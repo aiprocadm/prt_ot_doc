@@ -7,8 +7,29 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.modules.pipelines.graph import PipelineGraph, PipelineProfileValidator
 
-STEP_CODES = {"render_docx", "apply_headers", "replace", "quality_gate", "convert_pdf", "build_zip", "archive", "send_edo", "send_for_approval", "index_content"}
-KNOWN_SCHEMAS = {"RenderParamsV1", "HeadersParamsV1", "ReplaceParamsV1", "QualityGateParamsV1", "PdfParamsV1", "ZipParamsV1", "ArchiveParamsV1", "EdoParamsV1", "ApprovalParamsV1"}
+STEP_CODES = {
+    "render_docx",
+    "apply_headers",
+    "replace",
+    "quality_gate",
+    "convert_pdf",
+    "build_zip",
+    "archive",
+    "send_edo",
+    "send_for_approval",
+    "index_content",
+}
+KNOWN_SCHEMAS = {
+    "RenderParamsV1",
+    "HeadersParamsV1",
+    "ReplaceParamsV1",
+    "QualityGateParamsV1",
+    "PdfParamsV1",
+    "ZipParamsV1",
+    "ArchiveParamsV1",
+    "EdoParamsV1",
+    "ApprovalParamsV1",
+}
 
 JobStatusLiteral = Literal["queued", "running", "success", "failed", "canceled"]
 
@@ -99,8 +120,17 @@ class PipelineRunRequest(BaseModel):
 
     @model_validator(mode="after")
     def validate_profile_selector(self) -> "PipelineRunRequest":
-        if not any((self.profile_code, self.profile_id, self.pipeline_profile_code, self.pipeline_profile_id)):
-            raise ValueError("profile_code/profile_id or pipeline_profile_code/pipeline_profile_id is required")
+        if not any(
+            (
+                self.profile_code,
+                self.profile_id,
+                self.pipeline_profile_code,
+                self.pipeline_profile_id,
+            )
+        ):
+            raise ValueError(
+                "profile_code/profile_id or pipeline_profile_code/pipeline_profile_id is required"
+            )
         return self
 
 

@@ -56,92 +56,172 @@ async def executive_dashboard(
         )
     ).scalar_one_or_none()
     if snapshot is None:
-        snapshot = await ProjectionOrchestrator(session, str(tenant.id)).rebuild_dashboard_snapshot(today)
+        snapshot = await ProjectionOrchestrator(session, str(tenant.id)).rebuild_dashboard_snapshot(
+            today
+        )
     payload = await KpiDashboardService(session, str(tenant.id)).executive(filters)
     return {"snapshot_date": today, "widgets": snapshot.payload, "dashboard": payload}
 
 
 @router.get("/dashboard/safety")
-async def safety_dashboard(filters: DashboardFilters = Depends(_filters), session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> dict:
+async def safety_dashboard(
+    filters: DashboardFilters = Depends(_filters),
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+) -> dict:
     return await KpiDashboardService(session, str(tenant.id)).safety(filters)
 
 
 @router.get("/dashboard/client-delivery")
-async def client_delivery_dashboard(filters: DashboardFilters = Depends(_filters), session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> dict:
+async def client_delivery_dashboard(
+    filters: DashboardFilters = Depends(_filters),
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+) -> dict:
     return await KpiDashboardService(session, str(tenant.id)).client_delivery(filters)
 
 
 @router.get("/dashboard/incidents")
-async def incidents_dashboard(filters: DashboardFilters = Depends(_filters), session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> dict:
+async def incidents_dashboard(
+    filters: DashboardFilters = Depends(_filters),
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+) -> dict:
     return await KpiDashboardService(session, str(tenant.id)).incidents(filters)
 
 
 @router.get("/dashboard/inspections")
-async def inspections_dashboard(filters: DashboardFilters = Depends(_filters), session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> dict:
+async def inspections_dashboard(
+    filters: DashboardFilters = Depends(_filters),
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+) -> dict:
     return await KpiDashboardService(session, str(tenant.id)).inspections(filters)
 
 
 @router.get("/dashboard/prescriptions")
-async def prescriptions_dashboard(filters: DashboardFilters = Depends(_filters), session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> dict:
+async def prescriptions_dashboard(
+    filters: DashboardFilters = Depends(_filters),
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+) -> dict:
     return await KpiDashboardService(session, str(tenant.id)).prescriptions(filters)
 
 
 @router.get("/dashboard/overdue")
-async def overdue_dashboard(filters: DashboardFilters = Depends(_filters), session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> dict:
+async def overdue_dashboard(
+    filters: DashboardFilters = Depends(_filters),
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+) -> dict:
     return await KpiDashboardService(session, str(tenant.id)).overdue(filters)
 
 
 @router.get("/dashboard/sla-load")
-async def sla_load_dashboard(filters: DashboardFilters = Depends(_filters), session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> dict:
+async def sla_load_dashboard(
+    filters: DashboardFilters = Depends(_filters),
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+) -> dict:
     return await KpiDashboardService(session, str(tenant.id)).sla_load(filters)
 
 
 @router.get("/dashboard/edo")
-async def edo_dashboard(filters: DashboardFilters = Depends(_filters), session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> dict:
+async def edo_dashboard(
+    filters: DashboardFilters = Depends(_filters),
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+) -> dict:
     return await KpiDashboardService(session, str(tenant.id)).edo(filters)
 
 
 @router.get("/dashboard/ppe")
-async def ppe_dashboard(filters: DashboardFilters = Depends(_filters), session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> dict:
+async def ppe_dashboard(
+    filters: DashboardFilters = Depends(_filters),
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+) -> dict:
     return await KpiDashboardService(session, str(tenant.id)).ppe(filters)
 
 
 @router.get("/dashboard/training")
-async def training_dashboard(filters: DashboardFilters = Depends(_filters), session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> dict:
+async def training_dashboard(
+    filters: DashboardFilters = Depends(_filters),
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+) -> dict:
     return await KpiDashboardService(session, str(tenant.id)).training(filters)
 
 
 @router.get("/trends/incidents")
-async def incidents_trends(period: str = Query(default="daily", pattern="^(daily|weekly|monthly)$"), session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> dict:
-    return await AnalyticsAggregationService(session, str(tenant.id)).trend_series("incidents", period)
+async def incidents_trends(
+    period: str = Query(default="daily", pattern="^(daily|weekly|monthly)$"),
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+) -> dict:
+    return await AnalyticsAggregationService(session, str(tenant.id)).trend_series(
+        "incidents", period
+    )
 
 
 @router.get("/trends/compliance")
-async def compliance_trends(period: str = Query(default="daily", pattern="^(daily|weekly|monthly)$"), session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> dict:
-    return await AnalyticsAggregationService(session, str(tenant.id)).trend_series("compliance", period)
+async def compliance_trends(
+    period: str = Query(default="daily", pattern="^(daily|weekly|monthly)$"),
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+) -> dict:
+    return await AnalyticsAggregationService(session, str(tenant.id)).trend_series(
+        "compliance", period
+    )
 
 
 @router.get("/trends/packages")
-async def packages_trends(period: str = Query(default="daily", pattern="^(daily|weekly|monthly)$"), session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> dict:
-    return await AnalyticsAggregationService(session, str(tenant.id)).trend_series("packages", period)
+async def packages_trends(
+    period: str = Query(default="daily", pattern="^(daily|weekly|monthly)$"),
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+) -> dict:
+    return await AnalyticsAggregationService(session, str(tenant.id)).trend_series(
+        "packages", period
+    )
 
 
 @router.get("/trends/trainings")
-async def trainings_trends(period: str = Query(default="daily", pattern="^(daily|weekly|monthly)$"), session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> dict:
-    return await AnalyticsAggregationService(session, str(tenant.id)).trend_series("trainings", period)
+async def trainings_trends(
+    period: str = Query(default="daily", pattern="^(daily|weekly|monthly)$"),
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+) -> dict:
+    return await AnalyticsAggregationService(session, str(tenant.id)).trend_series(
+        "trainings", period
+    )
 
 
 @router.get("/trends/inspections")
-async def inspections_trends(period: str = Query(default="daily", pattern="^(daily|weekly|monthly)$"), session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> dict:
-    return await AnalyticsAggregationService(session, str(tenant.id)).trend_series("inspections", period)
+async def inspections_trends(
+    period: str = Query(default="daily", pattern="^(daily|weekly|monthly)$"),
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+) -> dict:
+    return await AnalyticsAggregationService(session, str(tenant.id)).trend_series(
+        "inspections", period
+    )
 
 
 @router.get("/trends/ppe")
-async def ppe_trends(period: str = Query(default="daily", pattern="^(daily|weekly|monthly)$"), session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> dict:
+async def ppe_trends(
+    period: str = Query(default="daily", pattern="^(daily|weekly|monthly)$"),
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+) -> dict:
     return await AnalyticsAggregationService(session, str(tenant.id)).trend_series("ppe", period)
 
 
 @router.post("/recompute")
-async def recompute_dashboard(session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> dict:
-    snapshot = await ProjectionOrchestrator(session, str(tenant.id)).rebuild_dashboard_snapshot(date.today())
+async def recompute_dashboard(
+    session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)
+) -> dict:
+    snapshot = await ProjectionOrchestrator(session, str(tenant.id)).rebuild_dashboard_snapshot(
+        date.today()
+    )
     return {"status": "ok", "payload": snapshot.payload}

@@ -4,12 +4,13 @@
 (подкласс PepApprovalRequired(PepConflict)); все прочие ПЭП-конфликты остаются
 409 code="PEP_CONFLICT".
 """
+
 from __future__ import annotations
 
 import pytest
 
-from app.models.models import ApprovalInstance, ApprovalRoute, PPEIssue, RoleEnum
 from app.models.approval_workflow import ApprovalInstanceStatus
+from app.models.models import ApprovalInstance, ApprovalRoute, PPEIssue, RoleEnum
 from app.services.pep_signing import PepApprovalRequired, PepConflict, PepSigningService
 
 
@@ -28,8 +29,11 @@ async def _doc_with_running_instance(session, data_factory, *, tag: str):
     await session.flush()
     session.add(
         ApprovalInstance(
-            tenant_id=tenant.id, entity_type="document", entity_id=ver.id,
-            approval_route_id=route.id, status=ApprovalInstanceStatus.RUNNING,
+            tenant_id=tenant.id,
+            entity_type="document",
+            entity_id=ver.id,
+            approval_route_id=route.id,
+            status=ApprovalInstanceStatus.RUNNING,
             started_by="user-1",
         )
     )
@@ -44,8 +48,11 @@ async def test_service_gate_raises_pep_approval_required(sessionmaker, data_fact
         svc = PepSigningService(session, str(tenant.id))
         with pytest.raises(PepApprovalRequired):
             await svc.create_request(
-                object_type="document_version", object_id=ver.id, purpose="document",
-                signer_user_id="user-1", requested_by="user-1",
+                object_type="document_version",
+                object_id=ver.id,
+                purpose="document",
+                signer_user_id="user-1",
+                requested_by="user-1",
             )
 
 
@@ -60,8 +67,10 @@ async def test_pep_requests_endpoint_maps_gate_to_approval_required_code(
     resp = await async_client.post(
         "/api/v1/sign/pep/requests",
         json={
-            "object_type": "document_version", "object_id": ver.id,
-            "purpose": "document", "signer_user_id": "user-1",
+            "object_type": "document_version",
+            "object_id": ver.id,
+            "purpose": "document",
+            "signer_user_id": "user-1",
         },
         headers=headers,
     )
@@ -115,8 +124,11 @@ async def test_generic_conflict_keeps_pep_conflict_code(
         company = await data_factory.create_company(tenant=tenant, session=session, name="PEP DUP")
         person = await data_factory.create_person(tenant=tenant, company=company, session=session)
         issue = PPEIssue(
-            tenant_id=tenant.id, person_id=person.id,
-            item_name="Каска dup", quantity=1, status="issued",
+            tenant_id=tenant.id,
+            person_id=person.id,
+            item_name="Каска dup",
+            quantity=1,
+            status="issued",
         )
         session.add(issue)
         await session.commit()
@@ -124,8 +136,10 @@ async def test_generic_conflict_keeps_pep_conflict_code(
         person_id = person.id
     headers = await make_auth_headers(RoleEnum.ADMIN, tenant=tenant.slug)
     payload = {
-        "object_type": "ppe_issue", "object_id": issue_id,
-        "purpose": "ppe_issue", "signer_person_id": person_id,
+        "object_type": "ppe_issue",
+        "object_id": issue_id,
+        "purpose": "ppe_issue",
+        "signer_person_id": person_id,
     }
     first = await async_client.post("/api/v1/sign/pep/requests", json=payload, headers=headers)
     assert first.status_code == 201, first.text

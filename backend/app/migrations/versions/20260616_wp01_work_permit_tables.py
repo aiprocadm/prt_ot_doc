@@ -5,6 +5,7 @@ no native enums (анти-грабли enum-parity). FKs to existing site/person
 Names are LITERAL (AST-audit blindspot). Round-trip-safe: downgrade drops children
 before the parent.
 """
+
 from __future__ import annotations
 
 import sqlalchemy as sa

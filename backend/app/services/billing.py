@@ -47,30 +47,46 @@ class BillingService:
 
     async def get_context(self, tenant: Tenant) -> BillingContext:
         subscription = (
-            await self.session.execute(
-                select(BillingSubscription)
-                .where(BillingSubscription.tenant_id == tenant.id)
-                .order_by(BillingSubscription.created_at.desc())
-            )
-        ).scalars().first()
-        plan = await self.session.get(BillingPlan, subscription.plan_id) if subscription else None
-        override = (
-            await self.session.execute(select(TenantLimitOverride).where(TenantLimitOverride.tenant_id == tenant.id))
-        ).scalars().first()
-        usage = (
-            await self.session.execute(
-                select(BillingUsageCounter).where(
-                    BillingUsageCounter.tenant_id == tenant.id,
-                    BillingUsageCounter.period_yyyymm == current_period_yyyymm(),
+            (
+                await self.session.execute(
+                    select(BillingSubscription)
+                    .where(BillingSubscription.tenant_id == tenant.id)
+                    .order_by(BillingSubscription.created_at.desc())
                 )
             )
-        ).scalars().first()
+            .scalars()
+            .first()
+        )
+        plan = await self.session.get(BillingPlan, subscription.plan_id) if subscription else None
+        override = (
+            (
+                await self.session.execute(
+                    select(TenantLimitOverride).where(TenantLimitOverride.tenant_id == tenant.id)
+                )
+            )
+            .scalars()
+            .first()
+        )
+        usage = (
+            (
+                await self.session.execute(
+                    select(BillingUsageCounter).where(
+                        BillingUsageCounter.tenant_id == tenant.id,
+                        BillingUsageCounter.period_yyyymm == current_period_yyyymm(),
+                    )
+                )
+            )
+            .scalars()
+            .first()
+        )
         limits = dict((plan.limits if plan else {}) or {})
         features = dict((plan.features if plan else {}) or {})
         if override is not None:
             limits.update(override.limits or {})
             features.update(override.features or {})
-        return BillingContext(plan=plan, subscription=subscription, usage=usage, limits=limits, features=features)
+        return BillingContext(
+            plan=plan, subscription=subscription, usage=usage, limits=limits, features=features
+        )
 
     async def ensure_active(self, tenant: Tenant) -> BillingSubscription | None:
         ctx = await self.get_context(tenant)
@@ -81,7 +97,11 @@ class BillingService:
         if sub.status in {BillingSubscriptionStatus.SUSPENDED, BillingSubscriptionStatus.CANCELED}:
             raise HTTPException(
                 status.HTTP_402_PAYMENT_REQUIRED,
-                detail={"code": "TENANT_SUSPENDED", "type": "billing", "message": "Tenant subscription is suspended"},
+                detail={
+                    "code": "TENANT_SUSPENDED",
+                    "type": "billing",
+                    "message": "Tenant subscription is suspended",
+                },
             )
         if sub.status == BillingSubscriptionStatus.PAST_DUE:
             if sub.grace_until is None or sub.grace_until < now:
@@ -90,21 +110,38 @@ class BillingService:
                     await self.session.flush()
                 raise HTTPException(
                     status.HTTP_402_PAYMENT_REQUIRED,
-                    detail={"code": "TENANT_SUSPENDED", "type": "billing", "message": "Grace period expired"},
+                    detail={
+                        "code": "TENANT_SUSPENDED",
+                        "type": "billing",
+                        "message": "Grace period expired",
+                    },
                 )
-            raise HTTPException(status.HTTP_402_PAYMENT_REQUIRED, detail={"code": "TENANT_PAST_DUE", "type": "billing", "message": "Tenant payment past due"})
+            raise HTTPException(
+                status.HTTP_402_PAYMENT_REQUIRED,
+                detail={
+                    "code": "TENANT_PAST_DUE",
+                    "type": "billing",
+                    "message": "Tenant payment past due",
+                },
+            )
         return sub
 
-    async def ensure_usage_row(self, tenant_id: str, period_yyyymm: int | None = None) -> BillingUsageCounter:
+    async def ensure_usage_row(
+        self, tenant_id: str, period_yyyymm: int | None = None
+    ) -> BillingUsageCounter:
         period = period_yyyymm or current_period_yyyymm()
         row = (
-            await self.session.execute(
-                select(BillingUsageCounter).where(
-                    BillingUsageCounter.tenant_id == tenant_id,
-                    BillingUsageCounter.period_yyyymm == period,
+            (
+                await self.session.execute(
+                    select(BillingUsageCounter).where(
+                        BillingUsageCounter.tenant_id == tenant_id,
+                        BillingUsageCounter.period_yyyymm == period,
+                    )
                 )
             )
-        ).scalars().first()
+            .scalars()
+            .first()
+        )
         if row is None:
             row = BillingUsageCounter(tenant_id=tenant_id, period_yyyymm=period)
             self.session.add(row)
@@ -116,18 +153,26 @@ class BillingService:
         if action in {"templates.create", "create_template"}:
             count_stmt = select(func.count(Template.id)).where(Template.tenant_id == tenant_id)
         elif action in {"users.create", "create_user"}:
-            count_stmt = select(func.count(User.id)).where(User.tenant_id == tenant_id, User.deleted_at.is_(None))
+            count_stmt = select(func.count(User.id)).where(
+                User.tenant_id == tenant_id, User.deleted_at.is_(None)
+            )
         elif action in {"companies.create", "sites.create", "create_company"}:
-            count_stmt = select(func.count(Company.id)).where(Company.tenant_id == tenant_id, Company.deleted_at.is_(None))
+            count_stmt = select(func.count(Company.id)).where(
+                Company.tenant_id == tenant_id, Company.deleted_at.is_(None)
+            )
         elif action in {"integrations.enable", "enable_integration"}:
             from app.models.models import TenantIntegrationKey
 
-            count_stmt = select(func.count(TenantIntegrationKey.id)).where(TenantIntegrationKey.tenant_id == tenant_id)
+            count_stmt = select(func.count(TenantIntegrationKey.id)).where(
+                TenantIntegrationKey.tenant_id == tenant_id
+            )
         if count_stmt is None:
             return 0
         return int((await self.session.execute(count_stmt)).scalar_one() or 0)
 
-    async def check_quota(self, tenant: Tenant, action: str, meta: dict[str, Any] | None = None) -> None:
+    async def check_quota(
+        self, tenant: Tenant, action: str, meta: dict[str, Any] | None = None
+    ) -> None:
         meta = meta or {}
         ctx = await self.get_context(tenant)
         usage = ctx.usage or await self.ensure_usage_row(tenant.id)
@@ -174,7 +219,9 @@ class BillingService:
         assert raw_limit is not None  # guarded above; satisfies type checker
         limit = int(raw_limit)
         if usage_field == "s3_bytes_used":
-            used = int(Decimal(getattr(usage, usage_field) or 0)) + int(meta.get("delta_bytes") or 0)
+            used = int(Decimal(getattr(usage, usage_field) or 0)) + int(
+                meta.get("delta_bytes") or 0
+            )
         elif usage_field:
             used = int(getattr(usage, usage_field) or 0) + int(meta.get("delta") or 1)
         elif action == "start_generation_job.concurrent":
@@ -190,7 +237,9 @@ class BillingService:
                 or 0
             ) + int(meta.get("delta") or 1)
         else:
-            used = await self._count_tenant_entities(tenant.id, action) + int(meta.get("delta") or 1)
+            used = await self._count_tenant_entities(tenant.id, action) + int(
+                meta.get("delta") or 1
+            )
 
         if used > limit:
             raise HTTPException(
@@ -203,7 +252,9 @@ class BillingService:
                 },
             )
 
-    async def assert_allowed(self, tenant: Tenant, action: str, meta: dict[str, Any] | None = None) -> None:
+    async def assert_allowed(
+        self, tenant: Tenant, action: str, meta: dict[str, Any] | None = None
+    ) -> None:
         await self.ensure_active(tenant)
         await self.check_quota(tenant, action, meta)
 
@@ -218,15 +269,19 @@ class BillingService:
     ) -> bool:
         if ref_id:
             exists = (
-                await self.session.execute(
-                    select(BillingEvent).where(
-                        BillingEvent.tenant_id == tenant_id,
-                        BillingEvent.type == event_type,
-                        BillingEvent.ref_type == ref_type,
-                        BillingEvent.ref_id == ref_id,
+                (
+                    await self.session.execute(
+                        select(BillingEvent).where(
+                            BillingEvent.tenant_id == tenant_id,
+                            BillingEvent.type == event_type,
+                            BillingEvent.ref_type == ref_type,
+                            BillingEvent.ref_id == ref_id,
+                        )
                     )
                 )
-            ).scalars().first()
+                .scalars()
+                .first()
+            )
             if exists is not None:
                 return False
         self.session.add(
@@ -277,13 +332,30 @@ class BillingService:
         await self.session.flush()
         return usage
 
-    async def switch_plan(self, tenant: Tenant, plan_code: str, *, actor_user_id: str | None, correlation_id: str) -> BillingSubscription:
-        plan = (await self.session.execute(select(BillingPlan).where(BillingPlan.code == plan_code))).scalars().first()
+    async def switch_plan(
+        self, tenant: Tenant, plan_code: str, *, actor_user_id: str | None, correlation_id: str
+    ) -> BillingSubscription:
+        plan = (
+            (await self.session.execute(select(BillingPlan).where(BillingPlan.code == plan_code)))
+            .scalars()
+            .first()
+        )
         if plan is None:
-            raise HTTPException(status.HTTP_404_NOT_FOUND, detail={"code": "PLAN_NOT_FOUND", "message": "Plan not found"})
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND,
+                detail={"code": "PLAN_NOT_FOUND", "message": "Plan not found"},
+            )
         sub = (
-            await self.session.execute(select(BillingSubscription).where(BillingSubscription.tenant_id == tenant.id).order_by(BillingSubscription.created_at.desc()))
-        ).scalars().first()
+            (
+                await self.session.execute(
+                    select(BillingSubscription)
+                    .where(BillingSubscription.tenant_id == tenant.id)
+                    .order_by(BillingSubscription.created_at.desc())
+                )
+            )
+            .scalars()
+            .first()
+        )
         now = datetime.now(tz=timezone.utc)
         if sub is None:
             sub = BillingSubscription(
@@ -298,7 +370,13 @@ class BillingService:
         else:
             sub.plan_id = plan.id
             sub.updated_at = now
-        await self.add_billing_event(tenant_id=tenant.id, event_type=BillingEventType.PLAN_CHANGED, ref_type="subscription", ref_id=sub.id, payload={"plan_code": plan_code})
+        await self.add_billing_event(
+            tenant_id=tenant.id,
+            event_type=BillingEventType.PLAN_CHANGED,
+            ref_type="subscription",
+            ref_id=sub.id,
+            payload={"plan_code": plan_code},
+        )
         self.session.add(
             AuditLog(
                 tenant_id=tenant.id,
@@ -319,9 +397,13 @@ class BillingService:
         return sub
 
     @staticmethod
-    def compute_remaining(limits: dict[str, Any], usage: BillingUsageCounter | None) -> dict[str, int | None]:
+    def compute_remaining(
+        limits: dict[str, Any], usage: BillingUsageCounter | None
+    ) -> dict[str, int | None]:
         usage = usage or BillingUsageCounter(tenant_id="", period_yyyymm=current_period_yyyymm())
-        generation_limit = limits.get("max_generations_per_month", limits.get("generations_per_month"))
+        generation_limit = limits.get(
+            "max_generations_per_month", limits.get("generations_per_month")
+        )
         fields = {
             "max_generations_per_month": int(usage.docs_generated or 0),
             "edo_outgoing_per_month": int(usage.edo_outgoing or 0),
@@ -340,8 +422,9 @@ class BillingService:
             out["generations_per_month"] = out["max_generations_per_month"]
         return out
 
-
-    async def list_events(self, tenant_id: str, *, limit: int = 50, offset: int = 0) -> list[BillingEvent]:
+    async def list_events(
+        self, tenant_id: str, *, limit: int = 50, offset: int = 0
+    ) -> list[BillingEvent]:
         stmt = (
             select(BillingEvent)
             .where(BillingEvent.tenant_id == tenant_id)
@@ -351,8 +434,14 @@ class BillingService:
         )
         return list((await self.session.execute(stmt)).scalars().all())
 
-    async def list_invoices(self, tenant_id: str, period_yyyymm: int | None = None) -> list[BillingInvoice]:
-        stmt = select(BillingInvoice).where(BillingInvoice.tenant_id == tenant_id).order_by(BillingInvoice.period_yyyymm.desc())
+    async def list_invoices(
+        self, tenant_id: str, period_yyyymm: int | None = None
+    ) -> list[BillingInvoice]:
+        stmt = (
+            select(BillingInvoice)
+            .where(BillingInvoice.tenant_id == tenant_id)
+            .order_by(BillingInvoice.period_yyyymm.desc())
+        )
         if period_yyyymm is not None:
             stmt = stmt.where(BillingInvoice.period_yyyymm == period_yyyymm)
         return list((await self.session.execute(stmt)).scalars().all())

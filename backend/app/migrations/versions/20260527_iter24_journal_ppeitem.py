@@ -54,9 +54,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "20260527_iter24_journal_ppeitem"
-down_revision: str | Sequence[str] | None = (
-    "20260527_iter23_refresh_session_securityauditlog"
-)
+down_revision: str | Sequence[str] | None = "20260527_iter23_refresh_session_securityauditlog"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
@@ -102,9 +100,7 @@ def upgrade() -> None:
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("version", sa.Integer(), nullable=False),
         sa.PrimaryKeyConstraint("id"),
-        sa.ForeignKeyConstraint(
-            ["tenant_id"], ["tenant.id"], name="fk_journal_tenant"
-        ),
+        sa.ForeignKeyConstraint(["tenant_id"], ["tenant.id"], name="fk_journal_tenant"),
         sa.ForeignKeyConstraint(
             ["company_id"],
             ["company.id"],
@@ -114,9 +110,7 @@ def upgrade() -> None:
     )
     op.create_index("ix_journal_tenant_id", "journal", ["tenant_id"], unique=False)
     op.create_index("ix_journal_company_id", "journal", ["company_id"], unique=False)
-    op.create_index(
-        "ix_journal_company", "journal", ["tenant_id", "company_id"], unique=False
-    )
+    op.create_index("ix_journal_company", "journal", ["tenant_id", "company_id"], unique=False)
 
     # --- ppeitem ------------------------------------------------------------
     op.create_table(
@@ -138,9 +132,7 @@ def upgrade() -> None:
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("version", sa.Integer(), nullable=False),
         sa.PrimaryKeyConstraint("id"),
-        sa.ForeignKeyConstraint(
-            ["tenant_id"], ["tenant.id"], name="fk_ppeitem_tenant"
-        ),
+        sa.ForeignKeyConstraint(["tenant_id"], ["tenant.id"], name="fk_ppeitem_tenant"),
         sa.UniqueConstraint("tenant_id", "name", name="uq_ppe_item_name"),
         sa.UniqueConstraint("tenant_id", "code", name="uq_ppe_item_code"),
     )

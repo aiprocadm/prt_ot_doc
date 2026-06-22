@@ -7,7 +7,9 @@ from app.models.job_engine import DocumentJob, DocumentJobStatus, DocumentJobSte
 
 
 @pytest.mark.anyio
-async def test_cancel_and_retry_failed_only(app_fixture, make_auth_headers, sessionmaker, data_factory) -> None:
+async def test_cancel_and_retry_failed_only(
+    app_fixture, make_auth_headers, sessionmaker, data_factory
+) -> None:
     async with sessionmaker() as session:
         tenant = await data_factory.ensure_tenant(session=session)
         job = DocumentJob(
@@ -26,10 +28,26 @@ async def test_cancel_and_retry_failed_only(app_fixture, make_auth_headers, sess
         )
         session.add(job)
         await session.flush()
-        session.add_all([
-            DocumentJobStep(tenant_id=str(tenant.id), job_id=job.id, step_code="render_docx", order=1, status=JobStepStatus.SUCCESS.value, attempts=1),
-            DocumentJobStep(tenant_id=str(tenant.id), job_id=job.id, step_code="convert_pdf", order=2, status=JobStepStatus.FAILED.value, attempts=1),
-        ])
+        session.add_all(
+            [
+                DocumentJobStep(
+                    tenant_id=str(tenant.id),
+                    job_id=job.id,
+                    step_code="render_docx",
+                    order=1,
+                    status=JobStepStatus.SUCCESS.value,
+                    attempts=1,
+                ),
+                DocumentJobStep(
+                    tenant_id=str(tenant.id),
+                    job_id=job.id,
+                    step_code="convert_pdf",
+                    order=2,
+                    status=JobStepStatus.FAILED.value,
+                    attempts=1,
+                ),
+            ]
+        )
         await session.commit()
         job_id = job.id
 
@@ -40,7 +58,9 @@ async def test_cancel_and_retry_failed_only(app_fixture, make_auth_headers, sess
         assert canceled.status_code == 200
         assert canceled.json()["job"]["status"] == "canceled"
 
-        retried = await client.post(f"/api/v1/jobs/{job_id}:retry", json={"retry_failed_only": True}, headers=headers)
+        retried = await client.post(
+            f"/api/v1/jobs/{job_id}:retry", json={"retry_failed_only": True}, headers=headers
+        )
         assert retried.status_code == 200
         step_status = {s["code"]: s["status"] for s in retried.json()["steps"]}
         assert step_status["render_docx"] == "success"

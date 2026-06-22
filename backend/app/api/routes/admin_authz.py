@@ -61,14 +61,22 @@ class EvaluatePayload(BaseModel):
 
 @router.get("/roles")
 async def list_roles(*, tenant: TenantDep, _: AdminAccess, session: SessionDep):
-    rows = (await session.execute(select(AuthzRole).where(AuthzRole.tenant_id == str(tenant.id)))).scalars().all()
+    rows = (
+        (await session.execute(select(AuthzRole).where(AuthzRole.tenant_id == str(tenant.id))))
+        .scalars()
+        .all()
+    )
     return rows
 
 
 @router.post("/roles", status_code=status.HTTP_201_CREATED)
 @audit_operation("create", "authz_role")
-async def create_role(payload: RolePayload, *, tenant: TenantDep, _: AdminAccess, session: SessionDep):
-    row = AuthzRole(tenant_id=str(tenant.id), code=payload.code, name=payload.name, is_system=payload.is_system)
+async def create_role(
+    payload: RolePayload, *, tenant: TenantDep, _: AdminAccess, session: SessionDep
+):
+    row = AuthzRole(
+        tenant_id=str(tenant.id), code=payload.code, name=payload.name, is_system=payload.is_system
+    )
     session.add(row)
     await session.commit()
     await session.refresh(row)
@@ -77,7 +85,9 @@ async def create_role(payload: RolePayload, *, tenant: TenantDep, _: AdminAccess
 
 @router.post("/roles/assign")
 @audit_operation("assign", "authz_user_role")
-async def assign_role(payload: AssignRolePayload, *, tenant: TenantDep, _: AdminAccess, session: SessionDep):
+async def assign_role(
+    payload: AssignRolePayload, *, tenant: TenantDep, _: AdminAccess, session: SessionDep
+):
     row = AuthzUserRole(
         tenant_id=str(tenant.id),
         user_id=payload.user_id,
@@ -92,16 +102,24 @@ async def assign_role(payload: AssignRolePayload, *, tenant: TenantDep, _: Admin
 @router.get("/policies")
 async def list_policies(*, tenant: TenantDep, _: AdminAccess, session: SessionDep):
     rows = (
-        await session.execute(
-            select(AuthzPolicy).where(AuthzPolicy.tenant_id == str(tenant.id)).order_by(AuthzPolicy.priority.asc())
+        (
+            await session.execute(
+                select(AuthzPolicy)
+                .where(AuthzPolicy.tenant_id == str(tenant.id))
+                .order_by(AuthzPolicy.priority.asc())
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     return rows
 
 
 @router.post("/policies", status_code=status.HTTP_201_CREATED)
 @audit_operation("create", "authz_policy")
-async def create_policy(payload: PolicyPayload, *, tenant: TenantDep, _: AdminAccess, session: SessionDep):
+async def create_policy(
+    payload: PolicyPayload, *, tenant: TenantDep, _: AdminAccess, session: SessionDep
+):
     row = AuthzPolicy(tenant_id=str(tenant.id), **payload.model_dump())
     session.add(row)
     await session.commit()
@@ -110,27 +128,45 @@ async def create_policy(payload: PolicyPayload, *, tenant: TenantDep, _: AdminAc
 
 
 @router.post("/policies:evaluate")
-async def eval_policy(payload: EvaluatePayload, *, tenant: TenantDep, access: AdminAccess, session: SessionDep):
+async def eval_policy(
+    payload: EvaluatePayload, *, tenant: TenantDep, access: AdminAccess, session: SessionDep
+):
     role_rows = (
         await session.execute(
             select(AuthzUserRole, AuthzRole)
             .join(AuthzRole, AuthzRole.id == AuthzUserRole.role_id)
-            .where(AuthzUserRole.tenant_id == str(tenant.id), AuthzUserRole.user_id == str(access.user.id))
+            .where(
+                AuthzUserRole.tenant_id == str(tenant.id),
+                AuthzUserRole.user_id == str(access.user.id),
+            )
         )
     ).all()
     scopes = [row[0].scope_json for row in role_rows]
     perms = (
-        await session.execute(
-            select(AuthzRolePermission.permission_code)
-            .join(AuthzUserRole, AuthzUserRole.role_id == AuthzRolePermission.role_id)
-            .where(AuthzUserRole.tenant_id == str(tenant.id), AuthzUserRole.user_id == str(access.user.id))
+        (
+            await session.execute(
+                select(AuthzRolePermission.permission_code)
+                .join(AuthzUserRole, AuthzUserRole.role_id == AuthzRolePermission.role_id)
+                .where(
+                    AuthzUserRole.tenant_id == str(tenant.id),
+                    AuthzUserRole.user_id == str(access.user.id),
+                )
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     policies = (
-        await session.execute(
-            select(AuthzPolicy).where(AuthzPolicy.tenant_id == str(tenant.id), AuthzPolicy.enabled.is_(True))
+        (
+            await session.execute(
+                select(AuthzPolicy).where(
+                    AuthzPolicy.tenant_id == str(tenant.id), AuthzPolicy.enabled.is_(True)
+                )
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     subject = Subject(
         user_id=str(access.user.id),
         tenant_id=str(tenant.id),
@@ -159,7 +195,11 @@ async def eval_policy(payload: EvaluatePayload, *, tenant: TenantDep, access: Ad
             request_attrs={"policies": policies},
         ),
     )
-    return {"allow": decision.allow, "reason": decision.reason, "matched_policy_id": decision.matched_policy_id}
+    return {
+        "allow": decision.allow,
+        "reason": decision.reason,
+        "matched_policy_id": decision.matched_policy_id,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -225,6 +265,7 @@ async def get_provider_status(
 # OPS-004: Tenant Health Score  GET /admin/tenant-health
 # ---------------------------------------------------------------------------
 
+
 class TenantHealthResponse(BaseModel):
     generated_at: datetime
     score: int = Field(ge=0, le=100, description="Composite tenant health score 0-100")
@@ -247,6 +288,7 @@ async def get_tenant_health(
     """Composite health score for the tenant: jobs, outbox, provider readiness."""
     TenantContextValidator.ensure_tenant_context(tenant)
     from datetime import timedelta
+
     now = datetime.now(timezone.utc)
     since = now - timedelta(hours=24)
 
@@ -261,7 +303,8 @@ async def get_tenant_health(
                     DocumentJob.created_at >= since,
                 )
             )
-        ).scalar_one() or 0
+        ).scalar_one()
+        or 0
     )
 
     outbox_counts = (
@@ -285,10 +328,15 @@ async def get_tenant_health(
                     OutboxEvent.status == OutboxEventStatus.POISONED.value,
                 )
             )
-        ).scalar_one() or 0
+        ).scalar_one()
+        or 0
     )
 
-    non_prod_providers = [name for name, adapter in _KNOWN_PROVIDERS if not describe_provider(adapter).production_ready]
+    non_prod_providers = [
+        name
+        for name, adapter in _KNOWN_PROVIDERS
+        if not describe_provider(adapter).production_ready
+    ]
 
     # Score calculation: start at 100, deduct for each issue
     score = 100

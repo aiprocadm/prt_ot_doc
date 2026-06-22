@@ -16,7 +16,13 @@ def _sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def convert_docx_bytes(*, source_bytes: bytes, timeout_s: int, pool: LibreOfficePool, passport: dict[str, object] | None = None) -> tuple[bytes, str]:
+def convert_docx_bytes(
+    *,
+    source_bytes: bytes,
+    timeout_s: int,
+    pool: LibreOfficePool,
+    passport: dict[str, object] | None = None,
+) -> tuple[bytes, str]:
     with tempfile.TemporaryDirectory(prefix="pdf-convert-") as td:
         workdir = Path(td)
         source = workdir / "source.docx"
@@ -34,7 +40,9 @@ def load_source_bytes(file: File) -> bytes:
         return stream.read()
 
 
-def persist_pdf(*, tenant_prefix: str, source: File, pdf_bytes: bytes, sha256_hex: str) -> tuple[str, str]:
+def persist_pdf(
+    *, tenant_prefix: str, source: File, pdf_bytes: bytes, sha256_hex: str
+) -> tuple[str, str]:
     key = f"{tenant_prefix}/pdf/{source.id}-{sha256_hex[:12]}.pdf"
     s3.put_object(key=key, data=pdf_bytes, mime="application/pdf")
     return key, sha256_hex

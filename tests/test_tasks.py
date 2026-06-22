@@ -61,7 +61,11 @@ def test_register_template_task(monkeypatch) -> None:
         metadata={"category": "demo"},
         version_metadata={
             "document_type": "instruction",
-            "required_fields_schema": {"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]},
+            "required_fields_schema": {
+                "type": "object",
+                "properties": {"name": {"type": "string"}},
+                "required": ["name"],
+            },
             "applicability_rules": {},
             "output_types": ["docx"],
             "profile": {},
@@ -162,7 +166,9 @@ def test_dispatch_outbox_events_resolves_webhook_endpoints_by_tenant_id(monkeypa
 
     async def fetch():
         async with TestSession() as session:
-            event = (await session.execute(select(OutboxEvent).where(OutboxEvent.event_id == "evt-1"))).scalar_one()
+            event = (
+                await session.execute(select(OutboxEvent).where(OutboxEvent.event_id == "evt-1"))
+            ).scalar_one()
             deliveries = (await session.execute(select(WebhookDelivery))).scalars().all()
             return event, deliveries
 

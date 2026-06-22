@@ -1,6 +1,7 @@
 """HTTP cache (ETag / If-None-Match) contract for /api/v1/ppe/stock/batches
 (W-A · TZ-3.2-V11-01). Mirrors tests/api/test_ppe_prescriptions_cache_etag_contract.py.
 """
+
 from __future__ import annotations
 
 import pytest

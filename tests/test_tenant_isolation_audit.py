@@ -12,6 +12,7 @@ In a multi-tenant SaaS environment, a user/app in tenant A must NEVER be able to
 
 Each test covers one critical boundary.
 """
+
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -216,9 +217,7 @@ async def test_rbac_isolation_across_tenants(
         if users_a and users_b:
             user_ids_a = {u["id"] for u in users_a}
             user_ids_b = {u["id"] for u in users_b}
-            assert len(user_ids_a & user_ids_b) == 0, (
-                "Admin endpoint must be tenant-isolated"
-            )
+            assert len(user_ids_a & user_ids_b) == 0, "Admin endpoint must be tenant-isolated"
 
 
 @pytest.mark.anyio
@@ -245,9 +244,7 @@ async def test_cannot_list_other_tenant_employees(
     emp_ids_a = {e["id"] for e in employees_a}
     emp_ids_b = {e["id"] for e in employees_b}
 
-    assert len(emp_ids_a & emp_ids_b) == 0, (
-        "Employee lists must be tenant-isolated"
-    )
+    assert len(emp_ids_a & emp_ids_b) == 0, "Employee lists must be tenant-isolated"
 
 
 @pytest.mark.anyio
@@ -314,14 +311,20 @@ async def test_audit_log_isolation(sessionmaker) -> None:
 
     async with sessionmaker() as session:
         acme_id, beta_id = await _two_tenant_ids(session)
-        session.add(AuditLog(tenant_id=acme_id, action="probe", object_type="t", object_id="audit-acme"))
-        session.add(AuditLog(tenant_id=beta_id, action="probe", object_type="t", object_id="audit-beta"))
+        session.add(
+            AuditLog(tenant_id=acme_id, action="probe", object_type="t", object_id="audit-acme")
+        )
+        session.add(
+            AuditLog(tenant_id=beta_id, action="probe", object_type="t", object_id="audit-beta")
+        )
         await session.commit()
 
     async with sessionmaker() as session:
         rows = (
-            await session.execute(select(AuditLog).where(AuditLog.tenant_id == acme_id))
-        ).scalars().all()
+            (await session.execute(select(AuditLog).where(AuditLog.tenant_id == acme_id)))
+            .scalars()
+            .all()
+        )
     object_ids = {r.object_id for r in rows}
     assert "audit-acme" in object_ids
     assert "audit-beta" not in object_ids
@@ -357,8 +360,10 @@ async def test_notification_isolation(sessionmaker) -> None:
 
     async with sessionmaker() as session:
         rows = (
-            await session.execute(select(Notification).where(Notification.tenant_id == acme_id))
-        ).scalars().all()
+            (await session.execute(select(Notification).where(Notification.tenant_id == acme_id)))
+            .scalars()
+            .all()
+        )
     keys = {r.dedup_key for r in rows}
     assert "dk-acme" in keys
     assert "dk-beta" not in keys
@@ -373,14 +378,20 @@ async def test_outbox_isolation(sessionmaker) -> None:
 
     async with sessionmaker() as session:
         acme_id, beta_id = await _two_tenant_ids(session)
-        session.add(Outbox(tenant_id=acme_id, event_type="probe", destination="https://acme.example"))
-        session.add(Outbox(tenant_id=beta_id, event_type="probe", destination="https://beta.example"))
+        session.add(
+            Outbox(tenant_id=acme_id, event_type="probe", destination="https://acme.example")
+        )
+        session.add(
+            Outbox(tenant_id=beta_id, event_type="probe", destination="https://beta.example")
+        )
         await session.commit()
 
     async with sessionmaker() as session:
         rows = (
-            await session.execute(select(Outbox).where(Outbox.tenant_id == acme_id))
-        ).scalars().all()
+            (await session.execute(select(Outbox).where(Outbox.tenant_id == acme_id)))
+            .scalars()
+            .all()
+        )
     destinations = {r.destination for r in rows}
     assert "https://acme.example" in destinations
     assert "https://beta.example" not in destinations
@@ -401,8 +412,10 @@ async def test_workflow_events_isolation(sessionmaker) -> None:
 
     async with sessionmaker() as session:
         rows = (
-            await session.execute(select(OutboxEvent).where(OutboxEvent.tenant_id == acme_id))
-        ).scalars().all()
+            (await session.execute(select(OutboxEvent).where(OutboxEvent.tenant_id == acme_id)))
+            .scalars()
+            .all()
+        )
     event_ids = {r.event_id for r in rows}
     assert "wf-acme" in event_ids
     assert "wf-beta" not in event_ids
@@ -422,17 +435,27 @@ async def test_webhook_delivery_isolation(sessionmaker) -> None:
         session.add_all([ep_a, ep_b])
         await session.flush()
         session.add(
-            WebhookDelivery(tenant_id=acme_id, endpoint_id=ep_a.id, event_id="wh-acme", status="pending")
+            WebhookDelivery(
+                tenant_id=acme_id, endpoint_id=ep_a.id, event_id="wh-acme", status="pending"
+            )
         )
         session.add(
-            WebhookDelivery(tenant_id=beta_id, endpoint_id=ep_b.id, event_id="wh-beta", status="pending")
+            WebhookDelivery(
+                tenant_id=beta_id, endpoint_id=ep_b.id, event_id="wh-beta", status="pending"
+            )
         )
         await session.commit()
 
     async with sessionmaker() as session:
         rows = (
-            await session.execute(select(WebhookDelivery).where(WebhookDelivery.tenant_id == acme_id))
-        ).scalars().all()
+            (
+                await session.execute(
+                    select(WebhookDelivery).where(WebhookDelivery.tenant_id == acme_id)
+                )
+            )
+            .scalars()
+            .all()
+        )
     event_ids = {r.event_id for r in rows}
     assert "wh-acme" in event_ids
     assert "wh-beta" not in event_ids
@@ -454,30 +477,24 @@ class TenantIsolationAuditChecklist:
         ("Query: Documents list", "Implied by isolation test"),
         ("Query: Audit logs", "test_audit_log_isolation"),
         ("Query: Notifications", "test_notification_isolation"),
-
         # Mutations
         ("Mutation: Modify company", "test_cannot_modify_other_tenant_company"),
         ("Access: Template by ID", "test_cannot_access_other_tenant_template"),
         ("Mutation: Update employee", "Covered by general RBAC test"),
         ("Mutation: Modify template", "Covered by general RBAC test"),
-
         # File Access
         ("Files: S3 key isolation", "test_file_storage_key_isolation"),
         ("Files: Cannot read other tenant's file", "Implicit in S3 scoping"),
-
         # Event Publishing
         ("Events: Workflow events isolated", "test_workflow_events_isolation"),
         ("Events: Outbox messages isolated", "test_outbox_isolation"),
         ("Events: Notifications isolated", "test_notification_isolation"),
-
         # Integrations
         ("Integrations: Webhooks isolated", "test_webhook_delivery_isolation"),
         ("Integrations: API tokens per-tenant", "Covered by general RBAC test"),
-
         # RBAC
         ("RBAC: Permissions isolated", "test_rbac_isolation_across_tenants"),
         ("RBAC: Module access control", "Needs Phase 1.2 implementation"),
-
         # Session
         ("Session: JWT bound to tenant", "test_session_contract_isolation"),
         ("Session: X-Tenant header required", "Existing test_tenant_header_required.py"),
@@ -486,9 +503,9 @@ class TenantIsolationAuditChecklist:
     @classmethod
     def generate_report(cls):
         """Print audit checklist for documentation."""
-        print("\n" + "="*80)
+        print("\n" + "=" * 80)
         print("TENANT ISOLATION AUDIT CHECKLIST")
-        print("="*80)
+        print("=" * 80)
         for boundary, test in cls.BOUNDARIES:
             print(f"[ ] {boundary:50} | {test}")
-        print("="*80 + "\n")
+        print("=" * 80 + "\n")

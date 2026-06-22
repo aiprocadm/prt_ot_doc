@@ -15,7 +15,10 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column("files", sa.Column("is_public", sa.Boolean(), nullable=False, server_default=sa.text("false")))
+    op.add_column(
+        "files",
+        sa.Column("is_public", sa.Boolean(), nullable=False, server_default=sa.text("false")),
+    )
     op.add_column("files", sa.Column("original_name", sa.String(length=255), nullable=True))
     op.execute("UPDATE files SET original_name = original_filename WHERE original_name IS NULL")
 
@@ -33,7 +36,9 @@ def upgrade() -> None:
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index("ix_file_scan_results_file_scanned", "file_scan_results", ["file_id", "scanned_at"])
+    op.create_index(
+        "ix_file_scan_results_file_scanned", "file_scan_results", ["file_id", "scanned_at"]
+    )
 
 
 def downgrade() -> None:

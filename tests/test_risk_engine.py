@@ -62,9 +62,7 @@ async def test_risk_engine_flow(
             tenant=tenant, session=session, name="Risk Corp"
         )
         site = Site(tenant_id=tenant.id, company_id=company.id, name="Site A")
-        position = Position(
-            tenant_id=tenant.id, company_id=company.id, name="Inspector"
-        )
+        position = Position(tenant_id=tenant.id, company_id=company.id, name="Inspector")
         session.add_all([site, position])
         await session.commit()
         await session.refresh(site)
@@ -144,9 +142,7 @@ async def test_risk_engine_flow(
     assert len(maps) == 1
 
     async with sessionmaker() as session:
-        tenant = (
-            await session.execute(select(Tenant).where(Tenant.slug == "test"))
-        ).scalar_one()
+        tenant = (await session.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()
         tenant_id = str(tenant.id)
 
         hazard = (
@@ -180,13 +176,17 @@ async def test_risk_engine_flow(
         assert assessment.place_id == site_id
 
         assessment_items = (
-            await session.execute(
-                select(RiskAssessmentItem).where(
-                    RiskAssessmentItem.tenant_id == tenant_id,
-                    RiskAssessmentItem.assessment_id == assessment_id,
+            (
+                await session.execute(
+                    select(RiskAssessmentItem).where(
+                        RiskAssessmentItem.tenant_id == tenant_id,
+                        RiskAssessmentItem.assessment_id == assessment_id,
+                    )
                 )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         assert len(assessment_items) == 1
         assert assessment_items[0].score == 9
 
@@ -209,13 +209,17 @@ async def test_risk_engine_flow(
             )
         ).scalar_one()
         plan_items = (
-            await session.execute(
-                select(RiskActionPlanItem).where(
-                    RiskActionPlanItem.tenant_id == tenant_id,
-                    RiskActionPlanItem.plan_id == action_plan.id,
+            (
+                await session.execute(
+                    select(RiskActionPlanItem).where(
+                        RiskActionPlanItem.tenant_id == tenant_id,
+                        RiskActionPlanItem.plan_id == action_plan.id,
+                    )
                 )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         assert len(plan_items) == 1
 
         risk_map = (

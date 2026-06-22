@@ -16,18 +16,46 @@ depends_on = None
 
 
 def upgrade() -> None:
-    package_entity_status = postgresql.ENUM("draft", "active", "archived", name="package_entity_status", create_type=False)
-    package_source_type = postgresql.ENUM("csv", "xlsx", "json", "mixed", name="package_source_type", create_type=False)
-    package_preset_status = postgresql.ENUM("draft", "active", "archived", name="package_preset_status", create_type=False)
-    replace_mode = postgresql.ENUM("none", "preview", "apply", name="replace_mode", create_type=False)
-    package_output_format = postgresql.ENUM("docx", "pdf", "both", name="package_output_format", create_type=False)
-    pack_run_source_type = postgresql.ENUM("csv", "xlsx", "json", "mixed", name="pack_run_source_type", create_type=False)
-    pack_run_lifecycle_status = postgresql.ENUM(
-        "queued", "running", "success", "failed", "canceled", "partial_success",
-        name="pack_run_lifecycle_status", create_type=False,
+    package_entity_status = postgresql.ENUM(
+        "draft", "active", "archived", name="package_entity_status", create_type=False
     )
-    pack_run_item_status = postgresql.ENUM("queued", "running", "success", "failed", "skipped", name="pack_run_item_status", create_type=False)
-    pack_log_level = postgresql.ENUM("info", "warning", "error", name="pack_log_level", create_type=False)
+    package_source_type = postgresql.ENUM(
+        "csv", "xlsx", "json", "mixed", name="package_source_type", create_type=False
+    )
+    package_preset_status = postgresql.ENUM(
+        "draft", "active", "archived", name="package_preset_status", create_type=False
+    )
+    replace_mode = postgresql.ENUM(
+        "none", "preview", "apply", name="replace_mode", create_type=False
+    )
+    package_output_format = postgresql.ENUM(
+        "docx", "pdf", "both", name="package_output_format", create_type=False
+    )
+    pack_run_source_type = postgresql.ENUM(
+        "csv", "xlsx", "json", "mixed", name="pack_run_source_type", create_type=False
+    )
+    pack_run_lifecycle_status = postgresql.ENUM(
+        "queued",
+        "running",
+        "success",
+        "failed",
+        "canceled",
+        "partial_success",
+        name="pack_run_lifecycle_status",
+        create_type=False,
+    )
+    pack_run_item_status = postgresql.ENUM(
+        "queued",
+        "running",
+        "success",
+        "failed",
+        "skipped",
+        name="pack_run_item_status",
+        create_type=False,
+    )
+    pack_log_level = postgresql.ENUM(
+        "info", "warning", "error", name="pack_log_level", create_type=False
+    )
 
     bind = op.get_bind()
     for enum_ in [
@@ -61,7 +89,11 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("tenant_id", "code", name="uq_package_profiles_v2_tenant_code"),
     )
-    op.create_index("ix_package_profiles_v2_tenant_status_updated", "package_profiles_v2", ["tenant_id", "status", "updated_at"])
+    op.create_index(
+        "ix_package_profiles_v2_tenant_status_updated",
+        "package_profiles_v2",
+        ["tenant_id", "status", "updated_at"],
+    )
 
     op.create_table(
         "package_presets_v2",
@@ -85,7 +117,11 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("tenant_id", "code", name="uq_package_presets_v2_tenant_code"),
     )
-    op.create_index("ix_package_presets_v2_tenant_status_updated", "package_presets_v2", ["tenant_id", "status", "updated_at"])
+    op.create_index(
+        "ix_package_presets_v2_tenant_status_updated",
+        "package_presets_v2",
+        ["tenant_id", "status", "updated_at"],
+    )
 
     op.create_table(
         "package_preset_items",
@@ -112,7 +148,9 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("package_preset_id", "order_no", name="uq_package_preset_items_order"),
     )
-    op.create_index("ix_package_preset_items_order", "package_preset_items", ["package_preset_id", "order_no"])
+    op.create_index(
+        "ix_package_preset_items_order", "package_preset_items", ["package_preset_id", "order_no"]
+    )
 
     op.create_table(
         "pack_runs",
@@ -142,10 +180,16 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["source_file_id"], ["file.id"]),
         sa.ForeignKeyConstraint(["tenant_id"], ["tenant.id"]),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("tenant_id", "idempotency_key", "request_hash", name="uq_pack_runs_idempotency"),
+        sa.UniqueConstraint(
+            "tenant_id", "idempotency_key", "request_hash", name="uq_pack_runs_idempotency"
+        ),
     )
-    op.create_index("ix_pack_runs_status_created", "pack_runs", ["tenant_id", "status", "created_at"])
-    op.create_index("ix_pack_runs_tenant_status_updated", "pack_runs", ["tenant_id", "status", "updated_at"])
+    op.create_index(
+        "ix_pack_runs_status_created", "pack_runs", ["tenant_id", "status", "created_at"]
+    )
+    op.create_index(
+        "ix_pack_runs_tenant_status_updated", "pack_runs", ["tenant_id", "status", "updated_at"]
+    )
 
     op.create_table(
         "pack_run_items",

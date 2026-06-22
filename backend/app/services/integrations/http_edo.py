@@ -39,7 +39,9 @@ class HttpEDOIntegration(BaseEDOIntegration):
         self._base = normalized.rstrip("/")
         self._token = (api_token or "").strip() or None
         self._timeout = timeout_seconds
-        self._outbound_path = outbound_path if outbound_path.startswith("/") else f"/{outbound_path}"
+        self._outbound_path = (
+            outbound_path if outbound_path.startswith("/") else f"/{outbound_path}"
+        )
 
     def _headers(self, *, json_body: bool = False) -> dict[str, str]:
         h: dict[str, str] = {}

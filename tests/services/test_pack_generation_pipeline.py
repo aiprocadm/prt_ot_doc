@@ -50,7 +50,9 @@ async def test_pack_pipeline_plans_and_renders(
     async with sessionmaker() as session:
         tenant = await data_factory.ensure_tenant(session=session)
         company: Company = await data_factory.create_company(tenant=tenant, session=session)
-        person: Person = await data_factory.create_person(tenant=tenant, company=company, session=session)
+        person: Person = await data_factory.create_person(
+            tenant=tenant, company=company, session=session
+        )
         template = await data_factory.create_template(tenant=tenant, session=session)
         version = TemplateVersion(
             tenant_id=tenant.id,

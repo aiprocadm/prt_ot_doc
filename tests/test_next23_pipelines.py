@@ -30,7 +30,9 @@ async def test_pipeline_run_is_idempotent(async_client, make_auth_headers):
         "is_active": True,
     }
     tenant_headers = {**dict(async_client.headers), **await make_auth_headers()}
-    created = await async_client.post("/api/v1/pipelines/profiles", json=profile_payload, headers=tenant_headers)
+    created = await async_client.post(
+        "/api/v1/pipelines/profiles", json=profile_payload, headers=tenant_headers
+    )
     assert created.status_code == 201
 
     run_payload = {"profile_code": "default_docpack_v1", "inputs": {"template_version_id": "tv-1"}}
@@ -54,11 +56,15 @@ async def test_pipeline_run_requires_x_tenant_header(async_client, make_auth_hea
         "is_active": True,
     }
     tenant_headers = {**dict(async_client.headers), **await make_auth_headers()}
-    created = await async_client.post("/api/v1/pipelines/profiles", json=profile_payload, headers=tenant_headers)
+    created = await async_client.post(
+        "/api/v1/pipelines/profiles", json=profile_payload, headers=tenant_headers
+    )
     assert created.status_code == 201
 
     run_payload = {"profile_code": "default_docpack_v2", "inputs": {"template_version_id": "tv-2"}}
     no_tenant_headers = {"Idempotency-Key": "idem-no-tenant"}
-    resp = await async_client.post("/api/v1/pipelines/run", json=run_payload, headers=no_tenant_headers)
+    resp = await async_client.post(
+        "/api/v1/pipelines/run", json=run_payload, headers=no_tenant_headers
+    )
     assert resp.status_code == 400
     assert "X-Tenant" in resp.text

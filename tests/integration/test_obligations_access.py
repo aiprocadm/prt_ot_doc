@@ -68,9 +68,7 @@ async def test_worker_cannot_create_inspection(async_client, make_auth_headers):
 
 
 @pytest.mark.anyio
-async def test_attestation_audit_log(
-    async_client, sessionmaker, data_factory, make_auth_headers
-):
+async def test_attestation_audit_log(async_client, sessionmaker, data_factory, make_auth_headers):
     headers = await make_auth_headers(RoleEnum.ADMIN)
     async with sessionmaker() as session:
         tenant = await data_factory.ensure_tenant(session=session)
@@ -85,11 +83,15 @@ async def test_attestation_audit_log(
 
     async with sessionmaker() as session:
         logs = (
-            await session.execute(
-                select(AuditLog).where(
-                    AuditLog.object_type == "attestation",
-                    AuditLog.object_id == attestation_id,
+            (
+                await session.execute(
+                    select(AuditLog).where(
+                        AuditLog.object_type == "attestation",
+                        AuditLog.object_id == attestation_id,
+                    )
                 )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         assert logs

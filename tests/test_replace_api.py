@@ -16,10 +16,18 @@ from app.services.file_storage import FileStorageService
 async def _seed_document_version(sessionmaker, data_factory):
     async with sessionmaker() as session:
         tenant = await data_factory.ensure_tenant(session=session)
-        user = await data_factory.create_user(tenant=tenant, email=f"{uuid4()}@example.com", session=session)
-        company = await data_factory.create_company(tenant=tenant, name=f"Company {uuid4()}"[:36], session=session)
-        person = await data_factory.create_person(tenant=tenant, company=company, first_name="Jane", last_name="Doe", session=session)
-        template = await data_factory.create_template(tenant=tenant, name=f"Template {uuid4()}"[:36], session=session)
+        user = await data_factory.create_user(
+            tenant=tenant, email=f"{uuid4()}@example.com", session=session
+        )
+        company = await data_factory.create_company(
+            tenant=tenant, name=f"Company {uuid4()}"[:36], session=session
+        )
+        person = await data_factory.create_person(
+            tenant=tenant, company=company, first_name="Jane", last_name="Doe", session=session
+        )
+        template = await data_factory.create_template(
+            tenant=tenant, name=f"Template {uuid4()}"[:36], session=session
+        )
         document, version = await data_factory.create_document(
             tenant=tenant,
             company=company,
@@ -36,11 +44,15 @@ async def _seed_document_version(sessionmaker, data_factory):
 
 
 @pytest.mark.anyio
-async def test_replace_dry_run_apply_rollback(app_fixture, make_auth_headers, sessionmaker, data_factory) -> None:
+async def test_replace_dry_run_apply_rollback(
+    app_fixture, make_auth_headers, sessionmaker, data_factory
+) -> None:
     headers = await make_auth_headers()
     transport = ASGITransport(app=app_fixture)
 
-    tenant_slug, _, version_id, version_key = await _seed_document_version(sessionmaker, data_factory)
+    tenant_slug, _, version_id, version_key = await _seed_document_version(
+        sessionmaker, data_factory
+    )
 
     doc = Document()
     doc.add_paragraph("Hello {{company_name}}")
@@ -51,13 +63,25 @@ async def test_replace_dry_run_apply_rollback(app_fixture, make_auth_headers, se
     buffer = BytesIO()
     doc.save(buffer)
     payload = buffer.getvalue()
-    FileStorageService.default().put(version_key, payload, content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+    FileStorageService.default().put(
+        version_key,
+        payload,
+        content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    )
 
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
         create_map = await client.post(
             "/api/v1/replace-maps",
             headers={**headers, "X-Tenant": tenant_slug},
-            data={"payload": json.dumps({"code": "demo-map", "name": "Demo map", "rules": [{"from": "{{company_name}}", "to": "OOO Demo"}]})},
+            data={
+                "payload": json.dumps(
+                    {
+                        "code": "demo-map",
+                        "name": "Demo map",
+                        "rules": [{"from": "{{company_name}}", "to": "OOO Demo"}],
+                    }
+                )
+            },
         )
         assert create_map.status_code == 201
         map_id = create_map.json()["id"]
@@ -92,28 +116,52 @@ async def test_replace_dry_run_apply_rollback(app_fixture, make_auth_headers, se
 
 
 @pytest.mark.anyio
-async def test_replace_idempotency_conflict_same_key_different_payload(app_fixture, make_auth_headers, sessionmaker, data_factory) -> None:
+async def test_replace_idempotency_conflict_same_key_different_payload(
+    app_fixture, make_auth_headers, sessionmaker, data_factory
+) -> None:
     headers = await make_auth_headers()
     transport = ASGITransport(app=app_fixture)
 
-    tenant_slug, _, version_id, version_key = await _seed_document_version(sessionmaker, data_factory)
+    tenant_slug, _, version_id, version_key = await _seed_document_version(
+        sessionmaker, data_factory
+    )
 
     doc = Document()
     doc.add_paragraph("Hello {{company_name}}")
     buffer = BytesIO()
     doc.save(buffer)
-    FileStorageService.default().put(version_key, buffer.getvalue(), content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+    FileStorageService.default().put(
+        version_key,
+        buffer.getvalue(),
+        content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    )
 
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
         first_map = await client.post(
             "/api/v1/replace-maps",
             headers={**headers, "X-Tenant": tenant_slug},
-            data={"payload": json.dumps({"code": "map-1", "name": "Map 1", "rules": [{"from": "{{company_name}}", "to": "OOO Demo"}]})},
+            data={
+                "payload": json.dumps(
+                    {
+                        "code": "map-1",
+                        "name": "Map 1",
+                        "rules": [{"from": "{{company_name}}", "to": "OOO Demo"}],
+                    }
+                )
+            },
         )
         second_map = await client.post(
             "/api/v1/replace-maps",
             headers={**headers, "X-Tenant": tenant_slug},
-            data={"payload": json.dumps({"code": "map-2", "name": "Map 2", "rules": [{"from": "{{company_name}}", "to": "AO Demo"}]})},
+            data={
+                "payload": json.dumps(
+                    {
+                        "code": "map-2",
+                        "name": "Map 2",
+                        "rules": [{"from": "{{company_name}}", "to": "AO Demo"}],
+                    }
+                )
+            },
         )
         assert first_map.status_code == 201
         assert second_map.status_code == 201
@@ -134,7 +182,15 @@ async def test_replace_idempotency_conflict_same_key_different_payload(app_fixtu
         assert second.json()["code"] == "IDEMPOTENCY_MISMATCH"
 
     async with sessionmaker() as session:
-        versions = (await session.execute(select(DocumentVersion).where(DocumentVersion.document_id.is_not(None)))).scalars().all()
+        versions = (
+            (
+                await session.execute(
+                    select(DocumentVersion).where(DocumentVersion.document_id.is_not(None))
+                )
+            )
+            .scalars()
+            .all()
+        )
         assert len(versions) >= 1
 
 
@@ -149,12 +205,13 @@ def test_replace_engine_persists_patch_and_rollback(tmp_path):
     persisted = reloaded.get_patch(patch.patch_id)
     assert persisted is not None
     assert persisted.status == "applied"
-    assert persisted.diff == [{"key": "company", "before": "Old", "after": "New", "replacement": "New"}]
+    assert persisted.diff == [
+        {"key": "company", "before": "Old", "after": "New", "replacement": "New"}
+    ]
 
     restored = reloaded.rollback(patch.patch_id)
     assert restored == {"company": "Old", "city": "Kazan"}
     assert reloaded.get_patch(patch.patch_id).status == "rolled_back"
-
 
 
 def test_replace_engine_supports_nested_paths_and_idempotent_rollback(tmp_path):

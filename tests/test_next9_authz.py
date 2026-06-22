@@ -58,7 +58,11 @@ def test_client_cannot_access_templates() -> None:
     assert decision.allowed is False
     # client has no "templates" module (MODULE_PERMISSIONS["client"]), so the
     # module gate denies first — module_access_denied is the correct reason.
-    assert decision.reason in {"module_access_denied", "client_resource_restricted", "missing_permission"}
+    assert decision.reason in {
+        "module_access_denied",
+        "client_resource_restricted",
+        "missing_permission",
+    }
 
 
 def test_inspector_contractor_reads_within_contractor() -> None:

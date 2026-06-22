@@ -25,7 +25,6 @@ from httpx import AsyncClient
 from app.models.models import RoleEnum
 from tests.utils.factories import TestDataFactory
 
-
 # =============================================================================
 # /api/v1/admin/users — base list contract
 # =============================================================================
@@ -131,9 +130,7 @@ async def test_admin_users_list_invalid_role_422(
         await session.commit()
 
     headers = await make_auth_headers(RoleEnum.ADMIN)
-    response = await async_client.get(
-        "/api/v1/admin/users?role=nosuchrole", headers=headers
-    )
+    response = await async_client.get("/api/v1/admin/users?role=nosuchrole", headers=headers)
     assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
 
 
@@ -217,9 +214,7 @@ async def test_admin_users_etag_distinct_per_role_filter(
 
     headers = await make_auth_headers(RoleEnum.ADMIN)
     unfiltered = await async_client.get("/api/v1/admin/users", headers=headers)
-    filtered = await async_client.get(
-        "/api/v1/admin/users?role=hr", headers=headers
-    )
+    filtered = await async_client.get("/api/v1/admin/users?role=hr", headers=headers)
     assert unfiltered.headers["ETag"] != filtered.headers["ETag"]
 
 
@@ -241,12 +236,8 @@ async def test_admin_users_etag_distinct_per_active_filter(
 
     headers = await make_auth_headers(RoleEnum.ADMIN)
     no_filter = await async_client.get("/api/v1/admin/users", headers=headers)
-    active_true = await async_client.get(
-        "/api/v1/admin/users?is_active=true", headers=headers
-    )
-    active_false = await async_client.get(
-        "/api/v1/admin/users?is_active=false", headers=headers
-    )
+    active_true = await async_client.get("/api/v1/admin/users?is_active=true", headers=headers)
+    active_false = await async_client.get("/api/v1/admin/users?is_active=false", headers=headers)
     etags = {
         no_filter.headers["ETag"],
         active_true.headers["ETag"],
@@ -296,12 +287,8 @@ async def test_admin_users_etag_distinct_per_page(
         await session.commit()
 
     headers = await make_auth_headers(RoleEnum.ADMIN)
-    page_a = await async_client.get(
-        "/api/v1/admin/users?limit=2&offset=0", headers=headers
-    )
-    page_b = await async_client.get(
-        "/api/v1/admin/users?limit=2&offset=2", headers=headers
-    )
+    page_a = await async_client.get("/api/v1/admin/users?limit=2&offset=0", headers=headers)
+    page_b = await async_client.get("/api/v1/admin/users?limit=2&offset=2", headers=headers)
     assert page_a.headers["ETag"] != page_b.headers["ETag"]
 
 
@@ -321,9 +308,7 @@ async def test_admin_users_empty_by_filter_stable_etag(
     headers = await make_auth_headers(
         RoleEnum.ADMIN, tenant="users-tch", email="admin-tch@example.com"
     )
-    first = await async_client.get(
-        "/api/v1/admin/users?role=teacher", headers=headers
-    )
+    first = await async_client.get("/api/v1/admin/users?role=teacher", headers=headers)
     assert first.status_code == status.HTTP_200_OK
     assert first.json()["items"] == []
     etag = first.headers["ETag"]

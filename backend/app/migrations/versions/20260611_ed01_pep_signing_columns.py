@@ -17,6 +17,7 @@ On SQLite the existing_type is String(16) (SQLite has no native ENUM). On PG
 we use raw ALTER TABLE with USING cast to avoid enum-vs-varchar conflicts; the
 orphaned enum type is dropped after widening (anti-footgun from PR #639).
 """
+
 from __future__ import annotations
 
 import sqlalchemy as sa
@@ -27,20 +28,39 @@ down_revision = "20260611_sz02_drop_ppe_family_b_tables"
 branch_labels = None
 depends_on = None
 
+
 def upgrade() -> None:
     bind = op.get_bind()
     dialect = bind.dialect.name
 
     # Plain string, no FK — user ids are external auth identifiers (same pattern as requested_by).
-    op.add_column("signature_requests", sa.Column("signer_user_id", sa.String(length=36), nullable=True))
-    op.create_index("ix_signature_requests_signer_user_id", "signature_requests", ["signer_user_id"])
-    op.add_column("signature_requests", sa.Column("signer_person_id", sa.String(length=36), nullable=True))
-    op.add_column("signature_requests", sa.Column("content_hash", sa.String(length=64), nullable=True))
+    op.add_column(
+        "signature_requests", sa.Column("signer_user_id", sa.String(length=36), nullable=True)
+    )
+    op.create_index(
+        "ix_signature_requests_signer_user_id", "signature_requests", ["signer_user_id"]
+    )
+    op.add_column(
+        "signature_requests", sa.Column("signer_person_id", sa.String(length=36), nullable=True)
+    )
+    op.add_column(
+        "signature_requests", sa.Column("content_hash", sa.String(length=64), nullable=True)
+    )
     op.add_column("signature_requests", sa.Column("purpose", sa.String(length=32), nullable=True))
-    op.add_column("signature_requests", sa.Column("confirm_code_hash", sa.String(length=64), nullable=True))
-    op.add_column("signature_requests", sa.Column("confirm_code_expires_at", sa.DateTime(timezone=True), nullable=True))
-    op.add_column("signature_requests", sa.Column("confirm_attempts", sa.Integer(), nullable=False, server_default="0"))
-    op.create_index("ix_signature_requests_signer_person_id", "signature_requests", ["signer_person_id"])
+    op.add_column(
+        "signature_requests", sa.Column("confirm_code_hash", sa.String(length=64), nullable=True)
+    )
+    op.add_column(
+        "signature_requests",
+        sa.Column("confirm_code_expires_at", sa.DateTime(timezone=True), nullable=True),
+    )
+    op.add_column(
+        "signature_requests",
+        sa.Column("confirm_attempts", sa.Integer(), nullable=False, server_default="0"),
+    )
+    op.create_index(
+        "ix_signature_requests_signer_person_id", "signature_requests", ["signer_person_id"]
+    )
     if dialect == "postgresql":
         op.create_foreign_key(
             "fk_signature_requests_signer_person_id_person",
@@ -50,7 +70,9 @@ def upgrade() -> None:
             ["id"],
             ondelete="SET NULL",
         )
-        op.execute("ALTER TABLE signature_requests ALTER COLUMN status TYPE VARCHAR(32) USING status::text")
+        op.execute(
+            "ALTER TABLE signature_requests ALTER COLUMN status TYPE VARCHAR(32) USING status::text"
+        )
         op.execute("DROP TYPE IF EXISTS signaturerequeststatus")
     else:
         with op.batch_alter_table("signature_requests") as batch:
@@ -83,8 +105,14 @@ def downgrade() -> None:
         )
 
     if dialect == "postgresql":
-        op.drop_constraint("fk_signature_requests_signer_person_id_person", "signature_requests", type_="foreignkey")
-        op.execute("CREATE TYPE signaturerequeststatus AS ENUM ('created', 'requested', 'signed', 'failed')")
+        op.drop_constraint(
+            "fk_signature_requests_signer_person_id_person",
+            "signature_requests",
+            type_="foreignkey",
+        )
+        op.execute(
+            "CREATE TYPE signaturerequeststatus AS ENUM ('created', 'requested', 'signed', 'failed')"
+        )
         op.execute(
             "ALTER TABLE signature_requests ALTER COLUMN status TYPE signaturerequeststatus "
             "USING status::signaturerequeststatus"
@@ -106,4 +134,3 @@ def downgrade() -> None:
     op.drop_column("signature_requests", "signer_person_id")
     op.drop_index("ix_signature_requests_signer_user_id", table_name="signature_requests")
     op.drop_column("signature_requests", "signer_user_id")
-

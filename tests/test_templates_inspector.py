@@ -137,9 +137,7 @@ def test_loop_variable_not_flagged_as_undefined() -> None:
 
 def test_loops_and_conditions_surfaced() -> None:
     report = inspect_template_context(
-        _docx_with_text(
-            "{% if active %}{% for x in items %}{{ x }}{% endfor %}{% endif %}"
-        ),
+        _docx_with_text("{% if active %}{% for x in items %}{{ x }}{% endfor %}{% endif %}"),
         available_variables={"active": False, "items": []},
     )
     assert len(report["loops"]) == 1

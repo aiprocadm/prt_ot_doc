@@ -106,7 +106,9 @@ class DataQualityService:
             generated_at=datetime.now(tz=timezone.utc),
         )
 
-        logger.info(f"Data quality check completed: {total_issues} issues found, {completeness_percent:.1f}% complete")
+        logger.info(
+            f"Data quality check completed: {total_issues} issues found, {completeness_percent:.1f}% complete"
+        )
 
         return report
 

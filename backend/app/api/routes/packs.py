@@ -41,17 +41,12 @@ from app.models.models import (
     Company,
     DocumentPack,
     DocumentPackItem,
-    MedicalExam,
     Person,
     PipelineRun,
     PipelineRunStatus,
-    PPEIssue,
-    PPEIssueStatus,
     Site,
     TemplateVersion,
     Tenant,
-    Training,
-    TrainingStatus,
 )
 from app.models.safety_core import RiskMapItem, SafetyRiskMap
 from app.modules.ppe.services import PackSafetySummaryService
@@ -86,7 +81,9 @@ TenantDep = Annotated[Tenant, Depends(get_tenant_record)]
 def _pack_bad_request(message: str) -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,
-        detail=api_problem_detail(code="PACK_VALIDATION_ERROR", message=message, error_type="packs"),
+        detail=api_problem_detail(
+            code="PACK_VALIDATION_ERROR", message=message, error_type="packs"
+        ),
     )
 
 
@@ -202,10 +199,16 @@ def _serialize_definition(definition) -> PackScenarioDescriptor:  # type: ignore
         name=definition.name,
         description=definition.description,
         scenario=definition.scenario.value,
-        module=definition.module.value if hasattr(definition.module, "value") else str(definition.module),
-        scenario_type=definition.scenario_type.value
-        if hasattr(definition.scenario_type, "value")
-        else str(definition.scenario_type),
+        module=(
+            definition.module.value
+            if hasattr(definition.module, "value")
+            else str(definition.module)
+        ),
+        scenario_type=(
+            definition.scenario_type.value
+            if hasattr(definition.scenario_type, "value")
+            else str(definition.scenario_type)
+        ),
         templates=[
             PackScenarioTemplate(
                 code=template.code,
@@ -325,9 +328,7 @@ async def _enforce_person_invariants(
         ) from exc
 
 
-async def _get_pack(
-    session: AsyncSession, tenant: Tenant, pack_code: str
-) -> DocumentPack:
+async def _get_pack(session: AsyncSession, tenant: Tenant, pack_code: str) -> DocumentPack:
     await ensure_default_packs(session, tenant_slug=tenant.slug)
     tenant_scope = _tenant_scope_values(tenant)
     stmt = (
@@ -408,7 +409,9 @@ def _resolve_naming(
     config = payload.naming
     org = _coerce_string(config.org, company.name)
     unit = _coerce_string(config.unit, site.name if site else "hq")
-    project = _coerce_string(config.project, payload.data.get("project") if payload.data else pack.code)
+    project = _coerce_string(
+        config.project, payload.data.get("project") if payload.data else pack.code
+    )
     client = _coerce_string(config.client, company.name)
     topic = _coerce_string(config.topic, pack.code)
     version = config.version or 1
@@ -458,14 +461,16 @@ async def create_pack_from_scenario(
     _ = access
     definition = PACK_DEFINITIONS_BY_CODE.get(scenario_code)
     if definition is None:
-        raise _pack_not_found(code="PACK_SCENARIO_NOT_SUPPORTED", message="Scenario is not supported")
+        raise _pack_not_found(
+            code="PACK_SCENARIO_NOT_SUPPORTED", message="Scenario is not supported"
+        )
 
     try:
-        pack = await ensure_pack_by_code(
-            session, tenant_slug=tenant.slug, pack_code=scenario_code
-        )
+        pack = await ensure_pack_by_code(session, tenant_slug=tenant.slug, pack_code=scenario_code)
     except ValueError:
-        raise _pack_not_found(code="PACK_SCENARIO_NOT_SUPPORTED", message="Scenario is not supported")
+        raise _pack_not_found(
+            code="PACK_SCENARIO_NOT_SUPPORTED", message="Scenario is not supported"
+        )
 
     if payload.name:
         pack.name = payload.name
@@ -550,9 +555,7 @@ async def list_packs(
     return PackListResponse.model_validate(payload)
 
 
-@router.post(
-    "/generate", response_model=TaskAcceptedResponse, status_code=status.HTTP_202_ACCEPTED
-)
+@router.post("/generate", response_model=TaskAcceptedResponse, status_code=status.HTTP_202_ACCEPTED)
 async def generate_pack_documents(
     payload: PackGenerateRequest,
     request: Request,
@@ -591,7 +594,9 @@ async def generate_pack_documents(
 
     try:
         company = await _get_company(session, tenant, payload.company_id, access=access)
-        await _get_site(session, tenant, company, payload.site_id)  # validate: raises 404 if invalid
+        await _get_site(
+            session, tenant, company, payload.site_id
+        )  # validate: raises 404 if invalid
         persons = await _get_persons(session, tenant, company, payload.person_ids)
         await _enforce_person_invariants(session, tenant, persons)
         await _get_pack(session, tenant, payload.pack_code)
@@ -661,6 +666,7 @@ async def generate_pack_documents(
     response.status_code = status.HTTP_202_ACCEPTED
     return result
 
+
 @router.post("/run", response_model=PackRunResponse, status_code=status.HTTP_202_ACCEPTED)
 async def run_pack(
     payload: PackRunRequest,
@@ -693,9 +699,7 @@ async def run_pack(
             .select_from(PipelineRun)
             .where(
                 PipelineRun.tenant_id == tenant.id,
-                PipelineRun.status.in_(
-                    [PipelineRunStatus.QUEUED, PipelineRunStatus.RUNNING]
-                ),
+                PipelineRun.status.in_([PipelineRunStatus.QUEUED, PipelineRunStatus.RUNNING]),
             )
         )
         active_runs = (await session.execute(active_stmt)).scalar_one()
@@ -742,12 +746,16 @@ async def run_pack(
                 person=person,
                 payload=payload,
             )
-            context["letterhead"] = payload.letterhead.model_dump(mode="json") if payload.letterhead else None
+            context["letterhead"] = (
+                payload.letterhead.model_dump(mode="json") if payload.letterhead else None
+            )
             context["site_id"] = site.id if site else None
             for item in pack.items:
                 template = item.template
                 if template is None:
-                    raise _pack_conflict("Pack item is missing a template", code="PACK_ITEM_NO_TEMPLATE")
+                    raise _pack_conflict(
+                        "Pack item is missing a template", code="PACK_ITEM_NO_TEMPLATE"
+                    )
                 if item.template_version_id is None:
                     raise _pack_conflict(
                         "Pack item requires template_version_id",
@@ -868,6 +876,7 @@ async def run_pack(
 
     response.status_code = status.HTTP_202_ACCEPTED
     return result
+
 
 @router.get("/download", summary="Download generated package archive")
 async def download_pack_archive(
@@ -1042,7 +1051,11 @@ async def pack_safety_summary(
     del access
     tenant_scope = _tenant_scope_values(tenant)
 
-    people_stmt = select(Person).where(Person.tenant_id.in_(tenant_scope), Person.deleted_at.is_(None)).limit(100)
+    people_stmt = (
+        select(Person)
+        .where(Person.tenant_id.in_(tenant_scope), Person.deleted_at.is_(None))
+        .limit(100)
+    )
     persons = (await session.execute(people_stmt)).scalars().all()
 
     output: list[dict[str, object]] = []
@@ -1069,7 +1082,9 @@ async def pack_safety_summary(
                 RiskMapItem.deleted_at.is_(None),
                 RiskMapItem.risk_level.is_not(None),
             )
-            raw_levels = [str(level) for level in (await session.execute(level_stmt)).scalars().all()]
+            raw_levels = [
+                str(level) for level in (await session.execute(level_stmt)).scalars().all()
+            ]
             rank = {"low": 0, "medium": 1, "high": 2, "critical": 3}
             levels = sorted(set(raw_levels), key=lambda value: rank.get(value, -1))
 
@@ -1079,12 +1094,16 @@ async def pack_safety_summary(
         issued_ppe: list[dict[str, object]] = []
 
         missing_ppe: dict[str, float] = {}
-        has_clearance = PackSafetySummaryService.has_clearance(risk_levels=levels, missing_ppe=missing_ppe)
+        has_clearance = PackSafetySummaryService.has_clearance(
+            risk_levels=levels, missing_ppe=missing_ppe
+        )
 
         output.append(
             {
                 "person_id": person.id,
-                "fio": " ".join(filter(None, [person.last_name, person.first_name, person.middle_name])),
+                "fio": " ".join(
+                    filter(None, [person.last_name, person.first_name, person.middle_name])
+                ),
                 "position": getattr(person.position, "name", None),
                 "site": getattr(getattr(person.workplace, "site", None), "name", None),
                 "active_risk_map_id": active_risk_map.id if active_risk_map else None,

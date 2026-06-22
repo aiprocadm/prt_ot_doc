@@ -15,7 +15,9 @@ from .interfaces import (
 )
 
 
-def _stub_details(*, provider: str, operation: str, extra: dict[str, Any] | None = None) -> dict[str, Any]:
+def _stub_details(
+    *, provider: str, operation: str, extra: dict[str, Any] | None = None
+) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "provider_mode": "non_production",
         "adapter_type": "stub",
@@ -113,7 +115,9 @@ class StubFRDOIntegration(BaseFRDOIntegration):
         return IntegrationStatus(
             external_id=f"frdo-{int(datetime.now(tz=timezone.utc).timestamp())}",
             status="submitted",
-            details=_stub_details(provider=self.name, operation="submit_record", extra={"payload": payload}),
+            details=_stub_details(
+                provider=self.name, operation="submit_record", extra={"payload": payload}
+            ),
         )
 
     async def fetch_record(self, external_id: str) -> dict[str, Any] | None:
@@ -153,7 +157,9 @@ class StubEISOTIntegration(BaseEISOTIntegration):
         return IntegrationStatus(
             external_id=f"eisot-{int(datetime.now(tz=timezone.utc).timestamp())}",
             status="queued",
-            details=_stub_details(provider=self.name, operation="publish_report", extra={"payload": payload}),
+            details=_stub_details(
+                provider=self.name, operation="publish_report", extra={"payload": payload}
+            ),
         )
 
     async def get_publication_status(self, external_id: str) -> IntegrationStatus:
@@ -169,7 +175,9 @@ class StubEISOTIntegration(BaseEISOTIntegration):
             IntegrationStatus(
                 external_id="notification-1",
                 status="info",
-                details=_stub_details(provider=self.name, operation="pull_notifications", extra={"timestamp": now}),
+                details=_stub_details(
+                    provider=self.name, operation="pull_notifications", extra={"timestamp": now}
+                ),
             ),
         ]
 

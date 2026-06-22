@@ -318,7 +318,9 @@ def _serialize_date(value: date | datetime | None) -> str | None:
     return value.isoformat()
 
 
-def _validate_payload_required_fields(payload: dict[str, Any], required_fields: tuple[str, ...]) -> None:
+def _validate_payload_required_fields(
+    payload: dict[str, Any], required_fields: tuple[str, ...]
+) -> None:
     missing = [field for field in required_fields if payload.get(field) in (None, "")]
     if missing:
         raise HTTPException(
@@ -331,7 +333,9 @@ def _validate_payload_required_fields(payload: dict[str, Any], required_fields: 
         )
 
 
-def _sanitize_client_payload(payload: dict[str, Any], blocked_fields: tuple[str, ...]) -> dict[str, Any]:
+def _sanitize_client_payload(
+    payload: dict[str, Any], blocked_fields: tuple[str, ...]
+) -> dict[str, Any]:
     sanitized = dict(payload)
     for field in blocked_fields:
         sanitized.pop(field, None)
@@ -376,7 +380,9 @@ async def create_batch(
 ):
     incoming = dict(payload or {})
     _validate_payload_required_fields(incoming, ("device_id", "entity_type", "payload"))
-    sanitized = _sanitize_client_payload(incoming, ("tenant_id", "user_id", "status", "error_payload"))
+    sanitized = _sanitize_client_payload(
+        incoming, ("tenant_id", "user_id", "status", "error_payload")
+    )
     sanitized["payload"] = _sanitize_offline_entity_payload(sanitized.get("payload") or {})
     batch = OfflineSyncBatch(
         tenant_id=tenant.id,
@@ -425,7 +431,9 @@ async def commit_media(
 ):
     incoming = dict(payload or {})
     _validate_payload_required_fields(incoming, ("device_id", "local_ref"))
-    sanitized = _sanitize_client_payload(incoming, ("tenant_id", "user_id", "upload_status", "file_id"))
+    sanitized = _sanitize_client_payload(
+        incoming, ("tenant_id", "user_id", "upload_status", "file_id")
+    )
     media = OfflineMediaQueue(
         tenant_id=tenant.id,
         user_id=str(access.user.id),
@@ -652,10 +660,20 @@ async def bootstrap(
         },
         offline_queue={
             "capabilities": _build_offline_capabilities(permissions),
-            "failed_conflicts": [_serialize_conflict(item).model_dump(mode="json") for item in failed_conflicts[:10]],
+            "failed_conflicts": [
+                _serialize_conflict(item).model_dump(mode="json") for item in failed_conflicts[:10]
+            ],
             "conflict_count": len(failed_conflicts),
-            "draft_entity_types": ["briefing_entry", "incident", "inspection_checklist", "task_comment", "training_ack"],
-            "draft_policy": _build_draft_policy(pending_batches=pending_batches, failed_batches=failed_batches),
+            "draft_entity_types": [
+                "briefing_entry",
+                "incident",
+                "inspection_checklist",
+                "task_comment",
+                "training_ack",
+            ],
+            "draft_policy": _build_draft_policy(
+                pending_batches=pending_batches, failed_batches=failed_batches
+            ),
             "conflict_resolution": _build_conflict_resolution_contract(len(failed_conflicts)),
         },
         dictionaries=_build_dictionaries(),

@@ -203,8 +203,14 @@ class NotificationApplicationService:
             stmt = stmt.where(Notification.created_at < created_before)
 
         rows = (
-            await self.session.execute(stmt.order_by(Notification.created_at.desc()).limit(limit + 1))
-        ).scalars().all()
+            (
+                await self.session.execute(
+                    stmt.order_by(Notification.created_at.desc()).limit(limit + 1)
+                )
+            )
+            .scalars()
+            .all()
+        )
         has_more = len(rows) > limit
         items = rows[:limit]
 
@@ -251,7 +257,9 @@ class NotificationApplicationService:
         await self.session.commit()
         return updated
 
-    async def list_templates(self, *, channel_value: str | None, type_value: str | None) -> list[NotificationTemplateOut]:
+    async def list_templates(
+        self, *, channel_value: str | None, type_value: str | None
+    ) -> list[NotificationTemplateOut]:
         notification_channel = self._parse_enum(NotificationChannel, channel_value, "channel")
         notification_type = self._parse_enum(NotificationType, type_value, "type")
         stmt = select(NotificationTemplate).where(
@@ -263,10 +271,16 @@ class NotificationApplicationService:
         if notification_type is not None:
             stmt = stmt.where(NotificationTemplate.type == notification_type)
         rows = (
-            await self.session.execute(
-                stmt.order_by(NotificationTemplate.code.asc(), NotificationTemplate.locale.asc())
+            (
+                await self.session.execute(
+                    stmt.order_by(
+                        NotificationTemplate.code.asc(), NotificationTemplate.locale.asc()
+                    )
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         return [self._to_template_out(row) for row in rows]
 
     async def upsert_template(self, payload: NotificationTemplateIn) -> NotificationTemplateOut:
@@ -339,9 +353,13 @@ class NotificationApplicationService:
         await self.session.commit()
         return ChannelSettingsOut.model_validate(settings, from_attributes=True)
 
-    async def list_calendar_events(self, *, status_value: str | None, source: str | None) -> list[CalendarEventRead]:
+    async def list_calendar_events(
+        self, *, status_value: str | None, source: str | None
+    ) -> list[CalendarEventRead]:
         events: list[CalendarEventRead] = []
-        plan_task_status = self._parse_enum(PlanTaskStatus, status_value, "status") if status_value else None
+        plan_task_status = (
+            self._parse_enum(PlanTaskStatus, status_value, "status") if status_value else None
+        )
         calendar_source = self._parse_calendar_source(source)
 
         task_stmt = select(PlanTask).where(
@@ -352,8 +370,10 @@ class NotificationApplicationService:
         if plan_task_status is not None:
             task_stmt = task_stmt.where(PlanTask.status == plan_task_status)
         task_rows = (
-            await self.session.execute(task_stmt.order_by(PlanTask.due_at.asc()).limit(300))
-        ).scalars().all()
+            (await self.session.execute(task_stmt.order_by(PlanTask.due_at.asc()).limit(300)))
+            .scalars()
+            .all()
+        )
         for row in task_rows:
             if calendar_source and calendar_source != "task":
                 continue
@@ -373,14 +393,20 @@ class NotificationApplicationService:
             )
 
         training_rows = (
-            await self.session.execute(
-                select(TrainingPlan).where(
-                    TrainingPlan.tenant_id == self.tenant.id,
-                    TrainingPlan.deleted_at.is_(None),
-                    TrainingPlan.due_date.is_not(None),
-                ).limit(300)
+            (
+                await self.session.execute(
+                    select(TrainingPlan)
+                    .where(
+                        TrainingPlan.tenant_id == self.tenant.id,
+                        TrainingPlan.deleted_at.is_(None),
+                        TrainingPlan.due_date.is_not(None),
+                    )
+                    .limit(300)
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         for row in training_rows:
             if calendar_source and calendar_source != "training":
                 continue
@@ -399,14 +425,20 @@ class NotificationApplicationService:
             )
 
         ppe_rows = (
-            await self.session.execute(
-                select(PPEIssue).where(
-                    PPEIssue.tenant_id == self.tenant.id,
-                    PPEIssue.deleted_at.is_(None),
-                    PPEIssue.expires_at.is_not(None),
-                ).limit(300)
+            (
+                await self.session.execute(
+                    select(PPEIssue)
+                    .where(
+                        PPEIssue.tenant_id == self.tenant.id,
+                        PPEIssue.deleted_at.is_(None),
+                        PPEIssue.expires_at.is_not(None),
+                    )
+                    .limit(300)
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         for row in ppe_rows:
             if calendar_source and calendar_source != "ppe":
                 continue
@@ -425,14 +457,20 @@ class NotificationApplicationService:
             )
 
         inspection_rows = (
-            await self.session.execute(
-                select(Inspection).where(
-                    Inspection.tenant_id == self.tenant.id,
-                    Inspection.deleted_at.is_(None),
-                    Inspection.scheduled_at.is_not(None),
-                ).limit(300)
+            (
+                await self.session.execute(
+                    select(Inspection)
+                    .where(
+                        Inspection.tenant_id == self.tenant.id,
+                        Inspection.deleted_at.is_(None),
+                        Inspection.scheduled_at.is_not(None),
+                    )
+                    .limit(300)
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         for row in inspection_rows:
             if calendar_source and calendar_source != "inspection":
                 continue
@@ -445,7 +483,9 @@ class NotificationApplicationService:
                     entity_type="inspection",
                     entity_id=row.id,
                     title="Проверка: запланировано",
-                    date=datetime.combine(row.scheduled_at, datetime.min.time(), tzinfo=timezone.utc),
+                    date=datetime.combine(
+                        row.scheduled_at, datetime.min.time(), tzinfo=timezone.utc
+                    ),
                     status=row.status.value if hasattr(row.status, "value") else str(row.status),
                     deeplink=f"/inspections?id={row.id}",
                 )

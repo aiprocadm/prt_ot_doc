@@ -39,10 +39,7 @@ class _TraversalState:
     def track_keys(self, count: int) -> None:
         self.total_keys += count
         if self.total_keys > MAX_METADATA_NESTED_KEYS:
-            msg = (
-                "metadata cannot contain more than "
-                f"{MAX_METADATA_NESTED_KEYS} total keys"
-            )
+            msg = "metadata cannot contain more than " f"{MAX_METADATA_NESTED_KEYS} total keys"
             raise ValueError(msg)
 
 
@@ -65,9 +62,7 @@ def _validate_key(key: str) -> str:
     if not candidate:
         raise ValueError("metadata keys cannot be blank")
     if len(candidate) > MAX_METADATA_KEY_LENGTH:
-        raise ValueError(
-            f"metadata keys cannot exceed {MAX_METADATA_KEY_LENGTH} characters"
-        )
+        raise ValueError(f"metadata keys cannot exceed {MAX_METADATA_KEY_LENGTH} characters")
     return candidate
 
 
@@ -91,10 +86,7 @@ def _validate_metadata_value(value: Any, *, depth: int, state: _TraversalState) 
             raise ValueError(
                 f"metadata lists cannot contain more than {MAX_METADATA_LIST_ITEMS} items"
             )
-        return [
-            _validate_metadata_value(item, depth=depth + 1, state=state)
-            for item in value
-        ]
+        return [_validate_metadata_value(item, depth=depth + 1, state=state) for item in value]
 
     if isinstance(value, str):
         candidate = value.strip()

@@ -33,15 +33,15 @@ __all__ = ["ensure_default_packs", "ensure_pack_by_code"]
 async def _resolve_tenant_id(session: AsyncSession, tenant_slug: str) -> str:
     info = getattr(session, "info", None)
     if isinstance(info, dict):
-        session_tenant_slug = str(info.get("tenant_slug") or info.get("tenant") or "").strip().lower()
+        session_tenant_slug = (
+            str(info.get("tenant_slug") or info.get("tenant") or "").strip().lower()
+        )
         session_tenant_id = str(info.get("tenant_id") or "").strip()
         if session_tenant_slug == tenant_slug and session_tenant_id:
             return session_tenant_id
 
     tenant = (
-        await session.execute(
-            select(Tenant.id).where(Tenant.slug == tenant_slug).limit(1)
-        )
+        await session.execute(select(Tenant.id).where(Tenant.slug == tenant_slug).limit(1))
     ).scalar_one_or_none()
     if tenant is None:
         raise ValueError(f"Tenant not found for slug {tenant_slug}")
@@ -56,9 +56,7 @@ async def _ensure_template(
     template_spec: PackTemplateSpec,
     storage: FileStorageService,
 ) -> Template:
-    key = (
-        f"{tenant_prefix_path(tenant_slug)}/templates/{template_spec.code}.docx"
-    )
+    key = f"{tenant_prefix_path(tenant_slug)}/templates/{template_spec.code}.docx"
     payload_bytes = template_spec.builder()
     storage.put(key, payload_bytes, content_type=DOCX_MIME)
 
@@ -146,8 +144,7 @@ async def _ensure_pack(
         DocumentPackItem.deleted_at.is_(None),
     )
     existing_items = {
-        item.template_id: item
-        for item in (await session.execute(stmt_items)).scalars().all()
+        item.template_id: item for item in (await session.execute(stmt_items)).scalars().all()
     }
 
     async def _resolve_template_version_id(template: Template) -> str:

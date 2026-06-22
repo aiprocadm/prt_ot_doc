@@ -22,7 +22,6 @@ from httpx import AsyncClient
 from app.models.models import RoleEnum
 from tests.utils.factories import TestDataFactory
 
-
 # -----------------------------------------------------------------------------
 # Helpers
 # -----------------------------------------------------------------------------
@@ -37,9 +36,7 @@ async def _seed_briefing_template(
     briefing_type: str = "introductory",
 ) -> dict:
     payload = {"code": code, "title": title, "briefing_type": briefing_type}
-    response = await async_client.post(
-        "/api/v1/briefings/templates", json=payload, headers=headers
-    )
+    response = await async_client.post("/api/v1/briefings/templates", json=payload, headers=headers)
     assert response.status_code == status.HTTP_201_CREATED, response.text
     return response.json()
 
@@ -53,9 +50,7 @@ async def _seed_briefing_journal(
     journal_type: str = "introductory",
 ) -> dict:
     payload = {"code": code, "title": title, "journal_type": journal_type}
-    response = await async_client.post(
-        "/api/v1/briefings/journals", json=payload, headers=headers
-    )
+    response = await async_client.post("/api/v1/briefings/journals", json=payload, headers=headers)
     assert response.status_code == status.HTTP_201_CREATED, response.text
     return response.json()
 
@@ -72,9 +67,7 @@ async def _seed_briefing_entry(
         "briefing_type": briefing_type,
         "briefing_date": datetime.now(timezone.utc).isoformat(),
     }
-    response = await async_client.post(
-        "/api/v1/briefings/entries", json=payload, headers=headers
-    )
+    response = await async_client.post("/api/v1/briefings/entries", json=payload, headers=headers)
     assert response.status_code == status.HTTP_201_CREATED, response.text
     return response.json()
 
@@ -87,9 +80,7 @@ async def _seed_training_course(
     code: str = "TRC-1",
 ) -> dict:
     payload = {"title": title, "code": code, "duration_hours": 8, "valid_period_days": 365}
-    response = await async_client.post(
-        "/api/v1/training/courses", json=payload, headers=headers
-    )
+    response = await async_client.post("/api/v1/training/courses", json=payload, headers=headers)
     assert response.status_code == status.HTTP_201_CREATED, response.text
     return response.json()
 
@@ -364,16 +355,10 @@ async def test_training_courses_etag_distinct_per_page(
 
     headers = await make_auth_headers(RoleEnum.ADMIN)
     for i in range(4):
-        await _seed_training_course(
-            async_client, headers, code=f"TRC-P{i}", title=f"Course P{i}"
-        )
+        await _seed_training_course(async_client, headers, code=f"TRC-P{i}", title=f"Course P{i}")
 
-    a = await async_client.get(
-        "/api/v1/training/courses?limit=2&offset=0", headers=headers
-    )
-    b = await async_client.get(
-        "/api/v1/training/courses?limit=2&offset=2", headers=headers
-    )
+    a = await async_client.get("/api/v1/training/courses?limit=2&offset=0", headers=headers)
+    b = await async_client.get("/api/v1/training/courses?limit=2&offset=2", headers=headers)
     assert a.headers["ETag"] != b.headers["ETag"]
 
 

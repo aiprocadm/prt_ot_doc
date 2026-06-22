@@ -3,6 +3,7 @@
 Extracted from ``tasks.py::_enforce_person_invariants`` (Task 7.1) and
 extended with suspension-block and norm-aware medical checks (Task 7.2).
 """
+
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -12,7 +13,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domains.medical import lifecycle as lc
 from app.domains.ppe import lifecycle as ppe_lc
-from app.modules.ppe.services import NormItem, PPENormService
 from app.models.models import (
     MedicalExam,
     MedicalNorm,
@@ -26,6 +26,7 @@ from app.models.models import (
     Training,
     TrainingStatus,
 )
+from app.modules.ppe.services import NormItem, PPENormService
 
 
 def _normalize_datetime(value: datetime | None) -> datetime | None:
@@ -176,14 +177,11 @@ async def enforce_person_admission(
         )
     ).all()
     latest_by_kind: dict[tuple[str, str], object] = {
-        (pid, (kind.value if hasattr(kind, "value") else kind)): vu
-        for pid, kind, vu in ex_rows
+        (pid, (kind.value if hasattr(kind, "value") else kind)): vu for pid, kind, vu in ex_rows
     }
 
     # Hazard map: position_id -> set of hazard_id (explicit query, no lazy load)
-    position_ids: list[str] = list(
-        {person.position_id for person in persons if person.position_id}
-    )
+    position_ids: list[str] = list({person.position_id for person in persons if person.position_id})
     position_hazards: dict[str, set[str]] = {pid: set() for pid in position_ids}
     if position_ids:
         ph_rows = (
@@ -224,9 +222,7 @@ async def enforce_person_admission(
 
     norms_by_position: dict[str, list[tuple[str | None, str, int]]] = {}
     for npos_id, nitem_id, nitem_name, nquantity in ppe_norm_rows:
-        norms_by_position.setdefault(npos_id, []).append(
-            (nitem_id, nitem_name, nquantity)
-        )
+        norms_by_position.setdefault(npos_id, []).append((nitem_id, nitem_name, nquantity))
 
     # Required card lines per position — same fold as build_personal_card_766n:
     # required_union (max per catalog key) + best-norm metadata per key.
@@ -255,8 +251,7 @@ async def enforce_person_admission(
             if kept is None or nquantity > kept[2]:
                 line_meta[key] = (nitem_id, nitem_name, nquantity)
         ppe_required_by_position[npos_id] = [
-            (line_meta[key][0], line_meta[key][1], int(qty))
-            for key, qty in required_qty.items()
+            (line_meta[key][0], line_meta[key][1], int(qty)) for key, qty in required_qty.items()
         ]
 
     normed_person_ids = [
@@ -318,9 +313,7 @@ async def enforce_person_admission(
         if pos_id and pos_id in positions_with_norms:
             hazard_ids = position_hazards.get(pos_id, set())
             wcc = person.working_conditions_class
-            required_kinds = lc.resolve_required_kinds(
-                pos_id, wcc, hazard_ids, norms
-            )
+            required_kinds = lc.resolve_required_kinds(pos_id, wcc, hazard_ids, norms)
             if required_kinds:
                 for kind in required_kinds:
                     vu = latest_by_kind.get((person.id, kind.value))
@@ -338,15 +331,11 @@ async def enforce_person_admission(
                 missing.append("medical_exam")
 
         # PPE — norm-aware (766н card lines) or legacy fallback
-        ppe_required = (
-            ppe_required_by_position.get(pos_id) if pos_id else None
-        )
+        ppe_required = ppe_required_by_position.get(pos_id) if pos_id else None
         if ppe_required:
             by_id, by_name = ppe_issue_index.get(person.id, ({}, {}))
             for nitem_id, nitem_name, req_qty in ppe_required:
-                views = ppe_lc.match_issues_for_norm_line(
-                    nitem_id, nitem_name, by_id, by_name
-                )
+                views = ppe_lc.match_issues_for_norm_line(nitem_id, nitem_name, by_id, by_name)
                 line_status = ppe_lc.card_line_status(req_qty, views, today)
                 if line_status in ppe_lc.ADMISSION_BLOCKING_STATUSES:
                     missing.append("ppe_issue")

@@ -26,11 +26,9 @@ from app.models.models import (
     BriefingEntry,
     BriefingJournal,
     BriefingTemplate,
-    OfflineMediaQueue,
     OfflineSyncBatch,
     Tenant,
 )
-
 
 # -----------------------------------------------------------------------------
 # Helpers
@@ -38,7 +36,13 @@ from app.models.models import (
 
 
 async def _post_batch(
-    client: AsyncClient, headers: dict[str, str], *, entity_type: str, payload: dict, device_id: str = "dev-1", **extras
+    client: AsyncClient,
+    headers: dict[str, str],
+    *,
+    entity_type: str,
+    payload: dict,
+    device_id: str = "dev-1",
+    **extras,
 ) -> dict:
     body = {"device_id": device_id, "entity_type": entity_type, "payload": payload, **extras}
     response = await client.post("/api/v1/pwa/sync/batch", headers=headers, json=body)
@@ -229,7 +233,9 @@ async def test_briefing_entry_signed_employee_triggers_final_conflict(
 ) -> None:
     async with sessionmaker() as session:
         tenant = (await session.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()
-        entry_id = await _seed_briefing_entry(session, tenant_id=str(tenant.id), status="signed_employee")
+        entry_id = await _seed_briefing_entry(
+            session, tenant_id=str(tenant.id), status="signed_employee"
+        )
 
     headers = await make_auth_headers()
     body = {
@@ -275,7 +281,11 @@ async def test_evidence_case_create_when_already_exists_is_conflict(
     create_body = {
         "device_id": "dev",
         "entity_type": "evidence_case",
-        "payload": {"entity_type": "evidence_case", "operation": "create", "evidence_case_id": "ec-1"},
+        "payload": {
+            "entity_type": "evidence_case",
+            "operation": "create",
+            "evidence_case_id": "ec-1",
+        },
     }
     first = await async_client.post("/api/v1/pwa/sync/batch", headers=headers, json=create_body)
     assert first.json()["status"] == "applied"
@@ -296,7 +306,11 @@ async def test_evidence_case_update_when_missing_is_conflict(
     body = {
         "device_id": "dev",
         "entity_type": "evidence_case",
-        "payload": {"entity_type": "evidence_case", "operation": "update", "evidence_case_id": "missing"},
+        "payload": {
+            "entity_type": "evidence_case",
+            "operation": "update",
+            "evidence_case_id": "missing",
+        },
     }
     response = await async_client.post("/api/v1/pwa/sync/batch", headers=headers, json=body)
     failure = response.json()
@@ -315,7 +329,11 @@ async def test_evidence_case_update_with_stale_base_version_is_conflict(
         json={
             "device_id": "dev",
             "entity_type": "evidence_case",
-            "payload": {"entity_type": "evidence_case", "operation": "create", "evidence_case_id": "ec-2"},
+            "payload": {
+                "entity_type": "evidence_case",
+                "operation": "create",
+                "evidence_case_id": "ec-2",
+            },
         },
     )
     assert create.json()["status"] == "applied"
@@ -353,7 +371,11 @@ async def test_evidence_case_update_increments_version_on_success(
         json={
             "device_id": "dev",
             "entity_type": "evidence_case",
-            "payload": {"entity_type": "evidence_case", "operation": "create", "evidence_case_id": "ec-3"},
+            "payload": {
+                "entity_type": "evidence_case",
+                "operation": "create",
+                "evidence_case_id": "ec-3",
+            },
         },
     )
     update = await async_client.post(
@@ -413,7 +435,11 @@ async def test_resolve_conflict_server_wins_marks_applied(
         json={
             "device_id": "dev",
             "entity_type": "evidence_case",
-            "payload": {"entity_type": "evidence_case", "operation": "create", "evidence_case_id": "ec-resolve-1"},
+            "payload": {
+                "entity_type": "evidence_case",
+                "operation": "create",
+                "evidence_case_id": "ec-resolve-1",
+            },
         },
     )
     conflict = await async_client.post(
@@ -422,7 +448,11 @@ async def test_resolve_conflict_server_wins_marks_applied(
         json={
             "device_id": "dev",
             "entity_type": "evidence_case",
-            "payload": {"entity_type": "evidence_case", "operation": "create", "evidence_case_id": "ec-resolve-1"},
+            "payload": {
+                "entity_type": "evidence_case",
+                "operation": "create",
+                "evidence_case_id": "ec-resolve-1",
+            },
         },
     )
     failed_id = conflict.json()["id"]
@@ -449,7 +479,11 @@ async def test_resolve_conflict_client_retry_marks_pending_with_patch(
         json={
             "device_id": "dev",
             "entity_type": "evidence_case",
-            "payload": {"entity_type": "evidence_case", "operation": "create", "evidence_case_id": "ec-resolve-2"},
+            "payload": {
+                "entity_type": "evidence_case",
+                "operation": "create",
+                "evidence_case_id": "ec-resolve-2",
+            },
         },
     )
     conflict = await async_client.post(
@@ -458,7 +492,11 @@ async def test_resolve_conflict_client_retry_marks_pending_with_patch(
         json={
             "device_id": "dev",
             "entity_type": "evidence_case",
-            "payload": {"entity_type": "evidence_case", "operation": "create", "evidence_case_id": "ec-resolve-2"},
+            "payload": {
+                "entity_type": "evidence_case",
+                "operation": "create",
+                "evidence_case_id": "ec-resolve-2",
+            },
         },
     )
     failed_id = conflict.json()["id"]
@@ -662,10 +700,17 @@ async def test_bootstrap_returns_full_envelope(
     assert response.status_code == 200
     body = response.json()
     assert {
-        "current_user", "tenant_branding", "route_permissions",
-        "briefing_templates", "active_journals", "assigned_training",
-        "compliance_deadlines_summary", "offline_queue",
-        "dictionaries", "sync_state", "diagnostics",
+        "current_user",
+        "tenant_branding",
+        "route_permissions",
+        "briefing_templates",
+        "active_journals",
+        "assigned_training",
+        "compliance_deadlines_summary",
+        "offline_queue",
+        "dictionaries",
+        "sync_state",
+        "diagnostics",
     } <= set(body)
     assert body["diagnostics"]["provider_mode"] == "projection_api"
     assert body["diagnostics"]["bootstrap_version"] == 4

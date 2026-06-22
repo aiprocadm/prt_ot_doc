@@ -29,7 +29,6 @@ Result invariants:
 
 from __future__ import annotations
 
-import re
 import zipfile
 from io import BytesIO
 
@@ -38,7 +37,6 @@ from docx import Document
 from docx.shared import Inches
 
 from app.modules.replace.engine import ReplaceOptions, replace_docx_bytes
-
 
 # -----------------------------------------------------------------------------
 # Builders
@@ -145,9 +143,7 @@ def _document_xml(docx_bytes: bytes, name: str = "word/document.xml") -> str:
 
 
 def test_replaces_in_single_body_paragraph() -> None:
-    result = replace_docx_bytes(
-        _docx_with_text("Hello Alice"), {"Alice": "Bob"}, ReplaceOptions()
-    )
+    result = replace_docx_bytes(_docx_with_text("Hello Alice"), {"Alice": "Bob"}, ReplaceOptions())
     assert "Hello Bob" in _body_text(result.docx_bytes)
     assert len(result.hits) == 1
     assert result.hits[0].part == "body"
@@ -235,9 +231,7 @@ def test_replaces_in_textbox() -> None:
 
 
 def test_default_match_is_case_insensitive() -> None:
-    result = replace_docx_bytes(
-        _docx_with_text("ALICE bob"), {"alice": "X"}, ReplaceOptions()
-    )
+    result = replace_docx_bytes(_docx_with_text("ALICE bob"), {"alice": "X"}, ReplaceOptions())
     assert "X" in _body_text(result.docx_bytes)
 
 
@@ -314,9 +308,7 @@ def test_regex_special_char_passes_through_when_regex_true() -> None:
 
 
 def test_empty_source_is_skipped() -> None:
-    result = replace_docx_bytes(
-        _docx_with_text("Hello"), {"": "anything"}, ReplaceOptions()
-    )
+    result = replace_docx_bytes(_docx_with_text("Hello"), {"": "anything"}, ReplaceOptions())
     assert _body_text(result.docx_bytes) == "Hello"
     assert result.hits == []
 
@@ -339,9 +331,7 @@ def test_multiple_rules_apply_in_order() -> None:
 
 
 def test_identity_rule_produces_no_hit() -> None:
-    result = replace_docx_bytes(
-        _docx_with_text("alice"), {"alice": "alice"}, ReplaceOptions()
-    )
+    result = replace_docx_bytes(_docx_with_text("alice"), {"alice": "alice"}, ReplaceOptions())
     # Identity rule: pattern matches, but replacement equals source — engine
     # still records a hit because match_count > 0; the text is unchanged.
     assert _body_text(result.docx_bytes) == "alice"
@@ -349,9 +339,7 @@ def test_identity_rule_produces_no_hit() -> None:
 
 def test_target_containing_source_does_not_loop() -> None:
     """Replacing ``a`` with ``aa`` must produce ``aa b aa``, not an infinite chain."""
-    result = replace_docx_bytes(
-        _docx_with_text("a b a"), {"a": "aa"}, ReplaceOptions()
-    )
+    result = replace_docx_bytes(_docx_with_text("a b a"), {"a": "aa"}, ReplaceOptions())
     assert _body_text(result.docx_bytes) == "aa b aa"
 
 
@@ -379,27 +367,21 @@ def test_unicode_source_and_target() -> None:
 
 
 def test_hit_records_from_and_to() -> None:
-    result = replace_docx_bytes(
-        _docx_with_text("Hello Alice"), {"Alice": "Bob"}, ReplaceOptions()
-    )
+    result = replace_docx_bytes(_docx_with_text("Hello Alice"), {"Alice": "Bob"}, ReplaceOptions())
     hit = result.hits[0]
     assert hit.from_text == "Alice"
     assert hit.to_text == "Bob"
 
 
 def test_hit_records_part_and_location() -> None:
-    result = replace_docx_bytes(
-        _docx_with_text("Hello Alice"), {"Alice": "Bob"}, ReplaceOptions()
-    )
+    result = replace_docx_bytes(_docx_with_text("Hello Alice"), {"Alice": "Bob"}, ReplaceOptions())
     hit = result.hits[0]
     assert hit.part == "body"
     assert hit.location.startswith("body.p[")
 
 
 def test_hit_records_before_and_after_snippets() -> None:
-    result = replace_docx_bytes(
-        _docx_with_text("Hello Alice"), {"Alice": "Bob"}, ReplaceOptions()
-    )
+    result = replace_docx_bytes(_docx_with_text("Hello Alice"), {"Alice": "Bob"}, ReplaceOptions())
     hit = result.hits[0]
     assert hit.before == "Hello Alice"
     assert hit.after == "Hello Bob"
@@ -415,9 +397,7 @@ def test_hit_records_match_count() -> None:
 
 
 def test_no_hits_when_no_match() -> None:
-    result = replace_docx_bytes(
-        _docx_with_text("Hello"), {"missing": "x"}, ReplaceOptions()
-    )
+    result = replace_docx_bytes(_docx_with_text("Hello"), {"missing": "x"}, ReplaceOptions())
     assert result.hits == []
 
 
@@ -440,9 +420,7 @@ def test_hits_aggregate_across_paragraphs() -> None:
 
 def test_apply_changes_false_does_not_modify_bytes() -> None:
     source = _docx_with_text("Hello Alice")
-    result = replace_docx_bytes(
-        source, {"Alice": "Bob"}, ReplaceOptions(), apply_changes=False
-    )
+    result = replace_docx_bytes(source, {"Alice": "Bob"}, ReplaceOptions(), apply_changes=False)
     # Bytes returned unchanged.
     assert result.docx_bytes == source
     # Hits still reported (dry-run preview).
@@ -451,9 +429,7 @@ def test_apply_changes_false_does_not_modify_bytes() -> None:
 
 def test_apply_changes_true_modifies_bytes() -> None:
     source = _docx_with_text("Hello Alice")
-    result = replace_docx_bytes(
-        source, {"Alice": "Bob"}, ReplaceOptions(), apply_changes=True
-    )
+    result = replace_docx_bytes(source, {"Alice": "Bob"}, ReplaceOptions(), apply_changes=True)
     assert result.docx_bytes != source
     assert "Bob" in _body_text(result.docx_bytes)
 
@@ -566,7 +542,9 @@ def test_replace_is_idempotent_when_no_overlap() -> None:
     first = replace_docx_bytes(source, {"Alice": "Bob"}, ReplaceOptions())
     second = replace_docx_bytes(first.docx_bytes, {"Alice": "Bob"}, ReplaceOptions())
     # Second run cannot find Alice anymore -> hits empty, bytes returned unchanged.
-    assert second.hits == [] or all(h.from_text == "Alice" and h.match_count == 0 for h in second.hits)
+    assert second.hits == [] or all(
+        h.from_text == "Alice" and h.match_count == 0 for h in second.hits
+    )
 
 
 def test_replace_preserves_unrelated_paragraphs() -> None:

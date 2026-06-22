@@ -88,7 +88,9 @@ def _ignored_by_regex(text: str, ignore_regex: list[str] | None) -> bool:
     return any(re.search(pattern, text) for pattern in ignore_regex)
 
 
-def _apply_text_replace(text: str, mapping: dict[str, str], options: ReplaceOptions, *, part: str, location: str) -> tuple[str, list[ReplaceHit]]:
+def _apply_text_replace(
+    text: str, mapping: dict[str, str], options: ReplaceOptions, *, part: str, location: str
+) -> tuple[str, list[ReplaceHit]]:
     current = text
     hits: list[ReplaceHit] = []
     if _ignored_by_regex(current, options.ignore_regex):
@@ -117,7 +119,9 @@ def _apply_text_replace(text: str, mapping: dict[str, str], options: ReplaceOpti
     return current, hits
 
 
-def _replace_shapes(docx_bytes: bytes, mapping: dict[str, str], options: ReplaceOptions) -> tuple[bytes, list[ReplaceHit]]:
+def _replace_shapes(
+    docx_bytes: bytes, mapping: dict[str, str], options: ReplaceOptions
+) -> tuple[bytes, list[ReplaceHit]]:
     src = BytesIO(docx_bytes)
     dst = BytesIO()
     hits: list[ReplaceHit] = []
@@ -131,14 +135,22 @@ def _replace_shapes(docx_bytes: bytes, mapping: dict[str, str], options: Replace
                     zout.writestr(info, payload)
                     continue
                 if "txbxContent" in text or "<v:textbox" in text:
-                    updated, local = _apply_text_replace(text, mapping, options, part="shape", location=info.filename)
+                    updated, local = _apply_text_replace(
+                        text, mapping, options, part="shape", location=info.filename
+                    )
                     hits.extend(local)
                     payload = updated.encode("utf-8")
             zout.writestr(info, payload)
     return dst.getvalue(), hits
 
 
-def replace_docx_bytes(docx_bytes: bytes, mapping: dict[str, str], options: ReplaceOptions, *, apply_changes: bool = True) -> ReplaceResult:
+def replace_docx_bytes(
+    docx_bytes: bytes,
+    mapping: dict[str, str],
+    options: ReplaceOptions,
+    *,
+    apply_changes: bool = True,
+) -> ReplaceResult:
     doc = Document(BytesIO(docx_bytes))
     hits: list[ReplaceHit] = []
     for paragraph, path in _iter_paragraphs(doc, "body"):
@@ -157,7 +169,9 @@ def replace_docx_bytes(docx_bytes: bytes, mapping: dict[str, str], options: Repl
             if options.normalize_runs:
                 _normalize_runs(paragraph)
             current = paragraph.text
-            replaced, local = _apply_text_replace(current, mapping, options, part="header", location=path)
+            replaced, local = _apply_text_replace(
+                current, mapping, options, part="header", location=path
+            )
             if apply_changes and replaced != current:
                 paragraph.text = replaced
             hits.extend(local)
@@ -165,7 +179,9 @@ def replace_docx_bytes(docx_bytes: bytes, mapping: dict[str, str], options: Repl
             if options.normalize_runs:
                 _normalize_runs(paragraph)
             current = paragraph.text
-            replaced, local = _apply_text_replace(current, mapping, options, part="footer", location=path)
+            replaced, local = _apply_text_replace(
+                current, mapping, options, part="footer", location=path
+            )
             if apply_changes and replaced != current:
                 paragraph.text = replaced
             hits.extend(local)

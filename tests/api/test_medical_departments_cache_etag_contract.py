@@ -21,7 +21,6 @@ from httpx import AsyncClient
 from app.models.models import MedicalExam, RoleEnum
 from tests.utils.factories import TestDataFactory
 
-
 # -----------------------------------------------------------------------------
 # Helpers
 # -----------------------------------------------------------------------------
@@ -82,9 +81,7 @@ async def test_medical_exams_hit_returns_304(
         person = await data_factory.create_person(
             tenant=tenant, company=company, first_name="Med", last_name="Patient", session=session
         )
-        await _seed_medical_exam(
-            session, tenant_id=tenant.id, person_id=person.id
-        )
+        await _seed_medical_exam(session, tenant_id=tenant.id, person_id=person.id)
         await session.commit()
 
     headers = await make_auth_headers(RoleEnum.ADMIN)
@@ -159,19 +156,17 @@ async def test_medical_exams_etag_distinct_per_status_filter(
             tenant=tenant, company=company, first_name="Status", last_name="F", session=session
         )
         # One upcoming, one expired
-        await _seed_medical_exam(session, tenant_id=tenant.id, person_id=person.id, days_until_valid=30)
+        await _seed_medical_exam(
+            session, tenant_id=tenant.id, person_id=person.id, days_until_valid=30
+        )
         await _seed_medical_exam(
             session, tenant_id=tenant.id, person_id=person.id, days_until_valid=-30
         )
         await session.commit()
 
     headers = await make_auth_headers(RoleEnum.ADMIN)
-    expired = await async_client.get(
-        "/api/v1/medical/exams?status=expired", headers=headers
-    )
-    upcoming = await async_client.get(
-        "/api/v1/medical/exams?status=upcoming", headers=headers
-    )
+    expired = await async_client.get("/api/v1/medical/exams?status=expired", headers=headers)
+    upcoming = await async_client.get("/api/v1/medical/exams?status=upcoming", headers=headers)
     assert expired.headers["ETag"] != upcoming.headers["ETag"]
 
 
@@ -300,9 +295,7 @@ async def test_departments_etag_distinct_per_page(
 
     headers = await make_auth_headers(RoleEnum.ADMIN)
     for i in range(4):
-        await _seed_department(
-            async_client, headers, company_id=company_id, name=f"Page Dept {i}"
-        )
+        await _seed_department(async_client, headers, company_id=company_id, name=f"Page Dept {i}")
 
     a = await async_client.get("/api/v1/departments?limit=2&offset=0", headers=headers)
     b = await async_client.get("/api/v1/departments?limit=2&offset=2", headers=headers)

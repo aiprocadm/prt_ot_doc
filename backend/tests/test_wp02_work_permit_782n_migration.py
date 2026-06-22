@@ -1,5 +1,7 @@
 """Guard: wp02 chains from wp01 and adds exactly the 782н columns (additive)."""
+
 import importlib.util
+import re
 from pathlib import Path
 
 MIG = (
@@ -8,8 +10,14 @@ MIG = (
 )
 
 NEW_COLUMNS = {
-    "subdivision_text", "content_text", "conditions_text", "safety_systems",
-    "measures_before_text", "measures_during_text", "special_conditions_text", "ppe_text",
+    "subdivision_text",
+    "content_text",
+    "conditions_text",
+    "safety_systems",
+    "measures_before_text",
+    "measures_during_text",
+    "special_conditions_text",
+    "ppe_text",
 }
 
 
@@ -27,11 +35,14 @@ def test_wp02_chain_and_revision():
 
 
 def test_wp02_source_adds_and_drops_all_columns():
-    src = MIG.read_text(encoding="utf-8")
+    # Whitespace-insensitive: black may wrap a long add_column() across lines
+    # (e.g. subdivision_text's String(255)), so collapse all whitespace before
+    # matching. Still ties each column to its own work_permit add/drop call
+    # (not a global fallback) — only the source layout is normalized.
+    src = re.sub(r"\s+", "", MIG.read_text(encoding="utf-8"))
     for col in NEW_COLUMNS:
-        # ties each column to its own upgrade add_column call (not a global fallback)
-        assert f'add_column("work_permit", sa.Column("{col}"' in src, f"upgrade missing: {col}"
-        assert f'drop_column("work_permit", "{col}")' in src, f"downgrade missing: {col}"
+        assert f'add_column("work_permit",sa.Column("{col}"' in src, f"upgrade missing: {col}"
+        assert f'drop_column("work_permit","{col}")' in src, f"downgrade missing: {col}"
 
 
 def test_model_has_782n_columns():

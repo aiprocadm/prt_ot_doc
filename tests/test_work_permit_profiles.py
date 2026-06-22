@@ -1,4 +1,5 @@
 """Профили видов работ: приказ, валидация type_specific, сборка печатной секции."""
+
 from __future__ import annotations
 
 import pytest
@@ -20,10 +21,13 @@ def test_legal_reference_per_type():
 
 
 def test_validate_confined_accepts_valid_payload():
-    pr.validate_type_specific("confined_space", {
-        "gas_analysis": [{"parameter": "oxygen", "value": "20.9", "norm": "≥ 20"}],
-        "ventilation": "forced",
-    })
+    pr.validate_type_specific(
+        "confined_space",
+        {
+            "gas_analysis": [{"parameter": "oxygen", "value": "20.9", "norm": "≥ 20"}],
+            "ventilation": "forced",
+        },
+    )
 
 
 def test_validate_confined_rejects_unknown_key():
@@ -33,7 +37,9 @@ def test_validate_confined_rejects_unknown_key():
 
 def test_validate_confined_rejects_bad_parameter():
     with pytest.raises(ValueError):
-        pr.validate_type_specific("confined_space", {"gas_analysis": [{"parameter": "xx", "value": "1"}]})
+        pr.validate_type_specific(
+            "confined_space", {"gas_analysis": [{"parameter": "xx", "value": "1"}]}
+        )
 
 
 def test_validate_confined_rejects_bad_ventilation():
@@ -58,7 +64,9 @@ def test_validate_allows_none_and_empty():
 
 
 def test_build_section_height_from_safety_systems():
-    sec = pr.build_structured_section("height", safety_systems=["restraint", "fall_arrest"], type_specific=None)
+    sec = pr.build_structured_section(
+        "height", safety_systems=["restraint", "fall_arrest"], type_specific=None
+    )
     assert isinstance(sec, StructuredSection)
     assert "Удерживающие" in sec.kv[0][1] and "Страховочные" in sec.kv[0][1]
     assert sec.table is None
@@ -66,13 +74,19 @@ def test_build_section_height_from_safety_systems():
 
 def test_build_section_confined_from_type_specific():
     sec = pr.build_structured_section(
-        "confined_space", safety_systems=None,
-        type_specific={"gas_analysis": [{"parameter": "oxygen", "value": "20.9", "norm": "≥ 20"}],
-                       "ventilation": "forced"})
+        "confined_space",
+        safety_systems=None,
+        type_specific={
+            "gas_analysis": [{"parameter": "oxygen", "value": "20.9", "norm": "≥ 20"}],
+            "ventilation": "forced",
+        },
+    )
     assert isinstance(sec, StructuredSection)
     assert any("Вентиляция" == k for k, _ in sec.kv)
     assert sec.table is not None and sec.table.rows[0][0] == "Кислород (O₂), %"
 
 
 def test_build_section_none_profile_returns_none():
-    assert pr.build_structured_section("electrical", safety_systems=None, type_specific=None) is None
+    assert (
+        pr.build_structured_section("electrical", safety_systems=None, type_specific=None) is None
+    )

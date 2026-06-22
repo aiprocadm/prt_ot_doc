@@ -90,16 +90,36 @@ def resolve_pipeline_profile(
 class PackAssembler:
     template_id: str
 
-    def assemble(self, packs: Iterable[DocumentPack], *, preset_code: str | None = None, context: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    def assemble(
+        self,
+        packs: Iterable[DocumentPack],
+        *,
+        preset_code: str | None = None,
+        context: dict[str, Any] | None = None,
+    ) -> list[dict[str, Any]]:
         shared_context = dict(context or {})
         assembled: list[dict[str, Any]] = []
         for index, pack in enumerate(packs, start=1):
             pack_context = {
                 **shared_context,
-                "pack": {"name": pack.name, "description": pack.description or "", "sequence": index, "preset_code": preset_code},
+                "pack": {
+                    "name": pack.name,
+                    "description": pack.description or "",
+                    "sequence": index,
+                    "preset_code": preset_code,
+                },
             }
             fingerprint = hashlib.sha256(
-                json.dumps({"template_id": self.template_id, "preset_code": preset_code, "index": index, "name": pack.name}, ensure_ascii=False, sort_keys=True).encode('utf-8')
+                json.dumps(
+                    {
+                        "template_id": self.template_id,
+                        "preset_code": preset_code,
+                        "index": index,
+                        "name": pack.name,
+                    },
+                    ensure_ascii=False,
+                    sort_keys=True,
+                ).encode("utf-8")
             ).hexdigest()
             warnings = [] if pack.description else ["pack description is empty"]
             assembled.append(

@@ -129,9 +129,7 @@ async def test_pack_scenarios_listing_and_creation(
 
 
 @pytest.mark.anyio
-async def test_template_metadata_validation(
-    async_client: AsyncClient, make_auth_headers
-) -> None:
+async def test_template_metadata_validation(async_client: AsyncClient, make_auth_headers) -> None:
     headers = {**dict(async_client.headers), **await make_auth_headers()}
     template_bytes = _build_template()
 
@@ -199,9 +197,7 @@ async def test_template_creation_rejects_large_metadata(
     assert response.status_code == 413
     body = response.json()
     assert body["code"] == "PAYLOAD_TOO_LARGE"
-    assert body["message"] == (
-        f"metadata payload cannot exceed {MAX_METADATA_JSON_BYTES} bytes"
-    )
+    assert body["message"] == (f"metadata payload cannot exceed {MAX_METADATA_JSON_BYTES} bytes")
     assert body["trace_id"]
 
 
@@ -317,9 +313,7 @@ async def test_pipeline_async_enqueue(
         assert headers.get("trace_id")
         return StubResult()
 
-    monkeypatch.setattr(
-        "app.api.v1.router.run_pipeline_task.apply_async", _fake_apply_async
-    )
+    monkeypatch.setattr("app.api.v1.router.run_pipeline_task.apply_async", _fake_apply_async)
 
     payload = {"context": {"name": "Async"}, "output_basename": "async"}
     response = await async_client.post(

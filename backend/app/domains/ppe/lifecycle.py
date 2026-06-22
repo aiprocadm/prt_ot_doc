@@ -4,6 +4,7 @@ No I/O and no sqlalchemy imports — mirrors ``domains/medical/lifecycle.py``
 and ``domains/contractors/lifecycle.py``. Status values are the canonical
 VARCHAR values stored in ``ppeissue.status`` (lowercase, see migration sz01).
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -18,12 +19,14 @@ ISSUE_STATUS_WRITTEN_OFF = "written_off"
 ISSUE_STATUS_REPLACED = "replaced"
 ISSUE_STATUS_LOST = "lost"
 
-TERMINAL_STATUSES = frozenset({
-    ISSUE_STATUS_RETURNED,
-    ISSUE_STATUS_WRITTEN_OFF,
-    ISSUE_STATUS_REPLACED,
-    ISSUE_STATUS_LOST,
-})
+TERMINAL_STATUSES = frozenset(
+    {
+        ISSUE_STATUS_RETURNED,
+        ISSUE_STATUS_WRITTEN_OFF,
+        ISSUE_STATUS_REPLACED,
+        ISSUE_STATUS_LOST,
+    }
+)
 ISSUE_STATUSES = frozenset({ISSUE_STATUS_ISSUED}) | TERMINAL_STATUSES
 
 ALLOWED_TRANSITIONS: dict[str, frozenset[str]] = {
@@ -101,10 +104,12 @@ def card_line_status(
 
 # Card-line statuses that block person admission (vNext §12 gate):
 # ok / due_soon pass, overdue / missing block.
-ADMISSION_BLOCKING_STATUSES = frozenset({
-    ContingentItemStatus.MISSING.value,
-    ContingentItemStatus.OVERDUE.value,
-})
+ADMISSION_BLOCKING_STATUSES = frozenset(
+    {
+        ContingentItemStatus.MISSING.value,
+        ContingentItemStatus.OVERDUE.value,
+    }
+)
 
 
 def norm_line_key(item_id: str | None, item_name: str) -> str:

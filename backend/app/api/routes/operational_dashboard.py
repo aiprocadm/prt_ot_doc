@@ -8,8 +8,8 @@ from fastapi import APIRouter, Depends, Request, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import get_settings
 from app.api.dependencies import get_session
+from app.core.config import get_settings
 from app.core.security import AccessContext, rbac
 from app.modules.operational_dashboard import OperationalDashboardService
 
@@ -68,11 +68,7 @@ async def get_operational_dashboard(
         service = OperationalDashboardService(settings)
         dashboard = await service.get_dashboard(tenant_id=tenant_id, db=db)
 
-        code = (
-            status.HTTP_200_OK
-            if dashboard.status == "ok"
-            else status.HTTP_200_OK
-        )
+        code = status.HTTP_200_OK if dashboard.status == "ok" else status.HTTP_200_OK
         return JSONResponse(status_code=code, content=dashboard.model_dump(mode="json"))
     except Exception as e:
         logger.exception("operational_dashboard.get_dashboard_failed")

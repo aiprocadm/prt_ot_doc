@@ -109,9 +109,7 @@ async def _to_read_with_files(
     session: AsyncSession, record: Prescription, *, tenant_id: str, today: date
 ) -> PrescriptionRead:
     """``_to_read`` plus the prescription's linked evidence files."""
-    files = await _list_evidence_files(
-        session, tenant_id=tenant_id, prescription_id=record.id
-    )
+    files = await _list_evidence_files(session, tenant_id=tenant_id, prescription_id=record.id)
     return _to_read(record, today=today).model_copy(update={"evidence_files": files})
 
 
@@ -178,11 +176,23 @@ def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> str | No
 
 ManagerAccess = Annotated[
     AccessContext,
-    Depends(abac(_tenant_resource_id, required_roles=_PRESCRIPTION_READ_ROLES, action="read prescriptions")),
+    Depends(
+        abac(
+            _tenant_resource_id,
+            required_roles=_PRESCRIPTION_READ_ROLES,
+            action="read prescriptions",
+        )
+    ),
 ]
 EditorAccess = Annotated[
     AccessContext,
-    Depends(abac(_tenant_resource_id, required_roles=_PRESCRIPTION_WRITE_ROLES, action="manage prescriptions")),
+    Depends(
+        abac(
+            _tenant_resource_id,
+            required_roles=_PRESCRIPTION_WRITE_ROLES,
+            action="manage prescriptions",
+        )
+    ),
 ]
 
 
@@ -217,7 +227,9 @@ async def _get_incident(session: AsyncSession, tenant_id: str, incident_id: str)
 
 
 async def _get_user(session: AsyncSession, tenant_id: str, user_id: str) -> User:
-    stmt = select(User).where(User.id == user_id, User.tenant_id == tenant_id, User.deleted_at.is_(None))
+    stmt = select(User).where(
+        User.id == user_id, User.tenant_id == tenant_id, User.deleted_at.is_(None)
+    )
     user = (await session.execute(stmt)).scalar_one_or_none()
     if user is None:
         raise HTTPException(

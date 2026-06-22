@@ -1,4 +1,5 @@
 """PPE domain services for requirement unions and personal-card projections."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -51,8 +52,6 @@ class PPENormService:
         return totals
 
 
-
-
 class PPEIssueService:
     @staticmethod
     def validate_issue_type(issue_type: str) -> str:
@@ -65,15 +64,21 @@ class PPEIssueService:
 
 class PPEPersonalCardService:
     @staticmethod
-    def apply_issue_events(events: list[PPEIssueEvent]) -> dict[str, dict[str, datetime | float | None]]:
+    def apply_issue_events(
+        events: list[PPEIssueEvent],
+    ) -> dict[str, dict[str, datetime | float | None]]:
         state: dict[str, dict[str, datetime | float | None]] = {}
 
         for event in sorted(events, key=lambda item: item.issued_at):
-            bucket = state.setdefault(event.ppe_catalog_id, {"current_quantity": 0.0, "next_due_at": None})
+            bucket = state.setdefault(
+                event.ppe_catalog_id, {"current_quantity": 0.0, "next_due_at": None}
+            )
             if event.issue_type in {"issue", "replacement"}:
                 bucket["current_quantity"] = float(bucket["current_quantity"]) + event.quantity
             elif event.issue_type in {"return", "writeoff"}:
-                bucket["current_quantity"] = max(0.0, float(bucket["current_quantity"]) - event.quantity)
+                bucket["current_quantity"] = max(
+                    0.0, float(bucket["current_quantity"]) - event.quantity
+                )
 
             months = event.period_months or event.wear_term_months
             if months:
@@ -84,7 +89,9 @@ class PPEPersonalCardService:
 
 class RiskPPEProjectionService:
     @staticmethod
-    def missing_required(required: dict[str, float], issued_state: dict[str, dict[str, datetime | float | None]]) -> dict[str, float]:
+    def missing_required(
+        required: dict[str, float], issued_state: dict[str, dict[str, datetime | float | None]]
+    ) -> dict[str, float]:
         missing: dict[str, float] = {}
         for catalog_id, qty in required.items():
             current = float(issued_state.get(catalog_id, {}).get("current_quantity", 0.0))
@@ -93,13 +100,16 @@ class RiskPPEProjectionService:
         return missing
 
     @staticmethod
-    def expiring_soon(issued_state: dict[str, dict[str, datetime | float | None]], days: int = 30) -> list[str]:
+    def expiring_soon(
+        issued_state: dict[str, dict[str, datetime | float | None]], days: int = 30
+    ) -> list[str]:
         now = datetime.now(tz=timezone.utc)
         threshold = now + timedelta(days=days)
         return [
             catalog_id
             for catalog_id, bucket in issued_state.items()
-            if isinstance(bucket.get("next_due_at"), datetime) and now <= bucket["next_due_at"] <= threshold
+            if isinstance(bucket.get("next_due_at"), datetime)
+            and now <= bucket["next_due_at"] <= threshold
         ]
 
 

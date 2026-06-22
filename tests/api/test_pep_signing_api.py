@@ -1,4 +1,5 @@
 """PEP signing HTTP contract: full person-code cycle, errors, journal, acknowledgements."""
+
 from __future__ import annotations
 
 import pytest
@@ -12,8 +13,11 @@ async def _issue_world(session, data_factory):
     company = await data_factory.create_company(tenant=tenant, session=session, name="PEP API")
     person = await data_factory.create_person(tenant=tenant, company=company, session=session)
     issue = PPEIssue(
-        tenant_id=tenant.id, person_id=person.id,
-        item_name="Каска api", quantity=1, status="issued",
+        tenant_id=tenant.id,
+        person_id=person.id,
+        item_name="Каска api",
+        quantity=1,
+        status="issued",
     )
     session.add(issue)
     await session.commit()
@@ -31,8 +35,10 @@ async def test_full_person_cycle_via_http(
     created = await async_client.post(
         "/api/v1/sign/pep/requests",
         json={
-            "object_type": "ppe_issue", "object_id": issue.id,
-            "purpose": "ppe_issue", "signer_person_id": person.id,
+            "object_type": "ppe_issue",
+            "object_id": issue.id,
+            "purpose": "ppe_issue",
+            "signer_person_id": person.id,
         },
         headers=headers,
     )
@@ -75,8 +81,10 @@ async def test_wrong_code_409_persists_attempts(
     created = await async_client.post(
         "/api/v1/sign/pep/requests",
         json={
-            "object_type": "ppe_issue", "object_id": issue.id,
-            "purpose": "ppe_issue", "signer_person_id": person.id,
+            "object_type": "ppe_issue",
+            "object_id": issue.id,
+            "purpose": "ppe_issue",
+            "signer_person_id": person.id,
         },
         headers=headers,
     )
@@ -102,8 +110,10 @@ async def test_unknown_object_404(async_client, sessionmaker, data_factory, make
     missing = await async_client.post(
         "/api/v1/sign/pep/requests",
         json={
-            "object_type": "ppe_issue", "object_id": "no-such",
-            "purpose": "ppe_issue", "signer_person_id": person.id,
+            "object_type": "ppe_issue",
+            "object_id": "no-such",
+            "purpose": "ppe_issue",
+            "signer_person_id": person.id,
         },
         headers=headers,
     )
@@ -125,8 +135,10 @@ async def test_acknowledgements_journal(
     created = await async_client.post(
         "/api/v1/sign/pep/requests",
         json={
-            "object_type": "document_version", "object_id": ver.id,
-            "purpose": "acknowledgement", "signer_person_id": person.id,
+            "object_type": "document_version",
+            "object_id": ver.id,
+            "purpose": "acknowledgement",
+            "signer_person_id": person.id,
         },
         headers=headers,
     )
@@ -157,8 +169,10 @@ async def test_decline_endpoint(async_client, sessionmaker, data_factory, make_a
     created = await async_client.post(
         "/api/v1/sign/pep/requests",
         json={
-            "object_type": "ppe_issue", "object_id": issue.id,
-            "purpose": "ppe_issue", "signer_person_id": person.id,
+            "object_type": "ppe_issue",
+            "object_id": issue.id,
+            "purpose": "ppe_issue",
+            "signer_person_id": person.id,
         },
         headers=headers,
     )
@@ -183,8 +197,10 @@ async def test_foreign_user_signer_confirm_403(
     created = await async_client.post(
         "/api/v1/sign/pep/requests",
         json={
-            "object_type": "ppe_issue", "object_id": issue.id,
-            "purpose": "ppe_issue", "signer_user_id": "user-77",
+            "object_type": "ppe_issue",
+            "object_id": issue.id,
+            "purpose": "ppe_issue",
+            "signer_user_id": "user-77",
         },
         headers={**headers, "X-User-Id": "system"},
     )

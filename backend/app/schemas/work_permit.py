@@ -1,4 +1,5 @@
 """Schemas for work permits (наряды-допуски)."""
+
 from __future__ import annotations
 
 from datetime import date, datetime

@@ -60,7 +60,12 @@ async def test_edo_webhook_passes_tenant_slug_to_worker(
 
     response = await async_client.post(
         "/api/v1/edo/webhooks/mock",
-        json={"event_id": "evt-edo-tenant", "external_id": "ext-2", "status": "accepted", "raw_payload": {"k": "v"}},
+        json={
+            "event_id": "evt-edo-tenant",
+            "external_id": "ext-2",
+            "status": "accepted",
+            "raw_payload": {"k": "v"},
+        },
         headers={"X-Tenant": tenant.slug},
     )
 
@@ -80,9 +85,13 @@ async def test_inbound_requires_hmac_when_secret_configured(
     reset_settings_cache()
     try:
         async with sessionmaker() as session:
-            tenant = (await session.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()
+            tenant = (
+                await session.execute(select(Tenant).where(Tenant.slug == "test"))
+            ).scalar_one()
 
-        monkeypatch.setattr("app.api.routes.webhooks.process_inbound_webhook.delay", lambda **kwargs: None)
+        monkeypatch.setattr(
+            "app.api.routes.webhooks.process_inbound_webhook.delay", lambda **kwargs: None
+        )
 
         body = {"event_id": "evt-hmac", "external_id": "ext-hmac", "status": "accepted"}
         raw = json.dumps(body).encode("utf-8")
@@ -119,7 +128,9 @@ async def test_inbound_rejects_invalid_json(
     async with sessionmaker() as session:
         tenant = (await session.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()
 
-    monkeypatch.setattr("app.api.routes.webhooks.process_inbound_webhook.delay", lambda **kwargs: None)
+    monkeypatch.setattr(
+        "app.api.routes.webhooks.process_inbound_webhook.delay", lambda **kwargs: None
+    )
 
     response = await async_client.post(
         "/api/v1/webhooks/inbound/edo",

@@ -4,6 +4,7 @@ Generic-колонка под per-type секции (ОЗП газоанализ
 держит safety_systems и не трогается. Имя таблицы ЛИТЕРАЛОМ (AST-audit blindspot).
 Honest downgrade удаляет колонку.
 """
+
 from __future__ import annotations
 
 import sqlalchemy as sa

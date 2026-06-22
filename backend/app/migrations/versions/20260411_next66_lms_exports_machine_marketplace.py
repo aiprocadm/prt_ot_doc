@@ -29,14 +29,21 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column("api_key", sa.Column("usage_count", sa.Integer(), nullable=False, server_default="0"))
+    op.add_column(
+        "api_key", sa.Column("usage_count", sa.Integer(), nullable=False, server_default="0")
+    )
     op.add_column("api_key", sa.Column("revoked_at", sa.DateTime(timezone=True), nullable=True))
     op.add_column("api_key", sa.Column("rate_limit_per_minute", sa.Integer(), nullable=True))
 
     op.add_column("training_modules", sa.Column("materials_json", sa.JSON(), nullable=True))
     op.create_table(
         "training_lessons",
-        sa.Column("training_module_id", sa.String(length=36), sa.ForeignKey("training_modules.id", ondelete="CASCADE"), nullable=False),
+        sa.Column(
+            "training_module_id",
+            sa.String(length=36),
+            sa.ForeignKey("training_modules.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
         sa.Column("title", sa.String(length=255), nullable=False),
         sa.Column("lesson_order", sa.Integer(), nullable=False, server_default="0"),
         sa.Column("content_type", sa.String(length=32), nullable=False, server_default="document"),
@@ -54,23 +61,58 @@ def upgrade() -> None:
     )
     op.create_index("ix_training_lessons_module", "training_lessons", ["training_module_id"])
 
-    op.add_column("training_enrollments", sa.Column("progress_percent", sa.Numeric(5, 2), nullable=False, server_default="0"))
-    op.add_column("training_enrollments", sa.Column("completion_status", sa.String(length=32), nullable=False, server_default="assigned"))
-    op.add_column("training_enrollments", sa.Column("completion_confirmed_at", sa.DateTime(timezone=True), nullable=True))
+    op.add_column(
+        "training_enrollments",
+        sa.Column("progress_percent", sa.Numeric(5, 2), nullable=False, server_default="0"),
+    )
+    op.add_column(
+        "training_enrollments",
+        sa.Column(
+            "completion_status", sa.String(length=32), nullable=False, server_default="assigned"
+        ),
+    )
+    op.add_column(
+        "training_enrollments",
+        sa.Column("completion_confirmed_at", sa.DateTime(timezone=True), nullable=True),
+    )
     op.add_column("training_enrollments", sa.Column("completion_payload", sa.JSON(), nullable=True))
-    op.add_column("training_enrollments", sa.Column("external_runtime_state", sa.JSON(), nullable=True))
+    op.add_column(
+        "training_enrollments", sa.Column("external_runtime_state", sa.JSON(), nullable=True)
+    )
 
-    op.add_column("training_attempts", sa.Column("source_type", sa.String(length=32), nullable=False, server_default="manual"))
-    op.add_column("training_attempts", sa.Column("external_session_ref", sa.String(length=255), nullable=True))
+    op.add_column(
+        "training_attempts",
+        sa.Column("source_type", sa.String(length=32), nullable=False, server_default="manual"),
+    )
+    op.add_column(
+        "training_attempts", sa.Column("external_session_ref", sa.String(length=255), nullable=True)
+    )
     op.add_column("training_attempts", sa.Column("provider_payload", sa.JSON(), nullable=True))
 
     op.add_column("export_jobs", sa.Column("dataset_code", sa.String(length=64), nullable=True))
-    op.add_column("export_jobs", sa.Column("schema_version", sa.String(length=32), nullable=False, server_default="v1"))
-    op.add_column("export_jobs", sa.Column("anonymized", sa.Boolean(), nullable=False, server_default=sa.text("false")))
-    op.add_column("export_jobs", sa.Column("target_type", sa.String(length=32), nullable=False, server_default="file"))
-    op.add_column("export_jobs", sa.Column("target_config", sa.JSON(), nullable=False, server_default="{}"))
-    op.add_column("export_jobs", sa.Column("progress_percent", sa.Numeric(5, 2), nullable=False, server_default="0"))
-    op.add_column("export_jobs", sa.Column("delivery_history_json", sa.JSON(), nullable=False, server_default="[]"))
+    op.add_column(
+        "export_jobs",
+        sa.Column("schema_version", sa.String(length=32), nullable=False, server_default="v1"),
+    )
+    op.add_column(
+        "export_jobs",
+        sa.Column("anonymized", sa.Boolean(), nullable=False, server_default=sa.text("false")),
+    )
+    op.add_column(
+        "export_jobs",
+        sa.Column("target_type", sa.String(length=32), nullable=False, server_default="file"),
+    )
+    op.add_column(
+        "export_jobs", sa.Column("target_config", sa.JSON(), nullable=False, server_default="{}")
+    )
+    op.add_column(
+        "export_jobs",
+        sa.Column("progress_percent", sa.Numeric(5, 2), nullable=False, server_default="0"),
+    )
+    op.add_column(
+        "export_jobs",
+        sa.Column("delivery_history_json", sa.JSON(), nullable=False, server_default="[]"),
+    )
 
     op.create_table(
         "export_schedules",
@@ -92,7 +134,11 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["tenant_id"], ["tenant.id"]),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index("ix_export_schedules_tenant_active", "export_schedules", ["tenant_id", "is_active", "updated_at"])
+    op.create_index(
+        "ix_export_schedules_tenant_active",
+        "export_schedules",
+        ["tenant_id", "is_active", "updated_at"],
+    )
 
     op.create_table(
         "kpi_definitions",
@@ -111,7 +157,9 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["tenant_id"], ["tenant.id"]),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index("ix_kpi_definitions_tenant_code", "kpi_definitions", ["tenant_id", "code"], unique=True)
+    op.create_index(
+        "ix_kpi_definitions_tenant_code", "kpi_definitions", ["tenant_id", "code"], unique=True
+    )
 
     op.create_table(
         "marketplace_catalog_items",
@@ -136,9 +184,15 @@ def upgrade() -> None:
         sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True),
         sa.ForeignKeyConstraint(["tenant_id"], ["tenant.id"]),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("tenant_id", "item_type", "code", "version_label", name="uq_marketplace_catalog_item"),
+        sa.UniqueConstraint(
+            "tenant_id", "item_type", "code", "version_label", name="uq_marketplace_catalog_item"
+        ),
     )
-    op.create_index("ix_marketplace_catalog_lookup", "marketplace_catalog_items", ["tenant_id", "item_type", "status", "updated_at"])
+    op.create_index(
+        "ix_marketplace_catalog_lookup",
+        "marketplace_catalog_items",
+        ["tenant_id", "item_type", "status", "updated_at"],
+    )
 
 
 def downgrade() -> None:
@@ -148,11 +202,25 @@ def downgrade() -> None:
     op.drop_table("kpi_definitions")
     op.drop_index("ix_export_schedules_tenant_active", table_name="export_schedules")
     op.drop_table("export_schedules")
-    for column in ["delivery_history_json", "progress_percent", "target_config", "target_type", "anonymized", "schema_version", "dataset_code"]:
+    for column in [
+        "delivery_history_json",
+        "progress_percent",
+        "target_config",
+        "target_type",
+        "anonymized",
+        "schema_version",
+        "dataset_code",
+    ]:
         op.drop_column("export_jobs", column)
     for column in ["provider_payload", "external_session_ref", "source_type"]:
         op.drop_column("training_attempts", column)
-    for column in ["external_runtime_state", "completion_payload", "completion_confirmed_at", "completion_status", "progress_percent"]:
+    for column in [
+        "external_runtime_state",
+        "completion_payload",
+        "completion_confirmed_at",
+        "completion_status",
+        "progress_percent",
+    ]:
         op.drop_column("training_enrollments", column)
     op.drop_index("ix_training_lessons_module", table_name="training_lessons")
     op.drop_table("training_lessons")

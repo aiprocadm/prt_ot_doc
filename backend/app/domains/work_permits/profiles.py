@@ -5,6 +5,7 @@ per-type специфики: legal_reference, словари структурн�
 type_specific, сборка печатной StructuredSection. Высота читает колонку
 safety_systems; ОЗП — type_specific JSON.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -31,32 +32,48 @@ class WorkTypeProfile:
     code: str
     label: str
     legal_reference: str
-    structured_kind: str | None   # "safety_systems" | "confined_env" | None
+    structured_kind: str | None  # "safety_systems" | "confined_env" | None
 
 
 PROFILES: dict[str, WorkTypeProfile] = {
     "height": WorkTypeProfile(
-        "height", "Работа на высоте",
-        "Приказ Минтруда России от 16.11.2020 № 782н", "safety_systems"),
+        "height",
+        "Работа на высоте",
+        "Приказ Минтруда России от 16.11.2020 № 782н",
+        "safety_systems",
+    ),
     "confined_space": WorkTypeProfile(
-        "confined_space", "Работа в ограниченных и замкнутых пространствах",
-        "Приказ Минтруда России от 15.12.2020 № 902н", "confined_env"),
+        "confined_space",
+        "Работа в ограниченных и замкнутых пространствах",
+        "Приказ Минтруда России от 15.12.2020 № 902н",
+        "confined_env",
+    ),
     "electrical": WorkTypeProfile(
-        "electrical", "Работа в электроустановках",
-        "Приказ Минтруда России от 15.12.2020 № 903н", None),
+        "electrical",
+        "Работа в электроустановках",
+        "Приказ Минтруда России от 15.12.2020 № 903н",
+        None,
+    ),
     "hot_work": WorkTypeProfile(
-        "hot_work", "Огневые работы",
-        "Постановление Правительства РФ от 16.09.2020 № 1479 (ППР)", None),
+        "hot_work",
+        "Огневые работы",
+        "Постановление Правительства РФ от 16.09.2020 № 1479 (ППР)",
+        None,
+    ),
     "gas_hazardous": WorkTypeProfile(
-        "gas_hazardous", "Газоопасные работы",
-        "Правила проведения газоопасных работ", None),
+        "gas_hazardous", "Газоопасные работы", "Правила проведения газоопасных работ", None
+    ),
     "excavation": WorkTypeProfile(
-        "excavation", "Земляные работы",
-        "Правила безопасности при производстве земляных работ", None),
+        "excavation",
+        "Земляные работы",
+        "Правила безопасности при производстве земляных работ",
+        None,
+    ),
 }
 
-_GENERIC = WorkTypeProfile("generic", "Работы повышенной опасности",
-                           "Правила по охране труда", None)
+_GENERIC = WorkTypeProfile(
+    "generic", "Работы повышенной опасности", "Правила по охране труда", None
+)
 
 
 def profile_for(work_type: str) -> WorkTypeProfile:
@@ -99,7 +116,10 @@ def validate_type_specific(work_type: str, payload: dict | None) -> None:
 
 
 def build_structured_section(
-    work_type: str, *, safety_systems: list[str] | None, type_specific: dict | None,
+    work_type: str,
+    *,
+    safety_systems: list[str] | None,
+    type_specific: dict | None,
 ):
     """Собрать печатную StructuredSection по профилю (или None)."""
     kind = profile_for(work_type).structured_kind
@@ -108,8 +128,8 @@ def build_structured_section(
             return None
         labels = ", ".join(pf.safety_system_label(c) for c in safety_systems)
         return pf.StructuredSection(
-            title="Системы обеспечения безопасности (782н)",
-            kv=[("Системы", labels)], table=None)
+            title="Системы обеспечения безопасности (782н)", kv=[("Системы", labels)], table=None
+        )
     if kind == "confined_env":
         ts = type_specific or {}
         kv: list[tuple[str, str]] = []
@@ -121,11 +141,19 @@ def build_structured_section(
         if rows:
             table = pf.StructuredTable(
                 headers=["Параметр", "Значение", "Норма", "Замер"],
-                rows=[[GAS_PARAMETERS.get(r.get("parameter"), r.get("parameter") or ""),
-                       str(r.get("value") or ""), str(r.get("norm") or ""),
-                       str(r.get("measured_at") or "")] for r in rows])
+                rows=[
+                    [
+                        GAS_PARAMETERS.get(r.get("parameter"), r.get("parameter") or ""),
+                        str(r.get("value") or ""),
+                        str(r.get("norm") or ""),
+                        str(r.get("measured_at") or ""),
+                    ]
+                    for r in rows
+                ],
+            )
         if not kv and table is None:
             return None
         return pf.StructuredSection(
-            title="Анализ воздушной среды и вентиляция (902н)", kv=kv, table=table)
+            title="Анализ воздушной среды и вентиляция (902н)", kv=kv, table=table
+        )
     return None

@@ -4,6 +4,7 @@ In-place type conversion mirroring sz01 (ppeissue.status). The legacy enum
 ``permitstatus`` already covers all three values (active/expired/revoked),
 so downgrade is fully reversible — no data blocker is needed.
 """
+
 from __future__ import annotations
 
 from alembic import op
@@ -20,8 +21,7 @@ def upgrade() -> None:
 
     if dialect == "postgresql":
         op.execute(
-            "ALTER TABLE permit ALTER COLUMN status TYPE VARCHAR(32) "
-            "USING lower(status::text)"
+            "ALTER TABLE permit ALTER COLUMN status TYPE VARCHAR(32) " "USING lower(status::text)"
         )
         op.execute("ALTER TABLE permit ALTER COLUMN status SET DEFAULT 'active'")
         op.execute("DROP TYPE IF EXISTS permitstatus")

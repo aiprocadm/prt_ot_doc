@@ -34,7 +34,7 @@ router = APIRouter(prefix="/pipelines", tags=["pipelines"])
 
 def _serialize_profile(model) -> PipelineProfileRead:
     step_payload = []
-    for step in (model.steps or []):
+    for step in model.steps or []:
         if isinstance(step, dict) and "code" in step and "params_schema" in step:
             step_payload.append(step)
     return PipelineProfileRead(
@@ -50,6 +50,7 @@ def _serialize_profile(model) -> PipelineProfileRead:
         version=model.version,
         concurrency_limit_per_tenant=getattr(model, "concurrency_limit_per_tenant", None),
     )
+
 
 def _serialize_step(step: DocumentJobStep) -> dict[str, Any]:
     return {
@@ -71,12 +72,16 @@ def _serialize_step(step: DocumentJobStep) -> dict[str, Any]:
 
 async def _build_run_read(session: AsyncSession, run: DocumentJob) -> PipelineRunRead:
     steps = (
-        await session.execute(
-            select(DocumentJobStep)
-            .where(DocumentJobStep.job_id == run.id)
-            .order_by(DocumentJobStep.seq.asc().nullslast(), DocumentJobStep.order.asc())
+        (
+            await session.execute(
+                select(DocumentJobStep)
+                .where(DocumentJobStep.job_id == run.id)
+                .order_by(DocumentJobStep.seq.asc().nullslast(), DocumentJobStep.order.asc())
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     return PipelineRunRead(
         run_id=run.id,
         profile_id=run.profile_id or run.pipeline_profile_id,
@@ -91,11 +96,17 @@ async def _build_run_read(session: AsyncSession, run: DocumentJob) -> PipelineRu
 
 def _run_snapshot_hash(run_payload: PipelineRunRead) -> str:
     body = json.dumps(run_payload.model_dump(mode="json"), sort_keys=True, ensure_ascii=False)
-    return hashlib.sha1(body.encode("utf-8"), usedforsecurity=False).hexdigest()  # nosec B324 - run-snapshot fingerprint, not security
+    return hashlib.sha1(
+        body.encode("utf-8"), usedforsecurity=False
+    ).hexdigest()  # nosec B324 - run-snapshot fingerprint, not security
 
 
 @router.post("/profiles", response_model=PipelineProfileRead, status_code=status.HTTP_201_CREATED)
-async def create_profile(payload: PipelineProfileCreate, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> PipelineProfileRead:
+async def create_profile(
+    payload: PipelineProfileCreate,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+) -> PipelineProfileRead:
     repo = PipelineProfileRepo(session)
     try:
         model = await repo.create(tenant_id=str(tenant.id), payload=payload)
@@ -107,13 +118,21 @@ async def create_profile(payload: PipelineProfileCreate, session: AsyncSession =
 
 
 @router.get("/profiles", response_model=list[PipelineProfileRead])
-async def list_profiles(active: bool | None = None, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> list[PipelineProfileRead]:
+async def list_profiles(
+    active: bool | None = None,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+) -> list[PipelineProfileRead]:
     rows = await PipelineProfileRepo(session).list(tenant_id=str(tenant.id), active=active)
     return [_serialize_profile(r) for r in rows]
 
 
 @router.get("/profiles/{profile_id}", response_model=PipelineProfileRead)
-async def get_profile(profile_id: str, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> PipelineProfileRead:
+async def get_profile(
+    profile_id: str,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+) -> PipelineProfileRead:
     model = await PipelineProfileRepo(session).get(tenant_id=str(tenant.id), profile_id=profile_id)
     if model is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "profile not found")
@@ -121,7 +140,12 @@ async def get_profile(profile_id: str, session: AsyncSession = Depends(get_sessi
 
 
 @router.patch("/profiles/{profile_id}", response_model=PipelineProfileRead)
-async def patch_profile(profile_id: str, payload: PipelineProfilePatch, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> PipelineProfileRead:
+async def patch_profile(
+    profile_id: str,
+    payload: PipelineProfilePatch,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+) -> PipelineProfileRead:
     repo = PipelineProfileRepo(session)
     model = await repo.get(tenant_id=str(tenant.id), profile_id=profile_id)
     if model is None:
@@ -132,12 +156,23 @@ async def patch_profile(profile_id: str, payload: PipelineProfilePatch, session:
 
 
 @router.put("/profiles/{profile_id}", response_model=PipelineProfileRead)
-async def put_profile(profile_id: str, payload: PipelineProfilePatch, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> PipelineProfileRead:
-    return await patch_profile(profile_id=profile_id, payload=payload, session=session, tenant=tenant)
+async def put_profile(
+    profile_id: str,
+    payload: PipelineProfilePatch,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+) -> PipelineProfileRead:
+    return await patch_profile(
+        profile_id=profile_id, payload=payload, session=session, tenant=tenant
+    )
 
 
 @router.post("/profiles/{profile_id}:activate", response_model=PipelineProfileRead)
-async def activate_profile(profile_id: str, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> PipelineProfileRead:
+async def activate_profile(
+    profile_id: str,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+) -> PipelineProfileRead:
     repo = PipelineProfileRepo(session)
     model = await repo.get(tenant_id=str(tenant.id), profile_id=profile_id)
     if model is None:
@@ -147,14 +182,26 @@ async def activate_profile(profile_id: str, session: AsyncSession = Depends(get_
     return _serialize_profile(model)
 
 
-@router.delete("/profiles/{profile_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
-async def delete_profile(profile_id: str, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> None:
+@router.delete(
+    "/profiles/{profile_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None
+)
+async def delete_profile(
+    profile_id: str,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+) -> None:
     repo = PipelineProfileRepo(session)
     model = await repo.get(tenant_id=str(tenant.id), profile_id=profile_id)
     if model is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "profile not found")
     active_job = (
-        await session.execute(select(DocumentJob).where(DocumentJob.tenant_id == str(tenant.id), DocumentJob.profile_id == profile_id, DocumentJob.status.in_(["queued", "running"])))
+        await session.execute(
+            select(DocumentJob).where(
+                DocumentJob.tenant_id == str(tenant.id),
+                DocumentJob.profile_id == profile_id,
+                DocumentJob.status.in_(["queued", "running"]),
+            )
+        )
     ).scalar_one_or_none()
     if active_job:
         raise HTTPException(status.HTTP_409_CONFLICT, "profile has active jobs")
@@ -189,12 +236,20 @@ async def run_pipeline(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "profile not found")
 
     request_payload = payload.model_dump(mode="json")
-    request_hash = compute_request_hash({"tenant_id": str(tenant.id), "endpoint": "/api/v1/pipelines/run", "body": request_payload})
-    idem_service = IdempotencyService(session=session, tenant_id=str(tenant.id), endpoint="pipelines.runs")
+    request_hash = compute_request_hash(
+        {"tenant_id": str(tenant.id), "endpoint": "/api/v1/pipelines/run", "body": request_payload}
+    )
+    idem_service = IdempotencyService(
+        session=session, tenant_id=str(tenant.id), endpoint="pipelines.runs"
+    )
     idem_key = normalize_idempotency_key(idempotency_key)
-    record, created = await idem_service.acquire(key=idem_key, request_hash=request_hash, method="POST", path="/api/v1/pipelines/run")
+    record, created = await idem_service.acquire(
+        key=idem_key, request_hash=request_hash, method="POST", path="/api/v1/pipelines/run"
+    )
     if not created:
-        return await idem_service.respond_from_store(record, model=PipelineRunAccepted, response=response)
+        return await idem_service.respond_from_store(
+            record, model=PipelineRunAccepted, response=response
+        )
 
     orchestrator = DocumentPipelineOrchestrator(session)
     job = await orchestrator.start_document_job(
@@ -218,7 +273,17 @@ async def run_pipeline(
         idempotency_key=idem_key,
         request_hash=request_hash,
     )
-    steps = (await session.execute(select(DocumentJobStep).where(DocumentJobStep.job_id == job.id).order_by(DocumentJobStep.seq.asc().nullslast(), DocumentJobStep.order.asc()))).scalars().all()
+    steps = (
+        (
+            await session.execute(
+                select(DocumentJobStep)
+                .where(DocumentJobStep.job_id == job.id)
+                .order_by(DocumentJobStep.seq.asc().nullslast(), DocumentJobStep.order.asc())
+            )
+        )
+        .scalars()
+        .all()
+    )
     accepted = PipelineRunAccepted(
         run_id=job.id,
         job_id=job.id,
@@ -226,7 +291,9 @@ async def run_pipeline(
         correlation_id=job.correlation_id,
         step_runs=[_serialize_step(s) for s in steps],
     )
-    await idem_service.store_success(record, status_code=status.HTTP_202_ACCEPTED, body=accepted.model_dump(mode="json"))
+    await idem_service.store_success(
+        record, status_code=status.HTTP_202_ACCEPTED, body=accepted.model_dump(mode="json")
+    )
     await session.commit()
     return accepted
 
@@ -249,6 +316,7 @@ async def run_pipeline_compat(
         tenant=tenant,
     )
 
+
 @router.get("/runs", response_model=list[PipelineRunRead])
 async def list_runs(
     status_filter: str | None = Query(default=None, alias="status"),
@@ -259,15 +327,26 @@ async def list_runs(
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
 ) -> list[PipelineRunRead]:
-    stmt = select(DocumentJob).where(DocumentJob.tenant_id == str(tenant.id)).order_by(DocumentJob.updated_at.desc())
+    stmt = (
+        select(DocumentJob)
+        .where(DocumentJob.tenant_id == str(tenant.id))
+        .order_by(DocumentJob.updated_at.desc())
+    )
     if status_filter:
         stmt = stmt.where(DocumentJob.status == status_filter)
     if profile:
-        stmt = stmt.where((DocumentJob.profile_id == profile) | (DocumentJob.pipeline_profile_id == profile) | (DocumentJob.template_code == profile))
+        stmt = stmt.where(
+            (DocumentJob.profile_id == profile)
+            | (DocumentJob.pipeline_profile_id == profile)
+            | (DocumentJob.template_code == profile)
+        )
     if created_by:
         stmt = stmt.where(DocumentJob.created_by == created_by)
     if q:
-        stmt = stmt.where((DocumentJob.template_code.ilike(f"%{q}%")) | (DocumentJob.correlation_id.ilike(f"%{q}%")))
+        stmt = stmt.where(
+            (DocumentJob.template_code.ilike(f"%{q}%"))
+            | (DocumentJob.correlation_id.ilike(f"%{q}%"))
+        )
     if date_from:
         stmt = stmt.where(DocumentJob.created_at >= date_from)
     runs = (await session.execute(stmt)).scalars().all()
@@ -297,7 +376,11 @@ async def bulk_update_runs(
 
 
 @router.get("/runs/{run_id}", response_model=PipelineRunRead)
-async def get_run(run_id: str, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> PipelineRunRead:
+async def get_run(
+    run_id: str,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+) -> PipelineRunRead:
     run = await session.get(DocumentJob, run_id)
     if run is None or str(run.tenant_id) != str(tenant.id):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "run not found")
@@ -305,7 +388,11 @@ async def get_run(run_id: str, session: AsyncSession = Depends(get_session), ten
 
 
 @router.get("/runs/{run_id}/events")
-async def stream_run_events(run_id: str, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> StreamingResponse:
+async def stream_run_events(
+    run_id: str,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+) -> StreamingResponse:
     run = await session.get(DocumentJob, run_id)
     if run is None or str(run.tenant_id) != str(tenant.id):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "run not found")
@@ -322,7 +409,9 @@ async def stream_run_events(run_id: str, session: AsyncSession = Depends(get_ses
                 previous_hash = snapshot_hash
                 yield "event: run.update\n"
                 yield f"data: {json.dumps(payload.model_dump(mode='json'), ensure_ascii=False)}\n\n"
-            current_status = run_obj.status.value if hasattr(run_obj.status, "value") else str(run_obj.status)
+            current_status = (
+                run_obj.status.value if hasattr(run_obj.status, "value") else str(run_obj.status)
+            )
             if current_status in {"success", "failed", "canceled"}:
                 yield "event: run.done\n"
                 yield f"data: {json.dumps(payload.model_dump(mode='json'), ensure_ascii=False)}\n\n"
@@ -339,7 +428,11 @@ async def stream_run_events(run_id: str, session: AsyncSession = Depends(get_ses
 
 
 @router.post("/runs/{run_id}:cancel", response_model=PipelineRunRead)
-async def cancel_run(run_id: str, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> PipelineRunRead:
+async def cancel_run(
+    run_id: str,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+) -> PipelineRunRead:
     run = await session.get(DocumentJob, run_id)
     if run is None or str(run.tenant_id) != str(tenant.id):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "run not found")
@@ -349,7 +442,11 @@ async def cancel_run(run_id: str, session: AsyncSession = Depends(get_session), 
 
 
 @router.post("/runs/{run_id}:retry", response_model=PipelineRunRead)
-async def retry_run(run_id: str, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> PipelineRunRead:
+async def retry_run(
+    run_id: str,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+) -> PipelineRunRead:
     run = await session.get(DocumentJob, run_id)
     if run is None or str(run.tenant_id) != str(tenant.id):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "run not found")
@@ -359,7 +456,12 @@ async def retry_run(run_id: str, session: AsyncSession = Depends(get_session), t
 
 
 @router.post("/runs/{run_id}/steps/{step_run_id}:retry", response_model=PipelineRunRead)
-async def retry_step_run(run_id: str, step_run_id: str, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> PipelineRunRead:
+async def retry_step_run(
+    run_id: str,
+    step_run_id: str,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+) -> PipelineRunRead:
     run = await session.get(DocumentJob, run_id)
     if run is None or str(run.tenant_id) != str(tenant.id):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "run not found")
@@ -369,4 +471,3 @@ async def retry_step_run(run_id: str, step_run_id: str, session: AsyncSession = 
     await DocumentPipelineOrchestrator(session).retry_step(job_id=run_id, step_code=step.step_code)
     await session.commit()
     return await _build_run_read(session, run)
-

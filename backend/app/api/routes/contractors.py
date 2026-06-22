@@ -16,9 +16,9 @@ from app.api.helpers.etag import (
 )
 from app.core.feature_flags import is_feature_enabled
 from app.core.security import AccessContext, abac
-from app.models.models import Tenant
 from app.domains.contractors.documents import document_expiry_status
 from app.domains.shared import ContingentItemStatus
+from app.models.models import Tenant
 from app.modules.contractors.models import (
     ComplianceStatus,
     ContractorDocument,
@@ -38,7 +38,14 @@ router = APIRouter(prefix="/contractors", tags=["contractors"])
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 TenantDep = Annotated[Tenant, Depends(get_tenant_record)]
 
-_CONTRACTOR_READ_ROLES = ["admin", "owner", "hse_head", "hse_specialist", "inspector_contractor", "client_admin"]
+_CONTRACTOR_READ_ROLES = [
+    "admin",
+    "owner",
+    "hse_head",
+    "hse_specialist",
+    "inspector_contractor",
+    "client_admin",
+]
 _CONTRACTOR_WRITE_ROLES = ["admin", "owner", "hse_head"]
 
 _CONTRACTORS_FEATURE_CODE = "contractors"
@@ -50,17 +57,25 @@ def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> str | No
 
 ReaderAccess = Annotated[
     AccessContext,
-    Depends(abac(_tenant_resource_id, required_roles=_CONTRACTOR_READ_ROLES, action="read contractors")),
+    Depends(
+        abac(_tenant_resource_id, required_roles=_CONTRACTOR_READ_ROLES, action="read contractors")
+    ),
 ]
 WriterAccess = Annotated[
     AccessContext,
-    Depends(abac(_tenant_resource_id, required_roles=_CONTRACTOR_WRITE_ROLES, action="manage contractors")),
+    Depends(
+        abac(
+            _tenant_resource_id, required_roles=_CONTRACTOR_WRITE_ROLES, action="manage contractors"
+        )
+    ),
 ]
 
 
 async def require_contractors_feature(tenant: TenantDep, session: SessionDep) -> None:
     if not await is_feature_enabled(session, str(tenant.id), _CONTRACTORS_FEATURE_CODE):
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Contractors feature is not enabled for this tenant")
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND, "Contractors feature is not enabled for this tenant"
+        )
 
 
 ContractorsFeatureGate = Depends(require_contractors_feature)
@@ -113,8 +128,14 @@ class ContractorIncidentCreate(BaseModel):
 
 
 DocType = Literal[
-    "license", "insurance", "contract", "sro",
-    "training_cert", "medical_cert", "access_permit", "qualification",
+    "license",
+    "insurance",
+    "contract",
+    "sro",
+    "training_cert",
+    "medical_cert",
+    "access_permit",
+    "qualification",
     "other",
 ]
 
@@ -171,7 +192,15 @@ async def list_contractors_registry(
     if contractor_ids:
         stmt = stmt.where(ContractorRegistry.id.in_(contractor_ids))
     total = int(await session.scalar(select(func.count()).select_from(stmt.subquery())) or 0)
-    items = list((await session.execute(stmt.order_by(ContractorRegistry.created_at.desc()).offset(offset).limit(limit))).scalars().all())
+    items = list(
+        (
+            await session.execute(
+                stmt.order_by(ContractorRegistry.created_at.desc()).offset(offset).limit(limit)
+            )
+        )
+        .scalars()
+        .all()
+    )
     etag = compute_list_etag(
         tenant_id=str(tenant.id),
         items=items,
@@ -207,7 +236,9 @@ async def create_contractor_registry(
 
 
 @router.get("/registry/{contractor_id}")
-async def get_contractor_registry(contractor_id: str, tenant: TenantDep, session: SessionDep, access: ReaderAccess):
+async def get_contractor_registry(
+    contractor_id: str, tenant: TenantDep, session: SessionDep, access: ReaderAccess
+):
     access.ensure_abac(contractor_id=contractor_id, action="read contractors")
     row = (
         await session.execute(
@@ -224,7 +255,13 @@ async def get_contractor_registry(contractor_id: str, tenant: TenantDep, session
 
 
 @router.patch("/registry/{contractor_id}")
-async def patch_contractor_registry(contractor_id: str, payload: ContractorRegistryPatch, tenant: TenantDep, session: SessionDep, access: WriterAccess):
+async def patch_contractor_registry(
+    contractor_id: str,
+    payload: ContractorRegistryPatch,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: WriterAccess,
+):
     access.ensure_abac(contractor_id=contractor_id, action="manage contractors")
     row = (
         await session.execute(
@@ -244,8 +281,12 @@ async def patch_contractor_registry(contractor_id: str, payload: ContractorRegis
     return row
 
 
-@router.delete("/registry/{contractor_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
-async def archive_contractor_registry(contractor_id: str, tenant: TenantDep, session: SessionDep, access: WriterAccess):
+@router.delete(
+    "/registry/{contractor_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None
+)
+async def archive_contractor_registry(
+    contractor_id: str, tenant: TenantDep, session: SessionDep, access: WriterAccess
+):
     access.ensure_abac(contractor_id=contractor_id, action="manage contractors")
     row = (
         await session.execute(
@@ -281,12 +322,16 @@ async def list_contractor_employees(
     contractor_ids = [str(v) for v in access.claims.get("contractor_ids", []) if v]
     if contractor_ids:
         stmt = stmt.where(ContractorEmployee.contractor_id.in_(contractor_ids))
-    items = list((await session.execute(stmt.order_by(ContractorEmployee.created_at.desc()))).scalars().all())
+    items = list(
+        (await session.execute(stmt.order_by(ContractorEmployee.created_at.desc()))).scalars().all()
+    )
     return {"items": items, "total": len(items)}
 
 
 @router.post("/employees", status_code=status.HTTP_201_CREATED)
-async def create_contractor_employee(payload: ContractorEmployeeCreate, tenant: TenantDep, session: SessionDep, access: WriterAccess):
+async def create_contractor_employee(
+    payload: ContractorEmployeeCreate, tenant: TenantDep, session: SessionDep, access: WriterAccess
+):
     access.ensure_abac(contractor_id=payload.contractor_id, action="manage contractors")
     row = ContractorEmployee(tenant_id=str(tenant.id), **payload.model_dump())
     session.add(row)
@@ -296,7 +341,13 @@ async def create_contractor_employee(payload: ContractorEmployeeCreate, tenant: 
 
 
 @router.patch("/employees/{employee_id}")
-async def patch_contractor_employee(employee_id: str, payload: ContractorEmployeePatch, tenant: TenantDep, session: SessionDep, access: WriterAccess):
+async def patch_contractor_employee(
+    employee_id: str,
+    payload: ContractorEmployeePatch,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: WriterAccess,
+):
     row = (
         await session.execute(
             select(ContractorEmployee).where(
@@ -334,12 +385,18 @@ async def list_contractor_incidents(
     contractor_ids = [str(v) for v in access.claims.get("contractor_ids", []) if v]
     if contractor_ids:
         stmt = stmt.where(ContractorIncident.contractor_id.in_(contractor_ids))
-    items = list((await session.execute(stmt.order_by(ContractorIncident.occurred_at.desc()))).scalars().all())
+    items = list(
+        (await session.execute(stmt.order_by(ContractorIncident.occurred_at.desc())))
+        .scalars()
+        .all()
+    )
     return {"items": items, "total": len(items)}
 
 
 @router.post("/incidents", status_code=status.HTTP_201_CREATED)
-async def create_contractor_incident(payload: ContractorIncidentCreate, tenant: TenantDep, session: SessionDep, access: WriterAccess):
+async def create_contractor_incident(
+    payload: ContractorIncidentCreate, tenant: TenantDep, session: SessionDep, access: WriterAccess
+):
     access.ensure_abac(contractor_id=payload.contractor_id, action="manage contractors")
     row = ContractorIncident(tenant_id=str(tenant.id), **payload.model_dump())
     session.add(row)
@@ -446,7 +503,10 @@ async def get_employee_readiness(
     dependencies=[ContractorsFeatureGate],
 )
 async def get_employee_document_checklist(
-    employee_id: str, tenant: TenantDep, session: SessionDep, access: ReaderAccess,
+    employee_id: str,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: ReaderAccess,
 ) -> dict:
     """Per-requirement document collection status for a contractor employee (advisory)."""
     row = await _fetch_employee(session, tenant, employee_id)
@@ -526,7 +586,9 @@ def _document_body(doc: ContractorDocument, today: date | None = None) -> dict:
     }
 
 
-async def _fetch_document(session: AsyncSession, tenant: Tenant, document_id: str) -> ContractorDocument:
+async def _fetch_document(
+    session: AsyncSession, tenant: Tenant, document_id: str
+) -> ContractorDocument:
     """Return the in-tenant, non-deleted ContractorDocument or raise 404."""
     row = (
         await session.execute(
@@ -590,18 +652,27 @@ async def list_contractor_documents(
     contractor_ids = [str(v) for v in access.claims.get("contractor_ids", []) if v]
     if contractor_ids:
         stmt = stmt.where(ContractorDocument.contractor_id.in_(contractor_ids))
-    items = list((await session.execute(stmt.order_by(ContractorDocument.created_at.desc()))).scalars().all())
+    items = list(
+        (await session.execute(stmt.order_by(ContractorDocument.created_at.desc()))).scalars().all()
+    )
     today = datetime.now(timezone.utc).date()
     return {"items": [_document_body(d, today) for d in items], "total": len(items)}
 
 
-@router.post("/documents", status_code=status.HTTP_201_CREATED, dependencies=[ContractorsFeatureGate])
+@router.post(
+    "/documents", status_code=status.HTTP_201_CREATED, dependencies=[ContractorsFeatureGate]
+)
 async def create_contractor_document(
-    payload: ContractorDocumentCreate, tenant: TenantDep, session: SessionDep, access: WriterAccess,
+    payload: ContractorDocumentCreate,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: WriterAccess,
 ) -> dict:
     access.ensure_abac(contractor_id=payload.contractor_id, action="manage contractors")
     if payload.employee_id:
-        await _validate_employee_belongs(session, tenant, payload.contractor_id, payload.employee_id)
+        await _validate_employee_belongs(
+            session, tenant, payload.contractor_id, payload.employee_id
+        )
     row = ContractorDocument(tenant_id=str(tenant.id), **payload.model_dump())
     session.add(row)
     await session.commit()
@@ -633,15 +704,19 @@ async def list_expiring_contractor_documents(
     flagged = [
         _document_body(d, today)
         for d in (await session.execute(stmt)).scalars().all()
-        if document_expiry_status(d.valid_until, today) in (
-            ContingentItemStatus.DUE_SOON, ContingentItemStatus.OVERDUE,
+        if document_expiry_status(d.valid_until, today)
+        in (
+            ContingentItemStatus.DUE_SOON,
+            ContingentItemStatus.OVERDUE,
         )
     ]
     return {"items": flagged, "total": len(flagged)}
 
 
 @router.get("/documents/{document_id}", dependencies=[ContractorsFeatureGate])
-async def get_contractor_document(document_id: str, tenant: TenantDep, session: SessionDep, access: ReaderAccess) -> dict:
+async def get_contractor_document(
+    document_id: str, tenant: TenantDep, session: SessionDep, access: ReaderAccess
+) -> dict:
     row = await _fetch_document(session, tenant, document_id)
     access.ensure_abac(contractor_id=row.contractor_id, action="read contractors")
     return _document_body(row)
@@ -649,7 +724,11 @@ async def get_contractor_document(document_id: str, tenant: TenantDep, session: 
 
 @router.patch("/documents/{document_id}", dependencies=[ContractorsFeatureGate])
 async def patch_contractor_document(
-    document_id: str, payload: ContractorDocumentPatch, tenant: TenantDep, session: SessionDep, access: WriterAccess,
+    document_id: str,
+    payload: ContractorDocumentPatch,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: WriterAccess,
 ) -> dict:
     row = await _fetch_document(session, tenant, document_id)
     access.ensure_abac(contractor_id=row.contractor_id, action="manage contractors")
@@ -660,8 +739,15 @@ async def patch_contractor_document(
     return _document_body(row)
 
 
-@router.delete("/documents/{document_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None, dependencies=[ContractorsFeatureGate])
-async def archive_contractor_document(document_id: str, tenant: TenantDep, session: SessionDep, access: WriterAccess):
+@router.delete(
+    "/documents/{document_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_model=None,
+    dependencies=[ContractorsFeatureGate],
+)
+async def archive_contractor_document(
+    document_id: str, tenant: TenantDep, session: SessionDep, access: WriterAccess
+):
     row = await _fetch_document(session, tenant, document_id)
     access.ensure_abac(contractor_id=row.contractor_id, action="manage contractors")
     row.deleted_at = datetime.now(timezone.utc)
@@ -684,13 +770,23 @@ def _requirement_body(req: ContractorDocumentRequirement) -> dict:
 
 
 @router.get("/document-requirements", dependencies=[ContractorsFeatureGate])
-async def list_document_requirements(tenant: TenantDep, session: SessionDep, access: ReaderAccess) -> dict:
-    rows = list((await session.execute(
-        select(ContractorDocumentRequirement).where(
-            ContractorDocumentRequirement.tenant_id == str(tenant.id),
-            ContractorDocumentRequirement.deleted_at.is_(None),
-        ).order_by(ContractorDocumentRequirement.doc_type)
-    )).scalars().all())
+async def list_document_requirements(
+    tenant: TenantDep, session: SessionDep, access: ReaderAccess
+) -> dict:
+    rows = list(
+        (
+            await session.execute(
+                select(ContractorDocumentRequirement)
+                .where(
+                    ContractorDocumentRequirement.tenant_id == str(tenant.id),
+                    ContractorDocumentRequirement.deleted_at.is_(None),
+                )
+                .order_by(ContractorDocumentRequirement.doc_type)
+            )
+        )
+        .scalars()
+        .all()
+    )
     return {"items": [_requirement_body(r) for r in rows], "total": len(rows)}
 
 
@@ -700,20 +796,28 @@ async def list_document_requirements(tenant: TenantDep, session: SessionDep, acc
     dependencies=[ContractorsFeatureGate],
 )
 async def create_document_requirement(
-    payload: DocumentRequirementCreate, tenant: TenantDep, session: SessionDep, access: WriterAccess,
+    payload: DocumentRequirementCreate,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: WriterAccess,
 ) -> dict:
-    existing = (await session.execute(
-        select(ContractorDocumentRequirement).where(
-            ContractorDocumentRequirement.tenant_id == str(tenant.id),
-            ContractorDocumentRequirement.doc_type == payload.doc_type,
-            ContractorDocumentRequirement.scope == payload.scope,
-            ContractorDocumentRequirement.deleted_at.is_(None),
+    existing = (
+        await session.execute(
+            select(ContractorDocumentRequirement).where(
+                ContractorDocumentRequirement.tenant_id == str(tenant.id),
+                ContractorDocumentRequirement.doc_type == payload.doc_type,
+                ContractorDocumentRequirement.scope == payload.scope,
+                ContractorDocumentRequirement.deleted_at.is_(None),
+            )
         )
-    )).scalar_one_or_none()
+    ).scalar_one_or_none()
     if existing is not None:
         raise HTTPException(
             status.HTTP_409_CONFLICT,
-            detail={"code": "requirement_exists", "message": "Requirement already exists for this doc_type/scope"},
+            detail={
+                "code": "requirement_exists",
+                "message": "Requirement already exists for this doc_type/scope",
+            },
         )
     row = ContractorDocumentRequirement(tenant_id=str(tenant.id), **payload.model_dump())
     session.add(row)
@@ -729,15 +833,20 @@ async def create_document_requirement(
     dependencies=[ContractorsFeatureGate],
 )
 async def delete_document_requirement(
-    requirement_id: str, tenant: TenantDep, session: SessionDep, access: WriterAccess,
+    requirement_id: str,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: WriterAccess,
 ):
-    row = (await session.execute(
-        select(ContractorDocumentRequirement).where(
-            ContractorDocumentRequirement.id == requirement_id,
-            ContractorDocumentRequirement.tenant_id == str(tenant.id),
-            ContractorDocumentRequirement.deleted_at.is_(None),
+    row = (
+        await session.execute(
+            select(ContractorDocumentRequirement).where(
+                ContractorDocumentRequirement.id == requirement_id,
+                ContractorDocumentRequirement.tenant_id == str(tenant.id),
+                ContractorDocumentRequirement.deleted_at.is_(None),
+            )
         )
-    )).scalar_one_or_none()
+    ).scalar_one_or_none()
     if row is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Requirement not found")
     row.deleted_at = datetime.now(timezone.utc)

@@ -1,4 +1,5 @@
 """Seed database with initial template data."""
+
 from __future__ import annotations
 
 import asyncio
@@ -51,9 +52,7 @@ def build_docx(paragraphs: list[str]) -> bytes:
 async def ensure_tenant_exists() -> None:
     async with session_scope(tenant="public") as session:
         existing = (
-            await session.execute(
-                select(Tenant).where(Tenant.slug == SEED_TENANT)
-            )
+            await session.execute(select(Tenant).where(Tenant.slug == SEED_TENANT))
         ).scalar_one_or_none()
         if existing is None:
             tenant = Tenant(

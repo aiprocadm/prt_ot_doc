@@ -51,9 +51,7 @@ def upgrade() -> None:
         # IF EXISTS keeps this idempotent and safe across environments where the
         # constraint may already be absent (e.g. a DB bootstrapped via create_all
         # rather than this migration chain).
-        op.execute(
-            f'ALTER TABLE featureenablement DROP CONSTRAINT IF EXISTS "{_FK_NAME}"'
-        )
+        op.execute(f'ALTER TABLE featureenablement DROP CONSTRAINT IF EXISTS "{_FK_NAME}"')
 
 
 def downgrade() -> None:

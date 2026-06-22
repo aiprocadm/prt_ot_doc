@@ -48,7 +48,10 @@ logger = logging.getLogger(__name__)
 
 _PII_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}", re.IGNORECASE), "[masked_email]"),
-    (re.compile(r"(?:\+7|8)?[\s\-()]?\d{3}[\s\-()]?\d{3}[\s\-]?\d{2}[\s\-]?\d{2}"), "[masked_phone]"),
+    (
+        re.compile(r"(?:\+7|8)?[\s\-()]?\d{3}[\s\-()]?\d{3}[\s\-]?\d{2}[\s\-]?\d{2}"),
+        "[masked_phone]",
+    ),
     (re.compile(r"\b\d{4}\s?\d{6}\b"), "[masked_passport]"),
 )
 
@@ -206,7 +209,9 @@ class FileService:
         if not record_company_id:
             return
         if not company_id or str(company_id) != str(record_company_id):
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="file_company_forbidden")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="file_company_forbidden"
+            )
 
     async def _enforce_company_scope(
         self,
@@ -225,7 +230,9 @@ class FileService:
         role = actor_role or (access.role if access is not None else None)
         if self._is_client_role(role):
             if not actor_company_id or str(actor_company_id) != str(record_company_id):
-                deny_exc = HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="file_company_forbidden")
+                deny_exc = HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN, detail="file_company_forbidden"
+                )
 
         if deny_exc is None and access is not None and self._is_client_role(access.role):
             try:
@@ -279,7 +286,9 @@ class FileService:
         actor_role: str | None,
         actor_company_id: str | None,
     ) -> None:
-        self._enforce_client_company_scope(record=record, actor_role=actor_role, actor_company_id=actor_company_id)
+        self._enforce_client_company_scope(
+            record=record, actor_role=actor_role, actor_company_id=actor_company_id
+        )
         await self._enforce_company_scope(
             record=record,
             action="read file",
@@ -306,14 +315,29 @@ class FileService:
             raise HTTPException(status_code=415, detail="unsupported_content_type")
         _reject_dangerous_double_extension(
             filename,
-            allowed_extensions={ext.lower().lstrip(".") for ext in settings.file_allowed_extensions},
+            allowed_extensions={
+                ext.lower().lstrip(".") for ext in settings.file_allowed_extensions
+            },
         )
         lower_name = filename.lower()
         if lower_name.endswith((".docm", ".xlsm")):
             raise HTTPException(status_code=400, detail="macro_enabled_documents_are_forbidden")
-        declared_sha = (metadata_json or {}).get("sha256") if isinstance(metadata_json, dict) else None
+        declared_sha = (
+            (metadata_json or {}).get("sha256") if isinstance(metadata_json, dict) else None
+        )
         if declared_sha:
-            dedupe = (await self.session.execute(select(FileRecord).where(FileRecord.tenant_id == self.tenant_id, FileRecord.sha256 == declared_sha, FileRecord.status == FileStatus.clean.value, FileRecord.deleted_at.is_(None)).limit(1))).scalar_one_or_none()
+            dedupe = (
+                await self.session.execute(
+                    select(FileRecord)
+                    .where(
+                        FileRecord.tenant_id == self.tenant_id,
+                        FileRecord.sha256 == declared_sha,
+                        FileRecord.status == FileStatus.clean.value,
+                        FileRecord.deleted_at.is_(None),
+                    )
+                    .limit(1)
+                )
+            ).scalar_one_or_none()
             if dedupe is not None:
                 if metadata_json:
                     merged = dict(dedupe.metadata_json or {})
@@ -323,7 +347,9 @@ class FileService:
                     await self.session.flush()
                 return dedupe, "", 0
         object_id = str(uuid4())
-        object_key = storage.build_tenant_key(tenant_id=self.tenant_id, file_id=object_id, filename=_safe_filename(filename))
+        object_key = storage.build_tenant_key(
+            tenant_id=self.tenant_id, file_id=object_id, filename=_safe_filename(filename)
+        )
         record = FileRecord(
             id=object_id,
             tenant_id=self.tenant_id,
@@ -345,10 +371,10 @@ class FileService:
         self.session.add(record)
         await self.session.flush()
         ttl = settings.presign_download_ttl_seconds
-        upload_url = s3.generate_presigned_put_url(object_key, expires_in=ttl, content_type=content_type)
+        upload_url = s3.generate_presigned_put_url(
+            object_key, expires_in=ttl, content_type=content_type
+        )
         return record, upload_url, ttl
-
-
 
     async def create_new_version_upload_session(
         self,
@@ -370,7 +396,9 @@ class FileService:
             raise HTTPException(status_code=415, detail="unsupported_content_type")
         _reject_dangerous_double_extension(
             filename,
-            allowed_extensions={ext.lower().lstrip(".") for ext in settings.file_allowed_extensions},
+            allowed_extensions={
+                ext.lower().lstrip(".") for ext in settings.file_allowed_extensions
+            },
         )
 
         latest = (
@@ -513,7 +541,10 @@ class FileService:
                 tmp.flush()
                 verdict = av.scan_file(Path(tmp.name))
         except Exception as exc:
-            logger.exception("files.av.scan_failed", extra={"file_id": file_id, "error_class": exc.__class__.__name__})
+            logger.exception(
+                "files.av.scan_failed",
+                extra={"file_id": file_id, "error_class": exc.__class__.__name__},
+            )
             record.status = FileStatus.scanning.value
             record.av_result_json = {"status": "error", "error_class": exc.__class__.__name__}
             self.session.add(
@@ -565,7 +596,10 @@ class FileService:
         await self.session.flush()
         if record.status in {FileStatus.clean.value}:
             try:
-                index_file_content_job.apply_async(kwargs={"tenant_slug": self.session.info.get("tenant"), "file_id": record.id}, countdown=0)
+                index_file_content_job.apply_async(
+                    kwargs={"tenant_slug": self.session.info.get("tenant"), "file_id": record.id},
+                    countdown=0,
+                )
             except Exception:
                 await index_file_record(self.session, tenant_id=self.tenant_id, file_id=record.id)
         return record
@@ -639,7 +673,9 @@ class FileService:
                     request_id=request_id,
                     details={"reason": "tenant_key_mismatch", "purpose": purpose},
                 )
-                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="forbidden") from exc
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN, detail="forbidden"
+                ) from exc
         ttl = self._resolve_signed_url_ttl(ttl)
         url = storage.presign_get(key=record.object_key, expires_in=ttl)
         self.session.add(
@@ -709,7 +745,11 @@ class FileService:
                 "ip": ip,
                 "user_agent": user_agent,
                 "request_id": request_id,
-                "details": {"reason": "company_scope_mismatch", "role": role, "entity_type": entity_type},
+                "details": {
+                    "reason": "company_scope_mismatch",
+                    "role": role,
+                    "entity_type": entity_type,
+                },
             },
         )
         if role in guarded_roles and record.status != FileStatus.clean.value:
@@ -759,7 +799,9 @@ class FileService:
         record.deleted_at = datetime.now(timezone.utc)
         await self.session.flush()
 
-    async def unlink_file(self, *, file_id: str, entity_type: str, entity_id: str, role: str | None = None) -> None:
+    async def unlink_file(
+        self, *, file_id: str, entity_type: str, entity_id: str, role: str | None = None
+    ) -> None:
         stmt = delete(FileLink).where(
             FileLink.tenant_id == self.tenant_id,
             FileLink.file_id == file_id,
@@ -788,7 +830,9 @@ class FileService:
         ext = Path(filename).suffix or ".bin"
         record_id = str(uuid4())
         display_name = _safe_filename(filename, fallback=f"artifact{ext}")
-        object_key = storage.build_tenant_key(tenant_id=self.tenant_id, file_id=record_id, filename=f"{record_id}{ext}")
+        object_key = storage.build_tenant_key(
+            tenant_id=self.tenant_id, file_id=record_id, filename=f"{record_id}{ext}"
+        )
         s3.put_object(data=payload, mime=content_type, key=object_key)
         metadata = dict(metadata_json or {})
         metadata.setdefault("display_name", display_name)
@@ -813,7 +857,9 @@ class FileService:
         )
         self.session.add(record)
         await self.session.flush()
-        await self.link_file(file_id=record.id, entity_type=entity_type, entity_id=resolved_entity_id, role=role)
+        await self.link_file(
+            file_id=record.id, entity_type=entity_type, entity_id=resolved_entity_id, role=role
+        )
         return record
 
     async def delete_file(
@@ -875,7 +921,9 @@ class FileService:
 
 
 # legacy NEXT29 API kept for compatibility
-async def create_upload_session(*, session: AsyncSession, tenant_id: str, payload, user_id: str | None) -> tuple[FileObject, FileVersion, str]:
+async def create_upload_session(
+    *, session: AsyncSession, tenant_id: str, payload, user_id: str | None
+) -> tuple[FileObject, FileVersion, str]:
     obj = FileObject(
         tenant_id=tenant_id,
         kind=payload.kind,
@@ -890,7 +938,13 @@ async def create_upload_session(*, session: AsyncSession, tenant_id: str, payloa
         file_id=obj.id,
         version_no=1,
         filename=payload.filename,
-        s3_key=storage.build_tenant_key(tenant_id=tenant_id, entity=str(payload.owner_entity_type or "files"), entity_id=str(payload.owner_entity_id or obj.id), file_id=obj.id, filename=payload.filename),
+        s3_key=storage.build_tenant_key(
+            tenant_id=tenant_id,
+            entity=str(payload.owner_entity_type or "files"),
+            entity_id=str(payload.owner_entity_id or obj.id),
+            file_id=obj.id,
+            filename=payload.filename,
+        ),
         size=0,
         mime="application/octet-stream",
         sha256="",
@@ -905,7 +959,9 @@ async def create_upload_session(*, session: AsyncSession, tenant_id: str, payloa
     return obj, version, url
 
 
-async def complete_upload(*, session: AsyncSession, tenant_id: str, file_id: str, version_id: str) -> FileVersion:
+async def complete_upload(
+    *, session: AsyncSession, tenant_id: str, file_id: str, version_id: str
+) -> FileVersion:
     version = await session.get(FileVersion, version_id)
     if version is None or version.tenant_id != tenant_id or version.file_id != file_id:
         raise HTTPException(status_code=404, detail="version_not_found")
@@ -941,15 +997,23 @@ async def complete_upload(*, session: AsyncSession, tenant_id: str, file_id: str
 
     await session.flush()
     if version.status == FileVersionStatus.ready.value:
-        index_file_content_job.apply_async(kwargs={"tenant_slug": session.info.get("tenant"), "version_id": version.id}, countdown=0)
+        index_file_content_job.apply_async(
+            kwargs={"tenant_slug": session.info.get("tenant"), "version_id": version.id},
+            countdown=0,
+        )
     return version
 
 
-async def index_file_content(*, session: AsyncSession, tenant_id: str, version: FileVersion, data: bytes) -> None:
+async def index_file_content(
+    *, session: AsyncSession, tenant_id: str, version: FileVersion, data: bytes
+) -> None:
     started = perf_counter()
     if version.size > MAX_INDEX_BYTES:
         version.text_index_status = TextIndexStatus.skipped.value
-        logger.info("files.index_content.skipped_too_large", extra={"version_id": version.id, "size": version.size})
+        logger.info(
+            "files.index_content.skipped_too_large",
+            extra={"version_id": version.id, "size": version.size},
+        )
         return
     text = ""
     with NamedTemporaryFile(delete=True, suffix=Path(version.filename).suffix) as tmp:
@@ -965,7 +1029,10 @@ async def index_file_content(*, session: AsyncSession, tenant_id: str, version: 
             return
     if not text:
         version.text_index_status = TextIndexStatus.skipped.value
-        logger.info("files.index_content.not_indexable", extra={"version_id": version.id, "mime": version.mime})
+        logger.info(
+            "files.index_content.not_indexable",
+            extra={"version_id": version.id, "mime": version.mime},
+        )
         return
     truncated = False
     text = _mask_pii(text)
@@ -974,7 +1041,11 @@ async def index_file_content(*, session: AsyncSession, tenant_id: str, version: 
         truncated = True
     version.text_index_status = TextIndexStatus.indexed.value
 
-    existing = (await session.execute(select(FileTextIndex).where(FileTextIndex.file_version_id == version.id))).scalar_one_or_none()
+    existing = (
+        await session.execute(
+            select(FileTextIndex).where(FileTextIndex.file_version_id == version.id)
+        )
+    ).scalar_one_or_none()
     if existing is None:
         existing = FileTextIndex(tenant_id=tenant_id, file_version_id=version.id)
         session.add(existing)
@@ -984,15 +1055,32 @@ async def index_file_content(*, session: AsyncSession, tenant_id: str, version: 
     existing.content_tsv = text
     existing.lang = "russian"
 
-    logger.info("files.index_content.done", extra={"version_id": version.id, "bytes": len(data), "duration_ms": int((perf_counter()-started)*1000), "extracted_chars": len(text), "truncated": truncated})
+    logger.info(
+        "files.index_content.done",
+        extra={
+            "version_id": version.id,
+            "bytes": len(data),
+            "duration_ms": int((perf_counter() - started) * 1000),
+            "extracted_chars": len(text),
+            "truncated": truncated,
+        },
+    )
 
 
 async def index_file_version(session: AsyncSession, *, tenant_id: str, version_id: str) -> None:
     version = await session.get(FileVersion, version_id)
-    if version is None or version.tenant_id != tenant_id or version.status != FileVersionStatus.ready.value:
+    if (
+        version is None
+        or version.tenant_id != tenant_id
+        or version.status != FileVersionStatus.ready.value
+    ):
         return
     if version.text_index_status == TextIndexStatus.indexed.value:
-        existing = (await session.execute(select(FileTextIndex).where(FileTextIndex.file_version_id == version.id))).scalar_one_or_none()
+        existing = (
+            await session.execute(
+                select(FileTextIndex).where(FileTextIndex.file_version_id == version.id)
+            )
+        ).scalar_one_or_none()
         if existing is not None:
             return
     with s3.stream_object(key=version.s3_key) as body:
@@ -1002,16 +1090,31 @@ async def index_file_version(session: AsyncSession, *, tenant_id: str, version_i
 
 async def index_file_record(session: AsyncSession, *, tenant_id: str, file_id: str) -> None:
     record = await session.get(FileRecord, file_id)
-    if record is None or record.tenant_id != tenant_id or record.status not in {FileStatus.clean.value, FileStatus.ready.value}:
+    if (
+        record is None
+        or record.tenant_id != tenant_id
+        or record.status not in {FileStatus.clean.value, FileStatus.ready.value}
+    ):
         return
 
     file_hash = record.sha256
-    existing = (await session.execute(select(FileContentIndex).where(FileContentIndex.file_id == file_id))).scalar_one_or_none()
-    if existing is not None and existing.content_sha256 == file_hash and existing.status == FileContentIndexStatus.indexed.value:
+    existing = (
+        await session.execute(select(FileContentIndex).where(FileContentIndex.file_id == file_id))
+    ).scalar_one_or_none()
+    if (
+        existing is not None
+        and existing.content_sha256 == file_hash
+        and existing.status == FileContentIndexStatus.indexed.value
+    ):
         return
 
     if existing is None:
-        existing = FileContentIndex(tenant_id=tenant_id, file_id=file_id, content_sha256=file_hash, mime_type=record.content_type)
+        existing = FileContentIndex(
+            tenant_id=tenant_id,
+            file_id=file_id,
+            content_sha256=file_hash,
+            mime_type=record.content_type,
+        )
         session.add(existing)
 
     existing.attempts = int(existing.attempts or 0) + 1
@@ -1040,7 +1143,9 @@ async def index_file_record(session: AsyncSession, *, tenant_id: str, file_id: s
 
     existing.raw_text = text
     existing.content_sha256 = file_hash
-    existing.status = FileContentIndexStatus.indexed.value if text else FileContentIndexStatus.failed.value
+    existing.status = (
+        FileContentIndexStatus.indexed.value if text else FileContentIndexStatus.failed.value
+    )
     existing.last_error = None if text else "not_indexable"
     existing.language = "ru"
 
@@ -1055,8 +1160,16 @@ async def _upsert_file_search_document(
     text: str,
 ) -> None:
     links = (
-        await session.execute(select(FileLink).where(FileLink.tenant_id == tenant_id, FileLink.file_id == file_record.id))
-    ).scalars().all()
+        (
+            await session.execute(
+                select(FileLink).where(
+                    FileLink.tenant_id == tenant_id, FileLink.file_id == file_record.id
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
     meta = dict(file_record.metadata_json or {})
     if links:
         primary = links[0]
@@ -1094,7 +1207,16 @@ async def _upsert_file_search_document(
         existing.fts = text_content
 
 
-async def issue_download_url(*, session: AsyncSession, tenant_id: str, file_id: str, version_id: str, user_id: str | None, ip: str | None, user_agent: str | None) -> str:
+async def issue_download_url(
+    *,
+    session: AsyncSession,
+    tenant_id: str,
+    file_id: str,
+    version_id: str,
+    user_id: str | None,
+    ip: str | None,
+    user_agent: str | None,
+) -> str:
     version = await session.get(FileVersion, version_id)
     if version is None or version.file_id != file_id or version.tenant_id != tenant_id:
         raise HTTPException(status_code=404, detail="version_not_found")
@@ -1105,6 +1227,15 @@ async def issue_download_url(*, session: AsyncSession, tenant_id: str, file_id: 
     except PermissionError as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="forbidden") from exc
     url = storage.presign_get(key=version.s3_key, expires_in=resolve_presign_ttl())
-    session.add(DownloadLog(tenant_id=tenant_id, user_id=user_id, file_id=file_id, version_id=version_id, ip=ip, user_agent=user_agent))
+    session.add(
+        DownloadLog(
+            tenant_id=tenant_id,
+            user_id=user_id,
+            file_id=file_id,
+            version_id=version_id,
+            ip=ip,
+            user_agent=user_agent,
+        )
+    )
     await session.flush()
     return url

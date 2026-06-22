@@ -60,16 +60,30 @@ class ExportCenterService:
         await self.session.refresh(job)
         return job
 
-    async def record_delivery(self, job: ExportJob, *, status: str, payload: dict[str, Any]) -> ExportJob:
+    async def record_delivery(
+        self, job: ExportJob, *, status: str, payload: dict[str, Any]
+    ) -> ExportJob:
         history = list(job.delivery_history_json or [])
-        history.append({"status": status, "payload": payload, "at": datetime.now(tz=timezone.utc).isoformat()})
+        history.append(
+            {"status": status, "payload": payload, "at": datetime.now(tz=timezone.utc).isoformat()}
+        )
         job.delivery_history_json = history
         job.progress_percent = 100 if status == "delivered" else job.progress_percent
         await self.session.commit()
         await self.session.refresh(job)
         return job
 
-    async def create_schedule(self, *, name: str, dataset_code: str, cron_expr: str, filters_json: dict[str, Any], anonymized: bool, target_type: str, target_config: dict[str, Any]) -> ExportSchedule:
+    async def create_schedule(
+        self,
+        *,
+        name: str,
+        dataset_code: str,
+        cron_expr: str,
+        filters_json: dict[str, Any],
+        anonymized: bool,
+        target_type: str,
+        target_config: dict[str, Any],
+    ) -> ExportSchedule:
         return await self.create_schedule_with_schema(
             name=name,
             dataset_code=dataset_code,
@@ -109,7 +123,16 @@ class ExportCenterService:
         await self.session.refresh(item)
         return item
 
-    async def create_kpi_definition(self, *, code: str, name: str, dataset_code: str, formula_json: dict[str, Any], threshold_json: dict[str, Any], locale_labels: dict[str, Any]) -> KpiDefinition:
+    async def create_kpi_definition(
+        self,
+        *,
+        code: str,
+        name: str,
+        dataset_code: str,
+        formula_json: dict[str, Any],
+        threshold_json: dict[str, Any],
+        locale_labels: dict[str, Any],
+    ) -> KpiDefinition:
         item = KpiDefinition(
             tenant_id=self.tenant_id,
             code=code,
@@ -127,14 +150,54 @@ class ExportCenterService:
     @staticmethod
     def dataset_catalog() -> list[dict[str, Any]]:
         return [
-            {"code": "employees_training", "schema_version": "v1", "targets": ["file", "webhook", "dwh"], "anonymization_profiles": ["none", "basic"]},
-            {"code": "risks", "schema_version": "v1", "targets": ["file", "webhook", "dwh"], "anonymization_profiles": ["none", "basic"]},
-            {"code": "incidents", "schema_version": "v1", "targets": ["file", "webhook", "dwh"], "anonymization_profiles": ["none", "basic"]},
-            {"code": "inspections_prescriptions", "schema_version": "v1", "targets": ["file", "webhook", "dwh"], "anonymization_profiles": ["none", "basic"]},
-            {"code": "documents_edo", "schema_version": "v1", "targets": ["file", "webhook", "dwh"], "anonymization_profiles": ["none", "basic"]},
-            {"code": "ppe_warehouse", "schema_version": "v1", "targets": ["file", "webhook", "dwh"], "anonymization_profiles": ["none", "basic"]},
-            {"code": "billing_usage", "schema_version": "v1", "targets": ["file", "webhook", "dwh"], "anonymization_profiles": ["none", "tenant_only"]},
-            {"code": "workflow_tasks", "schema_version": "v1", "targets": ["file", "webhook", "dwh"], "anonymization_profiles": ["none", "basic"]},
+            {
+                "code": "employees_training",
+                "schema_version": "v1",
+                "targets": ["file", "webhook", "dwh"],
+                "anonymization_profiles": ["none", "basic"],
+            },
+            {
+                "code": "risks",
+                "schema_version": "v1",
+                "targets": ["file", "webhook", "dwh"],
+                "anonymization_profiles": ["none", "basic"],
+            },
+            {
+                "code": "incidents",
+                "schema_version": "v1",
+                "targets": ["file", "webhook", "dwh"],
+                "anonymization_profiles": ["none", "basic"],
+            },
+            {
+                "code": "inspections_prescriptions",
+                "schema_version": "v1",
+                "targets": ["file", "webhook", "dwh"],
+                "anonymization_profiles": ["none", "basic"],
+            },
+            {
+                "code": "documents_edo",
+                "schema_version": "v1",
+                "targets": ["file", "webhook", "dwh"],
+                "anonymization_profiles": ["none", "basic"],
+            },
+            {
+                "code": "ppe_warehouse",
+                "schema_version": "v1",
+                "targets": ["file", "webhook", "dwh"],
+                "anonymization_profiles": ["none", "basic"],
+            },
+            {
+                "code": "billing_usage",
+                "schema_version": "v1",
+                "targets": ["file", "webhook", "dwh"],
+                "anonymization_profiles": ["none", "tenant_only"],
+            },
+            {
+                "code": "workflow_tasks",
+                "schema_version": "v1",
+                "targets": ["file", "webhook", "dwh"],
+                "anonymization_profiles": ["none", "basic"],
+            },
         ]
 
     async def run_schedule_now(self, schedule: ExportSchedule) -> ExportJob:

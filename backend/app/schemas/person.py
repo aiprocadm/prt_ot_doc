@@ -288,7 +288,15 @@ class PersonRead(BaseSchema):
     def _email_blank_or_invalid_to_none(cls, value: object) -> object:
         return _email_str_or_none(value)
 
-    @field_validator("middle_name", "phone", "snils", "passport", "personnel_number", "working_conditions_class", mode="before")
+    @field_validator(
+        "middle_name",
+        "phone",
+        "snils",
+        "passport",
+        "personnel_number",
+        "working_conditions_class",
+        mode="before",
+    )
     @classmethod
     def _optional_str_fields_coerce(cls, value: object, info: ValidationInfo) -> object:
         if value is None:

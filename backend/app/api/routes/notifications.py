@@ -28,7 +28,9 @@ TenantDep = Annotated[Tenant, Depends(get_tenant_record)]
 AccessDep = Annotated[AccessContext, Depends(rbac())]
 
 
-def _service(session: AsyncSession, tenant: Tenant, access: AccessContext) -> NotificationApplicationService:
+def _service(
+    session: AsyncSession, tenant: Tenant, access: AccessContext
+) -> NotificationApplicationService:
     return NotificationApplicationService(session=session, tenant=tenant, user_id=access.user.id)
 
 

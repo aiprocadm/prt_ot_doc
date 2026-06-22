@@ -1,9 +1,10 @@
 """Work-permit (наряд-допуск) models: document + brigade members + event log."""
+
 from __future__ import annotations
 
 from datetime import date, datetime
 
-from sqlalchemy import Date, DateTime, ForeignKey, Index, JSON, String, Text, UniqueConstraint, func
+from sqlalchemy import JSON, Date, DateTime, ForeignKey, Index, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import TenantBaseModel
@@ -61,7 +62,10 @@ class WorkPermitMember(TenantBaseModel):
 
     __table_args__ = (
         UniqueConstraint(
-            "tenant_id", "work_permit_id", "person_id", "role",
+            "tenant_id",
+            "work_permit_id",
+            "person_id",
+            "role",
             name="uq_work_permit_member",
         ),
     )

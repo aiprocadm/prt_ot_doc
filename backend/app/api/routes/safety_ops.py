@@ -121,7 +121,6 @@ class CorrectiveActionProjection(BaseModel):
     completed_at: datetime | None = None
 
 
-
 def _serialize_finding(row: Finding) -> dict[str, Any]:
     return FindingProjection(
         id=row.id,
@@ -138,12 +137,13 @@ def _serialize_finding(row: Finding) -> dict[str, Any]:
     ).model_dump(mode="json")
 
 
-
 def _serialize_action(row: CorrectiveAction) -> dict[str, Any]:
     return CorrectiveActionProjection(
         id=row.id,
         title=row.title,
-        status=CorrectiveActionService.mark_overdue_if_needed(due_date=row.due_date, status=row.status),
+        status=CorrectiveActionService.mark_overdue_if_needed(
+            due_date=row.due_date, status=row.status
+        ),
         source_type=row.source_type,
         source_id=row.source_id,
         action_type=row.action_type,
@@ -240,7 +240,11 @@ async def create_finding(
 async def _get_finding(session: AsyncSession, tenant_id: str, finding_id: str) -> Finding:
     row = (
         await session.execute(
-            select(Finding).where(Finding.id == finding_id, Finding.tenant_id == tenant_id, Finding.deleted_at.is_(None))
+            select(Finding).where(
+                Finding.id == finding_id,
+                Finding.tenant_id == tenant_id,
+                Finding.deleted_at.is_(None),
+            )
         )
     ).scalar_one_or_none()
     if row is None:
@@ -323,12 +327,21 @@ async def verify_finding(
 
 
 @router.get("/safety-ops/prescriptions")
-async def list_prescriptions(tenant: TenantDep, session: SessionDep, _: ManagerAccess) -> list[dict[str, str]]:
+async def list_prescriptions(
+    tenant: TenantDep, session: SessionDep, _: ManagerAccess
+) -> list[dict[str, str]]:
     rows = (
-        await session.execute(
-            select(OpsPrescription).where(OpsPrescription.tenant_id == str(tenant.id), OpsPrescription.deleted_at.is_(None))
+        (
+            await session.execute(
+                select(OpsPrescription).where(
+                    OpsPrescription.tenant_id == str(tenant.id),
+                    OpsPrescription.deleted_at.is_(None),
+                )
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     return [{"id": r.id, "code": r.code, "status": r.status} for r in rows]
 
 
@@ -341,7 +354,11 @@ async def create_prescription(
     access: EditorAccess,
 ) -> dict[str, str]:
     rec = OpsPrescription(
-        tenant_id=str(tenant.id), code=payload.code, source_type=payload.source_type, title=payload.title, status="draft"
+        tenant_id=str(tenant.id),
+        code=payload.code,
+        source_type=payload.source_type,
+        title=payload.title,
+        status="draft",
     )
     session.add(rec)
     await session.flush()
@@ -367,12 +384,24 @@ async def list_actions(
     status_filter: str | None = Query(default=None, alias="status"),
     source_type: str | None = Query(default=None),
 ) -> list[dict[str, Any]]:
-    stmt = select(CorrectiveAction).where(CorrectiveAction.tenant_id == str(tenant.id), CorrectiveAction.deleted_at.is_(None))
+    stmt = select(CorrectiveAction).where(
+        CorrectiveAction.tenant_id == str(tenant.id), CorrectiveAction.deleted_at.is_(None)
+    )
     if status_filter:
         stmt = stmt.where(CorrectiveAction.status == status_filter)
     if source_type:
         stmt = stmt.where(CorrectiveAction.source_type == source_type)
-    rows = (await session.execute(stmt.order_by(CorrectiveAction.due_date.asc().nullslast(), CorrectiveAction.created_at.desc()))).scalars().all()
+    rows = (
+        (
+            await session.execute(
+                stmt.order_by(
+                    CorrectiveAction.due_date.asc().nullslast(), CorrectiveAction.created_at.desc()
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
     return [_serialize_action(r) for r in rows]
 
 
@@ -485,14 +514,21 @@ async def verify_action(
 
 
 @router.get("/inspection-prep/packages")
-async def list_prep_packages(tenant: TenantDep, session: SessionDep, _: ManagerAccess) -> list[dict[str, Any]]:
+async def list_prep_packages(
+    tenant: TenantDep, session: SessionDep, _: ManagerAccess
+) -> list[dict[str, Any]]:
     rows = (
-        await session.execute(
-            select(InspectionPrepPackage).where(
-                InspectionPrepPackage.tenant_id == str(tenant.id), InspectionPrepPackage.deleted_at.is_(None)
+        (
+            await session.execute(
+                select(InspectionPrepPackage).where(
+                    InspectionPrepPackage.tenant_id == str(tenant.id),
+                    InspectionPrepPackage.deleted_at.is_(None),
+                )
             )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     return [{"id": p.id, "code": p.code, "title": p.title, "status": p.status} for p in rows]
 
 
@@ -527,7 +563,9 @@ async def create_prep_package(
     return {"id": rec.id}
 
 
-async def _get_package(session: AsyncSession, tenant_id: str, package_id: str) -> InspectionPrepPackage:
+async def _get_package(
+    session: AsyncSession, tenant_id: str, package_id: str
+) -> InspectionPrepPackage:
     pack = (
         await session.execute(
             select(InspectionPrepPackage).where(
@@ -543,43 +581,89 @@ async def _get_package(session: AsyncSession, tenant_id: str, package_id: str) -
 
 
 @router.get("/inspection-prep/packages/{package_id}/summary")
-async def package_summary(package_id: str, tenant: TenantDep, session: SessionDep, _: ManagerAccess) -> dict[str, int | str]:
+async def package_summary(
+    package_id: str, tenant: TenantDep, session: SessionDep, _: ManagerAccess
+) -> dict[str, int | str]:
     pack = await _get_package(session, str(tenant.id), package_id)
     items = (
-        await session.execute(
-            select(InspectionPrepItem).where(InspectionPrepItem.package_id == pack.id, InspectionPrepItem.tenant_id == str(tenant.id))
+        (
+            await session.execute(
+                select(InspectionPrepItem).where(
+                    InspectionPrepItem.package_id == pack.id,
+                    InspectionPrepItem.tenant_id == str(tenant.id),
+                )
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     gaps = (
-        await session.execute(
-            select(InspectionPrepGap).where(InspectionPrepGap.package_id == pack.id, InspectionPrepGap.tenant_id == str(tenant.id))
+        (
+            await session.execute(
+                select(InspectionPrepGap).where(
+                    InspectionPrepGap.package_id == pack.id,
+                    InspectionPrepGap.tenant_id == str(tenant.id),
+                )
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     present = sum(1 for item in items if item.status in {"present", "replaced"})
     score = InspectionPrepPackageService.readiness_score(total=len(items), present=present)
-    return {"id": pack.id, "status": pack.status, "items": len(items), "gaps": len(gaps), "readiness_score": score}
+    return {
+        "id": pack.id,
+        "status": pack.status,
+        "items": len(items),
+        "gaps": len(gaps),
+        "readiness_score": score,
+    }
 
 
 @router.get("/inspection-prep/packages/{package_id}/items")
-async def package_items(package_id: str, tenant: TenantDep, session: SessionDep, _: ManagerAccess) -> list[dict[str, str]]:
+async def package_items(
+    package_id: str, tenant: TenantDep, session: SessionDep, _: ManagerAccess
+) -> list[dict[str, str]]:
     pack = await _get_package(session, str(tenant.id), package_id)
     rows = (
-        await session.execute(
-            select(InspectionPrepItem).where(InspectionPrepItem.package_id == pack.id, InspectionPrepItem.tenant_id == str(tenant.id))
+        (
+            await session.execute(
+                select(InspectionPrepItem).where(
+                    InspectionPrepItem.package_id == pack.id,
+                    InspectionPrepItem.tenant_id == str(tenant.id),
+                )
+            )
         )
-    ).scalars().all()
-    return [{"id": row.id, "item_type": row.item_type, "title": row.title, "status": row.status} for row in rows]
+        .scalars()
+        .all()
+    )
+    return [
+        {"id": row.id, "item_type": row.item_type, "title": row.title, "status": row.status}
+        for row in rows
+    ]
 
 
 @router.get("/inspection-prep/packages/{package_id}/gaps")
-async def package_gaps(package_id: str, tenant: TenantDep, session: SessionDep, _: ManagerAccess) -> list[dict[str, str]]:
+async def package_gaps(
+    package_id: str, tenant: TenantDep, session: SessionDep, _: ManagerAccess
+) -> list[dict[str, str]]:
     pack = await _get_package(session, str(tenant.id), package_id)
     rows = (
-        await session.execute(
-            select(InspectionPrepGap).where(InspectionPrepGap.package_id == pack.id, InspectionPrepGap.tenant_id == str(tenant.id))
+        (
+            await session.execute(
+                select(InspectionPrepGap).where(
+                    InspectionPrepGap.package_id == pack.id,
+                    InspectionPrepGap.tenant_id == str(tenant.id),
+                )
+            )
         )
-    ).scalars().all()
-    return [{"id": row.id, "gap_type": row.gap_type, "severity": row.severity, "title": row.title} for row in rows]
+        .scalars()
+        .all()
+    )
+    return [
+        {"id": row.id, "gap_type": row.gap_type, "severity": row.severity, "title": row.title}
+        for row in rows
+    ]
 
 
 class GapRecalcIn(BaseModel):
@@ -630,14 +714,19 @@ async def prep_summary(
 ) -> dict[str, int]:
     packages_total = await session.scalar(
         select(func.count()).select_from(
-            select(InspectionPrepPackage.id).where(
-                InspectionPrepPackage.tenant_id == str(tenant.id), InspectionPrepPackage.deleted_at.is_(None)
-            ).subquery()
+            select(InspectionPrepPackage.id)
+            .where(
+                InspectionPrepPackage.tenant_id == str(tenant.id),
+                InspectionPrepPackage.deleted_at.is_(None),
+            )
+            .subquery()
         )
     )
     gap_total = await session.scalar(
         select(func.count()).select_from(
-            select(InspectionPrepGap.id).where(InspectionPrepGap.tenant_id == str(tenant.id)).subquery()
+            select(InspectionPrepGap.id)
+            .where(InspectionPrepGap.tenant_id == str(tenant.id))
+            .subquery()
         )
     )
     return {"packages": int(packages_total or 0), "gaps": int(gap_total or 0)}

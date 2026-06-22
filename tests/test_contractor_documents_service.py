@@ -1,4 +1,5 @@
 """notify_document_expiry: enqueue only for DUE_SOON/OVERDUE, idempotent per day."""
+
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
@@ -15,24 +16,44 @@ async def _seed(session, tenant_id: str) -> str:
     session.add(contractor)
     await session.flush()
     # OK (future) — skipped
-    session.add(ContractorDocument(
-        tenant_id=tenant_id, contractor_id=contractor.id, doc_type="license", title="Future",
-        valid_until=TODAY + timedelta(days=90),
-    ))
+    session.add(
+        ContractorDocument(
+            tenant_id=tenant_id,
+            contractor_id=contractor.id,
+            doc_type="license",
+            title="Future",
+            valid_until=TODAY + timedelta(days=90),
+        )
+    )
     # open-ended — skipped
-    session.add(ContractorDocument(
-        tenant_id=tenant_id, contractor_id=contractor.id, doc_type="other", title="Open",
-    ))
+    session.add(
+        ContractorDocument(
+            tenant_id=tenant_id,
+            contractor_id=contractor.id,
+            doc_type="other",
+            title="Open",
+        )
+    )
     # DUE_SOON — enqueued
-    session.add(ContractorDocument(
-        tenant_id=tenant_id, contractor_id=contractor.id, doc_type="medical_cert", title="Soon",
-        valid_until=TODAY + timedelta(days=10),
-    ))
+    session.add(
+        ContractorDocument(
+            tenant_id=tenant_id,
+            contractor_id=contractor.id,
+            doc_type="medical_cert",
+            title="Soon",
+            valid_until=TODAY + timedelta(days=10),
+        )
+    )
     # OVERDUE — enqueued
-    session.add(ContractorDocument(
-        tenant_id=tenant_id, contractor_id=contractor.id, doc_type="access_permit", title="Past",
-        valid_until=TODAY - timedelta(days=3),
-    ))
+    session.add(
+        ContractorDocument(
+            tenant_id=tenant_id,
+            contractor_id=contractor.id,
+            doc_type="access_permit",
+            title="Past",
+            valid_until=TODAY - timedelta(days=3),
+        )
+    )
     await session.commit()
     return contractor.id
 

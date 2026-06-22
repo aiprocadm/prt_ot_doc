@@ -3,6 +3,7 @@
 Additive. One new table, VARCHAR doc_type/scope (no enum types), no cross-base FK.
 Round-trip-safe: downgrade drops the index then the table; no orphan enum types.
 """
+
 from __future__ import annotations
 
 import sqlalchemy as sa

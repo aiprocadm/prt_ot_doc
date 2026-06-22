@@ -13,6 +13,7 @@ exist (those values are unrepresentable in the old 3-value enum).
 On SQLite the downgrade only uppercases data (no type narrowing back to
 VARCHAR(8)) — deliberate, SQLite does not enforce VARCHAR length anyway.
 """
+
 from __future__ import annotations
 
 import sqlalchemy as sa
@@ -54,8 +55,7 @@ def upgrade() -> None:
     # --- status: native enum -> VARCHAR(32), lowercase ------------------
     if dialect == "postgresql":
         op.execute(
-            "ALTER TABLE ppeissue ALTER COLUMN status TYPE VARCHAR(32) "
-            "USING lower(status::text)"
+            "ALTER TABLE ppeissue ALTER COLUMN status TYPE VARCHAR(32) " "USING lower(status::text)"
         )
         op.execute("ALTER TABLE ppeissue ALTER COLUMN status SET DEFAULT 'issued'")
         op.execute("DROP TYPE IF EXISTS ppeissuestatus")
@@ -77,9 +77,7 @@ def downgrade() -> None:
 
     # written_off / replaced are unrepresentable in the legacy 3-value enum.
     blockers = bind.execute(
-        sa.text(
-            "SELECT COUNT(*) FROM ppeissue WHERE status IN ('written_off', 'replaced')"
-        )
+        sa.text("SELECT COUNT(*) FROM ppeissue WHERE status IN ('written_off', 'replaced')")
     ).scalar()
     if blockers:
         raise RuntimeError(

@@ -1,4 +1,5 @@
 """FastAPI middleware for tenant extraction and context propagation."""
+
 from __future__ import annotations
 
 import logging
@@ -88,7 +89,9 @@ class TenantMiddleware(BaseHTTPMiddleware):
         return True
 
     @staticmethod
-    def _error(status_code: int, correlation_id: str, *, code: str, message: str, err_type: str = "tenancy") -> HTTPException:
+    def _error(
+        status_code: int, correlation_id: str, *, code: str, message: str, err_type: str = "tenancy"
+    ) -> HTTPException:
         return HTTPException(
             status_code,
             detail={
@@ -114,7 +117,11 @@ class TenantMiddleware(BaseHTTPMiddleware):
             or path in self._openapi_public_paths(settings)
             or self._is_public_path(path)
         ):
-            if path.startswith("/api/v1/webhooks/inbound/") or path.startswith("/api/v1/edo/webhooks/") or path.startswith("/api/v1/edo/webhook/status"):
+            if (
+                path.startswith("/api/v1/webhooks/inbound/")
+                or path.startswith("/api/v1/edo/webhooks/")
+                or path.startswith("/api/v1/edo/webhook/status")
+            ):
                 await self._preload_webhook_tenant(request)
             response = await call_next(request)
             response.headers["X-Correlation-Id"] = correlation_id
@@ -122,7 +129,12 @@ class TenantMiddleware(BaseHTTPMiddleware):
 
         header_slug = request.headers.get(TENANT_HEADER)
         if path.startswith("/api/v1/") and not header_slug:
-            raise self._error(status.HTTP_400_BAD_REQUEST, correlation_id, code="TENANT_REQUIRED", message="X-Tenant header required")
+            raise self._error(
+                status.HTTP_400_BAD_REQUEST,
+                correlation_id,
+                code="TENANT_REQUIRED",
+                message="X-Tenant header required",
+            )
         if not header_slug:
             tenant_required(None)
         token_slug: str | None = None
@@ -146,15 +158,24 @@ class TenantMiddleware(BaseHTTPMiddleware):
         info = tenant_required(normalized_header)
         identifier = info.slug
         if not identifier:
-            raise self._error(status.HTTP_400_BAD_REQUEST, correlation_id, code="TENANT_INVALID", message="X-Tenant has invalid value")
+            raise self._error(
+                status.HTTP_400_BAD_REQUEST,
+                correlation_id,
+                code="TENANT_INVALID",
+                message="X-Tenant has invalid value",
+            )
 
         lookup = str(identifier).strip()
         if self._is_uuid(lookup):
             filters = [Tenant.id == lookup]
         else:
             filters = [Tenant.slug == lookup.lower(), Tenant.code == lookup.lower()]
-        async with AsyncSessionLocal(tenant="public", include_public=False, create_schema=False) as session:
-            tenant = (await session.execute(select(Tenant).where(or_(*filters)))).scalar_one_or_none()
+        async with AsyncSessionLocal(
+            tenant="public", include_public=False, create_schema=False
+        ) as session:
+            tenant = (
+                await session.execute(select(Tenant).where(or_(*filters)))
+            ).scalar_one_or_none()
         if tenant is None:
             if self._is_uuid(lookup):
                 raise self._error(
@@ -169,7 +190,11 @@ class TenantMiddleware(BaseHTTPMiddleware):
                 code="TENANT_INVALID",
                 message="X-Tenant has invalid value",
             )
-        if token_slug and token_slug.casefold() not in {str(tenant.id).casefold(), str(tenant.slug).casefold(), str(tenant.code).casefold()}:
+        if token_slug and token_slug.casefold() not in {
+            str(tenant.id).casefold(),
+            str(tenant.slug).casefold(),
+            str(tenant.code).casefold(),
+        }:
             raise self._error(
                 status.HTTP_403_FORBIDDEN,
                 correlation_id,
@@ -185,15 +210,25 @@ class TenantMiddleware(BaseHTTPMiddleware):
             )
         request.state.tenant_id = str(tenant.id)
         request.state.tenant_slug = tenant.slug
-        async with AsyncSessionLocal(tenant="public", include_public=False, create_schema=False) as session:
+        async with AsyncSessionLocal(
+            tenant="public", include_public=False, create_schema=False
+        ) as session:
             settings = (
-                await session.execute(select(TenantSettings).where(TenantSettings.tenant_id == tenant.id))
+                await session.execute(
+                    select(TenantSettings).where(TenantSettings.tenant_id == tenant.id)
+                )
             ).scalar_one_or_none()
             quota = (
                 await session.execute(select(TenantQuota).where(TenantQuota.tenant_id == tenant.id))
             ).scalar_one_or_none()
-        request.state.tenant_schema = (settings.schema_name if settings else None) or tenant.schema_name or f"tenant_{tenant.slug}"
-        request.state.tenant_s3_prefix = (settings.s3_prefix if settings else None) or tenant.s3_prefix or str(tenant.id)
+        request.state.tenant_schema = (
+            (settings.schema_name if settings else None)
+            or tenant.schema_name
+            or f"tenant_{tenant.slug}"
+        )
+        request.state.tenant_s3_prefix = (
+            (settings.s3_prefix if settings else None) or tenant.s3_prefix or str(tenant.id)
+        )
         request.state.tenant_code = tenant.code
         request.state.tenant_record = tenant
         request.state.tenant_settings = settings
@@ -219,7 +254,12 @@ class TenantMiddleware(BaseHTTPMiddleware):
             schema=request.state.tenant_schema,
             s3_prefix=request.state.tenant_s3_prefix,
             tenant_level=getattr(tenant, "kind", "customer"),
-            plan=((getattr(tenant, "settings", None) or {}).get("plan") if isinstance(getattr(tenant, "settings", None), dict) else None) or "Free",
+            plan=(
+                (getattr(tenant, "settings", None) or {}).get("plan")
+                if isinstance(getattr(tenant, "settings", None), dict)
+                else None
+            )
+            or "Free",
             limits={
                 "users": None,
                 "templates": None,
@@ -237,13 +277,21 @@ class TenantMiddleware(BaseHTTPMiddleware):
             attributes=attributes or None,
         )
         request.state.claims = token_claims
-        request.state.user_id = token_claims.get("sub") if token_claims else request.headers.get("x-actor-id")
+        request.state.user_id = (
+            token_claims.get("sub") if token_claims else request.headers.get("x-actor-id")
+        )
         request.state.roles = jwt_roles
         request.state.scopes = {
-            "company_ids": _coerce_claim_list(token_claims.get("company_ids")) if token_claims else [],
+            "company_ids": (
+                _coerce_claim_list(token_claims.get("company_ids")) if token_claims else []
+            ),
             "site_ids": _coerce_claim_list(token_claims.get("site_ids")) if token_claims else [],
-            "project_ids": _coerce_claim_list(token_claims.get("project_ids")) if token_claims else [],
-            "contractor_ids": _coerce_claim_list(token_claims.get("contractor_ids")) if token_claims else [],
+            "project_ids": (
+                _coerce_claim_list(token_claims.get("project_ids")) if token_claims else []
+            ),
+            "contractor_ids": (
+                _coerce_claim_list(token_claims.get("contractor_ids")) if token_claims else []
+            ),
         }
         request.state.tenant_context = ctx
         token = set_tenant_context(ctx)
@@ -276,9 +324,17 @@ class TenantMiddleware(BaseHTTPMiddleware):
             )
             return
 
-        async with AsyncSessionLocal(tenant="public", include_public=False, create_schema=False) as session:
+        async with AsyncSessionLocal(
+            tenant="public", include_public=False, create_schema=False
+        ) as session:
             for candidate, source in tenant_candidates:
-                tenant = (await session.execute(select(Tenant).where(or_(Tenant.slug == candidate, Tenant.code == candidate)))).scalar_one_or_none()
+                tenant = (
+                    await session.execute(
+                        select(Tenant).where(
+                            or_(Tenant.slug == candidate, Tenant.code == candidate)
+                        )
+                    )
+                ).scalar_one_or_none()
                 if tenant is None or not tenant.is_active:
                     continue
                 request.state.tenant_record = tenant

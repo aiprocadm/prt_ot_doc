@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import hashlib
+from datetime import date, datetime, timedelta, timezone
+
 import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from datetime import date, datetime, timedelta, timezone
 
 from app.models.document import Document, DocumentStatus, DocumentVersion
 from app.models.models import (
@@ -94,7 +94,9 @@ class TestMissingMandatoryFieldsRule:
 
         assert any(i.affected_entity_id == person.id for i in rule.issues)
         assert any("email" in i.additional_info.get("missing_fields", []) for i in rule.issues)
-        assert any("position_id" in i.additional_info.get("missing_fields", []) for i in rule.issues)
+        assert any(
+            "position_id" in i.additional_info.get("missing_fields", []) for i in rule.issues
+        )
 
     async def test_ok_complete_person(
         self,
@@ -275,9 +277,7 @@ class TestExpiredPermitsRule:
         await rule.check()
 
         assert any(i.affected_entity_id == str(expired.id) for i in rule.issues)
-        assert all(
-            i.issue_type == IssueType.EXPIRED_RECORD for i in rule.issues
-        )
+        assert all(i.issue_type == IssueType.EXPIRED_RECORD for i in rule.issues)
 
     async def test_ignores_revoked_or_future_permits(
         self,
@@ -356,9 +356,7 @@ class TestExpiredPPEIssuesRule:
         await rule.check()
 
         assert any(i.affected_entity_id == str(issuance.id) for i in rule.issues)
-        assert all(
-            i.affected_entity_type == "ppe_issue" for i in rule.issues
-        )
+        assert all(i.affected_entity_type == "ppe_issue" for i in rule.issues)
 
     async def test_ignores_returned_or_unexpired_ppe(
         self,
@@ -437,9 +435,7 @@ class TestDocumentPersonCompanyMismatchRule:
         await rule.check()
 
         assert any(i.affected_entity_id == str(document.id) for i in rule.issues)
-        assert all(
-            i.issue_type == IssueType.DATA_MISMATCH for i in rule.issues
-        )
+        assert all(i.issue_type == IssueType.DATA_MISMATCH for i in rule.issues)
         flagged = next(i for i in rule.issues if i.affected_entity_id == str(document.id))
         assert flagged.additional_info["person_company_id"] == str(person_company.id)
         assert flagged.additional_info["document_company_id"] == str(document_company.id)
@@ -759,9 +755,7 @@ class TestOrphanedAssignmentsRule:
 
         flagged = [i for i in rule.issues if i.affected_entity_id == str(person.id)]
         assert flagged, "Expected an orphaned-assignment issue for the test person"
-        assert any(
-            i.additional_info.get("reason") == "position_soft_deleted" for i in flagged
-        )
+        assert any(i.additional_info.get("reason") == "position_soft_deleted" for i in flagged)
         assert all(i.severity == IssueSeverity.HIGH for i in flagged)
 
     async def test_flags_active_person_with_deleted_workplace(
@@ -867,9 +861,7 @@ class TestCompanyRequisitesRule:
         flagged = [i for i in rule.issues if i.affected_entity_id == str(company.id)]
         assert flagged
         assert all(i.severity == IssueSeverity.HIGH for i in flagged)
-        assert any(
-            "inn" in i.additional_info.get("missing_critical", []) for i in flagged
-        )
+        assert any("inn" in i.additional_info.get("missing_critical", []) for i in flagged)
 
     async def test_flags_only_recommended_with_low_severity(
         self,
@@ -890,9 +882,7 @@ class TestCompanyRequisitesRule:
         flagged = [i for i in rule.issues if i.affected_entity_id == str(company.id)]
         assert flagged
         assert all(i.severity == IssueSeverity.LOW for i in flagged)
-        assert all(
-            not i.additional_info.get("missing_critical") for i in flagged
-        )
+        assert all(not i.additional_info.get("missing_critical") for i in flagged)
         recommended = {
             field
             for issue in flagged
@@ -918,9 +908,7 @@ class TestCompanyRequisitesRule:
         rule = CompanyRequisitesRule(str(tenant.id), test_db_session)
         await rule.check()
 
-        assert not any(
-            i.affected_entity_id == str(company.id) for i in rule.issues
-        )
+        assert not any(i.affected_entity_id == str(company.id) for i in rule.issues)
 
 
 @pytest.mark.anyio
@@ -952,12 +940,9 @@ class TestDocumentReadinessRule:
         assert all(i.severity == IssueSeverity.MEDIUM for i in flagged)
         assert all(i.issue_type == IssueType.MISSING_FIELD for i in flagged)
         assert any(
-            "missing_template_version" in i.additional_info.get("missing", [])
-            for i in flagged
+            "missing_template_version" in i.additional_info.get("missing", []) for i in flagged
         )
-        assert all(
-            i.additional_info.get("age_days", 0) >= 14 for i in flagged
-        )
+        assert all(i.additional_info.get("age_days", 0) >= 14 for i in flagged)
 
     async def test_flags_old_draft_without_generated_file(
         self,
@@ -997,8 +982,7 @@ class TestDocumentReadinessRule:
         flagged = [i for i in rule.issues if i.affected_entity_id == str(document.id)]
         assert flagged
         assert any(
-            "missing_generated_file" in i.additional_info.get("missing", [])
-            for i in flagged
+            "missing_generated_file" in i.additional_info.get("missing", []) for i in flagged
         )
 
     async def test_ignores_recent_drafts(
@@ -1021,9 +1005,7 @@ class TestDocumentReadinessRule:
         rule = DocumentReadinessRule(str(tenant.id), test_db_session)
         await rule.check()
 
-        assert not any(
-            i.affected_entity_id == str(document.id) for i in rule.issues
-        )
+        assert not any(i.affected_entity_id == str(document.id) for i in rule.issues)
 
     async def test_ignores_non_draft_status(
         self,
@@ -1045,6 +1027,4 @@ class TestDocumentReadinessRule:
         rule = DocumentReadinessRule(str(tenant.id), test_db_session)
         await rule.check()
 
-        assert not any(
-            i.affected_entity_id == str(document.id) for i in rule.issues
-        )
+        assert not any(i.affected_entity_id == str(document.id) for i in rule.issues)

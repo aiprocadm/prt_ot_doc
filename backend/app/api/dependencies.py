@@ -1,4 +1,5 @@
 """Dependency declarations shared across API routers."""
+
 from __future__ import annotations
 
 import logging
@@ -92,7 +93,9 @@ def _tenant_resolution_policy(request: Request, *, auth_flow: bool) -> dict[str,
 
 
 async def _fetch_tenant_by_identifier(identifier: str) -> Tenant:
-    async with AsyncSessionLocal(tenant="public", include_public=False, create_schema=False) as session:
+    async with AsyncSessionLocal(
+        tenant="public", include_public=False, create_schema=False
+    ) as session:
         filters = [Tenant.slug == identifier, Tenant.code == identifier]
         if len(identifier) == 36:
             filters.append(Tenant.id == identifier)
@@ -158,7 +161,11 @@ async def get_tenant_record(request: Request) -> Tenant:
     if policy["allow_state_or_header"] and isinstance(preloaded, Tenant):
         logger.info(
             "tenant.resolve.success",
-            extra={"path": request.url.path, "tenant": preloaded.slug, "source": "middleware_preloaded"},
+            extra={
+                "path": request.url.path,
+                "tenant": preloaded.slug,
+                "source": "middleware_preloaded",
+            },
         )
         return preloaded
     if policy["allow_state_or_header"]:
@@ -167,7 +174,11 @@ async def get_tenant_record(request: Request) -> Tenant:
             tenant = await _fetch_tenant_by_identifier(tenant_id)
             logger.info(
                 "tenant.resolve.success",
-                extra={"path": request.url.path, "tenant": tenant.slug, "source": "request_state_or_header_id"},
+                extra={
+                    "path": request.url.path,
+                    "tenant": tenant.slug,
+                    "source": "request_state_or_header_id",
+                },
             )
             return tenant
 
@@ -177,10 +188,16 @@ async def get_tenant_record(request: Request) -> Tenant:
             tenant = await _fetch_tenant_by_identifier(info.slug)
             logger.info(
                 "tenant.resolve.success",
-                extra={"path": request.url.path, "tenant": tenant.slug, "source": "request_state_or_header_slug"},
+                extra={
+                    "path": request.url.path,
+                    "tenant": tenant.slug,
+                    "source": "request_state_or_header_slug",
+                },
             )
             return tenant
-    logger.warning("tenant.resolve.failed", extra={"path": request.url.path, "reason": "tenant_not_provided"})
+    logger.warning(
+        "tenant.resolve.failed", extra={"path": request.url.path, "reason": "tenant_not_provided"}
+    )
     raise HTTPException(status.HTTP_404_NOT_FOUND, "Tenant not found")
 
 

@@ -224,7 +224,9 @@ class DocumentSnapshot(TenantBaseModel):
     )
     template_code: Mapped[str] = mapped_column(String(255), nullable=False)
     template_version: Mapped[int | None] = mapped_column(Integer)
-    company_snapshot: Mapped[dict[str, Any]] = mapped_column(JSONBType, nullable=False, default=dict)
+    company_snapshot: Mapped[dict[str, Any]] = mapped_column(
+        JSONBType, nullable=False, default=dict
+    )
     source_refs: Mapped[dict[str, Any]] = mapped_column(JSONBType, nullable=False, default=dict)
     compliance_refs: Mapped[dict[str, Any]] = mapped_column(JSONBType, nullable=False, default=dict)
     render_log: Mapped[dict[str, Any]] = mapped_column(JSONBType, nullable=False, default=dict)
@@ -392,9 +394,7 @@ class DocumentBatchRun(TenantBaseModel):
         lazy="selectin",
     )
 
-    __table_args__ = (
-        Index("ix_document_batch_run_tenant_created", "tenant_id", "created_at"),
-    )
+    __table_args__ = (Index("ix_document_batch_run_tenant_created", "tenant_id", "created_at"),)
 
 
 class DocumentBatchItem(TenantBaseModel):

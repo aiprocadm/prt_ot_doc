@@ -83,5 +83,7 @@ async def test_webhook_signature_is_valid(sessionmaker) -> None:
     signature = requests[0].headers.get("X-Signature")
     assert signature is not None
     assert timestamp is not None
-    expected = hmac.new(b"top-secret", f"{timestamp}.".encode("utf-8") + requests[0].content, sha256).hexdigest()
+    expected = hmac.new(
+        b"top-secret", f"{timestamp}.".encode("utf-8") + requests[0].content, sha256
+    ).hexdigest()
     assert signature == f"v1={expected}"

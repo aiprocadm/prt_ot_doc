@@ -160,7 +160,9 @@ async def audit_template_versions(
             tenant_id=template.tenant_id,
             version_id=version.id,
             version_number=version.version,
-            status=version.status.value if hasattr(version.status, "value") else str(version.status),
+            status=(
+                version.status.value if hasattr(version.status, "value") else str(version.status)
+            ),
             file_key=key,
         )
         if not key:

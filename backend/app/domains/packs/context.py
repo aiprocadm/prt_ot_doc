@@ -102,9 +102,7 @@ def _apply_site_access(context: dict[str, Any], data: dict[str, Any]) -> dict[st
     payload.setdefault("session_date", _coerce_text(data.get("session_date")))
     payload.setdefault("team_members", _format_list(data.get("team_members")))
     payload.setdefault("training_passed", _coerce_text(data.get("training_passed"), "да"))
-    payload.setdefault(
-        "medical_clearance", _coerce_text(data.get("medical_clearance"), "да")
-    )
+    payload.setdefault("medical_clearance", _coerce_text(data.get("medical_clearance"), "да"))
     payload.setdefault("ppe_ready", _coerce_text(data.get("ppe_ready"), "да"))
     payload.setdefault("notes", _coerce_text(data.get("notes")))
     payload.setdefault("supervisor", _coerce_text(data.get("supervisor")))
@@ -277,4 +275,3 @@ def enrich_context(
         _ensure_company_alias(context)
         return context
     return builder(context, payload_data)
-

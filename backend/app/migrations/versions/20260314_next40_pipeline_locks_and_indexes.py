@@ -28,11 +28,20 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("tenant_id", name="uq_pipeline_step_locks_tenant"),
     )
-    op.create_index("ix_pipeline_step_locks_tenant_updated", "pipeline_step_locks", ["tenant_id", "updated_at"], unique=False)
+    op.create_index(
+        "ix_pipeline_step_locks_tenant_updated",
+        "pipeline_step_locks",
+        ["tenant_id", "updated_at"],
+        unique=False,
+    )
 
-    op.create_index("ix_document_jobs_status_updated", "document_jobs", ["status", "updated_at"], unique=False)
+    op.create_index(
+        "ix_document_jobs_status_updated", "document_jobs", ["status", "updated_at"], unique=False
+    )
     op.create_index("ix_document_jobs_created_at", "document_jobs", ["created_at"], unique=False)
-    op.create_index("ix_document_jobs_idempotency_key", "document_jobs", ["idempotency_key"], unique=False)
+    op.create_index(
+        "ix_document_jobs_idempotency_key", "document_jobs", ["idempotency_key"], unique=False
+    )
     # iter-15c follow-up: `ix_document_job_steps_job_status` is also created
     # by sibling-branch revision 20260326_next53 (next53_job_pipeline_tz_alignment).
     # Both branches descend from 20260310_next39, so alembic may run either

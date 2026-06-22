@@ -28,7 +28,12 @@ def test_file_storage_supports_signed_urls_and_quarantine_metadata():
     storage = FileStorageService.default()
     storage.clear()
 
-    meta = storage.upload("packages/demo/result.pdf", BytesIO(b"payload"), content_type="application/pdf", quarantined=True)
+    meta = storage.upload(
+        "packages/demo/result.pdf",
+        BytesIO(b"payload"),
+        content_type="application/pdf",
+        quarantined=True,
+    )
     signed_url = storage.create_signed_url("packages/demo/result.pdf", download_name="result.pdf")
     head = storage.head("packages/demo/result.pdf")
     hook = storage.antivirus_scan_hook_payload("packages/demo/result.pdf")
@@ -39,7 +44,9 @@ def test_file_storage_supports_signed_urls_and_quarantine_metadata():
     assert head["quarantined"] is True
     assert head["sha256"] == hook["sha256"]
 
-    updated = storage.mark_quarantined("packages/demo/result.pdf", quarantined=False, reason="scan-clean")
+    updated = storage.mark_quarantined(
+        "packages/demo/result.pdf", quarantined=False, reason="scan-clean"
+    )
     assert updated is not None
     assert updated["quarantined"] is False
     assert updated["scan_status"] == "clean"
@@ -57,7 +64,6 @@ def test_write_temp_file_uses_safe_named_tempfile(tmp_path):
         assert os.path.basename(temp_path).startswith("prt-storage-")
     finally:
         os.unlink(temp_path)
-
 
 
 def test_signed_url_roundtrip_verification() -> None:

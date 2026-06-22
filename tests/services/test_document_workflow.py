@@ -31,9 +31,7 @@ async def test_document_status_changes(sessionmaker, data_factory: TestDataFacto
 
 
 @pytest.mark.asyncio
-async def test_invalid_status_transition_raises(
-    sessionmaker, data_factory: TestDataFactory
-):
+async def test_invalid_status_transition_raises(sessionmaker, data_factory: TestDataFactory):
     async with sessionmaker() as session:
         tenant = await data_factory.ensure_tenant(session=session)
         document, _ = await data_factory.create_document(

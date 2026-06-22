@@ -51,14 +51,18 @@ EditorAccess = Annotated[
 def _person_bad_request(message: str) -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,
-        detail=api_problem_detail(code="PERSON_VALIDATION_ERROR", message=message, error_type="persons"),
+        detail=api_problem_detail(
+            code="PERSON_VALIDATION_ERROR", message=message, error_type="persons"
+        ),
     )
 
 
 def _person_unprocessable(message: str) -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-        detail=api_problem_detail(code="PERSON_VALIDATION_ERROR", message=message, error_type="persons"),
+        detail=api_problem_detail(
+            code="PERSON_VALIDATION_ERROR", message=message, error_type="persons"
+        ),
     )
 
 
@@ -86,9 +90,7 @@ async def _get_position(session: AsyncSession, tenant: Tenant, position_id: str)
     return position
 
 
-async def _get_workplace(
-    session: AsyncSession, tenant: Tenant, workplace_id: str
-) -> Workplace:
+async def _get_workplace(session: AsyncSession, tenant: Tenant, workplace_id: str) -> Workplace:
     stmt = select(Workplace).where(
         Workplace.id == workplace_id,
         Workplace.tenant_id == tenant.id,

@@ -7,7 +7,9 @@ from app.domains.files.utils import build_storage_key
 
 
 @pytest.mark.anyio
-async def test_missing_x_tenant_returns_400_on_business_route(app_fixture, make_auth_headers) -> None:
+async def test_missing_x_tenant_returns_400_on_business_route(
+    app_fixture, make_auth_headers
+) -> None:
     headers = await make_auth_headers()
     headers.pop("x-tenant", None)
     transport = ASGITransport(app=app_fixture)

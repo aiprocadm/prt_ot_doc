@@ -16,7 +16,9 @@ class _FakeAttempt:
 
 
 @pytest.mark.asyncio
-async def test_submit_attempt_marks_passed_and_computes_expiry(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_submit_attempt_marks_passed_and_computes_expiry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setattr(training_services, "TrainingAttempt", _FakeAttempt)
     session = AsyncMock()
     session.add = MagicMock()

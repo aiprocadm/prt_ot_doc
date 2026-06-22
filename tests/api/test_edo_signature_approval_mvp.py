@@ -8,7 +8,9 @@ from app.models.models import ApprovalRequest, SignatureRequest
 
 
 @pytest.mark.asyncio
-async def test_idempotency_key_same_request_returns_same_response(async_client, sessionmaker, make_auth_headers, data_factory):
+async def test_idempotency_key_same_request_returns_same_response(
+    async_client, sessionmaker, make_auth_headers, data_factory
+):
     async with sessionmaker() as session:
         tenant = await data_factory.ensure_tenant(session=session)
         _, version = await data_factory.create_document(tenant=tenant, session=session)
@@ -16,7 +18,12 @@ async def test_idempotency_key_same_request_returns_same_response(async_client, 
     headers["Idempotency-Key"] = "route-create-1"
     await async_client.post(
         "/api/v1/approvals/routes",
-        json={"code": "DOC_ROUTE", "name": "Doc route", "rules_json": {"steps": [{"order": 1, "role": "admin"}]}, "version": 1},
+        json={
+            "code": "DOC_ROUTE",
+            "name": "Doc route",
+            "rules_json": {"steps": [{"order": 1, "role": "admin"}]},
+            "version": 1,
+        },
         headers=headers,
     )
     headers["Idempotency-Key"] = "approval-start-1"
@@ -36,7 +43,9 @@ async def test_idempotency_key_same_request_returns_same_response(async_client, 
 
 
 @pytest.mark.asyncio
-async def test_edo_send_honest_409_provider_not_configured(async_client, sessionmaker, make_auth_headers, data_factory):
+async def test_edo_send_honest_409_provider_not_configured(
+    async_client, sessionmaker, make_auth_headers, data_factory
+):
     """Честный контракт: /edo/send всегда 409 EDO_PROVIDER_NOT_CONFIGURED.
 
     Идемпотентная запись не сохраняется при 409-ответе, поэтому повторный
@@ -70,7 +79,9 @@ async def test_edo_send_honest_409_provider_not_configured(async_client, session
 
 
 @pytest.mark.asyncio
-async def test_approval_then_pep_signature_then_edo_send_409(async_client, sessionmaker, make_auth_headers, data_factory):
+async def test_approval_then_pep_signature_then_edo_send_409(
+    async_client, sessionmaker, make_auth_headers, data_factory
+):
     """Честный флоу согласования + подпись через ПЭП-ядро + 409 на /edo/send.
 
     Шаги:
@@ -89,7 +100,12 @@ async def test_approval_then_pep_signature_then_edo_send_409(async_client, sessi
 
     route = await async_client.post(
         "/api/v1/approvals/routes",
-        json={"code": "FLOW_ROUTE", "name": "Flow route", "rules_json": {"steps": [{"order": 1, "role": "admin"}]}, "version": 1},
+        json={
+            "code": "FLOW_ROUTE",
+            "name": "Flow route",
+            "rules_json": {"steps": [{"order": 1, "role": "admin"}]},
+            "version": 1,
+        },
         headers=headers,
     )
     assert route.status_code == status.HTTP_200_OK

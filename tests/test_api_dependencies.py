@@ -55,7 +55,9 @@ async def test_get_session_uses_tenant_session_factory(monkeypatch: pytest.Monke
             self.calls: list[tuple[str, str, str | None]] = []
             self.contexts: list[DummyContextManager] = []
 
-        def __call__(self, *, tenant: str, tenant_id: str | None = None, schema_name: str | None = None):
+        def __call__(
+            self, *, tenant: str, tenant_id: str | None = None, schema_name: str | None = None
+        ):
             ctx = DummyContextManager()
             self.calls.append((tenant, tenant_id or "", schema_name))
             self.contexts.append(ctx)

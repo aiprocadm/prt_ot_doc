@@ -1,4 +1,5 @@
 """Tenant-scoped risk assessment models."""
+
 from __future__ import annotations
 
 from datetime import date, datetime, timezone
@@ -95,9 +96,7 @@ class RiskHazard(TenantBase):
         overlaps="hazard_links",
     )
 
-    __table_args__ = (
-        Index("ix_risk_hazard_tenant_code", "tenant_id", "code", unique=True),
-    )
+    __table_args__ = (Index("ix_risk_hazard_tenant_code", "tenant_id", "code", unique=True),)
 
 
 class RiskControl(TenantBase):
@@ -122,9 +121,7 @@ class RiskControl(TenantBase):
     type: Mapped[str] = mapped_column(String(32), nullable=False, default="org")
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    __table_args__ = (
-        Index("ix_risk_control_tenant_code", "tenant_id", "code", unique=True),
-    )
+    __table_args__ = (Index("ix_risk_control_tenant_code", "tenant_id", "code", unique=True),)
 
 
 class RiskMatrixCell(TenantBase):
@@ -179,9 +176,7 @@ class RiskAssessment(TenantBase):
     company_id: Mapped[str | None] = mapped_column(
         ForeignKey("company.id"), nullable=True, index=True
     )
-    place_id: Mapped[str | None] = mapped_column(
-        ForeignKey("site.id"), nullable=True, index=True
-    )
+    place_id: Mapped[str | None] = mapped_column(ForeignKey("site.id"), nullable=True, index=True)
     workplace_id: Mapped[str | None] = mapped_column(
         ForeignKey("workplace.id"), nullable=True, index=True
     )
@@ -214,9 +209,7 @@ class RiskAssessment(TenantBase):
     workplace: Mapped[Workplace | None] = relationship(backref="risk_assessments")
     position: Mapped["Position | None"] = relationship(backref="risk_assessments")
     employee: Mapped[Person | None] = relationship(backref="risk_assessments")
-    document_pack: Mapped["DocumentPack | None"] = relationship(
-        backref="risk_assessments"
-    )
+    document_pack: Mapped["DocumentPack | None"] = relationship(backref="risk_assessments")
 
     __table_args__ = (
         Index("ix_risk_assessment_tenant_job", "tenant_id", "job_title"),
@@ -234,12 +227,8 @@ class Risk(TenantBaseModel):
 
     __tablename__ = "risk"
 
-    company_id: Mapped[str] = mapped_column(
-        ForeignKey("company.id"), nullable=False, index=True
-    )
-    site_id: Mapped[str | None] = mapped_column(
-        ForeignKey("site.id"), nullable=True, index=True
-    )
+    company_id: Mapped[str] = mapped_column(ForeignKey("company.id"), nullable=False, index=True)
+    site_id: Mapped[str | None] = mapped_column(ForeignKey("site.id"), nullable=True, index=True)
     hazard: Mapped[str] = mapped_column(String(512), nullable=False)
     probability: Mapped[int] = mapped_column(Integer, nullable=False)
     severity: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -249,9 +238,7 @@ class Risk(TenantBaseModel):
     company: Mapped[Company] = relationship(backref="risks")
     site: Mapped[Site | None] = relationship(backref="risks")
 
-    __table_args__ = (
-        Index("ix_risk_tenant_site", "tenant_id", "site_id"),
-    )
+    __table_args__ = (Index("ix_risk_tenant_site", "tenant_id", "site_id"),)
 
 
 class RiskAssessmentItem(TenantBaseModel):
@@ -293,9 +280,7 @@ class RiskCard(TenantBaseModel):
     company_id: Mapped[str | None] = mapped_column(
         ForeignKey("company.id"), nullable=True, index=True
     )
-    site_id: Mapped[str | None] = mapped_column(
-        ForeignKey("site.id"), nullable=True, index=True
-    )
+    site_id: Mapped[str | None] = mapped_column(ForeignKey("site.id"), nullable=True, index=True)
     workplace_id: Mapped[str | None] = mapped_column(
         ForeignKey("workplace.id"), nullable=True, index=True
     )
@@ -313,9 +298,7 @@ class RiskCard(TenantBaseModel):
 
     assessment: Mapped[RiskAssessment] = relationship(backref="risk_cards")
 
-    __table_args__ = (
-        Index("ix_risk_cards_tenant_assessment", "tenant_id", "assessment_id"),
-    )
+    __table_args__ = (Index("ix_risk_cards_tenant_assessment", "tenant_id", "assessment_id"),)
 
 
 class RiskActionPlan(TenantBaseModel):
@@ -329,9 +312,7 @@ class RiskActionPlan(TenantBaseModel):
     company_id: Mapped[str | None] = mapped_column(
         ForeignKey("company.id"), nullable=True, index=True
     )
-    site_id: Mapped[str | None] = mapped_column(
-        ForeignKey("site.id"), nullable=True, index=True
-    )
+    site_id: Mapped[str | None] = mapped_column(ForeignKey("site.id"), nullable=True, index=True)
     workplace_id: Mapped[str | None] = mapped_column(
         ForeignKey("workplace.id"), nullable=True, index=True
     )
@@ -347,13 +328,9 @@ class RiskActionPlan(TenantBaseModel):
     methodology_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="open")
 
-    assessment: Mapped[RiskAssessment] = relationship(
-        backref=backref("action_plan", uselist=False)
-    )
+    assessment: Mapped[RiskAssessment] = relationship(backref=backref("action_plan", uselist=False))
 
-    __table_args__ = (
-        Index("ix_action_plans_tenant_assessment", "tenant_id", "assessment_id"),
-    )
+    __table_args__ = (Index("ix_action_plans_tenant_assessment", "tenant_id", "assessment_id"),)
 
 
 class RiskActionPlanItem(TenantBaseModel):
@@ -384,6 +361,4 @@ class RiskActionPlanItem(TenantBaseModel):
     assessment: Mapped[RiskAssessment] = relationship(backref="action_plan_items")
     hazard: Mapped[RiskHazard | None] = relationship()
 
-    __table_args__ = (
-        Index("ix_action_plan_items_tenant_plan", "tenant_id", "plan_id"),
-    )
+    __table_args__ = (Index("ix_action_plan_items_tenant_plan", "tenant_id", "plan_id"),)

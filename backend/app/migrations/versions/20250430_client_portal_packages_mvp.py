@@ -4,6 +4,7 @@ Revision ID: 20250430_client_portal_packages_mvp
 Revises: 20250425_edo_approval_signature_mvp
 Create Date: 2025-04-30 00:00:00.000000
 """
+
 from __future__ import annotations
 
 import sqlalchemy as sa
@@ -16,20 +17,36 @@ branch_labels: str | None = None
 depends_on: str | None = None
 
 package_run_status = postgresql.ENUM(
-    "draft", "running", "success", "failed", "canceled",
-    name="packagerunstatus", create_type=False,
+    "draft",
+    "running",
+    "success",
+    "failed",
+    "canceled",
+    name="packagerunstatus",
+    create_type=False,
 )
 package_requirement_type = postgresql.ENUM(
-    "file", "text", "table",
-    name="packagerequirementtype", create_type=False,
+    "file",
+    "text",
+    "table",
+    name="packagerequirementtype",
+    create_type=False,
 )
 package_requirement_status = postgresql.ENUM(
-    "missing", "provided", "approved", "rejected",
-    name="packagerequirementstatus", create_type=False,
+    "missing",
+    "provided",
+    "approved",
+    "rejected",
+    name="packagerequirementstatus",
+    create_type=False,
 )
 client_request_ticket_status = postgresql.ENUM(
-    "open", "in_progress", "resolved", "closed",
-    name="clientrequestticketstatus", create_type=False,
+    "open",
+    "in_progress",
+    "resolved",
+    "closed",
+    name="clientrequestticketstatus",
+    create_type=False,
 )
 
 
@@ -84,7 +101,9 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["tenant_id"], ["tenant.id"]),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index("ix_package_runs_status_updated", "package_runs", ["tenant_id", "status", "updated_at"])
+    op.create_index(
+        "ix_package_runs_status_updated", "package_runs", ["tenant_id", "status", "updated_at"]
+    )
 
     op.create_table(
         "package_requirements",

@@ -79,12 +79,27 @@ class PublicWebhookSubscriptionCreate(BaseModel):
 
 def _ensure_scope(record: ApiKey, scope: str) -> None:
     if scope not in record.scope_list and "api:admin" not in record.scope_list:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, {"code": "scope_denied", "message": f"Missing scope: {scope}"})
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            {"code": "scope_denied", "message": f"Missing scope: {scope}"},
+        )
 
 
 @admin_router.get("")
-async def list_machine_keys(session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)):
-    rows = (await session.execute(select(ApiKey).where(ApiKey.tenant_id == tenant.id).order_by(ApiKey.created_at.desc()))).scalars().all()
+async def list_machine_keys(
+    session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)
+):
+    rows = (
+        (
+            await session.execute(
+                select(ApiKey)
+                .where(ApiKey.tenant_id == tenant.id)
+                .order_by(ApiKey.created_at.desc())
+            )
+        )
+        .scalars()
+        .all()
+    )
     return {
         "items": [
             {
@@ -107,17 +122,33 @@ async def list_machine_keys(session: AsyncSession = Depends(get_session), tenant
 
 @admin_router.post("", status_code=status.HTTP_201_CREATED)
 @audit_operation("issue", "machine_key")
-async def issue_machine_key(payload: MachineKeyCreate, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)):
-    secret = await create_api_key(session, tenant_id=str(tenant.id), name=payload.name, scopes=payload.scopes or ["api:read"])
+async def issue_machine_key(
+    payload: MachineKeyCreate,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+):
+    secret = await create_api_key(
+        session, tenant_id=str(tenant.id), name=payload.name, scopes=payload.scopes or ["api:read"]
+    )
     secret.record.rate_limit_per_minute = payload.rate_limit_per_minute
     await session.commit()
     await session.refresh(secret.record)
-    return {"id": secret.record.id, "name": secret.record.name, "scopes": secret.record.scope_list, "token": secret.value, "rate_limit_per_minute": secret.record.rate_limit_per_minute}
+    return {
+        "id": secret.record.id,
+        "name": secret.record.name,
+        "scopes": secret.record.scope_list,
+        "token": secret.value,
+        "rate_limit_per_minute": secret.record.rate_limit_per_minute,
+    }
 
 
 @admin_router.post("/{item_id}/revoke")
 @audit_operation("revoke", "machine_key")
-async def revoke_machine_key(item_id: str, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)):
+async def revoke_machine_key(
+    item_id: str,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+):
     record = await session.get(ApiKey, item_id)
     if not record or record.tenant_id != tenant.id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Machine key not found")
@@ -129,7 +160,11 @@ async def revoke_machine_key(item_id: str, session: AsyncSession = Depends(get_s
 
 @admin_router.post("/{item_id}/rotate")
 @audit_operation("rotate", "machine_key")
-async def rotate_machine_key(item_id: str, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)):
+async def rotate_machine_key(
+    item_id: str,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+):
     record = await session.get(ApiKey, item_id)
     if not record or record.tenant_id != tenant.id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Machine key not found")
@@ -150,7 +185,12 @@ async def rotate_machine_key(item_id: str, session: AsyncSession = Depends(get_s
 
 @router.get("/auth/machine")
 async def machine_auth_info(record: ApiKey = Depends(api_key_auth)):
-    return {"subject": f"api_key:{record.id}", "tenant_id": str(record.tenant_id), "scopes": record.scope_list, "usage_count": record.usage_count}
+    return {
+        "subject": f"api_key:{record.id}",
+        "tenant_id": str(record.tenant_id),
+        "scopes": record.scope_list,
+        "usage_count": record.usage_count,
+    }
 
 
 def _apply_filters(stmt, model, q: str | None, status_value: str | None):
@@ -160,7 +200,9 @@ def _apply_filters(stmt, model, q: str | None, status_value: str | None):
         text_columns = [name for name in ("name", "title", "code") if hasattr(model, name)]
         if text_columns:
             pattern = f"%{q}%"
-            stmt = stmt.where(or_(*[cast(getattr(model, col), String).ilike(pattern) for col in text_columns]))
+            stmt = stmt.where(
+                or_(*[cast(getattr(model, col), String).ilike(pattern) for col in text_columns])
+            )
     return stmt
 
 
@@ -180,11 +222,17 @@ async def _tenant_scoped_list(
     offset = max(offset, 0)
     sort_column = getattr(model, sort_by, None) or getattr(model, "updated_at")
     order_by = desc(sort_column) if sort_order.lower() == "desc" else asc(sort_column)
-    base_stmt = _apply_filters(select(model).where(model.tenant_id == tenant_id), model, q, status_value)
-    total = int((await session.execute(select(func.count()).select_from(base_stmt.subquery()))).scalar_one())
+    base_stmt = _apply_filters(
+        select(model).where(model.tenant_id == tenant_id), model, q, status_value
+    )
+    total = int(
+        (await session.execute(select(func.count()).select_from(base_stmt.subquery()))).scalar_one()
+    )
     rows = (
-        await session.execute(base_stmt.order_by(order_by).offset(offset).limit(limit))
-    ).scalars().all()
+        (await session.execute(base_stmt.order_by(order_by).offset(offset).limit(limit)))
+        .scalars()
+        .all()
+    )
     return {
         "items": rows,
         "total": total,
@@ -206,65 +254,220 @@ async def public_employees(
     session: AsyncSession = Depends(get_session),
 ):
     _ensure_scope(record, "employees:read")
-    return await _tenant_scoped_list(Person, str(record.tenant_id), session, limit=limit, offset=offset, sort_by=sort_by, sort_order=sort_order, q=q)
+    return await _tenant_scoped_list(
+        Person,
+        str(record.tenant_id),
+        session,
+        limit=limit,
+        offset=offset,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        q=q,
+    )
 
 
 @router.get("/documents")
-async def public_documents(limit: int = Query(default=50, ge=1, le=100), offset: int = Query(default=0, ge=0), sort_by: str = Query(default="updated_at"), sort_order: str = Query(default="desc", pattern="^(asc|desc)$"), status_value: str | None = Query(default=None, alias="status"), q: str | None = Query(default=None), record: ApiKey = Depends(api_key_auth), session: AsyncSession = Depends(get_session)):
+async def public_documents(
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    sort_by: str = Query(default="updated_at"),
+    sort_order: str = Query(default="desc", pattern="^(asc|desc)$"),
+    status_value: str | None = Query(default=None, alias="status"),
+    q: str | None = Query(default=None),
+    record: ApiKey = Depends(api_key_auth),
+    session: AsyncSession = Depends(get_session),
+):
     _ensure_scope(record, "documents:read")
-    return await _tenant_scoped_list(Document, str(record.tenant_id), session, limit=limit, offset=offset, sort_by=sort_by, sort_order=sort_order, q=q, status_value=status_value)
+    return await _tenant_scoped_list(
+        Document,
+        str(record.tenant_id),
+        session,
+        limit=limit,
+        offset=offset,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        q=q,
+        status_value=status_value,
+    )
 
 
 @router.get("/training")
-async def public_training(limit: int = Query(default=50, ge=1, le=100), offset: int = Query(default=0, ge=0), sort_by: str = Query(default="updated_at"), sort_order: str = Query(default="desc", pattern="^(asc|desc)$"), status_value: str | None = Query(default=None, alias="status"), record: ApiKey = Depends(api_key_auth), session: AsyncSession = Depends(get_session)):
+async def public_training(
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    sort_by: str = Query(default="updated_at"),
+    sort_order: str = Query(default="desc", pattern="^(asc|desc)$"),
+    status_value: str | None = Query(default=None, alias="status"),
+    record: ApiKey = Depends(api_key_auth),
+    session: AsyncSession = Depends(get_session),
+):
     _ensure_scope(record, "training:read")
-    return await _tenant_scoped_list(TrainingEnrollment, str(record.tenant_id), session, limit=limit, offset=offset, sort_by=sort_by, sort_order=sort_order, status_value=status_value)
+    return await _tenant_scoped_list(
+        TrainingEnrollment,
+        str(record.tenant_id),
+        session,
+        limit=limit,
+        offset=offset,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        status_value=status_value,
+    )
 
 
 @router.get("/risks")
-async def public_risks(limit: int = Query(default=50, ge=1, le=100), offset: int = Query(default=0, ge=0), sort_by: str = Query(default="updated_at"), sort_order: str = Query(default="desc", pattern="^(asc|desc)$"), status_value: str | None = Query(default=None, alias="status"), record: ApiKey = Depends(api_key_auth), session: AsyncSession = Depends(get_session)):
+async def public_risks(
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    sort_by: str = Query(default="updated_at"),
+    sort_order: str = Query(default="desc", pattern="^(asc|desc)$"),
+    status_value: str | None = Query(default=None, alias="status"),
+    record: ApiKey = Depends(api_key_auth),
+    session: AsyncSession = Depends(get_session),
+):
     _ensure_scope(record, "risks:read")
-    return await _tenant_scoped_list(RiskAssessment, str(record.tenant_id), session, limit=limit, offset=offset, sort_by=sort_by, sort_order=sort_order, status_value=status_value)
+    return await _tenant_scoped_list(
+        RiskAssessment,
+        str(record.tenant_id),
+        session,
+        limit=limit,
+        offset=offset,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        status_value=status_value,
+    )
 
 
 @router.get("/incidents")
-async def public_incidents(limit: int = Query(default=50, ge=1, le=100), offset: int = Query(default=0, ge=0), sort_by: str = Query(default="updated_at"), sort_order: str = Query(default="desc", pattern="^(asc|desc)$"), status_value: str | None = Query(default=None, alias="status"), record: ApiKey = Depends(api_key_auth), session: AsyncSession = Depends(get_session)):
+async def public_incidents(
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    sort_by: str = Query(default="updated_at"),
+    sort_order: str = Query(default="desc", pattern="^(asc|desc)$"),
+    status_value: str | None = Query(default=None, alias="status"),
+    record: ApiKey = Depends(api_key_auth),
+    session: AsyncSession = Depends(get_session),
+):
     _ensure_scope(record, "incidents:read")
-    return await _tenant_scoped_list(Incident, str(record.tenant_id), session, limit=limit, offset=offset, sort_by=sort_by, sort_order=sort_order, status_value=status_value)
+    return await _tenant_scoped_list(
+        Incident,
+        str(record.tenant_id),
+        session,
+        limit=limit,
+        offset=offset,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        status_value=status_value,
+    )
 
 
 @router.get("/inspections")
-async def public_inspections(limit: int = Query(default=50, ge=1, le=100), offset: int = Query(default=0, ge=0), sort_by: str = Query(default="updated_at"), sort_order: str = Query(default="desc", pattern="^(asc|desc)$"), status_value: str | None = Query(default=None, alias="status"), record: ApiKey = Depends(api_key_auth), session: AsyncSession = Depends(get_session)):
+async def public_inspections(
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    sort_by: str = Query(default="updated_at"),
+    sort_order: str = Query(default="desc", pattern="^(asc|desc)$"),
+    status_value: str | None = Query(default=None, alias="status"),
+    record: ApiKey = Depends(api_key_auth),
+    session: AsyncSession = Depends(get_session),
+):
     _ensure_scope(record, "inspections:read")
-    return await _tenant_scoped_list(Inspection, str(record.tenant_id), session, limit=limit, offset=offset, sort_by=sort_by, sort_order=sort_order, status_value=status_value)
+    return await _tenant_scoped_list(
+        Inspection,
+        str(record.tenant_id),
+        session,
+        limit=limit,
+        offset=offset,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        status_value=status_value,
+    )
 
 
 @router.get("/prescriptions")
-async def public_prescriptions(limit: int = Query(default=50, ge=1, le=100), offset: int = Query(default=0, ge=0), sort_by: str = Query(default="updated_at"), sort_order: str = Query(default="desc", pattern="^(asc|desc)$"), status_value: str | None = Query(default=None, alias="status"), record: ApiKey = Depends(api_key_auth), session: AsyncSession = Depends(get_session)):
+async def public_prescriptions(
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    sort_by: str = Query(default="updated_at"),
+    sort_order: str = Query(default="desc", pattern="^(asc|desc)$"),
+    status_value: str | None = Query(default=None, alias="status"),
+    record: ApiKey = Depends(api_key_auth),
+    session: AsyncSession = Depends(get_session),
+):
     _ensure_scope(record, "prescriptions:read")
-    return await _tenant_scoped_list(Prescription, str(record.tenant_id), session, limit=limit, offset=offset, sort_by=sort_by, sort_order=sort_order, status_value=status_value)
+    return await _tenant_scoped_list(
+        Prescription,
+        str(record.tenant_id),
+        session,
+        limit=limit,
+        offset=offset,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        status_value=status_value,
+    )
 
 
 @router.get("/notifications")
-async def public_notifications(limit: int = Query(default=50, ge=1, le=100), offset: int = Query(default=0, ge=0), sort_by: str = Query(default="updated_at"), sort_order: str = Query(default="desc", pattern="^(asc|desc)$"), status_value: str | None = Query(default=None, alias="status"), record: ApiKey = Depends(api_key_auth), session: AsyncSession = Depends(get_session)):
+async def public_notifications(
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    sort_by: str = Query(default="updated_at"),
+    sort_order: str = Query(default="desc", pattern="^(asc|desc)$"),
+    status_value: str | None = Query(default=None, alias="status"),
+    record: ApiKey = Depends(api_key_auth),
+    session: AsyncSession = Depends(get_session),
+):
     _ensure_scope(record, "notifications:read")
-    return await _tenant_scoped_list(Notification, str(record.tenant_id), session, limit=limit, offset=offset, sort_by=sort_by, sort_order=sort_order, status_value=status_value)
+    return await _tenant_scoped_list(
+        Notification,
+        str(record.tenant_id),
+        session,
+        limit=limit,
+        offset=offset,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        status_value=status_value,
+    )
 
 
 @router.get("/reports/exports")
-async def public_exports(limit: int = Query(default=50, ge=1, le=100), offset: int = Query(default=0, ge=0), sort_by: str = Query(default="updated_at"), sort_order: str = Query(default="desc", pattern="^(asc|desc)$"), status_value: str | None = Query(default=None, alias="status"), record: ApiKey = Depends(api_key_auth), session: AsyncSession = Depends(get_session)):
+async def public_exports(
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    sort_by: str = Query(default="updated_at"),
+    sort_order: str = Query(default="desc", pattern="^(asc|desc)$"),
+    status_value: str | None = Query(default=None, alias="status"),
+    record: ApiKey = Depends(api_key_auth),
+    session: AsyncSession = Depends(get_session),
+):
     _ensure_scope(record, "exports:read")
-    return await _tenant_scoped_list(ExportJob, str(record.tenant_id), session, limit=limit, offset=offset, sort_by=sort_by, sort_order=sort_order, status_value=status_value)
+    return await _tenant_scoped_list(
+        ExportJob,
+        str(record.tenant_id),
+        session,
+        limit=limit,
+        offset=offset,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        status_value=status_value,
+    )
 
 
 @router.get("/integrations/webhooks")
-async def public_webhooks(record: ApiKey = Depends(api_key_auth), session: AsyncSession = Depends(get_session)):
+async def public_webhooks(
+    record: ApiKey = Depends(api_key_auth), session: AsyncSession = Depends(get_session)
+):
     _ensure_scope(record, "integrations:read")
     rows = (
-        await session.execute(
-            select(WebhookEndpoint).where(WebhookEndpoint.tenant_id == str(record.tenant_id)).order_by(WebhookEndpoint.updated_at.desc())
+        (
+            await session.execute(
+                select(WebhookEndpoint)
+                .where(WebhookEndpoint.tenant_id == str(record.tenant_id))
+                .order_by(WebhookEndpoint.updated_at.desc())
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     return {
         "items": [
             {
@@ -314,19 +517,34 @@ async def create_public_webhook_subscription(
 
 
 @marketplace_router.get("")
-async def list_marketplace(session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record), item_type: str | None = None, status_value: str | None = None):
-    stmt = select(MarketplaceCatalogItem).where(MarketplaceCatalogItem.tenant_id == tenant.id, MarketplaceCatalogItem.deleted_at.is_(None))
+async def list_marketplace(
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+    item_type: str | None = None,
+    status_value: str | None = None,
+):
+    stmt = select(MarketplaceCatalogItem).where(
+        MarketplaceCatalogItem.tenant_id == tenant.id, MarketplaceCatalogItem.deleted_at.is_(None)
+    )
     if item_type:
         stmt = stmt.where(MarketplaceCatalogItem.item_type == item_type)
     if status_value:
         stmt = stmt.where(MarketplaceCatalogItem.status == status_value)
-    rows = (await session.execute(stmt.order_by(MarketplaceCatalogItem.updated_at.desc()))).scalars().all()
+    rows = (
+        (await session.execute(stmt.order_by(MarketplaceCatalogItem.updated_at.desc())))
+        .scalars()
+        .all()
+    )
     return {"items": rows, "total": len(rows)}
 
 
 @marketplace_router.post("", status_code=status.HTTP_201_CREATED)
 @audit_operation("publish", "marketplace_item")
-async def publish_marketplace_item(payload: MarketplaceItemCreate, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)):
+async def publish_marketplace_item(
+    payload: MarketplaceItemCreate,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+):
     item = MarketplaceCatalogItem(tenant_id=tenant.id, status="published", **payload.model_dump())
     session.add(item)
     await session.commit()
@@ -336,14 +554,21 @@ async def publish_marketplace_item(payload: MarketplaceItemCreate, session: Asyn
 
 @marketplace_router.post("/{item_id}/install")
 @audit_operation("install", "marketplace_item")
-async def install_marketplace_item(item_id: str, payload: MarketplaceInstallRequest, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)):
+async def install_marketplace_item(
+    item_id: str,
+    payload: MarketplaceInstallRequest,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+):
     item = await session.get(MarketplaceCatalogItem, item_id)
     if not item or item.tenant_id != tenant.id or item.deleted_at is not None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Marketplace item not found")
     item.usage_count += 1
     installed_ref: dict[str, str] | None = None
     if item.item_type == "package_preset":
-        source_payload = item.preview_json.get("package_preset") if isinstance(item.preview_json, dict) else None
+        source_payload = (
+            item.preview_json.get("package_preset") if isinstance(item.preview_json, dict) else None
+        )
         if isinstance(source_payload, dict):
             preset = ClientPackagePreset(
                 tenant_id=tenant.id,
@@ -358,4 +583,9 @@ async def install_marketplace_item(item_id: str, payload: MarketplaceInstallRequ
             await session.flush()
             installed_ref = {"entity_type": "package_preset", "entity_id": preset.id}
     await session.commit()
-    return {"status": payload.mode, "item_id": item.id, "usage_count": item.usage_count, "installed_ref": installed_ref}
+    return {
+        "status": payload.mode,
+        "item_id": item.id,
+        "usage_count": item.usage_count,
+        "installed_ref": installed_ref,
+    }

@@ -54,7 +54,6 @@ from app.modules.projections.models import (
     SiteSafetyReadModel,
 )
 
-
 # -----------------------------------------------------------------------------
 # Query counter
 # -----------------------------------------------------------------------------
@@ -77,7 +76,9 @@ class QueryCounter:
         self.count = 0
         self.statements: list[str] = []
 
-    def _on_execute(self, conn, cursor, statement, parameters, context, executemany):  # noqa: D401, ANN001
+    def _on_execute(
+        self, conn, cursor, statement, parameters, context, executemany
+    ):  # noqa: D401, ANN001
         head = statement.lstrip().split(" ", 1)[0].upper()
         if head in self._COUNTED_PREFIXES:
             self.count += 1
@@ -260,9 +261,9 @@ async def test_detailed_counters_issues_exactly_eleven_queries(sessionmaker) -> 
         service = AnalyticsAggregationService(session, tenant_id)
         with count_queries(session) as q:
             counters = await service.detailed_counters(DashboardFilters())
-    assert q.count == 11, (
-        f"detailed_counters issued {q.count} queries; expected 11 (one per counter)."
-    )
+    assert (
+        q.count == 11
+    ), f"detailed_counters issued {q.count} queries; expected 11 (one per counter)."
     assert set(counters.keys()) == {
         "trainings_overdue",
         "ppe_overdue",
@@ -358,9 +359,9 @@ async def test_kpi_dashboard_query_budget(sessionmaker, name: str, expected: int
         method = getattr(dash, name)
         with count_queries(session) as q:
             await method(DashboardFilters())
-    assert q.count == expected, (
-        f"KpiDashboardService.{name}() issued {q.count} queries; expected {expected}"
-    )
+    assert (
+        q.count == expected
+    ), f"KpiDashboardService.{name}() issued {q.count} queries; expected {expected}"
 
 
 @pytest.mark.anyio
@@ -373,9 +374,7 @@ async def test_kpi_dashboard_combined_query_budget(sessionmaker, name: str) -> N
         method = getattr(dash, name)
         with count_queries(session) as q:
             await method(DashboardFilters())
-    assert q.count == 15, (
-        f"KpiDashboardService.{name}() issued {q.count} queries; expected 15"
-    )
+    assert q.count == 15, f"KpiDashboardService.{name}() issued {q.count} queries; expected 15"
 
 
 @pytest.mark.anyio
@@ -579,9 +578,7 @@ def _index_columns(model, index_name: str) -> tuple[str, ...]:
 def test_package_read_model_has_composite_index_for_dashboard_filters() -> None:
     """``PackageReadModel`` indexes cover the analytics filter matrix."""
     assert "ix_package_read_models_tenant_status_client_updated" in _index_names(PackageReadModel)
-    cols = _index_columns(
-        PackageReadModel, "ix_package_read_models_tenant_status_client_updated"
-    )
+    cols = _index_columns(PackageReadModel, "ix_package_read_models_tenant_status_client_updated")
     assert cols == ("tenant_id", "status", "client_company_id", "updated_at")
 
 
@@ -605,9 +602,7 @@ def test_contractor_readiness_has_tenant_readiness_index() -> None:
 
 def test_search_index_entries_has_composite_index_for_filtered_search() -> None:
     """``SearchIndexEntry`` indexes cover Universal Search Phase 4.2 hot path."""
-    cols = _index_columns(
-        SearchIndexEntry, "ix_search_index_entries_tenant_entity_updated"
-    )
+    cols = _index_columns(SearchIndexEntry, "ix_search_index_entries_tenant_entity_updated")
     assert cols == ("tenant_id", "entity_type", "updated_at")
 
 

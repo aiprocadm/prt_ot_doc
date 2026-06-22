@@ -188,18 +188,14 @@ def _audit_migrations() -> list[Violation]:
 def test_no_migration_double_creates_enum_type() -> None:
     violations = _audit_migrations()
     if violations:
-        lines = [
-            f"  {v.file}:{v.lineno}  {v.call}(name={v.enum_name!r})"
-            for v in violations
-        ]
+        lines = [f"  {v.file}:{v.lineno}  {v.call}(name={v.enum_name!r})" for v in violations]
         raise AssertionError(
             f"Found {len(violations)} ENUM declarations missing create_type=False "
             "in migrations that call .create(checkfirst=True). This double-creates "
             "the Postgres type and breaks alembic-postgres-upgrade. "
             "Fix per PR #555: switch the declaration to "
             "postgresql.ENUM(..., create_type=False). "
-            "Downgrade .drop() calls may remain as sa.Enum.\n"
-            + "\n".join(lines)
+            "Downgrade .drop() calls may remain as sa.Enum.\n" + "\n".join(lines)
         )
 
 
@@ -332,8 +328,7 @@ def test_no_op_add_column_with_uncreated_enum() -> None:
             "Postgres → UndefinedObjectError. Fix: declare as "
             "postgresql.ENUM(name=X, create_type=False) variable, call "
             "var.create(op.get_bind(), checkfirst=True) before op.add_column, "
-            "mirror with var.drop(...) in downgrade.\n"
-            + "\n".join(lines)
+            "mirror with var.drop(...) in downgrade.\n" + "\n".join(lines)
         )
 
 

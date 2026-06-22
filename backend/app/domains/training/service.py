@@ -177,7 +177,11 @@ async def register_training_session(
             raise ValueError("Plan does not match person or course")
 
     now = datetime.now(tz=timezone.utc)
-    started_value = started_at or (now if status in {TrainingSessionStatus.IN_PROGRESS, TrainingSessionStatus.COMPLETED} else None)
+    started_value = started_at or (
+        now
+        if status in {TrainingSessionStatus.IN_PROGRESS, TrainingSessionStatus.COMPLETED}
+        else None
+    )
     completed_value = completed_at or (now if status == TrainingSessionStatus.COMPLETED else None)
 
     record = TrainingSession(
@@ -258,7 +262,11 @@ async def issue_certificate(
             permit_type=normalized_permit_type,
             issued_at=computed_issued_at,
             valid_until=valid_until,
-            status=PermitStatus.ACTIVE.value if (valid_until is None or valid_until >= computed_issued_at) else PermitStatus.EXPIRED.value,
+            status=(
+                PermitStatus.ACTIVE.value
+                if (valid_until is None or valid_until >= computed_issued_at)
+                else PermitStatus.EXPIRED.value
+            ),
         )
         session.add(permit)
         await session.flush()

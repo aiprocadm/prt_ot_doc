@@ -10,6 +10,7 @@ that previously blocked importing app.models.feature (FK to SharedBase `feature`
 from TenantBase `featureenablement`, which broke create_all-first boot) was
 fixed by dropping that ForeignKey — see tests/unit/test_feature_model_import.py.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -152,9 +153,7 @@ async def test_batches_tenant_isolation(
     )
     listed_b = await async_client.get("/api/v1/ppe/stock/batches", headers=headers_b)
     assert all(b["id"] != batch_a for b in listed_b.json()["items"])
-    fetched_b = await async_client.get(
-        f"/api/v1/ppe/stock/batches/{batch_a}", headers=headers_b
-    )
+    fetched_b = await async_client.get(f"/api/v1/ppe/stock/batches/{batch_a}", headers=headers_b)
     assert fetched_b.status_code == status.HTTP_404_NOT_FOUND
 
 

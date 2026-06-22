@@ -11,12 +11,10 @@ Tests cover:
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from sqlalchemy import func, select
 
-from app.core.config import get_settings
 from app.models.models import Outbox, OutboxStatus, Tenant, WebhookDelivery
 
 
@@ -63,9 +61,7 @@ class MetricsRecorder:
         self.outbox_failed.append({"event_type": event_type, "error_code": error_code})
 
     def record_outbox_poison_queue(self, event_type: str, max_attempts: int) -> None:
-        self.outbox_poison_queue.append(
-            {"event_type": event_type, "max_attempts": max_attempts}
-        )
+        self.outbox_poison_queue.append({"event_type": event_type, "max_attempts": max_attempts})
 
     def record_outbox_retry_attempt(self, event_type: str, attempt_number: int) -> None:
         self.outbox_retry_attempts.append(
@@ -102,7 +98,7 @@ async def test_outbox_poison_queue_after_max_retries(
         from app.services.outbox import OutboxProcessor
 
         processor = OutboxProcessor(session, dispatcher=dispatcher)
-        processed = await processor.process_once()
+        await processor.process_once()
 
     # Entry should be moved to poison queue after final failure
     async with sessionmaker() as session:
@@ -142,7 +138,7 @@ async def test_outbox_metrics_on_successful_delivery(sessionmaker) -> None:
         from app.services.outbox import OutboxProcessor
 
         processor = OutboxProcessor(session, dispatcher=dispatcher)
-        processed = await processor.process_once()
+        await processor.process_once()
 
     # Verify metrics
     assert len(metrics.outbox_dispatched) == 1
@@ -247,9 +243,7 @@ async def test_outbox_deduplication_same_idempotency_key(sessionmaker) -> None:
 
 
 @pytest.mark.anyio
-async def test_outbox_backoff_exponential(
-    sessionmaker, monkeypatch: pytest.MonkeyPatch
-) -> None:
+async def test_outbox_backoff_exponential(sessionmaker, monkeypatch: pytest.MonkeyPatch) -> None:
     """Retry backoff should increase with each attempt."""
     monkeypatch.setenv("OUTBOX_RETRY_BACKOFF_SECONDS", "2")
 
@@ -358,9 +352,7 @@ async def test_outbox_tenant_isolation_in_queue(sessionmaker) -> None:
 
     # Query events for test tenant
     async with sessionmaker() as session:
-        events = await session.execute(
-            select(Outbox).where(Outbox.tenant_id == test_tenant.id)
-        )
+        events = await session.execute(select(Outbox).where(Outbox.tenant_id == test_tenant.id))
         records = events.scalars().all()
         assert len(records) >= 1
         for record in records:

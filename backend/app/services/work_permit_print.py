@@ -1,4 +1,5 @@
 """Ф4: загрузка наряда+связей+подписей, сборка печатного снимка, опц. бланк и PDF."""
+
 from __future__ import annotations
 
 import asyncio
@@ -52,9 +53,15 @@ async def _name_map(session: AsyncSession, tenant_id: str, person_ids: set) -> d
     ids = {str(p) for p in person_ids if p}
     if not ids:
         return {}
-    rows = (await session.execute(
-        select(Person).where(Person.tenant_id == tenant_id, Person.id.in_(tuple(ids)))
-    )).scalars().all()
+    rows = (
+        (
+            await session.execute(
+                select(Person).where(Person.tenant_id == tenant_id, Person.id.in_(tuple(ids)))
+            )
+        )
+        .scalars()
+        .all()
+    )
     out: dict[str, str] = {}
     for p in rows:
         parts = [p.last_name, p.first_name]
@@ -66,54 +73,101 @@ async def _name_map(session: AsyncSession, tenant_id: str, person_ids: set) -> d
 
 
 async def render_work_permit(
-    session: AsyncSession, *, tenant: Tenant, permit_id: str,
-    fmt: str = "docx", with_letterhead: bool = True,
+    session: AsyncSession,
+    *,
+    tenant: Tenant,
+    permit_id: str,
+    fmt: str = "docx",
+    with_letterhead: bool = True,
 ) -> RenderedDoc | None:
     tid = str(tenant.id)
-    wp = (await session.execute(
-        select(WorkPermit).where(WorkPermit.id == permit_id, WorkPermit.tenant_id == tid)
-    )).scalar_one_or_none()
+    wp = (
+        await session.execute(
+            select(WorkPermit).where(WorkPermit.id == permit_id, WorkPermit.tenant_id == tid)
+        )
+    ).scalar_one_or_none()
     if wp is None:
         return None
 
-    members = (await session.execute(
-        select(WorkPermitMember).where(
-            WorkPermitMember.tenant_id == tid, WorkPermitMember.work_permit_id == permit_id
-        ).order_by(WorkPermitMember.created_at.asc())
-    )).scalars().all()
+    members = (
+        (
+            await session.execute(
+                select(WorkPermitMember)
+                .where(
+                    WorkPermitMember.tenant_id == tid, WorkPermitMember.work_permit_id == permit_id
+                )
+                .order_by(WorkPermitMember.created_at.asc())
+            )
+        )
+        .scalars()
+        .all()
+    )
 
-    briefings = (await session.execute(
-        select(WorkPermitBriefing).where(
-            WorkPermitBriefing.tenant_id == tid, WorkPermitBriefing.work_permit_id == permit_id
-        ).order_by(WorkPermitBriefing.created_at.asc())
-    )).scalars().all()
+    briefings = (
+        (
+            await session.execute(
+                select(WorkPermitBriefing)
+                .where(
+                    WorkPermitBriefing.tenant_id == tid,
+                    WorkPermitBriefing.work_permit_id == permit_id,
+                )
+                .order_by(WorkPermitBriefing.created_at.asc())
+            )
+        )
+        .scalars()
+        .all()
+    )
 
-    admissions = (await session.execute(
-        select(WorkPermitDailyAdmission).where(
-            WorkPermitDailyAdmission.tenant_id == tid,
-            WorkPermitDailyAdmission.work_permit_id == permit_id,
-        ).order_by(WorkPermitDailyAdmission.admission_date.asc())
-    )).scalars().all()
+    admissions = (
+        (
+            await session.execute(
+                select(WorkPermitDailyAdmission)
+                .where(
+                    WorkPermitDailyAdmission.tenant_id == tid,
+                    WorkPermitDailyAdmission.work_permit_id == permit_id,
+                )
+                .order_by(WorkPermitDailyAdmission.admission_date.asc())
+            )
+        )
+        .scalars()
+        .all()
+    )
 
-    ext_events = (await session.execute(
-        select(WorkPermitEvent).where(
-            WorkPermitEvent.tenant_id == tid,
-            WorkPermitEvent.work_permit_id == permit_id,
-            WorkPermitEvent.event_type == "extended",
-        ).order_by(WorkPermitEvent.at.asc())
-    )).scalars().all()
+    ext_events = (
+        (
+            await session.execute(
+                select(WorkPermitEvent)
+                .where(
+                    WorkPermitEvent.tenant_id == tid,
+                    WorkPermitEvent.work_permit_id == permit_id,
+                    WorkPermitEvent.event_type == "extended",
+                )
+                .order_by(WorkPermitEvent.at.asc())
+            )
+        )
+        .scalars()
+        .all()
+    )
 
     briefing_ids = [str(b.id) for b in briefings]
     sig_object_ids = [permit_id] + briefing_ids
-    signatures = (await session.execute(
-        select(SignatureRequest).where(
-            SignatureRequest.tenant_id == tid,
-            SignatureRequest.object_type.in_(
-                ("work_permit", "work_permit_briefing", "work_permit_closing")
-            ),
-            SignatureRequest.object_id.in_(sig_object_ids),
-        ).order_by(SignatureRequest.created_at.asc())
-    )).scalars().all()
+    signatures = (
+        (
+            await session.execute(
+                select(SignatureRequest)
+                .where(
+                    SignatureRequest.tenant_id == tid,
+                    SignatureRequest.object_type.in_(
+                        ("work_permit", "work_permit_briefing", "work_permit_closing")
+                    ),
+                    SignatureRequest.object_id.in_(sig_object_ids),
+                )
+                .order_by(SignatureRequest.created_at.asc())
+            )
+        )
+        .scalars()
+        .all()
+    )
 
     member_role_by_person: dict[str, str] = {str(m.person_id): m.role for m in members}
 
@@ -135,25 +189,31 @@ async def render_work_permit(
             role_label = _closing_kind_label(member_role_by_person.get(str(s.signer_person_id)))
         elif s.object_type == "work_permit_briefing":
             group = "briefing"
-            role_label = pf.member_role_label(member_role_by_person.get(str(s.signer_person_id), ""))
+            role_label = pf.member_role_label(
+                member_role_by_person.get(str(s.signer_person_id), "")
+            )
         else:
             group = "permit"
-            role_label = pf.member_role_label(member_role_by_person.get(str(s.signer_person_id), ""))
+            role_label = pf.member_role_label(
+                member_role_by_person.get(str(s.signer_person_id), "")
+            )
 
         signer = fio(s.signer_person_id) if s.signer_person_id else (s.signer_name or "—")
         # эвристика режима: confirm_code_hash проставлен только в code-flow и не
         # очищается после подписи; attested-подписи его не имеют. Хрупко — при смене
         # семантики confirm_code_hash потребуется явный атрибут режима.
         mode = "code" if s.confirm_code_hash else "attested"
-        sig_lines.append(pf.SignatureLine(
-            group=group,
-            role_label=role_label,
-            fio=signer,
-            status_label="Подписано" if s.status == "signed" else (s.status or "—"),
-            signed_at=_fmt_dt(s.signed_at),
-            mode=mode,
-            hash_short=(s.content_hash[:16] if s.content_hash else "—"),
-        ))
+        sig_lines.append(
+            pf.SignatureLine(
+                group=group,
+                role_label=role_label,
+                fio=signer,
+                status_label="Подписано" if s.status == "signed" else (s.status or "—"),
+                signed_at=_fmt_dt(s.signed_at),
+                mode=mode,
+                hash_short=(s.content_hash[:16] if s.content_hash else "—"),
+            )
+        )
 
     briefing0 = briefings[0] if briefings else None
     data = pf.WorkPermitPrintData(
@@ -171,7 +231,8 @@ async def render_work_permit(
         equipment_text=wp.equipment_text,
         hazards_text=wp.hazards_text,
         structured_section=wp_profiles.build_structured_section(
-            wp.work_type, safety_systems=wp.safety_systems, type_specific=wp.type_specific),
+            wp.work_type, safety_systems=wp.safety_systems, type_specific=wp.type_specific
+        ),
         measures_before=wp.measures_before_text,
         measures_during=wp.measures_during_text,
         special_conditions=wp.special_conditions_text,
@@ -183,7 +244,8 @@ async def render_work_permit(
                 "conducted_at": _fmt_dt(briefing0.conducted_at),
                 "topics": briefing0.topics_text,
             }
-            if briefing0 else None
+            if briefing0
+            else None
         ),
         daily_admissions=[
             {
@@ -204,7 +266,8 @@ async def render_work_permit(
         ],
         completion=(
             {"text": wp.completion_text, "recorded_at": _fmt_dt(wp.completion_recorded_at)}
-            if wp.completion_text else None
+            if wp.completion_text
+            else None
         ),
         closed_at=_fmt_dt(wp.closed_at),
         signatures=sig_lines,

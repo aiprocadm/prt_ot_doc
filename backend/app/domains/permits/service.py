@@ -1,4 +1,5 @@
 """Session-aware operations for personal permits (личные допуски)."""
+
 from __future__ import annotations
 
 from datetime import date
@@ -101,9 +102,7 @@ async def extend_permit(
     return permit
 
 
-async def revoke_permit(
-    session: AsyncSession, *, tenant_id: str, permit_id: str
-) -> Permit | None:
+async def revoke_permit(session: AsyncSession, *, tenant_id: str, permit_id: str) -> Permit | None:
     """Revoke an active permit. None when not found; PermitTransitionError otherwise."""
     permit = await _get(session, tenant_id, permit_id)
     if permit is None:

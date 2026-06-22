@@ -1,4 +1,5 @@
 """PEP signing API (vNext §6.9): внутренняя простая электронная подпись."""
+
 from __future__ import annotations
 
 from typing import Annotated
@@ -232,16 +233,20 @@ async def list_pep_requests(
         stmt = stmt.where(SignatureRequest.status == status_filter)
     total = int(await session.scalar(select(func.count()).select_from(stmt.subquery())) or 0)
     rows = (
-        await session.execute(
-            stmt.order_by(
-                # Стабильная сортировка: id desc как tie-breaker при равных created_at.
-                SignatureRequest.created_at.desc(),
-                SignatureRequest.id.desc(),
+        (
+            await session.execute(
+                stmt.order_by(
+                    # Стабильная сортировка: id desc как tie-breaker при равных created_at.
+                    SignatureRequest.created_at.desc(),
+                    SignatureRequest.id.desc(),
+                )
+                .offset(offset)
+                .limit(limit)
             )
-            .offset(offset)
-            .limit(limit)
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     return {"items": [_request_read(r) for r in rows], "total": total}
 
 

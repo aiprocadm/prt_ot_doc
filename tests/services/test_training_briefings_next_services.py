@@ -234,10 +234,14 @@ async def test_registry_dispatch_updates_certificate_status(sessionmaker) -> Non
         assert certificate.external_registry_payload is not None
 
         jobs = (
-            await session.execute(
-                select(ExternalRegistryJob).where(ExternalRegistryJob.tenant_id == tenant_id)
+            (
+                await session.execute(
+                    select(ExternalRegistryJob).where(ExternalRegistryJob.tenant_id == tenant_id)
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         assert len(jobs) == 1
 
 

@@ -20,7 +20,9 @@ def _is_empty(value: Any) -> bool:
     return False
 
 
-def _validate_required_fields(data: dict[str, Any], required_fields: list[str]) -> list[QualityIssue]:
+def _validate_required_fields(
+    data: dict[str, Any], required_fields: list[str]
+) -> list[QualityIssue]:
     issues: list[QualityIssue] = []
     for field_name in required_fields:
         if _is_empty(data.get(field_name)):
@@ -36,7 +38,9 @@ def _validate_required_fields(data: dict[str, Any], required_fields: list[str]) 
     return issues
 
 
-def _validate_value_types(data: dict[str, Any], date_fields: list[str], numeric_fields: list[str]) -> list[QualityIssue]:
+def _validate_value_types(
+    data: dict[str, Any], date_fields: list[str], numeric_fields: list[str]
+) -> list[QualityIssue]:
     issues: list[QualityIssue] = []
     for field_name in date_fields:
         value = data.get(field_name)
@@ -115,4 +119,3 @@ def build_quality_report(
         summary={"critical": critical_count, "warning": warning_count, "total": len(issues)},
         issues=issues,
     )
-

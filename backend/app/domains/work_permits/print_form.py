@@ -3,6 +3,7 @@
 Без sqlalchemy / без I/O — как domains/work_permits/lifecycle.py. Принимает уже
 собранный снимок (WorkPermitPrintData), возвращает байты DOCX. RU-метки —
 локальные словари (модуль не зависит от фронта)."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -12,23 +13,34 @@ from docx import Document
 
 # --- RU vocab (зеркало lib/workPermitVocab.ts, но локально для чистого модуля) ---
 WORK_TYPE_LABELS = {
-    "hot_work": "Огневые работы", "gas_hazardous": "Газоопасные работы",
-    "height": "Работа на высоте", "confined_space": "Замкнутые пространства",
-    "excavation": "Земляные работы", "electrical": "Электроустановки",
+    "hot_work": "Огневые работы",
+    "gas_hazardous": "Газоопасные работы",
+    "height": "Работа на высоте",
+    "confined_space": "Замкнутые пространства",
+    "excavation": "Земляные работы",
+    "electrical": "Электроустановки",
 }
 MEMBER_ROLE_LABELS = {
-    "issuer": "Выдающий наряд", "supervisor": "Ответственный руководитель",
-    "admitter": "Допускающий", "foreman": "Производитель работ",
-    "observer": "Наблюдающий", "member": "Член бригады",
+    "issuer": "Выдающий наряд",
+    "supervisor": "Ответственный руководитель",
+    "admitter": "Допускающий",
+    "foreman": "Производитель работ",
+    "observer": "Наблюдающий",
+    "member": "Член бригады",
 }
 SAFETY_SYSTEM_LABELS = {
-    "restraint": "Удерживающие системы", "positioning": "Системы позиционирования",
-    "fall_arrest": "Страховочные системы", "rescue_evacuation": "Системы для эвакуации и спасения",
+    "restraint": "Удерживающие системы",
+    "positioning": "Системы позиционирования",
+    "fall_arrest": "Страховочные системы",
+    "rescue_evacuation": "Системы для эвакуации и спасения",
     "access": "Системы для подъёма и спуска",
 }
 STATUS_LABELS = {
-    "draft": "Черновик", "issued": "Выдан", "suspended": "Приостановлен",
-    "closed": "Закрыт", "cancelled": "Отменён",
+    "draft": "Черновик",
+    "issued": "Выдан",
+    "suspended": "Приостановлен",
+    "closed": "Закрыт",
+    "cancelled": "Отменён",
 }
 SIGN_GROUP_LABELS = {"permit": "Наряд", "briefing": "Целевой инструктаж", "closing": "Закрытие"}
 SIGN_MODE_LABELS = {"attested": "При оформителе", "code": "По коду"}
@@ -52,12 +64,12 @@ def status_label(code: str) -> str:
 
 @dataclass
 class SignatureLine:
-    group: str          # "permit" | "briefing" | "closing"
+    group: str  # "permit" | "briefing" | "closing"
     role_label: str
     fio: str
     status_label: str
     signed_at: str | None
-    mode: str           # "attested" | "code" | "—"
+    mode: str  # "attested" | "code" | "—"
     hash_short: str
 
 
@@ -94,11 +106,11 @@ class WorkPermitPrintData:
     measures_during: str | None
     special_conditions: str | None
     ppe_text: str | None
-    members: list[tuple[str, str]]          # (role_label, fio)
-    briefing: dict | None                    # {conducted_by_fio, conducted_at, topics}
-    daily_admissions: list[dict]             # [{date, start, end, admitted_by_fio}]
-    extensions: list[dict]                   # [{old_end, new_end, at}]
-    completion: dict | None                  # {text, recorded_at}
+    members: list[tuple[str, str]]  # (role_label, fio)
+    briefing: dict | None  # {conducted_by_fio, conducted_at, topics}
+    daily_admissions: list[dict]  # [{date, start, end, admitted_by_fio}]
+    extensions: list[dict]  # [{old_end, new_end, at}]
+    completion: dict | None  # {text, recorded_at}
     closed_at: str | None
     signatures: list[SignatureLine]
 
@@ -111,7 +123,8 @@ def build_work_permit_docx(data: WorkPermitPrintData) -> bytes:
     doc = Document()
     doc.add_heading(
         f"НАРЯД-ДОПУСК на производство работ повышенной опасности "
-        f"({data.work_type_label}, {data.legal_reference})", level=0,
+        f"({data.work_type_label}, {data.legal_reference})",
+        level=0,
     )
 
     # 1. Шапка
@@ -179,7 +192,12 @@ def build_work_permit_docx(data: WorkPermitPrintData) -> bytes:
         tbl = doc.add_table(rows=1, cols=4)
         tbl.style = "Table Grid"
         hdr = tbl.rows[0].cells
-        hdr[0].text, hdr[1].text, hdr[2].text, hdr[3].text = "Дата", "Начало", "Окончание", "Допустил"
+        hdr[0].text, hdr[1].text, hdr[2].text, hdr[3].text = (
+            "Дата",
+            "Начало",
+            "Окончание",
+            "Допустил",
+        )
         for a in data.daily_admissions:
             cells = tbl.add_row().cells
             cells[0].text = str(a.get("date") or "")

@@ -69,7 +69,9 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("tenant_id", "company_id", "name", name="uq_department_company_name"),
     )
-    op.create_index("ix_department_company", "department", ["tenant_id", "company_id"], unique=False)
+    op.create_index(
+        "ix_department_company", "department", ["tenant_id", "company_id"], unique=False
+    )
 
     op.create_table(
         "contract",
@@ -201,7 +203,12 @@ def upgrade() -> None:
     op.add_column("document", sa.Column("order_id", sa.String(length=36), nullable=True))
     op.add_column("document", sa.Column("invoice_id", sa.String(length=36), nullable=True))
     op.create_foreign_key(
-        "fk_document_department", "document", "department", ["department_id"], ["id"], ondelete="SET NULL"
+        "fk_document_department",
+        "document",
+        "department",
+        ["department_id"],
+        ["id"],
+        ondelete="SET NULL",
     )
     op.create_foreign_key(
         "fk_document_contract", "document", "contract", ["contract_id"], ["id"], ondelete="SET NULL"

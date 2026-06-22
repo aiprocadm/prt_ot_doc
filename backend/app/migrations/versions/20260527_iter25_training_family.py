@@ -98,14 +98,10 @@ def upgrade() -> None:
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("version", sa.Integer(), nullable=False),
         sa.PrimaryKeyConstraint("id"),
-        sa.ForeignKeyConstraint(
-            ["tenant_id"], ["tenant.id"], name="fk_training_course_tenant"
-        ),
+        sa.ForeignKeyConstraint(["tenant_id"], ["tenant.id"], name="fk_training_course_tenant"),
         sa.UniqueConstraint("tenant_id", "title", name="uq_training_course_title"),
     )
-    op.create_index(
-        "ix_training_course_tenant_id", "training_course", ["tenant_id"], unique=False
-    )
+    op.create_index("ix_training_course_tenant_id", "training_course", ["tenant_id"], unique=False)
     op.create_index(
         "ix_training_course_code",
         "training_course",
@@ -130,9 +126,7 @@ def upgrade() -> None:
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("version", sa.Integer(), nullable=False),
         sa.PrimaryKeyConstraint("id"),
-        sa.ForeignKeyConstraint(
-            ["tenant_id"], ["tenant.id"], name="fk_training_plan_tenant"
-        ),
+        sa.ForeignKeyConstraint(["tenant_id"], ["tenant.id"], name="fk_training_plan_tenant"),
         sa.ForeignKeyConstraint(
             ["company_id"],
             ["company.id"],
@@ -166,21 +160,11 @@ def upgrade() -> None:
             name="uq_training_plan_target",
         ),
     )
-    op.create_index(
-        "ix_training_plan_tenant_id", "training_plan", ["tenant_id"], unique=False
-    )
-    op.create_index(
-        "ix_training_plan_company_id", "training_plan", ["company_id"], unique=False
-    )
-    op.create_index(
-        "ix_training_plan_position_id", "training_plan", ["position_id"], unique=False
-    )
-    op.create_index(
-        "ix_training_plan_person_id", "training_plan", ["person_id"], unique=False
-    )
-    op.create_index(
-        "ix_training_plan_course_id", "training_plan", ["course_id"], unique=False
-    )
+    op.create_index("ix_training_plan_tenant_id", "training_plan", ["tenant_id"], unique=False)
+    op.create_index("ix_training_plan_company_id", "training_plan", ["company_id"], unique=False)
+    op.create_index("ix_training_plan_position_id", "training_plan", ["position_id"], unique=False)
+    op.create_index("ix_training_plan_person_id", "training_plan", ["person_id"], unique=False)
+    op.create_index("ix_training_plan_course_id", "training_plan", ["course_id"], unique=False)
 
     # --- training_session ---------------------------------------------------
     op.create_table(
@@ -203,9 +187,7 @@ def upgrade() -> None:
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("version", sa.Integer(), nullable=False),
         sa.PrimaryKeyConstraint("id"),
-        sa.ForeignKeyConstraint(
-            ["tenant_id"], ["tenant.id"], name="fk_training_session_tenant"
-        ),
+        sa.ForeignKeyConstraint(["tenant_id"], ["tenant.id"], name="fk_training_session_tenant"),
         sa.ForeignKeyConstraint(
             ["person_id"],
             ["person.id"],

@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import pytest
+
 from app.models.models import RoleEnum
 
 BASE = "/api/v1/work-permits"
 
 
 async def _issued_permit(async_client, headers) -> str:
-    r = await async_client.post(BASE, headers=headers, json={"work_type": "height", "zone_text": "z"})
+    r = await async_client.post(
+        BASE, headers=headers, json={"work_type": "height", "zone_text": "z"}
+    )
     wp_id = r.json()["id"]
     iss = await async_client.post(f"{BASE}/{wp_id}/issue", headers=headers, json={})
     assert iss.status_code == 200, iss.text
@@ -20,7 +23,8 @@ async def test_admission_create_list_patch(async_client, make_auth_headers, data
     wp_id = await _issued_permit(async_client, headers)
 
     r = await async_client.post(
-        f"{BASE}/{wp_id}/admissions", headers=headers,
+        f"{BASE}/{wp_id}/admissions",
+        headers=headers,
         json={"admission_date": "2026-06-18", "note": "смена 1"},
     )
     assert r.status_code == 201, r.text
@@ -32,11 +36,13 @@ async def test_admission_create_list_patch(async_client, make_auth_headers, data
     assert [a["id"] for a in lst.json()] == [aid]
 
     upd = await async_client.patch(
-        f"{BASE}/{wp_id}/admissions/{aid}", headers=headers,
+        f"{BASE}/{wp_id}/admissions/{aid}",
+        headers=headers,
         json={"end_at": "2026-06-18T17:00:00+00:00"},
     )
     assert upd.status_code == 200
     from datetime import datetime, timezone
+
     end_at = datetime.fromisoformat(upd.json()["end_at"])
     assert end_at.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M") == "2026-06-18T17:00"
 
@@ -44,7 +50,9 @@ async def test_admission_create_list_patch(async_client, make_auth_headers, data
 @pytest.mark.asyncio
 async def test_admission_rejected_when_not_issued(async_client, make_auth_headers, data_factory):
     headers = await make_auth_headers(RoleEnum.ADMIN)
-    r = await async_client.post(BASE, headers=headers, json={"work_type": "height", "zone_text": "z"})
+    r = await async_client.post(
+        BASE, headers=headers, json={"work_type": "height", "zone_text": "z"}
+    )
     wp_id = r.json()["id"]  # draft
     a = await async_client.post(
         f"{BASE}/{wp_id}/admissions", headers=headers, json={"admission_date": "2026-06-18"}
@@ -53,7 +61,9 @@ async def test_admission_rejected_when_not_issued(async_client, make_auth_header
 
 
 @pytest.mark.asyncio
-async def test_admission_patch_rejects_foreign_permit(async_client, make_auth_headers, data_factory):
+async def test_admission_patch_rejects_foreign_permit(
+    async_client, make_auth_headers, data_factory
+):
     """An admission of permit A must not be patchable via permit B's path (same tenant)."""
     headers = await make_auth_headers(RoleEnum.ADMIN)
     wp_a = await _issued_permit(async_client, headers)

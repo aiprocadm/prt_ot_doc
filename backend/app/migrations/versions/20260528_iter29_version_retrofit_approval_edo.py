@@ -61,14 +61,14 @@ depends_on: str | Sequence[str] | None = None
 # Stable alphabetical order so a future drift diff against this file is
 # easy to read. ORM model class noted in comment for each row.
 _TABLES: tuple[str, ...] = (
-    "approval_decision_logs",     # ApprovalDecisionLog
-    "approval_instance_steps",    # ApprovalInstanceStep
-    "approval_processes",         # ApprovalProcess
-    "approval_tasks",             # ApprovalTask
-    "edo_envelopes",              # EdoEnvelope
-    "edo_status_events",          # EdoStatusEvent
-    "edo_webhook_inbox",          # EdoWebhookInbox
-    "signature_requests",         # SignatureRequest
+    "approval_decision_logs",  # ApprovalDecisionLog
+    "approval_instance_steps",  # ApprovalInstanceStep
+    "approval_processes",  # ApprovalProcess
+    "approval_tasks",  # ApprovalTask
+    "edo_envelopes",  # EdoEnvelope
+    "edo_status_events",  # EdoStatusEvent
+    "edo_webhook_inbox",  # EdoWebhookInbox
+    "signature_requests",  # SignatureRequest
 )
 
 

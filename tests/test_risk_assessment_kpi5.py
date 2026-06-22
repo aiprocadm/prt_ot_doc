@@ -60,9 +60,7 @@ async def test_risk_assessment_artifacts_and_idempotency(
         },
     ]
     for payload in hazard_payloads:
-        hazard_resp = await async_client.post(
-            "/api/v1/risk/hazards", json=payload, headers=headers
-        )
+        hazard_resp = await async_client.post("/api/v1/risk/hazards", json=payload, headers=headers)
         assert hazard_resp.status_code == 200, hazard_resp.text
 
     assess_payload = {
@@ -94,40 +92,50 @@ async def test_risk_assessment_artifacts_and_idempotency(
     assert idempotent_resp.json()["assessment_id"] == assessment_id
 
     async with sessionmaker() as session:
-        tenant = (
-            await session.execute(select(Tenant).where(Tenant.slug == "test"))
-        ).scalar_one()
+        tenant = (await session.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()
         tenant_id = str(tenant.id)
 
         assessments = (
-            await session.execute(
-                select(RiskAssessment).where(
-                    RiskAssessment.tenant_id == tenant_id,
-                    RiskAssessment.assessment_key == "kpi5-assessment",
+            (
+                await session.execute(
+                    select(RiskAssessment).where(
+                        RiskAssessment.tenant_id == tenant_id,
+                        RiskAssessment.assessment_key == "kpi5-assessment",
+                    )
                 )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         assert len(assessments) == 1
 
         items = (
-            await session.execute(
-                select(RiskAssessmentItem).where(
-                    RiskAssessmentItem.tenant_id == tenant_id,
-                    RiskAssessmentItem.assessment_id == assessment_id,
+            (
+                await session.execute(
+                    select(RiskAssessmentItem).where(
+                        RiskAssessmentItem.tenant_id == tenant_id,
+                        RiskAssessmentItem.assessment_id == assessment_id,
+                    )
                 )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         assert len(items) == 2
         assert {item.level for item in items} == {"med"}
 
         risk_cards = (
-            await session.execute(
-                select(RiskCard).where(
-                    RiskCard.tenant_id == tenant_id,
-                    RiskCard.assessment_id == assessment_id,
+            (
+                await session.execute(
+                    select(RiskCard).where(
+                        RiskCard.tenant_id == tenant_id,
+                        RiskCard.assessment_id == assessment_id,
+                    )
                 )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         assert len(risk_cards) == 1
 
         action_plan = (
@@ -139,13 +147,17 @@ async def test_risk_assessment_artifacts_and_idempotency(
             )
         ).scalar_one()
         action_items = (
-            await session.execute(
-                select(RiskActionPlanItem).where(
-                    RiskActionPlanItem.tenant_id == tenant_id,
-                    RiskActionPlanItem.plan_id == action_plan.id,
+            (
+                await session.execute(
+                    select(RiskActionPlanItem).where(
+                        RiskActionPlanItem.tenant_id == tenant_id,
+                        RiskActionPlanItem.plan_id == action_plan.id,
+                    )
                 )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         assert len(action_items) == 2
 
 

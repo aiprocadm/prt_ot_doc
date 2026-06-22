@@ -94,7 +94,9 @@ async def upload_init(
     if not idempotency_key:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Idempotency-Key is required")
     request_hash = compute_request_hash(payload.model_dump(mode="json"))
-    idem = IdempotencyService(session=session, tenant_id=str(tenant.id), endpoint="files.upload_init")
+    idem = IdempotencyService(
+        session=session, tenant_id=str(tenant.id), endpoint="files.upload_init"
+    )
     key = normalize_idempotency_key(idempotency_key)
     record, created = await idem.acquire(
         key=key,
@@ -139,7 +141,9 @@ async def upload_complete(
     if not idempotency_key:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Idempotency-Key is required")
     request_hash = compute_request_hash(payload.model_dump(mode="json"))
-    idem = IdempotencyService(session=session, tenant_id=str(tenant.id), endpoint="files.upload_complete")
+    idem = IdempotencyService(
+        session=session, tenant_id=str(tenant.id), endpoint="files.upload_complete"
+    )
     key = normalize_idempotency_key(idempotency_key)
     record, created = await idem.acquire(
         key=key,
@@ -148,7 +152,9 @@ async def upload_complete(
         path="/v1/files:upload-complete",
     )
     if not created:
-        return await idem.respond_from_store(record, model=UploadCompleteResponse, response=response)
+        return await idem.respond_from_store(
+            record, model=UploadCompleteResponse, response=response
+        )
 
     version = await service.complete_upload(
         session=session,
@@ -380,13 +386,15 @@ async def get_file_v2(
             )
             for link_row in link_rows
         ],
-        content_index=FileIndexStatusDto(
-            status=content_index.status,
-            attempts=int(content_index.attempts or 0),
-            last_error=content_index.last_error,
-        )
-        if content_index
-        else None,
+        content_index=(
+            FileIndexStatusDto(
+                status=content_index.status,
+                attempts=int(content_index.attempts or 0),
+                last_error=content_index.last_error,
+            )
+            if content_index
+            else None
+        ),
     )
 
 
@@ -673,12 +681,16 @@ async def list_files_v1(
     if query:
         stmt = stmt.where(FileRecord.object_key.ilike(f"%{query}%"))
     if meta_document_version_id:
-        stmt = stmt.where(FileRecord.metadata_json["document_version_id"].astext == meta_document_version_id)
+        stmt = stmt.where(
+            FileRecord.metadata_json["document_version_id"].astext == meta_document_version_id
+        )
     if updated_from:
         stmt = stmt.where(FileRecord.updated_at >= updated_from)
     rows = (
-        await session.execute(stmt.order_by(FileRecord.updated_at.desc()).limit(200))
-    ).scalars().all()
+        (await session.execute(stmt.order_by(FileRecord.updated_at.desc()).limit(200)))
+        .scalars()
+        .all()
+    )
     return [
         FileDto(
             id=r.id,
@@ -749,12 +761,16 @@ async def list_file_versions_v1(
 ) -> list[FileVersionDto]:
     _enforce_access_role(access, _FILE_READ_ROLES)
     rows = (
-        await session.execute(
-            select(FileVersion)
-            .where(FileVersion.tenant_id == str(tenant.id), FileVersion.file_id == file_id)
-            .order_by(FileVersion.version_no.desc())
+        (
+            await session.execute(
+                select(FileVersion)
+                .where(FileVersion.tenant_id == str(tenant.id), FileVersion.file_id == file_id)
+                .order_by(FileVersion.version_no.desc())
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     return [
         FileVersionDto(
             id=v.id,

@@ -32,9 +32,7 @@ __all__ = [
 ]
 
 
-DOCX_MIME = (
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-)
+DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
 PACK_CODE_SITE_ACCESS = "OT_ENTER_SITE"
 PACK_CODE_NEW_COMPANY = "NEW_COMPANY"
@@ -676,7 +674,4 @@ DEFAULT_PACKS: Sequence[PackDefinition] = (
     ),
 )
 
-PACK_DEFINITIONS_BY_CODE: dict[str, PackDefinition] = {
-    pack.code: pack for pack in DEFAULT_PACKS
-}
-
+PACK_DEFINITIONS_BY_CODE: dict[str, PackDefinition] = {pack.code: pack for pack in DEFAULT_PACKS}

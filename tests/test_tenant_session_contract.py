@@ -49,7 +49,9 @@ async def test_demo_bootstrap_uses_tenant_uuid_for_fk_backed_entities(
     async def fake_ensure_default_packs(session, *, tenant_slug: str) -> None:
         return None
 
-    monkeypatch.setattr("app.services.demo_bootstrap.ensure_default_packs", fake_ensure_default_packs)
+    monkeypatch.setattr(
+        "app.services.demo_bootstrap.ensure_default_packs", fake_ensure_default_packs
+    )
 
     settings = Settings.model_validate(
         {
@@ -65,13 +67,25 @@ async def test_demo_bootstrap_uses_tenant_uuid_for_fk_backed_entities(
     await bootstrap_demo_tenant(settings)
 
     async with sessionmaker() as session:
-        tenant = (await session.execute(select(Tenant).where(Tenant.slug == "wave1-demo"))).scalar_one()
-        company = (await session.execute(select(Company).where(Company.name == "Wave 1 Demo LLC"))).scalar_one()
+        tenant = (
+            await session.execute(select(Tenant).where(Tenant.slug == "wave1-demo"))
+        ).scalar_one()
+        company = (
+            await session.execute(select(Company).where(Company.name == "Wave 1 Demo LLC"))
+        ).scalar_one()
         site = (await session.execute(select(Site).where(Site.name == "Wave 1 Site"))).scalar_one()
-        department = (await session.execute(select(Department).where(Department.code == "DEMO-PROD"))).scalar_one()
-        position = (await session.execute(select(Position).where(Position.name == "Мастер участка"))).scalar_one()
-        person = (await session.execute(select(Person).where(Person.personnel_number == "D-001"))).scalar_one()
-        course = (await session.execute(select(TrainingCourse).where(TrainingCourse.code == "demo-intro"))).scalar_one()
+        department = (
+            await session.execute(select(Department).where(Department.code == "DEMO-PROD"))
+        ).scalar_one()
+        position = (
+            await session.execute(select(Position).where(Position.name == "Мастер участка"))
+        ).scalar_one()
+        person = (
+            await session.execute(select(Person).where(Person.personnel_number == "D-001"))
+        ).scalar_one()
+        course = (
+            await session.execute(select(TrainingCourse).where(TrainingCourse.code == "demo-intro"))
+        ).scalar_one()
 
         assert company.tenant_id == tenant.id
         assert site.tenant_id == tenant.id
@@ -82,7 +96,9 @@ async def test_demo_bootstrap_uses_tenant_uuid_for_fk_backed_entities(
 
 
 @pytest.mark.anyio
-async def test_async_session_local_ensures_explicit_schema_name(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_async_session_local_ensures_explicit_schema_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     ensured: list[tuple[str, str | None, bool]] = []
 
     monkeypatch.setattr(db_session, "_SUPPORTS_SCHEMAS", True)
@@ -90,7 +106,9 @@ async def test_async_session_local_ensures_explicit_schema_name(monkeypatch: pyt
     monkeypatch.setattr(
         db_session,
         "ensure_tenant_schema",
-        lambda slug, *, schema_name=None, implicit=False: ensured.append((slug, schema_name, implicit)),
+        lambda slug, *, schema_name=None, implicit=False: ensured.append(
+            (slug, schema_name, implicit)
+        ),
     )
 
     session = db_session.AsyncSessionLocal(tenant="schema-demo", schema_name="tenant_schema_demo")
@@ -161,7 +179,9 @@ async def test_fetch_tenant_by_identifier_uses_recorded_schema_name(
     monkeypatch.setattr(
         api_dependencies,
         "ensure_tenant_schema",
-        lambda slug, *, schema_name=None, implicit=False: ensured.append((slug, schema_name, implicit)),
+        lambda slug, *, schema_name=None, implicit=False: ensured.append(
+            (slug, schema_name, implicit)
+        ),
     )
 
     tenant = await api_dependencies._fetch_tenant_by_identifier("schema-demo")
@@ -171,7 +191,9 @@ async def test_fetch_tenant_by_identifier_uses_recorded_schema_name(
     assert ensured == [("schema-demo", "tenant_schema_demo", True)]
 
 
-def test_ensure_tenant_schema_skips_implicit_bootstrap_when_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_ensure_tenant_schema_skips_implicit_bootstrap_when_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setattr(db_session, "_SUPPORTS_SCHEMAS", True)
     monkeypatch.setattr(
         db_session,
@@ -188,7 +210,9 @@ def test_ensure_tenant_schema_skips_implicit_bootstrap_when_disabled(monkeypatch
     assert triggered == []
 
 
-def test_ensure_tenant_schema_allows_explicit_bootstrap_when_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_ensure_tenant_schema_allows_explicit_bootstrap_when_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setattr(db_session, "_SUPPORTS_SCHEMAS", True)
     monkeypatch.setattr(
         db_session,

@@ -44,7 +44,9 @@ async def get_npa_detail(
     TenantContextValidator.ensure_tenant_context(tenant)
 
     _ = access
-    payload = await NpaImpactService(session, str(tenant.id)).detail(act_id, revision_id=revision_id)
+    payload = await NpaImpactService(session, str(tenant.id)).detail(
+        act_id, revision_id=revision_id
+    )
     if payload is None:
         raise HTTPException(status_code=404, detail="NPA act not found")
     return payload
@@ -61,6 +63,11 @@ async def create_npa_update_tasks(
 ) -> dict:
     TenantContextValidator.ensure_tenant_context(tenant)
 
-    tasks = await NpaImpactService(session, str(tenant.id)).create_update_tasks(act_id, getattr(access.user, "id", None), revision_id=revision_id)
+    tasks = await NpaImpactService(session, str(tenant.id)).create_update_tasks(
+        act_id, getattr(access.user, "id", None), revision_id=revision_id
+    )
     await session.commit()
-    return {"created": len(tasks), "items": [{"id": item.id, "title": item.title} for item in tasks]}
+    return {
+        "created": len(tasks),
+        "items": [{"id": item.id, "title": item.title} for item in tasks],
+    }

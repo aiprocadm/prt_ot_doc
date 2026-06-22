@@ -9,7 +9,6 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domains.ppe import lifecycle as lc
-from app.modules.ppe.services import NormItem, PPENormService
 from app.models.models import (
     Journal,
     JournalEntry,
@@ -20,6 +19,7 @@ from app.models.models import (
     PPEItem,
     PPENorm,
 )
+from app.modules.ppe.services import NormItem, PPENormService
 
 
 @dataclass(slots=True)
@@ -129,7 +129,9 @@ async def list_expiring_issues(
     return (await session.execute(stmt)).scalars().all()
 
 
-async def _get_issue_record(session: AsyncSession, tenant_id: str, issue_id: str) -> PPEIssue | None:
+async def _get_issue_record(
+    session: AsyncSession, tenant_id: str, issue_id: str
+) -> PPEIssue | None:
     stmt = select(PPEIssue).where(
         PPEIssue.id == issue_id,
         PPEIssue.tenant_id == tenant_id,
@@ -308,23 +310,43 @@ async def build_personal_card_766n(
     position: Position | None = None
     norms: list[PPENorm] = []
     if person.position_id:
-        position = (await session.execute(select(Position).where(
-            Position.id == person.position_id,
-            Position.tenant_id == tenant_id,
-            Position.deleted_at.is_(None),
-        ))).scalar_one_or_none()
-        norms = list((await session.execute(select(PPENorm).where(
-            PPENorm.tenant_id == tenant_id,
-            PPENorm.position_id == person.position_id,
-        ))).scalars().all())
+        position = (
+            await session.execute(
+                select(Position).where(
+                    Position.id == person.position_id,
+                    Position.tenant_id == tenant_id,
+                    Position.deleted_at.is_(None),
+                )
+            )
+        ).scalar_one_or_none()
+        norms = list(
+            (
+                await session.execute(
+                    select(PPENorm).where(
+                        PPENorm.tenant_id == tenant_id,
+                        PPENorm.position_id == person.position_id,
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
 
-    issues = list((await session.execute(
-        select(PPEIssue).where(
-            PPEIssue.tenant_id == tenant_id,
-            PPEIssue.person_id == person.id,
-            PPEIssue.deleted_at.is_(None),
-        ).order_by(PPEIssue.issued_at.asc())
-    )).scalars().all())
+    issues = list(
+        (
+            await session.execute(
+                select(PPEIssue)
+                .where(
+                    PPEIssue.tenant_id == tenant_id,
+                    PPEIssue.person_id == person.id,
+                    PPEIssue.deleted_at.is_(None),
+                )
+                .order_by(PPEIssue.issued_at.asc())
+            )
+        )
+        .scalars()
+        .all()
+    )
 
     # «Положено»: max по позиции каталога через переиспользуемый required_union.
     norm_items = [
@@ -373,32 +395,50 @@ async def build_personal_card_766n(
     required: list[CardRequiredLine] = []
     for key, qty in required_qty.items():
         norm = line_meta[key]
-        required.append(CardRequiredLine(
-            item_id=norm.item_id,
-            item_name=norm.item_name,
-            required_quantity=int(qty),
-            interval_days=norm.interval_days,
-            status=lc.card_line_status(int(qty), _views_for_line(norm), today),
-        ))
+        required.append(
+            CardRequiredLine(
+                item_id=norm.item_id,
+                item_name=norm.item_name,
+                required_quantity=int(qty),
+                interval_days=norm.interval_days,
+                status=lc.card_line_status(int(qty), _views_for_line(norm), today),
+            )
+        )
     required.sort(key=lambda line: line.item_name)
 
     timeline: list[CardTimelineEvent] = []
     for issue in issues:
-        timeline.append(CardTimelineEvent(
-            occurred_at=issue.issued_at, event="issued",
-            issue_id=issue.id, item_name=issue.item_name,
-        ))
+        timeline.append(
+            CardTimelineEvent(
+                occurred_at=issue.issued_at,
+                event="issued",
+                issue_id=issue.id,
+                item_name=issue.item_name,
+            )
+        )
         current = str(issue.status)
         if current == lc.ISSUE_STATUS_RETURNED and issue.returned_at is not None:
-            timeline.append(CardTimelineEvent(
-                occurred_at=issue.returned_at, event="returned",
-                issue_id=issue.id, item_name=issue.item_name,
-            ))
-        elif current in (lc.ISSUE_STATUS_WRITTEN_OFF, lc.ISSUE_STATUS_REPLACED, lc.ISSUE_STATUS_LOST):
-            timeline.append(CardTimelineEvent(
-                occurred_at=issue.updated_at, event=current,
-                issue_id=issue.id, item_name=issue.item_name,
-            ))
+            timeline.append(
+                CardTimelineEvent(
+                    occurred_at=issue.returned_at,
+                    event="returned",
+                    issue_id=issue.id,
+                    item_name=issue.item_name,
+                )
+            )
+        elif current in (
+            lc.ISSUE_STATUS_WRITTEN_OFF,
+            lc.ISSUE_STATUS_REPLACED,
+            lc.ISSUE_STATUS_LOST,
+        ):
+            timeline.append(
+                CardTimelineEvent(
+                    occurred_at=issue.updated_at,
+                    event=current,
+                    issue_id=issue.id,
+                    item_name=issue.item_name,
+                )
+            )
     timeline.sort(key=lambda e: e.occurred_at)
 
     return PersonalCard766n(
@@ -437,4 +477,3 @@ async def build_journal_export(
         "journal": journal,
         "entries": list(entries),
     }
-

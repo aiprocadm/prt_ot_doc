@@ -47,7 +47,9 @@ def _resolved_signature(func: Callable[..., Any]) -> Signature:
 
     raw_sig = signature(func)
     try:
-        resolved = get_type_hints(func, globalns=func.__globals__, localns=None, include_extras=True)
+        resolved = get_type_hints(
+            func, globalns=func.__globals__, localns=None, include_extras=True
+        )
     except Exception:  # noqa: BLE001 - fallback to raw annotations when resolution fails
         resolved = {}
 

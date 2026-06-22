@@ -4,6 +4,7 @@ Additive. New table + one nullable column on risk_hazards. VARCHAR category (no 
 types), no cross-base FK. Round-trip-safe: downgrade drops the column then the table.
 Table/column names are LITERAL (AST-audit blindspot).
 """
+
 from __future__ import annotations
 
 import sqlalchemy as sa

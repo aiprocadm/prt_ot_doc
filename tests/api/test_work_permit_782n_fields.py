@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+
 from app.models.models import RoleEnum
 
 BASE = "/api/v1/work-permits"
@@ -10,9 +11,12 @@ BASE = "/api/v1/work-permits"
 async def test_create_roundtrips_782n_fields(async_client, make_auth_headers):
     headers = await make_auth_headers(RoleEnum.ADMIN)
     body = {
-        "work_type": "height", "zone_text": "фасад",
-        "subdivision_text": "Цех №2", "content_text": "монтаж ограждения",
-        "safety_systems": ["fall_arrest", "rescue_evacuation"], "ppe_text": "каска, привязь",
+        "work_type": "height",
+        "zone_text": "фасад",
+        "subdivision_text": "Цех №2",
+        "content_text": "монтаж ограждения",
+        "safety_systems": ["fall_arrest", "rescue_evacuation"],
+        "ppe_text": "каска, привязь",
     }
     r = await async_client.post(BASE, headers=headers, json=body)
     assert r.status_code == 201, r.text
@@ -82,11 +86,14 @@ async def test_patch_confined_space_invalid_type_specific(async_client, make_aut
 
 
 @pytest.mark.asyncio
-async def test_patch_work_type_to_height_clears_stale_type_specific(async_client, make_auth_headers):
+async def test_patch_work_type_to_height_clears_stale_type_specific(
+    async_client, make_auth_headers
+):
     headers = await make_auth_headers(RoleEnum.ADMIN)
     # Confined permit carrying a valid type_specific section.
     create_body = {
-        "work_type": "confined_space", "zone_text": "колодец",
+        "work_type": "confined_space",
+        "zone_text": "колодец",
         "type_specific": {"ventilation": "forced"},
     }
     cr = await async_client.post(BASE, headers=headers, json=create_body)
@@ -96,7 +103,9 @@ async def test_patch_work_type_to_height_clears_stale_type_specific(async_client
     # Switching to height (a profile without its own type_specific section) WITHOUT
     # resending type_specific must clear the now-invalid stale section, not keep it.
     r = await async_client.patch(
-        f"{BASE}/{wp_id}", headers=headers, json={"work_type": "height"},
+        f"{BASE}/{wp_id}",
+        headers=headers,
+        json={"work_type": "height"},
     )
     assert r.status_code == 200, r.text
     assert r.json()["work_type"] == "height"

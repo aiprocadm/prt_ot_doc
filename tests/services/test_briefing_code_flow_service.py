@@ -1,4 +1,5 @@
 """Two-phase briefing code-flow at the service layer (Срез-3)."""
+
 from __future__ import annotations
 
 import itertools
@@ -41,7 +42,11 @@ async def _world(session, data_factory, *, require_code: bool, with_person: bool
         require_signature_code=require_code,
     )
     journal = BriefingJournal(
-        tenant_id=tenant.id, code=f"BRF-CF-J-{n}", title="CF", journal_type="workplace", status="active"
+        tenant_id=tenant.id,
+        code=f"BRF-CF-J-{n}",
+        title="CF",
+        journal_type="workplace",
+        status="active",
     )
     session.add_all([template, journal])
     await session.flush()
@@ -71,7 +76,9 @@ async def test_requires_code_true_only_when_flag_and_person(sessionmaker, data_f
         _, _, _, entry_noperson = await _world(
             session, data_factory, require_code=True, with_person=False
         )
-        assert await BriefingEntryService().requires_signature_code(session, entry_noperson) is False
+        assert (
+            await BriefingEntryService().requires_signature_code(session, entry_noperson) is False
+        )
 
 
 @pytest.mark.asyncio
@@ -84,9 +91,15 @@ async def test_start_then_confirm_creates_signature(sessionmaker, data_factory):
 
         assert req.status == PepStatus.AWAITING_CODE.value
         assert code is not None and len(code) == 6
-        sigs = (await session.execute(
-            select(BriefingSignature).where(BriefingSignature.briefing_entry_id == entry.id)
-        )).scalars().all()
+        sigs = (
+            (
+                await session.execute(
+                    select(BriefingSignature).where(BriefingSignature.briefing_entry_id == entry.id)
+                )
+            )
+            .scalars()
+            .all()
+        )
         assert sigs == []
         assert entry.status == "assigned"
 

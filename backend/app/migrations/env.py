@@ -79,10 +79,7 @@ def _ensure_alembic_version_table_can_store_long_revisions(connection) -> None:
 
     if connection.dialect.name == "postgresql":
         connection.execute(
-            sa.text(
-                "ALTER TABLE alembic_version "
-                "ALTER COLUMN version_num TYPE TEXT"
-            )
+            sa.text("ALTER TABLE alembic_version " "ALTER COLUMN version_num TYPE TEXT")
         )
 
 

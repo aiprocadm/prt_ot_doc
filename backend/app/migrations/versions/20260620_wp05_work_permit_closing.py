@@ -4,6 +4,7 @@
 закрытия живут в signature_requests (object_type="work_permit_closing").
 Имена таблиц ЛИТЕРАЛОМ (AST-audit blindspot). Honest downgrade удаляет колонки.
 """
+
 from __future__ import annotations
 
 import sqlalchemy as sa

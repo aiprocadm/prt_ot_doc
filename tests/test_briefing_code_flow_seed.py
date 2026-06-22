@@ -1,4 +1,5 @@
 """§6.9 Срез-3 demo seed: a briefing template opted into code-flow signing exists (idempotent)."""
+
 import pytest
 from sqlalchemy import select
 
@@ -17,14 +18,30 @@ async def test_seed_briefing_code_flow_demo(sessionmaker, data_factory):
         await _seed_briefing_code_flow_demo(session, str(tenant.id), person)
         await session.commit()
 
-        flagged = (await session.execute(select(BriefingTemplate).where(
-            BriefingTemplate.tenant_id == tenant.id,
-            BriefingTemplate.require_signature_code.is_(True),
-        ))).scalars().all()
+        flagged = (
+            (
+                await session.execute(
+                    select(BriefingTemplate).where(
+                        BriefingTemplate.tenant_id == tenant.id,
+                        BriefingTemplate.require_signature_code.is_(True),
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
         assert len(flagged) >= 1
 
-        only_one = (await session.execute(select(BriefingTemplate).where(
-            BriefingTemplate.tenant_id == tenant.id,
-            BriefingTemplate.code == "demo-primary-code",
-        ))).scalars().all()
+        only_one = (
+            (
+                await session.execute(
+                    select(BriefingTemplate).where(
+                        BriefingTemplate.tenant_id == tenant.id,
+                        BriefingTemplate.code == "demo-primary-code",
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
         assert len(only_one) == 1

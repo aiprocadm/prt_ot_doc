@@ -4,6 +4,7 @@ A prescription may be completed with attached evidence files (linked via
 FileLink, role="evidence") instead of — or in addition to — a textual note.
 Attached files must be tenant-owned and antivirus-clean.
 """
+
 from __future__ import annotations
 
 from datetime import date
@@ -92,7 +93,10 @@ async def test_complete_with_evidence_file_only_links_and_lists(
 
     # No text evidence — a single clean file alone must satisfy completion.
     r = await _transition(
-        async_client, pid, headers, PrescriptionStatus.COMPLETED.value,
+        async_client,
+        pid,
+        headers,
+        PrescriptionStatus.COMPLETED.value,
         evidence_file_ids=[file_id],
     )
     assert r.status_code == status.HTTP_200_OK, r.text
@@ -132,7 +136,10 @@ async def test_complete_rejects_unclean_file_422(
     file_id = await _make_file(sessionmaker, tenant_id, status_value="uploaded")  # not scanned
 
     r = await _transition(
-        async_client, pid, headers, PrescriptionStatus.COMPLETED.value,
+        async_client,
+        pid,
+        headers,
+        PrescriptionStatus.COMPLETED.value,
         evidence_file_ids=[file_id],
     )
     assert r.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY, r.text
@@ -150,14 +157,15 @@ async def test_complete_rejects_cross_tenant_file_404(
 
     # A clean file owned by a DIFFERENT tenant must not be linkable.
     async with sessionmaker() as session:
-        other = (
-            await session.execute(select(Tenant).where(Tenant.slug == "beta"))
-        ).scalar_one()
+        other = (await session.execute(select(Tenant).where(Tenant.slug == "beta"))).scalar_one()
         other_tenant_id = other.id
     foreign_file_id = await _make_file(sessionmaker, other_tenant_id, status_value="clean")
 
     r = await _transition(
-        async_client, pid, headers, PrescriptionStatus.COMPLETED.value,
+        async_client,
+        pid,
+        headers,
+        PrescriptionStatus.COMPLETED.value,
         evidence_file_ids=[foreign_file_id],
     )
     assert r.status_code == status.HTTP_404_NOT_FOUND, r.text
@@ -176,12 +184,20 @@ async def test_relinking_same_file_is_idempotent(
 
     # Complete with the file, rework back, then complete again with the SAME file.
     await _transition(
-        async_client, pid, headers, PrescriptionStatus.COMPLETED.value,
+        async_client,
+        pid,
+        headers,
+        PrescriptionStatus.COMPLETED.value,
         evidence_file_ids=[file_id],
     )
-    await _transition(async_client, pid, headers, PrescriptionStatus.IN_PROGRESS.value, note="rework")
+    await _transition(
+        async_client, pid, headers, PrescriptionStatus.IN_PROGRESS.value, note="rework"
+    )
     r = await _transition(
-        async_client, pid, headers, PrescriptionStatus.COMPLETED.value,
+        async_client,
+        pid,
+        headers,
+        PrescriptionStatus.COMPLETED.value,
         evidence_file_ids=[file_id],
     )
     assert r.status_code == status.HTTP_200_OK, r.text
@@ -190,15 +206,19 @@ async def test_relinking_same_file_is_idempotent(
 
     async with sessionmaker() as session:
         links = (
-            await session.execute(
-                select(FileLink).where(
-                    FileLink.entity_type == "prescription",
-                    FileLink.entity_id == pid,
-                    FileLink.file_id == file_id,
-                    FileLink.role == "evidence",
+            (
+                await session.execute(
+                    select(FileLink).where(
+                        FileLink.entity_type == "prescription",
+                        FileLink.entity_id == pid,
+                        FileLink.file_id == file_id,
+                        FileLink.role == "evidence",
+                    )
                 )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         assert len(links) == 1
 
 
@@ -216,7 +236,10 @@ async def test_evidence_display_name_falls_back_to_object_key(
     )
 
     r = await _transition(
-        async_client, pid, headers, PrescriptionStatus.COMPLETED.value,
+        async_client,
+        pid,
+        headers,
+        PrescriptionStatus.COMPLETED.value,
         evidence_file_ids=[file_id],
     )
     assert r.status_code == status.HTTP_200_OK, r.text

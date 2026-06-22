@@ -1,4 +1,5 @@
 """Demo seed creates 3 contractor documents with valid/expiring/expired statuses."""
+
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -25,16 +26,24 @@ async def test_demo_seed_creates_three_documents(sessionmaker, data_factory):
         contractor = ContractorRegistry(tenant_id=tid, name="Seed Doc Contractor")
         session.add(contractor)
         await session.flush()
-        emp = ContractorEmployee(tenant_id=tid, contractor_id=contractor.id, full_name="Seed Worker")
+        emp = ContractorEmployee(
+            tenant_id=tid, contractor_id=contractor.id, full_name="Seed Worker"
+        )
         session.add(emp)
         await session.flush()
 
         await _seed_contractor_documents(session, tid, contractor.id, emp.id)
         await session.commit()
 
-        docs = list((await session.execute(
-            select(ContractorDocument).where(ContractorDocument.tenant_id == tid)
-        )).scalars().all())
+        docs = list(
+            (
+                await session.execute(
+                    select(ContractorDocument).where(ContractorDocument.tenant_id == tid)
+                )
+            )
+            .scalars()
+            .all()
+        )
 
     assert len(docs) == 3
     today = datetime.now(timezone.utc).date()

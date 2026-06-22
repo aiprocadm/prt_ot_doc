@@ -23,19 +23,43 @@ from app.core.tenant_validation import TenantContextValidator
 from app.domains.medical import lifecycle as lc
 from app.domains.medical import service as medsvc
 from app.models.models import (
-    MedicalExam, MedicalFactor, MedicalNorm, MedicalReferral, MedicalReferralStatus,
-    MedicalSuspension, MedicalSuspensionStatus, Person, Tenant,
+    MedicalExam,
+    MedicalFactor,
+    MedicalNorm,
+    MedicalReferral,
+    MedicalReferralStatus,
+    MedicalSuspension,
+    MedicalSuspensionStatus,
+    Person,
+    Tenant,
 )
 from app.schemas.medical import (
-    ContingentItem, ContingentPage,
-    ContingentRegisterPage, ContingentRegisterRow,
-    MedicalExamCreate, MedicalExamPage, MedicalExamRead, MedicalExamUpdate, MedicalRequirementCreate,
-    MedicalFactorCreate, MedicalFactorPage, MedicalFactorRead, MedicalFactorUpdate,
-    MedicalNormCreate, MedicalNormPage, MedicalNormRead, MedicalNormUpdate,
-    MedicalReferralCreate, MedicalReferralPage, MedicalReferralRead, MedicalReferralTransition,
+    ContingentItem,
+    ContingentPage,
+    ContingentRegisterPage,
+    ContingentRegisterRow,
+    MedicalExamCreate,
+    MedicalExamPage,
+    MedicalExamRead,
+    MedicalExamUpdate,
+    MedicalFactorCreate,
+    MedicalFactorPage,
+    MedicalFactorRead,
+    MedicalFactorUpdate,
+    MedicalNormCreate,
+    MedicalNormPage,
+    MedicalNormRead,
+    MedicalNormUpdate,
+    MedicalReferralCreate,
+    MedicalReferralPage,
+    MedicalReferralRead,
+    MedicalReferralTransition,
+    MedicalRequirementCreate,
     MedicalSummary,
-    MedicalSuspensionPage, MedicalSuspensionRead,
-    NamedListPage, NamedListRow,
+    MedicalSuspensionPage,
+    MedicalSuspensionRead,
+    NamedListPage,
+    NamedListRow,
 )
 from app.schemas.task import TaskRead
 from app.services.audit import AuditService
@@ -45,7 +69,6 @@ router = APIRouter(tags=["medical"])
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 TenantDep = Annotated[Tenant, Depends(get_tenant_record)]
-
 
 
 def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> UUID | None:
@@ -58,7 +81,9 @@ _MEDICAL_READ_ROLES = ["admin", "owner", "hr", "line_manager"]
 
 MedicalAccess = Annotated[
     AccessContext,
-    Depends(abac(_tenant_resource_id, required_roles=_MEDICAL_WRITE_ROLES, action="manage medical")),
+    Depends(
+        abac(_tenant_resource_id, required_roles=_MEDICAL_WRITE_ROLES, action="manage medical")
+    ),
 ]
 MedicalReadAccess = Annotated[
     AccessContext,
@@ -70,7 +95,9 @@ _MEDICAL_FEATURE_CODE = "medical"
 
 async def require_medical_feature(tenant: TenantDep, session: SessionDep) -> None:
     if not await is_feature_enabled(session, str(tenant.id), _MEDICAL_FEATURE_CODE):
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Medical feature is not enabled for this tenant")
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND, "Medical feature is not enabled for this tenant"
+        )
 
 
 MedicalFeatureGate = Depends(require_medical_feature)
@@ -87,9 +114,14 @@ def _to_referral_read(record: MedicalReferral, *, today) -> MedicalReferralRead:
 
 
 async def _get_factor(session: AsyncSession, tenant_id: str, factor_id: str) -> MedicalFactor:
-    rec = (await session.execute(select(MedicalFactor).where(
-        MedicalFactor.id == factor_id, MedicalFactor.tenant_id == tenant_id,
-    ))).scalar_one_or_none()
+    rec = (
+        await session.execute(
+            select(MedicalFactor).where(
+                MedicalFactor.id == factor_id,
+                MedicalFactor.tenant_id == tenant_id,
+            )
+        )
+    ).scalar_one_or_none()
     if rec is None:
         raise HTTPException(
             status.HTTP_404_NOT_FOUND,
@@ -100,9 +132,15 @@ async def _get_factor(session: AsyncSession, tenant_id: str, factor_id: str) -> 
 
 async def _get_norm(session: AsyncSession, tenant_id: str, norm_id: str) -> MedicalNorm:
     from app.models.models import MedicalNorm as _MN
-    rec = (await session.execute(select(_MN).where(
-        _MN.id == norm_id, _MN.tenant_id == tenant_id,
-    ))).scalar_one_or_none()
+
+    rec = (
+        await session.execute(
+            select(_MN).where(
+                _MN.id == norm_id,
+                _MN.tenant_id == tenant_id,
+            )
+        )
+    ).scalar_one_or_none()
     if rec is None:
         raise HTTPException(
             status.HTTP_404_NOT_FOUND,
@@ -112,11 +150,15 @@ async def _get_norm(session: AsyncSession, tenant_id: str, norm_id: str) -> Medi
 
 
 async def _get_referral(session: AsyncSession, tenant_id: str, referral_id: str) -> MedicalReferral:
-    rec = (await session.execute(select(MedicalReferral).where(
-        MedicalReferral.id == referral_id,
-        MedicalReferral.tenant_id == tenant_id,
-        MedicalReferral.deleted_at.is_(None),
-    ))).scalar_one_or_none()
+    rec = (
+        await session.execute(
+            select(MedicalReferral).where(
+                MedicalReferral.id == referral_id,
+                MedicalReferral.tenant_id == tenant_id,
+                MedicalReferral.deleted_at.is_(None),
+            )
+        )
+    ).scalar_one_or_none()
     if rec is None:
         raise HTTPException(
             status.HTTP_404_NOT_FOUND,
@@ -142,7 +184,9 @@ async def list_medical_exams(
     TenantContextValidator.ensure_tenant_context(tenant)
 
     _ = access
-    stmt = select(MedicalExam).where(MedicalExam.tenant_id == tenant.id, MedicalExam.deleted_at.is_(None))
+    stmt = select(MedicalExam).where(
+        MedicalExam.tenant_id == tenant.id, MedicalExam.deleted_at.is_(None)
+    )
     if person_id:
         stmt = stmt.where(MedicalExam.person_id == person_id)
     if status_filter == "expired":
@@ -155,11 +199,17 @@ async def list_medical_exams(
         stmt = stmt.where(MedicalExam.fitness == fitness)
 
     total_stmt = select(func.count()).select_from(stmt.subquery())
-    rows = list((
-        await session.execute(
-            stmt.order_by(MedicalExam.valid_until.asc(), MedicalExam.exam_date.desc()).offset(offset).limit(limit)
+    rows = list(
+        (
+            await session.execute(
+                stmt.order_by(MedicalExam.valid_until.asc(), MedicalExam.exam_date.desc())
+                .offset(offset)
+                .limit(limit)
+            )
         )
-    ).scalars().all())
+        .scalars()
+        .all()
+    )
     total = await session.scalar(total_stmt)
     etag = compute_list_etag(
         tenant_id=str(tenant.id),
@@ -180,7 +230,9 @@ async def list_medical_exams(
             status_code=status.HTTP_304_NOT_MODIFIED,
             headers=build_not_modified_headers(etag),
         )
-    return MedicalExamPage(items=[MedicalExamRead.model_validate(item) for item in rows], total=int(total or 0))
+    return MedicalExamPage(
+        items=[MedicalExamRead.model_validate(item) for item in rows], total=int(total or 0)
+    )
 
 
 @router.post("/medical/requirements", response_model=TaskRead, status_code=status.HTTP_201_CREATED)
@@ -194,7 +246,11 @@ async def create_medical_requirement(
     TenantContextValidator.ensure_tenant_context(tenant)
 
     person = await session.scalar(
-        select(Person).where(Person.id == payload.person_id, Person.tenant_id == tenant.id, Person.deleted_at.is_(None))
+        select(Person).where(
+            Person.id == payload.person_id,
+            Person.tenant_id == tenant.id,
+            Person.deleted_at.is_(None),
+        )
     )
     if person is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Person not found")
@@ -210,20 +266,34 @@ async def create_medical_requirement(
     return TaskRead.model_validate(task)
 
 
-@router.post("/medical/exams", response_model=MedicalExamRead,
-             status_code=status.HTTP_201_CREATED, dependencies=[MedicalFeatureGate])
+@router.post(
+    "/medical/exams",
+    response_model=MedicalExamRead,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[MedicalFeatureGate],
+)
 async def create_medical_exam(
-    payload: MedicalExamCreate, tenant: TenantDep, session: SessionDep, access: MedicalAccess,
+    payload: MedicalExamCreate,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: MedicalAccess,
 ) -> MedicalExamRead:
     TenantContextValidator.ensure_tenant_context(tenant)
     try:
         exam = await medsvc.record_exam(
-            session, tenant_id=str(tenant.id), actor_id=getattr(access.user, "id", None),
-            person_id=payload.person_id, exam_kind=payload.exam_kind,
-            exam_date=payload.exam_date, fitness=payload.fitness,
-            contraindications=payload.contraindications, conclusion=payload.conclusion,
-            restrictions=payload.restrictions, valid_until=payload.valid_until,
-            medical_org_name=payload.medical_org_name, referral_id=payload.referral_id,
+            session,
+            tenant_id=str(tenant.id),
+            actor_id=getattr(access.user, "id", None),
+            person_id=payload.person_id,
+            exam_kind=payload.exam_kind,
+            exam_date=payload.exam_date,
+            fitness=payload.fitness,
+            contraindications=payload.contraindications,
+            conclusion=payload.conclusion,
+            restrictions=payload.restrictions,
+            valid_until=payload.valid_until,
+            medical_org_name=payload.medical_org_name,
+            referral_id=payload.referral_id,
             exam_type=payload.exam_type,
         )
     except ValueError as exc:
@@ -233,16 +303,26 @@ async def create_medical_exam(
     return MedicalExamRead.model_validate(exam)
 
 
-@router.get("/medical/exams/{exam_id}", response_model=MedicalExamRead,
-            dependencies=[MedicalFeatureGate])
+@router.get(
+    "/medical/exams/{exam_id}", response_model=MedicalExamRead, dependencies=[MedicalFeatureGate]
+)
 async def get_medical_exam(
-    exam_id: str, tenant: TenantDep, session: SessionDep, access: MedicalReadAccess,
+    exam_id: str,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: MedicalReadAccess,
 ) -> MedicalExamRead:
     TenantContextValidator.ensure_tenant_context(tenant)
     _ = access
-    record = (await session.execute(select(MedicalExam).where(
-        MedicalExam.id == exam_id, MedicalExam.tenant_id == tenant.id,
-        MedicalExam.deleted_at.is_(None)))).scalar_one_or_none()
+    record = (
+        await session.execute(
+            select(MedicalExam).where(
+                MedicalExam.id == exam_id,
+                MedicalExam.tenant_id == tenant.id,
+                MedicalExam.deleted_at.is_(None),
+            )
+        )
+    ).scalar_one_or_none()
     if record is None:
         raise HTTPException(
             status.HTTP_404_NOT_FOUND,
@@ -251,17 +331,25 @@ async def get_medical_exam(
     return MedicalExamRead.model_validate(record)
 
 
-@router.patch("/medical/exams/{exam_id}", response_model=MedicalExamRead,
-              dependencies=[MedicalFeatureGate])
+@router.patch(
+    "/medical/exams/{exam_id}", response_model=MedicalExamRead, dependencies=[MedicalFeatureGate]
+)
 async def update_medical_exam(
-    exam_id: str, payload: MedicalExamUpdate, tenant: TenantDep, session: SessionDep, access: MedicalAccess,
+    exam_id: str,
+    payload: MedicalExamUpdate,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: MedicalAccess,
 ) -> MedicalExamRead:
     TenantContextValidator.ensure_tenant_context(tenant)
     updates = payload.model_dump(exclude_unset=True)
     try:
         exam = await medsvc.update_exam(
-            session, tenant_id=str(tenant.id), actor_id=getattr(access.user, "id", None),
-            exam_id=exam_id, **updates,
+            session,
+            tenant_id=str(tenant.id),
+            actor_id=getattr(access.user, "id", None),
+            exam_id=exam_id,
+            **updates,
         )
     except ValueError as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail=str(exc))
@@ -270,19 +358,23 @@ async def update_medical_exam(
     return MedicalExamRead.model_validate(exam)
 
 
-@router.get("/medical/suspensions", response_model=MedicalSuspensionPage,
-            dependencies=[MedicalFeatureGate])
+@router.get(
+    "/medical/suspensions", response_model=MedicalSuspensionPage, dependencies=[MedicalFeatureGate]
+)
 async def list_suspensions(
     request: Request,
     response: Response,
-    tenant: TenantDep, session: SessionDep, access: MedicalReadAccess,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: MedicalReadAccess,
     person_id: str | None = Query(default=None),
     status_filter: str | None = Query(default=None, alias="status"),
 ) -> MedicalSuspensionPage | Response:
     TenantContextValidator.ensure_tenant_context(tenant)
     _ = access
     stmt = select(MedicalSuspension).where(
-        MedicalSuspension.tenant_id == tenant.id, MedicalSuspension.deleted_at.is_(None))
+        MedicalSuspension.tenant_id == tenant.id, MedicalSuspension.deleted_at.is_(None)
+    )
     if person_id:
         stmt = stmt.where(MedicalSuspension.person_id == person_id)
     if status_filter == "active":
@@ -304,7 +396,8 @@ async def list_suspensions(
             headers=build_not_modified_headers(etag),
         )
     return MedicalSuspensionPage(
-        items=[MedicalSuspensionRead.model_validate(r) for r in rows], total=len(rows))
+        items=[MedicalSuspensionRead.model_validate(r) for r in rows], total=len(rows)
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -312,39 +405,71 @@ async def list_suspensions(
 # ---------------------------------------------------------------------------
 
 
-@router.post("/medical/suspensions/{suspension_id}/lift",
-             response_model=MedicalSuspensionRead, dependencies=[MedicalFeatureGate])
+@router.post(
+    "/medical/suspensions/{suspension_id}/lift",
+    response_model=MedicalSuspensionRead,
+    dependencies=[MedicalFeatureGate],
+)
 async def lift_suspension(
-    request: Request, suspension_id: str, tenant: TenantDep, session: SessionDep, access: MedicalAccess,
+    request: Request,
+    suspension_id: str,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: MedicalAccess,
 ) -> MedicalSuspensionRead:
     TenantContextValidator.ensure_tenant_context(tenant)
     roles = {v.lower() for v in access.to_auth_context().roles}
     if not roles & lc.LIFT_SUSPENSION_ROLES:
-        raise HTTPException(status.HTTP_403_FORBIDDEN,
-                            detail=_error("suspension_lift_forbidden", "Only admin or owner may lift a medical suspension"))
-    record = (await session.execute(select(MedicalSuspension).where(
-        MedicalSuspension.id == suspension_id, MedicalSuspension.tenant_id == tenant.id,
-        MedicalSuspension.deleted_at.is_(None)))).scalar_one_or_none()
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            detail=_error(
+                "suspension_lift_forbidden", "Only admin or owner may lift a medical suspension"
+            ),
+        )
+    record = (
+        await session.execute(
+            select(MedicalSuspension).where(
+                MedicalSuspension.id == suspension_id,
+                MedicalSuspension.tenant_id == tenant.id,
+                MedicalSuspension.deleted_at.is_(None),
+            )
+        )
+    ).scalar_one_or_none()
     if record is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail=_error("suspension_not_found", "Suspension not found"))
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND, detail=_error("suspension_not_found", "Suspension not found")
+        )
     if record.status == MedicalSuspensionStatus.ACTIVE:
         record.status = MedicalSuspensionStatus.LIFTED
         record.lifted_at = datetime.now(timezone.utc)
         record.lifted_by = getattr(access.user, "id", None)
         from app.services.events import EventType
         from app.services.outbox import OutboxService
+
         await OutboxService(session).enqueue(
-            tenant_id=str(tenant.id), event_type=EventType.PERSON_REINSTATED.value,
+            tenant_id=str(tenant.id),
+            event_type=EventType.PERSON_REINSTATED.value,
             idempotency_key=f"person-reinstated:{record.id}",
-            payload={"tenant_id": str(tenant.id), "actor_id": getattr(access.user, "id", None),
-                     "suspension_id": record.id, "person_id": record.person_id})
+            payload={
+                "tenant_id": str(tenant.id),
+                "actor_id": getattr(access.user, "id", None),
+                "suspension_id": record.id,
+                "person_id": record.person_id,
+            },
+        )
         audit = AuditService(session)
         ip = request.client.host if request.client else "unknown"
         await audit.log_event(
-            tenant_id=str(tenant.id), action="lift", object_type="medical_suspension",
-            object_id=record.id, user_id=getattr(access.user, "id", None), ip=ip,
+            tenant_id=str(tenant.id),
+            action="lift",
+            object_type="medical_suspension",
+            object_id=record.id,
+            user_id=getattr(access.user, "id", None),
+            ip=ip,
             request_id=getattr(request.state, "trace_id", None),
-            user_agent=request.headers.get("user-agent"), details={"person_id": record.person_id})
+            user_agent=request.headers.get("user-agent"),
+            details={"person_id": record.person_id},
+        )
     await session.commit()
     await session.refresh(record)
     return MedicalSuspensionRead.model_validate(record)
@@ -397,8 +522,12 @@ async def list_medical_norms(
     )
 
 
-@router.post("/medical/norms", response_model=MedicalNormRead,
-             status_code=status.HTTP_201_CREATED, dependencies=[MedicalFeatureGate])
+@router.post(
+    "/medical/norms",
+    response_model=MedicalNormRead,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[MedicalFeatureGate],
+)
 async def create_medical_norm(
     request: Request,
     payload: MedicalNormCreate,
@@ -427,8 +556,9 @@ async def create_medical_norm(
     return MedicalNormRead.model_validate(record)
 
 
-@router.get("/medical/norms/{norm_id}", response_model=MedicalNormRead,
-            dependencies=[MedicalFeatureGate])
+@router.get(
+    "/medical/norms/{norm_id}", response_model=MedicalNormRead, dependencies=[MedicalFeatureGate]
+)
 async def get_medical_norm(
     norm_id: str,
     tenant: TenantDep,
@@ -441,8 +571,9 @@ async def get_medical_norm(
     return MedicalNormRead.model_validate(record)
 
 
-@router.patch("/medical/norms/{norm_id}", response_model=MedicalNormRead,
-              dependencies=[MedicalFeatureGate])
+@router.patch(
+    "/medical/norms/{norm_id}", response_model=MedicalNormRead, dependencies=[MedicalFeatureGate]
+)
 async def update_medical_norm(
     request: Request,
     norm_id: str,
@@ -472,8 +603,11 @@ async def update_medical_norm(
     return MedicalNormRead.model_validate(record)
 
 
-@router.delete("/medical/norms/{norm_id}", status_code=status.HTTP_204_NO_CONTENT,
-               dependencies=[MedicalFeatureGate])
+@router.delete(
+    "/medical/norms/{norm_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[MedicalFeatureGate],
+)
 async def delete_medical_norm(
     request: Request,
     norm_id: str,
@@ -505,8 +639,9 @@ async def delete_medical_norm(
 # ---------------------------------------------------------------------------
 
 
-@router.get("/medical/referrals", response_model=MedicalReferralPage,
-            dependencies=[MedicalFeatureGate])
+@router.get(
+    "/medical/referrals", response_model=MedicalReferralPage, dependencies=[MedicalFeatureGate]
+)
 async def list_medical_referrals(
     request: Request,
     response: Response,
@@ -522,7 +657,8 @@ async def list_medical_referrals(
     _ = access
     today = datetime.now(timezone.utc).date()
     stmt = select(MedicalReferral).where(
-        MedicalReferral.tenant_id == tenant.id, MedicalReferral.deleted_at.is_(None),
+        MedicalReferral.tenant_id == tenant.id,
+        MedicalReferral.deleted_at.is_(None),
     )
     if person_id:
         stmt = stmt.where(MedicalReferral.person_id == person_id)
@@ -555,8 +691,12 @@ async def list_medical_referrals(
     )
 
 
-@router.post("/medical/referrals", response_model=MedicalReferralRead,
-             status_code=status.HTTP_201_CREATED, dependencies=[MedicalFeatureGate])
+@router.post(
+    "/medical/referrals",
+    response_model=MedicalReferralRead,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[MedicalFeatureGate],
+)
 async def create_medical_referral(
     request: Request,
     payload: MedicalReferralCreate,
@@ -566,13 +706,15 @@ async def create_medical_referral(
 ) -> MedicalReferralRead:
     TenantContextValidator.ensure_tenant_context(tenant)
     today = datetime.now(timezone.utc).date()
-    person = (await session.execute(
-        select(Person).where(
-            Person.id == payload.person_id,
-            Person.tenant_id == tenant.id,
-            Person.deleted_at.is_(None),
+    person = (
+        await session.execute(
+            select(Person).where(
+                Person.id == payload.person_id,
+                Person.tenant_id == tenant.id,
+                Person.deleted_at.is_(None),
+            )
         )
-    )).scalar_one_or_none()
+    ).scalar_one_or_none()
     if person is None:
         raise HTTPException(
             status.HTTP_404_NOT_FOUND,
@@ -604,8 +746,11 @@ async def create_medical_referral(
     return _to_referral_read(ref, today=today)
 
 
-@router.get("/medical/referrals/{referral_id}", response_model=MedicalReferralRead,
-            dependencies=[MedicalFeatureGate])
+@router.get(
+    "/medical/referrals/{referral_id}",
+    response_model=MedicalReferralRead,
+    dependencies=[MedicalFeatureGate],
+)
 async def get_medical_referral(
     referral_id: str,
     tenant: TenantDep,
@@ -618,8 +763,11 @@ async def get_medical_referral(
     return _to_referral_read(record, today=datetime.now(timezone.utc).date())
 
 
-@router.post("/medical/referrals/{referral_id}/transition", response_model=MedicalReferralRead,
-             dependencies=[MedicalFeatureGate])
+@router.post(
+    "/medical/referrals/{referral_id}/transition",
+    response_model=MedicalReferralRead,
+    dependencies=[MedicalFeatureGate],
+)
 async def transition_referral(
     request: Request,
     referral_id: str,
@@ -646,19 +794,27 @@ async def transition_referral(
         if not effective:
             raise HTTPException(
                 status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=_error("result_required", "A result exam is required to complete a referral"),
+                detail=_error(
+                    "result_required", "A result exam is required to complete a referral"
+                ),
             )
     if payload.result_exam_id is not None:
-        exam = (await session.execute(select(MedicalExam).where(
-            MedicalExam.id == payload.result_exam_id,
-            MedicalExam.tenant_id == tenant.id,
-            MedicalExam.deleted_at.is_(None),
-        ))).scalar_one_or_none()
+        exam = (
+            await session.execute(
+                select(MedicalExam).where(
+                    MedicalExam.id == payload.result_exam_id,
+                    MedicalExam.tenant_id == tenant.id,
+                    MedicalExam.deleted_at.is_(None),
+                )
+            )
+        ).scalar_one_or_none()
         if exam is None:
             raise HTTPException(
                 status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=_error("result_exam_not_found",
-                              "result_exam_id does not reference an exam in this tenant"),
+                detail=_error(
+                    "result_exam_not_found",
+                    "result_exam_id does not reference an exam in this tenant",
+                ),
             )
         record.result_exam_id = payload.result_exam_id
     record.status = target
@@ -687,7 +843,9 @@ async def transition_referral(
 
 @router.get("/medical/factors", response_model=MedicalFactorPage, dependencies=[MedicalFeatureGate])
 async def list_medical_factors(
-    tenant: TenantDep, session: SessionDep, access: MedicalReadAccess,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: MedicalReadAccess,
     category: str | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
@@ -698,28 +856,43 @@ async def list_medical_factors(
     if category:
         stmt = stmt.where(MedicalFactor.category == category)
     total = await session.scalar(select(func.count()).select_from(stmt.subquery()))
-    rows = list((await session.execute(
-        stmt.order_by(MedicalFactor.code.asc()).offset(offset).limit(limit)
-    )).scalars().all())
+    rows = list(
+        (await session.execute(stmt.order_by(MedicalFactor.code.asc()).offset(offset).limit(limit)))
+        .scalars()
+        .all()
+    )
     return MedicalFactorPage(
-        items=[MedicalFactorRead.model_validate(r) for r in rows], total=int(total or 0),
+        items=[MedicalFactorRead.model_validate(r) for r in rows],
+        total=int(total or 0),
     )
 
 
-@router.post("/medical/factors", response_model=MedicalFactorRead,
-             status_code=status.HTTP_201_CREATED, dependencies=[MedicalFeatureGate])
+@router.post(
+    "/medical/factors",
+    response_model=MedicalFactorRead,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[MedicalFeatureGate],
+)
 async def create_medical_factor(
     request: Request,
-    payload: MedicalFactorCreate, tenant: TenantDep, session: SessionDep, access: MedicalAccess,
+    payload: MedicalFactorCreate,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: MedicalAccess,
 ) -> MedicalFactorRead:
     TenantContextValidator.ensure_tenant_context(tenant)
-    dup = await session.scalar(select(MedicalFactor).where(
-        MedicalFactor.tenant_id == tenant.id, MedicalFactor.code == payload.code,
-    ))
+    dup = await session.scalar(
+        select(MedicalFactor).where(
+            MedicalFactor.tenant_id == tenant.id,
+            MedicalFactor.code == payload.code,
+        )
+    )
     if dup is not None:
         raise HTTPException(
             status.HTTP_409_CONFLICT,
-            detail=_error("medical_factor_duplicate", f"Factor code already exists: {payload.code}"),
+            detail=_error(
+                "medical_factor_duplicate", f"Factor code already exists: {payload.code}"
+            ),
         )
     data = payload.model_dump()
     data["exam_kinds"] = [k.value for k in payload.exam_kinds]
@@ -743,22 +916,34 @@ async def create_medical_factor(
     return MedicalFactorRead.model_validate(record)
 
 
-@router.get("/medical/factors/{factor_id}", response_model=MedicalFactorRead,
-            dependencies=[MedicalFeatureGate])
+@router.get(
+    "/medical/factors/{factor_id}",
+    response_model=MedicalFactorRead,
+    dependencies=[MedicalFeatureGate],
+)
 async def get_medical_factor(
-    factor_id: str, tenant: TenantDep, session: SessionDep, access: MedicalReadAccess,
+    factor_id: str,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: MedicalReadAccess,
 ) -> MedicalFactorRead:
     TenantContextValidator.ensure_tenant_context(tenant)
     _ = access
     return MedicalFactorRead.model_validate(await _get_factor(session, str(tenant.id), factor_id))
 
 
-@router.patch("/medical/factors/{factor_id}", response_model=MedicalFactorRead,
-              dependencies=[MedicalFeatureGate])
+@router.patch(
+    "/medical/factors/{factor_id}",
+    response_model=MedicalFactorRead,
+    dependencies=[MedicalFeatureGate],
+)
 async def update_medical_factor(
     request: Request,
-    factor_id: str, payload: MedicalFactorUpdate, tenant: TenantDep,
-    session: SessionDep, access: MedicalAccess,
+    factor_id: str,
+    payload: MedicalFactorUpdate,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: MedicalAccess,
 ) -> MedicalFactorRead:
     TenantContextValidator.ensure_tenant_context(tenant)
     record = await _get_factor(session, str(tenant.id), factor_id)
@@ -784,11 +969,17 @@ async def update_medical_factor(
     return MedicalFactorRead.model_validate(record)
 
 
-@router.delete("/medical/factors/{factor_id}", status_code=status.HTTP_204_NO_CONTENT,
-               dependencies=[MedicalFeatureGate])
+@router.delete(
+    "/medical/factors/{factor_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[MedicalFeatureGate],
+)
 async def delete_medical_factor(
     request: Request,
-    factor_id: str, tenant: TenantDep, session: SessionDep, access: MedicalAccess,
+    factor_id: str,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: MedicalAccess,
 ) -> Response:
     TenantContextValidator.ensure_tenant_context(tenant)
     record = await _get_factor(session, str(tenant.id), factor_id)
@@ -809,24 +1000,31 @@ async def delete_medical_factor(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.get("/medical/contingent/register", response_model=ContingentRegisterPage,
-            dependencies=[MedicalFeatureGate])
+@router.get(
+    "/medical/contingent/register",
+    response_model=ContingentRegisterPage,
+    dependencies=[MedicalFeatureGate],
+)
 async def get_contingent_register(
-    tenant: TenantDep, session: SessionDep, access: MedicalReadAccess,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: MedicalReadAccess,
 ) -> ContingentRegisterPage:
     TenantContextValidator.ensure_tenant_context(tenant)
     _ = access
     today = datetime.now(timezone.utc).date()
     rows = await medsvc.build_contingent_register(session, tenant_id=str(tenant.id), today=today)
     return ContingentRegisterPage(
-        items=[ContingentRegisterRow(**r) for r in rows], total=len(rows),
+        items=[ContingentRegisterRow(**r) for r in rows],
+        total=len(rows),
     )
 
 
-@router.get("/medical/named-list", response_model=NamedListPage,
-            dependencies=[MedicalFeatureGate])
+@router.get("/medical/named-list", response_model=NamedListPage, dependencies=[MedicalFeatureGate])
 async def get_named_list(
-    tenant: TenantDep, session: SessionDep, access: MedicalReadAccess,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: MedicalReadAccess,
 ) -> NamedListPage:
     TenantContextValidator.ensure_tenant_context(tenant)
     _ = access
@@ -840,8 +1038,7 @@ async def get_named_list(
 # ---------------------------------------------------------------------------
 
 
-@router.get("/medical/contingent", response_model=ContingentPage,
-            dependencies=[MedicalFeatureGate])
+@router.get("/medical/contingent", response_model=ContingentPage, dependencies=[MedicalFeatureGate])
 async def get_medical_contingent(
     tenant: TenantDep,
     session: SessionDep,
@@ -853,7 +1050,10 @@ async def get_medical_contingent(
     _ = access
     today = datetime.now(timezone.utc).date()
     items = await medsvc.compute_contingent(
-        session, tenant_id=str(tenant.id), today=today, position_id=position_id,
+        session,
+        tenant_id=str(tenant.id),
+        today=today,
+        position_id=position_id,
     )
     if status_filter:
         items = [it for it in items if it["status"] == status_filter]
@@ -895,8 +1095,7 @@ async def generate_referrals(
     return {"count": count}
 
 
-@router.get("/medical/summary", response_model=MedicalSummary,
-            dependencies=[MedicalFeatureGate])
+@router.get("/medical/summary", response_model=MedicalSummary, dependencies=[MedicalFeatureGate])
 async def get_medical_summary(
     tenant: TenantDep,
     session: SessionDep,
@@ -905,4 +1104,6 @@ async def get_medical_summary(
     TenantContextValidator.ensure_tenant_context(tenant)
     _ = access
     today = datetime.now(timezone.utc).date()
-    return MedicalSummary(**await medsvc.status_summary(session, tenant_id=str(tenant.id), today=today))
+    return MedicalSummary(
+        **await medsvc.status_summary(session, tenant_id=str(tenant.id), today=today)
+    )

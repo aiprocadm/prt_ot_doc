@@ -21,8 +21,12 @@ def _docx(text: str) -> bytes:
 
 def test_passport_hash_is_stable_for_same_payload() -> None:
     payload = {"a": 1, "b": {"x": "y"}}
-    h1 = compute_sha256_input(payload, mapping={"m": 1}, template_version_id="t1", options={"visible": True})
-    h2 = compute_sha256_input(payload, mapping={"m": 1}, template_version_id="t1", options={"visible": True})
+    h1 = compute_sha256_input(
+        payload, mapping={"m": 1}, template_version_id="t1", options={"visible": True}
+    )
+    h2 = compute_sha256_input(
+        payload, mapping={"m": 1}, template_version_id="t1", options={"visible": True}
+    )
     assert h1 == h2
 
 
@@ -62,6 +66,10 @@ def test_correlation_id_propagates_to_document_version_and_job() -> None:
         version_number=2,
     )
     assert passport["correlation_id"] == "corr-123"
-    data_json = {"payload": {"x": 1}, "passport": passport, "correlation_id": passport["correlation_id"]}
+    data_json = {
+        "payload": {"x": 1},
+        "passport": passport,
+        "correlation_id": passport["correlation_id"],
+    }
     assert data_json["correlation_id"] == "corr-123"
     assert data_json["passport"]["document_version_id"] == "ver-1"

@@ -28,6 +28,7 @@ Downgrade честно воссоздаёт обе таблицы в состо�
     ``status`` (20260529_iter38; его downgrade сбросит default позже по пути
     к base — round-trip симметрия) + её 2 индекса.
 """
+
 from __future__ import annotations
 
 import sqlalchemy as sa
@@ -41,21 +42,35 @@ depends_on = None
 
 # Независимые таблицы (FK между ними нет) — порядок не критичен.
 DROPPED_TABLES = (
-    "signatures",      # Signature (approval_workflow.py, удалён)
-    "edo_envelopes",   # EdoEnvelope (models.py, удалён)
+    "signatures",  # Signature (approval_workflow.py, удалён)
+    "edo_envelopes",  # EdoEnvelope (models.py, удалён)
 )
 
 # PG enum-типы, осиротевшие после DROP (создавались create_type=False,
 # поэтому create/drop здесь явные; на SQLite оба вызова — no-op).
 signature_type = postgresql.ENUM(
-    "KEP", "UNEP", "INTERNAL", name="signaturetype", create_type=False,
+    "KEP",
+    "UNEP",
+    "INTERNAL",
+    name="signaturetype",
+    create_type=False,
 )
 signature_status = postgresql.ENUM(
-    "pending", "signed", "failed", name="signaturestatus", create_type=False,
+    "pending",
+    "signed",
+    "failed",
+    name="signaturestatus",
+    create_type=False,
 )
 edo_envelope_status = postgresql.ENUM(
-    "queued", "sent", "delivered", "signed", "rejected", "failed",
-    name="edoenvelopestatus", create_type=False,
+    "queued",
+    "sent",
+    "delivered",
+    "signed",
+    "rejected",
+    "failed",
+    name="edoenvelopestatus",
+    create_type=False,
 )
 
 
@@ -113,4 +128,6 @@ def downgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index("ix_edo_envelopes_status", "edo_envelopes", ["tenant_id", "status"])
-    op.create_index("ix_edo_envelopes_object", "edo_envelopes", ["tenant_id", "object_type", "object_id"])
+    op.create_index(
+        "ix_edo_envelopes_object", "edo_envelopes", ["tenant_id", "object_type", "object_id"]
+    )

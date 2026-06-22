@@ -7,4 +7,6 @@ from typing import Any
 
 
 def compute_inbound_dedup_key(payload: dict[str, Any], raw_body: bytes) -> str:
-    return str(payload.get("event_id") or payload.get("message_id") or hashlib.sha256(raw_body).hexdigest())
+    return str(
+        payload.get("event_id") or payload.get("message_id") or hashlib.sha256(raw_body).hexdigest()
+    )

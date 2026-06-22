@@ -15,9 +15,19 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column("auditlog", sa.Column("correlation_id", sa.String(length=128), nullable=False, server_default="unknown"))
-    op.add_column("auditlog", sa.Column("resource_attrs", sa.JSON(), nullable=False, server_default=sa.text("'{}'")))
-    op.add_column("auditlog", sa.Column("hash", sa.String(length=64), nullable=False, server_default=""))
+    op.add_column(
+        "auditlog",
+        sa.Column(
+            "correlation_id", sa.String(length=128), nullable=False, server_default="unknown"
+        ),
+    )
+    op.add_column(
+        "auditlog",
+        sa.Column("resource_attrs", sa.JSON(), nullable=False, server_default=sa.text("'{}'")),
+    )
+    op.add_column(
+        "auditlog", sa.Column("hash", sa.String(length=64), nullable=False, server_default="")
+    )
     op.add_column("auditlog", sa.Column("prev_hash", sa.String(length=64), nullable=True))
     op.create_index("ix_auditlog_corr", "auditlog", ["correlation_id"], unique=False)
 

@@ -54,9 +54,7 @@ def _scale_values(definition: dict[str, object], key: str) -> list[int]:
         for item in raw:
             if isinstance(item, int):
                 values.append(item)
-            elif isinstance(item, dict) and "value" in item and isinstance(
-                item["value"], int
-            ):
+            elif isinstance(item, dict) and "value" in item and isinstance(item["value"], int):
                 values.append(int(item["value"]))
     if not values:
         return [1, 2, 3, 4, 5]
@@ -89,9 +87,7 @@ async def rebuild_matrix_from_methodology(
     severities = _scale_values(definition, "severity_scale")
     likelihoods = _scale_values(definition, "likelihood_scale")
 
-    await session.execute(
-        select(RiskMatrixCell).where(RiskMatrixCell.tenant_id == tenant_id)
-    )
+    await session.execute(select(RiskMatrixCell).where(RiskMatrixCell.tenant_id == tenant_id))
     await session.execute(
         RiskMatrixCell.__table__.delete().where(RiskMatrixCell.tenant_id == tenant_id)
     )

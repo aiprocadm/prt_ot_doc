@@ -3,6 +3,7 @@
 Lifted from ``domains/medical/lifecycle.py`` so non-medical contours (e.g.
 contractors) can reuse deadline classification without importing medical.
 """
+
 from __future__ import annotations
 
 import enum

@@ -7,6 +7,8 @@ from app.core.utils.canonical_hash import compute_sha256_input
 from app.domains.templating.renderer import render_docx as _render_docx_production
 from app.modules.templates.linter import (
     inspect_template_context as _inspect_template_context,
+)
+from app.modules.templates.linter import (
     lint_template,
 )
 from app.modules.templates.passport import inject_passport

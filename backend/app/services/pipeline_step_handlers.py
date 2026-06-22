@@ -16,7 +16,9 @@ from app.services.integrations.factory import get_edo_integration
 StepHandler = Callable[..., Awaitable[dict[str, Any]]]
 
 
-async def validate_template_step_handler(*, session, job: DocumentJob, step: DocumentJobStep) -> dict[str, Any]:
+async def validate_template_step_handler(
+    *, session, job: DocumentJob, step: DocumentJobStep
+) -> dict[str, Any]:
     """Проверяет, что код шаблона и версия существуют и пригодны для генерации."""
 
     from app.models.models import Template, TemplateVersion, TemplateVersionStatus
@@ -85,7 +87,9 @@ async def validate_template_step_handler(*, session, job: DocumentJob, step: Doc
     }
 
 
-async def artifact_step_handler(*, session, job: DocumentJob, step: DocumentJobStep, step_key: str) -> dict[str, Any]:
+async def artifact_step_handler(
+    *, session, job: DocumentJob, step: DocumentJobStep, step_key: str
+) -> dict[str, Any]:
     payload = f"{step_key}:{job.id}".encode("utf-8")
     ext = "pdf" if step_key == "convert_pdf" else ("zip" if step_key == "build_zip" else "bin")
     filename = build_artifact_name(job.input_payload_json or {}, ext=ext)
@@ -121,7 +125,9 @@ async def artifact_step_handler(*, session, job: DocumentJob, step: DocumentJobS
     return {"file_id": file_record.id, "kind": step_key, "display_name": filename}
 
 
-async def signature_step_handler(*, job: DocumentJob, step: DocumentJobStep, step_key: str) -> dict[str, Any]:
+async def signature_step_handler(
+    *, job: DocumentJob, step: DocumentJobStep, step_key: str
+) -> dict[str, Any]:
     payload = job.input_payload_json or {}
     digest = hashlib.sha256(
         json.dumps(
@@ -184,11 +190,19 @@ async def edo_step_handler(*, job: DocumentJob, step: DocumentJobStep) -> dict[s
     }
 
 
-async def index_projection_step_handler(*, job: DocumentJob, step: DocumentJobStep) -> dict[str, Any]:
+async def index_projection_step_handler(
+    *, job: DocumentJob, step: DocumentJobStep
+) -> dict[str, Any]:
     payload = step.input or {}
     source_payload = payload.get("payload") if isinstance(payload, dict) else {}
-    serialized = json.dumps(source_payload or job.input_payload_json or {}, sort_keys=True, default=str)
-    tokens = [token for token in serialized.replace("{", " ").replace("}", " ").replace('"', " ").split() if token]
+    serialized = json.dumps(
+        source_payload or job.input_payload_json or {}, sort_keys=True, default=str
+    )
+    tokens = [
+        token
+        for token in serialized.replace("{", " ").replace("}", " ").replace('"', " ").split()
+        if token
+    ]
     return {
         "status": "indexed",
         "source": "job_payload_projection",
@@ -199,14 +213,24 @@ async def index_projection_step_handler(*, job: DocumentJob, step: DocumentJobSt
 
 async def quality_gate_step_handler(*, job: DocumentJob, step: DocumentJobStep) -> dict[str, Any]:
     payload = job.input_payload_json or {}
-    data = payload.get("inline_data") if isinstance(payload.get("inline_data"), dict) else payload.get("data")
+    data = (
+        payload.get("inline_data")
+        if isinstance(payload.get("inline_data"), dict)
+        else payload.get("data")
+    )
     if not isinstance(data, dict):
         data = {}
     config = step.input.get("config", {}) if isinstance(step.input, dict) else {}
-    required_fields = config.get("required_fields") if isinstance(config.get("required_fields"), list) else []
+    required_fields = (
+        config.get("required_fields") if isinstance(config.get("required_fields"), list) else []
+    )
     date_fields = config.get("date_fields") if isinstance(config.get("date_fields"), list) else []
-    numeric_fields = config.get("numeric_fields") if isinstance(config.get("numeric_fields"), list) else []
-    rendered_text = config.get("rendered_text") if isinstance(config.get("rendered_text"), str) else None
+    numeric_fields = (
+        config.get("numeric_fields") if isinstance(config.get("numeric_fields"), list) else []
+    )
+    rendered_text = (
+        config.get("rendered_text") if isinstance(config.get("rendered_text"), str) else None
+    )
     report = build_quality_report(
         data=data,
         required_fields=[str(x) for x in required_fields],

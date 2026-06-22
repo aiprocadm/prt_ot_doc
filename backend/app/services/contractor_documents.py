@@ -4,6 +4,7 @@ Mirrors ``notify_readiness`` (contractor_admission.py): load tenant documents th
 carry a ``valid_until``, classify, enqueue an outbox event for DUE_SOON / OVERDUE.
 Idempotent per (document, status, UTC date).
 """
+
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -33,10 +34,14 @@ async def _outbox_key_exists(session: AsyncSession, *, tenant_id: str, key: str)
     "already emitted today". A destination-scoped check would over-count in the
     has-destinations regime.
     """
-    stmt = select(Outbox.id).where(
-        Outbox.tenant_id == tenant_id,
-        Outbox.idempotency_key == key,
-    ).limit(1)
+    stmt = (
+        select(Outbox.id)
+        .where(
+            Outbox.tenant_id == tenant_id,
+            Outbox.idempotency_key == key,
+        )
+        .limit(1)
+    )
     result = await session.execute(stmt)
     return result.scalar_one_or_none() is not None
 

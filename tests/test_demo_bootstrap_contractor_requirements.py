@@ -1,4 +1,5 @@
 """Demo bootstrap seeds tenant document requirements (sro/company, medical_cert/employee)."""
+
 from __future__ import annotations
 
 import pytest
@@ -20,12 +21,18 @@ async def test_seed_requirements_idempotent(sessionmaker, data_factory):
         await _seed_contractor_requirements(session, tid)
         await session.commit()
 
-        rows = (await session.execute(
-            select(ContractorDocumentRequirement).where(
-                ContractorDocumentRequirement.tenant_id == tid,
-                ContractorDocumentRequirement.deleted_at.is_(None),
+        rows = (
+            (
+                await session.execute(
+                    select(ContractorDocumentRequirement).where(
+                        ContractorDocumentRequirement.tenant_id == tid,
+                        ContractorDocumentRequirement.deleted_at.is_(None),
+                    )
+                )
             )
-        )).scalars().all()
+            .scalars()
+            .all()
+        )
 
     pairs = {(r.doc_type, r.scope) for r in rows}
     assert ("sro", "company") in pairs

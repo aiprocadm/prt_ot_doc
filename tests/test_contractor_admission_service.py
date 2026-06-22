@@ -3,6 +3,7 @@
 Fixture name: ``sessionmaker`` / ``data_factory`` — same as test_medical_service.py.
 Pattern: async with sessionmaker() as session → seed → commit → call service.
 """
+
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
@@ -19,10 +20,10 @@ from app.services.contractor_admission import (
     evaluate_contractor_admission,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _now_utc() -> datetime:
     return datetime.now(tz=timezone.utc)
@@ -96,12 +97,12 @@ async def test_evaluate_returns_verdicts(sessionmaker, data_factory):
     ready_verdict = next(v for v in verdicts if v.employee_id == ready.id)
     stale_verdict = next(v for v in verdicts if v.employee_id == stale.id)
 
-    assert ready_verdict.status is ReadinessStatus.ALLOWED, (
-        f"Expected ALLOWED, got {ready_verdict.status}; violations={ready_verdict.violations}"
-    )
-    assert stale_verdict.status is ReadinessStatus.BLOCKED, (
-        f"Expected BLOCKED, got {stale_verdict.status}"
-    )
+    assert (
+        ready_verdict.status is ReadinessStatus.ALLOWED
+    ), f"Expected ALLOWED, got {ready_verdict.status}; violations={ready_verdict.violations}"
+    assert (
+        stale_verdict.status is ReadinessStatus.BLOCKED
+    ), f"Expected BLOCKED, got {stale_verdict.status}"
     assert "medical" in stale_verdict.violations
 
 
@@ -201,8 +202,8 @@ async def test_notify_readiness_enqueues_for_non_allowed(sessionmaker, data_fact
         session.add(registry)
         await session.flush()
 
-        ready = _make_ready_employee(tid, registry.id)   # ALLOWED — must be skipped
-        stale = _make_stale_employee(tid, registry.id)   # BLOCKED — must be enqueued
+        ready = _make_ready_employee(tid, registry.id)  # ALLOWED — must be skipped
+        stale = _make_stale_employee(tid, registry.id)  # BLOCKED — must be enqueued
         session.add(ready)
         session.add(stale)
         await session.commit()

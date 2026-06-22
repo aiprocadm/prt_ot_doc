@@ -85,39 +85,61 @@ async def dashboard_summary(
     due_soon_date = today + timedelta(days=14)
     open_statuses = [TaskStatus.OPEN, TaskStatus.IN_PROGRESS]
 
-    overdue_tasks_stmt = select(func.count()).select_from(Task).where(
-        Task.tenant_id == tenant.id,
-        Task.status.in_(open_statuses),
-        Task.due_at.is_not(None),
-        Task.due_at < now,
+    overdue_tasks_stmt = (
+        select(func.count())
+        .select_from(Task)
+        .where(
+            Task.tenant_id == tenant.id,
+            Task.status.in_(open_statuses),
+            Task.due_at.is_not(None),
+            Task.due_at < now,
+        )
     )
-    critical_obligations_stmt = select(func.count()).select_from(Task).where(
-        Task.tenant_id == tenant.id,
-        Task.status.in_(open_statuses),
-        Task.priority.in_([TaskPriority.HIGH, TaskPriority.CRITICAL]),
-        Task.due_at.is_not(None),
-        Task.due_at <= now + timedelta(days=7),
+    critical_obligations_stmt = (
+        select(func.count())
+        .select_from(Task)
+        .where(
+            Task.tenant_id == tenant.id,
+            Task.status.in_(open_statuses),
+            Task.priority.in_([TaskPriority.HIGH, TaskPriority.CRITICAL]),
+            Task.due_at.is_not(None),
+            Task.due_at <= now + timedelta(days=7),
+        )
     )
-    incidents_open_stmt = select(func.count()).select_from(Incident).where(
-        Incident.tenant_id == tenant.id,
-        Incident.status.notin_([IncidentStatus.CLOSED, IncidentStatus.CANCELLED]),
+    incidents_open_stmt = (
+        select(func.count())
+        .select_from(Incident)
+        .where(
+            Incident.tenant_id == tenant.id,
+            Incident.status.notin_([IncidentStatus.CLOSED, IncidentStatus.CANCELLED]),
+        )
     )
-    risks_total_stmt = select(func.count()).select_from(RiskAssessment).where(
-        RiskAssessment.tenant_id == tenant.id
+    risks_total_stmt = (
+        select(func.count())
+        .select_from(RiskAssessment)
+        .where(RiskAssessment.tenant_id == tenant.id)
     )
-    training_total_stmt = select(func.count()).select_from(TrainingPlan).where(
-        TrainingPlan.tenant_id == tenant.id
+    training_total_stmt = (
+        select(func.count()).select_from(TrainingPlan).where(TrainingPlan.tenant_id == tenant.id)
     )
-    training_overdue_stmt = select(func.count()).select_from(TrainingPlan).where(
-        TrainingPlan.tenant_id == tenant.id,
-        TrainingPlan.due_date.is_not(None),
-        TrainingPlan.due_date < today,
+    training_overdue_stmt = (
+        select(func.count())
+        .select_from(TrainingPlan)
+        .where(
+            TrainingPlan.tenant_id == tenant.id,
+            TrainingPlan.due_date.is_not(None),
+            TrainingPlan.due_date < today,
+        )
     )
-    training_due_soon_stmt = select(func.count()).select_from(TrainingPlan).where(
-        TrainingPlan.tenant_id == tenant.id,
-        TrainingPlan.due_date.is_not(None),
-        TrainingPlan.due_date >= today,
-        TrainingPlan.due_date <= due_soon_date,
+    training_due_soon_stmt = (
+        select(func.count())
+        .select_from(TrainingPlan)
+        .where(
+            TrainingPlan.tenant_id == tenant.id,
+            TrainingPlan.due_date.is_not(None),
+            TrainingPlan.due_date >= today,
+            TrainingPlan.due_date <= due_soon_date,
+        )
     )
 
     overdue_tasks = await _scalar(session, overdue_tasks_stmt)
@@ -188,20 +210,24 @@ async def dashboard_operational_snapshot(
     open_task_statuses = [TaskStatus.OPEN, TaskStatus.IN_PROGRESS]
 
     task_rows = (
-        await session.execute(
-            select(Task)
-            .where(
-                Task.tenant_id == tenant.id,
-                Task.status.in_(open_task_statuses),
+        (
+            await session.execute(
+                select(Task)
+                .where(
+                    Task.tenant_id == tenant.id,
+                    Task.status.in_(open_task_statuses),
+                )
+                .order_by(
+                    case((Task.due_at.is_(None), 1), else_=0),
+                    Task.due_at.asc(),
+                    Task.created_at.desc(),
+                )
+                .limit(5)
             )
-            .order_by(
-                case((Task.due_at.is_(None), 1), else_=0),
-                Task.due_at.asc(),
-                Task.created_at.desc(),
-            )
-            .limit(5)
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
 
     document_rows = (
         await session.execute(
@@ -215,21 +241,27 @@ async def dashboard_operational_snapshot(
 
     packages_total = await _safe_scalar(
         session,
-        select(func.count()).select_from(InspectionPrepPackage).where(
+        select(func.count())
+        .select_from(InspectionPrepPackage)
+        .where(
             InspectionPrepPackage.tenant_id == str(tenant.id),
             InspectionPrepPackage.deleted_at.is_(None),
         ),
     )
     open_gaps = await _safe_scalar(
         session,
-        select(func.count()).select_from(InspectionPrepGap).where(
+        select(func.count())
+        .select_from(InspectionPrepGap)
+        .where(
             InspectionPrepGap.tenant_id == str(tenant.id),
             InspectionPrepGap.status == "open",
         ),
     )
     critical_gaps = await _safe_scalar(
         session,
-        select(func.count()).select_from(InspectionPrepGap).where(
+        select(func.count())
+        .select_from(InspectionPrepGap)
+        .where(
             InspectionPrepGap.tenant_id == str(tenant.id),
             InspectionPrepGap.status == "open",
             InspectionPrepGap.severity == "critical",
@@ -240,7 +272,7 @@ async def dashboard_operational_snapshot(
         select(func.max(InspectionPrepPackage.target_inspection_date)).where(
             InspectionPrepPackage.tenant_id == str(tenant.id),
             InspectionPrepPackage.deleted_at.is_(None),
-        )
+        ),
     )
 
     readiness_score = max(0, 100 - min(70, open_gaps * 10 + critical_gaps * 15))
@@ -261,7 +293,9 @@ async def dashboard_operational_snapshot(
                 title=task.title,
                 owner_label=_task_owner_label(task),
                 due_at=_as_utc_datetime(task.due_at).isoformat() if task.due_at else None,
-                priority=task.priority.value if hasattr(task.priority, "value") else str(task.priority),
+                priority=(
+                    task.priority.value if hasattr(task.priority, "value") else str(task.priority)
+                ),
                 status=task.status.value if hasattr(task.status, "value") else str(task.status),
                 overdue=bool((due_at := _as_utc_datetime(task.due_at)) and due_at < now),
                 entity_type=task.entity_type,

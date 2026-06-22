@@ -203,7 +203,15 @@ async def test_step_retry_does_not_duplicate_artifacts(
         )
         await orchestrator.run_job(job_id=job.id, fail_step="convert_pdf")
         await orchestrator.retry_job(job_id=job.id)
-        artifacts = (await session.execute(select(DocumentArtifact).where(DocumentArtifact.job_id == job.id))).scalars().all()
+        artifacts = (
+            (
+                await session.execute(
+                    select(DocumentArtifact).where(DocumentArtifact.job_id == job.id)
+                )
+            )
+            .scalars()
+            .all()
+        )
         keys = {(a.step_code, a.kind) for a in artifacts}
         assert len(artifacts) == len(keys)
 
@@ -224,13 +232,15 @@ async def test_outbox_created_on_success(
         )
         await orchestrator.run_job(job_id=job.id)
         events = (
-            await session.execute(
-                select(OutboxEvent).where(OutboxEvent.tenant_id == TENANT_ONE_JOB_ENGINE_ID)
+            (
+                await session.execute(
+                    select(OutboxEvent).where(OutboxEvent.tenant_id == TENANT_ONE_JOB_ENGINE_ID)
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         assert any(e.event_type == "DocumentGenerated" for e in events)
-
-
 
 
 @pytest.mark.anyio
@@ -247,9 +257,13 @@ async def test_idempotency_parallel_wait_returns_same_response(
         async def second_request() -> str:
             async with sessionmaker() as second_session:
                 idem2 = IdempotencyService(
-                    session=second_session, tenant_id=TENANT_ONE_JOB_ENGINE_ID, endpoint="documents.generate"
+                    session=second_session,
+                    tenant_id=TENANT_ONE_JOB_ENGINE_ID,
+                    endpoint="documents.generate",
                 )
-                rec2, created2 = await idem2.acquire(key="race-key", request_hash="hash-race", wait_timeout_seconds=1.0)
+                rec2, created2 = await idem2.acquire(
+                    key="race-key", request_hash="hash-race", wait_timeout_seconds=1.0
+                )
                 assert created2 is False
                 return str(rec2.status)
 
@@ -286,7 +300,9 @@ async def test_dispatch_outbox_events_retries_and_poisoned(
     await _dispatch_outbox_events(max_attempts=1, tenant_slug="tenant-1")
 
     async with session_scope(tenant="tenant-1") as session:
-        event = (await session.execute(select(OutboxEvent).where(OutboxEvent.event_id == "evt-fail"))).scalar_one()
+        event = (
+            await session.execute(select(OutboxEvent).where(OutboxEvent.event_id == "evt-fail"))
+        ).scalar_one()
         assert event.status == OutboxEventStatus.POISONED.value
         assert event.attempts >= 1
 
@@ -317,8 +333,12 @@ async def test_dispatch_outbox_events_sends_pending(
     assert processed >= 1
 
     async with session_scope(tenant="tenant-1") as session:
-        event = (await session.execute(select(OutboxEvent).where(OutboxEvent.event_id == "evt-ok"))).scalar_one()
+        event = (
+            await session.execute(select(OutboxEvent).where(OutboxEvent.event_id == "evt-ok"))
+        ).scalar_one()
         assert event.status == OutboxEventStatus.SENT.value
+
+
 @pytest.mark.anyio
 async def test_request_hash_stable_for_sorted_keys() -> None:
     from app.core.idempotency import compute_request_hash

@@ -25,6 +25,7 @@ them, in the state they would have at this chain position:
     iter37's own downgrade then resets it on the way to base (round-trip
     symmetry: ``upgrade heads`` -> ``downgrade base`` -> ``upgrade heads``).
 """
+
 from __future__ import annotations
 
 import sqlalchemy as sa
@@ -38,12 +39,12 @@ depends_on = None
 # FK-dependency-safe DROP order: children (link tables) before parents.
 DROPPED_TABLES = (
     "ppe_personal_card_items",  # FK -> ppe_personal_cards, ppe_catalog, ppe_issues
-    "ppe_personal_cards",       # FK -> persons
-    "ppe_issues",               # FK -> persons, ppe_catalog, ppe_norm_items
-    "ppe_norm_items",           # FK -> ppe_norms, ppe_catalog
+    "ppe_personal_cards",  # FK -> persons
+    "ppe_issues",  # FK -> persons, ppe_catalog, ppe_norm_items
+    "ppe_norm_items",  # FK -> ppe_norms, ppe_catalog
     "ppe_norms",
     "ppe_catalog",
-    "warehouseppe",             # FK -> tenant only; independent of the six above
+    "warehouseppe",  # FK -> tenant only; independent of the six above
 )
 
 
@@ -119,7 +120,9 @@ def downgrade() -> None:
         sa.Column("issued_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("due_return_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("basis_text", sa.Text(), nullable=True),
-        sa.Column("related_norm_item_id", sa.String(36), sa.ForeignKey("ppe_norm_items.id"), nullable=True),
+        sa.Column(
+            "related_norm_item_id", sa.String(36), sa.ForeignKey("ppe_norm_items.id"), nullable=True
+        ),
         sa.Column("issued_by", sa.String(36), nullable=True),
         *_audit_cols(),
     )
@@ -136,7 +139,12 @@ def downgrade() -> None:
         "ppe_personal_card_items",
         sa.Column("id", sa.String(36), primary_key=True),
         sa.Column("tenant_id", sa.String(36), sa.ForeignKey("tenant.id"), nullable=False),
-        sa.Column("personal_card_id", sa.String(36), sa.ForeignKey("ppe_personal_cards.id"), nullable=False),
+        sa.Column(
+            "personal_card_id",
+            sa.String(36),
+            sa.ForeignKey("ppe_personal_cards.id"),
+            nullable=False,
+        ),
         sa.Column("ppe_catalog_id", sa.String(36), sa.ForeignKey("ppe_catalog.id"), nullable=False),
         sa.Column("last_issue_id", sa.String(36), sa.ForeignKey("ppe_issues.id"), nullable=True),
         sa.Column("current_quantity", sa.Numeric(10, 2), nullable=False, server_default="0"),
@@ -148,9 +156,21 @@ def downgrade() -> None:
 
     # next58 created these explicitly; its downgrade drops them explicitly —
     # they must exist again for `downgrade base` to pass through next58.
-    op.create_index("ix_ppe_norm_items_filter", "ppe_norm_items", ["ppe_norm_id", "applies_to_type", "applies_to_id"])
-    op.create_index("ix_ppe_issues_filter", "ppe_issues", ["tenant_id", "person_id", "ppe_catalog_id", "issued_at"])
-    op.create_index("ix_ppe_personal_card_items_filter", "ppe_personal_card_items", ["personal_card_id", "ppe_catalog_id"])
+    op.create_index(
+        "ix_ppe_norm_items_filter",
+        "ppe_norm_items",
+        ["ppe_norm_id", "applies_to_type", "applies_to_id"],
+    )
+    op.create_index(
+        "ix_ppe_issues_filter",
+        "ppe_issues",
+        ["tenant_id", "person_id", "ppe_catalog_id", "issued_at"],
+    )
+    op.create_index(
+        "ix_ppe_personal_card_items_filter",
+        "ppe_personal_card_items",
+        ["personal_card_id", "ppe_catalog_id"],
+    )
 
     # --- warehouseppe, verbatim from the initial schema 6b6dee7c951f ------
     # plus quantity server_default="0" (iter37 state at this chain position).

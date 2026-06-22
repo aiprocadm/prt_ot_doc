@@ -58,7 +58,9 @@ class ApprovalRouteService:
         )
         rows = (await self.session.execute(stmt)).scalars().all()
         context = context or {}
-        matching = [row for row in rows if self._matches_conditions(row.conditions_json or {}, context)]
+        matching = [
+            row for row in rows if self._matches_conditions(row.conditions_json or {}, context)
+        ]
         if matching:
             return matching[0]
         return next((row for row in rows if row.is_default), None)
@@ -69,17 +71,26 @@ class ApprovalInstanceService:
         self.session = session
         self.tenant_id = tenant_id
 
-    async def start(self, *, entity_type: str, entity_id: str, approval_route_id: str, started_by: str) -> ApprovalInstance:
+    async def start(
+        self, *, entity_type: str, entity_id: str, approval_route_id: str, started_by: str
+    ) -> ApprovalInstance:
         route = await self.session.get(ApprovalRoute, approval_route_id)
         if route is None or str(route.tenant_id) != str(self.tenant_id):
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Approval route not found")
         steps = (
-            await self.session.execute(
-                select(ApprovalRouteStep)
-                .where(ApprovalRouteStep.approval_route_id == route.id, ApprovalRouteStep.tenant_id == self.tenant_id)
-                .order_by(ApprovalRouteStep.order_no.asc())
+            (
+                await self.session.execute(
+                    select(ApprovalRouteStep)
+                    .where(
+                        ApprovalRouteStep.approval_route_id == route.id,
+                        ApprovalRouteStep.tenant_id == self.tenant_id,
+                    )
+                    .order_by(ApprovalRouteStep.order_no.asc())
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         if not steps:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Approval route has no steps")
         instance = ApprovalInstance(
@@ -96,8 +107,15 @@ class ApprovalInstanceService:
         await self.session.flush()
         for step in steps:
             if not step.user_id and not step.role_code:
-                raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Approval step requires assignee user_id or role_code")
-            due_at = datetime.now(tz=timezone.utc) + timedelta(hours=step.deadline_hours) if step.deadline_hours else None
+                raise HTTPException(
+                    status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    "Approval step requires assignee user_id or role_code",
+                )
+            due_at = (
+                datetime.now(tz=timezone.utc) + timedelta(hours=step.deadline_hours)
+                if step.deadline_hours
+                else None
+            )
             self.session.add(
                 ApprovalInstanceStep(
                     tenant_id=self.tenant_id,
@@ -119,21 +137,32 @@ class ApprovalDecisionService:
         self.session = session
         self.tenant_id = tenant_id
 
-    async def decide(self, *, instance_id: str, actor_user_id: str, decision: str, comment: str | None = None, target_user_id: str | None = None) -> ApprovalInstance:
+    async def decide(
+        self,
+        *,
+        instance_id: str,
+        actor_user_id: str,
+        decision: str,
+        comment: str | None = None,
+        target_user_id: str | None = None,
+    ) -> ApprovalInstance:
         instance = await self.session.get(ApprovalInstance, instance_id)
         if instance is None or str(instance.tenant_id) != str(self.tenant_id):
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Approval instance not found")
         step = (
-            await self.session.execute(
-                select(ApprovalInstanceStep)
-                .where(
-                    ApprovalInstanceStep.tenant_id == self.tenant_id,
-                    ApprovalInstanceStep.approval_instance_id == instance.id,
-                    ApprovalInstanceStep.order_no == instance.current_step_no,
-                    ApprovalInstanceStep.status == ApprovalInstanceStepStatus.PENDING,
+            (
+                await self.session.execute(
+                    select(ApprovalInstanceStep).where(
+                        ApprovalInstanceStep.tenant_id == self.tenant_id,
+                        ApprovalInstanceStep.approval_instance_id == instance.id,
+                        ApprovalInstanceStep.order_no == instance.current_step_no,
+                        ApprovalInstanceStep.status == ApprovalInstanceStepStatus.PENDING,
+                    )
                 )
             )
-        ).scalars().first()
+            .scalars()
+            .first()
+        )
         if step is None:
             raise HTTPException(status.HTTP_409_CONFLICT, "No pending step")
         self.session.add(
@@ -151,7 +180,9 @@ class ApprovalDecisionService:
             return instance
         if decision == "delegate":
             if not target_user_id:
-                raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "target_user_id is required for delegate")
+                raise HTTPException(
+                    status.HTTP_422_UNPROCESSABLE_ENTITY, "target_user_id is required for delegate"
+                )
             step.delegated_from_user_id = step.assignee_user_id
             step.assignee_user_id = target_user_id
             step.status = ApprovalInstanceStepStatus.PENDING
@@ -165,16 +196,20 @@ class ApprovalDecisionService:
         step.status = ApprovalInstanceStepStatus.APPROVED
         step.acted_at = now
         next_step = (
-            await self.session.execute(
-                select(ApprovalInstanceStep)
-                .where(
-                    ApprovalInstanceStep.tenant_id == self.tenant_id,
-                    ApprovalInstanceStep.approval_instance_id == instance.id,
-                    ApprovalInstanceStep.order_no > (instance.current_step_no or 0),
+            (
+                await self.session.execute(
+                    select(ApprovalInstanceStep)
+                    .where(
+                        ApprovalInstanceStep.tenant_id == self.tenant_id,
+                        ApprovalInstanceStep.approval_instance_id == instance.id,
+                        ApprovalInstanceStep.order_no > (instance.current_step_no or 0),
+                    )
+                    .order_by(ApprovalInstanceStep.order_no.asc())
                 )
-                .order_by(ApprovalInstanceStep.order_no.asc())
             )
-        ).scalars().first()
+            .scalars()
+            .first()
+        )
         if next_step is None:
             instance.status = ApprovalInstanceStatus.APPROVED
             instance.current_step_no = None
@@ -206,7 +241,10 @@ class EscalationService:
                     ApprovalInstanceStep.status == ApprovalInstanceStepStatus.PENDING,
                     ApprovalInstanceStep.due_at.is_not(None),
                     ApprovalInstanceStep.due_at < now,
-                    or_(ApprovalRouteStep.escalation_user_id.is_not(None), ApprovalRouteStep.escalation_role_code.is_not(None)),
+                    or_(
+                        ApprovalRouteStep.escalation_user_id.is_not(None),
+                        ApprovalRouteStep.escalation_role_code.is_not(None),
+                    ),
                 )
             )
         ).all()

@@ -4,6 +4,7 @@
 payload по типу объекта, гейт согласования (Task 5), диспетчер потребителей
 на signed (Task 5), outbox-события.
 """
+
 from __future__ import annotations
 
 import secrets
@@ -103,15 +104,19 @@ class PepSigningService:
             if wp is None or str(wp.tenant_id) != str(self.tenant_id):
                 raise PepNotFound("work_permit")
             members = (
-                await self.session.execute(
-                    select(WorkPermitMember)
-                    .where(
-                        WorkPermitMember.tenant_id == self.tenant_id,
-                        WorkPermitMember.work_permit_id == wp.id,
+                (
+                    await self.session.execute(
+                        select(WorkPermitMember)
+                        .where(
+                            WorkPermitMember.tenant_id == self.tenant_id,
+                            WorkPermitMember.work_permit_id == wp.id,
+                        )
+                        .order_by(WorkPermitMember.created_at.asc())
                     )
-                    .order_by(WorkPermitMember.created_at.asc())
                 )
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
             return {
                 "work_permit_id": wp.id,
                 "number": wp.number,
@@ -188,17 +193,21 @@ class PepSigningService:
             else SignatureRequest.signer_person_id == signer_person_id
         )
         dup = (
-            await self.session.execute(
-                select(SignatureRequest).where(
-                    SignatureRequest.tenant_id == self.tenant_id,
-                    SignatureRequest.object_type == object_type,
-                    SignatureRequest.object_id == object_id,
-                    SignatureRequest.purpose == purpose,
-                    SignatureRequest.status.in_(_ACTIVE_STATUSES),
-                    signer_filter,
+            (
+                await self.session.execute(
+                    select(SignatureRequest).where(
+                        SignatureRequest.tenant_id == self.tenant_id,
+                        SignatureRequest.object_type == object_type,
+                        SignatureRequest.object_id == object_id,
+                        SignatureRequest.purpose == purpose,
+                        SignatureRequest.status.in_(_ACTIVE_STATUSES),
+                        signer_filter,
+                    )
                 )
             )
-        ).scalars().first()
+            .scalars()
+            .first()
+        )
         if dup is not None:
             raise PepConflict("active pep request already exists for this signer/object")
 
@@ -225,8 +234,8 @@ class PepSigningService:
         if signer_person_id:
             code = f"{secrets.randbelow(1_000_000):06d}"
             req.confirm_code_hash = hash_confirm_code(req.id, code)
-            req.confirm_code_expires_at = (
-                datetime.now(tz=timezone.utc) + timedelta(minutes=CONFIRM_TTL_MINUTES)
+            req.confirm_code_expires_at = datetime.now(tz=timezone.utc) + timedelta(
+                minutes=CONFIRM_TTL_MINUTES
             )
             assert_transition(PepStatus.CREATED, PepStatus.AWAITING_CODE)
             req.status = PepStatus.AWAITING_CODE.value

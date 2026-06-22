@@ -43,7 +43,9 @@ class LetterheadResolver:
         override: LetterheadOverride | None,
     ) -> LetterheadDecision:
         if override is not None and override.disabled:
-            return LetterheadDecision(apply=False, issuer_kind=issuer.kind, issuer_id=issuer.company_id)
+            return LetterheadDecision(
+                apply=False, issuer_kind=issuer.kind, issuer_id=issuer.company_id
+            )
 
         preset_code_override = override.preset_code if override is not None else None
 
@@ -98,7 +100,9 @@ class LetterheadResolver:
             branding_payload_hash=profile.reproducibility.get("branding_payload_hash"),
         )
 
-    def _resolve_watermark_for_payload(self, branding: BrandingProfilePayload, _preset: Any, _override: LetterheadOverride | None) -> dict[str, Any]:
+    def _resolve_watermark_for_payload(
+        self, branding: BrandingProfilePayload, _preset: Any, _override: LetterheadOverride | None
+    ) -> dict[str, Any]:
         watermark = {"enabled": bool(branding.watermark_enabled), "text": branding.watermark_text}
         if not watermark.get("text"):
             watermark["enabled"] = False

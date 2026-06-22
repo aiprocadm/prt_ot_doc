@@ -6,7 +6,9 @@ from app.models.models import CalendarEvent, ComplianceDeadline
 
 
 class CalendarProjectionService:
-    async def project_deadline(self, session: AsyncSession, deadline: ComplianceDeadline) -> CalendarEvent:
+    async def project_deadline(
+        self, session: AsyncSession, deadline: ComplianceDeadline
+    ) -> CalendarEvent:
         event = CalendarEvent(
             tenant_id=deadline.tenant_id,
             source_type="compliance_deadline",
