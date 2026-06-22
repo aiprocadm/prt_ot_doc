@@ -25,6 +25,7 @@ import {
   VENTILATION_LABELS,
   GAS_PARAMETER_LABELS,
   FIRE_FIGHTING_MEANS_LABELS,
+  RESPIRATORY_PPE_LABELS,
   labelOf,
 } from "@/lib/workPermitVocab";
 import { PERMISSIONS } from "@/permissions/permissions";
@@ -335,6 +336,22 @@ export default function WorkPermitDetailPage() {
                   Средства пожаротушения:{" "}
                   {((wp.type_specific as { fire_fighting_means: string[] }).fire_fighting_means)
                     .map((c) => FIRE_FIGHTING_MEANS_LABELS[c] ?? c)
+                    .join(", ")}
+                </div>
+              ) : null}
+              {((wp.type_specific as { gas_analysis?: Array<{ parameter: string; value: string }> }).gas_analysis ?? []).map((m, i) => (
+                <div key={i}>{GAS_PARAMETER_LABELS[m.parameter] ?? m.parameter}: {m.value}</div>
+              ))}
+            </div>
+          ) : null}
+          {wp.work_type === "gas_hazardous" && wp.type_specific ? (
+            <div className="text-sm">
+              <div className="font-medium">Защита органов дыхания и анализ среды (528)</div>
+              {((wp.type_specific as { respiratory_ppe?: string[] }).respiratory_ppe ?? []).length ? (
+                <div>
+                  СИЗОД:{" "}
+                  {((wp.type_specific as { respiratory_ppe: string[] }).respiratory_ppe)
+                    .map((c) => RESPIRATORY_PPE_LABELS[c] ?? c)
                     .join(", ")}
                 </div>
               ) : null}
