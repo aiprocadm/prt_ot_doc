@@ -61,3 +61,31 @@ def test_create_rejects_ventilation_on_hot_work():
             work_type="hot_work", zone_text="эстакада",
             type_specific={"ventilation": "forced"},
         )
+
+
+def test_create_accepts_valid_gas_hazardous_type_specific():
+    m = WorkPermitCreate(
+        work_type="gas_hazardous",
+        zone_text="колодец К-12",
+        type_specific={
+            "respiratory_ppe": ["hose_mask", "scba"],
+            "gas_analysis": [{"parameter": "oxygen", "value": "20.9", "norm": "≥ 20 об.%"}],
+        },
+    )
+    assert m.type_specific["respiratory_ppe"] == ["hose_mask", "scba"]
+
+
+def test_create_rejects_bad_respiratory_ppe():
+    with pytest.raises(ValidationError):
+        WorkPermitCreate(
+            work_type="gas_hazardous", zone_text="колодец",
+            type_specific={"respiratory_ppe": ["spacesuit"]},
+        )
+
+
+def test_create_rejects_fire_means_on_gas_hazardous():
+    with pytest.raises(ValidationError):
+        WorkPermitCreate(
+            work_type="gas_hazardous", zone_text="колодец",
+            type_specific={"fire_fighting_means": ["sand"]},
+        )

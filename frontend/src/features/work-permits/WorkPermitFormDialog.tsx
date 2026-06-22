@@ -22,6 +22,7 @@ import {
   GAS_PARAMETER_CODES,
   VENTILATION_CODES,
   FIRE_FIGHTING_MEANS_CODES,
+  RESPIRATORY_PPE_CODES,
   workPermitSchema,
   type WorkPermitFormValues,
 } from "@/types/forms/workPermits";
@@ -32,6 +33,7 @@ import {
   GAS_PARAMETER_LABELS,
   VENTILATION_LABELS,
   FIRE_FIGHTING_MEANS_LABELS,
+  RESPIRATORY_PPE_LABELS,
 } from "@/lib/workPermitVocab";
 import { applyApiFieldErrorsToForm, isApiError } from "@/utils/apiFormErrors";
 
@@ -111,7 +113,7 @@ export const WorkPermitFormDialog = ({ trigger, initialData, onSubmitted }: Prop
     ppe_text: v.ppe_text || null,
     planned_start: v.planned_start ? new Date(v.planned_start).toISOString() : null,
     planned_end: v.planned_end ? new Date(v.planned_end).toISOString() : null,
-    type_specific: ["confined_space", "hot_work"].includes(v.work_type)
+    type_specific: ["confined_space", "hot_work", "gas_hazardous"].includes(v.work_type)
       ? (v.type_specific ?? null)
       : null,
   });
@@ -156,6 +158,18 @@ export const WorkPermitFormDialog = ({ trigger, initialData, onSubmitted }: Prop
     form.setValue("type_specific", {
       ...(form.watch("type_specific") ?? {}),
       fire_fighting_means: Array.from(next),
+    } as WorkPermitFormValues["type_specific"]);
+  };
+
+  const selectedResp = new Set(
+    ((form.watch("type_specific") as { respiratory_ppe?: string[] } | null)?.respiratory_ppe) ?? [],
+  );
+  const toggleResp = (code: (typeof RESPIRATORY_PPE_CODES)[number]) => {
+    const next = new Set(selectedResp);
+    next.has(code) ? next.delete(code) : next.add(code);
+    form.setValue("type_specific", {
+      ...(form.watch("type_specific") ?? {}),
+      respiratory_ppe: Array.from(next),
     } as WorkPermitFormValues["type_specific"]);
   };
 
@@ -296,6 +310,29 @@ export const WorkPermitFormDialog = ({ trigger, initialData, onSubmitted }: Prop
               <p className="text-xs text-muted-foreground">
                 Параметры замеров концентрации: {GAS_PARAMETER_CODES.map((c) => GAS_PARAMETER_LABELS[c]).join(", ")}.
                 Подготовка/очистка места и контроль после работ — в полях «Мероприятия» / «Особые условия».
+              </p>
+            </div>
+          )}
+
+          {form.watch("work_type") === "gas_hazardous" && (
+            <div className="space-y-2">
+              <Label>Защита органов дыхания и анализ среды (528)</Label>
+              <Label className="text-xs">СИЗ органов дыхания (СИЗОД)</Label>
+              <div className="flex flex-wrap gap-3">
+                {RESPIRATORY_PPE_CODES.map((code) => (
+                  <label key={code} className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={selectedResp.has(code)}
+                      onChange={() => toggleResp(code)}
+                    />
+                    {RESPIRATORY_PPE_LABELS[code]}
+                  </label>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Параметры замеров концентрации: {GAS_PARAMETER_CODES.map((c) => GAS_PARAMETER_LABELS[c]).join(", ")}.
+                Продувка/вентиляция и контроль среды — в полях «Мероприятия» / «Особые условия».
               </p>
             </div>
           )}

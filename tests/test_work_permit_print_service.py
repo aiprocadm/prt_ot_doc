@@ -149,3 +149,32 @@ async def test_render_hot_work_uses_1479_and_fire_means(sessionmaker, data_facto
         assert "Огнетушитель порошковый" in text and "Ящик с песком" in text
         assert "Горючие" in text and "0" in text
         assert "782н" not in text
+
+
+@pytest.mark.asyncio
+async def test_render_gas_hazardous_uses_528_and_respiratory_ppe(sessionmaker, data_factory):
+    tenant, (foreman,) = await _persons(data_factory, "Galina")
+    tid = str(tenant.id)
+    async with sessionmaker() as session:
+        wp = await svc.create_work_permit(
+            session,
+            tenant_id=tid,
+            work_type="gas_hazardous",
+            zone_text="колодец К-12",
+            number="НД-ГАЗ-1",
+            type_specific={
+                "respiratory_ppe": ["hose_mask", "scba"],
+                "gas_analysis": [{"parameter": "oxygen", "value": "20.9", "norm": "≥ 20 об.%"}],
+            },
+        )
+        await svc.add_member(
+            session, tenant_id=tid, work_permit_id=wp.id, person_id=foreman.id, role="foreman"
+        )
+        rendered = await render_work_permit(
+            session, tenant=tenant, permit_id=wp.id, fmt="docx", with_letterhead=False
+        )
+        text = _docx_text(rendered.content)
+        assert "528" in text
+        assert "Шланговый противогаз" in text and "Автономный дыхательный аппарат" in text
+        assert "Кислород" in text and "20.9" in text
+        assert "782н" not in text
