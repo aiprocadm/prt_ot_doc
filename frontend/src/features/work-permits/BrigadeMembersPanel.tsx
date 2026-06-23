@@ -36,6 +36,7 @@ export const BrigadeMembersPanel = ({ wp, persons, nameOf, onRefresh }: Props) =
       });
       toast.success("Участник добавлен");
       setSelectedPersonId("");
+      setSelectedRole("member");
       onRefresh();
     } catch {
       toast.error("Не удалось добавить участника");
@@ -83,8 +84,9 @@ export const BrigadeMembersPanel = ({ wp, persons, nameOf, onRefresh }: Props) =
         <Can permission={PERMISSIONS.WORK_PERMIT_MANAGE}>
           <div className="flex flex-wrap items-end gap-2 pt-1">
             <div className="flex flex-col gap-1">
-              <label className="text-xs text-muted-foreground">Сотрудник</label>
+              <label htmlFor="bm-person" className="text-xs text-muted-foreground">Сотрудник</label>
               <select
+                id="bm-person"
                 className="h-9 rounded-md border px-2 text-sm min-w-[180px]"
                 value={selectedPersonId}
                 onChange={(e) => setSelectedPersonId(e.target.value)}
@@ -98,8 +100,9 @@ export const BrigadeMembersPanel = ({ wp, persons, nameOf, onRefresh }: Props) =
               </select>
             </div>
             <div className="flex flex-col gap-1">
-              <label className="text-xs text-muted-foreground">Роль</label>
+              <label htmlFor="bm-role" className="text-xs text-muted-foreground">Роль</label>
               <select
+                id="bm-role"
                 className="h-9 rounded-md border px-2 text-sm"
                 value={selectedRole}
                 onChange={(e) => setSelectedRole(e.target.value)}

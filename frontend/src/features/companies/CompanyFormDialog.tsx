@@ -130,8 +130,8 @@ export const CompanyFormDialog = ({ trigger, initialData, onSubmitted }: Company
               {form.formState.errors.name && <p className="text-xs text-destructive">{form.formState.errors.name.message}</p>}
             </div>
             <div className="space-y-2">
-              <Label htmlFor="status">Статус</Label>
-              <select id="status" className="h-10 rounded-md border px-3" {...form.register("status")}> 
+              <Label htmlFor="status">Статус (не сохраняется в API)</Label>
+              <select id="status" className="h-10 rounded-md border px-3" {...form.register("status")}>
                 <option value="draft">Черновик</option>
                 <option value="active">Активна</option>
                 <option value="archived">Архив</option>
@@ -170,7 +170,7 @@ export const CompanyFormDialog = ({ trigger, initialData, onSubmitted }: Company
             <Textarea id="address" {...form.register("address")} rows={3} />
           </div>
           <div className="space-y-2">
-            <Label>Теги</Label>
+            <Label>Теги (не сохраняется в API)</Label>
             <div className="flex flex-wrap gap-1 rounded-md border px-3 py-2 min-h-10">
               {(form.watch("tags") ?? []).map((tag, i) => (
                 <Badge key={i} variant="secondary" className="flex items-center gap-1">

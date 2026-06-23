@@ -201,7 +201,7 @@ const BriefingsPage = () => {
                   size="sm"
                   disabled={!canManageBriefings}
                   title={canManageBriefings ? undefined : "Недостаточно прав для управления инструктажами"}
-                  onClick={() => void briefingsApi.complete(entry.id).then(() => { toast.success("Инструктаж завершен"); return load(); }).catch(() => toast.error("Сначала нужны обе подписи"))}
+                  onClick={() => void briefingsApi.complete(entry.id).then(() => { toast.success("Инструктаж завершен"); return load(); }).catch((err) => toast.error((err as { message?: string })?.message || "Не удалось завершить инструктаж (нужны обе подписи)"))}
                 >
                   Завершить
                 </Button>
