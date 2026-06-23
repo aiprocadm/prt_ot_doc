@@ -2,7 +2,18 @@ export interface WorkPermitMemberDto {
   id: string;
   person_id: string;
   role: string;
+  electrical_group?: string | null;
   created_at: string;
+}
+
+export interface ElectricalGroupReadinessDto {
+  ok: boolean;
+  insufficient: Array<{
+    person_id: string;
+    role: string;
+    group: string | null;
+    required: string | null;
+  }>;
 }
 
 export interface WorkPermitDto {
@@ -30,6 +41,7 @@ export interface WorkPermitDto {
   special_conditions_text: string | null;
   ppe_text: string | null;
   type_specific: Record<string, unknown> | null;
+  electrical_group_readiness?: ElectricalGroupReadinessDto | null;
   created_at: string;
   updated_at: string;
 }
