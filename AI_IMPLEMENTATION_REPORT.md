@@ -1,5 +1,18 @@
 # AI Implementation Report
 
+## Last Agent Handoff (2026-06-23 cont.8, КОНТУР «НАРЯДЫ-ДОПУСКИ» — МИНИМУМЫ ГРУПП ПО КЛАССУ НАПРЯЖЕНИЯ (до/выше 1000В) — ветка feat/work-permit-electrical-voltage-minimums, стек поверх групп, НЕ влита)
+
+- **Дата:** 2026-06-23 (продолжение). `/goal` «продолжай по роадмап» → no-decision refinement #1 групп: минимумы зависят от класса напряжения. Драйвер: brainstorming-lite → writing-plans → subagent-driven (5 задач). Среда Win+Py3.13.7/.venv. Спека/план: `docs/superpowers/{specs,plans}/2026-06-23-work-permit-electrical-voltage-minimums*`.
+- **ГЛАВНОЕ:** минимальная группа по электробезопасности теперь зависит от `voltage_level` наряда (до 1000В / выше 1000В). ПОТЭЭ выше 1000В строже: производитель/допускающий ≥IV, отв.руководитель ≥V, наблюдающий ≥IV (vs ≥III до 1000В). `voltage_level` ≠ `voltage_condition` (со снятием/без снятия) — разные поля.
+- **ДИВИДЕНД БЕЗ МИГРАЦИИ:** `voltage_level` — новое поле в `type_specific JSON` электронаряда (миграционный когорт RC=0).
+- **ОБРАТНАЯ СОВМЕСТИМОСТЬ (ключевой приём):** `meets_minimum(group, role, voltage_level=None)` и `readiness(members, voltage_level=None)` — параметр опционален, дефолт None → набор «до 1000В» = прежнее поведение → **25 существующих юнитов electrical_groups зелёные БЕЗ правок** (T1 это центр). Новый `ROLE_MIN_GROUP_HV` + `_min_table(voltage_level)` + `role_min`.
+- **Построено (5 задач, `9f3628a9`..`<handoff>`):** (T1) voltage-aware минимумы + 10 новых юнитов (35 всего). (T2) `voltage_level` в профиле электро (валидация ∈ VOLTAGE_LEVELS + печать «Класс напряжения») — 12 тестов. (T3) read-готовность по voltage_level + seed `WP-ELEC-DEMO` le_1000 — 9 тестов. (T4) select класса напряжения в электро-секции формы (по образцу voltage_condition) — vitest. (T5) верификация+handoff.
+- **Тесты (локально Py3.13.7/.venv):** backend когорт RC=0; **миграционный RC=0 (без миграции)**; frontend build EXIT=0, наряд-vitest 35 passed, tsc/eslint 0.
+- **Отложено (явно):** точные регуляторные минимумы HV — пометка «сверить с юристом» (структура voltage-aware = инженерный вклад); связь voltage_level↔voltage_condition; полноценный редактор квалификаций; история групп.
+- **Next:** ветка `feat/work-permit-electrical-voltage-minimums` (стек: …#688 ← voltage-minimums) готова, НЕ влита — merge=пользователя. Канон Py3.12 PG CI = финальный гейт.
+
+---
+
 ## Last Agent Handoff (2026-06-23 cont.7, КОНТУР «НАРЯДЫ-ДОПУСКИ» — ГРУППЫ ПО ЭЛЕКТРОБЕЗОПАСНОСТИ (903н) — ветка feat/work-permit-electrical-groups, стек поверх редактора замеров, НЕ влита)
 
 - **Дата:** 2026-06-23 (продолжение). `/goal` «продолжай по роадмап» → пользователь выбрал направление 1 (группы электробезопасности 903н — наиболее цитируемый пробел). Через AskUserQuestion: хранение **на персоне (без миграции)** + **показ + мягкая готовность** (без FSM-гейта). Драйвер: brainstorming → writing-plans → subagent-driven (6 задач). Среда Win+Py3.13.7/.venv. Спека/план: `docs/superpowers/{specs,plans}/2026-06-23-work-permit-electrical-groups*`.
