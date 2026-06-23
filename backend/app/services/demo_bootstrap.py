@@ -500,6 +500,7 @@ async def _seed_work_permit_electrical_demo(session, tenant_db_id: str, person) 
             zone_text="РУ-0,4 кВ, ячейка №7, цех №2",
             status="draft",
             type_specific={
+                "voltage_level": "le_1000",
                 "technical_measures": ["disconnect", "verify_no_voltage", "grounding"],
                 "voltage_condition": "de_energized",
             },

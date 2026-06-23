@@ -212,6 +212,7 @@ async def _permit_read(session: AsyncSession, tenant: Tenant, wp: WorkPermit) ->
             groups[str(m.person_id)] = eg.current_group(
                 quals_by_id.get(str(m.person_id)), today
             )
+        voltage_level = (wp.type_specific or {}).get("voltage_level")
         eg_readiness = eg.readiness(
             [
                 {
@@ -220,7 +221,8 @@ async def _permit_read(session: AsyncSession, tenant: Tenant, wp: WorkPermit) ->
                     "group": groups.get(str(m.person_id)),
                 }
                 for m in members
-            ]
+            ],
+            voltage_level,
         )
 
     return WorkPermitRead(

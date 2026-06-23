@@ -236,3 +236,72 @@ def test_person_read_qualification_level_roundtrip() -> None:
     model = PersonRead.model_validate(data)
     assert len(model.qualifications) == 1
     assert model.qualifications[0].level == "IV"
+
+
+# ---------------------------------------------------------------------------
+# Task 3 — готовность по классу напряжения (voltage_level прокидывается в readiness)
+# ---------------------------------------------------------------------------
+
+PERSON_ID_FOREMAN_III = "dddddddd-dddd-dddd-dddd-dddddddddddd"
+
+
+@pytest.mark.asyncio
+async def test_electrical_gt_1000_foreman_iii_insufficient() -> None:
+    """Электро-наряд gt_1000: форман с группой III < IV → readiness.ok==False, required=='IV'."""
+    from app.api.routes.work_permits import _permit_read
+
+    wp = _make_wp(work_type="electrical")
+    wp.type_specific = {"voltage_level": "gt_1000"}
+    tenant = _make_tenant()
+    member = _make_member(PERSON_ID_FOREMAN_III, "foreman")
+    quals = [{"kind": "electrical_safety_group", "level": "III", "name": "Группа III"}]
+
+    person_result = MagicMock()
+    person_result.all.return_value = [_make_person_row(PERSON_ID_FOREMAN_III, quals)]
+
+    session = AsyncMock()
+    session.execute.return_value = person_result
+
+    with patch(
+        "app.api.routes.work_permits.list_members",
+        new=AsyncMock(return_value=[member]),
+    ):
+        result = await _permit_read(session, tenant, wp)
+
+    assert result.electrical_group_readiness is not None
+    assert result.electrical_group_readiness.ok is False
+    insufficient = result.electrical_group_readiness.insufficient
+    assert len(insufficient) == 1
+    item = insufficient[0]
+    assert str(item["person_id"]) == PERSON_ID_FOREMAN_III
+    assert item["role"] == "foreman"
+    assert item["group"] == "III"
+    assert item["required"] == "IV", f"при gt_1000 форман должен иметь IV, получили required={item['required']!r}"
+
+
+@pytest.mark.asyncio
+async def test_electrical_le_1000_foreman_iii_ok() -> None:
+    """Электро-наряд le_1000: форман с группой III ≥ III → readiness.ok==True."""
+    from app.api.routes.work_permits import _permit_read
+
+    wp = _make_wp(work_type="electrical")
+    wp.type_specific = {"voltage_level": "le_1000"}
+    tenant = _make_tenant()
+    member = _make_member(PERSON_ID_FOREMAN_III, "foreman")
+    quals = [{"kind": "electrical_safety_group", "level": "III", "name": "Группа III"}]
+
+    person_result = MagicMock()
+    person_result.all.return_value = [_make_person_row(PERSON_ID_FOREMAN_III, quals)]
+
+    session = AsyncMock()
+    session.execute.return_value = person_result
+
+    with patch(
+        "app.api.routes.work_permits.list_members",
+        new=AsyncMock(return_value=[member]),
+    ):
+        result = await _permit_read(session, tenant, wp)
+
+    assert result.electrical_group_readiness is not None
+    assert result.electrical_group_readiness.ok is True
+    assert result.electrical_group_readiness.insufficient == []
