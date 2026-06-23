@@ -132,19 +132,24 @@ export const WorkPermitFormDialog = ({ trigger, initialData, onSubmitted }: Prop
     }
   };
 
-  // Профили type_specific у видов работ не совпадают (height/confined_space/hot_work),
-  // поэтому при смене вида сбрасываем данные предыдущего вида, чтобы не отправить чужие
-  // ключи (сервер вернёт 422). Сброс срабатывает только при действии пользователя —
-  // первичная загрузка черновика идёт через form.reset в useEffect выше.
+  // Структурные данные у видов работ не совпадают: type_specific (confined/hot/gas) и
+  // height-специфичный чеклист safety_systems. При смене вида сбрасываем оба, иначе чужие
+  // ключи/данные предыдущего вида уйдут на сервер (напр. safety_systems высоты на газоопасном
+  // наряде). Сброс срабатывает только при действии пользователя — первичная загрузка черновика
+  // идёт через form.reset в useEffect выше.
   const workTypeReg = form.register("work_type");
   const onWorkTypeChange = (e: ChangeEvent<HTMLSelectElement>) => {
     void workTypeReg.onChange(e);
     form.setValue("type_specific", null);
+    form.setValue("safety_systems", []);
   };
 
+  // Снимки для `checked`-пропсов считаются на рендере (через watch — подписка на ререндер).
+  // Сами тоггл-хендлеры читают АКТУАЛЬНОЕ состояние формы через getValues, а не render-снимок:
+  // иначе два быстрых клика до ререндера видели бы один устаревший снимок и второй перетёр бы первый.
   const selected = new Set(form.watch("safety_systems") ?? []);
   const toggleSystem = (code: (typeof SAFETY_SYSTEM_CODES)[number]) => {
-    const next = new Set(selected);
+    const next = new Set(form.getValues("safety_systems") ?? []);
     next.has(code) ? next.delete(code) : next.add(code);
     form.setValue("safety_systems", Array.from(next) as WorkPermitFormValues["safety_systems"]);
   };
@@ -153,10 +158,11 @@ export const WorkPermitFormDialog = ({ trigger, initialData, onSubmitted }: Prop
     ((form.watch("type_specific") as { fire_fighting_means?: string[] } | null)?.fire_fighting_means) ?? [],
   );
   const toggleMean = (code: (typeof FIRE_FIGHTING_MEANS_CODES)[number]) => {
-    const next = new Set(selectedMeans);
+    const current = (form.getValues("type_specific") ?? {}) as { fire_fighting_means?: string[] };
+    const next = new Set(current.fire_fighting_means ?? []);
     next.has(code) ? next.delete(code) : next.add(code);
     form.setValue("type_specific", {
-      ...(form.watch("type_specific") ?? {}),
+      ...current,
       fire_fighting_means: Array.from(next),
     } as WorkPermitFormValues["type_specific"]);
   };
@@ -165,10 +171,11 @@ export const WorkPermitFormDialog = ({ trigger, initialData, onSubmitted }: Prop
     ((form.watch("type_specific") as { respiratory_ppe?: string[] } | null)?.respiratory_ppe) ?? [],
   );
   const toggleResp = (code: (typeof RESPIRATORY_PPE_CODES)[number]) => {
-    const next = new Set(selectedResp);
+    const current = (form.getValues("type_specific") ?? {}) as { respiratory_ppe?: string[] };
+    const next = new Set(current.respiratory_ppe ?? []);
     next.has(code) ? next.delete(code) : next.add(code);
     form.setValue("type_specific", {
-      ...(form.watch("type_specific") ?? {}),
+      ...current,
       respiratory_ppe: Array.from(next),
     } as WorkPermitFormValues["type_specific"]);
   };
