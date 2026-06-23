@@ -23,6 +23,8 @@ import {
   VENTILATION_CODES,
   FIRE_FIGHTING_MEANS_CODES,
   RESPIRATORY_PPE_CODES,
+  ELECTRICAL_MEASURE_CODES,
+  VOLTAGE_CONDITION_CODES,
   workPermitSchema,
   type WorkPermitFormValues,
 } from "@/types/forms/workPermits";
@@ -34,6 +36,8 @@ import {
   VENTILATION_LABELS,
   FIRE_FIGHTING_MEANS_LABELS,
   RESPIRATORY_PPE_LABELS,
+  ELECTRICAL_MEASURES_LABELS,
+  VOLTAGE_CONDITION_LABELS,
 } from "@/lib/workPermitVocab";
 import { applyApiFieldErrorsToForm, isApiError } from "@/utils/apiFormErrors";
 
@@ -113,7 +117,7 @@ export const WorkPermitFormDialog = ({ trigger, initialData, onSubmitted }: Prop
     ppe_text: v.ppe_text || null,
     planned_start: v.planned_start ? new Date(v.planned_start).toISOString() : null,
     planned_end: v.planned_end ? new Date(v.planned_end).toISOString() : null,
-    type_specific: ["confined_space", "hot_work", "gas_hazardous"].includes(v.work_type)
+    type_specific: ["confined_space", "hot_work", "gas_hazardous", "electrical"].includes(v.work_type)
       ? (v.type_specific ?? null)
       : null,
   });
@@ -154,31 +158,30 @@ export const WorkPermitFormDialog = ({ trigger, initialData, onSubmitted }: Prop
     form.setValue("safety_systems", Array.from(next) as WorkPermitFormValues["safety_systems"]);
   };
 
-  const selectedMeans = new Set(
-    ((form.watch("type_specific") as { fire_fighting_means?: string[] } | null)?.fire_fighting_means) ?? [],
-  );
-  const toggleMean = (code: (typeof FIRE_FIGHTING_MEANS_CODES)[number]) => {
-    const current = (form.getValues("type_specific") ?? {}) as { fire_fighting_means?: string[] };
-    const next = new Set(current.fire_fighting_means ?? []);
+  // Один хендлер для всех type_specific-массивов (огневые/газоопасные/электро).
+  // Читает актуальный стор через getValues — два быстрых клика до ререндера не теряют друг друга.
+  const toggleTsCode = (
+    field: "fire_fighting_means" | "respiratory_ppe" | "technical_measures",
+    code: string,
+  ) => {
+    const current = (form.getValues("type_specific") ?? {}) as Record<string, string[] | undefined>;
+    const next = new Set(current[field] ?? []);
     next.has(code) ? next.delete(code) : next.add(code);
     form.setValue("type_specific", {
       ...current,
-      fire_fighting_means: Array.from(next),
+      [field]: Array.from(next),
     } as WorkPermitFormValues["type_specific"]);
   };
 
+  const selectedMeans = new Set(
+    ((form.watch("type_specific") as { fire_fighting_means?: string[] } | null)?.fire_fighting_means) ?? [],
+  );
   const selectedResp = new Set(
     ((form.watch("type_specific") as { respiratory_ppe?: string[] } | null)?.respiratory_ppe) ?? [],
   );
-  const toggleResp = (code: (typeof RESPIRATORY_PPE_CODES)[number]) => {
-    const current = (form.getValues("type_specific") ?? {}) as { respiratory_ppe?: string[] };
-    const next = new Set(current.respiratory_ppe ?? []);
-    next.has(code) ? next.delete(code) : next.add(code);
-    form.setValue("type_specific", {
-      ...current,
-      respiratory_ppe: Array.from(next),
-    } as WorkPermitFormValues["type_specific"]);
-  };
+  const selectedMeasures = new Set(
+    ((form.watch("type_specific") as { technical_measures?: string[] } | null)?.technical_measures) ?? [],
+  );
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -308,7 +311,7 @@ export const WorkPermitFormDialog = ({ trigger, initialData, onSubmitted }: Prop
                     <input
                       type="checkbox"
                       checked={selectedMeans.has(code)}
-                      onChange={() => toggleMean(code)}
+                      onChange={() => toggleTsCode("fire_fighting_means", code)}
                     />
                     {FIRE_FIGHTING_MEANS_LABELS[code]}
                   </label>
@@ -331,7 +334,7 @@ export const WorkPermitFormDialog = ({ trigger, initialData, onSubmitted }: Prop
                     <input
                       type="checkbox"
                       checked={selectedResp.has(code)}
-                      onChange={() => toggleResp(code)}
+                      onChange={() => toggleTsCode("respiratory_ppe", code)}
                     />
                     {RESPIRATORY_PPE_LABELS[code]}
                   </label>
@@ -341,6 +344,44 @@ export const WorkPermitFormDialog = ({ trigger, initialData, onSubmitted }: Prop
                 Параметры замеров концентрации: {GAS_PARAMETER_CODES.map((c) => GAS_PARAMETER_LABELS[c]).join(", ")}.
                 Продувка/вентиляция и контроль среды — в полях «Мероприятия» / «Особые условия».
               </p>
+            </div>
+          )}
+
+          {form.watch("work_type") === "electrical" && (
+            <div className="space-y-2">
+              <Label>Меры безопасности в электроустановках (903н)</Label>
+              <Label className="text-xs">Технические мероприятия подготовки места</Label>
+              <div className="flex flex-wrap gap-3">
+                {ELECTRICAL_MEASURE_CODES.map((code) => (
+                  <label key={code} className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={selectedMeasures.has(code)}
+                      onChange={() => toggleTsCode("technical_measures", code)}
+                    />
+                    {ELECTRICAL_MEASURES_LABELS[code]}
+                  </label>
+                ))}
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="voltage_condition" className="text-xs">Условие проведения</Label>
+                <select
+                  id="voltage_condition"
+                  className="h-10 w-full rounded-md border px-3"
+                  value={(form.watch("type_specific")?.voltage_condition as string) ?? ""}
+                  onChange={(e) =>
+                    form.setValue("type_specific", {
+                      ...(form.watch("type_specific") ?? {}),
+                      voltage_condition: (e.target.value || undefined) as never,
+                    })
+                  }
+                >
+                  <option value="">—</option>
+                  {VOLTAGE_CONDITION_CODES.map((c) => (
+                    <option key={c} value={c}>{VOLTAGE_CONDITION_LABELS[c]}</option>
+                  ))}
+                </select>
+              </div>
             </div>
           )}
 
