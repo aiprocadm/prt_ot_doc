@@ -19,6 +19,15 @@ export const ELECTRICAL_MEASURE_CODES = [
 ] as const;
 export const VOLTAGE_CONDITION_CODES = ["de_energized", "near_live", "away_live"] as const;
 
+export const UTILITY_CODES = ["power_cable", "gas_pipe", "water_sewer", "heating", "comms"] as const;
+export const SHORING_METHOD_CODES = ["natural_slopes", "shield_bracing", "sheet_piling", "none_shallow"] as const;
+
+export const excavationSafetySchema = z.object({
+  utilities: z.array(z.enum(UTILITY_CODES)).optional(),
+  shoring: z.enum(SHORING_METHOD_CODES).optional(),
+});
+export type ExcavationSafetyValues = z.infer<typeof excavationSafetySchema>;
+
 export const electricalSafetySchema = z.object({
   technical_measures: z.array(z.enum(ELECTRICAL_MEASURE_CODES)).optional(),
   voltage_condition: z.enum(VOLTAGE_CONDITION_CODES).optional(),
@@ -54,7 +63,8 @@ export type GasWorksValues = z.infer<typeof gasWorksSchema>;
 export const typeSpecificSchema = confinedEnvSchema
   .merge(fireSafetySchema)
   .merge(gasWorksSchema)
-  .merge(electricalSafetySchema);
+  .merge(electricalSafetySchema)
+  .merge(excavationSafetySchema);
 
 export const workPermitSchema = z.object({
   work_type: z.string().min(1, "Укажите вид работ"),
