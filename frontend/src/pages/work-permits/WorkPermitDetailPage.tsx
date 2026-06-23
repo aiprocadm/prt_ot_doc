@@ -26,6 +26,8 @@ import {
   GAS_PARAMETER_LABELS,
   FIRE_FIGHTING_MEANS_LABELS,
   RESPIRATORY_PPE_LABELS,
+  ELECTRICAL_MEASURES_LABELS,
+  VOLTAGE_CONDITION_LABELS,
   labelOf,
 } from "@/lib/workPermitVocab";
 import { PERMISSIONS } from "@/permissions/permissions";
@@ -360,6 +362,27 @@ export default function WorkPermitDetailPage() {
               {((wp.type_specific as { gas_analysis?: Array<{ parameter: string; value: string }> }).gas_analysis ?? []).map((m, i) => (
                 <div key={i}>{GAS_PARAMETER_LABELS[m.parameter] ?? m.parameter}: {m.value}</div>
               ))}
+            </div>
+          ) : null}
+          {wp.work_type === "electrical" && wp.type_specific ? (
+            <div className="text-sm">
+              <div className="font-medium">Меры безопасности в электроустановках (903н)</div>
+              {(wp.type_specific as { voltage_condition?: string }).voltage_condition ? (
+                <div>
+                  Условие проведения:{" "}
+                  {VOLTAGE_CONDITION_LABELS[
+                    (wp.type_specific as { voltage_condition: string }).voltage_condition
+                  ] ?? "—"}
+                </div>
+              ) : null}
+              {((wp.type_specific as { technical_measures?: string[] }).technical_measures ?? []).length ? (
+                <div>
+                  Технические мероприятия:{" "}
+                  {((wp.type_specific as { technical_measures: string[] }).technical_measures)
+                    .map((c) => ELECTRICAL_MEASURES_LABELS[c] ?? c)
+                    .join("; ")}
+                </div>
+              ) : null}
             </div>
           ) : null}
           {!wp.content_text &&
