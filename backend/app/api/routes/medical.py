@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Annotated
+from typing import Annotated, Literal
+from urllib.parse import quote
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
@@ -63,6 +64,11 @@ from app.schemas.medical import (
 )
 from app.schemas.task import TaskRead
 from app.services.audit import AuditService
+from app.services.medical_print import (
+    PdfRendererUnavailable,
+    render_contingent_register,
+    render_named_list,
+)
 from app.services.obligations import create_medical_task
 
 router = APIRouter(tags=["medical"])
@@ -1031,6 +1037,49 @@ async def get_named_list(
     today = datetime.now(timezone.utc).date()
     rows = await medsvc.build_named_list(session, tenant_id=str(tenant.id), today=today)
     return NamedListPage(items=[NamedListRow(**r) for r in rows], total=len(rows))
+
+
+async def _render_to_response(coro) -> Response:
+    """Awaits a medical render coroutine → file Response (503 если PDF недоступен)."""
+    try:
+        rendered = await coro
+    except PdfRendererUnavailable as exc:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=_error("pdf_renderer_unavailable", "PDF converter is unavailable"),
+        ) from exc
+    encoded_name = quote(rendered.filename, safe="")
+    return Response(
+        content=rendered.content,
+        media_type=rendered.media_type,
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{encoded_name}"},
+    )
+
+
+@router.get("/medical/contingent/register/print", dependencies=[MedicalFeatureGate])
+async def print_contingent_register(
+    tenant: TenantDep,
+    session: SessionDep,
+    access: MedicalReadAccess,
+    fmt: Literal["docx", "pdf"] = Query("docx", alias="format"),
+) -> Response:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    _ = access
+    return await _render_to_response(
+        render_contingent_register(session, tenant=tenant, fmt=fmt)
+    )
+
+
+@router.get("/medical/named-list/print", dependencies=[MedicalFeatureGate])
+async def print_named_list(
+    tenant: TenantDep,
+    session: SessionDep,
+    access: MedicalReadAccess,
+    fmt: Literal["docx", "pdf"] = Query("docx", alias="format"),
+) -> Response:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    _ = access
+    return await _render_to_response(render_named_list(session, tenant=tenant, fmt=fmt))
 
 
 # ---------------------------------------------------------------------------
