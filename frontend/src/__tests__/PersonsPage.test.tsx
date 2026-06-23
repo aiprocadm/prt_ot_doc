@@ -35,7 +35,16 @@ vi.mock("@/features/persons/PersonTable", () => ({
 }));
 
 vi.mock("@/features/persons/PersonFormDialog", () => ({
-  PersonFormDialog: ({ trigger }: { trigger: ReactNode }) => <>{trigger}</>
+  PersonFormDialog: ({ trigger, initialData }: { trigger: ReactNode; initialData?: { id: string } }) => (
+    <>
+      {trigger}
+      {initialData ? <span data-testid="edit-initial">{initialData.id}</span> : null}
+    </>
+  )
+}));
+
+vi.mock("@/components/permissions/Can", () => ({
+  Can: ({ children }: { children: (allowed: boolean) => ReactNode }) => <>{children(true)}</>
 }));
 
 import PersonsPage from "@/pages/persons/PersonsPage";
@@ -64,5 +73,17 @@ describe("PersonsPage", () => {
     expect(await screen.findByText("Иван Иванов")).toBeInTheDocument();
     expect(screen.getByText("Активен")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /сбросить фокус/i })).toHaveAttribute("href", "/persons");
+  });
+
+  it("показывает «Изменить» с данными выбранной персоны (edit-аффорданс)", async () => {
+    render(
+      <MemoryRouter initialEntries={["/persons?person_id=person-1"]}>
+        <PersonsPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByRole("button", { name: "Изменить" })).toBeInTheDocument();
+    // edit-диалог получает выбранную персону как initialData (merge-safe правка квалификаций)
+    expect(screen.getByTestId("edit-initial")).toHaveTextContent("person-1");
   });
 });

@@ -2,6 +2,7 @@
 """Endpoints for work permits (наряды-допуски)."""
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Annotated, Literal
 from urllib.parse import quote
 
@@ -37,6 +38,7 @@ from app.domains.work_permits import (
     update_briefing,
     update_work_permit,
 )
+from app.domains.work_permits import electrical_groups as eg
 from app.domains.work_permits import lifecycle as lc
 from app.domains.work_permits import profiles as wp_profiles
 from app.domains.work_permits.service import record_completion, signed_closing_kinds
@@ -45,6 +47,7 @@ from app.models.models import Person, SignatureRequest
 from app.models.tenanting import Tenant
 from app.models.work_permit import WorkPermit
 from app.schemas.work_permit import (
+    ElectricalGroupReadiness,
     ReadinessReportRead,
     ViolationRead,
     WorkPermitActionRequest,
@@ -100,9 +103,13 @@ def _transition_conflict(exc: lc.WorkPermitTransitionError) -> HTTPException:
     )
 
 
-def _member_schema(m) -> WorkPermitMemberRead:
+def _member_schema(m, *, electrical_group: str | None = None) -> WorkPermitMemberRead:
     return WorkPermitMemberRead(
-        id=str(m.id), person_id=str(m.person_id), role=m.role, created_at=m.created_at
+        id=str(m.id),
+        person_id=str(m.person_id),
+        role=m.role,
+        created_at=m.created_at,
+        electrical_group=electrical_group,
     )
 
 
@@ -186,6 +193,36 @@ async def _closing_summary(
 
 async def _permit_read(session: AsyncSession, tenant: Tenant, wp: WorkPermit) -> WorkPermitRead:
     members = await list_members(session, tenant_id=tenant.id, work_permit_id=wp.id)
+
+    groups: dict[str, str | None] = {}
+    eg_readiness = None
+    if wp.work_type == "electrical" and members:
+        person_ids = [m.person_id for m in members]
+        rows = (
+            await session.execute(
+                select(Person.id, Person.qualifications).where(
+                    Person.tenant_id == tenant.id,
+                    Person.id.in_(person_ids),
+                )
+            )
+        ).all()
+        today = datetime.now(timezone.utc).date()
+        quals_by_id = {str(pid): q for pid, q in rows}
+        for m in members:
+            groups[str(m.person_id)] = eg.current_group(
+                quals_by_id.get(str(m.person_id)), today
+            )
+        eg_readiness = eg.readiness(
+            [
+                {
+                    "person_id": str(m.person_id),
+                    "role": m.role,
+                    "group": groups.get(str(m.person_id)),
+                }
+                for m in members
+            ]
+        )
+
     return WorkPermitRead(
         id=str(wp.id),
         number=wp.number,
@@ -201,7 +238,9 @@ async def _permit_read(session: AsyncSession, tenant: Tenant, wp: WorkPermit) ->
         opened_at=wp.opened_at,
         closed_at=wp.closed_at,
         suspended_at=wp.suspended_at,
-        members=[_member_schema(m) for m in members],
+        members=[
+            _member_schema(m, electrical_group=groups.get(str(m.person_id))) for m in members
+        ],
         subdivision_text=wp.subdivision_text,
         content_text=wp.content_text,
         conditions_text=wp.conditions_text,
@@ -213,6 +252,9 @@ async def _permit_read(session: AsyncSession, tenant: Tenant, wp: WorkPermit) ->
         type_specific=wp.type_specific,
         created_at=wp.created_at,
         updated_at=wp.updated_at,
+        electrical_group_readiness=(
+            ElectricalGroupReadiness(**eg_readiness) if eg_readiness is not None else None
+        ),
     )
 
 

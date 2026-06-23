@@ -33,7 +33,7 @@ import {
   labelOf,
 } from "@/lib/workPermitVocab";
 import { PERMISSIONS } from "@/permissions/permissions";
-import type { ReadinessReportDto, WorkPermitClosingSummaryDto, WorkPermitDto, WorkPermitEventDto, WorkPermitSignatureDto } from "@/types/dto/workPermits";
+import type { ElectricalGroupReadinessDto, ReadinessReportDto, WorkPermitClosingSummaryDto, WorkPermitDto, WorkPermitEventDto, WorkPermitSignatureDto } from "@/types/dto/workPermits";
 
 // Actions available per status (excluding "Продлить" which needs a date input)
 const ACTIONS_BY_STATUS: Record<
@@ -74,6 +74,32 @@ function Section({ title, value }: { title: string; value: string | null | undef
     <div>
       <div className="text-xs text-muted-foreground">{title}</div>
       <div className="text-sm whitespace-pre-wrap">{value}</div>
+    </div>
+  );
+}
+
+// Баннер мягкой готовности по группам электробезопасности (только для electrical, только при !ok)
+function ElectricalGroupReadinessBanner({
+  workType,
+  readiness,
+}: {
+  workType: string;
+  readiness: ElectricalGroupReadinessDto | null;
+}) {
+  if (workType !== "electrical") return null;
+  if (!readiness || readiness.ok) return null;
+  if (readiness.insufficient.length === 0) return null;
+
+  return (
+    <div className="mt-3 rounded-md border border-yellow-400 bg-yellow-50 p-2 text-sm text-yellow-800">
+      <div className="font-medium mb-1">Группы электробезопасности: требуется повышение</div>
+      <ul className="space-y-0.5">
+        {readiness.insufficient.map((item) => (
+          <li key={item.person_id}>
+            {MEMBER_ROLE_LABELS[item.role] ?? item.role}: группа {item.group ?? "—"} {"<"} требуется {item.required}
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
@@ -427,6 +453,10 @@ export default function WorkPermitDetailPage() {
               persons={persons}
               nameOf={nameOf}
               onRefresh={() => void reload()}
+            />
+            <ElectricalGroupReadinessBanner
+              workType={wp.work_type}
+              readiness={wp.electrical_group_readiness ?? null}
             />
           </div>
           <div className="rounded-md border p-3">

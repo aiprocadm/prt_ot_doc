@@ -106,13 +106,14 @@ class WorkPermitPrintData:
     measures_during: str | None
     special_conditions: str | None
     ppe_text: str | None
-    members: list[tuple[str, str]]  # (role_label, fio)
+    members: list[tuple[str, str, str | None]]  # (role_label, fio, group)
     briefing: dict | None  # {conducted_by_fio, conducted_at, topics}
     daily_admissions: list[dict]  # [{date, start, end, admitted_by_fio}]
     extensions: list[dict]  # [{old_end, new_end, at}]
     completion: dict | None  # {text, recorded_at}
     closed_at: str | None
     signatures: list[SignatureLine]
+    show_member_groups: bool = False  # True только для электро (903н)
 
 
 def _kv(doc, label: str, value: str | None) -> None:
@@ -139,13 +140,18 @@ def build_work_permit_docx(data: WorkPermitPrintData) -> bytes:
     # 2. Ответственные и бригада
     doc.add_heading("Ответственные лица и состав бригады", level=1)
     if data.members:
-        tbl = doc.add_table(rows=1, cols=2)
+        cols = 3 if data.show_member_groups else 2
+        tbl = doc.add_table(rows=1, cols=cols)
         tbl.style = "Table Grid"
         hdr = tbl.rows[0].cells
         hdr[0].text, hdr[1].text = "Роль", "Ф.И.О."
-        for role_label, fio in data.members:
+        if data.show_member_groups:
+            hdr[2].text = "Группа"
+        for role_label, fio, group in data.members:
             cells = tbl.add_row().cells
             cells[0].text, cells[1].text = role_label, fio
+            if data.show_member_groups:
+                cells[2].text = group or "—"
     else:
         doc.add_paragraph("—")
 

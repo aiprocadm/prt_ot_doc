@@ -522,6 +522,19 @@ async def _seed_work_permit_electrical_demo(session, tenant_db_id: str, person) 
                 tenant_id=tenant_db_id, work_permit_id=wp.id, person_id=person.id, role="foreman"
             )
         )
+    # Производитель работ должен иметь группу по электробезопасности (903н) — показ + готовность
+    # в наряде. Хранится в Person.qualifications (без миграции). Идемпотентно.
+    quals = list(person.qualifications or [])
+    if not any(q.get("kind") == "electrical_safety_group" for q in quals):
+        quals.append(
+            {
+                "kind": "electrical_safety_group",
+                "level": "IV",
+                "name": "Группа по электробезопасности",
+                "valid_until": "2027-12-31",
+            }
+        )
+        person.qualifications = quals
 
 
 async def _seed_work_permit_excavation_demo(session, tenant_db_id: str, person) -> None:

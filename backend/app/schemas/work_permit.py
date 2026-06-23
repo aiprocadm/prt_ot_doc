@@ -23,11 +23,17 @@ class WorkPermitMemberCreate(BaseSchema):
         return v
 
 
+class ElectricalGroupReadiness(BaseSchema):
+    ok: bool
+    insufficient: list[dict]  # [{person_id, role, group, required}]
+
+
 class WorkPermitMemberRead(BaseSchema):
     id: str
     person_id: str
     role: str
     created_at: datetime
+    electrical_group: str | None = None
 
 
 class WorkPermitEventRead(BaseSchema):
@@ -151,6 +157,7 @@ class WorkPermitRead(BaseSchema):
     type_specific: dict | None
     created_at: datetime
     updated_at: datetime
+    electrical_group_readiness: ElectricalGroupReadiness | None = None
 
 
 class WorkPermitPage(BaseSchema):
