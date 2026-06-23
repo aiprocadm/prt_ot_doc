@@ -44,6 +44,7 @@ import {
   SHORING_METHOD_LABELS,
 } from "@/lib/workPermitVocab";
 import { applyApiFieldErrorsToForm, isApiError } from "@/utils/apiFormErrors";
+import { GasAnalysisEditor, type GasRow } from "@/features/work-permits/GasAnalysisEditor";
 
 const EMPTY: WorkPermitFormValues = {
   work_type: "height",
@@ -190,6 +191,32 @@ export const WorkPermitFormDialog = ({ trigger, initialData, onSubmitted }: Prop
     ((form.watch("type_specific") as { utilities?: string[] } | null)?.utilities) ?? [],
   );
 
+  // Редактор замеров (общий для ОЗП/огневых/газоопасных). Мутации через getValues — без stale-snapshot.
+  const updateGas = (mut: (rows: GasRow[]) => GasRow[]) => {
+    const current = (form.getValues("type_specific") ?? {}) as { gas_analysis?: GasRow[] };
+    const rows = mut([...(current.gas_analysis ?? [])]);
+    form.setValue("type_specific", {
+      ...current,
+      gas_analysis: rows,
+    } as WorkPermitFormValues["type_specific"]);
+  };
+  const gasRows =
+    ((form.watch("type_specific") as { gas_analysis?: GasRow[] } | null)?.gas_analysis) ?? [];
+  const gasEditorProps = {
+    rows: gasRows,
+    onAdd: () => updateGas((r) => [...r, { parameter: "oxygen", value: "" }]),
+    onRemove: (i: number) => updateGas((r) => r.filter((_, j) => j !== i)),
+    onCell: (i: number, f: keyof GasRow, v: string) =>
+      updateGas((r) =>
+        // norm/measured_at — optional: пусто→undefined; parameter/value хранятся как есть (value="" валидно)
+        r.map((row, j) =>
+          j === i
+            ? { ...row, [f]: f === "norm" || f === "measured_at" ? v || undefined : v }
+            : row,
+        ),
+      ),
+  };
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>{trigger}</DialogTrigger>
@@ -305,6 +332,7 @@ export const WorkPermitFormDialog = ({ trigger, initialData, onSubmitted }: Prop
                 Параметры замеров: {GAS_PARAMETER_CODES.map((c) => GAS_PARAMETER_LABELS[c]).join(", ")}.
                 Изоляция коммуникаций и средства эвакуации — в полях «Мероприятия» / «Особые условия».
               </p>
+              <GasAnalysisEditor {...gasEditorProps} />
             </div>
           )}
 
@@ -328,6 +356,7 @@ export const WorkPermitFormDialog = ({ trigger, initialData, onSubmitted }: Prop
                 Параметры замеров концентрации: {GAS_PARAMETER_CODES.map((c) => GAS_PARAMETER_LABELS[c]).join(", ")}.
                 Подготовка/очистка места и контроль после работ — в полях «Мероприятия» / «Особые условия».
               </p>
+              <GasAnalysisEditor {...gasEditorProps} />
             </div>
           )}
 
@@ -351,6 +380,7 @@ export const WorkPermitFormDialog = ({ trigger, initialData, onSubmitted }: Prop
                 Параметры замеров концентрации: {GAS_PARAMETER_CODES.map((c) => GAS_PARAMETER_LABELS[c]).join(", ")}.
                 Продувка/вентиляция и контроль среды — в полях «Мероприятия» / «Особые условия».
               </p>
+              <GasAnalysisEditor {...gasEditorProps} />
             </div>
           )}
 
