@@ -45,13 +45,29 @@ RESPIRATORY_PPE = {
     "air_supply": "Аппарат с принудительной подачей воздуха",
 }
 
+# --- технические мероприятия подготовки места (электроустановки, ПОТЭЭ 903н п.16.1) ---
+ELECTRICAL_MEASURES = {
+    "disconnect": "Произведены отключения, приняты меры против ошибочного включения",
+    "lockout_signs": "На приводах и ключах управления вывешены запрещающие плакаты",
+    "verify_no_voltage": "Проверено отсутствие напряжения на токоведущих частях",
+    "grounding": "Установлено заземление (включены ЗН / наложены переносные заземления)",
+    "barriers_signs": "Вывешены плакаты, ограждены рабочие места и токоведущие части под напряжением",
+}
+
+# --- условие производства работ по напряжению (электроустановки) ---
+VOLTAGE_CONDITIONS = {
+    "de_energized": "Со снятием напряжения",
+    "near_live": "Без снятия напряжения вблизи токоведущих частей",
+    "away_live": "Без снятия напряжения вдали от токоведущих частей",
+}
+
 
 @dataclass(frozen=True)
 class WorkTypeProfile:
     code: str
     label: str
     legal_reference: str
-    structured_kind: str | None  # "safety_systems" | "confined_env" | "fire_safety" | "gas_works" | None
+    structured_kind: str | None  # "safety_systems" | "confined_env" | "fire_safety" | "gas_works" | "electrical_safety" | None
 
 
 PROFILES: dict[str, WorkTypeProfile] = {
@@ -71,7 +87,7 @@ PROFILES: dict[str, WorkTypeProfile] = {
         "electrical",
         "Работа в электроустановках",
         "Приказ Минтруда России от 15.12.2020 № 903н",
-        None,
+        "electrical_safety",
     ),
     "hot_work": WorkTypeProfile(
         "hot_work",
@@ -163,6 +179,14 @@ def validate_type_specific(work_type: str, payload: dict | None) -> None:
             raise ValueError(f"unknown type_specific keys: {sorted(unknown)}")
         _validate_code_list(payload.get("respiratory_ppe"), RESPIRATORY_PPE, "respiratory_ppe")
         _validate_gas_analysis(payload.get("gas_analysis"))
+    elif kind == "electrical_safety":
+        unknown = set(payload) - {"technical_measures", "voltage_condition"}
+        if unknown:
+            raise ValueError(f"unknown type_specific keys: {sorted(unknown)}")
+        _validate_code_list(payload.get("technical_measures"), ELECTRICAL_MEASURES, "technical_measures")
+        vc = payload.get("voltage_condition")
+        if vc is not None and vc not in VOLTAGE_CONDITIONS:
+            raise ValueError(f"invalid voltage_condition: {vc!r}")
     else:
         raise ValueError(f"type_specific is not accepted for work_type {work_type!r}")
 
@@ -237,5 +261,21 @@ def build_structured_section(
             return None
         return pf.StructuredSection(
             title="Защита органов дыхания и анализ среды (528)", kv=kv, table=table
+        )
+    if kind == "electrical_safety":
+        ts = type_specific or {}
+        kv = []
+        vc = ts.get("voltage_condition")
+        if vc:
+            kv.append(("Условие проведения", VOLTAGE_CONDITIONS.get(vc, vc)))
+        measures = ts.get("technical_measures") or []
+        if measures:
+            kv.append(
+                ("Технические мероприятия", "; ".join(ELECTRICAL_MEASURES.get(m, m) for m in measures))
+            )
+        if not kv:
+            return None
+        return pf.StructuredSection(
+            title="Меры безопасности в электроустановках (903н)", kv=kv, table=None
         )
     return None

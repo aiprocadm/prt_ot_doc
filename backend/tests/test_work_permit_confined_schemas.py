@@ -89,3 +89,31 @@ def test_create_rejects_fire_means_on_gas_hazardous():
             work_type="gas_hazardous", zone_text="колодец",
             type_specific={"fire_fighting_means": ["sand"]},
         )
+
+
+def test_create_accepts_valid_electrical_type_specific():
+    m = WorkPermitCreate(
+        work_type="electrical",
+        zone_text="РУ-0,4 кВ, ячейка №7",
+        type_specific={
+            "technical_measures": ["disconnect", "verify_no_voltage", "grounding"],
+            "voltage_condition": "de_energized",
+        },
+    )
+    assert m.type_specific["voltage_condition"] == "de_energized"
+
+
+def test_create_rejects_bad_technical_measure():
+    with pytest.raises(ValidationError):
+        WorkPermitCreate(
+            work_type="electrical", zone_text="РУ",
+            type_specific={"technical_measures": ["laser"]},
+        )
+
+
+def test_create_rejects_gas_analysis_on_electrical():
+    with pytest.raises(ValidationError):
+        WorkPermitCreate(
+            work_type="electrical", zone_text="РУ",
+            type_specific={"gas_analysis": [{"parameter": "oxygen", "value": "20"}]},
+        )

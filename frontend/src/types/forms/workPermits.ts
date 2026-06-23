@@ -14,6 +14,17 @@ export const RESPIRATORY_PPE_CODES = [
   "hose_mask", "scba", "isolating_mask", "filter_mask", "air_supply",
 ] as const;
 
+export const ELECTRICAL_MEASURE_CODES = [
+  "disconnect", "lockout_signs", "verify_no_voltage", "grounding", "barriers_signs",
+] as const;
+export const VOLTAGE_CONDITION_CODES = ["de_energized", "near_live", "away_live"] as const;
+
+export const electricalSafetySchema = z.object({
+  technical_measures: z.array(z.enum(ELECTRICAL_MEASURE_CODES)).optional(),
+  voltage_condition: z.enum(VOLTAGE_CONDITION_CODES).optional(),
+});
+export type ElectricalSafetyValues = z.infer<typeof electricalSafetySchema>;
+
 const gasMeasurementSchema = z.object({
   parameter: z.enum(GAS_PARAMETER_CODES),
   value: z.string(),
@@ -40,7 +51,10 @@ export const gasWorksSchema = z.object({
 export type GasWorksValues = z.infer<typeof gasWorksSchema>;
 
 // Надмножество ключей всех видов — клиентская форма; серверная validate_type_specific — источник истины по виду.
-export const typeSpecificSchema = confinedEnvSchema.merge(fireSafetySchema).merge(gasWorksSchema);
+export const typeSpecificSchema = confinedEnvSchema
+  .merge(fireSafetySchema)
+  .merge(gasWorksSchema)
+  .merge(electricalSafetySchema);
 
 export const workPermitSchema = z.object({
   work_type: z.string().min(1, "Укажите вид работ"),

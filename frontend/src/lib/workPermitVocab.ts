@@ -103,5 +103,19 @@ export const RESPIRATORY_PPE_LABELS: Record<string, string> = {
   air_supply: "Аппарат с принудительной подачей воздуха",
 };
 
+export const ELECTRICAL_MEASURES_LABELS: Record<string, string> = {
+  disconnect: "Отключения + меры против ошибочного включения",
+  lockout_signs: "Запрещающие плакаты на приводах/ключах",
+  verify_no_voltage: "Проверено отсутствие напряжения",
+  grounding: "Установлено заземление (ЗН / переносные)",
+  barriers_signs: "Плакаты, ограждение мест и токоведущих частей",
+};
+
+export const VOLTAGE_CONDITION_LABELS: Record<string, string> = {
+  de_energized: "Со снятием напряжения",
+  near_live: "Без снятия напряжения вблизи токоведущих частей",
+  away_live: "Без снятия напряжения вдали от токоведущих частей",
+};
+
 export const labelOf = (map: Record<string, string>, code: string): string =>
   map[code] ?? code;

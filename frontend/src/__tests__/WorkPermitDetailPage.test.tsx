@@ -111,4 +111,16 @@ describe("WorkPermitDetailPage", () => {
     expect(await screen.findByText(/Защита органов дыхания/i)).toBeInTheDocument();
     expect(screen.queryByText("Системы безопасности")).not.toBeInTheDocument();
   });
+
+  it("электроустановки: показывает блок с условием напряжения и техническими мероприятиями", async () => {
+    setRole([PERMISSIONS.WORK_PERMIT_VIEW]);
+    getMock.mockResolvedValue({
+      ...draft,
+      work_type: "electrical",
+      type_specific: { technical_measures: ["disconnect"], voltage_condition: "de_energized" },
+    });
+    renderAt();
+    expect(await screen.findByText(/Меры безопасности в электроустановках/i)).toBeInTheDocument();
+    expect(screen.getByText(/Со снятием напряжения/i)).toBeInTheDocument();
+  });
 });
