@@ -123,4 +123,16 @@ describe("WorkPermitDetailPage", () => {
     expect(await screen.findByText(/Меры безопасности в электроустановках/i)).toBeInTheDocument();
     expect(screen.getByText(/Со снятием напряжения/i)).toBeInTheDocument();
   });
+
+  it("земляные работы: показывает блок безопасности с типом крепления и коммуникациями", async () => {
+    setRole([PERMISSIONS.WORK_PERMIT_VIEW]);
+    getMock.mockResolvedValue({
+      ...draft,
+      work_type: "excavation",
+      type_specific: { utilities: ["power_cable"], shoring: "shield_bracing" },
+    });
+    renderAt();
+    expect(await screen.findByText(/Безопасность земляных работ/i)).toBeInTheDocument();
+    expect(screen.getByText(/Крепление щитами/i)).toBeInTheDocument();
+  });
 });
