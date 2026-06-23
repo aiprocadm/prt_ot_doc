@@ -117,3 +117,28 @@ def test_create_rejects_gas_analysis_on_electrical():
             work_type="electrical", zone_text="РУ",
             type_specific={"gas_analysis": [{"parameter": "oxygen", "value": "20"}]},
         )
+
+
+def test_create_accepts_valid_excavation_type_specific():
+    m = WorkPermitCreate(
+        work_type="excavation",
+        zone_text="Траншея вдоль корпуса №4",
+        type_specific={"utilities": ["power_cable", "water_sewer"], "shoring": "shield_bracing"},
+    )
+    assert m.type_specific["shoring"] == "shield_bracing"
+
+
+def test_create_rejects_bad_utility():
+    with pytest.raises(ValidationError):
+        WorkPermitCreate(
+            work_type="excavation", zone_text="траншея",
+            type_specific={"utilities": ["lava_tube"]},
+        )
+
+
+def test_create_rejects_gas_analysis_on_excavation():
+    with pytest.raises(ValidationError):
+        WorkPermitCreate(
+            work_type="excavation", zone_text="траншея",
+            type_specific={"gas_analysis": [{"parameter": "oxygen", "value": "20"}]},
+        )

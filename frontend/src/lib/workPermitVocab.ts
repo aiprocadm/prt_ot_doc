@@ -70,7 +70,7 @@ export const LEGAL_REFERENCE_LABELS: Record<string, string> = {
   electrical: "Приказ Минтруда № 903н",
   hot_work: "Постановление Правительства РФ № 1479 (ППР)",
   gas_hazardous: "Приказ Ростехнадзора № 528 (ФНП)",
-  excavation: "Правила земляных работ",
+  excavation: "Приказ Минтруда № 883н (ПОТ в строительстве)",
 };
 
 export const GAS_PARAMETER_LABELS: Record<string, string> = {
@@ -115,6 +115,26 @@ export const VOLTAGE_CONDITION_LABELS: Record<string, string> = {
   de_energized: "Со снятием напряжения",
   near_live: "Без снятия напряжения вблизи токоведущих частей",
   away_live: "Без снятия напряжения вдали от токоведущих частей",
+};
+
+export const VOLTAGE_LEVEL_LABELS: Record<string, string> = {
+  le_1000: "До 1000 В",
+  gt_1000: "Выше 1000 В",
+};
+
+export const UTILITIES_LABELS: Record<string, string> = {
+  power_cable: "Электрические кабели",
+  gas_pipe: "Газопровод",
+  water_sewer: "Водопровод / канализация",
+  heating: "Теплосеть",
+  comms: "Кабели связи",
+};
+
+export const SHORING_METHOD_LABELS: Record<string, string> = {
+  natural_slopes: "Естественные откосы",
+  shield_bracing: "Крепление щитами / распорами",
+  sheet_piling: "Шпунтовое ограждение",
+  none_shallow: "Без крепления (мелкая выемка)",
 };
 
 export const labelOf = (map: Record<string, string>, code: string): string =>

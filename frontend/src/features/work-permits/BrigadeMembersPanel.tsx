@@ -62,6 +62,11 @@ export const BrigadeMembersPanel = ({ wp, persons, nameOf, onRefresh }: Props) =
           <li key={m.id} className="flex items-center justify-between gap-2">
             <span>{nameOf(m.person_id)}</span>
             <span className="text-muted-foreground">{labelOf(MEMBER_ROLE_LABELS, m.role)}</span>
+            {wp.work_type === "electrical" && (
+              <span className="text-xs text-muted-foreground">
+                Группа: {m.electrical_group ?? "—"}
+              </span>
+            )}
             {canEdit && (
               <Can permission={PERMISSIONS.WORK_PERMIT_MANAGE}>
                 <button

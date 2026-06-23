@@ -117,10 +117,28 @@ describe("WorkPermitDetailPage", () => {
     getMock.mockResolvedValue({
       ...draft,
       work_type: "electrical",
-      type_specific: { technical_measures: ["disconnect"], voltage_condition: "de_energized" },
+      type_specific: {
+        technical_measures: ["disconnect"],
+        voltage_condition: "de_energized",
+        voltage_level: "le_1000",
+      },
     });
     renderAt();
     expect(await screen.findByText(/Меры безопасности в электроустановках/i)).toBeInTheDocument();
     expect(screen.getByText(/Со снятием напряжения/i)).toBeInTheDocument();
+    expect(screen.getByText(/Класс напряжения/i)).toBeInTheDocument();
+    expect(screen.getByText(/До 1000 В/i)).toBeInTheDocument();
+  });
+
+  it("земляные работы: показывает блок безопасности с типом крепления и коммуникациями", async () => {
+    setRole([PERMISSIONS.WORK_PERMIT_VIEW]);
+    getMock.mockResolvedValue({
+      ...draft,
+      work_type: "excavation",
+      type_specific: { utilities: ["power_cable"], shoring: "shield_bracing" },
+    });
+    renderAt();
+    expect(await screen.findByText(/Безопасность земляных работ/i)).toBeInTheDocument();
+    expect(screen.getByText(/Крепление щитами/i)).toBeInTheDocument();
   });
 });

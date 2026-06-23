@@ -231,6 +231,7 @@ class QualificationRecord(BaseSchema):
     valid_until: date | None = None
     issuer: str | None = Field(default=None, max_length=255)
     document: str | None = Field(default=None, max_length=255)
+    level: str | None = Field(default=None, max_length=8)
 
 
 class PPEItem(BaseSchema):
