@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 
 import { npaApi } from "@/api/npa";
 import { EmptyState } from "@/components/common/EmptyState";
@@ -53,8 +54,14 @@ const NpaPage = () => {
 
   const createUpdateTasks = async () => {
     if (!selectedId) return;
-    await npaApi.createImpactTasks(selectedId);
-    await npaApi.getDetail<NpaDetail>(selectedId).then((response) => setDetail(response));
+    try {
+      await npaApi.createImpactTasks(selectedId);
+      const response = await npaApi.getDetail<NpaDetail>(selectedId);
+      setDetail(response);
+      toast.success("Задачи обновления созданы");
+    } catch {
+      toast.error("Не удалось создать задачи обновления");
+    }
   };
 
   return (
