@@ -312,7 +312,9 @@ export default function WorkPermitDetailPage() {
           <Section title="Содержание работ" value={wp.content_text} />
           <Section title="Условия проведения" value={wp.conditions_text} />
           <Section title="Опасные факторы" value={wp.hazards_text} />
-          <Section title="Системы безопасности" value={safetySystemsText} />
+          {wp.work_type === "height" ? (
+            <Section title="Системы безопасности" value={safetySystemsText} />
+          ) : null}
           <Section title="Мероприятия до начала" value={wp.measures_before_text} />
           <Section title="Мероприятия в процессе" value={wp.measures_during_text} />
           <Section title="Особые условия" value={wp.special_conditions_text} />

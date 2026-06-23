@@ -98,4 +98,17 @@ describe("WorkPermitDetailPage", () => {
     renderAt();
     expect(await screen.findByText(/ежедневный допуск/i)).toBeInTheDocument();
   });
+
+  it("газоопасный наряд не показывает height-секцию «Системы безопасности» (паритет с формой)", async () => {
+    setRole([PERMISSIONS.WORK_PERMIT_VIEW]);
+    getMock.mockResolvedValue({
+      ...draft,
+      work_type: "gas_hazardous",
+      safety_systems: ["fall_arrest"], // легаси-утечка данных другого вида
+      type_specific: { respiratory_ppe: ["hose_mask"] },
+    });
+    renderAt();
+    expect(await screen.findByText(/Защита органов дыхания/i)).toBeInTheDocument();
+    expect(screen.queryByText("Системы безопасности")).not.toBeInTheDocument();
+  });
 });
