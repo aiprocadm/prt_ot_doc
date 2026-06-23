@@ -28,6 +28,8 @@ import {
   RESPIRATORY_PPE_LABELS,
   ELECTRICAL_MEASURES_LABELS,
   VOLTAGE_CONDITION_LABELS,
+  UTILITIES_LABELS,
+  SHORING_METHOD_LABELS,
   labelOf,
 } from "@/lib/workPermitVocab";
 import { PERMISSIONS } from "@/permissions/permissions";
@@ -362,6 +364,25 @@ export default function WorkPermitDetailPage() {
               {((wp.type_specific as { gas_analysis?: Array<{ parameter: string; value: string }> }).gas_analysis ?? []).map((m, i) => (
                 <div key={i}>{GAS_PARAMETER_LABELS[m.parameter] ?? m.parameter}: {m.value}</div>
               ))}
+            </div>
+          ) : null}
+          {wp.work_type === "excavation" && wp.type_specific ? (
+            <div className="text-sm">
+              <div className="font-medium">Безопасность земляных работ (883н)</div>
+              {(wp.type_specific as { shoring?: string }).shoring ? (
+                <div>
+                  Защита стенок выемки:{" "}
+                  {SHORING_METHOD_LABELS[(wp.type_specific as { shoring: string }).shoring] ?? "—"}
+                </div>
+              ) : null}
+              {((wp.type_specific as { utilities?: string[] }).utilities ?? []).length ? (
+                <div>
+                  Подземные коммуникации:{" "}
+                  {((wp.type_specific as { utilities: string[] }).utilities)
+                    .map((c) => UTILITIES_LABELS[c] ?? c)
+                    .join(", ")}
+                </div>
+              ) : null}
             </div>
           ) : null}
           {wp.work_type === "electrical" && wp.type_specific ? (
