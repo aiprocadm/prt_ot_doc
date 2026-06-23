@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { workPermitsApi } from "@/api/workPermits";
@@ -27,6 +27,12 @@ export const ClosingPanel = ({
 }: Props) => {
   const [completionText, setCompletionText] = useState(summary.completion_text ?? "");
   const [savingAct, setSavingAct] = useState(false);
+
+  // Текст акта приходит из summary; после onRefresh (или правки другим пользователем) поле
+  // должно отражать актуальное значение, иначе редактор показывает устаревший снимок.
+  useEffect(() => {
+    setCompletionText(summary.completion_text ?? "");
+  }, [summary.completion_text]);
 
   const handleRecordAct = async () => {
     if (!workPermitId) return;

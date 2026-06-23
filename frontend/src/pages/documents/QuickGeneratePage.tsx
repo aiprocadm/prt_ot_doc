@@ -94,6 +94,13 @@ const QuickGeneratePage = () => {
     }
   }, [companies, companyId]);
 
+  // Подобранный шаблон привязан к конкретным компании/площадке/сотруднику/типу случая.
+  // При изменении любого входа сбрасываем подбор — иначе «Сгенерировать» уйдёт со старым
+  // template_code под новые данные (шаблон молча не соответствует выбору пользователя).
+  useEffect(() => {
+    setResolved(null);
+  }, [companyId, siteId, personId, caseType, documentType, category]);
+
   const selectedPerson = useMemo<PersonDto | undefined>(
     () => persons.find((item) => item.id === personId),
     [persons, personId]

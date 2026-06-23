@@ -453,7 +453,7 @@ async def _seed_work_permit_gas_demo(session, tenant_db_id: str, person) -> None
             tenant_id=tenant_db_id,
             number="WP-GAS-DEMO",
             work_type="gas_hazardous",
-            zone_text="Колодец К-12, узел запорной арматуры",
+            zone_text="ГРП-3, газорегуляторный пункт (узел запорной арматуры)",
             status="draft",
             type_specific={
                 "respiratory_ppe": ["hose_mask"],

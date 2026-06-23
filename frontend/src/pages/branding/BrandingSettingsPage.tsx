@@ -169,7 +169,9 @@ const BrandingSettingsPage = () => {
   useUnsavedChanges(hasUnsavedChanges);
 
   const handleSave = async () => {
-    if (!companyId) return;
+    // Пока профиль выбранной организации грузится, form ещё держит данные предыдущей
+    // организации — сохранение в этот момент записало бы чужие данные в новую компанию.
+    if (!companyId || loading) return;
     try {
       const payload = {
         preferred_header_preset_code: form.preferred_header_preset_code || null,
@@ -511,7 +513,7 @@ const BrandingSettingsPage = () => {
             </div>
 
             <div className="flex flex-wrap gap-2">
-              <Button onClick={() => void handleSave()}>Сохранить профиль</Button>
+              <Button onClick={() => void handleSave()} disabled={loading}>Сохранить профиль</Button>
               <Button
                 variant="outline"
                 onClick={() => void handlePreview().catch(() => toast.error("Не удалось собрать превью"))}

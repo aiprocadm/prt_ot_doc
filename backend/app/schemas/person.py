@@ -244,6 +244,7 @@ class PersonRead(BaseSchema):
     id: str
     company_id: str
     position_id: str | None = None
+    position_title: str | None = Field(default=None, max_length=255)
     workplace_id: str | None = None
     first_name: str
     last_name: str
@@ -357,6 +358,7 @@ class PersonPage(BaseSchema):
 class PersonCreate(BaseSchema):
     company_id: str = Field(min_length=1, max_length=36)
     position_id: str | None = Field(default=None, min_length=1, max_length=36)
+    position_title: str | None = Field(default=None, max_length=255)
     workplace_id: str | None = Field(default=None, min_length=1, max_length=36)
     first_name: str = Field(min_length=1, max_length=100)
     last_name: str = Field(min_length=1, max_length=100)
@@ -383,6 +385,7 @@ class PersonCreate(BaseSchema):
 class PersonUpdate(BaseSchema):
     company_id: str | None = Field(default=None, min_length=1, max_length=36)
     position_id: str | None = Field(default=None, min_length=1, max_length=36)
+    position_title: str | None = Field(default=None, max_length=255)
     workplace_id: str | None = Field(default=None, min_length=1, max_length=36)
     first_name: str | None = Field(default=None, min_length=1, max_length=100)
     last_name: str | None = Field(default=None, min_length=1, max_length=100)

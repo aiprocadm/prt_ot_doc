@@ -173,6 +173,8 @@ async def create_company(session: AsyncSession, tenant_id: str, payload: Company
         hazardous_factors=_clean_list(payload.hazardous_factors),
         is_hazardous_production_facility=bool(payload.is_hazardous_production_facility),
         has_dangerous_objects=bool(payload.has_dangerous_objects),
+        status=_clean(payload.status) or "active",
+        tags=_clean_list(payload.tags),
     )
     session.add(company)
     await session.flush()
