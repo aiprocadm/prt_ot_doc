@@ -25,6 +25,8 @@ import {
   RESPIRATORY_PPE_CODES,
   ELECTRICAL_MEASURE_CODES,
   VOLTAGE_CONDITION_CODES,
+  UTILITY_CODES,
+  SHORING_METHOD_CODES,
   workPermitSchema,
   type WorkPermitFormValues,
 } from "@/types/forms/workPermits";
@@ -38,6 +40,8 @@ import {
   RESPIRATORY_PPE_LABELS,
   ELECTRICAL_MEASURES_LABELS,
   VOLTAGE_CONDITION_LABELS,
+  UTILITIES_LABELS,
+  SHORING_METHOD_LABELS,
 } from "@/lib/workPermitVocab";
 import { applyApiFieldErrorsToForm, isApiError } from "@/utils/apiFormErrors";
 
@@ -117,7 +121,7 @@ export const WorkPermitFormDialog = ({ trigger, initialData, onSubmitted }: Prop
     ppe_text: v.ppe_text || null,
     planned_start: v.planned_start ? new Date(v.planned_start).toISOString() : null,
     planned_end: v.planned_end ? new Date(v.planned_end).toISOString() : null,
-    type_specific: ["confined_space", "hot_work", "gas_hazardous", "electrical"].includes(v.work_type)
+    type_specific: ["confined_space", "hot_work", "gas_hazardous", "electrical", "excavation"].includes(v.work_type)
       ? (v.type_specific ?? null)
       : null,
   });
@@ -161,7 +165,7 @@ export const WorkPermitFormDialog = ({ trigger, initialData, onSubmitted }: Prop
   // Один хендлер для всех type_specific-массивов (огневые/газоопасные/электро).
   // Читает актуальный стор через getValues — два быстрых клика до ререндера не теряют друг друга.
   const toggleTsCode = (
-    field: "fire_fighting_means" | "respiratory_ppe" | "technical_measures",
+    field: "fire_fighting_means" | "respiratory_ppe" | "technical_measures" | "utilities",
     code: string,
   ) => {
     const current = (form.getValues("type_specific") ?? {}) as Record<string, string[] | undefined>;
@@ -181,6 +185,9 @@ export const WorkPermitFormDialog = ({ trigger, initialData, onSubmitted }: Prop
   );
   const selectedMeasures = new Set(
     ((form.watch("type_specific") as { technical_measures?: string[] } | null)?.technical_measures) ?? [],
+  );
+  const selectedUtilities = new Set(
+    ((form.watch("type_specific") as { utilities?: string[] } | null)?.utilities) ?? [],
   );
 
   return (
@@ -379,6 +386,44 @@ export const WorkPermitFormDialog = ({ trigger, initialData, onSubmitted }: Prop
                   <option value="">—</option>
                   {VOLTAGE_CONDITION_CODES.map((c) => (
                     <option key={c} value={c}>{VOLTAGE_CONDITION_LABELS[c]}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          )}
+
+          {form.watch("work_type") === "excavation" && (
+            <div className="space-y-2">
+              <Label>Безопасность земляных работ (883н)</Label>
+              <Label className="text-xs">Подземные коммуникации в зоне работ</Label>
+              <div className="flex flex-wrap gap-3">
+                {UTILITY_CODES.map((code) => (
+                  <label key={code} className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={selectedUtilities.has(code)}
+                      onChange={() => toggleTsCode("utilities", code)}
+                    />
+                    {UTILITIES_LABELS[code]}
+                  </label>
+                ))}
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="shoring" className="text-xs">Защита стенок выемки</Label>
+                <select
+                  id="shoring"
+                  className="h-10 w-full rounded-md border px-3"
+                  value={(form.watch("type_specific")?.shoring as string) ?? ""}
+                  onChange={(e) =>
+                    form.setValue("type_specific", {
+                      ...(form.watch("type_specific") ?? {}),
+                      shoring: (e.target.value || undefined) as never,
+                    })
+                  }
+                >
+                  <option value="">—</option>
+                  {SHORING_METHOD_CODES.map((c) => (
+                    <option key={c} value={c}>{SHORING_METHOD_LABELS[c]}</option>
                   ))}
                 </select>
               </div>
