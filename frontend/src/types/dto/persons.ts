@@ -23,6 +23,7 @@ export interface PersonDto extends BaseEntityDto {
   status: PersonStatus;
   certifications?: CertificationDto[];
   photo?: FileLinkDto | null;
+  qualifications?: Array<Record<string, unknown>>;
 }
 
 export interface UpdatePersonDto {

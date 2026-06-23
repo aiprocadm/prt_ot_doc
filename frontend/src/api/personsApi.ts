@@ -2,6 +2,34 @@ import { apiClient } from "@/api/client";
 import type { PersonDto, PersonStatus } from "@/types/dto/persons";
 import type { PersonFormValues } from "@/types/forms/persons";
 
+/** Формирует запись electrical_safety_group из полей формы (или undefined, если группа не выбрана). */
+const buildElectricalGroupQual = (
+  values: PersonFormValues
+): Record<string, unknown> | undefined => {
+  if (!values.electrical_group) return undefined;
+  return {
+    kind: "electrical_safety_group",
+    level: values.electrical_group,
+    name: "Группа по электробезопасности",
+    ...(values.electrical_group_valid_until
+      ? { valid_until: values.electrical_group_valid_until }
+      : {})
+  };
+};
+
+/**
+ * Merge-safe: берёт существующие qualifications (кроме electrical_safety_group),
+ * добавляет новую запись если группа выбрана.
+ */
+export const mergeElectricalGroupQuals = (
+  existingQuals: Array<Record<string, unknown>>,
+  values: PersonFormValues
+): Array<Record<string, unknown>> => {
+  const others = existingQuals.filter((q) => q.kind !== "electrical_safety_group");
+  const newEntry = buildElectricalGroupQual(values);
+  return newEntry ? [...others, newEntry] : others;
+};
+
 type ApiEmploymentStatus = "active" | "on_leave" | "suspended" | "terminated";
 
 const toApiEmploymentStatus = (status: PersonFormValues["status"]): ApiEmploymentStatus => {
@@ -65,7 +93,8 @@ export const buildPersonCreateBody = (values: PersonFormValues) => ({
   position_title: values.position?.trim() || undefined,
   email: values.email?.trim() || undefined,
   phone: values.phone?.trim() || undefined,
-  employment_status: toApiEmploymentStatus(values.status)
+  employment_status: toApiEmploymentStatus(values.status),
+  ...(values.qualifications !== undefined ? { qualifications: values.qualifications } : {})
 });
 
 export const buildPersonPatchBody = (values: PersonFormValues) => ({
@@ -76,7 +105,8 @@ export const buildPersonPatchBody = (values: PersonFormValues) => ({
   position_title: values.position?.trim() || undefined,
   email: values.email?.trim() || undefined,
   phone: values.phone?.trim() || undefined,
-  employment_status: toApiEmploymentStatus(values.status)
+  employment_status: toApiEmploymentStatus(values.status),
+  ...(values.qualifications !== undefined ? { qualifications: values.qualifications } : {})
 });
 
 type PersonListResponse = { items?: unknown[]; total?: number };
