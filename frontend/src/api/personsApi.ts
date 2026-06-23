@@ -81,7 +81,12 @@ export const normalizePersonRead = (raw: unknown): PersonDto => {
     email: r.email != null ? String(r.email) : undefined,
     phone: r.phone != null ? String(r.phone) : undefined,
     status: employmentStatusToUi(employment),
-    company_id: typeof r.company_id === "string" ? r.company_id : undefined
+    company_id: typeof r.company_id === "string" ? r.company_id : undefined,
+    // Прокидываем qualifications, чтобы будущий edit-режим формы не затирал прочие квалификации
+    // (merge в PersonFormDialog читает их из initialData). См. handoff: пробел захвата.
+    qualifications: Array.isArray(r.qualifications)
+      ? (r.qualifications as Array<Record<string, unknown>>)
+      : [],
   };
 };
 

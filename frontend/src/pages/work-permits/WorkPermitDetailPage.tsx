@@ -96,7 +96,7 @@ function ElectricalGroupReadinessBanner({
       <ul className="space-y-0.5">
         {readiness.insufficient.map((item) => (
           <li key={item.person_id}>
-            {MEMBER_ROLE_LABELS[item.role] ?? item.role}: группа {item.group ?? "—"} &lt; требуется {item.required}
+            {MEMBER_ROLE_LABELS[item.role] ?? item.role}: группа {item.group ?? "—"} {"<"} требуется {item.required}
           </li>
         ))}
       </ul>
