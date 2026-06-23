@@ -480,6 +480,50 @@ async def _seed_work_permit_gas_demo(session, tenant_db_id: str, person) -> None
         )
 
 
+async def _seed_work_permit_electrical_demo(session, tenant_db_id: str, person) -> None:
+    """Демо-наряд работ в электроустановках (903н): тех. мероприятия + условие по напряжению. Идемпотентно."""
+    from app.models.work_permit import WorkPermit, WorkPermitMember
+
+    wp = (
+        await session.execute(
+            select(WorkPermit).where(
+                WorkPermit.tenant_id == tenant_db_id,
+                WorkPermit.number == "WP-ELEC-DEMO",
+            )
+        )
+    ).scalar_one_or_none()
+    if wp is None:
+        wp = WorkPermit(
+            tenant_id=tenant_db_id,
+            number="WP-ELEC-DEMO",
+            work_type="electrical",
+            zone_text="РУ-0,4 кВ, ячейка №7, цех №2",
+            status="draft",
+            type_specific={
+                "technical_measures": ["disconnect", "verify_no_voltage", "grounding"],
+                "voltage_condition": "de_energized",
+            },
+        )
+        session.add(wp)
+        await session.flush()
+    member = (
+        await session.execute(
+            select(WorkPermitMember).where(
+                WorkPermitMember.tenant_id == tenant_db_id,
+                WorkPermitMember.work_permit_id == wp.id,
+                WorkPermitMember.person_id == person.id,
+                WorkPermitMember.role == "foreman",
+            )
+        )
+    ).scalar_one_or_none()
+    if member is None:
+        session.add(
+            WorkPermitMember(
+                tenant_id=tenant_db_id, work_permit_id=wp.id, person_id=person.id, role="foreman"
+            )
+        )
+
+
 async def bootstrap_demo_tenant(settings: Settings) -> None:
     """Create a deterministic tenant with baseline entities for demo walkthrough."""
 
@@ -707,6 +751,7 @@ async def bootstrap_demo_tenant(settings: Settings) -> None:
             await _seed_work_permit_confined_demo(session, tenant_db_id, person)
             await _seed_work_permit_hot_work_demo(session, tenant_db_id, person)
             await _seed_work_permit_gas_demo(session, tenant_db_id, person)
+            await _seed_work_permit_electrical_demo(session, tenant_db_id, person)
 
         await ensure_default_packs(session, tenant_slug=tenant_slug)
         logger.info(
