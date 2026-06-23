@@ -13,7 +13,8 @@ import { Label } from "@/components/ui/label";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { useAbility } from "@/permissions/useAbility";
 import { PERMISSIONS } from "@/permissions/permissions";
-import { useCompaniesStore } from "@/stores/companies";
+import { fetchAllPersons } from "@/api/personsApi";
+import type { PersonDto } from "@/types/dto/persons";
 import { formatDate } from "@/utils/datetime";
 
 const BriefingsPage = () => {
@@ -23,7 +24,7 @@ const BriefingsPage = () => {
   const [overdue, setOverdue] = useState<BriefingEntryDto[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<ApiError | null>(null);
-  const { items: companies, list: listCompanies } = useCompaniesStore();
+  const [persons, setPersons] = useState<PersonDto[]>([]);
   const [templateForm, setTemplateForm] = useState({ code: "", title: "", briefing_type: "introductory", status: "active", description: "", validity_days: 365 });
   const [journalForm, setJournalForm] = useState({ code: "", title: "", journal_type: "ot", status: "active", site_id: null as string | null, department_id: null as string | null });
   const [entryForm, setEntryForm] = useState({ briefing_journal_id: "", briefing_template_id: "", person_id: "", instructor_user_id: "", briefing_type: "introductory", briefing_date: new Date().toISOString().slice(0, 16), valid_until: "", reason: "", status: "draft", notes: "" });
@@ -54,10 +55,13 @@ const BriefingsPage = () => {
 
   useEffect(() => {
     void load();
-    listCompanies({ page_size: 100 }).catch(() => undefined);
-  }, [listCompanies]);
+    fetchAllPersons().then(setPersons).catch(() => undefined);
+  }, []);
 
-  const companyOptions = useMemo(() => companies.map((company) => ({ value: company.id, label: company.name })), [companies]);
+  const personOptions = useMemo(
+    () => persons.map((person) => ({ value: person.id, label: person.full_name || person.id })),
+    [persons],
+  );
 
   return (
     <div className="space-y-6">
@@ -144,10 +148,10 @@ const BriefingsPage = () => {
               </select>
             </div>
             <div className="space-y-1">
-              <Label>Компания / сотрудник</Label>
-              <select className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={entryForm.person_id} onChange={(e) => setEntryForm((p) => ({ ...p, person_id: e.target.value }))}>
-                <option value="">Выберите организацию/контур</option>
-                {companyOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+              <Label htmlFor="entry-person">Сотрудник</Label>
+              <select id="entry-person" className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={entryForm.person_id} onChange={(e) => setEntryForm((p) => ({ ...p, person_id: e.target.value }))}>
+                <option value="">Выберите сотрудника</option>
+                {personOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
               </select>
             </div>
             <Input type="datetime-local" value={entryForm.briefing_date} onChange={(e) => setEntryForm((p) => ({ ...p, briefing_date: e.target.value }))} />
