@@ -41,6 +41,18 @@ describe("WorkPermitFormDialog gas_analysis editor", () => {
     expect(body.type_specific.gas_analysis).toEqual([{ parameter: "oxygen", value: "20.9" }]);
   });
 
+  it("два быстрых добавления накапливаются (защита от stale-snapshot)", () => {
+    render(<WorkPermitFormDialog trigger={<button>open</button>} />);
+    fireEvent.click(screen.getByText("open"));
+    fireEvent.change(screen.getByLabelText("Вид работ"), { target: { value: "confined_space" } });
+    act(() => {
+      fireEvent.click(screen.getByText("Добавить замер"));
+      fireEvent.click(screen.getByText("Добавить замер"));
+    });
+    // оба добавления видны — updateGas читает актуальный стор через getValues, не render-снимок
+    expect(screen.getAllByLabelText("Параметр замера")).toHaveLength(2);
+  });
+
   it("показывает редактор замеров для hot_work", () => {
     render(<WorkPermitFormDialog trigger={<button>open</button>} />);
     fireEvent.click(screen.getByText("open"));

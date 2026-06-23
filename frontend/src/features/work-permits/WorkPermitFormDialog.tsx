@@ -208,7 +208,12 @@ export const WorkPermitFormDialog = ({ trigger, initialData, onSubmitted }: Prop
     onRemove: (i: number) => updateGas((r) => r.filter((_, j) => j !== i)),
     onCell: (i: number, f: keyof GasRow, v: string) =>
       updateGas((r) =>
-        r.map((row, j) => (j === i ? { ...row, [f]: f === "value" ? v : v || undefined } : row)),
+        // norm/measured_at — optional: пусто→undefined; parameter/value хранятся как есть (value="" валидно)
+        r.map((row, j) =>
+          j === i
+            ? { ...row, [f]: f === "norm" || f === "measured_at" ? v || undefined : v }
+            : row,
+        ),
       ),
   };
 
