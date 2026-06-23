@@ -28,6 +28,7 @@ import {
   RESPIRATORY_PPE_LABELS,
   ELECTRICAL_MEASURES_LABELS,
   VOLTAGE_CONDITION_LABELS,
+  VOLTAGE_LEVEL_LABELS,
   UTILITIES_LABELS,
   SHORING_METHOD_LABELS,
   labelOf,
@@ -414,6 +415,14 @@ export default function WorkPermitDetailPage() {
           {wp.work_type === "electrical" && wp.type_specific ? (
             <div className="text-sm">
               <div className="font-medium">Меры безопасности в электроустановках (903н)</div>
+              {(wp.type_specific as { voltage_level?: string }).voltage_level ? (
+                <div>
+                  Класс напряжения:{" "}
+                  {VOLTAGE_LEVEL_LABELS[
+                    (wp.type_specific as { voltage_level: string }).voltage_level
+                  ] ?? "—"}
+                </div>
+              ) : null}
               {(wp.type_specific as { voltage_condition?: string }).voltage_condition ? (
                 <div>
                   Условие проведения:{" "}
