@@ -61,13 +61,30 @@ VOLTAGE_CONDITIONS = {
     "away_live": "Без снятия напряжения вдали от токоведущих частей",
 }
 
+# --- подземные коммуникации в зоне земляных работ ---
+UTILITIES = {
+    "power_cable": "Электрические кабели",
+    "gas_pipe": "Газопровод",
+    "water_sewer": "Водопровод / канализация",
+    "heating": "Теплосеть",
+    "comms": "Кабели связи",
+}
+
+# --- способ защиты стенок выемки (земляные работы) ---
+SHORING_METHODS = {
+    "natural_slopes": "Естественные откосы",
+    "shield_bracing": "Крепление щитами / распорами",
+    "sheet_piling": "Шпунтовое ограждение",
+    "none_shallow": "Без крепления (мелкая выемка)",
+}
+
 
 @dataclass(frozen=True)
 class WorkTypeProfile:
     code: str
     label: str
     legal_reference: str
-    structured_kind: str | None  # "safety_systems" | "confined_env" | "fire_safety" | "gas_works" | "electrical_safety" | None
+    structured_kind: str | None  # "safety_systems" | "confined_env" | "fire_safety" | "gas_works" | "electrical_safety" | "excavation_safety" | None
 
 
 PROFILES: dict[str, WorkTypeProfile] = {
@@ -105,8 +122,8 @@ PROFILES: dict[str, WorkTypeProfile] = {
     "excavation": WorkTypeProfile(
         "excavation",
         "Земляные работы",
-        "Правила безопасности при производстве земляных работ",
-        None,
+        "Приказ Минтруда России от 11.12.2020 № 883н (ПОТ при строительстве, реконструкции и ремонте)",
+        "excavation_safety",
     ),
 }
 
@@ -187,6 +204,14 @@ def validate_type_specific(work_type: str, payload: dict | None) -> None:
         vc = payload.get("voltage_condition")
         if vc is not None and vc not in VOLTAGE_CONDITIONS:
             raise ValueError(f"invalid voltage_condition: {vc!r}")
+    elif kind == "excavation_safety":
+        unknown = set(payload) - {"utilities", "shoring"}
+        if unknown:
+            raise ValueError(f"unknown type_specific keys: {sorted(unknown)}")
+        _validate_code_list(payload.get("utilities"), UTILITIES, "utilities")
+        shoring = payload.get("shoring")
+        if shoring is not None and shoring not in SHORING_METHODS:
+            raise ValueError(f"invalid shoring: {shoring!r}")
     else:
         raise ValueError(f"type_specific is not accepted for work_type {work_type!r}")
 
@@ -277,5 +302,19 @@ def build_structured_section(
             return None
         return pf.StructuredSection(
             title="Меры безопасности в электроустановках (903н)", kv=kv, table=None
+        )
+    if kind == "excavation_safety":
+        ts = type_specific or {}
+        kv = []
+        shoring = ts.get("shoring")
+        if shoring:
+            kv.append(("Защита стенок выемки", SHORING_METHODS.get(shoring, shoring)))
+        utils = ts.get("utilities") or []
+        if utils:
+            kv.append(("Подземные коммуникации", ", ".join(UTILITIES.get(u, u) for u in utils)))
+        if not kv:
+            return None
+        return pf.StructuredSection(
+            title="Безопасность земляных работ (883н)", kv=kv, table=None
         )
     return None
