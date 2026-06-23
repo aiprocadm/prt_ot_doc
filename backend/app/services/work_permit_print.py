@@ -9,7 +9,11 @@ from dataclasses import dataclass
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from datetime import timezone
+from datetime import datetime
+
 from app.core.config import get_settings
+from app.domains.work_permits import electrical_groups
 from app.domains.work_permits import lifecycle as lc
 from app.domains.work_permits import print_form as pf
 from app.domains.work_permits import profiles as wp_profiles
@@ -70,6 +74,30 @@ async def _name_map(session: AsyncSession, tenant_id: str, person_ids: set) -> d
             parts.append(middle)
         out[str(p.id)] = " ".join(x for x in parts if x).strip()
     return out
+
+
+async def _group_map(
+    session: AsyncSession, tenant_id: str, person_ids: set, as_of
+) -> dict[str, str | None]:
+    """Резолвит группу по электробезопасности для набора персон."""
+    ids = {str(p) for p in person_ids if p}
+    if not ids:
+        return {}
+    rows = (
+        (
+            await session.execute(
+                select(Person).where(Person.tenant_id == tenant_id, Person.id.in_(tuple(ids)))
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return {
+        str(p.id): electrical_groups.current_group(
+            getattr(p, "qualifications", None) or [], as_of
+        )
+        for p in rows
+    }
 
 
 async def render_work_permit(
@@ -178,6 +206,15 @@ async def render_work_permit(
     person_ids |= {str(s.signer_person_id) for s in signatures if s.signer_person_id}
     names = await _name_map(session, tid, person_ids)
 
+    # Для электро-нарядов резолвим группы по электробезопасности
+    is_electrical = wp.work_type == "electrical"
+    if is_electrical:
+        member_person_ids = {str(m.person_id) for m in members if m.person_id}
+        as_of = datetime.now(timezone.utc).date()
+        _elec_groups = await _group_map(session, tid, member_person_ids, as_of)
+    else:
+        _elec_groups: dict[str, str | None] = {}
+
     def fio(pid) -> str:
         return names.get(str(pid), "—") if pid else "—"
 
@@ -237,7 +274,11 @@ async def render_work_permit(
         measures_during=wp.measures_during_text,
         special_conditions=wp.special_conditions_text,
         ppe_text=wp.ppe_text,
-        members=[(pf.member_role_label(m.role), fio(m.person_id)) for m in members],
+        members=[
+            (pf.member_role_label(m.role), fio(m.person_id), _elec_groups.get(str(m.person_id)))
+            for m in members
+        ],
+        show_member_groups=is_electrical,
         briefing=(
             {
                 "conducted_by_fio": fio(briefing0.conducted_by_person_id),
