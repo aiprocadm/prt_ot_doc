@@ -10,11 +10,18 @@ from datetime import date, datetime
 
 GROUP_ORDER = ["I", "II", "III", "IV", "V"]
 
-# Упрощённые минимумы 903н (контекст ≤1000В). >1000В строже — отложено.
+# Минимумы 903н до 1000В (le_1000) — текущий/дефолтный набор.
 ROLE_MIN_GROUP: dict[str, str] = {
     "issuer": "IV", "supervisor": "IV", "admitter": "IV",
     "foreman": "III", "member": "III", "observer": "III",
 }
+
+# Минимумы выше 1000В (ПОТЭЭ; сверить с юристом).
+ROLE_MIN_GROUP_HV: dict[str, str] = {
+    "issuer": "IV", "supervisor": "V", "admitter": "IV",
+    "foreman": "IV", "member": "III", "observer": "IV",
+}
+
 _KIND = "electrical_safety_group"
 
 
@@ -39,6 +46,14 @@ def _as_date(v) -> date | None:
     return None
 
 
+def _min_table(voltage_level: str | None) -> dict[str, str]:
+    return ROLE_MIN_GROUP_HV if voltage_level == "gt_1000" else ROLE_MIN_GROUP
+
+
+def role_min(role: str, voltage_level: str | None = None) -> str | None:
+    return _min_table(voltage_level).get(role)
+
+
 def current_group(qualifications: list[dict] | None, as_of: date) -> str | None:
     best: str | None = None
     for q in qualifications or []:
@@ -55,23 +70,24 @@ def current_group(qualifications: list[dict] | None, as_of: date) -> str | None:
     return best
 
 
-def meets_minimum(group: str | None, role: str) -> bool:
-    required = ROLE_MIN_GROUP.get(role)
+def meets_minimum(group: str | None, role: str, voltage_level: str | None = None) -> bool:
+    required = _min_table(voltage_level).get(role)
     if required is None:
         return True
     return rank(group) >= rank(required)
 
 
-def readiness(members: list[dict]) -> dict:
+def readiness(members: list[dict], voltage_level: str | None = None) -> dict:
+    table = _min_table(voltage_level)
     insufficient = []
     for m in members:
         role = m.get("role")
         group = m.get("group")
-        if not meets_minimum(group, role):
+        if not meets_minimum(group, role, voltage_level):
             insufficient.append({
                 "person_id": m.get("person_id"),
                 "role": role,
                 "group": group,
-                "required": ROLE_MIN_GROUP.get(role),
+                "required": table.get(role),
             })
     return {"ok": not insufficient, "insufficient": insufficient}

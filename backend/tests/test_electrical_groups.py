@@ -175,3 +175,56 @@ class TestReadiness:
         assert result["ok"] is False
         assert result["insufficient"][0]["group"] is None
         assert result["insufficient"][0]["required"] == "III"
+
+
+# ---------------------------------------------------------------------------
+# role_min (voltage_level)
+# ---------------------------------------------------------------------------
+
+class TestRoleMin:
+    def test_foreman_gt_1000_requires_IV(self):
+        assert eg.role_min("foreman", "gt_1000") == "IV"
+
+    def test_foreman_le_1000_requires_III(self):
+        assert eg.role_min("foreman", "le_1000") == "III"
+
+    def test_foreman_none_requires_III(self):
+        assert eg.role_min("foreman", None) == "III"
+
+    def test_supervisor_gt_1000_requires_V(self):
+        assert eg.role_min("supervisor", "gt_1000") == "V"
+
+
+# ---------------------------------------------------------------------------
+# meets_minimum (voltage_level)
+# ---------------------------------------------------------------------------
+
+class TestMeetsMinimumVoltage:
+    def test_foreman_III_gt_1000_fails(self):
+        assert eg.meets_minimum("III", "foreman", "gt_1000") is False
+
+    def test_foreman_IV_gt_1000_meets(self):
+        assert eg.meets_minimum("IV", "foreman", "gt_1000") is True
+
+    def test_supervisor_IV_gt_1000_fails(self):
+        assert eg.meets_minimum("IV", "supervisor", "gt_1000") is False
+
+    def test_foreman_III_le_1000_meets(self):
+        assert eg.meets_minimum("III", "foreman", "le_1000") is True
+
+
+# ---------------------------------------------------------------------------
+# readiness (voltage_level)
+# ---------------------------------------------------------------------------
+
+class TestReadinessVoltage:
+    def test_foreman_III_gt_1000_insufficient(self):
+        members = [{"person_id": "p", "role": "foreman", "group": "III"}]
+        result = eg.readiness(members, "gt_1000")
+        assert result["ok"] is False
+        assert result["insufficient"][0]["required"] == "IV"
+
+    def test_foreman_III_no_voltage_ok(self):
+        members = [{"person_id": "p", "role": "foreman", "group": "III"}]
+        result = eg.readiness(members, None)
+        assert result["ok"] is True
