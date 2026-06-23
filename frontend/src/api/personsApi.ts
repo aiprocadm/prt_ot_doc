@@ -49,7 +49,7 @@ export const normalizePersonRead = (raw: unknown): PersonDto => {
     last_name: last,
     middle_name: middle,
     full_name: fullName,
-    position: typeof r.position === "string" ? r.position : undefined,
+    position: typeof r.position_title === "string" ? r.position_title : undefined,
     email: r.email != null ? String(r.email) : undefined,
     phone: r.phone != null ? String(r.phone) : undefined,
     status: employmentStatusToUi(employment),
@@ -62,6 +62,7 @@ export const buildPersonCreateBody = (values: PersonFormValues) => ({
   first_name: values.first_name.trim(),
   last_name: values.last_name.trim(),
   middle_name: values.middle_name?.trim() || undefined,
+  position_title: values.position?.trim() || undefined,
   email: values.email?.trim() || undefined,
   phone: values.phone?.trim() || undefined,
   employment_status: toApiEmploymentStatus(values.status)
@@ -72,6 +73,7 @@ export const buildPersonPatchBody = (values: PersonFormValues) => ({
   first_name: values.first_name.trim(),
   last_name: values.last_name.trim(),
   middle_name: values.middle_name?.trim() || undefined,
+  position_title: values.position?.trim() || undefined,
   email: values.email?.trim() || undefined,
   phone: values.phone?.trim() || undefined,
   employment_status: toApiEmploymentStatus(values.status)

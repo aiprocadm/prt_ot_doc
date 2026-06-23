@@ -168,8 +168,8 @@ export const PersonFormDialog = ({ trigger, initialData, onSubmitted }: PersonFo
               <Input id="middle_name" {...form.register("middle_name")} />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="position">Должность (не сохраняется в API)</Label>
-              <Input id="position" {...form.register("position")} placeholder="свободный текст, не сохраняется" />
+              <Label htmlFor="position">Должность</Label>
+              <Input id="position" {...form.register("position")} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="email">Электронная почта</Label>

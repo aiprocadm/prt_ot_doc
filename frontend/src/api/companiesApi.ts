@@ -2,7 +2,7 @@ import type { CompanyDto, CompanyStatus, UpdateCompanyDto } from "@/types/dto/co
 import type { CompanyFormValues } from "@/types/forms/companies";
 import type { DocumentDto } from "@/types/dto/documents";
 
-/** Только поля, которые принимает бэкенд (CompanyCreate / CompanyUpdate). Без status, tags, website — в модели API их нет. */
+/** Поля, которые принимает бэкенд (CompanyCreate / CompanyUpdate). website по-прежнему не в модели API. */
 export function buildCompanyWriteBody(values: CompanyFormValues): UpdateCompanyDto {
   const body: UpdateCompanyDto = {
     name: values.name.trim()
@@ -20,6 +20,8 @@ export function buildCompanyWriteBody(values: CompanyFormValues): UpdateCompanyD
   if (email) body.email = email;
   const phone = values.phone?.trim() ?? "";
   if (phone) body.phone_numbers = [phone];
+  if (values.status) body.status = values.status;
+  body.tags = (values.tags ?? []).map((t) => t.trim()).filter(Boolean);
   return body;
 }
 

@@ -122,7 +122,7 @@ def _apply_company_updates(company: Company, payload: CompanyUpdate) -> None:
         "stamp_file_id",
         "preferred_header_preset_code",
     ]
-    list_fields = ["phone_numbers", "work_types", "hazardous_factors", "okved_codes"]
+    list_fields = ["phone_numbers", "work_types", "hazardous_factors", "okved_codes", "tags"]
 
     for field in str_fields:
         if field in data:
@@ -143,6 +143,9 @@ def _apply_company_updates(company: Company, payload: CompanyUpdate) -> None:
         company.contact_person = _clean_string(data["contact_person"]) or None
     if "contact_phone" in data:
         company.contact_phone = _clean_string(data["contact_phone"]) or None
+    if "status" in data:
+        # status NOT NULL — пустое значение трактуем как «active», а не как NULL
+        company.status = _clean_string(data["status"]) or "active"
     if "is_hazardous_production_facility" in data:
         company.is_hazardous_production_facility = bool(data["is_hazardous_production_facility"])
     if "has_dangerous_objects" in data:

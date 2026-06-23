@@ -703,6 +703,13 @@ class Company(TenantBaseModel, SoftDeleteMixin):
         Boolean, nullable=False, default=False
     )
     has_dangerous_objects: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # CRM-статус карточки компании (draft/active/archived) — VARCHAR, не PG-enum
+    # (снимает класс enum-parity). tags — свободные метки; nullable, чтобы add_column
+    # на существующую таблицу не требовал server_default на JSON.
+    status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="active", server_default="active"
+    )
+    tags: Mapped[list[str] | None] = mapped_column(JSON, nullable=True, default=list)
 
     logo_file: Mapped["File | None"] = relationship(
         "File", foreign_keys=[logo_file_id], lazy="selectin"
@@ -769,6 +776,10 @@ class Person(TenantBaseModel, SoftDeleteMixin):
     ppe_sizes: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     working_conditions_class: Mapped[str | None] = mapped_column(String(32))
     hazardous_factors: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    # Свободнотекстовая должность (то, что вводит пользователь во фронте). Отдельно
+    # от структурного position_id/relationship `position` (каталог Position) — имя
+    # `position` занято связью, поэтому колонка называется position_title.
+    position_title: Mapped[str | None] = mapped_column(String(255))
     # values_callable: SQLAlchemy ``Enum`` defaults to sending the Python
     # enum member *name* ("ACTIVE"), but the PG type ``employmentstatus``
     # was created with lowercase *values* ("active") in migration
