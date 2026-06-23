@@ -25,6 +25,7 @@ import {
   RESPIRATORY_PPE_CODES,
   ELECTRICAL_MEASURE_CODES,
   VOLTAGE_CONDITION_CODES,
+  VOLTAGE_LEVEL_CODES,
   UTILITY_CODES,
   SHORING_METHOD_CODES,
   workPermitSchema,
@@ -40,6 +41,7 @@ import {
   RESPIRATORY_PPE_LABELS,
   ELECTRICAL_MEASURES_LABELS,
   VOLTAGE_CONDITION_LABELS,
+  VOLTAGE_LEVEL_LABELS,
   UTILITIES_LABELS,
   SHORING_METHOD_LABELS,
 } from "@/lib/workPermitVocab";
@@ -416,6 +418,25 @@ export const WorkPermitFormDialog = ({ trigger, initialData, onSubmitted }: Prop
                   <option value="">—</option>
                   {VOLTAGE_CONDITION_CODES.map((c) => (
                     <option key={c} value={c}>{VOLTAGE_CONDITION_LABELS[c]}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="voltage_level" className="text-xs">Класс напряжения</Label>
+                <select
+                  id="voltage_level"
+                  className="h-10 w-full rounded-md border px-3"
+                  value={(form.watch("type_specific")?.voltage_level as string) ?? ""}
+                  onChange={(e) =>
+                    form.setValue("type_specific", {
+                      ...(form.watch("type_specific") ?? {}),
+                      voltage_level: (e.target.value || undefined) as never,
+                    })
+                  }
+                >
+                  <option value="">—</option>
+                  {VOLTAGE_LEVEL_CODES.map((c) => (
+                    <option key={c} value={c}>{VOLTAGE_LEVEL_LABELS[c]}</option>
                   ))}
                 </select>
               </div>

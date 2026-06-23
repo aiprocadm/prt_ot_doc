@@ -8,7 +8,7 @@ vi.mock("@/api/workPermits", () => ({ workPermitsApi: { create: vi.fn(), update:
 const createMock = () => workPermitsApi.create as unknown as Mock;
 
 type SubmittedBody = {
-  type_specific?: { technical_measures?: string[]; voltage_condition?: string } | null;
+  type_specific?: { technical_measures?: string[]; voltage_condition?: string; voltage_level?: string } | null;
 };
 
 const openWith = (workType: string) => {
@@ -55,5 +55,19 @@ describe("WorkPermitFormDialog electrical section", () => {
     });
     const body = await submitAndBody();
     expect(body.type_specific?.voltage_condition).toBe("de_energized");
+  });
+
+  it("select «Класс напряжения» виден в электро-секции и пишет voltage_level отдельно от voltage_condition", async () => {
+    openWith("electrical");
+    // контрол присутствует
+    expect(screen.getByLabelText("Класс напряжения")).toBeInTheDocument();
+    // выбираем «Выше 1000 В»
+    fireEvent.change(screen.getByLabelText("Класс напряжения"), {
+      target: { value: "gt_1000" },
+    });
+    const body = await submitAndBody();
+    expect(body.type_specific?.voltage_level).toBe("gt_1000");
+    // voltage_condition не затронут (undefined/отсутствует)
+    expect(body.type_specific?.voltage_condition).toBeUndefined();
   });
 });

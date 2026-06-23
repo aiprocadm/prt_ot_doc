@@ -117,6 +117,11 @@ export const VOLTAGE_CONDITION_LABELS: Record<string, string> = {
   away_live: "Без снятия напряжения вдали от токоведущих частей",
 };
 
+export const VOLTAGE_LEVEL_LABELS: Record<string, string> = {
+  le_1000: "До 1000 В",
+  gt_1000: "Выше 1000 В",
+};
+
 export const UTILITIES_LABELS: Record<string, string> = {
   power_cable: "Электрические кабели",
   gas_pipe: "Газопровод",

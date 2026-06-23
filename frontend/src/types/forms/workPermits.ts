@@ -18,6 +18,7 @@ export const ELECTRICAL_MEASURE_CODES = [
   "disconnect", "lockout_signs", "verify_no_voltage", "grounding", "barriers_signs",
 ] as const;
 export const VOLTAGE_CONDITION_CODES = ["de_energized", "near_live", "away_live"] as const;
+export const VOLTAGE_LEVEL_CODES = ["le_1000", "gt_1000"] as const;
 
 export const UTILITY_CODES = ["power_cable", "gas_pipe", "water_sewer", "heating", "comms"] as const;
 export const SHORING_METHOD_CODES = ["natural_slopes", "shield_bracing", "sheet_piling", "none_shallow"] as const;
@@ -31,6 +32,7 @@ export type ExcavationSafetyValues = z.infer<typeof excavationSafetySchema>;
 export const electricalSafetySchema = z.object({
   technical_measures: z.array(z.enum(ELECTRICAL_MEASURE_CODES)).optional(),
   voltage_condition: z.enum(VOLTAGE_CONDITION_CODES).optional(),
+  voltage_level: z.enum(VOLTAGE_LEVEL_CODES).optional(),
 });
 export type ElectricalSafetyValues = z.infer<typeof electricalSafetySchema>;
 
