@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Annotated
+from typing import Annotated, Literal
+from urllib.parse import quote
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
@@ -33,11 +34,15 @@ from app.models.models import (
     Person,
     Tenant,
 )
+from app.models.risk import RiskHazard
 from app.schemas.medical import (
     ContingentItem,
     ContingentPage,
     ContingentRegisterPage,
     ContingentRegisterRow,
+    HazardFactorMappingIn,
+    HazardFactorMappingPage,
+    HazardFactorMappingRead,
     MedicalExamCreate,
     MedicalExamPage,
     MedicalExamRead,
@@ -63,6 +68,11 @@ from app.schemas.medical import (
 )
 from app.schemas.task import TaskRead
 from app.services.audit import AuditService
+from app.services.medical_print import (
+    PdfRendererUnavailable,
+    render_contingent_register,
+    render_named_list,
+)
 from app.services.obligations import create_medical_task
 
 router = APIRouter(tags=["medical"])
@@ -126,6 +136,23 @@ async def _get_factor(session: AsyncSession, tenant_id: str, factor_id: str) -> 
         raise HTTPException(
             status.HTTP_404_NOT_FOUND,
             detail=_error("medical_factor_not_found", "Medical factor not found"),
+        )
+    return rec
+
+
+async def _get_hazard(session: AsyncSession, tenant_id: str, hazard_id: str) -> RiskHazard:
+    rec = (
+        await session.execute(
+            select(RiskHazard).where(
+                RiskHazard.id == hazard_id,
+                RiskHazard.tenant_id == tenant_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if rec is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            detail=_error("hazard_not_found", "Hazard not found"),
         )
     return rec
 
@@ -1000,6 +1027,114 @@ async def delete_medical_factor(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
+# ---------------------------------------------------------------------------
+# Task 6.x — Runtime hazard→factor mapping (RiskHazard.medical_factor_code)
+# ---------------------------------------------------------------------------
+
+
+def _mapping_read(hazard: RiskHazard, factor_name: str | None) -> HazardFactorMappingRead:
+    return HazardFactorMappingRead(
+        hazard_id=hazard.id,
+        hazard_code=hazard.code,
+        hazard_title=hazard.title,
+        factor_code=hazard.medical_factor_code,
+        factor_name=factor_name,
+    )
+
+
+@router.get(
+    "/medical/hazard-factors",
+    response_model=HazardFactorMappingPage,
+    dependencies=[MedicalFeatureGate],
+)
+async def list_hazard_factor_mappings(
+    tenant: TenantDep,
+    session: SessionDep,
+    access: MedicalReadAccess,
+) -> HazardFactorMappingPage:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    _ = access
+    tid = str(tenant.id)
+    hazards = list(
+        (
+            await session.execute(
+                select(RiskHazard)
+                .where(RiskHazard.tenant_id == tid)
+                .order_by(RiskHazard.code.asc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+    codes = {h.medical_factor_code for h in hazards if h.medical_factor_code}
+    name_by_code: dict[str, str] = {}
+    if codes:
+        factors = (
+            await session.execute(
+                select(MedicalFactor).where(
+                    MedicalFactor.tenant_id == tid,
+                    MedicalFactor.code.in_(tuple(codes)),
+                )
+            )
+        ).scalars().all()
+        name_by_code = {f.code: f.name for f in factors}
+    items = [_mapping_read(h, name_by_code.get(h.medical_factor_code)) for h in hazards]
+    return HazardFactorMappingPage(items=items, total=len(items))
+
+
+@router.put(
+    "/medical/hazards/{hazard_id}/factor",
+    response_model=HazardFactorMappingRead,
+    dependencies=[MedicalFeatureGate],
+)
+async def set_hazard_factor(
+    request: Request,
+    hazard_id: str,
+    payload: HazardFactorMappingIn,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: MedicalAccess,
+) -> HazardFactorMappingRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    tid = str(tenant.id)
+    hazard = await _get_hazard(session, tid, hazard_id)
+    factor_name: str | None = None
+    if payload.factor_code is not None:
+        factor = (
+            await session.execute(
+                select(MedicalFactor).where(
+                    MedicalFactor.tenant_id == tid,
+                    MedicalFactor.code == payload.factor_code,
+                )
+            )
+        ).scalar_one_or_none()
+        if factor is None:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=_error(
+                    "medical_factor_not_found",
+                    f"Unknown factor code: {payload.factor_code}",
+                ),
+            )
+        factor_name = factor.name
+    hazard.medical_factor_code = payload.factor_code
+    audit = AuditService(session)
+    ip = request.client.host if request.client else "unknown"
+    await audit.log_event(
+        tenant_id=tid,
+        action="update",
+        object_type="hazard_factor_mapping",
+        object_id=hazard.id,
+        user_id=getattr(access.user, "id", None),
+        ip=ip,
+        request_id=getattr(request.state, "trace_id", None),
+        user_agent=request.headers.get("user-agent"),
+    )
+    await session.commit()
+    await session.refresh(hazard)
+    return _mapping_read(hazard, factor_name)
+
+
 @router.get(
     "/medical/contingent/register",
     response_model=ContingentRegisterPage,
@@ -1031,6 +1166,49 @@ async def get_named_list(
     today = datetime.now(timezone.utc).date()
     rows = await medsvc.build_named_list(session, tenant_id=str(tenant.id), today=today)
     return NamedListPage(items=[NamedListRow(**r) for r in rows], total=len(rows))
+
+
+async def _render_to_response(coro) -> Response:
+    """Awaits a medical render coroutine → file Response (503 если PDF недоступен)."""
+    try:
+        rendered = await coro
+    except PdfRendererUnavailable as exc:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=_error("pdf_renderer_unavailable", "PDF converter is unavailable"),
+        ) from exc
+    encoded_name = quote(rendered.filename, safe="")
+    return Response(
+        content=rendered.content,
+        media_type=rendered.media_type,
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{encoded_name}"},
+    )
+
+
+@router.get("/medical/contingent/register/print", dependencies=[MedicalFeatureGate])
+async def print_contingent_register(
+    tenant: TenantDep,
+    session: SessionDep,
+    access: MedicalReadAccess,
+    fmt: Literal["docx", "pdf"] = Query("docx", alias="format"),
+) -> Response:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    _ = access
+    return await _render_to_response(
+        render_contingent_register(session, tenant=tenant, fmt=fmt)
+    )
+
+
+@router.get("/medical/named-list/print", dependencies=[MedicalFeatureGate])
+async def print_named_list(
+    tenant: TenantDep,
+    session: SessionDep,
+    access: MedicalReadAccess,
+    fmt: Literal["docx", "pdf"] = Query("docx", alias="format"),
+) -> Response:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    _ = access
+    return await _render_to_response(render_named_list(session, tenant=tenant, fmt=fmt))
 
 
 # ---------------------------------------------------------------------------

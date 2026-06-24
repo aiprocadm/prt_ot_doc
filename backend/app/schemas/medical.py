@@ -245,3 +245,26 @@ class NamedListRow(BaseModel):
 class NamedListPage(BaseModel):
     items: list[NamedListRow]
     total: int
+
+
+class HazardFactorMappingIn(BaseModel):
+    """Runtime-привязка вредного фактора 29н к карте опасности.
+
+    `factor_code=None` снимает привязку.
+    """
+
+    factor_code: str | None = Field(default=None, max_length=32)
+    model_config = ConfigDict(extra="forbid")
+
+
+class HazardFactorMappingRead(BaseModel):
+    hazard_id: str
+    hazard_code: str
+    hazard_title: str
+    factor_code: str | None = None
+    factor_name: str | None = None
+
+
+class HazardFactorMappingPage(BaseModel):
+    items: list[HazardFactorMappingRead]
+    total: int
