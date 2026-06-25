@@ -213,7 +213,17 @@ class RoleEnum(str, enum.Enum):
 
 
 class Tenant(SharedModel):
-    code: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True)
+    # ORM↔миграция drift fix: PG-схема создаёт `code` как NOT NULL
+    # (миграция 20250601 batch.alter_column). Приводим ORM к реальной схеме.
+    # Контекстный default воспроизводит продакшен-конвенцию `code = slug`, чтобы
+    # конструкторы без явного `code` (тесты, seed) не падали на flush; продакшен
+    # задаёт `code` явно — тогда default не срабатывает.
+    code: Mapped[str] = mapped_column(
+        String(64),
+        nullable=False,
+        unique=True,
+        default=lambda ctx: ctx.get_current_parameters()["slug"],
+    )
     slug: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     contact_email: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -225,7 +235,16 @@ class Tenant(SharedModel):
         nullable=False,
         default="customer",
     )
-    schema_name: Mapped[str | None] = mapped_column(String(128), nullable=True, unique=True)
+    # Аналогично `code`: PG-схема NOT NULL (миграция 20250601). Default
+    # `tenant_<slug>` по продакшен-конвенции.
+    schema_name: Mapped[str] = mapped_column(
+        String(128),
+        nullable=False,
+        unique=True,
+        default=lambda ctx: f"tenant_{ctx.get_current_parameters()['slug']}",
+    )
+    # s3_prefix: дрейфа НЕТ — миграция next11 оставляет колонку nullable
+    # (alter_column к NOT NULL отсутствует), поэтому ORM тоже nullable=True.
     s3_prefix: Mapped[str | None] = mapped_column(String(255), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     settings: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
