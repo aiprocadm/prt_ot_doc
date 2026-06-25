@@ -22,6 +22,7 @@ import {
   ShieldCheck,
   Truck,
   Users,
+  UsersRound,
   Wrench
 } from "lucide-react";
 
@@ -86,7 +87,8 @@ export const MAIN_NAV_GROUPS: NavGroup[] = [
       { label: "Наряды-допуски", to: "/work-permits", icon: ClipboardCheck, permission: PERMISSIONS.WORK_PERMIT_VIEW },
       { label: "Инциденты/НС", to: "/incidents", icon: AlertTriangle, permission: PERMISSIONS.INCIDENT_VIEW },
       { label: "Проверки/предписания", to: "/inspections", icon: ClipboardCheck, permission: PERMISSIONS.INSPECTION_VIEW },
-      { label: "Подготовка к проверке", to: "/audit-prep", icon: Archive, permission: PERMISSIONS.AUDIT_PREP_VIEW }
+      { label: "Подготовка к проверке", to: "/audit-prep", icon: Archive, permission: PERMISSIONS.AUDIT_PREP_VIEW },
+      { label: "Комитеты по ОТ", to: "/committees", icon: UsersRound, permission: PERMISSIONS.COMMITTEE_VIEW }
     ]
   },
   {

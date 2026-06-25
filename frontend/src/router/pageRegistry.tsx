@@ -63,5 +63,6 @@ export const WorkspaceDataQualityPage = lazy(() => import("@/pages/workspace/Wor
 export const SyncConflictHelpPage = lazy(() => import("@/pages/help/SyncConflictHelpPage"));
 export const WorkPermitsPage = lazy(() => import("@/pages/work-permits/WorkPermitsPage"));
 export const WorkPermitDetailPage = lazy(() => import("@/pages/work-permits/WorkPermitDetailPage"));
+export const CommitteesPage = lazy(() => import("@/pages/committees/CommitteesPage"));
 export * from "@/router/pageRegistry/documents";
 export * from "@/router/pageRegistry/search";
