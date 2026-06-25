@@ -15,6 +15,7 @@ from app.api.helpers.etag import (
     compute_list_etag,
 )
 from app.core.errors import api_problem_detail
+from app.core.feature_flags import is_feature_enabled
 from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
 from app.domains.committees.lifecycle import (
@@ -65,6 +66,26 @@ def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> str | No
 
 _ROLES = ["admin"]
 Access = Annotated[AccessContext, Depends(abac(_tenant_resource_id, required_roles=_ROLES))]
+
+
+_FEATURE_CODE = "committees"
+
+
+def _feature_off() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail=api_problem_detail(
+            code="COMMITTEES_DISABLED",
+            message="Committees module is not enabled for this tenant",
+            error_type="committees",
+        ),
+    )
+
+
+async def _require_committees_enabled(session: AsyncSession, tenant: Tenant) -> None:
+    enabled = await is_feature_enabled(session, str(tenant.id), _FEATURE_CODE, default=False)
+    if not enabled:
+        raise _feature_off()
 
 
 def _conflict(exc: MeetingTransitionError) -> HTTPException:
@@ -150,6 +171,7 @@ async def list_committees(
     offset: int = Query(0, ge=0),
 ) -> CommitteePage | Response:
     TenantContextValidator.ensure_tenant_context(tenant)
+    await _require_committees_enabled(session, tenant)
     stmt = (
         select(Committee)
         .where(Committee.tenant_id == tenant.id, Committee.deleted_at.is_(None))
@@ -186,6 +208,7 @@ async def create_committee(
     payload: CommitteeCreate, tenant: TenantDep, session: SessionDep, access: Access
 ) -> CommitteeRead:
     TenantContextValidator.ensure_tenant_context(tenant)
+    await _require_committees_enabled(session, tenant)
     row = Committee(
         tenant_id=tenant.id,
         kind=payload.kind,
@@ -202,6 +225,7 @@ async def create_committee(
 @router.get("/{cid}", response_model=CommitteeRead)
 async def get_committee(cid: str, tenant: TenantDep, session: SessionDep, access: Access) -> CommitteeRead:
     TenantContextValidator.ensure_tenant_context(tenant)
+    await _require_committees_enabled(session, tenant)
     row = await _get_committee(session, tenant, cid)
     return CommitteeRead.model_validate(row, from_attributes=True)
 
@@ -211,6 +235,7 @@ async def update_committee(
     cid: str, payload: CommitteeUpdate, tenant: TenantDep, session: SessionDep, access: Access
 ) -> CommitteeRead:
     TenantContextValidator.ensure_tenant_context(tenant)
+    await _require_committees_enabled(session, tenant)
     row = await _get_committee(session, tenant, cid)
     for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(row, field, value)
@@ -225,6 +250,7 @@ async def add_member(
     cid: str, payload: MemberCreate, tenant: TenantDep, session: SessionDep, access: Access
 ) -> MemberRead:
     TenantContextValidator.ensure_tenant_context(tenant)
+    await _require_committees_enabled(session, tenant)
     await _get_committee(session, tenant, cid)
     row = CommitteeMember(
         tenant_id=tenant.id, committee_id=cid, person_id=payload.person_id, role=payload.role
@@ -240,6 +266,7 @@ async def remove_member(
     cid: str, mid: str, tenant: TenantDep, session: SessionDep, access: Access
 ) -> Response:
     TenantContextValidator.ensure_tenant_context(tenant)
+    await _require_committees_enabled(session, tenant)
     row = (
         await session.execute(
             select(CommitteeMember).where(
@@ -268,6 +295,7 @@ async def list_meetings(
     offset: int = Query(0, ge=0),
 ) -> MeetingPage | Response:
     TenantContextValidator.ensure_tenant_context(tenant)
+    await _require_committees_enabled(session, tenant)
     await _get_committee(session, tenant, cid)
     stmt = (
         select(CommitteeMeeting)
@@ -311,6 +339,7 @@ async def schedule_meeting(
     cid: str, payload: MeetingCreate, tenant: TenantDep, session: SessionDep, access: Access
 ) -> MeetingRead:
     TenantContextValidator.ensure_tenant_context(tenant)
+    await _require_committees_enabled(session, tenant)
     await _get_committee(session, tenant, cid)
     row = CommitteeMeeting(
         tenant_id=tenant.id, committee_id=cid,
@@ -325,6 +354,7 @@ async def schedule_meeting(
 @router.get("/meetings/{mid}", response_model=MeetingRead)
 async def get_meeting(mid: str, tenant: TenantDep, session: SessionDep, access: Access) -> MeetingRead:
     TenantContextValidator.ensure_tenant_context(tenant)
+    await _require_committees_enabled(session, tenant)
     row = await _get_meeting(session, tenant, mid)
     return MeetingRead.model_validate(row, from_attributes=True)
 
@@ -334,6 +364,7 @@ async def update_meeting(
     mid: str, payload: MeetingStatusUpdate, tenant: TenantDep, session: SessionDep, access: Access
 ) -> MeetingRead:
     TenantContextValidator.ensure_tenant_context(tenant)
+    await _require_committees_enabled(session, tenant)
     row = await _get_meeting(session, tenant, mid)
     try:
         validate_meeting_transition(row.status, payload.status)
@@ -350,6 +381,7 @@ async def create_agenda_item(
     mid: str, payload: AgendaItemCreate, tenant: TenantDep, session: SessionDep, access: Access
 ) -> AgendaItemRead:
     TenantContextValidator.ensure_tenant_context(tenant)
+    await _require_committees_enabled(session, tenant)
     await _get_meeting(session, tenant, mid)
     row = CommitteeAgendaItem(
         tenant_id=tenant.id, meeting_id=mid,
@@ -367,6 +399,7 @@ async def create_decision(
     mid: str, payload: DecisionCreate, tenant: TenantDep, session: SessionDep, access: Access
 ) -> DecisionRead:
     TenantContextValidator.ensure_tenant_context(tenant)
+    await _require_committees_enabled(session, tenant)
     meeting = await _get_meeting(session, tenant, mid)
     try:
         ensure_meeting_held(meeting.status)
@@ -387,6 +420,7 @@ async def get_protocol(
     mid: str, tenant: TenantDep, session: SessionDep, access: Access
 ) -> ProtocolRead:
     TenantContextValidator.ensure_tenant_context(tenant)
+    await _require_committees_enabled(session, tenant)
     meeting = await _get_meeting(session, tenant, mid)
     decisions = list(
         (
@@ -421,6 +455,7 @@ async def create_task(
     did: str, payload: DecisionTaskCreate, tenant: TenantDep, session: SessionDep, access: Access
 ) -> DecisionTaskRead:
     TenantContextValidator.ensure_tenant_context(tenant)
+    await _require_committees_enabled(session, tenant)
     await _get_decision(session, tenant, did)
     row = CommitteeDecisionTask(
         tenant_id=tenant.id, decision_id=did,
@@ -438,6 +473,7 @@ async def update_task(
     tid: str, payload: DecisionTaskUpdate, tenant: TenantDep, session: SessionDep, access: Access
 ) -> DecisionTaskRead:
     TenantContextValidator.ensure_tenant_context(tenant)
+    await _require_committees_enabled(session, tenant)
     row = await _get_task(session, tenant, tid)
     for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(row, field, value)
