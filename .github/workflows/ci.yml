@@ -302,12 +302,31 @@ jobs:
     # pytest-timeout below. timeout-minutes is the job-level backstop against
     # runaway billing (GitHub default is 360min).
     timeout-minutes: 90
+    services:
+      # Включает @pytest.mark.db: keystone enum-label guard + enum write-smoke.
+      # Гарды сами создают/дропают throwaway-БД enum_*<uuid> через TEST_PG_ADMIN_URL;
+      # `cabinet` не затрагивается. Имена throwaway-БД уникальны (uuid) → совместимо
+      # с `-n auto` (xdist).
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ptd
+          POSTGRES_PASSWORD: ptd
+          POSTGRES_DB: ptd
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ptd"
+          --health-interval 10s --health-timeout 5s --health-retries 5
     env:
       APP_ENV: test
       REDIS_URL: memory://
       REDIS_RESULT_URL: cache+memory://
       RATE_LIMIT_STORAGE_URI: memory://
       S3_ENDPOINT: http://localhost
+      # ptd — суперюзер образа postgres → может CREATE/DROP DATABASE для throwaway.
+      # DATABASE_URL НЕ задаём глобально: остальные тесты остаются на SQLite.
+      TEST_PG_ADMIN_URL: postgresql://ptd:ptd@localhost:5432/ptd
     steps:
       - uses: actions/checkout@v4
 
