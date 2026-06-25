@@ -24,9 +24,9 @@ This is the **incremental implementation roadmap** for vNext platform improvemen
 
 | Phase | Priority | Focus | Est. Sessions | Status |
 |-------|----------|-------|----------------|--------|
-| Phase 0: Release Blockers | P0 | TZ-1.1 baseline re-verification | 1 session | 🔴 CRITICAL (deferred) |
+| Phase 0: Release Blockers | P0 | TZ-1.1 baseline re-verification | 1 session | ✅ DONE (2026-06-14, PR #656) — CI re-enabled + canonical baseline green on Py3.12.12 (run `27508869071`: 3138 backend tests passed, alembic-PG green) |
 | Phase 1: Architectural Foundation | P1 | Role-based workspaces ✅, RBAC module access ✅, tenant isolation ✅ | 2-3 sessions | ✅ COMPLETE |
-| Phase 2: Operational Dashboard | P1 | Command Center (backend ✅, 2.1a done), health checks ✅, operational visibility | 2-3 sessions | 🟡 IN PROGRESS (2.2 done, 2.1 partial, pending frontend) |
+| Phase 2: Operational Dashboard | P1 | Command Center (backend ✅, 2.1a done), health checks ✅, operational visibility | 2-3 sessions | ✅ COMPLETE — 2.2 health UI done; 2.1 Command Center **frontend landed 2026-06-15 (PR #658)**: `CommandCenterPage.tsx` + `CommandCenterPanel.tsx` + `operationalDashboard` store/api over the ready `/operational/dashboard` backend |
 | Phase 3: Data Quality & Master Data | P1 | Data Quality Layer, unified employee/site cards, deduplication | 2-3 sessions | 📋 Planned |
 | Phase 4: Calendar & Search | P2 | Smart Calendar improvements, universal search + command bar | 2-3 sessions | ✅ COMPLETE — 4.1 Smart Calendar 100% done (Sessions 22-30); 4.2 all 6 acceptance criteria done: backend FTS + CMD+K palette with entity results + 7 type-to-execute commands + ARIA listbox keyboard nav (↑↓/Enter/Home/End) + saved searches in palette (S34) + recent entities tracking (S35) + backend search index accuracy tests (S33 — 35 cases / 6 classes). Optional polish open (non-blocking, non-acceptance): score-based unified ranking, per-tenant relevance tuning, i18n executable commands, saved-search cache invalidation |
 | Phase 5: Document Factory Hardening | P2 | Template engine, header/footer, replace engine improvements | 2-3 sessions | ✅ COMPLETE (Sessions 36-40 — 5.1 Sessions 36-38; 5.2 Sessions 39-40: 50 replace + 33 header/footer tests). Logo image + runtime QR code remain as enhancement items beyond original acceptance bar. |
@@ -34,7 +34,7 @@ This is the **incremental implementation roadmap** for vNext platform improvemen
 | Phase 7: Mobile & Field-Ready Work | P2 | Offline sync, mobile UX, field-specific workflows | 2-3 sessions | 🟡 IN PROGRESS (7.1 PWA sync state machine pinned Session 43 — 28 tests; 7.2 field-specific UX is frontend-only and deferred) |
 | Phase 8: Analytics & Reporting | P3 | Dashboards, reports, business intelligence, audit analytics | 2-3 sessions | ✅ COMPLETE (8.1 Session 44 — 34 analytics tests; 8.2 Session 45 — 26 audit-API tests). |
 | Phase 9: Performance & Scale | P3 | Database optimization, caching, performance hardening | 2-3 sessions | 🟡 IN PROGRESS (9.1 — Session 46 query-performance benchmarks (24 cases); slow-query identification + date partitioning are Postgres-only follow-ups. 9.2 ongoing rollout — Sessions 47-49 pinned 7/7 main list endpoints (55 cache tests); Session 50 shared `compute_list_etag` helper + 17 unit tests; S51 added ppe/items, ppe/issues, prescriptions (16); S52 added briefings/{templates,journals,entries} + training/courses (15); S53 added medical/exams + departments (13) — **16 endpoints total, 116 cache contract tests**; remaining list endpoints + service-level Redis cache + Cache-Control uniformity audit remain follow-ups) |
-| Phase 10: Enterprise Features | P3 | SSO, multi-language, white-label, advanced billing | 3+ sessions | 📋 Planned |
+| Phase 10: Enterprise Features | P3 | SSO, multi-language, white-label, advanced billing | 3+ sessions | 🟡 PARTIAL — original Task 10.1 (SSO) / 10.2 (white-label+i18n) still planned, BUT Phase 10 was **expanded to TZ Section B** (~15 subprojects) per the 2026-05-29 design roadmap, and much of Section B has since shipped to `main`. See the **Section B reconciliation (2026-06-25)** block below for per-subproject status (P10-05 Contractors, P10-08 Work Permits = ✅ merged; 6 subprojects not started). |
 
 ---
 
@@ -636,6 +636,32 @@ This is the **incremental implementation roadmap** for vNext platform improvemen
 **Focus:** Large organization support  
 **Estimated:** 3+ sessions  
 **Dependencies:** Phase 1-3 complete  
+
+> **Scope note.** Per the 2026-05-29 design roadmap ([`docs/superpowers/specs/2026-05-29-tz-completeness-roadmap-design.md`](../superpowers/specs/2026-05-29-tz-completeness-roadmap-design.md) §4), Phase 10 is **expanded from the original 2 tasks (SSO + white-label) to the full TZ Section B** (~15 subprojects P10-01…P10-15). Tasks 10.1/10.2 below are retained verbatim as P10-13/P10-14; the reconciliation table is the live status of the whole set.
+
+### Section B reconciliation — actual `main` state (2026-06-25)
+
+Reconciled against `origin/main` (head `84f89f19`, PR #693). **No open PRs — everything below is merged.** Memory note "merge = user's call, not yet in main" is now **stale**: the entire work-permits stack, contractors, EDO/PEP, medical printable forms, letterhead, and the W2 Command Center UI have all landed.
+
+| ID | Subproject (Section B) | Status | Evidence in `main` |
+|---|---|---|---|
+| **P10-05** | Подрядчики и допуск | ✅ **merged** | `domains/contractors/{lifecycle,documents}.py`, `services/contractor_admission.py`, migrations `con01`/`con02` (PR #644–#646, #667–#668) |
+| **P10-08** | Наряды-допуски + работы повыш. опасности | ✅ **merged (tirage closed)** | All 6 work types via profile layer: 782н Ф1–Ф4, ОЗП 902н, огневые 1479, газоопасные 528, электро 903н, земляные 883н — `domains/work_permits/{profiles,lifecycle,print_form,signing,electrical_groups}.py`, migrations `wp01`–`wp06` + personal permits `domains/permits/` (PR #666–#692) |
+| **P10-12** | ЭДО/подпись (ПЭП срез) | 🟡 **partial** | ЭДО/ПЭП влито: `services/pep_signing.py`, `api/routes/{pep_signing,edo_workflow}.py`, `modules/edo/`, migration `ed01`, briefing code-flow (PR #653/#672). **Остаётся:** КЭП/УНЭП/МЧД, роуминг, квитанции, НПА/compliance management |
+| **P10-03** | Медосмотры (полный контур) | 🟡 **substantial** | Печатные формы 29н + runtime hazard→factor CRUD (PR #691), `domains/medical/print_form.py`, exams API + ETag (S53). **Остаётся:** полнота контингента/психиатрия/направления/отстранение |
+| **P10-06** | СИЗ склад (полный) | 🟡 **skeleton only** | `PPEStockBatch` + `/ppe/stock/*` за warehouse-флагом (W-A, `wa01`). **Остаётся (как и планировалось):** перемещения, поставщики, бюджет безопасности, мобильная выдача, прогноз дефицита |
+| **P10-07** | Analytics frontend | 🟡 **partial** | Дашборды есть: `pages/DashboardPage`, `components/analytics/JsonKpiGrid.tsx`, `api/dashboard*.ts`, Command Center (#658). **Остаётся:** управленческие дашборды + report-builder UI |
+| **P10-09** | Equipment/Asset/ОПО/Транспорт/Электробезопасность | 🟡 **partial** | Электробезопасность-группы в нарядах (`work_permits/electrical_groups.py`), `domains/packs/assets.py`. **Остаётся:** полноценный equipment/asset/транспорт/ОПО-реестр |
+| **P10-02** | CRM + клиентский кабинет + reseller/white-label-портал | 🟡 **partial** | `pages/crm-finance/CrmFinancePage.tsx` + `api/crmFinance.ts` (CRM-finance срез). **Остаётся:** клиентский кабинет, trial/demo/sandbox, reseller-портал |
+| **P10-14** | White-label + i18n (= Task 10.2) | 🟡 **foundation** | White-label: `modules/branding/letterhead.py` (авто-бланк, PR #664). i18n-инфра: `core/i18n.py` + `frontend/src/i18n/`. **Остаётся:** полные 5+ языков, переводы UI/API/email |
+| **P10-01** | Комитеты / комиссии / заседания | ❌ **not started** | — |
+| **P10-04** | СОУТ | ❌ **not started** | — |
+| **P10-10** | Workflow / Rules / Smart Recommendations engines | ❌ **not started** | — |
+| **P10-11** | Вертикали: ПромБез · Экология · ГО-ЧС | ❌ **not started** | — |
+| **P10-13** | SSO / SAML 2.0 / OIDC + JIT (= Task 10.1) | ❌ **not started** | — |
+| **P10-15** | Терминалы/kiosk/биометрия/СКУД · видеоаналитика/CV · AI Copilot | ❌ **not started** | — |
+
+**Summary:** 2 subprojects fully merged (P10-05, P10-08) · 7 partial (P10-02/03/06/07/09/12/14) · 6 not started (P10-01/04/10/11/13/15). Next-up by version tag `[v1.1]`: **P10-01 Комитеты**, **P10-04 СОУТ**, then finish partials (P10-03 медосмотры, P10-06 СИЗ-склад, P10-07 analytics).
 
 ### Task 10.1: SSO & SAML (vNext-ENT-02)
 
