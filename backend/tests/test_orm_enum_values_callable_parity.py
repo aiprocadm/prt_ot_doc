@@ -83,3 +83,108 @@ def test_defective_columns_bind_enum_values_not_names() -> None:
                 f"{table_name}.{col_name}: binds {list(t.enums)} not {[m.value for m in t.enum_class]}"
             )
     assert not offenders, "columns still bind member NAMES (apply native_enum):\n" + "\n".join(offenders)
+
+
+# --- Сырой инвентарь (values_callable=None), запинен против регресса -----------
+#
+# Колонки, которые ЛЕГИТИМНО биндят имена членов (values_callable отсутствует).
+# Live-PG re-аудит 2026-06-25 (throwaway PG16, keystone-guard) классифицировал их:
+#   - GROUP-B (pg-тип создан с UPPER-именами членов) → биндить ИМЯ корректно;
+#     добавление values_callable СЛОМАЕТ insert (`'low' ∉ [LOW,MEDIUM,HIGH]`);
+#   - VARCHAR-backed (нативного pg-типа нет; approval-v2 + safety_core) → принимает
+#     любую строку, values_callable бесполезен;
+#   - OK (имена == значения: outbox.status, tenant.kind) → миграция не нужна.
+# Все три категории должны оставаться СЫРЫМИ. На момент аудита: 0 GROUP-A дефектов,
+# 0 колонок, ломающихся на PG. Точная классификация — за keystone-guard
+# (`test_orm_enum_pg_label_parity.py`, live PG); этот пин лишь ФИКСИРУЕТ инвентарь.
+#
+# Падение теста ниже = осознанно классифицируй изменение:
+#   * новая СЫРАЯ колонка → прогони keystone-guard; Group-A → native_enum (+ в
+#     DEFECTIVE_COLUMNS), иначе добавь сюда;
+#   * values_callable снят с Group-A колонки → колонка «всплыла» здесь → верни его;
+#   * values_callable добавлен к Group-B колонке → колонка «пропала» отсюда →
+#     это и есть регресс, который ломает PG-insert: откати.
+RAW_NATIVE_ENUM_COLUMNS = {
+    ("approval_instance_steps", "status"),  # ApprovalInstanceStepStatus (VARCHAR)
+    ("approval_instances", "status"),  # ApprovalInstanceStatus (VARCHAR)
+    ("approval_route_steps", "step_type"),  # ApprovalStepType (VARCHAR)
+    ("approval_routes", "applies_to"),  # ApprovalRouteAppliesTo (VARCHAR)
+    ("approval_routes", "status"),  # ApprovalRouteStatus (VARCHAR)
+    ("contractor_employees", "access_status"),  # ComplianceStatus (Group-B)
+    ("contractor_employees", "medical_status"),  # ComplianceStatus (Group-B)
+    ("contractor_employees", "training_status"),  # ComplianceStatus (Group-B)
+    ("contractor_incidents", "severity"),  # IncidentSeverity (Group-B)
+    ("correctiveaction", "status"),  # CorrectiveActionStatus (Group-B)
+    ("documentgenerationjob", "status"),  # DocumentJobStatus (Group-B)
+    ("equipment", "status"),  # EquipmentStatus (Group-B)
+    ("file", "kind"),  # FileKind (Group-B)
+    ("file", "scan_status"),  # FileScanStatus (Group-B)
+    ("hazard_bindings", "binding_type"),  # HazardBindingType (VARCHAR)
+    ("hazards", "source_type"),  # HazardSourceType (VARCHAR)
+    ("idempotency_keys", "status"),  # IdempotencyStatus (Group-B)
+    ("incident", "incident_type"),  # IncidentType (Group-B)
+    ("incident", "investigation_stage"),  # IncidentStage (Group-B)
+    ("incident", "severity"),  # IncidentSeverity (Group-B)
+    ("incident", "status"),  # IncidentStatus (Group-B)
+    ("incident_log", "stage"),  # IncidentStage (Group-B)
+    ("incident_log", "status"),  # IncidentStatus (Group-B)
+    ("incident_person", "role"),  # IncidentPersonRole (Group-B)
+    ("inspection", "status"),  # InspectionStatus (Group-B)
+    ("npa", "status"),  # NPAStatus (Group-B)
+    ("outbox", "status"),  # OutboxStatus (OK: имена==значения)
+    ("pipeline_runs", "status"),  # PipelineRunStatus (Group-B)
+    ("plantask", "status"),  # PlanTaskStatus (Group-B)
+    ("regulatory_inspection", "status"),  # InspectionStatus (Group-B)
+    ("risk_map_items", "residual_risk_level"),  # RiskLevel (VARCHAR)
+    ("risk_map_items", "risk_level"),  # RiskLevel (VARCHAR)
+    ("risk_maps", "entity_type"),  # RiskMapEntityType (VARCHAR)
+    ("risk_maps", "source"),  # RiskMapSource (VARCHAR)
+    ("risk_maps", "status"),  # RecordStatus (VARCHAR)
+    ("risk_measures", "measure_type"),  # MeasureType (VARCHAR)
+    ("risk_methodologies", "status"),  # RecordStatus (VARCHAR)
+    ("risk_methodologies", "type"),  # RiskMethodologyType (VARCHAR)
+    ("template", "status"),  # TemplateStatus (Group-B)
+    ("templateversion", "status"),  # TemplateVersionStatus (Group-B)
+    ("tenant", "kind"),  # литеральный enum (OK: значения lowercase)
+    ("training", "status"),  # TrainingStatus (Group-B)
+    ("violation", "severity"),  # ViolationSeverity (Group-B)
+}
+
+
+def _actual_raw_native_enum_columns() -> set[tuple[str, str]]:
+    raw: set[tuple[str, str]] = set()
+    for table_name, table in ALL_TABLES.items():
+        for col in table.columns:
+            t = col.type
+            if not isinstance(t, SAEnum) or not getattr(t, "native_enum", False):
+                continue
+            if t.values_callable is None:
+                raw.add((table_name, col.name))
+    return raw
+
+
+def test_raw_native_enum_inventory_is_frozen() -> None:
+    """Сырые (values_callable=None) native-enum колонки не должны меняться незаметно.
+
+    Защищает от: (а) новой сырой колонки без классификации, (б) снятия
+    values_callable с Group-A (всплывёт здесь), (в) добавления values_callable к
+    Group-B (пропадёт отсюда — это регресс, ломающий PG-insert). См. длинный
+    комментарий у RAW_NATIVE_ENUM_COLUMNS.
+    """
+    actual = _actual_raw_native_enum_columns()
+    unexpected = actual - RAW_NATIVE_ENUM_COLUMNS
+    missing = RAW_NATIVE_ENUM_COLUMNS - actual
+    assert not unexpected, (
+        "Новые СЫРЫЕ native-enum колонки — классифицируй через keystone PG-guard, "
+        f"затем native_enum (Group-A) или сюда (Group-B/VARCHAR/OK): {sorted(unexpected)}"
+    )
+    assert not missing, (
+        "Сырые колонки получили values_callable / исчезли. Если это Group-B — "
+        f"откати (ломает PG-insert); иначе обнови allowlist: {sorted(missing)}"
+    )
+
+
+def test_group_a_and_raw_sets_are_disjoint() -> None:
+    """Group-A (биндят .value) и сырой инвентарь не пересекаются — каждая
+    native-enum колонка ровно в одной категории."""
+    assert not (DEFECTIVE_COLUMNS & RAW_NATIVE_ENUM_COLUMNS)
