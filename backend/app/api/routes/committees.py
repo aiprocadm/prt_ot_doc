@@ -1,7 +1,6 @@
 """Endpoints for committees / commissions / meetings (P10-01 срез-1, TZ B.17)."""
 from __future__ import annotations
 
-from datetime import date
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status

@@ -664,6 +664,31 @@ async def _seed_committees_demo(session, tenant_db_id: str) -> None:
         )
     )
 
+    # Enable the default-off ``committees`` flag for the demo tenant so the
+    # seeded data is visible in the demo walkthrough. The flag stays default-off
+    # in production; this only writes a per-tenant enablement for the demo tenant.
+    from app.models.feature import Feature, FeatureEnablement
+
+    feature = (
+        await session.execute(select(Feature).where(Feature.code == "committees"))
+    ).scalar_one_or_none()
+    if feature is None:
+        feature = Feature(code="committees", title="Комитеты")
+        session.add(feature)
+        await session.flush()
+    enablement = (
+        await session.execute(
+            select(FeatureEnablement).where(
+                FeatureEnablement.tenant_id == tenant_db_id,
+                FeatureEnablement.feature_id == feature.id,
+            )
+        )
+    ).scalar_one_or_none()
+    if enablement is None:
+        session.add(
+            FeatureEnablement(tenant_id=tenant_db_id, feature_id=feature.id, on=True)
+        )
+
 
 async def bootstrap_demo_tenant(settings: Settings) -> None:
     """Create a deterministic tenant with baseline entities for demo walkthrough."""

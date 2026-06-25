@@ -25,6 +25,8 @@ export interface Meeting {
   scheduled_at: string;
   location?: string | null;
   status: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface MeetingPage {
@@ -36,6 +38,7 @@ export interface MeetingPage {
 
 export interface DecisionTask {
   id: string;
+  decision_id: string;
   assignee_person_id?: string | null;
   due_date?: string | null;
   status: string;
