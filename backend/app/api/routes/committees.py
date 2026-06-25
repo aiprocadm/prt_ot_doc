@@ -195,11 +195,13 @@ async def create_committee(
     )
     session.add(row)
     await session.flush()
+    await session.refresh(row)
     return CommitteeRead.model_validate(row, from_attributes=True)
 
 
 @router.get("/{cid}", response_model=CommitteeRead)
 async def get_committee(cid: str, tenant: TenantDep, session: SessionDep, access: Access) -> CommitteeRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
     row = await _get_committee(session, tenant, cid)
     return CommitteeRead.model_validate(row, from_attributes=True)
 
@@ -208,10 +210,12 @@ async def get_committee(cid: str, tenant: TenantDep, session: SessionDep, access
 async def update_committee(
     cid: str, payload: CommitteeUpdate, tenant: TenantDep, session: SessionDep, access: Access
 ) -> CommitteeRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
     row = await _get_committee(session, tenant, cid)
     for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(row, field, value)
     await session.flush()
+    await session.refresh(row)
     return CommitteeRead.model_validate(row, from_attributes=True)
 
 
@@ -220,12 +224,14 @@ async def update_committee(
 async def add_member(
     cid: str, payload: MemberCreate, tenant: TenantDep, session: SessionDep, access: Access
 ) -> MemberRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
     await _get_committee(session, tenant, cid)
     row = CommitteeMember(
         tenant_id=tenant.id, committee_id=cid, person_id=payload.person_id, role=payload.role
     )
     session.add(row)
     await session.flush()
+    await session.refresh(row)
     return MemberRead.model_validate(row, from_attributes=True)
 
 
@@ -233,6 +239,7 @@ async def add_member(
 async def remove_member(
     cid: str, mid: str, tenant: TenantDep, session: SessionDep, access: Access
 ) -> Response:
+    TenantContextValidator.ensure_tenant_context(tenant)
     row = (
         await session.execute(
             select(CommitteeMember).where(
@@ -260,6 +267,7 @@ async def list_meetings(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ) -> MeetingPage | Response:
+    TenantContextValidator.ensure_tenant_context(tenant)
     await _get_committee(session, tenant, cid)
     stmt = (
         select(CommitteeMeeting)
@@ -302,6 +310,7 @@ async def list_meetings(
 async def schedule_meeting(
     cid: str, payload: MeetingCreate, tenant: TenantDep, session: SessionDep, access: Access
 ) -> MeetingRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
     await _get_committee(session, tenant, cid)
     row = CommitteeMeeting(
         tenant_id=tenant.id, committee_id=cid,
@@ -309,11 +318,13 @@ async def schedule_meeting(
     )
     session.add(row)
     await session.flush()
+    await session.refresh(row)
     return MeetingRead.model_validate(row, from_attributes=True)
 
 
 @router.get("/meetings/{mid}", response_model=MeetingRead)
 async def get_meeting(mid: str, tenant: TenantDep, session: SessionDep, access: Access) -> MeetingRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
     row = await _get_meeting(session, tenant, mid)
     return MeetingRead.model_validate(row, from_attributes=True)
 
@@ -322,6 +333,7 @@ async def get_meeting(mid: str, tenant: TenantDep, session: SessionDep, access: 
 async def update_meeting(
     mid: str, payload: MeetingStatusUpdate, tenant: TenantDep, session: SessionDep, access: Access
 ) -> MeetingRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
     row = await _get_meeting(session, tenant, mid)
     try:
         validate_meeting_transition(row.status, payload.status)
@@ -329,6 +341,7 @@ async def update_meeting(
         raise _conflict(exc)
     row.status = payload.status
     await session.flush()
+    await session.refresh(row)
     return MeetingRead.model_validate(row, from_attributes=True)
 
 
@@ -336,6 +349,7 @@ async def update_meeting(
 async def create_agenda_item(
     mid: str, payload: AgendaItemCreate, tenant: TenantDep, session: SessionDep, access: Access
 ) -> AgendaItemRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
     await _get_meeting(session, tenant, mid)
     row = CommitteeAgendaItem(
         tenant_id=tenant.id, meeting_id=mid,
@@ -343,6 +357,7 @@ async def create_agenda_item(
     )
     session.add(row)
     await session.flush()
+    await session.refresh(row)
     return AgendaItemRead.model_validate(row, from_attributes=True)
 
 
@@ -351,6 +366,7 @@ async def create_agenda_item(
 async def create_decision(
     mid: str, payload: DecisionCreate, tenant: TenantDep, session: SessionDep, access: Access
 ) -> DecisionRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
     meeting = await _get_meeting(session, tenant, mid)
     try:
         ensure_meeting_held(meeting.status)
@@ -362,6 +378,7 @@ async def create_decision(
     )
     session.add(row)
     await session.flush()
+    await session.refresh(row)
     return DecisionRead.model_validate(row, from_attributes=True)
 
 
@@ -369,6 +386,7 @@ async def create_decision(
 async def get_protocol(
     mid: str, tenant: TenantDep, session: SessionDep, access: Access
 ) -> ProtocolRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
     meeting = await _get_meeting(session, tenant, mid)
     decisions = list(
         (
@@ -402,6 +420,7 @@ async def get_protocol(
 async def create_task(
     did: str, payload: DecisionTaskCreate, tenant: TenantDep, session: SessionDep, access: Access
 ) -> DecisionTaskRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
     await _get_decision(session, tenant, did)
     row = CommitteeDecisionTask(
         tenant_id=tenant.id, decision_id=did,
@@ -410,6 +429,7 @@ async def create_task(
     )
     session.add(row)
     await session.flush()
+    await session.refresh(row)
     return task_to_read(row)
 
 
@@ -417,8 +437,10 @@ async def create_task(
 async def update_task(
     tid: str, payload: DecisionTaskUpdate, tenant: TenantDep, session: SessionDep, access: Access
 ) -> DecisionTaskRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
     row = await _get_task(session, tenant, tid)
     for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(row, field, value)
     await session.flush()
+    await session.refresh(row)
     return task_to_read(row)

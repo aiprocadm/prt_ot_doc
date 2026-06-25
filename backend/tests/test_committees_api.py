@@ -19,7 +19,7 @@ from app.schemas.committees import MeetingStatusUpdate, DecisionCreate
 
 
 def _tenant():
-    return SimpleNamespace(id="tenant-1")
+    return SimpleNamespace(id="tenant-1", is_active=True, slug="t1")
 
 
 def _meeting(status=MeetingStatus.PLANNED):
