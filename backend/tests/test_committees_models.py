@@ -58,10 +58,12 @@ def test_enums_use_value_labels() -> None:
         DecisionTaskStatus,
     )
 
-    assert CommitteeKind.OSMS.value == "osms"
-    assert CommitteeMemberRole.CHAIR.value == "chair"
-    assert MeetingStatus.PLANNED.value == "planned"
-    assert DecisionTaskStatus.OPEN.value == "open"
+    assert {m.value for m in CommitteeKind} == {
+        "osms", "pb", "commission_training", "commission_investigation", "other",
+    }
+    assert {m.value for m in CommitteeMemberRole} == {"chair", "secretary", "member"}
+    assert {m.value for m in MeetingStatus} == {"planned", "held", "cancelled"}
+    assert {m.value for m in DecisionTaskStatus} == {"open", "in_progress", "done"}
 
 
 def test_models_reexported_from_package() -> None:
