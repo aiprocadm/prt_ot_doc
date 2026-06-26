@@ -1,7 +1,8 @@
 """Endpoints for СОУТ — спец. оценка условий труда (P10-04 срез-1, TZ B.10)."""
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Literal
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy import func, select
@@ -32,6 +33,12 @@ from app.domains.sout.service import (
 from app.domains.sout.suggestions import (
     build_medical_exam_suggestions,
     build_ppe_norm_suggestions,
+)
+from app.services.sout_print import (
+    PdfRendererUnavailable,
+    RenderedDoc,
+    render_sout_card,
+    render_summary_sheet,
 )
 from app.models.sout import (
     SoutCampaign,
@@ -622,3 +629,62 @@ async def get_report(
         )
         triples.append((w, factors, guarantees))
     return build_report(campaign, triples)
+
+
+# --- Printable forms (срез-4а) ---
+def _pdf_unavailable() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail=api_problem_detail(
+            code="SOUT_PDF_RENDERER_UNAVAILABLE",
+            message="PDF converter is unavailable",
+            error_type="sout",
+        ),
+    )
+
+
+def _doc_response(rendered: RenderedDoc) -> Response:
+    encoded_name = quote(rendered.filename, safe="")
+    return Response(
+        content=rendered.content,
+        media_type=rendered.media_type,
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{encoded_name}"},
+    )
+
+
+@router.get("/workplaces/{wid}/card/print")
+async def print_sout_card(
+    wid: str,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: Access,
+    fmt: Literal["docx", "pdf"] = Query("docx", alias="format"),
+) -> Response:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    await _require_sout_enabled(session, tenant)
+    try:
+        rendered = await render_sout_card(session, tenant=tenant, workplace_id=wid, fmt=fmt)
+    except PdfRendererUnavailable as exc:
+        raise _pdf_unavailable() from exc
+    if rendered is None:
+        raise _not_found("Workplace")
+    return _doc_response(rendered)
+
+
+@router.get("/{cid}/summary/print")
+async def print_summary_sheet(
+    cid: str,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: Access,
+    fmt: Literal["docx", "pdf"] = Query("docx", alias="format"),
+) -> Response:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    await _require_sout_enabled(session, tenant)
+    try:
+        rendered = await render_summary_sheet(session, tenant=tenant, campaign_id=cid, fmt=fmt)
+    except PdfRendererUnavailable as exc:
+        raise _pdf_unavailable() from exc
+    if rendered is None:
+        raise _not_found("Campaign")
+    return _doc_response(rendered)
