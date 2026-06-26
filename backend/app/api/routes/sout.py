@@ -35,6 +35,8 @@ from app.models.sout import (
     SoutGuarantee,
     SoutWorkplace,
 )
+from app.models.models import Position
+from app.models.risk import RiskHazard
 from app.models.tenanting import Tenant
 from app.schemas.sout import (
     CampaignCreate,
@@ -46,6 +48,7 @@ from app.schemas.sout import (
     ClassHistoryRead,
     FactorCreate,
     FactorRead,
+    FactorUpdate,
     GuaranteeCreate,
     GuaranteeRead,
     WorkplaceCreate,
@@ -130,6 +133,47 @@ async def _get_workplace(session: AsyncSession, tenant: Tenant, wid: str) -> Sou
     if row is None:
         raise _not_found("Workplace")
     return row
+
+
+async def _get_factor(session: AsyncSession, tenant: Tenant, fid: str) -> SoutFactor:
+    row = (
+        await session.execute(
+            select(SoutFactor).where(
+                SoutFactor.id == fid, SoutFactor.tenant_id == tenant.id
+            )
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        raise _not_found("Factor")
+    return row
+
+
+async def _validate_position(session: AsyncSession, tenant: Tenant, pid: str) -> str:
+    row = (
+        await session.execute(
+            select(Position.id).where(
+                Position.id == pid,
+                Position.tenant_id == tenant.id,
+                Position.deleted_at.is_(None),
+            )
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        raise _not_found("Position")
+    return pid
+
+
+async def _validate_hazard(session: AsyncSession, tenant: Tenant, hid: str) -> str:
+    row = (
+        await session.execute(
+            select(RiskHazard.id).where(
+                RiskHazard.id == hid, RiskHazard.tenant_id == tenant.id
+            )
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        raise _not_found("Hazard")
+    return hid
 
 
 # --- Campaigns ---
@@ -298,12 +342,15 @@ async def add_workplace(
         ensure_campaign_open(campaign.status)
     except CampaignTransitionError as exc:
         raise _conflict(exc)
+    if payload.position_id is not None:
+        await _validate_position(session, tenant, payload.position_id)
     row = SoutWorkplace(
         tenant_id=tenant.id,
         campaign_id=cid,
         workplace_code=payload.workplace_code,
         position_name=payload.position_name,
         person_id=payload.person_id,
+        position_id=payload.position_id,
         assessed_class=payload.assessed_class,
         assessment_date=payload.assessment_date,
         next_assessment_date=payload.next_assessment_date,
@@ -338,6 +385,8 @@ async def update_workplace(
     await _require_sout_enabled(session, tenant)
     row = await _get_workplace(session, tenant, wid)
     changes = payload.model_dump(exclude_unset=True)
+    if changes.get("position_id") is not None:
+        await _validate_position(session, tenant, changes["position_id"])
     old_class = row.assessed_class
     for field, value in changes.items():
         setattr(row, field, value)
@@ -383,15 +432,35 @@ async def add_factor(
     TenantContextValidator.ensure_tenant_context(tenant)
     await _require_sout_enabled(session, tenant)
     await _get_workplace(session, tenant, wid)
+    if payload.hazard_id is not None:
+        await _validate_hazard(session, tenant, payload.hazard_id)
     row = SoutFactor(
         tenant_id=tenant.id,
         workplace_id=wid,
         code=payload.code,
         name=payload.name,
         measured_class=payload.measured_class,
+        hazard_id=payload.hazard_id,
         note=payload.note,
     )
     session.add(row)
+    await session.flush()
+    await session.refresh(row)
+    return FactorRead.model_validate(row, from_attributes=True)
+
+
+@router.patch("/factors/{fid}", response_model=FactorRead)
+async def update_factor(
+    fid: str, payload: FactorUpdate, tenant: TenantDep, session: SessionDep, access: Access
+) -> FactorRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    await _require_sout_enabled(session, tenant)
+    row = await _get_factor(session, tenant, fid)
+    changes = payload.model_dump(exclude_unset=True)
+    if changes.get("hazard_id") is not None:
+        await _validate_hazard(session, tenant, changes["hazard_id"])
+    for field, value in changes.items():
+        setattr(row, field, value)
     await session.flush()
     await session.refresh(row)
     return FactorRead.model_validate(row, from_attributes=True)

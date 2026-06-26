@@ -33,6 +33,7 @@ def workplace_to_read(workplace, *, today: date | None = None) -> WorkplaceRead:
         workplace_code=workplace.workplace_code,
         position_name=workplace.position_name,
         person_id=workplace.person_id,
+        position_id=getattr(workplace, "position_id", None),
         assessed_class=workplace.assessed_class,
         assessment_date=workplace.assessment_date,
         next_assessment_date=workplace.next_assessment_date,
