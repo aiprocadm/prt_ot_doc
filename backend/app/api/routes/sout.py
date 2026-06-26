@@ -22,9 +22,15 @@ from app.domains.sout.lifecycle import (
     ensure_campaign_open,
     validate_campaign_transition,
 )
-from app.domains.sout.service import build_report, workplace_to_read
+from app.domains.sout.service import (
+    build_class_history_row,
+    build_report,
+    history_to_read,
+    workplace_to_read,
+)
 from app.models.sout import (
     SoutCampaign,
+    SoutClassHistory,
     SoutFactor,
     SoutGuarantee,
     SoutWorkplace,
@@ -37,6 +43,7 @@ from app.schemas.sout import (
     CampaignReport,
     CampaignStatusUpdate,
     CampaignUpdate,
+    ClassHistoryRead,
     FactorCreate,
     FactorRead,
     GuaranteeCreate,
@@ -303,6 +310,14 @@ async def add_workplace(
     )
     session.add(row)
     await session.flush()
+    # Record the initial class assignment (old=None) so the trajectory starts at
+    # creation, not at the first later edit.
+    history = build_class_history_row(
+        tenant_id=tenant.id, workplace_id=row.id,
+        old_class=None, new_class=row.assessed_class,
+    )
+    if history is not None:
+        session.add(history)
     await session.refresh(row)
     return workplace_to_read(row)
 
@@ -322,11 +337,42 @@ async def update_workplace(
     TenantContextValidator.ensure_tenant_context(tenant)
     await _require_sout_enabled(session, tenant)
     row = await _get_workplace(session, tenant, wid)
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    changes = payload.model_dump(exclude_unset=True)
+    old_class = row.assessed_class
+    for field, value in changes.items():
         setattr(row, field, value)
+    if "assessed_class" in changes:
+        history = build_class_history_row(
+            tenant_id=tenant.id, workplace_id=row.id,
+            old_class=old_class, new_class=row.assessed_class,
+        )
+        if history is not None:
+            session.add(history)
     await session.flush()
     await session.refresh(row)
     return workplace_to_read(row)
+
+
+@router.get("/workplaces/{wid}/class-history", response_model=list[ClassHistoryRead])
+async def list_class_history(
+    wid: str, tenant: TenantDep, session: SessionDep, access: Access
+) -> list[ClassHistoryRead]:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    await _require_sout_enabled(session, tenant)
+    await _get_workplace(session, tenant, wid)
+    rows = list(
+        (
+            await session.execute(
+                select(SoutClassHistory)
+                .where(
+                    SoutClassHistory.workplace_id == wid,
+                    SoutClassHistory.tenant_id == tenant.id,
+                )
+                .order_by(SoutClassHistory.changed_at.asc())
+            )
+        ).scalars().all()
+    )
+    return [history_to_read(r) for r in rows]
 
 
 # --- Factors ---
