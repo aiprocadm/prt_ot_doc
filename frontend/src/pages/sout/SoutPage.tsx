@@ -231,8 +231,8 @@ const NormSuggestionsSection = ({ workplaceId }: NormSuggestionsProps) => {
             <div className="space-y-1">
               <p className="text-xs font-medium">СИЗ</p>
               <ul className="space-y-1 text-xs">
-                {data.ppe.map((p, i) => (
-                  <li key={`ppe-${i}`} className="flex flex-wrap items-center gap-2">
+                {data.ppe.map((p) => (
+                  <li key={`ppe-${p.hazard_id}`} className="flex flex-wrap items-center gap-2">
                     <span className="font-medium">{p.hazard_title || p.factor_name}</span>
                     <span className="text-muted-foreground">{p.reason}</span>
                   </li>
@@ -244,8 +244,8 @@ const NormSuggestionsSection = ({ workplaceId }: NormSuggestionsProps) => {
             <div className="space-y-1">
               <p className="text-xs font-medium">Медосмотры</p>
               <ul className="space-y-1 text-xs">
-                {data.medical.map((m, i) => (
-                  <li key={`med-${i}`} className="flex flex-wrap items-center gap-2">
+                {data.medical.map((m) => (
+                  <li key={`med-${m.exam_kind}`} className="flex flex-wrap items-center gap-2">
                     <span className="font-medium">{m.exam_kind}</span>
                     <span className="text-muted-foreground">{m.periodicity_months} мес</span>
                     <span className="text-muted-foreground">{m.reason}</span>
