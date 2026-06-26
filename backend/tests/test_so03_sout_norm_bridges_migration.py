@@ -35,7 +35,10 @@ def test_so03_module_defines_both_bridge_columns() -> None:
     assert 'add_column("sout_factor"' in text
     assert '"position_id"' in text
     assert '"hazard_id"' in text
-    assert "position.id" in text
-    assert "risk_hazards.id" in text
+    assert "create_foreign_key" in text
+    assert '"position"' in text
+    assert '"risk_hazards"' in text
+    assert 'ondelete="SET NULL"' in text
     assert 'drop_column("sout_workplace", "position_id")' in text
     assert 'drop_column("sout_factor", "hazard_id")' in text
+    assert "drop_constraint" in text

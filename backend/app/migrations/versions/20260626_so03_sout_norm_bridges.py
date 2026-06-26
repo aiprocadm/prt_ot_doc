@@ -21,24 +21,24 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column("sout_workplace", sa.Column(
-        "position_id",
-        sa.String(length=36),
-        sa.ForeignKey("position.id", ondelete="SET NULL"),
-        nullable=True,
-    ))
+    op.add_column("sout_workplace", sa.Column("position_id", sa.String(length=36), nullable=True))
     op.create_index("ix_sout_workplace_position_id", "sout_workplace", ["position_id"])
-    op.add_column("sout_factor", sa.Column(
-        "hazard_id",
-        sa.String(length=36),
-        sa.ForeignKey("risk_hazards.id", ondelete="SET NULL"),
-        nullable=True,
-    ))
+    op.create_foreign_key(
+        "fk_sout_workplace_position", "sout_workplace", "position",
+        ["position_id"], ["id"], ondelete="SET NULL",
+    )
+    op.add_column("sout_factor", sa.Column("hazard_id", sa.String(length=36), nullable=True))
     op.create_index("ix_sout_factor_hazard_id", "sout_factor", ["hazard_id"])
+    op.create_foreign_key(
+        "fk_sout_factor_hazard", "sout_factor", "risk_hazards",
+        ["hazard_id"], ["id"], ondelete="SET NULL",
+    )
 
 
 def downgrade() -> None:
+    op.drop_constraint("fk_sout_factor_hazard", "sout_factor", type_="foreignkey")
     op.drop_index("ix_sout_factor_hazard_id", table_name="sout_factor")
     op.drop_column("sout_factor", "hazard_id")
+    op.drop_constraint("fk_sout_workplace_position", "sout_workplace", type_="foreignkey")
     op.drop_index("ix_sout_workplace_position_id", table_name="sout_workplace")
     op.drop_column("sout_workplace", "position_id")
