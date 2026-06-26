@@ -57,6 +57,7 @@ from app.api.routes import (
     risk_enterprise,
     safety_ops,
     sites,
+    sout,
     tasks,
     tenancy,
     tenants,
@@ -127,6 +128,7 @@ COMPLIANCE_AND_ADMIN_ROUTER_REGISTRATIONS: tuple[RouterRegistration, ...] = (
     (calendar.router, {}),
     (calendar_views.router, {}),
     (committees.router, {"tags": ["committees"]}),
+    (sout.router, {"tags": ["sout"]}),
     (compliance.router, {}),
     (billing.router, {}),
 )

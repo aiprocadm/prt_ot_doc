@@ -690,6 +690,105 @@ async def _seed_committees_demo(session, tenant_db_id: str) -> None:
         )
 
 
+async def _seed_sout_demo(session, tenant_db_id: str) -> None:
+    """Seed a minimal СОУТ demo (P10-04 срез-1).
+
+    Does NOT require a Person row — ``person_id`` is left NULL to keep this seed
+    independent of the rest of the demo bootstrap. Idempotent: keyed on
+    (tenant_id, name) for the SoutCampaign root.
+    """
+    from app.models.sout import (
+        SoutCampaign,
+        SoutCampaignStatus,
+        SoutClass,
+        SoutFactor,
+        SoutGuarantee,
+        SoutGuaranteeKind,
+        SoutWorkplace,
+    )
+
+    campaign = (
+        await session.execute(
+            select(SoutCampaign).where(
+                SoutCampaign.tenant_id == tenant_db_id,
+                SoutCampaign.name == "СОУТ 2026 (демо)",
+                SoutCampaign.deleted_at.is_(None),
+            )
+        )
+    ).scalar_one_or_none()
+    if campaign is not None:
+        return  # already seeded — full idempotent bail-out
+
+    campaign = SoutCampaign(
+        tenant_id=tenant_db_id,
+        name="СОУТ 2026 (демо)",
+        expert_org_name="ООО «Эксперт-Оценка» (демо)",
+        report_number="СОУТ-2026-001",
+        report_date=(datetime.now(timezone.utc) - timedelta(days=60)).date(),
+        status=SoutCampaignStatus.COMPLETED,
+        completed_date=(datetime.now(timezone.utc) - timedelta(days=60)).date(),
+    )
+    session.add(campaign)
+    await session.flush()
+
+    workplace = SoutWorkplace(
+        tenant_id=tenant_db_id,
+        campaign_id=campaign.id,
+        workplace_code="РМ-001",
+        position_name="Электрогазосварщик",
+        person_id=None,
+        assessed_class=SoutClass.HARMFUL_3_2,
+        assessment_date=(datetime.now(timezone.utc) - timedelta(days=60)).date(),
+        # next assessment already in the past → reassessment-due badge visible
+        next_assessment_date=(datetime.now(timezone.utc) - timedelta(days=5)).date(),
+    )
+    session.add(workplace)
+    await session.flush()
+
+    session.add(
+        SoutFactor(
+            tenant_id=tenant_db_id,
+            workplace_id=workplace.id,
+            code="4.50",
+            name="Шум",
+            measured_class=SoutClass.HARMFUL_3_1,
+            note="Превышение ПДУ по эквивалентному уровню звука (демо)",
+        )
+    )
+    session.add(
+        SoutGuarantee(
+            tenant_id=tenant_db_id,
+            workplace_id=workplace.id,
+            kind=SoutGuaranteeKind.ADDITIONAL_LEAVE,
+            detail="Дополнительный отпуск 7 календарных дней",
+        )
+    )
+
+    # Enable the default-off ``sout`` flag for the demo tenant so the seeded data
+    # is visible in the demo walkthrough. The flag stays default-off in production.
+    from app.models.feature import Feature, FeatureEnablement
+
+    feature = (
+        await session.execute(select(Feature).where(Feature.code == "sout"))
+    ).scalar_one_or_none()
+    if feature is None:
+        feature = Feature(code="sout", title="СОУТ")
+        session.add(feature)
+        await session.flush()
+    enablement = (
+        await session.execute(
+            select(FeatureEnablement).where(
+                FeatureEnablement.tenant_id == tenant_db_id,
+                FeatureEnablement.feature_id == feature.id,
+            )
+        )
+    ).scalar_one_or_none()
+    if enablement is None:
+        session.add(
+            FeatureEnablement(tenant_id=tenant_db_id, feature_id=feature.id, on=True)
+        )
+
+
 async def bootstrap_demo_tenant(settings: Settings) -> None:
     """Create a deterministic tenant with baseline entities for demo walkthrough."""
 
@@ -922,6 +1021,7 @@ async def bootstrap_demo_tenant(settings: Settings) -> None:
 
         await ensure_default_packs(session, tenant_slug=tenant_slug)
         await _seed_committees_demo(session, tenant_db_id)
+        await _seed_sout_demo(session, tenant_db_id)
         logger.info(
             "demo.bootstrap.done",
             extra={"tenant": tenant_slug, "company": company_name, "site": site_name},

@@ -10,6 +10,7 @@ import {
   FileArchive,
   FileText,
   Flame,
+  Gauge,
   GraduationCap,
   HeartPulse,
   History,
@@ -88,7 +89,8 @@ export const MAIN_NAV_GROUPS: NavGroup[] = [
       { label: "Инциденты/НС", to: "/incidents", icon: AlertTriangle, permission: PERMISSIONS.INCIDENT_VIEW },
       { label: "Проверки/предписания", to: "/inspections", icon: ClipboardCheck, permission: PERMISSIONS.INSPECTION_VIEW },
       { label: "Подготовка к проверке", to: "/audit-prep", icon: Archive, permission: PERMISSIONS.AUDIT_PREP_VIEW },
-      { label: "Комитеты по ОТ", to: "/committees", icon: UsersRound, permission: PERMISSIONS.COMMITTEE_VIEW }
+      { label: "Комитеты по ОТ", to: "/committees", icon: UsersRound, permission: PERMISSIONS.COMMITTEE_VIEW },
+      { label: "СОУТ", to: "/sout", icon: Gauge, permission: PERMISSIONS.SOUT_VIEW }
     ]
   },
   {
