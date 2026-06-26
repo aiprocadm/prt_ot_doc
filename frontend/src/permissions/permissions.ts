@@ -59,6 +59,7 @@ export const PERMISSIONS = {
   WORK_PERMIT_VIEW: "work_permit.view",
   WORK_PERMIT_MANAGE: "work_permit.manage",
   COMMITTEE_VIEW: "committee.view",
+  SOUT_VIEW: "sout.view",
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];

@@ -1,0 +1,464 @@
+"""Endpoints for СОУТ — спец. оценка условий труда (P10-04 срез-1, TZ B.10)."""
+from __future__ import annotations
+
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.api.dependencies import get_session, get_tenant_record
+from app.api.helpers.etag import (
+    apply_etag_response_headers,
+    build_not_modified_headers,
+    compute_list_etag,
+)
+from app.core.errors import api_problem_detail
+from app.core.feature_flags import is_feature_enabled
+from app.core.security import AccessContext, abac
+from app.core.tenant_validation import TenantContextValidator
+from app.domains.sout.lifecycle import (
+    CampaignTransitionError,
+    ensure_campaign_open,
+    validate_campaign_transition,
+)
+from app.domains.sout.service import (
+    build_class_history_row,
+    build_report,
+    history_to_read,
+    workplace_to_read,
+)
+from app.models.sout import (
+    SoutCampaign,
+    SoutClassHistory,
+    SoutFactor,
+    SoutGuarantee,
+    SoutWorkplace,
+)
+from app.models.tenanting import Tenant
+from app.schemas.sout import (
+    CampaignCreate,
+    CampaignPage,
+    CampaignRead,
+    CampaignReport,
+    CampaignStatusUpdate,
+    CampaignUpdate,
+    ClassHistoryRead,
+    FactorCreate,
+    FactorRead,
+    GuaranteeCreate,
+    GuaranteeRead,
+    WorkplaceCreate,
+    WorkplacePage,
+    WorkplaceRead,
+    WorkplaceUpdate,
+)
+
+router = APIRouter(prefix="/sout", tags=["sout"])
+
+SessionDep = Annotated[AsyncSession, Depends(get_session)]
+TenantDep = Annotated[Tenant, Depends(get_tenant_record)]
+
+
+def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> str | None:
+    return getattr(tenant, "id", None)
+
+
+_ROLES = ["admin"]
+Access = Annotated[AccessContext, Depends(abac(_tenant_resource_id, required_roles=_ROLES))]
+
+
+_FEATURE_CODE = "sout"
+
+
+def _feature_off() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail=api_problem_detail(
+            code="SOUT_DISABLED",
+            message="SOUT module is not enabled for this tenant",
+            error_type="sout",
+        ),
+    )
+
+
+async def _require_sout_enabled(session: AsyncSession, tenant: Tenant) -> None:
+    enabled = await is_feature_enabled(session, str(tenant.id), _FEATURE_CODE, default=False)
+    if not enabled:
+        raise _feature_off()
+
+
+def _conflict(exc: CampaignTransitionError) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail=api_problem_detail(
+            code="SOUT_TRANSITION_INVALID", message=str(exc), error_type="sout"
+        ),
+    )
+
+
+def _not_found(what: str) -> HTTPException:
+    return HTTPException(status.HTTP_404_NOT_FOUND, f"{what} not found")
+
+
+# --- tenant-scoped getters (patched in tests) ---
+async def _get_campaign(session: AsyncSession, tenant: Tenant, cid: str) -> SoutCampaign:
+    row = (
+        await session.execute(
+            select(SoutCampaign).where(
+                SoutCampaign.id == cid,
+                SoutCampaign.tenant_id == tenant.id,
+                SoutCampaign.deleted_at.is_(None),
+            )
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        raise _not_found("Campaign")
+    return row
+
+
+async def _get_workplace(session: AsyncSession, tenant: Tenant, wid: str) -> SoutWorkplace:
+    row = (
+        await session.execute(
+            select(SoutWorkplace).where(
+                SoutWorkplace.id == wid,
+                SoutWorkplace.tenant_id == tenant.id,
+                SoutWorkplace.deleted_at.is_(None),
+            )
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        raise _not_found("Workplace")
+    return row
+
+
+# --- Campaigns ---
+@router.get("", response_model=CampaignPage)
+async def list_campaigns(
+    request: Request,
+    response: Response,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: Access,
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+) -> CampaignPage | Response:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    await _require_sout_enabled(session, tenant)
+    stmt = (
+        select(SoutCampaign)
+        .where(SoutCampaign.tenant_id == tenant.id, SoutCampaign.deleted_at.is_(None))
+        .order_by(SoutCampaign.name.asc())
+        .limit(limit)
+        .offset(offset)
+    )
+    items = list((await session.execute(stmt)).scalars().all())
+    total = (
+        await session.execute(
+            select(func.count()).where(
+                SoutCampaign.tenant_id == tenant.id, SoutCampaign.deleted_at.is_(None)
+            )
+        )
+    ).scalar_one()
+    etag = compute_list_etag(
+        tenant_id=str(tenant.id),
+        items=items,
+        scalars=[("total", int(total or 0)), ("limit", limit), ("offset", offset)],
+    )
+    apply_etag_response_headers(response, etag)
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers=build_not_modified_headers(etag))
+    return CampaignPage(
+        items=[CampaignRead.model_validate(c, from_attributes=True) for c in items],
+        total=int(total or 0),
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.post("", response_model=CampaignRead, status_code=status.HTTP_201_CREATED)
+async def create_campaign(
+    payload: CampaignCreate, tenant: TenantDep, session: SessionDep, access: Access
+) -> CampaignRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    await _require_sout_enabled(session, tenant)
+    row = SoutCampaign(
+        tenant_id=tenant.id,
+        name=payload.name,
+        expert_org_name=payload.expert_org_name,
+        report_number=payload.report_number,
+        report_date=payload.report_date,
+        planned_date=payload.planned_date,
+    )
+    session.add(row)
+    await session.flush()
+    await session.refresh(row)
+    return CampaignRead.model_validate(row, from_attributes=True)
+
+
+@router.get("/{cid}", response_model=CampaignRead)
+async def get_campaign(cid: str, tenant: TenantDep, session: SessionDep, access: Access) -> CampaignRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    await _require_sout_enabled(session, tenant)
+    row = await _get_campaign(session, tenant, cid)
+    return CampaignRead.model_validate(row, from_attributes=True)
+
+
+@router.patch("/{cid}", response_model=CampaignRead)
+async def update_campaign(
+    cid: str, payload: CampaignUpdate, tenant: TenantDep, session: SessionDep, access: Access
+) -> CampaignRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    await _require_sout_enabled(session, tenant)
+    row = await _get_campaign(session, tenant, cid)
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(row, field, value)
+    await session.flush()
+    await session.refresh(row)
+    return CampaignRead.model_validate(row, from_attributes=True)
+
+
+@router.patch("/{cid}/status", response_model=CampaignRead)
+async def update_campaign_status(
+    cid: str, payload: CampaignStatusUpdate, tenant: TenantDep, session: SessionDep, access: Access
+) -> CampaignRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    await _require_sout_enabled(session, tenant)
+    row = await _get_campaign(session, tenant, cid)
+    try:
+        validate_campaign_transition(row.status, payload.status)
+    except CampaignTransitionError as exc:
+        raise _conflict(exc)
+    row.status = payload.status
+    await session.flush()
+    await session.refresh(row)
+    return CampaignRead.model_validate(row, from_attributes=True)
+
+
+# --- Workplaces ---
+@router.get("/{cid}/workplaces", response_model=WorkplacePage)
+async def list_workplaces(
+    cid: str,
+    request: Request,
+    response: Response,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: Access,
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+) -> WorkplacePage | Response:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    await _require_sout_enabled(session, tenant)
+    await _get_campaign(session, tenant, cid)
+    stmt = (
+        select(SoutWorkplace)
+        .where(
+            SoutWorkplace.campaign_id == cid,
+            SoutWorkplace.tenant_id == tenant.id,
+            SoutWorkplace.deleted_at.is_(None),
+        )
+        .order_by(SoutWorkplace.workplace_code.asc())
+        .limit(limit)
+        .offset(offset)
+    )
+    items = list((await session.execute(stmt)).scalars().all())
+    total = (
+        await session.execute(
+            select(func.count()).where(
+                SoutWorkplace.campaign_id == cid,
+                SoutWorkplace.tenant_id == tenant.id,
+                SoutWorkplace.deleted_at.is_(None),
+            )
+        )
+    ).scalar_one()
+    etag = compute_list_etag(
+        tenant_id=str(tenant.id),
+        items=items,
+        scalars=[("cid", cid), ("total", int(total or 0)), ("limit", limit), ("offset", offset)],
+    )
+    apply_etag_response_headers(response, etag)
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers=build_not_modified_headers(etag))
+    return WorkplacePage(
+        items=[workplace_to_read(w) for w in items],
+        total=int(total or 0),
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.post("/{cid}/workplaces", response_model=WorkplaceRead, status_code=status.HTTP_201_CREATED)
+async def add_workplace(
+    cid: str, payload: WorkplaceCreate, tenant: TenantDep, session: SessionDep, access: Access
+) -> WorkplaceRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    await _require_sout_enabled(session, tenant)
+    campaign = await _get_campaign(session, tenant, cid)
+    try:
+        ensure_campaign_open(campaign.status)
+    except CampaignTransitionError as exc:
+        raise _conflict(exc)
+    row = SoutWorkplace(
+        tenant_id=tenant.id,
+        campaign_id=cid,
+        workplace_code=payload.workplace_code,
+        position_name=payload.position_name,
+        person_id=payload.person_id,
+        assessed_class=payload.assessed_class,
+        assessment_date=payload.assessment_date,
+        next_assessment_date=payload.next_assessment_date,
+    )
+    session.add(row)
+    await session.flush()
+    # Record the initial class assignment (old=None) so the trajectory starts at
+    # creation, not at the first later edit.
+    history = build_class_history_row(
+        tenant_id=tenant.id, workplace_id=row.id,
+        old_class=None, new_class=row.assessed_class,
+    )
+    if history is not None:
+        session.add(history)
+    await session.refresh(row)
+    return workplace_to_read(row)
+
+
+@router.get("/workplaces/{wid}", response_model=WorkplaceRead)
+async def get_workplace(wid: str, tenant: TenantDep, session: SessionDep, access: Access) -> WorkplaceRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    await _require_sout_enabled(session, tenant)
+    row = await _get_workplace(session, tenant, wid)
+    return workplace_to_read(row)
+
+
+@router.patch("/workplaces/{wid}", response_model=WorkplaceRead)
+async def update_workplace(
+    wid: str, payload: WorkplaceUpdate, tenant: TenantDep, session: SessionDep, access: Access
+) -> WorkplaceRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    await _require_sout_enabled(session, tenant)
+    row = await _get_workplace(session, tenant, wid)
+    changes = payload.model_dump(exclude_unset=True)
+    old_class = row.assessed_class
+    for field, value in changes.items():
+        setattr(row, field, value)
+    if "assessed_class" in changes:
+        history = build_class_history_row(
+            tenant_id=tenant.id, workplace_id=row.id,
+            old_class=old_class, new_class=row.assessed_class,
+        )
+        if history is not None:
+            session.add(history)
+    await session.flush()
+    await session.refresh(row)
+    return workplace_to_read(row)
+
+
+@router.get("/workplaces/{wid}/class-history", response_model=list[ClassHistoryRead])
+async def list_class_history(
+    wid: str, tenant: TenantDep, session: SessionDep, access: Access
+) -> list[ClassHistoryRead]:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    await _require_sout_enabled(session, tenant)
+    await _get_workplace(session, tenant, wid)
+    rows = list(
+        (
+            await session.execute(
+                select(SoutClassHistory)
+                .where(
+                    SoutClassHistory.workplace_id == wid,
+                    SoutClassHistory.tenant_id == tenant.id,
+                )
+                .order_by(SoutClassHistory.changed_at.asc())
+            )
+        ).scalars().all()
+    )
+    return [history_to_read(r) for r in rows]
+
+
+# --- Factors ---
+@router.post("/workplaces/{wid}/factors", response_model=FactorRead, status_code=status.HTTP_201_CREATED)
+async def add_factor(
+    wid: str, payload: FactorCreate, tenant: TenantDep, session: SessionDep, access: Access
+) -> FactorRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    await _require_sout_enabled(session, tenant)
+    await _get_workplace(session, tenant, wid)
+    row = SoutFactor(
+        tenant_id=tenant.id,
+        workplace_id=wid,
+        code=payload.code,
+        name=payload.name,
+        measured_class=payload.measured_class,
+        note=payload.note,
+    )
+    session.add(row)
+    await session.flush()
+    await session.refresh(row)
+    return FactorRead.model_validate(row, from_attributes=True)
+
+
+# --- Guarantees ---
+@router.post("/workplaces/{wid}/guarantees", response_model=GuaranteeRead, status_code=status.HTTP_201_CREATED)
+async def add_guarantee(
+    wid: str, payload: GuaranteeCreate, tenant: TenantDep, session: SessionDep, access: Access
+) -> GuaranteeRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    await _require_sout_enabled(session, tenant)
+    await _get_workplace(session, tenant, wid)
+    row = SoutGuarantee(
+        tenant_id=tenant.id,
+        workplace_id=wid,
+        kind=payload.kind,
+        detail=payload.detail,
+    )
+    session.add(row)
+    await session.flush()
+    await session.refresh(row)
+    return GuaranteeRead.model_validate(row, from_attributes=True)
+
+
+# --- Report projection ---
+@router.get("/{cid}/report", response_model=CampaignReport)
+async def get_report(
+    cid: str, tenant: TenantDep, session: SessionDep, access: Access
+) -> CampaignReport:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    await _require_sout_enabled(session, tenant)
+    campaign = await _get_campaign(session, tenant, cid)
+    workplaces = list(
+        (
+            await session.execute(
+                select(SoutWorkplace)
+                .where(
+                    SoutWorkplace.campaign_id == cid,
+                    SoutWorkplace.tenant_id == tenant.id,
+                    SoutWorkplace.deleted_at.is_(None),
+                )
+                .order_by(SoutWorkplace.workplace_code.asc())
+            )
+        ).scalars().all()
+    )
+    triples = []
+    for w in workplaces:
+        factors = list(
+            (
+                await session.execute(
+                    select(SoutFactor).where(
+                        SoutFactor.workplace_id == w.id,
+                        SoutFactor.tenant_id == tenant.id,
+                    )
+                )
+            ).scalars().all()
+        )
+        guarantees = list(
+            (
+                await session.execute(
+                    select(SoutGuarantee).where(
+                        SoutGuarantee.workplace_id == w.id,
+                        SoutGuarantee.tenant_id == tenant.id,
+                    )
+                )
+            ).scalars().all()
+        )
+        triples.append((w, factors, guarantees))
+    return build_report(campaign, triples)

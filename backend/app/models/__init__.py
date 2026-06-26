@@ -144,6 +144,16 @@ from app.models.safety_core import (
     SafetyRiskMap,
     SafetyRiskMethodology,
 )
+from app.models.sout import (
+    SoutCampaign,
+    SoutCampaignStatus,
+    SoutClass,
+    SoutClassHistory,
+    SoutFactor,
+    SoutGuarantee,
+    SoutGuaranteeKind,
+    SoutWorkplace,
+)
 from app.models.work_permit import WorkPermit, WorkPermitEvent, WorkPermitMember
 
 __all__ = [
@@ -279,4 +289,12 @@ __all__ = [
     "CommitteeMemberRole",
     "DecisionTaskStatus",
     "MeetingStatus",
+    "SoutCampaign",
+    "SoutCampaignStatus",
+    "SoutClass",
+    "SoutClassHistory",
+    "SoutFactor",
+    "SoutGuarantee",
+    "SoutGuaranteeKind",
+    "SoutWorkplace",
 ]

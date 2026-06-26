@@ -120,6 +120,7 @@ ROLE_MODULE_DEFAULTS: dict[str, list[str]] = {
         "masterdata",
         "contractors",
         "compliance",
+        "sout",
     ],
     "ot_pb_lead": ["risk", "ppe", "incidents", "inspections", "documents", "tasks", "contractors"],
     "ot_specialist": ["risk", "ppe", "incidents", "documents", "tasks"],
