@@ -54,6 +54,7 @@ class WorkplaceCreate(BaseSchema):
     workplace_code: str
     position_name: str
     person_id: str | None = None
+    position_id: str | None = None
     assessed_class: SoutClass | None = None
     assessment_date: date | None = None
     next_assessment_date: date | None = None
@@ -63,6 +64,7 @@ class WorkplaceUpdate(BaseSchema):
     workplace_code: str | None = None
     position_name: str | None = None
     person_id: str | None = None
+    position_id: str | None = None
     assessed_class: SoutClass | None = None
     assessment_date: date | None = None
     next_assessment_date: date | None = None
@@ -74,6 +76,7 @@ class WorkplaceRead(BaseSchema):
     workplace_code: str
     position_name: str
     person_id: str | None
+    position_id: str | None = None
     assessed_class: SoutClass | None
     assessment_date: date | None
     next_assessment_date: date | None
@@ -95,11 +98,21 @@ class FactorCreate(BaseSchema):
     code: str | None = None
     measured_class: SoutClass | None = None
     note: str | None = None
+    hazard_id: str | None = None
+
+
+class FactorUpdate(BaseSchema):
+    name: str | None = None
+    code: str | None = None
+    measured_class: SoutClass | None = None
+    note: str | None = None
+    hazard_id: str | None = None
 
 
 class FactorRead(BaseSchema):
     id: str
     workplace_id: str
+    hazard_id: str | None = None
     code: str | None
     name: str
     measured_class: SoutClass | None
@@ -140,3 +153,27 @@ class WorkplaceReport(BaseSchema):
 class CampaignReport(BaseSchema):
     campaign: CampaignRead
     workplaces: list[WorkplaceReport]
+
+
+# --- Norm suggestions (срез-3) ---
+class PpeNormSuggestion(BaseSchema):
+    position_id: str
+    hazard_id: str
+    hazard_title: str
+    factor_name: str
+    factor_code: str | None
+    measured_class: SoutClass | None
+    reason: str
+
+
+class MedicalExamSuggestion(BaseSchema):
+    position_id: str
+    exam_kind: str
+    periodicity_months: int
+    factor_codes: list[str]
+    reason: str
+
+
+class NormSuggestions(BaseSchema):
+    ppe: list[PpeNormSuggestion]
+    medical: list[MedicalExamSuggestion]

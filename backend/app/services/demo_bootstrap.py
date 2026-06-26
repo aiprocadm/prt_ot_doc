@@ -690,7 +690,7 @@ async def _seed_committees_demo(session, tenant_db_id: str) -> None:
         )
 
 
-async def _seed_sout_demo(session, tenant_db_id: str) -> None:
+async def _seed_sout_demo(session, tenant_db_id: str, position_id: str | None = None) -> None:
     """Seed a minimal СОУТ demo (P10-04 срез-1).
 
     Does NOT require a Person row — ``person_id`` is left NULL to keep this seed
@@ -737,6 +737,7 @@ async def _seed_sout_demo(session, tenant_db_id: str) -> None:
         workplace_code="РМ-001",
         position_name="Электрогазосварщик",
         person_id=None,
+        position_id=position_id,
         assessed_class=SoutClass.HARMFUL_3_2,
         assessment_date=(datetime.now(timezone.utc) - timedelta(days=60)).date(),
         # next assessment already in the past → reassessment-due badge visible
@@ -745,10 +746,20 @@ async def _seed_sout_demo(session, tenant_db_id: str) -> None:
     session.add(workplace)
     await session.flush()
 
+    demo_hazard = (
+        await session.execute(
+            select(RiskHazard).where(
+                RiskHazard.tenant_id == tenant_db_id,
+                RiskHazard.code == "demo_general",
+            )
+        )
+    ).scalar_one_or_none()
+
     session.add(
         SoutFactor(
             tenant_id=tenant_db_id,
             workplace_id=workplace.id,
+            hazard_id=demo_hazard.id if demo_hazard else None,
             code="4.50",
             name="Шум",
             measured_class=SoutClass.HARMFUL_3_1,
@@ -1021,7 +1032,7 @@ async def bootstrap_demo_tenant(settings: Settings) -> None:
 
         await ensure_default_packs(session, tenant_slug=tenant_slug)
         await _seed_committees_demo(session, tenant_db_id)
-        await _seed_sout_demo(session, tenant_db_id)
+        await _seed_sout_demo(session, tenant_db_id, str(position.id) if position is not None else None)
         logger.info(
             "demo.bootstrap.done",
             extra={"tenant": tenant_slug, "company": company_name, "site": site_name},

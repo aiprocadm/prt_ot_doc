@@ -22,11 +22,16 @@ from app.domains.sout.lifecycle import (
     ensure_campaign_open,
     validate_campaign_transition,
 )
+from app.domains.medical.service import _load_factor_catalog
 from app.domains.sout.service import (
     build_class_history_row,
     build_report,
     history_to_read,
     workplace_to_read,
+)
+from app.domains.sout.suggestions import (
+    build_medical_exam_suggestions,
+    build_ppe_norm_suggestions,
 )
 from app.models.sout import (
     SoutCampaign,
@@ -35,6 +40,8 @@ from app.models.sout import (
     SoutGuarantee,
     SoutWorkplace,
 )
+from app.models.models import MedicalNorm, PPENorm, Position
+from app.models.risk import RiskHazard
 from app.models.tenanting import Tenant
 from app.schemas.sout import (
     CampaignCreate,
@@ -46,8 +53,10 @@ from app.schemas.sout import (
     ClassHistoryRead,
     FactorCreate,
     FactorRead,
+    FactorUpdate,
     GuaranteeCreate,
     GuaranteeRead,
+    NormSuggestions,
     WorkplaceCreate,
     WorkplacePage,
     WorkplaceRead,
@@ -130,6 +139,101 @@ async def _get_workplace(session: AsyncSession, tenant: Tenant, wid: str) -> Sou
     if row is None:
         raise _not_found("Workplace")
     return row
+
+
+async def _get_factor(session: AsyncSession, tenant: Tenant, fid: str) -> SoutFactor:
+    row = (
+        await session.execute(
+            select(SoutFactor).where(
+                SoutFactor.id == fid, SoutFactor.tenant_id == tenant.id
+            )
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        raise _not_found("Factor")
+    return row
+
+
+async def _validate_position(session: AsyncSession, tenant: Tenant, pid: str) -> str:
+    row = (
+        await session.execute(
+            select(Position.id).where(
+                Position.id == pid,
+                Position.tenant_id == tenant.id,
+                Position.deleted_at.is_(None),
+            )
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        raise _not_found("Position")
+    return pid
+
+
+async def _validate_hazard(session: AsyncSession, tenant: Tenant, hid: str) -> str:
+    row = (
+        await session.execute(
+            select(RiskHazard.id).where(
+                RiskHazard.id == hid, RiskHazard.tenant_id == tenant.id
+            )
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        raise _not_found("Hazard")
+    return hid
+
+
+# --- norm-suggestion loaders (patched in tests) ---
+async def _load_workplace_factors(session: AsyncSession, tenant: Tenant, wid: str):
+    return list(
+        (
+            await session.execute(
+                select(SoutFactor).where(
+                    SoutFactor.workplace_id == wid, SoutFactor.tenant_id == tenant.id
+                )
+            )
+        ).scalars().all()
+    )
+
+
+async def _load_hazard_meta(session: AsyncSession, tenant: Tenant, hazard_ids):
+    """Return {hazard_id: (title, medical_factor_code)} for the given ids."""
+    if not hazard_ids:
+        return {}
+    rows = (
+        await session.execute(
+            select(RiskHazard.id, RiskHazard.title, RiskHazard.medical_factor_code).where(
+                RiskHazard.id.in_(hazard_ids), RiskHazard.tenant_id == tenant.id
+            )
+        )
+    ).all()
+    return {r[0]: (r[1], r[2]) for r in rows}
+
+
+async def _load_existing_ppe_pairs(session: AsyncSession, tenant: Tenant, position_id: str):
+    rows = (
+        await session.execute(
+            select(PPENorm.position_id, PPENorm.hazard_id).where(
+                PPENorm.tenant_id == tenant.id, PPENorm.position_id == position_id
+            )
+        )
+    ).all()
+    return {(r[0], r[1]) for r in rows}
+
+
+async def _load_medical_inputs(session: AsyncSession, tenant: Tenant, position_id: str):
+    """Return (factor_catalog, existing_norm_kinds) for the position."""
+    catalog = await _load_factor_catalog(session, tenant_id=str(tenant.id))
+    kinds = set(
+        (
+            await session.execute(
+                select(MedicalNorm.exam_kind).where(
+                    MedicalNorm.tenant_id == tenant.id,
+                    MedicalNorm.position_id == position_id,
+                )
+            )
+        ).scalars().all()
+    )
+    return catalog, kinds
 
 
 # --- Campaigns ---
@@ -298,12 +402,15 @@ async def add_workplace(
         ensure_campaign_open(campaign.status)
     except CampaignTransitionError as exc:
         raise _conflict(exc)
+    if payload.position_id is not None:
+        await _validate_position(session, tenant, payload.position_id)
     row = SoutWorkplace(
         tenant_id=tenant.id,
         campaign_id=cid,
         workplace_code=payload.workplace_code,
         position_name=payload.position_name,
         person_id=payload.person_id,
+        position_id=payload.position_id,
         assessed_class=payload.assessed_class,
         assessment_date=payload.assessment_date,
         next_assessment_date=payload.next_assessment_date,
@@ -338,6 +445,8 @@ async def update_workplace(
     await _require_sout_enabled(session, tenant)
     row = await _get_workplace(session, tenant, wid)
     changes = payload.model_dump(exclude_unset=True)
+    if changes.get("position_id") is not None:
+        await _validate_position(session, tenant, changes["position_id"])
     old_class = row.assessed_class
     for field, value in changes.items():
         setattr(row, field, value)
@@ -375,6 +484,37 @@ async def list_class_history(
     return [history_to_read(r) for r in rows]
 
 
+@router.get("/workplaces/{wid}/norm-suggestions", response_model=NormSuggestions)
+async def get_norm_suggestions(
+    wid: str, tenant: TenantDep, session: SessionDep, access: Access
+) -> NormSuggestions:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    await _require_sout_enabled(session, tenant)
+    wp = await _get_workplace(session, tenant, wid)
+    if wp.position_id is None:
+        return NormSuggestions(ppe=[], medical=[])
+    factors = await _load_workplace_factors(session, tenant, wid)
+    hazard_ids = {f.hazard_id for f in factors if f.hazard_id is not None}
+    hazard_meta = await _load_hazard_meta(session, tenant, hazard_ids)
+    hazard_titles = {hid: meta[0] for hid, meta in hazard_meta.items()}
+    ppe_pairs = await _load_existing_ppe_pairs(session, tenant, wp.position_id)
+    ppe = build_ppe_norm_suggestions(
+        position_id=wp.position_id,
+        factors=factors,
+        hazard_titles=hazard_titles,
+        existing_norm_pairs=ppe_pairs,
+    )
+    factor_codes = {meta[1] for meta in hazard_meta.values() if meta[1]}
+    catalog, existing_kinds = await _load_medical_inputs(session, tenant, wp.position_id)
+    medical = build_medical_exam_suggestions(
+        position_id=wp.position_id,
+        hazard_factor_codes=factor_codes,
+        factor_catalog=catalog,
+        existing_norm_kinds=existing_kinds,
+    )
+    return NormSuggestions(ppe=ppe, medical=medical)
+
+
 # --- Factors ---
 @router.post("/workplaces/{wid}/factors", response_model=FactorRead, status_code=status.HTTP_201_CREATED)
 async def add_factor(
@@ -383,15 +523,35 @@ async def add_factor(
     TenantContextValidator.ensure_tenant_context(tenant)
     await _require_sout_enabled(session, tenant)
     await _get_workplace(session, tenant, wid)
+    if payload.hazard_id is not None:
+        await _validate_hazard(session, tenant, payload.hazard_id)
     row = SoutFactor(
         tenant_id=tenant.id,
         workplace_id=wid,
         code=payload.code,
         name=payload.name,
         measured_class=payload.measured_class,
+        hazard_id=payload.hazard_id,
         note=payload.note,
     )
     session.add(row)
+    await session.flush()
+    await session.refresh(row)
+    return FactorRead.model_validate(row, from_attributes=True)
+
+
+@router.patch("/factors/{fid}", response_model=FactorRead)
+async def update_factor(
+    fid: str, payload: FactorUpdate, tenant: TenantDep, session: SessionDep, access: Access
+) -> FactorRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    await _require_sout_enabled(session, tenant)
+    row = await _get_factor(session, tenant, fid)
+    changes = payload.model_dump(exclude_unset=True)
+    if changes.get("hazard_id") is not None:
+        await _validate_hazard(session, tenant, changes["hazard_id"])
+    for field, value in changes.items():
+        setattr(row, field, value)
     await session.flush()
     await session.refresh(row)
     return FactorRead.model_validate(row, from_attributes=True)

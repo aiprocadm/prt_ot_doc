@@ -80,6 +80,29 @@ export interface SoutClassHistoryEntry {
   is_worsening: boolean;
 }
 
+export interface PpeNormSuggestion {
+  position_id: string;
+  hazard_id: string;
+  hazard_title: string;
+  factor_name: string;
+  factor_code: string | null;
+  measured_class: string | null;
+  reason: string;
+}
+
+export interface MedicalExamSuggestion {
+  position_id: string;
+  exam_kind: string;
+  periodicity_months: number;
+  factor_codes: string[];
+  reason: string;
+}
+
+export interface NormSuggestions {
+  ppe: PpeNormSuggestion[];
+  medical: MedicalExamSuggestion[];
+}
+
 // ── API ────────────────────────────────────────────────────────────────────
 
 const base = "/sout";
@@ -112,5 +135,17 @@ export const soutApi = {
 
   async listClassHistory(workplaceId: string): Promise<SoutClassHistoryEntry[]> {
     return (await apiClient.get<SoutClassHistoryEntry[]>(`${base}/workplaces/${workplaceId}/class-history`)).data;
+  },
+
+  async getNormSuggestions(workplaceId: string): Promise<NormSuggestions> {
+    return (await apiClient.get<NormSuggestions>(`${base}/workplaces/${workplaceId}/norm-suggestions`)).data;
+  },
+
+  async linkWorkplacePosition(workplaceId: string, positionId: string): Promise<void> {
+    await apiClient.patch(`${base}/workplaces/${workplaceId}`, { position_id: positionId });
+  },
+
+  async linkFactorHazard(factorId: string, hazardId: string): Promise<void> {
+    await apiClient.patch(`${base}/factors/${factorId}`, { hazard_id: hazardId });
   },
 };

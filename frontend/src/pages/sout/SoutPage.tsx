@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 
 import {
   soutApi,
+  type NormSuggestions as NormSuggestionsData,
   type SoutCampaign,
   type SoutCampaignReport,
   type SoutClassHistoryEntry,
@@ -11,7 +12,9 @@ import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingScreen } from "@/components/common/LoadingScreen";
 import { RegistryPageHeader } from "@/components/common/RegistryPageHeader";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { ApiError } from "@/types/dto/common";
 import { formatDate } from "@/utils/datetime";
@@ -178,6 +181,136 @@ const ClassHistory = ({ workplaceId }: ClassHistoryProps) => {
   );
 };
 
+// ── Norm suggestions (lazy, per workplace) ──────────────────────────────────
+
+interface NormSuggestionsProps {
+  workplaceId: string;
+}
+
+const NormSuggestionsSection = ({ workplaceId }: NormSuggestionsProps) => {
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<ApiError | null>(null);
+  const [data, setData] = useState<NormSuggestionsData | null>(null);
+
+  const toggle = async () => {
+    const next = !open;
+    setOpen(next);
+    if (next && data === null && !loading) {
+      setLoading(true);
+      setError(null);
+      try {
+        setData(await soutApi.getNormSuggestions(workplaceId));
+      } catch (err) {
+        setError((err as ApiError) ?? { message: "Не удалось загрузить предложения норм" });
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
+
+  const isEmpty = data !== null && data.ppe.length === 0 && data.medical.length === 0;
+
+  return (
+    <div className="space-y-2">
+      <button
+        type="button"
+        onClick={() => void toggle()}
+        className="text-xs text-muted-foreground underline-offset-2 hover:underline"
+      >
+        {open ? "Скрыть предложения норм" : "Предложения норм"}
+      </button>
+      {open ? (
+        <div className="space-y-2">
+          <ErrorState error={error ?? undefined} onRetry={() => void toggle()} />
+          {loading ? <LoadingScreen label="Загрузка предложений" /> : null}
+          {!loading && !error && isEmpty ? (
+            <p className="text-xs text-muted-foreground">Предложений норм нет.</p>
+          ) : null}
+          {!loading && !error && data !== null && data.ppe.length > 0 ? (
+            <div className="space-y-1">
+              <p className="text-xs font-medium">СИЗ</p>
+              <ul className="space-y-1 text-xs">
+                {data.ppe.map((p) => (
+                  <li key={`ppe-${p.hazard_id}`} className="flex flex-wrap items-center gap-2">
+                    <span className="font-medium">{p.hazard_title || p.factor_name}</span>
+                    <span className="text-muted-foreground">{p.reason}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+          {!loading && !error && data !== null && data.medical.length > 0 ? (
+            <div className="space-y-1">
+              <p className="text-xs font-medium">Медосмотры</p>
+              <ul className="space-y-1 text-xs">
+                {data.medical.map((m) => (
+                  <li key={`med-${m.exam_kind}`} className="flex flex-wrap items-center gap-2">
+                    <span className="font-medium">{m.exam_kind}</span>
+                    <span className="text-muted-foreground">{m.periodicity_months} мес</span>
+                    <span className="text-muted-foreground">{m.reason}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+          {!loading && !error && !isEmpty && data !== null ? (
+            <p className="text-xs italic text-muted-foreground">
+              Подтвердите в разделе СИЗ / Медосмотры
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+};
+
+// ── Link controls (set position_id / hazard_id) ─────────────────────────────
+
+interface LinkInputProps {
+  label: string;
+  buttonLabel: string;
+  onSubmit: (value: string) => Promise<void>;
+}
+
+const LinkInput = ({ label, buttonLabel, onSubmit }: LinkInputProps) => {
+  const [value, setValue] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<ApiError | null>(null);
+
+  const submit = async () => {
+    const trimmed = value.trim();
+    if (!trimmed || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await onSubmit(trimmed);
+      setValue("");
+    } catch (err) {
+      setError((err as ApiError) ?? { message: "Не удалось сохранить связь" });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center gap-2">
+        <Input
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          placeholder={label}
+          className="h-8 max-w-xs text-xs"
+        />
+        <Button type="button" size="sm" disabled={busy} onClick={() => void submit()}>
+          {buttonLabel}
+        </Button>
+      </div>
+      <ErrorState error={error ?? undefined} />
+    </div>
+  );
+};
+
 // ── Report panel (workplaces + factors + guarantees) ────────────────────────
 
 interface ReportPanelProps {
@@ -239,12 +372,21 @@ const ReportPanel = ({ campaign }: ReportPanelProps) => {
                     Следующая оценка: {formatDate(workplace.next_assessment_date)}
                   </p>
                 ) : null}
+                <LinkInput
+                  label="ID должности"
+                  buttonLabel="Привязать должность"
+                  onSubmit={async (positionId) => {
+                    await soutApi.linkWorkplacePosition(workplace.id, positionId);
+                    await load();
+                  }}
+                />
                 {factors.length > 0 ? (
                   <Table>
                     <TableHeader>
                       <TableRow>
                         <TableHead>Фактор</TableHead>
                         <TableHead>Класс</TableHead>
+                        <TableHead>Опасность</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -253,6 +395,16 @@ const ReportPanel = ({ campaign }: ReportPanelProps) => {
                           <TableCell className="font-medium">{f.name}</TableCell>
                           <TableCell className="text-muted-foreground">
                             {classLabel(f.measured_class)}
+                          </TableCell>
+                          <TableCell>
+                            <LinkInput
+                              label="ID опасности"
+                              buttonLabel="Привязать"
+                              onSubmit={async (hazardId) => {
+                                await soutApi.linkFactorHazard(f.id, hazardId);
+                                await load();
+                              }}
+                            />
                           </TableCell>
                         </TableRow>
                       ))}
@@ -272,6 +424,7 @@ const ReportPanel = ({ campaign }: ReportPanelProps) => {
                   </div>
                 ) : null}
                 <ClassHistory workplaceId={workplace.id} />
+                <NormSuggestionsSection workplaceId={workplace.id} />
               </div>
             ))}
           </div>
