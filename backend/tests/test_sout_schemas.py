@@ -8,7 +8,11 @@ from app.schemas.sout import (
     CampaignCreate,
     CampaignStatusUpdate,
     FactorCreate,
+    FactorUpdate,
     GuaranteeCreate,
+    MedicalExamSuggestion,
+    NormSuggestions,
+    PpeNormSuggestion,
     WorkplaceCreate,
     WorkplaceRead,
     WorkplaceUpdate,
@@ -56,3 +60,28 @@ def test_factor_and_guarantee_create():
     assert f.measured_class is None
     g = GuaranteeCreate(kind=SoutGuaranteeKind.MILK)
     assert g.detail is None
+
+
+def test_workplace_create_accepts_position_id() -> None:
+    wp = WorkplaceCreate(workplace_code="РМ-1", position_name="Сварщик", position_id="pos-1")
+    assert wp.position_id == "pos-1"
+
+
+def test_factor_update_accepts_hazard_id() -> None:
+    fu = FactorUpdate(hazard_id="haz-1")
+    assert fu.model_dump(exclude_unset=True) == {"hazard_id": "haz-1"}
+
+
+def test_norm_suggestions_envelope() -> None:
+    ppe = PpeNormSuggestion(
+        position_id="pos-1", hazard_id="haz-1", hazard_title="Шум",
+        factor_name="Шум", factor_code="4.50", measured_class=SoutClass.HARMFUL_3_1,
+        reason="demo",
+    )
+    med = MedicalExamSuggestion(
+        position_id="pos-1", exam_kind="periodic", periodicity_months=12,
+        factor_codes=["4.4"], reason="demo",
+    )
+    env = NormSuggestions(ppe=[ppe], medical=[med])
+    assert env.ppe[0].hazard_id == "haz-1"
+    assert env.medical[0].exam_kind == "periodic"
