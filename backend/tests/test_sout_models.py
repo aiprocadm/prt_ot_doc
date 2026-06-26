@@ -67,3 +67,19 @@ def test_soutclass_enum_shared_across_two_columns() -> None:
 
 def test_models_reexported_from_package() -> None:
     from app.models import SoutCampaign, SoutWorkplace  # noqa: F401
+
+
+def test_workplace_has_nullable_position_bridge() -> None:
+    from app.models.sout import SoutWorkplace
+
+    col = SoutWorkplace.__table__.c.position_id
+    assert col.nullable is True
+    assert any(fk.column.table.name == "position" for fk in col.foreign_keys)
+
+
+def test_factor_has_nullable_hazard_bridge() -> None:
+    from app.models.sout import SoutFactor
+
+    col = SoutFactor.__table__.c.hazard_id
+    assert col.nullable is True
+    assert any(fk.column.table.name == "risk_hazards" for fk in col.foreign_keys)

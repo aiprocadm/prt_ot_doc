@@ -85,6 +85,9 @@ class SoutWorkplace(TenantBaseModel, SoftDeleteMixin):
     person_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("person.id", ondelete="SET NULL"), nullable=True
     )
+    position_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("position.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     assessed_class: Mapped[SoutClass | None] = mapped_column(_SOUT_CLASS_ENUM, nullable=True)
     assessment_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     next_assessment_date: Mapped[date | None] = mapped_column(Date, nullable=True)
@@ -95,6 +98,9 @@ class SoutFactor(TenantBaseModel):
 
     workplace_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("sout_workplace.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    hazard_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("risk_hazards.id", ondelete="SET NULL"), nullable=True, index=True
     )
     code: Mapped[str | None] = mapped_column(String(50), nullable=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
