@@ -119,6 +119,17 @@ class GuaranteeRead(BaseSchema):
     detail: str | None
 
 
+# --- Class history (срез-2) ---
+class ClassHistoryRead(BaseSchema):
+    id: str
+    workplace_id: str
+    old_class: SoutClass | None
+    new_class: SoutClass | None
+    changed_at: datetime
+    note: str | None
+    is_worsening: bool
+
+
 # --- Report projection ---
 class WorkplaceReport(BaseSchema):
     workplace: WorkplaceRead

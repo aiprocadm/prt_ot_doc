@@ -8,10 +8,12 @@ from __future__ import annotations
 
 from datetime import date
 
-from app.domains.sout.lifecycle import is_reassessment_due
+from app.domains.sout.lifecycle import is_class_worsening, is_reassessment_due
+from app.models.sout import SoutClass, SoutClassHistory
 from app.schemas.sout import (
     CampaignReport,
     CampaignRead,
+    ClassHistoryRead,
     FactorRead,
     GuaranteeRead,
     WorkplaceReport,
@@ -37,6 +39,38 @@ def workplace_to_read(workplace, *, today: date | None = None) -> WorkplaceRead:
         is_reassessment_due=is_reassessment_due(workplace.next_assessment_date, today),
         created_at=workplace.created_at,
         updated_at=workplace.updated_at,
+    )
+
+
+def history_to_read(row) -> ClassHistoryRead:
+    return ClassHistoryRead(
+        id=row.id,
+        workplace_id=row.workplace_id,
+        old_class=row.old_class,
+        new_class=row.new_class,
+        changed_at=row.changed_at,
+        note=row.note,
+        is_worsening=is_class_worsening(row.old_class, row.new_class),
+    )
+
+
+def build_class_history_row(
+    *, tenant_id: str, workplace_id: str, old_class: SoutClass | None,
+    new_class: SoutClass | None, note: str | None = None,
+) -> SoutClassHistory | None:
+    """Return an unsaved history row when the class actually changed, else None.
+
+    No-op when ``old_class == new_class`` (idempotent PATCH that doesn't touch the
+    class must not pollute the audit trail).
+    """
+    if old_class == new_class:
+        return None
+    return SoutClassHistory(
+        tenant_id=tenant_id,
+        workplace_id=workplace_id,
+        old_class=old_class,
+        new_class=new_class,
+        note=note,
     )
 
 

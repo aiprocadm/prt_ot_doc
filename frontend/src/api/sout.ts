@@ -70,6 +70,16 @@ export interface SoutCampaignReport {
   workplaces: SoutWorkplaceReport[];
 }
 
+export interface SoutClassHistoryEntry {
+  id: string;
+  workplace_id: string;
+  old_class?: string | null;
+  new_class?: string | null;
+  changed_at: string;
+  note?: string | null;
+  is_worsening: boolean;
+}
+
 // ── API ────────────────────────────────────────────────────────────────────
 
 const base = "/sout";
@@ -98,5 +108,9 @@ export const soutApi = {
 
   async getReport(campaignId: string): Promise<SoutCampaignReport> {
     return (await apiClient.get<SoutCampaignReport>(`${base}/${campaignId}/report`)).data;
+  },
+
+  async listClassHistory(workplaceId: string): Promise<SoutClassHistoryEntry[]> {
+    return (await apiClient.get<SoutClassHistoryEntry[]>(`${base}/workplaces/${workplaceId}/class-history`)).data;
   },
 };

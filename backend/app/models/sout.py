@@ -12,9 +12,9 @@ auto-cascade to PPE norms / medical exams are deferred to срез-2+.
 from __future__ import annotations
 
 import enum
-from datetime import date
+from datetime import date, datetime, timezone
 
-from sqlalchemy import Date, ForeignKey, String, Text
+from sqlalchemy import Date, DateTime, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import SoftDeleteMixin, TenantBaseModel, native_enum
@@ -112,3 +112,27 @@ class SoutGuarantee(TenantBaseModel):
         native_enum(SoutGuaranteeKind, name="soutguaranteekind"), nullable=False
     )
     detail: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class SoutClassHistory(TenantBaseModel):
+    """Append-only audit of class-of-conditions changes per workplace (срез-2).
+
+    A row is written whenever a workplace's ``assessed_class`` transitions to a
+    different value. ``old_class`` is NULL for the very first assessment. Both
+    class columns reuse the shared ``soutclass`` native enum (no soft-delete —
+    history is immutable).
+    """
+
+    __tablename__ = "sout_class_history"
+
+    workplace_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("sout_workplace.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    old_class: Mapped[SoutClass | None] = mapped_column(_SOUT_CLASS_ENUM, nullable=True)
+    new_class: Mapped[SoutClass | None] = mapped_column(_SOUT_CLASS_ENUM, nullable=True)
+    changed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(tz=timezone.utc),
+        nullable=False,
+    )
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)

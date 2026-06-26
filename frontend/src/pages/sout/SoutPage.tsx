@@ -4,6 +4,7 @@ import {
   soutApi,
   type SoutCampaign,
   type SoutCampaignReport,
+  type SoutClassHistoryEntry,
 } from "@/api/sout";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
@@ -110,6 +111,73 @@ const CampaignList = ({ selected, onSelect }: CampaignListProps) => {
   );
 };
 
+// ── Class-history (lazy, per workplace) ─────────────────────────────────────
+
+interface ClassHistoryProps {
+  workplaceId: string;
+}
+
+const ClassHistory = ({ workplaceId }: ClassHistoryProps) => {
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<ApiError | null>(null);
+  const [entries, setEntries] = useState<SoutClassHistoryEntry[] | null>(null);
+
+  const toggle = async () => {
+    const next = !open;
+    setOpen(next);
+    if (next && entries === null && !loading) {
+      setLoading(true);
+      setError(null);
+      try {
+        setEntries(await soutApi.listClassHistory(workplaceId));
+      } catch (err) {
+        setError((err as ApiError) ?? { message: "Не удалось загрузить историю класса" });
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
+
+  return (
+    <div className="space-y-2">
+      <button
+        type="button"
+        onClick={() => void toggle()}
+        className="text-xs text-muted-foreground underline-offset-2 hover:underline"
+      >
+        {open ? "Скрыть историю класса" : "История изменения класса"}
+      </button>
+      {open ? (
+        <div className="space-y-1">
+          <ErrorState error={error ?? undefined} onRetry={() => void toggle()} />
+          {loading ? <LoadingScreen label="Загрузка истории" /> : null}
+          {!loading && !error && entries !== null && entries.length === 0 ? (
+            <p className="text-xs text-muted-foreground">Изменений класса не зафиксировано.</p>
+          ) : null}
+          {!loading && !error && entries !== null && entries.length > 0 ? (
+            <ul className="space-y-1 text-xs">
+              {entries.map((e) => (
+                <li key={e.id} className="flex items-center gap-2">
+                  <span className="text-muted-foreground">{formatDate(e.changed_at)}</span>
+                  <span>
+                    {classLabel(e.old_class)} → {classLabel(e.new_class)}
+                  </span>
+                  {e.is_worsening ? (
+                    <Badge variant="destructive" className="text-xs">
+                      Ухудшение
+                    </Badge>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+};
+
 // ── Report panel (workplaces + factors + guarantees) ────────────────────────
 
 interface ReportPanelProps {
@@ -203,6 +271,7 @@ const ReportPanel = ({ campaign }: ReportPanelProps) => {
                     ))}
                   </div>
                 ) : null}
+                <ClassHistory workplaceId={workplace.id} />
               </div>
             ))}
           </div>

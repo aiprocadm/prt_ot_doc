@@ -7,7 +7,19 @@ from __future__ import annotations
 
 from datetime import date
 
-from app.models.sout import SoutCampaignStatus
+from app.models.sout import SoutCampaignStatus, SoutClass
+
+#: Severity ranking of the class of working conditions (ФЗ-426 ст. 14):
+#: optimal(1) < acceptable(2) < harmful 3.1–3.4 < dangerous(4). Higher = worse.
+CLASS_SEVERITY: dict[SoutClass, int] = {
+    SoutClass.OPTIMAL: 1,
+    SoutClass.ACCEPTABLE: 2,
+    SoutClass.HARMFUL_3_1: 3,
+    SoutClass.HARMFUL_3_2: 4,
+    SoutClass.HARMFUL_3_3: 5,
+    SoutClass.HARMFUL_3_4: 6,
+    SoutClass.DANGEROUS: 7,
+}
 
 #: Allowed campaign status transitions.
 _ALLOWED: dict[SoutCampaignStatus, set[SoutCampaignStatus]] = {
@@ -48,3 +60,14 @@ def is_reassessment_due(next_assessment_date: date | None, today: date) -> bool:
     if next_assessment_date is None:
         return False
     return next_assessment_date <= today
+
+
+def is_class_worsening(old: SoutClass | None, new: SoutClass | None) -> bool:
+    """True when the new class is more severe than the old one.
+
+    First assessment (``old is None``) is never "worsening" — there is no prior
+    baseline to deteriorate from. An unknown new class also counts as not-worse.
+    """
+    if old is None or new is None:
+        return False
+    return CLASS_SEVERITY[new] > CLASS_SEVERITY[old]
