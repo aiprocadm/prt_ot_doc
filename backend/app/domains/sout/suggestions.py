@@ -10,7 +10,8 @@ from __future__ import annotations
 
 from typing import Iterable
 
-from app.schemas.sout import PpeNormSuggestion
+from app.domains.medical import lifecycle as med_lc
+from app.schemas.sout import MedicalExamSuggestion, PpeNormSuggestion
 
 
 def build_ppe_norm_suggestions(
@@ -52,6 +53,44 @@ def build_ppe_norm_suggestions(
                 measured_class=cls,
                 reason=f"СОУТ: вредный фактор «{getattr(f, 'name', '')}» (класс {cls_label}) "
                 f"без нормы СИЗ для должности",
+            )
+        )
+    return out
+
+
+def build_medical_exam_suggestions(
+    *,
+    position_id: str | None,
+    hazard_factor_codes: set[str],
+    factor_catalog: Iterable,
+    existing_norm_kinds: set,
+) -> list[MedicalExamSuggestion]:
+    """Propose required medical exams derived from linked hazards' 29н factors.
+
+    Reuses the medical engine: linked hazards carry ``medical_factor_code`` →
+    ``factors_for_hazards`` filters the catalog → ``required_exams_from_factors``
+    yields kind→strictest-periodicity. A kind already covered by an existing
+    MedicalNorm for the position (``existing_norm_kinds``) is skipped.
+    """
+    if position_id is None:
+        return []
+    matched = med_lc.factors_for_hazards(set(hazard_factor_codes), factor_catalog)
+    required = med_lc.required_exams_from_factors(matched)  # dict[MedicalExamKind, int]
+    out: list[MedicalExamSuggestion] = []
+    for kind, months in required.items():
+        if kind in existing_norm_kinds:
+            continue
+        codes = sorted(
+            code for (code, _name, kinds, _m) in matched if kind in kinds
+        )
+        out.append(
+            MedicalExamSuggestion(
+                position_id=position_id,
+                exam_kind=kind.value,
+                periodicity_months=int(months),
+                factor_codes=codes,
+                reason=f"СОУТ: факторы 29н {codes} требуют осмотр «{kind.value}» "
+                f"каждые {int(months)} мес. — нормы нет",
             )
         )
     return out
