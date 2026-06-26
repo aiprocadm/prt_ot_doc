@@ -58,6 +58,7 @@ export const PERMISSIONS = {
   CALENDAR_VIEW: "calendar.view",
   WORK_PERMIT_VIEW: "work_permit.view",
   WORK_PERMIT_MANAGE: "work_permit.manage",
+  COMMITTEE_VIEW: "committee.view",
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];

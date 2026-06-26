@@ -654,14 +654,14 @@ Reconciled against `origin/main` (head `84f89f19`, PR #693). **No open PRs — e
 | **P10-09** | Equipment/Asset/ОПО/Транспорт/Электробезопасность | 🟡 **partial** | Электробезопасность-группы в нарядах (`work_permits/electrical_groups.py`), `domains/packs/assets.py`. **Остаётся:** полноценный equipment/asset/транспорт/ОПО-реестр |
 | **P10-02** | CRM + клиентский кабинет + reseller/white-label-портал | 🟡 **partial** | `pages/crm-finance/CrmFinancePage.tsx` + `api/crmFinance.ts` (CRM-finance срез). **Остаётся:** клиентский кабинет, trial/demo/sandbox, reseller-портал |
 | **P10-14** | White-label + i18n (= Task 10.2) | 🟡 **foundation** | White-label: `modules/branding/letterhead.py` (авто-бланк, PR #664). i18n-инфра: `core/i18n.py` + `frontend/src/i18n/`. **Остаётся:** полные 5+ языков, переводы UI/API/email |
-| **P10-01** | Комитеты / комиссии / заседания | ❌ **not started** | — |
+| **P10-01** | Комитеты / комиссии / заседания | 🟡 **partial (срез-1)** | срез-1 skeleton merged on branch: models/committees.py, migration cmt01, domains/committees/{lifecycle,service}.py, api/routes/committees.py (15 endpoints, ETag+tenant-iso), default-off committees flag, thin CommitteesPage UI. Остаётся (срез-2): голосование/кворум, приглашения, KPI-дашборд, журнал/нумерация протоколов, проекция задач в Command Center. |
 | **P10-04** | СОУТ | ❌ **not started** | — |
 | **P10-10** | Workflow / Rules / Smart Recommendations engines | ❌ **not started** | — |
 | **P10-11** | Вертикали: ПромБез · Экология · ГО-ЧС | ❌ **not started** | — |
 | **P10-13** | SSO / SAML 2.0 / OIDC + JIT (= Task 10.1) | ❌ **not started** | — |
 | **P10-15** | Терминалы/kiosk/биометрия/СКУД · видеоаналитика/CV · AI Copilot | ❌ **not started** | — |
 
-**Summary:** 2 subprojects fully merged (P10-05, P10-08) · 7 partial (P10-02/03/06/07/09/12/14) · 6 not started (P10-01/04/10/11/13/15). Next-up by version tag `[v1.1]`: **P10-01 Комитеты**, **P10-04 СОУТ**, then finish partials (P10-03 медосмотры, P10-06 СИЗ-склад, P10-07 analytics).
+**Summary:** 2 subprojects fully merged (P10-05, P10-08) · 8 partial (P10-01/02/03/06/07/09/12/14) · 5 not started (P10-04/10/11/13/15). P10-01 Комитеты now срез-1 partial (branch feat/committees-srez1-p10-01). Next-up by version tag `[v1.1]`: **P10-04 СОУТ**, then finish partials (P10-03 медосмотры, P10-06 СИЗ-склад, P10-07 analytics).
 
 ### Task 10.1: SSO & SAML (vNext-ENT-02)
 

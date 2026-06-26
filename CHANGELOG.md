@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## 2026-06-25 (feat/committees-srez1-p10-01 — ТЗ B.17 Комитеты/комиссии/заседания, Срез 1)
+
+### Added
+- **Комитеты / комиссии / заседания (P10-01 срез-1, TZ B.17):** committee→meeting→agenda→decision→decision-task with CRUD API, lifecycle guards (meeting planned→held→cancelled; decisions only on held), read-time `is_overdue` flag, ETag list caching, tenant isolation, behind default-off `committees` feature flag, plus a thin list/detail UI. Deferred to срез-2: voting/quorum, invitations, execution-KPI dashboard, meetings journal/protocol numbering, Command Center task projection.
+
 ## 2026-06-08 (feat/medical-exams-contingent — ТЗ B.8 Медосмотры, Срез 1)
 
 ### Added

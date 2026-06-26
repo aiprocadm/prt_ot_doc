@@ -582,6 +582,114 @@ async def _seed_work_permit_excavation_demo(session, tenant_db_id: str, person) 
         )
 
 
+async def _seed_committees_demo(session, tenant_db_id: str) -> None:
+    """Seed a minimal committees demo (P10-01 срез-1).
+
+    Does NOT require a Person row — all person FK fields are left NULL to keep
+    this seed independent of the rest of the demo bootstrap.  Idempotent:
+    keyed on (tenant_id, name) for the Committee root.
+    """
+    from app.models.committees import (
+        Committee,
+        CommitteeAgendaItem,
+        CommitteeDecision,
+        CommitteeDecisionTask,
+        CommitteeMeeting,
+        CommitteeKind,
+        DecisionTaskStatus,
+        MeetingStatus,
+    )
+
+    committee = (
+        await session.execute(
+            select(Committee).where(
+                Committee.tenant_id == tenant_db_id,
+                Committee.name == "Комитет по охране труда",
+                Committee.deleted_at.is_(None),
+            )
+        )
+    ).scalar_one_or_none()
+    if committee is not None:
+        return  # already seeded — full idempotent bail-out
+
+    committee = Committee(
+        tenant_id=tenant_db_id,
+        kind=CommitteeKind.OSMS,
+        name="Комитет по охране труда",
+        description="Демо-комитет по охране труда (срез-1)",
+        is_active=True,
+    )
+    session.add(committee)
+    await session.flush()
+
+    meeting = CommitteeMeeting(
+        tenant_id=tenant_db_id,
+        committee_id=committee.id,
+        scheduled_at=datetime.now(timezone.utc) - timedelta(days=30),
+        location="Конференц-зал №1 (демо)",
+        status=MeetingStatus.HELD,
+    )
+    session.add(meeting)
+    await session.flush()
+
+    agenda_item = CommitteeAgendaItem(
+        tenant_id=tenant_db_id,
+        meeting_id=meeting.id,
+        seq=1,
+        title="Утверждение плана мероприятий по охране труда",
+        presenter_person_id=None,
+    )
+    session.add(agenda_item)
+    await session.flush()
+
+    decision = CommitteeDecision(
+        tenant_id=tenant_db_id,
+        meeting_id=meeting.id,
+        agenda_item_id=agenda_item.id,
+        text="Утвердить план мероприятий по охране труда на текущий год",
+        decided_at=datetime.now(timezone.utc) - timedelta(days=30),
+    )
+    session.add(decision)
+    await session.flush()
+
+    # due_date in the past → overdue badge is visible on first login
+    session.add(
+        CommitteeDecisionTask(
+            tenant_id=tenant_db_id,
+            decision_id=decision.id,
+            assignee_person_id=None,
+            due_date=(datetime.now(timezone.utc) - timedelta(days=10)).date(),
+            status=DecisionTaskStatus.OPEN,
+            evidence_note=None,
+        )
+    )
+
+    # Enable the default-off ``committees`` flag for the demo tenant so the
+    # seeded data is visible in the demo walkthrough. The flag stays default-off
+    # in production; this only writes a per-tenant enablement for the demo tenant.
+    from app.models.feature import Feature, FeatureEnablement
+
+    feature = (
+        await session.execute(select(Feature).where(Feature.code == "committees"))
+    ).scalar_one_or_none()
+    if feature is None:
+        feature = Feature(code="committees", title="Комитеты")
+        session.add(feature)
+        await session.flush()
+    enablement = (
+        await session.execute(
+            select(FeatureEnablement).where(
+                FeatureEnablement.tenant_id == tenant_db_id,
+                FeatureEnablement.feature_id == feature.id,
+            )
+        )
+    ).scalar_one_or_none()
+    if enablement is None:
+        session.add(
+            FeatureEnablement(tenant_id=tenant_db_id, feature_id=feature.id, on=True)
+        )
+
+
 async def bootstrap_demo_tenant(settings: Settings) -> None:
     """Create a deterministic tenant with baseline entities for demo walkthrough."""
 
@@ -813,6 +921,7 @@ async def bootstrap_demo_tenant(settings: Settings) -> None:
             await _seed_work_permit_excavation_demo(session, tenant_db_id, person)
 
         await ensure_default_packs(session, tenant_slug=tenant_slug)
+        await _seed_committees_demo(session, tenant_db_id)
         logger.info(
             "demo.bootstrap.done",
             extra={"tenant": tenant_slug, "company": company_name, "site": site_name},
