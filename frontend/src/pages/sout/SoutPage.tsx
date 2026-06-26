@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 
 import {
   soutApi,
@@ -339,6 +340,32 @@ const ReportPanel = ({ campaign }: ReportPanelProps) => {
     void load();
   }, [campaign.id]);
 
+  const handleSummaryDownload = async (fmt: "docx" | "pdf") => {
+    try {
+      await soutApi.downloadSummary(campaign.id, fmt, campaign.name);
+    } catch (e: unknown) {
+      const status = (e as { response?: { status?: number } })?.response?.status;
+      toast.error(
+        fmt === "pdf" && status === 503
+          ? "PDF-конвертер недоступен, скачайте DOCX"
+          : "Не удалось скачать документ",
+      );
+    }
+  };
+
+  const handleCardDownload = async (workplaceId: string, code: string, fmt: "docx" | "pdf") => {
+    try {
+      await soutApi.downloadCard(workplaceId, fmt, code);
+    } catch (e: unknown) {
+      const status = (e as { response?: { status?: number } })?.response?.status;
+      toast.error(
+        fmt === "pdf" && status === 503
+          ? "PDF-конвертер недоступен, скачайте DOCX"
+          : "Не удалось скачать документ",
+      );
+    }
+  };
+
   return (
     <Card>
       <CardHeader>
@@ -346,12 +373,12 @@ const ReportPanel = ({ campaign }: ReportPanelProps) => {
           <CardTitle className="text-base">Рабочие места — {campaign.name}</CardTitle>
           <span className="flex gap-1">
             <Button type="button" size="sm" variant="outline"
-              onClick={() => void soutApi.downloadSummary(campaign.id, "docx", campaign.name)}>
+              onClick={() => void handleSummaryDownload("docx")}>
               Сводная DOCX
             </Button>
             <Button type="button" size="sm" variant="outline"
-              onClick={() => void soutApi.downloadSummary(campaign.id, "pdf", campaign.name)}>
-              PDF
+              onClick={() => void handleSummaryDownload("pdf")}>
+              Сводная PDF
             </Button>
           </span>
         </div>
@@ -378,12 +405,12 @@ const ReportPanel = ({ campaign }: ReportPanelProps) => {
                       </Badge>
                     ) : null}
                     <Button type="button" size="sm" variant="outline"
-                      onClick={() => void soutApi.downloadCard(workplace.id, "docx", workplace.workplace_code)}>
+                      onClick={() => void handleCardDownload(workplace.id, workplace.workplace_code, "docx")}>
                       Карта DOCX
                     </Button>
                     <Button type="button" size="sm" variant="outline"
-                      onClick={() => void soutApi.downloadCard(workplace.id, "pdf", workplace.workplace_code)}>
-                      PDF
+                      onClick={() => void handleCardDownload(workplace.id, workplace.workplace_code, "pdf")}>
+                      Карта PDF
                     </Button>
                   </span>
                 </div>
