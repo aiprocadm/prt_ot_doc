@@ -1,4 +1,5 @@
 import { apiClient } from "@/api/client";
+import { downloadBlob } from "@/utils/download";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -147,5 +148,21 @@ export const soutApi = {
 
   async linkFactorHazard(factorId: string, hazardId: string): Promise<void> {
     await apiClient.patch(`${base}/factors/${factorId}`, { hazard_id: hazardId });
+  },
+
+  async downloadCard(workplaceId: string, fmt: "docx" | "pdf", nameHint?: string): Promise<void> {
+    const { data } = await apiClient.get<Blob>(`${base}/workplaces/${workplaceId}/card/print`, {
+      params: { format: fmt },
+      responseType: "blob",
+    });
+    downloadBlob(data, `sout-card-${nameHint ?? workplaceId}.${fmt}`);
+  },
+
+  async downloadSummary(campaignId: string, fmt: "docx" | "pdf", nameHint?: string): Promise<void> {
+    const { data } = await apiClient.get<Blob>(`${base}/${campaignId}/summary/print`, {
+      params: { format: fmt },
+      responseType: "blob",
+    });
+    downloadBlob(data, `sout-summary-${nameHint ?? campaignId}.${fmt}`);
   },
 };

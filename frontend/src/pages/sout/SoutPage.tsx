@@ -342,7 +342,19 @@ const ReportPanel = ({ campaign }: ReportPanelProps) => {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">Рабочие места — {campaign.name}</CardTitle>
+        <div className="flex items-center justify-between gap-2">
+          <CardTitle className="text-base">Рабочие места — {campaign.name}</CardTitle>
+          <span className="flex gap-1">
+            <Button type="button" size="sm" variant="outline"
+              onClick={() => void soutApi.downloadSummary(campaign.id, "docx", campaign.name)}>
+              Сводная DOCX
+            </Button>
+            <Button type="button" size="sm" variant="outline"
+              onClick={() => void soutApi.downloadSummary(campaign.id, "pdf", campaign.name)}>
+              PDF
+            </Button>
+          </span>
+        </div>
       </CardHeader>
       <CardContent className="space-y-4">
         <ErrorState error={error ?? undefined} onRetry={load} />
@@ -365,6 +377,14 @@ const ReportPanel = ({ campaign }: ReportPanelProps) => {
                         Переоценка просрочена
                       </Badge>
                     ) : null}
+                    <Button type="button" size="sm" variant="outline"
+                      onClick={() => void soutApi.downloadCard(workplace.id, "docx", workplace.workplace_code)}>
+                      Карта DOCX
+                    </Button>
+                    <Button type="button" size="sm" variant="outline"
+                      onClick={() => void soutApi.downloadCard(workplace.id, "pdf", workplace.workplace_code)}>
+                      PDF
+                    </Button>
                   </span>
                 </div>
                 {workplace.next_assessment_date ? (
