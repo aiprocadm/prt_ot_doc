@@ -74,3 +74,14 @@ async def test_summary_print_404_when_missing(monkeypatch):
             cid="missing", tenant=_tenant(), session=AsyncMock(), access=None, fmt="docx",
         )
     assert getattr(exc.value, "status_code", None) == 404
+
+
+@pytest.mark.asyncio
+async def test_summary_print_503_when_pdf_unavailable(monkeypatch):
+    monkeypatch.setattr(routes, "_require_sout_enabled", AsyncMock())
+    monkeypatch.setattr(routes, "render_summary_sheet", AsyncMock(side_effect=PdfRendererUnavailable("no soffice")))
+    with pytest.raises(Exception) as exc:
+        await routes.print_summary_sheet(
+            cid="c1", tenant=_tenant(), session=AsyncMock(), access=None, fmt="pdf",
+        )
+    assert getattr(exc.value, "status_code", None) == 503
