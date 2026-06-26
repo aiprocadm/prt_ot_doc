@@ -10,6 +10,7 @@ import asyncio
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from types import SimpleNamespace
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,6 +24,10 @@ logger = logging.getLogger(__name__)
 _DOCX_MEDIA = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 _PDF_MEDIA = "application/pdf"
 _PDF_TIMEOUT_S = 45
+
+# Кампания РМ удалена, а РМ выжил (edge-case: campaign_id — non-nullable FK,
+# но кампанию могли soft-delete). Карту рендерим без реквизитов кампании.
+_EMPTY_CAMPAIGN = SimpleNamespace(name=None, expert_org_name=None, report_number=None, report_date=None)
 
 
 class PdfRendererUnavailable(Exception):
@@ -60,7 +65,7 @@ def _card_print_data(
         generated_at=generated_at,
         expert_org_name=getattr(campaign, "expert_org_name", None),
         report_number=getattr(campaign, "report_number", None),
-        report_date=_iso(getattr(campaign, "report_date", None)) or getattr(campaign, "report_date", None),
+        report_date=_iso(getattr(campaign, "report_date", None)),
         workplace_code=workplace.workplace_code,
         position_name=workplace.position_name,
         assessed_class=_raw(workplace.assessed_class),
@@ -101,7 +106,7 @@ def _summary_print_data(
         campaign_name=campaign.name,
         expert_org_name=getattr(campaign, "expert_org_name", None),
         report_number=getattr(campaign, "report_number", None),
-        report_date=_iso(getattr(campaign, "report_date", None)) or getattr(campaign, "report_date", None),
+        report_date=_iso(getattr(campaign, "report_date", None)),
         rows=rows,
         class_counts=counts,
     )
@@ -149,7 +154,7 @@ async def _load_campaign(session: AsyncSession, tenant: Tenant, cid: str) -> Sou
     ).scalar_one_or_none()
 
 
-async def _load_factors(session: AsyncSession, tenant: Tenant, wid: str):
+async def _load_factors(session: AsyncSession, tenant: Tenant, wid: str) -> list[SoutFactor]:
     return list(
         (
             await session.execute(
@@ -161,7 +166,7 @@ async def _load_factors(session: AsyncSession, tenant: Tenant, wid: str):
     )
 
 
-async def _load_guarantees(session: AsyncSession, tenant: Tenant, wid: str):
+async def _load_guarantees(session: AsyncSession, tenant: Tenant, wid: str) -> list[SoutGuarantee]:
     return list(
         (
             await session.execute(
@@ -185,7 +190,7 @@ async def render_sout_card(
     data = _card_print_data(
         org_header=_org_header(tenant),
         generated_at=datetime.now(timezone.utc).date().isoformat(),
-        campaign=campaign or SoutCampaign(),
+        campaign=campaign or _EMPTY_CAMPAIGN,
         workplace=wp,
         factors=factors,
         guarantees=guarantees,
