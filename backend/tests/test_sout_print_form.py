@@ -107,6 +107,7 @@ def test_summary_lists_workplaces_and_stats() -> None:
     assert "РМ-01" in txt and "РМ-02" in txt
     assert "Сварщик" in txt and "Слесарь" in txt
     assert "СОУТ 2026" in txt
+    assert "3.2" in txt  # секция «Итоги по классам» (class_counts)
 
 
 def test_summary_empty_campaign_renders() -> None:

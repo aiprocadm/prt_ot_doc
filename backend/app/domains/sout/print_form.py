@@ -47,7 +47,9 @@ def class_label(code: str | None) -> str:
     return SOUT_CLASS_LABELS.get(code, code)
 
 
-def guarantee_label(code: str) -> str:
+def guarantee_label(code: str | None) -> str:
+    if code is None:
+        return "—"
     return GUARANTEE_KIND_LABELS.get(code, code)
 
 
@@ -161,6 +163,8 @@ def build_sout_card_docx(data: SoutCardPrintData) -> bytes:
         doc.add_paragraph("—")
 
     doc.add_heading("Комиссия по проведению СОУТ", level=1)
+    # TODO (срез-4б): развернуть в строку на каждого члена комиссии, когда реквизиты
+    # комиссии появятся в модели данных.
     doc.add_paragraph("Председатель комиссии: ____________________ / ____________________")
     doc.add_paragraph("Члены комиссии: ____________________ / ____________________")
     _kv(doc, "Дата формирования", data.generated_at)
