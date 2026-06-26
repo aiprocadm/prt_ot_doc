@@ -183,3 +183,72 @@ async def test_update_factor_sets_hazard_id(monkeypatch):
     )
     assert out.hazard_id == "haz-1"
     routes._validate_hazard.assert_awaited_once()
+
+
+def _workplace_with_position():
+    wp = _workplace()
+    wp.position_id = "pos-1"
+    return wp
+
+
+@pytest.mark.asyncio
+async def test_norm_suggestions_with_position(monkeypatch):
+    session = AsyncMock()
+    monkeypatch.setattr(routes, "_require_sout_enabled", AsyncMock())
+    monkeypatch.setattr(
+        routes, "_get_workplace", AsyncMock(return_value=_workplace_with_position())
+    )
+
+    # A factor linked to a hazard that has no existing PPE norm → expect a ppe suggestion.
+    factor = _factor()
+    factor.hazard_id = "haz-1"
+    monkeypatch.setattr(
+        routes, "_load_workplace_factors", AsyncMock(return_value=[factor])
+    )
+    monkeypatch.setattr(
+        routes,
+        "_load_hazard_meta",
+        AsyncMock(return_value={"haz-1": ("Шум", "29")}),
+    )
+    monkeypatch.setattr(
+        routes, "_load_existing_ppe_pairs", AsyncMock(return_value=set())
+    )
+    monkeypatch.setattr(
+        routes,
+        "_load_medical_inputs",
+        AsyncMock(return_value=([], set())),
+    )
+
+    out = await routes.get_norm_suggestions(
+        wid="w1",
+        tenant=_tenant(),
+        session=session,
+        access=SimpleNamespace(),
+    )
+    body = out.model_dump()
+    assert "ppe" in body and "medical" in body
+    # linked hazard with no existing norm → at least one ppe suggestion
+    assert len(body["ppe"]) >= 1
+
+
+@pytest.mark.asyncio
+async def test_norm_suggestions_no_position_returns_empty(monkeypatch):
+    session = AsyncMock()
+    monkeypatch.setattr(routes, "_require_sout_enabled", AsyncMock())
+    monkeypatch.setattr(routes, "_get_workplace", AsyncMock(return_value=_workplace()))
+
+    # Loaders must NOT be called when position_id is None.
+    factors_loader = AsyncMock()
+    monkeypatch.setattr(routes, "_load_workplace_factors", factors_loader)
+    medical_loader = AsyncMock()
+    monkeypatch.setattr(routes, "_load_medical_inputs", medical_loader)
+
+    out = await routes.get_norm_suggestions(
+        wid="w1",
+        tenant=_tenant(),
+        session=session,
+        access=SimpleNamespace(),
+    )
+    assert out.model_dump() == {"ppe": [], "medical": []}
+    factors_loader.assert_not_awaited()
+    medical_loader.assert_not_awaited()
