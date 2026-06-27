@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from sqlalchemy import Boolean, Index, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.ext.mutable import MutableDict
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import JSON
 
@@ -40,7 +41,9 @@ class FeatureEnablement(TenantBaseModel):
         nullable=False,
     )
     on: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    config_json: Mapped[dict] = mapped_column(JSONBType, nullable=False, default=dict)
+    config_json: Mapped[dict] = mapped_column(
+        MutableDict.as_mutable(JSONBType), nullable=False, default=dict
+    )
 
     __table_args__ = (
         UniqueConstraint("tenant_id", "feature_id", name="uq_feature_enablement_tenant_feature"),
