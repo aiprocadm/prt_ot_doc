@@ -599,3 +599,38 @@ async def test_pipeline_rejects_session_tenant_mismatch(
                 idempotency_key="mismatch-session-contract",
                 output_basename="report",
             )
+
+
+@pytest.mark.asyncio()
+async def test_pipeline_run_json_columns_track_top_level_inplace_mutation(
+    session: AsyncSession,
+) -> None:
+    """`PipelineRun.outputs`/`result_metadata` are MutableDict-wrapped, so a
+    TOP-LEVEL in-place edit is persisted even WITHOUT reassigning a fresh object.
+
+    Before the wrapper this lost the update (plain JSON column tracks only by
+    object identity). Nested edits still require fresh reassignment.
+    """
+    tenant = (await session.execute(select(Tenant).where(Tenant.slug == "acme"))).scalar_one()
+    template, version = await _prepare_template(session, tenant)
+    run = PipelineRun(
+        tenant_id=tenant.id,
+        template_id=template.id,
+        template_version_id=version.id,
+        status=PipelineRunStatus.QUEUED,
+        context={},
+        outputs={"docx": "a"},
+        result_metadata={"pdf_fallback": False},
+        idempotency_key="mutable-tracking",
+    )
+    session.add(run)
+    await session.commit()
+
+    # In-place top-level mutation, NO reassignment of run.outputs / result_metadata.
+    run.outputs["pdf"] = "b"
+    run.result_metadata["pdf_fallback"] = True
+    await session.commit()
+    await session.refresh(run)
+
+    assert run.outputs == {"docx": "a", "pdf": "b"}
+    assert run.result_metadata == {"pdf_fallback": True}
