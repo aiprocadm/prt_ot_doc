@@ -338,14 +338,42 @@ def _helper_injected_columns(functions: dict[str, ast.FunctionDef], helper_name:
     return injected
 
 
-def _columns_in_create_table_call(call: ast.Call) -> set[str]:
-    """Column names from ``op.create_table("t", sa.Column("c", ...), ...)``."""
+def _columns_in_create_table_call(
+    call: ast.Call,
+    functions: dict[str, ast.FunctionDef] | None = None,
+) -> set[str]:
+    """Column names from ``op.create_table("t", sa.Column("c", ...), ...)``.
+
+    Also decodes the splat-helper pattern
+    ``op.create_table("t", *_common(sa.Column("c", ...), ...))`` where
+    ``_common`` is a same-module function returning a list of columns
+    (a DRY base-columns helper distinct from the table-creating helpers
+    handled separately). Both the helper's internally-defined
+    ``sa.Column`` literals AND the ``sa.Column`` literals passed at the
+    call site (the ``*extra``) are credited. ``functions`` must be the
+    module's function map for the helper-body decode to apply.
+    """
     cols: set[str] = set()
     for arg in call.args[1:]:
         if isinstance(arg, ast.Call):
             col = _column_name(arg)
             if col is not None:
                 cols.add(col)
+        elif isinstance(arg, ast.Starred) and isinstance(arg.value, ast.Call):
+            helper_call = arg.value
+            helper_fn = helper_call.func
+            if (
+                functions is not None
+                and isinstance(helper_fn, ast.Name)
+                and helper_fn.id in functions
+            ):
+                cols |= _helper_injected_columns(functions, helper_fn.id)
+            # sa.Column(...) literals passed positionally to the helper.
+            for helper_arg in helper_call.args:
+                if isinstance(helper_arg, ast.Call):
+                    col = _column_name(helper_arg)
+                    if col is not None:
+                        cols.add(col)
     return cols
 
 
@@ -452,7 +480,9 @@ def collect_migration_columns(verbose: bool = False) -> dict[str, set[str]]:
             if is_create and node.args:
                 first = node.args[0]
                 if isinstance(first, ast.Constant) and isinstance(first.value, str):
-                    per_table[first.value].update(_columns_in_create_table_call(node))
+                    per_table[first.value].update(
+                        _columns_in_create_table_call(node, functions)
+                    )
             # ---- Helper-wrapped: <helper>("t", sa.Column("c", ...), ...) ----
             if (
                 isinstance(func, ast.Name)
