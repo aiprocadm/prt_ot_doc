@@ -20,6 +20,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
+from sqlalchemy.ext.mutable import MutableDict
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.session import TenantBase
@@ -120,8 +121,12 @@ class SafetyRiskMethodology(TenantBaseModel, SoftDeleteMixin):
         Enum(RecordStatus), nullable=False, default=RecordStatus.DRAFT
     )
     version_no: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
-    formula_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
-    scale_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    formula_json: Mapped[dict[str, Any]] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=False, default=dict
+    )
+    scale_json: Mapped[dict[str, Any]] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=False, default=dict
+    )
     effective_from: Mapped[date | None] = mapped_column(Date, nullable=True)
     effective_to: Mapped[date | None] = mapped_column(Date, nullable=True)
     is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)

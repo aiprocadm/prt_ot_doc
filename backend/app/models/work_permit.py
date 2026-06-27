@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import date, datetime
 
 from sqlalchemy import JSON, Date, DateTime, ForeignKey, Index, String, Text, UniqueConstraint, func
+from sqlalchemy.ext.mutable import MutableDict, MutableList
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import TenantBaseModel
@@ -27,8 +28,10 @@ class WorkPermit(TenantBaseModel):
     subdivision_text: Mapped[str | None] = mapped_column(String(255), nullable=True)
     content_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     conditions_text: Mapped[str | None] = mapped_column(Text, nullable=True)
-    safety_systems: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
-    type_specific: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    safety_systems: Mapped[list[str] | None] = mapped_column(
+        MutableList.as_mutable(JSON), nullable=True
+    )
+    type_specific: Mapped[dict | None] = mapped_column(MutableDict.as_mutable(JSON), nullable=True)
     measures_before_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     measures_during_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     special_conditions_text: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -86,7 +89,7 @@ class WorkPermitEvent(TenantBaseModel):
         ForeignKey("file.id", ondelete="SET NULL"), nullable=True
     )
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
-    meta: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    meta: Mapped[dict | None] = mapped_column(MutableDict.as_mutable(JSON), nullable=True)
 
 
 class WorkPermitBriefing(TenantBaseModel):
