@@ -20,6 +20,7 @@ from sqlalchemy import (
     UniqueConstraint,
     event,
 )
+from sqlalchemy.ext.mutable import MutableDict
 from sqlalchemy.orm import Mapped, mapped_column, relationship, synonym
 
 from app.db.session import TenantBase
@@ -2123,8 +2124,15 @@ class PipelineRun(TenantBaseModel):
         Enum(PipelineRunStatus), nullable=False, default=PipelineRunStatus.QUEUED
     )
     context: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
-    outputs: Mapped[dict[str, Any] | None] = mapped_column(JSON)
-    result_metadata: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    # MutableDict so top-level in-place edits (outputs["pdf"]=..., result_metadata[...])
+    # are flagged dirty even without a fresh reassignment. This is the column that
+    # produced the _record_stage data-loss bug; see tests/test_no_inplace_json_mutation.py.
+    # NOTE: only TOP-LEVEL keys are tracked — nested edits (outputs["stages"][k]=...)
+    # still require reassigning a fresh object.
+    outputs: Mapped[dict[str, Any] | None] = mapped_column(MutableDict.as_mutable(JSON))
+    result_metadata: Mapped[dict[str, Any]] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=False, default=dict
+    )
     docx_storage_key: Mapped[str | None] = mapped_column(String(512))
     pdf_storage_key: Mapped[str | None] = mapped_column(String(512))
     result_s3_key: Mapped[str | None] = mapped_column(String(512))
