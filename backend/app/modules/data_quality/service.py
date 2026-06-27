@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .rules import DataQualityRuleEngine
-from .schemas import DataQualityCheckResult, DataQualityIssue, DataQualityReport, IssueSeverity
+from .schemas import DataQualityCheckResult, DataQualityReport, IssueSeverity
 
 logger = logging.getLogger("app.modules.data_quality")
 
@@ -111,18 +111,3 @@ class DataQualityService:
         )
 
         return report
-
-    async def get_issue_details(self, issue_id: str) -> DataQualityIssue | None:
-        """Get details for a specific issue."""
-        # Placeholder for future implementation
-        return None
-
-    async def mark_issue_reviewed(self, issue_id: str) -> bool:
-        """Mark an issue as reviewed."""
-        # Placeholder for future implementation
-        return True
-
-    async def get_issue_history(self, entity_id: str) -> list[DataQualityIssue]:
-        """Get issue history for an entity."""
-        # Placeholder for future implementation
-        return []

@@ -37,12 +37,22 @@ from app.services.pdf import (
     PdfConverter,
 )
 
-__all__ = ["PipelineService"]
+__all__ = ["PipelineService", "StampingUnavailableError"]
 
 logger = logging.getLogger(__name__)
 
 DocumentJob = PipelineRun
 DocumentJobStatus = PipelineRunStatus
+
+
+class StampingUnavailableError(RuntimeError):
+    """Raised when a stamping stage (QR/watermark) is requested but no real backend exists.
+
+    Distinct from a genuine stamping *failure*: it signals that the feature was
+    enabled while the platform ships only a placeholder backend, so the stage must
+    be recorded as an honest ``skipped`` (not ``success`` — which would imply the
+    PDF was stamped — and not ``error`` — which would imply a malfunction).
+    """
 
 
 class PipelineService:
@@ -143,26 +153,25 @@ class PipelineService:
         return str(document_version_id or run.id)
 
     def _apply_qr_code_to_pdf(self, pdf_bytes: bytes, payload: str) -> bytes:
-        """Placeholder QR-code stage. Replace with real QR stamping when available."""
-        _ = payload
-        with tempfile.TemporaryDirectory() as td:
-            temp_dir = Path(td)
-            input_path = temp_dir / "input.pdf"
-            output_path = temp_dir / "output.pdf"
-            input_path.write_bytes(pdf_bytes)
-            output_path.write_bytes(pdf_bytes)
-            return output_path.read_bytes()
+        """Default QR-code stage backend.
+
+        No real QR stamping ships yet. Rather than silently returning the PDF
+        unchanged (which the pipeline would record as a successful stage and
+        mislead callers into trusting an unstamped document), signal that the
+        backend is unavailable so the stage is recorded honestly as ``skipped``.
+        Override this method (or inject a real backend) to enable stamping.
+        """
+        _ = (pdf_bytes, payload)
+        raise StampingUnavailableError("qr_code")
 
     def _apply_watermark_to_pdf(self, pdf_bytes: bytes, text: str) -> bytes:
-        """Placeholder watermark stage. Replace with real watermarking when available."""
-        _ = text
-        with tempfile.TemporaryDirectory() as td:
-            temp_dir = Path(td)
-            input_path = temp_dir / "input.pdf"
-            output_path = temp_dir / "output.pdf"
-            input_path.write_bytes(pdf_bytes)
-            output_path.write_bytes(pdf_bytes)
-            return output_path.read_bytes()
+        """Default watermark stage backend.
+
+        See :meth:`_apply_qr_code_to_pdf` — no real watermarking ships yet, so this
+        raises instead of falsely reporting an applied watermark.
+        """
+        _ = (pdf_bytes, text)
+        raise StampingUnavailableError("watermark")
 
     @staticmethod
     def _init_outputs(run: PipelineRun) -> dict[str, Any]:
@@ -197,8 +206,15 @@ class PipelineService:
             entry.setdefault("details", {})
             entry["details"].update(details)
         stages[stage] = entry
-        outputs["stages"] = stages
-        return outputs
+        # Return a NEW top-level dict so every ``run.outputs = self._record_stage(...)``
+        # reassignment has a fresh object identity. ``PipelineRun.outputs`` is a plain
+        # ``JSON`` column (no ``MutableDict``), so SQLAlchemy only flags the attribute
+        # dirty when the assigned object differs by identity. Mutating-and-returning the
+        # same dict (the previous behaviour) left the column unchanged after the first
+        # flush, silently dropping the stage timeline on ``session.refresh``.
+        new_outputs = dict(outputs)
+        new_outputs["stages"] = stages
+        return new_outputs
 
     async def ensure_pending_run(
         self,
@@ -776,6 +792,24 @@ class PipelineService:
                 )
                 try:
                     pdf_bytes = self._apply_qr_code_to_pdf(pdf_bytes, self._qr_payload(run))
+                except StampingUnavailableError:
+                    # Feature enabled but no real stamping backend ships: leave the PDF
+                    # untouched and record an honest "requested but not applied" instead
+                    # of a misleading success or a spurious error.
+                    self.metrics.record_pipeline_stage_end(
+                        pipeline=PipelineType.DOCUMENT,
+                        stage=PipelineStage.QR_CODE_APPLIED,
+                        result=StageResult.SKIPPED,
+                        seconds=0.0,
+                    )
+                    outputs = self._record_stage(
+                        outputs,
+                        stage="qr_code",
+                        status="skipped",
+                        started_at=qr_started,
+                        finished_at=datetime.now(tz=timezone.utc),
+                        details={"reason": "stamping_backend_unavailable"},
+                    )
                 except Exception as exc:  # pragma: no cover - defensive fallback
                     self.metrics.record_pipeline_stage_end(
                         pipeline=PipelineType.DOCUMENT,
@@ -836,6 +870,22 @@ class PipelineService:
                 try:
                     pdf_bytes = self._apply_watermark_to_pdf(
                         pdf_bytes, self._settings.doc_pipeline_watermark_text
+                    )
+                except StampingUnavailableError:
+                    # See the QR branch: honest "requested but not applied".
+                    self.metrics.record_pipeline_stage_end(
+                        pipeline=PipelineType.DOCUMENT,
+                        stage=PipelineStage.WATERMARK_APPLIED,
+                        result=StageResult.SKIPPED,
+                        seconds=0.0,
+                    )
+                    outputs = self._record_stage(
+                        outputs,
+                        stage="watermark",
+                        status="skipped",
+                        started_at=watermark_started,
+                        finished_at=datetime.now(tz=timezone.utc),
+                        details={"reason": "stamping_backend_unavailable"},
                     )
                 except Exception as exc:  # pragma: no cover - defensive fallback
                     self.metrics.record_pipeline_stage_end(

@@ -121,7 +121,14 @@ async def idempotency_dependency(request: Request) -> Response | None:
 
 
 async def store_idempotent_response(request: Request, response: Response) -> None:
-    """Placeholder hook for updating stored idempotent responses after processing."""
+    """Persist the finished JSON response against its idempotency key (best-effort).
+
+    Invoked by the idempotency middleware after ``call_next`` (see
+    ``app/api/app.py``). Updates the matching ``IdempotencyKey`` row with the
+    response status/body so a later replay returns the same result. Runs in the
+    post-response phase, so any persistence error is swallowed to a debug log
+    rather than altering the already-sent response.
+    """
 
     state = getattr(request, "state", None)
     idem = getattr(state, "idempotency", None) if state is not None else None

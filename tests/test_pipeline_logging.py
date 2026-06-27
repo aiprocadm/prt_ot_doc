@@ -173,9 +173,11 @@ async def test_pipeline_skips_qr_and_watermark_when_disabled(
             output_basename="report",
         )
 
-    stages = run.outputs.get("stages", {})
-    assert stages.get("qr_code", {"status": "skipped"})["status"] == "skipped"
-    assert stages.get("watermark", {"status": "skipped"})["status"] == "skipped"
+    stages = run.outputs["stages"]
+    assert stages["qr_code"]["status"] == "skipped"
+    assert stages["qr_code"]["details"]["reason"] == "disabled"
+    assert stages["watermark"]["status"] == "skipped"
+    assert stages["watermark"]["details"]["reason"] == "disabled"
 
 
 @pytest.mark.asyncio()
@@ -215,9 +217,88 @@ async def test_pipeline_qr_watermark_failure_fallback(
         )
 
     assert run.status == PipelineRunStatus.DONE
-    stages = run.outputs.get("stages", {})
-    assert stages.get("qr_code", {"status": "success"})["status"] == "success"
-    assert stages.get("watermark", {"status": "error"})["status"] == "error"
+    stages = run.outputs["stages"]
+    assert stages["qr_code"]["status"] == "success"
+    assert stages["watermark"]["status"] == "error"
+
+
+@pytest.mark.asyncio()
+async def test_pipeline_persists_stage_telemetry_after_completion(
+    session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A completed run must persist its stage history, not collapse to ``{}``.
+
+    ``run.outputs`` is a plain ``JSON`` column with no ``MutableDict`` wrapper, so
+    in-place mutation of the same dict object was not change-tracked and the stage
+    timeline was lost on ``session.refresh``. These assertions index the persisted
+    stages directly (no matching ``.get`` default) so they cannot pass vacuously.
+    """
+    _patch_docx(monkeypatch)
+    tenant = (await session.execute(select(Tenant).where(Tenant.slug == "delta"))).scalar_one()
+    template, version = await _prepare_template(session, tenant)
+    service = PipelineService(pdf_converter=_FakePdfConverter())
+
+    with tenant_context("delta"):
+        run = await service.run(
+            session,
+            tenant_id=tenant.id,
+            template=template,
+            template_version=version,
+            context={"name": "Pavel"},
+            replacements=None,
+            header_text=None,
+            footer_text=None,
+            idempotency_key="job-telemetry-persist",
+            output_basename="report",
+        )
+
+    assert run.status == PipelineRunStatus.DONE
+    stages = run.outputs["stages"]
+    # Core stages must survive the post-commit refresh with their recorded status.
+    assert stages["export"]["status"] in {"success", "fallback"}
+    assert stages["store"]["status"] == "success"
+    assert stages["audit"]["status"] == "success"
+
+
+@pytest.mark.asyncio()
+async def test_pipeline_default_stamping_backend_reports_unavailable_not_success(
+    session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Enabling QR/watermark without a real stamping backend must NOT claim success.
+
+    The default placeholder cannot stamp the PDF; the pipeline has to surface the
+    request as an honest, observable "not applied" instead of recording a no-op as
+    a successful stage (which previously misled callers into trusting an unstamped
+    document).
+    """
+    _patch_docx(monkeypatch)
+    tenant = (await session.execute(select(Tenant).where(Tenant.slug == "gamma"))).scalar_one()
+    template, version = await _prepare_template(session, tenant)
+    service = PipelineService(pdf_converter=_FakePdfConverter())
+    service._settings.doc_pipeline_enable_qr = True
+    service._settings.doc_pipeline_enable_watermark = True
+    # Intentionally do NOT monkeypatch _apply_*: exercise the real default backend.
+
+    with tenant_context("gamma"):
+        run = await service.run(
+            session,
+            tenant_id=tenant.id,
+            template=template,
+            template_version=version,
+            context={"name": "Pavel"},
+            replacements=None,
+            header_text=None,
+            footer_text=None,
+            idempotency_key="job-stamping-unavailable",
+            output_basename="report",
+        )
+
+    assert run.status == PipelineRunStatus.DONE
+    stages = run.outputs["stages"]
+    assert stages["qr_code"]["status"] == "skipped"
+    assert stages["qr_code"]["details"]["reason"] == "stamping_backend_unavailable"
+    assert stages["watermark"]["status"] == "skipped"
+    assert stages["watermark"]["details"]["reason"] == "stamping_backend_unavailable"
 
 
 @pytest.mark.asyncio()
