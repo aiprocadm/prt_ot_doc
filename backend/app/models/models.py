@@ -20,7 +20,7 @@ from sqlalchemy import (
     UniqueConstraint,
     event,
 )
-from sqlalchemy.ext.mutable import MutableDict
+from sqlalchemy.ext.mutable import MutableDict, MutableList
 from sqlalchemy.orm import Mapped, mapped_column, relationship, synonym
 
 from app.db.session import TenantBase
@@ -248,7 +248,9 @@ class Tenant(SharedModel):
     # (alter_column к NOT NULL отсутствует), поэтому ORM тоже nullable=True.
     s3_prefix: Mapped[str | None] = mapped_column(String(255), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    settings: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    settings: Mapped[dict[str, Any]] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=False, default=dict
+    )
 
     __table_args__ = (
         UniqueConstraint("slug", name="uq_tenant_slug"),
@@ -282,8 +284,12 @@ class TenantSettings(SharedModel):
     schema_name: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
     s3_prefix: Mapped[str] = mapped_column(String(255), nullable=False)
     timezone: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    retention_policy: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
-    integration_keys: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    retention_policy: Mapped[dict[str, Any]] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=False, default=dict
+    )
+    integration_keys: Mapped[dict[str, Any]] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=False, default=dict
+    )
 
 
 class TenantCounter(SharedModel):
@@ -306,7 +312,9 @@ class TenantIntegrationKey(SharedModel):
     )
     provider: Mapped[str] = mapped_column(String(64), nullable=False)
     encrypted_secret: Mapped[str] = mapped_column(Text, nullable=False)
-    meta_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    meta_json: Mapped[dict[str, Any]] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=False, default=dict
+    )
 
     __table_args__ = (
         UniqueConstraint(
@@ -343,9 +351,15 @@ class BillingPlan(SharedModel, SoftDeleteMixin):
 
     code: Mapped[str] = mapped_column(String(32), nullable=False, unique=True)
     name: Mapped[str] = mapped_column(String(128), nullable=False)
-    limits: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
-    features: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
-    price: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    limits: Mapped[dict[str, Any]] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=False, default=dict
+    )
+    features: Mapped[dict[str, Any]] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=False, default=dict
+    )
+    price: Mapped[dict[str, Any]] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=False, default=dict
+    )
 
 
 class BillingSubscription(SharedModel, SoftDeleteMixin):
@@ -364,7 +378,9 @@ class BillingSubscription(SharedModel, SoftDeleteMixin):
     period_end: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     auto_renew: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     grace_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    external_provider: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    external_provider: Mapped[dict[str, Any] | None] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=True
+    )
     cancel_at_period_end: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     external_customer_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
 
@@ -410,7 +426,9 @@ class BillingInvoice(SharedModel):
         native_enum(BillingInvoiceStatus), nullable=False, default=BillingInvoiceStatus.DRAFT
     )
     due_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    payload: Mapped[dict[str, Any]] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=False, default=dict
+    )
 
     __table_args__ = (Index("ix_invoices_tenant_status", "tenant_id", "status"),)
 
@@ -437,7 +455,9 @@ class BillingEvent(SharedModel):
     ref_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
     ref_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     amount: Mapped[float | None] = mapped_column(Numeric(14, 2), nullable=True)
-    payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    payload: Mapped[dict[str, Any]] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=False, default=dict
+    )
     delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     __table_args__ = (
@@ -455,7 +475,9 @@ class TenantRateLimit(SharedModel):
     concurrency_limit: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     burst: Mapped[int] = mapped_column(Integer, nullable=False, default=5)
     rps: Mapped[int] = mapped_column(Integer, nullable=False, default=2)
-    queues: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    queues: Mapped[dict[str, Any]] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=False, default=dict
+    )
 
 
 class ApiToken(SharedModel, SoftDeleteMixin):
@@ -466,7 +488,9 @@ class ApiToken(SharedModel, SoftDeleteMixin):
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     token_hash: Mapped[str] = mapped_column(String(128), nullable=False, unique=True, index=True)
-    scopes_json: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    scopes_json: Mapped[list[str]] = mapped_column(
+        MutableList.as_mutable(JSON), nullable=False, default=list
+    )
     created_by_user_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -481,8 +505,12 @@ class TenantLimitOverride(SharedModel):
     tenant_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("tenant.id"), nullable=False, unique=True
     )
-    limits: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
-    features: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    limits: Mapped[dict[str, Any]] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=False, default=dict
+    )
+    features: Mapped[dict[str, Any]] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=False, default=dict
+    )
     effective_from: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=lambda: datetime.now(tz=timezone.utc)
     )
@@ -496,7 +524,9 @@ class WebhookSubscription(SharedModel):
     )
     event_type: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
     url: Mapped[str] = mapped_column(String(2048), nullable=False)
-    headers: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    headers: Mapped[dict[str, Any]] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=False, default=dict
+    )
     secret: Mapped[str | None] = mapped_column(String(512), nullable=True)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
@@ -571,10 +601,18 @@ class UserAttribute(TenantBaseModel):
     user_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("user.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    company_ids: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
-    site_ids: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
-    project_ids: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
-    contractor_ids: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    company_ids: Mapped[list[str]] = mapped_column(
+        MutableList.as_mutable(JSON), nullable=False, default=list
+    )
+    site_ids: Mapped[list[str]] = mapped_column(
+        MutableList.as_mutable(JSON), nullable=False, default=list
+    )
+    project_ids: Mapped[list[str]] = mapped_column(
+        MutableList.as_mutable(JSON), nullable=False, default=list
+    )
+    contractor_ids: Mapped[list[str]] = mapped_column(
+        MutableList.as_mutable(JSON), nullable=False, default=list
+    )
 
     __table_args__ = (
         UniqueConstraint("tenant_id", "user_id", name="uq_user_attribute"),
@@ -644,7 +682,9 @@ class AuthzUserRole(AuthzBaseModel):
     role_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("authz_roles.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    scope_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    scope_json: Mapped[dict[str, Any]] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=False, default=dict
+    )
 
     __table_args__ = (
         UniqueConstraint(
@@ -661,7 +701,9 @@ class AuthzPolicy(AuthzBaseModel):
     resource: Mapped[str] = mapped_column(String(128), nullable=False)
     action: Mapped[str] = mapped_column(String(64), nullable=False)
     effect: Mapped[str] = mapped_column(String(8), nullable=False)
-    conditions_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    conditions_json: Mapped[dict[str, Any]] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=False, default=dict
+    )
     priority: Mapped[int] = mapped_column(Integer, nullable=False, default=100)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
@@ -697,14 +739,18 @@ class Company(TenantBaseModel, SoftDeleteMixin):
     kpp: Mapped[str | None] = mapped_column(String(32), nullable=True)
     ogrn: Mapped[str | None] = mapped_column(String(32), nullable=True)
     activity_type: Mapped[str | None] = mapped_column(String(128), nullable=True)
-    okved_codes: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    okved_codes: Mapped[list[str]] = mapped_column(
+        MutableList.as_mutable(JSON), nullable=False, default=list
+    )
     legal_address: Mapped[str | None] = mapped_column("address", String(255))
     actual_address: Mapped[str | None] = mapped_column(String(255))
     director: Mapped[str | None] = mapped_column(String(255))
     bank_name: Mapped[str | None] = mapped_column(String(255))
     bank_bik: Mapped[str | None] = mapped_column(String(32))
     bank_account: Mapped[str | None] = mapped_column(String(32))
-    phone_numbers: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    phone_numbers: Mapped[list[str]] = mapped_column(
+        MutableList.as_mutable(JSON), nullable=False, default=list
+    )
     contact_person: Mapped[str | None] = mapped_column(String(255))
     contact_phone: Mapped[str | None] = mapped_column(String(32))
     contact_email: Mapped[str | None] = mapped_column(String(320))
@@ -715,10 +761,16 @@ class Company(TenantBaseModel, SoftDeleteMixin):
     stamp_file_id: Mapped[str | None] = mapped_column(
         ForeignKey("file.id", ondelete="SET NULL"), nullable=True
     )
-    branding_payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    branding_payload: Mapped[dict[str, Any]] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=False, default=dict
+    )
     preferred_header_preset_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    work_types: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
-    hazardous_factors: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    work_types: Mapped[list[str]] = mapped_column(
+        MutableList.as_mutable(JSON), nullable=False, default=list
+    )
+    hazardous_factors: Mapped[list[str]] = mapped_column(
+        MutableList.as_mutable(JSON), nullable=False, default=list
+    )
     is_hazardous_production_facility: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False
     )
@@ -729,7 +781,9 @@ class Company(TenantBaseModel, SoftDeleteMixin):
     status: Mapped[str] = mapped_column(
         String(32), nullable=False, default="active", server_default="active"
     )
-    tags: Mapped[list[str] | None] = mapped_column(JSON, nullable=True, default=list)
+    tags: Mapped[list[str] | None] = mapped_column(
+        MutableList.as_mutable(JSON), nullable=True, default=list
+    )
 
     logo_file: Mapped["File | None"] = relationship(
         "File", foreign_keys=[logo_file_id], lazy="selectin"
@@ -750,7 +804,9 @@ class Position(TenantBaseModel, SoftDeleteMixin):
     description: Mapped[str | None] = mapped_column(String(255))
     safety_category: Mapped[str | None] = mapped_column(String(64))
     working_conditions_class: Mapped[str | None] = mapped_column(String(32))
-    hazardous_factors: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    hazardous_factors: Mapped[list[str]] = mapped_column(
+        MutableList.as_mutable(JSON), nullable=False, default=list
+    )
 
     company: Mapped[Company] = relationship(backref="positions")
     hazards: Mapped[list["RiskHazard"]] = relationship(
@@ -787,15 +843,23 @@ class Person(TenantBaseModel, SoftDeleteMixin):
     phone: Mapped[str | None] = mapped_column(String(32))
     personnel_number: Mapped[str | None] = mapped_column(String(32), index=True)
     hired_at: Mapped[date | None] = mapped_column(Date)
-    qualifications: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False, default=list)
+    qualifications: Mapped[list[dict[str, Any]]] = mapped_column(
+        MutableList.as_mutable(JSON), nullable=False, default=list
+    )
     snils: Mapped[str | None] = mapped_column(String(32))
     passport: Mapped[str | None] = mapped_column(String(64))
-    current_ppe: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False, default=list)
+    current_ppe: Mapped[list[dict[str, Any]]] = mapped_column(
+        MutableList.as_mutable(JSON), nullable=False, default=list
+    )
     # 766н: рост и размеры СИЗ работника (одежда/обувь/головной убор/СИЗОД/
     # перчатки/рукавицы). JSON: состав ключей зависит от выдаваемых СИЗ.
-    ppe_sizes: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    ppe_sizes: Mapped[dict[str, Any] | None] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=True
+    )
     working_conditions_class: Mapped[str | None] = mapped_column(String(32))
-    hazardous_factors: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    hazardous_factors: Mapped[list[str]] = mapped_column(
+        MutableList.as_mutable(JSON), nullable=False, default=list
+    )
     # Свободнотекстовая должность (то, что вводит пользователь во фронте). Отдельно
     # от структурного position_id/relationship `position` (каталог Position) — имя
     # `position` занято связью, поэтому колонка называется position_title.
@@ -832,7 +896,9 @@ class Site(TenantBaseModel, SoftDeleteMixin):
     company_id: Mapped[str] = mapped_column(ForeignKey("company.id"), nullable=False, index=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     address: Mapped[str | None] = mapped_column(String(255))
-    geo_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    geo_json: Mapped[dict[str, Any] | None] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=True
+    )
     hazard_class: Mapped[str | None] = mapped_column(String(32))
     site_type: Mapped[str | None] = mapped_column(String(64))
     contact_name: Mapped[str | None] = mapped_column(String(255))
@@ -842,7 +908,9 @@ class Site(TenantBaseModel, SoftDeleteMixin):
         Boolean, nullable=False, default=False
     )
     opo_register_number: Mapped[str | None] = mapped_column(String(64))
-    branding_payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    branding_payload: Mapped[dict[str, Any]] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=False, default=dict
+    )
 
     company: Mapped[Company] = relationship(backref="sites")
 
@@ -929,7 +997,9 @@ class MedicalExam(TenantBaseModel, SoftDeleteMixin):
         native_enum(MedicalFitness), nullable=True
     )
     restrictions: Mapped[str | None] = mapped_column(Text)
-    contraindications: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    contraindications: Mapped[list[str]] = mapped_column(
+        MutableList.as_mutable(JSON), nullable=False, default=list
+    )
     referral_id: Mapped[str | None] = mapped_column(
         ForeignKey("medical_referral.id"), nullable=True, index=True
     )
@@ -977,10 +1047,14 @@ class MedicalFactor(TenantBaseModel):
     code: Mapped[str] = mapped_column(String(32), nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     category: Mapped[str] = mapped_column(String(16), nullable=False, default="factor")
-    exam_kinds: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    exam_kinds: Mapped[list[str]] = mapped_column(
+        MutableList.as_mutable(JSON), nullable=False, default=list
+    )
     periodicity_months: Mapped[int] = mapped_column(Integer, nullable=False, default=12)
-    participants: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
-    lab_tests: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    participants: Mapped[list[str] | None] = mapped_column(
+        MutableList.as_mutable(JSON), nullable=True
+    )
+    lab_tests: Mapped[list[str] | None] = mapped_column(MutableList.as_mutable(JSON), nullable=True)
 
     __table_args__ = (UniqueConstraint("tenant_id", "code", name="uq_medical_factor_tenant_code"),)
 
@@ -1053,7 +1127,9 @@ class TrainingCourse(TenantBaseModel, SoftDeleteMixin):
     description: Mapped[str | None] = mapped_column(Text)
     duration_hours: Mapped[int | None] = mapped_column(Integer, nullable=True)
     valid_period_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=False, default=dict
+    )
 
     __table_args__ = (
         UniqueConstraint("tenant_id", "title", name="uq_training_course_title"),
@@ -1148,7 +1224,9 @@ class TrainingCertificate(TenantBaseModel, SoftDeleteMixin):
         ForeignKey("file.id", ondelete="SET NULL"), nullable=True, index=True
     )
     external_registry_status: Mapped[str | None] = mapped_column(String(16), nullable=True)
-    external_registry_payload: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    external_registry_payload: Mapped[dict[str, Any] | None] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=True
+    )
 
     # backward-compatible legacy fields
     course_id: Mapped[str | None] = mapped_column(
@@ -1203,7 +1281,9 @@ class TrainingModule(TenantBaseModel):
     content_type: Mapped[str] = mapped_column(String(32), nullable=False)
     content_ref: Mapped[str | None] = mapped_column(Text, nullable=True)
     required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    materials_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    materials_json: Mapped[dict[str, Any] | None] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=True
+    )
 
 
 class TrainingLesson(TenantBaseModel):
@@ -1216,7 +1296,9 @@ class TrainingLesson(TenantBaseModel):
     lesson_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     content_type: Mapped[str] = mapped_column(String(32), nullable=False, default="document")
     content_ref: Mapped[str | None] = mapped_column(Text, nullable=True)
-    materials_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    materials_json: Mapped[dict[str, Any] | None] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=True
+    )
     duration_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
     required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
@@ -1244,8 +1326,12 @@ class TrainingTestQuestion(TenantBaseModel):
     question_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     question_type: Mapped[str] = mapped_column(String(16), nullable=False)
     prompt: Mapped[str] = mapped_column(Text, nullable=False)
-    options_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
-    correct_answer_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    options_json: Mapped[dict[str, Any] | None] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=True
+    )
+    correct_answer_json: Mapped[dict[str, Any] | None] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=True
+    )
     weight: Mapped[float] = mapped_column(Numeric(8, 2), nullable=False, default=1)
 
 
@@ -1308,8 +1394,12 @@ class TrainingEnrollment(TenantBaseModel, SoftDeleteMixin):
     completion_confirmed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    completion_payload: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
-    external_runtime_state: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    completion_payload: Mapped[dict[str, Any] | None] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=True
+    )
+    external_runtime_state: Mapped[dict[str, Any] | None] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=True
+    )
 
 
 class TrainingAttempt(TenantBaseModel):
@@ -1322,10 +1412,14 @@ class TrainingAttempt(TenantBaseModel):
     submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     score: Mapped[float | None] = mapped_column(Numeric(8, 2), nullable=True)
     passed: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
-    answers_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    answers_json: Mapped[dict[str, Any] | None] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=True
+    )
     source_type: Mapped[str] = mapped_column(String(32), nullable=False, default="manual")
     external_session_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    provider_payload: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    provider_payload: Mapped[dict[str, Any] | None] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=True
+    )
 
 
 class TrainingProtocol(TenantBaseModel, SoftDeleteMixin):
@@ -1374,11 +1468,19 @@ class MarketplaceCatalogItem(TenantBaseModel, SoftDeleteMixin):
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="draft")
     version_label: Mapped[str] = mapped_column(String(64), nullable=False)
     category: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    tags_json: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    tags_json: Mapped[list[str]] = mapped_column(
+        MutableList.as_mutable(JSON), nullable=False, default=list
+    )
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    preview_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
-    compatibility_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
-    dependency_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    preview_json: Mapped[dict[str, Any]] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=False, default=dict
+    )
+    compatibility_json: Mapped[dict[str, Any]] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=False, default=dict
+    )
+    dependency_json: Mapped[dict[str, Any]] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=False, default=dict
+    )
     source_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
     usage_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
@@ -1477,7 +1579,9 @@ class BriefingSignature(TenantBaseModel):
     signed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=lambda: datetime.now(tz=timezone.utc)
     )
-    signature_payload: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    signature_payload: Mapped[dict[str, Any] | None] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=True
+    )
 
 
 class ComplianceDeadline(TenantBaseModel):
@@ -1518,8 +1622,12 @@ class OfflineSyncBatch(TenantBaseModel):
     device_id: Mapped[str] = mapped_column(String(128), nullable=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending")
     entity_type: Mapped[str] = mapped_column(String(64), nullable=False)
-    payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
-    error_payload: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    payload: Mapped[dict[str, Any]] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=False, default=dict
+    )
+    error_payload: Mapped[dict[str, Any] | None] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=True
+    )
 
 
 class OfflineMediaQueue(TenantBaseModel):
@@ -1532,7 +1640,9 @@ class OfflineMediaQueue(TenantBaseModel):
         ForeignKey("file.id", ondelete="SET NULL"), nullable=True
     )
     upload_status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending")
-    metadata_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    metadata_json: Mapped[dict[str, Any] | None] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=True
+    )
 
 
 class ExternalRegistryJob(TenantBaseModel):
@@ -1542,8 +1652,12 @@ class ExternalRegistryJob(TenantBaseModel):
     entity_id: Mapped[str] = mapped_column(String(36), nullable=False)
     registry_type: Mapped[str] = mapped_column(String(16), nullable=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending")
-    request_payload: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
-    response_payload: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    request_payload: Mapped[dict[str, Any] | None] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=True
+    )
+    response_payload: Mapped[dict[str, Any] | None] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=True
+    )
 
 
 class PermitStatus(str, enum.Enum):
@@ -1615,7 +1729,9 @@ class PPEItem(TenantBaseModel, SoftDeleteMixin):
     )
     description: Mapped[str | None] = mapped_column(String(512))
     default_wear_days: Mapped[int] = mapped_column(Integer, nullable=False, default=365)
-    metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=False, default=dict
+    )
 
     __table_args__ = (
         UniqueConstraint("tenant_id", "name", name="uq_ppe_item_name"),
@@ -1703,8 +1819,10 @@ class Template(TenantBaseModel):
     )
     scope_company_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     scope_site_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
-    tags_json: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
-    metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    tags_json: Mapped[list[str] | None] = mapped_column(MutableList.as_mutable(JSON), nullable=True)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=False, default=dict
+    )
     storage_key: Mapped[str | None] = mapped_column(String(512), nullable=True, index=True)
     status: Mapped[TemplateStatus] = mapped_column(
         Enum(TemplateStatus), nullable=False, default=TemplateStatus.DRAFT
@@ -1749,15 +1867,21 @@ class TemplateVersion(TenantBaseModel):
     payload_key: Mapped[str] = mapped_column(String(512), nullable=False)
     file_id: Mapped[str | None] = mapped_column(String(512), nullable=True)
     size_bytes: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    placeholder_index: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
-    linter_report_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    placeholder_index: Mapped[dict[str, Any] | None] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=True
+    )
+    linter_report_json: Mapped[dict[str, Any] | None] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=True
+    )
     created_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     document_type: Mapped[str | None] = mapped_column(String(255))
-    required_fields_schema: Mapped[dict[str, Any] | None] = mapped_column(JSON)
-    applicability_rules: Mapped[dict[str, Any] | None] = mapped_column(JSON)
-    output_types: Mapped[list[str] | None] = mapped_column(JSON)
-    profile: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    required_fields_schema: Mapped[dict[str, Any] | None] = mapped_column(
+        MutableDict.as_mutable(JSON)
+    )
+    applicability_rules: Mapped[dict[str, Any] | None] = mapped_column(MutableDict.as_mutable(JSON))
+    output_types: Mapped[list[str] | None] = mapped_column(MutableList.as_mutable(JSON))
+    profile: Mapped[dict[str, Any] | None] = mapped_column(MutableDict.as_mutable(JSON))
 
     template: Mapped[Template] = relationship(backref="versions", foreign_keys=[template_id])
 
@@ -1847,7 +1971,7 @@ class PackageProfileConfig(TenantBaseModel):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
     pipeline_steps_json: Mapped[list[dict[str, Any]]] = mapped_column(
-        JSON, nullable=False, default=list
+        MutableList.as_mutable(JSON), nullable=False, default=list
     )
     concurrency_limit: Mapped[int | None] = mapped_column(Integer)
     status: Mapped[PackageEntityStatus] = mapped_column(
@@ -1878,8 +2002,12 @@ class PackagePresetConfig(TenantBaseModel):
         nullable=False,
         default=PackageSourceType.CSV,
     )
-    mapping_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
-    options_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    mapping_json: Mapped[dict[str, Any]] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=False, default=dict
+    )
+    options_json: Mapped[dict[str, Any]] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=False, default=dict
+    )
     status: Mapped[PackageEntityStatus] = mapped_column(
         native_enum(PackageEntityStatus, name="package_preset_status"),
         nullable=False,
@@ -1908,18 +2036,18 @@ class PackagePresetItem(TenantBaseModel):
     template_version_id: Mapped[str] = mapped_column(
         ForeignKey("templateversion.id"), nullable=False, index=True
     )
-    header_preset_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    header_preset_json: Mapped[dict[str, Any] | None] = mapped_column(MutableDict.as_mutable(JSON))
     replace_mode: Mapped[ReplaceMode] = mapped_column(
         native_enum(ReplaceMode, name="replace_mode"), nullable=False, default=ReplaceMode.NONE
     )
-    replace_map_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    replace_map_json: Mapped[dict[str, Any] | None] = mapped_column(MutableDict.as_mutable(JSON))
     output_format: Mapped[OutputFormat] = mapped_column(
         native_enum(OutputFormat, name="package_output_format"),
         nullable=False,
         default=OutputFormat.BOTH,
     )
     is_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    conditions_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    conditions_json: Mapped[dict[str, Any] | None] = mapped_column(MutableDict.as_mutable(JSON))
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     preset: Mapped[PackagePresetConfig] = relationship(backref="items")
@@ -1955,7 +2083,9 @@ class PackRun(TenantBaseModel):
         default=PackRunLifecycleStatus.QUEUED,
     )
     result_zip_file_id: Mapped[str | None] = mapped_column(ForeignKey("file.id"), nullable=True)
-    stats_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    stats_json: Mapped[dict[str, Any]] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=False, default=dict
+    )
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
@@ -1991,7 +2121,7 @@ class PackRunItem(TenantBaseModel):
     output_pdf_file_id: Mapped[str | None] = mapped_column(ForeignKey("file.id"), nullable=True)
     filename: Mapped[str] = mapped_column(String(512), nullable=False)
     error_code: Mapped[str | None] = mapped_column(String(128), nullable=True)
-    error_payload: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    error_payload: Mapped[dict[str, Any] | None] = mapped_column(MutableDict.as_mutable(JSON))
 
     __table_args__ = (Index("ix_pack_run_items_run_status", "pack_run_id", "status"),)
 
@@ -2005,13 +2135,15 @@ class PackRunLog(TenantBaseModel):
     )
     step: Mapped[str | None] = mapped_column(String(64))
     message: Mapped[str] = mapped_column(Text, nullable=False)
-    payload: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    payload: Mapped[dict[str, Any] | None] = mapped_column(MutableDict.as_mutable(JSON))
 
 
 class PackageProfile(TenantBaseModel):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(String(1024))
-    config: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    config: Mapped[dict[str, Any]] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=False, default=dict
+    )
 
     __table_args__ = (UniqueConstraint("tenant_id", "name", name="uq_package_profile_name"),)
 
@@ -2021,7 +2153,9 @@ class PackagePreset(TenantBaseModel):
         ForeignKey("packageprofile.id"), nullable=False, index=True
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
-    payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    payload: Mapped[dict[str, Any]] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=False, default=dict
+    )
 
     profile: Mapped[PackageProfile] = relationship(backref="presets")
 
@@ -2097,7 +2231,9 @@ class DocumentPackItem(TenantBaseModel, SoftDeleteMixin):
     )
     order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    condition: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    condition: Mapped[dict[str, Any]] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=False, default=dict
+    )
 
     pack: Mapped[DocumentPack] = relationship(back_populates="items")
     template: Mapped[Template] = relationship(backref="document_pack_items", lazy="selectin")
@@ -2123,7 +2259,9 @@ class PipelineRun(TenantBaseModel):
     status: Mapped[PipelineRunStatus] = mapped_column(
         Enum(PipelineRunStatus), nullable=False, default=PipelineRunStatus.QUEUED
     )
-    context: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    context: Mapped[dict[str, Any]] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=False, default=dict
+    )
     # MutableDict so top-level in-place edits (outputs["pdf"]=..., result_metadata[...])
     # are flagged dirty even without a fresh reassignment. This is the column that
     # produced the _record_stage data-loss bug; see tests/test_no_inplace_json_mutation.py.
@@ -2188,9 +2326,11 @@ class ClientPackagePreset(TenantBaseModel, SoftDeleteMixin):
     code: Mapped[str] = mapped_column(String(128), nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
-    steps_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    steps_json: Mapped[dict[str, Any]] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=False, default=dict
+    )
     required_inputs_json: Mapped[list[dict[str, Any]]] = mapped_column(
-        JSON, nullable=False, default=list
+        MutableList.as_mutable(JSON), nullable=False, default=list
     )
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
@@ -2219,8 +2359,8 @@ class ClientPackageRun(TenantBaseModel, SoftDeleteMixin):
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     output_zip_s3_key: Mapped[str | None] = mapped_column(String(512))
     output_pdf_s3_key: Mapped[str | None] = mapped_column(String(512))
-    qc_report_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
-    error_payload_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    qc_report_json: Mapped[dict[str, Any] | None] = mapped_column(MutableDict.as_mutable(JSON))
+    error_payload_json: Mapped[dict[str, Any] | None] = mapped_column(MutableDict.as_mutable(JSON))
 
     preset: Mapped[ClientPackagePreset] = relationship(backref="runs")
 
@@ -2243,7 +2383,7 @@ class PackageRequirement(TenantBaseModel):
         nullable=False,
         default=PackageRequirementStatus.MISSING,
     )
-    payload_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    payload_json: Mapped[dict[str, Any] | None] = mapped_column(MutableDict.as_mutable(JSON))
 
 
 class ClientPortalToken(TenantBaseModel):
@@ -2253,7 +2393,9 @@ class ClientPortalToken(TenantBaseModel):
     package_run_id: Mapped[str] = mapped_column(
         ForeignKey("package_runs.id"), nullable=False, index=True
     )
-    scope_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    scope_json: Mapped[dict[str, Any]] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=False, default=dict
+    )
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
@@ -2285,7 +2427,7 @@ class PackageEvent(TenantBaseModel):
         ForeignKey("package_runs.id"), nullable=False, index=True
     )
     type: Mapped[str] = mapped_column(String(128), nullable=False)
-    payload_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    payload_json: Mapped[dict[str, Any] | None] = mapped_column(MutableDict.as_mutable(JSON))
 
 
 class IdempotencyStatus(str, enum.Enum):
@@ -2306,9 +2448,11 @@ class IdempotencyKey(TenantBaseModel):
     path: Mapped[str | None] = mapped_column(String(512))
     method: Mapped[str | None] = mapped_column(String(16))
     status_code: Mapped[int | None] = mapped_column(Integer)
-    response_headers: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    response_headers: Mapped[dict[str, Any] | None] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=True
+    )
     response_body: Mapped[str | None] = mapped_column(Text)
-    result_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    result_json: Mapped[dict[str, Any] | None] = mapped_column(MutableDict.as_mutable(JSON))
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
@@ -2323,7 +2467,7 @@ class RiskMethodology(TenantBaseModel):
 
     code: Mapped[str] = mapped_column(String(64), nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
-    definition: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    definition: Mapped[dict[str, Any]] = mapped_column(MutableDict.as_mutable(JSON), nullable=False)
 
     __table_args__ = (
         UniqueConstraint("tenant_id", "name", name="uq_risk_methodology_name"),
@@ -2343,7 +2487,7 @@ class RiskMap(TenantBaseModel):
     document_pack_id: Mapped[str | None] = mapped_column(
         ForeignKey("document_pack.id"), nullable=True, index=True
     )
-    matrix: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    matrix: Mapped[dict[str, Any]] = mapped_column(MutableDict.as_mutable(JSON), nullable=False)
     recalculated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     methodology: Mapped[RiskMethodology] = relationship(backref="risk_maps")
@@ -2455,7 +2599,9 @@ class NPABinding(TenantBaseModel):
         default=NpaBindingTarget.TEMPLATE_VERSION,
     )
     entity_id: Mapped[str] = mapped_column(String(36), nullable=False)
-    context: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    context: Mapped[dict[str, Any]] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=False, default=dict
+    )
 
     template_version: Mapped[TemplateVersion | None] = relationship(backref="npa_bindings")
     npa: Mapped[NPA] = relationship(backref="bindings")
@@ -2482,12 +2628,24 @@ class AuditLog(TenantBaseModel):
     request_id: Mapped[str | None] = mapped_column(String(128))
     session_id: Mapped[str | None] = mapped_column(String(128))
     user_agent: Mapped[str | None] = mapped_column(String(256))
-    resource_attrs: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
-    details: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
-    before_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
-    after_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
-    changed_fields: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
-    actor_role_codes: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    resource_attrs: Mapped[dict[str, Any]] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=False, default=dict
+    )
+    details: Mapped[dict[str, Any]] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=False, default=dict
+    )
+    before_json: Mapped[dict[str, Any] | None] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=True
+    )
+    after_json: Mapped[dict[str, Any] | None] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=True
+    )
+    changed_fields: Mapped[dict[str, Any]] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=False, default=dict
+    )
+    actor_role_codes: Mapped[list[str]] = mapped_column(
+        MutableList.as_mutable(JSON), nullable=False, default=list
+    )
     before_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     after_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     hash: Mapped[str] = mapped_column(String(64), nullable=False, default="")
@@ -2515,7 +2673,9 @@ def _prevent_auditlog_delete(*_args, **_kwargs) -> None:
 class AuditExportJob(TenantBaseModel):
     __tablename__ = "audit_export_job"
 
-    filters: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    filters: Mapped[dict[str, Any]] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=False, default=dict
+    )
     format: Mapped[str] = mapped_column(String(16), nullable=False)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="queued")
     storage_key: Mapped[str | None] = mapped_column(String(512), nullable=True)
@@ -2545,7 +2705,9 @@ class SecurityAuditLog(TenantBaseModel):
     ip: Mapped[str] = mapped_column(String(64), nullable=False, default="unknown")
     user_agent: Mapped[str | None] = mapped_column(String(256))
     correlation_id: Mapped[str | None] = mapped_column(String(128))
-    details: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    details: Mapped[dict[str, Any]] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=False, default=dict
+    )
 
     __table_args__ = (
         Index("ix_security_auditlog_action", "action"),
@@ -2578,7 +2740,9 @@ class Journal(TenantBaseModel, SoftDeleteMixin):
     journal_type: Mapped[JournalType] = mapped_column(native_enum(JournalType), nullable=False)
     started_at: Mapped[date | None] = mapped_column(Date, nullable=True)
     closed_at: Mapped[date | None] = mapped_column(Date, nullable=True)
-    metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=False, default=dict
+    )
 
     company: Mapped[Company | None] = relationship("Company", backref="journals")
 
@@ -2592,7 +2756,9 @@ class JournalEntry(TenantBaseModel, SoftDeleteMixin):
     entry_date: Mapped[date] = mapped_column(Date, nullable=False, default=date.today)
     instructor: Mapped[str | None] = mapped_column(String(255))
     notes: Mapped[str | None] = mapped_column(Text)
-    metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=False, default=dict
+    )
 
     journal: Mapped[Journal] = relationship(backref="entries")
     person: Mapped[Person] = relationship(backref="journal_entries")
@@ -2763,7 +2929,9 @@ class IncidentLog(TenantBaseModel):
         Enum(IncidentStatus, name="incidentlogstatus"), nullable=False
     )
     message: Mapped[str] = mapped_column(Text, nullable=False)
-    metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=False, default=dict
+    )
 
     incident: Mapped[Incident] = relationship("Incident", back_populates="logs")
     author: Mapped[User | None] = relationship("User")
@@ -3065,7 +3233,9 @@ class ApprovalRouteStep(TenantBaseModel, SoftDeleteMixin, VersionedMixin):
     deadline_hours: Mapped[int | None] = mapped_column(Integer, nullable=True)
     escalation_role_code: Mapped[str | None] = mapped_column(String(128), nullable=True)
     escalation_user_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
-    conditions_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    conditions_json: Mapped[dict[str, Any] | None] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=True
+    )
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     __table_args__ = (
@@ -3116,7 +3286,9 @@ class ApprovalInstanceStep(TenantBaseModel):
     due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     acted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     comment: Mapped[str | None] = mapped_column(Text, nullable=True)
-    payload_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    payload_json: Mapped[dict[str, Any] | None] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=True
+    )
 
     __table_args__ = (
         Index("ix_approval_instance_steps_lookup", "approval_instance_id", "status", "order_no"),
@@ -3131,7 +3303,9 @@ class EdoStatusEvent(TenantBaseModel):
     )
     status: Mapped[str] = mapped_column(String(64), nullable=False)
     external_event_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    payload_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    payload_json: Mapped[dict[str, Any]] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=False, default=dict
+    )
     received_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=lambda: datetime.now(tz=timezone.utc)
     )
@@ -3149,8 +3323,12 @@ class EdoWebhookInbox(TenantBaseModel):
     operator_code: Mapped[str] = mapped_column(String(64), nullable=False)
     external_event_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     dedupe_key: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
-    headers_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
-    payload_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    headers_json: Mapped[dict[str, Any]] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=False, default=dict
+    )
+    payload_json: Mapped[dict[str, Any]] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=False, default=dict
+    )
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="received")
     error_text: Mapped[str | None] = mapped_column(Text, nullable=True)
 
@@ -3184,9 +3362,13 @@ class SignatureRequest(TenantBaseModel):
     certificate_thumbprint: Mapped[str | None] = mapped_column(String(255), nullable=True)
     signer_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     signed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    verification_result_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
-    payload_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
-    result_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    verification_result_json: Mapped[dict[str, Any] | None] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=True
+    )
+    payload_json: Mapped[dict[str, Any]] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=False, default=dict
+    )
+    result_json: Mapped[dict[str, Any] | None] = mapped_column(MutableDict.as_mutable(JSON))
 
     # --- PEP (простая электронная подпись, ed01) ---
     # Plain string — no FK (user ids come from external auth; pattern follows requested_by).
@@ -3216,8 +3398,12 @@ class SignatureRequest(TenantBaseModel):
 class Outbox(TenantBaseModel):
     event_type: Mapped[str] = mapped_column(String(128), nullable=False)
     destination: Mapped[str] = mapped_column(String(512), nullable=False)
-    payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
-    headers: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    payload: Mapped[dict[str, Any]] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=False, default=dict
+    )
+    headers: Mapped[dict[str, Any] | None] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=True
+    )
     idempotency_key: Mapped[str | None] = mapped_column(String(128))
     status: Mapped[OutboxStatus] = mapped_column(
         Enum(OutboxStatus),
@@ -3226,7 +3412,9 @@ class Outbox(TenantBaseModel):
     )
     attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    last_error: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    last_error: Mapped[dict[str, Any] | None] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=True
+    )
     sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     __table_args__ = (
@@ -3249,12 +3437,16 @@ class WebhookDelivery(TenantBaseModel):
     event_id: Mapped[str] = mapped_column(String(64), nullable=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False)
     attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    request_headers: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
-    response_headers: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    request_headers: Mapped[dict[str, Any] | None] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=True
+    )
+    response_headers: Mapped[dict[str, Any] | None] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=True
+    )
     next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_status_code: Mapped[int | None] = mapped_column(Integer)
     last_response_body: Mapped[str | None] = mapped_column(Text, nullable=True)
-    last_error: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    last_error: Mapped[dict[str, Any] | None] = mapped_column(MutableDict.as_mutable(JSON))
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     latency_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -3273,8 +3465,12 @@ class WebhookEndpoint(TenantBaseModel):
     url: Mapped[str] = mapped_column(String(2048), nullable=False)
     secret: Mapped[str | None] = mapped_column(String(512), nullable=True)
     is_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    subscribed_events: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    subscribed_events: Mapped[list[str]] = mapped_column(
+        MutableList.as_mutable(JSON), nullable=False, default=list
+    )
     timeout_ms: Mapped[int] = mapped_column(Integer, nullable=False, default=5000)
-    headers: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    headers: Mapped[dict[str, Any] | None] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=True
+    )
 
     __table_args__ = (Index("ix_webhook_endpoint_tenant_enabled", "tenant_id", "is_enabled"),)
