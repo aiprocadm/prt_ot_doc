@@ -48,3 +48,16 @@ def test_projection_coerces_enum_class_value() -> None:
     )
     assert rows[0].assessed_class == "optimal"
     assert rows[0].eligible is True
+
+
+def test_declaration_schema_validates_from_dataclass() -> None:
+    from app.schemas.sout import DeclarationRowRead
+
+    rows = build_declaration_projection(
+        campaign=SimpleNamespace(name="x", report_number=None, report_date=None),
+        workplaces_with_factors=[(_wp(person_id="p1"), [])],
+    )
+    read = DeclarationRowRead.model_validate(rows[0], from_attributes=True)
+    assert read.workplace_code == "РМ-01"
+    assert read.eligible is True
+    assert read.headcount == "1"
