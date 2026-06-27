@@ -13,6 +13,7 @@ from enum import Enum
 from sqlalchemy import BigInteger, Boolean, DateTime, Index, String
 from sqlalchemy import Enum as SQLEnum
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.ext.mutable import MutableDict
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import JSON
 
@@ -53,7 +54,9 @@ class File(TenantBaseModel):
     size: Mapped[int] = mapped_column(BigInteger, nullable=False)
     mime: Mapped[str] = mapped_column(String(128), nullable=False)
     original_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    meta_json: Mapped[dict] = mapped_column(JSONBType, nullable=False, default=dict)
+    meta_json: Mapped[dict] = mapped_column(
+        MutableDict.as_mutable(JSONBType), nullable=False, default=dict
+    )
     kind: Mapped[FileKind] = mapped_column(
         SQLEnum(FileKind, name="file_kind"), nullable=False, default=FileKind.DOCUMENT
     )

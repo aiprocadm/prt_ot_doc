@@ -17,6 +17,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
+from sqlalchemy.ext.mutable import MutableDict, MutableList
 from sqlalchemy.orm import Mapped, backref, mapped_column, relationship
 
 from app.db.session import TenantBase
@@ -70,7 +71,7 @@ class RiskHazard(TenantBase):
     module: Mapped[str] = mapped_column(String(32), nullable=False, default="ot")
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     recommended_measures: Mapped[list[dict[str, Any]]] = mapped_column(
-        JSON, nullable=False, default=list
+        MutableList.as_mutable(JSON), nullable=False, default=list
     )
     document_file_id: Mapped[str | None] = mapped_column(
         ForeignKey("file.id", ondelete="SET NULL"), nullable=True
@@ -196,7 +197,9 @@ class RiskAssessment(TenantBase):
     score_before: Mapped[int] = mapped_column(Integer, nullable=False)
     band_before: Mapped[str] = mapped_column(String(16), nullable=False)
     controls: Mapped[str | None] = mapped_column(Text, nullable=True)
-    risk_card: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    risk_card: Mapped[dict[str, Any] | None] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=True
+    )
     severity_after: Mapped[int] = mapped_column(Integer, nullable=False)
     likelihood_after: Mapped[int] = mapped_column(Integer, nullable=False)
     score_after: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -294,7 +297,9 @@ class RiskCard(TenantBaseModel):
         ForeignKey("riskmethodology.id"), nullable=True, index=True
     )
     methodology_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    summary: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    summary: Mapped[dict[str, Any]] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=False, default=dict
+    )
 
     assessment: Mapped[RiskAssessment] = relationship(backref="risk_cards")
 
