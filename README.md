@@ -24,38 +24,45 @@ This wave re-audited the repository and confirmed the following canonical paths:
 ## Quick start
 
 ### Local dockerless / Codespaces
-```bash
-make dev-lite
-```
 
-Cross-platform direct launcher (Windows/macOS/Linux):
-```bash
-python scripts/dev_lite.py
-```
+**Recommended order (verified path):**
 
-Windows PowerShell wrapper:
+1. **Preflight** — confirm Python ≥ 3.12, Node ≥ 18.18, npm ≥ 9 are on PATH:
+   ```bash
+   python scripts/dev_lite.py --preflight-only
+   ```
+2. **Start** — one command brings up both servers; `--auto-kill-ports` frees any
+   stale process holding `8000`/`5173` from a previous run:
+   ```bash
+   make dev-lite                                 # or:
+   python scripts/dev_lite.py --auto-kill-ports
+   ```
+3. Wait for `Application startup complete` (backend) and `VITE ... ready`
+   (frontend), then open:
+   - Frontend: `http://localhost:5173`
+   - Backend health: `http://localhost:8000/health` → `{"status":"ok"}`
+
+Platform-specific wrappers (equivalent to step 2):
 ```powershell
-./scripts/dev_lite.ps1
+./scripts/dev_lite.ps1                # Windows PowerShell (add -AutoKillPorts to free ports)
 ```
-
-Unix shell wrapper:
 ```bash
-./scripts/dev_lite.sh
-```
-
-Preflight only (versions + PATH diagnostics, no start):
-```bash
-python scripts/dev_lite.py --preflight-only
-```
-
-Auto-free busy dev ports (`8000`, `5173`) before start:
-```bash
-python scripts/dev_lite.py --auto-kill-ports
+./scripts/dev_lite.sh                 # Unix shell
+python scripts/dev_lite.py            # cross-platform, no port auto-free
 ```
 
 Note for WSL: dependencies must be installed inside the selected Linux distro as well (`python`, `node`, `npm` in WSL PATH).
 
 This is the recommended local start path in this workspace. It prepares dockerless env defaults, initializes the SQLite schema, starts backend on `http://localhost:8000`, and starts frontend on `http://localhost:5173`.
+
+> **Database note — let the launcher reset `dev.db`.** Dockerless mode bootstraps
+> the SQLite schema via SQLAlchemy `metadata.create_all`, which only issues
+> `CREATE TABLE IF NOT EXISTS` — it never runs `ALTER TABLE ADD COLUMN`. A
+> `dev.db` left over from an older revision therefore keeps its **stale schema**,
+> and startup crashes with errors like `no such column: company_1.status`.
+> `dev_lite.py` deletes `dev.db` on every run by default to avoid this; only pass
+> `--keep-db` when you are sure the on-disk schema matches the current ORM. If you
+> hit a `no such column` crash, delete `dev.db` and restart.
 
 #### Test login without secrets
 
@@ -63,6 +70,18 @@ Default test credentials for local development (never use in production):
 - **Tenant:** `demo`
 - **Email:** `admin@example.com`
 - **Password:** `admin123`
+
+When calling the API directly (curl / scripts), the tenant is resolved from the
+`x-tenant-slug` header — **not** `X-Tenant-ID` (that header expects a UUID). Smoke
+test:
+```bash
+TOKEN=$(curl -s -X POST http://localhost:8000/api/v1/auth/login \
+  -H 'Content-Type: application/json' -H 'x-tenant-slug: demo' \
+  -d '{"email":"admin@example.com","password":"admin123"}' \
+  | python -c 'import sys,json;print(json.load(sys.stdin)["access_token"])')
+curl -s http://localhost:8000/api/v1/auth/me \
+  -H 'x-tenant-slug: demo' -H "Authorization: Bearer $TOKEN"
+```
 
 These credentials are **non-production defaults only** and are populated by `dev_bootstrap.py` / `demo_bootstrap.py` scripts during `make dev-lite`. To customize test credentials, edit `backend/app/services/dev_bootstrap.py` before running `make dev-lite` for the first time.
 
