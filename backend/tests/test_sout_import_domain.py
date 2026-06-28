@@ -79,3 +79,75 @@ def test_validate_no_error_when_class_blank_on_overall_workplace():
     wp = ParsedWorkplace("РМ-7", "Слесарь", None, None, [])
     issues = validate_parsed([wp])
     assert issues[0].errors == []
+
+
+from io import BytesIO
+
+from app.domains.sout.import_report import parse_csv, parse_fgis_xml, parse_xlsx
+
+
+def test_parse_csv_groups_factors_by_code():
+    csv_text = (
+        "workplace_code,position_name,assessed_class,factor_name,factor_class\n"
+        "РМ-01,Слесарь,3.1,Шум,3.1\n"
+        "РМ-01,Слесарь,3.1,Вибрация,2\n"
+        "РМ-02,Сварщик,2,,\n"
+    ).encode("utf-8")
+    wps = parse_csv(csv_text)
+    assert [w.workplace_code for w in wps] == ["РМ-01", "РМ-02"]
+    assert wps[0].assessed_class == "harmful_3_1"
+    assert [f.name for f in wps[0].factors] == ["Шум", "Вибрация"]
+    assert wps[0].factors[0].measured_class == "harmful_3_1"
+    assert wps[1].factors == []
+
+
+def test_parse_csv_detects_conflict_on_repeated_code():
+    csv_text = (
+        "workplace_code,position_name,assessed_class\n"
+        "РМ-01,Слесарь,2\n"
+        "РМ-01,Слесарь,3.1\n"  # тот же код, другой класс → конфликт
+    ).encode("utf-8")
+    wps = parse_csv(csv_text)
+    assert wps[0].conflict is True
+
+
+def test_parse_csv_russian_headers():
+    csv_text = (
+        "Код РМ,Должность,Класс\n"
+        "РМ-05,Оператор,допустимый\n"
+    ).encode("utf-8")
+    wps = parse_csv(csv_text)
+    assert wps[0].workplace_code == "РМ-05"
+    assert wps[0].position_name == "Оператор"
+    assert wps[0].assessed_class == "acceptable"
+
+
+def test_parse_xlsx_roundtrip():
+    from openpyxl import Workbook
+
+    wb = Workbook()
+    ws = wb.active
+    ws.append(["workplace_code", "position_name", "assessed_class", "factor_name", "factor_class"])
+    ws.append(["РМ-01", "Слесарь", "3.1", "Шум", "3.1"])
+    buf = BytesIO()
+    wb.save(buf)
+    wps = parse_xlsx(buf.getvalue())
+    assert wps[0].workplace_code == "РМ-01"
+    assert wps[0].assessed_class == "harmful_3_1"
+    assert wps[0].factors[0].name == "Шум"
+
+
+def test_parse_fgis_xml_subset():
+    xml = (
+        "<sout><workplace code='РМ-01' position='Слесарь'>"
+        "<assessed_class>acceptable</assessed_class>"
+        "<factors><factor code='4.50' name='Шум' class='harmful_3_1'/>"
+        "<factor name='Вибрация' class='2'/></factors>"
+        "</workplace></sout>"
+    ).encode("utf-8")
+    wps = parse_fgis_xml(xml)
+    assert wps[0].workplace_code == "РМ-01"
+    assert wps[0].position_name == "Слесарь"
+    assert wps[0].assessed_class == "acceptable"
+    assert [f.name for f in wps[0].factors] == ["Шум", "Вибрация"]
+    assert wps[0].factors[0].measured_class == "harmful_3_1"
