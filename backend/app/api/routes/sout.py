@@ -40,6 +40,10 @@ from app.services.sout_print import (
     render_sout_card,
     render_summary_sheet,
 )
+from app.services.sout_declaration import (
+    build_declaration_projection,
+    render_declaration,
+)
 from app.models.sout import (
     SoutCampaign,
     SoutClassHistory,
@@ -58,6 +62,8 @@ from app.schemas.sout import (
     CampaignStatusUpdate,
     CampaignUpdate,
     ClassHistoryRead,
+    DeclarationPreview,
+    DeclarationRowRead,
     FactorCreate,
     FactorRead,
     FactorUpdate,
@@ -241,6 +247,36 @@ async def _load_medical_inputs(session: AsyncSession, tenant: Tenant, position_i
         ).scalars().all()
     )
     return catalog, kinds
+
+
+async def _load_declaration_pairs(session: AsyncSession, tenant: Tenant, cid: str):
+    """[(workplace, [factors]), ...] for the campaign, ordered by code."""
+    workplaces = list(
+        (
+            await session.execute(
+                select(SoutWorkplace)
+                .where(
+                    SoutWorkplace.campaign_id == cid,
+                    SoutWorkplace.tenant_id == tenant.id,
+                    SoutWorkplace.deleted_at.is_(None),
+                )
+                .order_by(SoutWorkplace.workplace_code.asc())
+            )
+        ).scalars().all()
+    )
+    pairs = []
+    for w in workplaces:
+        factors = list(
+            (
+                await session.execute(
+                    select(SoutFactor).where(
+                        SoutFactor.workplace_id == w.id, SoutFactor.tenant_id == tenant.id
+                    )
+                )
+            ).scalars().all()
+        )
+        pairs.append((w, factors))
+    return pairs
 
 
 # --- Campaigns ---
@@ -683,6 +719,46 @@ async def print_summary_sheet(
     await _require_sout_enabled(session, tenant)
     try:
         rendered = await render_summary_sheet(session, tenant=tenant, campaign_id=cid, fmt=fmt)
+    except PdfRendererUnavailable as exc:
+        raise _pdf_unavailable() from exc
+    if rendered is None:
+        raise _not_found("Campaign")
+    return _doc_response(rendered)
+
+
+@router.get("/{cid}/declaration", response_model=DeclarationPreview)
+async def get_declaration(
+    cid: str, tenant: TenantDep, session: SessionDep, access: Access
+) -> DeclarationPreview:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    await _require_sout_enabled(session, tenant)
+    campaign = await _get_campaign(session, tenant, cid)
+    pairs = await _load_declaration_pairs(session, tenant, cid)
+    rows = build_declaration_projection(campaign=campaign, workplaces_with_factors=pairs)
+    eligible = [DeclarationRowRead.model_validate(r, from_attributes=True) for r in rows if r.eligible]
+    ineligible = [DeclarationRowRead.model_validate(r, from_attributes=True) for r in rows if not r.eligible]
+    return DeclarationPreview(
+        campaign_id=cid,
+        campaign_name=campaign.name,
+        eligible=eligible,
+        ineligible=ineligible,
+        eligible_count=len(eligible),
+        ineligible_count=len(ineligible),
+    )
+
+
+@router.get("/{cid}/declaration/print")
+async def print_declaration(
+    cid: str,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: Access,
+    fmt: Literal["docx", "pdf"] = Query("docx", alias="format"),
+) -> Response:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    await _require_sout_enabled(session, tenant)
+    try:
+        rendered = await render_declaration(session, tenant=tenant, campaign_id=cid, fmt=fmt)
     except PdfRendererUnavailable as exc:
         raise _pdf_unavailable() from exc
     if rendered is None:
