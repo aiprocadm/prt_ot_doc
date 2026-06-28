@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+from typing import Literal
 
 from app.models.sout import SoutCampaignStatus, SoutClass, SoutGuaranteeKind
 from app.schemas.base import BaseSchema
@@ -197,3 +198,43 @@ class DeclarationPreview(BaseSchema):
     ineligible: list[DeclarationRowRead]
     eligible_count: int
     ineligible_count: int
+
+
+# --- Import of СОУТ report (срез-5) ---
+class ImportFactorRow(BaseSchema):
+    code: str | None
+    name: str
+    parsed_class: str | None
+    class_unparsed: str | None
+
+
+class ImportWorkplaceRow(BaseSchema):
+    row_index: int
+    workplace_code: str
+    position_name: str
+    parsed_class: str | None
+    current_class: str | None
+    change: Literal["new", "changed", "unchanged", "removed"]
+    factors: list[ImportFactorRow]
+    errors: list[str]
+    warnings: list[str]
+
+
+class ImportPreview(BaseSchema):
+    campaign_id: str
+    rows: list[ImportWorkplaceRow]
+    new_count: int
+    changed_count: int
+    unchanged_count: int
+    removed_count: int
+    error_count: int
+    can_apply: bool
+
+
+class ImportResult(BaseSchema):
+    campaign_id: str
+    created: int
+    updated: int
+    skipped: int
+    removed_detected: int
+    errors: list[str]
