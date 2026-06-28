@@ -45,6 +45,9 @@ runtime-dev.db
 !.vscode/
 !.vscode/settings.json
 
+# Claude Code — персональные настройки машины (общий settings.json остаётся в git)
+.claude/settings.local.json
+
 # Logs and artifacts
 *.log
 artifacts/
