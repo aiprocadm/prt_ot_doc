@@ -12,6 +12,7 @@ from sqlalchemy.exc import OperationalError, ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.api.helpers.upload import reject_oversize_upload
 from app.core.security import AccessContext, abac
 from app.models.models import Tenant
 from app.modules.client_portal.services import ClientPortalService
@@ -178,6 +179,12 @@ async def uploads(
     *,
     access: PortalAccess,
 ):
+    reject_oversize_upload(
+        file,
+        code="PORTAL_UPLOAD_TOO_LARGE",
+        error_type="client_portal",
+        message="Загружаемый файл превышает максимальный размер",
+    )
     return {"tenant_id": str(tenant.id), "filename": file.filename, "size": len(await file.read())}
 
 

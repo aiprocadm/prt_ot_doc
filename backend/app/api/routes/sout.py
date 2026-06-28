@@ -14,7 +14,7 @@ from app.api.helpers.etag import (
     build_not_modified_headers,
     compute_list_etag,
 )
-from app.core.config import get_settings
+from app.api.helpers.upload import reject_oversize_upload
 from app.core.errors import api_problem_detail
 from app.core.feature_flags import is_feature_enabled
 from app.core.security import AccessContext, abac
@@ -806,16 +806,7 @@ async def print_declaration(
 
 
 def _reject_oversize(file: UploadFile) -> None:
-    max_bytes = get_settings().max_upload_size
-    if (getattr(file, "size", None) or 0) > max_bytes:
-        raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail=api_problem_detail(
-                code="SOUT_IMPORT_TOO_LARGE",
-                message="Файл превышает максимальный размер загрузки",
-                error_type="sout",
-            ),
-        )
+    reject_oversize_upload(file, code="SOUT_IMPORT_TOO_LARGE", error_type="sout")
 
 
 def _unsupported_format(exc: UnsupportedImportFormat) -> HTTPException:

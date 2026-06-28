@@ -20,6 +20,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.api.helpers.upload import reject_oversize_upload
 from app.core.idempotency import compute_request_hash
 from app.models.document import DocumentVersion
 from app.models.models import Tenant
@@ -54,6 +55,12 @@ async def create_replace_map(
     tenant: Tenant = Depends(get_tenant_record),
 ) -> ReplaceMapRead:
     if replace_csv is not None:
+        reject_oversize_upload(
+            replace_csv,
+            code="REPLACE_MAP_UPLOAD_TOO_LARGE",
+            error_type="replace",
+            message="Файл карты замен превышает максимальный размер загрузки",
+        )
         rules = parse_replace_csv(await replace_csv.read())
         data = ReplaceMapCreate(
             code=replace_csv.filename or "replace_map",

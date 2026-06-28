@@ -20,6 +20,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.api.helpers.upload import reject_oversize_upload
 from app.api.tenant_row_http import enforce_row_belongs_to_tenant
 from app.core.idempotency import compute_request_hash
 from app.core.security import AccessContext, abac
@@ -631,6 +632,12 @@ async def upload_multipart_v1(
     access: AccessContext = WRITE_ACCESS_DEP,
 ) -> FinalizeUploadResponse:
     _enforce_access_role(access, _FILE_UPLOAD_ROLES)
+    reject_oversize_upload(
+        file,
+        code="FILE_UPLOAD_TOO_LARGE",
+        error_type="files",
+        message="Загружаемый файл превышает максимальный размер",
+    )
     svc = service.FileService(session=session, tenant_id=str(tenant.id))
     filename = file.filename or "upload.bin"
     content_type = file.content_type or "application/octet-stream"
