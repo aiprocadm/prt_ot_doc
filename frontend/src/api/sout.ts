@@ -123,6 +123,45 @@ export interface SoutDeclarationPreview {
   ineligible_count: number;
 }
 
+export interface SoutImportFactorRow {
+  code: string | null;
+  name: string;
+  parsed_class: string | null;
+  class_unparsed: string | null;
+}
+
+export interface SoutImportWorkplaceRow {
+  row_index: number;
+  workplace_code: string;
+  position_name: string;
+  parsed_class: string | null;
+  current_class: string | null;
+  change: "new" | "changed" | "unchanged" | "removed";
+  factors: SoutImportFactorRow[];
+  errors: string[];
+  warnings: string[];
+}
+
+export interface SoutImportPreview {
+  campaign_id: string;
+  rows: SoutImportWorkplaceRow[];
+  new_count: number;
+  changed_count: number;
+  unchanged_count: number;
+  removed_count: number;
+  error_count: number;
+  can_apply: boolean;
+}
+
+export interface SoutImportResult {
+  campaign_id: string;
+  created: number;
+  updated: number;
+  skipped: number;
+  removed_detected: number;
+  errors: string[];
+}
+
 // ── API ────────────────────────────────────────────────────────────────────
 
 const base = "/sout";
@@ -195,5 +234,17 @@ export const soutApi = {
       responseType: "blob",
     });
     downloadBlob(data, `sout-declaration-${nameHint ?? campaignId}.${fmt}`);
+  },
+
+  async previewImport(campaignId: string, file: File): Promise<SoutImportPreview> {
+    const form = new FormData();
+    form.append("file", file);
+    return (await apiClient.post<SoutImportPreview>(`${base}/${campaignId}/import/preview`, form)).data;
+  },
+
+  async applyImport(campaignId: string, file: File): Promise<SoutImportResult> {
+    const form = new FormData();
+    form.append("file", file);
+    return (await apiClient.post<SoutImportResult>(`${base}/${campaignId}/import/apply`, form)).data;
   },
 };
