@@ -4,7 +4,7 @@ from __future__ import annotations
 from typing import Annotated, Literal
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, Response, UploadFile, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -44,6 +44,12 @@ from app.services.sout_declaration import (
     build_declaration_projection,
     render_declaration,
 )
+from app.services.sout_import import (
+    ImportValidationError,
+    apply_import,
+    preview_import,
+)
+from app.domains.sout.import_report import UnsupportedImportFormat
 from app.models.sout import (
     SoutCampaign,
     SoutClassHistory,
@@ -64,6 +70,8 @@ from app.schemas.sout import (
     ClassHistoryRead,
     DeclarationPreview,
     DeclarationRowRead,
+    ImportPreview,
+    ImportResult,
     FactorCreate,
     FactorRead,
     FactorUpdate,
@@ -764,3 +772,72 @@ async def print_declaration(
     if rendered is None:
         raise _not_found("Campaign")
     return _doc_response(rendered)
+
+
+def _unsupported_format(exc: UnsupportedImportFormat) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        detail=api_problem_detail(
+            code="SOUT_IMPORT_FORMAT", message=str(exc), error_type="sout"
+        ),
+    )
+
+
+def _import_invalid(exc: ImportValidationError) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        detail=api_problem_detail(
+            code="SOUT_IMPORT_INVALID", message="; ".join(exc.errors), error_type="sout"
+        ),
+    )
+
+
+@router.post("/{cid}/import/preview", response_model=ImportPreview)
+async def import_preview(
+    cid: str,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: Access,
+    file: Annotated[UploadFile, File()],
+) -> ImportPreview:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    await _require_sout_enabled(session, tenant)
+    content = await file.read()
+    try:
+        outcome = await preview_import(
+            session, tenant=tenant, campaign_id=cid, content=content, filename=file.filename or ""
+        )
+    except UnsupportedImportFormat as exc:
+        raise _unsupported_format(exc)
+    if outcome is None:
+        raise _not_found("Campaign")
+    return outcome
+
+
+@router.post("/{cid}/import/apply", response_model=ImportResult)
+async def import_apply(
+    cid: str,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: Access,
+    file: Annotated[UploadFile, File()],
+) -> ImportResult:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    await _require_sout_enabled(session, tenant)
+    campaign = await _get_campaign(session, tenant, cid)
+    try:
+        ensure_campaign_open(campaign.status)
+    except CampaignTransitionError as exc:
+        raise _conflict(exc)
+    content = await file.read()
+    try:
+        result = await apply_import(
+            session, tenant=tenant, campaign_id=cid, content=content, filename=file.filename or ""
+        )
+    except UnsupportedImportFormat as exc:
+        raise _unsupported_format(exc)
+    except ImportValidationError as exc:
+        raise _import_invalid(exc)
+    if result is None:
+        raise _not_found("Campaign")
+    return result
