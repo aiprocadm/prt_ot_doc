@@ -1,4 +1,6 @@
 """Юниты чистого домена импорта СОУТ (без БД, без async)."""
+import pytest
+
 from app.domains.sout.import_report import (
     DiffRow,
     ParsedFactor,
@@ -68,8 +70,12 @@ def test_diff_campaign_classifies():
 
 
 def test_parse_report_rejects_unknown_extension():
-    try:
+    with pytest.raises(UnsupportedImportFormat):
         parse_report(b"x", "report.pdf")
-        assert False, "expected UnsupportedImportFormat"
-    except UnsupportedImportFormat:
-        pass
+
+
+def test_validate_no_error_when_class_blank_on_overall_workplace():
+    # РМ без класса вовсе — допустимо, не блокирующая ошибка
+    wp = ParsedWorkplace("РМ-7", "Слесарь", None, None, [])
+    issues = validate_parsed([wp])
+    assert issues[0].errors == []

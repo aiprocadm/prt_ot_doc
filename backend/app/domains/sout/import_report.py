@@ -113,6 +113,9 @@ def _rows_to_workplaces(dict_rows) -> list[ParsedWorkplace]:
             order.append(code)
         else:
             wp = by_code[code]
+            # Класс может стоять не в первой строке РМ — добираем его, если первая была пустой.
+            if wp.assessed_class is None and wp.class_unparsed is None and ac_val is not None:
+                wp.assessed_class = ac_val
             # повторная строка с тем же кодом: конфликт, если непустой класс/должность отличаются
             if pos and pos != wp.position_name:
                 wp.conflict = True
@@ -195,7 +198,7 @@ def parse_report(content: bytes, filename: str) -> list[ParsedWorkplace]:
     raise UnsupportedImportFormat(f"неподдерживаемый формат файла: {filename}")
 
 
-def validate_parsed(workplaces) -> dict[int, RowIssues]:
+def validate_parsed(workplaces: list[ParsedWorkplace]) -> dict[int, RowIssues]:
     issues: dict[int, RowIssues] = {}
     for i, wp in enumerate(workplaces):
         ri = RowIssues()
@@ -218,7 +221,7 @@ def validate_parsed(workplaces) -> dict[int, RowIssues]:
     return issues
 
 
-def diff_campaign(parsed, existing) -> list[DiffRow]:
+def diff_campaign(parsed: list[ParsedWorkplace], existing: list[tuple[str, str | None]]) -> list[DiffRow]:
     """existing: list[(workplace_code, assessed_class_value)]."""
     existing_map = {code: cls for code, cls in existing}
     seen: set[str] = set()
@@ -232,7 +235,9 @@ def diff_campaign(parsed, existing) -> list[DiffRow]:
         else:
             change = "unchanged"
         out.append(DiffRow(wp.workplace_code, change, wp.assessed_class, existing_map.get(wp.workplace_code)))
+    seen_removed: set[str] = set()
     for code, cls in existing:
-        if code not in seen:
+        if code not in seen and code not in seen_removed:
+            seen_removed.add(code)
             out.append(DiffRow(code, "removed", None, cls))
     return out
