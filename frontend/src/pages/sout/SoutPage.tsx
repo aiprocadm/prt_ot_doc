@@ -3,6 +3,7 @@ import { toast } from "sonner";
 
 import {
   soutApi,
+  type CascadePreview as CascadePreviewData,
   type NormSuggestions as NormSuggestionsData,
   type SoutCampaign,
   type SoutCampaignReport,
@@ -261,6 +262,109 @@ const NormSuggestionsSection = ({ workplaceId }: NormSuggestionsProps) => {
             <p className="text-xs italic text-muted-foreground">
               Подтвердите в разделе СИЗ / Медосмотры
             </p>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+};
+
+// ── Cascade SOUT class → norms (lazy, per workplace) ────────────────────────
+
+interface CascadeSectionProps {
+  workplaceId: string;
+}
+
+export const CascadeSection = ({ workplaceId }: CascadeSectionProps) => {
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [applying, setApplying] = useState(false);
+  const [error, setError] = useState<ApiError | null>(null);
+  const [data, setData] = useState<CascadePreviewData | null>(null);
+  const [done, setDone] = useState<string | null>(null);
+
+  const loadPreview = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      setData(await soutApi.previewCascade(workplaceId));
+    } catch (err) {
+      setError((err as ApiError) ?? { message: "Не удалось загрузить каскад" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const toggle = async () => {
+    const next = !open;
+    setOpen(next);
+    if (next && data === null && !loading) await loadPreview();
+  };
+
+  const apply = async () => {
+    if (applying) return;
+    setApplying(true);
+    setError(null);
+    try {
+      const res = await soutApi.applyCascade(workplaceId);
+      setDone(`Создано: ${res.created}, переклассифицировано: ${res.reclassified}, конфликтов: ${res.conflicts}`);
+      await loadPreview();
+    } catch (err) {
+      setError((err as ApiError) ?? { message: "Не удалось применить каскад" });
+    } finally {
+      setApplying(false);
+    }
+  };
+
+  const opLabel = (op: string) =>
+    op === "create" ? "создать" : op === "reclass" ? "проставить класс" : "конфликт";
+
+  return (
+    <div className="space-y-2">
+      <button
+        type="button"
+        onClick={() => void toggle()}
+        className="text-xs text-muted-foreground underline-offset-2 hover:underline"
+      >
+        {open ? "Скрыть каскад в нормы" : "Каскад в нормы"}
+      </button>
+      {open ? (
+        <div className="space-y-2">
+          <ErrorState error={error ?? undefined} onRetry={() => void loadPreview()} />
+          {loading ? <LoadingScreen label="Загрузка каскада" /> : null}
+          {!loading && !error && data !== null ? (
+            <div className="space-y-2">
+              <p className="text-xs text-muted-foreground">
+                Класс СОУТ: <span className="font-medium">{data.assessed_class ?? "—"}</span>
+              </p>
+              {data.medical.length > 0 ? (
+                <ul className="space-y-1 text-xs">
+                  {data.medical.map((m) => (
+                    <li key={`casc-${m.exam_kind}`} className="flex flex-wrap items-center gap-2">
+                      <span className="font-medium">{m.exam_kind}</span>
+                      <span className="rounded bg-muted px-1">{opLabel(m.op)}</span>
+                      <span className="text-muted-foreground">{m.reason}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-xs text-muted-foreground">Изменений мед-норм нет.</p>
+              )}
+              {data.ppe_advisory.length > 0 ? (
+                <p className="text-xs italic text-muted-foreground">
+                  СИЗ: {data.ppe_advisory.length} вредных фактор(ов) без норм — заведите вручную.
+                </p>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => void apply()}
+                disabled={!data.can_apply || applying}
+                className="rounded border px-2 py-1 text-xs disabled:opacity-50"
+              >
+                {applying ? "Применение…" : "Применить"}
+              </button>
+              {done ? <p className="text-xs text-emerald-600">{done}</p> : null}
+            </div>
           ) : null}
         </div>
       ) : null}
@@ -603,6 +707,7 @@ const ReportPanel = ({ campaign }: ReportPanelProps) => {
                 ) : null}
                 <ClassHistory workplaceId={workplace.id} />
                 <NormSuggestionsSection workplaceId={workplace.id} />
+                <CascadeSection workplaceId={workplace.id} />
               </div>
             ))}
           </div>
