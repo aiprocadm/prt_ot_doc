@@ -32,6 +32,7 @@ from app.api.helpers.etag import (
     build_not_modified_headers,
     compute_list_etag,
 )
+from app.api.helpers.upload import reject_oversize_upload
 from app.core.audit_decorator import audit_operation
 from app.core.config import get_settings
 from app.core.errors import api_problem_detail
@@ -1645,6 +1646,13 @@ async def generate_document_batch(
     access: AccessContext = AccessDep,
 ) -> DocumentBatchRunRead:
     settings = get_settings()
+    reject_oversize_upload(
+        file,
+        code="DOCUMENT_BATCH_FILE_TOO_LARGE",
+        error_type="documents",
+        message="Файл пакета превышает максимальный размер загрузки",
+        max_bytes=settings.max_upload_size,
+    )
     await BillingService(session).assert_allowed(tenant, "documents.generate")
     if template_version is None or not company_id or not template_code:
         raise _documents_bad_request("template_code, template_version and company_id required")
