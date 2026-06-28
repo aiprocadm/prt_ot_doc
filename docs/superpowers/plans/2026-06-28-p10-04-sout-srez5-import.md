@@ -581,11 +581,27 @@ git commit -m "feat(sout): import preview/result schemas (срез-5)"
 
 ```python
 import pytest
-import pytest_asyncio
-from sqlalchemy import select
+from sqlalchemy import Column, String, Table, select
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+from app.db.session import TenantBase
+import app.models.sout  # noqa: F401  — регистрирует sout-таблицы в metadata
 from app.models.sout import SoutCampaign, SoutClass, SoutClassHistory, SoutFactor, SoutWorkplace
 from app.services.sout_import import ImportValidationError, apply_import, preview_import
+
+
+# Локальная in-memory SQLite сессия (паттерн test_dq_medical.py — общего conftest нет).
+@pytest.fixture()
+async def db_session():
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    if "tenant" not in TenantBase.metadata.tables:
+        Table("tenant", TenantBase.metadata, Column("id", String(36), primary_key=True))
+    async with engine.begin() as conn:
+        await conn.run_sync(TenantBase.metadata.create_all)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    async with session_factory() as session:
+        yield session
+    await engine.dispose()
 
 
 class _Tenant:
@@ -598,7 +614,7 @@ def _csv(rows: str) -> bytes:
     return (header + rows).encode("utf-8")
 
 
-@pytest_asyncio.fixture
+@pytest.fixture()
 async def campaign(db_session):
     t = _Tenant()
     c = SoutCampaign(tenant_id=t.id, name="СОУТ 2026")
@@ -678,7 +694,7 @@ async def test_apply_idempotent_second_run_is_noop(db_session, campaign):
     assert result.created == 0 and result.updated == 0 and result.skipped == 1
 ```
 
-> **Note:** тест использует фикстуру `db_session` из `backend/tests/conftest.py` (та же, что в `test_sout_service.py`/`test_sout_api.py`). Если имя другое — взять фактическое из соседних СОУТ-тестов. `pytest_asyncio` уже в зависимостях контура.
+> **Note:** общего conftest-fixture для async-сессии в репо нет — DB-тесты определяют локальную in-memory SQLite сессию (паттерн `test_dq_medical.py`, воспроизведён выше). `import app.models.sout` обязателен, чтобы sout-таблицы зарегистрировались в `TenantBase.metadata` до `create_all`. FK на person/position/risk_hazards в SQLite не мешают `create_all` (FK к отсутствующей таблице не ломает DDL).
 
 - [ ] **Step 2: Run test to verify it fails**
 
