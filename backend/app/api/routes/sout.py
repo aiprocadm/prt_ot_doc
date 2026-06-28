@@ -51,6 +51,7 @@ from app.services.sout_import import (
     apply_import,
     preview_import,
 )
+from app.services.sout_cascade import apply_cascade, preview_cascade
 from app.models.sout import (
     SoutCampaign,
     SoutClassHistory,
@@ -68,6 +69,8 @@ from app.schemas.sout import (
     CampaignReport,
     CampaignStatusUpdate,
     CampaignUpdate,
+    CascadePreview,
+    CascadeResult,
     ClassHistoryRead,
     DeclarationPreview,
     DeclarationRowRead,
@@ -565,6 +568,33 @@ async def get_norm_suggestions(
         existing_norm_kinds=existing_kinds,
     )
     return NormSuggestions(ppe=ppe, medical=medical)
+
+
+@router.get("/workplaces/{wid}/cascade/preview", response_model=CascadePreview)
+async def cascade_preview(
+    wid: str, tenant: TenantDep, session: SessionDep, access: Access
+) -> CascadePreview:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    await _require_sout_enabled(session, tenant)
+    preview = await preview_cascade(session, tenant, wid)
+    if preview is None:
+        raise _not_found("Workplace")
+    return preview
+
+
+@router.post("/workplaces/{wid}/cascade/apply", response_model=CascadeResult)
+async def cascade_apply(
+    wid: str, tenant: TenantDep, session: SessionDep, access: Access
+) -> CascadeResult:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    await _require_sout_enabled(session, tenant)
+    try:
+        result = await apply_cascade(session, tenant, wid)
+    except CampaignTransitionError as exc:
+        raise _conflict(exc)
+    if result is None:
+        raise _not_found("Workplace")
+    return result
 
 
 # --- Factors ---

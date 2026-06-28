@@ -104,6 +104,31 @@ export interface NormSuggestions {
   medical: MedicalExamSuggestion[];
 }
 
+export interface CascadeMedicalAction {
+  exam_kind: string;
+  op: "create" | "reclass" | "conflict";
+  periodicity_months: number;
+  interval_days: number;
+  target_class: string;
+  current_class: string | null;
+  factor_codes: string[];
+  reason: string;
+}
+
+export interface CascadePreview {
+  assessed_class: string | null;
+  can_apply: boolean;
+  medical: CascadeMedicalAction[];
+  ppe_advisory: PpeNormSuggestion[];
+}
+
+export interface CascadeResult {
+  created: number;
+  reclassified: number;
+  conflicts: number;
+  ppe_advisory_count: number;
+}
+
 export interface SoutDeclarationRow {
   workplace_code: string;
   position_name: string;
@@ -198,6 +223,14 @@ export const soutApi = {
 
   async getNormSuggestions(workplaceId: string): Promise<NormSuggestions> {
     return (await apiClient.get<NormSuggestions>(`${base}/workplaces/${workplaceId}/norm-suggestions`)).data;
+  },
+
+  async previewCascade(workplaceId: string): Promise<CascadePreview> {
+    return (await apiClient.get<CascadePreview>(`${base}/workplaces/${workplaceId}/cascade/preview`)).data;
+  },
+
+  async applyCascade(workplaceId: string): Promise<CascadeResult> {
+    return (await apiClient.post<CascadeResult>(`${base}/workplaces/${workplaceId}/cascade/apply`)).data;
   },
 
   async linkWorkplacePosition(workplaceId: string, positionId: string): Promise<void> {
