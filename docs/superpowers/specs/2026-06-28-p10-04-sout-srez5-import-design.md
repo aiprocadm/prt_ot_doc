@@ -54,7 +54,7 @@ class ParsedWorkplace:
 - `parse_report(content: bytes, filename: str) -> list[ParsedWorkplace]` — диспетчер по расширению (`.csv`→csv, `.xlsx`→xlsx, `.xml`→xml); неизвестное → `UnsupportedImportFormat` (исключение домена).
 
 **Валидация** `validate_parsed(rows) -> dict[int, RowIssues]` (по индексу строки):
-- **Блокирующие ошибки:** пустой `workplace_code`; пустой `position_name`; `class_unparsed` не пуст (assessed_class не разобран); дубль `workplace_code` в файле.
+- **Блокирующие ошибки:** пустой `workplace_code`; пустой `position_name`; `class_unparsed` не пуст (assessed_class не разобран); **конфликтующий дубль** `workplace_code` (один код встретился с разными классом/должностью в разных строках). Обычный повтор кода (несколько факторов одного РМ) — НЕ ошибка, строки штатно группируются в один РМ.
 - **Предупреждения (не блокируют):** assessed_class ∈ {`optimal`,`acceptable`} И есть фактор ∈ `HARMFUL_CLASSES` (анти-грабли согласованности, как в декларации); любой фактор с `class_unparsed` (класс фактора не разобран — фактор сохранится с `measured_class=None`).
 
 **Diff** `diff_campaign(parsed, existing) -> list[DiffRow]` (чистая функция над двумя нормализованными коллекциями; `existing` — список `(workplace_code, assessed_class_value)`):
@@ -135,7 +135,7 @@ class ImportResult(BaseSchema):
 | Пустой `workplace_code` | блокирующая | строка в ошибки, `can_apply=false` |
 | Пустой `position_name` | блокирующая | то же |
 | `assessed_class` не разобран | блокирующая | то же (исходная строка в сообщении) |
-| Дубль `workplace_code` в файле | блокирующая | обе строки помечаются |
+| Конфликтующий дубль `workplace_code` (разные класс/должность) | блокирующая | РМ помечается; обычный повтор-для-факторов не ошибка |
 | Класс 1-2 + фактор ≥3.1 | предупреждение | не блокирует apply; видно в preview |
 | Класс фактора не разобран | предупреждение | фактор сохраняется с `measured_class=None` |
 
