@@ -424,8 +424,8 @@ const ReportPanel = ({ campaign }: ReportPanelProps) => {
             </p>
             {declaration.ineligible.length > 0 ? (
               <ul className="mt-1 list-disc pl-5 text-xs text-muted-foreground">
-                {declaration.ineligible.map((r) => (
-                  <li key={r.workplace_code}>
+                {declaration.ineligible.map((r, i) => (
+                  <li key={`${r.workplace_code}-${i}`}>
                     {r.workplace_code} · {r.position_name} — {r.ineligible_reason}
                   </li>
                 ))}
