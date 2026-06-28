@@ -177,3 +177,23 @@ class MedicalExamSuggestion(BaseSchema):
 class NormSuggestions(BaseSchema):
     ppe: list[PpeNormSuggestion]
     medical: list[MedicalExamSuggestion]
+
+
+# --- Declaration of conformity (срез-4) ---
+class DeclarationRowRead(BaseSchema):
+    workplace_code: str
+    position_name: str
+    assessed_class: str | None
+    headcount: str
+    report_ref: str | None
+    eligible: bool
+    ineligible_reason: str | None
+
+
+class DeclarationPreview(BaseSchema):
+    campaign_id: str
+    campaign_name: str
+    eligible: list[DeclarationRowRead]
+    ineligible: list[DeclarationRowRead]
+    eligible_count: int
+    ineligible_count: int

@@ -104,6 +104,25 @@ export interface NormSuggestions {
   medical: MedicalExamSuggestion[];
 }
 
+export interface SoutDeclarationRow {
+  workplace_code: string;
+  position_name: string;
+  assessed_class: string | null;
+  headcount: string;
+  report_ref: string | null;
+  eligible: boolean;
+  ineligible_reason: string | null;
+}
+
+export interface SoutDeclarationPreview {
+  campaign_id: string;
+  campaign_name: string;
+  eligible: SoutDeclarationRow[];
+  ineligible: SoutDeclarationRow[];
+  eligible_count: number;
+  ineligible_count: number;
+}
+
 // ── API ────────────────────────────────────────────────────────────────────
 
 const base = "/sout";
@@ -164,5 +183,17 @@ export const soutApi = {
       responseType: "blob",
     });
     downloadBlob(data, `sout-summary-${nameHint ?? campaignId}.${fmt}`);
+  },
+
+  async getDeclaration(campaignId: string): Promise<SoutDeclarationPreview> {
+    return (await apiClient.get<SoutDeclarationPreview>(`${base}/${campaignId}/declaration`)).data;
+  },
+
+  async downloadDeclaration(campaignId: string, fmt: "docx" | "pdf", nameHint?: string): Promise<void> {
+    const { data } = await apiClient.get<Blob>(`${base}/${campaignId}/declaration/print`, {
+      params: { format: fmt },
+      responseType: "blob",
+    });
+    downloadBlob(data, `sout-declaration-${nameHint ?? campaignId}.${fmt}`);
   },
 };

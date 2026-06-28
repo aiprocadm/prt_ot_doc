@@ -7,6 +7,7 @@ import {
   type SoutCampaign,
   type SoutCampaignReport,
   type SoutClassHistoryEntry,
+  type SoutDeclarationPreview,
 } from "@/api/sout";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
@@ -322,6 +323,29 @@ const ReportPanel = ({ campaign }: ReportPanelProps) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
   const [report, setReport] = useState<SoutCampaignReport | null>(null);
+  const [declaration, setDeclaration] = useState<SoutDeclarationPreview | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    void soutApi
+      .getDeclaration(campaign.id)
+      .then((d) => { if (active) setDeclaration(d); })
+      .catch(() => { if (active) setDeclaration(null); });
+    return () => { active = false; };
+  }, [campaign.id]);
+
+  const handleDeclarationDownload = async (fmt: "docx" | "pdf") => {
+    try {
+      await soutApi.downloadDeclaration(campaign.id, fmt, campaign.name);
+    } catch (e: unknown) {
+      const status = (e as { response?: { status?: number } })?.response?.status;
+      toast.error(
+        fmt === "pdf" && status === 503
+          ? "PDF-конвертер недоступен, скачайте DOCX"
+          : "Не удалось скачать документ",
+      );
+    }
+  };
 
   const load = async () => {
     setLoading(true);
@@ -380,10 +404,35 @@ const ReportPanel = ({ campaign }: ReportPanelProps) => {
               onClick={() => void handleSummaryDownload("pdf")}>
               Сводная PDF
             </Button>
+            <Button type="button" size="sm" variant="outline"
+              onClick={() => void handleDeclarationDownload("docx")}>
+              Декларация DOCX
+            </Button>
+            <Button type="button" size="sm" variant="outline"
+              onClick={() => void handleDeclarationDownload("pdf")}>
+              Декларация PDF
+            </Button>
           </span>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
+        {declaration !== null ? (
+          <div className="rounded-md border border-border p-3 text-sm" data-testid="sout-declaration-summary">
+            <p className="font-medium">Декларация соответствия (класс 1-2)</p>
+            <p className="text-muted-foreground">
+              Подлежат декларированию: {declaration.eligible_count} · не подлежат: {declaration.ineligible_count}
+            </p>
+            {declaration.ineligible.length > 0 ? (
+              <ul className="mt-1 list-disc pl-5 text-xs text-muted-foreground">
+                {declaration.ineligible.map((r, i) => (
+                  <li key={`${r.workplace_code}-${i}`}>
+                    {r.workplace_code} · {r.position_name} — {r.ineligible_reason}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+        ) : null}
         <ErrorState error={error ?? undefined} onRetry={load} />
         {loading ? <LoadingScreen label="Загрузка отчёта" /> : null}
         {!loading && !error && report !== null && report.workplaces.length === 0 ? (
