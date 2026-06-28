@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import {
@@ -8,6 +8,7 @@ import {
   type SoutCampaignReport,
   type SoutClassHistoryEntry,
   type SoutDeclarationPreview,
+  type SoutImportPreview,
 } from "@/api/sout";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
@@ -324,6 +325,48 @@ const ReportPanel = ({ campaign }: ReportPanelProps) => {
   const [error, setError] = useState<ApiError | null>(null);
   const [report, setReport] = useState<SoutCampaignReport | null>(null);
   const [declaration, setDeclaration] = useState<SoutDeclarationPreview | null>(null);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importPreview, setImportPreview] = useState<SoutImportPreview | null>(null);
+  const [importBusy, setImportBusy] = useState(false);
+  const importInputRef = useRef<HTMLInputElement>(null);
+
+  const handleImportPreview = async () => {
+    if (!importFile || importBusy) return;
+    setImportBusy(true);
+    try {
+      setImportPreview(await soutApi.previewImport(campaign.id, importFile));
+    } catch (e: unknown) {
+      const status = (e as { response?: { status?: number } })?.response?.status;
+      toast.error(status === 413
+        ? "Файл слишком большой"
+        : "Не удалось разобрать файл (проверьте формат: CSV/XLSX/XML)");
+      setImportPreview(null);
+    } finally {
+      setImportBusy(false);
+    }
+  };
+
+  const handleImportApply = async () => {
+    if (!importFile || importBusy) return;
+    setImportBusy(true);
+    try {
+      const res = await soutApi.applyImport(campaign.id, importFile);
+      toast.success(`Импорт применён: создано ${res.created}, обновлено ${res.updated}, пропущено ${res.skipped}`);
+      setImportPreview(null);
+      setImportFile(null);
+      if (importInputRef.current) importInputRef.current.value = "";
+    } catch (e: unknown) {
+      const status = (e as { response?: { status?: number } })?.response?.status;
+      toast.error(status === 409 ? "Кампания закрыта для импорта" : "Исправьте ошибки в файле и повторите");
+    } finally {
+      setImportBusy(false);
+    }
+  };
+
+  useEffect(() => {
+    setImportFile(null);
+    setImportPreview(null);
+  }, [campaign.id]);
 
   useEffect(() => {
     let active = true;
@@ -433,6 +476,45 @@ const ReportPanel = ({ campaign }: ReportPanelProps) => {
             ) : null}
           </div>
         ) : null}
+        <div className="rounded-md border border-border p-3 text-sm" data-testid="sout-import">
+          <p className="font-medium">Импорт отчёта СОУТ</p>
+          <p className="text-muted-foreground">Поддерживаются CSV, XLSX, ФГИС XML.</p>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <input
+              ref={importInputRef}
+              type="file"
+              accept=".csv,.xlsx,.xml"
+              onChange={(e) => { setImportFile(e.target.files?.[0] ?? null); setImportPreview(null); }}
+            />
+            <Button type="button" size="sm" variant="outline" disabled={!importFile || importBusy}
+              onClick={() => void handleImportPreview()}>
+              Проверить
+            </Button>
+            <Button type="button" size="sm"
+              disabled={!importPreview || !importPreview.can_apply || importBusy}
+              onClick={() => void handleImportApply()}>
+              Применить
+            </Button>
+          </div>
+          {importPreview !== null ? (
+            <div className="mt-2">
+              <p className="text-muted-foreground">
+                Новых: {importPreview.new_count} · изменённых: {importPreview.changed_count} ·
+                без изменений: {importPreview.unchanged_count} · отсутствуют в файле: {importPreview.removed_count} ·
+                ошибок: {importPreview.error_count}
+              </p>
+              <ul className="mt-1 list-disc pl-5 text-xs">
+                {importPreview.rows.map((r) => (
+                  <li key={`${r.row_index}-${r.workplace_code}`}>
+                    [{r.change}] {r.workplace_code} {r.position_name}
+                    {r.errors.length > 0 ? ` — ОШИБКИ: ${r.errors.join("; ")}` : ""}
+                    {r.warnings.length > 0 ? ` — предупр.: ${r.warnings.join("; ")}` : ""}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+        </div>
         <ErrorState error={error ?? undefined} onRetry={load} />
         {loading ? <LoadingScreen label="Загрузка отчёта" /> : null}
         {!loading && !error && report !== null && report.workplaces.length === 0 ? (
