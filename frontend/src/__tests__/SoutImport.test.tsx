@@ -7,7 +7,7 @@ vi.mock("@/api/client", () => ({
 }));
 
 describe("soutApi import methods", () => {
-  beforeEach(() => { vi.restoreAllMocks(); });
+  beforeEach(() => { vi.clearAllMocks(); });
 
   it("previewImport posts FormData to the preview endpoint", async () => {
     const { apiClient } = await import("@/api/client");
