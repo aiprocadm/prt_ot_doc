@@ -305,6 +305,7 @@ export const CascadeSection = ({ workplaceId }: CascadeSectionProps) => {
     if (applying) return;
     setApplying(true);
     setError(null);
+    setDone(null);
     try {
       const res = await soutApi.applyCascade(workplaceId);
       setDone(`Создано: ${res.created}, переклассифицировано: ${res.reclassified}, конфликтов: ${res.conflicts}`);
