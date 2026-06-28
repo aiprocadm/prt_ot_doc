@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domains.sout import import_report as imp
 from app.domains.sout.service import build_class_history_row
-from app.models.sout import SoutCampaign, SoutClass, SoutFactor, SoutWorkplace
+from app.models.sout import SoutClass, SoutFactor, SoutWorkplace
 from app.models.tenanting import Tenant
 from app.schemas.sout import (
     ImportFactorRow,
@@ -18,6 +18,7 @@ from app.schemas.sout import (
     ImportResult,
     ImportWorkplaceRow,
 )
+from app.services.sout_print import _load_campaign, _raw
 
 
 class ImportValidationError(Exception):
@@ -28,24 +29,8 @@ class ImportValidationError(Exception):
         super().__init__("; ".join(errors))
 
 
-def _raw(value):
-    return getattr(value, "value", value)
-
-
 def _to_class(value: str | None) -> SoutClass | None:
     return SoutClass(value) if value else None
-
-
-async def _load_campaign(session: AsyncSession, tenant: Tenant, cid: str) -> SoutCampaign | None:
-    return (
-        await session.execute(
-            select(SoutCampaign).where(
-                SoutCampaign.id == cid,
-                SoutCampaign.tenant_id == tenant.id,
-                SoutCampaign.deleted_at.is_(None),
-            )
-        )
-    ).scalar_one_or_none()
 
 
 async def _load_existing(session: AsyncSession, tenant: Tenant, cid: str):
@@ -72,18 +57,18 @@ def _assemble_preview(cid: str, parsed, existing_pairs) -> ImportPreview:
     rows: list[ImportWorkplaceRow] = []
     error_count = 0
     for i, wp in enumerate(parsed):
-        ri = issues.get(i, imp.RowIssues())
+        ri = issues[i]
         if ri.errors:
             error_count += 1
-        d = diff_by_code.get(wp.workplace_code)
+        d = diff_by_code[wp.workplace_code]
         rows.append(
             ImportWorkplaceRow(
                 row_index=i,
                 workplace_code=wp.workplace_code,
                 position_name=wp.position_name,
                 parsed_class=wp.assessed_class,
-                current_class=(d.current_class if d else None),
-                change=(d.change if d else "new"),
+                current_class=d.current_class,
+                change=d.change,
                 factors=[
                     ImportFactorRow(
                         code=f.code, name=f.name,
@@ -168,9 +153,11 @@ async def apply_import(
             created += 1
         elif change == "changed":
             existing = by_code[wp.workplace_code]
+            existing.position_name = wp.position_name
             old = existing.assessed_class
             new = _to_class(wp.assessed_class)
             existing.assessed_class = new
+            # NOTE: реконсиляция факторов существующего РМ на "changed" отложена (срез-6, spec §7).
             hist = build_class_history_row(
                 tenant_id=tenant.id, workplace_id=existing.id, old_class=old, new_class=new,
             )

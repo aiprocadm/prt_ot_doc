@@ -1,9 +1,17 @@
 """Тесты сервиса импорта СОУТ + схем (часть без БД)."""
 
+import pytest
+from sqlalchemy import Column, String, Table, select
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+import app.models.sout  # noqa: F401  — регистрирует sout-таблицы в metadata
+from app.db.session import TenantBase
+from app.models.sout import SoutCampaign, SoutClass, SoutClassHistory, SoutFactor, SoutWorkplace
+from app.schemas.sout import ImportFactorRow, ImportPreview, ImportWorkplaceRow
+from app.services.sout_import import ImportValidationError, apply_import, preview_import
+
 
 def test_import_preview_schema_roundtrip():
-    from app.schemas.sout import ImportFactorRow, ImportPreview, ImportWorkplaceRow
-
     row = ImportWorkplaceRow(
         row_index=0, workplace_code="РМ-01", position_name="Слесарь",
         parsed_class="acceptable", current_class=None, change="new",
@@ -16,16 +24,6 @@ def test_import_preview_schema_roundtrip():
     )
     assert preview.rows[0].change == "new"
     assert preview.can_apply is True
-
-
-import pytest
-from sqlalchemy import Column, String, Table, select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
-from app.db.session import TenantBase
-import app.models.sout  # noqa: F401  — регистрирует sout-таблицы в metadata
-from app.models.sout import SoutCampaign, SoutClass, SoutClassHistory, SoutFactor, SoutWorkplace
-from app.services.sout_import import ImportValidationError, apply_import, preview_import
 
 
 # Локальная in-memory SQLite сессия (паттерн test_dq_medical.py — общего conftest нет).
@@ -108,6 +106,20 @@ async def test_apply_creates_updates_and_writes_history(db_session, campaign):
     assert any(f.name == "Шум" and f.measured_class == SoutClass.HARMFUL_3_1 for f in factors)
     hist = (await db_session.execute(select(SoutClassHistory))).scalars().all()
     assert any(h.new_class == SoutClass.HARMFUL_3_1 for h in hist)
+    assert any(h.old_class is None and h.new_class == SoutClass.ACCEPTABLE for h in hist)
+
+
+@pytest.mark.asyncio
+async def test_apply_changed_syncs_position_name(db_session, campaign):
+    t, c = campaign
+    content = _csv("РМ-01,Слесарь-ремонтник,3.1,,\n")  # класс изменился + имя должности
+    await apply_import(db_session, tenant=t, campaign_id=c.id, content=content, filename="r.csv")
+    await db_session.flush()
+    rm01 = (await db_session.execute(
+        select(SoutWorkplace).where(SoutWorkplace.workplace_code == "РМ-01")
+    )).scalar_one()
+    assert rm01.position_name == "Слесарь-ремонтник"
+    assert rm01.assessed_class == SoutClass.HARMFUL_3_1
 
 
 @pytest.mark.asyncio
