@@ -11,8 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domains.medical.service import _load_factor_catalog
 from app.domains.sout import cascade as casc
-from app.domains.sout.lifecycle import CampaignTransitionError, ensure_campaign_open  # noqa: F401
-from app.models.models import MedicalExamKind, MedicalNorm, PPENorm, Position  # noqa: F401
+from app.domains.sout.lifecycle import ensure_campaign_open
+from app.models.models import MedicalExamKind, MedicalNorm, PPENorm
 from app.models.risk import RiskHazard
 from app.models.sout import SoutCampaign, SoutFactor, SoutWorkplace
 from app.models.tenanting import Tenant
@@ -171,7 +171,7 @@ async def apply_cascade(
                         MedicalNorm.exam_kind == MedicalExamKind(action.exam_kind),
                     )
                 )
-            ).scalar_one_or_none()
+            ).scalars().first()
             if norm is not None and norm.working_conditions_class in (None, ""):
                 norm.working_conditions_class = action.target_class
                 reclassified += 1

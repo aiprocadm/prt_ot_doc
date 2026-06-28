@@ -122,6 +122,26 @@ async def test_apply_reclass_only_when_empty(db_session, seeded):
 
 
 @pytest.mark.asyncio
+async def test_apply_reclass_picks_first_when_duplicate_general_norms(db_session, seeded):
+    """Две общие (hazard_id IS NULL) нормы одного вида осмотра легальны (NULL != NULL
+    в unique-constraint). reclass не должен падать (scalars().first()) и проставит класс."""
+    t, c, wp, pos = seeded
+    for _ in range(2):
+        db_session.add(MedicalNorm(
+            tenant_id=t.id, position_id=pos.id, exam_kind=MedicalExamKind.PERIODIC,
+            hazard_id=None, interval_days=365, working_conditions_class=None,
+        ))
+    await db_session.flush()
+    result = await apply_cascade(db_session, _Tenant(), wp.id)
+    assert result.reclassified == 1 and result.created == 0
+    norms = list((await db_session.execute(
+        select(MedicalNorm).where(MedicalNorm.position_id == pos.id)
+    )).scalars().all())
+    assert len(norms) == 2
+    assert any(n.working_conditions_class == "harmful_3_1" for n in norms)
+
+
+@pytest.mark.asyncio
 async def test_apply_conflict_not_overwritten(db_session, seeded):
     t, c, wp, pos = seeded
     db_session.add(MedicalNorm(
