@@ -164,6 +164,9 @@ def parse_fgis_xml(content: bytes) -> list[ParsedWorkplace]:
     </workplace></sout>
 
     TODO: сверить с реальной выгрузкой ФГИС СОУТ (образца в репо нет)."""
+    # TODO (hardening, deferred): xml.etree не защищён от entity-expansion (billion laughs);
+    # при появлении defusedxml в зависимостях перейти на defusedxml.ElementTree.fromstring.
+    # Сейчас риск ограничен: эндпоинт admin-only + size-guard; stdlib-парсинг — репо-конвенция.
     root = ET.fromstring(content)
     out: list[ParsedWorkplace] = []
     for wp_el in root.iter("workplace"):

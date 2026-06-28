@@ -123,7 +123,11 @@ async def apply_import(
         return None
     parsed = imp.parse_report(content, filename)
     issues = imp.validate_parsed(parsed)
-    blocking = [f"строка {i + 1}: {e}" for i, ri in issues.items() for e in ri.errors]
+    blocking = [
+        f"{parsed[i].workplace_code or f'строка {i + 1}'}: {e}"
+        for i, ri in issues.items()
+        for e in ri.errors
+    ]
     if blocking:
         raise ImportValidationError(blocking)
     existing_pairs, by_code = await _load_existing(session, tenant, campaign_id)
