@@ -180,6 +180,32 @@ class NormSuggestions(BaseSchema):
     medical: list[MedicalExamSuggestion]
 
 
+# --- Class cascade (срез-6) ---
+class CascadeMedicalAction(BaseSchema):
+    exam_kind: str
+    op: Literal["create", "reclass", "conflict"]
+    periodicity_months: int
+    interval_days: int
+    target_class: str
+    current_class: str | None = None
+    factor_codes: list[str] = []
+    reason: str
+
+
+class CascadePreview(BaseSchema):
+    assessed_class: str | None
+    can_apply: bool
+    medical: list[CascadeMedicalAction] = []
+    ppe_advisory: list[PpeNormSuggestion] = []
+
+
+class CascadeResult(BaseSchema):
+    created: int
+    reclassified: int
+    conflicts: int
+    ppe_advisory_count: int
+
+
 # --- Declaration of conformity (срез-4) ---
 class DeclarationRowRead(BaseSchema):
     workplace_code: str
