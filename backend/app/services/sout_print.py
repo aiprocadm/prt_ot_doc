@@ -27,7 +27,9 @@ _PDF_TIMEOUT_S = 45
 
 # Кампания РМ удалена, а РМ выжил (edge-case: campaign_id — non-nullable FK,
 # но кампанию могли soft-delete). Карту рендерим без реквизитов кампании.
-_EMPTY_CAMPAIGN = SimpleNamespace(name=None, expert_org_name=None, report_number=None, report_date=None)
+_EMPTY_CAMPAIGN = SimpleNamespace(
+    name=None, expert_org_name=None, report_number=None, report_date=None
+)
 
 
 class PdfRendererUnavailable(Exception):
@@ -53,7 +55,7 @@ def _iso(value) -> str | None:
 
 
 def _org_header(tenant: Tenant) -> str:
-    return getattr(tenant, "name", None) or getattr(tenant, "slug", "")
+    return str(getattr(tenant, "name", None) or getattr(tenant, "slug", "") or "")
 
 
 # --- чистая сборка снимков (тестируется без БД) ---
@@ -162,7 +164,9 @@ async def _load_factors(session: AsyncSession, tenant: Tenant, wid: str) -> list
                     SoutFactor.workplace_id == wid, SoutFactor.tenant_id == tenant.id
                 )
             )
-        ).scalars().all()
+        )
+        .scalars()
+        .all()
     )
 
 
@@ -174,7 +178,9 @@ async def _load_guarantees(session: AsyncSession, tenant: Tenant, wid: str) -> l
                     SoutGuarantee.workplace_id == wid, SoutGuarantee.tenant_id == tenant.id
                 )
             )
-        ).scalars().all()
+        )
+        .scalars()
+        .all()
     )
 
 
@@ -219,7 +225,9 @@ async def render_summary_sheet(
                 )
                 .order_by(SoutWorkplace.workplace_code.asc())
             )
-        ).scalars().all()
+        )
+        .scalars()
+        .all()
     )
     pairs = [(wp, await _load_factors(session, tenant, wp.id)) for wp in workplaces]
     data = _summary_print_data(

@@ -95,7 +95,13 @@ def build_contingent_register_docx(data: RegisterPrintData) -> bytes:
         tbl = doc.add_table(rows=1, cols=5)
         tbl.style = "Table Grid"
         for i, title in enumerate(
-            ["Должность", "Вредные факторы (29н)", "Численность", "Виды осмотров", "Периодичность, мес."]
+            [
+                "Должность",
+                "Вредные факторы (29н)",
+                "Численность",
+                "Виды осмотров",
+                "Периодичность, мес.",
+            ]
         ):
             tbl.rows[0].cells[i].text = title
         for r in data.rows:

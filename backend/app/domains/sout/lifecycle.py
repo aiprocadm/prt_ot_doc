@@ -3,6 +3,7 @@
 No DB access — callers pass current/target states. Mirrors the
 committees/work_permits lifecycle style (raise a typed error; route maps to 409).
 """
+
 from __future__ import annotations
 
 from datetime import date
@@ -38,9 +39,7 @@ class CampaignTransitionError(ValueError):
     """Raised on an illegal campaign transition or edit of a closed campaign."""
 
 
-def validate_campaign_transition(
-    current: SoutCampaignStatus, target: SoutCampaignStatus
-) -> None:
+def validate_campaign_transition(current: SoutCampaignStatus, target: SoutCampaignStatus) -> None:
     if target not in _ALLOWED.get(current, set()):
         raise CampaignTransitionError(
             f"Cannot transition campaign {current.value} -> {target.value}"

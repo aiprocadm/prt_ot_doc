@@ -90,7 +90,9 @@ class WorkTypeProfile:
     code: str
     label: str
     legal_reference: str
-    structured_kind: str | None  # "safety_systems" | "confined_env" | "fire_safety" | "gas_works" | "electrical_safety" | "excavation_safety" | None
+    structured_kind: (
+        str | None
+    )  # "safety_systems" | "confined_env" | "fire_safety" | "gas_works" | "electrical_safety" | "excavation_safety" | None
 
 
 PROFILES: dict[str, WorkTypeProfile] = {
@@ -194,7 +196,9 @@ def validate_type_specific(work_type: str, payload: dict | None) -> None:
         unknown = set(payload) - {"fire_fighting_means", "gas_analysis"}
         if unknown:
             raise ValueError(f"unknown type_specific keys: {sorted(unknown)}")
-        _validate_code_list(payload.get("fire_fighting_means"), FIRE_FIGHTING_MEANS, "fire_fighting_means")
+        _validate_code_list(
+            payload.get("fire_fighting_means"), FIRE_FIGHTING_MEANS, "fire_fighting_means"
+        )
         _validate_gas_analysis(payload.get("gas_analysis"))
     elif kind == "gas_works":
         unknown = set(payload) - {"respiratory_ppe", "gas_analysis"}
@@ -206,7 +210,9 @@ def validate_type_specific(work_type: str, payload: dict | None) -> None:
         unknown = set(payload) - {"technical_measures", "voltage_condition", "voltage_level"}
         if unknown:
             raise ValueError(f"unknown type_specific keys: {sorted(unknown)}")
-        _validate_code_list(payload.get("technical_measures"), ELECTRICAL_MEASURES, "technical_measures")
+        _validate_code_list(
+            payload.get("technical_measures"), ELECTRICAL_MEASURES, "technical_measures"
+        )
         vc = payload.get("voltage_condition")
         if vc is not None and vc not in VOLTAGE_CONDITIONS:
             raise ValueError(f"invalid voltage_condition: {vc!r}")
@@ -308,7 +314,10 @@ def build_structured_section(
         measures = ts.get("technical_measures") or []
         if measures:
             kv.append(
-                ("Технические мероприятия", "; ".join(ELECTRICAL_MEASURES.get(m, m) for m in measures))
+                (
+                    "Технические мероприятия",
+                    "; ".join(ELECTRICAL_MEASURES.get(m, m) for m in measures),
+                )
             )
         if not kv:
             return None
@@ -326,7 +335,5 @@ def build_structured_section(
             kv.append(("Подземные коммуникации", ", ".join(UTILITIES.get(u, u) for u in utils)))
         if not kv:
             return None
-        return pf.StructuredSection(
-            title="Безопасность земляных работ (883н)", kv=kv, table=None
-        )
+        return pf.StructuredSection(title="Безопасность земляных работ (883н)", kv=kv, table=None)
     return None

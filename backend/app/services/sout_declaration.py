@@ -2,6 +2,7 @@
 
 Зеркало services/sout_print.py. Переиспользует RenderedDoc / PdfRendererUnavailable
 / _to_pdf / helpers из sout_print (один контур СОУТ — DRY)."""
+
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -15,14 +16,14 @@ from app.models.sout import SoutWorkplace
 from app.models.tenanting import Tenant
 from app.services.sout_print import (
     _DOCX_MEDIA,
+    PdfRendererUnavailable,  # noqa: F401  (re-export for route import symmetry)
+    RenderedDoc,
     _iso,
     _load_campaign,
     _load_factors,
     _org_header,
     _raw,
     _to_pdf,
-    PdfRendererUnavailable,  # noqa: F401  (re-export for route import symmetry)
-    RenderedDoc,
 )
 
 
@@ -82,7 +83,9 @@ async def _load_workplaces(session: AsyncSession, tenant: Tenant, cid: str) -> l
                 )
                 .order_by(SoutWorkplace.workplace_code.asc())
             )
-        ).scalars().all()
+        )
+        .scalars()
+        .all()
     )
 
 

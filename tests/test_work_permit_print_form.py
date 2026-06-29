@@ -49,7 +49,10 @@ def _sample() -> WorkPermitPrintData:
         measures_during="наблюдение",
         special_conditions="—",
         ppe_text="каска, строп",
-        members=[("Производитель работ", "Иванов И.И."), ("Допускающий", "Петров П.П.")],
+        members=[
+            ("Производитель работ", "Иванов И.И.", None),
+            ("Допускающий", "Петров П.П.", None),
+        ],
         briefing={
             "conducted_by_fio": "Иванов И.И.",
             "conducted_at": "2026-06-20 07:45",

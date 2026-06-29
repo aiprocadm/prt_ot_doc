@@ -594,8 +594,8 @@ async def _seed_committees_demo(session, tenant_db_id: str) -> None:
         CommitteeAgendaItem,
         CommitteeDecision,
         CommitteeDecisionTask,
-        CommitteeMeeting,
         CommitteeKind,
+        CommitteeMeeting,
         DecisionTaskStatus,
         MeetingStatus,
     )
@@ -685,9 +685,7 @@ async def _seed_committees_demo(session, tenant_db_id: str) -> None:
         )
     ).scalar_one_or_none()
     if enablement is None:
-        session.add(
-            FeatureEnablement(tenant_id=tenant_db_id, feature_id=feature.id, on=True)
-        )
+        session.add(FeatureEnablement(tenant_id=tenant_db_id, feature_id=feature.id, on=True))
 
 
 async def _seed_sout_demo(session, tenant_db_id: str, position_id: str | None = None) -> None:
@@ -795,9 +793,7 @@ async def _seed_sout_demo(session, tenant_db_id: str, position_id: str | None = 
         )
     ).scalar_one_or_none()
     if enablement is None:
-        session.add(
-            FeatureEnablement(tenant_id=tenant_db_id, feature_id=feature.id, on=True)
-        )
+        session.add(FeatureEnablement(tenant_id=tenant_db_id, feature_id=feature.id, on=True))
 
 
 async def bootstrap_demo_tenant(settings: Settings) -> None:
@@ -1032,7 +1028,9 @@ async def bootstrap_demo_tenant(settings: Settings) -> None:
 
         await ensure_default_packs(session, tenant_slug=tenant_slug)
         await _seed_committees_demo(session, tenant_db_id)
-        await _seed_sout_demo(session, tenant_db_id, str(position.id) if position is not None else None)
+        await _seed_sout_demo(
+            session, tenant_db_id, str(position.id) if position is not None else None
+        )
         logger.info(
             "demo.bootstrap.done",
             extra={"tenant": tenant_slug, "company": company_name, "site": site_name},

@@ -5,6 +5,7 @@
 но НЕ пропускает существующие нормы — каскаду нужны все требуемые виды осмотров,
 чтобы классифицировать каждое действие как create/reclass/conflict.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -68,7 +69,9 @@ def build_cascade_plan(
         if kv not in existing_med_norms:
             op: CascadeOp = "create"
             current: str | None = None
-            reason = f"СОУТ класс {assessed_class}: добавить норму осмотра «{kv}» ({int(months)} мес.)"
+            reason = (
+                f"СОУТ класс {assessed_class}: добавить норму осмотра «{kv}» ({int(months)} мес.)"
+            )
         else:
             current = existing_med_norms[kv]
             if current in (None, ""):
@@ -84,15 +87,22 @@ def build_cascade_plan(
                 continue  # класс уже совпадает — действие не нужно
         plan.medical.append(
             MedicalCascadeAction(
-                exam_kind=kv, op=op, periodicity_months=int(months),
-                interval_days=interval, target_class=assessed_class,
-                current_class=current, factor_codes=codes, reason=reason,
+                exam_kind=kv,
+                op=op,
+                periodicity_months=int(months),
+                interval_days=interval,
+                target_class=assessed_class,
+                current_class=current,
+                factor_codes=codes,
+                reason=reason,
             )
         )
 
     hazard_titles = {hid: meta[0] for hid, meta in hazard_meta.items()}
     plan.ppe_advisory = build_ppe_norm_suggestions(
-        position_id=position_id, factors=factors,
-        hazard_titles=hazard_titles, existing_norm_pairs=existing_ppe_pairs,
+        position_id=position_id,
+        factors=factors,
+        hazard_titles=hazard_titles,
+        existing_norm_pairs=existing_ppe_pairs,
     )
     return plan

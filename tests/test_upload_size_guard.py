@@ -18,9 +18,7 @@ def _upload(size: int) -> UploadFile:
 
 def test_reject_oversize_upload_raises_above_limit() -> None:
     with pytest.raises(HTTPException) as excinfo:
-        reject_oversize_upload(
-            _upload(11), code="X_TOO_LARGE", error_type="x", max_bytes=10
-        )
+        reject_oversize_upload(_upload(11), code="X_TOO_LARGE", error_type="x", max_bytes=10)
 
     assert excinfo.value.status_code == status.HTTP_413_REQUEST_ENTITY_TOO_LARGE
     assert excinfo.value.detail["code"] == "X_TOO_LARGE"

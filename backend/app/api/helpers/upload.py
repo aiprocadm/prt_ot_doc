@@ -15,6 +15,7 @@ ingest with content-type sniffing and hashing, see
 its own problem-detail taxonomy (e.g. ``SOUT_IMPORT_TOO_LARGE`` / ``sout``,
 ``DOCUMENT_BATCH_FILE_TOO_LARGE`` / ``documents``).
 """
+
 from __future__ import annotations
 
 from fastapi import HTTPException, UploadFile, status

@@ -29,7 +29,7 @@ Design notes
 from __future__ import annotations
 
 from datetime import date, datetime, time, timezone
-from typing import Iterable
+from typing import Any, Iterable
 
 from sqlalchemy import Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -1136,7 +1136,7 @@ class CalendarAggregatorService:
 
     def _scoped_count(
         self,
-        model: type,
+        model: type[Any],
         *,
         person_id: str | None = None,
         site_id: str | None = None,

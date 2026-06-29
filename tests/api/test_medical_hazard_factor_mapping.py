@@ -22,8 +22,11 @@ async def _seed_hazard(sessionmaker, data_factory, *, tenant=None, factor=True):
         if factor:
             session.add(
                 MedicalFactor(
-                    tenant_id=t.id, code="4.4", name="Шум",
-                    exam_kinds=["periodic"], periodicity_months=12,
+                    tenant_id=t.id,
+                    code="4.4",
+                    name="Шум",
+                    exam_kinds=["periodic"],
+                    periodicity_months=12,
                 )
             )
         await session.flush()
@@ -33,7 +36,9 @@ async def _seed_hazard(sessionmaker, data_factory, *, tenant=None, factor=True):
 
 
 @pytest.mark.asyncio
-async def test_put_sets_mapping_and_get_lists_it(async_client, sessionmaker, data_factory, make_auth_headers):
+async def test_put_sets_mapping_and_get_lists_it(
+    async_client, sessionmaker, data_factory, make_auth_headers
+):
     _t, hid = await _seed_hazard(sessionmaker, data_factory)
     headers = await make_auth_headers(RoleEnum.ADMIN)
     resp = await async_client.put(MAP.format(hid=hid), headers=headers, json={"factor_code": "4.4"})
@@ -59,7 +64,9 @@ async def test_put_unknown_factor_422(async_client, sessionmaker, data_factory, 
 @pytest.mark.asyncio
 async def test_put_unknown_hazard_404(async_client, make_auth_headers):
     headers = await make_auth_headers(RoleEnum.ADMIN)
-    resp = await async_client.put(MAP.format(hid="missing-id"), headers=headers, json={"factor_code": None})
+    resp = await async_client.put(
+        MAP.format(hid="missing-id"), headers=headers, json={"factor_code": None}
+    )
     assert resp.status_code == status.HTTP_404_NOT_FOUND, resp.text
 
 
@@ -74,7 +81,9 @@ async def test_put_null_clears_mapping(async_client, sessionmaker, data_factory,
 
 
 @pytest.mark.asyncio
-async def test_mapping_affects_named_list_e2e(async_client, sessionmaker, data_factory, make_auth_headers):
+async def test_mapping_affects_named_list_e2e(
+    async_client, sessionmaker, data_factory, make_auth_headers
+):
     from app.models.models import Position, PositionHazardLink
 
     t, hid = await _seed_hazard(sessionmaker, data_factory)
@@ -85,8 +94,12 @@ async def test_mapping_affects_named_list_e2e(async_client, sessionmaker, data_f
         await session.flush()
         session.add(PositionHazardLink(tenant_id=t.id, position_id=pos.id, hazard_id=hid))
         await data_factory.create_person(
-            tenant=t, company=company, session=session, position_id=pos.id,
-            first_name="Иван", last_name="Петров",
+            tenant=t,
+            company=company,
+            session=session,
+            position_id=pos.id,
+            first_name="Иван",
+            last_name="Петров",
         )
         await session.commit()
     headers = await make_auth_headers(RoleEnum.ADMIN)
@@ -110,5 +123,7 @@ async def test_cross_tenant_hazard_404(async_client, sessionmaker, data_factory,
     headers_b = await make_auth_headers(
         RoleEnum.ADMIN, tenant="med-map-tb", email="admin-med-map-tb@example.com"
     )
-    resp = await async_client.put(MAP.format(hid=hid), headers=headers_b, json={"factor_code": None})
+    resp = await async_client.put(
+        MAP.format(hid=hid), headers=headers_b, json={"factor_code": None}
+    )
     assert resp.status_code == status.HTTP_404_NOT_FOUND, resp.text

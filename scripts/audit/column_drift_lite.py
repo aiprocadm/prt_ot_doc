@@ -480,9 +480,7 @@ def collect_migration_columns(verbose: bool = False) -> dict[str, set[str]]:
             if is_create and node.args:
                 first = node.args[0]
                 if isinstance(first, ast.Constant) and isinstance(first.value, str):
-                    per_table[first.value].update(
-                        _columns_in_create_table_call(node, functions)
-                    )
+                    per_table[first.value].update(_columns_in_create_table_call(node, functions))
             # ---- Helper-wrapped: <helper>("t", sa.Column("c", ...), ...) ----
             if (
                 isinstance(func, ast.Name)

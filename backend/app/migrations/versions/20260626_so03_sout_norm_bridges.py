@@ -9,6 +9,7 @@ SET NULL (not CASCADE): deleting a position/hazard nulls the link but never eras
 the СОУТ measurement row. Honest downgrade drops both columns. Table names literal
 (audit-static-analysis lesson).
 """
+
 from __future__ import annotations
 
 import sqlalchemy as sa
@@ -24,14 +25,22 @@ def upgrade() -> None:
     op.add_column("sout_workplace", sa.Column("position_id", sa.String(length=36), nullable=True))
     op.create_index("ix_sout_workplace_position_id", "sout_workplace", ["position_id"])
     op.create_foreign_key(
-        "fk_sout_workplace_position", "sout_workplace", "position",
-        ["position_id"], ["id"], ondelete="SET NULL",
+        "fk_sout_workplace_position",
+        "sout_workplace",
+        "position",
+        ["position_id"],
+        ["id"],
+        ondelete="SET NULL",
     )
     op.add_column("sout_factor", sa.Column("hazard_id", sa.String(length=36), nullable=True))
     op.create_index("ix_sout_factor_hazard_id", "sout_factor", ["hazard_id"])
     op.create_foreign_key(
-        "fk_sout_factor_hazard", "sout_factor", "risk_hazards",
-        ["hazard_id"], ["id"], ondelete="SET NULL",
+        "fk_sout_factor_hazard",
+        "sout_factor",
+        "risk_hazards",
+        ["hazard_id"],
+        ["id"],
+        ondelete="SET NULL",
     )
 
 

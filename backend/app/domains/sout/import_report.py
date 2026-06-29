@@ -3,6 +3,7 @@
 Три формат-парсера (csv/xlsx/ФГИС xml) сходятся к одному нормализованному
 промежуточному формату ParsedWorkplace; валидация и diff — формат-независимы.
 RU-метки классов берём из соседнего print_form.py (один контур)."""
+
 from __future__ import annotations
 
 import csv
@@ -19,13 +20,23 @@ class UnsupportedImportFormat(Exception):
 
 # Прямая карта распознавания класса: нормализованный токен -> значение SoutClass.
 _CLASS_ALIASES = {
-    "1": "optimal", "optimal": "optimal", "оптимальный": "optimal",
-    "2": "acceptable", "acceptable": "acceptable", "допустимый": "acceptable",
-    "3.1": "harmful_3_1", "harmful_3_1": "harmful_3_1",
-    "3.2": "harmful_3_2", "harmful_3_2": "harmful_3_2",
-    "3.3": "harmful_3_3", "harmful_3_3": "harmful_3_3",
-    "3.4": "harmful_3_4", "harmful_3_4": "harmful_3_4",
-    "4": "dangerous", "dangerous": "dangerous", "опасный": "dangerous",
+    "1": "optimal",
+    "optimal": "optimal",
+    "оптимальный": "optimal",
+    "2": "acceptable",
+    "acceptable": "acceptable",
+    "допустимый": "acceptable",
+    "3.1": "harmful_3_1",
+    "harmful_3_1": "harmful_3_1",
+    "3.2": "harmful_3_2",
+    "harmful_3_2": "harmful_3_2",
+    "3.3": "harmful_3_3",
+    "harmful_3_3": "harmful_3_3",
+    "3.4": "harmful_3_4",
+    "harmful_3_4": "harmful_3_4",
+    "4": "dangerous",
+    "dangerous": "dangerous",
+    "опасный": "dangerous",
 }
 
 
@@ -38,7 +49,7 @@ def parse_class_label(raw) -> tuple[str | None, str | None]:
         return None, None
     for prefix in ("подкласс", "класс", "subclass", "class"):
         if token.startswith(prefix):
-            token = token[len(prefix):].strip()
+            token = token[len(prefix) :].strip()
             break
     token = token.replace(",", ".")
     if token in _CLASS_ALIASES:
@@ -107,8 +118,11 @@ def _rows_to_workplaces(dict_rows) -> list[ParsedWorkplace]:
         ac_val, ac_unparsed = parse_class_label(_pick(norm, _WP_CLASS_KEYS))
         if code not in by_code:
             by_code[code] = ParsedWorkplace(
-                workplace_code=code, position_name=pos,
-                assessed_class=ac_val, class_unparsed=ac_unparsed, factors=[],
+                workplace_code=code,
+                position_name=pos,
+                assessed_class=ac_val,
+                class_unparsed=ac_unparsed,
+                factors=[],
             )
             order.append(code)
         else:
@@ -126,10 +140,14 @@ def _rows_to_workplaces(dict_rows) -> list[ParsedWorkplace]:
         if fname:
             fc_val, fc_unparsed = parse_class_label(_pick(norm, _F_CLASS_KEYS))
             fcode = _pick(norm, _F_CODE_KEYS)
-            wp.factors.append(ParsedFactor(
-                code=(str(fcode).strip() if fcode else None),
-                name=str(fname).strip(), measured_class=fc_val, class_unparsed=fc_unparsed,
-            ))
+            wp.factors.append(
+                ParsedFactor(
+                    code=(str(fcode).strip() if fcode else None),
+                    name=str(fname).strip(),
+                    measured_class=fc_val,
+                    class_unparsed=fc_unparsed,
+                )
+            )
     return [by_code[c] for c in order]
 
 
@@ -179,14 +197,23 @@ def parse_fgis_xml(content: bytes) -> list[ParsedWorkplace]:
             if not fname:
                 continue
             fc_val, fc_unparsed = parse_class_label(f_el.get("class") or f_el.findtext("class"))
-            factors.append(ParsedFactor(
-                code=(f_el.get("code") or None), name=fname,
-                measured_class=fc_val, class_unparsed=fc_unparsed,
-            ))
-        out.append(ParsedWorkplace(
-            workplace_code=code, position_name=pos,
-            assessed_class=ac_val, class_unparsed=ac_unparsed, factors=factors,
-        ))
+            factors.append(
+                ParsedFactor(
+                    code=(f_el.get("code") or None),
+                    name=fname,
+                    measured_class=fc_val,
+                    class_unparsed=fc_unparsed,
+                )
+            )
+        out.append(
+            ParsedWorkplace(
+                workplace_code=code,
+                position_name=pos,
+                assessed_class=ac_val,
+                class_unparsed=ac_unparsed,
+                factors=factors,
+            )
+        )
     return out
 
 
@@ -224,7 +251,9 @@ def validate_parsed(workplaces: list[ParsedWorkplace]) -> dict[int, RowIssues]:
     return issues
 
 
-def diff_campaign(parsed: list[ParsedWorkplace], existing: list[tuple[str, str | None]]) -> list[DiffRow]:
+def diff_campaign(
+    parsed: list[ParsedWorkplace], existing: list[tuple[str, str | None]]
+) -> list[DiffRow]:
     """existing: list[(workplace_code, assessed_class_value)]."""
     existing_map = {code: cls for code, cls in existing}
     seen: set[str] = set()
@@ -237,7 +266,11 @@ def diff_campaign(parsed: list[ParsedWorkplace], existing: list[tuple[str, str |
             change = "changed"
         else:
             change = "unchanged"
-        out.append(DiffRow(wp.workplace_code, change, wp.assessed_class, existing_map.get(wp.workplace_code)))
+        out.append(
+            DiffRow(
+                wp.workplace_code, change, wp.assessed_class, existing_map.get(wp.workplace_code)
+            )
+        )
     seen_removed: set[str] = set()
     for code, cls in existing:
         if code not in seen and code not in seen_removed:

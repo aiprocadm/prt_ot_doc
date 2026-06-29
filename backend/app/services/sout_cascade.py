@@ -4,6 +4,7 @@
 есть) → миграции нет. apply повторно выводит план из БД (не доверяет клиенту) →
 идемпотентность. Работает только с общими (hazard_id IS NULL) нормами должности.
 """
+
 from __future__ import annotations
 
 from sqlalchemy import select
@@ -43,7 +44,9 @@ async def _load_factors(session: AsyncSession, tenant: Tenant, wid: str):
                     SoutFactor.workplace_id == wid, SoutFactor.tenant_id == tenant.id
                 )
             )
-        ).scalars().all()
+        )
+        .scalars()
+        .all()
     )
 
 
@@ -96,18 +99,27 @@ async def _build_plan(session: AsyncSession, tenant: Tenant, wp: SoutWorkplace) 
     existing_med = await _load_general_med_norms(session, tenant, wp.position_id)
     ppe_pairs = await _load_ppe_pairs(session, tenant, wp.position_id)
     return casc.build_cascade_plan(
-        assessed_class=assessed, position_id=wp.position_id, factors=factors,
-        hazard_meta=hazard_meta, factor_catalog=catalog,
-        existing_med_norms=existing_med, existing_ppe_pairs=ppe_pairs,
+        assessed_class=assessed,
+        position_id=wp.position_id,
+        factors=factors,
+        hazard_meta=hazard_meta,
+        factor_catalog=catalog,
+        existing_med_norms=existing_med,
+        existing_ppe_pairs=ppe_pairs,
     )
 
 
 def _to_preview(plan: casc.CascadePlan) -> CascadePreview:
     medical = [
         CascadeMedicalAction(
-            exam_kind=a.exam_kind, op=a.op, periodicity_months=a.periodicity_months,
-            interval_days=a.interval_days, target_class=a.target_class,
-            current_class=a.current_class, factor_codes=a.factor_codes, reason=a.reason,
+            exam_kind=a.exam_kind,
+            op=a.op,
+            periodicity_months=a.periodicity_months,
+            interval_days=a.interval_days,
+            target_class=a.target_class,
+            current_class=a.current_class,
+            factor_codes=a.factor_codes,
+            reason=a.reason,
         )
         for a in plan.medical
     ]
@@ -115,14 +127,14 @@ def _to_preview(plan: casc.CascadePlan) -> CascadePreview:
     # plan.ppe_advisory items are already PpeNormSuggestion (pydantic) instances —
     # build_ppe_norm_suggestions returns the schema directly.
     return CascadePreview(
-        assessed_class=plan.assessed_class, can_apply=can_apply,
-        medical=medical, ppe_advisory=list(plan.ppe_advisory),
+        assessed_class=plan.assessed_class,
+        can_apply=can_apply,
+        medical=medical,
+        ppe_advisory=list(plan.ppe_advisory),
     )
 
 
-async def preview_cascade(
-    session: AsyncSession, tenant: Tenant, wid: str
-) -> CascadePreview | None:
+async def preview_cascade(session: AsyncSession, tenant: Tenant, wid: str) -> CascadePreview | None:
     wp = await _load_workplace(session, tenant, wid)
     if wp is None:
         return None
@@ -130,9 +142,7 @@ async def preview_cascade(
     return _to_preview(plan)
 
 
-async def apply_cascade(
-    session: AsyncSession, tenant: Tenant, wid: str
-) -> CascadeResult | None:
+async def apply_cascade(session: AsyncSession, tenant: Tenant, wid: str) -> CascadeResult | None:
     """Применить каскад. Бросает CampaignTransitionError если кампания закрыта."""
     wp = await _load_workplace(session, tenant, wid)
     if wp is None:
@@ -154,8 +164,10 @@ async def apply_cascade(
         if action.op == "create":
             session.add(
                 MedicalNorm(
-                    tenant_id=tenant.id, position_id=wp.position_id,
-                    exam_kind=MedicalExamKind(action.exam_kind), hazard_id=None,
+                    tenant_id=tenant.id,
+                    position_id=wp.position_id,
+                    exam_kind=MedicalExamKind(action.exam_kind),
+                    hazard_id=None,
                     interval_days=action.interval_days,
                     working_conditions_class=action.target_class,
                 )
@@ -163,15 +175,19 @@ async def apply_cascade(
             created += 1
         elif action.op == "reclass":
             norm = (
-                await session.execute(
-                    select(MedicalNorm).where(
-                        MedicalNorm.tenant_id == tenant.id,
-                        MedicalNorm.position_id == wp.position_id,
-                        MedicalNorm.hazard_id.is_(None),
-                        MedicalNorm.exam_kind == MedicalExamKind(action.exam_kind),
+                (
+                    await session.execute(
+                        select(MedicalNorm).where(
+                            MedicalNorm.tenant_id == tenant.id,
+                            MedicalNorm.position_id == wp.position_id,
+                            MedicalNorm.hazard_id.is_(None),
+                            MedicalNorm.exam_kind == MedicalExamKind(action.exam_kind),
+                        )
                     )
                 )
-            ).scalars().first()
+                .scalars()
+                .first()
+            )
             if norm is not None and norm.working_conditions_class in (None, ""):
                 norm.working_conditions_class = action.target_class
                 reclassified += 1
@@ -179,6 +195,8 @@ async def apply_cascade(
             conflicts += 1
     await session.flush()
     return CascadeResult(
-        created=created, reclassified=reclassified, conflicts=conflicts,
+        created=created,
+        reclassified=reclassified,
+        conflicts=conflicts,
         ppe_advisory_count=len(plan.ppe_advisory),
     )

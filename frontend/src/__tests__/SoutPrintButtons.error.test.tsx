@@ -9,6 +9,7 @@ const listMock = vi.fn();
 const getReportMock = vi.fn();
 const downloadSummaryMock = vi.fn();
 const downloadCardMock = vi.fn();
+const getDeclarationMock = vi.fn();
 
 vi.mock("@/api/sout", () => ({
   soutApi: {
@@ -16,6 +17,7 @@ vi.mock("@/api/sout", () => ({
     getReport: (...args: unknown[]) => getReportMock(...args),
     downloadSummary: (...args: unknown[]) => downloadSummaryMock(...args),
     downloadCard: (...args: unknown[]) => downloadCardMock(...args),
+    getDeclaration: (...args: unknown[]) => getDeclarationMock(...args),
   },
 }));
 
@@ -47,6 +49,14 @@ describe("SoutPage print download error handling", () => {
     getReportMock.mockResolvedValue({
       campaign,
       workplaces: [{ workplace, factors: [], guarantees: [] }],
+    });
+    getDeclarationMock.mockResolvedValue({
+      campaign_id: "c1",
+      campaign_name: "Кампания 2026",
+      eligible: [],
+      ineligible: [],
+      eligible_count: 0,
+      ineligible_count: 0,
     });
   });
 

@@ -6,6 +6,7 @@ medical side reuses the 29н engine and dedups by ``(position_id, exam_kind)``.
 Nothing here mutates target tables — confirmation goes through the targets' own
 write endpoints (e.g. ``POST /ppe/norms``).
 """
+
 from __future__ import annotations
 
 from typing import Iterable
@@ -80,9 +81,7 @@ def build_medical_exam_suggestions(
     for kind, months in required.items():
         if kind in existing_norm_kinds:
             continue
-        codes = sorted(
-            code for (code, _name, kinds, _m) in matched if kind in kinds
-        )
+        codes = sorted(code for (code, _name, kinds, _m) in matched if kind in kinds)
         out.append(
             MedicalExamSuggestion(
                 position_id=position_id,

@@ -324,6 +324,5 @@ def test_no_inplace_json_mutation_in_runtime_layers() -> None:
     assert not offenders, (
         "In-place mutation of a JSON column without fresh reassignment "
         "(silently lost on flush/commit — wrap the change in a copy and "
-        "reassign a new object, e.g. `obj.field = {**obj.field, ...}`):\n"
-        + "\n".join(offenders)
+        "reassign a new object, e.g. `obj.field = {**obj.field, ...}`):\n" + "\n".join(offenders)
     )

@@ -1,4 +1,5 @@
 """Endpoints for committees / commissions / meetings (P10-01 срез-1, TZ B.17)."""
+
 from __future__ import annotations
 
 from typing import Annotated
@@ -193,7 +194,9 @@ async def list_committees(
     )
     apply_etag_response_headers(response, etag)
     if request.headers.get("if-none-match") == etag:
-        return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers=build_not_modified_headers(etag))
+        return Response(
+            status_code=status.HTTP_304_NOT_MODIFIED, headers=build_not_modified_headers(etag)
+        )
     return CommitteePage(
         items=[CommitteeRead.model_validate(c, from_attributes=True) for c in items],
         total=int(total or 0),
@@ -222,7 +225,9 @@ async def create_committee(
 
 
 @router.get("/{cid}", response_model=CommitteeRead)
-async def get_committee(cid: str, tenant: TenantDep, session: SessionDep, access: Access) -> CommitteeRead:
+async def get_committee(
+    cid: str, tenant: TenantDep, session: SessionDep, access: Access
+) -> CommitteeRead:
     TenantContextValidator.ensure_tenant_context(tenant)
     await _require_committees_enabled(session, tenant)
     row = await _get_committee(session, tenant, cid)
@@ -324,7 +329,9 @@ async def list_meetings(
     )
     apply_etag_response_headers(response, etag)
     if request.headers.get("if-none-match") == etag:
-        return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers=build_not_modified_headers(etag))
+        return Response(
+            status_code=status.HTTP_304_NOT_MODIFIED, headers=build_not_modified_headers(etag)
+        )
     return MeetingPage(
         items=[MeetingRead.model_validate(m, from_attributes=True) for m in items],
         total=int(total or 0),
@@ -341,8 +348,10 @@ async def schedule_meeting(
     await _require_committees_enabled(session, tenant)
     await _get_committee(session, tenant, cid)
     row = CommitteeMeeting(
-        tenant_id=tenant.id, committee_id=cid,
-        scheduled_at=payload.scheduled_at, location=payload.location,
+        tenant_id=tenant.id,
+        committee_id=cid,
+        scheduled_at=payload.scheduled_at,
+        location=payload.location,
     )
     session.add(row)
     await session.flush()
@@ -351,7 +360,9 @@ async def schedule_meeting(
 
 
 @router.get("/meetings/{mid}", response_model=MeetingRead)
-async def get_meeting(mid: str, tenant: TenantDep, session: SessionDep, access: Access) -> MeetingRead:
+async def get_meeting(
+    mid: str, tenant: TenantDep, session: SessionDep, access: Access
+) -> MeetingRead:
     TenantContextValidator.ensure_tenant_context(tenant)
     await _require_committees_enabled(session, tenant)
     row = await _get_meeting(session, tenant, mid)
@@ -375,7 +386,11 @@ async def update_meeting(
     return MeetingRead.model_validate(row, from_attributes=True)
 
 
-@router.post("/meetings/{mid}/agenda-items", response_model=AgendaItemRead, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/meetings/{mid}/agenda-items",
+    response_model=AgendaItemRead,
+    status_code=status.HTTP_201_CREATED,
+)
 async def create_agenda_item(
     mid: str, payload: AgendaItemCreate, tenant: TenantDep, session: SessionDep, access: Access
 ) -> AgendaItemRead:
@@ -383,8 +398,11 @@ async def create_agenda_item(
     await _require_committees_enabled(session, tenant)
     await _get_meeting(session, tenant, mid)
     row = CommitteeAgendaItem(
-        tenant_id=tenant.id, meeting_id=mid,
-        seq=payload.seq, title=payload.title, presenter_person_id=payload.presenter_person_id,
+        tenant_id=tenant.id,
+        meeting_id=mid,
+        seq=payload.seq,
+        title=payload.title,
+        presenter_person_id=payload.presenter_person_id,
     )
     session.add(row)
     await session.flush()
@@ -393,7 +411,9 @@ async def create_agenda_item(
 
 
 # --- Decisions ---
-@router.post("/meetings/{mid}/decisions", response_model=DecisionRead, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/meetings/{mid}/decisions", response_model=DecisionRead, status_code=status.HTTP_201_CREATED
+)
 async def create_decision(
     mid: str, payload: DecisionCreate, tenant: TenantDep, session: SessionDep, access: Access
 ) -> DecisionRead:
@@ -405,8 +425,10 @@ async def create_decision(
     except MeetingTransitionError as exc:
         raise _conflict(exc)
     row = CommitteeDecision(
-        tenant_id=tenant.id, meeting_id=mid,
-        agenda_item_id=payload.agenda_item_id, text=payload.text,
+        tenant_id=tenant.id,
+        meeting_id=mid,
+        agenda_item_id=payload.agenda_item_id,
+        text=payload.text,
     )
     session.add(row)
     await session.flush()
@@ -431,7 +453,9 @@ async def get_protocol(
                 )
                 .order_by(CommitteeDecision.decided_at.asc())
             )
-        ).scalars().all()
+        )
+        .scalars()
+        .all()
     )
     pairs = []
     for d in decisions:
@@ -443,13 +467,17 @@ async def get_protocol(
                         CommitteeDecisionTask.tenant_id == tenant.id,
                     )
                 )
-            ).scalars().all()
+            )
+            .scalars()
+            .all()
         )
         pairs.append((d, tasks))
     return build_protocol(meeting, pairs)
 
 
-@router.post("/decisions/{did}/tasks", response_model=DecisionTaskRead, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/decisions/{did}/tasks", response_model=DecisionTaskRead, status_code=status.HTTP_201_CREATED
+)
 async def create_task(
     did: str, payload: DecisionTaskCreate, tenant: TenantDep, session: SessionDep, access: Access
 ) -> DecisionTaskRead:
@@ -457,9 +485,11 @@ async def create_task(
     await _require_committees_enabled(session, tenant)
     await _get_decision(session, tenant, did)
     row = CommitteeDecisionTask(
-        tenant_id=tenant.id, decision_id=did,
+        tenant_id=tenant.id,
+        decision_id=did,
         assignee_person_id=payload.assignee_person_id,
-        due_date=payload.due_date, evidence_note=payload.evidence_note,
+        due_date=payload.due_date,
+        evidence_note=payload.evidence_note,
     )
     session.add(row)
     await session.flush()

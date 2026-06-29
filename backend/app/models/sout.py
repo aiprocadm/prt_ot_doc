@@ -9,6 +9,7 @@ enum-pg-label-parity discipline.
 identified factors + resulting guarantees/compensations. File import and
 auto-cascade to PPE norms / medical exams are deferred to срез-2+.
 """
+
 from __future__ import annotations
 
 import enum
