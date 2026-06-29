@@ -87,7 +87,7 @@ async def test_outbox_poison_queue_after_max_retries(
             status=OutboxStatus.PENDING,
             next_attempt_at=datetime.now(tz=timezone.utc),
             attempts=3,  # Already at max retries
-            last_error="Connection refused",
+            last_error={"message": "Connection refused"},
         )
         session.add(entry)
         await session.commit()

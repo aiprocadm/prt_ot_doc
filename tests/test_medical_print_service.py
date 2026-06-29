@@ -25,9 +25,7 @@ def _docx_text(b: bytes) -> str:
 async def _seed(session, data_factory):
     tenant = await data_factory.ensure_tenant(session=session)
     company = await data_factory.create_company(tenant=tenant, session=session)
-    hazard = RiskHazard(
-        tenant_id=tenant.id, code="noise", title="Шум", medical_factor_code="4.4"
-    )
+    hazard = RiskHazard(tenant_id=tenant.id, code="noise", title="Шум", medical_factor_code="4.4")
     session.add(hazard)
     await session.flush()
     pos = Position(tenant_id=tenant.id, company_id=company.id, name="Сварщик")

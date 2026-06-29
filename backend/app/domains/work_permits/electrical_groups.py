@@ -4,6 +4,7 @@
 в Person.qualifications (kind="electrical_safety_group", level ∈ I..V). Read-путь наряда
 обогащает членов резолвнутой группой и считает мягкую готовность.
 """
+
 from __future__ import annotations
 
 from datetime import date, datetime
@@ -12,14 +13,22 @@ GROUP_ORDER = ["I", "II", "III", "IV", "V"]
 
 # Минимумы 903н до 1000В (le_1000) — текущий/дефолтный набор.
 ROLE_MIN_GROUP: dict[str, str] = {
-    "issuer": "IV", "supervisor": "IV", "admitter": "IV",
-    "foreman": "III", "member": "III", "observer": "III",
+    "issuer": "IV",
+    "supervisor": "IV",
+    "admitter": "IV",
+    "foreman": "III",
+    "member": "III",
+    "observer": "III",
 }
 
 # Минимумы выше 1000В (ПОТЭЭ; сверить с юристом).
 ROLE_MIN_GROUP_HV: dict[str, str] = {
-    "issuer": "IV", "supervisor": "V", "admitter": "IV",
-    "foreman": "IV", "member": "III", "observer": "IV",
+    "issuer": "IV",
+    "supervisor": "V",
+    "admitter": "IV",
+    "foreman": "IV",
+    "member": "III",
+    "observer": "IV",
 }
 
 _KIND = "electrical_safety_group"
@@ -84,10 +93,12 @@ def readiness(members: list[dict], voltage_level: str | None = None) -> dict:
         role = m.get("role")
         group = m.get("group")
         if not meets_minimum(group, role, voltage_level):
-            insufficient.append({
-                "person_id": m.get("person_id"),
-                "role": role,
-                "group": group,
-                "required": table.get(role),
-            })
+            insufficient.append(
+                {
+                    "person_id": m.get("person_id"),
+                    "role": role,
+                    "group": group,
+                    "required": table.get(role),
+                }
+            )
     return {"ok": not insufficient, "insufficient": insufficient}

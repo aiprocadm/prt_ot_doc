@@ -5,12 +5,10 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass
+from datetime import datetime, timezone
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from datetime import timezone
-from datetime import datetime
 
 from app.core.config import get_settings
 from app.domains.work_permits import electrical_groups
@@ -93,9 +91,7 @@ async def _group_map(
         .all()
     )
     return {
-        str(p.id): electrical_groups.current_group(
-            getattr(p, "qualifications", None) or [], as_of
-        )
+        str(p.id): electrical_groups.current_group(getattr(p, "qualifications", None) or [], as_of)
         for p in rows
     }
 
@@ -208,12 +204,13 @@ async def render_work_permit(
 
     # Для электро-нарядов резолвим группы по электробезопасности
     is_electrical = wp.work_type == "electrical"
+    _elec_groups: dict[str, str | None]
     if is_electrical:
         member_person_ids = {str(m.person_id) for m in members if m.person_id}
         as_of = datetime.now(timezone.utc).date()
         _elec_groups = await _group_map(session, tid, member_person_ids, as_of)
     else:
-        _elec_groups: dict[str, str | None] = {}
+        _elec_groups = {}
 
     def fio(pid) -> str:
         return names.get(str(pid), "—") if pid else "—"

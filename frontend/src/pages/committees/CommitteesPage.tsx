@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { committeesApi, type Committee, type Meeting, type Protocol } from "@/api/committees";
 import { EmptyState } from "@/components/common/EmptyState";
@@ -97,7 +97,7 @@ const MeetingList = ({ committee, selected, onSelect }: MeetingListProps) => {
   const [error, setError] = useState<ApiError | null>(null);
   const [items, setItems] = useState<Meeting[]>([]);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -108,11 +108,11 @@ const MeetingList = ({ committee, selected, onSelect }: MeetingListProps) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [committee.id]);
 
   useEffect(() => {
     void load();
-  }, [committee.id]);
+  }, [load]);
 
   return (
     <Card>
@@ -167,7 +167,7 @@ const ProtocolPanel = ({ meeting }: ProtocolPanelProps) => {
   const [error, setError] = useState<ApiError | null>(null);
   const [protocol, setProtocol] = useState<Protocol | null>(null);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -178,11 +178,11 @@ const ProtocolPanel = ({ meeting }: ProtocolPanelProps) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [meeting.id]);
 
   useEffect(() => {
     void load();
-  }, [meeting.id]);
+  }, [load]);
 
   return (
     <Card>

@@ -3,6 +3,7 @@
 Без sqlalchemy / без I/O — как print_form.py. Определяет, какие РМ подлежат
 декларированию (класс 1-2 И без вредных факторов), и собирает печатную форму.
 RU-метки/подсчёт вредных факторов переиспользуются из print_form (один контур)."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -42,7 +43,7 @@ class DeclarationRow:
     workplace_code: str
     position_name: str
     assessed_class: str | None
-    headcount: str          # "1" если есть person_id, иначе "—"
+    headcount: str  # "1" если есть person_id, иначе "—"
     report_ref: str | None
     eligible: bool
     ineligible_reason: str | None
@@ -80,10 +81,12 @@ def build_declaration_docx(data: DeclarationPrintData) -> bytes:
     basis = None
     if data.report_number or data.report_date:
         basis = " ".join(
-            p for p in [
+            p
+            for p in [
                 f"№ {data.report_number}" if data.report_number else None,
                 f"от {data.report_date}" if data.report_date else None,
-            ] if p
+            ]
+            if p
         )
     doc.add_paragraph(f"Основание — отчёт о проведении СОУТ: {basis or '____________________'}")
 

@@ -209,9 +209,7 @@ async def _permit_read(session: AsyncSession, tenant: Tenant, wp: WorkPermit) ->
         today = datetime.now(timezone.utc).date()
         quals_by_id = {str(pid): q for pid, q in rows}
         for m in members:
-            groups[str(m.person_id)] = eg.current_group(
-                quals_by_id.get(str(m.person_id)), today
-            )
+            groups[str(m.person_id)] = eg.current_group(quals_by_id.get(str(m.person_id)), today)
         voltage_level = (wp.type_specific or {}).get("voltage_level")
         eg_readiness = eg.readiness(
             [
@@ -240,9 +238,7 @@ async def _permit_read(session: AsyncSession, tenant: Tenant, wp: WorkPermit) ->
         opened_at=wp.opened_at,
         closed_at=wp.closed_at,
         suspended_at=wp.suspended_at,
-        members=[
-            _member_schema(m, electrical_group=groups.get(str(m.person_id))) for m in members
-        ],
+        members=[_member_schema(m, electrical_group=groups.get(str(m.person_id))) for m in members],
         subdivision_text=wp.subdivision_text,
         content_text=wp.content_text,
         conditions_text=wp.conditions_text,

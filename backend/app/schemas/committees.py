@@ -1,4 +1,5 @@
 """Pydantic schemas for committees срез-1 (P10-01)."""
+
 from __future__ import annotations
 
 from datetime import date, datetime

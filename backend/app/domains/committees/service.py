@@ -4,6 +4,7 @@ Kept DB-agnostic where possible: ``task_to_read`` / ``build_protocol`` take
 already-loaded ORM rows (or SimpleNamespace in tests) so the overdue
 projection and protocol grouping are unit-testable without a session.
 """
+
 from __future__ import annotations
 
 from datetime import date

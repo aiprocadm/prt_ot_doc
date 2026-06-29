@@ -6,7 +6,9 @@ extended with suspension-block and norm-aware medical checks (Task 7.2).
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from collections.abc import Sequence
+from datetime import date, datetime, timezone
+from typing import Any
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -176,7 +178,7 @@ async def enforce_person_admission(
             .group_by(MedicalExam.person_id, MedicalExam.exam_kind)
         )
     ).all()
-    latest_by_kind: dict[tuple[str, str], object] = {
+    latest_by_kind: dict[tuple[str, str], date | None] = {
         (pid, (kind.value if hasattr(kind, "value") else kind)): vu for pid, kind, vu in ex_rows
     }
 
@@ -204,7 +206,7 @@ async def enforce_person_admission(
     # must avoid missing/overdue (ok/due_soon pass); otherwise the legacy
     # any-active-issue check stays in force.
     # ------------------------------------------------------------------
-    ppe_norm_rows: list = []
+    ppe_norm_rows: Sequence[Any] = []
     if position_ids:
         ppe_norm_rows = (
             await session.execute(

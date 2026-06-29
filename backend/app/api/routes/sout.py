@@ -1,10 +1,21 @@
 """Endpoints for СОУТ — спец. оценка условий труда (P10-04 срез-1, TZ B.10)."""
+
 from __future__ import annotations
 
 from typing import Annotated, Literal
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, Response, UploadFile, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    UploadFile,
+    status,
+)
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,12 +30,13 @@ from app.core.errors import api_problem_detail
 from app.core.feature_flags import is_feature_enabled
 from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
+from app.domains.medical.service import _load_factor_catalog
+from app.domains.sout.import_report import UnsupportedImportFormat
 from app.domains.sout.lifecycle import (
     CampaignTransitionError,
     ensure_campaign_open,
     validate_campaign_transition,
 )
-from app.domains.medical.service import _load_factor_catalog
 from app.domains.sout.service import (
     build_class_history_row,
     build_report,
@@ -35,23 +47,8 @@ from app.domains.sout.suggestions import (
     build_medical_exam_suggestions,
     build_ppe_norm_suggestions,
 )
-from app.services.sout_print import (
-    PdfRendererUnavailable,
-    RenderedDoc,
-    render_sout_card,
-    render_summary_sheet,
-)
-from app.services.sout_declaration import (
-    build_declaration_projection,
-    render_declaration,
-)
-from app.domains.sout.import_report import UnsupportedImportFormat
-from app.services.sout_import import (
-    ImportValidationError,
-    apply_import,
-    preview_import,
-)
-from app.services.sout_cascade import apply_cascade, preview_cascade
+from app.models.models import MedicalNorm, Position, PPENorm
+from app.models.risk import RiskHazard
 from app.models.sout import (
     SoutCampaign,
     SoutClassHistory,
@@ -59,8 +56,6 @@ from app.models.sout import (
     SoutGuarantee,
     SoutWorkplace,
 )
-from app.models.models import MedicalNorm, PPENorm, Position
-from app.models.risk import RiskHazard
 from app.models.tenanting import Tenant
 from app.schemas.sout import (
     CampaignCreate,
@@ -74,18 +69,34 @@ from app.schemas.sout import (
     ClassHistoryRead,
     DeclarationPreview,
     DeclarationRowRead,
-    ImportPreview,
-    ImportResult,
     FactorCreate,
     FactorRead,
     FactorUpdate,
     GuaranteeCreate,
     GuaranteeRead,
+    ImportPreview,
+    ImportResult,
     NormSuggestions,
     WorkplaceCreate,
     WorkplacePage,
     WorkplaceRead,
     WorkplaceUpdate,
+)
+from app.services.sout_cascade import apply_cascade, preview_cascade
+from app.services.sout_declaration import (
+    build_declaration_projection,
+    render_declaration,
+)
+from app.services.sout_import import (
+    ImportValidationError,
+    apply_import,
+    preview_import,
+)
+from app.services.sout_print import (
+    PdfRendererUnavailable,
+    RenderedDoc,
+    render_sout_card,
+    render_summary_sheet,
 )
 
 router = APIRouter(prefix="/sout", tags=["sout"])
@@ -169,9 +180,7 @@ async def _get_workplace(session: AsyncSession, tenant: Tenant, wid: str) -> Sou
 async def _get_factor(session: AsyncSession, tenant: Tenant, fid: str) -> SoutFactor:
     row = (
         await session.execute(
-            select(SoutFactor).where(
-                SoutFactor.id == fid, SoutFactor.tenant_id == tenant.id
-            )
+            select(SoutFactor).where(SoutFactor.id == fid, SoutFactor.tenant_id == tenant.id)
         )
     ).scalar_one_or_none()
     if row is None:
@@ -197,9 +206,7 @@ async def _validate_position(session: AsyncSession, tenant: Tenant, pid: str) ->
 async def _validate_hazard(session: AsyncSession, tenant: Tenant, hid: str) -> str:
     row = (
         await session.execute(
-            select(RiskHazard.id).where(
-                RiskHazard.id == hid, RiskHazard.tenant_id == tenant.id
-            )
+            select(RiskHazard.id).where(RiskHazard.id == hid, RiskHazard.tenant_id == tenant.id)
         )
     ).scalar_one_or_none()
     if row is None:
@@ -216,7 +223,9 @@ async def _load_workplace_factors(session: AsyncSession, tenant: Tenant, wid: st
                     SoutFactor.workplace_id == wid, SoutFactor.tenant_id == tenant.id
                 )
             )
-        ).scalars().all()
+        )
+        .scalars()
+        .all()
     )
 
 
@@ -256,7 +265,9 @@ async def _load_medical_inputs(session: AsyncSession, tenant: Tenant, position_i
                     MedicalNorm.position_id == position_id,
                 )
             )
-        ).scalars().all()
+        )
+        .scalars()
+        .all()
     )
     return catalog, kinds
 
@@ -274,7 +285,9 @@ async def _load_declaration_pairs(session: AsyncSession, tenant: Tenant, cid: st
                 )
                 .order_by(SoutWorkplace.workplace_code.asc())
             )
-        ).scalars().all()
+        )
+        .scalars()
+        .all()
     )
     pairs = []
     for w in workplaces:
@@ -285,7 +298,9 @@ async def _load_declaration_pairs(session: AsyncSession, tenant: Tenant, cid: st
                         SoutFactor.workplace_id == w.id, SoutFactor.tenant_id == tenant.id
                     )
                 )
-            ).scalars().all()
+            )
+            .scalars()
+            .all()
         )
         pairs.append((w, factors))
     return pairs
@@ -326,7 +341,9 @@ async def list_campaigns(
     )
     apply_etag_response_headers(response, etag)
     if request.headers.get("if-none-match") == etag:
-        return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers=build_not_modified_headers(etag))
+        return Response(
+            status_code=status.HTTP_304_NOT_MODIFIED, headers=build_not_modified_headers(etag)
+        )
     return CampaignPage(
         items=[CampaignRead.model_validate(c, from_attributes=True) for c in items],
         total=int(total or 0),
@@ -356,7 +373,9 @@ async def create_campaign(
 
 
 @router.get("/{cid}", response_model=CampaignRead)
-async def get_campaign(cid: str, tenant: TenantDep, session: SessionDep, access: Access) -> CampaignRead:
+async def get_campaign(
+    cid: str, tenant: TenantDep, session: SessionDep, access: Access
+) -> CampaignRead:
     TenantContextValidator.ensure_tenant_context(tenant)
     await _require_sout_enabled(session, tenant)
     row = await _get_campaign(session, tenant, cid)
@@ -437,7 +456,9 @@ async def list_workplaces(
     )
     apply_etag_response_headers(response, etag)
     if request.headers.get("if-none-match") == etag:
-        return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers=build_not_modified_headers(etag))
+        return Response(
+            status_code=status.HTTP_304_NOT_MODIFIED, headers=build_not_modified_headers(etag)
+        )
     return WorkplacePage(
         items=[workplace_to_read(w) for w in items],
         total=int(total or 0),
@@ -475,8 +496,10 @@ async def add_workplace(
     # Record the initial class assignment (old=None) so the trajectory starts at
     # creation, not at the first later edit.
     history = build_class_history_row(
-        tenant_id=tenant.id, workplace_id=row.id,
-        old_class=None, new_class=row.assessed_class,
+        tenant_id=tenant.id,
+        workplace_id=row.id,
+        old_class=None,
+        new_class=row.assessed_class,
     )
     if history is not None:
         session.add(history)
@@ -485,7 +508,9 @@ async def add_workplace(
 
 
 @router.get("/workplaces/{wid}", response_model=WorkplaceRead)
-async def get_workplace(wid: str, tenant: TenantDep, session: SessionDep, access: Access) -> WorkplaceRead:
+async def get_workplace(
+    wid: str, tenant: TenantDep, session: SessionDep, access: Access
+) -> WorkplaceRead:
     TenantContextValidator.ensure_tenant_context(tenant)
     await _require_sout_enabled(session, tenant)
     row = await _get_workplace(session, tenant, wid)
@@ -507,8 +532,10 @@ async def update_workplace(
         setattr(row, field, value)
     if "assessed_class" in changes:
         history = build_class_history_row(
-            tenant_id=tenant.id, workplace_id=row.id,
-            old_class=old_class, new_class=row.assessed_class,
+            tenant_id=tenant.id,
+            workplace_id=row.id,
+            old_class=old_class,
+            new_class=row.assessed_class,
         )
         if history is not None:
             session.add(history)
@@ -534,7 +561,9 @@ async def list_class_history(
                 )
                 .order_by(SoutClassHistory.changed_at.asc())
             )
-        ).scalars().all()
+        )
+        .scalars()
+        .all()
     )
     return [history_to_read(r) for r in rows]
 
@@ -598,7 +627,9 @@ async def cascade_apply(
 
 
 # --- Factors ---
-@router.post("/workplaces/{wid}/factors", response_model=FactorRead, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/workplaces/{wid}/factors", response_model=FactorRead, status_code=status.HTTP_201_CREATED
+)
 async def add_factor(
     wid: str, payload: FactorCreate, tenant: TenantDep, session: SessionDep, access: Access
 ) -> FactorRead:
@@ -640,7 +671,11 @@ async def update_factor(
 
 
 # --- Guarantees ---
-@router.post("/workplaces/{wid}/guarantees", response_model=GuaranteeRead, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/workplaces/{wid}/guarantees",
+    response_model=GuaranteeRead,
+    status_code=status.HTTP_201_CREATED,
+)
 async def add_guarantee(
     wid: str, payload: GuaranteeCreate, tenant: TenantDep, session: SessionDep, access: Access
 ) -> GuaranteeRead:
@@ -678,7 +713,9 @@ async def get_report(
                 )
                 .order_by(SoutWorkplace.workplace_code.asc())
             )
-        ).scalars().all()
+        )
+        .scalars()
+        .all()
     )
     triples = []
     for w in workplaces:
@@ -690,7 +727,9 @@ async def get_report(
                         SoutFactor.tenant_id == tenant.id,
                     )
                 )
-            ).scalars().all()
+            )
+            .scalars()
+            .all()
         )
         guarantees = list(
             (
@@ -700,7 +739,9 @@ async def get_report(
                         SoutGuarantee.tenant_id == tenant.id,
                     )
                 )
-            ).scalars().all()
+            )
+            .scalars()
+            .all()
         )
         triples.append((w, factors, guarantees))
     return build_report(campaign, triples)
@@ -774,8 +815,12 @@ async def get_declaration(
     campaign = await _get_campaign(session, tenant, cid)
     pairs = await _load_declaration_pairs(session, tenant, cid)
     rows = build_declaration_projection(campaign=campaign, workplaces_with_factors=pairs)
-    eligible = [DeclarationRowRead.model_validate(r, from_attributes=True) for r in rows if r.eligible]
-    ineligible = [DeclarationRowRead.model_validate(r, from_attributes=True) for r in rows if not r.eligible]
+    eligible = [
+        DeclarationRowRead.model_validate(r, from_attributes=True) for r in rows if r.eligible
+    ]
+    ineligible = [
+        DeclarationRowRead.model_validate(r, from_attributes=True) for r in rows if not r.eligible
+    ]
     return DeclarationPreview(
         campaign_id=cid,
         campaign_name=campaign.name,
@@ -812,18 +857,14 @@ def _reject_oversize(file: UploadFile) -> None:
 def _unsupported_format(exc: UnsupportedImportFormat) -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-        detail=api_problem_detail(
-            code="SOUT_IMPORT_FORMAT", message=str(exc), error_type="sout"
-        ),
+        detail=api_problem_detail(code="SOUT_IMPORT_FORMAT", message=str(exc), error_type="sout"),
     )
 
 
 def _import_invalid(exc: ImportValidationError) -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-        detail=api_problem_detail(
-            code="SOUT_IMPORT_INVALID", message=str(exc), error_type="sout"
-        ),
+        detail=api_problem_detail(code="SOUT_IMPORT_INVALID", message=str(exc), error_type="sout"),
     )
 
 

@@ -3,6 +3,7 @@
 No DB access — callers pass current/target states. Mirrors the
 work_permits/ppe lifecycle style (raise a typed error; route maps to 409).
 """
+
 from __future__ import annotations
 
 from datetime import date
@@ -23,9 +24,7 @@ class MeetingTransitionError(ValueError):
 
 def validate_meeting_transition(current: MeetingStatus, target: MeetingStatus) -> None:
     if target not in _ALLOWED.get(current, set()):
-        raise MeetingTransitionError(
-            f"Cannot transition meeting {current.value} -> {target.value}"
-        )
+        raise MeetingTransitionError(f"Cannot transition meeting {current.value} -> {target.value}")
 
 
 def ensure_meeting_held(status: MeetingStatus) -> None:
@@ -35,9 +34,7 @@ def ensure_meeting_held(status: MeetingStatus) -> None:
         )
 
 
-def is_task_overdue(
-    status: DecisionTaskStatus, due_date: date | None, today: date
-) -> bool:
+def is_task_overdue(status: DecisionTaskStatus, due_date: date | None, today: date) -> bool:
     """A task is overdue when it has a past due_date and is not done."""
     if due_date is None or status is DecisionTaskStatus.DONE:
         return False

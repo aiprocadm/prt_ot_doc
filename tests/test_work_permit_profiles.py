@@ -114,9 +114,7 @@ def test_validate_hot_work_rejects_bad_means():
 
 def test_validate_hot_work_rejects_bad_gas_parameter():
     with pytest.raises(ValueError):
-        pr.validate_type_specific(
-            "hot_work", {"gas_analysis": [{"parameter": "xx", "value": "1"}]}
-        )
+        pr.validate_type_specific("hot_work", {"gas_analysis": [{"parameter": "xx", "value": "1"}]})
 
 
 def test_build_section_hot_work_means_and_gas():
@@ -136,9 +134,7 @@ def test_build_section_hot_work_means_and_gas():
 
 
 def test_build_section_hot_work_empty_returns_none():
-    assert (
-        pr.build_structured_section("hot_work", safety_systems=None, type_specific={}) is None
-    )
+    assert pr.build_structured_section("hot_work", safety_systems=None, type_specific={}) is None
 
 
 def test_legal_reference_gas_hazardous_is_528():

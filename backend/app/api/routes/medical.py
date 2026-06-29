@@ -1070,13 +1070,17 @@ async def list_hazard_factor_mappings(
     name_by_code: dict[str, str] = {}
     if codes:
         factors = (
-            await session.execute(
-                select(MedicalFactor).where(
-                    MedicalFactor.tenant_id == tid,
-                    MedicalFactor.code.in_(tuple(codes)),
+            (
+                await session.execute(
+                    select(MedicalFactor).where(
+                        MedicalFactor.tenant_id == tid,
+                        MedicalFactor.code.in_(tuple(codes)),
+                    )
                 )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         name_by_code = {f.code: f.name for f in factors}
     items = [_mapping_read(h, name_by_code.get(h.medical_factor_code)) for h in hazards]
     return HazardFactorMappingPage(items=items, total=len(items))
@@ -1194,9 +1198,7 @@ async def print_contingent_register(
 ) -> Response:
     TenantContextValidator.ensure_tenant_context(tenant)
     _ = access
-    return await _render_to_response(
-        render_contingent_register(session, tenant=tenant, fmt=fmt)
-    )
+    return await _render_to_response(render_contingent_register(session, tenant=tenant, fmt=fmt))
 
 
 @router.get("/medical/named-list/print", dependencies=[MedicalFeatureGate])

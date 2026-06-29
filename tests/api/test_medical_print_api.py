@@ -40,20 +40,29 @@ async def _seed_factor_chain(sessionmaker, data_factory, *, tenant=None):
         await session.flush()
         session.add(PositionHazardLink(tenant_id=t.id, position_id=pos.id, hazard_id=hazard.id))
         await data_factory.create_person(
-            tenant=t, company=company, session=session, position_id=pos.id,
-            first_name="Иван", last_name="Петров",
+            tenant=t,
+            company=company,
+            session=session,
+            position_id=pos.id,
+            first_name="Иван",
+            last_name="Петров",
         )
         session.add(
             MedicalFactor(
-                tenant_id=t.id, code="4.4", name="Шум",
-                exam_kinds=["periodic"], periodicity_months=12,
+                tenant_id=t.id,
+                code="4.4",
+                name="Шум",
+                exam_kinds=["periodic"],
+                periodicity_months=12,
             )
         )
         await session.commit()
 
 
 @pytest.mark.asyncio
-async def test_register_print_docx_returns_file(async_client, sessionmaker, data_factory, make_auth_headers):
+async def test_register_print_docx_returns_file(
+    async_client, sessionmaker, data_factory, make_auth_headers
+):
     await _seed_factor_chain(sessionmaker, data_factory)
     headers = await make_auth_headers(RoleEnum.ADMIN)
     resp = await async_client.get(f"{REG}?format=docx", headers=headers)
@@ -65,7 +74,9 @@ async def test_register_print_docx_returns_file(async_client, sessionmaker, data
 
 
 @pytest.mark.asyncio
-async def test_named_list_print_docx_returns_file(async_client, sessionmaker, data_factory, make_auth_headers):
+async def test_named_list_print_docx_returns_file(
+    async_client, sessionmaker, data_factory, make_auth_headers
+):
     await _seed_factor_chain(sessionmaker, data_factory)
     headers = await make_auth_headers(RoleEnum.ADMIN)
     resp = await async_client.get(f"{NAMED}?format=docx", headers=headers)

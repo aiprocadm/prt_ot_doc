@@ -24,8 +24,13 @@ SOUT_CLASS_LABELS = {
 }
 # Канонический порядок (метки заголовков + порядок статистики берут отсюда).
 SOUT_CLASS_ORDER = (
-    "optimal", "acceptable", "harmful_3_1", "harmful_3_2",
-    "harmful_3_3", "harmful_3_4", "dangerous",
+    "optimal",
+    "acceptable",
+    "harmful_3_1",
+    "harmful_3_2",
+    "harmful_3_3",
+    "harmful_3_4",
+    "dangerous",
 )
 # Вредные/опасные классы (3.1 и выше) — для подсчёта «вредных факторов».
 HARMFUL_CLASSES = frozenset(

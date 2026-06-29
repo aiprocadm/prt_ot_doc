@@ -5,6 +5,7 @@ duplicate-class hazards documented there. Native enums use the project
 ``native_enum`` helper (``.value`` labels, explicit ``name=``) per
 enum-pg-label-parity discipline.
 """
+
 from __future__ import annotations
 
 import enum
@@ -67,7 +68,9 @@ class CommitteeMember(TenantBaseModel):
     )
 
     __table_args__ = (
-        UniqueConstraint("tenant_id", "committee_id", "person_id", "role", name="uq_committee_member"),
+        UniqueConstraint(
+            "tenant_id", "committee_id", "person_id", "role", name="uq_committee_member"
+        ),
     )
 
 
@@ -90,7 +93,10 @@ class CommitteeAgendaItem(TenantBaseModel):
     __tablename__ = "committee_agenda_item"
 
     meeting_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("committee_meeting.id", ondelete="CASCADE"), nullable=False, index=True
+        String(36),
+        ForeignKey("committee_meeting.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     seq: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     title: Mapped[str] = mapped_column(String(500), nullable=False)
@@ -103,7 +109,10 @@ class CommitteeDecision(TenantBaseModel):
     __tablename__ = "committee_decision"
 
     meeting_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("committee_meeting.id", ondelete="CASCADE"), nullable=False, index=True
+        String(36),
+        ForeignKey("committee_meeting.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     agenda_item_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("committee_agenda_item.id", ondelete="SET NULL"), nullable=True
@@ -120,7 +129,10 @@ class CommitteeDecisionTask(TenantBaseModel):
     __tablename__ = "committee_decision_task"
 
     decision_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("committee_decision.id", ondelete="CASCADE"), nullable=False, index=True
+        String(36),
+        ForeignKey("committee_decision.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     assignee_person_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("person.id", ondelete="SET NULL"), nullable=True

@@ -4,6 +4,7 @@ Kept DB-agnostic where possible: ``workplace_to_read`` / ``build_report`` take
 already-loaded ORM rows (or SimpleNamespace in tests) so the reassessment-due
 projection and report grouping are unit-testable without a session.
 """
+
 from __future__ import annotations
 
 from datetime import date
@@ -11,13 +12,13 @@ from datetime import date
 from app.domains.sout.lifecycle import is_class_worsening, is_reassessment_due
 from app.models.sout import SoutClass, SoutClassHistory
 from app.schemas.sout import (
-    CampaignReport,
     CampaignRead,
+    CampaignReport,
     ClassHistoryRead,
     FactorRead,
     GuaranteeRead,
-    WorkplaceReport,
     WorkplaceRead,
+    WorkplaceReport,
 )
 
 
@@ -56,8 +57,12 @@ def history_to_read(row) -> ClassHistoryRead:
 
 
 def build_class_history_row(
-    *, tenant_id: str, workplace_id: str, old_class: SoutClass | None,
-    new_class: SoutClass | None, note: str | None = None,
+    *,
+    tenant_id: str,
+    workplace_id: str,
+    old_class: SoutClass | None,
+    new_class: SoutClass | None,
+    note: str | None = None,
 ) -> SoutClassHistory | None:
     """Return an unsaved history row when the class actually changed, else None.
 
@@ -75,7 +80,9 @@ def build_class_history_row(
     )
 
 
-def build_report(campaign, workplaces_with_children, *, today: date | None = None) -> CampaignReport:
+def build_report(
+    campaign, workplaces_with_children, *, today: date | None = None
+) -> CampaignReport:
     """workplaces_with_children: iterable of ``(workplace_row, [factor_rows], [guarantee_rows])``."""
     today = today or _today()
     grouped = [

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import {
@@ -495,7 +495,7 @@ const ReportPanel = ({ campaign }: ReportPanelProps) => {
     }
   };
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -506,11 +506,11 @@ const ReportPanel = ({ campaign }: ReportPanelProps) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [campaign.id]);
 
   useEffect(() => {
     void load();
-  }, [campaign.id]);
+  }, [load]);
 
   const handleSummaryDownload = async (fmt: "docx" | "pdf") => {
     try {
