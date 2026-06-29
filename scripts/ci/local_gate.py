@@ -163,6 +163,10 @@ def gate_command(mode: str, extra_pytest: list[str], pg_name: str) -> str:
     steps = [
         "set -e",
         "export PYTHONPATH=/srv/backend",
+        # ARCH-3: границы bounded-context. Быстро, без PG (stdlib AST-чекер).
+        # Падает на НОВОМ cross-context импорте; текущие протечки в allowlist.
+        'echo "--- check-boundaries: границы bounded-context (ARCH-3) ---"',
+        "python scripts/ci/check_context_boundaries.py",
     ]
     if mode == "db-only":
         steps += [

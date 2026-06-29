@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-3: enforce bounded-context boundaries)
+
+### Added
+- **ARCH-3 — энфорсмент границ bounded contexts.** Правило «не смешивать bounded contexts напрямую» (`product_spec.py::ARCHITECTURE_RULES`) раньше было только текстом. Теперь оно **проверяется**: `scripts/ci/check_context_boundaries.py` (stdlib AST-walker) запрещает прямые cross-context импорты `app.modules.* → app.domains.*` и `app.domains.* → app.modules.*`. Новый такой импорт валит проверку; текущие 10 протечек (аудит 2026-06-30: 8 modules→domains, 2 domains→modules) заморожены в `ALLOWLIST` как временный долг (вычищается ARCH-1). Allowlist держится честным — устаревшая запись (импорт уже удалён) тоже валит проверку. Запуск: `make check-boundaries`, плюс шаг встроен в `make gate` (`scripts/ci/local_gate.py`) и в pytest (`tests/test_context_boundaries.py`, 3 теста). `app.modules.* → app.services.*` сознательно НЕ запрещён — `services/` это санкционированный слой оркестрации (ТЗ).
+- **Почему свой AST-чекер, а не import-linter:** `app.modules` / `app.domains` — PEP 420 namespace-пакеты (без `__init__.py`), и graph-builder import-linter (grimp) их не обходит (пустой граф). ТЗ допускает «import-linter ИЛИ эквивалентный тест»; чекер читает файлы напрямую (namespace-агностичен) и работает на любом Python без внешних зависимостей.
+
 ## 2026-06-30 (fix/stabilize-gates-2026-06-29 — REL-4: RC-012 (RTO/RPO go/no-go) + RC-013 (relational scope cutover))
 
 ### Added

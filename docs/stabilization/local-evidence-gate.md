@@ -26,6 +26,10 @@ REL-1, путь (c): постоянная local-evidence политика с о�
 `--db-only` — высокосигнальный срез: именно он ловит класс багов, невидимый на SQLite
 (нативные pg-enum, миграции, label drift). Это прямая проверка REL-2 / REL-3.
 
+Оба режима сначала прогоняют **ARCH-3 boundary check** (`scripts/ci/check_context_boundaries.py`) —
+быстрый stdlib-чекер границ bounded contexts: падает на новом cross-context импорте
+`app.modules.* ↔ app.domains.*` (текущие протечки в allowlist). Отдельно: `make check-boundaries`.
+
 > **Caveat по `--full`:** gate-образ не содержит LibreOffice (он тяжёлый и нужен лишь
 > тестам рендеринга документов). Поэтому несколько рендер-тестов в `--full` могут
 > пропускаться/падать на отсутствии бинаря — это ожидаемо и не является регрессом

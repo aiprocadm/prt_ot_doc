@@ -1,4 +1,4 @@
-.PHONY: install install-pip lint format test contract run clean up down migrate tenant-migrate tenant-init seed smoke branded-smoke logs dev env frontend-install lint-frontend format-frontend test-frontend dev-lite dev-lite-force dev-lite-win dev-lite-win-force test-lite dev-nodocker test-nodocker check-docker demo cs\:dev cs\:test cs\:reset final-acceptance tenant-bootstrap tenant-demo-bootstrap codex-audit gate gate-full
+.PHONY: install install-pip lint format test contract run clean up down migrate tenant-migrate tenant-init seed smoke branded-smoke logs dev env frontend-install lint-frontend format-frontend test-frontend dev-lite dev-lite-force dev-lite-win dev-lite-win-force test-lite dev-nodocker test-nodocker check-docker demo cs\:dev cs\:test cs\:reset final-acceptance tenant-bootstrap tenant-demo-bootstrap codex-audit gate gate-full check-boundaries
 
 LINT_PATHS=backend/app tests scripts
 VENV_BIN=.venv/bin
@@ -166,3 +166,8 @@ gate:
 
 gate-full:
 	$(PYTHON) scripts/ci/local_gate.py --full
+
+# ARCH-3: enforce bounded-context import boundaries (AST checker, stdlib-only).
+# Fails on a new cross-context import; current leaks are allowlisted.
+check-boundaries:
+	$(PYTHON) scripts/ci/check_context_boundaries.py
