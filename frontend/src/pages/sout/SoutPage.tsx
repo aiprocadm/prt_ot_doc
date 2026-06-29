@@ -469,11 +469,6 @@ const ReportPanel = ({ campaign }: ReportPanelProps) => {
   };
 
   useEffect(() => {
-    setImportFile(null);
-    setImportPreview(null);
-  }, [campaign.id]);
-
-  useEffect(() => {
     let active = true;
     void soutApi
       .getDeclaration(campaign.id)
@@ -730,7 +725,7 @@ const SoutPage = () => {
         description="Специальная оценка условий труда: кампании, классы условий, гарантии и компенсации."
       />
       <CampaignList selected={selectedCampaign} onSelect={setSelectedCampaign} />
-      {selectedCampaign !== null ? <ReportPanel campaign={selectedCampaign} /> : null}
+      {selectedCampaign !== null ? <ReportPanel key={selectedCampaign.id} campaign={selectedCampaign} /> : null}
     </div>
   );
 };
