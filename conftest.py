@@ -98,6 +98,17 @@ from sqlalchemy.engine import Engine as _SAEngine  # noqa: E402
 
 @_sa_event.listens_for(_SAEngine, "connect")
 def _sqlite_test_speed_pragmas(dbapi_connection, connection_record):  # noqa: ANN001
+    # SQLite-only. This listener is attached to the base ``Engine`` class, so it
+    # ALSO fires for Postgres connections — e.g. the @pytest.mark.db PG guards
+    # (alembic upgrade/downgrade, enum label-drift). On Postgres ``PRAGMA`` is a
+    # syntax error that aborts the connection's transaction; the ``except`` below
+    # swallows the *Python* exception but the server-side transaction stays
+    # aborted, so the very next statement (asyncpg JSON-codec introspection or the
+    # first migration) dies with ``InFailedSQLTransactionError``. Guard strictly
+    # to SQLite drivers — both ``sqlite3`` (sync) and ``aiosqlite`` (async) carry
+    # "sqlite" in their module path; asyncpg / psycopg2 do not.
+    if "sqlite" not in type(dbapi_connection).__module__:
+        return
     try:
         cursor = dbapi_connection.cursor()
         cursor.execute("PRAGMA synchronous=OFF")

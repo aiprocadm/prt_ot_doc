@@ -1,5 +1,18 @@
 # CHANGELOG
 
+## 2026-06-29 (fix/stabilize-gates-2026-06-29 — REL-1/REL-2/REL-3: воспроизводимый PG-гейт + 2 PG-блокера)
+
+### Added
+- **REL-1 — воспроизводимый локальный гейт качества (без GitHub Actions).** `scripts/ci/local_gate.py` поднимает PostgreSQL 16 в Docker и гоняет PG-критичные проверки внутри образа `python:3.12` (`scripts/ci/Dockerfile.gate`), фиксируя версию Python вместо хостовой (на 3.13+/Windows pytest зависает — см. CLAUDE.md). Режимы `--db-only` (alembic upgrade/downgrade + enum label-drift guards; зеркало job `alembic-postgres-upgrade` + `@pytest.mark.db` части `backend-tests`) и `--full` (полный suite). Пишет JSON-вердикт в `artifacts/local-gate/summary.json`. Make-обёртки `make gate` / `make gate-full`. Политика и инструкция — `docs/stabilization/local-evidence-gate.md` (REL-1, путь «c»: постоянная local-evidence политика с воспроизводимой командой). **Вердикт первого зелёного прогона: 9 passed на PG16.14.**
+
+### Fixed
+- **Тест-харнес ломал ВСЕ `@pytest.mark.db` PG-гарды (regression).** Слушатель `conftest.py::_sqlite_test_speed_pragmas` был навешен на базовый класс `Engine` и выполнял `PRAGMA synchronous=OFF` на КАЖДОМ подключении, включая Postgres-соединения PG-гардов. На PG `PRAGMA` — синтаксическая ошибка, которая аборти́т транзакцию соединения; `except: pass` глушил Python-исключение, но серверная транзакция оставалась aborted → следующий statement (интроспекция JSON-кодека asyncpg / первая миграция) падал с `InFailedSQLTransactionError`. Слушатель ограничен строго SQLite-драйверами (`"sqlite" in type(dbapi_connection).__module__`). Невидимо на SQLite; ловится только реальным PG.
+- **СОУТ-миграции `so01`/`so02` ломали `alembic upgrade heads` на PostgreSQL (release-блокер).** Колонки `sout_workplace.assessed_class` / `sout_factor.measured_class` (so01) и `sout_class_history.old_class`/`new_class` (so02) использовали generic `sa.Enum(name="soutclass", create_type=False)`. У generic `sa.Enum` флаг `create_type=False` не подавляет неявный `CREATE TYPE` в `op.create_table` так надёжно, как у dialect-specific `postgresql.ENUM` → повторный `CREATE TYPE soutclass` → `DuplicateObjectError: type "soutclass" already exists`. Заменено на `postgresql.ENUM(create_type=False)` (тот же паттерн, что у рабочего `_CAMPAIGN_STATUS`). Невидимо на SQLite (enum→VARCHAR); внесено после среза-снапшота ТЗ (2026-06-26) и после enum-ре-аудита 2026-06-25.
+
+### Verified (local-evidence, 2026-06-29, Python 3.12 / PG16.14)
+- **REL-2 (ORM↔pg_enum label drift):** keystone PG-гард `test_orm_enum_pg_label_parity.py` (bound ⊆ pg_labels + write-smoke insert/update) и 4 быстрых пина зелёные — 0 Group-A дефектов на живом PG16.
+- **REL-3 (миграции на PG):** `test_alembic_postgres_upgrade.py` — `upgrade heads` и round-trip `upgrade heads → downgrade base → upgrade heads` зелёные на чистом PG16; голова цепочки `20260626_so03_sout_norm_bridges`.
+
 ## 2026-06-26 (feat/sout-srez2-p10-04 — ТЗ B.10 СОУТ, Срез 2: версионирование класса)
 
 ### Added

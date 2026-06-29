@@ -1,4 +1,4 @@
-.PHONY: install install-pip lint format test contract run clean up down migrate tenant-migrate tenant-init seed smoke branded-smoke logs dev env frontend-install lint-frontend format-frontend test-frontend dev-lite dev-lite-force dev-lite-win dev-lite-win-force test-lite dev-nodocker test-nodocker check-docker demo cs\:dev cs\:test cs\:reset final-acceptance tenant-bootstrap tenant-demo-bootstrap codex-audit
+.PHONY: install install-pip lint format test contract run clean up down migrate tenant-migrate tenant-init seed smoke branded-smoke logs dev env frontend-install lint-frontend format-frontend test-frontend dev-lite dev-lite-force dev-lite-win dev-lite-win-force test-lite dev-nodocker test-nodocker check-docker demo cs\:dev cs\:test cs\:reset final-acceptance tenant-bootstrap tenant-demo-bootstrap codex-audit gate gate-full
 
 LINT_PATHS=backend/app tests scripts
 VENV_BIN=.venv/bin
@@ -157,3 +157,12 @@ ci-local:
 	$(MAKE) test-backend
 	$(MAKE) test-frontend
 	$(MAKE) test-smoke
+
+# REL-1: воспроизводимый локальный гейт качества (PG16 в Docker, Python 3.12).
+# Источник истины по PG-корректности без GitHub Actions.
+# Док: docs/stabilization/local-evidence-gate.md
+gate:
+	$(PYTHON) scripts/ci/local_gate.py --db-only
+
+gate-full:
+	$(PYTHON) scripts/ci/local_gate.py --full
