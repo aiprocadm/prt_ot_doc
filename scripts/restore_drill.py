@@ -59,6 +59,55 @@ def _utc_now() -> str:
     return datetime.now(UTC).isoformat(timespec="seconds")
 
 
+# RC-012 — formal recovery objectives. Production targets from ТЗ vNext §31.6
+# (TZ_FULL_UNIFIED.md): RTO ≤ 4h, RPO ≤ 24h. These are the go/no-go *budgets* the
+# drill must meet; override via CLI flags / env for stricter SLAs.
+DEFAULT_RTO_SECONDS = int(os.getenv("RESTORE_DRILL_RTO_SECONDS", str(4 * 60 * 60)))
+DEFAULT_RPO_SECONDS = int(os.getenv("RESTORE_DRILL_RPO_SECONDS", str(24 * 60 * 60)))
+
+
+def evaluate_rto_rpo(
+    *,
+    rto_measured_seconds: float,
+    rpo_measured_seconds: float,
+    rto_threshold_seconds: int,
+    rpo_threshold_seconds: int,
+    integrity_ok: bool,
+) -> dict[str, object]:
+    """Formal RTO/RPO go/no-go decision (RC-012).
+
+    RTO (Recovery Time Objective): measured = wall-clock from "backup available"
+    to "restored system verified & boots" (restore + verification + smoke). Must
+    be ≤ the RTO budget.
+
+    RPO (Recovery Point Objective): measured = staleness of the backup relative to
+    the last committed write — here the rehearsal's seed→backup lag. Must be ≤ the
+    RPO budget. NOTE: in production RPO is governed by backup *cadence*; this drill
+    measures only its own rehearsal lag (a lower bound), made explicit in
+    ``rpo_basis`` so the number is never mistaken for a production guarantee.
+
+    ``decision`` is ``go`` only when data-integrity checks pass AND both objectives
+    are met — so a future restore that breaches the RTO budget flips the drill to
+    ``no-go`` instead of silently passing on integrity alone.
+    """
+    rto_met = rto_measured_seconds <= rto_threshold_seconds
+    rpo_met = rpo_measured_seconds <= rpo_threshold_seconds
+    return {
+        "rto_threshold_seconds": rto_threshold_seconds,
+        "rto_measured_seconds": round(rto_measured_seconds, 3),
+        "rto_met": rto_met,
+        "rpo_threshold_seconds": rpo_threshold_seconds,
+        "rpo_measured_seconds": round(rpo_measured_seconds, 3),
+        "rpo_met": rpo_met,
+        "rpo_basis": (
+            "seed→backup lag measured in this rehearsal; production RPO is governed "
+            "by backup cadence, not by this drill"
+        ),
+        "integrity_ok": bool(integrity_ok),
+        "decision": "go" if (rto_met and rpo_met and integrity_ok) else "no-go",
+    }
+
+
 def _build_seed_objects(tenant_slug: str) -> list[ObjectSeed]:
     return [
         ObjectSeed(
@@ -591,7 +640,13 @@ def _app_smoke_boot(
     return payload
 
 
-def run_drill_sqlite(output_dir: Path, tenant_slug: str) -> Path:
+def run_drill_sqlite(
+    output_dir: Path,
+    tenant_slug: str,
+    *,
+    rto_threshold_seconds: int = DEFAULT_RTO_SECONDS,
+    rpo_threshold_seconds: int = DEFAULT_RPO_SECONDS,
+) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
     started = time.monotonic()
     timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
@@ -606,7 +661,9 @@ def run_drill_sqlite(output_dir: Path, tenant_slug: str) -> Path:
         target_db.parent.mkdir(parents=True, exist_ok=True)
 
         seeded = _seed_source_sqlite(source_db, source_objects, tenant_slug)
+        seed_completed = time.monotonic()  # last write to source
         backup = _backup_sqlite(source_db, source_objects, backup_dir)
+        backup_completed = time.monotonic()  # backup snapshot captured; recovery begins
         _restore_sqlite(
             Path(backup["db_backup_path"]),
             Path(backup["storage_backup_path"]),
@@ -617,11 +674,30 @@ def run_drill_sqlite(output_dir: Path, tenant_slug: str) -> Path:
         smoke = _app_smoke_boot(database_url=f"sqlite+aiosqlite:///{target_db}")
 
     return _write_evidence(
-        output_dir, timestamp, started, tenant_slug, "sqlite", seeded, backup, restored, smoke
+        output_dir,
+        timestamp,
+        started,
+        tenant_slug,
+        "sqlite",
+        seeded,
+        backup,
+        restored,
+        smoke,
+        seed_completed=seed_completed,
+        backup_completed=backup_completed,
+        rto_threshold_seconds=rto_threshold_seconds,
+        rpo_threshold_seconds=rpo_threshold_seconds,
     )
 
 
-def run_drill_postgres_minio(output_dir: Path, tenant_slug: str, cfg: PostgresMinioConfig) -> Path:
+def run_drill_postgres_minio(
+    output_dir: Path,
+    tenant_slug: str,
+    cfg: PostgresMinioConfig,
+    *,
+    rto_threshold_seconds: int = DEFAULT_RTO_SECONDS,
+    rpo_threshold_seconds: int = DEFAULT_RPO_SECONDS,
+) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
     started = time.monotonic()
     timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
@@ -631,7 +707,9 @@ def run_drill_postgres_minio(output_dir: Path, tenant_slug: str, cfg: PostgresMi
         backup_dir = workspace / "backup"
 
         seeded = asyncio.run(_seed_source_postgres(cfg, tenant_slug=tenant_slug))
+        seed_completed = time.monotonic()  # last write to source
         backup = _backup_postgres_minio(cfg, backup_dir, object_prefix=tenant_slug)
+        backup_completed = time.monotonic()  # backup snapshot captured; recovery begins
         _restore_postgres_minio(
             cfg, Path(backup["db_backup_path"]), Path(backup["storage_backup_path"])
         )
@@ -665,6 +743,10 @@ def run_drill_postgres_minio(output_dir: Path, tenant_slug: str, cfg: PostgresMi
         backup,
         restored,
         smoke,
+        seed_completed=seed_completed,
+        backup_completed=backup_completed,
+        rto_threshold_seconds=rto_threshold_seconds,
+        rpo_threshold_seconds=rpo_threshold_seconds,
     )
 
 
@@ -678,6 +760,11 @@ def _write_evidence(
     backup: dict[str, object],
     restored: dict[str, object],
     smoke: dict[str, object],
+    *,
+    seed_completed: float,
+    backup_completed: float,
+    rto_threshold_seconds: int = DEFAULT_RTO_SECONDS,
+    rpo_threshold_seconds: int = DEFAULT_RPO_SECONDS,
 ) -> Path:
     verify_counts = (
         seeded["document_count"] == restored["document_count"]
@@ -700,7 +787,20 @@ def _write_evidence(
     ]
     verify_objects = len(metadata_mismatch) == 0
 
-    duration_seconds = round(time.monotonic() - started, 3)
+    now = time.monotonic()
+    duration_seconds = round(now - started, 3)
+    integrity_ok = bool(
+        verify_counts and verify_checksum and verify_objects and smoke["exit_code"] == 0
+    )
+    # RTO = recovery window (backup-available → restored+verified+booted); RPO =
+    # backup staleness vs last write (seed→backup lag). See evaluate_rto_rpo().
+    go_no_go = evaluate_rto_rpo(
+        rto_measured_seconds=now - backup_completed,
+        rpo_measured_seconds=backup_completed - seed_completed,
+        rto_threshold_seconds=rto_threshold_seconds,
+        rpo_threshold_seconds=rpo_threshold_seconds,
+        integrity_ok=integrity_ok,
+    )
     evidence = {
         "drill": {
             "id": f"restore-drill-{mode}-{timestamp}",
@@ -708,8 +808,9 @@ def _write_evidence(
             "executed_at_utc": _utc_now(),
             "duration_seconds": duration_seconds,
             "tenant_slug": tenant_slug,
-            "assumed_rto_seconds": 900,
-            "assumed_rpo_seconds": 300,
+            # Retained for back-compat; authoritative budgets live in go_no_go.
+            "assumed_rto_seconds": rto_threshold_seconds,
+            "assumed_rpo_seconds": rpo_threshold_seconds,
         },
         "seed": seeded,
         "backup": backup,
@@ -723,9 +824,10 @@ def _write_evidence(
             },
         },
         "smoke_boot": smoke,
-        "success": bool(
-            verify_counts and verify_checksum and verify_objects and smoke["exit_code"] == 0
-        ),
+        # RC-012: formal go/no-go on recovery objectives.
+        "go_no_go": go_no_go,
+        # success now requires integrity AND meeting both objectives (decision=go).
+        "success": go_no_go["decision"] == "go",
     }
 
     output_path = output_dir / f"{mode}-{timestamp}.json"
@@ -796,6 +898,24 @@ def parse_args() -> argparse.Namespace:
         default=os.getenv("RESTORE_DRILL_MINIO_RESTORE_BUCKET", "restore-drill-restored"),
         help="MinIO restore bucket.",
     )
+    parser.add_argument(
+        "--rto-threshold-seconds",
+        type=int,
+        default=DEFAULT_RTO_SECONDS,
+        help=(
+            "RTO go/no-go budget in seconds (default 14400 = 4h, ТЗ vNext §31.6; "
+            "env RESTORE_DRILL_RTO_SECONDS)."
+        ),
+    )
+    parser.add_argument(
+        "--rpo-threshold-seconds",
+        type=int,
+        default=DEFAULT_RPO_SECONDS,
+        help=(
+            "RPO go/no-go budget in seconds (default 86400 = 24h, ТЗ vNext §31.6; "
+            "env RESTORE_DRILL_RPO_SECONDS)."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -809,7 +929,12 @@ def main() -> int:
     args = parse_args()
     output_dir = Path(args.output_dir)
     if args.mode == "sqlite":
-        output_path = run_drill_sqlite(output_dir, tenant_slug=args.tenant_slug)
+        output_path = run_drill_sqlite(
+            output_dir,
+            tenant_slug=args.tenant_slug,
+            rto_threshold_seconds=args.rto_threshold_seconds,
+            rpo_threshold_seconds=args.rpo_threshold_seconds,
+        )
     else:
         cfg = PostgresMinioConfig(
             postgres_source_dsn=_require(args.postgres_source_dsn, "--postgres-source-dsn"),
@@ -821,7 +946,13 @@ def main() -> int:
             source_bucket=args.minio_source_bucket,
             restore_bucket=args.minio_restore_bucket,
         )
-        output_path = run_drill_postgres_minio(output_dir, tenant_slug=args.tenant_slug, cfg=cfg)
+        output_path = run_drill_postgres_minio(
+            output_dir,
+            tenant_slug=args.tenant_slug,
+            cfg=cfg,
+            rto_threshold_seconds=args.rto_threshold_seconds,
+            rpo_threshold_seconds=args.rpo_threshold_seconds,
+        )
 
     print(
         json.dumps(

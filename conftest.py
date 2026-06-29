@@ -47,7 +47,9 @@ else:
 # clear() delete another worker's files mid-test (empty reads / 500s on read-back).
 # Give each worker its own storage root, mirroring the per-worker DATABASE_URL above.
 if _xdist_worker:
-    os.environ["STORAGE_ROOT"] = os.path.join(tempfile.gettempdir(), f"prt_ot_storage_{_xdist_worker}")
+    os.environ["STORAGE_ROOT"] = os.path.join(
+        tempfile.gettempdir(), f"prt_ot_storage_{_xdist_worker}"
+    )
 else:
     os.environ.setdefault("STORAGE_ROOT", "./.local_storage")
 os.environ.setdefault("REDIS_URL", "memory://")

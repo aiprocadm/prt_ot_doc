@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## 2026-06-30 (fix/stabilize-gates-2026-06-29 — REL-4: RC-012 (RTO/RPO go/no-go) + RC-013 (relational scope cutover))
+
+### Added
+- **RC-012 — формальный RTO/RPO go/no-go в restore drill.** `scripts/restore_drill.py` теперь эмитит блок `go_no_go` (`evaluate_rto_rpo`): измеренные `rto_measured_seconds` (окно восстановления: backup→restore+verify+boot) и `rpo_measured_seconds` (лаг бэкапа от последней записи) сравниваются с порогами и дают `decision: go|no-go`. Решение свёрнуто в агрегатный `success` — слишком медленное восстановление = no-go, а не «зелёно по целостности». Пороги по умолчанию = продакшн-цели ТЗ vNext §31.6 (**RTO ≤ 4ч / RPO ≤ 24ч**), переопределяются `--rto-threshold-seconds` / `--rpo-threshold-seconds` или env `RESTORE_DRILL_RTO_SECONDS` / `RESTORE_DRILL_RPO_SECONDS`. Честная оговорка в `go_no_go.rpo_basis`: измеренный RPO — это лаг репетиции seed→backup (нижняя оценка), продакшн-RPO определяется частотой бэкапов. Doc `docs/stabilization/restore-drill.md` (Acceptance criteria + раздел «RTO/RPO go/no-go»). Тесты `tests/test_restore_drill_go_no_go.py` (7, зелёные Py3.12).
+
+### Changed
+- **RC-013 — завершён переход template scope на реляционную/индексированную модель.** Реляционные колонки `Template.scope_level` / `scope_company_id` / `scope_site_id` + индекс `ix_template_scope_level_company_site` уже существовали (миграция `20260416_next68`, бэкфилл из JSON). Теперь **читатели резолвинга переведены на индексированные колонки**: `app/api/routes/documents.py::_normalize_scope_level` / `_scope_target_ids` читают из колонок (fallback на legacy `metadata_json["scope"]` только для не-бэкфилленных строк) — поведение-сохраняюще (алиасы organization/legal_entity→company, branch→site, global→system без изменений). `metadata_json["scope"]` сохранён как compat-зеркало. Тесты `tests/test_template_scope_relational_reads.py` (6) + существующие `tests/test_template_catalog_scope.py` зелёные. DB-level scope pre-filter в resolve-запросе осознанно отложен (non-blocking — безопасность для не-бэкфилленных строк).
+
+### Fixed
+- **`patch_template` — двойное присваивание `scope_level`.** В `app/api/v1/router.py::patch_template` колонка `template.scope_level` присваивалась дважды подряд одним и тем же выражением — убрано дублирование (behavior-neutral).
+
 ## 2026-06-29 (fix/stabilize-gates-2026-06-29 — REL-1/REL-2/REL-3: воспроизводимый PG-гейт + 2 PG-блокера)
 
 ### Added

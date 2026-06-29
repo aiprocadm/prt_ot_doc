@@ -60,8 +60,14 @@ def _run(cmd: list[str], **kw) -> subprocess.CompletedProcess:
 
 def _docker_available() -> bool:
     try:
-        return _run(["docker", "version", "--format", "{{.Server.Version}}"],
-                    capture_output=True, text=True).returncode == 0
+        return (
+            _run(
+                ["docker", "version", "--format", "{{.Server.Version}}"],
+                capture_output=True,
+                text=True,
+            ).returncode
+            == 0
+        )
     except FileNotFoundError:
         return False
 
@@ -76,12 +82,17 @@ def build_gate_image() -> None:
         for fname in ("requirements.txt", "requirements-dev.txt"):
             shutil.copy2(REPO_ROOT / fname, ctx_path / fname)
         shutil.copy2(GATE_DOCKERFILE, ctx_path / "Dockerfile")
-        res = _run([
-            "docker", "build",
-            "-f", str(ctx_path / "Dockerfile"),
-            "-t", GATE_IMAGE,
-            str(ctx_path),
-        ])
+        res = _run(
+            [
+                "docker",
+                "build",
+                "-f",
+                str(ctx_path / "Dockerfile"),
+                "-t",
+                GATE_IMAGE,
+                str(ctx_path),
+            ]
+        )
     if res.returncode != 0:
         raise SystemExit("Не удалось собрать gate-образ")
 
@@ -89,15 +100,26 @@ def build_gate_image() -> None:
 def start_postgres(network: str, name: str) -> None:
     print("\n=== Запуск PostgreSQL 16 ===")
     _run(["docker", "network", "create", network], capture_output=True, text=True)
-    res = _run([
-        "docker", "run", "-d",
-        "--name", name,
-        "--network", network,
-        "-e", f"POSTGRES_USER={PG_USER}",
-        "-e", f"POSTGRES_PASSWORD={PG_PASSWORD}",
-        "-e", f"POSTGRES_DB={PG_DB}",
-        PG_IMAGE,
-    ], capture_output=True, text=True)
+    res = _run(
+        [
+            "docker",
+            "run",
+            "-d",
+            "--name",
+            name,
+            "--network",
+            network,
+            "-e",
+            f"POSTGRES_USER={PG_USER}",
+            "-e",
+            f"POSTGRES_PASSWORD={PG_PASSWORD}",
+            "-e",
+            f"POSTGRES_DB={PG_DB}",
+            PG_IMAGE,
+        ],
+        capture_output=True,
+        text=True,
+    )
     if res.returncode != 0:
         raise SystemExit(f"Не удалось запустить PostgreSQL: {res.stderr}")
 
@@ -108,7 +130,8 @@ def wait_for_postgres(name: str, timeout_s: int = 120) -> None:
     while time.time() < deadline:
         res = subprocess.run(
             ["docker", "exec", name, "pg_isready", "-U", PG_USER, "-d", PG_DB],
-            capture_output=True, text=True,
+            capture_output=True,
+            text=True,
         )
         if res.returncode == 0:
             print("PostgreSQL готов.")
@@ -163,21 +186,35 @@ def run_gate(mode: str, network: str, pg_name: str, extra_pytest: list[str]) -> 
     print(f"\n=== Прогон гейта (режим: {mode}) ===")
     admin_url = f"postgresql://{PG_USER}:{PG_PASSWORD}@{pg_name}:5432/{PG_DB}"
     cmd = [
-        "docker", "run", "--rm",
-        "--network", network,
-        "-v", f"{REPO_ROOT}:/srv",
-        "-w", "/srv",
-        "-e", "APP_ENV=test",
-        "-e", "REDIS_URL=memory://",
-        "-e", "REDIS_RESULT_URL=cache+memory://",
-        "-e", "RATE_LIMIT_STORAGE_URI=memory://",
-        "-e", "S3_ENDPOINT=http://localhost",
-        "-e", "SECRET_KEY=local-gate-not-for-production",
+        "docker",
+        "run",
+        "--rm",
+        "--network",
+        network,
+        "-v",
+        f"{REPO_ROOT}:/srv",
+        "-w",
+        "/srv",
+        "-e",
+        "APP_ENV=test",
+        "-e",
+        "REDIS_URL=memory://",
+        "-e",
+        "REDIS_RESULT_URL=cache+memory://",
+        "-e",
+        "RATE_LIMIT_STORAGE_URI=memory://",
+        "-e",
+        "S3_ENDPOINT=http://localhost",
+        "-e",
+        "SECRET_KEY=local-gate-not-for-production",
         # TEST_PG_ADMIN_URL включает @pytest.mark.db гарды; throwaway-БД они
         # создают/дропают сами (enum_*<uuid>), основной `ptd` не трогается.
-        "-e", f"TEST_PG_ADMIN_URL={admin_url}",
+        "-e",
+        f"TEST_PG_ADMIN_URL={admin_url}",
         GATE_IMAGE,
-        "bash", "-c", gate_command(mode, extra_pytest, pg_name),
+        "bash",
+        "-c",
+        gate_command(mode, extra_pytest, pg_name),
     ]
     return _run(cmd).returncode
 
@@ -207,25 +244,42 @@ def write_summary(mode: str, exit_code: int, started: str) -> Path:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__,
-                                     formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     g = parser.add_mutually_exclusive_group()
-    g.add_argument("--db-only", action="store_const", dest="mode", const="db-only",
-                   help="только PG-критичный срез (по умолчанию)")
-    g.add_argument("--full", action="store_const", dest="mode", const="full",
-                   help="полный бэкенд-suite (зеркало CI)")
-    parser.add_argument("--keep-db", action="store_true",
-                        help="не гасить PostgreSQL после прогона (для отладки)")
-    parser.add_argument("--no-build", action="store_true",
-                        help="не пересобирать gate-образ (использовать существующий)")
-    parser.add_argument("pytest_args", nargs="*",
-                        help="доп. аргументы pytest после --")
+    g.add_argument(
+        "--db-only",
+        action="store_const",
+        dest="mode",
+        const="db-only",
+        help="только PG-критичный срез (по умолчанию)",
+    )
+    g.add_argument(
+        "--full",
+        action="store_const",
+        dest="mode",
+        const="full",
+        help="полный бэкенд-suite (зеркало CI)",
+    )
+    parser.add_argument(
+        "--keep-db", action="store_true", help="не гасить PostgreSQL после прогона (для отладки)"
+    )
+    parser.add_argument(
+        "--no-build",
+        action="store_true",
+        help="не пересобирать gate-образ (использовать существующий)",
+    )
+    parser.add_argument("pytest_args", nargs="*", help="доп. аргументы pytest после --")
     parser.set_defaults(mode="db-only")
     args = parser.parse_args()
 
     if not _docker_available():
-        print("ОШИБКА: Docker недоступен. Этот гейт требует Docker "
-              "(PostgreSQL 16 + python:3.12 раннер).", file=sys.stderr)
+        print(
+            "ОШИБКА: Docker недоступен. Этот гейт требует Docker "
+            "(PostgreSQL 16 + python:3.12 раннер).",
+            file=sys.stderr,
+        )
         return 2
 
     started = datetime.now(timezone.utc).isoformat()
@@ -242,9 +296,11 @@ def main() -> int:
         exit_code = run_gate(args.mode, network, pg_name, args.pytest_args)
     finally:
         if args.keep_db:
-            print(f"\n[--keep-db] PostgreSQL оставлен запущенным: {pg_name} "
-                  f"(сеть {network}). Удалить: docker rm -f {pg_name} && "
-                  f"docker network rm {network}")
+            print(
+                f"\n[--keep-db] PostgreSQL оставлен запущенным: {pg_name} "
+                f"(сеть {network}). Удалить: docker rm -f {pg_name} && "
+                f"docker network rm {network}"
+            )
         else:
             teardown(network, pg_name)
 

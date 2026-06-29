@@ -766,9 +766,6 @@ async def patch_template(
         template.scope_level = str(
             normalized_scope.get("level") or normalized_scope.get("type") or "tenant"
         )
-        template.scope_level = str(
-            normalized_scope.get("level") or normalized_scope.get("type") or "tenant"
-        )
         template.scope_company_id = normalized_scope.get("company_id")
         template.scope_site_id = normalized_scope.get("site_id")
         template.metadata_json = {
