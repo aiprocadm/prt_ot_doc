@@ -46,6 +46,30 @@ def test_level_defaults_to_tenant_when_nothing_set() -> None:
     assert _normalize_scope_level(Template(scope_level=None, metadata_json={})) == "tenant"
 
 
+def test_level_falls_back_to_json_when_column_holds_default_tenant() -> None:
+    # A persisted un-backfilled row: scope_level is NOT NULL with a server default
+    # of "tenant", so a row written/backfilled before normalization (or created
+    # bypassing the catalog API) surfaces scope_level="tenant" even though its real
+    # scope still lives in the JSON mirror. The default "tenant" must defer to a
+    # more specific mirror level so the documented fallback reaches persisted rows.
+    t = Template(scope_level="tenant", metadata_json={"scope": {"level": "site"}})
+    assert _normalize_scope_level(t) == "site"
+
+
+def test_level_keeps_default_tenant_when_mirror_agrees_or_absent() -> None:
+    # A genuinely tenant-scoped row (mirror in sync, or no mirror) stays "tenant".
+    assert (
+        _normalize_scope_level(Template(scope_level="tenant", metadata_json={"scope": {}}))
+        == "tenant"
+    )
+    assert (
+        _normalize_scope_level(
+            Template(scope_level="tenant", metadata_json={"scope": {"level": "tenant"}})
+        )
+        == "tenant"
+    )
+
+
 def test_target_ids_prefer_relational_columns() -> None:
     # Columns win even when the JSON mirror holds stale/different ids.
     t = Template(

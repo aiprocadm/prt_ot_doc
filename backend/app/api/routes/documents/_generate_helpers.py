@@ -135,10 +135,17 @@ def _normalize_scope_level(template: Template) -> str:
     # normalization. Alias mapping is unchanged (organization/legal_entity →
     # company, branch → site, global → system) so matching/scoring is identical.
     raw_level = getattr(template, "scope_level", None)
-    if not raw_level:
-        metadata = template.metadata_json if isinstance(template.metadata_json, dict) else {}
-        scope = metadata.get("scope") if isinstance(metadata.get("scope"), dict) else {}
-        raw_level = scope.get("level") or scope.get("type")
+    metadata = template.metadata_json if isinstance(template.metadata_json, dict) else {}
+    scope = metadata.get("scope") if isinstance(metadata.get("scope"), dict) else {}
+    mirror_level = scope.get("level") or scope.get("type")
+    # ``scope_level`` is NOT NULL with a server default of "tenant", so a persisted
+    # un-backfilled row (or one created bypassing the catalog API) surfaces
+    # scope_level="tenant" even though its real scope still lives in the JSON
+    # mirror — making the fallback unreachable if it only triggered on an empty
+    # column. Treat the default "tenant" as "unset" and defer to a more specific
+    # mirror level; an explicit non-default column value still wins outright.
+    if (not raw_level or str(raw_level).strip().lower() == "tenant") and mirror_level:
+        raw_level = mirror_level
     raw = str(raw_level or "tenant").strip().lower()
     aliases = {
         "organization": "company",

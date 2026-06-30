@@ -17,6 +17,8 @@ from app.api.routes.documents._common import (  # noqa: F401  re-export for back
 )
 from app.api.routes.documents._generate_helpers import (  # noqa: F401  re-export for tests
     _fetch_template,
+    _normalize_scope_level,
+    _scope_target_ids,
     _serialize_payload,
 )
 
