@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-2: god-model decomposition (batch 1, 5 domains))
+
+### Changed
+- **ARCH-2 batch 1 — 5 more domains extracted from `models.py`** (same pure-move pattern,
+  guard-verified): `medical.py` (10), `briefings.py` (4), `field_ops.py` (7 — compliance
+  deadlines / calendar / offline sync / permits), `ppe.py` (6), `templates.py` (5). 32 classes
+  moved; identical tables (guard: 251 tables unchanged); all names re-exported from `models.py`
+  (in `__all__`) → zero import-contract change. `models.py`: 3142 → 2649 lines. Verified Py3.12:
+  guard green, ruff+black clean, domain tests green (medical/ppe/permit/template-scope/briefing).
+
 ## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-2: god-model decomposition (slice 1 + guard))
 
 ### Added

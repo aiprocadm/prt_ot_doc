@@ -13,7 +13,6 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
-    LargeBinary,
     Numeric,
     String,
     Text,
@@ -53,7 +52,59 @@ from app.models.base import (
     VersionedMixin,
     native_enum,
 )
+
+# ARCH-2: re-export briefings-domain models moved to app.models.briefings.
+from app.models.briefings import (
+    BriefingEntry,
+    BriefingJournal,
+    BriefingSignature,
+    BriefingTemplate,
+)
+
+# ARCH-2: re-export field_ops-domain models moved to app.models.field_ops.
+from app.models.field_ops import (
+    CalendarEvent,
+    ComplianceDeadline,
+    ExternalRegistryJob,
+    OfflineMediaQueue,
+    OfflineSyncBatch,
+    Permit,
+    PermitStatus,
+)
 from app.models.file import File
+
+# ARCH-2: re-export medical-domain models moved to app.models.medical.
+from app.models.medical import (
+    MedicalExam,
+    MedicalExamKind,
+    MedicalFactor,
+    MedicalFitness,
+    MedicalNorm,
+    MedicalReferral,
+    MedicalReferralStatus,
+    MedicalSuspension,
+    MedicalSuspensionReason,
+    MedicalSuspensionStatus,
+)
+
+# ARCH-2: re-export ppe-domain models moved to app.models.ppe.
+from app.models.ppe import (
+    PPEIssue,
+    PPEIssueStatus,
+    PPEItem,
+    PPEItemCategory,
+    PPENorm,
+    PPEStockBatch,
+)
+
+# ARCH-2: re-export templates-domain models moved to app.models.templates.
+from app.models.templates import (
+    Template,
+    TemplateStatus,
+    TemplateUsage,
+    TemplateVersion,
+    TemplateVersionStatus,
+)
 
 # ARCH-2: Training-domain models moved to app.models.training; re-exported
 # here so ``from app.models.models import Training...`` keeps working. All names
@@ -214,6 +265,42 @@ __all__ = [
     "EdoDirection",
     "EdoStatus",
     "EdoMessageStatus",
+]
+
+# ARCH-2 batch 1 re-exports (kept in __all__ so ruff F401 keeps the imports).
+__all__ += [
+    "MedicalExamKind",
+    "MedicalFitness",
+    "MedicalReferralStatus",
+    "MedicalSuspensionStatus",
+    "MedicalSuspensionReason",
+    "MedicalExam",
+    "MedicalNorm",
+    "MedicalFactor",
+    "MedicalReferral",
+    "MedicalSuspension",
+    "BriefingTemplate",
+    "BriefingJournal",
+    "BriefingEntry",
+    "BriefingSignature",
+    "ComplianceDeadline",
+    "CalendarEvent",
+    "OfflineSyncBatch",
+    "OfflineMediaQueue",
+    "ExternalRegistryJob",
+    "PermitStatus",
+    "Permit",
+    "PPENorm",
+    "PPEItemCategory",
+    "PPEItem",
+    "PPEIssueStatus",
+    "PPEIssue",
+    "PPEStockBatch",
+    "TemplateStatus",
+    "Template",
+    "TemplateVersionStatus",
+    "TemplateVersion",
+    "TemplateUsage",
 ]
 
 
@@ -973,168 +1060,6 @@ class Workplace(TenantBaseModel, SoftDeleteMixin):
     )
 
 
-class MedicalExamKind(str, enum.Enum):
-    """Types of occupational medical examination."""
-
-    PERIODIC = "periodic"
-    PRELIMINARY = "preliminary"
-    PSYCHIATRIC = "psychiatric"
-    FLUOROGRAPHY = "fluorography"
-    HEALTH_BOOK = "health_book"
-
-
-class MedicalFitness(str, enum.Enum):
-    """Medical fitness verdict for a person."""
-
-    FIT = "fit"
-    FIT_WITH_RESTRICTIONS = "fit_with_restrictions"
-    UNFIT = "unfit"
-
-
-class MedicalReferralStatus(str, enum.Enum):
-    """Lifecycle state of a medical-exam referral (направление)."""
-
-    ISSUED = "issued"
-    SCHEDULED = "scheduled"
-    COMPLETED = "completed"
-    CANCELLED = "cancelled"
-
-
-class MedicalSuspensionStatus(str, enum.Enum):
-    """State of a medical suspension (отстранение) record."""
-
-    ACTIVE = "active"
-    LIFTED = "lifted"
-
-
-class MedicalSuspensionReason(str, enum.Enum):
-    """Why a person is medically suspended from work."""
-
-    UNFIT = "unfit"
-    CONTRAINDICATION = "contraindication"
-
-
-class MedicalExam(TenantBaseModel, SoftDeleteMixin):
-    __tablename__ = "medical_exam"
-
-    person_id: Mapped[str] = mapped_column(ForeignKey("person.id"), nullable=False, index=True)
-    exam_type: Mapped[str] = mapped_column(String(128), nullable=False)
-    exam_date: Mapped[date] = mapped_column(Date, nullable=False)
-    conclusion: Mapped[str | None] = mapped_column(String(255))
-    valid_until: Mapped[date] = mapped_column(Date, nullable=False)
-    # --- additive (TZ B.8) ---
-    exam_kind: Mapped[MedicalExamKind | None] = mapped_column(
-        native_enum(MedicalExamKind), nullable=True
-    )
-    fitness: Mapped[MedicalFitness | None] = mapped_column(
-        native_enum(MedicalFitness), nullable=True
-    )
-    restrictions: Mapped[str | None] = mapped_column(Text)
-    contraindications: Mapped[list[str]] = mapped_column(
-        MutableList.as_mutable(JSON), nullable=False, default=list
-    )
-    referral_id: Mapped[str | None] = mapped_column(
-        ForeignKey("medical_referral.id"), nullable=True, index=True
-    )
-    medical_org_name: Mapped[str | None] = mapped_column(String(255))
-
-    person: Mapped[Person] = relationship(backref="medical_exams")
-
-
-class MedicalNorm(TenantBaseModel):
-    __tablename__ = "medical_norm"
-
-    position_id: Mapped[str] = mapped_column(ForeignKey("position.id"), nullable=False, index=True)
-    hazard_id: Mapped[str | None] = mapped_column(
-        ForeignKey("risk_hazards.id", ondelete="CASCADE"), nullable=True, index=True
-    )
-    exam_kind: Mapped[MedicalExamKind] = mapped_column(native_enum(MedicalExamKind), nullable=False)
-    interval_days: Mapped[int] = mapped_column(Integer, nullable=False, default=365)
-    working_conditions_class: Mapped[str | None] = mapped_column(String(32))
-
-    position: Mapped[Position] = relationship(backref="medical_norms")
-
-    # hazard_id is nullable (position-level "general" norms). NULL != NULL in a
-    # unique constraint, so duplicate general norms are tolerated; the contingent
-    # resolver dedups required kinds via set union, so this is functionally benign.
-    __table_args__ = (
-        UniqueConstraint(
-            "tenant_id",
-            "position_id",
-            "hazard_id",
-            "exam_kind",
-            name="uq_medical_norm_position_hazard_kind",
-        ),
-    )
-
-
-class MedicalFactor(TenantBaseModel):
-    """29н reference catalog: harmful factor / kind of work mandating periodic exams.
-
-    VARCHAR ``category`` (no PG enum — enum-label-parity anti-pattern). Linked from
-    ``RiskHazard.medical_factor_code`` (string, no cross-base FK). Optional norm overrides.
-    """
-
-    __tablename__ = "medical_factor"
-
-    code: Mapped[str] = mapped_column(String(32), nullable=False)
-    name: Mapped[str] = mapped_column(String(255), nullable=False)
-    category: Mapped[str] = mapped_column(String(16), nullable=False, default="factor")
-    exam_kinds: Mapped[list[str]] = mapped_column(
-        MutableList.as_mutable(JSON), nullable=False, default=list
-    )
-    periodicity_months: Mapped[int] = mapped_column(Integer, nullable=False, default=12)
-    participants: Mapped[list[str] | None] = mapped_column(
-        MutableList.as_mutable(JSON), nullable=True
-    )
-    lab_tests: Mapped[list[str] | None] = mapped_column(MutableList.as_mutable(JSON), nullable=True)
-
-    __table_args__ = (UniqueConstraint("tenant_id", "code", name="uq_medical_factor_tenant_code"),)
-
-
-class MedicalReferral(TenantBaseModel, SoftDeleteMixin):
-    __tablename__ = "medical_referral"
-
-    person_id: Mapped[str] = mapped_column(ForeignKey("person.id"), nullable=False, index=True)
-    exam_kind: Mapped[MedicalExamKind] = mapped_column(native_enum(MedicalExamKind), nullable=False)
-    due_at: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
-    status: Mapped[MedicalReferralStatus] = mapped_column(
-        native_enum(MedicalReferralStatus), nullable=False, default=MedicalReferralStatus.ISSUED
-    )
-    medical_org_name: Mapped[str | None] = mapped_column(String(255))
-    issued_by: Mapped[str | None] = mapped_column(
-        ForeignKey("user.id", ondelete="SET NULL"), nullable=True, index=True
-    )
-    result_exam_id: Mapped[str | None] = mapped_column(
-        ForeignKey("medical_exam.id", ondelete="SET NULL"), nullable=True
-    )
-
-    person: Mapped[Person] = relationship(backref="medical_referrals")
-
-
-class MedicalSuspension(TenantBaseModel, SoftDeleteMixin):
-    __tablename__ = "medical_suspension"
-
-    person_id: Mapped[str] = mapped_column(ForeignKey("person.id"), nullable=False, index=True)
-    reason: Mapped[MedicalSuspensionReason] = mapped_column(
-        native_enum(MedicalSuspensionReason),
-        nullable=False,  # no default — service always sets reason explicitly
-    )
-    source_exam_id: Mapped[str | None] = mapped_column(
-        ForeignKey("medical_exam.id", ondelete="SET NULL"), nullable=True
-    )
-    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    lifted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    status: Mapped[MedicalSuspensionStatus] = mapped_column(
-        native_enum(MedicalSuspensionStatus), nullable=False, default=MedicalSuspensionStatus.ACTIVE
-    )
-    lifted_by: Mapped[str | None] = mapped_column(
-        ForeignKey("user.id", ondelete="SET NULL"), nullable=True, index=True
-    )
-
-    person: Mapped[Person] = relationship(backref="medical_suspensions")
-
-
 class MarketplaceCatalogItem(TenantBaseModel, SoftDeleteMixin):
     __tablename__ = "marketplace_catalog_items"
 
@@ -1165,430 +1090,6 @@ class MarketplaceCatalogItem(TenantBaseModel, SoftDeleteMixin):
             "tenant_id", "item_type", "code", "version_label", name="uq_marketplace_catalog_item"
         ),
         Index("ix_marketplace_catalog_lookup", "tenant_id", "item_type", "status", "updated_at"),
-    )
-
-
-class BriefingTemplate(TenantBaseModel, SoftDeleteMixin):
-    __tablename__ = "briefing_templates"
-
-    code: Mapped[str] = mapped_column(String(128), nullable=False)
-    title: Mapped[str] = mapped_column(String(255), nullable=False)
-    briefing_type: Mapped[str] = mapped_column(String(32), nullable=False)
-    status: Mapped[str] = mapped_column(String(32), nullable=False, default="draft")
-    description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    validity_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    require_signature_code: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-
-    __table_args__ = (UniqueConstraint("tenant_id", "code", name="uq_briefing_templates_code"),)
-
-
-class BriefingJournal(TenantBaseModel, SoftDeleteMixin):
-    __tablename__ = "briefing_journals"
-
-    code: Mapped[str] = mapped_column(String(128), nullable=False)
-    title: Mapped[str] = mapped_column(String(255), nullable=False)
-    site_id: Mapped[str | None] = mapped_column(
-        ForeignKey("site.id", ondelete="SET NULL"), nullable=True
-    )
-    department_id: Mapped[str | None] = mapped_column(
-        ForeignKey("department.id", ondelete="SET NULL"), nullable=True
-    )
-    journal_type: Mapped[str] = mapped_column(String(32), nullable=False)
-    status: Mapped[str] = mapped_column(String(32), nullable=False, default="active")
-
-    __table_args__ = (UniqueConstraint("tenant_id", "code", name="uq_briefing_journals_code"),)
-
-
-class BriefingEntry(TenantBaseModel, SoftDeleteMixin):
-    __tablename__ = "briefing_entries"
-
-    briefing_journal_id: Mapped[str] = mapped_column(
-        ForeignKey("briefing_journals.id", ondelete="CASCADE"), nullable=False, index=True
-    )
-    briefing_template_id: Mapped[str | None] = mapped_column(
-        ForeignKey("briefing_templates.id", ondelete="SET NULL"), nullable=True
-    )
-    person_id: Mapped[str | None] = mapped_column(
-        ForeignKey("person.id", ondelete="SET NULL"), nullable=True, index=True
-    )
-    instructor_user_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
-    site_id: Mapped[str | None] = mapped_column(
-        ForeignKey("site.id", ondelete="SET NULL"), nullable=True
-    )
-    department_id: Mapped[str | None] = mapped_column(
-        ForeignKey("department.id", ondelete="SET NULL"), nullable=True
-    )
-    workplace_id: Mapped[str | None] = mapped_column(
-        ForeignKey("workplace.id", ondelete="SET NULL"), nullable=True
-    )
-    briefing_type: Mapped[str] = mapped_column(String(32), nullable=False)
-    briefing_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    valid_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
-    status: Mapped[str] = mapped_column(String(32), nullable=False, default="draft")
-    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
-
-
-class BriefingSignature(TenantBaseModel):
-    __tablename__ = "briefing_signatures"
-    __table_args__ = (
-        # Анти-гонка: один signer_type на briefing_entry (миграция ed03).
-        Index(
-            "uq_briefing_signatures_entry_signer",
-            "briefing_entry_id",
-            "signer_type",
-            unique=True,
-        ),
-    )
-
-    briefing_entry_id: Mapped[str] = mapped_column(
-        ForeignKey("briefing_entries.id", ondelete="CASCADE"), nullable=False, index=True
-    )
-    signer_type: Mapped[str] = mapped_column(String(16), nullable=False)
-    signer_user_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
-    signer_person_id: Mapped[str | None] = mapped_column(
-        ForeignKey("person.id", ondelete="SET NULL"), nullable=True
-    )
-    signature_mode: Mapped[str] = mapped_column(
-        String(32), nullable=False, default="internal_simple"
-    )
-    signed_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(tz=timezone.utc)
-    )
-    signature_payload: Mapped[dict[str, Any] | None] = mapped_column(
-        MutableDict.as_mutable(JSON), nullable=True
-    )
-
-
-class ComplianceDeadline(TenantBaseModel):
-    __tablename__ = "compliance_deadlines"
-
-    entity_type: Mapped[str] = mapped_column(String(64), nullable=False)
-    entity_id: Mapped[str] = mapped_column(String(36), nullable=False)
-    person_id: Mapped[str | None] = mapped_column(
-        ForeignKey("person.id", ondelete="SET NULL"), nullable=True, index=True
-    )
-    site_id: Mapped[str | None] = mapped_column(
-        ForeignKey("site.id", ondelete="SET NULL"), nullable=True
-    )
-    due_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    status: Mapped[str] = mapped_column(String(32), nullable=False, default="upcoming")
-    reminder_policy: Mapped[str | None] = mapped_column(Text, nullable=True)
-
-
-class CalendarEvent(TenantBaseModel):
-    __tablename__ = "calendar_events"
-
-    source_type: Mapped[str] = mapped_column(String(64), nullable=False)
-    source_id: Mapped[str] = mapped_column(String(36), nullable=False)
-    title: Mapped[str] = mapped_column(String(255), nullable=False)
-    starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    site_id: Mapped[str | None] = mapped_column(
-        ForeignKey("site.id", ondelete="SET NULL"), nullable=True
-    )
-    assigned_user_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
-    status: Mapped[str] = mapped_column(String(32), nullable=False, default="active")
-
-
-class OfflineSyncBatch(TenantBaseModel):
-    __tablename__ = "offline_sync_batches"
-
-    user_id: Mapped[str] = mapped_column(String(36), nullable=False)
-    device_id: Mapped[str] = mapped_column(String(128), nullable=False)
-    status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending")
-    entity_type: Mapped[str] = mapped_column(String(64), nullable=False)
-    payload: Mapped[dict[str, Any]] = mapped_column(
-        MutableDict.as_mutable(JSON), nullable=False, default=dict
-    )
-    error_payload: Mapped[dict[str, Any] | None] = mapped_column(
-        MutableDict.as_mutable(JSON), nullable=True
-    )
-
-
-class OfflineMediaQueue(TenantBaseModel):
-    __tablename__ = "offline_media_queue"
-
-    user_id: Mapped[str] = mapped_column(String(36), nullable=False)
-    device_id: Mapped[str] = mapped_column(String(128), nullable=False)
-    local_ref: Mapped[str] = mapped_column(String(255), nullable=False)
-    file_id: Mapped[str | None] = mapped_column(
-        ForeignKey("file.id", ondelete="SET NULL"), nullable=True
-    )
-    upload_status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending")
-    metadata_json: Mapped[dict[str, Any] | None] = mapped_column(
-        MutableDict.as_mutable(JSON), nullable=True
-    )
-
-
-class ExternalRegistryJob(TenantBaseModel):
-    __tablename__ = "external_registry_jobs"
-
-    entity_type: Mapped[str] = mapped_column(String(32), nullable=False)
-    entity_id: Mapped[str] = mapped_column(String(36), nullable=False)
-    registry_type: Mapped[str] = mapped_column(String(16), nullable=False)
-    status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending")
-    request_payload: Mapped[dict[str, Any] | None] = mapped_column(
-        MutableDict.as_mutable(JSON), nullable=True
-    )
-    response_payload: Mapped[dict[str, Any] | None] = mapped_column(
-        MutableDict.as_mutable(JSON), nullable=True
-    )
-
-
-class PermitStatus(str, enum.Enum):
-    ACTIVE = "active"
-    EXPIRED = "expired"
-    REVOKED = "revoked"
-
-
-class Permit(TenantBaseModel):
-    person_id: Mapped[str] = mapped_column(ForeignKey("person.id"), nullable=False, index=True)
-    position_id: Mapped[str | None] = mapped_column(
-        ForeignKey("position.id", ondelete="SET NULL"), nullable=True, index=True
-    )
-    permit_type: Mapped[str] = mapped_column(String(128), nullable=False)
-    issued_at: Mapped[date] = mapped_column(Date, nullable=False, default=date.today)
-    valid_until: Mapped[date | None] = mapped_column(Date)
-    status: Mapped[str] = mapped_column(
-        String(32), nullable=False, default=PermitStatus.ACTIVE.value
-    )
-
-    position: Mapped[Position | None] = relationship(backref="permits")
-    person: Mapped[Person] = relationship(backref="permits")
-
-    __table_args__ = (Index("ix_permit_position", "tenant_id", "position_id"),)
-
-
-class PPENorm(TenantBaseModel):
-    position_id: Mapped[str] = mapped_column(ForeignKey("position.id"), nullable=False, index=True)
-    hazard_id: Mapped[str] = mapped_column(
-        ForeignKey("risk_hazards.id", ondelete="CASCADE"), nullable=False, index=True
-    )
-    item_name: Mapped[str] = mapped_column(String(255), nullable=False)
-    quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
-    interval_days: Mapped[int] = mapped_column(Integer, nullable=False, default=365)
-    item_id: Mapped[str | None] = mapped_column(
-        ForeignKey("ppeitem.id", ondelete="SET NULL"), nullable=True, index=True
-    )
-
-    position: Mapped[Position] = relationship(backref="ppe_norms")
-    hazard: Mapped["RiskHazard"] = relationship("RiskHazard")
-    item: Mapped["PPEItem | None"] = relationship("PPEItem")
-
-    __table_args__ = (
-        UniqueConstraint(
-            "tenant_id",
-            "position_id",
-            "hazard_id",
-            "item_name",
-            name="uq_ppe_norm_position_hazard_item",
-        ),
-    )
-
-
-class PPEItemCategory(str, enum.Enum):
-    HEAD = "head"
-    HANDS = "hands"
-    RESPIRATORY = "respiratory"
-    BODY = "body"
-    FOOTWEAR = "footwear"
-    FALL_PROTECTION = "fall_protection"
-    OTHER = "other"
-
-
-class PPEItem(TenantBaseModel, SoftDeleteMixin):
-    name: Mapped[str] = mapped_column(String(255), nullable=False)
-    code: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    category: Mapped[PPEItemCategory] = mapped_column(
-        native_enum(PPEItemCategory), nullable=False, default=PPEItemCategory.OTHER
-    )
-    description: Mapped[str | None] = mapped_column(String(512))
-    default_wear_days: Mapped[int] = mapped_column(Integer, nullable=False, default=365)
-    metadata_json: Mapped[dict[str, Any]] = mapped_column(
-        MutableDict.as_mutable(JSON), nullable=False, default=dict
-    )
-
-    __table_args__ = (
-        UniqueConstraint("tenant_id", "name", name="uq_ppe_item_name"),
-        UniqueConstraint("tenant_id", "code", name="uq_ppe_item_code"),
-    )
-
-
-class PPEIssueStatus(str, enum.Enum):
-    ISSUED = "issued"
-    RETURNED = "returned"
-    WRITTEN_OFF = "written_off"
-    REPLACED = "replaced"
-    LOST = "lost"
-
-
-class PPEIssue(TenantBaseModel, SoftDeleteMixin):
-    person_id: Mapped[str] = mapped_column(ForeignKey("person.id"), nullable=False, index=True)
-    item_id: Mapped[str | None] = mapped_column(
-        ForeignKey("ppeitem.id", ondelete="SET NULL"), nullable=True, index=True
-    )
-    item_name: Mapped[str] = mapped_column(String(255), nullable=False)
-    quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
-    issued_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)
-    )
-    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    returned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    wear_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    # VARCHAR, not a native PG enum (sz01 converted the column; values are
-    # the lowercase PPEIssueStatus .value strings — анти-грабли after the
-    # PG enum incidents, same convention as medical/contractors).
-    status: Mapped[str] = mapped_column(
-        String(32), nullable=False, default=PPEIssueStatus.ISSUED.value
-    )
-    certificate_no: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    wear_percent: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    return_wear_percent: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    signature_doc_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    writeoff_reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    # Plain string ref, no FK: the replacement chain must survive hard deletes
-    # of old issues (same анти-грабли convention as contractor_documents.file_id).
-    replaces_issue_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
-
-    person: Mapped[Person] = relationship(backref="ppe_issues")
-    item: Mapped[PPEItem | None] = relationship("PPEItem", backref="issues")
-
-    __table_args__ = (Index("ix_ppe_issue_item", "tenant_id", "item_id"),)
-
-
-class PPEStockBatch(TenantBaseModel, SoftDeleteMixin):
-    __tablename__ = "ppe_stock_batch"
-
-    item_id: Mapped[str] = mapped_column(
-        ForeignKey("ppeitem.id", ondelete="CASCADE"), nullable=False, index=True
-    )
-    batch_no: Mapped[str] = mapped_column(String(128), nullable=False)
-    quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    received_at: Mapped[date | None] = mapped_column(Date, nullable=True)
-    certificate_no: Mapped[str | None] = mapped_column(String(128), nullable=True)
-    certificate_expires_at: Mapped[date | None] = mapped_column(Date, nullable=True)
-    location: Mapped[str | None] = mapped_column(String(255), nullable=True)
-
-    item: Mapped[PPEItem] = relationship("PPEItem")
-
-    __table_args__ = (
-        UniqueConstraint("tenant_id", "item_id", "batch_no", name="uq_ppe_stock_batch_item_no"),
-        Index("ix_ppe_stock_batch_item", "tenant_id", "item_id"),
-    )
-
-
-class TemplateStatus(str, enum.Enum):
-    DRAFT = "draft"
-    ACTIVE = "active"
-    ARCHIVED = "archived"
-
-
-class Template(TenantBaseModel):
-    code: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
-    name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
-    domain: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    description: Mapped[str | None] = mapped_column(String(1024))
-    category: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
-    scope_level: Mapped[str] = mapped_column(
-        String(32), nullable=False, default="tenant", index=True
-    )
-    scope_company_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
-    scope_site_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
-    tags_json: Mapped[list[str] | None] = mapped_column(MutableList.as_mutable(JSON), nullable=True)
-    metadata_json: Mapped[dict[str, Any]] = mapped_column(
-        MutableDict.as_mutable(JSON), nullable=False, default=dict
-    )
-    storage_key: Mapped[str | None] = mapped_column(String(512), nullable=True, index=True)
-    status: Mapped[TemplateStatus] = mapped_column(
-        Enum(TemplateStatus), nullable=False, default=TemplateStatus.DRAFT
-    )
-    current_version_id: Mapped[str | None] = mapped_column(
-        ForeignKey("templateversion.id", ondelete="SET NULL"), nullable=True, index=True
-    )
-    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-
-    __table_args__ = (
-        UniqueConstraint("tenant_id", "code", name="uq_templates_tenant_code"),
-        Index("ix_template_status_updated", "tenant_id", "status", "updated_at"),
-        Index("ix_template_updated", "tenant_id", "updated_at"),
-        Index(
-            "ix_template_scope_level_company_site",
-            "tenant_id",
-            "scope_level",
-            "scope_company_id",
-            "scope_site_id",
-        ),
-    )
-
-
-class TemplateVersionStatus(str, enum.Enum):
-    DRAFT = "draft"
-    ACTIVE = "active"
-    ARCHIVED = "archived"
-    UPLOADED = "uploaded"
-    LINTED = "linted"
-    READY = "ready"
-    DEPRECATED = "deprecated"
-
-
-class TemplateVersion(TenantBaseModel):
-    template_id: Mapped[str] = mapped_column(ForeignKey("template.id"), nullable=False, index=True)
-    version: Mapped[int] = mapped_column(Integer, nullable=False)
-    checksum: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
-    sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    status: Mapped[TemplateVersionStatus] = mapped_column(
-        Enum(TemplateVersionStatus), nullable=False, default=TemplateVersionStatus.UPLOADED
-    )
-    payload_key: Mapped[str] = mapped_column(String(512), nullable=False)
-    file_id: Mapped[str | None] = mapped_column(String(512), nullable=True)
-    size_bytes: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    placeholder_index: Mapped[dict[str, Any] | None] = mapped_column(
-        MutableDict.as_mutable(JSON), nullable=True
-    )
-    linter_report_json: Mapped[dict[str, Any] | None] = mapped_column(
-        MutableDict.as_mutable(JSON), nullable=True
-    )
-    created_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    document_type: Mapped[str | None] = mapped_column(String(255))
-    required_fields_schema: Mapped[dict[str, Any] | None] = mapped_column(
-        MutableDict.as_mutable(JSON)
-    )
-    applicability_rules: Mapped[dict[str, Any] | None] = mapped_column(MutableDict.as_mutable(JSON))
-    output_types: Mapped[list[str] | None] = mapped_column(MutableList.as_mutable(JSON))
-    profile: Mapped[dict[str, Any] | None] = mapped_column(MutableDict.as_mutable(JSON))
-
-    template: Mapped[Template] = relationship(backref="versions", foreign_keys=[template_id])
-
-    __mapper_args__ = {
-        "version_id_generator": False,
-    }
-
-    __table_args__ = (
-        UniqueConstraint("template_id", "version", name="uq_template_version"),
-        Index("ix_template_version_status", "tenant_id", "status"),
-        Index("ix_template_version_updated", "tenant_id", "updated_at"),
-    )
-
-
-class TemplateUsage(TenantBaseModel):
-    template_version_id: Mapped[str] = mapped_column(
-        ForeignKey("templateversion.id"), nullable=False, index=True
-    )
-    used_by_type: Mapped[str] = mapped_column(String(64), nullable=False)
-    used_by_id: Mapped[str] = mapped_column(String(36), nullable=False)
-
-    template_version: Mapped[TemplateVersion] = relationship(backref="usages")
-
-    __table_args__ = (
-        UniqueConstraint(
-            "template_version_id",
-            "used_by_type",
-            "used_by_id",
-            name="uq_template_usage_target",
-        ),
-        Index("ix_template_usage_lookup", "tenant_id", "template_version_id"),
     )
 
 
