@@ -1,5 +1,23 @@
 # CHANGELOG
 
+## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-2: god-model decomposition COMPLETE (batch 5))
+
+### Changed
+- **ARCH-2 batch 5 — foundational tenant/billing + identity/authz block extracted** (30 classes):
+  `tenant_billing.py` (19 — RoleEnum, Tenant*, Billing*, rate limits, ApiToken, WebhookSubscription),
+  `identity.py` (11 — User, RefreshSession, UserRole, UserAttribute, AuthzBaseModel + Authz*, ApiKey).
+  `identity.py` binds `RoleEnum` at runtime (`native_enum(RoleEnum)`, imported from `tenant_billing`)
+  and subclasses the declarative `TenantBase` — both imported normally.
+- **ARCH-2 acceptance met.** `backend/app/models/models.py` is now a **594-line pure re-export
+  facade** (was 3476 / 170 classes). All domain models live in 21 domain files, each **< 600 lines**
+  (training, medical, briefings, field_ops, ppe, templates, packages, audit_log, journals, incidents,
+  inspections, master_data, marketplace, idempotency, risk_register, assets, approval_runtime,
+  tenant_billing, identity, + the pre-existing document/finance/etc.). `from app.models.models import X`
+  and `from app.models import X` unchanged for every previously-available `X` (guard-enforced; the
+  declarative bases `SharedModel`/`TenantBaseModel` re-exported explicitly). Alembic schema unchanged
+  throughout (guard: 251 tables identical at every step). Verified Py3.12: guard green, ruff+black
+  clean, auth/RBAC/ABAC/tenant/billing behavior tests green.
+
 ## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-2: god-model decomposition (batch 4, approval runtime))
 
 ### Changed
