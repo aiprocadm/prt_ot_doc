@@ -1,5 +1,29 @@
 # CHANGELOG
 
+## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-2: god-model decomposition (slice 1 + guard))
+
+### Added
+- **ARCH-2 guard — `scripts/ci/check_models_metadata.py`.** Verifies that splitting
+  `backend/app/models/models.py` is a *pure move*: `configure_mappers()` (no circular
+  import / broken relationship), a **schema fingerprint** (table→columns→types for
+  SharedBase+TenantBase — a would-be `alembic autogenerate` diff) compared to a baseline,
+  and **re-export completeness** (every model/Enum type importable from `app.models.models`
+  at baseline stays importable). Baseline: `docs/stabilization/models_metadata_baseline.json`.
+  Runs in ~15s in the gate image (no PG). Refactor-verification tool, not a standing gate
+  (it freezes the schema fingerprint).
+
+### Changed
+- **ARCH-2 slice 1 — Training domain extracted from `models.py`.** 17 Training classes
+  (`Training`, `TrainingCourse`, `TrainingPlan`, `TrainingSession*`, `TrainingCertificate`,
+  `TrainingProgram`/`Module`/`Lesson`/`Test`/`TestQuestion`/`Group`/`Enrollment`/`Attempt`/
+  `Protocol`/`ProtocolItem`, + status enums) moved to new `backend/app/models/training.py`.
+  Pure move: same `TenantBase` registry, **identical tables** (guard green: 251 tables
+  unchanged). `models.py` re-exports all 17 (listed in `__all__` so ruff F401 keeps them)
+  → `from app.models.models import X` and `from app.models import X` unchanged. External
+  refs (Person/Company/Position/File) are `Mapped[...]` annotations resolved via the SA
+  registry, so only a `TYPE_CHECKING` import is needed — no runtime cycle. `models.py`:
+  3476 → 3142 lines. Verified Py3.12: guard green, `test_training_enrollment_service.py` green.
+
 ## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-3: enforce bounded-context boundaries)
 
 ### Added
