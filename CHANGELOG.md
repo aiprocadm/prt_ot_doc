@@ -1,5 +1,35 @@
 # CHANGELOG
 
+## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-4: split god-route documents.py into a package)
+
+### Changed
+- **ARCH-4 — split the god-route `api/routes/documents.py` (1938 lines) into a package**, the
+  first route-side decomposition under the OpenAPI contract guard. Behaviour/contract-preserving:
+  the public OpenAPI surface is byte-for-byte unchanged (guard: **803 operations, 644 schemas**),
+  and every endpoint is a pure move (deterministic line-diff: each module's code body is identical
+  to the original ranges).
+  - `api/routes/documents/_common.py` (242) — the single shared `router`, the documents error
+    vocabulary (`_documents_bad_request/_not_found/_conflict/_forbidden/_payload_too_large`,
+    `_generate_internal_error_problem`), `_dispatch_celery_task`, the access dependencies
+    (`AccessDep/ReadAccessDep/StatusAccessDep`), constants, and all request/response Pydantic models.
+  - `api/routes/documents/read.py` (649) — read/query endpoints (list, get, readiness, quality:check,
+    mapping:validate, versions/compare, dependency-map, status, download) + their view helpers.
+  - `api/routes/documents/_generate_helpers.py` (449) — generate-side helpers (CSV/XLSX parsing,
+    template-scope resolution, company/person fetch, `_resolve_run`).
+  - `api/routes/documents/generate.py` (723) — template:resolve / generate / batch / batch-get /
+    task-status / status-patch endpoints. (Slightly over the ~700 guideline — dominated by the
+    intrinsic 286-line `generate_document`; further intra-endpoint splitting deferred as it would
+    not be a pure move.)
+  - `api/routes/documents/__init__.py` — imports the endpoint modules in registration order
+    (read → generate, guarded by `# isort: off`) so route/OpenAPI order is preserved, and re-exports
+    `router` (used by `api/v1/route_groups.py` as `documents.router`) plus the internals imported by
+    tests (`DocGenerateRequest`, `_fetch_template`, `_serialize_payload`).
+  Verified locally (Py3.13 venv): OpenAPI guard green (unchanged), ruff+black clean, all 16 routes
+  registered in the original order, re-exports + `route_groups` import OK, documents route/contract
+  tests green. NOTE: `tests/test_documents_generate.py::test_template_resolve_prefers_site_scope`
+  fails **identically on the pre-split HEAD** (asserts site-scope wins but resolution returns
+  tenant-scope) — a pre-existing issue, unrelated to this move; flagged separately, not a regression.
+
 ## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-4: tasks/_core.py decomposition (slice 4 — notification/reminder jobs))
 
 ### Changed
