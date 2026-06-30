@@ -1,5 +1,31 @@
 # CHANGELOG
 
+## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-4: split god-route risk.py into a package)
+
+### Changed
+- **ARCH-4 — split the god-route `api/routes/risk.py` (1499 lines) into a package**, same
+  contract-preserving pattern as the documents split. OpenAPI surface byte-for-byte unchanged
+  (guard: **803 operations, 644 schemas**); every endpoint is a pure move (deterministic line-diff
+  vs the original ranges).
+  - `api/routes/risk/_common.py` (391) — both routers (`router` for `/risks`, `engine_router`
+    mounted at `/risk`), the `logging.getLogger("app.risk")` logger, access dependencies
+    (`SessionDep/TenantDep/EditorAccess/AdminAccess/RiskReadAccess`), `_RISK_READ_ROLES`, the error
+    helpers (`_risk_unprocessable/_risk_bad_request`) and engine helpers, and all request/response
+    models.
+  - `api/routes/risk/methodologies.py` (453) — methodology CRUD + hazards/controls/matrix + risk-map
+    endpoints.
+  - `api/routes/risk/assessments.py` (531) — `assess` (the ~420-line creator) + `get_assessment`.
+  - `api/routes/risk/reports.py` (232) — risk cards, action plans, and the `/risks` listing.
+  - `api/routes/risk/__init__.py` — imports endpoint modules in registration order (under
+    `# isort: off`), then `router.include_router(engine_router)` exactly as the original file did at
+    its end; re-exports `router` (route_groups uses `risk.router`) + the error helpers imported by
+    `tests/test_risk_error_contract.py`.
+  Verified locally (Py3.13 venv): OpenAPI guard green (unchanged), ruff+black clean, all 15 routes
+  registered in original order, the four module bodies byte-identical to the source ranges, re-exports
+  + `route_groups` import OK, risk route/engine tests green. (`RiskReadAccess`, a mixed-case dependency
+  alias, was caught by ruff `F821` during the split and added to the shared re-import — the
+  undefined-name guard doing its job.)
+
 ## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-4: split god-route documents.py into a package)
 
 ### Changed
