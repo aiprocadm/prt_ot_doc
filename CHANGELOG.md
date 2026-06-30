@@ -1,5 +1,29 @@
 # CHANGELOG
 
+## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-4: tasks/_core.py decomposition (slice 3 — file/PDF jobs))
+
+### Changed
+- **ARCH-4 slice 3 — extract the file/PDF job group from `tasks/_core.py`.** Same
+  behavior-preserving pattern (new leaf sub-module + re-export from `_core`, explicit `name=`
+  preserved → identical Celery registration):
+  - `tasks/file_jobs.py` (new) — the 4 file/PDF tasks: `apply_headers_job`
+    (`app.tasks.apply_headers_job`), `convert_pdf_job` (`app.tasks.convert_pdf_job`),
+    `index_file_content_job` (`files.index_content`, `bind=True max_retries=3`), and the
+    `av_scan_file_job` delegate (`files.av_scan_file_job`). Heavy third-party imports
+    (LibreOffice pool, pdf converters) stay function-local exactly as before. Leaf module —
+    imports only from `app.tasks._shared`, never back into `_core` → no cycle.
+  - `_core.py` re-exports all 4 (`# noqa: F401`); the re-exported task objects are identical
+    (same object), so `from app.tasks import X`, the thin wrappers in `app.celery.tasks.*`, and
+    the `app.modules.files.service` imports all keep resolving, and existing `.delay`/`.apply_async`
+    monkeypatches still work. `DOCX_MIME` (added to `_shared` in slice 2) is no longer referenced
+    from `_core`, so its `_shared` re-import was dropped there.
+  `_core.py`: 1233 → 920 lines; `file_jobs.py`: 350 lines. No test mock-patch targets needed
+  repointing this slice (a pre-flight sweep confirmed no test patches `app.tasks._core.<global>` for
+  a moved function — unlike slice 2). Verified locally (Py3.13 venv): Celery guard green (31 tasks
+  unchanged), ruff+black clean, re-export identity confirmed across all 5 import paths, file/PDF +
+  tasks tests green (57 passed); canonical 3.12.12 run via the Docker gate image. (Remaining groups
+  — notification/reminder, outbox, signing/edo — are follow-ups by the same pattern.)
+
 ## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-4: tasks/_core.py decomposition (slice 2 — document jobs))
 
 ### Changed
