@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 import enum
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import (
     JSON,
     Boolean,
-    Date,
     DateTime,
     Enum,
     ForeignKey,
@@ -19,7 +18,7 @@ from sqlalchemy import (
     UniqueConstraint,
 )
 from sqlalchemy.ext.mutable import MutableDict, MutableList
-from sqlalchemy.orm import Mapped, mapped_column, relationship, synonym
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.session import TenantBase
 from app.models.approval_workflow import (
@@ -41,6 +40,13 @@ from app.models.approval_workflow import (
     EdoStatusHistory,
     SignatureProviderStatus,
     SignatureType,
+)
+
+# ARCH-2: re-export assets models moved to app.models.assets.
+from app.models.assets import (
+    Asset,
+    Equipment,
+    EquipmentStatus,
 )
 
 # ARCH-2: re-export audit_log-domain models moved to app.models.audit_log.
@@ -77,7 +83,16 @@ from app.models.field_ops import (
     Permit,
     PermitStatus,
 )
+
+# Re-export File (kept in __all__ so ruff F401 keeps it; some callers do
+# ``from app.models.models import File``).
 from app.models.file import File
+
+# ARCH-2: re-export idempotency models moved to app.models.idempotency.
+from app.models.idempotency import (
+    IdempotencyKey,
+    IdempotencyStatus,
+)
 
 # ARCH-2: re-export incidents-domain models moved to app.models.incidents.
 from app.models.incidents import (
@@ -110,6 +125,21 @@ from app.models.journals import (
     JournalType,
     PlanTask,
     PlanTaskStatus,
+)
+
+# ARCH-2: re-export marketplace models moved to app.models.marketplace.
+from app.models.marketplace import (
+    MarketplaceCatalogItem,
+)
+
+# ARCH-2: re-export master_data models moved to app.models.master_data.
+from app.models.master_data import (
+    Company,
+    EmploymentStatus,
+    Person,
+    Position,
+    Site,
+    Workplace,
 )
 
 # ARCH-2: re-export medical-domain models moved to app.models.medical.
@@ -171,6 +201,18 @@ from app.models.ppe import (
     PPEStockBatch,
 )
 
+# ARCH-2: re-export risk_register models moved to app.models.risk_register.
+from app.models.risk_register import (
+    NPA,
+    NPABinding,
+    NpaBindingTarget,
+    NPAStatus,
+    PositionHazardLink,
+    RiskMap,
+    RiskMethodology,
+    WorkplaceHazardLink,
+)
+
 # ARCH-2: re-export templates-domain models moved to app.models.templates.
 from app.models.templates import (
     Template,
@@ -204,8 +246,7 @@ from app.models.training import (
 )
 
 if TYPE_CHECKING:  # pragma: no cover - used for type checkers only
-    from app.models.file import File
-    from app.models.risk import RiskHazard
+    pass
 
 __all__ = [
     "AuditLog",
@@ -339,6 +380,31 @@ __all__ = [
     "EdoDirection",
     "EdoStatus",
     "EdoMessageStatus",
+]
+
+# ARCH-2 batch 3 re-exports (kept in __all__ so ruff F401 keeps the imports).
+__all__ += [
+    "File",
+    "Company",
+    "Position",
+    "EmploymentStatus",
+    "Person",
+    "Site",
+    "Workplace",
+    "MarketplaceCatalogItem",
+    "IdempotencyStatus",
+    "IdempotencyKey",
+    "RiskMethodology",
+    "RiskMap",
+    "WorkplaceHazardLink",
+    "PositionHazardLink",
+    "NPAStatus",
+    "NPA",
+    "NpaBindingTarget",
+    "NPABinding",
+    "Asset",
+    "EquipmentStatus",
+    "Equipment",
 ]
 
 # ARCH-2 batch 2 re-exports (kept in __all__ so ruff F401 keeps the imports).
@@ -984,444 +1050,6 @@ class ApiKey(TenantBaseModel):
     @property
     def scope_list(self) -> list[str]:
         return [scope for scope in self.scopes.split() if scope]
-
-
-class Company(TenantBaseModel, SoftDeleteMixin):
-    name: Mapped[str] = mapped_column(String(255), nullable=False)
-    inn: Mapped[str | None] = mapped_column("tax_id", String(32), nullable=True)
-    kpp: Mapped[str | None] = mapped_column(String(32), nullable=True)
-    ogrn: Mapped[str | None] = mapped_column(String(32), nullable=True)
-    activity_type: Mapped[str | None] = mapped_column(String(128), nullable=True)
-    okved_codes: Mapped[list[str]] = mapped_column(
-        MutableList.as_mutable(JSON), nullable=False, default=list
-    )
-    legal_address: Mapped[str | None] = mapped_column("address", String(255))
-    actual_address: Mapped[str | None] = mapped_column(String(255))
-    director: Mapped[str | None] = mapped_column(String(255))
-    bank_name: Mapped[str | None] = mapped_column(String(255))
-    bank_bik: Mapped[str | None] = mapped_column(String(32))
-    bank_account: Mapped[str | None] = mapped_column(String(32))
-    phone_numbers: Mapped[list[str]] = mapped_column(
-        MutableList.as_mutable(JSON), nullable=False, default=list
-    )
-    contact_person: Mapped[str | None] = mapped_column(String(255))
-    contact_phone: Mapped[str | None] = mapped_column(String(32))
-    contact_email: Mapped[str | None] = mapped_column(String(320))
-    email: Mapped[str | None] = mapped_column(String(320))
-    logo_file_id: Mapped[str | None] = mapped_column(
-        ForeignKey("file.id", ondelete="SET NULL"), nullable=True
-    )
-    stamp_file_id: Mapped[str | None] = mapped_column(
-        ForeignKey("file.id", ondelete="SET NULL"), nullable=True
-    )
-    branding_payload: Mapped[dict[str, Any]] = mapped_column(
-        MutableDict.as_mutable(JSON), nullable=False, default=dict
-    )
-    preferred_header_preset_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    work_types: Mapped[list[str]] = mapped_column(
-        MutableList.as_mutable(JSON), nullable=False, default=list
-    )
-    hazardous_factors: Mapped[list[str]] = mapped_column(
-        MutableList.as_mutable(JSON), nullable=False, default=list
-    )
-    is_hazardous_production_facility: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=False
-    )
-    has_dangerous_objects: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    # CRM-статус карточки компании (draft/active/archived) — VARCHAR, не PG-enum
-    # (снимает класс enum-parity). tags — свободные метки; nullable, чтобы add_column
-    # на существующую таблицу не требовал server_default на JSON.
-    status: Mapped[str] = mapped_column(
-        String(32), nullable=False, default="active", server_default="active"
-    )
-    tags: Mapped[list[str] | None] = mapped_column(
-        MutableList.as_mutable(JSON), nullable=True, default=list
-    )
-
-    logo_file: Mapped["File | None"] = relationship(
-        "File", foreign_keys=[logo_file_id], lazy="selectin"
-    )
-    stamp_file: Mapped["File | None"] = relationship(
-        "File", foreign_keys=[stamp_file_id], lazy="selectin"
-    )
-
-    __table_args__ = (UniqueConstraint("tenant_id", "name", name="uq_company_tenant_name"),)
-
-    tax_id = synonym("inn")
-    address = synonym("legal_address")
-
-
-class Position(TenantBaseModel, SoftDeleteMixin):
-    company_id: Mapped[str] = mapped_column(ForeignKey("company.id"), nullable=False, index=True)
-    name: Mapped[str] = mapped_column(String(255), nullable=False)
-    description: Mapped[str | None] = mapped_column(String(255))
-    safety_category: Mapped[str | None] = mapped_column(String(64))
-    working_conditions_class: Mapped[str | None] = mapped_column(String(32))
-    hazardous_factors: Mapped[list[str]] = mapped_column(
-        MutableList.as_mutable(JSON), nullable=False, default=list
-    )
-
-    company: Mapped[Company] = relationship(backref="positions")
-    hazards: Mapped[list["RiskHazard"]] = relationship(
-        "RiskHazard",
-        secondary="position_hazard",
-        lazy="selectin",
-        back_populates="positions",
-        overlaps="hazard_links,position,hazard",
-    )
-
-    __table_args__ = (
-        UniqueConstraint("tenant_id", "company_id", "name", name="uq_position_company_name"),
-    )
-
-
-class EmploymentStatus(str, enum.Enum):
-    """Employment state for personnel records."""
-
-    ACTIVE = "active"
-    ON_LEAVE = "on_leave"
-    SUSPENDED = "suspended"
-    TERMINATED = "terminated"
-
-
-class Person(TenantBaseModel, SoftDeleteMixin):
-    company_id: Mapped[str] = mapped_column(ForeignKey("company.id"), nullable=False, index=True)
-    position_id: Mapped[str | None] = mapped_column(ForeignKey("position.id"))
-    workplace_id: Mapped[str | None] = mapped_column(ForeignKey("workplace.id"))
-    first_name: Mapped[str] = mapped_column(String(100), nullable=False)
-    last_name: Mapped[str] = mapped_column(String(100), nullable=False)
-    middle_name: Mapped[str | None] = mapped_column(String(100))
-    birth_date: Mapped[date | None] = mapped_column(Date)
-    email: Mapped[str | None] = mapped_column(String(320))
-    phone: Mapped[str | None] = mapped_column(String(32))
-    personnel_number: Mapped[str | None] = mapped_column(String(32), index=True)
-    hired_at: Mapped[date | None] = mapped_column(Date)
-    qualifications: Mapped[list[dict[str, Any]]] = mapped_column(
-        MutableList.as_mutable(JSON), nullable=False, default=list
-    )
-    snils: Mapped[str | None] = mapped_column(String(32))
-    passport: Mapped[str | None] = mapped_column(String(64))
-    current_ppe: Mapped[list[dict[str, Any]]] = mapped_column(
-        MutableList.as_mutable(JSON), nullable=False, default=list
-    )
-    # 766н: рост и размеры СИЗ работника (одежда/обувь/головной убор/СИЗОД/
-    # перчатки/рукавицы). JSON: состав ключей зависит от выдаваемых СИЗ.
-    ppe_sizes: Mapped[dict[str, Any] | None] = mapped_column(
-        MutableDict.as_mutable(JSON), nullable=True
-    )
-    working_conditions_class: Mapped[str | None] = mapped_column(String(32))
-    hazardous_factors: Mapped[list[str]] = mapped_column(
-        MutableList.as_mutable(JSON), nullable=False, default=list
-    )
-    # Свободнотекстовая должность (то, что вводит пользователь во фронте). Отдельно
-    # от структурного position_id/relationship `position` (каталог Position) — имя
-    # `position` занято связью, поэтому колонка называется position_title.
-    position_title: Mapped[str | None] = mapped_column(String(255))
-    # values_callable: SQLAlchemy ``Enum`` defaults to sending the Python
-    # enum member *name* ("ACTIVE"), but the PG type ``employmentstatus``
-    # was created with lowercase *values* ("active") in migration
-    # 8d2c1a6c5e24. Override to send ``.value`` so INSERTs satisfy the
-    # enum's accepted-value set. Without this, demo bootstrap fails with
-    # ``InvalidTextRepresentationError: invalid input value for enum
-    # employmentstatus: "ACTIVE"``.
-    employment_status: Mapped[EmploymentStatus] = mapped_column(
-        Enum(
-            EmploymentStatus,
-            name="employmentstatus",
-            values_callable=lambda enum_cls: [member.value for member in enum_cls],
-        ),
-        nullable=False,
-        default=EmploymentStatus.ACTIVE,
-    )
-
-    company: Mapped[Company] = relationship(backref="people")
-    position: Mapped[Position | None] = relationship(backref="people")
-    workplace: Mapped["Workplace | None"] = relationship(backref="people")
-
-    __table_args__ = (
-        UniqueConstraint("tenant_id", "personnel_number", name="uq_person_tenant_tab_number"),
-    )
-
-
-class Site(TenantBaseModel, SoftDeleteMixin):
-    __tablename__ = "site"
-
-    company_id: Mapped[str] = mapped_column(ForeignKey("company.id"), nullable=False, index=True)
-    name: Mapped[str] = mapped_column(String(255), nullable=False)
-    address: Mapped[str | None] = mapped_column(String(255))
-    geo_json: Mapped[dict[str, Any] | None] = mapped_column(
-        MutableDict.as_mutable(JSON), nullable=True
-    )
-    hazard_class: Mapped[str | None] = mapped_column(String(32))
-    site_type: Mapped[str | None] = mapped_column(String(64))
-    contact_name: Mapped[str | None] = mapped_column(String(255))
-    contact_phone: Mapped[str | None] = mapped_column(String(32))
-    contact_email: Mapped[str | None] = mapped_column(String(320))
-    is_hazardous_production_facility: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=False
-    )
-    opo_register_number: Mapped[str | None] = mapped_column(String(64))
-    branding_payload: Mapped[dict[str, Any]] = mapped_column(
-        MutableDict.as_mutable(JSON), nullable=False, default=dict
-    )
-
-    company: Mapped[Company] = relationship(backref="sites")
-
-
-class Workplace(TenantBaseModel, SoftDeleteMixin):
-    __tablename__ = "workplace"
-
-    company_id: Mapped[str] = mapped_column(ForeignKey("company.id"), nullable=False, index=True)
-    site_id: Mapped[str | None] = mapped_column(ForeignKey("site.id"), nullable=True, index=True)
-    name: Mapped[str] = mapped_column(String(255), nullable=False)
-    description: Mapped[str | None] = mapped_column(Text)
-    location: Mapped[str | None] = mapped_column(String(255))
-    working_conditions_class: Mapped[str | None] = mapped_column(String(32))
-
-    company: Mapped[Company] = relationship(backref="workplaces")
-    site: Mapped[Site | None] = relationship(backref="workplaces")
-    hazards: Mapped[list["RiskHazard"]] = relationship(
-        "RiskHazard",
-        secondary="workplace_hazard",
-        lazy="selectin",
-        back_populates="workplaces",
-        overlaps="hazard_links,workplace,hazard",
-    )
-
-    __table_args__ = (
-        UniqueConstraint("tenant_id", "company_id", "name", name="uq_workplace_company_name"),
-    )
-
-
-class MarketplaceCatalogItem(TenantBaseModel, SoftDeleteMixin):
-    __tablename__ = "marketplace_catalog_items"
-
-    item_type: Mapped[str] = mapped_column(String(32), nullable=False)
-    code: Mapped[str] = mapped_column(String(128), nullable=False)
-    name: Mapped[str] = mapped_column(String(255), nullable=False)
-    status: Mapped[str] = mapped_column(String(32), nullable=False, default="draft")
-    version_label: Mapped[str] = mapped_column(String(64), nullable=False)
-    category: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    tags_json: Mapped[list[str]] = mapped_column(
-        MutableList.as_mutable(JSON), nullable=False, default=list
-    )
-    description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    preview_json: Mapped[dict[str, Any]] = mapped_column(
-        MutableDict.as_mutable(JSON), nullable=False, default=dict
-    )
-    compatibility_json: Mapped[dict[str, Any]] = mapped_column(
-        MutableDict.as_mutable(JSON), nullable=False, default=dict
-    )
-    dependency_json: Mapped[dict[str, Any]] = mapped_column(
-        MutableDict.as_mutable(JSON), nullable=False, default=dict
-    )
-    source_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    usage_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-
-    __table_args__ = (
-        UniqueConstraint(
-            "tenant_id", "item_type", "code", "version_label", name="uq_marketplace_catalog_item"
-        ),
-        Index("ix_marketplace_catalog_lookup", "tenant_id", "item_type", "status", "updated_at"),
-    )
-
-
-class IdempotencyStatus(str, enum.Enum):
-    PENDING = "pending"
-    SUCCEEDED = "succeeded"
-    FAILED = "failed"
-
-
-class IdempotencyKey(TenantBaseModel):
-    __tablename__ = "idempotency_keys"
-
-    endpoint: Mapped[str] = mapped_column(String(255), nullable=False)
-    key: Mapped[str] = mapped_column(String(128), nullable=False)
-    status: Mapped[IdempotencyStatus] = mapped_column(
-        Enum(IdempotencyStatus), nullable=False, default=IdempotencyStatus.PENDING
-    )
-    request_hash: Mapped[str | None] = mapped_column(String(128))
-    path: Mapped[str | None] = mapped_column(String(512))
-    method: Mapped[str | None] = mapped_column(String(16))
-    status_code: Mapped[int | None] = mapped_column(Integer)
-    response_headers: Mapped[dict[str, Any] | None] = mapped_column(
-        MutableDict.as_mutable(JSON), nullable=True
-    )
-    response_body: Mapped[str | None] = mapped_column(Text)
-    result_json: Mapped[dict[str, Any] | None] = mapped_column(MutableDict.as_mutable(JSON))
-    last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-
-    __table_args__ = (
-        UniqueConstraint("tenant_id", "endpoint", "key", name="uq_idempotency_keys"),
-        Index("ix_idempotency_keys_lookup", "tenant_id", "endpoint", "key"),
-    )
-
-
-class RiskMethodology(TenantBaseModel):
-    """Risk calculation methodology including severity/likelihood scales."""
-
-    code: Mapped[str] = mapped_column(String(64), nullable=False)
-    name: Mapped[str] = mapped_column(String(255), nullable=False)
-    definition: Mapped[dict[str, Any]] = mapped_column(MutableDict.as_mutable(JSON), nullable=False)
-
-    __table_args__ = (
-        UniqueConstraint("tenant_id", "name", name="uq_risk_methodology_name"),
-        UniqueConstraint("tenant_id", "code", name="uq_risk_methodology_code"),
-    )
-
-
-class RiskMap(TenantBaseModel):
-    methodology_id: Mapped[str] = mapped_column(
-        ForeignKey("riskmethodology.id"), nullable=False, index=True
-    )
-    company_id: Mapped[str] = mapped_column(ForeignKey("company.id"), nullable=False, index=True)
-    site_id: Mapped[str | None] = mapped_column(ForeignKey("site.id"), nullable=True, index=True)
-    position_id: Mapped[str | None] = mapped_column(
-        ForeignKey("position.id"), nullable=True, index=True
-    )
-    document_pack_id: Mapped[str | None] = mapped_column(
-        ForeignKey("document_pack.id"), nullable=True, index=True
-    )
-    matrix: Mapped[dict[str, Any]] = mapped_column(MutableDict.as_mutable(JSON), nullable=False)
-    recalculated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-
-    methodology: Mapped[RiskMethodology] = relationship(backref="risk_maps")
-    company: Mapped[Company] = relationship(backref="risk_maps")
-    site: Mapped[Site | None] = relationship(backref="risk_maps")
-    position: Mapped[Position | None] = relationship(backref="risk_maps")
-    document_pack: Mapped["DocumentPack | None"] = relationship(backref="risk_maps")
-
-    __table_args__ = (
-        UniqueConstraint(
-            "tenant_id",
-            "company_id",
-            "site_id",
-            "position_id",
-            "methodology_id",
-            name="uq_riskmap_scope",
-        ),
-    )
-
-
-class WorkplaceHazardLink(TenantBaseModel):
-    __tablename__ = "workplace_hazard"
-
-    workplace_id: Mapped[str] = mapped_column(
-        ForeignKey("workplace.id", ondelete="CASCADE"), nullable=False, index=True
-    )
-    hazard_id: Mapped[str] = mapped_column(
-        ForeignKey("risk_hazards.id", ondelete="CASCADE"), nullable=False, index=True
-    )
-    document_file_id: Mapped[str | None] = mapped_column(
-        ForeignKey("file.id", ondelete="SET NULL"), nullable=True
-    )
-
-    workplace: Mapped[Workplace] = relationship(
-        backref="hazard_links", overlaps="hazards,workplaces"
-    )
-    hazard: Mapped["RiskHazard"] = relationship("RiskHazard", overlaps="hazards,workplaces")
-    document_file: Mapped["File | None"] = relationship("File")
-
-    __table_args__ = (
-        UniqueConstraint("tenant_id", "workplace_id", "hazard_id", name="uq_workplace_hazard_link"),
-    )
-
-
-class PositionHazardLink(TenantBaseModel):
-    __tablename__ = "position_hazard"
-
-    position_id: Mapped[str] = mapped_column(
-        ForeignKey("position.id", ondelete="CASCADE"), nullable=False, index=True
-    )
-    hazard_id: Mapped[str] = mapped_column(
-        ForeignKey("risk_hazards.id", ondelete="CASCADE"), nullable=False, index=True
-    )
-    document_file_id: Mapped[str | None] = mapped_column(
-        ForeignKey("file.id", ondelete="SET NULL"), nullable=True
-    )
-
-    position: Mapped[Position] = relationship(backref="hazard_links", overlaps="hazards,positions")
-    hazard: Mapped["RiskHazard"] = relationship("RiskHazard", overlaps="hazards,positions")
-    document_file: Mapped["File | None"] = relationship("File")
-
-    __table_args__ = (
-        UniqueConstraint("tenant_id", "position_id", "hazard_id", name="uq_position_hazard_link"),
-    )
-
-
-class NPAStatus(str, enum.Enum):
-    ACTIVE = "active"
-    OBSOLETE = "obsolete"
-
-
-class NPA(TenantBaseModel):
-    code: Mapped[str] = mapped_column(String(128), nullable=False)
-    title: Mapped[str] = mapped_column(String(512), nullable=False)
-    edition_date: Mapped[date] = mapped_column(Date, nullable=False)
-    status: Mapped[NPAStatus] = mapped_column(
-        Enum(NPAStatus), nullable=False, default=NPAStatus.ACTIVE
-    )
-
-    __table_args__ = (UniqueConstraint("tenant_id", "code", name="uq_npa_code"),)
-
-
-class NpaBindingTarget(str, enum.Enum):
-    """Entities that can be linked to an NPA."""
-
-    TEMPLATE_VERSION = "template_version"
-    DOCUMENT = "document"
-    PACK = "pack"
-
-
-class NPABinding(TenantBaseModel):
-    template_version_id: Mapped[str | None] = mapped_column(
-        ForeignKey("templateversion.id"), nullable=True, index=True
-    )
-    npa_id: Mapped[str] = mapped_column(ForeignKey("npa.id"), nullable=False, index=True)
-    ref: Mapped[str | None] = mapped_column(String(255))
-    entity_type: Mapped[NpaBindingTarget] = mapped_column(
-        Enum(
-            NpaBindingTarget,
-            name="npabindingtarget",
-            # iter-19 RB-002h cohort closure: PG type `npabindingtarget` was
-            # created lowercase by migration 8d2c1a6c5e24:59-62. Member names
-            # are uppercase ("TEMPLATE_VERSION"), so default SQLAlchemy binding
-            # sends the name → asyncpg rejects. Force `.value` via callable.
-            # Pinned by `backend/tests/test_npabinding_target_enum_values.py`.
-            values_callable=lambda enum_cls: [member.value for member in enum_cls],
-        ),
-        nullable=False,
-        default=NpaBindingTarget.TEMPLATE_VERSION,
-    )
-    entity_id: Mapped[str] = mapped_column(String(36), nullable=False)
-    context: Mapped[dict[str, Any]] = mapped_column(
-        MutableDict.as_mutable(JSON), nullable=False, default=dict
-    )
-
-    template_version: Mapped[TemplateVersion | None] = relationship(backref="npa_bindings")
-    npa: Mapped[NPA] = relationship(backref="bindings")
-
-
-class Asset(TenantBaseModel):
-    name: Mapped[str] = mapped_column(String(255), nullable=False)
-    category: Mapped[str | None] = mapped_column(String(128))
-
-
-class EquipmentStatus(str, enum.Enum):
-    ACTIVE = "active"
-    IN_SERVICE = "in_service"
-    DECOMMISSIONED = "decommissioned"
-
-
-class Equipment(TenantBaseModel):
-    asset_id: Mapped[str] = mapped_column(ForeignKey("asset.id"), nullable=False, index=True)
-    serial_number: Mapped[str] = mapped_column(String(128), nullable=False)
-    status: Mapped[EquipmentStatus] = mapped_column(
-        Enum(EquipmentStatus), nullable=False, default=EquipmentStatus.ACTIVE
-    )
-
-    asset: Mapped[Asset] = relationship(backref="equipment")
 
 
 class OutboxStatus(str, enum.Enum):

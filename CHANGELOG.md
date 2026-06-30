@@ -1,5 +1,18 @@
 # CHANGELOG
 
+## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-2: god-model decomposition (batch 3, 5 domains))
+
+### Changed
+- **ARCH-2 batch 3 — 5 more domains extracted from `models.py`** (20 classes, guard-verified):
+  `master_data.py` (6 — Company, Position, Person, Site, Workplace + EmploymentStatus),
+  `marketplace.py` (1), `idempotency.py` (2), `risk_register.py` (8 — legacy RiskMap/RiskMethodology,
+  hazard links, NPA/NPABinding), `assets.py` (3). `models.py`: 1770 → 1391 lines. All re-exported
+  (in `__all__`). Identical tables (guard: 251 unchanged).
+- **Kept `File` re-exported from `models.py`.** After the last in-body user of `File` moved out,
+  ruff removed `from app.models.file import File`; restored it and added `File` to `__all__` so the
+  strengthened guard's name-superset check (some callers do `from app.models.models import File`)
+  stays satisfied. Verified Py3.12: guard green, ruff+black clean, master-data/NPA/risk tests green.
+
 ## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-2: god-model decomposition (batch 2, 5 domains))
 
 ### Changed
