@@ -1,5 +1,19 @@
 # CHANGELOG
 
+## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-2: god-model decomposition (batch 4, approval runtime))
+
+### Changed
+- **ARCH-2 batch 4 — approval/edo/signature/outbox/webhook runtime block extracted** into
+  `approval_runtime.py` (16 classes: Outbox, Approval{Process,Task,DecisionLog,RouteStep,Instance,
+  InstanceStep}, Edo{StatusEvent,WebhookInbox}, SignatureRequest, Webhook{Delivery,Endpoint} +
+  enums). This block binds a few `approval_workflow` enums at **runtime** (`Enum(ApprovalStepType)`,
+  `SignatureProviderStatus.PENDING.value`), so those are imported normally (not TYPE_CHECKING).
+  `models.py`: 1391 → 1093 lines. All re-exported (in `__all__`).
+- **Kept `ApprovalStepType` / `SignatureProviderStatus` re-exported from `models.py`.** After the
+  approval classes moved, ruff removed these two from models.py's `approval_workflow` import (no
+  longer used in-body); restored + added to `__all__` so callers' `from app.models.models import …`
+  keeps working (guard name-superset check). Verified Py3.12: guard green, ruff+black clean.
+
 ## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-2: god-model decomposition (batch 3, 5 domains))
 
 ### Changed
