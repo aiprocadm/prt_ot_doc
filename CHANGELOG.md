@@ -1,5 +1,21 @@
 # CHANGELOG
 
+## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-2: god-model decomposition (batch 2, 5 domains))
+
+### Changed
+- **ARCH-2 batch 2 — 5 more domains extracted from `models.py`** (55 classes, guard-verified):
+  `packages.py` (31 — package profiles/presets/runs, pack runs, document packs, pipeline runs,
+  client-portal), `audit_log.py` (3 — AuditLog + its `@event.listens_for` immutability hooks,
+  AuditExportJob, SecurityAuditLog), `journals.py` (5), `incidents.py` (8), `inspections.py`
+  (8 — inspection/attestation/prescription). Identical tables (guard: 251 unchanged); all names
+  re-exported from `models.py`. `models.py`: 2649 → 1766 lines.
+- **Fixed move-induced relationship resolution.** Several relationships used fully-qualified
+  string targets (`"app.models.models.IncidentPerson"`, `"app.models.models.Inspection"`) to
+  disambiguate duplicate class names across model packages; updated to the new module path
+  (`app.models.incidents.*` / `app.models.inspections.*`) so SQLAlchemy's registry resolves them.
+  The guard's `configure_mappers()` caught this — a bare-name switch would have hit the known
+  cross-package ambiguity. Verified Py3.12: guard green, ruff+black clean, audit/packs tests green.
+
 ## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-2: god-model decomposition (batch 1, 5 domains))
 
 ### Changed

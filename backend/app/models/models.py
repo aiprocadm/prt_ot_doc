@@ -17,7 +17,6 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
-    event,
 )
 from sqlalchemy.ext.mutable import MutableDict, MutableList
 from sqlalchemy.orm import Mapped, mapped_column, relationship, synonym
@@ -42,6 +41,13 @@ from app.models.approval_workflow import (
     EdoStatusHistory,
     SignatureProviderStatus,
     SignatureType,
+)
+
+# ARCH-2: re-export audit_log-domain models moved to app.models.audit_log.
+from app.models.audit_log import (
+    AuditExportJob,
+    AuditLog,
+    SecurityAuditLog,
 )
 from app.models.base import (
     SharedModel,
@@ -73,6 +79,39 @@ from app.models.field_ops import (
 )
 from app.models.file import File
 
+# ARCH-2: re-export incidents-domain models moved to app.models.incidents.
+from app.models.incidents import (
+    Incident,
+    IncidentLog,
+    IncidentPerson,
+    IncidentPersonRole,
+    IncidentSeverity,
+    IncidentStage,
+    IncidentStatus,
+    IncidentType,
+)
+
+# ARCH-2: re-export inspections-domain models moved to app.models.inspections.
+from app.models.inspections import (
+    Attestation,
+    AttestationStatus,
+    Inspection,
+    InspectionResult,
+    InspectionStatus,
+    InspectionType,
+    Prescription,
+    PrescriptionStatus,
+)
+
+# ARCH-2: re-export journals-domain models moved to app.models.journals.
+from app.models.journals import (
+    Journal,
+    JournalEntry,
+    JournalType,
+    PlanTask,
+    PlanTaskStatus,
+)
+
 # ARCH-2: re-export medical-domain models moved to app.models.medical.
 from app.models.medical import (
     MedicalExam,
@@ -85,6 +124,41 @@ from app.models.medical import (
     MedicalSuspension,
     MedicalSuspensionReason,
     MedicalSuspensionStatus,
+)
+
+# ARCH-2: re-export packages-domain models moved to app.models.packages.
+from app.models.packages import (
+    ClientPackagePreset,
+    ClientPackageRun,
+    ClientPortalToken,
+    ClientRequestTicket,
+    ClientRequestTicketStatus,
+    DocumentPack,
+    DocumentPackItem,
+    DocumentPackModule,
+    DocumentPackScenario,
+    OutputFormat,
+    PackageEntityStatus,
+    PackageEvent,
+    PackagePreset,
+    PackagePresetConfig,
+    PackagePresetItem,
+    PackageProfile,
+    PackageProfileConfig,
+    PackageRequirement,
+    PackageRequirementStatus,
+    PackageRequirementType,
+    PackageRunStatus,
+    PackageSourceType,
+    PackLogLevel,
+    PackRun,
+    PackRunItem,
+    PackRunItemStatus,
+    PackRunLifecycleStatus,
+    PackRunLog,
+    PipelineRun,
+    PipelineRunStatus,
+    ReplaceMode,
 )
 
 # ARCH-2: re-export ppe-domain models moved to app.models.ppe.
@@ -265,6 +339,65 @@ __all__ = [
     "EdoDirection",
     "EdoStatus",
     "EdoMessageStatus",
+]
+
+# ARCH-2 batch 2 re-exports (kept in __all__ so ruff F401 keeps the imports).
+__all__ += [
+    "PackageEntityStatus",
+    "PackageSourceType",
+    "ReplaceMode",
+    "OutputFormat",
+    "PackRunLifecycleStatus",
+    "PackRunItemStatus",
+    "PackLogLevel",
+    "PackageProfileConfig",
+    "PackagePresetConfig",
+    "PackagePresetItem",
+    "PackRun",
+    "PackRunItem",
+    "PackRunLog",
+    "PackageProfile",
+    "PackagePreset",
+    "DocumentPackModule",
+    "DocumentPackScenario",
+    "DocumentPack",
+    "DocumentPackItem",
+    "PipelineRunStatus",
+    "PipelineRun",
+    "PackageRunStatus",
+    "PackageRequirementType",
+    "PackageRequirementStatus",
+    "ClientRequestTicketStatus",
+    "ClientPackagePreset",
+    "ClientPackageRun",
+    "PackageRequirement",
+    "ClientPortalToken",
+    "ClientRequestTicket",
+    "PackageEvent",
+    "AuditLog",
+    "AuditExportJob",
+    "SecurityAuditLog",
+    "JournalType",
+    "Journal",
+    "JournalEntry",
+    "PlanTaskStatus",
+    "PlanTask",
+    "IncidentSeverity",
+    "IncidentType",
+    "IncidentStatus",
+    "IncidentStage",
+    "Incident",
+    "IncidentPersonRole",
+    "IncidentPerson",
+    "IncidentLog",
+    "InspectionStatus",
+    "InspectionType",
+    "Inspection",
+    "InspectionResult",
+    "AttestationStatus",
+    "Attestation",
+    "PrescriptionStatus",
+    "Prescription",
 ]
 
 # ARCH-2 batch 1 re-exports (kept in __all__ so ruff F401 keeps the imports).
@@ -1093,520 +1226,6 @@ class MarketplaceCatalogItem(TenantBaseModel, SoftDeleteMixin):
     )
 
 
-class PackageEntityStatus(str, enum.Enum):
-    DRAFT = "draft"
-    ACTIVE = "active"
-    ARCHIVED = "archived"
-
-
-class PackageSourceType(str, enum.Enum):
-    CSV = "csv"
-    XLSX = "xlsx"
-    JSON = "json"
-    MIXED = "mixed"
-
-
-class ReplaceMode(str, enum.Enum):
-    NONE = "none"
-    PREVIEW = "preview"
-    APPLY = "apply"
-
-
-class OutputFormat(str, enum.Enum):
-    DOCX = "docx"
-    PDF = "pdf"
-    BOTH = "both"
-
-
-class PackRunLifecycleStatus(str, enum.Enum):
-    QUEUED = "queued"
-    RUNNING = "running"
-    SUCCESS = "success"
-    FAILED = "failed"
-    CANCELED = "canceled"
-    PARTIAL_SUCCESS = "partial_success"
-
-
-class PackRunItemStatus(str, enum.Enum):
-    QUEUED = "queued"
-    RUNNING = "running"
-    SUCCESS = "success"
-    FAILED = "failed"
-    SKIPPED = "skipped"
-
-
-class PackLogLevel(str, enum.Enum):
-    INFO = "info"
-    WARNING = "warning"
-    ERROR = "error"
-
-
-class PackageProfileConfig(TenantBaseModel):
-    __tablename__ = "package_profiles_v2"
-
-    code: Mapped[str] = mapped_column(String(64), nullable=False)
-    name: Mapped[str] = mapped_column(String(255), nullable=False)
-    description: Mapped[str | None] = mapped_column(Text)
-    pipeline_steps_json: Mapped[list[dict[str, Any]]] = mapped_column(
-        MutableList.as_mutable(JSON), nullable=False, default=list
-    )
-    concurrency_limit: Mapped[int | None] = mapped_column(Integer)
-    status: Mapped[PackageEntityStatus] = mapped_column(
-        native_enum(PackageEntityStatus, name="package_entity_status"),
-        nullable=False,
-        default=PackageEntityStatus.DRAFT,
-    )
-    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-
-    __table_args__ = (
-        UniqueConstraint("tenant_id", "code", name="uq_package_profiles_v2_tenant_code"),
-        Index("ix_package_profiles_v2_tenant_status_updated", "tenant_id", "status", "updated_at"),
-    )
-
-
-class PackagePresetConfig(TenantBaseModel):
-    __tablename__ = "package_presets_v2"
-
-    code: Mapped[str] = mapped_column(String(128), nullable=False)
-    name: Mapped[str] = mapped_column(String(255), nullable=False)
-    description: Mapped[str | None] = mapped_column(Text)
-    package_profile_id: Mapped[str] = mapped_column(
-        ForeignKey("package_profiles_v2.id"), nullable=False, index=True
-    )
-    naming_rule: Mapped[str] = mapped_column(String(512), nullable=False)
-    source_type: Mapped[PackageSourceType] = mapped_column(
-        native_enum(PackageSourceType, name="package_source_type"),
-        nullable=False,
-        default=PackageSourceType.CSV,
-    )
-    mapping_json: Mapped[dict[str, Any]] = mapped_column(
-        MutableDict.as_mutable(JSON), nullable=False, default=dict
-    )
-    options_json: Mapped[dict[str, Any]] = mapped_column(
-        MutableDict.as_mutable(JSON), nullable=False, default=dict
-    )
-    status: Mapped[PackageEntityStatus] = mapped_column(
-        native_enum(PackageEntityStatus, name="package_preset_status"),
-        nullable=False,
-        default=PackageEntityStatus.DRAFT,
-    )
-    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-
-    profile: Mapped[PackageProfileConfig] = relationship(backref="presets_v2")
-
-    __table_args__ = (
-        UniqueConstraint("tenant_id", "code", name="uq_package_presets_v2_tenant_code"),
-        Index("ix_package_presets_v2_tenant_status_updated", "tenant_id", "status", "updated_at"),
-    )
-
-
-class PackagePresetItem(TenantBaseModel):
-    __tablename__ = "package_preset_items"
-
-    package_preset_id: Mapped[str] = mapped_column(
-        ForeignKey("package_presets_v2.id"), nullable=False, index=True
-    )
-    order_no: Mapped[int] = mapped_column(Integer, nullable=False)
-    template_id: Mapped[str | None] = mapped_column(
-        ForeignKey("template.id"), nullable=True, index=True
-    )
-    template_version_id: Mapped[str] = mapped_column(
-        ForeignKey("templateversion.id"), nullable=False, index=True
-    )
-    header_preset_json: Mapped[dict[str, Any] | None] = mapped_column(MutableDict.as_mutable(JSON))
-    replace_mode: Mapped[ReplaceMode] = mapped_column(
-        native_enum(ReplaceMode, name="replace_mode"), nullable=False, default=ReplaceMode.NONE
-    )
-    replace_map_json: Mapped[dict[str, Any] | None] = mapped_column(MutableDict.as_mutable(JSON))
-    output_format: Mapped[OutputFormat] = mapped_column(
-        native_enum(OutputFormat, name="package_output_format"),
-        nullable=False,
-        default=OutputFormat.BOTH,
-    )
-    is_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    conditions_json: Mapped[dict[str, Any] | None] = mapped_column(MutableDict.as_mutable(JSON))
-    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-
-    preset: Mapped[PackagePresetConfig] = relationship(backref="items")
-    template: Mapped[Template | None] = relationship("Template", backref="package_preset_items")
-    template_version: Mapped[TemplateVersion] = relationship(
-        "TemplateVersion", backref="package_preset_items_v2"
-    )
-
-    __table_args__ = (
-        UniqueConstraint("package_preset_id", "order_no", name="uq_package_preset_items_order"),
-        Index("ix_package_preset_items_order", "package_preset_id", "order_no"),
-    )
-
-
-class PackRun(TenantBaseModel):
-    __tablename__ = "pack_runs"
-
-    package_preset_id: Mapped[str] = mapped_column(
-        ForeignKey("package_presets_v2.id"), nullable=False, index=True
-    )
-    package_profile_id: Mapped[str] = mapped_column(
-        ForeignKey("package_profiles_v2.id"), nullable=False, index=True
-    )
-    source_file_id: Mapped[str | None] = mapped_column(ForeignKey("file.id"), nullable=True)
-    source_type: Mapped[PackageSourceType] = mapped_column(
-        native_enum(PackageSourceType, name="pack_run_source_type"), nullable=False
-    )
-    source_rows_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    selected_rows_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    status: Mapped[PackRunLifecycleStatus] = mapped_column(
-        native_enum(PackRunLifecycleStatus, name="pack_run_lifecycle_status"),
-        nullable=False,
-        default=PackRunLifecycleStatus.QUEUED,
-    )
-    result_zip_file_id: Mapped[str | None] = mapped_column(ForeignKey("file.id"), nullable=True)
-    stats_json: Mapped[dict[str, Any]] = mapped_column(
-        MutableDict.as_mutable(JSON), nullable=False, default=dict
-    )
-    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    created_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
-    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    idempotency_key: Mapped[str | None] = mapped_column(String(128), nullable=True)
-    request_hash: Mapped[str | None] = mapped_column(String(128), nullable=True)
-    approval_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
-    signature_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
-    edo_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
-
-    __table_args__ = (
-        Index("ix_pack_runs_status_created", "tenant_id", "status", "created_at"),
-        Index("ix_pack_runs_tenant_status_updated", "tenant_id", "status", "updated_at"),
-        UniqueConstraint(
-            "tenant_id", "idempotency_key", "request_hash", name="uq_pack_runs_idempotency"
-        ),
-    )
-
-
-class PackRunItem(TenantBaseModel):
-    __tablename__ = "pack_run_items"
-
-    pack_run_id: Mapped[str] = mapped_column(ForeignKey("pack_runs.id"), nullable=False, index=True)
-    row_no: Mapped[int] = mapped_column(Integer, nullable=False)
-    source_record_hash: Mapped[str] = mapped_column(String(64), nullable=False)
-    status: Mapped[PackRunItemStatus] = mapped_column(
-        native_enum(PackRunItemStatus, name="pack_run_item_status"),
-        nullable=False,
-        default=PackRunItemStatus.QUEUED,
-    )
-    document_job_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
-    output_docx_file_id: Mapped[str | None] = mapped_column(ForeignKey("file.id"), nullable=True)
-    output_pdf_file_id: Mapped[str | None] = mapped_column(ForeignKey("file.id"), nullable=True)
-    filename: Mapped[str] = mapped_column(String(512), nullable=False)
-    error_code: Mapped[str | None] = mapped_column(String(128), nullable=True)
-    error_payload: Mapped[dict[str, Any] | None] = mapped_column(MutableDict.as_mutable(JSON))
-
-    __table_args__ = (Index("ix_pack_run_items_run_status", "pack_run_id", "status"),)
-
-
-class PackRunLog(TenantBaseModel):
-    __tablename__ = "pack_run_logs"
-
-    pack_run_id: Mapped[str] = mapped_column(ForeignKey("pack_runs.id"), nullable=False, index=True)
-    level: Mapped[PackLogLevel] = mapped_column(
-        native_enum(PackLogLevel, name="pack_log_level"), nullable=False
-    )
-    step: Mapped[str | None] = mapped_column(String(64))
-    message: Mapped[str] = mapped_column(Text, nullable=False)
-    payload: Mapped[dict[str, Any] | None] = mapped_column(MutableDict.as_mutable(JSON))
-
-
-class PackageProfile(TenantBaseModel):
-    name: Mapped[str] = mapped_column(String(255), nullable=False)
-    description: Mapped[str | None] = mapped_column(String(1024))
-    config: Mapped[dict[str, Any]] = mapped_column(
-        MutableDict.as_mutable(JSON), nullable=False, default=dict
-    )
-
-    __table_args__ = (UniqueConstraint("tenant_id", "name", name="uq_package_profile_name"),)
-
-
-class PackagePreset(TenantBaseModel):
-    profile_id: Mapped[str] = mapped_column(
-        ForeignKey("packageprofile.id"), nullable=False, index=True
-    )
-    name: Mapped[str] = mapped_column(String(255), nullable=False)
-    payload: Mapped[dict[str, Any]] = mapped_column(
-        MutableDict.as_mutable(JSON), nullable=False, default=dict
-    )
-
-    profile: Mapped[PackageProfile] = relationship(backref="presets")
-
-
-class DocumentPackModule(str, enum.Enum):
-    """High-level grouping for document packs."""
-
-    OT = "ot"
-    FIRE_SAFETY = "fire_safety"
-    HEALTH = "health"
-    CUSTOM = "custom"
-
-
-class DocumentPackScenario(str, enum.Enum):
-    """Execution scenario describing how a pack runs."""
-
-    DOCUMENT_BATCH = "document_batch"
-    REPORT = "report"
-    WORKFLOW = "workflow"
-
-
-class DocumentPack(TenantBaseModel, SoftDeleteMixin):
-    __tablename__ = "document_pack"
-
-    code: Mapped[str] = mapped_column(String(128), nullable=False)
-    name: Mapped[str] = mapped_column(String(255), nullable=False)
-    description: Mapped[str | None] = mapped_column(Text)
-    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    # values_callable: PG enum ``documentpackmodule`` was created with
-    # lowercase values ("ot", "fire_safety", ...) in migration
-    # 8d2c1a6c5e24:43-66. SQLAlchemy's default sends the Python member
-    # *name* ("OT") for INSERT, which PG rejects. Same root cause and
-    # migration as ``Person.employment_status`` (iter-17 RB-002c).
-    module: Mapped[DocumentPackModule] = mapped_column(
-        Enum(
-            DocumentPackModule,
-            name="documentpackmodule",
-            values_callable=lambda enum_cls: [member.value for member in enum_cls],
-        ),
-        nullable=False,
-        default=DocumentPackModule.OT,
-    )
-    # Same lowercase-PG-enum drift as ``module`` above. PG type
-    # ``documentpackscenario`` accepts ("document_batch", "report",
-    # "workflow"); Python member names are uppercase.
-    scenario_type: Mapped[DocumentPackScenario] = mapped_column(
-        Enum(
-            DocumentPackScenario,
-            name="documentpackscenario",
-            values_callable=lambda enum_cls: [member.value for member in enum_cls],
-        ),
-        nullable=False,
-        default=DocumentPackScenario.DOCUMENT_BATCH,
-    )
-
-    items: Mapped[list["DocumentPackItem"]] = relationship(
-        back_populates="pack",
-        cascade="all, delete-orphan",
-        order_by="DocumentPackItem.order",
-        lazy="selectin",
-    )
-
-    __table_args__ = (UniqueConstraint("tenant_id", "code", name="uq_document_pack_code"),)
-
-
-class DocumentPackItem(TenantBaseModel, SoftDeleteMixin):
-    __tablename__ = "document_pack_item"
-
-    pack_id: Mapped[str] = mapped_column(ForeignKey("document_pack.id"), nullable=False, index=True)
-    template_id: Mapped[str] = mapped_column(ForeignKey("template.id"), nullable=False, index=True)
-    template_version_id: Mapped[str | None] = mapped_column(
-        ForeignKey("templateversion.id"), nullable=True, index=True
-    )
-    order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    condition: Mapped[dict[str, Any]] = mapped_column(
-        MutableDict.as_mutable(JSON), nullable=False, default=dict
-    )
-
-    pack: Mapped[DocumentPack] = relationship(back_populates="items")
-    template: Mapped[Template] = relationship(backref="document_pack_items", lazy="selectin")
-    template_version: Mapped[TemplateVersion | None] = relationship(
-        "TemplateVersion", backref="document_pack_items", lazy="selectin"
-    )
-
-
-class PipelineRunStatus(str, enum.Enum):
-    QUEUED = "queued"
-    RUNNING = "running"
-    DONE = "done"
-    ERROR = "error"
-
-
-class PipelineRun(TenantBaseModel):
-    __tablename__ = "pipeline_runs"
-
-    template_id: Mapped[str] = mapped_column(ForeignKey("template.id"), nullable=False, index=True)
-    template_version_id: Mapped[str] = mapped_column(
-        ForeignKey("templateversion.id"), nullable=False, index=True
-    )
-    status: Mapped[PipelineRunStatus] = mapped_column(
-        Enum(PipelineRunStatus), nullable=False, default=PipelineRunStatus.QUEUED
-    )
-    context: Mapped[dict[str, Any]] = mapped_column(
-        MutableDict.as_mutable(JSON), nullable=False, default=dict
-    )
-    # MutableDict so top-level in-place edits (outputs["pdf"]=..., result_metadata[...])
-    # are flagged dirty even without a fresh reassignment. This is the column that
-    # produced the _record_stage data-loss bug; see tests/test_no_inplace_json_mutation.py.
-    # NOTE: only TOP-LEVEL keys are tracked — nested edits (outputs["stages"][k]=...)
-    # still require reassigning a fresh object.
-    outputs: Mapped[dict[str, Any] | None] = mapped_column(MutableDict.as_mutable(JSON))
-    result_metadata: Mapped[dict[str, Any]] = mapped_column(
-        MutableDict.as_mutable(JSON), nullable=False, default=dict
-    )
-    docx_storage_key: Mapped[str | None] = mapped_column(String(512))
-    pdf_storage_key: Mapped[str | None] = mapped_column(String(512))
-    result_s3_key: Mapped[str | None] = mapped_column(String(512))
-    error: Mapped[str | None] = mapped_column(String(255))
-    idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
-    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-
-    template: Mapped[Template] = relationship(backref="pipeline_runs")
-    template_version: Mapped[TemplateVersion] = relationship(backref="pipeline_runs")
-
-    __table_args__ = (
-        Index(
-            "ix_pipeline_runs_tenant_idempotency",
-            "tenant_id",
-            "idempotency_key",
-            unique=True,
-        ),
-    )
-
-
-class PackageRunStatus(str, enum.Enum):
-    DRAFT = "draft"
-    RUNNING = "running"
-    SUCCESS = "success"
-    FAILED = "failed"
-    CANCELED = "canceled"
-
-
-class PackageRequirementType(str, enum.Enum):
-    FILE = "file"
-    TEXT = "text"
-    TABLE = "table"
-
-
-class PackageRequirementStatus(str, enum.Enum):
-    MISSING = "missing"
-    PROVIDED = "provided"
-    APPROVED = "approved"
-    REJECTED = "rejected"
-
-
-class ClientRequestTicketStatus(str, enum.Enum):
-    OPEN = "open"
-    IN_PROGRESS = "in_progress"
-    RESOLVED = "resolved"
-    CLOSED = "closed"
-
-
-class ClientPackagePreset(TenantBaseModel, SoftDeleteMixin):
-    __tablename__ = "package_presets"
-
-    code: Mapped[str] = mapped_column(String(128), nullable=False)
-    name: Mapped[str] = mapped_column(String(255), nullable=False)
-    description: Mapped[str | None] = mapped_column(Text)
-    steps_json: Mapped[dict[str, Any]] = mapped_column(
-        MutableDict.as_mutable(JSON), nullable=False, default=dict
-    )
-    required_inputs_json: Mapped[list[dict[str, Any]]] = mapped_column(
-        MutableList.as_mutable(JSON), nullable=False, default=list
-    )
-    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-
-    __table_args__ = (
-        UniqueConstraint("tenant_id", "code", name="uq_package_presets_code"),
-        Index("ix_package_presets_code", "tenant_id", "code"),
-    )
-
-
-class ClientPackageRun(TenantBaseModel, SoftDeleteMixin):
-    __tablename__ = "package_runs"
-
-    preset_id: Mapped[str] = mapped_column(
-        ForeignKey("package_presets.id"), nullable=False, index=True
-    )
-    initiated_by_user_id: Mapped[str | None] = mapped_column(
-        ForeignKey("user.id"), nullable=True, index=True
-    )
-    client_company_id: Mapped[str | None] = mapped_column(
-        ForeignKey("company.id"), nullable=True, index=True
-    )
-    status: Mapped[PackageRunStatus] = mapped_column(
-        native_enum(PackageRunStatus), nullable=False, default=PackageRunStatus.DRAFT
-    )
-    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    output_zip_s3_key: Mapped[str | None] = mapped_column(String(512))
-    output_pdf_s3_key: Mapped[str | None] = mapped_column(String(512))
-    qc_report_json: Mapped[dict[str, Any] | None] = mapped_column(MutableDict.as_mutable(JSON))
-    error_payload_json: Mapped[dict[str, Any] | None] = mapped_column(MutableDict.as_mutable(JSON))
-
-    preset: Mapped[ClientPackagePreset] = relationship(backref="runs")
-
-    __table_args__ = (Index("ix_package_runs_status_updated", "tenant_id", "status", "updated_at"),)
-
-
-class PackageRequirement(TenantBaseModel):
-    __tablename__ = "package_requirements"
-
-    package_run_id: Mapped[str] = mapped_column(
-        ForeignKey("package_runs.id"), nullable=False, index=True
-    )
-    key: Mapped[str] = mapped_column(String(128), nullable=False)
-    title: Mapped[str] = mapped_column(String(255), nullable=False)
-    type: Mapped[PackageRequirementType] = mapped_column(
-        native_enum(PackageRequirementType), nullable=False, default=PackageRequirementType.FILE
-    )
-    status: Mapped[PackageRequirementStatus] = mapped_column(
-        native_enum(PackageRequirementStatus),
-        nullable=False,
-        default=PackageRequirementStatus.MISSING,
-    )
-    payload_json: Mapped[dict[str, Any] | None] = mapped_column(MutableDict.as_mutable(JSON))
-
-
-class ClientPortalToken(TenantBaseModel):
-    __tablename__ = "client_portal_tokens"
-
-    token_hash: Mapped[str] = mapped_column(String(128), nullable=False)
-    package_run_id: Mapped[str] = mapped_column(
-        ForeignKey("package_runs.id"), nullable=False, index=True
-    )
-    scope_json: Mapped[dict[str, Any]] = mapped_column(
-        MutableDict.as_mutable(JSON), nullable=False, default=dict
-    )
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-
-    __table_args__ = (
-        Index("ix_client_portal_tokens_expires_hash", "tenant_id", "expires_at", "token_hash"),
-    )
-
-
-class ClientRequestTicket(TenantBaseModel):
-    __tablename__ = "client_request_tickets"
-
-    package_run_id: Mapped[str] = mapped_column(
-        ForeignKey("package_runs.id"), nullable=False, index=True
-    )
-    title: Mapped[str] = mapped_column(String(255), nullable=False)
-    message: Mapped[str] = mapped_column(Text, nullable=False)
-    status: Mapped[ClientRequestTicketStatus] = mapped_column(
-        native_enum(ClientRequestTicketStatus),
-        nullable=False,
-        default=ClientRequestTicketStatus.OPEN,
-    )
-    created_by: Mapped[str | None] = mapped_column(String(128))
-
-
-class PackageEvent(TenantBaseModel):
-    __tablename__ = "package_events"
-
-    package_run_id: Mapped[str] = mapped_column(
-        ForeignKey("package_runs.id"), nullable=False, index=True
-    )
-    type: Mapped[str] = mapped_column(String(128), nullable=False)
-    payload_json: Mapped[dict[str, Any] | None] = mapped_column(MutableDict.as_mutable(JSON))
-
-
 class IdempotencyStatus(str, enum.Enum):
     PENDING = "pending"
     SUCCEEDED = "succeeded"
@@ -1782,508 +1401,6 @@ class NPABinding(TenantBaseModel):
 
     template_version: Mapped[TemplateVersion | None] = relationship(backref="npa_bindings")
     npa: Mapped[NPA] = relationship(backref="bindings")
-
-
-class AuditLog(TenantBaseModel):
-    """Immutable audit trail entry capturing key security events."""
-
-    when: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(tz=timezone.utc), nullable=False
-    )
-    actor_type: Mapped[str] = mapped_column(String(16), nullable=False, default="user")
-    user_id: Mapped[str | None] = mapped_column(
-        String(36), ForeignKey("user.id", ondelete="SET NULL"), nullable=True, index=True
-    )
-    actor_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
-    action: Mapped[str] = mapped_column(String(64), nullable=False)
-    object_type: Mapped[str] = mapped_column(String(64), nullable=False)
-    object_id: Mapped[str] = mapped_column(String(128), nullable=False)
-    parent_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    parent_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
-    ip: Mapped[str] = mapped_column(String(64), nullable=False, default="unknown")
-    correlation_id: Mapped[str] = mapped_column(String(128), nullable=False, default="unknown")
-    request_id: Mapped[str | None] = mapped_column(String(128))
-    session_id: Mapped[str | None] = mapped_column(String(128))
-    user_agent: Mapped[str | None] = mapped_column(String(256))
-    resource_attrs: Mapped[dict[str, Any]] = mapped_column(
-        MutableDict.as_mutable(JSON), nullable=False, default=dict
-    )
-    details: Mapped[dict[str, Any]] = mapped_column(
-        MutableDict.as_mutable(JSON), nullable=False, default=dict
-    )
-    before_json: Mapped[dict[str, Any] | None] = mapped_column(
-        MutableDict.as_mutable(JSON), nullable=True
-    )
-    after_json: Mapped[dict[str, Any] | None] = mapped_column(
-        MutableDict.as_mutable(JSON), nullable=True
-    )
-    changed_fields: Mapped[dict[str, Any]] = mapped_column(
-        MutableDict.as_mutable(JSON), nullable=False, default=dict
-    )
-    actor_role_codes: Mapped[list[str]] = mapped_column(
-        MutableList.as_mutable(JSON), nullable=False, default=list
-    )
-    before_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    after_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    hash: Mapped[str] = mapped_column(String(64), nullable=False, default="")
-    prev_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
-
-    __table_args__ = (
-        Index("ix_auditlog_action", "action", "when"),
-        Index("ix_auditlog_object", "object_type", "object_id", "when"),
-        Index("ix_auditlog_actor", "user_id", "when"),
-        Index("ix_auditlog_corr", "correlation_id"),
-        Index("ix_auditlog_when", "when"),
-    )
-
-
-@event.listens_for(AuditLog, "before_update", propagate=True)
-def _prevent_auditlog_update(*_args, **_kwargs) -> None:
-    raise RuntimeError("Audit logs are append-only")
-
-
-@event.listens_for(AuditLog, "before_delete", propagate=True)
-def _prevent_auditlog_delete(*_args, **_kwargs) -> None:
-    raise RuntimeError("Audit logs are append-only")
-
-
-class AuditExportJob(TenantBaseModel):
-    __tablename__ = "audit_export_job"
-
-    filters: Mapped[dict[str, Any]] = mapped_column(
-        MutableDict.as_mutable(JSON), nullable=False, default=dict
-    )
-    format: Mapped[str] = mapped_column(String(16), nullable=False)
-    status: Mapped[str] = mapped_column(String(16), nullable=False, default="queued")
-    storage_key: Mapped[str | None] = mapped_column(String(512), nullable=True)
-    signed_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
-    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    size_bytes: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    error: Mapped[str | None] = mapped_column(Text, nullable=True)
-
-    __table_args__ = (Index("ix_audit_export_job_tenant_status", "tenant_id", "status"),)
-
-
-class SecurityAuditLog(TenantBaseModel):
-    """Authorization decision log (allow/deny) for RBAC+ABAC enforcement."""
-
-    when: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(tz=timezone.utc), nullable=False
-    )
-    user_id: Mapped[str | None] = mapped_column(
-        String(36), ForeignKey("user.id", ondelete="SET NULL"), nullable=True, index=True
-    )
-    action: Mapped[str] = mapped_column(String(64), nullable=False)
-    resource_type: Mapped[str] = mapped_column(String(64), nullable=False)
-    resource_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
-    decision: Mapped[str] = mapped_column(String(8), nullable=False)
-    reason_code: Mapped[str | None] = mapped_column(String(128), nullable=True)
-    ip: Mapped[str] = mapped_column(String(64), nullable=False, default="unknown")
-    user_agent: Mapped[str | None] = mapped_column(String(256))
-    correlation_id: Mapped[str | None] = mapped_column(String(128))
-    details: Mapped[dict[str, Any]] = mapped_column(
-        MutableDict.as_mutable(JSON), nullable=False, default=dict
-    )
-
-    __table_args__ = (
-        Index("ix_security_auditlog_action", "action"),
-        Index("ix_security_auditlog_decision", "decision"),
-        Index("ix_security_auditlog_resource", "resource_type", "resource_id"),
-        Index("ix_security_auditlog_when", "when"),
-    )
-
-
-# WarehousePPE ORM class was removed in СИЗ Срез-1 (2026-06-11): dead orphan
-# from initial_schema (item_name+quantity+location) without endpoints/services/
-# relationships. Its table (warehouseppe) was dropped by migration sz02
-# (20260611_sz02_drop_ppe_family_b_tables).
-
-
-class JournalType(str, enum.Enum):
-    INTRODUCTORY = "introductory"
-    PRIMARY = "primary"
-    REPEATED = "repeated"
-    TARGET = "target"
-    FIRE_SAFETY = "fire_safety"
-    UNSCHEDULED = "unscheduled"
-
-
-class Journal(TenantBaseModel, SoftDeleteMixin):
-    company_id: Mapped[str | None] = mapped_column(
-        ForeignKey("company.id", ondelete="SET NULL"), nullable=True, index=True
-    )
-    title: Mapped[str | None] = mapped_column(String(255))
-    journal_type: Mapped[JournalType] = mapped_column(native_enum(JournalType), nullable=False)
-    started_at: Mapped[date | None] = mapped_column(Date, nullable=True)
-    closed_at: Mapped[date | None] = mapped_column(Date, nullable=True)
-    metadata_json: Mapped[dict[str, Any]] = mapped_column(
-        MutableDict.as_mutable(JSON), nullable=False, default=dict
-    )
-
-    company: Mapped[Company | None] = relationship("Company", backref="journals")
-
-    __table_args__ = (Index("ix_journal_company", "tenant_id", "company_id"),)
-
-
-class JournalEntry(TenantBaseModel, SoftDeleteMixin):
-    journal_id: Mapped[str] = mapped_column(ForeignKey("journal.id"), nullable=False, index=True)
-    person_id: Mapped[str] = mapped_column(ForeignKey("person.id"), nullable=False, index=True)
-    entry_type: Mapped[JournalType] = mapped_column(native_enum(JournalType), nullable=False)
-    entry_date: Mapped[date] = mapped_column(Date, nullable=False, default=date.today)
-    instructor: Mapped[str | None] = mapped_column(String(255))
-    notes: Mapped[str | None] = mapped_column(Text)
-    metadata_json: Mapped[dict[str, Any]] = mapped_column(
-        MutableDict.as_mutable(JSON), nullable=False, default=dict
-    )
-
-    journal: Mapped[Journal] = relationship(backref="entries")
-    person: Mapped[Person] = relationship(backref="journal_entries")
-
-    __table_args__ = (
-        UniqueConstraint(
-            "tenant_id",
-            "journal_id",
-            "person_id",
-            "entry_type",
-            "entry_date",
-            name="uq_journal_entry_unique_person_date",
-        ),
-        Index("ix_journal_entry_type", "tenant_id", "entry_type"),
-    )
-
-
-class PlanTaskStatus(str, enum.Enum):
-    OPEN = "open"
-    IN_PROGRESS = "in_progress"
-    DONE = "done"
-    CANCELLED = "cancelled"
-
-
-class PlanTask(TenantBaseModel):
-    title: Mapped[str] = mapped_column(String(255), nullable=False)
-    description: Mapped[str | None] = mapped_column(Text)
-    due_date: Mapped[date | None] = mapped_column(Date)
-    status: Mapped[PlanTaskStatus] = mapped_column(
-        Enum(PlanTaskStatus), nullable=False, default=PlanTaskStatus.OPEN
-    )
-
-
-class IncidentSeverity(str, enum.Enum):
-    LOW = "low"
-    MEDIUM = "medium"
-    HIGH = "high"
-
-
-class IncidentType(str, enum.Enum):
-    ACCIDENT = "accident"
-    MICROTRAUMA = "microtrauma"
-    NEAR_MISS = "near_miss"
-    UNSAFE_CONDITION = "unsafe_condition"
-
-
-class IncidentStatus(str, enum.Enum):
-    REPORTED = "reported"
-    INVESTIGATING = "investigating"
-    ACTIONS = "corrective_actions"
-    CLOSED = "closed"
-    CANCELLED = "cancelled"
-
-
-class IncidentStage(str, enum.Enum):
-    REGISTRATION = "registration"
-    INVESTIGATION = "investigation"
-    ACTION_PLAN = "action_plan"
-    FOLLOW_UP = "follow_up"
-    CLOSED = "closed"
-
-
-class Incident(TenantBaseModel, SoftDeleteMixin):
-    __tablename__ = "incident"
-
-    title: Mapped[str] = mapped_column(String(255), nullable=False)
-    description: Mapped[str | None] = mapped_column(Text)
-    incident_type: Mapped[IncidentType] = mapped_column(
-        Enum(IncidentType, name="incidenttype"), nullable=False, default=IncidentType.ACCIDENT
-    )
-    occurred_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)
-    )
-    company_id: Mapped[str] = mapped_column(ForeignKey("company.id"), nullable=False, index=True)
-    site_id: Mapped[str] = mapped_column(ForeignKey("site.id"), nullable=False, index=True)
-    location_description: Mapped[str | None] = mapped_column(String(255))
-    severity: Mapped[IncidentSeverity] = mapped_column(
-        Enum(IncidentSeverity, name="incidentseverity"),
-        nullable=False,
-        default=IncidentSeverity.MEDIUM,
-    )
-    status: Mapped[IncidentStatus] = mapped_column(
-        Enum(IncidentStatus, name="incidentstatus"), nullable=False, default=IncidentStatus.REPORTED
-    )
-    investigation_stage: Mapped[IncidentStage] = mapped_column(
-        Enum(IncidentStage, name="incidentstage"),
-        nullable=False,
-        default=IncidentStage.REGISTRATION,
-    )
-    pack_id: Mapped[str | None] = mapped_column(
-        ForeignKey("document_pack.id", ondelete="SET NULL"), nullable=True, index=True
-    )
-
-    company: Mapped[Company] = relationship(backref="incidents")
-    site: Mapped[Site] = relationship(backref="incidents")
-    pack: Mapped[DocumentPack | None] = relationship("DocumentPack", backref="incidents")
-    logs: Mapped[list["IncidentLog"]] = relationship(
-        "IncidentLog",
-        back_populates="incident",
-        cascade="all, delete-orphan",
-        passive_deletes=True,
-        order_by="IncidentLog.created_at",
-    )
-    participants: Mapped[list["IncidentPerson"]] = relationship(
-        "app.models.models.IncidentPerson",
-        back_populates="incident",
-        cascade="all, delete-orphan",
-        passive_deletes=True,
-    )
-
-    __table_args__ = (
-        Index("ix_incident_company", "tenant_id", "company_id"),
-        Index("ix_incident_site", "tenant_id", "site_id"),
-        Index("ix_incident_status", "tenant_id", "status"),
-        Index("ix_incident_occurred_at", "occurred_at"),
-    )
-
-
-class IncidentPersonRole(str, enum.Enum):
-    VICTIM = "victim"
-    WITNESS = "witness"
-    PARTICIPANT = "participant"
-
-
-class IncidentPerson(TenantBaseModel):
-    __tablename__ = "incident_person"
-
-    incident_id: Mapped[str] = mapped_column(
-        ForeignKey("incident.id", ondelete="CASCADE"), nullable=False, index=True
-    )
-    person_id: Mapped[str] = mapped_column(
-        ForeignKey("person.id", ondelete="RESTRICT"), nullable=False, index=True
-    )
-    role: Mapped[IncidentPersonRole] = mapped_column(
-        Enum(IncidentPersonRole, name="incidentpersonrole"),
-        nullable=False,
-        default=IncidentPersonRole.VICTIM,
-    )
-
-    incident: Mapped[Incident] = relationship("Incident", back_populates="participants")
-    person: Mapped[Person] = relationship("Person", backref="incident_links")
-
-    __table_args__ = (
-        UniqueConstraint(
-            "tenant_id",
-            "incident_id",
-            "person_id",
-            "role",
-            name="uq_incident_person_role",
-        ),
-        Index("ix_incident_person_role", "role"),
-    )
-
-
-class IncidentLog(TenantBaseModel):
-    __tablename__ = "incident_log"
-
-    incident_id: Mapped[str] = mapped_column(
-        ForeignKey("incident.id", ondelete="CASCADE"), nullable=False, index=True
-    )
-    author_id: Mapped[str | None] = mapped_column(
-        ForeignKey("user.id", ondelete="SET NULL"), nullable=True, index=True
-    )
-    stage: Mapped[IncidentStage] = mapped_column(
-        Enum(IncidentStage, name="incidentlogstage"), nullable=False
-    )
-    status: Mapped[IncidentStatus] = mapped_column(
-        Enum(IncidentStatus, name="incidentlogstatus"), nullable=False
-    )
-    message: Mapped[str] = mapped_column(Text, nullable=False)
-    metadata_json: Mapped[dict[str, Any]] = mapped_column(
-        MutableDict.as_mutable(JSON), nullable=False, default=dict
-    )
-
-    incident: Mapped[Incident] = relationship("Incident", back_populates="logs")
-    author: Mapped[User | None] = relationship("User")
-
-    __table_args__ = (
-        Index("ix_incident_log_incident", "tenant_id", "incident_id"),
-        Index("ix_incident_log_stage", "tenant_id", "stage"),
-    )
-
-
-class InspectionStatus(str, enum.Enum):
-    PLANNED = "planned"
-    IN_PROGRESS = "in_progress"
-    COMPLETED = "completed"
-    CANCELLED = "cancelled"
-
-
-class InspectionType(str, enum.Enum):
-    INTERNAL = "internal"
-    EXTERNAL = "external"
-
-
-class Inspection(TenantBaseModel, SoftDeleteMixin):
-    __tablename__ = "regulatory_inspection"
-
-    company_id: Mapped[str] = mapped_column(
-        ForeignKey("company.id", ondelete="RESTRICT"), nullable=False, index=True
-    )
-    site_id: Mapped[str | None] = mapped_column(
-        ForeignKey("site.id", ondelete="SET NULL"), nullable=True, index=True
-    )
-    inspection_type: Mapped[InspectionType] = mapped_column(
-        native_enum(InspectionType, name="inspectiontype"),
-        nullable=False,
-        default=InspectionType.INTERNAL,
-    )
-    responsible_id: Mapped[str | None] = mapped_column(
-        ForeignKey("user.id", ondelete="SET NULL"), nullable=True, index=True
-    )
-    recurrence_rule: Mapped[str | None] = mapped_column(String(128))
-    authority: Mapped[str] = mapped_column(String(255), nullable=False)
-    purpose: Mapped[str | None] = mapped_column(String(255))
-    scheduled_at: Mapped[date | None] = mapped_column(Date, nullable=True)
-    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    status: Mapped[InspectionStatus] = mapped_column(
-        Enum(InspectionStatus, name="regulatoryinspectionstatus"),
-        nullable=False,
-        default=InspectionStatus.PLANNED,
-    )
-    result_summary: Mapped[str | None] = mapped_column(Text)
-
-    company: Mapped[Company] = relationship(backref="regulatory_inspections")
-    site: Mapped[Site | None] = relationship(backref="regulatory_inspections")
-    responsible: Mapped[User | None] = relationship("User")
-    results: Mapped[list["InspectionResult"]] = relationship(
-        "InspectionResult",
-        back_populates="inspection",
-        cascade="all, delete-orphan",
-        passive_deletes=True,
-    )
-
-    __table_args__ = (
-        Index("ix_regulatory_inspection_company", "tenant_id", "company_id"),
-        Index("ix_regulatory_inspection_site", "tenant_id", "site_id"),
-        Index("ix_regulatory_inspection_responsible", "tenant_id", "responsible_id"),
-        Index("ix_regulatory_inspection_status", "tenant_id", "status"),
-        Index("ix_regulatory_inspection_type", "tenant_id", "inspection_type"),
-    )
-
-
-class InspectionResult(TenantBaseModel, SoftDeleteMixin):
-    __tablename__ = "inspection_result"
-
-    inspection_id: Mapped[str] = mapped_column(
-        ForeignKey("regulatory_inspection.id", ondelete="CASCADE"), nullable=False, index=True
-    )
-    title: Mapped[str] = mapped_column(String(255), nullable=False)
-    outcome: Mapped[str | None] = mapped_column(String(128))
-    notes: Mapped[str | None] = mapped_column(Text)
-    issued_at: Mapped[date | None] = mapped_column(Date)
-    file_id: Mapped[str | None] = mapped_column(
-        ForeignKey("file.id", ondelete="SET NULL"), nullable=True
-    )
-
-    inspection: Mapped[Inspection] = relationship(
-        "app.models.models.Inspection", back_populates="results"
-    )
-    file: Mapped[File | None] = relationship("File")
-
-    __table_args__ = (
-        Index("ix_inspection_result_inspection", "tenant_id", "inspection_id"),
-        Index("ix_inspection_result_issued_at", "issued_at"),
-    )
-
-
-class AttestationStatus(str, enum.Enum):
-    ACTIVE = "active"
-    EXPIRED = "expired"
-    REVOKED = "revoked"
-
-
-class Attestation(TenantBaseModel, SoftDeleteMixin):
-    __tablename__ = "attestation"
-
-    person_id: Mapped[str] = mapped_column(
-        ForeignKey("person.id", ondelete="CASCADE"), nullable=False, index=True
-    )
-    position_id: Mapped[str | None] = mapped_column(
-        ForeignKey("position.id", ondelete="SET NULL"), nullable=True, index=True
-    )
-    name: Mapped[str] = mapped_column(String(255), nullable=False)
-    issued_at: Mapped[date | None] = mapped_column(Date)
-    expires_at: Mapped[date | None] = mapped_column(Date)
-    status: Mapped[AttestationStatus] = mapped_column(
-        native_enum(AttestationStatus, name="attestationstatus"),
-        nullable=False,
-        default=AttestationStatus.ACTIVE,
-    )
-    responsible_id: Mapped[str | None] = mapped_column(
-        ForeignKey("user.id", ondelete="SET NULL"), nullable=True, index=True
-    )
-    notes: Mapped[str | None] = mapped_column(Text)
-
-    person: Mapped[Person] = relationship("Person")
-    position: Mapped[Position | None] = relationship("Position")
-    responsible: Mapped[User | None] = relationship("User")
-
-    __table_args__ = (
-        Index("ix_attestation_person", "tenant_id", "person_id"),
-        Index("ix_attestation_status", "tenant_id", "status"),
-        Index("ix_attestation_expires", "tenant_id", "expires_at"),
-    )
-
-
-class PrescriptionStatus(str, enum.Enum):
-    OPEN = "open"
-    IN_PROGRESS = "in_progress"
-    COMPLETED = "completed"
-    VERIFIED = "verified"
-    CANCELLED = "cancelled"
-
-
-class Prescription(TenantBaseModel, SoftDeleteMixin):
-    __tablename__ = "inspection_prescription"
-
-    inspection_id: Mapped[str] = mapped_column(
-        ForeignKey("regulatory_inspection.id", ondelete="CASCADE"), nullable=False, index=True
-    )
-    incident_id: Mapped[str | None] = mapped_column(
-        ForeignKey("incident.id", ondelete="SET NULL"), nullable=True, index=True
-    )
-    description: Mapped[str] = mapped_column(Text, nullable=False)
-    due_at: Mapped[date | None] = mapped_column(Date)
-    status: Mapped[PrescriptionStatus] = mapped_column(
-        native_enum(PrescriptionStatus, name="prescriptionstatus"),
-        nullable=False,
-        default=PrescriptionStatus.OPEN,
-    )
-    assignee_id: Mapped[str | None] = mapped_column(
-        ForeignKey("user.id", ondelete="SET NULL"), nullable=True, index=True
-    )
-    evidence: Mapped[str | None] = mapped_column(Text)
-    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-
-    inspection: Mapped[Inspection] = relationship("app.models.models.Inspection")
-    incident: Mapped[Incident | None] = relationship("Incident")
-    assignee: Mapped[User | None] = relationship("User")
-
-    __table_args__ = (
-        Index("ix_prescription_inspection", "tenant_id", "inspection_id"),
-        Index("ix_prescription_status", "tenant_id", "status"),
-        Index("ix_prescription_due", "tenant_id", "due_at"),
-        Index("ix_prescription_assignee", "tenant_id", "assignee_id"),
-    )
 
 
 class Asset(TenantBaseModel):
