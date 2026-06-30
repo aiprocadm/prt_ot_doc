@@ -1,5 +1,29 @@
 # CHANGELOG
 
+## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-4: tasks/_core.py decomposition (slice 1) + Celery guard)
+
+### Added
+- **ARCH-4 guard — `scripts/ci/check_celery_tasks.py`.** Splitting the Celery god-file must keep
+  the set of registered task names (`celery_app.tasks` keys) identical — a changed name silently
+  breaks beat schedules / `send_task`. The guard imports `app.tasks` (registers everything) and
+  compares to `docs/stabilization/celery_tasks_baseline.json` (31 tasks). Task-name change = fatal;
+  incidental `_core` attribute losses (moved imports/private impls) are reported, not fatal.
+
+### Changed
+- **ARCH-4 slice 1 — `tasks/_core.py` decomposition (the ТЗ's #1-priority god-file).** Following the
+  sanctioned plan in `app/tasks/__init__.py` ("дальнейшее дробление — без смены публичных импортов"):
+  - `tasks/_shared.py` — the cross-task helpers `_run_coroutine` / `_resolve_task_tenant_scope` +
+    `RETRYABLE_EXCEPTIONS` (a leaf module, so task sub-modules don't import back into `_core` → no cycle).
+  - `tasks/domain_ticks.py` — the 8 periodic domain-tick tasks (`workflow.sla/timers.tick`,
+    `medical.contingent.tick`, `contractors.readiness/documents.tick`, `ppe/permits.expiry.tick`,
+    `prescriptions.escalate.tick`) + their private async impls. Explicit `name=` preserved → Celery
+    registration identical.
+  - `_core.py` re-exports both (public tasks, private `_*_tick` impls used by tests, and the shared
+    helpers) so `from app.tasks._core import X` / `from app.tasks import X` are unchanged.
+  `_core.py`: 2275 → 1983 lines. Verified Py3.12: Celery guard green (31 tasks unchanged), ruff+black
+  clean, tick behavior tests green (ppe/permits/medical/contractors). (First slice; further task
+  groups — document/outbox/notification/signing-edo — are follow-ups by the same pattern.)
+
 ## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-4: OpenAPI contract guard (verification infra))
 
 ### Added
