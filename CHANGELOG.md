@@ -1,5 +1,30 @@
 # CHANGELOG
 
+## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-4: tasks/_core.py decomposition (slice 4 — notification/reminder jobs))
+
+### Changed
+- **ARCH-4 slice 4 — extract the notification/reminder job group from `tasks/_core.py`.** Same
+  behavior-preserving pattern (new leaf sub-module + re-export from `_core`, explicit `name=`
+  preserved → identical Celery registration). With this slice `_core.py` drops **under the ~700-line
+  ТЗ target**:
+  - `tasks/notification_jobs.py` (new) — `dispatch_notification_job` (`notifications.dispatch`) +
+    `_dispatch_notification_job`; `scan_reminders_job` (`reminders.scan`) + the reminder-rule scan
+    helpers `_resolve_rule_recipients` / `_scan_reminders_for_tenant` / `_scan_reminders_job`
+    (training/PPE/inspection due-date evaluation → in-app notifications + plan tasks). Leaf module —
+    imports only from `app.tasks._shared`, never back into `_core` → no cycle.
+  - `_core.py` re-exports all 6 (`# noqa: F401`); the `reminders.scan` entry in the
+    `app.services.celery_app` beat schedule keeps resolving because the task **name** is unchanged
+    (the Celery guard enforces this). The task `dispatch_task_reminders` (`tasks.reminders.dispatch`,
+    task-obligations dispatch — a different concern) stays in `_core`.
+  `_core.py`: 920 → 617 lines; `notification_jobs.py`: 347 lines. No test mock-patch targets needed
+  repointing (pre-flight sweep: no test patches `app.tasks._core.<global>` for a moved fn, and no test
+  imports these tasks directly). Verified locally (Py3.13 venv): Celery guard green (31 tasks
+  unchanged), ruff+black clean, moved block byte-identical to commit 13248301 (299 lines, deterministic
+  diff), re-export identity confirmed, `reminders.scan` beat task still registered, notification/reminder
+  + tasks tests green (21 passed); adversarial reference/import review clean. (Remaining `_core` groups
+  — outbox, process_inbound_webhook, billing, signing/edo wrappers — are optional follow-ups; `_core`
+  is already under target.)
+
 ## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-4: tasks/_core.py decomposition (slice 3 — file/PDF jobs))
 
 ### Changed
