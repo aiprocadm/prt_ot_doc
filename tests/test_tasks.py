@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 import app.tasks as tasks
 import app.tasks._core as tasks_core
+import app.tasks.document_jobs as tasks_document_jobs
 from app.db import Base, SharedBase
 from app.models.job_engine import OutboxEvent, OutboxEventStatus
 from app.models.models import Template, TemplateVersion, Tenant, WebhookDelivery, WebhookEndpoint
@@ -50,7 +51,9 @@ def test_register_template_task(monkeypatch) -> None:
                 await session.rollback()
                 raise
 
-    monkeypatch.setattr(tasks_core, "session_scope", override_scope)
+    # register_template_task lives in app.tasks.document_jobs (ARCH-4 slice 2);
+    # patch session_scope where the task looks it up.
+    monkeypatch.setattr(tasks_document_jobs, "session_scope", override_scope)
 
     version_id = tasks.register_template_task(
         tenant.slug,

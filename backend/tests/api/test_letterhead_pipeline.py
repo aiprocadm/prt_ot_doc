@@ -348,7 +348,7 @@ class _LetterheadFixture:
         different company_id than the one seeded by default; the run row is updated
         in-place before the pipeline executes so the pipeline picks it up.
         """
-        from app.tasks._core import _generate_document_for_run
+        from app.tasks.document_jobs import _generate_document_for_run
 
         stored: dict[str, bytes] = {}
 
@@ -377,10 +377,10 @@ class _LetterheadFixture:
             yield session
 
         with (
-            patch("app.tasks._core.session_scope", _fake_session_scope),
-            patch("app.tasks._core.ensure_tenant_schema", return_value=None),
-            patch("app.tasks._core.s3.put_object", side_effect=_fake_put_object),
-            patch("app.tasks._core.settings") as mock_settings,
+            patch("app.tasks.document_jobs.session_scope", _fake_session_scope),
+            patch("app.tasks.document_jobs.ensure_tenant_schema", return_value=None),
+            patch("app.tasks.document_jobs.s3.put_object", side_effect=_fake_put_object),
+            patch("app.tasks.document_jobs.settings") as mock_settings,
         ):
             mock_settings.doc_pipeline_letterhead_auto = auto_flag
             # Forward other settings accesses to real settings

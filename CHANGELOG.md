@@ -1,5 +1,32 @@
 # CHANGELOG
 
+## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-4: tasks/_core.py decomposition (slice 2 — document jobs))
+
+### Changed
+- **ARCH-4 slice 2 — extract the document-generation group from `tasks/_core.py`.** Same
+  behavior-preserving pattern as slice 1 (new leaf sub-module + re-export from `_core`, explicit
+  `name=` preserved so Celery registration is identical):
+  - `tasks/document_jobs.py` — the 3 document tasks (`app.tasks.register_template`,
+    `app.tasks.generate_document`, `app.tasks.generate_document_batch_item`) plus their private
+    impls (`_generate_document_for_run`, `_assert_pipeline_run_matches_session_tenant`,
+    `_assert_batch_item_scope`, `_company_snapshot`, `_sha256_bytes`, `_mark_batch_item_failed`).
+    A leaf module — imports only from `app.tasks._shared`, never back into `_core` → no cycle.
+  - `tasks/_shared.py` — `DOCX_MIME` moved here (shared between document_jobs and the header/PDF
+    jobs still in `_core`); imported by both.
+  - `_core.py` re-exports all moved names (`# noqa: F401`) so `from app.tasks._core import X` /
+    `from app.tasks import X` are unchanged; the re-exported task objects are identical (same
+    object), so existing `generate_document_task.apply_async` monkeypatches still work.
+  `_core.py`: 1983 → 1233 lines; `document_jobs.py`: 813 lines (dominated by the ~390-line
+  `_generate_document_for_run`; further intra-function splitting would not be a pure move and is
+  deferred). Tests whose mock-patch target was `app.tasks._core.<global>` for a *moved* function
+  (`session_scope`/`ensure_tenant_schema`/`s3`/`settings` in `test_letterhead_pipeline.py`,
+  `session_scope` in `test_tasks.py::test_register_template_task`) were repointed to
+  `app.tasks.document_jobs.*` — patch must target the namespace the function looks the name up in.
+  Verified locally (Py3.13 venv): Celery guard green (31 tasks unchanged), ruff+black clean,
+  affected task tests green (24 passed); canonical 3.12.12 run via the Docker gate image.
+  (Remaining groups — file/PDF, notification/reminder, outbox, signing/edo — are follow-ups by
+  the same pattern.)
+
 ## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-4: tasks/_core.py decomposition (slice 1) + Celery guard)
 
 ### Added
