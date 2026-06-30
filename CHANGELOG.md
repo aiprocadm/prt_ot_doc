@@ -1,5 +1,27 @@
 # CHANGELOG
 
+## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-4: split god-route medical.py into a package)
+
+### Changed
+- **ARCH-4 — split the god-route `api/routes/medical.py` (1289 lines) into a package**, same
+  contract-preserving pattern as the documents/risk splits. OpenAPI surface byte-for-byte unchanged
+  (guard: **803 operations, 644 schemas**); every endpoint a pure move (deterministic line-diff).
+  - `api/routes/medical/_common.py` (147) — the single `router`, access deps
+    (`SessionDep/TenantDep/MedicalAccess/MedicalReadAccess`), role constants
+    (`_MEDICAL_READ_ROLES/_MEDICAL_WRITE_ROLES`), the `MedicalFeatureGate` feature gate, and the
+    shared error/getter helpers (`_error`, `_to_referral_read`, `_get_factor/_get_hazard/_get_norm/_get_referral`).
+  - `api/routes/medical/exams.py` (358) — medical exams, requirements, suspensions endpoints.
+  - `api/routes/medical/catalog.py` (578) — norms + referrals + factors CRUD endpoints.
+  - `api/routes/medical/contingent.py` (302) — hazard↔factor mappings, contingent register,
+    named-list, print endpoints, contingent, generate-referrals, summary. Keeps the two mid-file
+    helpers (`_mapping_read`, `_render_to_response`) with the endpoints that use them.
+  - `api/routes/medical/__init__.py` — imports endpoint modules in registration order
+    (`# isort: off`); re-exports `router` (route_groups uses `medical.router`) + the role constants
+    imported by `tests/test_medical_access_parity.py`.
+  Verified locally (Py3.13 venv): OpenAPI guard green (unchanged), ruff+black clean, all 30 routes
+  registered in original order, the four module bodies byte-identical to the source ranges, re-exports
+  + `route_groups` import OK, medical route tests green.
+
 ## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-4: split god-route risk.py into a package)
 
 ### Changed
