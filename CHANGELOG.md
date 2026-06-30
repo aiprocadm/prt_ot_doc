@@ -1,5 +1,21 @@
 # CHANGELOG
 
+## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-4: OpenAPI contract guard (verification infra))
+
+### Added
+- **ARCH-4 guard — `scripts/ci/check_openapi_snapshot.py`.** Route refactors (splitting god-route
+  files into sub-routers / extracting helpers) must keep the public OpenAPI surface identical. This
+  guard imports the FastAPI app, builds `app.openapi()`, and fingerprints it — every `METHOD path`
+  operation, all `operationId`s, and component schema names — comparing to a baseline
+  (`docs/stabilization/openapi_routes_baseline.json`, captured: **803 operations, 644 schemas**).
+  Any diff is a contract change. This is the directly-acceptance-relevant verification tool for
+  ARCH-4 ("OpenAPI snapshot не изменился"); like the ARCH-2 metadata guard it is a refactor tool,
+  not a standing gate (it freezes the surface, so new endpoints require a re-snapshot). Run in the
+  gate image (Python 3.12 + app env). NOTE: the per-file god-route/service splits themselves
+  (mixin decomposition for `PipelineService`/`FileService`, ordered sub-routers for
+  `documents`/`risk`/`medical`/`packs`, Celery task-name preservation for `tasks/_core.py`) are the
+  remaining ARCH-4 work — each now de-risked by this guard.
+
 ## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-2: god-model decomposition COMPLETE (batch 5))
 
 ### Changed
