@@ -987,9 +987,16 @@ def _extract_document_version_id(run: PipelineRun) -> str | None:
 
 
 def _normalize_scope_level(template: Template) -> str:
-    metadata = template.metadata_json if isinstance(template.metadata_json, dict) else {}
-    scope = metadata.get("scope") if isinstance(metadata.get("scope"), dict) else {}
-    raw = str(scope.get("level") or scope.get("type") or "tenant").strip().lower()
+    # RC-013: read the indexed relational column first; fall back to the legacy
+    # metadata_json["scope"] mirror only for rows written/backfilled before
+    # normalization. Alias mapping is unchanged (organization/legal_entity →
+    # company, branch → site, global → system) so matching/scoring is identical.
+    raw_level = getattr(template, "scope_level", None)
+    if not raw_level:
+        metadata = template.metadata_json if isinstance(template.metadata_json, dict) else {}
+        scope = metadata.get("scope") if isinstance(metadata.get("scope"), dict) else {}
+        raw_level = scope.get("level") or scope.get("type")
+    raw = str(raw_level or "tenant").strip().lower()
     aliases = {
         "organization": "company",
         "legal_entity": "company",
@@ -1000,10 +1007,15 @@ def _normalize_scope_level(template: Template) -> str:
 
 
 def _scope_target_ids(template: Template) -> tuple[str | None, str | None]:
-    metadata = template.metadata_json if isinstance(template.metadata_json, dict) else {}
-    scope = metadata.get("scope") if isinstance(metadata.get("scope"), dict) else {}
-    company_id = scope.get("company_id")
-    site_id = scope.get("site_id")
+    # RC-013: prefer the indexed relational columns; fall back to legacy JSON
+    # only when both columns are unset (un-backfilled row).
+    company_id = getattr(template, "scope_company_id", None)
+    site_id = getattr(template, "scope_site_id", None)
+    if company_id is None and site_id is None:
+        metadata = template.metadata_json if isinstance(template.metadata_json, dict) else {}
+        scope = metadata.get("scope") if isinstance(metadata.get("scope"), dict) else {}
+        company_id = scope.get("company_id")
+        site_id = scope.get("site_id")
     return (str(company_id) if company_id else None, str(site_id) if site_id else None)
 
 

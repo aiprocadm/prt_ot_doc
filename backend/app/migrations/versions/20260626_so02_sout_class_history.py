@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import sqlalchemy as sa
 from alembic import op
+from sqlalchemy.dialects import postgresql
 
 revision = "20260626_so02_sout_class_history"
 down_revision = "20260626_so01_sout"
@@ -18,7 +19,12 @@ depends_on = None
 
 
 # soutclass already created by so01 — reference without re-emitting DDL.
-_SOUT_CLASS = sa.Enum(
+# ВАЖНО: dialect-specific ``postgresql.ENUM(create_type=False)``, а НЕ generic
+# ``sa.Enum``: только у первого create_type=False надёжно подавляет неявный
+# ``CREATE TYPE`` в ``op.create_table`` (иначе ``DuplicateObjectError: type
+# "soutclass" already exists`` на PostgreSQL; на SQLite невидимо). Один объект
+# безопасно переиспользуется обеими колонками (old_class/new_class) — DDL нет.
+_SOUT_CLASS = postgresql.ENUM(
     "optimal",
     "acceptable",
     "harmful_3_1",

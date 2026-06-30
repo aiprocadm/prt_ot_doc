@@ -1,5 +1,170 @@
 # CHANGELOG
 
+## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-4: tasks/_core.py decomposition (slice 1) + Celery guard)
+
+### Added
+- **ARCH-4 guard — `scripts/ci/check_celery_tasks.py`.** Splitting the Celery god-file must keep
+  the set of registered task names (`celery_app.tasks` keys) identical — a changed name silently
+  breaks beat schedules / `send_task`. The guard imports `app.tasks` (registers everything) and
+  compares to `docs/stabilization/celery_tasks_baseline.json` (31 tasks). Task-name change = fatal;
+  incidental `_core` attribute losses (moved imports/private impls) are reported, not fatal.
+
+### Changed
+- **ARCH-4 slice 1 — `tasks/_core.py` decomposition (the ТЗ's #1-priority god-file).** Following the
+  sanctioned plan in `app/tasks/__init__.py` ("дальнейшее дробление — без смены публичных импортов"):
+  - `tasks/_shared.py` — the cross-task helpers `_run_coroutine` / `_resolve_task_tenant_scope` +
+    `RETRYABLE_EXCEPTIONS` (a leaf module, so task sub-modules don't import back into `_core` → no cycle).
+  - `tasks/domain_ticks.py` — the 8 periodic domain-tick tasks (`workflow.sla/timers.tick`,
+    `medical.contingent.tick`, `contractors.readiness/documents.tick`, `ppe/permits.expiry.tick`,
+    `prescriptions.escalate.tick`) + their private async impls. Explicit `name=` preserved → Celery
+    registration identical.
+  - `_core.py` re-exports both (public tasks, private `_*_tick` impls used by tests, and the shared
+    helpers) so `from app.tasks._core import X` / `from app.tasks import X` are unchanged.
+  `_core.py`: 2275 → 1983 lines. Verified Py3.12: Celery guard green (31 tasks unchanged), ruff+black
+  clean, tick behavior tests green (ppe/permits/medical/contractors). (First slice; further task
+  groups — document/outbox/notification/signing-edo — are follow-ups by the same pattern.)
+
+## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-4: OpenAPI contract guard (verification infra))
+
+### Added
+- **ARCH-4 guard — `scripts/ci/check_openapi_snapshot.py`.** Route refactors (splitting god-route
+  files into sub-routers / extracting helpers) must keep the public OpenAPI surface identical. This
+  guard imports the FastAPI app, builds `app.openapi()`, and fingerprints it — every `METHOD path`
+  operation, all `operationId`s, and component schema names — comparing to a baseline
+  (`docs/stabilization/openapi_routes_baseline.json`, captured: **803 operations, 644 schemas**).
+  Any diff is a contract change. This is the directly-acceptance-relevant verification tool for
+  ARCH-4 ("OpenAPI snapshot не изменился"); like the ARCH-2 metadata guard it is a refactor tool,
+  not a standing gate (it freezes the surface, so new endpoints require a re-snapshot). Run in the
+  gate image (Python 3.12 + app env). NOTE: the per-file god-route/service splits themselves
+  (mixin decomposition for `PipelineService`/`FileService`, ordered sub-routers for
+  `documents`/`risk`/`medical`/`packs`, Celery task-name preservation for `tasks/_core.py`) are the
+  remaining ARCH-4 work — each now de-risked by this guard.
+
+## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-2: god-model decomposition COMPLETE (batch 5))
+
+### Changed
+- **ARCH-2 batch 5 — foundational tenant/billing + identity/authz block extracted** (30 classes):
+  `tenant_billing.py` (19 — RoleEnum, Tenant*, Billing*, rate limits, ApiToken, WebhookSubscription),
+  `identity.py` (11 — User, RefreshSession, UserRole, UserAttribute, AuthzBaseModel + Authz*, ApiKey).
+  `identity.py` binds `RoleEnum` at runtime (`native_enum(RoleEnum)`, imported from `tenant_billing`)
+  and subclasses the declarative `TenantBase` — both imported normally.
+- **ARCH-2 acceptance met.** `backend/app/models/models.py` is now a **594-line pure re-export
+  facade** (was 3476 / 170 classes). All domain models live in 21 domain files, each **< 600 lines**
+  (training, medical, briefings, field_ops, ppe, templates, packages, audit_log, journals, incidents,
+  inspections, master_data, marketplace, idempotency, risk_register, assets, approval_runtime,
+  tenant_billing, identity, + the pre-existing document/finance/etc.). `from app.models.models import X`
+  and `from app.models import X` unchanged for every previously-available `X` (guard-enforced; the
+  declarative bases `SharedModel`/`TenantBaseModel` re-exported explicitly). Alembic schema unchanged
+  throughout (guard: 251 tables identical at every step). Verified Py3.12: guard green, ruff+black
+  clean, auth/RBAC/ABAC/tenant/billing behavior tests green.
+
+## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-2: god-model decomposition (batch 4, approval runtime))
+
+### Changed
+- **ARCH-2 batch 4 — approval/edo/signature/outbox/webhook runtime block extracted** into
+  `approval_runtime.py` (16 classes: Outbox, Approval{Process,Task,DecisionLog,RouteStep,Instance,
+  InstanceStep}, Edo{StatusEvent,WebhookInbox}, SignatureRequest, Webhook{Delivery,Endpoint} +
+  enums). This block binds a few `approval_workflow` enums at **runtime** (`Enum(ApprovalStepType)`,
+  `SignatureProviderStatus.PENDING.value`), so those are imported normally (not TYPE_CHECKING).
+  `models.py`: 1391 → 1093 lines. All re-exported (in `__all__`).
+- **Kept `ApprovalStepType` / `SignatureProviderStatus` re-exported from `models.py`.** After the
+  approval classes moved, ruff removed these two from models.py's `approval_workflow` import (no
+  longer used in-body); restored + added to `__all__` so callers' `from app.models.models import …`
+  keeps working (guard name-superset check). Verified Py3.12: guard green, ruff+black clean.
+
+## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-2: god-model decomposition (batch 3, 5 domains))
+
+### Changed
+- **ARCH-2 batch 3 — 5 more domains extracted from `models.py`** (20 classes, guard-verified):
+  `master_data.py` (6 — Company, Position, Person, Site, Workplace + EmploymentStatus),
+  `marketplace.py` (1), `idempotency.py` (2), `risk_register.py` (8 — legacy RiskMap/RiskMethodology,
+  hazard links, NPA/NPABinding), `assets.py` (3). `models.py`: 1770 → 1391 lines. All re-exported
+  (in `__all__`). Identical tables (guard: 251 unchanged).
+- **Kept `File` re-exported from `models.py`.** After the last in-body user of `File` moved out,
+  ruff removed `from app.models.file import File`; restored it and added `File` to `__all__` so the
+  strengthened guard's name-superset check (some callers do `from app.models.models import File`)
+  stays satisfied. Verified Py3.12: guard green, ruff+black clean, master-data/NPA/risk tests green.
+
+## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-2: god-model decomposition (batch 2, 5 domains))
+
+### Changed
+- **ARCH-2 batch 2 — 5 more domains extracted from `models.py`** (55 classes, guard-verified):
+  `packages.py` (31 — package profiles/presets/runs, pack runs, document packs, pipeline runs,
+  client-portal), `audit_log.py` (3 — AuditLog + its `@event.listens_for` immutability hooks,
+  AuditExportJob, SecurityAuditLog), `journals.py` (5), `incidents.py` (8), `inspections.py`
+  (8 — inspection/attestation/prescription). Identical tables (guard: 251 unchanged); all names
+  re-exported from `models.py`. `models.py`: 2649 → 1766 lines.
+- **Fixed move-induced relationship resolution.** Several relationships used fully-qualified
+  string targets (`"app.models.models.IncidentPerson"`, `"app.models.models.Inspection"`) to
+  disambiguate duplicate class names across model packages; updated to the new module path
+  (`app.models.incidents.*` / `app.models.inspections.*`) so SQLAlchemy's registry resolves them.
+  The guard's `configure_mappers()` caught this — a bare-name switch would have hit the known
+  cross-package ambiguity. Verified Py3.12: guard green, ruff+black clean, audit/packs tests green.
+
+## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-2: god-model decomposition (batch 1, 5 domains))
+
+### Changed
+- **ARCH-2 batch 1 — 5 more domains extracted from `models.py`** (same pure-move pattern,
+  guard-verified): `medical.py` (10), `briefings.py` (4), `field_ops.py` (7 — compliance
+  deadlines / calendar / offline sync / permits), `ppe.py` (6), `templates.py` (5). 32 classes
+  moved; identical tables (guard: 251 tables unchanged); all names re-exported from `models.py`
+  (in `__all__`) → zero import-contract change. `models.py`: 3142 → 2649 lines. Verified Py3.12:
+  guard green, ruff+black clean, domain tests green (medical/ppe/permit/template-scope/briefing).
+
+## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-2: god-model decomposition (slice 1 + guard))
+
+### Added
+- **ARCH-2 guard — `scripts/ci/check_models_metadata.py`.** Verifies that splitting
+  `backend/app/models/models.py` is a *pure move*: `configure_mappers()` (no circular
+  import / broken relationship), a **schema fingerprint** (table→columns→types for
+  SharedBase+TenantBase — a would-be `alembic autogenerate` diff) compared to a baseline,
+  and **re-export completeness** (every model/Enum type importable from `app.models.models`
+  at baseline stays importable). Baseline: `docs/stabilization/models_metadata_baseline.json`.
+  Runs in ~15s in the gate image (no PG). Refactor-verification tool, not a standing gate
+  (it freezes the schema fingerprint).
+
+### Changed
+- **ARCH-2 slice 1 — Training domain extracted from `models.py`.** 17 Training classes
+  (`Training`, `TrainingCourse`, `TrainingPlan`, `TrainingSession*`, `TrainingCertificate`,
+  `TrainingProgram`/`Module`/`Lesson`/`Test`/`TestQuestion`/`Group`/`Enrollment`/`Attempt`/
+  `Protocol`/`ProtocolItem`, + status enums) moved to new `backend/app/models/training.py`.
+  Pure move: same `TenantBase` registry, **identical tables** (guard green: 251 tables
+  unchanged). `models.py` re-exports all 17 (listed in `__all__` so ruff F401 keeps them)
+  → `from app.models.models import X` and `from app.models import X` unchanged. External
+  refs (Person/Company/Position/File) are `Mapped[...]` annotations resolved via the SA
+  registry, so only a `TYPE_CHECKING` import is needed — no runtime cycle. `models.py`:
+  3476 → 3142 lines. Verified Py3.12: guard green, `test_training_enrollment_service.py` green.
+
+## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-3: enforce bounded-context boundaries)
+
+### Added
+- **ARCH-3 — энфорсмент границ bounded contexts.** Правило «не смешивать bounded contexts напрямую» (`product_spec.py::ARCHITECTURE_RULES`) раньше было только текстом. Теперь оно **проверяется**: `scripts/ci/check_context_boundaries.py` (stdlib AST-walker) запрещает прямые cross-context импорты `app.modules.* → app.domains.*` и `app.domains.* → app.modules.*`. Новый такой импорт валит проверку; текущие 10 протечек (аудит 2026-06-30: 8 modules→domains, 2 domains→modules) заморожены в `ALLOWLIST` как временный долг (вычищается ARCH-1). Allowlist держится честным — устаревшая запись (импорт уже удалён) тоже валит проверку. Запуск: `make check-boundaries`, плюс шаг встроен в `make gate` (`scripts/ci/local_gate.py`) и в pytest (`tests/test_context_boundaries.py`, 3 теста). `app.modules.* → app.services.*` сознательно НЕ запрещён — `services/` это санкционированный слой оркестрации (ТЗ).
+- **Почему свой AST-чекер, а не import-linter:** `app.modules` / `app.domains` — PEP 420 namespace-пакеты (без `__init__.py`), и graph-builder import-linter (grimp) их не обходит (пустой граф). ТЗ допускает «import-linter ИЛИ эквивалентный тест»; чекер читает файлы напрямую (namespace-агностичен) и работает на любом Python без внешних зависимостей.
+
+## 2026-06-30 (fix/stabilize-gates-2026-06-29 — REL-4: RC-012 (RTO/RPO go/no-go) + RC-013 (relational scope cutover))
+
+### Added
+- **RC-012 — формальный RTO/RPO go/no-go в restore drill.** `scripts/restore_drill.py` теперь эмитит блок `go_no_go` (`evaluate_rto_rpo`): измеренные `rto_measured_seconds` (окно восстановления: backup→restore+verify+boot) и `rpo_measured_seconds` (лаг бэкапа от последней записи) сравниваются с порогами и дают `decision: go|no-go`. Решение свёрнуто в агрегатный `success` — слишком медленное восстановление = no-go, а не «зелёно по целостности». Пороги по умолчанию = продакшн-цели ТЗ vNext §31.6 (**RTO ≤ 4ч / RPO ≤ 24ч**), переопределяются `--rto-threshold-seconds` / `--rpo-threshold-seconds` или env `RESTORE_DRILL_RTO_SECONDS` / `RESTORE_DRILL_RPO_SECONDS`. Честная оговорка в `go_no_go.rpo_basis`: измеренный RPO — это лаг репетиции seed→backup (нижняя оценка), продакшн-RPO определяется частотой бэкапов. Doc `docs/stabilization/restore-drill.md` (Acceptance criteria + раздел «RTO/RPO go/no-go»). Тесты `tests/test_restore_drill_go_no_go.py` (7, зелёные Py3.12).
+
+### Changed
+- **RC-013 — завершён переход template scope на реляционную/индексированную модель.** Реляционные колонки `Template.scope_level` / `scope_company_id` / `scope_site_id` + индекс `ix_template_scope_level_company_site` уже существовали (миграция `20260416_next68`, бэкфилл из JSON). Теперь **читатели резолвинга переведены на индексированные колонки**: `app/api/routes/documents.py::_normalize_scope_level` / `_scope_target_ids` читают из колонок (fallback на legacy `metadata_json["scope"]` только для не-бэкфилленных строк) — поведение-сохраняюще (алиасы organization/legal_entity→company, branch→site, global→system без изменений). `metadata_json["scope"]` сохранён как compat-зеркало. Тесты `tests/test_template_scope_relational_reads.py` (6) + существующие `tests/test_template_catalog_scope.py` зелёные. DB-level scope pre-filter в resolve-запросе осознанно отложен (non-blocking — безопасность для не-бэкфилленных строк).
+
+### Fixed
+- **`patch_template` — двойное присваивание `scope_level`.** В `app/api/v1/router.py::patch_template` колонка `template.scope_level` присваивалась дважды подряд одним и тем же выражением — убрано дублирование (behavior-neutral).
+
+## 2026-06-29 (fix/stabilize-gates-2026-06-29 — REL-1/REL-2/REL-3: воспроизводимый PG-гейт + 2 PG-блокера)
+
+### Added
+- **REL-1 — воспроизводимый локальный гейт качества (без GitHub Actions).** `scripts/ci/local_gate.py` поднимает PostgreSQL 16 в Docker и гоняет PG-критичные проверки внутри образа `python:3.12` (`scripts/ci/Dockerfile.gate`), фиксируя версию Python вместо хостовой (на 3.13+/Windows pytest зависает — см. CLAUDE.md). Режимы `--db-only` (alembic upgrade/downgrade + enum label-drift guards; зеркало job `alembic-postgres-upgrade` + `@pytest.mark.db` части `backend-tests`) и `--full` (полный suite). Пишет JSON-вердикт в `artifacts/local-gate/summary.json`. Make-обёртки `make gate` / `make gate-full`. Политика и инструкция — `docs/stabilization/local-evidence-gate.md` (REL-1, путь «c»: постоянная local-evidence политика с воспроизводимой командой). **Вердикт первого зелёного прогона: 9 passed на PG16.14.**
+
+### Fixed
+- **Тест-харнес ломал ВСЕ `@pytest.mark.db` PG-гарды (regression).** Слушатель `conftest.py::_sqlite_test_speed_pragmas` был навешен на базовый класс `Engine` и выполнял `PRAGMA synchronous=OFF` на КАЖДОМ подключении, включая Postgres-соединения PG-гардов. На PG `PRAGMA` — синтаксическая ошибка, которая аборти́т транзакцию соединения; `except: pass` глушил Python-исключение, но серверная транзакция оставалась aborted → следующий statement (интроспекция JSON-кодека asyncpg / первая миграция) падал с `InFailedSQLTransactionError`. Слушатель ограничен строго SQLite-драйверами (`"sqlite" in type(dbapi_connection).__module__`). Невидимо на SQLite; ловится только реальным PG.
+- **СОУТ-миграции `so01`/`so02` ломали `alembic upgrade heads` на PostgreSQL (release-блокер).** Колонки `sout_workplace.assessed_class` / `sout_factor.measured_class` (so01) и `sout_class_history.old_class`/`new_class` (so02) использовали generic `sa.Enum(name="soutclass", create_type=False)`. У generic `sa.Enum` флаг `create_type=False` не подавляет неявный `CREATE TYPE` в `op.create_table` так надёжно, как у dialect-specific `postgresql.ENUM` → повторный `CREATE TYPE soutclass` → `DuplicateObjectError: type "soutclass" already exists`. Заменено на `postgresql.ENUM(create_type=False)` (тот же паттерн, что у рабочего `_CAMPAIGN_STATUS`). Невидимо на SQLite (enum→VARCHAR); внесено после среза-снапшота ТЗ (2026-06-26) и после enum-ре-аудита 2026-06-25.
+
+### Verified (local-evidence, 2026-06-29, Python 3.12 / PG16.14)
+- **REL-2 (ORM↔pg_enum label drift):** keystone PG-гард `test_orm_enum_pg_label_parity.py` (bound ⊆ pg_labels + write-smoke insert/update) и 4 быстрых пина зелёные — 0 Group-A дефектов на живом PG16.
+- **REL-3 (миграции на PG):** `test_alembic_postgres_upgrade.py` — `upgrade heads` и round-trip `upgrade heads → downgrade base → upgrade heads` зелёные на чистом PG16; голова цепочки `20260626_so03_sout_norm_bridges`.
+
 ## 2026-06-26 (feat/sout-srez2-p10-04 — ТЗ B.10 СОУТ, Срез 2: версионирование класса)
 
 ### Added

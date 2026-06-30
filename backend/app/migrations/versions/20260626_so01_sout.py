@@ -74,7 +74,15 @@ def upgrade() -> None:
         enum_type.create(bind, checkfirst=True)
 
     # ``soutclass`` already created above; reference it without re-emitting DDL.
-    sout_class_ref = sa.Enum(
+    # ВАЖНО: именно ``postgresql.ENUM(create_type=False)``, а НЕ generic
+    # ``sa.Enum(create_type=False)``. Только у dialect-specific ENUM флаг
+    # create_type=False надёжно подавляет неявный ``CREATE TYPE`` в
+    # ``op.create_table`` (его ``_on_table_create`` пропускает DDL). С generic
+    # sa.Enum тип пере-создаётся при создании таблицы → ``DuplicateObjectError:
+    # type "soutclass" already exists`` на PostgreSQL (на SQLite невидимо).
+    # Один и тот же объект безопасно переиспользуется обеими колонками
+    # (workplace.assessed_class + factor.measured_class) — DDL не эмитится.
+    sout_class_ref = postgresql.ENUM(
         "optimal",
         "acceptable",
         "harmful_3_1",

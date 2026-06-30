@@ -5,19 +5,15 @@
 
 from __future__ import annotations
 
-import asyncio
 import binascii
 import hashlib
 import logging
-import threading
 from datetime import datetime, timedelta, timezone
 from time import perf_counter
-from typing import Any, Coroutine, TypeVar
+from typing import Any, TypeVar
 from uuid import uuid4
 
-from botocore.exceptions import ClientError
 from sqlalchemy import select
-from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
@@ -86,7 +82,6 @@ from app.modules.headers.engine import apply_headers_to_docx
 from app.modules.headers.repo import get_preset_by_code
 from app.modules.templates.passport import inject_passport
 from app.modules.templates.service import build_passport
-from app.modules.workflow.service import WorkflowService
 from app.repository import create_template
 from app.schemas.template import TemplateCreate, TemplateVersionMetadata
 from app.services.audit import AuditService
@@ -99,6 +94,32 @@ from app.services.notifications import send_notification
 from app.services.obligations import process_task_reminders
 from app.services.outbox import OutboxProcessor, OutboxService
 from app.services.reminders import evaluate_due_date
+
+# ARCH-4: shared helpers moved to app.tasks._shared; domain ticks to app.tasks.domain_ticks.
+from app.tasks._shared import (  # noqa: E402
+    RETRYABLE_EXCEPTIONS,
+    _resolve_task_tenant_scope,
+    _run_coroutine,
+)
+
+# Importing domain_ticks registers its tasks with Celery and re-exposes them as
+# ``app.tasks.*`` (via app.tasks.__init__ __getattr__). noqa F401: re-export only.
+from app.tasks.domain_ticks import (  # noqa: E402, F401
+    _contractors_documents_tick,
+    _contractors_readiness_tick,
+    _medical_contingent_tick,
+    _permits_expiry_tick,
+    _ppe_expiry_tick,
+    _prescriptions_escalate_tick,
+    contractors_documents_tick,
+    contractors_readiness_tick,
+    medical_contingent_tick,
+    permits_expiry_tick,
+    ppe_expiry_tick,
+    prescriptions_escalate_tick,
+    workflow_sla_tick,
+    workflow_timers_tick,
+)
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -150,72 +171,6 @@ def _assert_batch_item_scope(
             },
         )
         raise ValueError("Batch item not found")
-
-
-def _run_coroutine(coro: Coroutine[Any, Any, T]) -> T:
-    started = perf_counter()
-    try:
-        asyncio.get_running_loop()
-    except RuntimeError:
-        logger.debug("tasks._run_coroutine", extra={"bridge": "asyncio.run"})
-        try:
-            return asyncio.run(coro)
-        finally:
-            logger.debug(
-                "tasks._run_coroutine.done",
-                extra={"bridge": "asyncio.run", "seconds": round(perf_counter() - started, 4)},
-            )
-
-    result_holder: dict[str, T] = {}
-    error_holder: list[BaseException] = []
-
-    def runner() -> None:
-        try:
-            result_holder["value"] = asyncio.run(coro)
-        except BaseException as exc:  # pragma: no cover - defensive branch
-            error_holder.append(exc)
-
-    logger.debug("tasks._run_coroutine", extra={"bridge": "thread_asyncio.run"})
-    thread = threading.Thread(target=runner, daemon=True)
-    thread.start()
-    thread.join()
-    logger.debug(
-        "tasks._run_coroutine.done",
-        extra={"bridge": "thread_asyncio.run", "seconds": round(perf_counter() - started, 4)},
-    )
-    if error_holder:
-        raise error_holder[0]
-    return result_holder["value"]
-
-
-async def _resolve_task_tenant_scope(
-    session: AsyncSession,
-    tenant_slug: str,
-) -> tuple[str, tuple[str, ...]]:
-    tenant_id = str(session.info.get("tenant_id") or "").strip()
-    tenant = (
-        await session.execute(select(Tenant.id).where(Tenant.slug == tenant_slug).limit(1))
-    ).scalar_one_or_none()
-    if tenant is None:
-        raise ValueError(f"Tenant not found for slug {tenant_slug}")
-    resolved_tenant_id = str(tenant)
-    if tenant_id and tenant_id != resolved_tenant_id:
-        raise ValueError(
-            f"Tenant scope mismatch for slug {tenant_slug}: session tenant_id={tenant_id}, resolved tenant_id={resolved_tenant_id}"
-        )
-    if not tenant_id:
-        tenant_id = resolved_tenant_id
-    tenant_scope = (tenant_id, tenant_slug) if tenant_id != tenant_slug else (tenant_id,)
-    return tenant_id, tenant_scope
-
-
-# См. матрицу retry vs terminal: docs/stabilization/RETRY_VS_TERMINAL_OUTBOX_CELERY.md
-RETRYABLE_EXCEPTIONS: tuple[type[BaseException], ...] = (
-    ClientError,
-    SQLAlchemyError,
-    OSError,
-    asyncio.TimeoutError,
-)
 
 
 async def _generate_document_for_run(run_id: str, tenant_slug: str) -> tuple[str, str]:
@@ -2026,250 +1981,3 @@ def generate_edo_protocol_job(*, message_id: str, tenant_id: str) -> dict[str, s
 def webhook_dispatch_job(limit: int = 50, tenant_slug: str = "test") -> dict[str, int]:
     dispatched = dispatch_outbox_events(tenant_slug=tenant_slug)
     return {"dispatched": int(dispatched), "limit": int(limit)}
-
-
-@celery_app.task(
-    name="workflow.sla.tick",
-    autoretry_for=RETRYABLE_EXCEPTIONS,
-    retry_backoff=True,
-    retry_jitter=True,
-    max_retries=5,
-)
-def workflow_sla_tick(tenant_slug: str) -> int:
-    async def _run() -> int:
-        with tenant_context(tenant_slug):
-            ensure_tenant_schema(tenant_slug)
-            async with session_scope(tenant=tenant_slug) as session:
-                tenant_id, _tenant_scope = await _resolve_task_tenant_scope(session, tenant_slug)
-                processed = await WorkflowService(session, tenant_id).sweep_task_sla()
-                await session.commit()
-                return processed
-
-    return _run_coroutine(_run())
-
-
-@celery_app.task(
-    name="workflow.timers.tick",
-    autoretry_for=RETRYABLE_EXCEPTIONS,
-    retry_backoff=True,
-    retry_jitter=True,
-    max_retries=5,
-)
-def workflow_timers_tick(tenant_slug: str) -> int:
-    async def _run() -> int:
-        with tenant_context(tenant_slug):
-            ensure_tenant_schema(tenant_slug)
-            async with session_scope(tenant=tenant_slug) as session:
-                tenant_id, _tenant_scope = await _resolve_task_tenant_scope(session, tenant_slug)
-                processed = await WorkflowService(session, tenant_id).run_due_timers()
-                await session.commit()
-                return processed
-
-    return _run_coroutine(_run())
-
-
-@celery_app.task(
-    name="medical.contingent.tick",
-    autoretry_for=RETRYABLE_EXCEPTIONS,
-    retry_backoff=True,
-    retry_jitter=True,
-    max_retries=5,
-)
-def medical_contingent_tick() -> int:
-    return _run_coroutine(_medical_contingent_tick())
-
-
-async def _medical_contingent_tick() -> int:
-    from app.domains.medical.service import notify_overdue
-
-    today = datetime.now(tz=timezone.utc).date()
-    async with AsyncSessionLocal(tenant=settings.default_tenant_slug) as session:
-        tenants = list(
-            (await session.execute(select(Tenant).where(Tenant.is_active.is_(True))))
-            .scalars()
-            .all()
-        )
-    processed = 0
-    for tenant in tenants:
-        with tenant_context(tenant.slug):
-            ensure_tenant_schema(tenant.slug)
-            async with session_scope(tenant=tenant.slug) as session:
-                tenant_id, _scope = await _resolve_task_tenant_scope(session, tenant.slug)
-                processed += await notify_overdue(
-                    session, tenant_id=tenant_id, actor_id=None, today=today
-                )
-                await session.commit()
-    return processed
-
-
-@celery_app.task(
-    name="contractors.readiness.tick",
-    autoretry_for=RETRYABLE_EXCEPTIONS,
-    retry_backoff=True,
-    retry_jitter=True,
-    max_retries=5,
-)
-def contractors_readiness_tick() -> int:
-    return _run_coroutine(_contractors_readiness_tick())
-
-
-async def _contractors_readiness_tick() -> int:
-    from app.modules.projections.services import ContractorReadinessProjectionService
-    from app.services.contractor_admission import notify_readiness
-
-    async with AsyncSessionLocal(tenant=settings.default_tenant_slug) as session:
-        tenants = list(
-            (await session.execute(select(Tenant).where(Tenant.is_active.is_(True))))
-            .scalars()
-            .all()
-        )
-    total = 0
-    # Per-tenant isolation matches _medical_contingent_tick (no per-tenant try/except):
-    # a tenant failure aborts the run and Celery autoretry re-runs it; both steps are
-    # idempotent (rebuild upserts, notify dedups by (employee, status, day)).
-    for tenant in tenants:
-        with tenant_context(tenant.slug):
-            ensure_tenant_schema(tenant.slug)
-            async with session_scope(tenant=tenant.slug) as session:
-                tenant_id, _scope = await _resolve_task_tenant_scope(session, tenant.slug)
-                # Enqueue notifications first, THEN rebuild — rebuild() commits, making the
-                # outbox events and the refreshed projection a single atomic unit (avoids a
-                # projection/notification split-brain if either step fails midway).
-                total += await notify_readiness(session, tenant_id=tenant_id)
-                await ContractorReadinessProjectionService(session, tenant_id).rebuild()
-                await session.commit()
-    return total
-
-
-@celery_app.task(
-    name="contractors.documents.tick",
-    autoretry_for=RETRYABLE_EXCEPTIONS,
-    retry_backoff=True,
-    retry_jitter=True,
-    max_retries=5,
-)
-def contractors_documents_tick() -> int:
-    return _run_coroutine(_contractors_documents_tick())
-
-
-async def _contractors_documents_tick() -> int:
-    from app.services.contractor_documents import notify_document_expiry
-
-    async with AsyncSessionLocal(tenant=settings.default_tenant_slug) as session:
-        tenants = list(
-            (await session.execute(select(Tenant).where(Tenant.is_active.is_(True))))
-            .scalars()
-            .all()
-        )
-    total = 0
-    for tenant in tenants:
-        with tenant_context(tenant.slug):
-            ensure_tenant_schema(tenant.slug)
-            async with session_scope(tenant=tenant.slug) as session:
-                tenant_id, _scope = await _resolve_task_tenant_scope(session, tenant.slug)
-                # Enqueue then commit — outbox events are atomic with the read (notify dedups
-                # by (document, status, day), so autoretry is safe).
-                total += await notify_document_expiry(session, tenant_id=tenant_id)
-                await session.commit()
-    return total
-
-
-@celery_app.task(
-    name="ppe.expiry.tick",
-    autoretry_for=RETRYABLE_EXCEPTIONS,
-    retry_backoff=True,
-    retry_jitter=True,
-    max_retries=5,
-)
-def ppe_expiry_tick() -> int:
-    return _run_coroutine(_ppe_expiry_tick())
-
-
-async def _ppe_expiry_tick() -> int:
-    from app.services.ppe_notifications import notify_replacement_due
-
-    async with AsyncSessionLocal(tenant=settings.default_tenant_slug) as session:
-        tenants = list(
-            (await session.execute(select(Tenant).where(Tenant.is_active.is_(True))))
-            .scalars()
-            .all()
-        )
-    total = 0
-    for tenant in tenants:
-        with tenant_context(tenant.slug):
-            ensure_tenant_schema(tenant.slug)
-            async with session_scope(tenant=tenant.slug) as session:
-                tenant_id, _scope = await _resolve_task_tenant_scope(session, tenant.slug)
-                # Enqueue then commit — события атомарны с чтением; notify дедупит
-                # по (issue, status, day), поэтому autoretry безопасен.
-                total += await notify_replacement_due(session, tenant_id=tenant_id)
-                await session.commit()
-    return total
-
-
-@celery_app.task(
-    name="permits.expiry.tick",
-    autoretry_for=RETRYABLE_EXCEPTIONS,
-    retry_backoff=True,
-    retry_jitter=True,
-    max_retries=5,
-)
-def permits_expiry_tick() -> int:
-    return _run_coroutine(_permits_expiry_tick())
-
-
-async def _permits_expiry_tick() -> int:
-    from app.domains.permits.service import expire_due
-
-    async with AsyncSessionLocal(tenant=settings.default_tenant_slug) as session:
-        tenants = list(
-            (await session.execute(select(Tenant).where(Tenant.is_active.is_(True))))
-            .scalars()
-            .all()
-        )
-    total = 0
-    for tenant in tenants:
-        with tenant_context(tenant.slug):
-            ensure_tenant_schema(tenant.slug)
-            async with session_scope(tenant=tenant.slug) as session:
-                tenant_id, _scope = await _resolve_task_tenant_scope(session, tenant.slug)
-                # Idempotent: re-running on the same day flips nothing new.
-                total += await expire_due(session, tenant_id=tenant_id)
-                await session.commit()
-    return total
-
-
-@celery_app.task(
-    name="prescriptions.escalate.tick",
-    autoretry_for=RETRYABLE_EXCEPTIONS,
-    retry_backoff=True,
-    retry_jitter=True,
-    max_retries=5,
-)
-def prescriptions_escalate_tick() -> int:
-    return _run_coroutine(_prescriptions_escalate_tick())
-
-
-async def _prescriptions_escalate_tick() -> int:
-    # imported lazily to avoid import cycles at task-module load time
-    from app.domains.prescriptions.service import notify_overdue
-
-    today = datetime.now(tz=timezone.utc).date()
-    async with AsyncSessionLocal(tenant=settings.default_tenant_slug) as session:
-        tenants = list(
-            (await session.execute(select(Tenant).where(Tenant.is_active.is_(True))))
-            .scalars()
-            .all()
-        )
-    processed = 0
-    for tenant in tenants:
-        with tenant_context(tenant.slug):
-            ensure_tenant_schema(tenant.slug)
-            async with session_scope(tenant=tenant.slug) as session:
-                tenant_id, _scope = await _resolve_task_tenant_scope(session, tenant.slug)
-                overdue = await notify_overdue(
-                    session, tenant_id=tenant_id, actor_id=None, today=today
-                )
-                await session.commit()
-                processed += len(overdue)
-    return processed
