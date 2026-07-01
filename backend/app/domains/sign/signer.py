@@ -1,12 +1,7 @@
+"""Deprecated compat-shim — canonical location is :mod:`app.modules.sign.signer` (ARCH-1)."""
+
 from __future__ import annotations
 
-import hashlib
-from dataclasses import dataclass
+from app.modules.sign.signer import DocumentSigner  # noqa: F401  (compat re-export)
 
-
-@dataclass(slots=True)
-class DocumentSigner:
-    secret: str
-
-    def sign(self, data: bytes) -> str:
-        return hashlib.sha256(self.secret.encode("utf-8") + data).hexdigest()
+__all__ = ["DocumentSigner"]

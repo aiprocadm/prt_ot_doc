@@ -1,5 +1,28 @@
 # CHANGELOG
 
+## 2026-07-02 (fix/stabilize-gates-2026-06-29 — ARCH-1: tail slice 8 — replace/audit/sign; duplicated-context queue CLOSED)
+
+### Changed
+- **ARCH-1 slice 8 — fold the three tail contexts, closing the duplicated-context queue.** All three
+  moves are **byte-identical** (stdlib/`app.models`-only imports):
+  - **replace** (the flagged MESSY one — canon decision): the legacy persisted `ReplaceEngine`
+    (`domains/replace/engine.py`, 265 loc) is production-dead — its only importers are 3 lazy imports in
+    `tests/test_replace_api.py`. The richer `modules/replace` package (pattern-replacement `engine.py`,
+    api/service/…) stays the canon untouched; the legacy engine moves ASIDE as
+    `modules/replace/legacy_engine.py` (rename dodges the `engine.py` collision), test repointed.
+    Nothing deleted (per ТЗ the compat layer survives until POST-1).
+  - **audit**: `domains/audit/service.py` (`AuditDomainService`, 0 importers) → `modules/audit/service.py`.
+  - **sign**: `domains/sign/signer.py` (`DocumentSigner`, 0 importers) → `modules/sign/signer.py`.
+  - `domains/{replace,audit,sign}/` are now pure compat-shims; ARCH-3 allowlist +3 shim edges (now 27).
+  - NOT in scope (not duplicated contexts — no `modules/` counterpart): `domains/{shared,signing,medical,
+    permits,templating}` stay as-is; `domains.shared` migration is flagged as its own future slice.
+  Verified locally (Py3.13 venv): ruff+black clean first-try, ARCH-3 boundaries clean (27 allowlisted,
+  0 new), byte-identity ×3, replace API tests green, shim/canon object-identity smoke, OpenAPI contract
+  unchanged (803/644), Celery tasks unchanged (32).
+  **ARCH-1 status: all 8 slices done** (risk, incidents, training, contractors, ppe, packs, files,
+  replace/audit/sign). Every duplicated `domains/X ↔ modules/X` context is collapsed into `modules/`
+  with deprecated re-export shims left behind (POST-1 removes them next major).
+
 ## 2026-07-02 (fix/stabilize-gates-2026-06-29 — ARCH-1: collapse domains/files into modules/files (slice 7))
 
 ### Changed

@@ -69,6 +69,9 @@ ALLOWLIST: set[tuple[str, str]] = {
     ("app.domains.files.s3", "app.modules.files.s3"),
     ("app.domains.files.utils", "app.modules.files.utils"),
     ("app.domains.files.document", "app.modules.files.document"),
+    ("app.domains.replace.engine", "app.modules.replace.legacy_engine"),
+    ("app.domains.audit.service", "app.modules.audit.service"),
+    ("app.domains.sign.signer", "app.modules.sign.signer"),
 }
 
 
