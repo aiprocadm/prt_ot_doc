@@ -1,5 +1,35 @@
 # CHANGELOG
 
+## 2026-07-01 (fix/stabilize-gates-2026-06-29 — RC-011: real notification delivery + channel-tier escalation)
+
+### Added
+- **RC-011 — real notification delivery (provider orchestration + escalation).** Previously the
+  dispatch job set `status=SENT` without calling any provider, and — worse — *nothing* enqueued the
+  dispatch, so QUEUED email/telegram/webhook notifications were never delivered at all. Now:
+  - **Provider abstraction** `app/modules/notifications/providers/` — `NotificationProvider` protocol
+    + `DeliveryResult` (DELIVERED / FAILED / SKIPPED) and thin real clients: `InAppProvider` (terminal,
+    always delivered), `EmailProvider` (stdlib SMTP off-loop), `TelegramProvider` (Bot API via httpx),
+    `WebhookProvider` (HTTP POST + HMAC, reuses `INBOUND_WEBHOOK_HMAC_SECRET`). All external delivery is
+    **feature-flagged** (`NOTIFICATIONS_DELIVERY_ENABLED`, default **False**) and per-channel configured;
+    when off/unconfigured/without a recipient contact a provider returns `SKIPPED` (never a false SENT).
+  - **Orchestration** `app/modules/notifications/delivery.py` — `deliver_notification` resolves the
+    recipient contact (`NotificationChannelSettings.email/telegram_chat_id`, falling back to `User.email`),
+    calls the channel provider and records an honest status: DELIVERED→`sent`; SKIPPED→`sent` (still shown
+    in-app) with the skip reason; FAILED→retry while `attempts < NOTIFICATIONS_MAX_DELIVERY_ATTEMPTS`, then
+    `failed` + **channel-tier escalation** — re-queue on the next enabled channel of the chain
+    email→telegram→in-app (in-app terminal, so the chain always converges). Delivery metadata is written
+    to the existing `payload` JSON; **no schema change** (uses existing `status`/`attempts`/`last_error`/
+    `sent_at`).
+  - **`notifications.dispatch_pending` beat job** (every 5 min) — the missing orchestrator: scans due
+    QUEUED notifications per active tenant and delivers them; the existing `notifications.dispatch`
+    (single-message) now also routes through the delivery layer. Celery baseline re-snapshotted (31→32).
+  - New config: `NOTIFICATIONS_DELIVERY_ENABLED`, `NOTIFICATIONS_MAX_DELIVERY_ATTEMPTS`, `SMTP_*`,
+    `TELEGRAM_BOT_TOKEN` (config-only; feature off by default).
+  Verified locally (Py3.13 venv): ruff+black clean, new `tests/test_notification_delivery.py`
+  (11 tests: provider skip paths, in-app/disabled/success/retry-then-escalate, batch scan, escalation
+  chain) green; the named acceptance regressions (`test_notifications_calendar_api`, `test_workflow_api`)
+  and task tests stay green — the public API contract is unchanged.
+
 ## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-4: decompose god-class FileService via mixins)
 
 ### Changed

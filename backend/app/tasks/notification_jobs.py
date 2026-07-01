@@ -1,13 +1,14 @@
-"""Notification & reminder-scan Celery jobs — extracted from _core.py (ARCH-4 decomposition).
+"""Notification & reminder-scan Celery jobs (ARCH-4 decomposition; RC-011 delivery).
 
-Pure move: identical task definitions, explicit ``name=`` preserved, so Celery
-registration is unchanged (the ``reminders.scan`` beat-schedule entry in
-``app.services.celery_app`` keeps resolving by name). Re-exported from ``_core`` for
-back-compat (``from app.tasks import scan_reminders_job`` etc.).
+Explicit ``name=`` is preserved for the existing tasks, so the ``reminders.scan``
+beat-schedule entry keeps resolving by name; re-exported from ``_core`` for back-compat
+(``from app.tasks import scan_reminders_job`` etc.).
 
-Covers single-notification dispatch and the reminder-rule scan (training / PPE /
-inspection due-date evaluation -> in-app notifications + plan tasks). Depends only on the
-leaf module ``app.tasks._shared`` — never imports back into ``_core`` — so there is no cycle.
+Covers the reminder-rule scan (training / PPE / inspection due-date evaluation -> in-app
+notifications + plan tasks) and, since RC-011, real notification delivery: single-message
+dispatch and the ``notifications.dispatch_pending`` beat scan both hand off to
+:mod:`app.modules.notifications.delivery` (per-channel providers + honest status +
+channel-tier escalation) instead of stubbing ``status=SENT``.
 """
 
 from __future__ import annotations
@@ -38,6 +39,10 @@ from app.models.notifications import (
     ReminderEntityType,
     ReminderRule,
 )
+from app.modules.notifications.delivery import (
+    deliver_notification,
+    scan_pending_notifications,
+)
 from app.services.celery_app import celery_app
 from app.services.notifications import send_notification
 from app.services.reminders import evaluate_due_date
@@ -58,27 +63,34 @@ async def _dispatch_notification_job(*, notification_id: str, tenant_slug: str =
         notification = (
             await session.execute(select(Notification).where(Notification.id == notification_id))
         ).scalar_one_or_none()
-        if notification is None:
+        if notification is None or notification.status != NotificationStatus.QUEUED:
             return 0
-        if notification.status != NotificationStatus.QUEUED:
-            return 0
-        try:
-            if notification.channel == NotificationChannel.INAPP:
-                notification.status = NotificationStatus.SENT
-                notification.sent_at = datetime.now(tz=timezone.utc)
-            elif notification.channel == NotificationChannel.EMAIL:
-                notification.status = NotificationStatus.SENT
-                notification.sent_at = datetime.now(tz=timezone.utc)
-            else:
-                notification.status = NotificationStatus.SENT
-                notification.sent_at = datetime.now(tz=timezone.utc)
-            notification.attempts += 1
-        except Exception as exc:  # pragma: no cover
-            notification.attempts += 1
-            notification.status = NotificationStatus.FAILED
-            notification.last_error = str(exc)
-        await session.flush()
+        # RC-011: real provider delivery + honest status + channel-tier escalation
+        # (replaces the former stub that set status=SENT without calling any provider).
+        await deliver_notification(session, notification)
     return 1
+
+
+@celery_app.task(name="notifications.dispatch_pending")
+def dispatch_pending_notifications_job() -> int:
+    """Beat job: deliver all due QUEUED notifications for every active tenant (RC-011)."""
+    return _run_coroutine(_dispatch_pending_notifications_job())
+
+
+async def _dispatch_pending_notifications_job() -> int:
+    async with AsyncSessionLocal(tenant=settings.default_tenant_slug) as session:
+        tenants = list(
+            (await session.execute(select(Tenant).where(Tenant.is_active.is_(True))))
+            .scalars()
+            .all()
+        )
+    processed = 0
+    for tenant in tenants:
+        with tenant_context(tenant.slug):
+            ensure_tenant_schema(tenant.slug)
+            async with session_scope(tenant=tenant.slug) as tenant_session:
+                processed += await scan_pending_notifications(tenant_session)
+    return processed
 
 
 @celery_app.task(name="reminders.scan")

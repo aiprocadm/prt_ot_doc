@@ -96,10 +96,12 @@ from app.tasks.file_jobs import (  # noqa: E402, F401
 # ``app.tasks.*``. noqa F401: re-export only (the reminders.scan beat entry resolves by name).
 from app.tasks.notification_jobs import (  # noqa: E402, F401
     _dispatch_notification_job,
+    _dispatch_pending_notifications_job,
     _resolve_rule_recipients,
     _scan_reminders_for_tenant,
     _scan_reminders_job,
     dispatch_notification_job,
+    dispatch_pending_notifications_job,
     scan_reminders_job,
 )
 
