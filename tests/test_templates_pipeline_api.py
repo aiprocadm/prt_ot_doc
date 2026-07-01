@@ -8,7 +8,7 @@ from httpx import AsyncClient
 
 from app.api.v1.router import MAX_METADATA_JSON_BYTES
 from app.core.payload_constraints import MAX_STRING_VALUE_LENGTH
-from app.domains.packs.definitions import (
+from app.modules.packs.definitions import (
     PACK_CODE_INCIDENT,
     PACK_CODE_INSPECTION_PREP,
     PACK_CODE_SITE_ACCESS,

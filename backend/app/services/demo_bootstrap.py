@@ -9,7 +9,6 @@ from sqlalchemy import select
 
 from app.core.config import Settings
 from app.db import aensure_tenant_schema, session_scope
-from app.domains.packs.seeder import ensure_default_packs
 from app.models.feature import Feature
 from app.models.finance import Department
 from app.models.models import (
@@ -38,6 +37,7 @@ from app.modules.contractors.models import (
     ContractorEmployee,
     ContractorRegistry,
 )
+from app.modules.packs.seeder import ensure_default_packs
 
 logger = logging.getLogger(__name__)
 

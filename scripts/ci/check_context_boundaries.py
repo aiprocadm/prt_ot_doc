@@ -71,6 +71,11 @@ ALLOWLIST: set[tuple[str, str]] = {
     ("app.domains.ppe", "app.modules.ppe.operations"),
     ("app.domains.ppe.lifecycle", "app.modules.ppe.lifecycle"),
     ("app.domains.ppe.service", "app.modules.ppe.operations"),
+    ("app.domains.packs.assets", "app.modules.packs.assets"),
+    ("app.domains.packs.context", "app.modules.packs.context"),
+    ("app.domains.packs.definitions", "app.modules.packs.definitions"),
+    ("app.domains.packs.seeder", "app.modules.packs.seeder"),
+    ("app.domains.packs.service", "app.modules.packs.operations"),
 }
 
 

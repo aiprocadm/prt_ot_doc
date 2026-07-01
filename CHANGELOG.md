@@ -1,5 +1,41 @@
 # CHANGELOG
 
+## 2026-07-02 (fix/stabilize-gates-2026-06-29 — ARCH-1: collapse domains/packs into modules/packs (slice 6))
+
+### Changed
+- **ARCH-1 slice 6 — fold `domains/packs` into `modules/packs`.** Largest slice so far (5 logic files,
+  ~1243 loc, 10 importers). `modules/packs` already held the pack-run v2 surface (`api.py`/`schemas.py`/
+  `service.py`), so:
+  - `domains/packs/{assets,context,definitions,seeder}.py` → `modules/packs/*` **keeping names**
+    (git-moved; assets byte-identical, the other three change only their intra-package import lines,
+    plus ruff isort reorder).
+  - `domains/packs/service.py` → `modules/packs/operations.py` (git-moved **byte-identical**; renamed to
+    avoid the existing `modules/packs/service.py` — different concern: scenario-profile resolution +
+    `PackAssembler` vs pack-run/naming services).
+  - `modules/packs/__init__.py` now exposes `router` **lazily (PEP 562)**: worker/bootstrap import paths
+    (`services/tasks.py`, `services/demo_bootstrap.py` import the `seeder`/`context` submodules) must not
+    eagerly pull FastAPI/openpyxl via the package `__init__` — before the move they imported
+    `domains.packs.*` whose `__init__` was empty, so the eager `from .api import router` would have been a
+    NEW heavyweight edge in the worker import graph. `route_groups.py`'s `from app.modules.packs import api`
+    still works (submodule fallback), and `pkg.router` resolves on first access.
+  - `domains/packs/` is now a pure compat-shim package (5 re-export modules + deprecation docstring in
+    `__init__`; kept until POST-1).
+  - Importers use the canon (10): `api/routes/client_portal.py` (`…packs.operations`),
+    `api/routes/packs/_common.py`, `api/routes/packs/management.py`, `services/demo_bootstrap.py`,
+    `services/package_pipeline.py`, `services/tasks.py` + root-tests `tests/test_package_pipeline.py`,
+    `tests/test_templates_pipeline_api.py`, `tests/services/test_pack_generation_pipeline.py`,
+    `tests/integration/test_packages_e2e.py`; docstring pointer updated in
+    `backend/tests/test_documentpack_enum_values.py`. No mock-patch string targets exist for packs
+    (swept tests/, backend/tests, integration_tests/, scripts/).
+  - ARCH-3 allowlist: **+5 compat-shim edges only** (now 29) — the moved files import nothing from
+    `app.domains.*` (seeder's `app.services.file_storage` etc. are exempt orchestration-layer imports),
+    so unlike contractors/ppe no new shared-kernel edges appear and no stale entries needed removal.
+  Verified locally (Py3.13 venv): ruff+black clean, ARCH-3 boundaries clean (29 allowlisted, 0 new),
+  byte-identity of all 5 moved files, packs test suite green, shim/canon object-identity + lazy-router
+  smoke, OpenAPI contract unchanged (803/644), Celery tasks unchanged (32). Schema untouched → PG-gate
+  not required. Queue next: `files` (769 loc / 28 imp., most-coupled), then decisions on `replace`
+  (ReplaceEngine canon) and trivial `audit`/`sign`.
+
 ## 2026-07-01 (fix/stabilize-gates-2026-06-29 — ARCH-1: collapse domains/ppe into modules/ppe (slice 5))
 
 ### Changed

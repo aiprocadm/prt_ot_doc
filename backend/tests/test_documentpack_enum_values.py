@@ -20,7 +20,7 @@ RB-002c fixed ``Person.employment_status`` (the first symptom that
 surfaced in CI). RB-002d preemptively fixes the next two columns that
 the demo bootstrap path touches: ``DocumentPack.module`` and
 ``DocumentPack.scenario_type`` (both inserted by
-``app.domains.packs.seeder._ensure_pack`` via every ``DEFAULT_PACKS``
+``app.modules.packs.seeder._ensure_pack`` via every ``DEFAULT_PACKS``
 entry).
 
 The remaining two enums from the same migration (``documentversionstatus``,

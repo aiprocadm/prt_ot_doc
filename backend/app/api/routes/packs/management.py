@@ -40,11 +40,11 @@ from app.core.query import (
 from app.core.response import list_response
 from app.core.tenant_validation import TenantContextValidator
 from app.core.tracing import get_trace_id
-from app.domains.packs.definitions import DEFAULT_PACKS, PACK_DEFINITIONS_BY_CODE
-from app.domains.packs.seeder import ensure_pack_by_code
 from app.models.models import (
     DocumentPack,
 )
+from app.modules.packs.definitions import DEFAULT_PACKS, PACK_DEFINITIONS_BY_CODE
+from app.modules.packs.seeder import ensure_pack_by_code
 from app.schemas.pack import (
     PackFromScenarioRequest,
     PackGenerateRequest,

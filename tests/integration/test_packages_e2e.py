@@ -6,12 +6,12 @@ import pytest
 from fastapi import status
 from sqlalchemy import select
 
-from app.domains.packs.definitions import (
+from app.models.models import DocumentPack, RoleEnum, Site
+from app.modules.packs.definitions import (
     PACK_CODE_INCIDENT,
     PACK_CODE_INSPECTION_PREP,
     PACK_CODE_SITE_ACCESS,
 )
-from app.models.models import DocumentPack, RoleEnum, Site
 from tests.utils.factories import TestDataFactory
 
 # POST /api/v1/packages (DocumentPack direct-create with {code, name, ...}) no

@@ -11,8 +11,6 @@ from sqlalchemy.orm import selectinload
 
 from app.core.metrics import get_metrics
 from app.db.session import AsyncSessionLocal
-from app.domains.packs.context import enrich_context
-from app.domains.packs.seeder import ensure_default_packs
 from app.models.models import (
     Company,
     DocumentPack,
@@ -21,6 +19,8 @@ from app.models.models import (
     PipelineRun,
     Site,
 )
+from app.modules.packs.context import enrich_context
+from app.modules.packs.seeder import ensure_default_packs
 from app.schemas.pack import PackGenerateRequest
 from app.services.audit import AuditService
 from app.services.celery_app import celery_app
