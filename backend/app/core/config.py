@@ -311,6 +311,20 @@ class Settings(BaseSettings):
     admin_password: str = Field("", alias="ADMIN_PASSWORD")
     admin_tenant: str = Field("public", alias="ADMIN_TENANT")
     webhook_notification_url: str | None = Field(None, alias="WEBHOOK_NOTIFICATION_URL")
+    # RC-011 notification delivery (feature-flagged; default OFF -> no external send).
+    notifications_delivery_enabled: bool = Field(
+        False, alias="NOTIFICATIONS_DELIVERY_ENABLED"
+    )
+    notifications_max_delivery_attempts: int = Field(
+        3, alias="NOTIFICATIONS_MAX_DELIVERY_ATTEMPTS"
+    )
+    smtp_host: str = Field("", alias="SMTP_HOST")
+    smtp_port: int = Field(587, alias="SMTP_PORT")
+    smtp_username: str = Field("", alias="SMTP_USERNAME")
+    smtp_password: str = Field("", alias="SMTP_PASSWORD")
+    smtp_from: str = Field("", alias="SMTP_FROM")
+    smtp_use_tls: bool = Field(True, alias="SMTP_USE_TLS")
+    telegram_bot_token: str = Field("", alias="TELEGRAM_BOT_TOKEN")
     demo_bootstrap: bool = Field(False, alias="DEMO_BOOTSTRAP")
     demo_tenant_id: str = Field("demo", alias="DEMO_TENANT_ID")
     demo_company_name: str = Field("ООО Демо Строй", alias="DEMO_COMPANY_NAME")

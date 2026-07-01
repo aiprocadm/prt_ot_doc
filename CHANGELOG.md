@@ -1,5 +1,345 @@
 # CHANGELOG
 
+## 2026-07-01 (fix/stabilize-gates-2026-06-29 — ARCH-1: collapse domains/training into modules/training (slice 3))
+
+### Changed
+- **ARCH-1 slice 3 — fold `domains/training` into `modules/training`** (same new-file pattern as
+  `incidents`; `modules/training` already held the class services
+  `TrainingEnrollmentService`/`TrainingCertificateService`):
+  - `domains/training/service.py` → `modules/training/operations.py` (git-moved; contents unchanged —
+    imports only `app.models.*` / `app.services.*`, so no new cross-context edges). Holds
+    `assign_training_plan` / `register_training_session` / `issue_certificate` /
+    `upcoming_certificate_expirations` / `TrainingCertificateIssueResult`.
+  - **new** `modules/training/__init__.py` re-exports the operations functions + the existing services
+    (the package previously had no `__init__.py`; existing `from app.modules.training.services import …`
+    callers are unaffected).
+  - `domains/training/` is now a deprecated compat-shim (re-exports from
+    `app.modules.training.operations`; kept until POST-1).
+  - Importers use the canon: `api/routes/training.py` + `tests/domains/test_training_domain.py` →
+    `from app.modules.training import …`.
+  - ARCH-3: two intentional shim edges added to the "ARCH-1 compat-shims" allowlist group.
+  Verified locally (Py3.13 venv): ruff+black clean, ARCH-3 boundaries clean (19 allowlisted, 0 new),
+  shim/canon object-identity smoke, training tests green, OpenAPI contract unchanged (803/644). No
+  other `app.domains.training` importers remain.
+
+## 2026-07-01 (fix/stabilize-gates-2026-06-29 — ARCH-1: collapse domains/incidents into modules/incidents (slice 2))
+
+### Changed
+- **ARCH-1 slice 2 — fold `domains/incidents` into `modules/incidents`.** Unlike `risk` (where the
+  legacy file was a distinct concern), `modules/incidents` already held complementary domain-rule
+  services (`IncidentCaseService`/`IncidentInvestigationService`/`RiskReviewTriggerService`), so the
+  legacy CRUD/orchestration file lands as a **new** module file rather than overwriting:
+  - `domains/incidents/service.py` → `modules/incidents/operations.py` (git-moved; contents unchanged
+    — imports only `app.models.*`, so no new cross-context edges inside). Holds the persistence
+    functions (`register_incident`/`update_incident`/`append_log_entry`/`register_inspection`/
+    `update_inspection`/`add_inspection_result`).
+  - `modules/incidents/__init__.py` re-exports the operations functions alongside the existing
+    services.
+  - `domains/incidents/` is now a deprecated compat-shim (re-exports from
+    `app.modules.incidents.operations`; kept until POST-1).
+  - Importers use the canon: `api/routes/incidents.py` + `api/routes/inspections.py` →
+    `from app.modules.incidents import …`.
+  - ARCH-3: two intentional shim edges added to the "ARCH-1 compat-shims" allowlist group.
+  Verified locally (Py3.13 venv): ruff+black clean, ARCH-3 boundaries clean (17 allowlisted, 0 new),
+  shim/canon object-identity smoke, incident/inspection API + safety-ops + outbox tests green
+  (102 passed), OpenAPI contract unchanged (803/644). No other `app.domains.incidents` importers remain.
+  NOTE: not every duplicated context is this clean — `replace` has a real `engine.py` name-collision
+  (a legacy `ReplaceEngine` absent from the richer `modules/replace`), so it needs a per-context canon
+  decision rather than a mechanical shim.
+
+## 2026-07-01 (fix/stabilize-gates-2026-06-29 — ARCH-1: collapse domains/risk into modules/risk (slice 1))
+
+### Changed
+- **ARCH-1 slice 1 — fold the legacy `domains/risk` context into the canonical `modules/risk`.**
+  First incremental step of collapsing the duplicated `domains/` ↔ `modules/` layers (ТЗ ARCH-1),
+  chosen as the smallest named context (192 loc, 3 importers). Behaviour-preserving:
+  - `domains/risk/calc.py` → `modules/risk/calc.py` (git-moved; contents unchanged — it only imports
+    `app.models.*`, so no new cross-context edges inside).
+  - `modules/risk/__init__.py` now re-exports the calc API (`score_band`,
+    `rebuild_matrix_from_methodology`, `recalc_risk_map`) alongside the existing services.
+  - `domains/risk/` is now a **deprecated compat-shim** — `__init__.py` and `calc.py` re-export from
+    `app.modules.risk.calc` (kept until POST-1 physically removes the `domains/*` shims); no business
+    logic remains there.
+  - The three importers now use the canon: `api/routes/risk/assessments.py` +
+    `api/routes/risk/methodologies.py` → `from app.modules.risk import …`; `tests/test_domains_risk_calc.py`
+    → `from app.modules.risk.calc import …`.
+  - ARCH-3 boundary guard: the shim adds two intentional `app.domains.risk[.calc] -> app.modules.risk.calc`
+    edges, added to `ALLOWLIST` under a new "ARCH-1 compat-shims" note (distinct from the legacy leaks;
+    they disappear with the shim at POST-1).
+  Verified locally (Py3.13 venv): ruff+black clean, ARCH-3 boundaries clean (15 allowlisted, 0 new),
+  shim/canon object-identity smoke, risk calc + engine + API/contract tests green; OpenAPI contract
+  unchanged (only import sources moved, not signatures). No other `app.domains.risk` importers remain.
+
+### Added
+- **RC-011 — real notification delivery (provider orchestration + escalation).** Previously the
+  dispatch job set `status=SENT` without calling any provider, and — worse — *nothing* enqueued the
+  dispatch, so QUEUED email/telegram/webhook notifications were never delivered at all. Now:
+  - **Provider abstraction** `app/modules/notifications/providers/` — `NotificationProvider` protocol
+    + `DeliveryResult` (DELIVERED / FAILED / SKIPPED) and thin real clients: `InAppProvider` (terminal,
+    always delivered), `EmailProvider` (stdlib SMTP off-loop), `TelegramProvider` (Bot API via httpx),
+    `WebhookProvider` (HTTP POST + HMAC, reuses `INBOUND_WEBHOOK_HMAC_SECRET`). All external delivery is
+    **feature-flagged** (`NOTIFICATIONS_DELIVERY_ENABLED`, default **False**) and per-channel configured;
+    when off/unconfigured/without a recipient contact a provider returns `SKIPPED` (never a false SENT).
+  - **Orchestration** `app/modules/notifications/delivery.py` — `deliver_notification` resolves the
+    recipient contact (`NotificationChannelSettings.email/telegram_chat_id`, falling back to `User.email`),
+    calls the channel provider and records an honest status: DELIVERED→`sent`; SKIPPED→`sent` (still shown
+    in-app) with the skip reason; FAILED→retry while `attempts < NOTIFICATIONS_MAX_DELIVERY_ATTEMPTS`, then
+    `failed` + **channel-tier escalation** — re-queue on the next enabled channel of the chain
+    email→telegram→in-app (in-app terminal, so the chain always converges). Delivery metadata is written
+    to the existing `payload` JSON; **no schema change** (uses existing `status`/`attempts`/`last_error`/
+    `sent_at`).
+  - **`notifications.dispatch_pending` beat job** (every 5 min) — the missing orchestrator: scans due
+    QUEUED notifications per active tenant and delivers them; the existing `notifications.dispatch`
+    (single-message) now also routes through the delivery layer. Celery baseline re-snapshotted (31→32).
+  - New config: `NOTIFICATIONS_DELIVERY_ENABLED`, `NOTIFICATIONS_MAX_DELIVERY_ATTEMPTS`, `SMTP_*`,
+    `TELEGRAM_BOT_TOKEN` (config-only; feature off by default).
+  Verified locally (Py3.13 venv): ruff+black clean, new `tests/test_notification_delivery.py`
+  (11 tests: provider skip paths, in-app/disabled/success/retry-then-escalate, batch scan, escalation
+  chain) green; the named acceptance regressions (`test_notifications_calendar_api`, `test_workflow_api`)
+  and task tests stay green — the public API contract is unchanged.
+
+## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-4: decompose god-class FileService via mixins)
+
+### Changed
+- **ARCH-4 — decompose the god-class `modules/files/service.py::FileService` (1241 lines) via
+  mixins** — the last ARCH-4 god-file. Behaviour-preserving: every method/function body is a
+  byte-identical move (deterministic line-diff). `service.py` → `modules/files/service/` package:
+  - `_base.py` — imports, constants (`MAX_INDEX_BYTES/MAX_INDEX_CHARS`), logger, and the module-level
+    file helpers (`resolve_presign_ttl`, sha/stream hashing, `_safe_filename`, dangerous-extension
+    guard, `_mask_pii`, artifact naming) shared by everything.
+  - `_access.py` `AccessMixin` — role/company scoping, audit logging, signed-url TTL.
+  - `_uploads.py` `UploadMixin` — upload session create / new-version / finalize + AV scan.
+  - `_fileops.py` `FileOpsMixin` — download URLs, link/unlink, abort, artifact-from-bytes, delete.
+  - `_functions.py` — the module-level (non-method) functions kept for compatibility
+    (`create_upload_session`/`complete_upload`/`index_file_*`/`_upsert_file_search_document`/
+    `issue_download_url`), independent of the class (no cycle); `UploadMixin.finalize_upload` imports
+    the one it calls (`index_file_record`) from here.
+  - `service.py` — `class FileService(AccessMixin, UploadMixin, FileOpsMixin)` + `__init__`.
+  - `__init__.py` — re-exports `FileService`, the public helpers and module functions, plus the
+    module-level names tests monkeypatch as `app.modules.files.service.<name>`: `s3`, `av`,
+    `OutboxService`, `av_scan_file_job` (attribute-level patches on these shared objects stay global,
+    so the mixin call sites see them), so every `from app.modules.files.service import …` and every
+    such patch target resolve unchanged.
+  No `__`-mangled members exist. Verified locally (Py3.13 venv): ruff+black clean (a duplicate `s3`
+  import was caught by ruff `F811`/`ImportError` and resolved by importing `s3` for the patch target
+  directly from `app.domains.files`), every body byte-identical to source, a class-assembly smoke
+  (MRO, all 20 methods resolve, 2 `@staticmethod`s static, unchanged `__init__(self, session,
+  tenant_id)`, `s3`/`av`/`OutboxService`/`av_scan_file_job` identity across the package / `_uploads` /
+  `_functions`, all external importers — api/tasks/pipelines_orchestrator/pipeline_step_handlers —
+  resolving the same class), files tests green (106 passed). One test that patched a *function name*
+  (`app.modules.files.service.get_settings`) rather than an object attribute was repointed to
+  `app.modules.files.service._uploads.get_settings` — a name is patched in the namespace the function
+  looks it up in, and `create_upload_session` now lives in the `_uploads` mixin. **All six ARCH-4
+  god-files (`tasks/_core.py` + documents/risk/medical/packs routes + PipelineService + FileService)
+  are now decomposed.**
+
+## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-4: decompose god-class PipelineService via mixins)
+
+### Changed
+- **ARCH-4 — decompose the god-class `services/pipeline.py::PipelineService` (1125 lines) via
+  mixins.** First god-*service* split (no OpenAPI guard applies), behaviour-preserving: every method
+  body is a byte-identical move (deterministic line-diff, incl. the 735-line `run`), so the class is
+  reassembled from mixins with identical behaviour. `pipeline.py` → `services/pipeline/` package:
+  - `_base.py` — `StampingUnavailableError`, kept in one place so the raise sites (StampingMixin)
+    and `run`'s `except` clause (service.py) reference the **same class object** (identity preserved
+    → `except` still catches).
+  - `_preparation.py` `PreparationMixin` — request-metadata build, parameter prep, idempotent-run
+    validation.
+  - `_stamping.py` `StampingMixin` — QR/watermark placeholder backends.
+  - `_staging.py` `StagingMixin` — output stage bookkeeping (`_init_outputs/_stage_completed/_record_stage`).
+  - `_runs.py` `RunLifecycleMixin` — pending-run creation / idempotent lookup, error normalization.
+  - `service.py` — `class PipelineService(PreparationMixin, StampingMixin, StagingMixin,
+    RunLifecycleMixin)` with `DOCX_CONTENT_TYPE`, `__init__` and the `run` orchestrator (819 lines,
+    over the ~700 guideline because `run` is a single ~735-line method — splitting it would change
+    behaviour, which the ТЗ forbids; the supporting method groups are what became mixins).
+  - `__init__.py` — re-exports `PipelineService` + `StampingUnavailableError` so the public surface
+    (`from app.services.pipeline import …`, the `app.services` re-export, and all callers in
+    packs/router/cli/tasks/package_pipeline) is unchanged.
+  No `__`-mangled members exist, so the moves are safe. Verified locally (Py3.13 venv): ruff+black
+  clean, every method body byte-identical to the source, and a class-assembly smoke confirming the
+  MRO, `StampingUnavailableError` identity across `_base`/`_stamping`/`service`, all 14 methods
+  resolving on the class, the 6 `@staticmethod`s still static, the `DOCX_CONTENT_TYPE` class attr,
+  the unchanged `__init__(self, storage, pdf_converter, metrics)` signature, and all six external
+  importers resolving the same `PipelineService`; pipeline tests green (44 passed).
+
+## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-4: split god-route packs.py into a package)
+
+### Changed
+- **ARCH-4 — split the god-route `api/routes/packs.py` (1121 lines) into a package**, the last
+  god-route, same contract-preserving pattern. OpenAPI surface byte-for-byte unchanged (guard:
+  **803 operations, 644 schemas**); every endpoint a pure move (deterministic line-diff).
+  - `api/routes/packs/_common.py` (403) — the single `router` + logger, access deps
+    (`SessionDep/TenantDep/PackReadAccess/PackWriteAccess`), role constants
+    (`_PACK_READ_ROLES/_PACK_WRITE_ROLES`), `_SINGLE_TASK_PLANS`, error helpers
+    (`_pack_bad_request/_pack_not_found/_pack_conflict`) and all pack helper functions
+    (context build, person/company/site getters, naming, serialization).
+  - `api/routes/packs/management.py` (288) — scenario list/create, pack listing, generate-documents.
+  - `api/routes/packs/run.py` (514) — `run_pack`, archive downloads, safety summary.
+  - `api/routes/packs/__init__.py` — imports endpoint modules in registration order (`# isort: off`);
+    re-exports `router` (route_groups uses `packs.router`), the role constants / error helpers
+    imported by tests, and `generate_document_task` — whose `.apply_async` several tests monkeypatch
+    via `app.api.routes.packs.generate_document_task` (the re-exported object is identical to
+    `app.services.tasks.generate_document_task`, so the patch still lands).
+  Verified locally (Py3.13 venv): OpenAPI guard green (unchanged), ruff+black clean, all 8 routes
+  registered in original order, the three module bodies byte-identical to the source ranges,
+  re-exports + `route_groups` import OK, mock-patch target object identity confirmed, packs route
+  tests green. With this the four ARCH-4 god-routes (documents/risk/medical/packs) are all split;
+  the god-services (`services/pipeline.py`, `modules/files/service.py`) remain as follow-ups.
+
+## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-4: split god-route medical.py into a package)
+
+### Changed
+- **ARCH-4 — split the god-route `api/routes/medical.py` (1289 lines) into a package**, same
+  contract-preserving pattern as the documents/risk splits. OpenAPI surface byte-for-byte unchanged
+  (guard: **803 operations, 644 schemas**); every endpoint a pure move (deterministic line-diff).
+  - `api/routes/medical/_common.py` (147) — the single `router`, access deps
+    (`SessionDep/TenantDep/MedicalAccess/MedicalReadAccess`), role constants
+    (`_MEDICAL_READ_ROLES/_MEDICAL_WRITE_ROLES`), the `MedicalFeatureGate` feature gate, and the
+    shared error/getter helpers (`_error`, `_to_referral_read`, `_get_factor/_get_hazard/_get_norm/_get_referral`).
+  - `api/routes/medical/exams.py` (358) — medical exams, requirements, suspensions endpoints.
+  - `api/routes/medical/catalog.py` (578) — norms + referrals + factors CRUD endpoints.
+  - `api/routes/medical/contingent.py` (302) — hazard↔factor mappings, contingent register,
+    named-list, print endpoints, contingent, generate-referrals, summary. Keeps the two mid-file
+    helpers (`_mapping_read`, `_render_to_response`) with the endpoints that use them.
+  - `api/routes/medical/__init__.py` — imports endpoint modules in registration order
+    (`# isort: off`); re-exports `router` (route_groups uses `medical.router`) + the role constants
+    imported by `tests/test_medical_access_parity.py`.
+  Verified locally (Py3.13 venv): OpenAPI guard green (unchanged), ruff+black clean, all 30 routes
+  registered in original order, the four module bodies byte-identical to the source ranges, re-exports
+  + `route_groups` import OK, medical route tests green.
+
+## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-4: split god-route risk.py into a package)
+
+### Changed
+- **ARCH-4 — split the god-route `api/routes/risk.py` (1499 lines) into a package**, same
+  contract-preserving pattern as the documents split. OpenAPI surface byte-for-byte unchanged
+  (guard: **803 operations, 644 schemas**); every endpoint is a pure move (deterministic line-diff
+  vs the original ranges).
+  - `api/routes/risk/_common.py` (391) — both routers (`router` for `/risks`, `engine_router`
+    mounted at `/risk`), the `logging.getLogger("app.risk")` logger, access dependencies
+    (`SessionDep/TenantDep/EditorAccess/AdminAccess/RiskReadAccess`), `_RISK_READ_ROLES`, the error
+    helpers (`_risk_unprocessable/_risk_bad_request`) and engine helpers, and all request/response
+    models.
+  - `api/routes/risk/methodologies.py` (453) — methodology CRUD + hazards/controls/matrix + risk-map
+    endpoints.
+  - `api/routes/risk/assessments.py` (531) — `assess` (the ~420-line creator) + `get_assessment`.
+  - `api/routes/risk/reports.py` (232) — risk cards, action plans, and the `/risks` listing.
+  - `api/routes/risk/__init__.py` — imports endpoint modules in registration order (under
+    `# isort: off`), then `router.include_router(engine_router)` exactly as the original file did at
+    its end; re-exports `router` (route_groups uses `risk.router`) + the error helpers imported by
+    `tests/test_risk_error_contract.py`.
+  Verified locally (Py3.13 venv): OpenAPI guard green (unchanged), ruff+black clean, all 15 routes
+  registered in original order, the four module bodies byte-identical to the source ranges, re-exports
+  + `route_groups` import OK, risk route/engine tests green. (`RiskReadAccess`, a mixed-case dependency
+  alias, was caught by ruff `F821` during the split and added to the shared re-import — the
+  undefined-name guard doing its job.)
+
+## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-4: split god-route documents.py into a package)
+
+### Changed
+- **ARCH-4 — split the god-route `api/routes/documents.py` (1938 lines) into a package**, the
+  first route-side decomposition under the OpenAPI contract guard. Behaviour/contract-preserving:
+  the public OpenAPI surface is byte-for-byte unchanged (guard: **803 operations, 644 schemas**),
+  and every endpoint is a pure move (deterministic line-diff: each module's code body is identical
+  to the original ranges).
+  - `api/routes/documents/_common.py` (242) — the single shared `router`, the documents error
+    vocabulary (`_documents_bad_request/_not_found/_conflict/_forbidden/_payload_too_large`,
+    `_generate_internal_error_problem`), `_dispatch_celery_task`, the access dependencies
+    (`AccessDep/ReadAccessDep/StatusAccessDep`), constants, and all request/response Pydantic models.
+  - `api/routes/documents/read.py` (649) — read/query endpoints (list, get, readiness, quality:check,
+    mapping:validate, versions/compare, dependency-map, status, download) + their view helpers.
+  - `api/routes/documents/_generate_helpers.py` (449) — generate-side helpers (CSV/XLSX parsing,
+    template-scope resolution, company/person fetch, `_resolve_run`).
+  - `api/routes/documents/generate.py` (723) — template:resolve / generate / batch / batch-get /
+    task-status / status-patch endpoints. (Slightly over the ~700 guideline — dominated by the
+    intrinsic 286-line `generate_document`; further intra-endpoint splitting deferred as it would
+    not be a pure move.)
+  - `api/routes/documents/__init__.py` — imports the endpoint modules in registration order
+    (read → generate, guarded by `# isort: off`) so route/OpenAPI order is preserved, and re-exports
+    `router` (used by `api/v1/route_groups.py` as `documents.router`) plus the internals imported by
+    tests (`DocGenerateRequest`, `_fetch_template`, `_serialize_payload`).
+  Verified locally (Py3.13 venv): OpenAPI guard green (unchanged), ruff+black clean, all 16 routes
+  registered in the original order, re-exports + `route_groups` import OK, documents route/contract
+  tests green. NOTE: `tests/test_documents_generate.py::test_template_resolve_prefers_site_scope`
+  fails **identically on the pre-split HEAD** (asserts site-scope wins but resolution returns
+  tenant-scope) — a pre-existing issue, unrelated to this move; flagged separately, not a regression.
+
+## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-4: tasks/_core.py decomposition (slice 4 — notification/reminder jobs))
+
+### Changed
+- **ARCH-4 slice 4 — extract the notification/reminder job group from `tasks/_core.py`.** Same
+  behavior-preserving pattern (new leaf sub-module + re-export from `_core`, explicit `name=`
+  preserved → identical Celery registration). With this slice `_core.py` drops **under the ~700-line
+  ТЗ target**:
+  - `tasks/notification_jobs.py` (new) — `dispatch_notification_job` (`notifications.dispatch`) +
+    `_dispatch_notification_job`; `scan_reminders_job` (`reminders.scan`) + the reminder-rule scan
+    helpers `_resolve_rule_recipients` / `_scan_reminders_for_tenant` / `_scan_reminders_job`
+    (training/PPE/inspection due-date evaluation → in-app notifications + plan tasks). Leaf module —
+    imports only from `app.tasks._shared`, never back into `_core` → no cycle.
+  - `_core.py` re-exports all 6 (`# noqa: F401`); the `reminders.scan` entry in the
+    `app.services.celery_app` beat schedule keeps resolving because the task **name** is unchanged
+    (the Celery guard enforces this). The task `dispatch_task_reminders` (`tasks.reminders.dispatch`,
+    task-obligations dispatch — a different concern) stays in `_core`.
+  `_core.py`: 920 → 617 lines; `notification_jobs.py`: 347 lines. No test mock-patch targets needed
+  repointing (pre-flight sweep: no test patches `app.tasks._core.<global>` for a moved fn, and no test
+  imports these tasks directly). Verified locally (Py3.13 venv): Celery guard green (31 tasks
+  unchanged), ruff+black clean, moved block byte-identical to commit 13248301 (299 lines, deterministic
+  diff), re-export identity confirmed, `reminders.scan` beat task still registered, notification/reminder
+  + tasks tests green (21 passed); adversarial reference/import review clean. (Remaining `_core` groups
+  — outbox, process_inbound_webhook, billing, signing/edo wrappers — are optional follow-ups; `_core`
+  is already under target.)
+
+## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-4: tasks/_core.py decomposition (slice 3 — file/PDF jobs))
+
+### Changed
+- **ARCH-4 slice 3 — extract the file/PDF job group from `tasks/_core.py`.** Same
+  behavior-preserving pattern (new leaf sub-module + re-export from `_core`, explicit `name=`
+  preserved → identical Celery registration):
+  - `tasks/file_jobs.py` (new) — the 4 file/PDF tasks: `apply_headers_job`
+    (`app.tasks.apply_headers_job`), `convert_pdf_job` (`app.tasks.convert_pdf_job`),
+    `index_file_content_job` (`files.index_content`, `bind=True max_retries=3`), and the
+    `av_scan_file_job` delegate (`files.av_scan_file_job`). Heavy third-party imports
+    (LibreOffice pool, pdf converters) stay function-local exactly as before. Leaf module —
+    imports only from `app.tasks._shared`, never back into `_core` → no cycle.
+  - `_core.py` re-exports all 4 (`# noqa: F401`); the re-exported task objects are identical
+    (same object), so `from app.tasks import X`, the thin wrappers in `app.celery.tasks.*`, and
+    the `app.modules.files.service` imports all keep resolving, and existing `.delay`/`.apply_async`
+    monkeypatches still work. `DOCX_MIME` (added to `_shared` in slice 2) is no longer referenced
+    from `_core`, so its `_shared` re-import was dropped there.
+  `_core.py`: 1233 → 920 lines; `file_jobs.py`: 350 lines. No test mock-patch targets needed
+  repointing this slice (a pre-flight sweep confirmed no test patches `app.tasks._core.<global>` for
+  a moved function — unlike slice 2). Verified locally (Py3.13 venv): Celery guard green (31 tasks
+  unchanged), ruff+black clean, re-export identity confirmed across all 5 import paths, file/PDF +
+  tasks tests green (57 passed); canonical 3.12.12 run via the Docker gate image. (Remaining groups
+  — notification/reminder, outbox, signing/edo — are follow-ups by the same pattern.)
+
+## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-4: tasks/_core.py decomposition (slice 2 — document jobs))
+
+### Changed
+- **ARCH-4 slice 2 — extract the document-generation group from `tasks/_core.py`.** Same
+  behavior-preserving pattern as slice 1 (new leaf sub-module + re-export from `_core`, explicit
+  `name=` preserved so Celery registration is identical):
+  - `tasks/document_jobs.py` — the 3 document tasks (`app.tasks.register_template`,
+    `app.tasks.generate_document`, `app.tasks.generate_document_batch_item`) plus their private
+    impls (`_generate_document_for_run`, `_assert_pipeline_run_matches_session_tenant`,
+    `_assert_batch_item_scope`, `_company_snapshot`, `_sha256_bytes`, `_mark_batch_item_failed`).
+    A leaf module — imports only from `app.tasks._shared`, never back into `_core` → no cycle.
+  - `tasks/_shared.py` — `DOCX_MIME` moved here (shared between document_jobs and the header/PDF
+    jobs still in `_core`); imported by both.
+  - `_core.py` re-exports all moved names (`# noqa: F401`) so `from app.tasks._core import X` /
+    `from app.tasks import X` are unchanged; the re-exported task objects are identical (same
+    object), so existing `generate_document_task.apply_async` monkeypatches still work.
+  `_core.py`: 1983 → 1233 lines; `document_jobs.py`: 813 lines (dominated by the ~390-line
+  `_generate_document_for_run`; further intra-function splitting would not be a pure move and is
+  deferred). Tests whose mock-patch target was `app.tasks._core.<global>` for a *moved* function
+  (`session_scope`/`ensure_tenant_schema`/`s3`/`settings` in `test_letterhead_pipeline.py`,
+  `session_scope` in `test_tasks.py::test_register_template_task`) were repointed to
+  `app.tasks.document_jobs.*` — patch must target the namespace the function looks the name up in.
+  Verified locally (Py3.13 venv): Celery guard green (31 tasks unchanged), ruff+black clean,
+  affected task tests green (24 passed); canonical 3.12.12 run via the Docker gate image.
+  (Remaining groups — file/PDF, notification/reminder, outbox, signing/edo — are follow-ups by
+  the same pattern.)
+
 ## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-4: tasks/_core.py decomposition (slice 1) + Celery guard)
 
 ### Added

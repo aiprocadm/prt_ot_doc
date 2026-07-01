@@ -1,6 +1,6 @@
-"""Incident and inspection domain services."""
+"""Deprecated compat-shim — canonical location is :mod:`app.modules.incidents` (ARCH-1)."""
 
-from app.domains.incidents.service import (
+from app.modules.incidents.operations import (  # noqa: F401  (compat re-export)
     add_inspection_result,
     append_log_entry,
     register_incident,

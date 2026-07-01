@@ -56,6 +56,10 @@ celery_app.conf.beat_schedule = {
         "task": "reminders.scan",
         "schedule": crontab(minute=0),
     },
+    "notifications-dispatch-pending": {
+        "task": "notifications.dispatch_pending",
+        "schedule": crontab(minute="*/5"),
+    },
     "prescriptions-escalate-daily": {
         "task": "prescriptions.escalate.tick",
         "schedule": crontab(hour=2, minute=0),

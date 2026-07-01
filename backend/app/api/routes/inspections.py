@@ -16,7 +16,6 @@ from app.api.helpers.etag import (
 from app.core.errors import api_problem_detail
 from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
-from app.domains.incidents import add_inspection_result, register_inspection, update_inspection
 from app.models.models import (
     Inspection,
     InspectionResult,
@@ -25,6 +24,7 @@ from app.models.models import (
     Tenant,
     User,
 )
+from app.modules.incidents import add_inspection_result, register_inspection, update_inspection
 from app.schemas.incidents import (
     InspectionCreate,
     InspectionPage,

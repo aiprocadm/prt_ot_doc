@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from app.domains.risk.calc import _fallback_band, score_band
 from app.models.risk import RiskMatrixCell
+from app.modules.risk.calc import _fallback_band, score_band
 
 
 @pytest.mark.parametrize(

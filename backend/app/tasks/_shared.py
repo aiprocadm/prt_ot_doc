@@ -23,6 +23,9 @@ from app.models.models import Tenant
 logger = logging.getLogger(__name__)
 T = TypeVar("T")
 
+# Shared across document generation (document_jobs) and header/PDF jobs (still in _core).
+DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
 
 def _run_coroutine(coro: Coroutine[Any, Any, T]) -> T:
     started = perf_counter()

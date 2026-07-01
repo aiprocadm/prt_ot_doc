@@ -17,7 +17,6 @@ from app.core.audit_decorator import audit_operation
 from app.core.errors import api_problem_detail
 from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
-from app.domains.incidents import append_log_entry, register_incident, update_incident
 from app.models.models import (
     Incident,
     IncidentLog,
@@ -26,6 +25,7 @@ from app.models.models import (
     IncidentType,
     Tenant,
 )
+from app.modules.incidents import append_log_entry, register_incident, update_incident
 from app.schemas.incidents import (
     IncidentCreate,
     IncidentLogCreate,

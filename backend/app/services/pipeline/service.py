@@ -1,3 +1,9 @@
+"""PipelineService — template rendering + PDF conversion orchestration (ARCH-4 slice 9).
+
+The god-class was decomposed into mixins (preparation/stamping/staging/run-lifecycle);
+this module keeps the class assembly, ``__init__`` and the ``run`` orchestrator.
+"""
+
 from __future__ import annotations
 
 import logging
@@ -6,10 +12,7 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from time import perf_counter
-from typing import Any
 
-from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
@@ -20,10 +23,6 @@ from app.core.metrics import (
     StageResult,
     get_metrics,
     sanitize_label,
-)
-from app.core.payload_constraints import (
-    enforce_mapping_constraints,
-    normalize_output_basename,
 )
 from app.core.tenant import get_current_tenant
 from app.domains.files.utils import build_dated_prefix
@@ -36,6 +35,11 @@ from app.services.pdf import (
     PdfConversionResult,
     PdfConverter,
 )
+from app.services.pipeline._base import StampingUnavailableError
+from app.services.pipeline._preparation import PreparationMixin
+from app.services.pipeline._runs import RunLifecycleMixin
+from app.services.pipeline._staging import StagingMixin
+from app.services.pipeline._stamping import StampingMixin
 
 __all__ = ["PipelineService", "StampingUnavailableError"]
 
@@ -45,95 +49,10 @@ DocumentJob = PipelineRun
 DocumentJobStatus = PipelineRunStatus
 
 
-class StampingUnavailableError(RuntimeError):
-    """Raised when a stamping stage (QR/watermark) is requested but no real backend exists.
-
-    Distinct from a genuine stamping *failure*: it signals that the feature was
-    enabled while the platform ships only a placeholder backend, so the stage must
-    be recorded as an honest ``skipped`` (not ``success`` — which would imply the
-    PDF was stamped — and not ``error`` — which would imply a malfunction).
-    """
-
-
-class PipelineService:
+class PipelineService(PreparationMixin, StampingMixin, StagingMixin, RunLifecycleMixin):
     """Coordinate template rendering and PDF conversion for document jobs."""
 
     DOCX_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-
-    @staticmethod
-    def _build_request_metadata(
-        *,
-        replacements: dict[str, str],
-        header_text: str | None,
-        footer_text: str | None,
-        output_basename: str | None,
-    ) -> dict[str, Any]:
-        return {
-            "replacements": replacements,
-            "header_text": header_text,
-            "footer_text": footer_text,
-            "output_basename": output_basename,
-        }
-
-    def _prepare_parameters(
-        self,
-        *,
-        session: AsyncSession,
-        template: Template,
-        template_version: TemplateVersion,
-        context: dict[str, Any],
-        replacements: dict[str, str] | None,
-        header_text: str | None,
-        footer_text: str | None,
-        output_basename: str | None,
-        tenant_id: str | None,
-    ) -> tuple[str, str | None, dict[str, str], dict[str, Any]]:
-        enforce_mapping_constraints(context, field="context")
-        if replacements is not None:
-            enforce_mapping_constraints(replacements, field="replacements")
-
-        normalized_output_basename = normalize_output_basename(output_basename)
-
-        tenant_identifier = str(tenant_id or template.tenant_id or "").strip()
-        if not tenant_identifier:
-            raise ValueError("Template is not bound to a tenant")
-        if template_version.tenant_id and template_version.tenant_id != tenant_identifier:
-            raise ValueError("Template version belongs to a different tenant")
-        session_info = getattr(session, "info", None)
-        session_tenant_id = None
-        session_tenant_slug = None
-        if isinstance(session_info, dict):
-            session_tenant_id = str(session_info.get("tenant_id") or "").strip() or None
-            session_tenant_slug = (
-                str(session_info.get("tenant_slug") or session_info.get("tenant") or "").strip()
-                or None
-            )
-        if session_tenant_slug and session_tenant_id is None:
-            raise ValueError("Session tenant_id is missing; tenant session contract is incomplete")
-        if session_tenant_id and session_tenant_id != tenant_identifier:
-            raise ValueError("Session tenant does not match template tenant")
-
-        replacements_map = dict(replacements or {})
-        metadata = self._build_request_metadata(
-            replacements=dict(replacements_map),
-            header_text=header_text,
-            footer_text=footer_text,
-            output_basename=normalized_output_basename,
-        )
-        return tenant_identifier, normalized_output_basename, replacements_map, metadata
-
-    @staticmethod
-    def _validate_idempotent_run(
-        run: PipelineRun,
-        *,
-        template_id: str,
-        template_version_id: str,
-        payload: dict[str, Any],
-    ) -> None:
-        if run.template_id != template_id or run.template_version_id != template_version_id:
-            raise ValueError("Idempotency key collision for different template")
-        if run.context != payload:
-            raise ValueError("Idempotency key collision for different payload")
 
     def __init__(
         self,
@@ -145,231 +64,6 @@ class PipelineService:
         self.pdf = pdf_converter or PdfConverter()
         self.metrics = metrics or get_metrics()
         self._settings = get_settings()
-
-    def _qr_payload(self, run: PipelineRun) -> str:
-        metadata = dict(run.result_metadata or {})
-        request_meta = metadata.get("request") or {}
-        document_version_id = request_meta.get("document_version_id")
-        return str(document_version_id or run.id)
-
-    def _apply_qr_code_to_pdf(self, pdf_bytes: bytes, payload: str) -> bytes:
-        """Default QR-code stage backend.
-
-        No real QR stamping ships yet. Rather than silently returning the PDF
-        unchanged (which the pipeline would record as a successful stage and
-        mislead callers into trusting an unstamped document), signal that the
-        backend is unavailable so the stage is recorded honestly as ``skipped``.
-        Override this method (or inject a real backend) to enable stamping.
-        """
-        _ = (pdf_bytes, payload)
-        raise StampingUnavailableError("qr_code")
-
-    def _apply_watermark_to_pdf(self, pdf_bytes: bytes, text: str) -> bytes:
-        """Default watermark stage backend.
-
-        See :meth:`_apply_qr_code_to_pdf` — no real watermarking ships yet, so this
-        raises instead of falsely reporting an applied watermark.
-        """
-        _ = (pdf_bytes, text)
-        raise StampingUnavailableError("watermark")
-
-    @staticmethod
-    def _init_outputs(run: PipelineRun) -> dict[str, Any]:
-        outputs = dict(run.outputs or {})
-        outputs.setdefault("stages", {})
-        return outputs
-
-    @staticmethod
-    def _stage_completed(outputs: dict[str, Any], stage: str) -> bool:
-        stages = outputs.get("stages") or {}
-        entry = stages.get(stage) or {}
-        return entry.get("status") == "success"
-
-    @staticmethod
-    def _record_stage(
-        outputs: dict[str, Any],
-        *,
-        stage: str,
-        status: str,
-        started_at: datetime | None = None,
-        finished_at: datetime | None = None,
-        details: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
-        stages = dict(outputs.get("stages") or {})
-        entry = dict(stages.get(stage) or {})
-        if started_at is not None:
-            entry["started_at"] = started_at.isoformat()
-        if finished_at is not None:
-            entry["finished_at"] = finished_at.isoformat()
-        entry["status"] = status
-        if details:
-            entry.setdefault("details", {})
-            entry["details"].update(details)
-        stages[stage] = entry
-        # Return a NEW top-level dict so every ``run.outputs = self._record_stage(...)``
-        # reassignment has a fresh object identity. ``PipelineRun.outputs`` is a plain
-        # ``JSON`` column (no ``MutableDict``), so SQLAlchemy only flags the attribute
-        # dirty when the assigned object differs by identity. Mutating-and-returning the
-        # same dict (the previous behaviour) left the column unchanged after the first
-        # flush, silently dropping the stage timeline on ``session.refresh``.
-        new_outputs = dict(outputs)
-        new_outputs["stages"] = stages
-        return new_outputs
-
-    async def ensure_pending_run(
-        self,
-        session: AsyncSession,
-        *,
-        template: Template,
-        template_version: TemplateVersion,
-        context: dict[str, Any],
-        replacements: dict[str, str] | None,
-        header_text: str | None,
-        footer_text: str | None,
-        idempotency_key: str,
-        output_basename: str | None,
-        tenant_id: str | None = None,
-    ) -> tuple[PipelineRun, bool]:
-        """Ensure a ``PipelineRun`` exists without executing heavy work."""
-
-        stage_start = perf_counter()
-        self.metrics.record_pipeline_stage_start(
-            pipeline=PipelineType.DOCUMENT,
-            stage=PipelineStage.DATA_PERSISTED,
-        )
-        try:
-            (
-                tenant_identifier,
-                _normalized_output_basename,
-                _replacements_map,
-                request_metadata,
-            ) = self._prepare_parameters(
-                session=session,
-                template=template,
-                template_version=template_version,
-                context=context,
-                replacements=replacements,
-                header_text=header_text,
-                footer_text=footer_text,
-                output_basename=output_basename,
-                tenant_id=tenant_id,
-            )
-
-            run, created = await self._get_or_create_pending_run(
-                session,
-                tenant_id=tenant_identifier,
-                idempotency_key=idempotency_key,
-                template_id=template.id,
-                template_version_id=template_version.id,
-                payload=context,
-                defaults={"result_metadata": {"request": request_metadata}},
-            )
-
-            metadata = dict(run.result_metadata or {})
-            existing_request = metadata.get("request")
-            if existing_request and existing_request != request_metadata:
-                raise ValueError("Idempotency key collision for different pipeline options")
-            if not existing_request:
-                metadata["request"] = request_metadata
-            run.result_metadata = metadata
-
-            if created:
-                run.status = PipelineRunStatus.QUEUED
-                run.outputs = None
-                run.docx_storage_key = None
-                run.pdf_storage_key = None
-                run.result_s3_key = None
-                run.error = None
-                run.started_at = None
-                run.finished_at = None
-
-            await session.flush()
-        except Exception as exc:
-            self.metrics.record_pipeline_stage_end(
-                pipeline=PipelineType.DOCUMENT,
-                stage=PipelineStage.DATA_PERSISTED,
-                result=StageResult.FAILED,
-                seconds=perf_counter() - stage_start,
-                error_class=exc.__class__.__name__,
-            )
-            raise
-
-        self.metrics.record_pipeline_stage_end(
-            pipeline=PipelineType.DOCUMENT,
-            stage=PipelineStage.DATA_PERSISTED,
-            result=StageResult.SUCCESS,
-            seconds=perf_counter() - stage_start,
-        )
-        return run, created
-
-    @staticmethod
-    def _normalize_error_details(exc: Exception) -> tuple[str, str]:
-        message = (str(exc) or exc.__class__.__name__).strip()
-        sanitized = sanitize_label(message)
-        lowered = message.lower()
-        metrics_code = sanitized
-        if "template version payload missing" in lowered:
-            metrics_code = "template_not_uploaded"
-        return sanitized, metrics_code
-
-    async def _get_or_create_pending_run(
-        self,
-        session: AsyncSession,
-        *,
-        tenant_id: str,
-        idempotency_key: str,
-        template_id: str,
-        template_version_id: str,
-        payload: dict[str, Any],
-        defaults: dict[str, Any] | None = None,
-    ) -> tuple[PipelineRun, bool]:
-        """Fetch an existing document job or create a new pending record.
-
-        Ensures idempotency by validating that any existing job registered under
-        ``idempotency_key`` was created for the same template, template version,
-        and payload. When a mismatch is detected we raise ``ValueError`` to make
-        the conflict explicit for callers.
-        """
-
-        stmt = select(PipelineRun).where(
-            PipelineRun.tenant_id == tenant_id,
-            PipelineRun.idempotency_key == idempotency_key,
-        )
-        run = (await session.execute(stmt)).scalar_one_or_none()
-        if run:
-            self._validate_idempotent_run(
-                run,
-                template_id=template_id,
-                template_version_id=template_version_id,
-                payload=payload,
-            )
-            return run, False
-
-        create_kwargs = {
-            "tenant_id": tenant_id,
-            "idempotency_key": idempotency_key,
-            "status": PipelineRunStatus.QUEUED,
-            "template_id": template_id,
-            "template_version_id": template_version_id,
-            "context": payload,
-        }
-        if defaults:
-            create_kwargs.update(defaults)
-        run = PipelineRun(**create_kwargs)
-        session.add(run)
-        try:
-            await session.flush()
-        except IntegrityError:
-            await session.rollback()
-            run = (await session.execute(stmt)).scalar_one()
-            self._validate_idempotent_run(
-                run,
-                template_id=template_id,
-                template_version_id=template_version_id,
-                payload=payload,
-            )
-            return run, False
-        return run, True
 
     async def run(
         self,
