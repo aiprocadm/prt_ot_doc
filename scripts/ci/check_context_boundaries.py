@@ -38,10 +38,15 @@ APP_DIR = BACKEND_DIR / "app"
 # Each is a debt item for ARCH-1. ``imported_from_module`` is the module named in
 # ``from X import ...`` / ``import X`` (X), not the imported attribute.
 ALLOWLIST: set[tuple[str, str]] = {
-    # modules → domains (8)
+    # modules → domains (11)
     ("app.modules.briefings.services", "app.domains.signing.pep"),
     ("app.modules.files.api", "app.domains.files"),
     ("app.modules.files.service", "app.domains.files"),
+    # ARCH-4 slice 10: FileService god-class split relocated the same legitimate ``s3``
+    # access into the package sub-modules — same debt item, not a new leak.
+    ("app.modules.files.service._fileops", "app.domains.files"),
+    ("app.modules.files.service._functions", "app.domains.files"),
+    ("app.modules.files.service._uploads", "app.domains.files"),
     ("app.modules.files.storage", "app.domains.files"),
     ("app.modules.health_checks.service", "app.domains.files"),
     ("app.modules.pdf.convert", "app.domains.files"),
