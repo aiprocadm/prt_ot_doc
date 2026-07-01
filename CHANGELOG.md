@@ -1,5 +1,40 @@
 # CHANGELOG
 
+## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-4: decompose god-class FileService via mixins)
+
+### Changed
+- **ARCH-4 — decompose the god-class `modules/files/service.py::FileService` (1241 lines) via
+  mixins** — the last ARCH-4 god-file. Behaviour-preserving: every method/function body is a
+  byte-identical move (deterministic line-diff). `service.py` → `modules/files/service/` package:
+  - `_base.py` — imports, constants (`MAX_INDEX_BYTES/MAX_INDEX_CHARS`), logger, and the module-level
+    file helpers (`resolve_presign_ttl`, sha/stream hashing, `_safe_filename`, dangerous-extension
+    guard, `_mask_pii`, artifact naming) shared by everything.
+  - `_access.py` `AccessMixin` — role/company scoping, audit logging, signed-url TTL.
+  - `_uploads.py` `UploadMixin` — upload session create / new-version / finalize + AV scan.
+  - `_fileops.py` `FileOpsMixin` — download URLs, link/unlink, abort, artifact-from-bytes, delete.
+  - `_functions.py` — the module-level (non-method) functions kept for compatibility
+    (`create_upload_session`/`complete_upload`/`index_file_*`/`_upsert_file_search_document`/
+    `issue_download_url`), independent of the class (no cycle); `UploadMixin.finalize_upload` imports
+    the one it calls (`index_file_record`) from here.
+  - `service.py` — `class FileService(AccessMixin, UploadMixin, FileOpsMixin)` + `__init__`.
+  - `__init__.py` — re-exports `FileService`, the public helpers and module functions, plus the
+    module-level names tests monkeypatch as `app.modules.files.service.<name>`: `s3`, `av`,
+    `OutboxService`, `av_scan_file_job` (attribute-level patches on these shared objects stay global,
+    so the mixin call sites see them), so every `from app.modules.files.service import …` and every
+    such patch target resolve unchanged.
+  No `__`-mangled members exist. Verified locally (Py3.13 venv): ruff+black clean (a duplicate `s3`
+  import was caught by ruff `F811`/`ImportError` and resolved by importing `s3` for the patch target
+  directly from `app.domains.files`), every body byte-identical to source, a class-assembly smoke
+  (MRO, all 20 methods resolve, 2 `@staticmethod`s static, unchanged `__init__(self, session,
+  tenant_id)`, `s3`/`av`/`OutboxService`/`av_scan_file_job` identity across the package / `_uploads` /
+  `_functions`, all external importers — api/tasks/pipelines_orchestrator/pipeline_step_handlers —
+  resolving the same class), files tests green (106 passed). One test that patched a *function name*
+  (`app.modules.files.service.get_settings`) rather than an object attribute was repointed to
+  `app.modules.files.service._uploads.get_settings` — a name is patched in the namespace the function
+  looks it up in, and `create_upload_session` now lives in the `_uploads` mixin. **All six ARCH-4
+  god-files (`tasks/_core.py` + documents/risk/medical/packs routes + PipelineService + FileService)
+  are now decomposed.**
+
 ## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-4: decompose god-class PipelineService via mixins)
 
 ### Changed
