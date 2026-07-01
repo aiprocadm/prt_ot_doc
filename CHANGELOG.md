@@ -1,5 +1,37 @@
 # CHANGELOG
 
+## 2026-07-02 (fix/stabilize-gates-2026-06-29 — ARCH-1: collapse domains/files into modules/files (slice 7))
+
+### Changed
+- **ARCH-1 slice 7 — fold `domains/files` into `modules/files`.** The most-coupled slice (28 import
+  sites across 18 code files + 11 test files) but the cleanest mechanically — all three logic files moved
+  **byte-identical** (they import only exempt `app.core.*`/`app.services.*`, and never each other):
+  - `domains/files/{s3,utils,document}.py` → `modules/files/*` keeping names (all free in the package).
+  - `domains/files/` is now a pure compat-shim package (3 re-export modules + deprecation docstring in
+    the previously-empty `__init__`; kept until POST-1). The `s3` shim re-exports the full `__all__`
+    including `_resolve_endpoint` and documents that mock-patch string targets must use the canon path.
+  - Importers repointed via exact-list bulk replace (`app.domains.files` → `app.modules.files`):
+    `api/app.py`, `api/routes/{files,health}.py`, `api/routes/packs/run.py`, `api/v1/router.py`,
+    `modules/files/{api.py,storage.py,service/{__init__,_fileops,_functions,_uploads}.py}`,
+    `modules/health_checks/service.py`, `modules/pdf/convert.py`, `services/{clamav,file_storage,
+    package_export}.py`, `services/pipeline/service.py`, `tasks/document_jobs.py` + 10 test files
+    incl. `tests/conftest.py`. The two lazy in-function imports in `services/file_storage.py` (they break
+    the `s3 ↔ file_storage` import cycle) stay lazy, only the path changed.
+  - **Mock-patch traps handled**: 3 patch STRING targets (`"app.domains.files.s3.generate_presigned_get_url"`
+    ×2, `"app.domains.files.s3.get_client"`) repointed to `app.modules.files.s3.*` — a name-by-name shim is
+    a distinct module object, so patching the old path would silently stop affecting canon consumers.
+    Also `tests/minio/test_s3_endpoint_resolution.py` loads `s3.py` **by file path** (`"domains" / "files"`
+    as Path segments — invisible to dotted-string greps); its loader path updated to `modules`.
+  - ARCH-3 allowlist **shrinks 29 → 24**: the 8 long-standing `modules/* → app.domains.files` debt edges
+    (files.api, files.service + 3 mixins, files.storage, health_checks, pdf.convert) all became stale and
+    were REMOVED (the debt this slice drains); +3 compat-shim edges (`domains.files.{s3,utils,document}`).
+  Verified locally (Py3.13 venv): ruff+black clean, ARCH-3 boundaries clean (24 allowlisted, 0 new,
+  0 stale), byte-identity of all 3 moved files, files/tenancy/minio test suite green, shim/canon
+  object-identity smoke (incl. `modules.files.service.s3 is modules.files.s3`), OpenAPI contract
+  unchanged (803/644), Celery tasks unchanged (32). Schema untouched → PG-gate not required.
+  ARCH-1 core queue is now DONE (7 slices); remaining: `replace` (needs a canon decision on the legacy
+  `ReplaceEngine`) and trivial `audit`/`sign`.
+
 ## 2026-07-02 (fix/stabilize-gates-2026-06-29 — ARCH-1: collapse domains/packs into modules/packs (slice 6))
 
 ### Changed

@@ -25,11 +25,11 @@ from app.core.rate_limit import (
     limiter,
 )
 from app.db.session import aensure_shared_schema, dispose_engine
-from app.domains.files import s3
 from app.middleware.billing_guard import BillingGuardMiddleware
 from app.middleware.global_error_handler import GlobalErrorHandlerMiddleware
 from app.middleware.observability import ObservabilityMiddleware
 from app.middleware.tenant import TenantMiddleware
+from app.modules.files import s3
 from app.services.demo_bootstrap import bootstrap_demo_tenant
 from app.services.dev_bootstrap import bootstrap_admin_user
 

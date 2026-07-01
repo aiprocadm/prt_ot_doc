@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.domains.files.utils import build_storage_key
+from app.modules.files.utils import build_storage_key
 
 
 def test_s3_key_builder_is_tenant_scoped() -> None:

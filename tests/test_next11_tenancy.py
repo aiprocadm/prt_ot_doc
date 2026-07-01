@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from app.domains.files.utils import build_storage_key
+from app.modules.files.utils import build_storage_key
 
 
 @pytest.mark.anyio

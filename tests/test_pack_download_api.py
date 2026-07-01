@@ -56,7 +56,7 @@ async def test_pack_download_presigned_redirect(
         return "https://example.com/presigned"
 
     monkeypatch.setattr(
-        "app.domains.files.s3.generate_presigned_get_url",
+        "app.modules.files.s3.generate_presigned_get_url",
         fake_presign,
     )
 

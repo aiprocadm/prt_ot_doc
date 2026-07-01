@@ -30,8 +30,6 @@ from app.db import ensure_tenant_schema, session_scope
 from app.db.tenant_row_guard import (
     assert_tenant_row_matches_session as _assert_tenant_row_matches_session,
 )
-from app.domains.files import s3
-from app.domains.files.utils import build_dated_prefix
 from app.domains.templating.renderer import render_docx
 from app.models.document import (
     Document,
@@ -56,6 +54,8 @@ from app.models.models import (
 from app.modules.branding.letterhead import LetterheadResolver
 from app.modules.branding.schemas import IssuerRef, LetterheadOverride
 from app.modules.branding.service import BrandingService
+from app.modules.files import s3
+from app.modules.files.utils import build_dated_prefix
 from app.modules.headers.engine import apply_headers_to_docx
 from app.modules.templates.passport import inject_passport
 from app.modules.templates.service import build_passport

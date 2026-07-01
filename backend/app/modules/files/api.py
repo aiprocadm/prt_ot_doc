@@ -647,7 +647,7 @@ async def upload_multipart_v1(
         size_bytes=0,
         metadata_json={},
     )
-    from app.domains.files import s3
+    from app.modules.files import s3
 
     sha256 = hashlib.sha256()
     chunks: list[bytes] = []

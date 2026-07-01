@@ -6,9 +6,9 @@ import pytest
 from sqlalchemy import select
 
 from app.core.config import get_settings
-from app.domains.files import s3
 from app.models.file import File as StoredFile
 from app.models.file import FileScanStatus
+from app.modules.files import s3
 from app.services.clamav import (
     ClamAVScanOutcome,
     ClamAVVerdict,

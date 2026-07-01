@@ -25,8 +25,8 @@ from app.core.metrics import (
     sanitize_label,
 )
 from app.core.tenant import get_current_tenant
-from app.domains.files.utils import build_dated_prefix
 from app.models.models import PipelineRun, PipelineRunStatus, Template, TemplateVersion
+from app.modules.files.utils import build_dated_prefix
 from app.services.docx import DocxService
 from app.services.file_storage import FileStorageService
 from app.services.pdf import (

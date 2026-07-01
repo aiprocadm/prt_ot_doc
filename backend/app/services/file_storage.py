@@ -299,7 +299,7 @@ class _S3Adapter:
     name = "s3"
 
     def __init__(self) -> None:
-        from app.domains.files import s3 as s3_domain
+        from app.modules.files import s3 as s3_domain
 
         self._s3 = s3_domain
         self._meta: dict[str, BlobMeta] = {}
@@ -556,7 +556,7 @@ class FileStorageService:
         normalized_key = self._normalize_key(key)
         ttl = int(expires_in or self._settings.presign_download_ttl_seconds)
         if getattr(self._adapter, "name", "") == "s3" and self._settings.s3_backend == "minio":
-            from app.domains.files.s3 import generate_presigned_get_url
+            from app.modules.files.s3 import generate_presigned_get_url
 
             response_headers = {}
             if download_name:

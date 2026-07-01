@@ -11,8 +11,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import delete
 
 from app.core.security import AccessContext
-from app.domains.files import s3
-from app.modules.files import storage
+from app.modules.files import s3, storage
 from app.modules.files.models import (
     FileDownloadLog,
     FileEntityType,

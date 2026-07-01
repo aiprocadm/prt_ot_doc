@@ -40,7 +40,6 @@ from app.core.payload_constraints import (
 )
 from app.core.security import AccessContext, abac
 from app.core.tracing import get_trace_id
-from app.domains.files.utils import build_dated_prefix
 from app.models.document import Document
 from app.models.document_core import (
     DocumentPackItem,
@@ -53,6 +52,7 @@ from app.models.document_core import (
     TemplateVersionStatus,
 )
 from app.models.tenanting import Tenant
+from app.modules.files.utils import build_dated_prefix
 from app.modules.templates import (
     audit_template_versions,
     build_passport,

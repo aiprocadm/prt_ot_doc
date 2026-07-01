@@ -14,7 +14,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.config import Settings
 from app.db.session import engine
-from app.domains.files import s3
+from app.modules.files import s3
 from app.modules.health_checks.schemas import (
     HealthCheckComprehensiveResponse,
     HealthCheckItem,

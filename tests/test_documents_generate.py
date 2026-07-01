@@ -12,7 +12,6 @@ import app.tasks._core as task_core
 from app.core.config import get_settings
 from app.core.security import issue_access_token
 from app.db.session import AsyncSessionLocal
-from app.domains.files import s3
 from app.models.document import (
     Document as DocumentModel,
 )
@@ -34,6 +33,7 @@ from app.models.models import (
     TemplateVersionStatus,
     Tenant,
 )
+from app.modules.files import s3
 from app.tasks import celery_app
 from tests.utils.factories import TestDataFactory
 

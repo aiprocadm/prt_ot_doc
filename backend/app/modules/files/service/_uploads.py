@@ -12,8 +12,7 @@ from fastapi import HTTPException
 from sqlalchemy import func, select
 
 from app.core.config import get_settings
-from app.domains.files import s3
-from app.modules.files import av, storage
+from app.modules.files import av, s3, storage
 from app.modules.files.models import (
     AVStatus,
     FileRecord,

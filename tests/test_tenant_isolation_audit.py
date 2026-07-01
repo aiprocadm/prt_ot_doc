@@ -126,7 +126,7 @@ async def test_cannot_modify_other_tenant_company(
 @pytest.mark.anyio
 async def test_file_storage_key_isolation(test_db_session) -> None:
     """File storage keys must be scoped to tenant (S3 bucket strategy)."""
-    from app.domains.files.utils import build_storage_key
+    from app.modules.files.utils import build_storage_key
 
     key_tenant_a = build_storage_key(
         tenant_slug="tenant-a",

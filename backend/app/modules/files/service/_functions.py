@@ -16,8 +16,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.domains.files import s3
-from app.modules.files import av, extractors, storage
+from app.modules.files import av, extractors, s3, storage
 from app.modules.files.models import (
     AVStatus,
     DownloadLog,

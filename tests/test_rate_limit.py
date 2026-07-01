@@ -12,8 +12,8 @@ from app.core.rate_limit import (
     login_per_identity,
     upload_per_tenant,
 )
-from app.domains.files import s3
 from app.models.models import RoleEnum, Tenant, User
+from app.modules.files import s3
 from app.services.auth import hash_password
 
 
