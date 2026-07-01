@@ -1,5 +1,35 @@
 # CHANGELOG
 
+## 2026-07-02 (fix/stabilize-gates-2026-06-29 — RC-014: dedicated Branch entity separated from Site)
+
+### Added
+- **RC-014 — сущность «филиал» (Branch), отделённая от Site** (санкционированное additive-исключение
+  из правила «не менять контракт», ТЗ §5 REL-4 / §10.3; санкция пользователя 2026-07-02):
+  - **Model** `app/models/master_data.py::Branch` — company-scoped уровень master-data между Company и
+    Site (vNext-иерархия «группы компаний → компании → **филиалы** → объекты → площадки»): name/code/
+    address/contacts + VARCHAR `status` (не PG-enum — вне enum-parity класса, прецедент cm01);
+    `UniqueConstraint(tenant_id, company_id, name)`. Re-exported через `models.py`/`models/__init__`
+    (+ в оба `__all__` — иначе ruff --fix вырезает реэкспорт).
+  - **`Site.branch_id`** — additive nullable колонка, **app-level ссылка без DB FK** (add_column с FK —
+    класс миграционных граблей wa02; прецедент `contractor_registry.company_id`); целостность держит
+    API-слой: `_ensure_branch_link` в `routes/sites.py` (существование + тот же tenant + та же company →
+    404/400).
+  - **Migration** `20260702_br01_branch_entity` (additive: create `branch` + `site.branch_id` + index;
+    honest downgrade). NOTE: локальный alembic-прогон на SQLite невозможен исторически (initial_schema
+    использует JSONB) — канонический прогон миграций = PG16 gate.
+  - **API** `/api/v1/branches` (list ETag / create / get / patch / delete) — зеркало `sites.py` (те же
+    ABAC-роли и audit_operation); master-data CRUD в репо не феатур-флагуется (прецедент sites/companies).
+    `SiteCreate`/`SiteUpdate`/`SiteRead` получили опциональный `branch_id` (отвязка через `branch_id: null`).
+  - **Contract tests** `tests/test_branches_api.py` (5): CRUD roundtrip, create с несуществующей company
+    → 404, cross-tenant изоляция (get/patch/delete чужого → 404, список не течёт), site↔branch
+    link/unlink/relink, company-mismatch → 400 + ghost branch → 404.
+  - **OpenAPI baseline re-snapped**: 803 операции / 644 схемы → **808 / 648** (+5 роутов, +4 схемы) —
+    легитимное пере-снятие через `check_openapi_snapshot.py --snapshot`; Celery unchanged (32).
+  - Verified: branch tests 5 passed; AST drift-audit (ORM↔migrations parity) 59 passed; ruff+black clean;
+    PG16 gate (alembic upgrade heads + boundary + enum parity) — final evidence.
+  - Docs: `GAP_REPORT.md` + `docs/stabilization/RELEASE_BLOCKERS_STATUS.md` RC-014 → done;
+    `docs/MODULES.md` обновлён (карта после ARCH-1 + иерархия org_structure с branch).
+
 ## 2026-07-02 (fix/stabilize-gates-2026-06-29 — ARCH-1: tail slice 8 — replace/audit/sign; duplicated-context queue CLOSED)
 
 ### Changed

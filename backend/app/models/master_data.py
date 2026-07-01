@@ -200,10 +200,43 @@ class Person(TenantBaseModel, SoftDeleteMixin):
     )
 
 
+class Branch(TenantBaseModel, SoftDeleteMixin):
+    """Филиал — уровень master-data между Company и Site (RC-014).
+
+    vNext-иерархия: группы компаний → компании → **филиалы** → объекты →
+    площадки → подразделения. До этой сущности филиалы моделировались через
+    ``Site``; ``Site.branch_id`` — обратная (опциональная) привязка.
+    ``status`` — VARCHAR, не PG-enum (снимает класс enum-parity, прецедент cm01).
+    """
+
+    __tablename__ = "branch"
+
+    company_id: Mapped[str] = mapped_column(ForeignKey("company.id"), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    address: Mapped[str | None] = mapped_column(String(255))
+    contact_name: Mapped[str | None] = mapped_column(String(255))
+    contact_phone: Mapped[str | None] = mapped_column(String(32))
+    contact_email: Mapped[str | None] = mapped_column(String(320))
+    status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="active", server_default="active"
+    )
+
+    company: Mapped[Company] = relationship(backref="branches")
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "company_id", "name", name="uq_branch_company_name"),
+    )
+
+
 class Site(TenantBaseModel, SoftDeleteMixin):
     __tablename__ = "site"
 
     company_id: Mapped[str] = mapped_column(ForeignKey("company.id"), nullable=False, index=True)
+    # RC-014: привязка к филиалу — app-level reference БЕЗ DB FK: колонка ДОБАВЛЯЕТСЯ
+    # к существующей таблице, а add_column с FK — класс миграционных граблей wa02
+    # (прецедент: contractor_registry.company_id). Целостность обеспечивает API-слой.
+    branch_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     address: Mapped[str | None] = mapped_column(String(255))
     geo_json: Mapped[dict[str, Any] | None] = mapped_column(

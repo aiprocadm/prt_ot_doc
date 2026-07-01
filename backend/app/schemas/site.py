@@ -7,6 +7,7 @@ from app.schemas.base import BaseSchema
 
 class SiteBase(BaseSchema):
     company_id: str = Field(min_length=1, max_length=36)
+    branch_id: str | None = Field(default=None, min_length=1, max_length=36)
     name: str = Field(min_length=1, max_length=255)
     address: str | None = Field(default=None, max_length=255)
     geo_json: dict | None = None
@@ -25,6 +26,7 @@ class SiteCreate(SiteBase):
 
 
 class SiteUpdate(BaseSchema):
+    branch_id: str | None = Field(default=None, min_length=1, max_length=36)
     name: str | None = Field(default=None, min_length=1, max_length=255)
     address: str | None = Field(default=None, max_length=255)
     geo_json: dict | None = None
