@@ -1,5 +1,33 @@
 # CHANGELOG
 
+## 2026-07-01 (fix/stabilize-gates-2026-06-29 — ARCH-1: collapse domains/contractors into modules/contractors (slice 4))
+
+### Changed
+- **ARCH-1 slice 4 — fold `domains/contractors` into `modules/contractors`.** `modules/contractors`
+  already held the ORM (`models.py`) and its file names `documents.py`/`lifecycle.py` were free, so the
+  two pure (no-I/O) logic files move **keeping their names** — no `operations.py` rename needed:
+  - `domains/contractors/documents.py` → `modules/contractors/documents.py` (git-moved; unchanged —
+    expiry classification `document_expiry_status`/`best_document`/`requirement_status`).
+  - `domains/contractors/lifecycle.py` → `modules/contractors/lifecycle.py` (git-moved; the only body
+    change is its internal import `app.domains.contractors.documents` → `app.modules.contractors.documents`).
+    Holds the admission engine `evaluate_employee` + `ReadinessStatus`/`EmployeeVerdict`/`DocumentRequirement`.
+  - **new** `modules/contractors/__init__.py` re-exports the public surface of both files.
+  - `domains/contractors/documents.py` + `lifecycle.py` are now deprecated compat-shims (re-export from
+    `app.modules.contractors.*`; kept until POST-1).
+  - Importers use the canon: `services/contractor_admission.py`, `services/contractor_documents.py`,
+    `api/routes/contractors.py`, `modules/projections/services.py` + the 3 `tests/test_contractor_*.py`
+    → `from app.modules.contractors import …`.
+  - ARCH-3 allowlist churn (net +2, now 21): **removed** two stale edges (`projections.services →
+    domains.contractors.lifecycle`, repointed to canon; `domains.contractors.lifecycle →
+    modules.contractors.models`, now behind the shim); **added** two compat-shim edges plus — unlike
+    risk/incidents/training, whose moved files imported only `app.models.*` — two `modules.contractors.* →
+    app.domains.shared` edges, because the pure logic still uses the shared `ContingentItemStatus`/`classify`
+    kernel (migrating `app.domains.shared` itself is a separate future slice, flagged in-code).
+  Verified locally (Py3.13 venv): ruff+black clean, ARCH-3 boundaries clean (21 allowlisted, 0 new),
+  shim/canon object-identity smoke, contractor + shared-classify unit tests green (32 passed), OpenAPI
+  contract unchanged (803/644), Celery tasks unchanged (32). No other `app.domains.contractors` importers
+  remain. Queue next: `ppe` (has `modules/ppe/services.py` → possible name collision), then `packs`, `files`.
+
 ## 2026-07-01 (fix/stabilize-gates-2026-06-29 — ARCH-1: collapse domains/training into modules/training (slice 3))
 
 ### Changed

@@ -38,7 +38,7 @@ APP_DIR = BACKEND_DIR / "app"
 # Each is a debt item for ARCH-1. ``imported_from_module`` is the module named in
 # ``from X import ...`` / ``import X`` (X), not the imported attribute.
 ALLOWLIST: set[tuple[str, str]] = {
-    # modules → domains (11)
+    # modules → domains (10)
     ("app.modules.briefings.services", "app.domains.signing.pep"),
     ("app.modules.files.api", "app.domains.files"),
     ("app.modules.files.service", "app.domains.files"),
@@ -50,10 +50,13 @@ ALLOWLIST: set[tuple[str, str]] = {
     ("app.modules.files.storage", "app.domains.files"),
     ("app.modules.health_checks.service", "app.domains.files"),
     ("app.modules.pdf.convert", "app.domains.files"),
-    ("app.modules.projections.services", "app.domains.contractors.lifecycle"),
     ("app.modules.templates.service", "app.domains.templating.renderer"),
-    # domains → modules (2)
-    ("app.domains.contractors.lifecycle", "app.modules.contractors.models"),
+    # modules → domains.shared (shared kernel). ARCH-1 slice 4 moved contractors' pure
+    # logic into modules/, but it still imports the shared ContingentItemStatus/classify
+    # helpers; migrating app.domains.shared itself is a separate future slice.
+    ("app.modules.contractors.documents", "app.domains.shared"),
+    ("app.modules.contractors.lifecycle", "app.domains.shared"),
+    # domains → modules (1)
     ("app.domains.ppe.service", "app.modules.ppe.services"),
     # ARCH-1 compat-shims: canon logic moved to modules/, domains/<ctx> kept as a pure
     # re-export until the next major (POST-1 removes it). Intentional, not debt to reduce.
@@ -63,6 +66,8 @@ ALLOWLIST: set[tuple[str, str]] = {
     ("app.domains.incidents.service", "app.modules.incidents.operations"),
     ("app.domains.training", "app.modules.training.operations"),
     ("app.domains.training.service", "app.modules.training.operations"),
+    ("app.domains.contractors.documents", "app.modules.contractors.documents"),
+    ("app.domains.contractors.lifecycle", "app.modules.contractors.lifecycle"),
 }
 
 

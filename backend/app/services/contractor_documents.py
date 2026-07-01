@@ -12,9 +12,9 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.domains.contractors.documents import document_expiry_status
 from app.domains.shared import ContingentItemStatus
 from app.models.models import Outbox
+from app.modules.contractors.documents import document_expiry_status
 from app.modules.contractors.models import ContractorDocument
 from app.services.events import EventType
 from app.services.outbox import OutboxService
