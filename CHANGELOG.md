@@ -1,5 +1,30 @@
 # CHANGELOG
 
+## 2026-07-01 (fix/stabilize-gates-2026-06-29 — ARCH-1: collapse domains/incidents into modules/incidents (slice 2))
+
+### Changed
+- **ARCH-1 slice 2 — fold `domains/incidents` into `modules/incidents`.** Unlike `risk` (where the
+  legacy file was a distinct concern), `modules/incidents` already held complementary domain-rule
+  services (`IncidentCaseService`/`IncidentInvestigationService`/`RiskReviewTriggerService`), so the
+  legacy CRUD/orchestration file lands as a **new** module file rather than overwriting:
+  - `domains/incidents/service.py` → `modules/incidents/operations.py` (git-moved; contents unchanged
+    — imports only `app.models.*`, so no new cross-context edges inside). Holds the persistence
+    functions (`register_incident`/`update_incident`/`append_log_entry`/`register_inspection`/
+    `update_inspection`/`add_inspection_result`).
+  - `modules/incidents/__init__.py` re-exports the operations functions alongside the existing
+    services.
+  - `domains/incidents/` is now a deprecated compat-shim (re-exports from
+    `app.modules.incidents.operations`; kept until POST-1).
+  - Importers use the canon: `api/routes/incidents.py` + `api/routes/inspections.py` →
+    `from app.modules.incidents import …`.
+  - ARCH-3: two intentional shim edges added to the "ARCH-1 compat-shims" allowlist group.
+  Verified locally (Py3.13 venv): ruff+black clean, ARCH-3 boundaries clean (17 allowlisted, 0 new),
+  shim/canon object-identity smoke, incident/inspection API + safety-ops + outbox tests green
+  (102 passed), OpenAPI contract unchanged (803/644). No other `app.domains.incidents` importers remain.
+  NOTE: not every duplicated context is this clean — `replace` has a real `engine.py` name-collision
+  (a legacy `ReplaceEngine` absent from the richer `modules/replace`), so it needs a per-context canon
+  decision rather than a mechanical shim.
+
 ## 2026-07-01 (fix/stabilize-gates-2026-06-29 — ARCH-1: collapse domains/risk into modules/risk (slice 1))
 
 ### Changed

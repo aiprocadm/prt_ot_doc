@@ -59,6 +59,8 @@ ALLOWLIST: set[tuple[str, str]] = {
     # re-export until the next major (POST-1 removes it). Intentional, not debt to reduce.
     ("app.domains.risk", "app.modules.risk.calc"),
     ("app.domains.risk.calc", "app.modules.risk.calc"),
+    ("app.domains.incidents", "app.modules.incidents.operations"),
+    ("app.domains.incidents.service", "app.modules.incidents.operations"),
 }
 
 
