@@ -55,6 +55,10 @@ ALLOWLIST: set[tuple[str, str]] = {
     # domains → modules (2)
     ("app.domains.contractors.lifecycle", "app.modules.contractors.models"),
     ("app.domains.ppe.service", "app.modules.ppe.services"),
+    # ARCH-1 compat-shims: canon logic moved to modules/, domains/<ctx> kept as a pure
+    # re-export until the next major (POST-1 removes it). Intentional, not debt to reduce.
+    ("app.domains.risk", "app.modules.risk.calc"),
+    ("app.domains.risk.calc", "app.modules.risk.calc"),
 }
 
 

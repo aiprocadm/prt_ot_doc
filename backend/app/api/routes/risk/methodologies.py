@@ -29,7 +29,6 @@ from app.api.routes.risk._common import (
     _slugify_code,
     engine_router,
 )
-from app.domains.risk import rebuild_matrix_from_methodology, recalc_risk_map
 from app.models.models import (
     Company,
     DocumentPack,
@@ -43,6 +42,7 @@ from app.models.risk import (
     RiskHazard,
     RiskMatrixCell,
 )
+from app.modules.risk import rebuild_matrix_from_methodology, recalc_risk_map
 
 
 @engine_router.post("/methodologies", response_model=MethodologyOut)

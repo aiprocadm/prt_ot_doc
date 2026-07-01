@@ -1,6 +1,27 @@
 # CHANGELOG
 
-## 2026-07-01 (fix/stabilize-gates-2026-06-29 — RC-011: real notification delivery + channel-tier escalation)
+## 2026-07-01 (fix/stabilize-gates-2026-06-29 — ARCH-1: collapse domains/risk into modules/risk (slice 1))
+
+### Changed
+- **ARCH-1 slice 1 — fold the legacy `domains/risk` context into the canonical `modules/risk`.**
+  First incremental step of collapsing the duplicated `domains/` ↔ `modules/` layers (ТЗ ARCH-1),
+  chosen as the smallest named context (192 loc, 3 importers). Behaviour-preserving:
+  - `domains/risk/calc.py` → `modules/risk/calc.py` (git-moved; contents unchanged — it only imports
+    `app.models.*`, so no new cross-context edges inside).
+  - `modules/risk/__init__.py` now re-exports the calc API (`score_band`,
+    `rebuild_matrix_from_methodology`, `recalc_risk_map`) alongside the existing services.
+  - `domains/risk/` is now a **deprecated compat-shim** — `__init__.py` and `calc.py` re-export from
+    `app.modules.risk.calc` (kept until POST-1 physically removes the `domains/*` shims); no business
+    logic remains there.
+  - The three importers now use the canon: `api/routes/risk/assessments.py` +
+    `api/routes/risk/methodologies.py` → `from app.modules.risk import …`; `tests/test_domains_risk_calc.py`
+    → `from app.modules.risk.calc import …`.
+  - ARCH-3 boundary guard: the shim adds two intentional `app.domains.risk[.calc] -> app.modules.risk.calc`
+    edges, added to `ALLOWLIST` under a new "ARCH-1 compat-shims" note (distinct from the legacy leaks;
+    they disappear with the shim at POST-1).
+  Verified locally (Py3.13 venv): ruff+black clean, ARCH-3 boundaries clean (15 allowlisted, 0 new),
+  shim/canon object-identity smoke, risk calc + engine + API/contract tests green; OpenAPI contract
+  unchanged (only import sources moved, not signatures). No other `app.domains.risk` importers remain.
 
 ### Added
 - **RC-011 — real notification delivery (provider orchestration + escalation).** Previously the

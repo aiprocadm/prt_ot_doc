@@ -31,7 +31,6 @@ from app.api.routes.risk._common import (
 from app.core.idempotency import compute_request_hash
 from app.core.metrics import get_metrics
 from app.core.security import AuthContext, get_auth_ctx
-from app.domains.risk import score_band
 from app.models.models import (
     Company,
     DocumentPack,
@@ -49,6 +48,7 @@ from app.models.risk import (
     RiskCard,
     RiskHazard,
 )
+from app.modules.risk import score_band
 from app.services.events import EventType
 from app.services.idempotency import IdempotencyService, normalize_idempotency_key
 from app.services.outbox import OutboxService
