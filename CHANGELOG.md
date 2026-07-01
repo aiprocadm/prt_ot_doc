@@ -1,5 +1,29 @@
 # CHANGELOG
 
+## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-4: split god-route packs.py into a package)
+
+### Changed
+- **ARCH-4 — split the god-route `api/routes/packs.py` (1121 lines) into a package**, the last
+  god-route, same contract-preserving pattern. OpenAPI surface byte-for-byte unchanged (guard:
+  **803 operations, 644 schemas**); every endpoint a pure move (deterministic line-diff).
+  - `api/routes/packs/_common.py` (403) — the single `router` + logger, access deps
+    (`SessionDep/TenantDep/PackReadAccess/PackWriteAccess`), role constants
+    (`_PACK_READ_ROLES/_PACK_WRITE_ROLES`), `_SINGLE_TASK_PLANS`, error helpers
+    (`_pack_bad_request/_pack_not_found/_pack_conflict`) and all pack helper functions
+    (context build, person/company/site getters, naming, serialization).
+  - `api/routes/packs/management.py` (288) — scenario list/create, pack listing, generate-documents.
+  - `api/routes/packs/run.py` (514) — `run_pack`, archive downloads, safety summary.
+  - `api/routes/packs/__init__.py` — imports endpoint modules in registration order (`# isort: off`);
+    re-exports `router` (route_groups uses `packs.router`), the role constants / error helpers
+    imported by tests, and `generate_document_task` — whose `.apply_async` several tests monkeypatch
+    via `app.api.routes.packs.generate_document_task` (the re-exported object is identical to
+    `app.services.tasks.generate_document_task`, so the patch still lands).
+  Verified locally (Py3.13 venv): OpenAPI guard green (unchanged), ruff+black clean, all 8 routes
+  registered in original order, the three module bodies byte-identical to the source ranges,
+  re-exports + `route_groups` import OK, mock-patch target object identity confirmed, packs route
+  tests green. With this the four ARCH-4 god-routes (documents/risk/medical/packs) are all split;
+  the god-services (`services/pipeline.py`, `modules/files/service.py`) remain as follow-ups.
+
 ## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-4: split god-route medical.py into a package)
 
 ### Changed
