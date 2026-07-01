@@ -1,5 +1,27 @@
 # CHANGELOG
 
+## 2026-07-01 (fix/stabilize-gates-2026-06-29 — ARCH-1: collapse domains/training into modules/training (slice 3))
+
+### Changed
+- **ARCH-1 slice 3 — fold `domains/training` into `modules/training`** (same new-file pattern as
+  `incidents`; `modules/training` already held the class services
+  `TrainingEnrollmentService`/`TrainingCertificateService`):
+  - `domains/training/service.py` → `modules/training/operations.py` (git-moved; contents unchanged —
+    imports only `app.models.*` / `app.services.*`, so no new cross-context edges). Holds
+    `assign_training_plan` / `register_training_session` / `issue_certificate` /
+    `upcoming_certificate_expirations` / `TrainingCertificateIssueResult`.
+  - **new** `modules/training/__init__.py` re-exports the operations functions + the existing services
+    (the package previously had no `__init__.py`; existing `from app.modules.training.services import …`
+    callers are unaffected).
+  - `domains/training/` is now a deprecated compat-shim (re-exports from
+    `app.modules.training.operations`; kept until POST-1).
+  - Importers use the canon: `api/routes/training.py` + `tests/domains/test_training_domain.py` →
+    `from app.modules.training import …`.
+  - ARCH-3: two intentional shim edges added to the "ARCH-1 compat-shims" allowlist group.
+  Verified locally (Py3.13 venv): ruff+black clean, ARCH-3 boundaries clean (19 allowlisted, 0 new),
+  shim/canon object-identity smoke, training tests green, OpenAPI contract unchanged (803/644). No
+  other `app.domains.training` importers remain.
+
 ## 2026-07-01 (fix/stabilize-gates-2026-06-29 — ARCH-1: collapse domains/incidents into modules/incidents (slice 2))
 
 ### Changed

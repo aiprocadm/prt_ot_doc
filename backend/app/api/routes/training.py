@@ -19,12 +19,6 @@ from app.core.audit_decorator import audit_operation
 from app.core.errors import api_problem_detail
 from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
-from app.domains.training import (
-    assign_training_plan,
-    issue_certificate,
-    register_training_session,
-    upcoming_certificate_expirations,
-)
 from app.models.file import File
 from app.models.models import (
     Company,
@@ -33,6 +27,12 @@ from app.models.models import (
     TrainingCourse,
     TrainingPlan,
     TrainingSessionStatus,
+)
+from app.modules.training import (
+    assign_training_plan,
+    issue_certificate,
+    register_training_session,
+    upcoming_certificate_expirations,
 )
 from app.schemas.training import (
     TrainingCertificateCreate,

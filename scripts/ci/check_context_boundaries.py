@@ -61,6 +61,8 @@ ALLOWLIST: set[tuple[str, str]] = {
     ("app.domains.risk.calc", "app.modules.risk.calc"),
     ("app.domains.incidents", "app.modules.incidents.operations"),
     ("app.domains.incidents.service", "app.modules.incidents.operations"),
+    ("app.domains.training", "app.modules.training.operations"),
+    ("app.domains.training.service", "app.modules.training.operations"),
 }
 
 
