@@ -1,5 +1,34 @@
 # CHANGELOG
 
+## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-4: decompose god-class PipelineService via mixins)
+
+### Changed
+- **ARCH-4 — decompose the god-class `services/pipeline.py::PipelineService` (1125 lines) via
+  mixins.** First god-*service* split (no OpenAPI guard applies), behaviour-preserving: every method
+  body is a byte-identical move (deterministic line-diff, incl. the 735-line `run`), so the class is
+  reassembled from mixins with identical behaviour. `pipeline.py` → `services/pipeline/` package:
+  - `_base.py` — `StampingUnavailableError`, kept in one place so the raise sites (StampingMixin)
+    and `run`'s `except` clause (service.py) reference the **same class object** (identity preserved
+    → `except` still catches).
+  - `_preparation.py` `PreparationMixin` — request-metadata build, parameter prep, idempotent-run
+    validation.
+  - `_stamping.py` `StampingMixin` — QR/watermark placeholder backends.
+  - `_staging.py` `StagingMixin` — output stage bookkeeping (`_init_outputs/_stage_completed/_record_stage`).
+  - `_runs.py` `RunLifecycleMixin` — pending-run creation / idempotent lookup, error normalization.
+  - `service.py` — `class PipelineService(PreparationMixin, StampingMixin, StagingMixin,
+    RunLifecycleMixin)` with `DOCX_CONTENT_TYPE`, `__init__` and the `run` orchestrator (819 lines,
+    over the ~700 guideline because `run` is a single ~735-line method — splitting it would change
+    behaviour, which the ТЗ forbids; the supporting method groups are what became mixins).
+  - `__init__.py` — re-exports `PipelineService` + `StampingUnavailableError` so the public surface
+    (`from app.services.pipeline import …`, the `app.services` re-export, and all callers in
+    packs/router/cli/tasks/package_pipeline) is unchanged.
+  No `__`-mangled members exist, so the moves are safe. Verified locally (Py3.13 venv): ruff+black
+  clean, every method body byte-identical to the source, and a class-assembly smoke confirming the
+  MRO, `StampingUnavailableError` identity across `_base`/`_stamping`/`service`, all 14 methods
+  resolving on the class, the 6 `@staticmethod`s still static, the `DOCX_CONTENT_TYPE` class attr,
+  the unchanged `__init__(self, storage, pdf_converter, metrics)` signature, and all six external
+  importers resolving the same `PipelineService`; pipeline tests green (44 passed).
+
 ## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-4: split god-route packs.py into a package)
 
 ### Changed
