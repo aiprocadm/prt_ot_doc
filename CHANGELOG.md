@@ -1,5 +1,36 @@
 # CHANGELOG
 
+## 2026-07-01 (fix/stabilize-gates-2026-06-29 — ARCH-1: collapse domains/ppe into modules/ppe (slice 5))
+
+### Changed
+- **ARCH-1 slice 5 — fold `domains/ppe` into `modules/ppe`.** The messiest slice so far: unlike
+  `contractors` (empty `__init__`), `domains/ppe/__init__.py` re-exported 8 functions and callers import
+  from the **package** (`from app.domains.ppe import build_journal_export`), and `modules/ppe` already
+  held a same-named-ish `services.py`:
+  - `domains/ppe/lifecycle.py` → `modules/ppe/lifecycle.py` (git-moved; **byte-identical** — pure issue
+    FSM + card-line rules; imports only `app.domains.shared` + stdlib). Name was free in `modules/ppe`.
+  - `domains/ppe/service.py` → `modules/ppe/operations.py` (git-moved; **renamed** to avoid colliding with
+    the existing `modules/ppe/services.py` — different concern: pure norm/card algorithms there vs
+    DB-backed issuance/card/journal ops here). Only body change: internal `app.domains.ppe`→
+    `app.modules.ppe` for `import lifecycle as lc`.
+  - `modules/ppe/__init__.py` **extended**: keeps re-exporting the 4 existing service classes and adds the
+    8 `operations` functions, so `from app.modules.ppe import build_journal_export` works.
+  - `domains/ppe/` now three deprecated compat-shims (`__init__` + `lifecycle.py` + `service.py`,
+    re-exporting from `app.modules.ppe*`; kept until POST-1).
+  - Importers use the canon: `api/routes/ppe.py` (2 imports), `api/routes/journals.py`,
+    `services/person_admission.py`, `services/ppe_notifications.py` + `tests/test_ppe_lifecycle.py`
+    → `from app.modules.ppe …`.
+  - ARCH-3 allowlist churn (net +3, now 24): **removed** the stale `domains.ppe.service →
+    modules.ppe.services` edge (service.py moved; the moved `operations.py` imports `modules.ppe.services`
+    as a same-context modules→modules edge, which the guard does not flag); **added** one
+    `modules.ppe.lifecycle → app.domains.shared` shared-kernel edge (same class as contractors) plus three
+    `domains.ppe* → modules.ppe*` compat-shim edges.
+  Verified locally (Py3.13 venv): ruff+black clean, ARCH-3 boundaries clean (24 allowlisted, 0 new),
+  byte-identity of both moved files (lifecycle identical; operations differs only in the `lc` import),
+  ppe FSM/card unit tests green (24), ppe route/error/events + person-admission + journal-concept tests
+  green (58), OpenAPI contract unchanged (803/644), Celery tasks unchanged (32). No other
+  `app.domains.ppe` importers remain. Queue next: `packs` (1405 loc / 11 imp.), then `files` (most-coupled).
+
 ## 2026-07-01 (fix/stabilize-gates-2026-06-29 — ARCH-1: collapse domains/contractors into modules/contractors (slice 4))
 
 ### Changed

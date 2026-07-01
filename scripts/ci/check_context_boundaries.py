@@ -51,13 +51,13 @@ ALLOWLIST: set[tuple[str, str]] = {
     ("app.modules.health_checks.service", "app.domains.files"),
     ("app.modules.pdf.convert", "app.domains.files"),
     ("app.modules.templates.service", "app.domains.templating.renderer"),
-    # modules → domains.shared (shared kernel). ARCH-1 slice 4 moved contractors' pure
-    # logic into modules/, but it still imports the shared ContingentItemStatus/classify
-    # helpers; migrating app.domains.shared itself is a separate future slice.
+    # modules → domains.shared (shared kernel). ARCH-1 slices 4-5 moved contractors' and
+    # ppe's pure logic into modules/, but they still import the shared
+    # ContingentItemStatus/classify helpers; migrating app.domains.shared itself is a
+    # separate future slice.
     ("app.modules.contractors.documents", "app.domains.shared"),
     ("app.modules.contractors.lifecycle", "app.domains.shared"),
-    # domains → modules (1)
-    ("app.domains.ppe.service", "app.modules.ppe.services"),
+    ("app.modules.ppe.lifecycle", "app.domains.shared"),
     # ARCH-1 compat-shims: canon logic moved to modules/, domains/<ctx> kept as a pure
     # re-export until the next major (POST-1 removes it). Intentional, not debt to reduce.
     ("app.domains.risk", "app.modules.risk.calc"),
@@ -68,6 +68,9 @@ ALLOWLIST: set[tuple[str, str]] = {
     ("app.domains.training.service", "app.modules.training.operations"),
     ("app.domains.contractors.documents", "app.modules.contractors.documents"),
     ("app.domains.contractors.lifecycle", "app.modules.contractors.lifecycle"),
+    ("app.domains.ppe", "app.modules.ppe.operations"),
+    ("app.domains.ppe.lifecycle", "app.modules.ppe.lifecycle"),
+    ("app.domains.ppe.service", "app.modules.ppe.operations"),
 }
 
 

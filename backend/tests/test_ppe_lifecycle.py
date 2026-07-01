@@ -2,13 +2,14 @@
 
 Hermetic: no DB, no route imports (Windows libmagic pitfall).
 """
+
 from __future__ import annotations
 
 from datetime import date, timedelta
 
 import pytest
 
-from app.domains.ppe.lifecycle import (
+from app.modules.ppe.lifecycle import (
     ADMISSION_BLOCKING_STATUSES,
     ISSUE_STATUS_ISSUED,
     ISSUE_STATUS_LOST,
@@ -29,16 +30,29 @@ TODAY = date(2026, 6, 10)
 
 # --- FSM -------------------------------------------------------------------
 
-@pytest.mark.parametrize("target", [
-    ISSUE_STATUS_RETURNED, ISSUE_STATUS_WRITTEN_OFF, ISSUE_STATUS_REPLACED, ISSUE_STATUS_LOST,
-])
+
+@pytest.mark.parametrize(
+    "target",
+    [
+        ISSUE_STATUS_RETURNED,
+        ISSUE_STATUS_WRITTEN_OFF,
+        ISSUE_STATUS_REPLACED,
+        ISSUE_STATUS_LOST,
+    ],
+)
 def test_issued_can_transition_to_each_terminal(target):
     validate_transition(ISSUE_STATUS_ISSUED, target)  # must not raise
 
 
-@pytest.mark.parametrize("current", [
-    ISSUE_STATUS_RETURNED, ISSUE_STATUS_WRITTEN_OFF, ISSUE_STATUS_REPLACED, ISSUE_STATUS_LOST,
-])
+@pytest.mark.parametrize(
+    "current",
+    [
+        ISSUE_STATUS_RETURNED,
+        ISSUE_STATUS_WRITTEN_OFF,
+        ISSUE_STATUS_REPLACED,
+        ISSUE_STATUS_LOST,
+    ],
+)
 def test_terminal_statuses_are_frozen(current):
     with pytest.raises(PPETransitionError):
         validate_transition(current, ISSUE_STATUS_RETURNED)
@@ -57,6 +71,7 @@ def test_noop_same_status_rejected():
 
 
 # --- card_line_status ------------------------------------------------------
+
 
 def _issue(qty=1, expires_in_days: int | None = 100, status=ISSUE_STATUS_ISSUED):
     expires = TODAY + timedelta(days=expires_in_days) if expires_in_days is not None else None
@@ -97,6 +112,7 @@ def test_overdue_beats_due_soon_within_line():
 
 # --- fold_card_status ------------------------------------------------------
 
+
 def test_fold_empty_is_ok():
     assert fold_card_status([]) == "ok"
 
@@ -109,6 +125,7 @@ def test_fold_worst_of():
 
 
 # --- norm-line matching helpers (shared by card + admission gate) ------------
+
 
 def test_norm_line_key_prefers_item_id():
     assert norm_line_key("item-1", "Каска") == "item-1"

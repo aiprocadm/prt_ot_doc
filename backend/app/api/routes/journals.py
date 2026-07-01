@@ -18,8 +18,8 @@ from app.api.helpers.etag import (
 from app.core.audit_decorator import audit_operation
 from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
-from app.domains.ppe import build_journal_export
 from app.models.models import Journal, JournalEntry, Person, Tenant
+from app.modules.ppe import build_journal_export
 from app.schemas.journal import (
     JournalEntryPage,
     JournalEntryRead,

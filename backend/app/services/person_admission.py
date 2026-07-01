@@ -14,7 +14,6 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domains.medical import lifecycle as lc
-from app.domains.ppe import lifecycle as ppe_lc
 from app.models.models import (
     MedicalExam,
     MedicalNorm,
@@ -28,6 +27,7 @@ from app.models.models import (
     Training,
     TrainingStatus,
 )
+from app.modules.ppe import lifecycle as ppe_lc
 from app.modules.ppe.services import NormItem, PPENormService
 
 

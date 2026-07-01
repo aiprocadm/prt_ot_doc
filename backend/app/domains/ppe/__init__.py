@@ -1,6 +1,11 @@
-"""Domain services for PPE personal cards and journals."""
+"""Deprecated compat-shim — canonical location is :mod:`app.modules.ppe` (ARCH-1).
 
-from app.domains.ppe.service import (
+Re-exports the PPE personal-card / journal operations from the canonical
+``app.modules.ppe`` package. The pure issue-FSM rules live in
+``app.modules.ppe.lifecycle`` (mirrored by ``app.domains.ppe.lifecycle``).
+"""
+
+from app.modules.ppe.operations import (  # noqa: F401  (compat re-export)
     build_journal_export,
     build_personal_card_766n,
     build_personal_card_payload,
