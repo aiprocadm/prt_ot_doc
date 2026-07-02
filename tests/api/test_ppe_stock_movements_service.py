@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.models.ppe_registry import PPEItem, PPEStockBatch, PPEStockMovement
+from app.models.ppe_registry import PPEItem, PPEStockBatch
 from app.modules.ppe.stock import (
     InsufficientStockError,
     StockBatchNotFound,
