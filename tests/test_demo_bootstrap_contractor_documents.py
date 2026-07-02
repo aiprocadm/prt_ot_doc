@@ -7,8 +7,8 @@ from datetime import datetime, timezone
 import pytest
 from sqlalchemy import select
 
-from app.domains.contractors.documents import document_expiry_status
 from app.domains.shared import ContingentItemStatus
+from app.modules.contractors.documents import document_expiry_status
 from app.modules.contractors.models import (
     ContractorDocument,
     ContractorEmployee,

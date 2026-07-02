@@ -1,7 +1,7 @@
 """Pure PPE lifecycle rules: issue FSM + personal-card line statuses.
 
 No I/O and no sqlalchemy imports — mirrors ``domains/medical/lifecycle.py``
-and ``domains/contractors/lifecycle.py``. Status values are the canonical
+and ``modules/contractors/lifecycle.py``. Status values are the canonical
 VARCHAR values stored in ``ppeissue.status`` (lowercase, see migration sz01).
 """
 

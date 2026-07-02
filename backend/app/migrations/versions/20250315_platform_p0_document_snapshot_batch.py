@@ -20,8 +20,11 @@ depends_on = None
 def upgrade() -> None:
     bind = op.get_bind()
     if bind.dialect.name == "postgresql":
-        for value in ("generated", "approved", "revoked"):
-            op.execute(f"ALTER TYPE documentstatus ADD VALUE IF NOT EXISTS '{value}'")
+        # POST-2: enum extension commits outside the migration tx (PG forbids
+        # using a new value in the tx that added it); IF NOT EXISTS = retry-safe.
+        with op.get_context().autocommit_block():
+            for value in ("generated", "approved", "revoked"):
+                op.execute(f"ALTER TYPE documentstatus ADD VALUE IF NOT EXISTS '{value}'")
 
     op.create_table(
         "document_snapshot",

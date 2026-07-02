@@ -38,8 +38,13 @@ def upgrade() -> None:
     # SQLite has no enum type — column behaves as TEXT, no schema op needed.
     bind = op.get_bind()
     if bind.dialect.name == "postgresql":
-        for new_value in ("UPLOADED", "LINTED", "READY", "DEPRECATED"):
-            op.execute(f"ALTER TYPE templateversionstatus ADD VALUE IF NOT EXISTS '{new_value}'")
+        # POST-2: enum extension commits outside the migration tx (PG forbids
+        # using a new value in the tx that added it); IF NOT EXISTS = retry-safe.
+        with op.get_context().autocommit_block():
+            for new_value in ("UPLOADED", "LINTED", "READY", "DEPRECATED"):
+                op.execute(
+                    f"ALTER TYPE templateversionstatus ADD VALUE IF NOT EXISTS '{new_value}'"
+                )
 
     op.add_column("template", sa.Column("status", template_status, nullable=True))
     op.add_column("template", sa.Column("current_version_id", sa.String(length=36), nullable=True))

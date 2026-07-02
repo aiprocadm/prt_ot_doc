@@ -81,9 +81,12 @@ def upgrade() -> None:
     bind = op.get_bind()
     if bind.dialect.name != "postgresql":
         return
-    for type_name, values in ADD_VALUES.items():
-        for value in values:
-            op.execute(f"ALTER TYPE {type_name} ADD VALUE IF NOT EXISTS '{value}'")
+    # POST-2: enum extension commits outside the migration tx (PG forbids
+    # using a new value in the tx that added it); IF NOT EXISTS = retry-safe.
+    with op.get_context().autocommit_block():
+        for type_name, values in ADD_VALUES.items():
+            for value in values:
+                op.execute(f"ALTER TYPE {type_name} ADD VALUE IF NOT EXISTS '{value}'")
 
 
 def downgrade() -> None:

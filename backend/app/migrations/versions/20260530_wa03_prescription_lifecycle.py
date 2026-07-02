@@ -38,7 +38,10 @@ def upgrade() -> None:
     )
     bind = op.get_bind()
     if bind.dialect.name == "postgresql":
-        op.execute("ALTER TYPE prescriptionstatus ADD VALUE IF NOT EXISTS 'verified'")
+        # POST-2: enum extension commits outside the migration tx (PG forbids
+        # using a new value in the tx that added it); IF NOT EXISTS = retry-safe.
+        with op.get_context().autocommit_block():
+            op.execute("ALTER TYPE prescriptionstatus ADD VALUE IF NOT EXISTS 'verified'")
 
 
 def downgrade() -> None:

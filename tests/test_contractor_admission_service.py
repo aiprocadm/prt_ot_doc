@@ -74,7 +74,7 @@ def _make_stale_employee(tenant_id: str, contractor_id: str) -> ContractorEmploy
 @pytest.mark.asyncio
 async def test_evaluate_returns_verdicts(sessionmaker, data_factory):
     """evaluate_contractor_admission returns ALLOWED for ready, BLOCKED for stale."""
-    from app.domains.contractors.lifecycle import ReadinessStatus
+    from app.modules.contractors.lifecycle import ReadinessStatus
 
     async with sessionmaker() as session:
         tenant = await data_factory.ensure_tenant(session=session)

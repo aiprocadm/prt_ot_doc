@@ -1,5 +1,24 @@
 # AI Implementation Report
 
+## Last Agent Handoff (2026-07-02, POST-2: MIGRATION HARDENING — ветка feat/post-2-migration-hardening)
+
+- **Дата:** 2026-07-02, продолжение той же сессии, что POST-1 (PR #717, ветка `feat/post-1-remove-domain-shims` — открыт, НЕ влит). POST-2 — на отдельной ветке от main@`8f5c74a5`; обе ветки добавляют записи в верх CHANGELOG/этого журнала → при мерже второго PR будет тривиальный конфликт в доках (план: после merge #717 перебазировать эту ветку).
+- **POST-2 (выбор пользователя «Продолжай пункт 1» из списка после POST-1):** механика миграций, схема НЕ тронута. `env.py`: снят глобальный AUTOCOMMIT (компромисс 2026-06-01: каждый оператор коммитился сразу, atomicity=0, задокументирован в RELEASE_BLOCKERS_STATUS «env.py atomicity review» с этим же hardening'ом как named follow-up) → `transaction_per_migration=True` теперь НАСТОЯЩИЙ BEGIN/COMMIT на миграцию; pre-step alembic_version→TEXT коммитится явно (SQLAlchemy 2.0 autobegin — alembic должен получить чистое соединение). 7 сайтов `ALTER TYPE ADD VALUE` обёрнуты в `op.get_context().autocommit_block()`: 20250315, 20250410, 20260318_next67_hotfix (DO-блок), 20260328_next55, 20260407_hotfix, 20260530_wa03, 20260602_iter49. Счёт «8 сайтов» в старых доках неверен — исполняемых 7 (8-й был UPDATE-сайт next55b, удалён в iter-14). Аудит: ни одна миграция не ИСПОЛЬЗУЕТ новое значение в своей же транзакции (проверено чтением всех 7; next55 вынес зависимый UPDATE в next55b ещё при написании); `CONCURRENTLY`/нетранзакционного DDL в цепочке нет (grep).
+- **Валидация:** ruff/black по 8 файлам зелёные; PG16-гейт `local_gate.py --db-only` (свежий `upgrade heads` ~110 миграций + round-trip `heads→base→heads`) — ЕДИНСТВЕННАЯ валидация alembic (SQLite цепочку не тянет). Итог гейта — см. текст сессии/коммит.
+- **Next (точный шаг):** после зелёного гейта и «ок» — PR в main. Остальная очередь: фронт для RC-014 (UI филиалов, API готов), реактивация GitHub Actions (`.yml.disabled`), роадмап vNext (СОУТ срез-7; ветка `feat/sout-srez6-cascade-p10-04` НЕ влита — отдельное решение).
+
+---
+
+## Last Agent Handoff (2026-07-02, POST-1: ФИЗИЧЕСКОЕ УДАЛЕНИЕ domains/*-SHIM'ОВ — ветка feat/post-1-remove-domain-shims)
+
+- **Дата:** 2026-07-02. Контекст: PR #715 влит в main 2026-07-01, хвост PR #716 (handoff-журнал) влит 2026-07-02 утром; ветка `fix/stabilize-gates-2026-06-29` удалена локально и на GitHub (санкция пользователя). Основная копия репо переключена на main. Работа — на новой ветке `feat/post-1-remove-domain-shims` от main@`8f5c74a5`. Venv лежит в ОСНОВНОЙ копии (`D:\Кодинг\3. …\.venv`), из worktree вызывать по абсолютному пути.
+- **POST-1 (следующий мажор по ТЗ, выбор пользователя):** физически удалены 10 deprecated compat-shim пакетов `domains/{audit,contractors,files,incidents,packs,ppe,replace,risk,sign,training}` (28 файлов — чистые реэкспорты ARCH-1). Последние потребители переведены на канон `modules/*`: 3 contractors-теста + `scripts/smoke.sh` ×2 (`domains.files`→`modules.files`). ALLOWLIST в `check_context_boundaries.py`: **27 → 5** (ушли 22 shim-ребра; остались briefings→signing.pep, templates→templating.renderer, 3× →domains.shared). `.coveragerc` omit-пути packs переведены на modules (протухли в ARCH-1 slice 6). Docstring-хвосты подчищены (modules/{contractors,packs,ppe}/`__init__`, permits/lifecycle, signing/pep, modules/ppe/lifecycle).
+- **НАХОДКА — красный тест на main:** `tests/test_context_boundaries.py::test_allowlist_is_the_expected_legacy_set` фиксировал `len(ALLOWLIST)==10`, реально было 27 — ARCH-1 обновлял скрипт-гейт, но не зеркальный freeze-тест (скрипт проверяет новые/протухшие рёбра, не количество — потому гейт молчал). Исправлено: фиксация = 5.
+- **Верификация:** boundary-гейт зелёный (5 allowlisted, 0 new); ruff/black по изменённым файлам зелёные (ruff auto-fix пересортировал импорты в test_demo_bootstrap_contractor_documents.py); пакетный pytest (boundaries + 3 contractors-файла) — см. итог в тексте сессии; OpenAPI/Celery guards — фоновой цепочкой после pytest (два full-import параллельно НЕ гонять).
+- **Next (точный шаг):** после «ок» пользователя — PR ветки в main. Дальше по списку: POST-2 (migration hardening: per-migration tx + autocommit_block на 7 ADD VALUE), фронт для RC-014 (UI филиалов), реактивация GitHub Actions (`.yml.disabled`), либо роадмап vNext (СОУТ срез-7; ветка `feat/sout-srez6-cascade-p10-04` НЕ влита — отдельное решение).
+
+---
+
 ## Last Agent Handoff (2026-07-02, ARCH-1 ЗАКРЫТ ЦЕЛИКОМ (срезы 4-8) + RC-014 BRANCH — ветка fix/stabilize-gates-2026-06-29, PR #715)
 
 - **Дата:** 2026-07-01/02. Продолжение ТЗ `TZ_REFACTOR_AND_RELEASE.md` (лежит в `~/Downloads`). Ветка `fix/stabilize-gates-2026-06-29`, PR #715 → main. Среда Win11 + системный Py3.14 (без ruff!) — ВСЁ гонять через `.venv\Scripts\python.exe` (Py3.13); PG-гейт — из PowerShell (не Git-Bash).
