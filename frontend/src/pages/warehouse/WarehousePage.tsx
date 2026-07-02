@@ -201,6 +201,9 @@ const WarehousePage = () => {
               Провести
             </Button>
           </div>
+          <p className="text-xs text-muted-foreground">
+            Для «Корректировки» количество — это фактический остаток партии (не дельта).
+          </p>
           {movements.length === 0 ? (
             <EmptyState title="Движений нет" description="Проведите приход или корректировку по партии." />
           ) : (

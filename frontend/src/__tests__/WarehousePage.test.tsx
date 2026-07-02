@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -57,5 +57,35 @@ describe("WarehousePage", () => {
     listBatchesMock.mockResolvedValue([]);
     render(<MemoryRouter><WarehousePage /></MemoryRouter>);
     await waitFor(() => expect(screen.getByText("Позиции не найдены")).toBeInTheDocument());
+  });
+
+  it("submits a manual movement with the form payload", async () => {
+    listLevelsMock.mockResolvedValue([]);
+    listBatchesMock.mockResolvedValue([]);
+    listMovementsMock.mockResolvedValue([]);
+    createMovementMock.mockResolvedValue({
+      id: "m2",
+      item_id: "i1",
+      batch_id: "b1",
+      kind: "receipt",
+      quantity_delta: 1,
+      occurred_at: "2026-07-02T00:00:00Z",
+      reason: null,
+      ref_type: null,
+      ref_id: null,
+      created_at: "2026-07-02T00:00:00Z"
+    });
+
+    render(<MemoryRouter><WarehousePage /></MemoryRouter>);
+    await waitFor(() => expect(screen.getByText("Движения")).toBeInTheDocument());
+
+    fireEvent.change(screen.getByPlaceholderText("ID партии"), { target: { value: "b1" } });
+    fireEvent.click(screen.getByRole("button", { name: "Провести" }));
+
+    await waitFor(() =>
+      expect(createMovementMock).toHaveBeenCalledWith(
+        expect.objectContaining({ batch_id: "b1", kind: "receipt", quantity: 1, reason: null })
+      )
+    );
   });
 });
