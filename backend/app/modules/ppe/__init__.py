@@ -2,8 +2,8 @@
 
 Public surface: the pure requirement/card algorithm services (``.services``), the
 DB-backed issuance/card/journal operations (``.operations``) and the pure issue-FSM
-+ card-line rules (``.lifecycle``). The legacy ``app.domains.ppe`` package is a
-deprecated compat-shim re-exporting from here.
++ card-line rules (``.lifecycle``). The legacy ``app.domains.ppe`` compat-shim
+was removed in POST-1 (2026-07-02).
 """
 
 from app.modules.ppe.operations import (  # noqa: F401  (public re-export)
