@@ -8,13 +8,13 @@ movement recording are the only sanctioned way to mutate stock quantity.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.feature_flags import is_feature_enabled
-from app.models.ppe_registry import PPEStockBatch, PPEStockMovement
+from app.models.ppe_registry import PPEItem, PPEStockBatch, PPEStockMovement
 
 KIND_RECEIPT = "receipt"
 KIND_ISSUE = "issue"
@@ -264,3 +264,115 @@ async def deplete_for_issue(
             )
         )
     return movements
+
+
+@dataclass(slots=True, frozen=True)
+class ShortageRow:
+    item_id: str
+    item_name: str
+    min_stock: int
+    on_hand: int
+    deficit: int
+    below_threshold: bool
+    avg_daily_consumption: float
+    days_to_depletion: float | None
+    projected_breach_date: date | None
+
+
+async def compute_shortages(
+    session: AsyncSession,
+    tenant_id: str,
+    *,
+    now: datetime,
+    window_days: int = 90,
+    only_below: bool = False,
+) -> list[ShortageRow]:
+    """Shortage report over items with a positive ``min_stock`` threshold.
+
+    ``on_hand`` = sum of batch.quantity; ``avg_daily`` = issued units in the
+    trailing ``window_days`` divided by ``window_days``. ``now`` is injected for
+    deterministic tests. Rows are sorted below-threshold-first, then by
+    days-to-depletion ascending (unknown last).
+    """
+    items = list(
+        (
+            await session.execute(
+                select(PPEItem).where(
+                    PPEItem.tenant_id == tenant_id,
+                    PPEItem.deleted_at.is_(None),
+                    PPEItem.min_stock > 0,
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if not items:
+        return []
+    item_ids = [i.id for i in items]
+
+    on_hand_rows = (
+        await session.execute(
+            select(
+                PPEStockBatch.item_id,
+                func.coalesce(func.sum(PPEStockBatch.quantity), 0),
+            )
+            .where(
+                PPEStockBatch.tenant_id == tenant_id,
+                PPEStockBatch.item_id.in_(item_ids),
+                PPEStockBatch.deleted_at.is_(None),
+            )
+            .group_by(PPEStockBatch.item_id)
+        )
+    ).all()
+    on_hand = {iid: int(qty or 0) for iid, qty in on_hand_rows}
+
+    cutoff = now - timedelta(days=window_days)
+    consumed_rows = (
+        await session.execute(
+            select(
+                PPEStockMovement.item_id,
+                func.coalesce(func.sum(-PPEStockMovement.quantity_delta), 0),
+            )
+            .where(
+                PPEStockMovement.tenant_id == tenant_id,
+                PPEStockMovement.item_id.in_(item_ids),
+                PPEStockMovement.kind == KIND_ISSUE,
+                PPEStockMovement.occurred_at >= cutoff,
+            )
+            .group_by(PPEStockMovement.item_id)
+        )
+    ).all()
+    consumed = {iid: int(total or 0) for iid, total in consumed_rows}
+
+    rows: list[ShortageRow] = []
+    for item in items:
+        oh = on_hand.get(item.id, 0)
+        avg_daily = consumed.get(item.id, 0) / window_days
+        proj = project_shortage(oh, item.min_stock, avg_daily)
+        if only_below and not proj.below_threshold:
+            continue
+        breach: date | None = None
+        if proj.days_to_threshold is not None:
+            breach = (now + timedelta(days=proj.days_to_threshold)).date()
+        rows.append(
+            ShortageRow(
+                item_id=item.id,
+                item_name=item.name,
+                min_stock=item.min_stock,
+                on_hand=oh,
+                deficit=proj.deficit,
+                below_threshold=proj.below_threshold,
+                avg_daily_consumption=avg_daily,
+                days_to_depletion=proj.days_to_depletion,
+                projected_breach_date=breach,
+            )
+        )
+
+    rows.sort(
+        key=lambda r: (
+            not r.below_threshold,
+            r.days_to_depletion if r.days_to_depletion is not None else float("inf"),
+        )
+    )
+    return rows
