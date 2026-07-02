@@ -85,6 +85,7 @@ class PPEItem(TenantBaseModel, SoftDeleteMixin):
     )
     description: Mapped[str | None] = mapped_column(String(512))
     default_wear_days: Mapped[int] = mapped_column(Integer, nullable=False, default=365)
+    min_stock: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     metadata_json: Mapped[dict[str, Any]] = mapped_column(
         MutableDict.as_mutable(JSON), nullable=False, default=dict
     )
