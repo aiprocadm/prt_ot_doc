@@ -70,6 +70,39 @@ def allocate_fifo(available: list[tuple[str, int]], quantity: int) -> list[Alloc
     return result
 
 
+@dataclass(slots=True, frozen=True)
+class ShortageProjection:
+    below_threshold: bool
+    deficit: int
+    days_to_depletion: float | None
+    days_to_threshold: float | None
+
+
+def project_shortage(on_hand: int, min_stock: int, avg_daily: float) -> ShortageProjection:
+    """Pure shortage math. ``avg_daily`` is average daily consumption (issues).
+
+    - below_threshold: a positive threshold is set and on-hand is under it.
+    - deficit: units to reorder back up to the threshold.
+    - days_to_depletion: on_hand / avg_daily (None when there is no consumption).
+    - days_to_threshold: days until on-hand reaches the threshold (0 if already
+      at/below it; None when there is no consumption).
+    """
+    below_threshold = min_stock > 0 and on_hand < min_stock
+    deficit = max(0, min_stock - on_hand)
+    if avg_daily > 0:
+        days_to_depletion: float | None = on_hand / avg_daily
+        days_to_threshold: float | None = max(0, on_hand - min_stock) / avg_daily
+    else:
+        days_to_depletion = None
+        days_to_threshold = None
+    return ShortageProjection(
+        below_threshold=below_threshold,
+        deficit=deficit,
+        days_to_depletion=days_to_depletion,
+        days_to_threshold=days_to_threshold,
+    )
+
+
 async def _load_batch(
     session: AsyncSession,
     tenant_id: str,
