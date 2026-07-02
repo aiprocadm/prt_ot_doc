@@ -143,3 +143,116 @@ async def test_movements_tenant_isolation(
         headers=headers_b,
     )
     assert resp.status_code == status.HTTP_404_NOT_FOUND  # batch invisible cross-tenant
+
+
+async def _seed_person(sessionmaker, data_factory: TestDataFactory, *, name: str = "Иванов") -> str:
+    """Seed a person via the test data factory (default tenant slug='test',
+    same tenant ``make_auth_headers(RoleEnum.ADMIN)`` uses)."""
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        person = await data_factory.create_person(
+            tenant=tenant, last_name=name, first_name="Иван", session=session
+        )
+        await session.commit()
+        return str(person.id)
+
+
+@pytest.mark.asyncio
+async def test_issue_depletes_stock_fifo(
+    async_client: AsyncClient, make_auth_headers, sessionmaker, data_factory: TestDataFactory
+):
+    async with sessionmaker() as session:
+        await data_factory.ensure_tenant(session=session)
+        await session.commit()
+    headers = await make_auth_headers(RoleEnum.ADMIN)
+    item_id = await _seed_item(async_client, headers)
+    await _seed_batch(async_client, headers, item_id, no="B-1", qty=10)
+    person_id = await _seed_person(sessionmaker, data_factory)
+
+    issued = await async_client.post(
+        "/api/v1/ppe/issues",
+        json={"person_id": person_id, "item_id": item_id, "quantity": 3},
+        headers=headers,
+    )
+    assert issued.status_code == status.HTTP_201_CREATED, issued.text
+
+    levels = await async_client.get("/api/v1/ppe/stock/levels", headers=headers)
+    row = next(r for r in levels.json()["items"] if r["item_id"] == item_id)
+    assert row["total_quantity"] == 7  # 10 - 3
+
+
+@pytest.mark.asyncio
+async def test_issue_insufficient_stock_400_and_no_issue(
+    async_client: AsyncClient, make_auth_headers, sessionmaker, data_factory: TestDataFactory
+):
+    async with sessionmaker() as session:
+        await data_factory.ensure_tenant(session=session)
+        await session.commit()
+    headers = await make_auth_headers(RoleEnum.ADMIN)
+    item_id = await _seed_item(async_client, headers)
+    await _seed_batch(async_client, headers, item_id, no="B-1", qty=2)
+    person_id = await _seed_person(sessionmaker, data_factory)
+
+    resp = await async_client.post(
+        "/api/v1/ppe/issues",
+        json={"person_id": person_id, "item_id": item_id, "quantity": 5},
+        headers=headers,
+    )
+    assert resp.status_code == status.HTTP_400_BAD_REQUEST
+
+    # rollback: no issue persisted, stock unchanged
+    issues = await async_client.get(f"/api/v1/ppe/issues?person_id={person_id}", headers=headers)
+    assert issues.json()["total"] == 0
+    levels = await async_client.get("/api/v1/ppe/stock/levels", headers=headers)
+    row = next(r for r in levels.json()["items"] if r["item_id"] == item_id)
+    assert row["total_quantity"] == 2
+
+
+@pytest.mark.asyncio
+async def test_issue_without_batches_is_noop(
+    async_client: AsyncClient, make_auth_headers, sessionmaker, data_factory: TestDataFactory
+):
+    async with sessionmaker() as session:
+        await data_factory.ensure_tenant(session=session)
+        await session.commit()
+    headers = await make_auth_headers(RoleEnum.ADMIN)
+    item_id = await _seed_item(async_client, headers)  # no batches
+    person_id = await _seed_person(sessionmaker, data_factory)
+
+    issued = await async_client.post(
+        "/api/v1/ppe/issues",
+        json={"person_id": person_id, "item_id": item_id, "quantity": 3},
+        headers=headers,
+    )
+    assert issued.status_code == status.HTTP_201_CREATED  # backward compatible
+
+
+@pytest.mark.asyncio
+async def test_issue_explicit_batch_id(
+    async_client: AsyncClient, make_auth_headers, sessionmaker, data_factory: TestDataFactory
+):
+    async with sessionmaker() as session:
+        await data_factory.ensure_tenant(session=session)
+        await session.commit()
+    headers = await make_auth_headers(RoleEnum.ADMIN)
+    item_id = await _seed_item(async_client, headers)
+    b1 = await _seed_batch(async_client, headers, item_id, no="B-1", qty=5)
+    b2 = await _seed_batch(async_client, headers, item_id, no="B-2", qty=5)
+    person_id = await _seed_person(sessionmaker, data_factory)
+
+    issued = await async_client.post(
+        "/api/v1/ppe/issues",
+        json={"person_id": person_id, "item_id": item_id, "quantity": 2, "batch_id": b2},
+        headers=headers,
+    )
+    assert issued.status_code == status.HTTP_201_CREATED, issued.text
+
+    b1_movements = await async_client.get(
+        f"/api/v1/ppe/stock/movements?batch_id={b1}", headers=headers
+    )
+    # b1 has only its opening receipt (no issue movement)
+    assert all(m["kind"] != "issue" for m in b1_movements.json()["items"])
+    b2_movements = await async_client.get(
+        f"/api/v1/ppe/stock/movements?batch_id={b2}", headers=headers
+    )
+    assert any(m["kind"] == "issue" and m["quantity_delta"] == -2 for m in b2_movements.json()["items"])

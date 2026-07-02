@@ -32,6 +32,7 @@ from app.models.risk import RiskHazard
 from app.models.tenanting import Tenant
 from app.modules.ppe import (
     build_personal_card_766n,
+    deplete_for_issue,
     issue_ppe_item,
     list_expiring_issues,
     record_movement,
@@ -548,6 +549,21 @@ async def create_issue(
         )
     except ValueError as exc:
         raise _ppe_bad_request(str(exc)) from exc
+
+    try:
+        await deplete_for_issue(
+            session,
+            tenant_id=str(tenant.id),
+            item_id=issue.item_id,
+            quantity=issue.quantity,
+            batch_id=payload.batch_id,
+            ref_id=issue.id,
+        )
+    except StockBatchNotFound as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
+    except InsufficientStockError as exc:
+        raise _ppe_bad_request(str(exc)) from exc
+
     outbox = OutboxService(session)
     await outbox.enqueue(
         tenant_id=str(tenant.id),
@@ -684,6 +700,21 @@ async def replace_issue_endpoint(
     if result is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "PPE issue not found")
     _old, new_issue = result
+
+    try:
+        await deplete_for_issue(
+            session,
+            tenant_id=str(tenant.id),
+            item_id=new_issue.item_id,
+            quantity=new_issue.quantity,
+            batch_id=payload.batch_id,
+            ref_id=new_issue.id,
+        )
+    except StockBatchNotFound as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
+    except InsufficientStockError as exc:
+        raise _ppe_bad_request(str(exc)) from exc
+
     outbox = OutboxService(session)
     await outbox.enqueue(
         tenant_id=str(tenant.id),
