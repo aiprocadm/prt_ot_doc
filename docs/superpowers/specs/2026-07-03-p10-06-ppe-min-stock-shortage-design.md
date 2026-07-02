@@ -142,9 +142,13 @@ GET /ppe/stock/shortages
 ```
 
 - `TenantContextValidator.ensure_tenant_context(tenant)` (как соседние эндпоинты).
-- **ETag** conditional-GET через `backend/app/api/helpers/etag.py :: compute_list_etag`
-  (scalars: `[("window", window_days), ("only_below", "1"/"0")]`) — консистентно с ETag-роллаутом
-  ppe/items, ppe/issues (срезы S51). `If-None-Match` → 304.
+- **Без ETag** — зеркалит соседний `/stock/levels` (тоже вычисляемый агрегат, ETag не имеет).
+  Обоснование: строки дефицита — агрегат поверх `PPEStockBatch.quantity` + `PPEStockMovement`;
+  `compute_list_etag` ключует ответ по `(id, updated_at)` строк, но `PPEItem.updated_at` **не
+  меняется** при движении склада → ETag отдавал бы устаревший дефицит после прихода/выдачи
+  (silent-stale — класс дефектов, от которого ETag-контракт как раз защищает на обычных списках).
+  Отчёт пересчитывается на каждый вызов, как `/stock/levels`. (В ppe.py ETag есть только на
+  `/items` и `/issues`; ни один `/stock/*` эндпоинт его не использует — зеркалим их.)
 - Установка порога — через существующий item CRUD (`min_stock` в create/update payload); отдельного
   эндпоинта не заводим.
 
@@ -175,8 +179,8 @@ GET /ppe/stock/shortages
 - **Сервис** `compute_shortages`: watchlist-фильтр (`min_stock>0` only), агрегация `on_hand` по
   нескольким партиям, `avg_daily` только по `kind=issue` в окне (исключает receipt/writeoff/
   adjustment и движения вне окна), сортировка по тяжести, `only_below` фильтр, tenant-iso.
-- **API**: happy path, flag-off (gate), tenant-iso, ETag hit/miss + пагинация scalars,
-  `window_days` (default + clamp 422), `only_below`, RBAC (`ManagerAccess`).
+- **API**: happy path, flag-off (gate), tenant-iso, `window_days` (default + clamp 422),
+  `only_below`, RBAC (`ManagerAccess`).
 - **Миграция** `wa05`: колонка появляется, `downgrade` дропает, аддитивность (PG16-гейт).
 - **Фронт**: рендер секции дефицита (бейджи тяжести), установка `min_stock` через форму позиции.
 
