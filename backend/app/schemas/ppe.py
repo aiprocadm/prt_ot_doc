@@ -251,6 +251,8 @@ class PPEStockLevelPage(BaseSchema):
     total: int
 
 
+# Mirrors ``MANUAL_KINDS`` in ``app.modules.ppe.stock`` — intentionally duplicated
+# so the schema layer stays free of a service-layer import. Keep the two in sync.
 _MOVEMENT_MANUAL_KINDS = {"receipt", "writeoff", "adjustment"}
 
 
