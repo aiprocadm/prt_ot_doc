@@ -42,15 +42,9 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["batch_id"], ["ppe_stock_batch.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index(
-        op.f("ix_ppe_stock_movement_tenant_id"), "ppe_stock_movement", ["tenant_id"]
-    )
-    op.create_index(
-        "ix_ppe_stock_movement_item", "ppe_stock_movement", ["tenant_id", "item_id"]
-    )
-    op.create_index(
-        "ix_ppe_stock_movement_batch", "ppe_stock_movement", ["tenant_id", "batch_id"]
-    )
+    op.create_index(op.f("ix_ppe_stock_movement_tenant_id"), "ppe_stock_movement", ["tenant_id"])
+    op.create_index("ix_ppe_stock_movement_item", "ppe_stock_movement", ["tenant_id", "item_id"])
+    op.create_index("ix_ppe_stock_movement_batch", "ppe_stock_movement", ["tenant_id", "batch_id"])
 
 
 def downgrade() -> None:

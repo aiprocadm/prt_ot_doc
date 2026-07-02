@@ -1067,9 +1067,11 @@ async def list_stock_movements(
     if kind:
         base = base.where(PPEStockMovement.kind == kind)
 
-    stmt = base.order_by(
-        PPEStockMovement.occurred_at.desc(), PPEStockMovement.id.desc()
-    ).limit(limit).offset(offset)
+    stmt = (
+        base.order_by(PPEStockMovement.occurred_at.desc(), PPEStockMovement.id.desc())
+        .limit(limit)
+        .offset(offset)
+    )
     movements = list((await session.execute(stmt)).scalars().all())
 
     count_stmt = select(func.count()).select_from(base.subquery())

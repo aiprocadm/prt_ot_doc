@@ -28,9 +28,7 @@ class InsufficientStockError(Exception):
     """Raised when a depletion would drive on-hand below zero."""
 
     def __init__(self, requested: int, available: int) -> None:
-        super().__init__(
-            f"insufficient stock: requested {requested}, available {available}"
-        )
+        super().__init__(f"insufficient stock: requested {requested}, available {available}")
         self.requested = requested
         self.available = available
 
@@ -196,8 +194,7 @@ async def deplete_for_issue(
         candidates = [await _load_batch(session, tenant_id, batch_id, item_id=item_id)]
     else:
         stmt = (
-            select(PPEStockBatch)
-            .where(
+            select(PPEStockBatch).where(
                 PPEStockBatch.tenant_id == tenant_id,
                 PPEStockBatch.item_id == item_id,
                 PPEStockBatch.deleted_at.is_(None),
