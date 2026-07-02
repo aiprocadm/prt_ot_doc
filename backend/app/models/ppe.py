@@ -156,3 +156,35 @@ class PPEStockBatch(TenantBaseModel, SoftDeleteMixin):
         UniqueConstraint("tenant_id", "item_id", "batch_no", name="uq_ppe_stock_batch_item_no"),
         Index("ix_ppe_stock_batch_item", "tenant_id", "item_id"),
     )
+
+
+class PPEStockMovement(TenantBaseModel):
+    """Append-only stock ledger (P10-06). ``batch.quantity`` is the live cached
+    balance; each row here is the immutable journal entry that changed it.
+    ``ref_type``/``ref_id`` are plain strings (no FK) so the journal survives a
+    hard-delete of the source issue — same convention as ``replaces_issue_id``.
+    ``kind`` is VARCHAR, not a PG enum (enum-parity convention)."""
+
+    __tablename__ = "ppe_stock_movement"
+
+    item_id: Mapped[str] = mapped_column(
+        ForeignKey("ppeitem.id", ondelete="CASCADE"), nullable=False
+    )
+    batch_id: Mapped[str | None] = mapped_column(
+        ForeignKey("ppe_stock_batch.id", ondelete="CASCADE"), nullable=True
+    )
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    quantity_delta: Mapped[int] = mapped_column(Integer, nullable=False)
+    occurred_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(tz=timezone.utc),
+    )
+    reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    ref_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    ref_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+
+    __table_args__ = (
+        Index("ix_ppe_stock_movement_item", "tenant_id", "item_id"),
+        Index("ix_ppe_stock_movement_batch", "tenant_id", "batch_id"),
+    )

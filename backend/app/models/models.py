@@ -210,6 +210,7 @@ from app.models.ppe import (
     PPEItemCategory,
     PPENorm,
     PPEStockBatch,
+    PPEStockMovement,
 )
 
 # ARCH-2: re-export risk_register models moved to app.models.risk_register.
@@ -588,6 +589,7 @@ __all__ += [
     "PPEIssueStatus",
     "PPEIssue",
     "PPEStockBatch",
+    "PPEStockMovement",
     "TemplateStatus",
     "Template",
     "TemplateVersionStatus",
