@@ -30,27 +30,29 @@ async def run_migrations_online() -> None:
         future=True,
     )
 
-    # AUTOCOMMIT: under this isolation level every *statement* commits
-    # immediately, so an `ALTER TYPE ... ADD VALUE` is durable before a later
-    # statement/migration references it (PG forbids using a new enum value in
-    # the transaction that added it). `transaction_per_migration=True` is kept
-    # for intent, but note: with AUTOCOMMIT the per-migration
-    # `begin_transaction()` is effectively a no-op — a SQLAlchemy rollback does
-    # NOT undo an already-executed statement (verified empirically). Trade-off,
-    # accepted (see RELEASE_BLOCKERS_STATUS "env.py atomicity review"): migrations
-    # are no longer atomic, so a multi-statement migration that fails midway
-    # leaves partial state. Safe here because (a) every `ADD VALUE` site uses
-    # `IF NOT EXISTS` (retry-safe), (b) no migration relies on global rollback,
-    # and (c) the prior single-outer-transaction wrapper never actually
-    # completed `upgrade heads` on PG anyway (this is not a regression).
+    # POST-2 migration hardening: real per-migration transactions.
+    # History: 2026-06-01..07-02 the whole run used isolation_level="AUTOCOMMIT"
+    # (every statement committed immediately) because PG forbids *using* an enum
+    # value in the transaction that ADD VALUE'd it. The accepted trade-off was
+    # zero atomicity — a migration failing midway left partial state (see
+    # RELEASE_BLOCKERS_STATUS "env.py atomicity review", which named this exact
+    # hardening as the follow-up). Now: `transaction_per_migration=True` is a
+    # REAL per-migration BEGIN/COMMIT (fail = rollback of that one migration),
+    # and each of the 7 `ALTER TYPE ... ADD VALUE` sites opens its own
+    # `op.get_context().autocommit_block()` — the enum extension commits
+    # immediately (durable + usable by later statements/migrations) and stays
+    # retry-safe via IF NOT EXISTS.
     async with connectable.connect() as connection:
-        await connection.execution_options(isolation_level="AUTOCOMMIT")
         await connection.run_sync(do_run_migrations)
     await connectable.dispose()
 
 
 def do_run_migrations(connection) -> None:
     _ensure_alembic_version_table_can_store_long_revisions(connection)
+    # Commit the pre-step explicitly: SQLAlchemy 2.0 connections autobegin on
+    # first statement, and alembic's per-migration transaction management must
+    # start from a clean (non-begun) connection.
+    connection.commit()
     context.configure(
         connection=connection,
         target_metadata=target_metadata,

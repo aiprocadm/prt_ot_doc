@@ -47,6 +47,15 @@ GitHub Actions billing was restored on 2026-05-21 after a ~9-week block (from 20
 >   1. **Test-harness broke every `@pytest.mark.db` PG guard.** `conftest.py::_sqlite_test_speed_pragmas` was attached to the base `Engine` class and ran `PRAGMA synchronous=OFF` on *every* connection, incl. Postgres — a syntax error that aborts the connection's transaction; the swallowed exception left the server-side tx aborted, so the next statement died with `InFailedSQLTransactionError`. Fixed: listener guarded to SQLite drivers only.
 >   2. **СОУТ `so01`/`so02` migrations broke `upgrade heads` on PG** — generic `sa.Enum(name="soutclass", create_type=False)` re-emitted `CREATE TYPE soutclass` in `op.create_table` → `DuplicateObjectError`. Fixed by switching to `postgresql.ENUM(create_type=False)` (the dialect type reliably suppresses the implicit DDL).
 
+> **UPDATE 2026-07-02 (POST-2 migration hardening — branch `feat/post-2-migration-hardening`):**
+> The "optional future hardening" named in the 2026-06-02 atomicity review is DONE: env.py
+> drops the global `isolation_level="AUTOCOMMIT"` — `transaction_per_migration=True` is now a
+> REAL per-migration BEGIN/COMMIT (a failing migration rolls back whole), and each `ALTER TYPE
+> ADD VALUE` site opens its own `op.get_context().autocommit_block()` (enum extension commits
+> immediately; `IF NOT EXISTS` keeps it retry-safe). Site count corrected: **7** executing
+> sites, not 8 (the 8th in the old count was next55b's UPDATE-site removed back in iter-14).
+> Validated by the PG16 local gate (`--db-only`: fresh `upgrade heads` + round-trip).
+
 **RB-001/002/005 re-validation status (updated 2026-05-26):** the three release-blocker workflows were re-triggered against post-iter-15h main on 2026-05-23 (after the 9-iteration alembic-postgres-upgrade repair sprint closed). Results:
 
 | Workflow | Run | Conclusion | Mapped RB |

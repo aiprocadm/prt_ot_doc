@@ -46,7 +46,10 @@ $$;
 def upgrade() -> None:
     bind = op.get_bind()
     if bind.dialect.name == "postgresql":
-        op.execute(_GUARDED_ALTER_SQL)
+        # POST-2: enum extension commits outside the migration tx (PG forbids
+        # using a new value in the tx that added it); IF NOT EXISTS = retry-safe.
+        with op.get_context().autocommit_block():
+            op.execute(_GUARDED_ALTER_SQL)
 
 
 def downgrade() -> None:

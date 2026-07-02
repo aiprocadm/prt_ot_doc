@@ -1,5 +1,26 @@
 # CHANGELOG
 
+## 2026-07-02 (feat/post-2-migration-hardening — POST-2: настоящие per-migration транзакции + autocommit-блоки на enum-сайтах)
+
+### Changed
+- **POST-2 — укрепление механики миграций** (санкция пользователя; схема данных НЕ меняется):
+  - `backend/app/migrations/env.py`: снят глобальный `isolation_level="AUTOCOMMIT"` (компромисс
+    2026-06-01, при котором КАЖДЫЙ оператор коммитился сразу и упавшая миграция оставляла
+    частичное состояние). Теперь `transaction_per_migration=True` — настоящий BEGIN/COMMIT на
+    каждую миграцию: упавшая миграция откатывается целиком. Pre-step (`alembic_version` →
+    TEXT) коммитится явно — alembic должен стартовать с чистого (не-begun) соединения
+    (SQLAlchemy 2.0 autobegin).
+  - Все **7 сайтов `ALTER TYPE … ADD VALUE`** обёрнуты в `op.get_context().autocommit_block()`
+    (PG запрещает использовать новое значение enum в той же транзакции; блок коммитит
+    расширение немедленно, `IF NOT EXISTS` даёт retry-safety): 20250315 (documentstatus),
+    20250410 (roleenum), 20260318_next67_hotfix (riskmethodologytype, DO-блок),
+    20260328_next55 (templateversionstatus ×4), 20260407_hotfix (active),
+    20260530_wa03 (prescriptionstatus), 20260602_iter49 (4 типа). Примечание: в
+    RELEASE_BLOCKERS_STATUS фигурировало «8 сайтов» — реально исполняемых 7 (восьмым считался
+    удалённый в iter-14 UPDATE-сайт next55b).
+  - Ровно тот follow-up, который был назван в «env.py atomicity review» (2026-06-02) как
+    «optional future hardening: per-migration tx + autocommit_block()».
+
 ## 2026-07-02 (fix/stabilize-gates-2026-06-29 — REL-1 resolved: permanent local-evidence policy; RC-015/RC-016 closed; staged mypy gate repaired)
 
 ### Changed
