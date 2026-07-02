@@ -183,8 +183,9 @@ async def deplete_for_issue(
     No-op (returns ``[]``) when the warehouse flag is off for the tenant or the
     item has no stock batches — this preserves the pre-ledger issuance behaviour.
     Explicit ``batch_id`` depletes that batch; otherwise FIFO by ``received_at``
-    (nulls last), ``id`` tiebreaker. Raises :class:`InsufficientStockError` when
-    the requested quantity exceeds available on-hand.
+    (nulls last), then ``created_at`` (insertion order) and ``id`` as tiebreakers.
+    Raises :class:`InsufficientStockError` when the requested quantity exceeds
+    available on-hand.
     """
     if quantity <= 0:
         return []
@@ -202,10 +203,13 @@ async def deplete_for_issue(
                 PPEStockBatch.deleted_at.is_(None),
                 PPEStockBatch.quantity > 0,
             )
-            # portable NULLS LAST: is_(None) sorts False(0) before True(1)
+            # portable NULLS LAST: is_(None) sorts False(0) before True(1).
+            # created_at breaks same-received_at ties by insertion order (true
+            # FIFO); id is a final deterministic tiebreaker (uuid, not ordered).
             .order_by(
                 PPEStockBatch.received_at.is_(None),
                 PPEStockBatch.received_at.asc(),
+                PPEStockBatch.created_at.asc(),
                 PPEStockBatch.id.asc(),
             )
         )
