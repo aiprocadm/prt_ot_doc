@@ -21,6 +21,26 @@ export type StockLevelDto = {
   nearest_certificate_expiry?: string | null;
 };
 
+export type StockMovementDto = {
+  id: string;
+  item_id: string;
+  batch_id: string | null;
+  kind: "receipt" | "issue" | "writeoff" | "adjustment";
+  quantity_delta: number;
+  occurred_at: string;
+  reason?: string | null;
+  ref_type?: string | null;
+  ref_id?: string | null;
+  created_at: string;
+};
+
+export type CreateMovementInput = {
+  batch_id: string;
+  kind: "receipt" | "writeoff" | "adjustment";
+  quantity: number;
+  reason?: string | null;
+};
+
 type PageResponse<T> = { items: T[]; total: number };
 
 export const warehouseApi = {
@@ -33,5 +53,15 @@ export const warehouseApi = {
   async listLevels(): Promise<StockLevelDto[]> {
     const response = await apiClient.get<PageResponse<StockLevelDto>>("/ppe/stock/levels");
     return response.data.items ?? [];
+  },
+  async listMovements(): Promise<StockMovementDto[]> {
+    const response = await apiClient.get<PageResponse<StockMovementDto>>("/ppe/stock/movements", {
+      params: { limit: 50, offset: 0 }
+    });
+    return response.data.items ?? [];
+  },
+  async createMovement(input: CreateMovementInput): Promise<StockMovementDto> {
+    const response = await apiClient.post<StockMovementDto>("/ppe/stock/movements", input);
+    return response.data;
   }
 };

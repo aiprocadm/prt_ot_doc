@@ -83,10 +83,13 @@ async def test_create_list_get_patch_batch(
     assert fetched.json()["certificate_no"] == "CERT-1"
 
     patched = await async_client.patch(
-        f"/api/v1/ppe/stock/batches/{batch_id}", json={"quantity": 5}, headers=headers
+        f"/api/v1/ppe/stock/batches/{batch_id}",
+        json={"location": "Склад-2"},
+        headers=headers,
     )
     assert patched.status_code == status.HTTP_200_OK
-    assert patched.json()["quantity"] == 5
+    assert patched.json()["location"] == "Склад-2"
+    assert patched.json()["quantity"] == 25  # quantity unchanged: not patchable
 
 
 @pytest.mark.asyncio

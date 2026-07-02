@@ -22,17 +22,31 @@ from app.modules.ppe.services import (  # noqa: F401  (public re-export)
     PPEPersonalCardService,
     RiskPPEProjectionService,
 )
+from app.modules.ppe.stock import (  # noqa: F401  (public re-export)
+    Allocation,
+    InsufficientStockError,
+    StockBatchNotFound,
+    allocate_fifo,
+    deplete_for_issue,
+    record_movement,
+)
 
 __all__ = [
+    "Allocation",
+    "InsufficientStockError",
     "PPEIssueEvent",
     "PPEPersonalCardService",
     "PPENormService",
     "RiskPPEProjectionService",
+    "StockBatchNotFound",
+    "allocate_fifo",
     "build_personal_card_766n",
     "build_personal_card_payload",
     "build_journal_export",
+    "deplete_for_issue",
     "issue_ppe_item",
     "list_expiring_issues",
+    "record_movement",
     "replace_issue",
     "return_issue",
     "writeoff_issue",

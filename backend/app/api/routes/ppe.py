@@ -21,18 +21,27 @@ from app.core.feature_flags import is_feature_enabled
 from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
 from app.models.models import Person, Position, PPENorm
-from app.models.ppe_registry import PPEIssue, PPEIssueStatus, PPEItem, PPEStockBatch
+from app.models.ppe_registry import (
+    PPEIssue,
+    PPEIssueStatus,
+    PPEItem,
+    PPEStockBatch,
+    PPEStockMovement,
+)
 from app.models.risk import RiskHazard
 from app.models.tenanting import Tenant
 from app.modules.ppe import (
     build_personal_card_766n,
+    deplete_for_issue,
     issue_ppe_item,
     list_expiring_issues,
+    record_movement,
     replace_issue,
     return_issue,
     writeoff_issue,
 )
 from app.modules.ppe.lifecycle import PPETransitionError, validate_transition
+from app.modules.ppe.stock import InsufficientStockError, StockBatchNotFound
 from app.schemas.ppe import (
     PPECardRead,
     PPECardRequiredLine,
@@ -60,6 +69,9 @@ from app.schemas.ppe import (
     PPEStockBatchUpdate,
     PPEStockLevelPage,
     PPEStockLevelRead,
+    PPEStockMovementCreate,
+    PPEStockMovementPage,
+    PPEStockMovementRead,
 )
 from app.services.events import EventType
 from app.services.outbox import OutboxService
@@ -537,6 +549,21 @@ async def create_issue(
         )
     except ValueError as exc:
         raise _ppe_bad_request(str(exc)) from exc
+
+    try:
+        await deplete_for_issue(
+            session,
+            tenant_id=str(tenant.id),
+            item_id=issue.item_id,
+            quantity=issue.quantity,
+            batch_id=payload.batch_id,
+            ref_id=issue.id,
+        )
+    except StockBatchNotFound as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
+    except InsufficientStockError as exc:
+        raise _ppe_bad_request(str(exc)) from exc
+
     outbox = OutboxService(session)
     await outbox.enqueue(
         tenant_id=str(tenant.id),
@@ -673,6 +700,21 @@ async def replace_issue_endpoint(
     if result is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "PPE issue not found")
     _old, new_issue = result
+
+    try:
+        await deplete_for_issue(
+            session,
+            tenant_id=str(tenant.id),
+            item_id=new_issue.item_id,
+            quantity=new_issue.quantity,
+            batch_id=payload.batch_id,
+            ref_id=new_issue.id,
+        )
+    except StockBatchNotFound as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
+    except InsufficientStockError as exc:
+        raise _ppe_bad_request(str(exc)) from exc
+
     outbox = OutboxService(session)
     await outbox.enqueue(
         tenant_id=str(tenant.id),
@@ -858,7 +900,7 @@ async def create_stock_batch(
         tenant_id=tenant.id,
         item_id=payload.item_id,
         batch_no=payload.batch_no,
-        quantity=payload.quantity,
+        quantity=0,
         received_at=payload.received_at,
         certificate_no=payload.certificate_no,
         certificate_expires_at=payload.certificate_expires_at,
@@ -866,6 +908,15 @@ async def create_stock_batch(
     )
     session.add(batch)
     await session.flush()
+    if payload.quantity > 0:
+        await record_movement(
+            session,
+            tenant_id=tenant.id,
+            batch_id=batch.id,
+            kind="receipt",
+            quantity=payload.quantity,
+            reason="opening balance",
+        )
     await session.refresh(batch)
     return PPEStockBatchRead.model_validate(batch)
 
@@ -954,6 +1005,99 @@ async def list_stock_levels(
         for row in rows
     ]
     return PPEStockLevelPage(items=levels, total=len(levels))
+
+
+@router.post(
+    "/stock/movements",
+    response_model=PPEStockMovementRead,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[WarehouseFeatureGate],
+)
+@audit_operation("create", "ppe_stock_movement")
+async def create_stock_movement(
+    payload: PPEStockMovementCreate,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: EditorAccess,
+) -> PPEStockMovementRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    try:
+        movement = await record_movement(
+            session,
+            tenant_id=tenant.id,
+            batch_id=payload.batch_id,
+            kind=payload.kind,
+            quantity=payload.quantity,
+            reason=payload.reason,
+            occurred_at=payload.occurred_at,
+        )
+    except StockBatchNotFound as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
+    except InsufficientStockError as exc:
+        raise _ppe_bad_request(str(exc)) from exc
+    except ValueError as exc:
+        raise _ppe_bad_request(str(exc)) from exc
+    return PPEStockMovementRead.model_validate(movement)
+
+
+@router.get(
+    "/stock/movements",
+    response_model=PPEStockMovementPage,
+    dependencies=[WarehouseFeatureGate],
+)
+async def list_stock_movements(
+    request: Request,
+    response: Response,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: ManagerAccess,
+    item_id: str | None = None,
+    batch_id: str | None = None,
+    kind: str | None = None,
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+) -> PPEStockMovementPage | Response:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
+    base = select(PPEStockMovement).where(PPEStockMovement.tenant_id == tenant.id)
+    if item_id:
+        base = base.where(PPEStockMovement.item_id == item_id)
+    if batch_id:
+        base = base.where(PPEStockMovement.batch_id == batch_id)
+    if kind:
+        base = base.where(PPEStockMovement.kind == kind)
+
+    stmt = (
+        base.order_by(PPEStockMovement.occurred_at.desc(), PPEStockMovement.id.desc())
+        .limit(limit)
+        .offset(offset)
+    )
+    movements = list((await session.execute(stmt)).scalars().all())
+
+    count_stmt = select(func.count()).select_from(base.subquery())
+    total = (await session.execute(count_stmt)).scalar_one()
+
+    etag = compute_list_etag(
+        tenant_id=str(tenant.id),
+        items=movements,
+        scalars=[
+            ("total", int(total or 0)),
+            ("limit", limit),
+            ("offset", offset),
+            ("item", item_id or ""),
+            ("batch", batch_id or ""),
+            ("kind", kind or ""),
+        ],
+    )
+    apply_etag_response_headers(response, etag)
+    if request.headers.get("if-none-match") == etag:
+        return Response(
+            status_code=status.HTTP_304_NOT_MODIFIED,
+            headers=build_not_modified_headers(etag),
+        )
+    return PPEStockMovementPage(
+        items=[PPEStockMovementRead.model_validate(m) for m in movements], total=total
+    )
 
 
 # --- 766н: личная карточка учёта СИЗ + размеры работника ---------------------

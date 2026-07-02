@@ -101,6 +101,7 @@ class PPEIssueCreate(BaseSchema):
     certificate_no: str | None = Field(default=None, max_length=255)
     wear_percent: int | None = Field(default=None, ge=0, le=100)
     signature_doc_ref: str | None = Field(default=None, max_length=255)
+    batch_id: str | None = None  # P10-06: explicit stock batch to deplete (else FIFO)
 
 
 class PPEIssueUpdate(BaseSchema):
@@ -154,6 +155,7 @@ class PPEIssueReplaceRequest(BaseSchema):
     certificate_no: str | None = Field(default=None, max_length=255)
     wear_percent: int | None = Field(default=None, ge=0, le=100)
     signature_doc_ref: str | None = Field(default=None, max_length=255)
+    batch_id: str | None = None  # P10-06: explicit stock batch to deplete (else FIFO)
 
 
 class PPECardRequiredLine(BaseSchema):
@@ -212,7 +214,6 @@ class PPEStockBatchCreate(BaseSchema):
 
 class PPEStockBatchUpdate(BaseSchema):
     batch_no: str | None = None
-    quantity: int | None = Field(default=None, ge=0)
     received_at: date | None = None
     certificate_no: str | None = None
     certificate_expires_at: date | None = None
@@ -247,4 +248,45 @@ class PPEStockLevelRead(BaseSchema):
 
 class PPEStockLevelPage(BaseSchema):
     items: list[PPEStockLevelRead]
+    total: int
+
+
+# Mirrors ``MANUAL_KINDS`` in ``app.modules.ppe.stock`` — intentionally duplicated
+# so the schema layer stays free of a service-layer import. Keep the two in sync.
+_MOVEMENT_MANUAL_KINDS = {"receipt", "writeoff", "adjustment"}
+
+
+class PPEStockMovementCreate(BaseSchema):
+    batch_id: str
+    kind: str
+    quantity: int = Field(ge=0)
+    reason: str | None = Field(default=None, max_length=255)
+    occurred_at: datetime | None = None
+
+    @field_validator("kind")
+    @classmethod
+    def _validate_kind(cls, value: str) -> str:
+        if value not in _MOVEMENT_MANUAL_KINDS:
+            raise ValueError(
+                "kind must be one of receipt/writeoff/adjustment "
+                "(issue movements are created by the issuance flow)"
+            )
+        return value
+
+
+class PPEStockMovementRead(BaseSchema):
+    id: str
+    item_id: str
+    batch_id: str | None
+    kind: str
+    quantity_delta: int
+    occurred_at: datetime
+    reason: str | None
+    ref_type: str | None
+    ref_id: str | None
+    created_at: datetime
+
+
+class PPEStockMovementPage(BaseSchema):
+    items: list[PPEStockMovementRead]
     total: int

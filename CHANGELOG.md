@@ -1,5 +1,34 @@
 # CHANGELOG
 
+## 2026-07-02 (feat/ppe-stock-movements-p10-06 — P10-06 СИЗ склад: журнал движений («честные остатки»))
+
+### Added
+- **Журнал движений склада СИЗ (P10-06)** — append-only таблица `ppe_stock_movement`
+  (migration `wa04`, строго аддитивная, без бэкофилла; `kind` receipt/issue/writeoff/adjustment
+  как VARCHAR по enum-parity-конвенции, `quantity_delta` со знаком, `ref_type`/`ref_id` строкой
+  без FK — журнал переживает hard-delete выдачи). Архитектура «Вариант B»: `batch.quantity` —
+  живой кэш-баланс, мутируется ТОЛЬКО через сервис `backend/app/modules/ppe/stock.py`.
+  - Эндпоинты `POST /ppe/stock/movements` (ручной receipt/writeoff/adjustment; `issue` отклоняется
+    на уровне схемы → 422) и `GET /ppe/stock/movements` (фильтры item/batch/kind, ETag+304,
+    tenant-iso) за флагом `warehouse`.
+  - **FIFO-списание при выдаче СИЗ**: `POST /ppe/issues` (и replace) получил опциональный `batch_id`;
+    без него авто-FIFO по `received_at` (nulls last)→`created_at`→`id`; при нехватке → 400 и вся
+    выдача откатывается (issue не создаётся); флаг ВЫКЛ или у позиции нет партий → без движения
+    (полная обратная совместимость).
+  - Создание партии пишет стартовую проводку `receipt`; `/ppe/stock/levels` теперь честный остаток.
+  - Фронт: секция «Движения» в `pages/warehouse/WarehousePage.tsx` (журнал + форма ручного
+    прихода/списания/корректировки; `issue` в форме недоступен).
+
+### Changed
+- `PPEStockBatchUpdate` больше НЕ принимает `quantity` — количество меняется только проводкой
+  (приход/корректировка), а не сырым `PATCH`.
+
+### Notes
+- OpenAPI baseline пере-снят 808/648 → **810/651** (санкционированное аддитивное исключение —
+  2 новых эндпоинта + 3 схемы движений; прецедент RC-013/RC-014).
+- Разработка: brainstorming → writing-plans → subagent-driven-development (спека+план в
+  `docs/superpowers/{specs,plans}/2026-07-02-p10-06-ppe-stock-movements*`).
+
 ## 2026-07-02 (feat/rc-014-branches-ui — фронт для филиалов (RC-014): экраны master data)
 
 ### Added
