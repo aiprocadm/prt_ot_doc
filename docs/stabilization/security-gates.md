@@ -1,8 +1,31 @@
 # Security Gates (Stabilization)
 
-_Last updated: 2026-04-20._
+_Last updated: 2026-07-02._
 
 This document defines the mandatory security gates in `.github/workflows/ci.yml`, including fail thresholds, scope exclusions, and exception handling.
+
+## Operational status under the permanent local-evidence policy (RC-015, 2026-07-02)
+
+REL-1 resolved the CI question as a **permanent local-evidence policy** (see
+`docs/stabilization/RELEASE_BLOCKERS_STATUS.md` → «Evidence policy (PERMANENT)»). The gate matrix
+below therefore splits into locally-runnable gates (mandatory, all green as of 2026-07-02, Py3.13
+venv) and scanner gates (standing deferrals until CI re-enablement or optional local installs):
+
+| Gate | Local command | 2026-07-02 result |
+|---|---|---|
+| Exception metadata validity | `python scripts/ci/check_security_exceptions.py` | ✅ 1 exception valid, none expired |
+| Default-secret guard | `python scripts/ci/check_default_secrets.py` | ✅ passed |
+| Runtime/build artifact guard | `python scripts/ci/check_runtime_artifacts.py` | ✅ passed |
+| Scoped-query guard | `python scripts/ci/check_scoped_queries.py` | ✅ no forbidden `session.query` |
+| SAST (Bandit) | `python -m bandit -r backend/app -lll -iii` | ✅ 0 HIGH-severity findings (bandit 1.7.10) |
+| Static gates (ruff F821 + staged mypy) | `bash scripts/ci/static_gates.sh` | ✅ F821 clean; mypy wave0 29 files / wave1 20 files — 0 errors |
+| Dependency vulnerability scan (Trivy) | — | ⏸ standing deferral (no local runner) |
+| Secret scanning (Gitleaks) | — | ⏸ standing deferral (no local runner) |
+| Container image scan (Trivy) | — | ⏸ standing deferral (no local runner) |
+| SBOM generation | — | ⏸ standing deferral (no local runner) |
+
+Windows note: venv exe-shims (`bandit.exe`, `mypy.exe`) fail silently on the Cyrillic repo path —
+always invoke as `python -m bandit` / `python -m mypy`.
 
 ## Security exception registry
 

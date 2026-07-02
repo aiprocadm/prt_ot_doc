@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from fastapi import HTTPException, status
 
@@ -15,9 +15,18 @@ from app.modules.files.service._base import (
 )
 from app.services.audit import AuditService
 
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+
 
 class AccessMixin:
     """Role/company scoping, audit logging and signed-url TTL resolution."""
+
+    if TYPE_CHECKING:
+        # Mixin contract (no runtime effect): state provided by
+        # FileService.__init__ (service.py). Keeps the staged mypy gate honest.
+        session: AsyncSession
+        tenant_id: str
 
     @staticmethod
     def _is_client_role(role: str | None) -> bool:

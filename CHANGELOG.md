@@ -1,5 +1,35 @@
 # CHANGELOG
 
+## 2026-07-02 (fix/stabilize-gates-2026-06-29 — REL-1 resolved: permanent local-evidence policy; RC-015/RC-016 closed; staged mypy gate repaired)
+
+### Changed
+- **REL-1 (ТЗ §5) — решение по гейту качества: вариант (c), постоянная local-evidence политика**
+  (санкция пользователя «делаем всё»; полностью обратимо — workflows сохранены как `.yml.disabled`):
+  - `docs/stabilization/RELEASE_BLOCKERS_STATUS.md` → «Evidence policy (PERMANENT)»: снята
+    «provisional»-рамка, добавлена **каноническая таблица воспроизводимого пайплайна** (PG16-гейт,
+    lint, static gates, SAST, script-гейты, contract-guards, critical-path matrix, frontend) и
+    **standing deferrals** (Trivy dep/image, Gitleaks, SBOM, Playwright — нет локальных раннеров).
+  - `RELEASE_READINESS.md` синхронизирован (Updated-on 2026-07-02; re-validation obligation →
+    permanent-policy формулировка).
+- **RC-015 (security gate matrix) → done (local-evidence, 2026-07-02).** Локально запускаемые гейты
+  зелёные: 4 script-гейта (`check_security_exceptions`/`check_default_secrets`/
+  `check_runtime_artifacts`/`check_scoped_queries` — exit 0), SAST `python -m bandit -r backend/app
+  -lll -iii` — 0 HIGH, static gates — F821 clean + staged mypy 0 ошибок. `security-gates.md` получил
+  операционную таблицу с командами/результатами/deferral'ами.
+- **RC-016 (critical-path coverage matrix) → done (local-evidence, 2026-07-02).** Backend-ядро
+  Block B.1 зелёное: tenant-isolation + cross-tenant matrix + final-regression = **14 passed**.
+  Caveats: Playwright smoke — deferral (прецедент RB-005); perf/workflow edges — под caveat RC-002.
+  `coverage.md` + `PLAN.md` B.1 обновлены (заодно починен устаревший B.2: RC-006 done с 2026-05-29).
+- **Ремонт staged mypy-гейта (сломан молча с ARCH-4 slice 10):** `scripts/ci/static_gates.sh`
+  ссылался на `backend/app/modules/files/service.py`, который стал ПАКЕТОМ — mypy падал «can't read
+  file» до старта. Путь исправлен на пакет; вскрытые 79 attr-defined ошибок миксинов закрыты
+  **TYPE_CHECKING-контрактами** в `_access`/`_fileops`/`_uploads` (декларации `session`/`tenant_id`
+  + сигнатуры заимствованных helper'ов AccessMixin; ноль рантайм-эффекта): wave0 29 файлов / wave1
+  20 файлов — 0 ошибок. Error-budget таблица в `coverage.md` дополнена строкой 2026-07-02.
+  ANTI-ГРАБЛИ (Windows): venv exe-шимы (`bandit.exe`/`mypy.exe`) молча падают на кириллическом пути
+  репо — вызывать `python -m bandit` / `python -m mypy`; и `script | tail; echo $?` возвращает статус
+  tail, НЕ скрипта (ложный зелёный) — проверять `${PIPESTATUS[0]}`.
+
 ## 2026-07-02 (fix/stabilize-gates-2026-06-29 — RC-014: dedicated Branch entity separated from Site)
 
 ### Added

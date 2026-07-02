@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 from fastapi import HTTPException
@@ -32,9 +32,59 @@ from app.modules.files.service._functions import index_file_record
 from app.services.outbox import OutboxService
 from app.tasks import av_scan_file_job, index_file_content_job
 
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    from app.core.security import AccessContext
+
 
 class UploadMixin:
     """Upload session create / new-version / finalize and AV scan."""
+
+    if TYPE_CHECKING:
+        # Mixin contract (no runtime effect): state from FileService.__init__
+        # plus helpers provided by AccessMixin (_access.py). Signatures mirror
+        # the AccessMixin definitions so the staged mypy gate checks call-sites.
+        session: AsyncSession
+        tenant_id: str
+
+        async def _audit_file_action(
+            self,
+            *,
+            action: str,
+            object_id: str,
+            user_id: str | None,
+            ip: str | None,
+            user_agent: str | None,
+            request_id: str | None,
+            details: dict[str, Any] | None = None,
+        ) -> None: ...
+
+        async def _enforce_company_scope(
+            self,
+            *,
+            record: FileRecord,
+            action: str,
+            actor_role: str | None,
+            actor_company_id: str | None,
+            access: AccessContext | None = None,
+            on_deny_audit: dict[str, Any] | None = None,
+        ) -> None: ...
+
+        async def _enforce_client_company_scope_with_audit(
+            self,
+            *,
+            record: FileRecord,
+            deny_action: str | None,
+            actor_id: str | None,
+            ip: str | None,
+            user_agent: str | None,
+            request_id: str | None,
+            details: dict[str, Any] | None = None,
+            access: AccessContext | None = None,
+            actor_role: str | None = None,
+            actor_company_id: str | None = None,
+        ) -> None: ...
 
     async def create_upload_session(
         self,
