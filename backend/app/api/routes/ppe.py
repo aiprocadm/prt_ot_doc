@@ -41,7 +41,11 @@ from app.modules.ppe import (
     writeoff_issue,
 )
 from app.modules.ppe.lifecycle import PPETransitionError, validate_transition
-from app.modules.ppe.stock import InsufficientStockError, StockBatchNotFound
+from app.modules.ppe.stock import (
+    InsufficientStockError,
+    StockBatchNotFound,
+    compute_shortages,
+)
 from app.schemas.ppe import (
     PPECardRead,
     PPECardRequiredLine,
@@ -72,6 +76,8 @@ from app.schemas.ppe import (
     PPEStockMovementCreate,
     PPEStockMovementPage,
     PPEStockMovementRead,
+    PPEStockShortagePage,
+    PPEStockShortageRead,
 )
 from app.services.events import EventType
 from app.services.outbox import OutboxService
@@ -1006,6 +1012,43 @@ async def list_stock_levels(
         for row in rows
     ]
     return PPEStockLevelPage(items=levels, total=len(levels))
+
+
+@router.get(
+    "/stock/shortages",
+    response_model=PPEStockShortagePage,
+    dependencies=[WarehouseFeatureGate],
+)
+async def list_stock_shortages(
+    tenant: TenantDep,
+    session: SessionDep,
+    access: ManagerAccess,
+    window_days: int = Query(90, ge=1, le=365),
+    only_below: bool = Query(False),
+) -> PPEStockShortagePage:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    rows = await compute_shortages(
+        session,
+        tenant.id,
+        now=datetime.now(tz=timezone.utc),
+        window_days=window_days,
+        only_below=only_below,
+    )
+    items = [
+        PPEStockShortageRead(
+            item_id=r.item_id,
+            item_name=r.item_name,
+            min_stock=r.min_stock,
+            on_hand=r.on_hand,
+            deficit=r.deficit,
+            below_threshold=r.below_threshold,
+            avg_daily_consumption=r.avg_daily_consumption,
+            days_to_depletion=r.days_to_depletion,
+            projected_breach_date=r.projected_breach_date,
+        )
+        for r in rows
+    ]
+    return PPEStockShortagePage(items=items, total=len(items), window_days=window_days)
 
 
 @router.post(

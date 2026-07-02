@@ -254,6 +254,24 @@ class PPEStockLevelPage(BaseSchema):
     total: int
 
 
+class PPEStockShortageRead(BaseSchema):
+    item_id: str
+    item_name: str
+    min_stock: int
+    on_hand: int
+    deficit: int
+    below_threshold: bool
+    avg_daily_consumption: float
+    days_to_depletion: float | None
+    projected_breach_date: date | None
+
+
+class PPEStockShortagePage(BaseSchema):
+    items: list[PPEStockShortageRead]
+    total: int
+    window_days: int
+
+
 # Mirrors ``MANUAL_KINDS`` in ``app.modules.ppe.stock`` — intentionally duplicated
 # so the schema layer stays free of a service-layer import. Keep the two in sync.
 _MOVEMENT_MANUAL_KINDS = {"receipt", "writeoff", "adjustment"}

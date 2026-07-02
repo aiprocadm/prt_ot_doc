@@ -5,10 +5,31 @@ from __future__ import annotations
 import pytest
 from fastapi import status
 from httpx import AsyncClient
+from sqlalchemy import select
 
+from app.models.feature import Feature, FeatureEnablement
 from app.models.models import RoleEnum
 from app.schemas.ppe import PPEItemCategory
 from tests.utils.factories import TestDataFactory
+
+
+async def _set_warehouse_flag(sessionmaker, data_factory: TestDataFactory, *, on: bool) -> None:
+    """Seed Feature(code="warehouse") + FeatureEnablement(on=...) for the
+    default ("test") tenant used by ``make_auth_headers``.
+
+    Mirrors ``tests/api/test_ppe_warehouse_api.py::_set_warehouse_flag``.
+    """
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        feature = (
+            await session.execute(select(Feature).where(Feature.code == "warehouse"))
+        ).scalar_one_or_none()
+        if feature is None:
+            feature = Feature(code="warehouse", title="Warehouse")
+            session.add(feature)
+            await session.flush()
+        session.add(FeatureEnablement(tenant_id=tenant.id, feature_id=feature.id, on=on))
+        await session.commit()
 
 
 async def _seed_item(client, headers, *, name="Каска", min_stock=0):
@@ -19,6 +40,16 @@ async def _seed_item(client, headers, *, name="Каска", min_stock=0):
     )
     assert resp.status_code == status.HTTP_201_CREATED, resp.text
     return resp.json()
+
+
+async def _seed_batch(client, headers, item_id, *, no="B-1", qty=1):
+    resp = await client.post(
+        "/api/v1/ppe/stock/batches",
+        json={"item_id": item_id, "batch_no": no, "quantity": qty},
+        headers=headers,
+    )
+    assert resp.status_code == status.HTTP_201_CREATED, resp.text
+    return resp.json()["id"]
 
 
 @pytest.mark.asyncio
@@ -40,3 +71,49 @@ async def test_item_create_and_patch_min_stock(
     )
     assert patched.status_code == status.HTTP_200_OK, patched.text
     assert patched.json()["min_stock"] == 15
+
+
+@pytest.mark.asyncio
+async def test_shortages_lists_below_threshold_item(
+    async_client: AsyncClient, make_auth_headers, sessionmaker, data_factory: TestDataFactory
+):
+    async with sessionmaker() as session:
+        await data_factory.ensure_tenant(session=session)
+        await session.commit()
+    # warehouse defaults on (no FeatureEnablement row) — see test_ppe_warehouse_api.py.
+    headers = await make_auth_headers(RoleEnum.ADMIN)
+    item = await _seed_item(async_client, headers, name="Каска", min_stock=10)
+    await _seed_batch(async_client, headers, item["id"], qty=3)
+
+    resp = await async_client.get("/api/v1/ppe/stock/shortages", headers=headers)
+    assert resp.status_code == status.HTTP_200_OK, resp.text
+    body = resp.json()
+    assert body["window_days"] == 90
+    row = next(r for r in body["items"] if r["item_id"] == item["id"])
+    assert row["min_stock"] == 10
+    assert row["on_hand"] == 3
+    assert row["deficit"] == 7
+    assert row["below_threshold"] is True
+
+
+@pytest.mark.asyncio
+async def test_shortages_window_days_clamped(
+    async_client: AsyncClient, make_auth_headers, sessionmaker, data_factory: TestDataFactory
+):
+    async with sessionmaker() as session:
+        await data_factory.ensure_tenant(session=session)
+        await session.commit()
+    headers = await make_auth_headers(RoleEnum.ADMIN)
+    resp = await async_client.get("/api/v1/ppe/stock/shortages?window_days=0", headers=headers)
+    assert resp.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+
+@pytest.mark.asyncio
+async def test_shortages_gated_by_warehouse_flag(
+    async_client: AsyncClient, make_auth_headers, sessionmaker, data_factory: TestDataFactory
+):
+    await _set_warehouse_flag(sessionmaker, data_factory, on=False)
+    headers = await make_auth_headers(RoleEnum.ADMIN)
+    resp = await async_client.get("/api/v1/ppe/stock/shortages", headers=headers)
+    assert resp.status_code == status.HTTP_404_NOT_FOUND
+    assert "warehouse" in resp.text.lower()
