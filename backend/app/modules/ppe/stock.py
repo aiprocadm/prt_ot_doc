@@ -70,3 +70,100 @@ def allocate_fifo(available: list[tuple[str, int]], quantity: int) -> list[Alloc
     if remaining > 0:
         raise InsufficientStockError(requested=quantity, available=quantity - remaining)
     return result
+
+
+async def _load_batch(
+    session: AsyncSession,
+    tenant_id: str,
+    batch_id: str,
+    *,
+    item_id: str | None = None,
+) -> PPEStockBatch:
+    stmt = select(PPEStockBatch).where(
+        PPEStockBatch.id == batch_id,
+        PPEStockBatch.tenant_id == tenant_id,
+        PPEStockBatch.deleted_at.is_(None),
+    )
+    if item_id is not None:
+        stmt = stmt.where(PPEStockBatch.item_id == item_id)
+    batch = (await session.execute(stmt)).scalar_one_or_none()
+    if batch is None:
+        raise StockBatchNotFound(batch_id)
+    return batch
+
+
+async def _write_movement(
+    session: AsyncSession,
+    *,
+    tenant_id: str,
+    batch: PPEStockBatch,
+    kind: str,
+    delta: int,
+    reason: str | None = None,
+    occurred_at: datetime | None = None,
+    ref_type: str | None = None,
+    ref_id: str | None = None,
+) -> PPEStockMovement:
+    """Apply ``delta`` to the batch balance and append the journal row.
+
+    The ONLY place ``batch.quantity`` is mutated. Guards on-hand >= 0.
+    """
+    new_qty = batch.quantity + delta
+    if new_qty < 0:
+        raise InsufficientStockError(requested=-delta, available=batch.quantity)
+    batch.quantity = new_qty
+    movement = PPEStockMovement(
+        tenant_id=tenant_id,
+        item_id=batch.item_id,
+        batch_id=batch.id,
+        kind=kind,
+        quantity_delta=delta,
+        occurred_at=occurred_at or datetime.now(tz=timezone.utc),
+        reason=reason,
+        ref_type=ref_type,
+        ref_id=ref_id,
+    )
+    session.add(movement)
+    await session.flush()
+    await session.refresh(movement)
+    return movement
+
+
+async def record_movement(
+    session: AsyncSession,
+    *,
+    tenant_id: str,
+    batch_id: str,
+    kind: str,
+    quantity: int,
+    reason: str | None = None,
+    occurred_at: datetime | None = None,
+) -> PPEStockMovement:
+    """Manual receipt / writeoff / adjustment against one batch.
+
+    - receipt: +quantity   (quantity must be > 0)
+    - writeoff: -quantity   (quantity must be > 0)
+    - adjustment: set the batch to an absolute ``quantity`` (>= 0)
+    """
+    if kind not in MANUAL_KINDS:
+        raise ValueError(f"unsupported manual movement kind: {kind}")
+    batch = await _load_batch(session, tenant_id, batch_id)
+    if kind == KIND_RECEIPT:
+        if quantity <= 0:
+            raise ValueError("receipt quantity must be positive")
+        delta = quantity
+    elif kind == KIND_WRITEOFF:
+        if quantity <= 0:
+            raise ValueError("writeoff quantity must be positive")
+        delta = -quantity
+    else:  # KIND_ADJUSTMENT — set-to absolute
+        delta = quantity - batch.quantity
+    return await _write_movement(
+        session,
+        tenant_id=tenant_id,
+        batch=batch,
+        kind=kind,
+        delta=delta,
+        reason=reason,
+        occurred_at=occurred_at,
+    )
