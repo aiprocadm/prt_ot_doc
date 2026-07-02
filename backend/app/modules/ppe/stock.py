@@ -167,3 +167,66 @@ async def record_movement(
         reason=reason,
         occurred_at=occurred_at,
     )
+
+
+async def deplete_for_issue(
+    session: AsyncSession,
+    *,
+    tenant_id: str,
+    item_id: str,
+    quantity: int,
+    batch_id: str | None = None,
+    ref_id: str,
+) -> list[PPEStockMovement]:
+    """Deplete stock for a worker issuance. Returns the ``issue`` movements.
+
+    No-op (returns ``[]``) when the warehouse flag is off for the tenant or the
+    item has no stock batches — this preserves the pre-ledger issuance behaviour.
+    Explicit ``batch_id`` depletes that batch; otherwise FIFO by ``received_at``
+    (nulls last), ``id`` tiebreaker. Raises :class:`InsufficientStockError` when
+    the requested quantity exceeds available on-hand.
+    """
+    if quantity <= 0:
+        return []
+    if not await is_feature_enabled(session, tenant_id, WAREHOUSE_FEATURE_CODE):
+        return []
+
+    if batch_id is not None:
+        candidates = [await _load_batch(session, tenant_id, batch_id, item_id=item_id)]
+    else:
+        stmt = (
+            select(PPEStockBatch)
+            .where(
+                PPEStockBatch.tenant_id == tenant_id,
+                PPEStockBatch.item_id == item_id,
+                PPEStockBatch.deleted_at.is_(None),
+                PPEStockBatch.quantity > 0,
+            )
+            # portable NULLS LAST: is_(None) sorts False(0) before True(1)
+            .order_by(
+                PPEStockBatch.received_at.is_(None),
+                PPEStockBatch.received_at.asc(),
+                PPEStockBatch.id.asc(),
+            )
+        )
+        candidates = list((await session.execute(stmt)).scalars().all())
+        if not candidates:
+            return []
+
+    by_id = {b.id: b for b in candidates}
+    allocations = allocate_fifo([(b.id, b.quantity) for b in candidates], quantity)
+
+    movements: list[PPEStockMovement] = []
+    for alloc in allocations:
+        movements.append(
+            await _write_movement(
+                session,
+                tenant_id=tenant_id,
+                batch=by_id[alloc.batch_id],
+                kind=KIND_ISSUE,
+                delta=-alloc.taken,
+                ref_type="ppe_issue",
+                ref_id=ref_id,
+            )
+        )
+    return movements

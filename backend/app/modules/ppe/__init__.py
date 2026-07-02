@@ -27,6 +27,7 @@ from app.modules.ppe.stock import (  # noqa: F401  (public re-export)
     InsufficientStockError,
     StockBatchNotFound,
     allocate_fifo,
+    deplete_for_issue,
     record_movement,
 )
 
@@ -42,6 +43,7 @@ __all__ = [
     "build_personal_card_766n",
     "build_personal_card_payload",
     "build_journal_export",
+    "deplete_for_issue",
     "issue_ppe_item",
     "list_expiring_issues",
     "record_movement",
