@@ -1,4 +1,5 @@
 import { useAuditStore } from "@/stores/audit";
+import { useBranchesStore } from "@/stores/branches";
 import { useCompaniesStore } from "@/stores/companies";
 import { useDocumentsStore } from "@/stores/documents";
 import { useDocumentsWizardStore } from "@/stores/documentsWizard";
@@ -12,6 +13,7 @@ import { useTemplatesStore } from "@/stores/templates";
 
 export const resetTenantStores = () => {
   useAuditStore.getState().reset();
+  useBranchesStore.getState().reset();
   useCompaniesStore.getState().reset();
   useDocumentsStore.getState().reset();
   useDocumentsWizardStore.getState().reset();

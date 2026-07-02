@@ -1,5 +1,26 @@
 # CHANGELOG
 
+## 2026-07-02 (feat/rc-014-branches-ui — фронт для филиалов (RC-014): экраны master data)
+
+### Added
+- **UI филиалов (Branch) — завершение RC-014 на фронте** (бэкенд `/api/v1/branches` был готов с
+  6796c380; схема БД не меняется, только клиент). По образцу экрана «Компании»:
+  - `types/dto/branches.ts` + `types/forms/branches.ts` (zod): `BranchDto` — плоский (без
+    таймстампов, как `BranchRead`); `status` — свободный `string` (VARCHAR, не enum).
+  - `api/branchesApi.ts` — раздельные тела: `buildBranchCreateBody` (с `company_id`) и
+    `buildBranchUpdateBody` (без — филиал нельзя перевесить на другую компанию; поле в форме
+    `disabled` при редактировании). Пустые опциональные поля не отправляются.
+  - `stores/branches.ts` — zustand-стор: список с фильтром `company_id`, create/update/remove;
+    ответ `{items,total}` (BranchPage). Зарегистрирован в `stores/reset.ts`.
+  - `pages/branches/BranchesPage.tsx` + `features/branches/{BranchTable,BranchFormDialog}.tsx`:
+    фильтр по компании, таблица (филиал/компания/контакт/статус), диалог создания/редактирования.
+  - Права `BRANCH_VIEW`/`BRANCH_MANAGE` (только в `ALL_PERMISSIONS` → owner/admin, совпадает с
+    backend-ограничением «только роль admin»); роут `/branches`, пункт меню «Филиалы» (иконка
+    `Network`) в группе «Документооборот».
+- Гейты: `npm run typecheck` — 0 ошибок; `npm run build` — ok; `npm run test` — 395/396 (единичный
+  сбой `ClientPortalPackagesPage` — известный флак от параллельной нагрузки, в изоляции зелёный,
+  к филиалам не относится).
+
 ## 2026-07-02 (feat/post-2-migration-hardening — POST-2: настоящие per-migration транзакции + autocommit-блоки на enum-сайтах)
 
 ### Changed

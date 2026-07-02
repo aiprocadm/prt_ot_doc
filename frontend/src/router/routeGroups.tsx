@@ -23,6 +23,7 @@ import {
   ClientPortalPackagesPage,
   ClientPortalRequestsPage,
   CommandCenterPage,
+  BranchesPage,
   CompaniesPage,
   ContractorsPage,
   CorrectiveActionsPage,
@@ -105,6 +106,7 @@ export const buildProtectedRouteGroups = (): ReactElement[] => {
       ]
     },
     { permission: PERMISSIONS.COMPANY_VIEW, routes: [<Route key="/companies" path="/companies" element={<CompaniesPage />} />] },
+    { permission: PERMISSIONS.BRANCH_VIEW, routes: [<Route key="/branches" path="/branches" element={<BranchesPage />} />] },
     { permission: PERMISSIONS.PERSON_VIEW, routes: [<Route key="/persons" path="/persons" element={<PersonsPage />} />] },
     {
       permission: PERMISSIONS.EMPLOYEE_CARD_VIEW,
