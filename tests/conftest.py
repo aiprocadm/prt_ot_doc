@@ -59,8 +59,8 @@ from app.core.security import issue_access_token
 from app.core.tenant import TENANT_HEADER, tenant_required
 from app.db import Base, SharedBase
 from app.db.session import AsyncSessionLocal, configure_engine
-from app.domains.files import s3
 from app.models.models import Company, RoleEnum, Tenant, User
+from app.modules.files import s3
 from app.services.clamav import reset_quarantine_publisher
 from app.services.file_storage import FileStorageService
 from tests.utils.factories import TestDataFactory

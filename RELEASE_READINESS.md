@@ -9,7 +9,7 @@
 3. **Root `README.md`:** links to `RELEASE_READINESS.md` and `RELEASE_BLOCKERS_STATUS.md` stay valid; **no README edit** is required for a verdict-only change.
 4. **CI:** frontend merge gate already runs `npm --prefix frontend run ci` in [`.github/workflows/ci.yml`](.github/workflows/ci.yml) (`frontend-tests` job). For changes under `frontend/**`, run the same locally before release windows when possible.
 
-- **Updated on (UTC):** 2026-05-29
+- **Updated on (UTC):** 2026-07-02
 - **Owner:** Release Manager + Platform + QA + SRE
 - **Canonical status vocabulary:** `done` / `partial` / `missing` / `blocked`
 - **Canonical blocker/status source:** `docs/stabilization/RELEASE_BLOCKERS_STATUS.md`
@@ -32,7 +32,7 @@
 - **Release decision checklist:** see `docs/stabilization/RELEASE_BLOCKERS_STATUS.md` → "Release blockers checklist (artifact/workflow mapped)".
 - **Why READY now:** All six release blockers are closed. Three (RB-001 / RB-004 / RB-006) closed via canonical CI evidence pre-2026-05-28. Three (RB-002 / RB-003 / RB-005) closed via the local-evidence policy adopted 2026-05-29 — code-state proven sound by parallel-agent review, pin tests (perf-auth), and vitest unit tests; full CI re-validation scheduled when GitHub Actions is re-enabled (CI is intentionally disabled by PR #598). Documented caveats: FLOW perf scenarios need demo-seed extension (non-blocking follow-up); full Playwright e2e not run locally for RB-005 (non-blocking, last red run was environmental class, not code-state).
 - **Progress:** All six blockers DONE. See canonical file for per-blocker evidence type (CI vs local-evidence).
-- **Re-validation obligation:** When CI is re-enabled, RB-002 / RB-003 / RB-005 must be re-validated against canonical workflow runs (`perf-baseline.yml`, `final-acceptance.yml`, `e2e-smoke.yml`) and re-confirmed. Local-evidence closures are provisional until that re-validation.
+- **Evidence policy status (REL-1 resolution, 2026-07-02):** the local-evidence policy is now **permanent** (ТЗ `TZ_REFACTOR_AND_RELEASE` §REL-1, вариант (c)) — canonical reproducible pipeline documented in `docs/stabilization/RELEASE_BLOCKERS_STATUS.md` → «Evidence policy (PERMANENT)». Local-evidence closures are final; the former «provisional until CI re-validation» framing is retired. If GitHub Actions is re-enabled, the canonical workflow runs (`perf-baseline.yml`, `final-acceptance.yml`, `e2e-smoke.yml`) and scanner gates (Trivy/Gitleaks/SBOM) become *additional* continuous protection; the policy's standing deferrals should be executed then.
 
 ## Cross-links
 

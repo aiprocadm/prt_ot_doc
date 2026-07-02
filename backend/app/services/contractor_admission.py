@@ -1,6 +1,6 @@
 """Contractor admission service.
 
-Wraps the pure lifecycle rules from ``app.domains.contractors.lifecycle``
+Wraps the pure lifecycle rules from ``app.modules.contractors.lifecycle``
 with DB access, mirroring the pattern of ``person_admission.py``.
 
 Public API
@@ -19,8 +19,8 @@ from datetime import datetime, timezone
 from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.domains.contractors import lifecycle as lc
-from app.domains.contractors.documents import best_document, requirement_status
+from app.modules.contractors import lifecycle as lc
+from app.modules.contractors.documents import best_document, requirement_status
 from app.modules.contractors.models import (
     ContractorDocument,
     ContractorDocumentRequirement,

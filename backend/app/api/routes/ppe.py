@@ -20,7 +20,11 @@ from app.core.errors import api_problem_detail
 from app.core.feature_flags import is_feature_enabled
 from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
-from app.domains.ppe import (
+from app.models.models import Person, Position, PPENorm
+from app.models.ppe_registry import PPEIssue, PPEIssueStatus, PPEItem, PPEStockBatch
+from app.models.risk import RiskHazard
+from app.models.tenanting import Tenant
+from app.modules.ppe import (
     build_personal_card_766n,
     issue_ppe_item,
     list_expiring_issues,
@@ -28,11 +32,7 @@ from app.domains.ppe import (
     return_issue,
     writeoff_issue,
 )
-from app.domains.ppe.lifecycle import PPETransitionError, validate_transition
-from app.models.models import Person, Position, PPENorm
-from app.models.ppe_registry import PPEIssue, PPEIssueStatus, PPEItem, PPEStockBatch
-from app.models.risk import RiskHazard
-from app.models.tenanting import Tenant
+from app.modules.ppe.lifecycle import PPETransitionError, validate_transition
 from app.schemas.ppe import (
     PPECardRead,
     PPECardRequiredLine,

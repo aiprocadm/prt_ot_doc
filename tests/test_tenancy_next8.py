@@ -4,7 +4,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 from kombu import Queue
 
-from app.domains.files.utils import build_storage_key
+from app.modules.files.utils import build_storage_key
 from app.services import celery_app as celery_app_module
 from app.services.celery_app import route_task_by_tenant
 

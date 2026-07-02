@@ -40,16 +40,16 @@ from app.core.metrics import get_metrics
 from app.core.rate_limit import ip_tenant_key, limiter, upload_per_tenant
 from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
-from app.domains.files import s3
-from app.domains.files.utils import (
+from app.models.file import File as StoredFile
+from app.models.file import FileKind, FileScanStatus
+from app.models.models import Tenant
+from app.modules.files import s3
+from app.modules.files.utils import (
     DEFAULT_SNIFF_BYTES,
     build_storage_key,
     determine_extension,
     guess_mime_type,
 )
-from app.models.file import File as StoredFile
-from app.models.file import FileKind, FileScanStatus
-from app.models.models import Tenant
 from app.services.audit import AuditService
 from app.services.clamav import ClamAVScanRequest, enqueue_scan_request
 from app.tenancy_quotas import assert_quota

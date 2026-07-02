@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from app.domains.packs.definitions import (
+from app.modules.packs.definitions import (
     PACK_CODE_INCIDENT,
     PACK_CODE_NEW_COMPANY,
     PACK_CODE_SITE_ACCESS,

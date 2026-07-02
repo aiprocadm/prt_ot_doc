@@ -1,7 +1,7 @@
 from datetime import date, timedelta
 
 from app.domains.shared import ContingentItemStatus
-from app.domains.contractors.documents import document_expiry_status
+from app.modules.contractors.documents import document_expiry_status
 
 TODAY = date(2026, 6, 9)
 
@@ -16,7 +16,9 @@ def test_future_is_ok():
 
 
 def test_within_window_is_due_soon():
-    assert document_expiry_status(TODAY + timedelta(days=10), TODAY) == ContingentItemStatus.DUE_SOON
+    assert (
+        document_expiry_status(TODAY + timedelta(days=10), TODAY) == ContingentItemStatus.DUE_SOON
+    )
 
 
 def test_past_is_overdue():

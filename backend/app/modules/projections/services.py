@@ -5,7 +5,6 @@ from datetime import date
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.domains.contractors.lifecycle import ReadinessStatus as ContractorReadinessStatus
 from app.models.finance import Contract, Order
 from app.models.models import (
     NPA,
@@ -19,6 +18,7 @@ from app.models.models import (
 )
 from app.models.notifications import PlanTask
 from app.modules.client_portal.services import SafePortalPayloadService
+from app.modules.contractors.lifecycle import ReadinessStatus as ContractorReadinessStatus
 from app.modules.contractors.models import ContractorEmployee, ContractorRegistry
 from app.modules.projections.models import (
     ClientPortalReadModel,

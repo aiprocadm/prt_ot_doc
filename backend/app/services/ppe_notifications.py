@@ -13,9 +13,9 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.domains.ppe.lifecycle import ISSUE_STATUS_ISSUED
 from app.domains.shared import ContingentItemStatus, classify
 from app.models.models import Outbox, PPEIssue
+from app.modules.ppe.lifecycle import ISSUE_STATUS_ISSUED
 from app.services.events import EventType
 from app.services.outbox import OutboxService
 

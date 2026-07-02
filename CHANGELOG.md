@@ -1,5 +1,215 @@
 # CHANGELOG
 
+## 2026-07-02 (fix/stabilize-gates-2026-06-29 — REL-1 resolved: permanent local-evidence policy; RC-015/RC-016 closed; staged mypy gate repaired)
+
+### Changed
+- **REL-1 (ТЗ §5) — решение по гейту качества: вариант (c), постоянная local-evidence политика**
+  (санкция пользователя «делаем всё»; полностью обратимо — workflows сохранены как `.yml.disabled`):
+  - `docs/stabilization/RELEASE_BLOCKERS_STATUS.md` → «Evidence policy (PERMANENT)»: снята
+    «provisional»-рамка, добавлена **каноническая таблица воспроизводимого пайплайна** (PG16-гейт,
+    lint, static gates, SAST, script-гейты, contract-guards, critical-path matrix, frontend) и
+    **standing deferrals** (Trivy dep/image, Gitleaks, SBOM, Playwright — нет локальных раннеров).
+  - `RELEASE_READINESS.md` синхронизирован (Updated-on 2026-07-02; re-validation obligation →
+    permanent-policy формулировка).
+- **RC-015 (security gate matrix) → done (local-evidence, 2026-07-02).** Локально запускаемые гейты
+  зелёные: 4 script-гейта (`check_security_exceptions`/`check_default_secrets`/
+  `check_runtime_artifacts`/`check_scoped_queries` — exit 0), SAST `python -m bandit -r backend/app
+  -lll -iii` — 0 HIGH, static gates — F821 clean + staged mypy 0 ошибок. `security-gates.md` получил
+  операционную таблицу с командами/результатами/deferral'ами.
+- **RC-016 (critical-path coverage matrix) → done (local-evidence, 2026-07-02).** Backend-ядро
+  Block B.1 зелёное: tenant-isolation + cross-tenant matrix + final-regression = **14 passed**.
+  Caveats: Playwright smoke — deferral (прецедент RB-005); perf/workflow edges — под caveat RC-002.
+  `coverage.md` + `PLAN.md` B.1 обновлены (заодно починен устаревший B.2: RC-006 done с 2026-05-29).
+- **Ремонт staged mypy-гейта (сломан молча с ARCH-4 slice 10):** `scripts/ci/static_gates.sh`
+  ссылался на `backend/app/modules/files/service.py`, который стал ПАКЕТОМ — mypy падал «can't read
+  file» до старта. Путь исправлен на пакет; вскрытые 79 attr-defined ошибок миксинов закрыты
+  **TYPE_CHECKING-контрактами** в `_access`/`_fileops`/`_uploads` (декларации `session`/`tenant_id`
+  + сигнатуры заимствованных helper'ов AccessMixin; ноль рантайм-эффекта): wave0 29 файлов / wave1
+  20 файлов — 0 ошибок. Error-budget таблица в `coverage.md` дополнена строкой 2026-07-02.
+  ANTI-ГРАБЛИ (Windows): venv exe-шимы (`bandit.exe`/`mypy.exe`) молча падают на кириллическом пути
+  репо — вызывать `python -m bandit` / `python -m mypy`; и `script | tail; echo $?` возвращает статус
+  tail, НЕ скрипта (ложный зелёный) — проверять `${PIPESTATUS[0]}`.
+
+## 2026-07-02 (fix/stabilize-gates-2026-06-29 — RC-014: dedicated Branch entity separated from Site)
+
+### Added
+- **RC-014 — сущность «филиал» (Branch), отделённая от Site** (санкционированное additive-исключение
+  из правила «не менять контракт», ТЗ §5 REL-4 / §10.3; санкция пользователя 2026-07-02):
+  - **Model** `app/models/master_data.py::Branch` — company-scoped уровень master-data между Company и
+    Site (vNext-иерархия «группы компаний → компании → **филиалы** → объекты → площадки»): name/code/
+    address/contacts + VARCHAR `status` (не PG-enum — вне enum-parity класса, прецедент cm01);
+    `UniqueConstraint(tenant_id, company_id, name)`. Re-exported через `models.py`/`models/__init__`
+    (+ в оба `__all__` — иначе ruff --fix вырезает реэкспорт).
+  - **`Site.branch_id`** — additive nullable колонка, **app-level ссылка без DB FK** (add_column с FK —
+    класс миграционных граблей wa02; прецедент `contractor_registry.company_id`); целостность держит
+    API-слой: `_ensure_branch_link` в `routes/sites.py` (существование + тот же tenant + та же company →
+    404/400).
+  - **Migration** `20260702_br01_branch_entity` (additive: create `branch` + `site.branch_id` + index;
+    honest downgrade). NOTE: локальный alembic-прогон на SQLite невозможен исторически (initial_schema
+    использует JSONB) — канонический прогон миграций = PG16 gate.
+  - **API** `/api/v1/branches` (list ETag / create / get / patch / delete) — зеркало `sites.py` (те же
+    ABAC-роли и audit_operation); master-data CRUD в репо не феатур-флагуется (прецедент sites/companies).
+    `SiteCreate`/`SiteUpdate`/`SiteRead` получили опциональный `branch_id` (отвязка через `branch_id: null`).
+  - **Contract tests** `tests/test_branches_api.py` (5): CRUD roundtrip, create с несуществующей company
+    → 404, cross-tenant изоляция (get/patch/delete чужого → 404, список не течёт), site↔branch
+    link/unlink/relink, company-mismatch → 400 + ghost branch → 404.
+  - **OpenAPI baseline re-snapped**: 803 операции / 644 схемы → **808 / 648** (+5 роутов, +4 схемы) —
+    легитимное пере-снятие через `check_openapi_snapshot.py --snapshot`; Celery unchanged (32).
+  - Verified: branch tests 5 passed; AST drift-audit (ORM↔migrations parity) 59 passed; ruff+black clean;
+    PG16 gate (alembic upgrade heads + boundary + enum parity) — final evidence.
+  - Docs: `GAP_REPORT.md` + `docs/stabilization/RELEASE_BLOCKERS_STATUS.md` RC-014 → done;
+    `docs/MODULES.md` обновлён (карта после ARCH-1 + иерархия org_structure с branch).
+
+## 2026-07-02 (fix/stabilize-gates-2026-06-29 — ARCH-1: tail slice 8 — replace/audit/sign; duplicated-context queue CLOSED)
+
+### Changed
+- **ARCH-1 slice 8 — fold the three tail contexts, closing the duplicated-context queue.** All three
+  moves are **byte-identical** (stdlib/`app.models`-only imports):
+  - **replace** (the flagged MESSY one — canon decision): the legacy persisted `ReplaceEngine`
+    (`domains/replace/engine.py`, 265 loc) is production-dead — its only importers are 3 lazy imports in
+    `tests/test_replace_api.py`. The richer `modules/replace` package (pattern-replacement `engine.py`,
+    api/service/…) stays the canon untouched; the legacy engine moves ASIDE as
+    `modules/replace/legacy_engine.py` (rename dodges the `engine.py` collision), test repointed.
+    Nothing deleted (per ТЗ the compat layer survives until POST-1).
+  - **audit**: `domains/audit/service.py` (`AuditDomainService`, 0 importers) → `modules/audit/service.py`.
+  - **sign**: `domains/sign/signer.py` (`DocumentSigner`, 0 importers) → `modules/sign/signer.py`.
+  - `domains/{replace,audit,sign}/` are now pure compat-shims; ARCH-3 allowlist +3 shim edges (now 27).
+  - NOT in scope (not duplicated contexts — no `modules/` counterpart): `domains/{shared,signing,medical,
+    permits,templating}` stay as-is; `domains.shared` migration is flagged as its own future slice.
+  Verified locally (Py3.13 venv): ruff+black clean first-try, ARCH-3 boundaries clean (27 allowlisted,
+  0 new), byte-identity ×3, replace API tests green, shim/canon object-identity smoke, OpenAPI contract
+  unchanged (803/644), Celery tasks unchanged (32).
+  **ARCH-1 status: all 8 slices done** (risk, incidents, training, contractors, ppe, packs, files,
+  replace/audit/sign). Every duplicated `domains/X ↔ modules/X` context is collapsed into `modules/`
+  with deprecated re-export shims left behind (POST-1 removes them next major).
+
+## 2026-07-02 (fix/stabilize-gates-2026-06-29 — ARCH-1: collapse domains/files into modules/files (slice 7))
+
+### Changed
+- **ARCH-1 slice 7 — fold `domains/files` into `modules/files`.** The most-coupled slice (28 import
+  sites across 18 code files + 11 test files) but the cleanest mechanically — all three logic files moved
+  **byte-identical** (they import only exempt `app.core.*`/`app.services.*`, and never each other):
+  - `domains/files/{s3,utils,document}.py` → `modules/files/*` keeping names (all free in the package).
+  - `domains/files/` is now a pure compat-shim package (3 re-export modules + deprecation docstring in
+    the previously-empty `__init__`; kept until POST-1). The `s3` shim re-exports the full `__all__`
+    including `_resolve_endpoint` and documents that mock-patch string targets must use the canon path.
+  - Importers repointed via exact-list bulk replace (`app.domains.files` → `app.modules.files`):
+    `api/app.py`, `api/routes/{files,health}.py`, `api/routes/packs/run.py`, `api/v1/router.py`,
+    `modules/files/{api.py,storage.py,service/{__init__,_fileops,_functions,_uploads}.py}`,
+    `modules/health_checks/service.py`, `modules/pdf/convert.py`, `services/{clamav,file_storage,
+    package_export}.py`, `services/pipeline/service.py`, `tasks/document_jobs.py` + 10 test files
+    incl. `tests/conftest.py`. The two lazy in-function imports in `services/file_storage.py` (they break
+    the `s3 ↔ file_storage` import cycle) stay lazy, only the path changed.
+  - **Mock-patch traps handled**: 3 patch STRING targets (`"app.domains.files.s3.generate_presigned_get_url"`
+    ×2, `"app.domains.files.s3.get_client"`) repointed to `app.modules.files.s3.*` — a name-by-name shim is
+    a distinct module object, so patching the old path would silently stop affecting canon consumers.
+    Also `tests/minio/test_s3_endpoint_resolution.py` loads `s3.py` **by file path** (`"domains" / "files"`
+    as Path segments — invisible to dotted-string greps); its loader path updated to `modules`.
+  - ARCH-3 allowlist **shrinks 29 → 24**: the 8 long-standing `modules/* → app.domains.files` debt edges
+    (files.api, files.service + 3 mixins, files.storage, health_checks, pdf.convert) all became stale and
+    were REMOVED (the debt this slice drains); +3 compat-shim edges (`domains.files.{s3,utils,document}`).
+  Verified locally (Py3.13 venv): ruff+black clean, ARCH-3 boundaries clean (24 allowlisted, 0 new,
+  0 stale), byte-identity of all 3 moved files, files/tenancy/minio test suite green, shim/canon
+  object-identity smoke (incl. `modules.files.service.s3 is modules.files.s3`), OpenAPI contract
+  unchanged (803/644), Celery tasks unchanged (32). Schema untouched → PG-gate not required.
+  ARCH-1 core queue is now DONE (7 slices); remaining: `replace` (needs a canon decision on the legacy
+  `ReplaceEngine`) and trivial `audit`/`sign`.
+
+## 2026-07-02 (fix/stabilize-gates-2026-06-29 — ARCH-1: collapse domains/packs into modules/packs (slice 6))
+
+### Changed
+- **ARCH-1 slice 6 — fold `domains/packs` into `modules/packs`.** Largest slice so far (5 logic files,
+  ~1243 loc, 10 importers). `modules/packs` already held the pack-run v2 surface (`api.py`/`schemas.py`/
+  `service.py`), so:
+  - `domains/packs/{assets,context,definitions,seeder}.py` → `modules/packs/*` **keeping names**
+    (git-moved; assets byte-identical, the other three change only their intra-package import lines,
+    plus ruff isort reorder).
+  - `domains/packs/service.py` → `modules/packs/operations.py` (git-moved **byte-identical**; renamed to
+    avoid the existing `modules/packs/service.py` — different concern: scenario-profile resolution +
+    `PackAssembler` vs pack-run/naming services).
+  - `modules/packs/__init__.py` now exposes `router` **lazily (PEP 562)**: worker/bootstrap import paths
+    (`services/tasks.py`, `services/demo_bootstrap.py` import the `seeder`/`context` submodules) must not
+    eagerly pull FastAPI/openpyxl via the package `__init__` — before the move they imported
+    `domains.packs.*` whose `__init__` was empty, so the eager `from .api import router` would have been a
+    NEW heavyweight edge in the worker import graph. `route_groups.py`'s `from app.modules.packs import api`
+    still works (submodule fallback), and `pkg.router` resolves on first access.
+  - `domains/packs/` is now a pure compat-shim package (5 re-export modules + deprecation docstring in
+    `__init__`; kept until POST-1).
+  - Importers use the canon (10): `api/routes/client_portal.py` (`…packs.operations`),
+    `api/routes/packs/_common.py`, `api/routes/packs/management.py`, `services/demo_bootstrap.py`,
+    `services/package_pipeline.py`, `services/tasks.py` + root-tests `tests/test_package_pipeline.py`,
+    `tests/test_templates_pipeline_api.py`, `tests/services/test_pack_generation_pipeline.py`,
+    `tests/integration/test_packages_e2e.py`; docstring pointer updated in
+    `backend/tests/test_documentpack_enum_values.py`. No mock-patch string targets exist for packs
+    (swept tests/, backend/tests, integration_tests/, scripts/).
+  - ARCH-3 allowlist: **+5 compat-shim edges only** (now 29) — the moved files import nothing from
+    `app.domains.*` (seeder's `app.services.file_storage` etc. are exempt orchestration-layer imports),
+    so unlike contractors/ppe no new shared-kernel edges appear and no stale entries needed removal.
+  Verified locally (Py3.13 venv): ruff+black clean, ARCH-3 boundaries clean (29 allowlisted, 0 new),
+  byte-identity of all 5 moved files, packs test suite green, shim/canon object-identity + lazy-router
+  smoke, OpenAPI contract unchanged (803/644), Celery tasks unchanged (32). Schema untouched → PG-gate
+  not required. Queue next: `files` (769 loc / 28 imp., most-coupled), then decisions on `replace`
+  (ReplaceEngine canon) and trivial `audit`/`sign`.
+
+## 2026-07-01 (fix/stabilize-gates-2026-06-29 — ARCH-1: collapse domains/ppe into modules/ppe (slice 5))
+
+### Changed
+- **ARCH-1 slice 5 — fold `domains/ppe` into `modules/ppe`.** The messiest slice so far: unlike
+  `contractors` (empty `__init__`), `domains/ppe/__init__.py` re-exported 8 functions and callers import
+  from the **package** (`from app.domains.ppe import build_journal_export`), and `modules/ppe` already
+  held a same-named-ish `services.py`:
+  - `domains/ppe/lifecycle.py` → `modules/ppe/lifecycle.py` (git-moved; **byte-identical** — pure issue
+    FSM + card-line rules; imports only `app.domains.shared` + stdlib). Name was free in `modules/ppe`.
+  - `domains/ppe/service.py` → `modules/ppe/operations.py` (git-moved; **renamed** to avoid colliding with
+    the existing `modules/ppe/services.py` — different concern: pure norm/card algorithms there vs
+    DB-backed issuance/card/journal ops here). Only body change: internal `app.domains.ppe`→
+    `app.modules.ppe` for `import lifecycle as lc`.
+  - `modules/ppe/__init__.py` **extended**: keeps re-exporting the 4 existing service classes and adds the
+    8 `operations` functions, so `from app.modules.ppe import build_journal_export` works.
+  - `domains/ppe/` now three deprecated compat-shims (`__init__` + `lifecycle.py` + `service.py`,
+    re-exporting from `app.modules.ppe*`; kept until POST-1).
+  - Importers use the canon: `api/routes/ppe.py` (2 imports), `api/routes/journals.py`,
+    `services/person_admission.py`, `services/ppe_notifications.py` + `tests/test_ppe_lifecycle.py`
+    → `from app.modules.ppe …`.
+  - ARCH-3 allowlist churn (net +3, now 24): **removed** the stale `domains.ppe.service →
+    modules.ppe.services` edge (service.py moved; the moved `operations.py` imports `modules.ppe.services`
+    as a same-context modules→modules edge, which the guard does not flag); **added** one
+    `modules.ppe.lifecycle → app.domains.shared` shared-kernel edge (same class as contractors) plus three
+    `domains.ppe* → modules.ppe*` compat-shim edges.
+  Verified locally (Py3.13 venv): ruff+black clean, ARCH-3 boundaries clean (24 allowlisted, 0 new),
+  byte-identity of both moved files (lifecycle identical; operations differs only in the `lc` import),
+  ppe FSM/card unit tests green (24), ppe route/error/events + person-admission + journal-concept tests
+  green (58), OpenAPI contract unchanged (803/644), Celery tasks unchanged (32). No other
+  `app.domains.ppe` importers remain. Queue next: `packs` (1405 loc / 11 imp.), then `files` (most-coupled).
+
+## 2026-07-01 (fix/stabilize-gates-2026-06-29 — ARCH-1: collapse domains/contractors into modules/contractors (slice 4))
+
+### Changed
+- **ARCH-1 slice 4 — fold `domains/contractors` into `modules/contractors`.** `modules/contractors`
+  already held the ORM (`models.py`) and its file names `documents.py`/`lifecycle.py` were free, so the
+  two pure (no-I/O) logic files move **keeping their names** — no `operations.py` rename needed:
+  - `domains/contractors/documents.py` → `modules/contractors/documents.py` (git-moved; unchanged —
+    expiry classification `document_expiry_status`/`best_document`/`requirement_status`).
+  - `domains/contractors/lifecycle.py` → `modules/contractors/lifecycle.py` (git-moved; the only body
+    change is its internal import `app.domains.contractors.documents` → `app.modules.contractors.documents`).
+    Holds the admission engine `evaluate_employee` + `ReadinessStatus`/`EmployeeVerdict`/`DocumentRequirement`.
+  - **new** `modules/contractors/__init__.py` re-exports the public surface of both files.
+  - `domains/contractors/documents.py` + `lifecycle.py` are now deprecated compat-shims (re-export from
+    `app.modules.contractors.*`; kept until POST-1).
+  - Importers use the canon: `services/contractor_admission.py`, `services/contractor_documents.py`,
+    `api/routes/contractors.py`, `modules/projections/services.py` + the 3 `tests/test_contractor_*.py`
+    → `from app.modules.contractors import …`.
+  - ARCH-3 allowlist churn (net +2, now 21): **removed** two stale edges (`projections.services →
+    domains.contractors.lifecycle`, repointed to canon; `domains.contractors.lifecycle →
+    modules.contractors.models`, now behind the shim); **added** two compat-shim edges plus — unlike
+    risk/incidents/training, whose moved files imported only `app.models.*` — two `modules.contractors.* →
+    app.domains.shared` edges, because the pure logic still uses the shared `ContingentItemStatus`/`classify`
+    kernel (migrating `app.domains.shared` itself is a separate future slice, flagged in-code).
+  Verified locally (Py3.13 venv): ruff+black clean, ARCH-3 boundaries clean (21 allowlisted, 0 new),
+  shim/canon object-identity smoke, contractor + shared-classify unit tests green (32 passed), OpenAPI
+  contract unchanged (803/644), Celery tasks unchanged (32). No other `app.domains.contractors` importers
+  remain. Queue next: `ppe` (has `modules/ppe/services.py` → possible name collision), then `packs`, `files`.
+
 ## 2026-07-01 (fix/stabilize-gates-2026-06-29 — ARCH-1: collapse domains/training into modules/training (slice 3))
 
 ### Changed

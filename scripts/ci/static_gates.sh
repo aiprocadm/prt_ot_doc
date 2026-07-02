@@ -34,6 +34,6 @@ mypy --config-file pyproject.toml \
   backend/app/tasks_replace.py \
   backend/app/celery/tasks/document_jobs_required.py \
   backend/app/celery/tasks/job_steps.py \
-  backend/app/modules/files/service.py \
+  backend/app/modules/files/service \
   backend/app/modules/rbac_abac/query_filters.py \
   --follow-imports=skip

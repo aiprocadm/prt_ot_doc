@@ -6,8 +6,10 @@ mock-patch target ``app.modules.files.service.s3.*`` resolve as before.
 
 # Module-level names re-exported so mock-patch targets ``app.modules.files.service.<name>``
 # (s3.*, av.scan_file, OutboxService.*, av_scan_file_job.delay) resolve as before the split.
-from app.domains.files import s3  # noqa: F401
-from app.modules.files import av  # noqa: F401
+from app.modules.files import (
+    av,  # noqa: F401
+    s3,  # noqa: F401
+)
 from app.modules.files.service._base import (  # noqa: F401  re-export public helpers + s3
     MAX_INDEX_BYTES,
     MAX_INDEX_CHARS,

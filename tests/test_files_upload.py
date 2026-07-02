@@ -15,10 +15,10 @@ from sqlalchemy import select
 
 from app.api.routes.files import max_upload_bytes
 from app.core.config import get_settings
-from app.domains.files import s3
 from app.models.file import File as StoredFile
 from app.models.file import FileKind, FileScanStatus
 from app.models.models import AuditLog, RoleEnum
+from app.modules.files import s3
 from app.services.clamav import (
     ClamAVScanOutcome,
     ClamAVScanRequest,
@@ -87,7 +87,7 @@ def _configure_s3(monkeypatch: pytest.MonkeyPatch) -> None:
     reset_clamav_client()
     s3.reset_client_cache()
     monkeypatch.setattr(
-        "app.domains.files.s3.generate_presigned_get_url",
+        "app.modules.files.s3.generate_presigned_get_url",
         lambda key, *, expires_in=3600, bucket=None, response_headers=None: (
             f"https://example.com/download/{key}?expires_in={expires_in}"
         ),
@@ -726,7 +726,7 @@ async def test_upload_returns_503_when_bucket_unavailable(
         def upload_fileobj(self, **kwargs):
             self._raise()
 
-    monkeypatch.setattr("app.domains.files.s3.get_client", lambda: _BrokenClient())
+    monkeypatch.setattr("app.modules.files.s3.get_client", lambda: _BrokenClient())
 
     headers = {**dict(async_client.headers), **await make_auth_headers()}
     response = await async_client.post(

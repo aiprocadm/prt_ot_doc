@@ -77,19 +77,47 @@ RB-002 / RB-005 failure-class diagnosis (updated 2026-05-28 via parallel-agent c
 | RC-011 | `KNOWN_LIMITATIONS.md` | Notifications escalation/provider orchestration completeness | `done` (2026-07-01) | Provider abstraction `app/modules/notifications/providers/` (in-app/email/telegram/webhook, feature-flagged `NOTIFICATIONS_DELIVERY_ENABLED` default off) + orchestration `app/modules/notifications/delivery.py` (honest status, no false SENT) + `notifications.dispatch_pending` beat scan (the previously-missing dispatcher) + channel-tier escalation (email→telegram→in-app). No schema change (existing `payload`/`status`/`attempts`). Tests: `tests/test_notification_delivery.py` (11, green); regressions `tests/api/test_notifications_calendar_api.py` + `tests/test_workflow_api.py` green (API unchanged). |
 | RC-012 | `GAP_REPORT.md` | Restore drill formal RTO/RPO go/no-go criteria | `done` (2026-06-30) | `scripts/restore_drill.py::evaluate_rto_rpo` → `go_no_go` block (measured vs threshold + `decision`), folded into `success`; thresholds default to ТЗ §31.6 (RTO 4h / RPO 24h); doc `docs/stabilization/restore-drill.md`; tests `tests/test_restore_drill_go_no_go.py` (7, green Py3.12) |
 | RC-013 | `GAP_REPORT.md` | Scope model migration to relational/indexed model | `done` (2026-06-30) | Model+index `ix_template_scope_level_company_site` (migration `20260416_next68`); reader cutover `app/api/routes/documents.py::_normalize_scope_level`/`_scope_target_ids` → relational columns (JSON fallback); tests `tests/test_template_scope_relational_reads.py` (6) + `test_template_catalog_scope.py` green. JSON mirror kept as compat |
-| RC-014 | `GAP_REPORT.md` | Dedicated branch entity (separate from `Site`) | `missing` | Workflow target: `.github/workflows/ci.yml`; evidence targets in contract tests + migration scripts |
-| RC-015 | `PLAN.md` | Canonical security gate matrix operational closure | `partial` | Workflows: `.github/workflows/ci.yml`, `.github/workflows/e2e-smoke.yml`; scripts: `scripts/ci/static_gates.sh`, `scripts/ci/check_scoped_queries.py`, `scripts/ci/check_runtime_artifacts.py`, `scripts/ci/check_default_secrets.py`; doc: `docs/stabilization/security-gates.md` |
-| RC-016 | `PLAN.md` | Critical-path coverage matrix normalization closure | `partial` | Workflows: `.github/workflows/ci.yml`, `.github/workflows/e2e-smoke.yml`; tests listed in Block B.1 of `docs/stabilization/PLAN.md`; docs: `docs/stabilization/coverage.md`, `ACCEPTANCE_TEST_MATRIX.md` |
+| RC-014 | `GAP_REPORT.md` | Dedicated branch entity (separate from `Site`) | `done` (2026-07-02) | `Branch` model (`app/models/master_data.py`) + additive `Site.branch_id` app-level link (no DB FK — wa02 precedent); migration `20260702_br01_branch_entity` (additive, honest downgrade, validated on PG16 gate); CRUD `/api/v1/branches`; contract tests `tests/test_branches_api.py` (5, incl. cross-tenant isolation + company-mismatch 400); OpenAPI baseline re-snapped 808/648 (sanctioned additive exception) |
+| RC-015 | `PLAN.md` | Canonical security gate matrix operational closure | `done` (local-evidence, 2026-07-02) | Closed under the permanent evidence policy (REL-1(c)). Locally-runnable gates green 2026-07-02 (Py3.13 venv): `check_security_exceptions` (1 exception valid, none expired) / `check_default_secrets` / `check_runtime_artifacts` / `check_scoped_queries` — all exit 0; SAST `python -m bandit -r backend/app -lll -iii` — 0 HIGH-severity; `static_gates.sh` — ruff F821 clean + staged mypy wave0 (29 files) & wave1 (20 files) 0 errors (gate repaired: stale `modules/files/service.py` path → package after ARCH-4 slice 10, mixin typing contracts added). ⚠️ Caveat: scanner gates (Trivy dep/image, Gitleaks, SBOM) = standing deferrals per policy — no local runners; doc: `docs/stabilization/security-gates.md` |
+| RC-016 | `PLAN.md` | Critical-path coverage matrix normalization closure | `done` (local-evidence, 2026-07-02) | Closed under the permanent evidence policy (REL-1(c)). Block B.1 backend evidence green 2026-07-02: `tests/integration/test_tenant_isolation.py` + `tests/integration/test_cross_tenant_resource_matrix.py` + `tests/e2e/final_regression/test_final_regression_api.py` — 14 passed, exit 0 (Py3.13 venv). ⚠️ Caveats: `frontend/e2e/smoke.spec.ts` (Playwright) = standing deferral (RB-005 precedent); perf/workflow acceptance edges tracked under the RC-002 caveat. Docs: `docs/stabilization/coverage.md`, `ACCEPTANCE_TEST_MATRIX.md` |
 
-## Evidence policy (effective 2026-05-29)
+## Evidence policy (PERMANENT — REL-1 resolution 2026-07-02; originally effective 2026-05-29)
 
-CI workflows are intentionally disabled (PR #598, 2026-05-28). To allow release closure without depending on CI re-enablement, this project accepts **local evidence** as sufficient closure grounds for release-critical blockers, provided the evidence is:
+CI workflows are intentionally disabled (PR #598, 2026-05-28). **REL-1 decision (ТЗ
+`TZ_REFACTOR_AND_RELEASE` §REL-1, вариант (c); 2026-07-02, user-sanctioned «делаем всё»):**
+local evidence is the project's **permanent** quality gate, not a stop-gap. GitHub Actions
+re-enablement remains possible at any time (workflows are preserved as `.yml.disabled`) and would
+*add* continuous regression protection, but it is no longer a precondition for closing
+release-critical items. The former «provisional until CI re-validation» framing is retired:
+closures under this policy are final, subject to the evidence-quality rules below.
+
+Evidence quality requirements (unchanged since 2026-05-29):
 
 1. **Reproducible** — exact command + Python/Node version recorded.
 2. **Code-state verifying** — pin tests, unit tests, code reviews, or audit-script runs that prove the underlying code-path is sound.
 3. **Caveats declared** — any scope-trim (e.g., FLOW vs pure-GET, unit vs full e2e) explicitly noted, with follow-up items tracked separately.
 
-Local evidence does NOT replace CI for ongoing regression protection — once CI is re-enabled, all closed blockers must be re-validated against the canonical workflow runs. Closures under this policy are tagged `(local-evidence, 2026-05-29)` in the status note.
+### Canonical reproducible pipeline (the standing merge/release gate)
+
+| Gate | Command | Notes |
+|---|---|---|
+| PG16 migrations + enum parity + ARCH-3 boundaries | `python scripts/ci/local_gate.py --db-only` (или `make gate` для полного режима) | Docker + PG16 (python:3.12 gate-образ); `test_alembic_postgres_upgrade` + enum-parity guards + `check_context_boundaries`. Канонический прогон миграций — alembic-цепочка исторически не запускается на SQLite (initial_schema = JSONB) |
+| Lint | `make lint` | ruff + black + frontend eslint |
+| Static gates (ruff F821 + staged mypy) | `bash scripts/ci/static_gates.sh` | Windows/кириллический путь: exe-шимы venv ломаются молча — вызывать `python -m mypy` / `python -m bandit` |
+| SAST | `python -m bandit -r backend/app -lll -iii` | Fail = HIGH severity + HIGH confidence |
+| Script security gates | `python scripts/ci/{check_security_exceptions,check_default_secrets,check_runtime_artifacts,check_scoped_queries}.py` | Все четыре — exit 0 обязателен |
+| Contract guards | `python scripts/ci/check_openapi_snapshot.py` / `check_celery_tasks.py` | Baselines: `docs/stabilization/*_baseline.json`; `--snapshot` только для санкционированных изменений контракта |
+| Critical-path matrix (RC-016) | `pytest tests/integration/test_tenant_isolation.py tests/integration/test_cross_tenant_resource_matrix.py tests/e2e/final_regression/test_final_regression_api.py` | Backend-ядро критических путей |
+| Frontend gates | `npm --prefix frontend run typecheck && npm --prefix frontend run test && npm --prefix frontend run build` | |
+
+### Standing deferrals (documented, non-blocking)
+
+Scanner-based gates have no local runner on the reference workstation and remain CI-bound
+obligations (execute on CI re-enablement, or via optional local scanner installs): **Trivy
+dependency scan, Gitleaks secret scan, Trivy container image scan, SBOM generation.**
+Playwright e2e smoke — same class (precedent: RB-005 closure caveat, 2026-05-29).
+
+Closures under this policy are tagged `(local-evidence, <date>)` in the status note.
 
 ## Release blockers checklist (artifact/workflow mapped)
 

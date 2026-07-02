@@ -144,6 +144,7 @@ from app.models.marketplace import (
 
 # ARCH-2: re-export master_data models moved to app.models.master_data.
 from app.models.master_data import (
+    Branch,
     Company,
     EmploymentStatus,
     Person,
@@ -285,6 +286,7 @@ __all__ = [
     "AuditLog",
     "AuditExportJob",
     "ApiKey",
+    "Branch",
     "Company",
     "PipelineRun",
     "PipelineRunStatus",

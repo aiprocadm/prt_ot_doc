@@ -16,7 +16,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.audit_decorator import audit_operation
 from app.core.config import get_settings
-from app.domains.packs.service import resolve_pipeline_profile
 from app.models.models import (
     ClientPackagePreset,
     ClientPackageRun,
@@ -30,6 +29,7 @@ from app.models.models import (
     PackageRunStatus,
     Tenant,
 )
+from app.modules.packs.operations import resolve_pipeline_profile
 from app.services.file_storage import FileStorageService
 
 router = APIRouter(prefix="/portal", tags=["client-portal"])

@@ -19,8 +19,6 @@ from sqlalchemy.orm import selectinload
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.errors import api_problem_detail
 from app.core.security import AccessContext, abac
-from app.domains.packs.context import enrich_context
-from app.domains.packs.seeder import ensure_default_packs
 from app.models.models import (
     Company,
     DocumentPack,
@@ -29,6 +27,8 @@ from app.models.models import (
     Site,
     Tenant,
 )
+from app.modules.packs.context import enrich_context
+from app.modules.packs.seeder import ensure_default_packs
 from app.schemas.pack import (
     PackGenerateRequest,
     PackListItem,

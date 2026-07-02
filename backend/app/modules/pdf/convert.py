@@ -6,8 +6,8 @@ import tempfile
 from pathlib import Path
 
 from app.core.utils.pdf_passport import embed_pdf_passport
-from app.domains.files import s3
 from app.models.file import File, FileKind, FileScanStatus
+from app.modules.files import s3
 from app.modules.pdf.service_pool import LibreOfficePool
 from app.modules.pdf.validators import PdfFontsValidationError, ensure_embedded_fonts
 

@@ -36,7 +36,6 @@ from app.core.idempotency import compute_request_hash
 from app.core.tenant import tenant_prefix_path
 from app.core.tenant_validation import TenantContextValidator
 from app.core.tracing import get_trace_id
-from app.domains.files import s3
 from app.models.file import File as StoredFile
 from app.models.file import FileScanStatus
 from app.models.models import (
@@ -46,6 +45,7 @@ from app.models.models import (
     TemplateVersion,
 )
 from app.models.safety_core import RiskMapItem, SafetyRiskMap
+from app.modules.files import s3
 from app.modules.ppe.services import PackSafetySummaryService
 from app.schemas.pack import (
     PackRunRequest,

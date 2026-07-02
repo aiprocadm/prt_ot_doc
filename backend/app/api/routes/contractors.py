@@ -16,9 +16,9 @@ from app.api.helpers.etag import (
 )
 from app.core.feature_flags import is_feature_enabled
 from app.core.security import AccessContext, abac
-from app.domains.contractors.documents import document_expiry_status
 from app.domains.shared import ContingentItemStatus
 from app.models.models import Tenant
+from app.modules.contractors.documents import document_expiry_status
 from app.modules.contractors.models import (
     ComplianceStatus,
     ContractorDocument,

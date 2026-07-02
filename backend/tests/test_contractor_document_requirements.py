@@ -5,8 +5,8 @@ from datetime import date, timedelta
 from types import SimpleNamespace
 
 from app.domains.shared import ContingentItemStatus
-from app.domains.contractors.documents import requirement_status, best_document
-from app.domains.contractors.lifecycle import (
+from app.modules.contractors.documents import best_document, requirement_status
+from app.modules.contractors.lifecycle import (
     DocumentRequirement,
     ReadinessStatus,
     evaluate_employee,
@@ -36,11 +36,16 @@ def test_future_candidate_is_ok():
 
 
 def test_within_window_is_due_soon():
-    assert requirement_status([_Doc(TODAY + timedelta(days=10))], TODAY) == ContingentItemStatus.DUE_SOON
+    assert (
+        requirement_status([_Doc(TODAY + timedelta(days=10))], TODAY)
+        == ContingentItemStatus.DUE_SOON
+    )
 
 
 def test_past_is_overdue():
-    assert requirement_status([_Doc(TODAY - timedelta(days=1))], TODAY) == ContingentItemStatus.OVERDUE
+    assert (
+        requirement_status([_Doc(TODAY - timedelta(days=1))], TODAY) == ContingentItemStatus.OVERDUE
+    )
 
 
 def test_best_of_multiple_valid_beats_expired():
@@ -66,8 +71,8 @@ def _ready_emp():
         access_status=ComplianceStatus.VALID,
         training_status=ComplianceStatus.VALID,
         medical_status=ComplianceStatus.VALID,
-        last_training_at=date(2026, 6, 1),       # within 365d window
-        next_medical_at=date(2026, 12, 1),       # future
+        last_training_at=date(2026, 6, 1),  # within 365d window
+        next_medical_at=date(2026, 12, 1),  # future
     )
 
 
@@ -78,7 +83,9 @@ def test_no_requirements_keeps_base_verdict_allowed():
 
 def test_mandatory_missing_document_blocks():
     req = DocumentRequirement(doc_type="medical_cert", scope="employee", mandatory=True)
-    v = evaluate_employee(_ready_emp(), TODAY, requirements=[req], employee_docs=[], company_docs=[])
+    v = evaluate_employee(
+        _ready_emp(), TODAY, requirements=[req], employee_docs=[], company_docs=[]
+    )
     assert v.status is ReadinessStatus.BLOCKED
     assert "document:medical_cert" in v.violations
 

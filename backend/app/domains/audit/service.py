@@ -1,35 +1,7 @@
+"""Deprecated compat-shim — canonical location is :mod:`app.modules.audit.service` (ARCH-1)."""
+
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Any
+from app.modules.audit.service import AuditDomainService  # noqa: F401  (compat re-export)
 
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from app.models.models import AuditLog
-
-
-@dataclass
-class AuditDomainService:
-    session: AsyncSession
-
-    async def record(
-        self,
-        actor_id: str | None,
-        action: str,
-        entity: str,
-        entity_id: str,
-        details: dict[str, Any],
-        *,
-        ip: str = "system",
-    ) -> AuditLog:
-        entry = AuditLog(
-            user_id=actor_id,
-            action=action,
-            object_type=entity,
-            object_id=entity_id,
-            details=dict(details),
-            ip=ip,
-        )
-        self.session.add(entry)
-        await self.session.flush()
-        return entry
+__all__ = ["AuditDomainService"]

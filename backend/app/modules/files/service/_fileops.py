@@ -4,15 +4,14 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 from fastapi import HTTPException, status
 from sqlalchemy import delete
 
 from app.core.security import AccessContext
-from app.domains.files import s3
-from app.modules.files import storage
+from app.modules.files import s3, storage
 from app.modules.files.models import (
     FileDownloadLog,
     FileEntityType,
@@ -27,9 +26,59 @@ from app.modules.files.service._base import (
     logger,
 )
 
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+
 
 class FileOpsMixin:
     """Signed download URLs, link/unlink, abort, artifact-from-bytes and delete."""
+
+    if TYPE_CHECKING:
+        # Mixin contract (no runtime effect): state from FileService.__init__
+        # plus helpers provided by AccessMixin (_access.py). Signatures mirror
+        # the AccessMixin definitions so the staged mypy gate checks call-sites.
+        session: AsyncSession
+        tenant_id: str
+
+        async def _audit_file_action(
+            self,
+            *,
+            action: str,
+            object_id: str,
+            user_id: str | None,
+            ip: str | None,
+            user_agent: str | None,
+            request_id: str | None,
+            details: dict[str, Any] | None = None,
+        ) -> None: ...
+
+        async def _enforce_company_scope(
+            self,
+            *,
+            record: FileRecord,
+            action: str,
+            actor_role: str | None,
+            actor_company_id: str | None,
+            access: AccessContext | None = None,
+            on_deny_audit: dict[str, Any] | None = None,
+        ) -> None: ...
+
+        async def _enforce_client_company_scope_with_audit(
+            self,
+            *,
+            record: FileRecord,
+            deny_action: str | None,
+            actor_id: str | None,
+            ip: str | None,
+            user_agent: str | None,
+            request_id: str | None,
+            details: dict[str, Any] | None = None,
+            access: AccessContext | None = None,
+            actor_role: str | None = None,
+            actor_company_id: str | None = None,
+        ) -> None: ...
+
+        def _resolve_signed_url_ttl(self, requested_ttl: int | None = None) -> int: ...
 
     async def get_signed_download_url(
         self,

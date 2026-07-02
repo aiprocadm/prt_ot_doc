@@ -195,7 +195,7 @@ async def test_replace_idempotency_conflict_same_key_different_payload(
 
 
 def test_replace_engine_persists_patch_and_rollback(tmp_path):
-    from app.domains.replace.engine import ReplaceEngine
+    from app.modules.replace.legacy_engine import ReplaceEngine
 
     storage_path = tmp_path / "patches.json"
     engine = ReplaceEngine(storage_path=str(storage_path))
@@ -215,7 +215,7 @@ def test_replace_engine_persists_patch_and_rollback(tmp_path):
 
 
 def test_replace_engine_supports_nested_paths_and_idempotent_rollback(tmp_path):
-    from app.domains.replace.engine import ReplaceEngine
+    from app.modules.replace.legacy_engine import ReplaceEngine
 
     storage_path = tmp_path / "patches.json"
     engine = ReplaceEngine(storage_path=str(storage_path))
@@ -234,7 +234,7 @@ def test_replace_engine_supports_nested_paths_and_idempotent_rollback(tmp_path):
 
 
 def test_replace_engine_records_summary_and_history(tmp_path):
-    from app.domains.replace.engine import ReplaceEngine
+    from app.modules.replace.legacy_engine import ReplaceEngine
 
     storage_path = tmp_path / "patches.json"
     engine = ReplaceEngine(storage_path=str(storage_path))

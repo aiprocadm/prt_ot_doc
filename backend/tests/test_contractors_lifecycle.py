@@ -1,12 +1,12 @@
 from dataclasses import dataclass
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 
-from app.modules.contractors.models import ComplianceStatus
-from app.domains.contractors.lifecycle import (
+from app.modules.contractors.lifecycle import (
+    TRAINING_INTERVAL_DAYS,
     ReadinessStatus,
     evaluate_employee,
-    TRAINING_INTERVAL_DAYS,
 )
+from app.modules.contractors.models import ComplianceStatus
 
 
 @dataclass
@@ -47,8 +47,11 @@ def test_stale_valid_medical_is_blocked():
 
 
 def test_expired_status_is_blocked():
-    emp = _Emp(access_status=ComplianceStatus.EXPIRED, last_training_at=_dt(TODAY),
-               next_medical_at=_dt(TODAY + timedelta(days=200)))
+    emp = _Emp(
+        access_status=ComplianceStatus.EXPIRED,
+        last_training_at=_dt(TODAY),
+        next_medical_at=_dt(TODAY + timedelta(days=200)),
+    )
     v = evaluate_employee(emp, TODAY)
     assert v.status == ReadinessStatus.BLOCKED
     assert "access" in v.violations
@@ -86,16 +89,18 @@ def test_missing_deadlines_are_blocked():
 
 
 def test_pending_status_is_warning():
-    emp = _Emp(training_status=ComplianceStatus.PENDING, last_training_at=_dt(TODAY),
-               next_medical_at=_dt(TODAY + timedelta(days=200)))
+    emp = _Emp(
+        training_status=ComplianceStatus.PENDING,
+        last_training_at=_dt(TODAY),
+        next_medical_at=_dt(TODAY + timedelta(days=200)),
+    )
     v = evaluate_employee(emp, TODAY)
     assert v.status == ReadinessStatus.WARNING
     assert "training" in v.warnings
 
 
 def test_due_soon_deadline_is_warning():
-    emp = _Emp(last_training_at=_dt(TODAY),
-               next_medical_at=_dt(TODAY + timedelta(days=10)))
+    emp = _Emp(last_training_at=_dt(TODAY), next_medical_at=_dt(TODAY + timedelta(days=10)))
     v = evaluate_employee(emp, TODAY)
     assert v.status == ReadinessStatus.WARNING
     assert "medical" in v.warnings

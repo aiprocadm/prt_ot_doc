@@ -38,23 +38,16 @@ APP_DIR = BACKEND_DIR / "app"
 # Each is a debt item for ARCH-1. ``imported_from_module`` is the module named in
 # ``from X import ...`` / ``import X`` (X), not the imported attribute.
 ALLOWLIST: set[tuple[str, str]] = {
-    # modules → domains (11)
+    # modules → domains (2)
     ("app.modules.briefings.services", "app.domains.signing.pep"),
-    ("app.modules.files.api", "app.domains.files"),
-    ("app.modules.files.service", "app.domains.files"),
-    # ARCH-4 slice 10: FileService god-class split relocated the same legitimate ``s3``
-    # access into the package sub-modules — same debt item, not a new leak.
-    ("app.modules.files.service._fileops", "app.domains.files"),
-    ("app.modules.files.service._functions", "app.domains.files"),
-    ("app.modules.files.service._uploads", "app.domains.files"),
-    ("app.modules.files.storage", "app.domains.files"),
-    ("app.modules.health_checks.service", "app.domains.files"),
-    ("app.modules.pdf.convert", "app.domains.files"),
-    ("app.modules.projections.services", "app.domains.contractors.lifecycle"),
     ("app.modules.templates.service", "app.domains.templating.renderer"),
-    # domains → modules (2)
-    ("app.domains.contractors.lifecycle", "app.modules.contractors.models"),
-    ("app.domains.ppe.service", "app.modules.ppe.services"),
+    # modules → domains.shared (shared kernel). ARCH-1 slices 4-5 moved contractors' and
+    # ppe's pure logic into modules/, but they still import the shared
+    # ContingentItemStatus/classify helpers; migrating app.domains.shared itself is a
+    # separate future slice.
+    ("app.modules.contractors.documents", "app.domains.shared"),
+    ("app.modules.contractors.lifecycle", "app.domains.shared"),
+    ("app.modules.ppe.lifecycle", "app.domains.shared"),
     # ARCH-1 compat-shims: canon logic moved to modules/, domains/<ctx> kept as a pure
     # re-export until the next major (POST-1 removes it). Intentional, not debt to reduce.
     ("app.domains.risk", "app.modules.risk.calc"),
@@ -63,6 +56,22 @@ ALLOWLIST: set[tuple[str, str]] = {
     ("app.domains.incidents.service", "app.modules.incidents.operations"),
     ("app.domains.training", "app.modules.training.operations"),
     ("app.domains.training.service", "app.modules.training.operations"),
+    ("app.domains.contractors.documents", "app.modules.contractors.documents"),
+    ("app.domains.contractors.lifecycle", "app.modules.contractors.lifecycle"),
+    ("app.domains.ppe", "app.modules.ppe.operations"),
+    ("app.domains.ppe.lifecycle", "app.modules.ppe.lifecycle"),
+    ("app.domains.ppe.service", "app.modules.ppe.operations"),
+    ("app.domains.packs.assets", "app.modules.packs.assets"),
+    ("app.domains.packs.context", "app.modules.packs.context"),
+    ("app.domains.packs.definitions", "app.modules.packs.definitions"),
+    ("app.domains.packs.seeder", "app.modules.packs.seeder"),
+    ("app.domains.packs.service", "app.modules.packs.operations"),
+    ("app.domains.files.s3", "app.modules.files.s3"),
+    ("app.domains.files.utils", "app.modules.files.utils"),
+    ("app.domains.files.document", "app.modules.files.document"),
+    ("app.domains.replace.engine", "app.modules.replace.legacy_engine"),
+    ("app.domains.audit.service", "app.modules.audit.service"),
+    ("app.domains.sign.signer", "app.modules.sign.signer"),
 }
 
 

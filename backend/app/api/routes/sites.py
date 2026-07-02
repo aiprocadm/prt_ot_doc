@@ -17,6 +17,7 @@ from app.core.audit_decorator import audit_operation
 from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
 from app.models.models import (
+    Branch,
     Company,
     Site,
     Tenant,
@@ -69,6 +70,22 @@ async def _get_company(session: AsyncSession, tenant: Tenant, company_id: str) -
     if company is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Company not found")
     return company
+
+
+async def _ensure_branch_link(
+    session: AsyncSession, tenant: Tenant, branch_id: str, company_id: str
+) -> None:
+    """RC-014: site.branch_id — app-level ссылка (нет DB FK), целостность держит API."""
+    stmt = select(Branch).where(
+        Branch.id == branch_id,
+        Branch.tenant_id == tenant.id,
+        Branch.deleted_at.is_(None),
+    )
+    branch = (await session.execute(stmt)).scalar_one_or_none()
+    if branch is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Branch not found")
+    if branch.company_id != company_id:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Branch belongs to a different company")
 
 
 async def _get_site(session: AsyncSession, tenant: Tenant, site_id: str) -> Site:
@@ -149,6 +166,8 @@ async def create_site(
     TenantContextValidator.ensure_tenant_context(tenant)
 
     await _get_company(session, tenant, payload.company_id)
+    if payload.branch_id:
+        await _ensure_branch_link(session, tenant, payload.branch_id, payload.company_id)
     site = Site(tenant_id=str(tenant.id), **payload.model_dump())
     session.add(site)
     await session.flush()
@@ -187,6 +206,9 @@ async def update_site(
         return SiteRead.model_validate(site)
     if "company_id" in updates:
         await _get_company(session, tenant, str(updates["company_id"]))
+    if updates.get("branch_id"):
+        target_company = str(updates.get("company_id") or site.company_id)
+        await _ensure_branch_link(session, tenant, str(updates["branch_id"]), target_company)
     for key, value in updates.items():
         setattr(site, key, value)
     await session.commit()
