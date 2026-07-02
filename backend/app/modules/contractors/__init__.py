@@ -2,7 +2,7 @@
 
 Public surface: ORM models (``.models``), pure document-expiry classification
 (``.documents``) and the admission-readiness engine (``.lifecycle``). The legacy
-``app.domains.contractors`` package is a deprecated compat-shim re-exporting from here.
+``app.domains.contractors`` compat-shim was removed in POST-1 (2026-07-02).
 """
 
 from __future__ import annotations
