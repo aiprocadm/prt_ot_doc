@@ -204,6 +204,7 @@ async def create_item(
         category=payload.category,
         description=payload.description,
         default_wear_days=payload.default_wear_days,
+        min_stock=payload.min_stock,
         metadata_json=payload.metadata_json,
     )
     session.add(item)
