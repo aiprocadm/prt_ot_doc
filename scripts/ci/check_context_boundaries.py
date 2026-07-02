@@ -8,10 +8,10 @@ This check enforces it for the two legacy-coupling directions:
   * ``app.modules.*`` must not import ``app.domains.*``
   * ``app.domains.*`` must not import ``app.modules.*``
 
-A NEW cross-context import fails the check. The current leaks (audit 2026-06-30:
-8 modules→domains, 2 domains→modules) are frozen in ``ALLOWLIST`` — a temporary
-debt list drained by ARCH-1 (domains/ → modules/ migration). The allowlist is
-kept honest: a stale entry (no longer a real import) also fails the check.
+A NEW cross-context import fails the check. The remaining leaks (5 after POST-1,
+2026-07-02: 2 modules→living-domains + 3 modules→domains.shared) are frozen in
+``ALLOWLIST``. The allowlist is kept honest: a stale entry (no longer a real
+import) also fails the check.
 
 Why a custom AST walker instead of import-linter: ``app.modules`` / ``app.domains``
 are PEP 420 namespace packages (no ``__init__.py``), which import-linter's graph
@@ -48,30 +48,9 @@ ALLOWLIST: set[tuple[str, str]] = {
     ("app.modules.contractors.documents", "app.domains.shared"),
     ("app.modules.contractors.lifecycle", "app.domains.shared"),
     ("app.modules.ppe.lifecycle", "app.domains.shared"),
-    # ARCH-1 compat-shims: canon logic moved to modules/, domains/<ctx> kept as a pure
-    # re-export until the next major (POST-1 removes it). Intentional, not debt to reduce.
-    ("app.domains.risk", "app.modules.risk.calc"),
-    ("app.domains.risk.calc", "app.modules.risk.calc"),
-    ("app.domains.incidents", "app.modules.incidents.operations"),
-    ("app.domains.incidents.service", "app.modules.incidents.operations"),
-    ("app.domains.training", "app.modules.training.operations"),
-    ("app.domains.training.service", "app.modules.training.operations"),
-    ("app.domains.contractors.documents", "app.modules.contractors.documents"),
-    ("app.domains.contractors.lifecycle", "app.modules.contractors.lifecycle"),
-    ("app.domains.ppe", "app.modules.ppe.operations"),
-    ("app.domains.ppe.lifecycle", "app.modules.ppe.lifecycle"),
-    ("app.domains.ppe.service", "app.modules.ppe.operations"),
-    ("app.domains.packs.assets", "app.modules.packs.assets"),
-    ("app.domains.packs.context", "app.modules.packs.context"),
-    ("app.domains.packs.definitions", "app.modules.packs.definitions"),
-    ("app.domains.packs.seeder", "app.modules.packs.seeder"),
-    ("app.domains.packs.service", "app.modules.packs.operations"),
-    ("app.domains.files.s3", "app.modules.files.s3"),
-    ("app.domains.files.utils", "app.modules.files.utils"),
-    ("app.domains.files.document", "app.modules.files.document"),
-    ("app.domains.replace.engine", "app.modules.replace.legacy_engine"),
-    ("app.domains.audit.service", "app.modules.audit.service"),
-    ("app.domains.sign.signer", "app.modules.sign.signer"),
+    # POST-1 (2026-07-02) physically removed the ARCH-1 compat-shim packages
+    # (domains/{audit,contractors,files,incidents,packs,ppe,replace,risk,sign,training})
+    # and their 22 domains→modules re-export edges from this list.
 }
 
 

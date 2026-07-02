@@ -32,6 +32,6 @@ def test_allowlist_has_no_stale_entries() -> None:
 
 
 def test_allowlist_is_the_expected_legacy_set() -> None:
-    # Freezes the known legacy leak count (audit 2026-06-30: 8 modules→domains + 2
-    # domains→modules). When ARCH-1 drains one, this number should go DOWN, never up.
-    assert len(checker.ALLOWLIST) == 10
+    # Freezes the known legacy leak count (POST-1 2026-07-02: 2 modules→living-domains
+    # + 3 modules→domains.shared). This number should go DOWN, never up.
+    assert len(checker.ALLOWLIST) == 5

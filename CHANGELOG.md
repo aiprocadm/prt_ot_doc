@@ -21,6 +21,37 @@
   - Ровно тот follow-up, который был назван в «env.py atomicity review» (2026-06-02) как
     «optional future hardening: per-migration tx + autocommit_block()».
 
+## 2026-07-02 (feat/post-1-remove-domain-shims — POST-1: физическое удаление ARCH-1 compat-shim'ов)
+
+### Removed
+- **POST-1 — снесены 10 deprecated compat-shim пакетов `domains/*`** (28 файлов, чистые
+  реэкспорты, оставленные ARCH-1 «до следующего мажора»): `audit`, `contractors`, `files`,
+  `incidents`, `packs`, `ppe`, `replace`, `risk`, `sign`, `training`. Канон — только
+  `app.modules.*`. Живые (не дублированные) домены `billing/committees/layout/medical/npa/
+  permits/prescriptions/signing/sout/templating/work_permits` + `shared.py` — не тронуты.
+
+### Changed
+- **Потребители переведены на канонические пути** (последние 5 ссылок на shim'ы):
+  `tests/test_contractor_admission_service.py`, `tests/test_contractor_admission_with_documents.py`
+  (`domains.contractors.lifecycle` → `modules.contractors.lifecycle`),
+  `tests/test_demo_bootstrap_contractor_documents.py` (`domains.contractors.documents` →
+  `modules.contractors.documents`), `scripts/smoke.sh` ×2 (`domains.files` → `modules.files`).
+- **ALLOWLIST в `scripts/ci/check_context_boundaries.py`: 27 → 5.** Ушли все 22 shim-ребра
+  domains→modules; остались 2 modules→живые-домены (briefings→signing.pep,
+  templates→templating.renderer) + 3 modules→domains.shared (shared kernel — отдельный
+  будущий срез).
+- `.coveragerc`: omit-пути `app/domains/packs/{context,seeder}.py` → `app/modules/packs/…`
+  (протухли в ARCH-1 slice 6, omit молча не работал).
+- Docstring'и `modules/{contractors,packs,ppe}/__init__.py` и протухшие перекрёстные ссылки
+  (`domains/permits/lifecycle.py`, `domains/signing/pep.py`, `modules/ppe/lifecycle.py`) —
+  упоминания shim'ов заменены на «removed in POST-1».
+
+### Fixed
+- **`tests/test_context_boundaries.py::test_allowlist_is_the_expected_legacy_set` был красным
+  на main**: freeze-тест фиксировал 10 записей allowlist, а ARCH-1 довёл их до 27, не обновив
+  зеркальный тест (скрипт-гейт не падал — он проверяет только новые/протухшие рёбра, не
+  количество). Теперь фиксация = 5 и совпадает с реальностью.
+
 ## 2026-07-02 (fix/stabilize-gates-2026-06-29 — REL-1 resolved: permanent local-evidence policy; RC-015/RC-016 closed; staged mypy gate repaired)
 
 ### Changed

@@ -4,7 +4,7 @@ Logic lives in submodules imported directly (``assets`` / ``context`` /
 ``definitions`` / ``seeder`` — provisioning and rendering-context helpers;
 ``operations`` — scenario-profile resolution + ``PackAssembler``; ``service`` /
 ``schemas`` / ``api`` — pack-run services and the v2 router). The legacy
-``app.domains.packs`` package is a deprecated compat-shim re-exporting from here.
+``app.domains.packs`` compat-shim was removed in POST-1 (2026-07-02).
 
 ``router`` is exposed lazily (PEP 562): worker/bootstrap import paths
 (``services/tasks.py``, ``services/demo_bootstrap.py`` import the ``seeder`` /

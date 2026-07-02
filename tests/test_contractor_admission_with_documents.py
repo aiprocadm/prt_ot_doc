@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from app.domains.contractors.lifecycle import ReadinessStatus
+from app.modules.contractors.lifecycle import ReadinessStatus
 from app.modules.contractors.models import (
     ComplianceStatus,
     ContractorDocument,

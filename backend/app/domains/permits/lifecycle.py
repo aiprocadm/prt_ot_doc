@@ -1,6 +1,6 @@
 """Pure personal-permit (личный допуск) lifecycle rules: FSM + expiry helpers.
 
-No I/O and no sqlalchemy imports — mirrors ``domains/ppe/lifecycle.py``.
+No I/O and no sqlalchemy imports — mirrors ``modules/ppe/lifecycle.py``.
 Status values are the canonical VARCHAR values stored in ``permit.status``
 (lowercase, see migration prm01).
 """
