@@ -114,10 +114,24 @@
 
 ### Слой 4 — интеграция с выдачей `issue_ppe_item` / `replace_issue`
 
+**Размещение — на уровне роута (решение зафиксировано).** `deplete_for_issue` вызывается в
+роут-хендлерах `create_issue` / `replace_issue_endpoint`, **не** внутри доменного
+`issue_ppe_item`. Обоснование (проверено по коду):
+- Пост-выдачные side-effects уже живут в роуте: `outbox.enqueue(PPE_ISSUED)` вызывается в
+  `create_issue`/`replace_issue_endpoint` после чистого сервиса. Списание склада — тот же класс
+  cross-context эффекта; ставим рядом с outbox, по грани существующего паттерна.
+- `replace_issue` (operations.py) переиспользует `issue_ppe_item` внутри. Разместив списание в
+  сервисе, мы получили бы его «бесплатно» и для replace — но ценой впрыска warehouse-флага и
+  склад-сервиса в доменную операцию выдачи. Явные 2 вызова в роутах дешевле этой связанности и
+  оставляют `issue_ppe_item` без зависимости от складской фичи (bounded contexts).
+
+Механика:
 - `PPEIssueCreate` (+`PPEIssueReplaceRequest`) получает опциональный `batch_id: str | None`.
 - `create_issue` / `replace_issue_endpoint` после успешного создания выдачи вызывают
-  `deplete_for_issue(..., item_id=issue.item_id, quantity=issue.quantity, batch_id=payload.batch_id,
-  ref_id=issue.id)` в той же транзакции.
+  `deplete_for_issue(..., item_id=<issue>.item_id, quantity=<issue>.quantity,
+  batch_id=payload.batch_id, ref_id=<issue>.id)` в той же транзакции запроса (рядом с
+  `outbox.enqueue`). Для replace списывается **новая** выдача (`new_issue`) — замена покидает
+  склад один раз.
 - Существующий `PPE_ISSUED` outbox-эвент **не трогаем**.
 - Обратная совместимость: флаг ВЫКЛ или нет партий → `deplete_for_issue` возвращает `[]`,
   выдача идентична текущей.
