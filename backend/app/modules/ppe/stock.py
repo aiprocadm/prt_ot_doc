@@ -373,6 +373,7 @@ async def compute_shortages(
         key=lambda r: (
             not r.below_threshold,
             r.days_to_depletion if r.days_to_depletion is not None else float("inf"),
+            r.item_id,
         )
     )
     return rows

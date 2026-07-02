@@ -109,3 +109,54 @@ async def test_only_below_filters_out_healthy(sessionmaker, data_factory: TestDa
     async with sessionmaker() as session:
         rows = await compute_shortages(session, tenant.id, now=NOW, only_below=True)
     assert [r.item_name for r in rows] == ["low"]
+
+
+@pytest.mark.asyncio
+async def test_watched_item_without_batches_reports_zero_on_hand(
+    sessionmaker, data_factory: TestDataFactory
+):
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        await _mk_item(session, tenant.id, name="nobatch", min_stock=5)
+        await session.commit()
+    async with sessionmaker() as session:
+        rows = await compute_shortages(session, tenant.id, now=NOW)
+    assert len(rows) == 1
+    assert rows[0].on_hand == 0
+    assert rows[0].below_threshold is True
+    assert rows[0].deficit == 5
+    assert rows[0].days_to_depletion is None
+
+
+@pytest.mark.asyncio
+async def test_rows_sorted_below_first_then_by_days_to_depletion(
+    sessionmaker, data_factory: TestDataFactory
+):
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        fast = await _mk_item(session, tenant.id, name="fast", min_stock=50)
+        fb = await _mk_batch(session, tenant.id, fast.id, 10)
+        await _mk_issue(session, tenant.id, fast.id, fb.id, 900, NOW - timedelta(days=5))
+        slow = await _mk_item(session, tenant.id, name="slow", min_stock=50)
+        sb = await _mk_batch(session, tenant.id, slow.id, 10)
+        await _mk_issue(session, tenant.id, slow.id, sb.id, 90, NOW - timedelta(days=5))
+        healthy = await _mk_item(session, tenant.id, name="healthy", min_stock=5)
+        await _mk_batch(session, tenant.id, healthy.id, 100)
+        await session.commit()
+    async with sessionmaker() as session:
+        rows = await compute_shortages(session, tenant.id, now=NOW, window_days=90)
+    assert [r.item_name for r in rows] == ["fast", "slow", "healthy"]
+    assert rows[0].days_to_depletion == pytest.approx(1.0)
+    assert rows[1].days_to_depletion == pytest.approx(10.0)
+    assert rows[2].below_threshold is False
+
+
+@pytest.mark.asyncio
+async def test_shortages_are_tenant_scoped(sessionmaker, data_factory: TestDataFactory):
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        await _mk_item(session, tenant.id, name="a-item", min_stock=10)
+        await session.commit()
+    async with sessionmaker() as session:
+        rows = await compute_shortages(session, "tenant-that-does-not-exist", now=NOW)
+    assert rows == []
