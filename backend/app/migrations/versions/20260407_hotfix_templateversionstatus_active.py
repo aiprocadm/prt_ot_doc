@@ -15,7 +15,10 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.execute("ALTER TYPE templateversionstatus ADD VALUE IF NOT EXISTS 'active'")
+    # POST-2: enum extension commits outside the migration tx (PG forbids
+    # using a new value in the tx that added it); IF NOT EXISTS = retry-safe.
+    with op.get_context().autocommit_block():
+        op.execute("ALTER TYPE templateversionstatus ADD VALUE IF NOT EXISTS 'active'")
 
 
 def downgrade() -> None:
