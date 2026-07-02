@@ -16,6 +16,7 @@ import {
   History,
   Link2,
   LayoutDashboard,
+  Network,
   Package,
   Search,
   Settings,
@@ -47,6 +48,7 @@ export const MAIN_NAV_GROUPS: NavGroup[] = [
     items: [
       { label: "Главная", to: "/dashboard", icon: LayoutDashboard, permission: PERMISSIONS.DASHBOARD_VIEW },
       { label: "Компании", to: "/companies", icon: Building2, permission: PERMISSIONS.COMPANY_VIEW },
+      { label: "Филиалы", to: "/branches", icon: Network, permission: PERMISSIONS.BRANCH_VIEW },
       { label: "Сотрудники", to: "/persons", icon: Users, permission: PERMISSIONS.PERSON_VIEW },
       { label: "Документы", to: "/documents", icon: FileText, permission: PERMISSIONS.DOCUMENT_VIEW },
       { label: "Шаблоны", to: "/templates", icon: FileArchive, permission: PERMISSIONS.TEMPLATE_VIEW },
