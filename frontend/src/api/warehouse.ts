@@ -41,7 +41,20 @@ export type CreateMovementInput = {
   reason?: string | null;
 };
 
+export type PPEStockShortageDto = {
+  item_id: string;
+  item_name: string;
+  min_stock: number;
+  on_hand: number;
+  deficit: number;
+  below_threshold: boolean;
+  avg_daily_consumption: number;
+  days_to_depletion: number | null;
+  projected_breach_date: string | null;
+};
+
 type PageResponse<T> = { items: T[]; total: number };
+type ShortagePageResponse = { items: PPEStockShortageDto[]; total: number; window_days: number };
 
 export const warehouseApi = {
   async listBatches(): Promise<StockBatchDto[]> {
@@ -63,5 +76,9 @@ export const warehouseApi = {
   async createMovement(input: CreateMovementInput): Promise<StockMovementDto> {
     const response = await apiClient.post<StockMovementDto>("/ppe/stock/movements", input);
     return response.data;
+  },
+  async listShortages(params?: { window_days?: number; only_below?: boolean }): Promise<PPEStockShortageDto[]> {
+    const response = await apiClient.get<ShortagePageResponse>("/ppe/stock/shortages", { params });
+    return response.data.items ?? [];
   }
 };

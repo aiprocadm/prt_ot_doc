@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 
-import { warehouseApi, type StockBatchDto, type StockLevelDto, type StockMovementDto } from "@/api/warehouse";
+import {
+  warehouseApi,
+  type PPEStockShortageDto,
+  type StockBatchDto,
+  type StockLevelDto,
+  type StockMovementDto
+} from "@/api/warehouse";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingScreen } from "@/components/common/LoadingScreen";
@@ -21,6 +27,7 @@ const WarehousePage = () => {
   const [levels, setLevels] = useState<StockLevelDto[]>([]);
   const [batches, setBatches] = useState<StockBatchDto[]>([]);
   const [movements, setMovements] = useState<StockMovementDto[]>([]);
+  const [shortages, setShortages] = useState<PPEStockShortageDto[]>([]);
   const [form, setForm] = useState({ batch_id: "", kind: "receipt", quantity: "1", reason: "" });
   const [submitting, setSubmitting] = useState(false);
 
@@ -28,14 +35,16 @@ const WarehousePage = () => {
     setLoading(true);
     setError(null);
     try {
-      const [levelsData, batchesData, movementsData] = await Promise.all([
+      const [levelsData, batchesData, movementsData, shortagesData] = await Promise.all([
         warehouseApi.listLevels(),
         warehouseApi.listBatches(),
-        warehouseApi.listMovements()
+        warehouseApi.listMovements(),
+        warehouseApi.listShortages()
       ]);
       setLevels(levelsData);
       setBatches(batchesData);
       setMovements(movementsData);
+      setShortages(shortagesData);
     } catch (err) {
       setError((err as ApiError) ?? { message: "Не удалось загрузить склад СИЗ" });
     } finally {
@@ -223,6 +232,58 @@ const WarehousePage = () => {
                     <TableCell>{m.kind}</TableCell>
                     <TableCell>{m.quantity_delta}</TableCell>
                     <TableCell>{m.reason || "—"}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            Дефицит / мин-остаток
+            <Badge variant="secondary">{shortages.filter((s) => s.below_threshold).length}</Badge>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {shortages.length === 0 ? (
+            <EmptyState
+              title="Дефицита нет"
+              description="Все позиции выше минимального остатка."
+            />
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Позиция</TableHead>
+                  <TableHead>Остаток</TableHead>
+                  <TableHead>Порог</TableHead>
+                  <TableHead>Дефицит</TableHead>
+                  <TableHead>Дней до исчерпания</TableHead>
+                  <TableHead>Дата пробоя</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {shortages.map((s) => (
+                  <TableRow key={s.item_id}>
+                    <TableCell className="font-medium">
+                      <div className="flex items-center gap-2">
+                        {s.item_name}
+                        <Badge variant={s.below_threshold ? "destructive" : "secondary"}>
+                          {s.below_threshold ? "Дефицит" : "Норма"}
+                        </Badge>
+                      </div>
+                    </TableCell>
+                    <TableCell>{s.on_hand}</TableCell>
+                    <TableCell>{s.min_stock}</TableCell>
+                    <TableCell>{s.deficit}</TableCell>
+                    <TableCell>
+                      {s.days_to_depletion !== null ? Math.round(s.days_to_depletion) : "—"}
+                    </TableCell>
+                    <TableCell>
+                      {s.projected_breach_date !== null ? formatDate(s.projected_breach_date) : "—"}
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
