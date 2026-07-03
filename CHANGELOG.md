@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## 2026-07-03 (p10-06 — P10-06 СИЗ склад: мин-остаток + прогноз дефицита)
+
+### Added
+- P10-06 СИЗ склад: per-item min-stock threshold (`ppeitem.min_stock`, migration wa05) + shortage forecast endpoint `GET /ppe/stock/shortages` (consumption velocity from issue movements → deficit-to-reorder + days-to-depletion + projected breach date) + WarehousePage shortage section.
+
 ## 2026-07-02 (feat/ppe-stock-movements-p10-06 — P10-06 СИЗ склад: журнал движений («честные остатки»))
 
 ### Added
