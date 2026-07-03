@@ -17,6 +17,7 @@ class PPEItemCreate(BaseSchema):
     category: PPEItemCategory = PPEItemCategory.OTHER
     description: str | None = None
     default_wear_days: int = Field(default=365, ge=1)
+    min_stock: int = Field(default=0, ge=0)
     metadata_json: dict[str, Any] = Field(default_factory=dict)
 
     @field_validator("category", mode="before")
@@ -33,6 +34,7 @@ class PPEItemUpdate(BaseSchema):
     category: PPEItemCategory | None = None
     description: str | None = None
     default_wear_days: int | None = Field(default=None, ge=1)
+    min_stock: int | None = Field(default=None, ge=0)
     metadata_json: dict[str, Any] | None = None
 
     @field_validator("category", mode="before")
@@ -50,6 +52,7 @@ class PPEItemRead(BaseSchema):
     category: PPEItemCategory
     description: str | None
     default_wear_days: int
+    min_stock: int
     metadata_json: dict[str, Any]
     created_at: datetime
     updated_at: datetime
@@ -249,6 +252,24 @@ class PPEStockLevelRead(BaseSchema):
 class PPEStockLevelPage(BaseSchema):
     items: list[PPEStockLevelRead]
     total: int
+
+
+class PPEStockShortageRead(BaseSchema):
+    item_id: str
+    item_name: str
+    min_stock: int
+    on_hand: int
+    deficit: int
+    below_threshold: bool
+    avg_daily_consumption: float
+    days_to_depletion: float | None
+    projected_breach_date: date | None
+
+
+class PPEStockShortagePage(BaseSchema):
+    items: list[PPEStockShortageRead]
+    total: int
+    window_days: int
 
 
 # Mirrors ``MANUAL_KINDS`` in ``app.modules.ppe.stock`` — intentionally duplicated

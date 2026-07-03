@@ -8,13 +8,15 @@ const listLevelsMock = vi.fn();
 const listBatchesMock = vi.fn();
 const listMovementsMock = vi.fn();
 const createMovementMock = vi.fn();
+const listShortagesMock = vi.fn();
 
 vi.mock("@/api/warehouse", () => ({
   warehouseApi: {
     listLevels: (...args: unknown[]) => listLevelsMock(...args),
     listBatches: (...args: unknown[]) => listBatchesMock(...args),
     listMovements: (...args: unknown[]) => listMovementsMock(...args),
-    createMovement: (...args: unknown[]) => createMovementMock(...args)
+    createMovement: (...args: unknown[]) => createMovementMock(...args),
+    listShortages: (...args: unknown[]) => listShortagesMock(...args)
   }
 }));
 
@@ -24,7 +26,9 @@ describe("WarehousePage", () => {
     listBatchesMock.mockReset();
     listMovementsMock.mockReset();
     createMovementMock.mockReset();
+    listShortagesMock.mockReset();
     listMovementsMock.mockResolvedValue([]);
+    listShortagesMock.mockResolvedValue([]);
   });
 
   it("renders stock levels from the warehouse API", async () => {
@@ -87,5 +91,23 @@ describe("WarehousePage", () => {
         expect.objectContaining({ batch_id: "b1", kind: "receipt", quantity: 1, reason: null })
       )
     );
+  });
+
+  it("renders the shortage section with a below-threshold row", async () => {
+    listLevelsMock.mockResolvedValue([]);
+    listBatchesMock.mockResolvedValue([]);
+    listMovementsMock.mockResolvedValue([]);
+    listShortagesMock.mockResolvedValue([
+      {
+        item_id: "i1", item_name: "Каска", min_stock: 10, on_hand: 3, deficit: 7,
+        below_threshold: true, avg_daily_consumption: 1, days_to_depletion: 3,
+        projected_breach_date: "2026-07-06"
+      }
+    ]);
+
+    render(<MemoryRouter><WarehousePage /></MemoryRouter>);
+    await waitFor(() => expect(screen.getByText("Дефицит / мин-остаток")).toBeInTheDocument());
+    expect(screen.getByText("Каска")).toBeInTheDocument();
+    expect(screen.getByText("7")).toBeInTheDocument();
   });
 });

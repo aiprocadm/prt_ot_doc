@@ -1,5 +1,16 @@
 # AI Implementation Report
 
+## Last Agent Handoff (2026-07-03, P10-06 СИЗ СКЛАД — МИН-ОСТАТОК + ПРОГНОЗ ДЕФИЦИТА — ветка claude/goofy-mendel-ae01ef)
+
+- **Дата:** 2026-07-03. Продолжение контура P10-06 после журнала движений (wa04): добавлен per-item порог `PPEItem.min_stock` (миграция `wa05`, аддитивная) и endpoint прогноза дефицита `GET /api/v1/ppe/stock/shortages` (за флагом `warehouse`, ManagerAccess, без ETag — вычисляемый агрегат, не сущность).
+- **Архитектура:** чистая функция `project_shortage` + агрегатор `compute_shortages` в существующем движке `backend/app/modules/ppe/stock.py` — считают скорость расхода по issue-движениям за окно (`window_days`) → дефицит к дозаказу (`min_stock - on_hand`, floor 0) + дни до исчерпания (`on_hand / daily_rate`) + прогнозная дата пробоя. `min_stock` добавлен в `PPEItemCreate/Update/Read`. Фронт: секция «Дефицит / мин-остаток» на `WarehousePage.tsx` + `warehouseApi.listShortages`.
+- **Осознанно отложено:** форма редактирования PPE-позиции (min_stock ставится только через `PATCH /ppe/items/{id}` — в фронте нет экрана редактирования позиций СИЗ вообще, не только для этого поля).
+- **Docs (Task 7):** роадмап `PLATFORM_VNEXT_IMPLEMENTATION_PLAN.md` P10-06 строка обновлена (shipped-проза + пункт «мин-остаток/прогноз дефицита» убран из «Остаётся»); `CHANGELOG.md` — новая запись 2026-07-03; OpenAPI baseline пере-снят **810/651 → 811/653** (1 эндпоинт `GET /stock/shortages` + 2 схемы `PPEStockShortageRead`/`PPEStockShortagePage`, чистый additive-диф, `--compare` зелёный).
+- **Верификация:** полный P10-06 регресс-сюит (миграция wa05 + projection unit + shortage service + shortage API + warehouse API + stock-movements API + ppe API) — см. итог в тексте сессии; фронт `WarehousePage.test.tsx` — см. итог в тексте сессии.
+- **Next (точный шаг):** следующий срез P10-06 по очереди — **инвентаризация** или **поставщики** (оба ещё не начаты; см. «Остаётся» в роадмап-таблице). После — бюджет безопасности, мобильная выдача.
+
+---
+
 ## Last Agent Handoff (2026-07-02, P10-06 СИЗ СКЛАД — ЖУРНАЛ ДВИЖЕНИЙ «ЧЕСТНЫЕ ОСТАТКИ» — ветка feat/ppe-stock-movements-p10-06 от main, НЕ влита)
 
 - **Дата:** 2026-07-02. «продолжай по roadmap». СВЕРКА: `TZ_REFACTOR_AND_RELEASE` отработан целиком (PR #715–719 влиты в main — ARCH-1, POST-1/2, RC-014 branch+UI); RC-серия закрыта локально. Через brainstorming пользователь выбрал контур **P10-06 СИЗ склад** → срез **«журнал движений»**; 3 архитектурных решения (AskUserQuestion): Вариант B (кэш-баланс + append-only журнал), FIFO-авто с явным `batch_id`-переопределением, 400 при нехватке. Драйвер: brainstorming → writing-plans → **subagent-driven-development** (10 TDD-задач; на каждую implementer + spec-review + quality-review; замечания триажированы/исправлены). Среда Win+Py3.13.7, venv в ОСНОВНОЙ копии (`D:\Кодинг\3. …\.venv`). Ветка от main@`899576b5`. Спека `docs/superpowers/specs/2026-07-02-p10-06-ppe-stock-movements-design.md`, план `docs/superpowers/plans/2026-07-02-p10-06-ppe-stock-movements.md`.
