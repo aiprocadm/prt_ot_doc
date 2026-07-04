@@ -14,6 +14,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.models import PPESupplier
 
+_UPDATABLE_FIELDS = frozenset({"name", "inn", "contact_email", "contact_phone"})
+
 
 class SupplierNotFound(Exception):
     def __init__(self, supplier_id: str) -> None:
@@ -27,7 +29,7 @@ class SupplierNameConflict(Exception):
         self.name = name
 
 
-async def _load(session: AsyncSession, tenant_id: str, supplier_id: str) -> PPESupplier:
+async def _load_supplier(session: AsyncSession, tenant_id: str, supplier_id: str) -> PPESupplier:
     stmt = select(PPESupplier).where(
         PPESupplier.id == supplier_id,
         PPESupplier.tenant_id == tenant_id,
@@ -58,7 +60,7 @@ async def create_supplier(
 
 
 async def get_supplier(session: AsyncSession, tenant_id: str, supplier_id: str) -> PPESupplier:
-    return await _load(session, tenant_id, supplier_id)
+    return await _load_supplier(session, tenant_id, supplier_id)
 
 
 async def list_suppliers(
@@ -83,9 +85,12 @@ async def list_suppliers(
 async def update_supplier(
     session: AsyncSession, tenant_id: str, supplier_id: str, **fields
 ) -> PPESupplier:
-    sup = await _load(session, tenant_id, supplier_id)
+    """Update a supplier. Only keys in ``_UPDATABLE_FIELDS`` are applied; stray
+    keys are ignored so they can never ``setattr`` onto the row."""
+    sup = await _load_supplier(session, tenant_id, supplier_id)
     for key, value in fields.items():
-        setattr(sup, key, value)
+        if key in _UPDATABLE_FIELDS:
+            setattr(sup, key, value)
     try:
         await session.flush()
     except IntegrityError as exc:
@@ -96,6 +101,6 @@ async def update_supplier(
 
 
 async def soft_delete_supplier(session: AsyncSession, tenant_id: str, supplier_id: str) -> None:
-    sup = await _load(session, tenant_id, supplier_id)
+    sup = await _load_supplier(session, tenant_id, supplier_id)
     sup.deleted_at = datetime.now(tz=timezone.utc)
     await session.flush()

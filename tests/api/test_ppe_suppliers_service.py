@@ -67,3 +67,23 @@ async def test_tenant_isolation(sessionmaker, data_factory: TestDataFactory):
         sup = await create_supplier(session, tenant_id=t1.id, name="OnlyT1")
         with pytest.raises(SupplierNotFound):
             await get_supplier(session, t2.id, sup.id)
+
+
+@pytest.mark.asyncio
+async def test_update_rename_to_existing_name_conflicts(sessionmaker, data_factory: TestDataFactory):
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        await create_supplier(session, tenant_id=tenant.id, name="A")
+        b = await create_supplier(session, tenant_id=tenant.id, name="B")
+        with pytest.raises(SupplierNameConflict):
+            await update_supplier(session, tenant.id, b.id, name="A")
+
+
+@pytest.mark.asyncio
+async def test_get_after_soft_delete_raises(sessionmaker, data_factory: TestDataFactory):
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        sup = await create_supplier(session, tenant_id=tenant.id, name="Gone")
+        await soft_delete_supplier(session, tenant.id, sup.id)
+        with pytest.raises(SupplierNotFound):
+            await get_supplier(session, tenant.id, sup.id)
