@@ -9,6 +9,7 @@ export type StockBatchDto = {
   certificate_no?: string | null;
   certificate_expires_at?: string | null;
   location?: string | null;
+  supplier_id?: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -82,6 +83,11 @@ export type PPEStockShortageDto = {
   avg_daily_consumption: number;
   days_to_depletion: number | null;
   projected_breach_date: string | null;
+  supplier_id: string | null;
+  supplier_name: string | null;
+  supplier_inn: string | null;
+  supplier_contact: string | null;
+  supplier_source: "explicit" | "history" | null;
 };
 
 export type InventoryCountStatus = "draft" | "applied" | "cancelled";
@@ -124,6 +130,50 @@ export type CreateInventoryCountInput = {
 };
 
 export type InventoryCountLineEntry = { line_id: string; counted_qty: number | null };
+
+export type SupplierDto = {
+  id: string;
+  name: string;
+  inn?: string | null;
+  contact_email?: string | null;
+  contact_phone?: string | null;
+};
+
+export type SupplierInput = {
+  name: string;
+  inn?: string | null;
+  contact_email?: string | null;
+  contact_phone?: string | null;
+};
+
+export type ReorderLineDto = { item_id: string; item_name: string; deficit: number };
+
+export type ReorderGroupDto = {
+  supplier_id: string | null;
+  supplier_name: string | null;
+  supplier_inn: string | null;
+  supplier_contact: string | null;
+  lines: ReorderLineDto[];
+  line_count: number;
+  total_deficit: number;
+};
+
+export type ReorderDraftDto = {
+  groups: ReorderGroupDto[];
+  total_lines: number;
+  total_deficit: number;
+};
+
+export type CreateBatchInput = {
+  item_id: string;
+  batch_no: string;
+  quantity?: number;
+  location?: string | null;
+  received_at?: string | null;
+  certificate_no?: string | null;
+  certificate_expires_at?: string | null;
+  supplier_id?: string | null;
+};
 
 type PageResponse<T> = { items: T[]; total: number };
 type ShortagePageResponse = { items: PPEStockShortageDto[]; total: number; window_days: number };
@@ -212,5 +262,33 @@ export const warehouseApi = {
       {}
     );
     return response.data;
+  },
+  async createBatch(input: CreateBatchInput): Promise<StockBatchDto> {
+    const response = await apiClient.post<StockBatchDto>("/ppe/stock/batches", input);
+    return response.data;
+  },
+  async listSuppliers(): Promise<SupplierDto[]> {
+    const response = await apiClient.get<PageResponse<SupplierDto>>("/ppe/suppliers", {
+      params: { limit: 200, offset: 0 }
+    });
+    return response.data.items ?? [];
+  },
+  async createSupplier(input: SupplierInput): Promise<SupplierDto> {
+    const response = await apiClient.post<SupplierDto>("/ppe/suppliers", input);
+    return response.data;
+  },
+  async updateSupplier(id: string, input: Partial<SupplierInput>): Promise<SupplierDto> {
+    const response = await apiClient.patch<SupplierDto>(`/ppe/suppliers/${id}`, input);
+    return response.data;
+  },
+  async deleteSupplier(id: string): Promise<void> {
+    await apiClient.delete(`/ppe/suppliers/${id}`);
+  },
+  async getReorderDraft(params?: { window_days?: number }): Promise<ReorderDraftDto> {
+    const response = await apiClient.get<ReorderDraftDto>("/ppe/stock/reorder", { params });
+    return response.data;
+  },
+  async patchItemPreferredSupplier(itemId: string, supplierId: string | null): Promise<void> {
+    await apiClient.patch(`/ppe/items/${itemId}`, { preferred_supplier_id: supplierId });
   }
 };
