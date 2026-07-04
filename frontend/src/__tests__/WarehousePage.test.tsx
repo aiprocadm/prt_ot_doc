@@ -15,6 +15,9 @@ const getCountMock = vi.fn();
 const patchCountLinesMock = vi.fn();
 const applyCountMock = vi.fn();
 const cancelCountMock = vi.fn();
+const listTransfersMock = vi.fn();
+const createTransferMock = vi.fn();
+const listLevelsByLocationMock = vi.fn();
 
 vi.mock("@/api/warehouse", () => ({
   warehouseApi: {
@@ -28,7 +31,10 @@ vi.mock("@/api/warehouse", () => ({
     getCount: (...args: unknown[]) => getCountMock(...args),
     patchCountLines: (...args: unknown[]) => patchCountLinesMock(...args),
     applyCount: (...args: unknown[]) => applyCountMock(...args),
-    cancelCount: (...args: unknown[]) => cancelCountMock(...args)
+    cancelCount: (...args: unknown[]) => cancelCountMock(...args),
+    listTransfers: (...args: unknown[]) => listTransfersMock(...args),
+    createTransfer: (...args: unknown[]) => createTransferMock(...args),
+    listLevelsByLocation: (...args: unknown[]) => listLevelsByLocationMock(...args)
   }
 }));
 
@@ -45,9 +51,14 @@ describe("WarehousePage", () => {
     patchCountLinesMock.mockReset();
     applyCountMock.mockReset();
     cancelCountMock.mockReset();
+    listTransfersMock.mockReset();
+    createTransferMock.mockReset();
+    listLevelsByLocationMock.mockReset();
     listMovementsMock.mockResolvedValue([]);
     listShortagesMock.mockResolvedValue([]);
     listCountsMock.mockResolvedValue([]);
+    listTransfersMock.mockResolvedValue([]);
+    listLevelsByLocationMock.mockResolvedValue([]);
   });
 
   it("renders stock levels from the warehouse API", async () => {
@@ -170,5 +181,38 @@ describe("WarehousePage", () => {
 
     await waitFor(() => expect(createCountMock).toHaveBeenCalled());
     await waitFor(() => expect(screen.getByText("B-1")).toBeInTheDocument());
+  });
+
+  it("creates a stock transfer between locations", async () => {
+    listLevelsMock.mockResolvedValue([]);
+    listBatchesMock.mockResolvedValue([
+      { id: "b1", item_id: "i1", batch_no: "B-1", quantity: 10, location: "A", created_at: "2026-07-04T00:00:00Z", updated_at: "2026-07-04T00:00:00Z" }
+    ]);
+    listLevelsByLocationMock.mockResolvedValue([
+      { item_id: "i1", item_name: "Каска", location: "A", quantity: 10, batch_count: 1 }
+    ]);
+    createTransferMock.mockResolvedValue({
+      ref_id: "r1", item_id: "i1", item_name: "Каска", batch_no: "B-1",
+      from_location: "A", to_location: "B", quantity: 3,
+      source_batch_id: "b1", dest_batch_id: "d1", out_movement_id: "m1", in_movement_id: "m2",
+      reason: null, occurred_at: "2026-07-04T00:00:00Z"
+    });
+
+    render(<MemoryRouter><WarehousePage /></MemoryRouter>);
+    await screen.findByText(/Перемещения между локациями/i);
+
+    fireEvent.change(screen.getByLabelText(/Партия-источник/i), { target: { value: "b1" } });
+    fireEvent.change(screen.getByLabelText(/Куда \(локация\)/i), { target: { value: "B" } });
+    fireEvent.change(screen.getByLabelText(/Количество для переноса/i), { target: { value: "3" } });
+    fireEvent.click(screen.getByRole("button", { name: /Перенести/i }));
+
+    await waitFor(() =>
+      expect(createTransferMock).toHaveBeenCalledWith({
+        source_batch_id: "b1",
+        to_location: "B",
+        quantity: 3,
+        reason: null
+      })
+    );
   });
 });
