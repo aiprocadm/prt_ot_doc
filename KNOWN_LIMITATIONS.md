@@ -1,6 +1,6 @@
 # KNOWN_LIMITATIONS
 
-- **Updated on (UTC):** 2026-05-21
+- **Updated on (UTC):** 2026-07-04
 - **Owner:** Product Engineering + Platform
 - **Canonical status vocabulary:** `done` / `partial` / `missing` / `blocked`
 - **Canonical blocker/status source:** `docs/stabilization/RELEASE_BLOCKERS_STATUS.md`
@@ -10,7 +10,7 @@
 
 | Criterion ID | Limitation tied to release readiness | Unified status | Evidence |
 |---|---|---|---|
-| RC-011 | Notifications escalation/provider orchestration is not feature-complete | `missing` | Tests: `tests/api/test_notifications_calendar_api.py`, `tests/test_workflow_api.py`; workflow: `.github/workflows/ci.yml`; tracker: `GAP_REPORT.md` |
+| RC-011 | Notifications escalation/provider orchestration | `done` (2026-07-01) | Provider abstraction `app/modules/notifications/providers/` (in-app/email/telegram/webhook) + orchestration `app/modules/notifications/delivery.py` (channel-tier escalation email→telegram→in-app, honest status) + `notifications.dispatch_pending` beat. Feature-flagged `NOTIFICATIONS_DELIVERY_ENABLED` (default off). Tests: `tests/test_notification_delivery.py` (11, green). Canonical: `docs/stabilization/RELEASE_BLOCKERS_STATUS.md` RC-011. Остаётся (non-blocking): SMS-провайдер. |
 | RC-007 | Replace dry-run/reporting path is incomplete end-to-end | `done` | Acceptance evidence in `ACCEPTANCE_TEST_MATRIX.md` (tests: `test_replace_api.py`, `test_replace_engine_advanced.py`); workflow: `.github/workflows/ci.yml` (`backend-tests`, `openapi-contract`); closed 2026-04-30 per `RELEASE_BLOCKERS_STATUS.md`. |
 | RC-008 | PDF conversion acceptance reliability not fully closed | `done` | Acceptance evidence in `ACCEPTANCE_TEST_MATRIX.md` (tests: `test_documents_generate.py`, `test_pdf_idempotency.py`, `test_services_pdf_unit.py`); workflow: `.github/workflows/ci.yml` (`backend-tests`); closed 2026-04-30 per `RELEASE_BLOCKERS_STATUS.md`. |
 | RC-009 | Approval/sign/archive handoff acceptance is incomplete | `done` | Acceptance evidence in `ACCEPTANCE_TEST_MATRIX.md` (tests in `test_approval_*.py`, `test_next57_approval_*.py`); workflows: `.github/workflows/ci.yml`, `.github/workflows/e2e-smoke.yml`; closed 2026-04-30 per `RELEASE_BLOCKERS_STATUS.md`. |

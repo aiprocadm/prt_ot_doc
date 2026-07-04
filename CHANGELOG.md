@@ -1,5 +1,17 @@
 # CHANGELOG
 
+## 2026-07-04 (claude/recursing-chaum-4a942d — СВЕРКА ТЗ↔КОД + синхронизация доков, PR #723)
+
+### Docs
+- **Спец↔код сверка (docs-only, кода нет).** Прямая сверка ТЗ/роадмапа/релиз-доков с фактическим `main`; весь рассинхрон односторонний — документы отставали от влитых PR.
+  - `CLAUDE.md`: секция «CI status: disabled» → «workflow-файлы включены» (PR #641/#656 вернули 5 активных `.yml`; local-evidence остаётся каноническим gate per REL-1).
+  - `KNOWN_LIMITATIONS.md`: RC-011 (уведомления/эскалация) `missing` → `done` (синхронно с каноном `RELEASE_BLOCKERS_STATUS`).
+  - `RELEASE_READINESS.md`: evidence-policy строка синхронизирована с re-enabled workflow'ами.
+  - `docs/roadmap/PLATFORM_VNEXT_IMPLEMENTATION_PLAN.md`: P10-10 workflow-движок `not started` → `partial` (модуль `modules/workflow/` ~1.4k LOC смонтирован); summary-счётчики (9 partial / 3 not-started); sync-note под Section B (медосмотры/НПА/клиент-кабинет были занижены).
+  - Новый `docs/audit/SPEC_CODE_SYNC_2026-07-04.md` — полная реконсиляция (таблица расхождений + остаток A/B/C).
+  - `AI_IMPLEMENTATION_REPORT.md`: новый handoff-блок с ledger «выполнено/не выполнено» + следующий точный шаг.
+- `TZ_COVERAGE_MATRIX.md` не тронут (CI-gated валидатор; MVP-строки корректны).
+
 ## 2026-07-04 (feat/ppe-inventory-count-p10-06 — P10-06 СИЗ склад: инвентаризация (сверка факт↔система))
 
 ### Added

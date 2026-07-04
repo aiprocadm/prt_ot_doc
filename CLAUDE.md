@@ -77,9 +77,9 @@ python3 --version          # see what's available
 python3.12 --version 2>/dev/null && echo "3.12 ok" || echo "3.12 not found — using fallback"
 ```
 
-## CI status: disabled
+## CI status: workflow-файлы включены; канонический gate — local-evidence
 
-All 5 GitHub Actions workflows renamed to `.yml.disabled` on 2026-05-28 (PR #598): `ci`, `e2e-smoke`, `final-acceptance`, `perf-baseline`, `restore-drill`. **Локальный pytest = источник истины**; на GHA не ссылайтесь как на актуальный gate. Текущий вердикт релиза и блокеры:
+5 workflow'ов были отключены 2026-05-28 (PR #598, переименование в `.yml.disabled`), затем **снова включены** (PR #641 «re-enable GHA (W0)» + PR #656 «workflow_dispatch + canonical baseline re-verify»): в `.github/workflows/` сейчас **5 активных `.yml`** — `ci`, `e2e-smoke`, `final-acceptance`, `perf-baseline`, `restore-drill` (не `.yml.disabled`). При этом **канонический gate — воспроизводимый локальный прогон** (постоянная local-evidence политика, REL-1 вариант (c); см. `docs/stabilization/RELEASE_BLOCKERS_STATUS.md` → «Evidence policy (PERMANENT)»): локальный pytest / `make gate` = источник истины, результаты GHA — дополнительная непрерывная защита. Текущий вердикт релиза и блокеры:
 
 - [RELEASE_READINESS.md](RELEASE_READINESS.md) — вердикт + RC-критерии
 - [docs/stabilization/RELEASE_BLOCKERS_STATUS.md](docs/stabilization/RELEASE_BLOCKERS_STATUS.md) — каноника блокеров
