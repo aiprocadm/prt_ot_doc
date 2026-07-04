@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
+from typing import NamedTuple
 from uuid import uuid4
 
 from sqlalchemy import func, select
@@ -407,53 +408,62 @@ class ShortageRow:
     supplier_source: str | None = None
 
 
+class _ResolvedSupplier(NamedTuple):
+    supplier: PPESupplier
+    source: str  # "explicit" | "history"
+
+
 async def _resolve_item_suppliers(
     session: AsyncSession, tenant_id: str, items: list[PPEItem]
-) -> dict[str, tuple[PPESupplier, str]]:
-    """Map item_id -> (supplier, source) where source is 'explicit'|'history'.
+) -> dict[str, _ResolvedSupplier]:
+    """Map item_id -> (supplier, source) for the reorder draft.
 
-    Explicit ``item.preferred_supplier_id`` wins; otherwise the most recently
-    received batch supplier (received_at desc nulls-last, created_at desc). Only
-    non-deleted suppliers count; unresolved items are simply absent from the map.
+    An item's EXPLICIT ``preferred_supplier_id`` wins when it points at a live
+    (non-deleted) supplier. Otherwise — unset, OR set but pointing at a
+    soft-deleted/missing supplier — we fall back to the item's most recently
+    received batch supplier (received_at desc nulls-last, then created_at desc).
+    Only non-deleted suppliers are eligible; an item with neither a usable
+    explicit preference nor a live history supplier is absent from the map
+    (its shortage row shows no supplier).
     """
     item_ids = [i.id for i in items]
     if not item_ids:
         return {}
 
-    source_for_item: dict[str, str] = {}
-    wanted: dict[str, str] = {}  # item_id -> supplier_id
+    explicit: dict[str, str] = {
+        i.id: i.preferred_supplier_id for i in items if i.preferred_supplier_id
+    }
 
-    for it in items:
-        if it.preferred_supplier_id:
-            wanted[it.id] = it.preferred_supplier_id
-            source_for_item[it.id] = "explicit"
-
-    remaining = [iid for iid in item_ids if iid not in wanted]
-    if remaining:
-        batch_rows = (
-            await session.execute(
-                select(
-                    PPEStockBatch.item_id, PPEStockBatch.supplier_id,
-                    PPEStockBatch.received_at, PPEStockBatch.created_at,
-                ).where(
-                    PPEStockBatch.tenant_id == tenant_id,
-                    PPEStockBatch.item_id.in_(remaining),
-                    PPEStockBatch.supplier_id.is_not(None),
-                    PPEStockBatch.deleted_at.is_(None),
-                )
+    # History fallback candidate: latest batch supplier per item. Queried for ALL
+    # items (not just those without an explicit pref) so a soft-deleted explicit
+    # supplier can still fall back to a live historical one.
+    batch_rows = (
+        await session.execute(
+            select(
+                PPEStockBatch.item_id,
+                PPEStockBatch.supplier_id,
+                PPEStockBatch.received_at,
+                PPEStockBatch.created_at,
+            ).where(
+                PPEStockBatch.tenant_id == tenant_id,
+                PPEStockBatch.item_id.in_(item_ids),
+                PPEStockBatch.supplier_id.is_not(None),
+                PPEStockBatch.deleted_at.is_(None),
             )
-        ).all()
-        # latest per item: received_at desc (None last), created_at desc
-        best: dict[str, tuple] = {}
-        for iid, sid, received, created in batch_rows:
-            key = (received is not None, received or date.min, created)
-            if iid not in best or key > best[iid][0]:
-                best[iid] = (key, sid)
-        for iid, (_key, sid) in best.items():
-            wanted[iid] = sid
-            source_for_item[iid] = "history"
+        )
+    ).all()
+    # "latest per item": received_at desc (None last), created_at desc. On an exact
+    # (received_at, created_at) tie the first-seen row wins — arbitrary but stable
+    # within a query (created_at is app-set and near-unique, so ties are rare).
+    best: dict[str, tuple[tuple[bool, date, datetime], str]] = {}
+    for iid, sid, received, created in batch_rows:
+        key = (received is not None, received or date.min, created)
+        if iid not in best or key > best[iid][0]:
+            best[iid] = (key, sid)
+    history: dict[str, str] = {iid: sid for iid, (_key, sid) in best.items()}
 
-    if not wanted:
+    candidate_ids = set(explicit.values()) | set(history.values())
+    if not candidate_ids:
         return {}
     suppliers = {
         s.id: s
@@ -461,17 +471,24 @@ async def _resolve_item_suppliers(
             await session.execute(
                 select(PPESupplier).where(
                     PPESupplier.tenant_id == tenant_id,
-                    PPESupplier.id.in_(set(wanted.values())),
+                    PPESupplier.id.in_(candidate_ids),
                     PPESupplier.deleted_at.is_(None),
                 )
             )
-        ).scalars().all()
+        )
+        .scalars()
+        .all()
     }
-    resolved: dict[str, tuple[PPESupplier, str]] = {}
-    for iid, sid in wanted.items():
-        sup = suppliers.get(sid)
-        if sup is not None:  # soft-deleted / missing -> unresolved
-            resolved[iid] = (sup, source_for_item[iid])
+
+    resolved: dict[str, _ResolvedSupplier] = {}
+    for iid in item_ids:
+        exp_sid = explicit.get(iid)
+        if exp_sid and exp_sid in suppliers:
+            resolved[iid] = _ResolvedSupplier(suppliers[exp_sid], "explicit")
+        else:
+            hist_sid = history.get(iid)
+            if hist_sid and hist_sid in suppliers:
+                resolved[iid] = _ResolvedSupplier(suppliers[hist_sid], "history")
     return resolved
 
 
@@ -553,8 +570,8 @@ async def compute_shortages(
         breach: date | None = None
         if proj.days_to_threshold is not None:
             breach = (now + timedelta(days=proj.days_to_threshold)).date()
-        sup_tuple = resolved.get(item.id)
-        supplier = sup_tuple[0] if sup_tuple else None
+        rs = resolved.get(item.id)
+        supplier = rs.supplier if rs else None
         rows.append(
             ShortageRow(
                 item_id=item.id,
@@ -570,7 +587,7 @@ async def compute_shortages(
                 supplier_name=supplier.name if supplier else None,
                 supplier_inn=supplier.inn if supplier else None,
                 supplier_contact=(supplier.contact_email or supplier.contact_phone) if supplier else None,
-                supplier_source=sup_tuple[1] if sup_tuple else None,
+                supplier_source=rs.source if rs else None,
             )
         )
 

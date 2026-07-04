@@ -92,3 +92,19 @@ async def test_soft_deleted_resolved_supplier_is_none(sessionmaker, data_factory
         row = next(r for r in rows if r.item_id == item.id)
         assert row.supplier_id is None
         assert row.supplier_source is None
+
+
+@pytest.mark.asyncio
+async def test_explicit_soft_deleted_falls_back_to_history(sessionmaker, data_factory: TestDataFactory):
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        dead = PPESupplier(tenant_id=tenant.id, name="DeadExplicit", deleted_at=NOW)
+        live = PPESupplier(tenant_id=tenant.id, name="LiveHistory")
+        session.add_all([dead, live])
+        await session.flush()
+        item = await _item(session, tenant.id, name="Каска", min_stock=10, preferred=dead.id)
+        await _batch(session, tenant.id, item.id, qty=1, supplier_id=live.id, received=date(2026, 6, 1))
+        rows = await compute_shortages(session, tenant.id, now=NOW)
+        row = next(r for r in rows if r.item_id == item.id)
+        assert row.supplier_id == live.id
+        assert row.supplier_source == "history"
