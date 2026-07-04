@@ -276,7 +276,7 @@ async def transfer_stock(
     if not dest_location:
         raise ValueError("transfer destination location must not be empty")
     source = await _load_batch(session, tenant_id, source_batch_id)
-    if source.location == dest_location:
+    if (source.location or "").strip() == dest_location:
         raise ValueError("transfer destination must differ from source location")
 
     when = occurred_at or datetime.now(tz=timezone.utc)

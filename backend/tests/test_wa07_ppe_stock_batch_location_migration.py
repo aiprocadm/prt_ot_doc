@@ -46,3 +46,5 @@ def test_migration_swaps_unique_key():
     assert "nulls_not_distinct" in src.lower()
     assert 'create_unique_constraint("uq_ppe_stock_batch_item_no"' in src
     assert "add_column" not in src
+    # partial index so soft-deleted rows don't occupy the (item, batch_no, location) slot
+    assert "deleted_at IS NULL" in src

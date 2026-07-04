@@ -8,6 +8,7 @@ old dedup guarantee. Not purely additive (swaps a constraint) — PG16-gate veri
 
 from __future__ import annotations
 
+import sqlalchemy as sa
 from alembic import op
 
 revision = "20260704_wa07_ppe_stock_batch_location_unique"
@@ -26,9 +27,12 @@ def upgrade() -> None:
         ["tenant_id", "item_id", "batch_no", "location"],
         unique=True,
         postgresql_nulls_not_distinct=True,
+        postgresql_where=sa.text("deleted_at IS NULL"),
     )
 
 
 def downgrade() -> None:
     op.drop_index("uq_ppe_stock_batch_item_no_loc", table_name=_TABLE)
-    op.create_unique_constraint("uq_ppe_stock_batch_item_no", _TABLE, ["tenant_id", "item_id", "batch_no"])
+    op.create_unique_constraint(
+        "uq_ppe_stock_batch_item_no", _TABLE, ["tenant_id", "item_id", "batch_no"]
+    )

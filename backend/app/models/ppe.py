@@ -22,6 +22,7 @@ from sqlalchemy import (
     Integer,
     String,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.ext.mutable import MutableDict
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -162,6 +163,7 @@ class PPEStockBatch(TenantBaseModel, SoftDeleteMixin):
             "location",
             unique=True,
             postgresql_nulls_not_distinct=True,
+            postgresql_where=text("deleted_at IS NULL"),
         ),
         Index("ix_ppe_stock_batch_item", "tenant_id", "item_id"),
     )
