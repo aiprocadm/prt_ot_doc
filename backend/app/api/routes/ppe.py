@@ -7,6 +7,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy import func, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.exc import StaleDataError
 
@@ -55,9 +56,11 @@ from app.modules.ppe.inventory import (
 )
 from app.modules.ppe.lifecycle import PPETransitionError, validate_transition
 from app.modules.ppe.stock import (
+    KIND_TRANSFER,
     InsufficientStockError,
     StockBatchNotFound,
     compute_shortages,
+    transfer_stock,
 )
 from app.schemas.ppe import (
     PPECardRead,
@@ -90,6 +93,8 @@ from app.schemas.ppe import (
     PPEStockBatchPage,
     PPEStockBatchRead,
     PPEStockBatchUpdate,
+    PPEStockLevelByLocationPage,
+    PPEStockLevelByLocationRead,
     PPEStockLevelPage,
     PPEStockLevelRead,
     PPEStockMovementCreate,
@@ -97,6 +102,9 @@ from app.schemas.ppe import (
     PPEStockMovementRead,
     PPEStockShortagePage,
     PPEStockShortageRead,
+    PPEStockTransferCreate,
+    PPEStockTransferPage,
+    PPEStockTransferRead,
 )
 from app.services.events import EventType
 from app.services.outbox import OutboxService
@@ -1043,6 +1051,58 @@ async def list_stock_levels(
 
 
 @router.get(
+    "/stock/levels/by-location",
+    response_model=PPEStockLevelByLocationPage,
+    dependencies=[WarehouseFeatureGate],
+)
+async def list_stock_levels_by_location(
+    tenant: TenantDep,
+    session: SessionDep,
+    access: ManagerAccess,
+) -> PPEStockLevelByLocationPage:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
+    agg_stmt = (
+        select(
+            PPEStockBatch.item_id,
+            PPEStockBatch.location,
+            func.coalesce(func.sum(PPEStockBatch.quantity), 0),
+            func.count(PPEStockBatch.id),
+        )
+        .where(
+            PPEStockBatch.tenant_id == tenant.id,
+            PPEStockBatch.deleted_at.is_(None),
+        )
+        .group_by(PPEStockBatch.item_id, PPEStockBatch.location)
+    )
+    rows = (await session.execute(agg_stmt)).all()
+
+    names: dict[str, str] = {}
+    item_ids = [row[0] for row in rows]
+    if item_ids:
+        names = {
+            iid: name
+            for iid, name in (
+                await session.execute(
+                    select(PPEItem.id, PPEItem.name).where(PPEItem.id.in_(item_ids))
+                )
+            ).all()
+        }
+
+    items = [
+        PPEStockLevelByLocationRead(
+            item_id=row[0],
+            item_name=names.get(row[0], ""),
+            location=row[1],
+            quantity=int(row[2] or 0),
+            batch_count=int(row[3] or 0),
+        )
+        for row in rows
+    ]
+    return PPEStockLevelByLocationPage(items=items, total=len(items))
+
+
+@router.get(
     "/stock/shortages",
     response_model=PPEStockShortagePage,
     dependencies=[WarehouseFeatureGate],
@@ -1170,6 +1230,200 @@ async def list_stock_movements(
     return PPEStockMovementPage(
         items=[PPEStockMovementRead.model_validate(m) for m in movements], total=total
     )
+
+
+@router.post(
+    "/stock/transfers",
+    response_model=PPEStockTransferRead,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[WarehouseFeatureGate],
+)
+@audit_operation("create", "ppe_stock_transfer")
+async def create_stock_transfer(
+    payload: PPEStockTransferCreate,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: EditorAccess,
+) -> PPEStockTransferRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    try:
+        result = await transfer_stock(
+            session,
+            tenant_id=tenant.id,
+            source_batch_id=payload.source_batch_id,
+            to_location=payload.to_location,
+            quantity=payload.quantity,
+            reason=payload.reason,
+            occurred_at=payload.occurred_at,
+        )
+    except StockBatchNotFound as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
+    except InsufficientStockError as exc:
+        raise _ppe_bad_request(str(exc)) from exc
+    except ValueError as exc:
+        raise _ppe_bad_request(str(exc)) from exc
+    except IntegrityError as exc:
+        # Concurrent transfer created the same destination (item, batch_no, location)
+        # slot first; the unique index rejected our insert. Report as a conflict.
+        raise _ppe_conflict("stock batch location conflict (concurrent transfer)") from exc
+    except StaleDataError as exc:
+        raise _ppe_conflict("stock batch was modified concurrently") from exc
+
+    item_name = (
+        await session.execute(select(PPEItem.name).where(PPEItem.id == result.out_movement.item_id))
+    ).scalar_one_or_none() or ""
+    return PPEStockTransferRead(
+        ref_id=result.ref_id,
+        item_id=result.out_movement.item_id,
+        item_name=item_name,
+        batch_no=result.batch_no,
+        from_location=result.from_location,
+        to_location=result.to_location,
+        quantity=result.quantity,
+        source_batch_id=result.source_batch_id,
+        dest_batch_id=result.dest_batch_id,
+        out_movement_id=result.out_movement.id,
+        in_movement_id=result.in_movement.id,
+        reason=result.out_movement.reason,
+        occurred_at=result.out_movement.occurred_at,
+    )
+
+
+@router.get(
+    "/stock/transfers",
+    response_model=PPEStockTransferPage,
+    dependencies=[WarehouseFeatureGate],
+)
+async def list_stock_transfers(
+    request: Request,
+    response: Response,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: ManagerAccess,
+    item_id: str | None = None,
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+) -> PPEStockTransferPage | Response:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
+    pair_filter = [
+        PPEStockMovement.tenant_id == tenant.id,
+        PPEStockMovement.kind == KIND_TRANSFER,
+    ]
+    if item_id:
+        pair_filter.append(PPEStockMovement.item_id == item_id)
+
+    pair_stmt = (
+        select(
+            PPEStockMovement.ref_id.label("ref"),
+            func.max(PPEStockMovement.occurred_at).label("occ"),
+        )
+        .where(*pair_filter)
+        .group_by(PPEStockMovement.ref_id)
+    )
+    total = (
+        await session.execute(select(func.count()).select_from(pair_stmt.subquery()))
+    ).scalar_one()
+
+    page_rows = (
+        await session.execute(
+            pair_stmt.order_by(
+                func.max(PPEStockMovement.occurred_at).desc(),
+                PPEStockMovement.ref_id.desc(),
+            )
+            .limit(limit)
+            .offset(offset)
+        )
+    ).all()
+    page_refs = [r.ref for r in page_rows]
+
+    movements: list[PPEStockMovement] = []
+    if page_refs:
+        movements = list(
+            (
+                await session.execute(
+                    select(PPEStockMovement).where(
+                        PPEStockMovement.tenant_id == tenant.id,
+                        PPEStockMovement.kind == KIND_TRANSFER,
+                        PPEStockMovement.ref_id.in_(page_refs),
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+    batch_ids = {m.batch_id for m in movements if m.batch_id}
+    batch_map: dict[str, PPEStockBatch] = {}
+    if batch_ids:
+        batch_map = {
+            b.id: b
+            for b in (
+                await session.execute(select(PPEStockBatch).where(PPEStockBatch.id.in_(batch_ids)))
+            )
+            .scalars()
+            .all()
+        }
+    item_ids = {m.item_id for m in movements}
+    names: dict[str, str] = {}
+    if item_ids:
+        names = {
+            iid: name
+            for iid, name in (
+                await session.execute(
+                    select(PPEItem.id, PPEItem.name).where(PPEItem.id.in_(item_ids))
+                )
+            ).all()
+        }
+
+    grouped: dict[str, list[PPEStockMovement]] = {}
+    for m in movements:
+        grouped.setdefault(m.ref_id, []).append(m)
+
+    items: list[PPEStockTransferRead] = []
+    for ref in page_refs:
+        pair = grouped.get(ref, [])
+        out = next((m for m in pair if m.quantity_delta < 0), None)
+        inc = next((m for m in pair if m.quantity_delta > 0), None)
+        if out is None or inc is None:
+            continue
+        out_batch = batch_map.get(out.batch_id or "")
+        in_batch = batch_map.get(inc.batch_id or "")
+        items.append(
+            PPEStockTransferRead(
+                ref_id=ref,
+                item_id=out.item_id,
+                item_name=names.get(out.item_id, ""),
+                batch_no=out_batch.batch_no if out_batch else "",
+                from_location=out_batch.location if out_batch else None,
+                to_location=in_batch.location if in_batch else "",
+                quantity=inc.quantity_delta,
+                source_batch_id=out.batch_id or "",
+                dest_batch_id=inc.batch_id or "",
+                out_movement_id=out.id,
+                in_movement_id=inc.id,
+                reason=out.reason,
+                occurred_at=out.occurred_at,
+            )
+        )
+
+    etag = compute_list_etag(
+        tenant_id=str(tenant.id),
+        items=sorted(movements, key=lambda m: m.id),
+        scalars=[
+            ("total", int(total or 0)),
+            ("limit", limit),
+            ("offset", offset),
+            ("item", item_id or ""),
+        ],
+    )
+    apply_etag_response_headers(response, etag)
+    if request.headers.get("if-none-match") == etag:
+        return Response(
+            status_code=status.HTTP_304_NOT_MODIFIED,
+            headers=build_not_modified_headers(etag),
+        )
+    return PPEStockTransferPage(items=items, total=total)
 
 
 def _inventory_count_read(view: CountSummaryView) -> PPEInventoryCountRead:
