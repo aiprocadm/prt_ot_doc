@@ -40,6 +40,14 @@ from app.modules.ppe import (
     return_issue,
     writeoff_issue,
 )
+from app.modules.ppe.inventory import (
+    CountDetailView,
+    CountSummaryView,
+    InventoryCountNotFound,
+    create_count,
+    get_count_detail,
+    list_counts,
+)
 from app.modules.ppe.lifecycle import PPETransitionError, validate_transition
 from app.modules.ppe.stock import (
     InsufficientStockError,
@@ -50,6 +58,11 @@ from app.schemas.ppe import (
     PPECardRead,
     PPECardRequiredLine,
     PPECardTimelineEvent,
+    PPEInventoryCountCreate,
+    PPEInventoryCountDetail,
+    PPEInventoryCountLineRead,
+    PPEInventoryCountPage,
+    PPEInventoryCountRead,
     PPEIssueCreate,
     PPEIssuePage,
     PPEIssueRead,
@@ -1142,6 +1155,137 @@ async def list_stock_movements(
     return PPEStockMovementPage(
         items=[PPEStockMovementRead.model_validate(m) for m in movements], total=total
     )
+
+
+def _inventory_count_read(view: CountSummaryView) -> PPEInventoryCountRead:
+    c = view.count
+    return PPEInventoryCountRead(
+        id=c.id,
+        status=c.status,
+        scope_item_id=c.scope_item_id,
+        scope_location=c.scope_location,
+        note=c.note,
+        applied_at=c.applied_at,
+        created_at=c.created_at,
+        line_count=view.line_count,
+        counted_count=view.counted_count,
+    )
+
+
+def _inventory_count_detail(detail: CountDetailView) -> PPEInventoryCountDetail:
+    c = detail.count
+    return PPEInventoryCountDetail(
+        id=c.id,
+        status=c.status,
+        scope_item_id=c.scope_item_id,
+        scope_location=c.scope_location,
+        note=c.note,
+        applied_at=c.applied_at,
+        created_at=c.created_at,
+        line_count=detail.line_count,
+        counted_count=detail.counted_count,
+        diff_count=detail.diff_count,
+        lines=[
+            PPEInventoryCountLineRead(
+                id=v.id,
+                batch_id=v.batch_id,
+                item_id=v.item_id,
+                batch_no=v.batch_no,
+                location=v.location,
+                item_name=v.item_name,
+                system_qty=v.system_qty,
+                counted_qty=v.counted_qty,
+                on_hand=v.on_hand,
+                delta=v.delta,
+                adjustment_movement_id=v.adjustment_movement_id,
+            )
+            for v in detail.lines
+        ],
+    )
+
+
+@router.post(
+    "/stock/inventory/counts",
+    response_model=PPEInventoryCountDetail,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[WarehouseFeatureGate],
+)
+@audit_operation("create", "ppe_inventory_count")
+async def create_inventory_count(
+    payload: PPEInventoryCountCreate,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: EditorAccess,
+) -> PPEInventoryCountDetail:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    if payload.scope_item_id is not None:
+        await _get_item(session, tenant, payload.scope_item_id)
+    count = await create_count(
+        session,
+        tenant_id=tenant.id,
+        scope_item_id=payload.scope_item_id,
+        scope_location=payload.scope_location,
+        note=payload.note,
+    )
+    detail = await get_count_detail(session, tenant.id, count.id)
+    return _inventory_count_detail(detail)
+
+
+@router.get(
+    "/stock/inventory/counts",
+    response_model=PPEInventoryCountPage,
+    dependencies=[WarehouseFeatureGate],
+)
+async def list_inventory_counts(
+    request: Request,
+    response: Response,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: ManagerAccess,
+    status_filter: str | None = Query(None, alias="status"),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+) -> PPEInventoryCountPage | Response:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    views, total = await list_counts(
+        session, tenant.id, status=status_filter, limit=limit, offset=offset
+    )
+    etag = compute_list_etag(
+        tenant_id=str(tenant.id),
+        items=[v.count for v in views],
+        scalars=[
+            ("total", total),
+            ("limit", limit),
+            ("offset", offset),
+            ("status", status_filter or ""),
+        ],
+    )
+    apply_etag_response_headers(response, etag)
+    if request.headers.get("if-none-match") == etag:
+        return Response(
+            status_code=status.HTTP_304_NOT_MODIFIED,
+            headers=build_not_modified_headers(etag),
+        )
+    return PPEInventoryCountPage(items=[_inventory_count_read(v) for v in views], total=total)
+
+
+@router.get(
+    "/stock/inventory/counts/{count_id}",
+    response_model=PPEInventoryCountDetail,
+    dependencies=[WarehouseFeatureGate],
+)
+async def get_inventory_count(
+    count_id: str,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: ManagerAccess,
+) -> PPEInventoryCountDetail:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    try:
+        detail = await get_count_detail(session, tenant.id, count_id)
+    except InventoryCountNotFound as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
+    return _inventory_count_detail(detail)
 
 
 # --- 766н: личная карточка учёта СИЗ + размеры работника ---------------------
