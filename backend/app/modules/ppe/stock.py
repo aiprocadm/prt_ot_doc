@@ -599,3 +599,61 @@ async def compute_shortages(
         )
     )
     return rows
+
+
+@dataclass(slots=True, frozen=True)
+class ReorderLine:
+    item_id: str
+    item_name: str
+    deficit: int
+
+
+@dataclass(slots=True, frozen=True)
+class ReorderGroup:
+    supplier_id: str | None
+    supplier_name: str | None
+    supplier_inn: str | None
+    supplier_contact: str | None
+    lines: list[ReorderLine]
+    line_count: int
+    total_deficit: int
+
+
+@dataclass(slots=True, frozen=True)
+class ReorderDraft:
+    groups: list[ReorderGroup]
+    total_lines: int
+    total_deficit: int
+
+
+def build_reorder_draft(rows: list[ShortageRow]) -> ReorderDraft:
+    """Group below-threshold shortage rows by resolved supplier. Rows with no
+    supplier fall into a single ``supplier_id=None`` group that always sorts last."""
+    buckets: dict[str | None, list[ShortageRow]] = {}
+    for r in rows:
+        if not (r.below_threshold and r.deficit > 0):
+            continue
+        buckets.setdefault(r.supplier_id, []).append(r)
+
+    groups: list[ReorderGroup] = []
+    for sid, rs in buckets.items():
+        lines = [ReorderLine(item_id=r.item_id, item_name=r.item_name, deficit=r.deficit) for r in rs]
+        head = rs[0]
+        groups.append(
+            ReorderGroup(
+                supplier_id=sid,
+                supplier_name=head.supplier_name if sid else None,
+                supplier_inn=head.supplier_inn if sid else None,
+                supplier_contact=head.supplier_contact if sid else None,
+                lines=lines,
+                line_count=len(lines),
+                total_deficit=sum(ln.deficit for ln in lines),
+            )
+        )
+    # named suppliers by name asc, unassigned (None) last
+    groups.sort(key=lambda g: (g.supplier_id is None, (g.supplier_name or "").lower()))
+    return ReorderDraft(
+        groups=groups,
+        total_lines=sum(g.line_count for g in groups),
+        total_deficit=sum(g.total_deficit for g in groups),
+    )

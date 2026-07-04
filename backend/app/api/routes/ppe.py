@@ -59,6 +59,7 @@ from app.modules.ppe.stock import (
     KIND_TRANSFER,
     InsufficientStockError,
     StockBatchNotFound,
+    build_reorder_draft,
     compute_shortages,
     transfer_stock,
 )
@@ -96,6 +97,9 @@ from app.schemas.ppe import (
     PPENormPage,
     PPENormRead,
     PPENormUpdate,
+    PPEReorderDraftRead,
+    PPEReorderGroupRead,
+    PPEReorderLineRead,
     PPESizesRead,
     PPESizesUpdate,
     PPEStockBatchCreate,
@@ -1314,6 +1318,47 @@ async def list_stock_shortages(
         for r in rows
     ]
     return PPEStockShortagePage(items=items, total=len(items), window_days=window_days)
+
+
+@router.get(
+    "/stock/reorder",
+    response_model=PPEReorderDraftRead,
+    dependencies=[WarehouseFeatureGate],
+)
+async def get_reorder_draft(
+    tenant: TenantDep,
+    session: SessionDep,
+    access: ManagerAccess,
+    window_days: int = Query(90, ge=1, le=365),
+) -> PPEReorderDraftRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    rows = await compute_shortages(
+        session,
+        tenant.id,
+        now=datetime.now(tz=timezone.utc),
+        window_days=window_days,
+        only_below=True,
+    )
+    draft = build_reorder_draft(rows)
+    return PPEReorderDraftRead(
+        groups=[
+            PPEReorderGroupRead(
+                supplier_id=g.supplier_id,
+                supplier_name=g.supplier_name,
+                supplier_inn=g.supplier_inn,
+                supplier_contact=g.supplier_contact,
+                lines=[
+                    PPEReorderLineRead(item_id=ln.item_id, item_name=ln.item_name, deficit=ln.deficit)
+                    for ln in g.lines
+                ],
+                line_count=g.line_count,
+                total_deficit=g.total_deficit,
+            )
+            for g in draft.groups
+        ],
+        total_lines=draft.total_lines,
+        total_deficit=draft.total_deficit,
+    )
 
 
 @router.post(

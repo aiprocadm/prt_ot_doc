@@ -354,6 +354,28 @@ class PPEStockShortagePage(BaseSchema):
     window_days: int
 
 
+class PPEReorderLineRead(BaseSchema):
+    item_id: str
+    item_name: str
+    deficit: int
+
+
+class PPEReorderGroupRead(BaseSchema):
+    supplier_id: str | None
+    supplier_name: str | None
+    supplier_inn: str | None
+    supplier_contact: str | None
+    lines: list[PPEReorderLineRead]
+    line_count: int
+    total_deficit: int
+
+
+class PPEReorderDraftRead(BaseSchema):
+    groups: list[PPEReorderGroupRead]
+    total_lines: int
+    total_deficit: int
+
+
 # Mirrors ``MANUAL_KINDS`` in ``app.modules.ppe.stock`` — intentionally duplicated
 # so the schema layer stays free of a service-layer import. Keep the two in sync.
 _MOVEMENT_MANUAL_KINDS = {"receipt", "writeoff", "adjustment"}
