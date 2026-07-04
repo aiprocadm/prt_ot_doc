@@ -12,7 +12,9 @@ from tests.utils.factories import TestDataFactory
 
 
 @pytest.mark.asyncio
-async def test_reorder_groups_below_threshold_by_supplier(async_client: AsyncClient, make_auth_headers, sessionmaker, data_factory: TestDataFactory):
+async def test_reorder_groups_below_threshold_by_supplier(
+    async_client: AsyncClient, make_auth_headers, sessionmaker, data_factory: TestDataFactory
+):
     async with sessionmaker() as session:
         await data_factory.ensure_tenant(session=session)
         await session.commit()
@@ -22,8 +24,12 @@ async def test_reorder_groups_below_threshold_by_supplier(async_client: AsyncCli
     sid = sup.json()["id"]
     item = await async_client.post(
         "/api/v1/ppe/items",
-        json={"name": "Каска", "category": PPEItemCategory.HEAD.value,
-              "min_stock": 10, "preferred_supplier_id": sid},
+        json={
+            "name": "Каска",
+            "category": PPEItemCategory.HEAD.value,
+            "min_stock": 10,
+            "preferred_supplier_id": sid,
+        },
         headers=headers,
     )
     item_id = item.json()["id"]
@@ -39,13 +45,18 @@ async def test_reorder_groups_below_threshold_by_supplier(async_client: AsyncCli
 
 
 @pytest.mark.asyncio
-async def test_reorder_404_when_feature_disabled(async_client, make_auth_headers, sessionmaker, data_factory: TestDataFactory):
-    from app.models.feature import Feature, FeatureEnablement
+async def test_reorder_404_when_feature_disabled(
+    async_client, make_auth_headers, sessionmaker, data_factory: TestDataFactory
+):
     from sqlalchemy import select
+
+    from app.models.feature import Feature, FeatureEnablement
 
     async with sessionmaker() as session:
         tenant = await data_factory.ensure_tenant(session=session)
-        feature = (await session.execute(select(Feature).where(Feature.code == "warehouse"))).scalar_one_or_none()
+        feature = (
+            await session.execute(select(Feature).where(Feature.code == "warehouse"))
+        ).scalar_one_or_none()
         if feature is None:
             feature = Feature(code="warehouse", title="Warehouse")
             session.add(feature)

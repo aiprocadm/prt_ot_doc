@@ -112,9 +112,7 @@ class PPESupplier(TenantBaseModel, SoftDeleteMixin):
     contact_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     contact_phone: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
-    __table_args__ = (
-        UniqueConstraint("tenant_id", "name", name="uq_ppe_supplier_name"),
-    )
+    __table_args__ = (UniqueConstraint("tenant_id", "name", name="uq_ppe_supplier_name"),)
 
 
 class PPEIssueStatus(str, enum.Enum):

@@ -7,7 +7,10 @@ from pathlib import Path
 
 _MIGRATION = (
     Path(__file__).resolve().parents[1]
-    / "app" / "migrations" / "versions" / "20260704_wa08_ppe_supplier.py"
+    / "app"
+    / "migrations"
+    / "versions"
+    / "20260704_wa08_ppe_supplier.py"
 )
 
 

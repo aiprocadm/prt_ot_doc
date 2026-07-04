@@ -15,6 +15,7 @@ async def _set_warehouse_flag(sessionmaker, data_factory, *, on: bool):
     async with sessionmaker() as session:
         tenant = await data_factory.ensure_tenant(session=session)
         from sqlalchemy import select
+
         feature = (
             await session.execute(select(Feature).where(Feature.code == "warehouse"))
         ).scalar_one_or_none()
@@ -27,7 +28,9 @@ async def _set_warehouse_flag(sessionmaker, data_factory, *, on: bool):
 
 
 @pytest.mark.asyncio
-async def test_supplier_crud_roundtrip(async_client: AsyncClient, make_auth_headers, sessionmaker, data_factory: TestDataFactory):
+async def test_supplier_crud_roundtrip(
+    async_client: AsyncClient, make_auth_headers, sessionmaker, data_factory: TestDataFactory
+):
     async with sessionmaker() as session:
         await data_factory.ensure_tenant(session=session)
         await session.commit()
@@ -58,7 +61,9 @@ async def test_supplier_crud_roundtrip(async_client: AsyncClient, make_auth_head
 
 
 @pytest.mark.asyncio
-async def test_duplicate_name_returns_409(async_client, make_auth_headers, sessionmaker, data_factory: TestDataFactory):
+async def test_duplicate_name_returns_409(
+    async_client, make_auth_headers, sessionmaker, data_factory: TestDataFactory
+):
     async with sessionmaker() as session:
         await data_factory.ensure_tenant(session=session)
         await session.commit()
@@ -69,7 +74,9 @@ async def test_duplicate_name_returns_409(async_client, make_auth_headers, sessi
 
 
 @pytest.mark.asyncio
-async def test_supplier_empty_name_returns_422(async_client, make_auth_headers, sessionmaker, data_factory: TestDataFactory):
+async def test_supplier_empty_name_returns_422(
+    async_client, make_auth_headers, sessionmaker, data_factory: TestDataFactory
+):
     async with sessionmaker() as session:
         await data_factory.ensure_tenant(session=session)
         await session.commit()
@@ -79,7 +86,9 @@ async def test_supplier_empty_name_returns_422(async_client, make_auth_headers, 
 
 
 @pytest.mark.asyncio
-async def test_suppliers_404_when_feature_disabled(async_client, make_auth_headers, sessionmaker, data_factory: TestDataFactory):
+async def test_suppliers_404_when_feature_disabled(
+    async_client, make_auth_headers, sessionmaker, data_factory: TestDataFactory
+):
     await _set_warehouse_flag(sessionmaker, data_factory, on=False)
     headers = await make_auth_headers(RoleEnum.ADMIN)
     listed = await async_client.get("/api/v1/ppe/suppliers", headers=headers)

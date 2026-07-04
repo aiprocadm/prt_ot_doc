@@ -5,8 +5,8 @@ from __future__ import annotations
 import pytest
 from sqlalchemy import select
 
-from app.models.ppe_registry import PPEItem, PPEStockBatch
 from app.models.models import PPESupplier
+from app.models.ppe_registry import PPEItem, PPEStockBatch
 
 
 @pytest.mark.asyncio
@@ -27,8 +27,12 @@ async def test_supplier_round_trip(sessionmaker, data_factory):
         session.add(item)
         await session.flush()
         batch = PPEStockBatch(
-            tenant_id=tenant.id, item_id=item.id, batch_no="B-1",
-            quantity=5, location="A", supplier_id=sup.id,
+            tenant_id=tenant.id,
+            item_id=item.id,
+            batch_no="B-1",
+            quantity=5,
+            location="A",
+            supplier_id=sup.id,
         )
         session.add(batch)
         await session.flush()

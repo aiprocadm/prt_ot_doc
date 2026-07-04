@@ -586,7 +586,9 @@ async def compute_shortages(
                 supplier_id=supplier.id if supplier else None,
                 supplier_name=supplier.name if supplier else None,
                 supplier_inn=supplier.inn if supplier else None,
-                supplier_contact=(supplier.contact_email or supplier.contact_phone) if supplier else None,
+                supplier_contact=(
+                    (supplier.contact_email or supplier.contact_phone) if supplier else None
+                ),
                 supplier_source=rs.source if rs else None,
             )
         )
@@ -641,7 +643,9 @@ def build_reorder_draft(rows: list[ShortageRow]) -> ReorderDraft:
 
     groups: list[ReorderGroup] = []
     for sid, rs in buckets.items():
-        lines = [ReorderLine(item_id=r.item_id, item_name=r.item_name, deficit=r.deficit) for r in rs]
+        lines = [
+            ReorderLine(item_id=r.item_id, item_name=r.item_name, deficit=r.deficit) for r in rs
+        ]
         head = rs[0]
         groups.append(
             ReorderGroup(

@@ -42,12 +42,20 @@ async def _load_supplier(session: AsyncSession, tenant_id: str, supplier_id: str
 
 
 async def create_supplier(
-    session: AsyncSession, *, tenant_id: str, name: str,
-    inn: str | None = None, contact_email: str | None = None, contact_phone: str | None = None,
+    session: AsyncSession,
+    *,
+    tenant_id: str,
+    name: str,
+    inn: str | None = None,
+    contact_email: str | None = None,
+    contact_phone: str | None = None,
 ) -> PPESupplier:
     sup = PPESupplier(
-        tenant_id=tenant_id, name=name, inn=inn,
-        contact_email=contact_email, contact_phone=contact_phone,
+        tenant_id=tenant_id,
+        name=name,
+        inn=inn,
+        contact_email=contact_email,
+        contact_phone=contact_phone,
     )
     session.add(sup)
     try:
@@ -73,10 +81,15 @@ async def list_suppliers(
     items = list(
         (
             await session.execute(
-                select(PPESupplier).where(*base).order_by(PPESupplier.name.asc())
-                .limit(limit).offset(offset)
+                select(PPESupplier)
+                .where(*base)
+                .order_by(PPESupplier.name.asc())
+                .limit(limit)
+                .offset(offset)
             )
-        ).scalars().all()
+        )
+        .scalars()
+        .all()
     )
     total = (await session.execute(select(func.count()).where(*base))).scalar_one()
     return items, int(total or 0)

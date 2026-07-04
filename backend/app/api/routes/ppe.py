@@ -167,9 +167,7 @@ def _ppe_conflict(message: str) -> HTTPException:
 def _ppe_supplier_conflict(message: str) -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_409_CONFLICT,
-        detail=api_problem_detail(
-            code="PPE_SUPPLIER_CONFLICT", message=message, error_type="ppe"
-        ),
+        detail=api_problem_detail(code="PPE_SUPPLIER_CONFLICT", message=message, error_type="ppe"),
     )
 
 
@@ -1348,7 +1346,9 @@ async def get_reorder_draft(
                 supplier_inn=g.supplier_inn,
                 supplier_contact=g.supplier_contact,
                 lines=[
-                    PPEReorderLineRead(item_id=ln.item_id, item_name=ln.item_name, deficit=ln.deficit)
+                    PPEReorderLineRead(
+                        item_id=ln.item_id, item_name=ln.item_name, deficit=ln.deficit
+                    )
                     for ln in g.lines
                 ],
                 line_count=g.line_count,

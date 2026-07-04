@@ -36,7 +36,9 @@ async def test_duplicate_name_conflicts(sessionmaker, data_factory: TestDataFact
 
 
 @pytest.mark.asyncio
-async def test_list_excludes_soft_deleted_and_paginates(sessionmaker, data_factory: TestDataFactory):
+async def test_list_excludes_soft_deleted_and_paginates(
+    sessionmaker, data_factory: TestDataFactory
+):
     async with sessionmaker() as session:
         tenant = await data_factory.ensure_tenant(session=session)
         a = await create_supplier(session, tenant_id=tenant.id, name="A")
@@ -70,7 +72,9 @@ async def test_tenant_isolation(sessionmaker, data_factory: TestDataFactory):
 
 
 @pytest.mark.asyncio
-async def test_update_rename_to_existing_name_conflicts(sessionmaker, data_factory: TestDataFactory):
+async def test_update_rename_to_existing_name_conflicts(
+    sessionmaker, data_factory: TestDataFactory
+):
     async with sessionmaker() as session:
         tenant = await data_factory.ensure_tenant(session=session)
         await create_supplier(session, tenant_id=tenant.id, name="A")
