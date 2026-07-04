@@ -83,6 +83,8 @@ class PPESupplierRead(BaseSchema):
     inn: str | None
     contact_email: str | None
     contact_phone: str | None
+    created_at: datetime
+    updated_at: datetime
 
 
 class PPESupplierPage(BaseSchema):

@@ -69,6 +69,16 @@ async def test_duplicate_name_returns_409(async_client, make_auth_headers, sessi
 
 
 @pytest.mark.asyncio
+async def test_supplier_empty_name_returns_422(async_client, make_auth_headers, sessionmaker, data_factory: TestDataFactory):
+    async with sessionmaker() as session:
+        await data_factory.ensure_tenant(session=session)
+        await session.commit()
+    headers = await make_auth_headers(RoleEnum.ADMIN)
+    resp = await async_client.post("/api/v1/ppe/suppliers", json={"name": ""}, headers=headers)
+    assert resp.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY, resp.text
+
+
+@pytest.mark.asyncio
 async def test_suppliers_404_when_feature_disabled(async_client, make_auth_headers, sessionmaker, data_factory: TestDataFactory):
     await _set_warehouse_flag(sessionmaker, data_factory, on=False)
     headers = await make_auth_headers(RoleEnum.ADMIN)
