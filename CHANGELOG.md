@@ -1,5 +1,27 @@
 # CHANGELOG
 
+## 2026-07-04 (feat/ppe-inventory-count-p10-06 — P10-06 СИЗ склад: инвентаризация (сверка факт↔система))
+
+### Added
+- **Инвентаризация склада СИЗ (P10-06)** — двухфазная сессия подсчёта: новые таблицы
+  `ppe_inventory_count` (заголовок, статус `draft`→`applied`/`cancelled`) + `ppe_inventory_count_line`
+  (снимок по партии: `system_qty`, `counted_qty` nullable, `adjustment_movement_id`), миграция `wa06`
+  (строго аддитивная, две новые таблицы, без бэкофилла).
+  - Сервис `backend/app/modules/ppe/inventory.py`: `create_count` (снимок активных партий под опц.
+    фильтр item/location) → `set_line_counts` (ввод факта на draft) → `apply_count` (выпускает
+    `adjustment`-проводки через `record_movement` — единственный мутатор `batch.quantity`; дельта от
+    **живого** остатка, не снимка; пропускает несосчитанные/нулевые/soft-deleted-партии строки;
+    замораживает срез) + `cancel_count`. Несосчитано (`null`) ≠ «не нашли» (`0`).
+  - Эндпоинты за флагом `warehouse`: `POST/GET /ppe/stock/inventory/counts`, `GET /…/{id}`
+    (детали = превью с live `on_hand`/`delta`), `PATCH /…/{id}/lines`, `POST /…/{id}/apply`,
+    `POST /…/{id}/cancel`. `apply`/`patch` на не-`draft` → 400; конкурентный `apply` → 409
+    (optimistic-lock `version`); `counted_qty < 0` → 422.
+  - `record_movement` расширен аддитивно опциональными `ref_type`/`ref_id` (проводка инвентаризации
+    ссылается на срез: `ref_type="ppe_inventory_count"`).
+  - Фронт: секция «Инвентаризация» в `pages/warehouse/WarehousePage.tsx` (список срезов + форма
+    создания + редактируемая сетка факта с дельтами + «Сохранить/Применить/Отменить»).
+- OpenAPI baseline пере-снят: 811→817 операций, 653→660 схем (чистый аддитив, ARCH-4 зелёный).
+
 ## 2026-07-03 (p10-06 — P10-06 СИЗ склад: мин-остаток + прогноз дефицита)
 
 ### Added
