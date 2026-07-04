@@ -28,7 +28,7 @@
 **Backend — create:**
 - `backend/app/migrations/versions/20260704_wa08_ppe_supplier.py` — additive migration.
 - `backend/app/modules/ppe/suppliers.py` — supplier CRUD service + exceptions.
-- `backend/tests/test_ppe_supplier_model.py` — ORM round-trip.
+- `tests/api/test_ppe_supplier_model.py` — ORM round-trip (needs tests/conftest.py DB fixtures).
 - `backend/tests/test_wa08_ppe_supplier_migration.py` — migration metadata/shape (mirror `test_wa07_*`).
 - `tests/api/test_ppe_suppliers_service.py` — CRUD service tests.
 - `tests/api/test_ppe_suppliers_api.py` — CRUD API contract.
@@ -56,12 +56,12 @@
 
 **Files:**
 - Modify: `backend/app/models/ppe.py`
-- Test: `backend/tests/test_ppe_supplier_model.py`
+- Test: `tests/api/test_ppe_supplier_model.py`  <!-- must live under tests/ so the sessionmaker/data_factory fixtures from tests/conftest.py are visible; backend/tests/ is a sibling dir and does NOT inherit them -->
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
-# backend/tests/test_ppe_supplier_model.py
+# tests/api/test_ppe_supplier_model.py
 """ORM round-trip for PPESupplier + batch/item provenance FKs (P10-06)."""
 
 from __future__ import annotations
@@ -1628,7 +1628,7 @@ Fix any findings (run `python -m black backend/app tests` to auto-format), re-ru
 - [ ] **Step 2: Run the PPE regression slice**
 
 Run (single invocation, 600000 ms):
-`python -m pytest backend/tests/test_ppe_supplier_model.py backend/tests/test_wa08_ppe_supplier_migration.py tests/api/test_ppe_suppliers_service.py tests/api/test_ppe_suppliers_api.py tests/api/test_ppe_supplier_provenance.py tests/api/test_ppe_reorder_service.py tests/api/test_ppe_reorder_api.py tests/api/test_ppe_stock_transfers_service.py tests/api/test_ppe_stock_transfers_api.py tests/api/test_ppe_shortage_service.py tests/api/test_ppe_shortage_api.py tests/api/test_ppe_warehouse_api.py -q`
+`python -m pytest tests/api/test_ppe_supplier_model.py backend/tests/test_wa08_ppe_supplier_migration.py tests/api/test_ppe_suppliers_service.py tests/api/test_ppe_suppliers_api.py tests/api/test_ppe_supplier_provenance.py tests/api/test_ppe_reorder_service.py tests/api/test_ppe_reorder_api.py tests/api/test_ppe_stock_transfers_service.py tests/api/test_ppe_stock_transfers_api.py tests/api/test_ppe_shortage_service.py tests/api/test_ppe_shortage_api.py tests/api/test_ppe_warehouse_api.py -q`
 Expected: all green (new + existing PPE-stock regression).
 
 - [ ] **Step 3: Re-snapshot the OpenAPI baseline**
