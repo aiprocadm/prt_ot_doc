@@ -9,6 +9,7 @@ movements through ``record_movement`` — the single sanctioned mutation point f
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,8 +20,9 @@ from app.models.ppe import (
     PPEItem,
     PPEStockBatch,
 )
+from app.modules.ppe.stock import KIND_ADJUSTMENT, record_movement
 
-# movement ref_type stamped on adjustment movements by the upcoming ``apply`` step
+# movement ref_type stamped on adjustment movements by ``apply_count``
 INVENTORY_REF_TYPE = "ppe_inventory_count"
 
 
@@ -312,3 +314,80 @@ async def list_counts(
         for c in counts
     ]
     return views, int(total or 0)
+
+
+async def apply_count(
+    session: AsyncSession, tenant_id: str, *, count_id: str, now: datetime
+) -> PPEInventoryCount:
+    """Reconcile physical counts into ``adjustment`` movements and freeze the count.
+
+    Emits an adjustment only for counted lines whose ``counted_qty`` differs from the
+    **live** batch on-hand (set-to-absolute via ``record_movement``). Uncounted lines,
+    zero-delta lines, and lines whose batch is soft-deleted are skipped. Concurrent
+    applies are guarded by the ``VersionedMixin`` optimistic lock on the header (the
+    losing flush raises ``StaleDataError``, surfaced as 409 at the route).
+    """
+    count = await _load_count(session, tenant_id, count_id)
+    if count.status != "draft":
+        raise InventoryCountNotDraft(count_id, count.status)
+
+    lines = list(
+        (
+            await session.execute(
+                select(PPEInventoryCountLine).where(
+                    PPEInventoryCountLine.tenant_id == tenant_id,
+                    PPEInventoryCountLine.count_id == count_id,
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    batch_ids = [line.batch_id for line in lines]
+    live: dict[str, int] = {}
+    if batch_ids:
+        rows = (
+            await session.execute(
+                select(PPEStockBatch.id, PPEStockBatch.quantity).where(
+                    PPEStockBatch.id.in_(batch_ids),
+                    PPEStockBatch.deleted_at.is_(None),
+                )
+            )
+        ).all()
+        live = {bid: int(qty or 0) for bid, qty in rows}
+
+    for line in lines:
+        if line.counted_qty is None:
+            continue
+        if line.batch_id not in live:
+            continue  # batch soft-deleted after seeding
+        if line.counted_qty == live[line.batch_id]:
+            continue  # zero delta — advisory skip; record_movement is source of truth
+        movement = await record_movement(
+            session,
+            tenant_id=tenant_id,
+            batch_id=line.batch_id,
+            kind=KIND_ADJUSTMENT,
+            quantity=line.counted_qty,
+            reason=f"inventory {count_id}",
+            ref_type=INVENTORY_REF_TYPE,
+            ref_id=count_id,
+        )
+        line.adjustment_movement_id = movement.id
+
+    count.status = "applied"
+    count.applied_at = now
+    await session.flush()
+    return count
+
+
+async def cancel_count(
+    session: AsyncSession, tenant_id: str, *, count_id: str
+) -> PPEInventoryCount:
+    """Cancel a draft count. Emits no movements."""
+    count = await _load_count(session, tenant_id, count_id)
+    if count.status != "draft":
+        raise InventoryCountNotDraft(count_id, count.status)
+    count.status = "cancelled"
+    await session.flush()
+    return count

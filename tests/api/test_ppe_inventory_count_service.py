@@ -188,3 +188,145 @@ async def test_list_counts_filters_by_status_and_counts_lines(
     assert drafts[0].line_count == 1
     assert drafts[0].counted_count == 1
     assert applied == []
+
+
+@pytest.mark.asyncio
+async def test_apply_emits_adjustments_only_for_changed_counted_lines(
+    sessionmaker, data_factory: TestDataFactory
+):
+    from sqlalchemy import select as _select
+
+    from app.models.ppe import PPEStockMovement
+    from app.modules.ppe.inventory import apply_count, set_line_counts
+
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        item = await _item(session, tenant.id, name="Каска")
+        b_low = await _batch(
+            session, tenant.id, item.id, batch_no="B-1", qty=10
+        )  # count 8 -> adjust
+        b_same = await _batch(session, tenant.id, item.id, batch_no="B-2", qty=5)  # count 5 -> skip
+        b_skip = await _batch(
+            session, tenant.id, item.id, batch_no="B-3", qty=3
+        )  # uncounted -> skip
+        count = await create_count(session, tenant_id=tenant.id)
+        detail = await get_count_detail(session, tenant.id, count.id)
+        line_by_batch = {line.batch_id: line.id for line in detail.lines}
+
+        await set_line_counts(
+            session,
+            tenant_id=tenant.id,
+            count_id=count.id,
+            entries=[(line_by_batch[b_low.id], 8), (line_by_batch[b_same.id], 5)],
+        )
+        applied = await apply_count(session, tenant_id=tenant.id, count_id=count.id, now=NOW)
+        await session.refresh(b_low)
+        await session.refresh(b_same)
+        await session.refresh(b_skip)
+        result = await session.execute(
+            _select(PPEStockMovement).where(
+                PPEStockMovement.tenant_id == tenant.id,
+                PPEStockMovement.kind == "adjustment",
+            )
+        )
+        movements = list(result.scalars().all())
+
+    assert applied.status == "applied"
+    assert applied.applied_at == NOW
+    assert b_low.quantity == 8  # adjusted to counted
+    assert b_same.quantity == 5  # unchanged (zero delta -> no movement)
+    assert b_skip.quantity == 3  # uncounted -> untouched
+    assert len(movements) == 1
+    assert movements[0].ref_type == "ppe_inventory_count"
+    assert movements[0].ref_id == count.id
+
+
+@pytest.mark.asyncio
+async def test_apply_uses_live_on_hand_not_snapshot(sessionmaker, data_factory: TestDataFactory):
+    from app.modules.ppe.inventory import apply_count, set_line_counts
+    from app.modules.ppe.stock import record_movement
+
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        item = await _item(session, tenant.id, name="Каска")
+        batch = await _batch(session, tenant.id, item.id, batch_no="B-1", qty=10)
+        count = await create_count(session, tenant_id=tenant.id)  # snapshot system_qty=10
+        detail = await get_count_detail(session, tenant.id, count.id)
+        # stock moves AFTER the snapshot: a writeoff of 4 -> live on_hand=6
+        await record_movement(
+            session, tenant_id=tenant.id, batch_id=batch.id, kind="writeoff", quantity=4
+        )
+        await set_line_counts(
+            session,
+            tenant_id=tenant.id,
+            count_id=count.id,
+            entries=[(detail.lines[0].id, 9)],
+        )
+        await apply_count(session, tenant_id=tenant.id, count_id=count.id, now=NOW)
+        await session.refresh(batch)
+
+    assert batch.quantity == 9  # set-to-absolute from LIVE 6, not snapshot 10
+
+
+@pytest.mark.asyncio
+async def test_apply_twice_is_rejected(sessionmaker, data_factory: TestDataFactory):
+    from app.modules.ppe.inventory import (
+        InventoryCountNotDraft,
+        apply_count,
+    )
+
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        count = await create_count(session, tenant_id=tenant.id)
+        await apply_count(session, tenant_id=tenant.id, count_id=count.id, now=NOW)
+        with pytest.raises(InventoryCountNotDraft):
+            await apply_count(session, tenant_id=tenant.id, count_id=count.id, now=NOW)
+
+
+@pytest.mark.asyncio
+async def test_cancel_sets_status_and_writes_no_movements(
+    sessionmaker, data_factory: TestDataFactory
+):
+    from app.modules.ppe.inventory import cancel_count
+
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        count = await create_count(session, tenant_id=tenant.id)
+        cancelled = await cancel_count(session, tenant_id=tenant.id, count_id=count.id)
+
+    assert cancelled.status == "cancelled"
+
+
+@pytest.mark.asyncio
+async def test_apply_empty_count_flips_to_applied_with_no_movements(
+    sessionmaker, data_factory: TestDataFactory
+):
+    from sqlalchemy import select as _select
+
+    from app.models.ppe import PPEStockMovement
+    from app.modules.ppe.inventory import apply_count
+
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        count = await create_count(session, tenant_id=tenant.id)  # no batches -> zero lines
+        applied = await apply_count(session, tenant_id=tenant.id, count_id=count.id, now=NOW)
+        result = await session.execute(
+            _select(PPEStockMovement).where(PPEStockMovement.tenant_id == tenant.id)
+        )
+        movements = list(result.scalars().all())
+
+    assert applied.status == "applied"
+    assert applied.applied_at == NOW
+    assert movements == []
+
+
+@pytest.mark.asyncio
+async def test_cancel_rejects_non_draft(sessionmaker, data_factory: TestDataFactory):
+    from app.modules.ppe.inventory import InventoryCountNotDraft, apply_count, cancel_count
+
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        count = await create_count(session, tenant_id=tenant.id)
+        await apply_count(session, tenant_id=tenant.id, count_id=count.id, now=NOW)
+        with pytest.raises(InventoryCountNotDraft):
+            await cancel_count(session, tenant_id=tenant.id, count_id=count.id)
