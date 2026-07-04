@@ -472,6 +472,8 @@ const WarehousePage = () => {
                       <TableCell>{line.on_hand}</TableCell>
                       <TableCell>
                         <Input
+                          type="number"
+                          min={0}
                           aria-label={`Факт ${line.batch_no}`}
                           value={countedInputs[line.id] ?? ""}
                           disabled={activeCount.status !== "draft"}
