@@ -329,4 +329,34 @@ describe("WarehousePage", () => {
       expect(patchItemPreferredSupplierMock).toHaveBeenCalledWith("i1", "s1")
     );
   });
+
+  it("escapes CSV cells containing the delimiter when copying the reorder draft", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+    listLevelsMock.mockResolvedValue([]);
+    listBatchesMock.mockResolvedValue([]);
+    getReorderDraftMock.mockResolvedValue({
+      groups: [
+        {
+          supplier_id: "s1",
+          supplier_name: "Alpha",
+          supplier_inn: null,
+          supplier_contact: "mail@x.ru; +7 900 000-00-00",
+          lines: [{ item_id: "i1", item_name: "Каска", deficit: 10 }],
+          line_count: 1,
+          total_deficit: 10
+        }
+      ],
+      total_lines: 1,
+      total_deficit: 10
+    });
+
+    render(<MemoryRouter><WarehousePage /></MemoryRouter>);
+    const btn = await screen.findByText("Копировать CSV");
+    fireEvent.click(btn);
+
+    await waitFor(() => expect(writeText).toHaveBeenCalled());
+    const csv = writeText.mock.calls[0][0] as string;
+    expect(csv).toContain('"mail@x.ru; +7 900 000-00-00"');
+  });
 });

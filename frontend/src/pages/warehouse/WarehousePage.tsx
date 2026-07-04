@@ -27,6 +27,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import type { ApiError } from "@/types/dto/common";
 import { formatDate } from "@/utils/datetime";
 
+const csvCell = (v: string | number | null | undefined): string => {
+  const s = String(v ?? "");
+  return /[";\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+};
+
 const WarehousePage = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
@@ -316,11 +321,11 @@ const WarehousePage = () => {
       group.lines.forEach((line) => {
         lines.push(
           [
-            supplierName,
-            group.supplier_inn ?? "",
-            group.supplier_contact ?? "",
-            line.item_name,
-            String(line.deficit)
+            csvCell(supplierName),
+            csvCell(group.supplier_inn),
+            csvCell(group.supplier_contact),
+            csvCell(line.item_name),
+            csvCell(line.deficit)
           ].join(";")
         );
       });
