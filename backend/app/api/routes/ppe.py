@@ -192,6 +192,13 @@ async def _get_item(session: AsyncSession, tenant: Tenant, item_id: str) -> PPEI
     return item
 
 
+async def _require_supplier(session: AsyncSession, tenant: Tenant, supplier_id: str) -> None:
+    try:
+        await get_supplier(session, tenant.id, supplier_id)
+    except SupplierNotFound as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "PPE supplier not found") from exc
+
+
 async def _get_issue(session: AsyncSession, tenant: Tenant, issue_id: str) -> PPEIssue:
     stmt = select(PPEIssue).where(
         PPEIssue.id == issue_id,
@@ -1088,10 +1095,7 @@ async def create_stock_batch(
     await _get_item(session, tenant, payload.item_id)
 
     if payload.supplier_id is not None:
-        try:
-            await get_supplier(session, tenant.id, payload.supplier_id)
-        except SupplierNotFound as exc:
-            raise _ppe_bad_request("unknown supplier") from exc
+        await _require_supplier(session, tenant, payload.supplier_id)
 
     batch = PPEStockBatch(
         tenant_id=tenant.id,
@@ -1152,10 +1156,7 @@ async def update_stock_batch(
     batch = await _get_batch(session, tenant, batch_id)
     updates = payload.model_dump(exclude_unset=True)
     if updates.get("supplier_id") is not None:
-        try:
-            await get_supplier(session, tenant.id, updates["supplier_id"])
-        except SupplierNotFound as exc:
-            raise _ppe_bad_request("unknown supplier") from exc
+        await _require_supplier(session, tenant, updates["supplier_id"])
     for field, value in updates.items():
         setattr(batch, field, value)
     await session.flush()
