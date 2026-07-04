@@ -18,6 +18,7 @@ class PPEItemCreate(BaseSchema):
     description: str | None = None
     default_wear_days: int = Field(default=365, ge=1)
     min_stock: int = Field(default=0, ge=0)
+    preferred_supplier_id: str | None = None
     metadata_json: dict[str, Any] = Field(default_factory=dict)
 
     @field_validator("category", mode="before")
@@ -35,6 +36,7 @@ class PPEItemUpdate(BaseSchema):
     description: str | None = None
     default_wear_days: int | None = Field(default=None, ge=1)
     min_stock: int | None = Field(default=None, ge=0)
+    preferred_supplier_id: str | None = None
     metadata_json: dict[str, Any] | None = None
 
     @field_validator("category", mode="before")
@@ -53,6 +55,7 @@ class PPEItemRead(BaseSchema):
     description: str | None
     default_wear_days: int
     min_stock: int
+    preferred_supplier_id: str | None
     metadata_json: dict[str, Any]
     created_at: datetime
     updated_at: datetime

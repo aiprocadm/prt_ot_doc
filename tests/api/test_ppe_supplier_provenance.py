@@ -133,3 +133,34 @@ async def test_batch_update_clears_supplier(async_client, make_auth_headers, ses
     )
     assert patched.status_code == status.HTTP_200_OK, patched.text
     assert patched.json()["supplier_id"] is None
+
+
+@pytest.mark.asyncio
+async def test_item_preferred_supplier_roundtrip(async_client, make_auth_headers, sessionmaker, data_factory: TestDataFactory):
+    async with sessionmaker() as session:
+        await data_factory.ensure_tenant(session=session)
+        await session.commit()
+    headers = await make_auth_headers(RoleEnum.ADMIN)
+    sid = await _supplier(async_client, headers)
+    item_id = await _item(async_client, headers)
+
+    patched = await async_client.patch(
+        f"/api/v1/ppe/items/{item_id}", json={"preferred_supplier_id": sid}, headers=headers
+    )
+    assert patched.status_code == status.HTTP_200_OK, patched.text
+    assert patched.json()["preferred_supplier_id"] == sid
+
+
+@pytest.mark.asyncio
+async def test_item_create_unknown_preferred_supplier_404(async_client, make_auth_headers, sessionmaker, data_factory: TestDataFactory):
+    async with sessionmaker() as session:
+        await data_factory.ensure_tenant(session=session)
+        await session.commit()
+    headers = await make_auth_headers(RoleEnum.ADMIN)
+    from app.schemas.ppe import PPEItemCategory
+    r = await async_client.post(
+        "/api/v1/ppe/items",
+        json={"name": "Каска2", "category": PPEItemCategory.HEAD.value, "preferred_supplier_id": "nope"},
+        headers=headers,
+    )
+    assert r.status_code == status.HTTP_404_NOT_FOUND, r.text

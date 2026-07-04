@@ -268,6 +268,9 @@ async def create_item(
 ) -> PPEItemRead:
     TenantContextValidator.ensure_tenant_context(tenant)
 
+    if payload.preferred_supplier_id is not None:
+        await _require_supplier(session, tenant, payload.preferred_supplier_id)
+
     item = PPEItem(
         tenant_id=tenant.id,
         name=payload.name,
@@ -276,6 +279,7 @@ async def create_item(
         description=payload.description,
         default_wear_days=payload.default_wear_days,
         min_stock=payload.min_stock,
+        preferred_supplier_id=payload.preferred_supplier_id,
         metadata_json=payload.metadata_json,
     )
     session.add(item)
@@ -310,7 +314,10 @@ async def update_item(
     TenantContextValidator.ensure_tenant_context(tenant)
 
     item = await _get_item(session, tenant, item_id)
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    updates = payload.model_dump(exclude_unset=True)
+    if updates.get("preferred_supplier_id") is not None:
+        await _require_supplier(session, tenant, updates["preferred_supplier_id"])
+    for field, value in updates.items():
         setattr(item, field, value)
     await session.flush()
     await session.refresh(item)
