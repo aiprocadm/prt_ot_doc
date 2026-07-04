@@ -41,10 +41,13 @@ def test_migration_has_upgrade_and_downgrade() -> None:
 
 def test_migration_swaps_unique_key():
     src = _MIGRATION.read_text(encoding="utf-8")
-    assert 'drop_constraint("uq_ppe_stock_batch_item_no"' in src
-    assert "uq_ppe_stock_batch_item_no_loc" in src
-    assert "nulls_not_distinct" in src.lower()
-    assert 'create_unique_constraint("uq_ppe_stock_batch_item_no"' in src
+    # whitespace-insensitive so black line-wrapping of the op.* calls can't break
+    # these substring checks (constraint/index names contain no internal spaces)
+    nospace = "".join(src.split())
+    assert 'drop_constraint("uq_ppe_stock_batch_item_no"' in nospace
+    assert "uq_ppe_stock_batch_item_no_loc" in nospace
+    assert "nulls_not_distinct" in nospace.lower()
+    assert 'create_unique_constraint("uq_ppe_stock_batch_item_no"' in nospace
     assert "add_column" not in src
     # partial index so soft-deleted rows don't occupy the (item, batch_no, location) slot
     assert "deleted_at IS NULL" in src
