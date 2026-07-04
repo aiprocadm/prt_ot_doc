@@ -631,6 +631,10 @@ def build_reorder_draft(rows: list[ShortageRow]) -> ReorderDraft:
     supplier fall into a single ``supplier_id=None`` group that always sorts last."""
     buckets: dict[str | None, list[ShortageRow]] = {}
     for r in rows:
+        # Guard the public contract explicitly: the /stock/reorder route already
+        # passes only_below rows, but build_reorder_draft is a public pure fn that
+        # other callers may feed unfiltered rows. (below_threshold implies deficit>0
+        # today, but keep both so the contract holds independent of the caller.)
         if not (r.below_threshold and r.deficit > 0):
             continue
         buckets.setdefault(r.supplier_id, []).append(r)

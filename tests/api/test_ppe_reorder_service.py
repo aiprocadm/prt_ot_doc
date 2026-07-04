@@ -134,3 +134,14 @@ def test_build_reorder_draft_groups_by_supplier():
     assert draft.groups[-1].supplier_id is None        # unassigned sorts last
     assert draft.total_lines == 3
     assert draft.total_deficit == 10
+
+
+def test_build_reorder_draft_sorts_named_suppliers_before_unassigned():
+    rows = [
+        _row("i0", 1, True, None, None),      # unassigned
+        _row("i1", 2, True, "sB", "Beta"),    # inserted before Alpha
+        _row("i2", 3, True, "sA", "Alpha"),
+    ]
+    draft = build_reorder_draft(rows)
+    order = [g.supplier_name for g in draft.groups]
+    assert order == ["Alpha", "Beta", None]   # name asc, unassigned last
