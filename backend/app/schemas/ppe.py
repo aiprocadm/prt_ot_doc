@@ -311,3 +311,56 @@ class PPEStockMovementRead(BaseSchema):
 class PPEStockMovementPage(BaseSchema):
     items: list[PPEStockMovementRead]
     total: int
+
+
+class PPEInventoryCountCreate(BaseSchema):
+    scope_item_id: str | None = None
+    scope_location: str | None = Field(default=None, max_length=255)
+    note: str | None = Field(default=None, max_length=255)
+
+
+class PPEInventoryCountLineInput(BaseSchema):
+    line_id: str
+    # None = not counted (skipped at apply); 0 = counted-zero (write-off);
+    # ge=0 applies only when an int is supplied.
+    counted_qty: int | None = Field(default=None, ge=0)
+
+
+class PPEInventoryCountLinesUpdate(BaseSchema):
+    entries: list[PPEInventoryCountLineInput]
+
+
+class PPEInventoryCountLineRead(BaseSchema):
+    id: str
+    batch_id: str
+    item_id: str
+    batch_no: str
+    location: str | None
+    item_name: str
+    system_qty: int
+    counted_qty: int | None
+    on_hand: int
+    delta: int | None
+    adjustment_movement_id: str | None
+
+
+class PPEInventoryCountRead(BaseSchema):
+    id: str
+    status: str
+    scope_item_id: str | None
+    scope_location: str | None
+    note: str | None
+    applied_at: datetime | None
+    created_at: datetime
+    line_count: int
+    counted_count: int
+
+
+class PPEInventoryCountDetail(PPEInventoryCountRead):
+    diff_count: int
+    lines: list[PPEInventoryCountLineRead]
+
+
+class PPEInventoryCountPage(BaseSchema):
+    items: list[PPEInventoryCountRead]
+    total: int
