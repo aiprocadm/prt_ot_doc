@@ -1,5 +1,31 @@
 # CHANGELOG
 
+## 2026-07-04 (claude/lucid-thompson-80c2b5 — P10-06 СИЗ склад: перемещения между локациями)
+
+### Added
+- **Перемещения запаса СИЗ между локациями (P10-06)** — частичный перенос `q` единиц партии из
+  локации A в локацию B как **пара `transfer`-проводок** (`−q` на партии-источнике, `+q` на партии-
+  приёмнике, общий сгенерированный `ref_id`, `ref_type="ppe_transfer"`) через единственный мутатор
+  остатка `_write_movement`. На уровне позиции остаток инвариантен (out + in = 0), per-location остаток
+  честно перетекает.
+  - Сервис `transfer_stock` в `backend/app/modules/ppe/stock.py`: списывает источник первым (нехватка →
+    `InsufficientStockError` до создания приёмника), затем **find-or-create** партии-приёмника с тем же
+    `batch_no` в локации B (копия провенанса: `received_at`/`certificate_no`/`certificate_expires_at`).
+    Гварды: `quantity>0`, непустая `to_location` (после `strip`), `to_location != source.location`.
+  - Миграция `wa07` расширяет уникальный ключ партии с `(tenant, item, batch_no)` до
+    `(tenant, item, batch_no, location)` — **частичный** unique-индекс `WHERE deleted_at IS NULL` +
+    `NULLS NOT DISTINCT` (PG16): один `batch_no` может лежать в разных локациях, legacy-дедуп сохранён,
+    soft-deleted партии не занимают слот. Не чисто аддитивная (drop+add ключа) — PG16-gate round-trip.
+  - Эндпоинты за флагом `warehouse`: `POST /ppe/stock/transfers` (`IntegrityError`/`StaleDataError`→409,
+    нехватка/невалидная локация→400, нет источника→404, `quantity≤0`→422),
+    `GET /ppe/stock/transfers` (история переносов, сгруппированная в пары по `ref_id`, фильтр `item_id`,
+    ETag+304, пагинация по парам), `GET /ppe/stock/levels/by-location` (остаток по `(item, location)`).
+  - Фронт: секция «Перемещения между локациями» на `WarehousePage` (форма источник/локация-назначения
+    с `datalist` известных локаций/количество/причина + история переносов) + `warehouseApi`
+    (`listTransfers`/`createTransfer`/`listLevelsByLocation`).
+  - Осознанно отложено (follow-up): location-фильтр истории переносов, goods-in-transit,
+    location-scoped FIFO-выдача, сущность-справочник `PPELocation`, picker партий в форме.
+
 ## 2026-07-04 (claude/recursing-chaum-4a942d — СВЕРКА ТЗ↔КОД + синхронизация доков, PR #723)
 
 ### Docs

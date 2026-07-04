@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
+from uuid import uuid4
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,6 +21,7 @@ KIND_RECEIPT = "receipt"
 KIND_ISSUE = "issue"
 KIND_WRITEOFF = "writeoff"
 KIND_ADJUSTMENT = "adjustment"
+KIND_TRANSFER = "transfer"
 MANUAL_KINDS = frozenset({KIND_RECEIPT, KIND_WRITEOFF, KIND_ADJUSTMENT})
 WAREHOUSE_FEATURE_CODE = "warehouse"
 
@@ -45,6 +47,19 @@ class StockBatchNotFound(Exception):
 class Allocation:
     batch_id: str
     taken: int
+
+
+@dataclass(slots=True, frozen=True)
+class TransferResult:
+    ref_id: str
+    out_movement: PPEStockMovement  # source, delta < 0
+    in_movement: PPEStockMovement  # destination, delta > 0
+    source_batch_id: str
+    dest_batch_id: str
+    batch_no: str
+    from_location: str | None
+    to_location: str
+    quantity: int
 
 
 def allocate_fifo(available: list[tuple[str, int]], quantity: int) -> list[Allocation]:
@@ -201,6 +216,109 @@ async def record_movement(
         occurred_at=occurred_at,
         ref_type=ref_type,
         ref_id=ref_id,
+    )
+
+
+async def _find_or_create_dest_batch(
+    session: AsyncSession,
+    *,
+    tenant_id: str,
+    source: PPEStockBatch,
+    to_location: str,
+) -> PPEStockBatch:
+    """Find the sibling batch (same item + batch_no) at ``to_location`` or create it
+    with quantity 0, copying the source batch provenance."""
+    stmt = select(PPEStockBatch).where(
+        PPEStockBatch.tenant_id == tenant_id,
+        PPEStockBatch.item_id == source.item_id,
+        PPEStockBatch.batch_no == source.batch_no,
+        PPEStockBatch.location == to_location,
+        PPEStockBatch.deleted_at.is_(None),
+    )
+    existing = (await session.execute(stmt)).scalar_one_or_none()
+    if existing is not None:
+        return existing
+    dest = PPEStockBatch(
+        tenant_id=tenant_id,
+        item_id=source.item_id,
+        batch_no=source.batch_no,
+        quantity=0,
+        location=to_location,
+        received_at=source.received_at,
+        certificate_no=source.certificate_no,
+        certificate_expires_at=source.certificate_expires_at,
+    )
+    session.add(dest)
+    await session.flush()
+    return dest
+
+
+async def transfer_stock(
+    session: AsyncSession,
+    *,
+    tenant_id: str,
+    source_batch_id: str,
+    to_location: str,
+    quantity: int,
+    reason: str | None = None,
+    occurred_at: datetime | None = None,
+) -> TransferResult:
+    """Move ``quantity`` of a batch from its location to ``to_location``.
+
+    Emits a pair of ``transfer`` movements (source ``-quantity`` / destination
+    ``+quantity``) sharing a generated ``ref_id`` via ``_write_movement`` — the only
+    sanctioned balance mutator. Item-level on-hand is invariant (out + in = 0).
+    The destination is a find-or-create sibling batch at ``to_location``.
+    """
+    if quantity <= 0:
+        raise ValueError("transfer quantity must be positive")
+    dest_location = (to_location or "").strip()
+    if not dest_location:
+        raise ValueError("transfer destination location must not be empty")
+    source = await _load_batch(session, tenant_id, source_batch_id)
+    if (source.location or "").strip() == dest_location:
+        raise ValueError("transfer destination must differ from source location")
+
+    when = occurred_at or datetime.now(tz=timezone.utc)
+    ref = uuid4().hex
+
+    # Deplete the source first: an insufficient balance raises here, before any
+    # destination batch is created (the whole call is one request transaction).
+    out_movement = await _write_movement(
+        session,
+        tenant_id=tenant_id,
+        batch=source,
+        kind=KIND_TRANSFER,
+        delta=-quantity,
+        reason=reason,
+        occurred_at=when,
+        ref_type="ppe_transfer",
+        ref_id=ref,
+    )
+    dest = await _find_or_create_dest_batch(
+        session, tenant_id=tenant_id, source=source, to_location=dest_location
+    )
+    in_movement = await _write_movement(
+        session,
+        tenant_id=tenant_id,
+        batch=dest,
+        kind=KIND_TRANSFER,
+        delta=quantity,
+        reason=reason,
+        occurred_at=when,
+        ref_type="ppe_transfer",
+        ref_id=ref,
+    )
+    return TransferResult(
+        ref_id=ref,
+        out_movement=out_movement,
+        in_movement=in_movement,
+        source_batch_id=source.id,
+        dest_batch_id=dest.id,
+        batch_no=source.batch_no,
+        from_location=source.location,
+        to_location=dest_location,
+        quantity=quantity,
     )
 
 

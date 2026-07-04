@@ -2,12 +2,15 @@ import { useEffect, useMemo, useState } from "react";
 
 import {
   warehouseApi,
+  type CreateTransferInput,
   type InventoryCountDetailDto,
   type InventoryCountDto,
   type PPEStockShortageDto,
   type StockBatchDto,
+  type StockLevelByLocationDto,
   type StockLevelDto,
-  type StockMovementDto
+  type StockMovementDto,
+  type StockTransferDto
 } from "@/api/warehouse";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
@@ -33,6 +36,10 @@ const WarehousePage = () => {
   const [form, setForm] = useState({ batch_id: "", kind: "receipt", quantity: "1", reason: "" });
   const [submitting, setSubmitting] = useState(false);
   const [counts, setCounts] = useState<InventoryCountDto[]>([]);
+  const [transfers, setTransfers] = useState<StockTransferDto[]>([]);
+  const [levelsByLoc, setLevelsByLoc] = useState<StockLevelByLocationDto[]>([]);
+  const [transferForm, setTransferForm] = useState({ source_batch_id: "", to_location: "", quantity: "1", reason: "" });
+  const [transferSubmitting, setTransferSubmitting] = useState(false);
   const [activeCount, setActiveCount] = useState<InventoryCountDetailDto | null>(null);
   const [countForm, setCountForm] = useState({ scope_item_id: "", scope_location: "", note: "" });
   const [countedInputs, setCountedInputs] = useState<Record<string, string>>({});
@@ -41,18 +48,22 @@ const WarehousePage = () => {
     setLoading(true);
     setError(null);
     try {
-      const [levelsData, batchesData, movementsData, shortagesData, countsData] = await Promise.all([
+      const [levelsData, batchesData, movementsData, shortagesData, countsData, transfersData, levelsByLocData] = await Promise.all([
         warehouseApi.listLevels(),
         warehouseApi.listBatches(),
         warehouseApi.listMovements(),
         warehouseApi.listShortages(),
-        warehouseApi.listCounts()
+        warehouseApi.listCounts(),
+        warehouseApi.listTransfers(),
+        warehouseApi.listLevelsByLocation()
       ]);
       setLevels(levelsData);
       setBatches(batchesData);
       setMovements(movementsData);
       setShortages(shortagesData);
       setCounts(countsData);
+      setTransfers(transfersData);
+      setLevelsByLoc(levelsByLocData);
     } catch (err) {
       setError((err as ApiError) ?? { message: "Не удалось загрузить склад СИЗ" });
     } finally {
@@ -78,6 +89,32 @@ const WarehousePage = () => {
       setSubmitting(false);
     }
   };
+
+  const submitTransfer = async () => {
+    if (!transferForm.source_batch_id || !transferForm.to_location) return;
+    setTransferSubmitting(true);
+    setError(null);
+    try {
+      const body: CreateTransferInput = {
+        source_batch_id: transferForm.source_batch_id.trim(),
+        to_location: transferForm.to_location.trim(),
+        quantity: Number(transferForm.quantity) || 0,
+        reason: transferForm.reason || null
+      };
+      await warehouseApi.createTransfer(body);
+      setTransferForm({ source_batch_id: "", to_location: "", quantity: "1", reason: "" });
+      await load();
+    } catch (err) {
+      setError((err as ApiError) ?? { message: "Не удалось выполнить перемещение" });
+    } finally {
+      setTransferSubmitting(false);
+    }
+  };
+
+  const knownLocations = useMemo(
+    () => Array.from(new Set(levelsByLoc.map((l) => l.location).filter(Boolean))) as string[],
+    [levelsByLoc]
+  );
 
   const openCountDetail = (detail: InventoryCountDetailDto) => {
     setActiveCount(detail);
@@ -325,6 +362,71 @@ const WarehousePage = () => {
               </TableBody>
             </Table>
           )}
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Перемещения между локациями</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Input
+              aria-label="Партия-источник"
+              placeholder="ID партии-источника"
+              value={transferForm.source_batch_id}
+              onChange={(e) => setTransferForm((f) => ({ ...f, source_batch_id: e.target.value }))}
+            />
+            <Input
+              aria-label="Куда (локация)"
+              list="transfer-locations"
+              placeholder="Локация назначения"
+              value={transferForm.to_location}
+              onChange={(e) => setTransferForm((f) => ({ ...f, to_location: e.target.value }))}
+            />
+            <datalist id="transfer-locations">
+              {knownLocations.map((loc) => (
+                <option key={loc} value={loc} />
+              ))}
+            </datalist>
+            <Input
+              aria-label="Количество для переноса"
+              type="number"
+              min={1}
+              value={transferForm.quantity}
+              onChange={(e) => setTransferForm((f) => ({ ...f, quantity: e.target.value }))}
+            />
+            <Input
+              aria-label="Причина перемещения"
+              placeholder="Причина (опционально)"
+              value={transferForm.reason}
+              onChange={(e) => setTransferForm((f) => ({ ...f, reason: e.target.value }))}
+            />
+          </div>
+          <Button onClick={submitTransfer} disabled={transferSubmitting}>
+            Перенести
+          </Button>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Позиция</TableHead>
+                <TableHead>Партия</TableHead>
+                <TableHead>Маршрут</TableHead>
+                <TableHead>Кол-во</TableHead>
+                <TableHead>Когда</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {transfers.map((t) => (
+                <TableRow key={t.ref_id}>
+                  <TableCell>{t.item_name}</TableCell>
+                  <TableCell>{t.batch_no}</TableCell>
+                  <TableCell>{(t.from_location ?? "—")} → {t.to_location}</TableCell>
+                  <TableCell>{t.quantity}</TableCell>
+                  <TableCell>{formatDate(t.occurred_at)}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         </CardContent>
       </Card>
       <Card>

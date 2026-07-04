@@ -41,6 +41,37 @@ export type CreateMovementInput = {
   reason?: string | null;
 };
 
+export type StockTransferDto = {
+  ref_id: string;
+  item_id: string;
+  item_name: string;
+  batch_no: string;
+  from_location?: string | null;
+  to_location: string;
+  quantity: number;
+  source_batch_id: string;
+  dest_batch_id: string;
+  out_movement_id: string;
+  in_movement_id: string;
+  reason?: string | null;
+  occurred_at: string;
+};
+
+export type CreateTransferInput = {
+  source_batch_id: string;
+  to_location: string;
+  quantity: number;
+  reason?: string | null;
+};
+
+export type StockLevelByLocationDto = {
+  item_id: string;
+  item_name: string;
+  location?: string | null;
+  quantity: number;
+  batch_count: number;
+};
+
 export type PPEStockShortageDto = {
   item_id: string;
   item_name: string;
@@ -117,6 +148,22 @@ export const warehouseApi = {
   async createMovement(input: CreateMovementInput): Promise<StockMovementDto> {
     const response = await apiClient.post<StockMovementDto>("/ppe/stock/movements", input);
     return response.data;
+  },
+  async listTransfers(params?: { item_id?: string }): Promise<StockTransferDto[]> {
+    const response = await apiClient.get<PageResponse<StockTransferDto>>("/ppe/stock/transfers", {
+      params: { limit: 50, offset: 0, ...(params ?? {}) }
+    });
+    return response.data.items ?? [];
+  },
+  async createTransfer(input: CreateTransferInput): Promise<StockTransferDto> {
+    const response = await apiClient.post<StockTransferDto>("/ppe/stock/transfers", input);
+    return response.data;
+  },
+  async listLevelsByLocation(): Promise<StockLevelByLocationDto[]> {
+    const response = await apiClient.get<PageResponse<StockLevelByLocationDto>>(
+      "/ppe/stock/levels/by-location"
+    );
+    return response.data.items ?? [];
   },
   async listShortages(params?: { window_days?: number; only_below?: boolean }): Promise<PPEStockShortageDto[]> {
     const response = await apiClient.get<ShortagePageResponse>("/ppe/stock/shortages", { params });
