@@ -242,6 +242,7 @@ class PPEStockBatchCreate(BaseSchema):
     certificate_no: str | None = None
     certificate_expires_at: date | None = None
     location: str | None = None
+    supplier_id: str | None = None
 
 
 class PPEStockBatchUpdate(BaseSchema):
@@ -250,6 +251,7 @@ class PPEStockBatchUpdate(BaseSchema):
     certificate_no: str | None = None
     certificate_expires_at: date | None = None
     location: str | None = None
+    supplier_id: str | None = None
 
 
 class PPEStockBatchRead(BaseSchema):
@@ -261,6 +263,7 @@ class PPEStockBatchRead(BaseSchema):
     certificate_no: str | None
     certificate_expires_at: date | None
     location: str | None
+    supplier_id: str | None
     created_at: datetime
     updated_at: datetime
 

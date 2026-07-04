@@ -1087,6 +1087,12 @@ async def create_stock_batch(
 
     await _get_item(session, tenant, payload.item_id)
 
+    if payload.supplier_id is not None:
+        try:
+            await get_supplier(session, tenant.id, payload.supplier_id)
+        except SupplierNotFound as exc:
+            raise _ppe_bad_request("unknown supplier") from exc
+
     batch = PPEStockBatch(
         tenant_id=tenant.id,
         item_id=payload.item_id,
@@ -1096,6 +1102,7 @@ async def create_stock_batch(
         certificate_no=payload.certificate_no,
         certificate_expires_at=payload.certificate_expires_at,
         location=payload.location,
+        supplier_id=payload.supplier_id,
     )
     session.add(batch)
     await session.flush()
@@ -1143,7 +1150,13 @@ async def update_stock_batch(
 ) -> PPEStockBatchRead:
     TenantContextValidator.ensure_tenant_context(tenant)
     batch = await _get_batch(session, tenant, batch_id)
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    updates = payload.model_dump(exclude_unset=True)
+    if updates.get("supplier_id") is not None:
+        try:
+            await get_supplier(session, tenant.id, updates["supplier_id"])
+        except SupplierNotFound as exc:
+            raise _ppe_bad_request("unknown supplier") from exc
+    for field, value in updates.items():
         setattr(batch, field, value)
     await session.flush()
     await session.refresh(batch)
