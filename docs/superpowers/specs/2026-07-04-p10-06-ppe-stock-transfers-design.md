@@ -198,10 +198,13 @@ class PPEStockLevelByLocationPage(BaseSchema):
 - **`GET /stock/transfers`** (зеркало `list_stock_movements` + группировка): движения
   `kind="transfer"` (tenant-scoped), **сгруппированные в пары по `ref_id`** — в паре отрицательная
   дельта = источник (её `batch_id`+location = `from`), положительная = приёмник (`to`). Собираем строки
-  `PPEStockTransferRead`. Фильтры: `item_id`, `location` (совпадение по `from` **или** `to`). Порядок —
-  `occurred_at desc`. Пагинация по **парам** (не по строкам журнала): выбираем упорядоченные `ref_id`
-  среди `kind="transfer"`, лимит/оффсет по ним, затем грузим обе проводки каждой пары. ETag по
-  собранным строкам + скалярам фильтров (паттерн `list_stock_movements`). `total` = число пар.
+  `PPEStockTransferRead`. Фильтр — `item_id` (обе проводки пары делят `item_id`, целостность пары
+  сохраняется). **`location`-фильтр отложен** в follow-up: `from`/`to` живут на партиях, а не на строках
+  журнала, DB-level фильтр по локации потребовал бы join — вне объёма среза; «вид по локациям» покрывает
+  `GET /stock/levels/by-location`. Порядок — `occurred_at desc`. Пагинация по **парам** (не по строкам
+  журнала): выбираем упорядоченные `ref_id` среди `kind="transfer"`, лимит/оффсет по ним, затем грузим
+  обе проводки каждой пары. ETag по собранным строкам + скалярам фильтров (паттерн `list_stock_movements`).
+  `total` = число пар.
 - **`GET /stock/levels/by-location`**: агрегат `sum(quantity)`, `count(id)` по
   `group_by(item_id, location)` c `deleted_at IS NULL` (зеркало `list_stock_levels`, +`location` в group_by),
   name-map по `item_id`. Отдаёт по строке на `(item, location)`. Пустые (нулевые) локации допустимы
