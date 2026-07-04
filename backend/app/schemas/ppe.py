@@ -63,6 +63,33 @@ class PPEItemPage(BaseSchema):
     total: int
 
 
+class PPESupplierCreate(BaseSchema):
+    name: str = Field(min_length=1, max_length=255)
+    inn: str | None = Field(default=None, max_length=12)
+    contact_email: str | None = Field(default=None, max_length=255)
+    contact_phone: str | None = Field(default=None, max_length=64)
+
+
+class PPESupplierUpdate(BaseSchema):
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    inn: str | None = Field(default=None, max_length=12)
+    contact_email: str | None = Field(default=None, max_length=255)
+    contact_phone: str | None = Field(default=None, max_length=64)
+
+
+class PPESupplierRead(BaseSchema):
+    id: str
+    name: str
+    inn: str | None
+    contact_email: str | None
+    contact_phone: str | None
+
+
+class PPESupplierPage(BaseSchema):
+    items: list[PPESupplierRead]
+    total: int
+
+
 class PPENormCreate(BaseSchema):
     position_id: str
     hazard_id: str

@@ -62,6 +62,15 @@ from app.modules.ppe.stock import (
     compute_shortages,
     transfer_stock,
 )
+from app.modules.ppe.suppliers import (
+    SupplierNameConflict,
+    SupplierNotFound,
+    create_supplier,
+    get_supplier,
+    list_suppliers,
+    soft_delete_supplier,
+    update_supplier,
+)
 from app.schemas.ppe import (
     PPECardRead,
     PPECardRequiredLine,
@@ -105,6 +114,10 @@ from app.schemas.ppe import (
     PPEStockTransferCreate,
     PPEStockTransferPage,
     PPEStockTransferRead,
+    PPESupplierCreate,
+    PPESupplierPage,
+    PPESupplierRead,
+    PPESupplierUpdate,
 )
 from app.services.events import EventType
 from app.services.outbox import OutboxService
@@ -143,6 +156,15 @@ def _ppe_conflict(message: str) -> HTTPException:
         status_code=status.HTTP_409_CONFLICT,
         detail=api_problem_detail(
             code="PPE_INVENTORY_COUNT_CONFLICT", message=message, error_type="ppe"
+        ),
+    )
+
+
+def _ppe_supplier_conflict(message: str) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail=api_problem_detail(
+            code="PPE_SUPPLIER_CONFLICT", message=message, error_type="ppe"
         ),
     )
 
@@ -855,6 +877,132 @@ async def require_warehouse_feature(tenant: TenantDep, session: SessionDep) -> N
 
 
 WarehouseFeatureGate = Depends(require_warehouse_feature)
+
+
+# --- PPE supplier directory (P10-06) ----------------------------------------
+
+
+@router.post(
+    "/suppliers",
+    response_model=PPESupplierRead,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[WarehouseFeatureGate],
+)
+@audit_operation("create", "ppe_supplier")
+async def create_supplier_endpoint(
+    payload: PPESupplierCreate,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: EditorAccess,
+) -> PPESupplierRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    try:
+        sup = await create_supplier(
+            session,
+            tenant_id=tenant.id,
+            name=payload.name,
+            inn=payload.inn,
+            contact_email=payload.contact_email,
+            contact_phone=payload.contact_phone,
+        )
+    except SupplierNameConflict as exc:
+        raise _ppe_supplier_conflict(str(exc)) from exc
+    return PPESupplierRead.model_validate(sup)
+
+
+@router.get(
+    "/suppliers",
+    response_model=PPESupplierPage,
+    dependencies=[WarehouseFeatureGate],
+)
+async def list_suppliers_endpoint(
+    request: Request,
+    response: Response,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: ManagerAccess,
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+) -> PPESupplierPage | Response:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    items, total = await list_suppliers(session, tenant.id, limit=limit, offset=offset)
+    etag = compute_list_etag(
+        tenant_id=str(tenant.id),
+        items=items,
+        scalars=[("total", total), ("limit", limit), ("offset", offset)],
+    )
+    apply_etag_response_headers(response, etag)
+    if request.headers.get("if-none-match") == etag:
+        return Response(
+            status_code=status.HTTP_304_NOT_MODIFIED,
+            headers=build_not_modified_headers(etag),
+        )
+    return PPESupplierPage(items=[PPESupplierRead.model_validate(s) for s in items], total=total)
+
+
+@router.get(
+    "/suppliers/{supplier_id}",
+    response_model=PPESupplierRead,
+    dependencies=[WarehouseFeatureGate],
+)
+async def get_supplier_endpoint(
+    supplier_id: str,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: ManagerAccess,
+) -> PPESupplierRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    try:
+        sup = await get_supplier(session, tenant.id, supplier_id)
+    except SupplierNotFound as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "PPE supplier not found") from exc
+    return PPESupplierRead.model_validate(sup)
+
+
+@router.patch(
+    "/suppliers/{supplier_id}",
+    response_model=PPESupplierRead,
+    dependencies=[WarehouseFeatureGate],
+)
+@audit_operation("update", "ppe_supplier")
+async def update_supplier_endpoint(
+    supplier_id: str,
+    payload: PPESupplierUpdate,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: EditorAccess,
+) -> PPESupplierRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    try:
+        sup = await update_supplier(
+            session, tenant.id, supplier_id, **payload.model_dump(exclude_unset=True)
+        )
+    except SupplierNotFound as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "PPE supplier not found") from exc
+    except SupplierNameConflict as exc:
+        raise _ppe_supplier_conflict(str(exc)) from exc
+    return PPESupplierRead.model_validate(sup)
+
+
+@router.delete(
+    "/suppliers/{supplier_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_model=None,
+    dependencies=[WarehouseFeatureGate],
+)
+@audit_operation("delete", "ppe_supplier")
+async def delete_supplier_endpoint(
+    supplier_id: str,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: EditorAccess,
+) -> None:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    try:
+        await soft_delete_supplier(session, tenant.id, supplier_id)
+    except SupplierNotFound as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "PPE supplier not found") from exc
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 async def _get_batch(session: AsyncSession, tenant: Tenant, batch_id: str) -> PPEStockBatch:
