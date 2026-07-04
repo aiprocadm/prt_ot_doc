@@ -306,8 +306,14 @@ const WarehousePage = () => {
     setError(null);
     try {
       await warehouseApi.patchItemPreferredSupplier(itemId, supplierId);
-      const shortagesData = await warehouseApi.listShortages();
-      setShortages(shortagesData);
+      // Both the shortages and reorder-draft views derive from the same supplier
+      // resolution, so refresh both to keep them consistent after the change.
+      const [freshShortages, freshReorder] = await Promise.all([
+        warehouseApi.listShortages(),
+        warehouseApi.getReorderDraft()
+      ]);
+      setShortages(freshShortages);
+      setReorderDraft(freshReorder);
     } catch (err) {
       setError((err as ApiError) ?? { message: "Не удалось задать поставщика позиции" });
     }

@@ -301,7 +301,7 @@ describe("WarehousePage", () => {
     expect(screen.getAllByText("10").length).toBeGreaterThan(0);
   });
 
-  it("patches an item preferred supplier and reloads shortages", async () => {
+  it("patches an item preferred supplier and reloads shortages + reorder draft", async () => {
     listLevelsMock.mockResolvedValue([]);
     listBatchesMock.mockResolvedValue([]);
     listSuppliersMock.mockResolvedValue([
@@ -321,12 +321,16 @@ describe("WarehousePage", () => {
     render(<MemoryRouter><WarehousePage /></MemoryRouter>);
     await waitFor(() => expect(screen.getByText("Дефицит / мин-остаток")).toBeInTheDocument());
 
+    const reorderCallsBefore = getReorderDraftMock.mock.calls.length;
     fireEvent.change(screen.getByLabelText(/Предпочтительный поставщик Каска/i), {
       target: { value: "s1" }
     });
 
     await waitFor(() =>
       expect(patchItemPreferredSupplierMock).toHaveBeenCalledWith("i1", "s1")
+    );
+    await waitFor(() =>
+      expect(getReorderDraftMock.mock.calls.length).toBeGreaterThan(reorderCallsBefore)
     );
   });
 
