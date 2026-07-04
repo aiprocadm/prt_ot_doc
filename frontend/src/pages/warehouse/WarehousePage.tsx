@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 
 import {
   warehouseApi,
+  type InventoryCountDetailDto,
+  type InventoryCountDto,
   type PPEStockShortageDto,
   type StockBatchDto,
   type StockLevelDto,
@@ -30,21 +32,27 @@ const WarehousePage = () => {
   const [shortages, setShortages] = useState<PPEStockShortageDto[]>([]);
   const [form, setForm] = useState({ batch_id: "", kind: "receipt", quantity: "1", reason: "" });
   const [submitting, setSubmitting] = useState(false);
+  const [counts, setCounts] = useState<InventoryCountDto[]>([]);
+  const [activeCount, setActiveCount] = useState<InventoryCountDetailDto | null>(null);
+  const [countForm, setCountForm] = useState({ scope_item_id: "", scope_location: "", note: "" });
+  const [countedInputs, setCountedInputs] = useState<Record<string, string>>({});
 
   const load = async () => {
     setLoading(true);
     setError(null);
     try {
-      const [levelsData, batchesData, movementsData, shortagesData] = await Promise.all([
+      const [levelsData, batchesData, movementsData, shortagesData, countsData] = await Promise.all([
         warehouseApi.listLevels(),
         warehouseApi.listBatches(),
         warehouseApi.listMovements(),
-        warehouseApi.listShortages()
+        warehouseApi.listShortages(),
+        warehouseApi.listCounts()
       ]);
       setLevels(levelsData);
       setBatches(batchesData);
       setMovements(movementsData);
       setShortages(shortagesData);
+      setCounts(countsData);
     } catch (err) {
       setError((err as ApiError) ?? { message: "Не удалось загрузить склад СИЗ" });
     } finally {
@@ -66,6 +74,86 @@ const WarehousePage = () => {
       await load();
     } catch (err) {
       setError((err as ApiError) ?? { message: "Не удалось провести движение" });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const openCountDetail = (detail: InventoryCountDetailDto) => {
+    setActiveCount(detail);
+    const seeded: Record<string, string> = {};
+    detail.lines.forEach((line) => {
+      seeded[line.id] = line.counted_qty === null ? "" : String(line.counted_qty);
+    });
+    setCountedInputs(seeded);
+  };
+
+  const createCount = async () => {
+    setSubmitting(true);
+    try {
+      const detail = await warehouseApi.createCount({
+        scope_item_id: countForm.scope_item_id || null,
+        scope_location: countForm.scope_location || null,
+        note: countForm.note || null
+      });
+      setCountForm({ scope_item_id: "", scope_location: "", note: "" });
+      openCountDetail(detail);
+      await load();
+    } catch (err) {
+      setError((err as ApiError) ?? { message: "Не удалось создать инвентаризацию" });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const openCount = async (id: string) => {
+    try {
+      openCountDetail(await warehouseApi.getCount(id));
+    } catch (err) {
+      setError((err as ApiError) ?? { message: "Не удалось открыть инвентаризацию" });
+    }
+  };
+
+  const saveCounts = async () => {
+    if (!activeCount) return;
+    setSubmitting(true);
+    try {
+      const entries = activeCount.lines.map((line) => ({
+        line_id: line.id,
+        counted_qty:
+          countedInputs[line.id] === "" || countedInputs[line.id] === undefined
+            ? null
+            : Number(countedInputs[line.id])
+      }));
+      openCountDetail(await warehouseApi.patchCountLines(activeCount.id, entries));
+    } catch (err) {
+      setError((err as ApiError) ?? { message: "Не удалось сохранить факт" });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const applyActiveCount = async () => {
+    if (!activeCount) return;
+    setSubmitting(true);
+    try {
+      openCountDetail(await warehouseApi.applyCount(activeCount.id));
+      await load();
+    } catch (err) {
+      setError((err as ApiError) ?? { message: "Не удалось применить инвентаризацию" });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const cancelActiveCount = async () => {
+    if (!activeCount) return;
+    setSubmitting(true);
+    try {
+      openCountDetail(await warehouseApi.cancelCount(activeCount.id));
+      await load();
+    } catch (err) {
+      setError((err as ApiError) ?? { message: "Не удалось отменить инвентаризацию" });
     } finally {
       setSubmitting(false);
     }
@@ -289,6 +377,129 @@ const WarehousePage = () => {
               </TableBody>
             </Table>
           )}
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            Инвентаризация
+            <Badge variant="secondary">{counts.length}</Badge>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex flex-wrap gap-2 items-end">
+            <Input
+              placeholder="ID позиции (опц.)"
+              value={countForm.scope_item_id}
+              onChange={(e) => setCountForm({ ...countForm, scope_item_id: e.target.value })}
+            />
+            <Input
+              placeholder="Локация (опц.)"
+              value={countForm.scope_location}
+              onChange={(e) => setCountForm({ ...countForm, scope_location: e.target.value })}
+            />
+            <Input
+              placeholder="Заметка (опц.)"
+              value={countForm.note}
+              onChange={(e) => setCountForm({ ...countForm, note: e.target.value })}
+            />
+            <Button onClick={createCount} disabled={submitting}>
+              Создать
+            </Button>
+          </div>
+
+          {counts.length === 0 ? (
+            <EmptyState title="Нет инвентаризаций" description="Создайте срез для сверки факта." />
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Статус</TableHead>
+                  <TableHead>Заметка</TableHead>
+                  <TableHead>Строк</TableHead>
+                  <TableHead>Сосчитано</TableHead>
+                  <TableHead>Создан</TableHead>
+                  <TableHead />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {counts.map((c) => (
+                  <TableRow key={c.id}>
+                    <TableCell>
+                      <Badge variant={c.status === "applied" ? "secondary" : "outline"}>
+                        {c.status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>{c.note || "—"}</TableCell>
+                    <TableCell>{c.line_count}</TableCell>
+                    <TableCell>{c.counted_count}</TableCell>
+                    <TableCell>{formatDate(c.created_at) || "—"}</TableCell>
+                    <TableCell>
+                      <Button variant="outline" onClick={() => openCount(c.id)}>
+                        Открыть
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+
+          {activeCount ? (
+            <div className="space-y-3 border-t pt-3">
+              <div className="flex items-center gap-2">
+                <span className="font-medium">Строки инвентаризации</span>
+                <Badge variant="outline">{activeCount.status}</Badge>
+                <Badge variant="secondary">расхождений: {activeCount.diff_count}</Badge>
+              </div>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Партия</TableHead>
+                    <TableHead>Локация</TableHead>
+                    <TableHead>Система</TableHead>
+                    <TableHead>Остаток</TableHead>
+                    <TableHead>Факт</TableHead>
+                    <TableHead>Δ</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {activeCount.lines.map((line) => (
+                    <TableRow key={line.id}>
+                      <TableCell className="font-medium">{line.batch_no}</TableCell>
+                      <TableCell>{line.location || "—"}</TableCell>
+                      <TableCell>{line.system_qty}</TableCell>
+                      <TableCell>{line.on_hand}</TableCell>
+                      <TableCell>
+                        <Input
+                          aria-label={`Факт ${line.batch_no}`}
+                          value={countedInputs[line.id] ?? ""}
+                          disabled={activeCount.status !== "draft"}
+                          onChange={(e) =>
+                            setCountedInputs({ ...countedInputs, [line.id]: e.target.value })
+                          }
+                        />
+                      </TableCell>
+                      <TableCell>{line.delta === null ? "—" : line.delta}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              {activeCount.status === "draft" ? (
+                <div className="flex gap-2">
+                  <Button variant="outline" onClick={saveCounts} disabled={submitting}>
+                    Сохранить факт
+                  </Button>
+                  <Button onClick={applyActiveCount} disabled={submitting}>
+                    Применить
+                  </Button>
+                  <Button variant="ghost" onClick={cancelActiveCount} disabled={submitting}>
+                    Отменить
+                  </Button>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
         </CardContent>
       </Card>
     </div>
