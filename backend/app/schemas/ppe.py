@@ -254,6 +254,48 @@ class PPEStockLevelPage(BaseSchema):
     total: int
 
 
+class PPEStockTransferCreate(BaseSchema):
+    source_batch_id: str
+    to_location: str = Field(min_length=1, max_length=255)
+    quantity: int = Field(gt=0)
+    reason: str | None = Field(default=None, max_length=255)
+    occurred_at: datetime | None = None
+
+
+class PPEStockTransferRead(BaseSchema):
+    ref_id: str
+    item_id: str
+    item_name: str
+    batch_no: str
+    from_location: str | None
+    to_location: str
+    quantity: int
+    source_batch_id: str
+    dest_batch_id: str
+    out_movement_id: str
+    in_movement_id: str
+    reason: str | None
+    occurred_at: datetime
+
+
+class PPEStockTransferPage(BaseSchema):
+    items: list[PPEStockTransferRead]
+    total: int
+
+
+class PPEStockLevelByLocationRead(BaseSchema):
+    item_id: str
+    item_name: str
+    location: str | None
+    quantity: int
+    batch_count: int
+
+
+class PPEStockLevelByLocationPage(BaseSchema):
+    items: list[PPEStockLevelByLocationRead]
+    total: int
+
+
 class PPEStockShortageRead(BaseSchema):
     item_id: str
     item_name: str
