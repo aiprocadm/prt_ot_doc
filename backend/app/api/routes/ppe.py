@@ -8,6 +8,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.exc import StaleDataError
 
 from app.api.dependencies import get_correlation_id, get_session, get_tenant_record
 from app.api.helpers.etag import (
@@ -43,10 +44,14 @@ from app.modules.ppe import (
 from app.modules.ppe.inventory import (
     CountDetailView,
     CountSummaryView,
+    InventoryCountNotDraft,
     InventoryCountNotFound,
+    apply_count,
+    cancel_count,
     create_count,
     get_count_detail,
     list_counts,
+    set_line_counts,
 )
 from app.modules.ppe.lifecycle import PPETransitionError, validate_transition
 from app.modules.ppe.stock import (
@@ -61,6 +66,7 @@ from app.schemas.ppe import (
     PPEInventoryCountCreate,
     PPEInventoryCountDetail,
     PPEInventoryCountLineRead,
+    PPEInventoryCountLinesUpdate,
     PPEInventoryCountPage,
     PPEInventoryCountRead,
     PPEIssueCreate,
@@ -121,6 +127,15 @@ def _ppe_bad_request(message: str) -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,
         detail=api_problem_detail(code="PPE_VALIDATION_ERROR", message=message, error_type="ppe"),
+    )
+
+
+def _ppe_conflict(message: str) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail=api_problem_detail(
+            code="PPE_INVENTORY_COUNT_CONFLICT", message=message, error_type="ppe"
+        ),
     )
 
 
@@ -1285,6 +1300,86 @@ async def get_inventory_count(
         detail = await get_count_detail(session, tenant.id, count_id)
     except InventoryCountNotFound as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
+    return _inventory_count_detail(detail)
+
+
+@router.patch(
+    "/stock/inventory/counts/{count_id}/lines",
+    response_model=PPEInventoryCountDetail,
+    dependencies=[WarehouseFeatureGate],
+)
+@audit_operation("update", "ppe_inventory_count")
+async def update_inventory_count_lines(
+    count_id: str,
+    payload: PPEInventoryCountLinesUpdate,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: EditorAccess,
+) -> PPEInventoryCountDetail:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    entries = [(entry.line_id, entry.counted_qty) for entry in payload.entries]
+    try:
+        await set_line_counts(session, tenant_id=tenant.id, count_id=count_id, entries=entries)
+    except InventoryCountNotFound as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
+    except InventoryCountNotDraft as exc:
+        raise _ppe_bad_request(str(exc)) from exc
+    detail = await get_count_detail(session, tenant.id, count_id)
+    return _inventory_count_detail(detail)
+
+
+@router.post(
+    "/stock/inventory/counts/{count_id}/apply",
+    response_model=PPEInventoryCountDetail,
+    dependencies=[WarehouseFeatureGate],
+)
+@audit_operation("update", "ppe_inventory_count")
+async def apply_inventory_count(
+    count_id: str,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: EditorAccess,
+) -> PPEInventoryCountDetail:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    try:
+        await apply_count(
+            session,
+            tenant_id=tenant.id,
+            count_id=count_id,
+            now=datetime.now(tz=timezone.utc),
+        )
+    except InventoryCountNotFound as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
+    except InventoryCountNotDraft as exc:
+        raise _ppe_bad_request(str(exc)) from exc
+    except InsufficientStockError as exc:
+        raise _ppe_bad_request(str(exc)) from exc
+    except StaleDataError as exc:
+        raise _ppe_conflict("inventory count was modified concurrently") from exc
+    detail = await get_count_detail(session, tenant.id, count_id)
+    return _inventory_count_detail(detail)
+
+
+@router.post(
+    "/stock/inventory/counts/{count_id}/cancel",
+    response_model=PPEInventoryCountDetail,
+    dependencies=[WarehouseFeatureGate],
+)
+@audit_operation("update", "ppe_inventory_count")
+async def cancel_inventory_count(
+    count_id: str,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: EditorAccess,
+) -> PPEInventoryCountDetail:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    try:
+        await cancel_count(session, tenant_id=tenant.id, count_id=count_id)
+    except InventoryCountNotFound as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
+    except InventoryCountNotDraft as exc:
+        raise _ppe_bad_request(str(exc)) from exc
+    detail = await get_count_detail(session, tenant.id, count_id)
     return _inventory_count_detail(detail)
 
 

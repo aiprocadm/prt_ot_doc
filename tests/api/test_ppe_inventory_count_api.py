@@ -172,3 +172,135 @@ async def test_create_scope_item_filters_lines(
     body = created.json()
     assert body["line_count"] == 1
     assert body["lines"][0]["batch_no"] == "A-1"
+
+
+@pytest.mark.asyncio
+async def test_patch_apply_flow_adjusts_stock(
+    async_client: AsyncClient, make_auth_headers, sessionmaker, data_factory: TestDataFactory
+):
+    async with sessionmaker() as session:
+        await data_factory.ensure_tenant(session=session)
+        await session.commit()
+    headers = await make_auth_headers(RoleEnum.ADMIN)
+    item_id = await _seed_item(async_client, headers)
+    await _seed_batch(async_client, headers, item_id, batch_no="B-1", qty=10)
+
+    created = await async_client.post(
+        "/api/v1/ppe/stock/inventory/counts", json={}, headers=headers
+    )
+    count_id = created.json()["id"]
+    line_id = created.json()["lines"][0]["id"]
+
+    patched = await async_client.patch(
+        f"/api/v1/ppe/stock/inventory/counts/{count_id}/lines",
+        json={"entries": [{"line_id": line_id, "counted_qty": 7}]},
+        headers=headers,
+    )
+    assert patched.status_code == status.HTTP_200_OK
+    assert patched.json()["lines"][0]["counted_qty"] == 7
+    assert patched.json()["lines"][0]["delta"] == -3
+    assert patched.json()["diff_count"] == 1
+
+    applied = await async_client.post(
+        f"/api/v1/ppe/stock/inventory/counts/{count_id}/apply", headers=headers
+    )
+    assert applied.status_code == status.HTTP_200_OK
+    assert applied.json()["status"] == "applied"
+
+    levels = await async_client.get("/api/v1/ppe/stock/levels", headers=headers)
+    total = next(
+        lvl["total_quantity"] for lvl in levels.json()["items"] if lvl["item_id"] == item_id
+    )
+    assert total == 7
+
+
+@pytest.mark.asyncio
+async def test_apply_twice_returns_400(
+    async_client: AsyncClient, make_auth_headers, sessionmaker, data_factory: TestDataFactory
+):
+    async with sessionmaker() as session:
+        await data_factory.ensure_tenant(session=session)
+        await session.commit()
+    headers = await make_auth_headers(RoleEnum.ADMIN)
+    created = await async_client.post(
+        "/api/v1/ppe/stock/inventory/counts", json={}, headers=headers
+    )
+    count_id = created.json()["id"]
+    first = await async_client.post(
+        f"/api/v1/ppe/stock/inventory/counts/{count_id}/apply", headers=headers
+    )
+    assert first.status_code == status.HTTP_200_OK
+    second = await async_client.post(
+        f"/api/v1/ppe/stock/inventory/counts/{count_id}/apply", headers=headers
+    )
+    assert second.status_code == status.HTTP_400_BAD_REQUEST
+
+
+@pytest.mark.asyncio
+async def test_patch_negative_counted_is_422(
+    async_client: AsyncClient, make_auth_headers, sessionmaker, data_factory: TestDataFactory
+):
+    async with sessionmaker() as session:
+        await data_factory.ensure_tenant(session=session)
+        await session.commit()
+    headers = await make_auth_headers(RoleEnum.ADMIN)
+    created = await async_client.post(
+        "/api/v1/ppe/stock/inventory/counts", json={}, headers=headers
+    )
+    count_id = created.json()["id"]
+    resp = await async_client.patch(
+        f"/api/v1/ppe/stock/inventory/counts/{count_id}/lines",
+        json={"entries": [{"line_id": "x", "counted_qty": -5}]},
+        headers=headers,
+    )
+    assert resp.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+
+@pytest.mark.asyncio
+async def test_cancel_sets_status(
+    async_client: AsyncClient, make_auth_headers, sessionmaker, data_factory: TestDataFactory
+):
+    async with sessionmaker() as session:
+        await data_factory.ensure_tenant(session=session)
+        await session.commit()
+    headers = await make_auth_headers(RoleEnum.ADMIN)
+    created = await async_client.post(
+        "/api/v1/ppe/stock/inventory/counts", json={}, headers=headers
+    )
+    count_id = created.json()["id"]
+    cancelled = await async_client.post(
+        f"/api/v1/ppe/stock/inventory/counts/{count_id}/cancel", headers=headers
+    )
+    assert cancelled.status_code == status.HTTP_200_OK
+    assert cancelled.json()["status"] == "cancelled"
+
+
+@pytest.mark.asyncio
+async def test_apply_nonexistent_count_is_404(
+    async_client: AsyncClient, make_auth_headers, sessionmaker, data_factory: TestDataFactory
+):
+    async with sessionmaker() as session:
+        await data_factory.ensure_tenant(session=session)
+        await session.commit()
+    headers = await make_auth_headers(RoleEnum.ADMIN)
+    resp = await async_client.post("/api/v1/ppe/stock/inventory/counts/nope/apply", headers=headers)
+    assert resp.status_code == status.HTTP_404_NOT_FOUND
+
+
+@pytest.mark.asyncio
+async def test_cancel_applied_count_is_400(
+    async_client: AsyncClient, make_auth_headers, sessionmaker, data_factory: TestDataFactory
+):
+    async with sessionmaker() as session:
+        await data_factory.ensure_tenant(session=session)
+        await session.commit()
+    headers = await make_auth_headers(RoleEnum.ADMIN)
+    created = await async_client.post(
+        "/api/v1/ppe/stock/inventory/counts", json={}, headers=headers
+    )
+    count_id = created.json()["id"]
+    await async_client.post(f"/api/v1/ppe/stock/inventory/counts/{count_id}/apply", headers=headers)
+    resp = await async_client.post(
+        f"/api/v1/ppe/stock/inventory/counts/{count_id}/cancel", headers=headers
+    )
+    assert resp.status_code == status.HTTP_400_BAD_REQUEST
