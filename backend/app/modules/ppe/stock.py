@@ -15,7 +15,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.feature_flags import is_feature_enabled
-from app.models.ppe_registry import PPEItem, PPEStockBatch, PPEStockMovement
+from app.models.ppe_registry import PPEItem, PPEStockBatch, PPEStockMovement, PPESupplier
 
 KIND_RECEIPT = "receipt"
 KIND_ISSUE = "issue"
@@ -400,6 +400,79 @@ class ShortageRow:
     avg_daily_consumption: float
     days_to_depletion: float | None
     projected_breach_date: date | None
+    supplier_id: str | None = None
+    supplier_name: str | None = None
+    supplier_inn: str | None = None
+    supplier_contact: str | None = None
+    supplier_source: str | None = None
+
+
+async def _resolve_item_suppliers(
+    session: AsyncSession, tenant_id: str, items: list[PPEItem]
+) -> dict[str, tuple[PPESupplier, str]]:
+    """Map item_id -> (supplier, source) where source is 'explicit'|'history'.
+
+    Explicit ``item.preferred_supplier_id`` wins; otherwise the most recently
+    received batch supplier (received_at desc nulls-last, created_at desc). Only
+    non-deleted suppliers count; unresolved items are simply absent from the map.
+    """
+    item_ids = [i.id for i in items]
+    if not item_ids:
+        return {}
+
+    source_for_item: dict[str, str] = {}
+    wanted: dict[str, str] = {}  # item_id -> supplier_id
+
+    for it in items:
+        if it.preferred_supplier_id:
+            wanted[it.id] = it.preferred_supplier_id
+            source_for_item[it.id] = "explicit"
+
+    remaining = [iid for iid in item_ids if iid not in wanted]
+    if remaining:
+        batch_rows = (
+            await session.execute(
+                select(
+                    PPEStockBatch.item_id, PPEStockBatch.supplier_id,
+                    PPEStockBatch.received_at, PPEStockBatch.created_at,
+                ).where(
+                    PPEStockBatch.tenant_id == tenant_id,
+                    PPEStockBatch.item_id.in_(remaining),
+                    PPEStockBatch.supplier_id.is_not(None),
+                    PPEStockBatch.deleted_at.is_(None),
+                )
+            )
+        ).all()
+        # latest per item: received_at desc (None last), created_at desc
+        best: dict[str, tuple] = {}
+        for iid, sid, received, created in batch_rows:
+            key = (received is not None, received or date.min, created)
+            if iid not in best or key > best[iid][0]:
+                best[iid] = (key, sid)
+        for iid, (_key, sid) in best.items():
+            wanted[iid] = sid
+            source_for_item[iid] = "history"
+
+    if not wanted:
+        return {}
+    suppliers = {
+        s.id: s
+        for s in (
+            await session.execute(
+                select(PPESupplier).where(
+                    PPESupplier.tenant_id == tenant_id,
+                    PPESupplier.id.in_(set(wanted.values())),
+                    PPESupplier.deleted_at.is_(None),
+                )
+            )
+        ).scalars().all()
+    }
+    resolved: dict[str, tuple[PPESupplier, str]] = {}
+    for iid, sid in wanted.items():
+        sup = suppliers.get(sid)
+        if sup is not None:  # soft-deleted / missing -> unresolved
+            resolved[iid] = (sup, source_for_item[iid])
+    return resolved
 
 
 async def compute_shortages(
@@ -468,6 +541,8 @@ async def compute_shortages(
     ).all()
     consumed = {iid: int(total or 0) for iid, total in consumed_rows}
 
+    resolved = await _resolve_item_suppliers(session, tenant_id, items)
+
     rows: list[ShortageRow] = []
     for item in items:
         oh = on_hand.get(item.id, 0)
@@ -478,6 +553,8 @@ async def compute_shortages(
         breach: date | None = None
         if proj.days_to_threshold is not None:
             breach = (now + timedelta(days=proj.days_to_threshold)).date()
+        sup_tuple = resolved.get(item.id)
+        supplier = sup_tuple[0] if sup_tuple else None
         rows.append(
             ShortageRow(
                 item_id=item.id,
@@ -489,6 +566,11 @@ async def compute_shortages(
                 avg_daily_consumption=avg_daily,
                 days_to_depletion=proj.days_to_depletion,
                 projected_breach_date=breach,
+                supplier_id=supplier.id if supplier else None,
+                supplier_name=supplier.name if supplier else None,
+                supplier_inn=supplier.inn if supplier else None,
+                supplier_contact=(supplier.contact_email or supplier.contact_phone) if supplier else None,
+                supplier_source=sup_tuple[1] if sup_tuple else None,
             )
         )
 

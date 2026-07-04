@@ -1305,6 +1305,11 @@ async def list_stock_shortages(
             avg_daily_consumption=r.avg_daily_consumption,
             days_to_depletion=r.days_to_depletion,
             projected_breach_date=r.projected_breach_date,
+            supplier_id=r.supplier_id,
+            supplier_name=r.supplier_name,
+            supplier_inn=r.supplier_inn,
+            supplier_contact=r.supplier_contact,
+            supplier_source=r.supplier_source,
         )
         for r in rows
     ]

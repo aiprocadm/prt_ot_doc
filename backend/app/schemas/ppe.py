@@ -341,6 +341,11 @@ class PPEStockShortageRead(BaseSchema):
     avg_daily_consumption: float
     days_to_depletion: float | None
     projected_breach_date: date | None
+    supplier_id: str | None = None
+    supplier_name: str | None = None
+    supplier_inn: str | None = None
+    supplier_contact: str | None = None
+    supplier_source: str | None = None
 
 
 class PPEStockShortagePage(BaseSchema):
