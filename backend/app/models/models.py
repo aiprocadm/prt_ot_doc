@@ -204,6 +204,8 @@ from app.models.packages import (
 
 # ARCH-2: re-export ppe-domain models moved to app.models.ppe.
 from app.models.ppe import (
+    PPEInventoryCount,
+    PPEInventoryCountLine,
     PPEIssue,
     PPEIssueStatus,
     PPEItem,
@@ -590,6 +592,8 @@ __all__ += [
     "PPEIssue",
     "PPEStockBatch",
     "PPEStockMovement",
+    "PPEInventoryCount",
+    "PPEInventoryCountLine",
     "TemplateStatus",
     "Template",
     "TemplateVersionStatus",

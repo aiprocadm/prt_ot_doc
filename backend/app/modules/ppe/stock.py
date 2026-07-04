@@ -169,6 +169,8 @@ async def record_movement(
     quantity: int,
     reason: str | None = None,
     occurred_at: datetime | None = None,
+    ref_type: str | None = None,
+    ref_id: str | None = None,
 ) -> PPEStockMovement:
     """Manual receipt / writeoff / adjustment against one batch.
 
@@ -197,6 +199,8 @@ async def record_movement(
         delta=delta,
         reason=reason,
         occurred_at=occurred_at,
+        ref_type=ref_type,
+        ref_id=ref_id,
     )
 
 

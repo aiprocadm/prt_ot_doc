@@ -53,6 +53,47 @@ export type PPEStockShortageDto = {
   projected_breach_date: string | null;
 };
 
+export type InventoryCountStatus = "draft" | "applied" | "cancelled";
+
+export type InventoryCountLineDto = {
+  id: string;
+  batch_id: string;
+  item_id: string;
+  batch_no: string;
+  location?: string | null;
+  item_name: string;
+  system_qty: number;
+  counted_qty: number | null;
+  on_hand: number;
+  delta: number | null;
+  adjustment_movement_id?: string | null;
+};
+
+export type InventoryCountDto = {
+  id: string;
+  status: InventoryCountStatus;
+  scope_item_id?: string | null;
+  scope_location?: string | null;
+  note?: string | null;
+  applied_at?: string | null;
+  created_at: string;
+  line_count: number;
+  counted_count: number;
+};
+
+export type InventoryCountDetailDto = InventoryCountDto & {
+  diff_count: number;
+  lines: InventoryCountLineDto[];
+};
+
+export type CreateInventoryCountInput = {
+  scope_item_id?: string | null;
+  scope_location?: string | null;
+  note?: string | null;
+};
+
+export type InventoryCountLineEntry = { line_id: string; counted_qty: number | null };
+
 type PageResponse<T> = { items: T[]; total: number };
 type ShortagePageResponse = { items: PPEStockShortageDto[]; total: number; window_days: number };
 
@@ -80,5 +121,49 @@ export const warehouseApi = {
   async listShortages(params?: { window_days?: number; only_below?: boolean }): Promise<PPEStockShortageDto[]> {
     const response = await apiClient.get<ShortagePageResponse>("/ppe/stock/shortages", { params });
     return response.data.items ?? [];
+  },
+  async listCounts(): Promise<InventoryCountDto[]> {
+    const response = await apiClient.get<PageResponse<InventoryCountDto>>(
+      "/ppe/stock/inventory/counts",
+      { params: { limit: 50, offset: 0 } }
+    );
+    return response.data.items ?? [];
+  },
+  async createCount(input: CreateInventoryCountInput): Promise<InventoryCountDetailDto> {
+    const response = await apiClient.post<InventoryCountDetailDto>(
+      "/ppe/stock/inventory/counts",
+      input
+    );
+    return response.data;
+  },
+  async getCount(id: string): Promise<InventoryCountDetailDto> {
+    const response = await apiClient.get<InventoryCountDetailDto>(
+      `/ppe/stock/inventory/counts/${id}`
+    );
+    return response.data;
+  },
+  async patchCountLines(
+    id: string,
+    entries: InventoryCountLineEntry[]
+  ): Promise<InventoryCountDetailDto> {
+    const response = await apiClient.patch<InventoryCountDetailDto>(
+      `/ppe/stock/inventory/counts/${id}/lines`,
+      { entries }
+    );
+    return response.data;
+  },
+  async applyCount(id: string): Promise<InventoryCountDetailDto> {
+    const response = await apiClient.post<InventoryCountDetailDto>(
+      `/ppe/stock/inventory/counts/${id}/apply`,
+      {}
+    );
+    return response.data;
+  },
+  async cancelCount(id: string): Promise<InventoryCountDetailDto> {
+    const response = await apiClient.post<InventoryCountDetailDto>(
+      `/ppe/stock/inventory/counts/${id}/cancel`,
+      {}
+    );
+    return response.data;
   }
 };

@@ -189,3 +189,52 @@ class PPEStockMovement(TenantBaseModel):
         Index("ix_ppe_stock_movement_item", "tenant_id", "item_id"),
         Index("ix_ppe_stock_movement_batch", "tenant_id", "batch_id"),
     )
+
+
+class PPEInventoryCount(TenantBaseModel, SoftDeleteMixin):
+    """Stocktake session header (P10-06). Two-phase: ``draft`` → ``applied`` /
+    ``cancelled``. ``apply`` emits ``adjustment`` movements via the ledger service —
+    this table never mutates ``batch.quantity`` directly. ``status`` is VARCHAR, not
+    a PG enum (enum-parity convention)."""
+
+    __tablename__ = "ppe_inventory_count"
+
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="draft")
+    scope_item_id: Mapped[str | None] = mapped_column(
+        ForeignKey("ppeitem.id", ondelete="SET NULL"), nullable=True
+    )
+    scope_location: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    note: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    applied_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    lines: Mapped[list["PPEInventoryCountLine"]] = relationship(
+        "PPEInventoryCountLine", backref="count", cascade="all, delete-orphan"
+    )
+
+
+class PPEInventoryCountLine(TenantBaseModel):
+    """One row per stock batch snapshotted into a count. ``counted_qty`` is nullable:
+    ``None`` = not counted (skipped at apply); ``0`` = counted-zero (write-off).
+    ``adjustment_movement_id`` is a plain string ref (no FK) so the append-only
+    journal survives a hard-delete — same convention as ``PPEStockMovement.ref_id``."""
+
+    __tablename__ = "ppe_inventory_count_line"
+
+    count_id: Mapped[str] = mapped_column(
+        ForeignKey("ppe_inventory_count.id", ondelete="CASCADE"), nullable=False
+    )
+    item_id: Mapped[str] = mapped_column(
+        ForeignKey("ppeitem.id", ondelete="CASCADE"), nullable=False
+    )
+    batch_id: Mapped[str] = mapped_column(
+        ForeignKey("ppe_stock_batch.id", ondelete="CASCADE"), nullable=False
+    )
+    system_qty: Mapped[int] = mapped_column(Integer, nullable=False)
+    counted_qty: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    adjustment_movement_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+
+    __table_args__ = (
+        Index("ix_ppe_inventory_count_line_count", "tenant_id", "count_id"),
+        Index("ix_ppe_inventory_count_line_batch", "tenant_id", "batch_id"),
+        UniqueConstraint("tenant_id", "count_id", "batch_id", name="uq_ppe_inv_count_line_batch"),
+    )

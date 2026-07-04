@@ -196,3 +196,27 @@ async def test_deplete_noop_when_flag_disabled(sessionmaker, data_factory: TestD
         ).scalar_one()
     assert movements == []
     assert batch.quantity == 10  # untouched when flag off
+
+
+@pytest.mark.asyncio
+async def test_record_movement_persists_ref_type_and_id(
+    sessionmaker, data_factory: TestDataFactory
+):
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        _item, batch = await _item_and_batch(session, tenant.id, qty=10)
+
+        movement = await record_movement(
+            session,
+            tenant_id=tenant.id,
+            batch_id=batch.id,
+            kind="adjustment",
+            quantity=7,
+            reason="inventory abc",
+            ref_type="ppe_inventory_count",
+            ref_id="count-123",
+        )
+
+    assert movement.ref_type == "ppe_inventory_count"
+    assert movement.ref_id == "count-123"
+    assert movement.quantity_delta == -3  # 10 -> 7 absolute
