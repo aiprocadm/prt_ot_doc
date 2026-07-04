@@ -9,6 +9,12 @@ const listBatchesMock = vi.fn();
 const listMovementsMock = vi.fn();
 const createMovementMock = vi.fn();
 const listShortagesMock = vi.fn();
+const listCountsMock = vi.fn();
+const createCountMock = vi.fn();
+const getCountMock = vi.fn();
+const patchCountLinesMock = vi.fn();
+const applyCountMock = vi.fn();
+const cancelCountMock = vi.fn();
 
 vi.mock("@/api/warehouse", () => ({
   warehouseApi: {
@@ -16,7 +22,13 @@ vi.mock("@/api/warehouse", () => ({
     listBatches: (...args: unknown[]) => listBatchesMock(...args),
     listMovements: (...args: unknown[]) => listMovementsMock(...args),
     createMovement: (...args: unknown[]) => createMovementMock(...args),
-    listShortages: (...args: unknown[]) => listShortagesMock(...args)
+    listShortages: (...args: unknown[]) => listShortagesMock(...args),
+    listCounts: (...args: unknown[]) => listCountsMock(...args),
+    createCount: (...args: unknown[]) => createCountMock(...args),
+    getCount: (...args: unknown[]) => getCountMock(...args),
+    patchCountLines: (...args: unknown[]) => patchCountLinesMock(...args),
+    applyCount: (...args: unknown[]) => applyCountMock(...args),
+    cancelCount: (...args: unknown[]) => cancelCountMock(...args)
   }
 }));
 
@@ -27,8 +39,15 @@ describe("WarehousePage", () => {
     listMovementsMock.mockReset();
     createMovementMock.mockReset();
     listShortagesMock.mockReset();
+    listCountsMock.mockReset();
+    createCountMock.mockReset();
+    getCountMock.mockReset();
+    patchCountLinesMock.mockReset();
+    applyCountMock.mockReset();
+    cancelCountMock.mockReset();
     listMovementsMock.mockResolvedValue([]);
     listShortagesMock.mockResolvedValue([]);
+    listCountsMock.mockResolvedValue([]);
   });
 
   it("renders stock levels from the warehouse API", async () => {
@@ -109,5 +128,47 @@ describe("WarehousePage", () => {
     await waitFor(() => expect(screen.getByText("Дефицит / мин-остаток")).toBeInTheDocument());
     expect(screen.getByText("Каска")).toBeInTheDocument();
     expect(screen.getByText("7")).toBeInTheDocument();
+  });
+
+  it("renders the inventory section with an existing count", async () => {
+    listLevelsMock.mockResolvedValue([]);
+    listBatchesMock.mockResolvedValue([]);
+    listCountsMock.mockResolvedValue([
+      {
+        id: "c1", status: "draft", scope_item_id: null, scope_location: null,
+        note: "июль", applied_at: null, created_at: "2026-07-03T00:00:00Z",
+        line_count: 2, counted_count: 0
+      }
+    ]);
+
+    render(<MemoryRouter><WarehousePage /></MemoryRouter>);
+    await waitFor(() => expect(screen.getByText("Инвентаризация")).toBeInTheDocument());
+    expect(screen.getByText("июль")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Открыть" })).toBeInTheDocument();
+  });
+
+  it("creates a count and shows its lines", async () => {
+    listLevelsMock.mockResolvedValue([]);
+    listBatchesMock.mockResolvedValue([]);
+    listCountsMock.mockResolvedValue([]);
+    createCountMock.mockResolvedValue({
+      id: "c9", status: "draft", scope_item_id: null, scope_location: null,
+      note: null, applied_at: null, created_at: "2026-07-03T00:00:00Z",
+      line_count: 1, counted_count: 0, diff_count: 0,
+      lines: [
+        {
+          id: "l1", batch_id: "b1", item_id: "i1", batch_no: "B-1", location: null,
+          item_name: "Каска", system_qty: 10, counted_qty: null, on_hand: 10,
+          delta: null, adjustment_movement_id: null
+        }
+      ]
+    });
+
+    render(<MemoryRouter><WarehousePage /></MemoryRouter>);
+    await waitFor(() => expect(screen.getByText("Инвентаризация")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "Создать" }));
+
+    await waitFor(() => expect(createCountMock).toHaveBeenCalled());
+    await waitFor(() => expect(screen.getByText("B-1")).toBeInTheDocument());
   });
 });
