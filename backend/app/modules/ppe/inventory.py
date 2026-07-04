@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.ppe import (
@@ -220,3 +220,95 @@ async def get_count_detail(session: AsyncSession, tenant_id: str, count_id: str)
         counted_count=counted_count,
         diff_count=diff_count,
     )
+
+
+async def set_line_counts(
+    session: AsyncSession,
+    tenant_id: str,
+    *,
+    count_id: str,
+    entries: list[tuple[str, int | None]],
+) -> PPEInventoryCount:
+    """Bulk-set ``counted_qty`` on a draft count's lines. ``None`` clears a count."""
+    count = await _load_count(session, tenant_id, count_id)
+    if count.status != "draft":
+        raise InventoryCountNotDraft(count_id, count.status)
+
+    line_ids = [line_id for line_id, _ in entries]
+    by_id: dict[str, PPEInventoryCountLine] = {}
+    if line_ids:
+        rows = (
+            (
+                await session.execute(
+                    select(PPEInventoryCountLine).where(
+                        PPEInventoryCountLine.tenant_id == tenant_id,
+                        PPEInventoryCountLine.count_id == count_id,
+                        PPEInventoryCountLine.id.in_(line_ids),
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        by_id = {line.id: line for line in rows}
+
+    for line_id, counted_qty in entries:
+        line = by_id.get(line_id)
+        if line is None:
+            raise InventoryCountNotFound(line_id)
+        line.counted_qty = counted_qty
+    await session.flush()
+    return count
+
+
+async def list_counts(
+    session: AsyncSession,
+    tenant_id: str,
+    *,
+    status: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> tuple[list[CountSummaryView], int]:
+    """Paginated counts (newest first) with cheap per-count line/counted tallies."""
+    base = select(PPEInventoryCount).where(
+        PPEInventoryCount.tenant_id == tenant_id,
+        PPEInventoryCount.deleted_at.is_(None),
+    )
+    if status is not None:
+        base = base.where(PPEInventoryCount.status == status)
+    stmt = (
+        base.order_by(PPEInventoryCount.created_at.desc(), PPEInventoryCount.id.desc())
+        .limit(limit)
+        .offset(offset)
+    )
+    counts = list((await session.execute(stmt)).scalars().all())
+    total = (await session.execute(select(func.count()).select_from(base.subquery()))).scalar_one()
+
+    tallies: dict[str, tuple[int, int]] = {}
+    count_ids = [c.id for c in counts]
+    if count_ids:
+        rows = (
+            await session.execute(
+                select(
+                    PPEInventoryCountLine.count_id,
+                    func.count(),
+                    func.count(PPEInventoryCountLine.counted_qty),
+                )
+                .where(
+                    PPEInventoryCountLine.tenant_id == tenant_id,
+                    PPEInventoryCountLine.count_id.in_(count_ids),
+                )
+                .group_by(PPEInventoryCountLine.count_id)
+            )
+        ).all()
+        tallies = {cid: (int(lc or 0), int(cc or 0)) for cid, lc, cc in rows}
+
+    views = [
+        CountSummaryView(
+            count=c,
+            line_count=tallies.get(c.id, (0, 0))[0],
+            counted_count=tallies.get(c.id, (0, 0))[1],
+        )
+        for c in counts
+    ]
+    return views, int(total or 0)

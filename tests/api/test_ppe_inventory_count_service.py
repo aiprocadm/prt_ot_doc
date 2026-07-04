@@ -120,3 +120,71 @@ async def test_detail_counted_line_with_soft_deleted_batch_has_none_delta(
     assert after.lines[0].delta is None
     assert after.counted_count == 1
     assert after.diff_count == 0
+
+
+@pytest.mark.asyncio
+async def test_set_line_counts_updates_only_named_lines(
+    sessionmaker, data_factory: TestDataFactory
+):
+    from app.modules.ppe.inventory import set_line_counts
+
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        item = await _item(session, tenant.id, name="Каска")
+        await _batch(session, tenant.id, item.id, batch_no="B-1", qty=10)
+        await _batch(session, tenant.id, item.id, batch_no="B-2", qty=4)
+        count = await create_count(session, tenant_id=tenant.id)
+        detail = await get_count_detail(session, tenant.id, count.id)
+        first = detail.lines[0]
+
+        await set_line_counts(
+            session, tenant_id=tenant.id, count_id=count.id, entries=[(first.id, 8)]
+        )
+        after = await get_count_detail(session, tenant.id, count.id)
+
+    counted = {line.id: line.counted_qty for line in after.lines}
+    assert counted[first.id] == 8
+    assert after.counted_count == 1
+    # 8 counted vs 10 on_hand -> delta -2 -> one diff
+    assert after.diff_count == 1
+
+
+@pytest.mark.asyncio
+async def test_set_line_counts_rejects_unknown_line(sessionmaker, data_factory: TestDataFactory):
+    from app.modules.ppe.inventory import InventoryCountNotFound, set_line_counts
+
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        count = await create_count(session, tenant_id=tenant.id)
+        with pytest.raises(InventoryCountNotFound):
+            await set_line_counts(
+                session, tenant_id=tenant.id, count_id=count.id, entries=[("nope", 1)]
+            )
+
+
+@pytest.mark.asyncio
+async def test_list_counts_filters_by_status_and_counts_lines(
+    sessionmaker, data_factory: TestDataFactory
+):
+    from app.modules.ppe.inventory import list_counts
+
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        item = await _item(session, tenant.id, name="Каска")
+        await _batch(session, tenant.id, item.id, batch_no="B-1", qty=10)
+        count = await create_count(session, tenant_id=tenant.id)
+        detail = await get_count_detail(session, tenant.id, count.id)
+        from app.modules.ppe.inventory import set_line_counts
+
+        await set_line_counts(
+            session, tenant_id=tenant.id, count_id=count.id, entries=[(detail.lines[0].id, 9)]
+        )
+        await session.commit()
+    async with sessionmaker() as session:
+        drafts, total = await list_counts(session, tenant.id, status="draft")
+        applied, _ = await list_counts(session, tenant.id, status="applied")
+
+    assert total == 1
+    assert drafts[0].line_count == 1
+    assert drafts[0].counted_count == 1
+    assert applied == []
