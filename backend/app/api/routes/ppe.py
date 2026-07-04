@@ -1084,7 +1084,10 @@ async def list_stock_levels_by_location(
             iid: name
             for iid, name in (
                 await session.execute(
-                    select(PPEItem.id, PPEItem.name).where(PPEItem.id.in_(item_ids))
+                    select(PPEItem.id, PPEItem.name).where(
+                        PPEItem.tenant_id == tenant.id,
+                        PPEItem.id.in_(item_ids),
+                    )
                 )
             ).all()
         }
@@ -1270,7 +1273,12 @@ async def create_stock_transfer(
         raise _ppe_conflict("stock batch was modified concurrently") from exc
 
     item_name = (
-        await session.execute(select(PPEItem.name).where(PPEItem.id == result.out_movement.item_id))
+        await session.execute(
+            select(PPEItem.name).where(
+                PPEItem.tenant_id == tenant.id,
+                PPEItem.id == result.out_movement.item_id,
+            )
+        )
     ).scalar_one_or_none() or ""
     return PPEStockTransferRead(
         ref_id=result.ref_id,
@@ -1356,10 +1364,17 @@ async def list_stock_transfers(
     batch_ids = {m.batch_id for m in movements if m.batch_id}
     batch_map: dict[str, PPEStockBatch] = {}
     if batch_ids:
+        # tenant-scoped; NOT deleted_at-filtered on purpose — history must still show
+        # the from/to of a transfer even if a batch was later soft-deleted.
         batch_map = {
             b.id: b
             for b in (
-                await session.execute(select(PPEStockBatch).where(PPEStockBatch.id.in_(batch_ids)))
+                await session.execute(
+                    select(PPEStockBatch).where(
+                        PPEStockBatch.tenant_id == tenant.id,
+                        PPEStockBatch.id.in_(batch_ids),
+                    )
+                )
             )
             .scalars()
             .all()
@@ -1371,7 +1386,10 @@ async def list_stock_transfers(
             iid: name
             for iid, name in (
                 await session.execute(
-                    select(PPEItem.id, PPEItem.name).where(PPEItem.id.in_(item_ids))
+                    select(PPEItem.id, PPEItem.name).where(
+                        PPEItem.tenant_id == tenant.id,
+                        PPEItem.id.in_(item_ids),
+                    )
                 )
             ).all()
         }
