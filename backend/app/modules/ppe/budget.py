@@ -1,7 +1,7 @@
 """PPE safety budget service (P10-06 §12.4, СИЗ scope).
 
-Thin CRUD over PPESafetyBudget (mirrors suppliers.py). compute_budget_actual
-(procurement actual from the movement ledger) is added in the next task.
+Thin CRUD over PPESafetyBudget (mirrors suppliers.py) plus compute_budget_actual,
+which derives procurement actual from the append-only movement ledger.
 """
 
 from __future__ import annotations
@@ -18,6 +18,7 @@ from app.models.ppe_registry import (
     PPEStockBatch,
     PPEStockMovement,
 )
+from app.modules.ppe.stock import KIND_RECEIPT
 
 
 @dataclass(slots=True, frozen=True)
@@ -135,7 +136,9 @@ async def compute_budget_actual(
     transfer are not procurement). Receipts on batches without a ``unit_cost`` are
     excluded from the total but counted in ``unpriced_receipt_count`` so callers can
     warn that the figure is incomplete. Single join query — no N+1. The ledger is the
-    source of truth for spend, so a later soft-delete of the batch does not un-spend it.
+    source of truth for spend, so a later soft-delete of the batch or item does not
+    un-spend it (no ``deleted_at`` filter — a discontinued item's past procurement
+    still counts).
     """
     start_dt = datetime.combine(period_start, time.min, tzinfo=timezone.utc)
     end_dt = datetime.combine(period_end, time.max, tzinfo=timezone.utc)
@@ -145,8 +148,8 @@ async def compute_budget_actual(
         .join(PPEItem, PPEStockMovement.item_id == PPEItem.id)
         .where(
             PPEStockMovement.tenant_id == tenant_id,
-            PPEStockMovement.kind == "receipt",
-            PPEStockMovement.quantity_delta > 0,
+            PPEStockMovement.kind == KIND_RECEIPT,
+            PPEStockMovement.quantity_delta > 0,  # defensive: receipts are always +
             PPEStockMovement.occurred_at >= start_dt,
             PPEStockMovement.occurred_at <= end_dt,
         )
