@@ -1,5 +1,31 @@
 # CHANGELOG
 
+## 2026-07-05 (claude/awesome-ritchie-1f2ce2 — P10-06 СИЗ склад: мобильная выдача (online-first))
+
+### Added
+- **Мобильная выдача СИЗ (P10-06)** — новый touch-first экран `/ppe/issue` (право `ppe.issue`) для полевой
+  выдачи СИЗ работникам. **Чисто фронтовый срез** поверх готового `POST /ppe/issues` (FIFO-списание):
+  без миграций, новых эндпоинтов и изменений OpenAPI. Инвариант честного остатка не тронут — выдача идёт
+  штатным путём `create_issue → deplete_for_issue`.
+  - Поток «корзина/комплект»: поиск сотрудника (typeahead по ФИО/должности, только `active`) → набор
+    позиций СИЗ в корзину (merge дублей, qty-степпер, удаление) → обзор → «Выдать всё» (N вызовов
+    `createPpeIssue`). Частичный отказ оставляет в корзине только неудачные строки для повтора (без двойной
+    выдачи), guard от двойного тапа (`useRef` in-flight lock).
+  - Stock-aware: бейджи остатка «на руках» из `warehouseApi.listLevels()` при включённом флаге `warehouse`;
+    тихая деградация (без остатков, выдача работает) при выключенном — зеркалит no-op `deplete_for_issue`.
+  - Файлы: хук `frontend/src/pages/ppe/mobile-issue/useMobileIssue.ts` + `types.ts`, страница
+    `frontend/src/pages/ppe/MobileIssuePage.tsx` (single-file, house-style), маршрут в
+    `pageRegistry.tsx`/`routeGroups.tsx` (за `PPE_ISSUE`), кнопка входа «Мобильная выдача» на `PpePage`.
+    Тесты: `useMobileIssue.test.tsx` (6, renderHook), `MobileIssuePage.test.tsx` (7), +1 на `PpePage.test.tsx`.
+  - Осознанно отложено: офлайн-очередь + серверная идемпотентность, QR-скан бейджа, захват подписи,
+    norm-driven 766н-комплект, per-line выбор партии на мобильном.
+
+### Fixed
+- **Pre-existing:** stale warehouse mock в `OpsPages.test.tsx` (мокал только `listLevels`/`listBatches`,
+  тогда как `WarehousePage` после PR #725 грузит movements/shortages/counts/transfers/levels-by-location/
+  suppliers/reorder на маунте) — зеркалирован полный мок из `WarehousePage.test.tsx`. Не связано с
+  мобильной выдачей; найдено при прогоне полного фронт-сюита.
+
 ## 2026-07-04 (claude/keen-mahavira-4d9ed8 — P10-06 СИЗ склад: поставщики (справочник + провенанс + дозаказ))
 
 ### Added
