@@ -1,4 +1,5 @@
 """Validation for PPE safety budget + batch unit_cost schemas (P10-06)."""
+
 from __future__ import annotations
 
 from datetime import date
@@ -19,13 +20,19 @@ def test_period_end_before_start_rejected():
 def test_planned_amount_non_negative():
     with pytest.raises(ValidationError):
         PPESafetyBudgetCreate(
-            name="x", period_start=date(2026, 1, 1), period_end=date(2026, 12, 31), planned_amount=-1
+            name="x",
+            period_start=date(2026, 1, 1),
+            period_end=date(2026, 12, 31),
+            planned_amount=-1,
         )
 
 
 def test_valid_budget_ok():
     b = PPESafetyBudgetCreate(
-        name="2026", period_start=date(2026, 1, 1), period_end=date(2026, 12, 31), planned_amount=5000
+        name="2026",
+        period_start=date(2026, 1, 1),
+        period_end=date(2026, 12, 31),
+        planned_amount=5000,
     )
     assert b.planned_amount == 5000
 

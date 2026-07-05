@@ -36,9 +36,7 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["tenant_id"], ["tenant.id"]),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index(
-        op.f("ix_ppe_safety_budget_tenant_id"), "ppe_safety_budget", ["tenant_id"]
-    )
+    op.create_index(op.f("ix_ppe_safety_budget_tenant_id"), "ppe_safety_budget", ["tenant_id"])
     op.add_column("ppe_stock_batch", sa.Column("unit_cost", sa.Numeric(14, 2), nullable=True))
 
 

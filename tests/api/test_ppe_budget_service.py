@@ -1,4 +1,5 @@
 """DB-level CRUD for the PPE safety budget service (P10-06)."""
+
 from __future__ import annotations
 
 from datetime import date

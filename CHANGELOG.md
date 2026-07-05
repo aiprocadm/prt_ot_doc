@@ -1,5 +1,34 @@
 # CHANGELOG
 
+## 2026-07-05 (feat/p10-06-ppe-safety-budget — P10-06 СИЗ склад: бюджет безопасности (СИЗ, план vs факт закупок))
+
+### Added
+- **Бюджет безопасности СИЗ (P10-06, ТЗ §12.4 — СИЗ-часть)** — план расходов на СИЗ за период vs
+  фактические закупки, поверх честного остатка. Аддитивно; инвариант «`batch.quantity` только через
+  `_write_movement`» не тронут — цена это метаданные, факт — вычисляемый агрегат.
+  - Новая сущность `PPESafetyBudget` (`ppe_safety_budget`, миграция `wa09`): `name`, `period_start`/
+    `period_end` (диапазон дат), `planned_amount` (`Numeric(14,2)`), `notes`; tenant-wide, пересечения
+    периодов допускаются. Новая nullable-колонка `PPEStockBatch.unit_cost` (цена за единицу лота).
+  - Сервис `backend/app/modules/ppe/budget.py`: CRUD (create/list/get/update/soft-delete;
+    `BudgetNotFound`→404) + `compute_budget_actual` — **вычисляемый** закупочный факт: Σ приходных
+    проводок (`kind=receipt`, `quantity_delta>0`) × `batch.unit_cost` за период (один join, без N+1),
+    разбивка по категориям `item.category`, приходы без цены исключены из суммы но посчитаны
+    (`unpriced_receipt_count`). Ledger — источник истины (soft-deleted партия/позиция не «отменяют» трату).
+  - API за флагом `warehouse`: `POST/GET /ppe/budgets`, `GET /ppe/budgets/{id}` (план/факт/остаток/
+    разбивка/unpriced), `PATCH/DELETE /ppe/budgets/{id}`; `unit_cost` в схемах/роуте приёмки партии.
+  - Фронт (`WarehousePage`): секция «Бюджет безопасности» (CRUD + деталь с разбивкой по категориям +
+    предупреждение «Приходов без цены: N») + поле «Цена за единицу» в форме приёмки + `warehouseApi`
+    (budgets CRUD/detail).
+  - **Осознанно вне объёма (отдельный под-проект):** кросс-доменный §12.4 (бюджеты обучения/медосмотров/
+    мероприятий, статьи расходов, заявки на возмещение, аналитика по филиалам/объектам — нужна связка
+    batch→branch), consumption-cost аллокация, мультивалюта.
+
+### Fixed
+- **Pre-existing:** stale warehouse mock в `OpsPages.test.tsx` (мокал только `listLevels`/`listBatches`,
+  тогда как `WarehousePage` грузит movements/shortages/counts/transfers/levels-by-location/suppliers/
+  reorder/budgets на маунте) — расширен до полного mount-набора. Не связано с бюджетом; всплыло на
+  полном фронт-сюите (тот же класс фикса, что в PR #726).
+
 ## 2026-07-04 (claude/keen-mahavira-4d9ed8 — P10-06 СИЗ склад: поставщики (справочник + провенанс + дозаказ))
 
 ### Added

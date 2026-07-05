@@ -1,4 +1,5 @@
 """ORM round-trip for PPESafetyBudget + PPEStockBatch.unit_cost (P10-06)."""
+
 from __future__ import annotations
 
 from datetime import date
@@ -40,9 +41,7 @@ async def test_batch_unit_cost_nullable(sessionmaker, data_factory: TestDataFact
         priced = PPEStockBatch(
             tenant_id=tenant.id, item_id=item.id, batch_no="B1", quantity=0, unit_cost=250
         )
-        unpriced = PPEStockBatch(
-            tenant_id=tenant.id, item_id=item.id, batch_no="B2", quantity=0
-        )
+        unpriced = PPEStockBatch(tenant_id=tenant.id, item_id=item.id, batch_no="B2", quantity=0)
         session.add_all([priced, unpriced])
         await session.flush()
         await session.refresh(priced)

@@ -1,4 +1,5 @@
 """Procurement actual computation for the safety budget (P10-06)."""
+
 from __future__ import annotations
 
 from datetime import date, datetime, timezone
@@ -49,10 +50,24 @@ async def test_sums_receipts_in_period(sessionmaker, data_factory: TestDataFacto
         t = await data_factory.ensure_tenant(session=session)
         it = await _item(session, t.id, name="Каска")
         b = await _batch(session, t.id, it.id, unit_cost=100)
-        await _movement(session, t.id, it.id, b.id, kind="receipt", delta=3,
-                        when=datetime(2026, 6, 1, tzinfo=timezone.utc))
-        await _movement(session, t.id, it.id, b.id, kind="receipt", delta=5,
-                        when=datetime(2025, 6, 1, tzinfo=timezone.utc))
+        await _movement(
+            session,
+            t.id,
+            it.id,
+            b.id,
+            kind="receipt",
+            delta=3,
+            when=datetime(2026, 6, 1, tzinfo=timezone.utc),
+        )
+        await _movement(
+            session,
+            t.id,
+            it.id,
+            b.id,
+            kind="receipt",
+            delta=5,
+            when=datetime(2025, 6, 1, tzinfo=timezone.utc),
+        )
         actual = await compute_budget_actual(session, t.id, PS, PE)
         assert actual.actual_total == 300.0
         assert actual.priced_receipt_count == 1

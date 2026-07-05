@@ -1,4 +1,5 @@
 """API contract for PPE safety budget (P10-06)."""
+
 from __future__ import annotations
 
 import pytest
@@ -9,8 +10,12 @@ from app.models.models import RoleEnum
 from app.schemas.ppe import PPEItemCategory
 from tests.utils.factories import TestDataFactory
 
-WIDE = {"name": "Всё время", "period_start": "2000-01-01", "period_end": "2100-01-01",
-        "planned_amount": 10000}
+WIDE = {
+    "name": "Всё время",
+    "period_start": "2000-01-01",
+    "period_end": "2100-01-01",
+    "planned_amount": 10000,
+}
 
 
 async def _seed_item(async_client, headers, *, name="Каска"):
@@ -79,8 +84,12 @@ async def test_period_order_422(
     headers = await make_auth_headers(RoleEnum.ADMIN)
     resp = await async_client.post(
         "/api/v1/ppe/budgets",
-        json={"name": "bad", "period_start": "2026-12-31", "period_end": "2026-01-01",
-              "planned_amount": 1},
+        json={
+            "name": "bad",
+            "period_start": "2026-12-31",
+            "period_end": "2026-01-01",
+            "planned_amount": 1,
+        },
         headers=headers,
     )
     assert resp.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY, resp.text
