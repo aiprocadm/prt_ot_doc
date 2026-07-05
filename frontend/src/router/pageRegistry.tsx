@@ -13,6 +13,7 @@ export const TasksPage = lazy(() => import("@/pages/tasks/TasksPage"));
 export const RiskPage = lazy(() => import("@/pages/risk/RiskPage"));
 export const ActivitiesPage = lazy(() => import("@/pages/activities/ActivitiesPage"));
 export const PpePage = lazy(() => import("@/pages/ppe/PpePage"));
+export const MobileIssuePage = lazy(() => import("@/pages/ppe/MobileIssuePage"));
 export const TrainingPage = lazy(() => import("@/pages/training/TrainingPage"));
 export const BriefingsPage = lazy(() => import("@/pages/briefings/BriefingsPage"));
 export const MedicalPage = lazy(() => import("@/pages/medical/MedicalPage"));

@@ -103,4 +103,22 @@ describe("PpePage", () => {
 
     expect(await screen.findByText("Требует замены")).toBeInTheDocument();
   });
+
+  it("shows a link to mobile issuance for users who can issue", async () => {
+    useAuthStore.setState({
+      user: { ...baseUser, permissions: [PERMISSIONS.PPE_VIEW, PERMISSIONS.PPE_ISSUE] },
+      loading: false,
+      error: null,
+      isAuthenticated: true,
+      initialized: true
+    });
+
+    render(
+      <MemoryRouter>
+        <PpePage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByRole("button", { name: /мобильная выдача/i })).toBeEnabled();
+  });
 });
