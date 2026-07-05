@@ -1,5 +1,36 @@
 # CHANGELOG
 
+## 2026-07-04 (claude/keen-mahavira-4d9ed8 — P10-06 СИЗ склад: поставщики (справочник + провенанс + дозаказ))
+
+### Added
+- **Поставщики СИЗ (P10-06)** — нормализованный справочник поставщиков + провенанс партий + закупочный
+  слой дозаказа. Чисто аддитивно; инвариант честного остатка (`batch.quantity` только через
+  `_write_movement`) не тронут — поставщик это метаданные.
+  - Новая сущность `PPESupplier` (`backend/app/models/ppe.py`, таблица `ppe_supplier`): `name` (unique per
+    tenant), `inn`, `contact_email`, `contact_phone`; `SoftDeleteMixin`. Провенанс: nullable FK
+    `PPEStockBatch.supplier_id` (лот пришёл от вендора) + явный `PPEItem.preferred_supplier_id`; обе FK
+    `ondelete=SET NULL`. Миграция `wa08` (аддитивная: таблица + 2 nullable-колонки + FK + индексы).
+  - Сервис справочника `backend/app/modules/ppe/suppliers.py` (create/list/get/update/soft-delete;
+    дубль имени → `SupplierNameConflict`→409 через `IntegrityError`, что ловит и soft-deleted тёзку;
+    `update` с allowlist полей). API за флагом `warehouse`: `POST/GET /ppe/suppliers`,
+    `GET/PATCH/DELETE /ppe/suppliers/{id}` (ETag на списке, дубль→409, нет/cross-tenant→404).
+  - Провенанс подключён: `supplier_id` в схемах/роутах партии (валидация → неизвестный поставщик 404 через
+    `_require_supplier`, явный `null` очищает); `transfer_stock` копирует `supplier_id` в партию-приёмник;
+    `preferred_supplier_id` в схемах/роутах позиции.
+  - Закупочный слой: `compute_shortages` резолвит поставщика позиции — **явный `preferred_supplier_id`
+    если жив, иначе fallback на последнего поставщика из истории партий** (received_at desc nulls-last →
+    created_at desc), soft-deleted резолвнутый → нет; батч-запросы без N+1. Строки `/ppe/stock/shortages`
+    получили поля `supplier_*`. Новый `GET /ppe/stock/reorder` — вычисляемый **черновик заявки**
+    (`build_reorder_draft`): below-threshold дефицит сгруппирован по поставщику, группа `unassigned`
+    последней, per-group `line_count`/`total_deficit` (НЕ персистентная сущность).
+  - Фронт (`WarehousePage`): секция «Поставщики» (CRUD), карточка «Новая партия (приёмка)» с пикером
+    поставщика, колонка «Поставщик» + бейдж источника (явный/история) + инлайн-пикер
+    `preferred_supplier_id` (PATCH → re-fetch дефицита), вид «Дозаказ» (карточки по поставщикам + «Копировать
+    CSV» с экранированием ячеек) + `warehouseApi` (suppliers CRUD / `getReorderDraft` /
+    `patchItemPreferredSupplier` / `createBatch`).
+  - Осознанно отложено (follow-up): unique по ИНН; персистентная заявка/PO + ЭДО-роуминг; полный экран
+    редактирования позиции СИЗ; мультипоставщик/прайс-листы/метрики; reorder-CSV как backend-endpoint.
+
 ## 2026-07-04 (claude/lucid-thompson-80c2b5 — P10-06 СИЗ склад: перемещения между локациями)
 
 ### Added

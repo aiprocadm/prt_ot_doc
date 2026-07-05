@@ -59,8 +59,18 @@ from app.modules.ppe.stock import (
     KIND_TRANSFER,
     InsufficientStockError,
     StockBatchNotFound,
+    build_reorder_draft,
     compute_shortages,
     transfer_stock,
+)
+from app.modules.ppe.suppliers import (
+    SupplierNameConflict,
+    SupplierNotFound,
+    create_supplier,
+    get_supplier,
+    list_suppliers,
+    soft_delete_supplier,
+    update_supplier,
 )
 from app.schemas.ppe import (
     PPECardRead,
@@ -87,6 +97,9 @@ from app.schemas.ppe import (
     PPENormPage,
     PPENormRead,
     PPENormUpdate,
+    PPEReorderDraftRead,
+    PPEReorderGroupRead,
+    PPEReorderLineRead,
     PPESizesRead,
     PPESizesUpdate,
     PPEStockBatchCreate,
@@ -105,6 +118,10 @@ from app.schemas.ppe import (
     PPEStockTransferCreate,
     PPEStockTransferPage,
     PPEStockTransferRead,
+    PPESupplierCreate,
+    PPESupplierPage,
+    PPESupplierRead,
+    PPESupplierUpdate,
 )
 from app.services.events import EventType
 from app.services.outbox import OutboxService
@@ -147,6 +164,13 @@ def _ppe_conflict(message: str) -> HTTPException:
     )
 
 
+def _ppe_supplier_conflict(message: str) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail=api_problem_detail(code="PPE_SUPPLIER_CONFLICT", message=message, error_type="ppe"),
+    )
+
+
 def _transition_conflict(exc: PPETransitionError) -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_409_CONFLICT,
@@ -168,6 +192,13 @@ async def _get_item(session: AsyncSession, tenant: Tenant, item_id: str) -> PPEI
     if item is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "PPE item not found")
     return item
+
+
+async def _require_supplier(session: AsyncSession, tenant: Tenant, supplier_id: str) -> None:
+    try:
+        await get_supplier(session, tenant.id, supplier_id)
+    except SupplierNotFound as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "PPE supplier not found") from exc
 
 
 async def _get_issue(session: AsyncSession, tenant: Tenant, issue_id: str) -> PPEIssue:
@@ -239,6 +270,9 @@ async def create_item(
 ) -> PPEItemRead:
     TenantContextValidator.ensure_tenant_context(tenant)
 
+    if payload.preferred_supplier_id is not None:
+        await _require_supplier(session, tenant, payload.preferred_supplier_id)
+
     item = PPEItem(
         tenant_id=tenant.id,
         name=payload.name,
@@ -247,6 +281,7 @@ async def create_item(
         description=payload.description,
         default_wear_days=payload.default_wear_days,
         min_stock=payload.min_stock,
+        preferred_supplier_id=payload.preferred_supplier_id,
         metadata_json=payload.metadata_json,
     )
     session.add(item)
@@ -281,7 +316,10 @@ async def update_item(
     TenantContextValidator.ensure_tenant_context(tenant)
 
     item = await _get_item(session, tenant, item_id)
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    updates = payload.model_dump(exclude_unset=True)
+    if updates.get("preferred_supplier_id") is not None:
+        await _require_supplier(session, tenant, updates["preferred_supplier_id"])
+    for field, value in updates.items():
         setattr(item, field, value)
     await session.flush()
     await session.refresh(item)
@@ -857,6 +895,132 @@ async def require_warehouse_feature(tenant: TenantDep, session: SessionDep) -> N
 WarehouseFeatureGate = Depends(require_warehouse_feature)
 
 
+# --- PPE supplier directory (P10-06) ----------------------------------------
+
+
+@router.post(
+    "/suppliers",
+    response_model=PPESupplierRead,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[WarehouseFeatureGate],
+)
+@audit_operation("create", "ppe_supplier")
+async def create_supplier_endpoint(
+    payload: PPESupplierCreate,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: EditorAccess,
+) -> PPESupplierRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    try:
+        sup = await create_supplier(
+            session,
+            tenant_id=tenant.id,
+            name=payload.name,
+            inn=payload.inn,
+            contact_email=payload.contact_email,
+            contact_phone=payload.contact_phone,
+        )
+    except SupplierNameConflict as exc:
+        raise _ppe_supplier_conflict(str(exc)) from exc
+    return PPESupplierRead.model_validate(sup)
+
+
+@router.get(
+    "/suppliers",
+    response_model=PPESupplierPage,
+    dependencies=[WarehouseFeatureGate],
+)
+async def list_suppliers_endpoint(
+    request: Request,
+    response: Response,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: ManagerAccess,
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+) -> PPESupplierPage | Response:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    items, total = await list_suppliers(session, tenant.id, limit=limit, offset=offset)
+    etag = compute_list_etag(
+        tenant_id=str(tenant.id),
+        items=items,
+        scalars=[("total", total), ("limit", limit), ("offset", offset)],
+    )
+    apply_etag_response_headers(response, etag)
+    if request.headers.get("if-none-match") == etag:
+        return Response(
+            status_code=status.HTTP_304_NOT_MODIFIED,
+            headers=build_not_modified_headers(etag),
+        )
+    return PPESupplierPage(items=[PPESupplierRead.model_validate(s) for s in items], total=total)
+
+
+@router.get(
+    "/suppliers/{supplier_id}",
+    response_model=PPESupplierRead,
+    dependencies=[WarehouseFeatureGate],
+)
+async def get_supplier_endpoint(
+    supplier_id: str,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: ManagerAccess,
+) -> PPESupplierRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    try:
+        sup = await get_supplier(session, tenant.id, supplier_id)
+    except SupplierNotFound as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "PPE supplier not found") from exc
+    return PPESupplierRead.model_validate(sup)
+
+
+@router.patch(
+    "/suppliers/{supplier_id}",
+    response_model=PPESupplierRead,
+    dependencies=[WarehouseFeatureGate],
+)
+@audit_operation("update", "ppe_supplier")
+async def update_supplier_endpoint(
+    supplier_id: str,
+    payload: PPESupplierUpdate,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: EditorAccess,
+) -> PPESupplierRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    try:
+        sup = await update_supplier(
+            session, tenant.id, supplier_id, **payload.model_dump(exclude_unset=True)
+        )
+    except SupplierNotFound as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "PPE supplier not found") from exc
+    except SupplierNameConflict as exc:
+        raise _ppe_supplier_conflict(str(exc)) from exc
+    return PPESupplierRead.model_validate(sup)
+
+
+@router.delete(
+    "/suppliers/{supplier_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_model=None,
+    dependencies=[WarehouseFeatureGate],
+)
+@audit_operation("delete", "ppe_supplier")
+async def delete_supplier_endpoint(
+    supplier_id: str,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: EditorAccess,
+) -> None:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    try:
+        await soft_delete_supplier(session, tenant.id, supplier_id)
+    except SupplierNotFound as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "PPE supplier not found") from exc
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 async def _get_batch(session: AsyncSession, tenant: Tenant, batch_id: str) -> PPEStockBatch:
     stmt = select(PPEStockBatch).where(
         PPEStockBatch.id == batch_id,
@@ -939,6 +1103,9 @@ async def create_stock_batch(
 
     await _get_item(session, tenant, payload.item_id)
 
+    if payload.supplier_id is not None:
+        await _require_supplier(session, tenant, payload.supplier_id)
+
     batch = PPEStockBatch(
         tenant_id=tenant.id,
         item_id=payload.item_id,
@@ -948,6 +1115,7 @@ async def create_stock_batch(
         certificate_no=payload.certificate_no,
         certificate_expires_at=payload.certificate_expires_at,
         location=payload.location,
+        supplier_id=payload.supplier_id,
     )
     session.add(batch)
     await session.flush()
@@ -995,7 +1163,10 @@ async def update_stock_batch(
 ) -> PPEStockBatchRead:
     TenantContextValidator.ensure_tenant_context(tenant)
     batch = await _get_batch(session, tenant, batch_id)
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    updates = payload.model_dump(exclude_unset=True)
+    if updates.get("supplier_id") is not None:
+        await _require_supplier(session, tenant, updates["supplier_id"])
+    for field, value in updates.items():
         setattr(batch, field, value)
     await session.flush()
     await session.refresh(batch)
@@ -1136,10 +1307,58 @@ async def list_stock_shortages(
             avg_daily_consumption=r.avg_daily_consumption,
             days_to_depletion=r.days_to_depletion,
             projected_breach_date=r.projected_breach_date,
+            supplier_id=r.supplier_id,
+            supplier_name=r.supplier_name,
+            supplier_inn=r.supplier_inn,
+            supplier_contact=r.supplier_contact,
+            supplier_source=r.supplier_source,
         )
         for r in rows
     ]
     return PPEStockShortagePage(items=items, total=len(items), window_days=window_days)
+
+
+@router.get(
+    "/stock/reorder",
+    response_model=PPEReorderDraftRead,
+    dependencies=[WarehouseFeatureGate],
+)
+async def get_reorder_draft(
+    tenant: TenantDep,
+    session: SessionDep,
+    access: ManagerAccess,
+    window_days: int = Query(90, ge=1, le=365),
+) -> PPEReorderDraftRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    rows = await compute_shortages(
+        session,
+        tenant.id,
+        now=datetime.now(tz=timezone.utc),
+        window_days=window_days,
+        only_below=True,
+    )
+    draft = build_reorder_draft(rows)
+    return PPEReorderDraftRead(
+        groups=[
+            PPEReorderGroupRead(
+                supplier_id=g.supplier_id,
+                supplier_name=g.supplier_name,
+                supplier_inn=g.supplier_inn,
+                supplier_contact=g.supplier_contact,
+                lines=[
+                    PPEReorderLineRead(
+                        item_id=ln.item_id, item_name=ln.item_name, deficit=ln.deficit
+                    )
+                    for ln in g.lines
+                ],
+                line_count=g.line_count,
+                total_deficit=g.total_deficit,
+            )
+            for g in draft.groups
+        ],
+        total_lines=draft.total_lines,
+        total_deficit=draft.total_deficit,
+    )
 
 
 @router.post(

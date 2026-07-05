@@ -87,6 +87,9 @@ class PPEItem(TenantBaseModel, SoftDeleteMixin):
     description: Mapped[str | None] = mapped_column(String(512))
     default_wear_days: Mapped[int] = mapped_column(Integer, nullable=False, default=365)
     min_stock: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    preferred_supplier_id: Mapped[str | None] = mapped_column(
+        ForeignKey("ppe_supplier.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     metadata_json: Mapped[dict[str, Any]] = mapped_column(
         MutableDict.as_mutable(JSON), nullable=False, default=dict
     )
@@ -95,6 +98,21 @@ class PPEItem(TenantBaseModel, SoftDeleteMixin):
         UniqueConstraint("tenant_id", "name", name="uq_ppe_item_name"),
         UniqueConstraint("tenant_id", "code", name="uq_ppe_item_code"),
     )
+
+
+class PPESupplier(TenantBaseModel, SoftDeleteMixin):
+    """PPE supplier directory (P10-06). Batches reference it via a nullable
+    provenance FK; items reference it via ``preferred_supplier_id`` for the
+    reorder draft. Name is unique per tenant (mirrors ``uq_ppe_item_name``)."""
+
+    __tablename__ = "ppe_supplier"
+
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    inn: Mapped[str | None] = mapped_column(String(12), nullable=True)
+    contact_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    contact_phone: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+    __table_args__ = (UniqueConstraint("tenant_id", "name", name="uq_ppe_supplier_name"),)
 
 
 class PPEIssueStatus(str, enum.Enum):
@@ -151,8 +169,12 @@ class PPEStockBatch(TenantBaseModel, SoftDeleteMixin):
     certificate_no: Mapped[str | None] = mapped_column(String(128), nullable=True)
     certificate_expires_at: Mapped[date | None] = mapped_column(Date, nullable=True)
     location: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    supplier_id: Mapped[str | None] = mapped_column(
+        ForeignKey("ppe_supplier.id", ondelete="SET NULL"), nullable=True, index=True
+    )
 
     item: Mapped[PPEItem] = relationship("PPEItem")
+    supplier: Mapped["PPESupplier | None"] = relationship("PPESupplier")
 
     __table_args__ = (
         Index(

@@ -18,6 +18,7 @@ class PPEItemCreate(BaseSchema):
     description: str | None = None
     default_wear_days: int = Field(default=365, ge=1)
     min_stock: int = Field(default=0, ge=0)
+    preferred_supplier_id: str | None = None
     metadata_json: dict[str, Any] = Field(default_factory=dict)
 
     @field_validator("category", mode="before")
@@ -35,6 +36,7 @@ class PPEItemUpdate(BaseSchema):
     description: str | None = None
     default_wear_days: int | None = Field(default=None, ge=1)
     min_stock: int | None = Field(default=None, ge=0)
+    preferred_supplier_id: str | None = None
     metadata_json: dict[str, Any] | None = None
 
     @field_validator("category", mode="before")
@@ -53,6 +55,7 @@ class PPEItemRead(BaseSchema):
     description: str | None
     default_wear_days: int
     min_stock: int
+    preferred_supplier_id: str | None
     metadata_json: dict[str, Any]
     created_at: datetime
     updated_at: datetime
@@ -60,6 +63,35 @@ class PPEItemRead(BaseSchema):
 
 class PPEItemPage(BaseSchema):
     items: list[PPEItemRead]
+    total: int
+
+
+class PPESupplierCreate(BaseSchema):
+    name: str = Field(min_length=1, max_length=255)
+    inn: str | None = Field(default=None, max_length=12)
+    contact_email: str | None = Field(default=None, max_length=255)
+    contact_phone: str | None = Field(default=None, max_length=64)
+
+
+class PPESupplierUpdate(BaseSchema):
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    inn: str | None = Field(default=None, max_length=12)
+    contact_email: str | None = Field(default=None, max_length=255)
+    contact_phone: str | None = Field(default=None, max_length=64)
+
+
+class PPESupplierRead(BaseSchema):
+    id: str
+    name: str
+    inn: str | None
+    contact_email: str | None
+    contact_phone: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class PPESupplierPage(BaseSchema):
+    items: list[PPESupplierRead]
     total: int
 
 
@@ -213,6 +245,7 @@ class PPEStockBatchCreate(BaseSchema):
     certificate_no: str | None = None
     certificate_expires_at: date | None = None
     location: str | None = None
+    supplier_id: str | None = None
 
 
 class PPEStockBatchUpdate(BaseSchema):
@@ -221,6 +254,7 @@ class PPEStockBatchUpdate(BaseSchema):
     certificate_no: str | None = None
     certificate_expires_at: date | None = None
     location: str | None = None
+    supplier_id: str | None = None
 
 
 class PPEStockBatchRead(BaseSchema):
@@ -232,6 +266,7 @@ class PPEStockBatchRead(BaseSchema):
     certificate_no: str | None
     certificate_expires_at: date | None
     location: str | None
+    supplier_id: str | None
     created_at: datetime
     updated_at: datetime
 
@@ -306,12 +341,39 @@ class PPEStockShortageRead(BaseSchema):
     avg_daily_consumption: float
     days_to_depletion: float | None
     projected_breach_date: date | None
+    supplier_id: str | None = None
+    supplier_name: str | None = None
+    supplier_inn: str | None = None
+    supplier_contact: str | None = None
+    supplier_source: str | None = None
 
 
 class PPEStockShortagePage(BaseSchema):
     items: list[PPEStockShortageRead]
     total: int
     window_days: int
+
+
+class PPEReorderLineRead(BaseSchema):
+    item_id: str
+    item_name: str
+    deficit: int
+
+
+class PPEReorderGroupRead(BaseSchema):
+    supplier_id: str | None
+    supplier_name: str | None
+    supplier_inn: str | None
+    supplier_contact: str | None
+    lines: list[PPEReorderLineRead]
+    line_count: int
+    total_deficit: int
+
+
+class PPEReorderDraftRead(BaseSchema):
+    groups: list[PPEReorderGroupRead]
+    total_lines: int
+    total_deficit: int
 
 
 # Mirrors ``MANUAL_KINDS`` in ``app.modules.ppe.stock`` — intentionally duplicated

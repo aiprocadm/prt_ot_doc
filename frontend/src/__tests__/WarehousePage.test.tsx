@@ -18,6 +18,13 @@ const cancelCountMock = vi.fn();
 const listTransfersMock = vi.fn();
 const createTransferMock = vi.fn();
 const listLevelsByLocationMock = vi.fn();
+const listSuppliersMock = vi.fn();
+const createSupplierMock = vi.fn();
+const updateSupplierMock = vi.fn();
+const deleteSupplierMock = vi.fn();
+const getReorderDraftMock = vi.fn();
+const createBatchMock = vi.fn();
+const patchItemPreferredSupplierMock = vi.fn();
 
 vi.mock("@/api/warehouse", () => ({
   warehouseApi: {
@@ -34,7 +41,14 @@ vi.mock("@/api/warehouse", () => ({
     cancelCount: (...args: unknown[]) => cancelCountMock(...args),
     listTransfers: (...args: unknown[]) => listTransfersMock(...args),
     createTransfer: (...args: unknown[]) => createTransferMock(...args),
-    listLevelsByLocation: (...args: unknown[]) => listLevelsByLocationMock(...args)
+    listLevelsByLocation: (...args: unknown[]) => listLevelsByLocationMock(...args),
+    listSuppliers: (...args: unknown[]) => listSuppliersMock(...args),
+    createSupplier: (...args: unknown[]) => createSupplierMock(...args),
+    updateSupplier: (...args: unknown[]) => updateSupplierMock(...args),
+    deleteSupplier: (...args: unknown[]) => deleteSupplierMock(...args),
+    getReorderDraft: (...args: unknown[]) => getReorderDraftMock(...args),
+    createBatch: (...args: unknown[]) => createBatchMock(...args),
+    patchItemPreferredSupplier: (...args: unknown[]) => patchItemPreferredSupplierMock(...args)
   }
 }));
 
@@ -54,11 +68,20 @@ describe("WarehousePage", () => {
     listTransfersMock.mockReset();
     createTransferMock.mockReset();
     listLevelsByLocationMock.mockReset();
+    listSuppliersMock.mockReset();
+    createSupplierMock.mockReset();
+    updateSupplierMock.mockReset();
+    deleteSupplierMock.mockReset();
+    getReorderDraftMock.mockReset();
+    createBatchMock.mockReset();
+    patchItemPreferredSupplierMock.mockReset();
     listMovementsMock.mockResolvedValue([]);
     listShortagesMock.mockResolvedValue([]);
     listCountsMock.mockResolvedValue([]);
     listTransfersMock.mockResolvedValue([]);
     listLevelsByLocationMock.mockResolvedValue([]);
+    listSuppliersMock.mockResolvedValue([]);
+    getReorderDraftMock.mockResolvedValue({ groups: [], total_lines: 0, total_deficit: 0 });
   });
 
   it("renders stock levels from the warehouse API", async () => {
@@ -131,7 +154,9 @@ describe("WarehousePage", () => {
       {
         item_id: "i1", item_name: "Каска", min_stock: 10, on_hand: 3, deficit: 7,
         below_threshold: true, avg_daily_consumption: 1, days_to_depletion: 3,
-        projected_breach_date: "2026-07-06"
+        projected_breach_date: "2026-07-06",
+        supplier_id: "s1", supplier_name: "Alpha", supplier_inn: null,
+        supplier_contact: null, supplier_source: "explicit"
       }
     ]);
 
@@ -139,6 +164,7 @@ describe("WarehousePage", () => {
     await waitFor(() => expect(screen.getByText("Дефицит / мин-остаток")).toBeInTheDocument());
     expect(screen.getByText("Каска")).toBeInTheDocument();
     expect(screen.getByText("7")).toBeInTheDocument();
+    expect(screen.getByText("Alpha")).toBeInTheDocument();
   });
 
   it("renders the inventory section with an existing count", async () => {
@@ -214,5 +240,127 @@ describe("WarehousePage", () => {
         reason: null
       })
     );
+  });
+
+  it("renders the suppliers section with an existing supplier", async () => {
+    listLevelsMock.mockResolvedValue([]);
+    listBatchesMock.mockResolvedValue([]);
+    listSuppliersMock.mockResolvedValue([
+      { id: "s1", name: "Alpha", inn: "7701234567", contact_email: null, contact_phone: null }
+    ]);
+
+    render(<MemoryRouter><WarehousePage /></MemoryRouter>);
+    await waitFor(() => expect(screen.getByText("Поставщики")).toBeInTheDocument());
+    expect(screen.getAllByText("Alpha").length).toBeGreaterThan(0);
+    expect(screen.getByText("7701234567")).toBeInTheDocument();
+  });
+
+  it("creates a supplier from the form", async () => {
+    listLevelsMock.mockResolvedValue([]);
+    listBatchesMock.mockResolvedValue([]);
+    listSuppliersMock.mockResolvedValue([]);
+    createSupplierMock.mockResolvedValue({
+      id: "s2", name: "Beta", inn: null, contact_email: null, contact_phone: null
+    });
+
+    render(<MemoryRouter><WarehousePage /></MemoryRouter>);
+    await waitFor(() => expect(screen.getByText("Поставщики")).toBeInTheDocument());
+
+    fireEvent.change(screen.getByLabelText(/Название поставщика/i), { target: { value: "Beta" } });
+    fireEvent.click(screen.getByRole("button", { name: /Сохранить поставщика/i }));
+
+    await waitFor(() =>
+      expect(createSupplierMock).toHaveBeenCalledWith(
+        expect.objectContaining({ name: "Beta" })
+      )
+    );
+  });
+
+  it("renders the reorder draft grouped by supplier", async () => {
+    listLevelsMock.mockResolvedValue([]);
+    listBatchesMock.mockResolvedValue([]);
+    getReorderDraftMock.mockResolvedValue({
+      groups: [
+        {
+          supplier_id: "s1",
+          supplier_name: "Alpha",
+          supplier_inn: null,
+          supplier_contact: null,
+          lines: [{ item_id: "i1", item_name: "Каска", deficit: 10 }],
+          line_count: 1,
+          total_deficit: 10
+        }
+      ],
+      total_lines: 1,
+      total_deficit: 10
+    });
+
+    render(<MemoryRouter><WarehousePage /></MemoryRouter>);
+    await waitFor(() => expect(screen.getByText("Дозаказ")).toBeInTheDocument());
+    expect(screen.getByText("Каска")).toBeInTheDocument();
+    expect(screen.getAllByText("10").length).toBeGreaterThan(0);
+  });
+
+  it("patches an item preferred supplier and reloads shortages + reorder draft", async () => {
+    listLevelsMock.mockResolvedValue([]);
+    listBatchesMock.mockResolvedValue([]);
+    listSuppliersMock.mockResolvedValue([
+      { id: "s1", name: "Alpha", inn: null, contact_email: null, contact_phone: null }
+    ]);
+    listShortagesMock.mockResolvedValue([
+      {
+        item_id: "i1", item_name: "Каска", min_stock: 10, on_hand: 3, deficit: 7,
+        below_threshold: true, avg_daily_consumption: 1, days_to_depletion: 3,
+        projected_breach_date: "2026-07-06",
+        supplier_id: null, supplier_name: null, supplier_inn: null,
+        supplier_contact: null, supplier_source: null
+      }
+    ]);
+    patchItemPreferredSupplierMock.mockResolvedValue(undefined);
+
+    render(<MemoryRouter><WarehousePage /></MemoryRouter>);
+    await waitFor(() => expect(screen.getByText("Дефицит / мин-остаток")).toBeInTheDocument());
+
+    const reorderCallsBefore = getReorderDraftMock.mock.calls.length;
+    fireEvent.change(screen.getByLabelText(/Предпочтительный поставщик Каска/i), {
+      target: { value: "s1" }
+    });
+
+    await waitFor(() =>
+      expect(patchItemPreferredSupplierMock).toHaveBeenCalledWith("i1", "s1")
+    );
+    await waitFor(() =>
+      expect(getReorderDraftMock.mock.calls.length).toBeGreaterThan(reorderCallsBefore)
+    );
+  });
+
+  it("escapes CSV cells containing the delimiter when copying the reorder draft", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+    listLevelsMock.mockResolvedValue([]);
+    listBatchesMock.mockResolvedValue([]);
+    getReorderDraftMock.mockResolvedValue({
+      groups: [
+        {
+          supplier_id: "s1",
+          supplier_name: "Alpha",
+          supplier_inn: null,
+          supplier_contact: "mail@x.ru; +7 900 000-00-00",
+          lines: [{ item_id: "i1", item_name: "Каска", deficit: 10 }],
+          line_count: 1,
+          total_deficit: 10
+        }
+      ],
+      total_lines: 1,
+      total_deficit: 10
+    });
+
+    render(<MemoryRouter><WarehousePage /></MemoryRouter>);
+    const btn = await screen.findByText("Копировать CSV");
+    fireEvent.click(btn);
+
+    await waitFor(() => expect(writeText).toHaveBeenCalled());
+    const csv = writeText.mock.calls[0][0] as string;
+    expect(csv).toContain('"mail@x.ru; +7 900 000-00-00"');
   });
 });

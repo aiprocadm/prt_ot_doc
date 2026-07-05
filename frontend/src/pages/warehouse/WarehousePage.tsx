@@ -6,11 +6,13 @@ import {
   type InventoryCountDetailDto,
   type InventoryCountDto,
   type PPEStockShortageDto,
+  type ReorderDraftDto,
   type StockBatchDto,
   type StockLevelByLocationDto,
   type StockLevelDto,
   type StockMovementDto,
-  type StockTransferDto
+  type StockTransferDto,
+  type SupplierDto
 } from "@/api/warehouse";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
@@ -24,6 +26,11 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { ApiError } from "@/types/dto/common";
 import { formatDate } from "@/utils/datetime";
+
+const csvCell = (v: string | number | null | undefined): string => {
+  const s = String(v ?? "");
+  return /[";\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+};
 
 const WarehousePage = () => {
   const [loading, setLoading] = useState(false);
@@ -43,19 +50,47 @@ const WarehousePage = () => {
   const [activeCount, setActiveCount] = useState<InventoryCountDetailDto | null>(null);
   const [countForm, setCountForm] = useState({ scope_item_id: "", scope_location: "", note: "" });
   const [countedInputs, setCountedInputs] = useState<Record<string, string>>({});
+  const [suppliers, setSuppliers] = useState<SupplierDto[]>([]);
+  const [supplierForm, setSupplierForm] = useState({
+    id: "",
+    name: "",
+    inn: "",
+    contact_email: "",
+    contact_phone: ""
+  });
+  const [reorderDraft, setReorderDraft] = useState<ReorderDraftDto | null>(null);
+  const [batchForm, setBatchForm] = useState({
+    item_id: "",
+    batch_no: "",
+    quantity: "1",
+    location: "",
+    supplier_id: ""
+  });
 
   const load = async () => {
     setLoading(true);
     setError(null);
     try {
-      const [levelsData, batchesData, movementsData, shortagesData, countsData, transfersData, levelsByLocData] = await Promise.all([
+      const [
+        levelsData,
+        batchesData,
+        movementsData,
+        shortagesData,
+        countsData,
+        transfersData,
+        levelsByLocData,
+        suppliersData,
+        reorderData
+      ] = await Promise.all([
         warehouseApi.listLevels(),
         warehouseApi.listBatches(),
         warehouseApi.listMovements(),
         warehouseApi.listShortages(),
         warehouseApi.listCounts(),
         warehouseApi.listTransfers(),
-        warehouseApi.listLevelsByLocation()
+        warehouseApi.listLevelsByLocation(),
+        warehouseApi.listSuppliers(),
+        warehouseApi.getReorderDraft()
       ]);
       setLevels(levelsData);
       setBatches(batchesData);
@@ -64,6 +99,8 @@ const WarehousePage = () => {
       setCounts(countsData);
       setTransfers(transfersData);
       setLevelsByLoc(levelsByLocData);
+      setSuppliers(suppliersData);
+      setReorderDraft(reorderData);
     } catch (err) {
       setError((err as ApiError) ?? { message: "Не удалось загрузить склад СИЗ" });
     } finally {
@@ -193,6 +230,117 @@ const WarehousePage = () => {
       setError((err as ApiError) ?? { message: "Не удалось отменить инвентаризацию" });
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const submitSupplier = async () => {
+    if (!supplierForm.name.trim()) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      const payload = {
+        name: supplierForm.name.trim(),
+        inn: supplierForm.inn.trim() || null,
+        contact_email: supplierForm.contact_email.trim() || null,
+        contact_phone: supplierForm.contact_phone.trim() || null
+      };
+      if (supplierForm.id) {
+        await warehouseApi.updateSupplier(supplierForm.id, payload);
+      } else {
+        await warehouseApi.createSupplier(payload);
+      }
+      setSupplierForm({ id: "", name: "", inn: "", contact_email: "", contact_phone: "" });
+      await load();
+    } catch (err) {
+      setError((err as ApiError) ?? { message: "Не удалось сохранить поставщика" });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const editSupplier = (supplier: SupplierDto) => {
+    setSupplierForm({
+      id: supplier.id,
+      name: supplier.name,
+      inn: supplier.inn ?? "",
+      contact_email: supplier.contact_email ?? "",
+      contact_phone: supplier.contact_phone ?? ""
+    });
+  };
+
+  const removeSupplier = async (id: string) => {
+    setSubmitting(true);
+    setError(null);
+    try {
+      await warehouseApi.deleteSupplier(id);
+      await load();
+    } catch (err) {
+      setError((err as ApiError) ?? { message: "Не удалось удалить поставщика" });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const submitBatch = async () => {
+    if (!batchForm.item_id.trim() || !batchForm.batch_no.trim()) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      await warehouseApi.createBatch({
+        item_id: batchForm.item_id.trim(),
+        batch_no: batchForm.batch_no.trim(),
+        quantity: Number(batchForm.quantity) || 0,
+        location: batchForm.location.trim() || null,
+        supplier_id: batchForm.supplier_id || null
+      });
+      setBatchForm({ item_id: "", batch_no: "", quantity: "1", location: "", supplier_id: "" });
+      await load();
+    } catch (err) {
+      setError((err as ApiError) ?? { message: "Не удалось создать партию" });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const changePreferredSupplier = async (itemId: string, supplierId: string | null) => {
+    setError(null);
+    try {
+      await warehouseApi.patchItemPreferredSupplier(itemId, supplierId);
+      // Both the shortages and reorder-draft views derive from the same supplier
+      // resolution, so refresh both to keep them consistent after the change.
+      const [freshShortages, freshReorder] = await Promise.all([
+        warehouseApi.listShortages(),
+        warehouseApi.getReorderDraft()
+      ]);
+      setShortages(freshShortages);
+      setReorderDraft(freshReorder);
+    } catch (err) {
+      setError((err as ApiError) ?? { message: "Не удалось задать поставщика позиции" });
+    }
+  };
+
+  const copyReorderDraft = async () => {
+    if (!reorderDraft) return;
+    const lines: string[] = ["Поставщик;ИНН;Контакт;Позиция;Дефицит"];
+    reorderDraft.groups.forEach((group) => {
+      const supplierName = group.supplier_name ?? "Без поставщика";
+      group.lines.forEach((line) => {
+        lines.push(
+          [
+            csvCell(supplierName),
+            csvCell(group.supplier_inn),
+            csvCell(group.supplier_contact),
+            csvCell(line.item_name),
+            csvCell(line.deficit)
+          ].join(";")
+        );
+      });
+    });
+    const csv = lines.join("\n");
+    try {
+      await navigator.clipboard?.writeText(csv);
+    } catch {
+      // clipboard may be unavailable (e.g. insecure context) — ignore silently
     }
   };
 
@@ -432,6 +580,148 @@ const WarehousePage = () => {
       <Card>
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
+            Поставщики
+            <Badge variant="secondary">{suppliers.length}</Badge>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-2 md:grid-cols-5">
+            <Input
+              aria-label="Название поставщика"
+              placeholder="Название"
+              value={supplierForm.name}
+              onChange={(e) => setSupplierForm((f) => ({ ...f, name: e.target.value }))}
+            />
+            <Input
+              aria-label="ИНН поставщика"
+              placeholder="ИНН"
+              value={supplierForm.inn}
+              onChange={(e) => setSupplierForm((f) => ({ ...f, inn: e.target.value }))}
+            />
+            <Input
+              aria-label="Email поставщика"
+              placeholder="Email"
+              value={supplierForm.contact_email}
+              onChange={(e) => setSupplierForm((f) => ({ ...f, contact_email: e.target.value }))}
+            />
+            <Input
+              aria-label="Телефон поставщика"
+              placeholder="Телефон"
+              value={supplierForm.contact_phone}
+              onChange={(e) => setSupplierForm((f) => ({ ...f, contact_phone: e.target.value }))}
+            />
+            <div className="flex gap-2">
+              <Button onClick={submitSupplier} disabled={submitting || !supplierForm.name.trim()}>
+                Сохранить поставщика
+              </Button>
+              {supplierForm.id ? (
+                <Button
+                  variant="ghost"
+                  onClick={() =>
+                    setSupplierForm({ id: "", name: "", inn: "", contact_email: "", contact_phone: "" })
+                  }
+                >
+                  Отмена
+                </Button>
+              ) : null}
+            </div>
+          </div>
+          {suppliers.length === 0 ? (
+            <EmptyState title="Поставщиков нет" description="Добавьте поставщика для дозаказа СИЗ." />
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Название</TableHead>
+                  <TableHead>ИНН</TableHead>
+                  <TableHead>Контакт</TableHead>
+                  <TableHead />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {suppliers.map((s) => (
+                  <TableRow key={s.id}>
+                    <TableCell className="font-medium">{s.name}</TableCell>
+                    <TableCell>{s.inn || "—"}</TableCell>
+                    <TableCell>{s.contact_email || s.contact_phone || "—"}</TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-2">
+                        <Button variant="outline" onClick={() => editSupplier(s)}>
+                          Изменить
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          aria-label={`Удалить поставщика ${s.name}`}
+                          onClick={() => removeSupplier(s.id)}
+                          disabled={submitting}
+                        >
+                          Удалить
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Новая партия (приёмка)</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="grid gap-2 md:grid-cols-5">
+            <Input
+              aria-label="ID позиции партии"
+              placeholder="ID позиции"
+              value={batchForm.item_id}
+              onChange={(e) => setBatchForm((f) => ({ ...f, item_id: e.target.value }))}
+            />
+            <Input
+              aria-label="Номер партии"
+              placeholder="Номер партии"
+              value={batchForm.batch_no}
+              onChange={(e) => setBatchForm((f) => ({ ...f, batch_no: e.target.value }))}
+            />
+            <Input
+              aria-label="Количество партии"
+              type="number"
+              min={0}
+              value={batchForm.quantity}
+              onChange={(e) => setBatchForm((f) => ({ ...f, quantity: e.target.value }))}
+            />
+            <Input
+              aria-label="Локация партии"
+              placeholder="Локация (опц.)"
+              value={batchForm.location}
+              onChange={(e) => setBatchForm((f) => ({ ...f, location: e.target.value }))}
+            />
+            <select
+              aria-label="Поставщик партии"
+              className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+              value={batchForm.supplier_id}
+              onChange={(e) => setBatchForm((f) => ({ ...f, supplier_id: e.target.value }))}
+            >
+              <option value="">— без поставщика —</option>
+              {suppliers.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <Button
+            onClick={submitBatch}
+            disabled={submitting || !batchForm.item_id.trim() || !batchForm.batch_no.trim()}
+          >
+            Создать партию
+          </Button>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
             Дефицит / мин-остаток
             <Badge variant="secondary">{shortages.filter((s) => s.below_threshold).length}</Badge>
           </CardTitle>
@@ -452,6 +742,7 @@ const WarehousePage = () => {
                   <TableHead>Дефицит</TableHead>
                   <TableHead>Дней до исчерпания</TableHead>
                   <TableHead>Дата пробоя</TableHead>
+                  <TableHead>Поставщик</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -474,10 +765,101 @@ const WarehousePage = () => {
                     <TableCell>
                       {s.projected_breach_date !== null ? formatDate(s.projected_breach_date) : "—"}
                     </TableCell>
+                    <TableCell>
+                      <div className="space-y-1">
+                        {s.supplier_name ? (
+                          <div className="flex items-center gap-2">
+                            <span>{s.supplier_name}</span>
+                            {s.supplier_source === "explicit" ? (
+                              <Badge variant="secondary">явный</Badge>
+                            ) : s.supplier_source === "history" ? (
+                              <Badge variant="outline">история</Badge>
+                            ) : null}
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                        <select
+                          aria-label={`Предпочтительный поставщик ${s.item_name}`}
+                          className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm"
+                          value={s.supplier_source === "explicit" ? s.supplier_id ?? "" : ""}
+                          onChange={(e) =>
+                            void changePreferredSupplier(s.item_id, e.target.value || null)
+                          }
+                        >
+                          <option value="">— без явного —</option>
+                          {suppliers.map((sup) => (
+                            <option key={sup.id} value={sup.id}>
+                              {sup.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
+          )}
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center justify-between gap-2">
+            <span className="flex items-center gap-2">
+              Дозаказ
+              <Badge variant="secondary">{reorderDraft?.total_lines ?? 0}</Badge>
+            </span>
+            <Button
+              variant="outline"
+              onClick={copyReorderDraft}
+              disabled={!reorderDraft || reorderDraft.total_lines === 0}
+            >
+              Копировать CSV
+            </Button>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {!reorderDraft || reorderDraft.groups.length === 0 ? (
+            <EmptyState
+              title="Дозаказ не требуется"
+              description="Нет позиций с дефицитом ниже минимального остатка."
+            />
+          ) : (
+            reorderDraft.groups.map((group) => (
+              <div
+                key={group.supplier_id ?? "no-supplier"}
+                className="space-y-2 rounded-md border p-3"
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-medium">
+                    {group.supplier_name ?? "Без поставщика"}
+                  </span>
+                  {group.supplier_contact ? (
+                    <span className="text-sm text-muted-foreground">
+                      {group.supplier_contact}
+                    </span>
+                  ) : null}
+                  <Badge variant="secondary">дефицит: {group.total_deficit}</Badge>
+                </div>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Позиция</TableHead>
+                      <TableHead>Дефицит</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {group.lines.map((line) => (
+                      <TableRow key={line.item_id}>
+                        <TableCell className="font-medium">{line.item_name}</TableCell>
+                        <TableCell>{line.deficit}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            ))
           )}
         </CardContent>
       </Card>
