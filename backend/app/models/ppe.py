@@ -20,6 +20,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    Numeric,
     String,
     UniqueConstraint,
     text,
@@ -115,6 +116,20 @@ class PPESupplier(TenantBaseModel, SoftDeleteMixin):
     __table_args__ = (UniqueConstraint("tenant_id", "name", name="uq_ppe_supplier_name"),)
 
 
+class PPESafetyBudget(TenantBaseModel, SoftDeleteMixin):
+    """PPE safety budget (P10-06 §12.4, СИЗ scope). Planned spend for a date-range
+    period; actual is computed from receipt movements × batch.unit_cost (never
+    persisted). Tenant-wide; overlapping periods are allowed."""
+
+    __tablename__ = "ppe_safety_budget"
+
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    period_start: Mapped[date] = mapped_column(Date, nullable=False)
+    period_end: Mapped[date] = mapped_column(Date, nullable=False)
+    planned_amount: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False, default=0)
+    notes: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+
+
 class PPEIssueStatus(str, enum.Enum):
     ISSUED = "issued"
     RETURNED = "returned"
@@ -172,6 +187,7 @@ class PPEStockBatch(TenantBaseModel, SoftDeleteMixin):
     supplier_id: Mapped[str | None] = mapped_column(
         ForeignKey("ppe_supplier.id", ondelete="SET NULL"), nullable=True, index=True
     )
+    unit_cost: Mapped[float | None] = mapped_column(Numeric(14, 2), nullable=True)
 
     item: Mapped[PPEItem] = relationship("PPEItem")
     supplier: Mapped["PPESupplier | None"] = relationship("PPESupplier")
