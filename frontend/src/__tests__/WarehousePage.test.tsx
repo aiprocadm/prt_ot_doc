@@ -25,6 +25,9 @@ const deleteSupplierMock = vi.fn();
 const getReorderDraftMock = vi.fn();
 const createBatchMock = vi.fn();
 const patchItemPreferredSupplierMock = vi.fn();
+const listBudgetsMock = vi.fn();
+const getBudgetMock = vi.fn();
+const createBudgetMock = vi.fn();
 
 vi.mock("@/api/warehouse", () => ({
   warehouseApi: {
@@ -48,7 +51,10 @@ vi.mock("@/api/warehouse", () => ({
     deleteSupplier: (...args: unknown[]) => deleteSupplierMock(...args),
     getReorderDraft: (...args: unknown[]) => getReorderDraftMock(...args),
     createBatch: (...args: unknown[]) => createBatchMock(...args),
-    patchItemPreferredSupplier: (...args: unknown[]) => patchItemPreferredSupplierMock(...args)
+    patchItemPreferredSupplier: (...args: unknown[]) => patchItemPreferredSupplierMock(...args),
+    listBudgets: (...args: unknown[]) => listBudgetsMock(...args),
+    getBudget: (...args: unknown[]) => getBudgetMock(...args),
+    createBudget: (...args: unknown[]) => createBudgetMock(...args)
   }
 }));
 
@@ -75,6 +81,9 @@ describe("WarehousePage", () => {
     getReorderDraftMock.mockReset();
     createBatchMock.mockReset();
     patchItemPreferredSupplierMock.mockReset();
+    listBudgetsMock.mockReset();
+    getBudgetMock.mockReset();
+    createBudgetMock.mockReset();
     listMovementsMock.mockResolvedValue([]);
     listShortagesMock.mockResolvedValue([]);
     listCountsMock.mockResolvedValue([]);
@@ -82,6 +91,7 @@ describe("WarehousePage", () => {
     listLevelsByLocationMock.mockResolvedValue([]);
     listSuppliersMock.mockResolvedValue([]);
     getReorderDraftMock.mockResolvedValue({ groups: [], total_lines: 0, total_deficit: 0 });
+    listBudgetsMock.mockResolvedValue([]);
   });
 
   it("renders stock levels from the warehouse API", async () => {
@@ -362,5 +372,36 @@ describe("WarehousePage", () => {
     await waitFor(() => expect(writeText).toHaveBeenCalled());
     const csv = writeText.mock.calls[0][0] as string;
     expect(csv).toContain('"mail@x.ru; +7 900 000-00-00"');
+  });
+
+  it("renders the safety budget section with a budget row", async () => {
+    listLevelsMock.mockResolvedValue([]);
+    listBatchesMock.mockResolvedValue([]);
+    listBudgetsMock.mockResolvedValue([
+      { id: "bud-1", name: "Бюджет 2026", period_start: "2026-01-01", period_end: "2026-12-31",
+        planned_amount: 100000, notes: null, created_at: "2026-01-01", updated_at: "2026-01-01" }
+    ]);
+    render(<MemoryRouter><WarehousePage /></MemoryRouter>);
+    expect(await screen.findByText("Бюджет безопасности")).toBeInTheDocument();
+    expect(await screen.findByText("Бюджет 2026")).toBeInTheDocument();
+  });
+
+  it("shows computed actual + remaining + unpriced warning on open", async () => {
+    listLevelsMock.mockResolvedValue([]);
+    listBatchesMock.mockResolvedValue([]);
+    listBudgetsMock.mockResolvedValue([
+      { id: "bud-1", name: "Бюджет 2026", period_start: "2026-01-01", period_end: "2026-12-31",
+        planned_amount: 100000, notes: null, created_at: "2026-01-01", updated_at: "2026-01-01" }
+    ]);
+    getBudgetMock.mockResolvedValue({
+      id: "bud-1", name: "Бюджет 2026", period_start: "2026-01-01", period_end: "2026-12-31",
+      planned_amount: 100000, notes: null, created_at: "2026-01-01", updated_at: "2026-01-01",
+      actual_total: 30000, remaining: 70000,
+      by_category: [{ category: "head", amount: 30000 }],
+      priced_receipt_count: 2, unpriced_receipt_count: 1
+    });
+    render(<MemoryRouter><WarehousePage /></MemoryRouter>);
+    fireEvent.click(await screen.findByRole("button", { name: /Открыть/ }));
+    expect(await screen.findByText(/Приходов без цены: 1/)).toBeInTheDocument();
   });
 });

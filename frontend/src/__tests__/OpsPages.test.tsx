@@ -15,6 +15,14 @@ const getCorrectiveActionsMock = vi.fn();
 const getAuditPrepSnapshotMock = vi.fn();
 const listLevelsMock = vi.fn();
 const listBatchesMock = vi.fn();
+const listMovementsMock = vi.fn();
+const listShortagesMock = vi.fn();
+const listCountsMock = vi.fn();
+const listTransfersMock = vi.fn();
+const listLevelsByLocationMock = vi.fn();
+const listSuppliersMock = vi.fn();
+const getReorderDraftMock = vi.fn();
+const listBudgetsMock = vi.fn();
 
 vi.mock("@/api/ops", () => ({
   opsApi: {
@@ -28,7 +36,15 @@ vi.mock("@/api/ops", () => ({
 vi.mock("@/api/warehouse", () => ({
   warehouseApi: {
     listLevels: (...args: unknown[]) => listLevelsMock(...args),
-    listBatches: (...args: unknown[]) => listBatchesMock(...args)
+    listBatches: (...args: unknown[]) => listBatchesMock(...args),
+    listMovements: (...args: unknown[]) => listMovementsMock(...args),
+    listShortages: (...args: unknown[]) => listShortagesMock(...args),
+    listCounts: (...args: unknown[]) => listCountsMock(...args),
+    listTransfers: (...args: unknown[]) => listTransfersMock(...args),
+    listLevelsByLocation: (...args: unknown[]) => listLevelsByLocationMock(...args),
+    listSuppliers: (...args: unknown[]) => listSuppliersMock(...args),
+    getReorderDraft: (...args: unknown[]) => getReorderDraftMock(...args),
+    listBudgets: (...args: unknown[]) => listBudgetsMock(...args)
   }
 }));
 
@@ -40,6 +56,22 @@ describe("operational pages converted from static to real data", () => {
     getAuditPrepSnapshotMock.mockReset();
     listLevelsMock.mockReset();
     listBatchesMock.mockReset();
+    listMovementsMock.mockReset();
+    listShortagesMock.mockReset();
+    listCountsMock.mockReset();
+    listTransfersMock.mockReset();
+    listLevelsByLocationMock.mockReset();
+    listSuppliersMock.mockReset();
+    getReorderDraftMock.mockReset();
+    listBudgetsMock.mockReset();
+    listMovementsMock.mockResolvedValue([]);
+    listShortagesMock.mockResolvedValue([]);
+    listCountsMock.mockResolvedValue([]);
+    listTransfersMock.mockResolvedValue([]);
+    listLevelsByLocationMock.mockResolvedValue([]);
+    listSuppliersMock.mockResolvedValue([]);
+    getReorderDraftMock.mockResolvedValue({ groups: [], total_lines: 0, total_deficit: 0 });
+    listBudgetsMock.mockResolvedValue([]);
   });
 
   it("renders warehouse stock levels from the warehouse API", async () => {
