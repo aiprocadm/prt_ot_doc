@@ -1,0 +1,105 @@
+"""PPE safety budget service (P10-06 §12.4, СИЗ scope).
+
+Thin CRUD over PPESafetyBudget (mirrors suppliers.py). compute_budget_actual
+(procurement actual from the movement ledger) is added in the next task.
+"""
+
+from __future__ import annotations
+
+from datetime import date, datetime, timezone
+
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.ppe_registry import PPESafetyBudget
+
+_UPDATABLE_FIELDS = frozenset({"name", "period_start", "period_end", "planned_amount", "notes"})
+
+
+class BudgetNotFound(Exception):
+    def __init__(self, budget_id: str) -> None:
+        super().__init__(f"PPE safety budget not found: {budget_id}")
+        self.budget_id = budget_id
+
+
+async def _load_budget(session: AsyncSession, tenant_id: str, budget_id: str) -> PPESafetyBudget:
+    stmt = select(PPESafetyBudget).where(
+        PPESafetyBudget.id == budget_id,
+        PPESafetyBudget.tenant_id == tenant_id,
+        PPESafetyBudget.deleted_at.is_(None),
+    )
+    row = (await session.execute(stmt)).scalar_one_or_none()
+    if row is None:
+        raise BudgetNotFound(budget_id)
+    return row
+
+
+async def create_budget(
+    session: AsyncSession,
+    *,
+    tenant_id: str,
+    name: str,
+    period_start: date,
+    period_end: date,
+    planned_amount: float = 0,
+    notes: str | None = None,
+) -> PPESafetyBudget:
+    budget = PPESafetyBudget(
+        tenant_id=tenant_id,
+        name=name,
+        period_start=period_start,
+        period_end=period_end,
+        planned_amount=planned_amount,
+        notes=notes,
+    )
+    session.add(budget)
+    await session.flush()
+    await session.refresh(budget)
+    return budget
+
+
+async def get_budget(session: AsyncSession, tenant_id: str, budget_id: str) -> PPESafetyBudget:
+    return await _load_budget(session, tenant_id, budget_id)
+
+
+async def list_budgets(
+    session: AsyncSession, tenant_id: str, *, limit: int, offset: int
+) -> tuple[list[PPESafetyBudget], int]:
+    base = (
+        PPESafetyBudget.tenant_id == tenant_id,
+        PPESafetyBudget.deleted_at.is_(None),
+    )
+    items = list(
+        (
+            await session.execute(
+                select(PPESafetyBudget)
+                .where(*base)
+                .order_by(PPESafetyBudget.period_start.desc())
+                .limit(limit)
+                .offset(offset)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    total = (await session.execute(select(func.count()).where(*base))).scalar_one()
+    return items, int(total or 0)
+
+
+async def update_budget(
+    session: AsyncSession, tenant_id: str, budget_id: str, **fields
+) -> PPESafetyBudget:
+    """Update a budget; only keys in ``_UPDATABLE_FIELDS`` are applied."""
+    budget = await _load_budget(session, tenant_id, budget_id)
+    for key, value in fields.items():
+        if key in _UPDATABLE_FIELDS:
+            setattr(budget, key, value)
+    await session.flush()
+    await session.refresh(budget)
+    return budget
+
+
+async def soft_delete_budget(session: AsyncSession, tenant_id: str, budget_id: str) -> None:
+    budget = await _load_budget(session, tenant_id, budget_id)
+    budget.deleted_at = datetime.now(tz=timezone.utc)
+    await session.flush()
