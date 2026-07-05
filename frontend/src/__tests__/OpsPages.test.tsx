@@ -22,6 +22,7 @@ const listTransfersMock = vi.fn();
 const listLevelsByLocationMock = vi.fn();
 const listSuppliersMock = vi.fn();
 const getReorderDraftMock = vi.fn();
+const listBudgetsMock = vi.fn();
 
 vi.mock("@/api/ops", () => ({
   opsApi: {
@@ -32,9 +33,6 @@ vi.mock("@/api/ops", () => ({
   }
 }));
 
-// WarehousePage loads several warehouse endpoints on mount (movements, shortages,
-// counts, transfers, levels-by-location, suppliers, reorder draft). Mock them all
-// so the page renders instead of erroring — mirrors WarehousePage.test.tsx.
 vi.mock("@/api/warehouse", () => ({
   warehouseApi: {
     listLevels: (...args: unknown[]) => listLevelsMock(...args),
@@ -45,7 +43,8 @@ vi.mock("@/api/warehouse", () => ({
     listTransfers: (...args: unknown[]) => listTransfersMock(...args),
     listLevelsByLocation: (...args: unknown[]) => listLevelsByLocationMock(...args),
     listSuppliers: (...args: unknown[]) => listSuppliersMock(...args),
-    getReorderDraft: (...args: unknown[]) => getReorderDraftMock(...args)
+    getReorderDraft: (...args: unknown[]) => getReorderDraftMock(...args),
+    listBudgets: (...args: unknown[]) => listBudgetsMock(...args)
   }
 }));
 
@@ -64,6 +63,7 @@ describe("operational pages converted from static to real data", () => {
     listLevelsByLocationMock.mockReset();
     listSuppliersMock.mockReset();
     getReorderDraftMock.mockReset();
+    listBudgetsMock.mockReset();
     listMovementsMock.mockResolvedValue([]);
     listShortagesMock.mockResolvedValue([]);
     listCountsMock.mockResolvedValue([]);
@@ -71,6 +71,7 @@ describe("operational pages converted from static to real data", () => {
     listLevelsByLocationMock.mockResolvedValue([]);
     listSuppliersMock.mockResolvedValue([]);
     getReorderDraftMock.mockResolvedValue({ groups: [], total_lines: 0, total_deficit: 0 });
+    listBudgetsMock.mockResolvedValue([]);
   });
 
   it("renders warehouse stock levels from the warehouse API", async () => {

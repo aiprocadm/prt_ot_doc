@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 
 import {
   warehouseApi,
+  type BudgetDetailDto,
+  type BudgetDto,
   type CreateTransferInput,
   type InventoryCountDetailDto,
   type InventoryCountDto,
@@ -64,8 +66,18 @@ const WarehousePage = () => {
     batch_no: "",
     quantity: "1",
     location: "",
-    supplier_id: ""
+    supplier_id: "",
+    unit_cost: ""
   });
+  const [budgets, setBudgets] = useState<BudgetDto[]>([]);
+  const [budgetForm, setBudgetForm] = useState({
+    name: "",
+    period_start: "",
+    period_end: "",
+    planned_amount: "",
+    notes: ""
+  });
+  const [activeBudget, setActiveBudget] = useState<BudgetDetailDto | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -80,7 +92,8 @@ const WarehousePage = () => {
         transfersData,
         levelsByLocData,
         suppliersData,
-        reorderData
+        reorderData,
+        budgetsData
       ] = await Promise.all([
         warehouseApi.listLevels(),
         warehouseApi.listBatches(),
@@ -90,7 +103,8 @@ const WarehousePage = () => {
         warehouseApi.listTransfers(),
         warehouseApi.listLevelsByLocation(),
         warehouseApi.listSuppliers(),
-        warehouseApi.getReorderDraft()
+        warehouseApi.getReorderDraft(),
+        warehouseApi.listBudgets()
       ]);
       setLevels(levelsData);
       setBatches(batchesData);
@@ -101,6 +115,7 @@ const WarehousePage = () => {
       setLevelsByLoc(levelsByLocData);
       setSuppliers(suppliersData);
       setReorderDraft(reorderData);
+      setBudgets(budgetsData);
     } catch (err) {
       setError((err as ApiError) ?? { message: "Не удалось загрузить склад СИЗ" });
     } finally {
@@ -291,9 +306,17 @@ const WarehousePage = () => {
         batch_no: batchForm.batch_no.trim(),
         quantity: Number(batchForm.quantity) || 0,
         location: batchForm.location.trim() || null,
-        supplier_id: batchForm.supplier_id || null
+        supplier_id: batchForm.supplier_id || null,
+        unit_cost: batchForm.unit_cost.trim() === "" ? null : Number(batchForm.unit_cost)
       });
-      setBatchForm({ item_id: "", batch_no: "", quantity: "1", location: "", supplier_id: "" });
+      setBatchForm({
+        item_id: "",
+        batch_no: "",
+        quantity: "1",
+        location: "",
+        supplier_id: "",
+        unit_cost: ""
+      });
       await load();
     } catch (err) {
       setError((err as ApiError) ?? { message: "Не удалось создать партию" });
@@ -316,6 +339,37 @@ const WarehousePage = () => {
       setReorderDraft(freshReorder);
     } catch (err) {
       setError((err as ApiError) ?? { message: "Не удалось задать поставщика позиции" });
+    }
+  };
+
+  const submitBudget = async () => {
+    if (!budgetForm.name.trim() || !budgetForm.period_start || !budgetForm.period_end) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      await warehouseApi.createBudget({
+        name: budgetForm.name.trim(),
+        period_start: budgetForm.period_start,
+        period_end: budgetForm.period_end,
+        planned_amount: Number(budgetForm.planned_amount) || 0,
+        notes: budgetForm.notes.trim() || null
+      });
+      setBudgetForm({ name: "", period_start: "", period_end: "", planned_amount: "", notes: "" });
+      const fresh = await warehouseApi.listBudgets();
+      setBudgets(fresh);
+    } catch (err) {
+      setError((err as ApiError) ?? { message: "Не удалось создать бюджет" });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const openBudget = async (id: string) => {
+    setError(null);
+    try {
+      setActiveBudget(await warehouseApi.getBudget(id));
+    } catch (err) {
+      setError((err as ApiError) ?? { message: "Не удалось открыть бюджет" });
     }
   };
 
@@ -710,6 +764,15 @@ const WarehousePage = () => {
                 </option>
               ))}
             </select>
+            <Input
+              aria-label="Цена за единицу"
+              type="number"
+              min={0}
+              step="0.01"
+              placeholder="Цена за единицу"
+              value={batchForm.unit_cost}
+              onChange={(e) => setBatchForm((f) => ({ ...f, unit_cost: e.target.value }))}
+            />
           </div>
           <Button
             onClick={submitBatch}
@@ -983,6 +1046,119 @@ const WarehousePage = () => {
                     Отменить
                   </Button>
                 </div>
+              ) : null}
+            </div>
+          ) : null}
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            Бюджет безопасности
+            <Badge variant="secondary">{budgets.length}</Badge>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-2 md:grid-cols-5">
+            <Input
+              aria-label="Название"
+              placeholder="Название"
+              value={budgetForm.name}
+              onChange={(e) => setBudgetForm((f) => ({ ...f, name: e.target.value }))}
+            />
+            <Input
+              aria-label="Начало периода"
+              type="date"
+              value={budgetForm.period_start}
+              onChange={(e) => setBudgetForm((f) => ({ ...f, period_start: e.target.value }))}
+            />
+            <Input
+              aria-label="Конец периода"
+              type="date"
+              value={budgetForm.period_end}
+              onChange={(e) => setBudgetForm((f) => ({ ...f, period_end: e.target.value }))}
+            />
+            <Input
+              aria-label="Плановая сумма"
+              type="number"
+              min={0}
+              step="0.01"
+              placeholder="Плановая сумма"
+              value={budgetForm.planned_amount}
+              onChange={(e) => setBudgetForm((f) => ({ ...f, planned_amount: e.target.value }))}
+            />
+            <Input
+              aria-label="Заметки"
+              placeholder="Заметки (опц.)"
+              value={budgetForm.notes}
+              onChange={(e) => setBudgetForm((f) => ({ ...f, notes: e.target.value }))}
+            />
+          </div>
+          <Button
+            onClick={submitBudget}
+            disabled={
+              submitting ||
+              !budgetForm.name.trim() ||
+              !budgetForm.period_start ||
+              !budgetForm.period_end
+            }
+          >
+            Создать бюджет
+          </Button>
+          {budgets.length === 0 ? (
+            <EmptyState
+              title="Бюджетов нет"
+              description="Создайте бюджет безопасности для контроля затрат на СИЗ."
+            />
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Название</TableHead>
+                  <TableHead>Период</TableHead>
+                  <TableHead>План</TableHead>
+                  <TableHead />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {budgets.map((b) => (
+                  <TableRow key={b.id}>
+                    <TableCell className="font-medium">{b.name}</TableCell>
+                    <TableCell>
+                      {b.period_start} – {b.period_end}
+                    </TableCell>
+                    <TableCell>План: {b.planned_amount}</TableCell>
+                    <TableCell className="text-right">
+                      <Button variant="outline" onClick={() => void openBudget(b.id)}>
+                        Открыть
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+
+          {activeBudget ? (
+            <div className="space-y-2 border-t pt-3">
+              <div className="flex items-center gap-2">
+                <span className="font-medium">{activeBudget.name}</span>
+                <Badge variant="secondary">Факт: {activeBudget.actual_total}</Badge>
+                <Badge variant="outline">Остаток: {activeBudget.remaining}</Badge>
+              </div>
+              {activeBudget.by_category.length > 0 ? (
+                <ul className="space-y-1 text-sm">
+                  {activeBudget.by_category.map((c) => (
+                    <li key={c.category}>
+                      {c.category}: {c.amount}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+              {activeBudget.unpriced_receipt_count > 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  Приходов без цены: {activeBudget.unpriced_receipt_count}
+                </p>
               ) : null}
             </div>
           ) : null}

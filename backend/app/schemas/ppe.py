@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 
 from app.models.models import PPEIssueStatus, PPEItemCategory
 from app.schemas.base import BaseSchema
@@ -93,6 +93,67 @@ class PPESupplierRead(BaseSchema):
 class PPESupplierPage(BaseSchema):
     items: list[PPESupplierRead]
     total: int
+
+
+class PPESafetyBudgetCreate(BaseSchema):
+    name: str = Field(min_length=1, max_length=255)
+    period_start: date
+    period_end: date
+    planned_amount: float = Field(default=0, ge=0)
+    notes: str | None = Field(default=None, max_length=1000)
+
+    @model_validator(mode="after")
+    def _check_period(self) -> "PPESafetyBudgetCreate":
+        if self.period_end < self.period_start:
+            raise ValueError("period_end must be >= period_start")
+        return self
+
+
+class PPESafetyBudgetUpdate(BaseSchema):
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    period_start: date | None = None
+    period_end: date | None = None
+    planned_amount: float | None = Field(default=None, ge=0)
+    notes: str | None = Field(default=None, max_length=1000)
+
+    @model_validator(mode="after")
+    def _check_period(self) -> "PPESafetyBudgetUpdate":
+        if (
+            self.period_start is not None
+            and self.period_end is not None
+            and self.period_end < self.period_start
+        ):
+            raise ValueError("period_end must be >= period_start")
+        return self
+
+
+class PPESafetyBudgetRead(BaseSchema):
+    id: str
+    name: str
+    period_start: date
+    period_end: date
+    planned_amount: float
+    notes: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class PPESafetyBudgetPage(BaseSchema):
+    items: list[PPESafetyBudgetRead]
+    total: int
+
+
+class PPEBudgetCategoryActualRead(BaseSchema):
+    category: str
+    amount: float
+
+
+class PPESafetyBudgetDetail(PPESafetyBudgetRead):
+    actual_total: float
+    remaining: float
+    by_category: list[PPEBudgetCategoryActualRead]
+    priced_receipt_count: int
+    unpriced_receipt_count: int
 
 
 class PPENormCreate(BaseSchema):
@@ -246,6 +307,7 @@ class PPEStockBatchCreate(BaseSchema):
     certificate_expires_at: date | None = None
     location: str | None = None
     supplier_id: str | None = None
+    unit_cost: float | None = Field(default=None, ge=0)
 
 
 class PPEStockBatchUpdate(BaseSchema):
@@ -255,6 +317,7 @@ class PPEStockBatchUpdate(BaseSchema):
     certificate_expires_at: date | None = None
     location: str | None = None
     supplier_id: str | None = None
+    unit_cost: float | None = Field(default=None, ge=0)
 
 
 class PPEStockBatchRead(BaseSchema):
@@ -267,6 +330,7 @@ class PPEStockBatchRead(BaseSchema):
     certificate_expires_at: date | None
     location: str | None
     supplier_id: str | None
+    unit_cost: float | None
     created_at: datetime
     updated_at: datetime
 

@@ -5,6 +5,7 @@ from app.models.models import (
     PPEIssueStatus,
     PPEItem,
     PPEItemCategory,
+    PPESafetyBudget,
     PPEStockBatch,
     PPEStockMovement,
     PPESupplier,
@@ -18,4 +19,5 @@ __all__ = [
     "PPEStockBatch",
     "PPEStockMovement",
     "PPESupplier",
+    "PPESafetyBudget",
 ]

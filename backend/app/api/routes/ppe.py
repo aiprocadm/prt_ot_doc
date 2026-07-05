@@ -42,6 +42,15 @@ from app.modules.ppe import (
     return_issue,
     writeoff_issue,
 )
+from app.modules.ppe.budget import (
+    BudgetNotFound,
+    compute_budget_actual,
+    create_budget,
+    get_budget,
+    list_budgets,
+    soft_delete_budget,
+    update_budget,
+)
 from app.modules.ppe.inventory import (
     CountDetailView,
     CountSummaryView,
@@ -73,6 +82,7 @@ from app.modules.ppe.suppliers import (
     update_supplier,
 )
 from app.schemas.ppe import (
+    PPEBudgetCategoryActualRead,
     PPECardRead,
     PPECardRequiredLine,
     PPECardTimelineEvent,
@@ -100,6 +110,11 @@ from app.schemas.ppe import (
     PPEReorderDraftRead,
     PPEReorderGroupRead,
     PPEReorderLineRead,
+    PPESafetyBudgetCreate,
+    PPESafetyBudgetDetail,
+    PPESafetyBudgetPage,
+    PPESafetyBudgetRead,
+    PPESafetyBudgetUpdate,
     PPESizesRead,
     PPESizesUpdate,
     PPEStockBatchCreate,
@@ -1021,6 +1036,142 @@ async def delete_supplier_endpoint(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
+# --- PPE safety budget (P10-06 §12.4, СИЗ scope) ----------------------------
+
+
+@router.post(
+    "/budgets",
+    response_model=PPESafetyBudgetRead,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[WarehouseFeatureGate],
+)
+@audit_operation("create", "ppe_safety_budget")
+async def create_budget_endpoint(
+    payload: PPESafetyBudgetCreate,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: EditorAccess,
+) -> PPESafetyBudgetRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    budget = await create_budget(
+        session,
+        tenant_id=tenant.id,
+        name=payload.name,
+        period_start=payload.period_start,
+        period_end=payload.period_end,
+        planned_amount=payload.planned_amount,
+        notes=payload.notes,
+    )
+    return PPESafetyBudgetRead.model_validate(budget)
+
+
+@router.get(
+    "/budgets",
+    response_model=PPESafetyBudgetPage,
+    dependencies=[WarehouseFeatureGate],
+)
+async def list_budgets_endpoint(
+    request: Request,
+    response: Response,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: ManagerAccess,
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+) -> PPESafetyBudgetPage | Response:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    items, total = await list_budgets(session, tenant.id, limit=limit, offset=offset)
+    etag = compute_list_etag(
+        tenant_id=str(tenant.id),
+        items=items,
+        scalars=[("total", total), ("limit", limit), ("offset", offset)],
+    )
+    apply_etag_response_headers(response, etag)
+    if request.headers.get("if-none-match") == etag:
+        return Response(
+            status_code=status.HTTP_304_NOT_MODIFIED,
+            headers=build_not_modified_headers(etag),
+        )
+    return PPESafetyBudgetPage(
+        items=[PPESafetyBudgetRead.model_validate(b) for b in items], total=total
+    )
+
+
+@router.get(
+    "/budgets/{budget_id}",
+    response_model=PPESafetyBudgetDetail,
+    dependencies=[WarehouseFeatureGate],
+)
+async def get_budget_endpoint(
+    budget_id: str,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: ManagerAccess,
+) -> PPESafetyBudgetDetail:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    try:
+        budget = await get_budget(session, tenant.id, budget_id)
+    except BudgetNotFound as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "PPE safety budget not found") from exc
+    actual = await compute_budget_actual(session, tenant.id, budget.period_start, budget.period_end)
+    base = PPESafetyBudgetRead.model_validate(budget)
+    return PPESafetyBudgetDetail(
+        **base.model_dump(),
+        actual_total=actual.actual_total,
+        remaining=float(base.planned_amount) - actual.actual_total,
+        by_category=[
+            PPEBudgetCategoryActualRead(category=c.category, amount=c.amount)
+            for c in actual.by_category
+        ],
+        priced_receipt_count=actual.priced_receipt_count,
+        unpriced_receipt_count=actual.unpriced_receipt_count,
+    )
+
+
+@router.patch(
+    "/budgets/{budget_id}",
+    response_model=PPESafetyBudgetRead,
+    dependencies=[WarehouseFeatureGate],
+)
+@audit_operation("update", "ppe_safety_budget")
+async def update_budget_endpoint(
+    budget_id: str,
+    payload: PPESafetyBudgetUpdate,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: EditorAccess,
+) -> PPESafetyBudgetRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    try:
+        budget = await update_budget(
+            session, tenant.id, budget_id, **payload.model_dump(exclude_unset=True)
+        )
+    except BudgetNotFound as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "PPE safety budget not found") from exc
+    return PPESafetyBudgetRead.model_validate(budget)
+
+
+@router.delete(
+    "/budgets/{budget_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_model=None,
+    dependencies=[WarehouseFeatureGate],
+)
+@audit_operation("delete", "ppe_safety_budget")
+async def delete_budget_endpoint(
+    budget_id: str,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: EditorAccess,
+) -> None:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    try:
+        await soft_delete_budget(session, tenant.id, budget_id)
+    except BudgetNotFound as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "PPE safety budget not found") from exc
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 async def _get_batch(session: AsyncSession, tenant: Tenant, batch_id: str) -> PPEStockBatch:
     stmt = select(PPEStockBatch).where(
         PPEStockBatch.id == batch_id,
@@ -1116,6 +1267,7 @@ async def create_stock_batch(
         certificate_expires_at=payload.certificate_expires_at,
         location=payload.location,
         supplier_id=payload.supplier_id,
+        unit_cost=payload.unit_cost,
     )
     session.add(batch)
     await session.flush()

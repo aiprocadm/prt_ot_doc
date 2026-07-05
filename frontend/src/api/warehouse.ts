@@ -10,6 +10,7 @@ export type StockBatchDto = {
   certificate_expires_at?: string | null;
   location?: string | null;
   supplier_id?: string | null;
+  unit_cost?: number | null;
   created_at: string;
   updated_at: string;
 };
@@ -164,6 +165,35 @@ export type ReorderDraftDto = {
   total_deficit: number;
 };
 
+export type BudgetDto = {
+  id: string;
+  name: string;
+  period_start: string;
+  period_end: string;
+  planned_amount: number;
+  notes?: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type BudgetCategoryActualDto = { category: string; amount: number };
+
+export type BudgetDetailDto = BudgetDto & {
+  actual_total: number;
+  remaining: number;
+  by_category: BudgetCategoryActualDto[];
+  priced_receipt_count: number;
+  unpriced_receipt_count: number;
+};
+
+export type BudgetCreateInput = {
+  name: string;
+  period_start: string;
+  period_end: string;
+  planned_amount: number;
+  notes?: string | null;
+};
+
 export type CreateBatchInput = {
   item_id: string;
   batch_no: string;
@@ -173,6 +203,7 @@ export type CreateBatchInput = {
   certificate_no?: string | null;
   certificate_expires_at?: string | null;
   supplier_id?: string | null;
+  unit_cost?: number | null;
 };
 
 type PageResponse<T> = { items: T[]; total: number };
@@ -290,5 +321,26 @@ export const warehouseApi = {
   },
   async patchItemPreferredSupplier(itemId: string, supplierId: string | null): Promise<void> {
     await apiClient.patch(`/ppe/items/${itemId}`, { preferred_supplier_id: supplierId });
+  },
+  async listBudgets(): Promise<BudgetDto[]> {
+    const response = await apiClient.get<PageResponse<BudgetDto>>("/ppe/budgets", {
+      params: { limit: 100, offset: 0 }
+    });
+    return response.data.items ?? [];
+  },
+  async getBudget(id: string): Promise<BudgetDetailDto> {
+    const response = await apiClient.get<BudgetDetailDto>(`/ppe/budgets/${id}`);
+    return response.data;
+  },
+  async createBudget(input: BudgetCreateInput): Promise<BudgetDto> {
+    const response = await apiClient.post<BudgetDto>("/ppe/budgets", input);
+    return response.data;
+  },
+  async updateBudget(id: string, input: Partial<BudgetCreateInput>): Promise<BudgetDto> {
+    const response = await apiClient.patch<BudgetDto>(`/ppe/budgets/${id}`, input);
+    return response.data;
+  },
+  async deleteBudget(id: string): Promise<void> {
+    await apiClient.delete(`/ppe/budgets/${id}`);
   }
 };
