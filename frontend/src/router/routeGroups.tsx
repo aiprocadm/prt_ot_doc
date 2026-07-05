@@ -44,6 +44,7 @@ import {
   HealthStatusPage,
   IntegrationsPage,
   MedicalPage,
+  MobileIssuePage,
   NotificationsPage,
   NpaPage,
   OutboxPage,
@@ -143,6 +144,7 @@ export const buildProtectedRouteGroups = (): ReactElement[] => {
     { permission: PERMISSIONS.RISK_VIEW, routes: [<Route key="/risk" path="/risk" element={<RiskPage />} />] },
     { permission: PERMISSIONS.ACTIVITY_VIEW, routes: [<Route key="/activities" path="/activities" element={<ActivitiesPage />} />] },
     { permission: PERMISSIONS.PPE_VIEW, routes: [<Route key="/ppe" path="/ppe" element={<PpePage />} />] },
+    { permission: PERMISSIONS.PPE_ISSUE, routes: [<Route key="/ppe/issue" path="/ppe/issue" element={<MobileIssuePage />} />] },
     { permission: PERMISSIONS.WAREHOUSE_VIEW, routes: [<Route key="/warehouse" path="/warehouse" element={<WarehousePage />} />] },
     {
       permission: PERMISSIONS.TRAINING_VIEW,
