@@ -327,8 +327,20 @@ class BillingService:
             )
             if recorded:
                 usage.edo_outgoing = int(usage.edo_outgoing or 0) + int(edo_outgoing)
-        updated_bytes = int(usage.s3_bytes_used or 0) + int(s3_bytes_delta)
-        usage.s3_bytes_used = max(updated_bytes, 0)
+        if s3_bytes_delta:
+            # Guard the storage delta with an idempotent billing event (same pattern as
+            # docs/edo above), else a retried call with the same ref_id double-counts
+            # s3_bytes_used and can trip the quota incorrectly.
+            recorded = await self.add_billing_event(
+                tenant_id=tenant_id,
+                event_type=BillingEventType.FILE_UPLOADED,
+                ref_type="s3_bytes",
+                ref_id=ref_id,
+                payload={"bytes": int(s3_bytes_delta)},
+            )
+            if recorded:
+                updated_bytes = int(usage.s3_bytes_used or 0) + int(s3_bytes_delta)
+                usage.s3_bytes_used = max(updated_bytes, 0)
         await self.session.flush()
         return usage
 

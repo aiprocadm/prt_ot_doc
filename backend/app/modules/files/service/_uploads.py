@@ -125,7 +125,12 @@ class UploadMixin:
                     .limit(1)
                 )
             ).scalar_one_or_none()
-            if dedupe is not None:
+            # Only dedup within the same company: reusing (and merging metadata into)
+            # another company's record would reassign that company's file and clobber
+            # its metadata/tags. Cross-company identical content gets its own record.
+            caller_company = (metadata_json or {}).get("company_id")
+            existing_company = (dedupe.metadata_json or {}).get("company_id") if dedupe else None
+            if dedupe is not None and caller_company == existing_company:
                 if metadata_json:
                     merged = dict(dedupe.metadata_json or {})
                     merged.update(metadata_json)
