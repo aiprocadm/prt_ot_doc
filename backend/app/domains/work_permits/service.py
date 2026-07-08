@@ -385,11 +385,21 @@ async def signed_closing_kinds(
             )
         )
     ).all()
-    kinds: set[str] = set()
-    for _person_id, role in role_rows:
+    # Each closing kind (сдал/принял) must be backed by a DISTINCT signer: a single
+    # person holding two member roles must not satisfy both sides of the two-party
+    # control with one signature. Collect the kinds each signer could cover, then
+    # assign at most one kind per person (greedy fewest-options-first = a correct
+    # bipartite matching for this small set of kinds).
+    person_kinds: dict[str, set[str]] = {}
+    for person_id, role in role_rows:
         kind = lc.role_to_closing_kind(role)
-        if kind:
-            kinds.add(kind)
+        if kind and person_id:
+            person_kinds.setdefault(person_id, set()).add(kind)
+    kinds: set[str] = set()
+    for _person_id, available in sorted(person_kinds.items(), key=lambda kv: len(kv[1])):
+        remaining = sorted(available - kinds)
+        if remaining:
+            kinds.add(remaining[0])
     return kinds
 
 

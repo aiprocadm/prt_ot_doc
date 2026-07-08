@@ -500,7 +500,23 @@ async def decide_approval_request(
         if route is None or str(route.tenant_id) != str(tenant.id):
             raise _edo_not_found("approval_route")
         rules = ApprovalRules.validate_rules(route.rules_json)
-        next_index = approval_request.current_step_index + 1
+        step_index = approval_request.current_step_index
+        # Enforce the step's required role: only an actor holding that role (or an
+        # admin/owner) may approve this step, else one actor could walk every step of
+        # a multi-step route.
+        if 0 <= step_index < len(rules.steps):
+            required_role = rules.steps[step_index].role
+            actor_role = access.user.role
+            if actor_role not in (RoleEnum.OWNER, RoleEnum.ADMIN) and actor_role != required_role:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=api_problem_detail(
+                        code="EDO_STEP_ROLE_MISMATCH",
+                        message="actor role does not match the approval step role",
+                        error_type="edo",
+                    ),
+                )
+        next_index = step_index + 1
         if next_index >= len(rules.steps):
             approval_request.status = ApprovalRequestStatus.APPROVED
             approval_request.finished_at = datetime.now(tz=timezone.utc)
