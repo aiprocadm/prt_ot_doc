@@ -431,6 +431,10 @@ async def approval_decide(
         raise _approval_signing_not_found("task")
     if task.assignee_id != x_user_id:
         raise _approval_signing_forbidden("Task assignee mismatch")
+    # Only an OPEN task may be decided; re-deciding a DONE/CANCELED/EXPIRED task would
+    # re-advance the process and spawn duplicate next-step tasks.
+    if task.status is not ApprovalTaskStatus.OPEN:
+        raise _approval_signing_conflict("Task is not open")
     process = await session.get(ApprovalProcess, task.process_id)
     if process is None or str(process.tenant_id) != str(tenant.id):
         raise _approval_signing_not_found("process")

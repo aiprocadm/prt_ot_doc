@@ -219,7 +219,16 @@ apiClient.interceptors.response.use(
                 originalRequest.headers.Authorization = `Bearer ${token}`;
                 resolve(apiClient(originalRequest));
               } else {
-                reject(error);
+                // Refresh failed: reject with a normalized ApiError (and run unified
+                // handling) so queued 401s surface like every other error path, not as
+                // a raw AxiosError missing .status/.field_errors.
+                const apiError = normalizeApiError(error.response?.data, {
+                  status,
+                  message: error.message ?? "Unauthorized",
+                  details: error.response?.data
+                });
+                handleApiError(apiError, originalRequest?.url);
+                reject(apiError);
               }
             });
           });

@@ -58,21 +58,48 @@ async def test_edo_webhook_passes_tenant_slug_to_worker(
 
     monkeypatch.setattr("app.api.routes.edo_workflow.process_inbound_webhook.delay", _fake_delay)
 
+    body = {
+        "event_id": "evt-edo-tenant",
+        "external_id": "ext-2",
+        "status": "accepted",
+        "raw_payload": {"k": "v"},
+    }
+    raw = json.dumps(body).encode("utf-8")
+    sig = hmac.new(b"dev-secret", raw, hashlib.sha256).hexdigest()
     response = await async_client.post(
         "/api/v1/edo/webhooks/mock",
-        json={
-            "event_id": "evt-edo-tenant",
-            "external_id": "ext-2",
-            "status": "accepted",
-            "raw_payload": {"k": "v"},
+        content=raw,
+        headers={
+            "X-Tenant": tenant.slug,
+            "Content-Type": "application/json",
+            "X-Signature": sig,
         },
-        headers={"X-Tenant": tenant.slug},
     )
 
     assert response.status_code == status.HTTP_200_OK
     assert response.json()["status"] == "accepted"
     assert captured["source"] == "edo"
     assert captured["tenant_slug"] == tenant.slug
+
+
+@pytest.mark.asyncio
+async def test_edo_webhook_rejects_missing_signature_when_secret_set(
+    async_client,
+    sessionmaker,
+) -> None:
+    """With a per-tenant secret configured, a webhook with no X-Signature is rejected
+    (a missing signature must not bypass HMAC verification)."""
+    async with sessionmaker() as session:
+        tenant = (await session.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()
+        tenant.settings = {"edo_webhook_secret": "dev-secret"}
+        await session.commit()
+
+    response = await async_client.post(
+        "/api/v1/edo/webhooks/mock",
+        json={"event_id": "evt-nosig", "external_id": "ext-3", "status": "accepted"},
+        headers={"X-Tenant": tenant.slug},
+    )
+    assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
 
 @pytest.mark.asyncio

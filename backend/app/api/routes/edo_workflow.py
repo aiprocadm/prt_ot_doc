@@ -473,6 +473,17 @@ async def decide_approval_request(
     approval_request = await session.get(ApprovalRequest, request_id)
     if approval_request is None or approval_request.tenant_id != str(tenant.id):
         raise _edo_not_found("approval_request")
+    # Only an in-flight request may be decided; a terminal one (approved/rejected/
+    # canceled) must not be flipped by a later decision.
+    if approval_request.status is not ApprovalRequestStatus.RUNNING:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=api_problem_detail(
+                code="EDO_INVALID_STATE",
+                message="approval request is not running",
+                error_type="edo",
+            ),
+        )
 
     decision = ApprovalDecision(
         tenant_id=str(tenant.id),
@@ -761,8 +772,13 @@ async def edo_webhook(
     raw = await request.body()
     configured_secret = (tenant.settings or {}).get("edo_webhook_secret")
     if configured_secret:
+        # A configured secret makes the signature mandatory: a missing X-Signature must
+        # be rejected, not silently accepted (else an attacker bypasses HMAC by omitting
+        # the header). Sanctioned tightening of the prior optional-signature behavior.
+        if not x_signature:
+            raise _edo_unauthorized("Missing webhook signature")
         expected = hmac.new(str(configured_secret).encode("utf-8"), raw, hashlib.sha256).hexdigest()
-        if x_signature and not hmac.compare_digest(expected, x_signature):
+        if not hmac.compare_digest(expected, x_signature):
             raise _edo_unauthorized("Invalid webhook signature")
 
     payload_hash = hashlib.sha256(raw).hexdigest()

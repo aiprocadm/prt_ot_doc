@@ -342,6 +342,9 @@ class PackRunService:
             return existing
 
         self.mapping.validate(preset.mapping_json or {}, list(rows[0].keys()) if rows else [])
+        # Drop out-of-range selections BEFORE computing counts, else stats_json reports
+        # more "success" documents than PackRunItem rows actually produced.
+        valid_selected = [row_no for row_no in selected_rows if 1 <= row_no <= len(rows)]
         run = PackRun(
             tenant_id=tenant_id,
             package_preset_id=preset.id,
@@ -349,9 +352,13 @@ class PackRunService:
             source_file_id=payload.source_file_id,
             source_type=preset.source_type,
             source_rows_count=len(rows),
-            selected_rows_count=len(selected_rows),
+            selected_rows_count=len(valid_selected),
             status=PackRunLifecycleStatus.SUCCESS,
-            stats_json={"queued": len(selected_rows), "success": len(selected_rows), "failed": 0},
+            stats_json={
+                "queued": len(valid_selected),
+                "success": len(valid_selected),
+                "failed": 0,
+            },
             started_at=datetime.now(timezone.utc),
             ended_at=datetime.now(timezone.utc),
             idempotency_key=idempotency_key,
@@ -360,9 +367,7 @@ class PackRunService:
         self.session.add(run)
         await self.session.flush()
         used_filenames: set[str] = set()
-        for row_no in selected_rows:
-            if row_no < 1 or row_no > len(rows):
-                continue
+        for row_no in valid_selected:
             mapped = self.mapping.apply(preset.mapping_json or {}, rows[row_no - 1])
             filename = self.naming.render(preset.naming_rule, mapped, ext="docx")
             filename = self.naming.ensure_unique(filename, used_filenames)

@@ -11,7 +11,9 @@ from app.models.models import (
     ClientPackageRun,
     Company,
     Incident,
+    IncidentStatus,
     Inspection,
+    InspectionStatus,
     Person,
     Prescription,
     Site,
@@ -75,14 +77,24 @@ class SiteSafetyProjectionService:
         incidents_by_site = (
             await self.session.execute(
                 select(Incident.site_id, func.count(Incident.id))
-                .where(Incident.tenant_id == self.tenant_id)
+                .where(
+                    Incident.tenant_id == self.tenant_id,
+                    Incident.deleted_at.is_(None),
+                    Incident.status.notin_([IncidentStatus.CLOSED, IncidentStatus.CANCELLED]),
+                )
                 .group_by(Incident.site_id)
             )
         ).all()
         inspections_by_site = (
             await self.session.execute(
                 select(Inspection.site_id, func.count(Inspection.id))
-                .where(Inspection.tenant_id == self.tenant_id)
+                .where(
+                    Inspection.tenant_id == self.tenant_id,
+                    Inspection.deleted_at.is_(None),
+                    Inspection.status.notin_(
+                        [InspectionStatus.COMPLETED, InspectionStatus.CANCELLED]
+                    ),
+                )
                 .group_by(Inspection.site_id)
             )
         ).all()

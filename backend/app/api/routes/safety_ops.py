@@ -465,6 +465,11 @@ async def complete_action(
     access: EditorAccess,
 ) -> dict[str, Any]:
     row = await _get_action(session, str(tenant.id), action_id)
+    if row.status in {"verified", "closed", "canceled"}:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"cannot complete a {row.status} corrective action",
+        )
     row.status = "done"
     row.completed_at = datetime.now(timezone.utc)
     await _audit_event(
@@ -491,6 +496,13 @@ async def verify_action(
     access: EditorAccess,
 ) -> dict[str, Any]:
     row = await _get_action(session, str(tenant.id), action_id)
+    # An action must be completed before its effectiveness can be verified, and a
+    # verified/closed one must not be re-verified (that would restate a terminal record).
+    if row.status != "done":
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "corrective action must be completed before verification",
+        )
     out = CorrectiveActionService.apply_verification(
         is_effective=payload.effective,
         partially_effective=payload.partial,

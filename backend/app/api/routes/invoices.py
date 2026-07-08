@@ -204,9 +204,19 @@ async def update_invoice(
         invoice.order_id = order.id
     if "status" in updates and updates["status"]:
         try:
-            updates["status"] = InvoiceStatus(str(updates["status"]).lower())
+            new_status = InvoiceStatus(str(updates["status"]).lower())
         except ValueError as exc:
             raise _invoice_unprocessable("Unsupported invoice status") from exc
+        # PAID and VOID are terminal: block reverting a settled/voided invoice back to
+        # issued (or flipping paid<->void), which would corrupt AR/revenue state.
+        if new_status != invoice.status and invoice.status in (
+            InvoiceStatus.PAID,
+            InvoiceStatus.VOID,
+        ):
+            raise _invoice_bad_request(
+                f"Cannot change status of a {InvoiceStatus(invoice.status).value} invoice"
+            )
+        updates["status"] = new_status
     for key, value in updates.items():
         setattr(invoice, key, value)
     await session.commit()

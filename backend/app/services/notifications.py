@@ -67,6 +67,7 @@ async def send_notification(
     scheduled_at: datetime | None = None,
     dedup_key: str | None = None,
     priority: NotificationPriority = NotificationPriority.MEDIUM,
+    force: bool = False,
 ) -> Notification | None:
     scheduled_at = scheduled_at or datetime.now(tz=timezone.utc)
     settings = (
@@ -82,12 +83,16 @@ async def send_notification(
     ).scalar_one_or_none()
 
     if settings:
-        if channel == NotificationChannel.EMAIL and not settings.email_enabled:
-            return None
-        if channel == NotificationChannel.TELEGRAM and not settings.telegram_enabled:
-            return None
-        if channel == NotificationChannel.INAPP and not settings.inapp_enabled:
-            return None
+        # ``force`` bypasses the per-channel opt-out (used by escalation, where the
+        # in-app channel is the guaranteed terminal fallback even if the user disabled
+        # it — otherwise a failed critical notification would silently vanish).
+        if not force:
+            if channel == NotificationChannel.EMAIL and not settings.email_enabled:
+                return None
+            if channel == NotificationChannel.TELEGRAM and not settings.telegram_enabled:
+                return None
+            if channel == NotificationChannel.INAPP and not settings.inapp_enabled:
+                return None
         scheduled_at = apply_quiet_hours(scheduled_at, settings.quiet_hours)
 
     if dedup_key:

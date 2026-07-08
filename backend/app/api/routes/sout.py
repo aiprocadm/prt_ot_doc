@@ -517,6 +517,17 @@ async def get_workplace(
     return workplace_to_read(row)
 
 
+async def _ensure_workplace_editable(session, tenant, workplace) -> None:
+    """Reject roster mutations once the workplace's campaign is no longer open
+    (COMPLETED/DECLARED), mirroring the guard already on ``add_workplace`` — a filed
+    declaration is frozen against the roster it was based on."""
+    campaign = await _get_campaign(session, tenant, workplace.campaign_id)
+    try:
+        ensure_campaign_open(campaign.status)
+    except CampaignTransitionError as exc:
+        raise _conflict(exc)
+
+
 @router.patch("/workplaces/{wid}", response_model=WorkplaceRead)
 async def update_workplace(
     wid: str, payload: WorkplaceUpdate, tenant: TenantDep, session: SessionDep, access: Access
@@ -524,6 +535,7 @@ async def update_workplace(
     TenantContextValidator.ensure_tenant_context(tenant)
     await _require_sout_enabled(session, tenant)
     row = await _get_workplace(session, tenant, wid)
+    await _ensure_workplace_editable(session, tenant, row)
     changes = payload.model_dump(exclude_unset=True)
     if changes.get("position_id") is not None:
         await _validate_position(session, tenant, changes["position_id"])
@@ -635,7 +647,8 @@ async def add_factor(
 ) -> FactorRead:
     TenantContextValidator.ensure_tenant_context(tenant)
     await _require_sout_enabled(session, tenant)
-    await _get_workplace(session, tenant, wid)
+    wp = await _get_workplace(session, tenant, wid)
+    await _ensure_workplace_editable(session, tenant, wp)
     if payload.hazard_id is not None:
         await _validate_hazard(session, tenant, payload.hazard_id)
     row = SoutFactor(
@@ -660,6 +673,8 @@ async def update_factor(
     TenantContextValidator.ensure_tenant_context(tenant)
     await _require_sout_enabled(session, tenant)
     row = await _get_factor(session, tenant, fid)
+    wp = await _get_workplace(session, tenant, row.workplace_id)
+    await _ensure_workplace_editable(session, tenant, wp)
     changes = payload.model_dump(exclude_unset=True)
     if changes.get("hazard_id") is not None:
         await _validate_hazard(session, tenant, changes["hazard_id"])
@@ -681,7 +696,8 @@ async def add_guarantee(
 ) -> GuaranteeRead:
     TenantContextValidator.ensure_tenant_context(tenant)
     await _require_sout_enabled(session, tenant)
-    await _get_workplace(session, tenant, wid)
+    wp = await _get_workplace(session, tenant, wid)
+    await _ensure_workplace_editable(session, tenant, wp)
     row = SoutGuarantee(
         tenant_id=tenant.id,
         workplace_id=wid,

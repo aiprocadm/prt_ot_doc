@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
@@ -874,7 +876,10 @@ async def edo_webhook(
     dedupe_key = (
         request.headers.get("X-Dedupe-Key")
         or payload.get("external_event_id")
-        or f"{operator_code}:{hash(str(payload))}"
+        # Stable content hash: builtin hash() is per-process randomized (PYTHONHASHSEED),
+        # so identical retried webhooks would produce different keys across workers and
+        # bypass dedup. sha256 over a canonical JSON serialization is deterministic.
+        or f"{operator_code}:{hashlib.sha256(json.dumps(payload, sort_keys=True, default=str).encode('utf-8')).hexdigest()}"
     )
     exists = (
         await session.execute(

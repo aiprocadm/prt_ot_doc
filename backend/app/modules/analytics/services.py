@@ -9,7 +9,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.models import (
     Incident,
+    IncidentStatus,
     Inspection,
+    InspectionStatus,
     PPEIssue,
     PPEIssueStatus,
     Prescription,
@@ -187,7 +189,11 @@ class AnalyticsAggregationService:
             await self.session.scalar(
                 select(func.count())
                 .select_from(Incident)
-                .where(Incident.tenant_id == self.tenant_id, Incident.deleted_at.is_(None))
+                .where(
+                    Incident.tenant_id == self.tenant_id,
+                    Incident.deleted_at.is_(None),
+                    Incident.status.notin_([IncidentStatus.CLOSED, IncidentStatus.CANCELLED]),
+                )
             )
             or 0
         )
@@ -195,7 +201,13 @@ class AnalyticsAggregationService:
             await self.session.scalar(
                 select(func.count())
                 .select_from(Inspection)
-                .where(Inspection.tenant_id == self.tenant_id, Inspection.deleted_at.is_(None))
+                .where(
+                    Inspection.tenant_id == self.tenant_id,
+                    Inspection.deleted_at.is_(None),
+                    Inspection.status.notin_(
+                        [InspectionStatus.COMPLETED, InspectionStatus.CANCELLED]
+                    ),
+                )
             )
             or 0
         )
