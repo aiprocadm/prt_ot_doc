@@ -671,6 +671,7 @@ class OutboxProcessor:
                 event_id=event_id,
             )
             self.session.add(existing)
+        existing.outbox_id = entry.id
         existing.status = "success" if success else "failed"
         existing.attempts = entry.attempts
         existing.last_status_code = status_code

@@ -720,6 +720,16 @@ async def retry_delivery(
 
     delivery.status = "pending"
     delivery.next_attempt_at = datetime.now(tz=timezone.utc)
+    # Re-drive the source Outbox entry — WebhookDelivery is only a status mirror, the
+    # OutboxProcessor is what actually delivers. Prefer the explicit outbox_id; fall
+    # back to event_id (which the /deliveries join already treats as the Outbox id) for
+    # legacy rows written before outbox_id existed.
+    outbox_ref = delivery.outbox_id or delivery.event_id
+    outbox_entry = await session.get(Outbox, outbox_ref) if outbox_ref else None
+    if outbox_entry is not None and str(outbox_entry.tenant_id) == str(tenant.id):
+        outbox_entry.status = OutboxStatus.PENDING
+        outbox_entry.attempts = 0
+        outbox_entry.next_attempt_at = datetime.now(tz=timezone.utc)
     await session.commit()
     return {"status": "queued"}
 
