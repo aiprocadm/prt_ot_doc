@@ -8,8 +8,11 @@ from datetime import date, datetime, timezone
 from enum import Enum
 from typing import Any, Mapping
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
+
+# Fixed key for the global audit hash-chain advisory lock (arbitrary but stable).
+_AUDIT_CHAIN_LOCK_KEY = 6_120_2025
 
 from app.core.config import get_settings
 from app.core.tracing import get_trace_id
@@ -210,6 +213,25 @@ class AuditService:
         stmt = select(AuditLog.hash).order_by(AuditLog.when.desc()).limit(1)
         return (await self.session.execute(stmt)).scalar_one_or_none()
 
+    def _is_postgres(self) -> bool:
+        try:
+            bind = self.session.bind
+            return bind is not None and bind.dialect.name == "postgresql"
+        except Exception:  # pragma: no cover - defensive: any detection failure -> skip
+            return False
+
+    async def _lock_chain(self) -> None:
+        """Serialize audit appends on PostgreSQL via a transaction-scoped advisory lock
+        so two concurrent writers can't read the same ``prev_hash`` and fork the global
+        hash chain. Released automatically at transaction commit/rollback. No-op on
+        other backends (SQLite serializes writes already). The throughput tradeoff —
+        audit appends are globally serialized — is intentional."""
+        if self._is_postgres():
+            await self.session.execute(
+                text("SELECT pg_advisory_xact_lock(:key)"),
+                {"key": _AUDIT_CHAIN_LOCK_KEY},
+            )
+
     @staticmethod
     def _canonical_hash_payload(payload: Mapping[str, Any], prev_hash: str | None) -> str:
         raw = json.dumps(
@@ -257,6 +279,9 @@ class AuditService:
         payload = _sanitize_mapping(details)
         safe_diff = _sanitize_mapping(changed_fields)
         correlation_id = request_id or get_trace_id(default="unknown")
+        # Serialize concurrent appends (PG advisory lock) before reading the previous
+        # hash, so two writers can't chain onto the same prev_hash and fork the chain.
+        await self._lock_chain()
         prev_hash = await self._prev_hash()
         hash_payload = {
             "tenant_id": tenant_id,
