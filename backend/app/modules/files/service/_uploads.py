@@ -113,24 +113,37 @@ class UploadMixin:
             (metadata_json or {}).get("sha256") if isinstance(metadata_json, dict) else None
         )
         if declared_sha:
-            dedupe = (
-                await self.session.execute(
-                    select(FileRecord)
-                    .where(
-                        FileRecord.tenant_id == self.tenant_id,
-                        FileRecord.sha256 == declared_sha,
-                        FileRecord.status == FileStatus.clean.value,
-                        FileRecord.deleted_at.is_(None),
-                    )
-                    .limit(1)
-                )
-            ).scalar_one_or_none()
             # Only dedup within the same company: reusing (and merging metadata into)
             # another company's record would reassign that company's file and clobber
             # its metadata/tags. Cross-company identical content gets its own record.
+            # There can be several clean rows per (tenant, sha256) once cross-company
+            # duplicates are allowed, so match the caller's company in Python rather
+            # than an arbitrary LIMIT 1 (which would drop same-company dedup for every
+            # company except whichever physical row the DB happened to surface).
+            candidates = (
+                (
+                    await self.session.execute(
+                        select(FileRecord).where(
+                            FileRecord.tenant_id == self.tenant_id,
+                            FileRecord.sha256 == declared_sha,
+                            FileRecord.status == FileStatus.clean.value,
+                            FileRecord.deleted_at.is_(None),
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
             caller_company = (metadata_json or {}).get("company_id")
-            existing_company = (dedupe.metadata_json or {}).get("company_id") if dedupe else None
-            if dedupe is not None and caller_company == existing_company:
+            dedupe = next(
+                (
+                    row
+                    for row in candidates
+                    if (row.metadata_json or {}).get("company_id") == caller_company
+                ),
+                None,
+            )
+            if dedupe is not None:
                 if metadata_json:
                     merged = dict(dedupe.metadata_json or {})
                     merged.update(metadata_json)

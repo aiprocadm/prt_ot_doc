@@ -276,6 +276,7 @@ async def complete_upload_v2(
     await BillingService(session).add_usage(
         tenant_id=str(tenant.id),
         s3_bytes_delta=int(file_record.size_bytes or 0),
+        ref_id=file_record.id,
     )
     await session.commit()
     return FinalizeUploadResponse(file_id=file_record.id, status=file_record.status)
@@ -319,6 +320,7 @@ async def finalize_upload_v2(
     await BillingService(session).add_usage(
         tenant_id=str(tenant.id),
         s3_bytes_delta=int(file_record.size_bytes or 0),
+        ref_id=file_record.id,
     )
     await session.commit()
     return FinalizeUploadResponse(file_id=file_record.id, status=file_record.status)
