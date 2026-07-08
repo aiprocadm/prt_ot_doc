@@ -178,6 +178,17 @@ async def update_incident(
     elif "pack_id" in updates and updates["pack_id"] is None:
         incident.pack_id = None
 
+    if "status" in updates and incident.status in (
+        IncidentStatus.CLOSED,
+        IncidentStatus.CANCELLED,
+    ):
+        current = getattr(incident.status, "value", incident.status)
+        if updates["status"] != incident.status:
+            # Terminal states are final: a closed/cancelled incident must not be
+            # reopened via a generic update. (Forward-order enforcement across the
+            # non-terminal states needs the documented lifecycle — see #14.)
+            raise ValueError(f"cannot change status of a {current} incident")
+
     for key in {
         "title",
         "description",

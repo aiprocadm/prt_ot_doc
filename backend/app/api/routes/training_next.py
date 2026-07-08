@@ -522,8 +522,19 @@ async def mark_passed(
     __: Any = _PermWriteDep,
 ):
     e = await get_enrollment(item_id, tenant, session)
+    now = datetime.now(tz=timezone.utc)
+    # Mirror the canonical "passed" completion (TrainingEnrollmentService.submit_attempt):
+    # set completion_status/progress_percent/expires_at too, else a passed enrolment
+    # reads as incomplete/overdue in analytics and the learner/teacher dashboards.
     e.status = "passed"
-    e.completed_at = datetime.now(tz=timezone.utc)
+    e.completion_status = "completed"
+    e.progress_percent = 100
+    e.completed_at = now
+    program = await session.get(TrainingProgram, e.training_program_id)
+    if program and str(program.tenant_id) == str(e.tenant_id) and program.validity_months:
+        e.expires_at = TrainingEnrollmentService._add_months(
+            now, program.validity_months
+        ).replace(microsecond=0)
     await session.flush()
     return e
 

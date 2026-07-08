@@ -12,6 +12,65 @@ from app.models.models import (
 
 
 @pytest.mark.anyio
+async def test_mark_passed_sets_completion_fields(
+    async_client, sessionmaker, data_factory, make_auth_headers
+):
+    """mark-passed must set completion_status/progress_percent/expires_at (mirroring
+    the submit_attempt completion), not just status — else a passed enrolment reads
+    as incomplete/overdue in analytics and the dashboards."""
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        company = await data_factory.create_company(session=session, tenant=tenant)
+        person = await data_factory.create_person(session=session, tenant=tenant, company=company)
+        program = TrainingProgram(
+            tenant_id=tenant.id,
+            code="prog-mp",
+            title="Mark Passed",
+            category="ot",
+            kind="course",
+            status="active",
+            validity_months=12,
+        )
+        session.add(program)
+        await session.flush()
+        group = TrainingGroup(
+            tenant_id=tenant.id,
+            code="grp-mp",
+            training_program_id=program.id,
+            title="Group",
+            teacher_user_id="teacher-1",
+            status="scheduled",
+        )
+        session.add(group)
+        await session.flush()
+        enrollment = TrainingEnrollment(
+            tenant_id=tenant.id,
+            training_group_id=group.id,
+            training_program_id=program.id,
+            person_id=person.id,
+            assignment_source="manual",
+            status="assigned",
+        )
+        session.add(enrollment)
+        await session.commit()
+        enrollment_id = enrollment.id
+
+    headers = await make_auth_headers(RoleEnum.ADMIN)
+    resp = await async_client.post(
+        f"/api/v1/training/enrollments/{enrollment_id}/mark-passed",
+        headers={**headers, "X-Tenant": "test"},
+    )
+    assert resp.status_code == 200, resp.text
+
+    async with sessionmaker() as session:
+        refreshed = await session.get(TrainingEnrollment, enrollment_id)
+        assert refreshed.status == "passed"
+        assert refreshed.completion_status == "completed"
+        assert float(refreshed.progress_percent) == 100
+        assert refreshed.expires_at is not None
+
+
+@pytest.mark.anyio
 async def test_training_teacher_and_runtime_flow(
     async_client, sessionmaker, data_factory, make_auth_headers
 ):
