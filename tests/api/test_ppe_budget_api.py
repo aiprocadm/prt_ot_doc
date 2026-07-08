@@ -93,3 +93,57 @@ async def test_period_order_422(
         headers=headers,
     )
     assert resp.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY, resp.text
+
+
+@pytest.mark.asyncio
+async def test_partial_patch_cannot_invert_period(
+    async_client: AsyncClient, make_auth_headers, sessionmaker, data_factory: TestDataFactory
+):
+    """A single-bound PATCH must not be able to leave period_end < period_start.
+
+    The create-time Pydantic guard only sees the request body, so a partial PATCH
+    carrying only one bound bypasses it — the service must re-check the merged range.
+    """
+    async with sessionmaker() as session:
+        await data_factory.ensure_tenant(session=session)
+        await session.commit()
+    headers = await make_auth_headers(RoleEnum.ADMIN)
+
+    created = await async_client.post(
+        "/api/v1/ppe/budgets",
+        json={
+            "name": "год",
+            "period_start": "2026-01-01",
+            "period_end": "2026-12-31",
+            "planned_amount": 1000,
+        },
+        headers=headers,
+    )
+    assert created.status_code == status.HTTP_201_CREATED, created.text
+    budget_id = created.json()["id"]
+
+    # PATCH only period_end to before the stored period_start -> rejected.
+    bad = await async_client.patch(
+        f"/api/v1/ppe/budgets/{budget_id}",
+        json={"period_end": "2025-01-01"},
+        headers=headers,
+    )
+    assert bad.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY, bad.text
+
+    # PATCH only period_start to after the stored period_end -> also rejected.
+    bad_start = await async_client.patch(
+        f"/api/v1/ppe/budgets/{budget_id}",
+        json={"period_start": "2027-01-01"},
+        headers=headers,
+    )
+    assert bad_start.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY, bad_start.text
+
+    # A valid single-bound PATCH still succeeds and the stored period is unchanged otherwise.
+    ok = await async_client.patch(
+        f"/api/v1/ppe/budgets/{budget_id}",
+        json={"period_end": "2027-06-30"},
+        headers=headers,
+    )
+    assert ok.status_code == status.HTTP_200_OK, ok.text
+    assert ok.json()["period_end"] == "2027-06-30"
+    assert ok.json()["period_start"] == "2026-01-01"

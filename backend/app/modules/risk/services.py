@@ -118,7 +118,15 @@ class RiskCalculationService:
             max_v = float(rule["max"])
             if min_v <= score <= max_v:
                 return str(rule["level"])
-        return "critical"
+        if not rules:
+            return "critical"
+        # Score falls outside every configured range: clamp to the nearest band
+        # rather than defaulting to "critical" (a residual of 0, below the lowest
+        # band, must not be labelled the most severe level).
+        by_min = sorted(rules, key=lambda r: float(r["min"]))
+        if score < float(by_min[0]["min"]):
+            return str(by_min[0]["level"])
+        return str(by_min[-1]["level"])
 
 
 class RiskMethodologyService:

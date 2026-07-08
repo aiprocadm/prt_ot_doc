@@ -5,7 +5,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from pydantic import BaseModel, Field
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
@@ -683,15 +683,29 @@ async def recalc_gaps(
     access: EditorAccess,
 ) -> Response:
     pack = await _get_package(session, str(tenant.id), package_id)
-    await GapAnalysisService.recalculate_package_gaps(
-        session,
-        package_id=pack.id,
-        tenant_id=str(tenant.id),
+    gaps = GapAnalysisService.detect_gaps(
         missing_documents=payload.missing_documents,
         open_prescriptions=payload.open_prescriptions,
         overdue_actions=payload.overdue_actions,
         high_risks=payload.high_risks,
     )
+    # Replace the package's gap rows with the freshly computed set (idempotent recompute).
+    await session.execute(
+        delete(InspectionPrepGap).where(
+            InspectionPrepGap.package_id == pack.id,
+            InspectionPrepGap.tenant_id == str(tenant.id),
+        )
+    )
+    for gap in gaps:
+        session.add(
+            InspectionPrepGap(
+                tenant_id=str(tenant.id),
+                package_id=pack.id,
+                gap_type=gap.gap_type,
+                severity=gap.severity,
+                title=gap.title,
+            )
+        )
     await _audit_event(
         request,
         session,

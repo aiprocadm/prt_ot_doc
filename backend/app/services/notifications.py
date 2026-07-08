@@ -45,7 +45,10 @@ def apply_quiet_hours(scheduled_at: datetime, quiet_hours: dict[str, str] | None
         return scheduled_at
 
     next_date = local.date()
-    if current >= from_t:
+    # Only an OVERNIGHT window (from > to) that we're in past `from` ends on the next
+    # day. A same-day window (from < to) always ends later today at `to`, so bumping
+    # to tomorrow would delay the notification by ~24h.
+    if from_t > to_t and current >= from_t:
         next_date = local.date() + timedelta(days=1)
     shifted = datetime.combine(next_date, to_t, tzinfo=tz)
     return shifted.astimezone(timezone.utc)

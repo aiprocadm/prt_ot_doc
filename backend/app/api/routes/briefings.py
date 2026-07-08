@@ -394,7 +394,10 @@ async def bulk_create_entries(
     __: Any = _PermCreateDep,
 ):
     created = []
-    base = payload.model_dump(exclude={"person_ids"})
+    # ``person_id`` is inherited from BriefingEntryPayload; exclude it too, else it
+    # collides with the explicit per-person ``person_id`` below (TypeError: got
+    # multiple values for keyword argument 'person_id').
+    base = payload.model_dump(exclude={"person_ids", "person_id"})
     for person_id in payload.person_ids:
         entry = BriefingEntry(tenant_id=tenant.id, person_id=person_id, **base)
         session.add(entry)

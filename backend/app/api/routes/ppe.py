@@ -44,6 +44,7 @@ from app.modules.ppe import (
 )
 from app.modules.ppe.budget import (
     BudgetNotFound,
+    BudgetPeriodInvalid,
     compute_budget_actual,
     create_budget,
     get_budget,
@@ -1148,6 +1149,10 @@ async def update_budget_endpoint(
         )
     except BudgetNotFound as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "PPE safety budget not found") from exc
+    except BudgetPeriodInvalid as exc:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY, "period_end must be >= period_start"
+        ) from exc
     return PPESafetyBudgetRead.model_validate(budget)
 
 

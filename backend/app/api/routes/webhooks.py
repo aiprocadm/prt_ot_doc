@@ -746,6 +746,9 @@ async def replay_event(
         detail=_OUTBOX_EVENT_NOT_FOUND,
     )
     event.status = OutboxStatus.PENDING
+    # Reset the exhausted retry counter, else a DEAD event (attempts > max) is picked
+    # up, immediately re-incremented past the cap and re-killed without a redelivery.
+    event.attempts = 0
     event.next_attempt_at = datetime.now(tz=timezone.utc)
     await session.commit()
     return {"status": "queued"}
