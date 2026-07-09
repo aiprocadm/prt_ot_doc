@@ -11,7 +11,18 @@ const operationsApiMock = vi.hoisted(() => ({
   getContractorSnapshot: vi.fn(),
   getSettingsSnapshot: vi.fn(),
   getMedicalSnapshot: vi.fn(),
-  getAdminSnapshot: vi.fn()
+  getAdminSnapshot: vi.fn(),
+  getPsychiatricSnapshot: vi.fn(),
+  seedPsychiatricDefaults: vi.fn(),
+  getMedicalOversightSnapshot: vi.fn(),
+  downloadContingentRegisterPrint: vi.fn(),
+  downloadNamedListPrint: vi.fn(),
+  listMedicalReferrals: vi.fn(),
+  createMedicalReferral: vi.fn(),
+  transitionMedicalReferral: vi.fn(),
+  generateMedicalReferrals: vi.fn(),
+  listMedicalSuspensions: vi.fn(),
+  liftMedicalSuspension: vi.fn()
 }));
 
 vi.mock("@/api/operations", () => ({ operationsApi: operationsApiMock }));
@@ -68,6 +79,14 @@ describe("real-data operational pages", () => {
       persons: [{ id: "p-1", full_name: "Иванов И.И.", first_name: "Иван", last_name: "Иванов", status: "active", created_at: "2026-03-01T00:00:00Z", updated_at: "2026-03-01T00:00:00Z" }],
       tasks: []
     });
+    operationsApiMock.getPsychiatricSnapshot.mockResolvedValue({ activityTypes: [], contingent: [] });
+    operationsApiMock.getMedicalOversightSnapshot.mockResolvedValue({
+      summary: { by_status: {}, total: 0, overdue_count: 0, suspended_count: 0 },
+      register: [],
+      namedList: [],
+    });
+    operationsApiMock.listMedicalReferrals.mockResolvedValue([]);
+    operationsApiMock.listMedicalSuspensions.mockResolvedValue([]);
 
     render(
       <MemoryRouter>
@@ -75,8 +94,8 @@ describe("real-data operational pages", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText("Иванов И.И.")).toBeInTheDocument();
-    expect(screen.getByText("Предварительный")).toBeInTheDocument();
+    expect((await screen.findAllByText("Иванов И.И.")).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Предварительный").length).toBeGreaterThan(0);
     expect(screen.getByText("Годен")).toBeInTheDocument();
   });
 
