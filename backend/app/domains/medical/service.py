@@ -22,6 +22,8 @@ from app.models.models import (
     MedicalSuspensionStatus,
     Person,
     Position,
+    PsychiatricActivityType,
+    PsychiatricPositionActivity,
 )
 from app.services.events import EventType
 from app.services.outbox import OutboxService
@@ -282,6 +284,32 @@ async def _load_factor_catalog(session: AsyncSession, *, tenant_id: str) -> list
     return out
 
 
+async def _load_activity_catalog(
+    session: AsyncSession, *, tenant_id: str
+) -> list[lc.ActivityTuple]:
+    """695 activity-type catalog as ORM-free ActivityTuples for the pure engine."""
+    stmt = select(
+        PsychiatricActivityType.code,
+        PsychiatricActivityType.name,
+        PsychiatricActivityType.interval_days,
+    ).where(PsychiatricActivityType.tenant_id == tenant_id)
+    return [(code, name, int(days)) for code, name, days in (await session.execute(stmt)).all()]
+
+
+async def _load_position_activity_map(
+    session: AsyncSession, *, tenant_id: str
+) -> dict[str, set[str]]:
+    """position_id -> set of mapped 695 activity codes (batched, no N+1)."""
+    stmt = select(
+        PsychiatricPositionActivity.position_id,
+        PsychiatricPositionActivity.activity_code,
+    ).where(PsychiatricPositionActivity.tenant_id == tenant_id)
+    out: dict[str, set[str]] = {}
+    for pos_id, code in (await session.execute(stmt)).all():
+        out.setdefault(pos_id, set()).add(code)
+    return out
+
+
 async def compute_contingent(
     session: AsyncSession,
     *,
@@ -304,7 +332,9 @@ async def compute_contingent(
     ).where(MedicalNorm.tenant_id == tenant_id)
     norms = [(r[0], r[1], r[2], r[3]) for r in (await session.execute(norm_stmt)).all()]
     catalog = await _load_factor_catalog(session, tenant_id=tenant_id)
-    if not norms and not catalog:
+    psych_catalog = await _load_activity_catalog(session, tenant_id=tenant_id)
+    psych_map = await _load_position_activity_map(session, tenant_id=tenant_id)
+    if not norms and not catalog and not psych_catalog:
         return []
 
     p_stmt = (
@@ -355,6 +385,10 @@ async def compute_contingent(
         required |= set(
             lc.required_exams_from_factors(lc.factors_for_hazards(factor_codes, catalog)).keys()
         )
+        if person.position_id and lc.psychiatric_required(
+            psych_map.get(person.position_id, set()), psych_catalog
+        ):
+            required.add(MedicalExamKind.PSYCHIATRIC)
         for kind in required:
             vu = latest.get((person.id, kind))
             st = lc.classify(vu, today, warning_days)
