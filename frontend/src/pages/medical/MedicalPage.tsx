@@ -5,6 +5,7 @@ import {
   type ContingentRegisterRowDto,
   type MedicalReferralDto,
   type MedicalSummaryDto,
+  type MedicalSuspensionDto,
   type NamedListRowDto
 } from "@/api/operations";
 import { EmptyState } from "@/components/common/EmptyState";
@@ -27,6 +28,11 @@ const EXAM_KIND_LABELS: Record<string, string> = {
 };
 
 const examKindLabel = (kind: string) => EXAM_KIND_LABELS[kind] ?? kind;
+
+const SUSPENSION_REASON_LABELS: Record<string, string> = {
+  unfit: "Негоден",
+  contraindication: "Противопоказания"
+};
 
 const mutationErrorText = (err: unknown, fallback: string) =>
   (err as { message?: string })?.message ?? fallback;
@@ -176,6 +182,41 @@ const MedicalPage = () => {
       }
     },
     [referrals]
+  );
+
+  const [suspensionsActiveOnly, setSuspensionsActiveOnly] = useState(true);
+  const suspensions = useAsyncResource({
+    loader: useCallback(
+      () => operationsApi.listMedicalSuspensions(suspensionsActiveOnly ? { status: "active" } : undefined),
+      [suspensionsActiveOnly]
+    ),
+    initialData: [] as MedicalSuspensionDto[],
+    errorMessage: "Не удалось загрузить отстранения"
+  });
+  const [suspensionError, setSuspensionError] = useState<string | null>(null);
+  const [liftingId, setLiftingId] = useState<string | null>(null);
+
+  const examLabelById = useMemo(() => {
+    const map = new Map<string, string>();
+    data.exams.forEach((exam) => map.set(exam.id, `${examKindLabel(exam.exam_type)} · ${formatDate(exam.exam_date)}`));
+    return (id: string | null | undefined) => (id ? map.get(id) ?? id : "—");
+  }, [data.exams]);
+
+  const onLiftSuspension = useCallback(
+    async (suspensionId: string) => {
+      if (!window.confirm("Снять отстранение? Работник будет допущен к работе.")) return;
+      setLiftingId(suspensionId);
+      setSuspensionError(null);
+      try {
+        await operationsApi.liftMedicalSuspension(suspensionId);
+        await Promise.all([suspensions.reload(), oversight.reload()]);
+      } catch (err) {
+        setSuspensionError(mutationErrorText(err, "Не удалось снять отстранение"));
+      } finally {
+        setLiftingId(null);
+      }
+    },
+    [oversight, suspensions]
   );
 
   const items = useMemo(
@@ -507,6 +548,65 @@ const MedicalPage = () => {
           </Table>
         ) : !referrals.loading ? (
           <p className="text-sm text-muted-foreground">Направлений нет.</p>
+        ) : null}
+      </section>
+
+      <section className="rounded-lg border border-border p-4 space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 className="text-base font-semibold">Отстранения от работы</h2>
+            <p className="text-sm text-muted-foreground">Автоматические отстранения по результатам осмотров; снятие — только admin/owner.</p>
+          </div>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              aria-label="Только активные"
+              type="checkbox"
+              checked={suspensionsActiveOnly}
+              onChange={(e) => setSuspensionsActiveOnly(e.target.checked)}
+            />
+            Только активные
+          </label>
+        </div>
+        <ErrorState error={suspensions.error ?? undefined} onRetry={() => void suspensions.reload()} />
+        {suspensionError ? <p role="alert" className="text-sm text-destructive">{suspensionError}</p> : null}
+        {suspensions.data.length > 0 ? (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Сотрудник</TableHead>
+                <TableHead>Причина</TableHead>
+                <TableHead>Статус</TableHead>
+                <TableHead>Осмотр-источник</TableHead>
+                <TableHead>Действие</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {suspensions.data.map((suspension) => (
+                <TableRow key={suspension.id}>
+                  <TableCell>{personName(suspension.person_id)}</TableCell>
+                  <TableCell>{SUSPENSION_REASON_LABELS[suspension.reason] ?? suspension.reason}</TableCell>
+                  <TableCell>
+                    <StatusBadge status={suspension.status} />
+                  </TableCell>
+                  <TableCell>{examLabelById(suspension.source_exam_id)}</TableCell>
+                  <TableCell>
+                    {suspension.status === "active" ? (
+                      <button
+                        type="button"
+                        className="rounded-md border border-border px-2 py-1 text-xs"
+                        onClick={() => void onLiftSuspension(suspension.id)}
+                        disabled={liftingId === suspension.id}
+                      >
+                        Снять отстранение
+                      </button>
+                    ) : null}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        ) : !suspensions.loading ? (
+          <p className="text-sm text-muted-foreground">Отстранений нет.</p>
         ) : null}
       </section>
 

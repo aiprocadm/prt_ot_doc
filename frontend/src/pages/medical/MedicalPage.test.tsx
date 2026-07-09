@@ -240,3 +240,48 @@ describe("MedicalPage referral completion", () => {
     expect(screen.queryByLabelText("Осмотр-результат")).not.toBeInTheDocument();
   });
 });
+
+describe("MedicalPage suspensions section", () => {
+  it("renders suspensions with reason labels and source exam", async () => {
+    (operationsApi.listMedicalSuspensions as any).mockResolvedValue([
+      { id: "s1", person_id: "p1", reason: "unfit", status: "active", source_exam_id: "e1" },
+    ]);
+    render(<MedicalPage />);
+    await waitFor(() => expect(screen.getByText("Отстранения от работы")).toBeInTheDocument());
+    expect(await screen.findByText("Негоден")).toBeInTheDocument();
+    expect(operationsApi.listMedicalSuspensions).toHaveBeenCalledWith({ status: "active" });
+  });
+
+  it("lifts an active suspension after confirmation and reloads", async () => {
+    (operationsApi.listMedicalSuspensions as any).mockResolvedValue([
+      { id: "s1", person_id: "p1", reason: "unfit", status: "active", source_exam_id: null },
+    ]);
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    render(<MedicalPage />);
+    const liftBtn = await screen.findByRole("button", { name: "Снять отстранение" });
+    fireEvent.click(liftBtn);
+    await waitFor(() => expect(operationsApi.liftMedicalSuspension).toHaveBeenCalledWith("s1"));
+    expect((operationsApi.getMedicalOversightSnapshot as any).mock.calls.length).toBeGreaterThanOrEqual(2);
+    confirmSpy.mockRestore();
+  });
+
+  it("does not lift when the confirmation is dismissed", async () => {
+    (operationsApi.listMedicalSuspensions as any).mockResolvedValue([
+      { id: "s1", person_id: "p1", reason: "unfit", status: "active", source_exam_id: null },
+    ]);
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
+    render(<MedicalPage />);
+    const liftBtn = await screen.findByRole("button", { name: "Снять отстранение" });
+    fireEvent.click(liftBtn);
+    await waitFor(() => expect(confirmSpy).toHaveBeenCalled());
+    expect(operationsApi.liftMedicalSuspension).not.toHaveBeenCalled();
+    confirmSpy.mockRestore();
+  });
+
+  it("loads all suspensions when the active-only toggle is unchecked", async () => {
+    render(<MedicalPage />);
+    const toggle = await screen.findByLabelText("Только активные");
+    fireEvent.click(toggle);
+    await waitFor(() => expect(operationsApi.listMedicalSuspensions).toHaveBeenLastCalledWith(undefined));
+  });
+});
