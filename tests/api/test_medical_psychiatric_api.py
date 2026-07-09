@@ -1,0 +1,113 @@
+from __future__ import annotations
+
+import pytest
+from fastapi import status
+
+from app.models.models import RoleEnum
+
+
+@pytest.mark.asyncio
+async def test_activity_type_crud_and_duplicate(
+    async_client, sessionmaker, data_factory, make_auth_headers
+):
+    async with sessionmaker() as session:
+        await data_factory.ensure_tenant(session=session)
+        await session.commit()
+    headers = await make_auth_headers(RoleEnum.ADMIN)
+    body = {"code": "height", "name": "Работы на высоте", "interval_days": 1825}
+    r = await async_client.post(
+        "/api/v1/medical/psychiatric/activity-types", headers=headers, json=body
+    )
+    assert r.status_code == status.HTTP_201_CREATED, r.text
+    aid = r.json()["id"]
+
+    dup = await async_client.post(
+        "/api/v1/medical/psychiatric/activity-types", headers=headers, json=body
+    )
+    assert dup.status_code == status.HTTP_409_CONFLICT
+
+    lst = await async_client.get("/api/v1/medical/psychiatric/activity-types", headers=headers)
+    assert lst.status_code == status.HTTP_200_OK
+    assert any(a["code"] == "height" for a in lst.json()["items"])
+
+    patched = await async_client.patch(
+        f"/api/v1/medical/psychiatric/activity-types/{aid}",
+        headers=headers, json={"interval_days": 1095},
+    )
+    assert patched.status_code == status.HTTP_200_OK and patched.json()["interval_days"] == 1095
+
+    deleted = await async_client.delete(
+        f"/api/v1/medical/psychiatric/activity-types/{aid}", headers=headers
+    )
+    assert deleted.status_code == status.HTTP_204_NO_CONTENT
+
+
+@pytest.mark.asyncio
+async def test_seed_defaults_idempotent_endpoint(
+    async_client, sessionmaker, data_factory, make_auth_headers
+):
+    async with sessionmaker() as session:
+        await data_factory.ensure_tenant(session=session)
+        await session.commit()
+    headers = await make_auth_headers(RoleEnum.ADMIN)
+    r1 = await async_client.post(
+        "/api/v1/medical/psychiatric/activity-types/seed-defaults", headers=headers
+    )
+    assert r1.status_code == status.HTTP_200_OK and r1.json()["count"] >= 8
+    r2 = await async_client.post(
+        "/api/v1/medical/psychiatric/activity-types/seed-defaults", headers=headers
+    )
+    assert r2.status_code == status.HTTP_200_OK and r2.json()["count"] == 0
+
+
+@pytest.mark.asyncio
+async def test_set_position_activities_and_validation(
+    async_client, sessionmaker, data_factory, make_auth_headers
+):
+    from app.models.models import Position
+
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        company = await data_factory.create_company(tenant=tenant, session=session)
+        pos = Position(tenant_id=tenant.id, company_id=company.id, name="Крановщик")
+        session.add(pos)
+        await session.commit()
+        pos_id = pos.id
+    headers = await make_auth_headers(RoleEnum.ADMIN)
+    await async_client.post(
+        "/api/v1/medical/psychiatric/activity-types/seed-defaults", headers=headers
+    )
+    # unknown code → 422
+    bad = await async_client.put(
+        f"/api/v1/medical/psychiatric/positions/{pos_id}/activities",
+        headers=headers, json={"activity_codes": ["ghost"]},
+    )
+    assert bad.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+    # valid set → 200, and read reflects it
+    ok = await async_client.put(
+        f"/api/v1/medical/psychiatric/positions/{pos_id}/activities",
+        headers=headers, json={"activity_codes": ["height", "transport"]},
+    )
+    assert ok.status_code == status.HTTP_200_OK
+    assert set(ok.json()["activity_codes"]) == {"height", "transport"}
+    # replace semantics: setting a smaller set removes the rest
+    ok2 = await async_client.put(
+        f"/api/v1/medical/psychiatric/positions/{pos_id}/activities",
+        headers=headers, json={"activity_codes": ["height"]},
+    )
+    assert set(ok2.json()["activity_codes"]) == {"height"}
+
+
+@pytest.mark.asyncio
+async def test_activity_types_require_write_role(
+    async_client, sessionmaker, data_factory, make_auth_headers
+):
+    async with sessionmaker() as session:
+        await data_factory.ensure_tenant(session=session)
+        await session.commit()
+    headers = await make_auth_headers(RoleEnum.LINE_MANAGER)
+    r = await async_client.post(
+        "/api/v1/medical/psychiatric/activity-types",
+        headers=headers, json={"code": "x", "name": "y"},
+    )
+    assert r.status_code in (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN)

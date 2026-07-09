@@ -21,6 +21,7 @@ from app.models.models import (
     MedicalFactor,
     MedicalNorm,
     MedicalReferral,
+    PsychiatricActivityType,
     Tenant,
 )
 from app.models.risk import RiskHazard
@@ -143,5 +144,23 @@ async def _get_referral(session: AsyncSession, tenant_id: str, referral_id: str)
         raise HTTPException(
             status.HTTP_404_NOT_FOUND,
             detail=_error("referral_not_found", "Referral not found"),
+        )
+    return rec
+
+
+async def _get_activity_type(
+    session: AsyncSession, tenant_id: str, activity_id: str
+) -> "PsychiatricActivityType":
+    from app.models.models import PsychiatricActivityType as _AT
+
+    rec = (
+        await session.execute(
+            select(_AT).where(_AT.id == activity_id, _AT.tenant_id == tenant_id)
+        )
+    ).scalar_one_or_none()
+    if rec is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            detail=_error("activity_type_not_found", "Psychiatric activity type not found"),
         )
     return rec
