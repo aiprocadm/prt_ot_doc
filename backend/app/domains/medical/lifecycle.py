@@ -162,6 +162,30 @@ def required_exams_from_factors(
     return result
 
 
+# ---------------------------------------------------------------------------
+# 2.6b — 342н psychiatric resolution (695 activity types → subject / periodicity)
+# ---------------------------------------------------------------------------
+
+# (code, name, interval_days) — ORM-free вид деятельности 695.
+ActivityTuple = tuple[str, str, int]
+
+
+def psychiatric_required(activity_codes: set[str], catalog: Iterable[ActivityTuple]) -> bool:
+    """True when a position is subject to ОПО: it has ≥1 mapped activity code that exists in the
+    tenant's activity-type catalog (695). Unknown/stale mapping codes are ignored."""
+    catalog_codes = {a[0] for a in catalog}
+    return bool(activity_codes & catalog_codes)
+
+
+def psychiatric_interval(activity_codes: set[str], catalog: Iterable[ActivityTuple]) -> int:
+    """Strictest (min) interval_days among the position's mapped activity types; falls back to
+    the 5-year PSYCHIATRIC default when none of the codes match the catalog."""
+    intervals = [days for code, _name, days in catalog if code in activity_codes]
+    if not intervals:
+        return DEFAULT_INTERVAL_DAYS[MedicalExamKind.PSYCHIATRIC]
+    return min(intervals)
+
+
 def worst_status(statuses: Iterable[str]) -> str:
     """Roll up per-kind contingent statuses to the most severe; 'ok' when empty."""
     worst = "ok"
