@@ -173,6 +173,8 @@ async def create_medical_exam(
             medical_org_name=payload.medical_org_name,
             referral_id=payload.referral_id,
             exam_type=payload.exam_type,
+            psychiatric_protocol_no=payload.psychiatric_protocol_no,
+            psychiatric_activity_codes=payload.psychiatric_activity_codes,
         )
     except ValueError as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail=str(exc))

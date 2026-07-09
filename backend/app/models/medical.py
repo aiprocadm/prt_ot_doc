@@ -103,6 +103,11 @@ class MedicalExam(TenantBaseModel, SoftDeleteMixin):
         ForeignKey("medical_referral.id"), nullable=True, index=True
     )
     medical_org_name: Mapped[str | None] = mapped_column(String(255))
+    # --- additive (342н psychiatric assessment) ---
+    psychiatric_protocol_no: Mapped[str | None] = mapped_column(String(128))
+    psychiatric_activity_codes: Mapped[list[str]] = mapped_column(
+        MutableList.as_mutable(JSON), nullable=False, default=list
+    )
 
     person: Mapped[Person] = relationship(backref="medical_exams")
 
@@ -199,3 +204,38 @@ class MedicalSuspension(TenantBaseModel, SoftDeleteMixin):
     )
 
     person: Mapped[Person] = relationship(backref="medical_suspensions")
+
+
+class PsychiatricActivityType(TenantBaseModel):
+    """342н reference catalog: вид деятельности (перечень ПП РФ № 695) mandating обязательное
+    психиатрическое освидетельствование. Tenant-scoped; unique by code. interval_days overrides
+    the 1825-day (5y) default periodicity per activity. VARCHAR-only, no cross-base FK."""
+
+    __tablename__ = "psychiatric_activity_type"
+
+    code: Mapped[str] = mapped_column(String(32), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    interval_days: Mapped[int] = mapped_column(Integer, nullable=False, default=1825)
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "code", name="uq_psychiatric_activity_type_tenant_code"),
+    )
+
+
+class PsychiatricPositionActivity(TenantBaseModel):
+    """Mapping должность → вид деятельности 695 — the psychiatry contingent axis, parallel to
+    RiskHazard.medical_factor_code for 29н. A position subject to ОПО has ≥1 mapped activity."""
+
+    __tablename__ = "psychiatric_position_activity"
+
+    position_id: Mapped[str] = mapped_column(ForeignKey("position.id"), nullable=False, index=True)
+    activity_code: Mapped[str] = mapped_column(String(32), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id",
+            "position_id",
+            "activity_code",
+            name="uq_psychiatric_position_activity",
+        ),
+    )

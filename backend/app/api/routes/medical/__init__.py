@@ -10,6 +10,7 @@ from app.api.routes.medical import _common  # noqa: F401  (defines the shared ro
 from app.api.routes.medical import exams  # noqa: F401  (registers exam routes first)
 from app.api.routes.medical import catalog  # noqa: F401  (norms/referrals/factors)
 from app.api.routes.medical import contingent  # noqa: F401  (mappings/contingent/summary)
+from app.api.routes.medical import psychiatric  # noqa: F401  (342н activity catalog/mapping)
 
 # isort: on
 from app.api.routes.medical._common import (  # noqa: F401  re-export for route_groups + tests

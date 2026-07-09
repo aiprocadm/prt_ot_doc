@@ -165,6 +165,8 @@ from app.models.medical import (
     MedicalSuspension,
     MedicalSuspensionReason,
     MedicalSuspensionStatus,
+    PsychiatricActivityType,
+    PsychiatricPositionActivity,
 )
 
 # ARCH-2: re-export packages-domain models moved to app.models.packages.
@@ -331,6 +333,8 @@ __all__ = [
     "MedicalNorm",
     "MedicalReferral",
     "MedicalSuspension",
+    "PsychiatricActivityType",
+    "PsychiatricPositionActivity",
     "DocumentPack",
     "DocumentPackItem",
     "DocumentPackModule",
@@ -576,6 +580,8 @@ __all__ += [
     "MedicalFactor",
     "MedicalReferral",
     "MedicalSuspension",
+    "PsychiatricActivityType",
+    "PsychiatricPositionActivity",
     "BriefingTemplate",
     "BriefingJournal",
     "BriefingEntry",

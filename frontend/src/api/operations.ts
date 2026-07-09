@@ -305,6 +305,30 @@ export const operationsApi = {
     };
   },
 
+  getPsychiatricSnapshot: async () => {
+    const [typesResponse, contingentResponse] = await Promise.all([
+      apiClient.get<{ items: { id: string; code: string; name: string; interval_days: number }[]; total: number }>(
+        "/medical/psychiatric/activity-types",
+        { params: { limit: 200, offset: 0 } }
+      ),
+      apiClient.get<{ items: { person_id: string; exam_kind: string; status: string; due_at: string | null }[]; total: number }>(
+        "/medical/contingent",
+        { params: {} }
+      ),
+    ]);
+    return {
+      activityTypes: typesResponse.data.items ?? [],
+      contingent: (contingentResponse.data.items ?? []).filter((i) => i.exam_kind === "psychiatric"),
+    };
+  },
+
+  seedPsychiatricDefaults: async () => {
+    const response = await apiClient.post<{ count: number }>(
+      "/medical/psychiatric/activity-types/seed-defaults"
+    );
+    return response.data;
+  },
+
   getFireSafetySnapshot: async () => {
     const [sitesResponse, inspectionsResponse, tasksResponse] = await Promise.all([
       apiClient.get<{ items: SiteDto[]; total: number }>("/sites", { params: { limit: 100, offset: 0 } }),

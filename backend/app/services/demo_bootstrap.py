@@ -25,6 +25,7 @@ from app.models.models import (
     PPEIssue,
     PPEItem,
     PPENorm,
+    PsychiatricPositionActivity,
     Site,
     Tenant,
     TrainingCourse,
@@ -281,6 +282,30 @@ async def _seed_medical_factor_demo(session, tenant_db_id: str, position_id: str
                 hazard_id=hazard.id,
             )
         )
+
+
+async def _seed_psychiatric_activities_demo(session, tenant_db_id: str, position_id: str) -> None:
+    """342н: seed the standard 695 activity-type set and map the demo position to «height»,
+    so the demo психиатрический контингент is non-empty out of the box. Idempotent."""
+    from app.domains.medical.service import seed_default_activity_types
+
+    await seed_default_activity_types(session, tenant_id=tenant_db_id)
+    existing = (
+        await session.execute(
+            select(PsychiatricPositionActivity).where(
+                PsychiatricPositionActivity.tenant_id == tenant_db_id,
+                PsychiatricPositionActivity.position_id == position_id,
+                PsychiatricPositionActivity.activity_code == "height",
+            )
+        )
+    ).scalar_one_or_none()
+    if existing is None:
+        session.add(
+            PsychiatricPositionActivity(
+                tenant_id=tenant_db_id, position_id=position_id, activity_code="height"
+            )
+        )
+        await session.flush()
 
 
 async def _seed_briefing_code_flow_demo(session, tenant_db_id: str, person) -> None:
@@ -1019,6 +1044,7 @@ async def bootstrap_demo_tenant(settings: Settings) -> None:
         if position is not None and person is not None:
             await _seed_ppe_demo(session, tenant_db_id, person, str(position.id))
             await _seed_medical_factor_demo(session, tenant_db_id, str(position.id))
+            await _seed_psychiatric_activities_demo(session, tenant_db_id, str(position.id))
             await _seed_briefing_code_flow_demo(session, tenant_db_id, person)
             await _seed_work_permit_confined_demo(session, tenant_db_id, person)
             await _seed_work_permit_hot_work_demo(session, tenant_db_id, person)

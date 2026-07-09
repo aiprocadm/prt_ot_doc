@@ -39,6 +39,8 @@ class MedicalExamRead(BaseModel):
     contraindications: list[str] = Field(default_factory=list)
     referral_id: str | None = None
     medical_org_name: str | None = None
+    psychiatric_protocol_no: str | None = None
+    psychiatric_activity_codes: list[str] = Field(default_factory=list)
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -60,6 +62,8 @@ class MedicalExamCreate(BaseModel):
     medical_org_name: str | None = None
     referral_id: str | None = None
     exam_type: str | None = None  # legacy free label; defaults from exam_kind
+    psychiatric_protocol_no: str | None = None
+    psychiatric_activity_codes: list[str] = Field(default_factory=list)
     model_config = ConfigDict(extra="forbid")
 
 
@@ -267,4 +271,47 @@ class HazardFactorMappingRead(BaseModel):
 
 class HazardFactorMappingPage(BaseModel):
     items: list[HazardFactorMappingRead]
+    total: int
+
+
+class PsychiatricActivityTypeCreate(BaseModel):
+    code: str = Field(..., min_length=1, max_length=32)
+    name: str = Field(..., min_length=1, max_length=255)
+    interval_days: int = Field(default=1825, ge=1, le=3650)
+    model_config = ConfigDict(extra="forbid")
+
+
+class PsychiatricActivityTypeRead(BaseModel):
+    id: str
+    code: str
+    name: str
+    interval_days: int
+    model_config = ConfigDict(from_attributes=True)
+
+
+class PsychiatricActivityTypeUpdate(BaseModel):
+    name: str | None = Field(default=None, max_length=255)
+    interval_days: int | None = Field(default=None, ge=1, le=3650)
+    model_config = ConfigDict(extra="forbid")
+
+
+class PsychiatricActivityTypePage(BaseModel):
+    items: list[PsychiatricActivityTypeRead]
+    total: int
+
+
+class PositionActivitiesIn(BaseModel):
+    """Full replacement of a position's mapped 695 activity codes."""
+
+    activity_codes: list[str] = Field(default_factory=list)
+    model_config = ConfigDict(extra="forbid")
+
+
+class PositionActivitiesRead(BaseModel):
+    position_id: str
+    activity_codes: list[str]
+
+
+class PositionActivitiesPage(BaseModel):
+    items: list[PositionActivitiesRead]
     total: int
