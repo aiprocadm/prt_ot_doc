@@ -154,9 +154,7 @@ async def _get_activity_type(
     from app.models.models import PsychiatricActivityType as _AT
 
     rec = (
-        await session.execute(
-            select(_AT).where(_AT.id == activity_id, _AT.tenant_id == tenant_id)
-        )
+        await session.execute(select(_AT).where(_AT.id == activity_id, _AT.tenant_id == tenant_id))
     ).scalar_one_or_none()
     if rec is None:
         raise HTTPException(

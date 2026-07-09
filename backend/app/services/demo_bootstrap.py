@@ -284,9 +284,7 @@ async def _seed_medical_factor_demo(session, tenant_db_id: str, position_id: str
         )
 
 
-async def _seed_psychiatric_activities_demo(
-    session, tenant_db_id: str, position_id: str
-) -> None:
+async def _seed_psychiatric_activities_demo(session, tenant_db_id: str, position_id: str) -> None:
     """342н: seed the standard 695 activity-type set and map the demo position to «height»,
     so the demo психиатрический контингент is non-empty out of the box. Idempotent."""
     from app.domains.medical.service import seed_default_activity_types

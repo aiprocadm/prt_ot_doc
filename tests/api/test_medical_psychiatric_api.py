@@ -32,7 +32,8 @@ async def test_activity_type_crud_and_duplicate(
 
     patched = await async_client.patch(
         f"/api/v1/medical/psychiatric/activity-types/{aid}",
-        headers=headers, json={"interval_days": 1095},
+        headers=headers,
+        json={"interval_days": 1095},
     )
     assert patched.status_code == status.HTTP_200_OK and patched.json()["interval_days"] == 1095
 
@@ -80,20 +81,23 @@ async def test_set_position_activities_and_validation(
     # unknown code → 422
     bad = await async_client.put(
         f"/api/v1/medical/psychiatric/positions/{pos_id}/activities",
-        headers=headers, json={"activity_codes": ["ghost"]},
+        headers=headers,
+        json={"activity_codes": ["ghost"]},
     )
     assert bad.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
     # valid set → 200, and read reflects it
     ok = await async_client.put(
         f"/api/v1/medical/psychiatric/positions/{pos_id}/activities",
-        headers=headers, json={"activity_codes": ["height", "transport"]},
+        headers=headers,
+        json={"activity_codes": ["height", "transport"]},
     )
     assert ok.status_code == status.HTTP_200_OK
     assert set(ok.json()["activity_codes"]) == {"height", "transport"}
     # replace semantics: setting a smaller set removes the rest
     ok2 = await async_client.put(
         f"/api/v1/medical/psychiatric/positions/{pos_id}/activities",
-        headers=headers, json={"activity_codes": ["height"]},
+        headers=headers,
+        json={"activity_codes": ["height"]},
     )
     assert set(ok2.json()["activity_codes"]) == {"height"}
 
@@ -108,7 +112,8 @@ async def test_activity_types_require_write_role(
     headers = await make_auth_headers(RoleEnum.LINE_MANAGER)
     r = await async_client.post(
         "/api/v1/medical/psychiatric/activity-types",
-        headers=headers, json={"code": "x", "name": "y"},
+        headers=headers,
+        json={"code": "x", "name": "y"},
     )
     assert r.status_code in (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN)
 
@@ -121,8 +126,11 @@ async def test_create_psychiatric_exam_persists_new_fields(
         tenant = await data_factory.ensure_tenant(session=session)
         company = await data_factory.create_company(tenant=tenant, session=session)
         person = await data_factory.create_person(
-            tenant=tenant, company=company, session=session,
-            first_name="Марк", last_name="Лев",
+            tenant=tenant,
+            company=company,
+            session=session,
+            first_name="Марк",
+            last_name="Лев",
         )
         await session.commit()
         pid = person.id
@@ -156,7 +164,8 @@ async def test_set_position_activities_unknown_position_404(
     )
     r = await async_client.put(
         "/api/v1/medical/psychiatric/positions/does-not-exist/activities",
-        headers=headers, json={"activity_codes": ["height"]},
+        headers=headers,
+        json={"activity_codes": ["height"]},
     )
     assert r.status_code == status.HTTP_404_NOT_FOUND, r.text
     # the _error(...) code is promoted to the top-level machine code in the error contract
@@ -180,7 +189,8 @@ async def test_activity_type_cross_tenant_isolation(
     )
     created = await async_client.post(
         "/api/v1/medical/psychiatric/activity-types",
-        headers=headers_a, json={"code": "height", "name": "Работы на высоте"},
+        headers=headers_a,
+        json={"code": "height", "name": "Работы на высоте"},
     )
     assert created.status_code == status.HTTP_201_CREATED, created.text
     aid = created.json()["id"]
@@ -190,8 +200,6 @@ async def test_activity_type_cross_tenant_isolation(
     )
     assert got.status_code == status.HTTP_404_NOT_FOUND
     # ... nor in its list
-    lst = await async_client.get(
-        "/api/v1/medical/psychiatric/activity-types", headers=headers_b
-    )
+    lst = await async_client.get("/api/v1/medical/psychiatric/activity-types", headers=headers_b)
     assert lst.status_code == status.HTTP_200_OK
     assert all(a["id"] != aid for a in lst.json()["items"])

@@ -56,9 +56,7 @@ async def list_activity_types(
 ) -> PsychiatricActivityTypePage:
     TenantContextValidator.ensure_tenant_context(tenant)
     _ = access
-    stmt = select(PsychiatricActivityType).where(
-        PsychiatricActivityType.tenant_id == tenant.id
-    )
+    stmt = select(PsychiatricActivityType).where(PsychiatricActivityType.tenant_id == tenant.id)
     total = await session.scalar(select(func.count()).select_from(stmt.subquery()))
     rows = list(
         (
@@ -328,9 +326,7 @@ async def set_position_activities(
     )
     for code in codes:
         session.add(
-            PsychiatricPositionActivity(
-                tenant_id=tid, position_id=position_id, activity_code=code
-            )
+            PsychiatricPositionActivity(tenant_id=tid, position_id=position_id, activity_code=code)
         )
     audit = AuditService(session)
     await audit.log_event(

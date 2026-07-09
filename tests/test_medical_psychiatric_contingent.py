@@ -31,8 +31,12 @@ async def test_contingent_includes_psychiatric_for_mapped_position(sessionmaker,
             )
         )
         person = await data_factory.create_person(
-            tenant=tenant, company=company, session=session,
-            position_id=pos.id, first_name="Иван", last_name="Петров",
+            tenant=tenant,
+            company=company,
+            session=session,
+            position_id=pos.id,
+            first_name="Иван",
+            last_name="Петров",
         )
         await session.commit()
         items = await compute_contingent(session, tenant_id=str(tenant.id), today=date(2026, 7, 9))
@@ -67,8 +71,12 @@ async def test_contingent_no_psychiatric_when_activity_not_in_catalog(sessionmak
             )
         )
         person = await data_factory.create_person(
-            tenant=tenant, company=company, session=session,
-            position_id=pos.id, first_name="Пётр", last_name="Сидоров",
+            tenant=tenant,
+            company=company,
+            session=session,
+            position_id=pos.id,
+            first_name="Пётр",
+            last_name="Сидоров",
         )
         await session.commit()
         items = await compute_contingent(session, tenant_id=str(tenant.id), today=date(2026, 7, 9))
@@ -79,7 +87,9 @@ async def test_contingent_no_psychiatric_when_activity_not_in_catalog(sessionmak
 
 
 @pytest.mark.asyncio
-async def test_record_psychiatric_exam_uses_activity_interval_and_fields(sessionmaker, data_factory):
+async def test_record_psychiatric_exam_uses_activity_interval_and_fields(
+    sessionmaker, data_factory
+):
     from datetime import date
 
     from app.domains.medical.service import record_exam
@@ -102,8 +112,12 @@ async def test_record_psychiatric_exam_uses_activity_interval_and_fields(session
             )
         )
         person = await data_factory.create_person(
-            tenant=tenant, company=company, session=session,
-            position_id=pos.id, first_name="Глеб", last_name="Смирнов",
+            tenant=tenant,
+            company=company,
+            session=session,
+            position_id=pos.id,
+            first_name="Глеб",
+            last_name="Смирнов",
         )
         await session.flush()
         exam = await record_exam(
@@ -145,16 +159,28 @@ async def test_unfit_psychiatric_exam_opens_suspension(sessionmaker, data_factor
         tenant = await data_factory.ensure_tenant(session=session)
         company = await data_factory.create_company(tenant=tenant, session=session)
         person = await data_factory.create_person(
-            tenant=tenant, company=company, session=session,
-            first_name="Анна", last_name="Кот",
+            tenant=tenant,
+            company=company,
+            session=session,
+            first_name="Анна",
+            last_name="Кот",
         )
         await session.flush()
         await record_exam(
-            session, tenant_id=str(tenant.id), actor_id=None, person_id=person.id,
-            exam_kind=MedicalExamKind.PSYCHIATRIC, exam_date=date(2026, 1, 1),
-            fitness=MedicalFitness.UNFIT, contraindications=["transport"],
-            conclusion=None, restrictions=None, valid_until=None,
-            medical_org_name=None, referral_id=None, exam_type=None,
+            session,
+            tenant_id=str(tenant.id),
+            actor_id=None,
+            person_id=person.id,
+            exam_kind=MedicalExamKind.PSYCHIATRIC,
+            exam_date=date(2026, 1, 1),
+            fitness=MedicalFitness.UNFIT,
+            contraindications=["transport"],
+            conclusion=None,
+            restrictions=None,
+            valid_until=None,
+            medical_org_name=None,
+            referral_id=None,
+            exam_type=None,
         )
         await session.commit()
         actives = await list_active_suspensions(
@@ -164,7 +190,9 @@ async def test_unfit_psychiatric_exam_opens_suspension(sessionmaker, data_factor
 
 
 @pytest.mark.asyncio
-async def test_psychiatric_interval_derives_from_mapping_not_passed_codes(sessionmaker, data_factory):
+async def test_psychiatric_interval_derives_from_mapping_not_passed_codes(
+    sessionmaker, data_factory
+):
     from datetime import date
 
     from app.domains.medical.service import record_exam
@@ -194,8 +222,12 @@ async def test_psychiatric_interval_derives_from_mapping_not_passed_codes(sessio
             )
         )
         person = await data_factory.create_person(
-            tenant=tenant, company=company, session=session,
-            position_id=pos.id, first_name="Глеб", last_name="Смирнов",
+            tenant=tenant,
+            company=company,
+            session=session,
+            position_id=pos.id,
+            first_name="Глеб",
+            last_name="Смирнов",
         )
         await session.flush()
         exam = await record_exam(

@@ -115,9 +115,7 @@ async def record_exam(
 
     if valid_until is None:
         if exam_kind is MedicalExamKind.PSYCHIATRIC:
-            interval = await _psychiatric_interval_days(
-                session, tenant_id=tenant_id, person=person
-            )
+            interval = await _psychiatric_interval_days(session, tenant_id=tenant_id, person=person)
         else:
             interval = await _norm_interval(
                 session, tenant_id=tenant_id, person=person, exam_kind=exam_kind

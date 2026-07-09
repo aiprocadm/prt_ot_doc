@@ -27,9 +27,7 @@ def upgrade() -> None:
         sa.Column("code", sa.String(length=32), nullable=False),
         sa.Column("name", sa.String(length=255), nullable=False),
         sa.Column("interval_days", sa.Integer(), nullable=False, server_default="1825"),
-        sa.UniqueConstraint(
-            "tenant_id", "code", name="uq_psychiatric_activity_type_tenant_code"
-        ),
+        sa.UniqueConstraint("tenant_id", "code", name="uq_psychiatric_activity_type_tenant_code"),
     )
     op.create_table(
         "psychiatric_position_activity",

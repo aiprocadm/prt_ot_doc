@@ -228,9 +228,7 @@ class PsychiatricPositionActivity(TenantBaseModel):
 
     __tablename__ = "psychiatric_position_activity"
 
-    position_id: Mapped[str] = mapped_column(
-        ForeignKey("position.id"), nullable=False, index=True
-    )
+    position_id: Mapped[str] = mapped_column(ForeignKey("position.id"), nullable=False, index=True)
     activity_code: Mapped[str] = mapped_column(String(32), nullable=False)
 
     __table_args__ = (
