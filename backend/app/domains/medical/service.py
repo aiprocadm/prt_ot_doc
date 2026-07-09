@@ -63,6 +63,26 @@ async def _norm_interval(
     return lc.interval_for_kind(exam_kind, interval)
 
 
+async def _psychiatric_interval_days(
+    session: AsyncSession, *, tenant_id: str, person: Person
+) -> int:
+    """Periodicity in days for a psychiatric exam: strictest interval among the person's
+    position's mapped 695 activities, else the 5-year default."""
+    catalog = await _load_activity_catalog(session, tenant_id=tenant_id)
+    codes: set[str] = set()
+    if person.position_id:
+        rows = (
+            await session.execute(
+                select(PsychiatricPositionActivity.activity_code).where(
+                    PsychiatricPositionActivity.tenant_id == tenant_id,
+                    PsychiatricPositionActivity.position_id == person.position_id,
+                )
+            )
+        ).all()
+        codes = {c for (c,) in rows}
+    return lc.psychiatric_interval(codes, catalog)
+
+
 async def record_exam(
     session: AsyncSession,
     *,
@@ -79,6 +99,8 @@ async def record_exam(
     medical_org_name: str | None,
     referral_id: str | None,
     exam_type: str | None,
+    psychiatric_protocol_no: str | None = None,
+    psychiatric_activity_codes: list[str] | None = None,
 ) -> MedicalExam:
     """Record an exam result; compute valid_until from norms if absent; emit MedicalExamRecorded; open/lift a suspension per the fitness verdict. Does not commit."""
     person = (
@@ -92,9 +114,14 @@ async def record_exam(
         raise ValueError(f"person not found: {person_id}")
 
     if valid_until is None:
-        interval = await _norm_interval(
-            session, tenant_id=tenant_id, person=person, exam_kind=exam_kind
-        )
+        if exam_kind is MedicalExamKind.PSYCHIATRIC:
+            interval = await _psychiatric_interval_days(
+                session, tenant_id=tenant_id, person=person
+            )
+        else:
+            interval = await _norm_interval(
+                session, tenant_id=tenant_id, person=person, exam_kind=exam_kind
+            )
         valid_until = lc.compute_valid_until(exam_date, interval)
 
     exam = MedicalExam(
@@ -110,6 +137,8 @@ async def record_exam(
         valid_until=valid_until,
         medical_org_name=medical_org_name,
         referral_id=referral_id,
+        psychiatric_protocol_no=psychiatric_protocol_no,
+        psychiatric_activity_codes=list(psychiatric_activity_codes or []),
     )
     session.add(exam)
     await session.flush()
@@ -308,6 +337,35 @@ async def _load_position_activity_map(
     for pos_id, code in (await session.execute(stmt)).all():
         out.setdefault(pos_id, set()).add(code)
     return out
+
+
+async def seed_default_activity_types(session: AsyncSession, *, tenant_id: str) -> int:
+    """Insert the standard ПП-695 activity-type set for codes not already present. Idempotent.
+    Does not commit. Returns the count inserted."""
+    from app.domains.medical.psychiatric_defaults import PSYCHIATRIC_ACTIVITY_DEFAULTS
+
+    existing = {
+        c
+        for (c,) in (
+            await session.execute(
+                select(PsychiatricActivityType.code).where(
+                    PsychiatricActivityType.tenant_id == tenant_id
+                )
+            )
+        ).all()
+    }
+    created = 0
+    for code, name, interval_days in PSYCHIATRIC_ACTIVITY_DEFAULTS:
+        if code in existing:
+            continue
+        session.add(
+            PsychiatricActivityType(
+                tenant_id=tenant_id, code=code, name=name, interval_days=interval_days
+            )
+        )
+        created += 1
+    await session.flush()
+    return created
 
 
 async def compute_contingent(
