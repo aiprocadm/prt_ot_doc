@@ -29,3 +29,8 @@ def test_med03_chains_and_is_additive():
     assert 'drop_table("psychiatric_activity_type")' in n
     assert 'drop_column("medical_exam","psychiatric_activity_codes")' in n
     assert 'drop_column("medical_exam","psychiatric_protocol_no")' in n
+    # load-bearing server defaults (JSON '[]' + 5y periodicity) are pinned
+    assert 'server_default="[]"' in n
+    assert 'server_default="1825"' in n
+    # the only cross-table reference is the position FK
+    assert '["position.id"]' in n
