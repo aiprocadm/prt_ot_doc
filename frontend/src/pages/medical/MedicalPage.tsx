@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 import { operationsApi } from "@/api/operations";
 import { EmptyState } from "@/components/common/EmptyState";
@@ -18,14 +18,37 @@ const MedicalPage = () => {
     errorMessage: "Не удалось загрузить медосмотры"
   });
 
-  const items = useMemo(() => data.exams.map((exam) => ({ ...exam, person: data.persons.find((person) => person.id === exam.person_id) })), [data]);
-  const registry = useLocalRegistry({ items, match: (item, query) => [item.person?.full_name, item.exam_type, item.conclusion].filter(Boolean).join(" ").toLowerCase().includes(query) });
+  const psych = useAsyncResource({
+    loader: useCallback(() => operationsApi.getPsychiatricSnapshot(), []),
+    initialData: { activityTypes: [], contingent: [] },
+    errorMessage: "Не удалось загрузить психиатрическое освидетельствование"
+  });
+  const [seeding, setSeeding] = useState(false);
+
+  const onSeed = useCallback(async () => {
+    setSeeding(true);
+    try {
+      await operationsApi.seedPsychiatricDefaults();
+      await psych.reload();
+    } finally {
+      setSeeding(false);
+    }
+  }, [psych]);
+
+  const items = useMemo(
+    () => data.exams.map((exam) => ({ ...exam, person: data.persons.find((person) => person.id === exam.person_id) })),
+    [data]
+  );
+  const registry = useLocalRegistry({
+    items,
+    match: (item, query) => [item.person?.full_name, item.exam_type, item.conclusion].filter(Boolean).join(" ").toLowerCase().includes(query)
+  });
 
   return (
     <div className="space-y-4">
       <RegistryPageHeader
         title="Медосмотры и допуски"
-        description="Реестр теперь использует реальный эндпоинт `/medical/exams` и связывает его с людьми и обязательствами."
+        description="Реестр использует эндпоинт `/medical/exams` и связывает его с людьми и обязательствами."
         stats={[
           { label: "Медосмотров", value: data.exams.length },
           { label: "Просрочено", value: data.exams.filter((item) => new Date(item.valid_until) < new Date()).length },
@@ -42,11 +65,7 @@ const MedicalPage = () => {
             { accessorKey: "exam_type", header: "Тип" },
             { accessorKey: "exam_date", header: "Дата", cell: ({ row }) => formatDate(row.original.exam_date) },
             { accessorKey: "valid_until", header: "Действует до", cell: ({ row }) => formatDate(row.original.valid_until) },
-            {
-              id: "state",
-              header: "Состояние",
-              cell: ({ row }) => <StatusBadge status={new Date(row.original.valid_until) < new Date() ? "overdue" : "ready"} />
-            },
+            { id: "state", header: "Состояние", cell: ({ row }) => <StatusBadge status={new Date(row.original.valid_until) < new Date() ? "overdue" : "ready"} /> },
             { accessorKey: "conclusion", header: "Заключение", cell: ({ row }) => row.original.conclusion || "—" }
           ]}
           data={registry.pagedItems}
@@ -60,6 +79,41 @@ const MedicalPage = () => {
           caption="Реестр медицинских осмотров"
         />
       ) : null}
+
+      <section className="rounded-lg border border-border p-4 space-y-3">
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <h2 className="text-base font-semibold">Психиатрическое освидетельствование (342н)</h2>
+            <p className="text-sm text-muted-foreground">Виды деятельности по перечню ПП РФ № 695 и подлежащий контингент.</p>
+          </div>
+          {psych.data.activityTypes.length === 0 ? (
+            <button
+              type="button"
+              className="rounded-md border border-border px-3 py-1.5 text-sm"
+              onClick={() => void onSeed()}
+              disabled={seeding}
+            >
+              {seeding ? "Загрузка…" : "Загрузить стандартный список 695"}
+            </button>
+          ) : null}
+        </div>
+        <ErrorState error={psych.error ?? undefined} onRetry={() => void psych.reload()} />
+        {psych.data.activityTypes.length > 0 ? (
+          <ul className="grid gap-1 text-sm sm:grid-cols-2">
+            {psych.data.activityTypes.map((a) => (
+              <li key={a.id} className="flex justify-between gap-2 border-b border-border/50 py-1">
+                <span>{a.name}</span>
+                <span className="text-muted-foreground">{Math.round(a.interval_days / 365)} лет</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-sm text-muted-foreground">Каталог видов деятельности пуст.</p>
+        )}
+        <div className="text-sm">
+          Подлежит освидетельствованию (контингент): <strong>{psych.data.contingent.length}</strong>
+        </div>
+      </section>
     </div>
   );
 };
