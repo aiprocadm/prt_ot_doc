@@ -3,6 +3,7 @@ import { useCallback, useMemo, useState } from "react";
 import {
   operationsApi,
   type ContingentRegisterRowDto,
+  type MedicalReferralDto,
   type MedicalSummaryDto,
   type NamedListRowDto
 } from "@/api/operations";
@@ -85,6 +86,86 @@ const MedicalPage = () => {
       }
     },
     [contingentView]
+  );
+
+  const [referralStatusFilter, setReferralStatusFilter] = useState("");
+  const referrals = useAsyncResource({
+    loader: useCallback(
+      () => operationsApi.listMedicalReferrals(referralStatusFilter ? { status: referralStatusFilter } : undefined),
+      [referralStatusFilter]
+    ),
+    initialData: [] as MedicalReferralDto[],
+    errorMessage: "Не удалось загрузить направления"
+  });
+  const [referralError, setReferralError] = useState<string | null>(null);
+  const [generating, setGenerating] = useState(false);
+  const [generatedCount, setGeneratedCount] = useState<number | null>(null);
+  const [creatingReferral, setCreatingReferral] = useState(false);
+  const [newReferral, setNewReferral] = useState({ person_id: "", exam_kind: "periodic", due_at: "", medical_org_name: "" });
+  const [transitioningId, setTransitioningId] = useState<string | null>(null);
+  const [completingId, setCompletingId] = useState<string | null>(null);
+  const [resultExamId, setResultExamId] = useState("");
+
+  const personName = useMemo(() => {
+    const map = new Map<string, string>();
+    data.persons.forEach((person) => map.set(person.id, person.full_name));
+    return (id: string) => map.get(id) ?? id;
+  }, [data.persons]);
+
+  const onGenerateReferrals = useCallback(async () => {
+    setGenerating(true);
+    setReferralError(null);
+    setGeneratedCount(null);
+    try {
+      const { count } = await operationsApi.generateMedicalReferrals();
+      setGeneratedCount(count);
+      await referrals.reload();
+    } catch (err) {
+      setReferralError(mutationErrorText(err, "Не удалось сформировать направления"));
+    } finally {
+      setGenerating(false);
+    }
+  }, [referrals]);
+
+  const onCreateReferral = useCallback(async () => {
+    if (!newReferral.person_id) return;
+    setCreatingReferral(true);
+    setReferralError(null);
+    try {
+      await operationsApi.createMedicalReferral({
+        person_id: newReferral.person_id,
+        exam_kind: newReferral.exam_kind,
+        ...(newReferral.due_at ? { due_at: newReferral.due_at } : {}),
+        ...(newReferral.medical_org_name.trim() ? { medical_org_name: newReferral.medical_org_name.trim() } : {})
+      });
+      setNewReferral({ person_id: "", exam_kind: "periodic", due_at: "", medical_org_name: "" });
+      await referrals.reload();
+    } catch (err) {
+      setReferralError(mutationErrorText(err, "Не удалось создать направление"));
+    } finally {
+      setCreatingReferral(false);
+    }
+  }, [newReferral, referrals]);
+
+  const onTransitionReferral = useCallback(
+    async (referralId: string, to: string, resultExam?: string) => {
+      setTransitioningId(referralId);
+      setReferralError(null);
+      try {
+        await operationsApi.transitionMedicalReferral(referralId, {
+          to,
+          ...(resultExam ? { result_exam_id: resultExam } : {})
+        });
+        setCompletingId(null);
+        setResultExamId("");
+        await referrals.reload();
+      } catch (err) {
+        setReferralError(mutationErrorText(err, "Не удалось изменить статус направления"));
+      } finally {
+        setTransitioningId(null);
+      }
+    },
+    [referrals]
   );
 
   const items = useMemo(
@@ -230,6 +311,147 @@ const MedicalPage = () => {
         ) : (
           <p className="text-sm text-muted-foreground">Поимённый список пуст.</p>
         )}
+      </section>
+
+      <section className="rounded-lg border border-border p-4 space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 className="text-base font-semibold">Направления на медосмотры</h2>
+            <p className="text-sm text-muted-foreground">Выдача направлений вручную или по контингенту; статусы: выдан → запланирован → завершён/отменён.</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              aria-label="Фильтр по статусу направления"
+              className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+              value={referralStatusFilter}
+              onChange={(e) => setReferralStatusFilter(e.target.value)}
+            >
+              <option value="">Все статусы</option>
+              <option value="issued">Выданные</option>
+              <option value="scheduled">Запланированные</option>
+              <option value="completed">Завершённые</option>
+              <option value="cancelled">Отменённые</option>
+            </select>
+            <button
+              type="button"
+              className="rounded-md border border-border px-3 py-1.5 text-sm"
+              onClick={() => void onGenerateReferrals()}
+              disabled={generating}
+            >
+              {generating ? "Формирование…" : "Сформировать по контингенту"}
+            </button>
+          </div>
+        </div>
+        <ErrorState error={referrals.error ?? undefined} onRetry={() => void referrals.reload()} />
+        {referralError ? <p role="alert" className="text-sm text-destructive">{referralError}</p> : null}
+        {generatedCount !== null ? <p className="text-sm">Создано направлений: {generatedCount}</p> : null}
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <select
+            aria-label="Сотрудник для направления"
+            className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+            value={newReferral.person_id}
+            onChange={(e) => setNewReferral((f) => ({ ...f, person_id: e.target.value }))}
+          >
+            <option value="">Сотрудник…</option>
+            {data.persons.map((person) => (
+              <option key={person.id} value={person.id}>
+                {person.full_name}
+              </option>
+            ))}
+          </select>
+          <select
+            aria-label="Вид осмотра"
+            className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+            value={newReferral.exam_kind}
+            onChange={(e) => setNewReferral((f) => ({ ...f, exam_kind: e.target.value }))}
+          >
+            {Object.entries(EXAM_KIND_LABELS).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+          <input
+            aria-label="Срок направления"
+            type="date"
+            className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+            value={newReferral.due_at}
+            onChange={(e) => setNewReferral((f) => ({ ...f, due_at: e.target.value }))}
+          />
+          <input
+            aria-label="Медорганизация"
+            placeholder="Медорганизация (опционально)"
+            className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+            value={newReferral.medical_org_name}
+            onChange={(e) => setNewReferral((f) => ({ ...f, medical_org_name: e.target.value }))}
+          />
+        </div>
+        <button
+          type="button"
+          className="rounded-md border border-border px-3 py-1.5 text-sm"
+          onClick={() => void onCreateReferral()}
+          disabled={creatingReferral || !newReferral.person_id}
+        >
+          Создать направление
+        </button>
+        {referrals.data.length > 0 ? (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Сотрудник</TableHead>
+                <TableHead>Вид</TableHead>
+                <TableHead>Статус</TableHead>
+                <TableHead>Срок</TableHead>
+                <TableHead>Медорганизация</TableHead>
+                <TableHead>Действия</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {referrals.data.map((referral) => (
+                <TableRow key={referral.id}>
+                  <TableCell>{personName(referral.person_id)}</TableCell>
+                  <TableCell>{examKindLabel(referral.exam_kind)}</TableCell>
+                  <TableCell>
+                    <span className="inline-flex items-center gap-1">
+                      <StatusBadge status={referral.status} />
+                      {referral.is_overdue && referral.status !== "completed" && referral.status !== "cancelled" ? (
+                        <span className="text-xs text-destructive">Просрочено</span>
+                      ) : null}
+                    </span>
+                  </TableCell>
+                  <TableCell>{referral.due_at ? formatDate(referral.due_at) : "—"}</TableCell>
+                  <TableCell>{referral.medical_org_name ?? "—"}</TableCell>
+                  <TableCell>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {referral.status === "issued" ? (
+                        <button
+                          type="button"
+                          className="rounded-md border border-border px-2 py-1 text-xs"
+                          onClick={() => void onTransitionReferral(referral.id, "scheduled")}
+                          disabled={transitioningId === referral.id}
+                        >
+                          Запланировать
+                        </button>
+                      ) : null}
+                      {referral.status === "issued" || referral.status === "scheduled" ? (
+                        <button
+                          type="button"
+                          className="rounded-md border border-border px-2 py-1 text-xs"
+                          onClick={() => void onTransitionReferral(referral.id, "cancelled")}
+                          disabled={transitioningId === referral.id}
+                        >
+                          Отменить
+                        </button>
+                      ) : null}
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        ) : !referrals.loading ? (
+          <p className="text-sm text-muted-foreground">Направлений нет.</p>
+        ) : null}
       </section>
 
       <section className="rounded-lg border border-border p-4 space-y-3">

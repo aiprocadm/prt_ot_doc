@@ -136,3 +136,65 @@ describe("MedicalPage contingent section", () => {
     expect(await screen.findByText(/PDF converter is unavailable/)).toBeInTheDocument();
   });
 });
+
+describe("MedicalPage referrals section", () => {
+  it("renders referrals with resolved person names and statuses", async () => {
+    (operationsApi.listMedicalReferrals as any).mockResolvedValue([
+      { id: "r1", person_id: "p1", exam_kind: "periodic", due_at: "2026-08-01", status: "issued", medical_org_name: "Клиника", result_exam_id: null, is_overdue: false },
+    ]);
+    render(<MedicalPage />);
+    await waitFor(() => expect(screen.getByText("Направления на медосмотры")).toBeInTheDocument());
+    expect(await screen.findByText("Выдан")).toBeInTheDocument();
+    expect(screen.getAllByText(/Иванов Иван/).length).toBeGreaterThan(0);
+    expect(screen.getByText("Клиника")).toBeInTheDocument();
+  });
+
+  it("generates referrals by contingent and reloads the list", async () => {
+    render(<MedicalPage />);
+    const btn = await screen.findByRole("button", { name: "Сформировать по контингенту" });
+    fireEvent.click(btn);
+    await waitFor(() => expect(operationsApi.generateMedicalReferrals).toHaveBeenCalled());
+    expect(await screen.findByText("Создано направлений: 4")).toBeInTheDocument();
+    expect((operationsApi.listMedicalReferrals as any).mock.calls.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("creates a manual referral with the selected person and kind", async () => {
+    render(<MedicalPage />);
+    const personSelect = await screen.findByLabelText("Сотрудник для направления");
+    fireEvent.change(personSelect, { target: { value: "p2" } });
+    fireEvent.change(screen.getByLabelText("Вид осмотра"), { target: { value: "psychiatric" } });
+    fireEvent.click(screen.getByRole("button", { name: "Создать направление" }));
+    await waitFor(() =>
+      expect(operationsApi.createMedicalReferral).toHaveBeenCalledWith({
+        person_id: "p2",
+        exam_kind: "psychiatric",
+      })
+    );
+  });
+
+  it("filters referrals by status server-side", async () => {
+    render(<MedicalPage />);
+    const filter = await screen.findByLabelText("Фильтр по статусу направления");
+    fireEvent.change(filter, { target: { value: "scheduled" } });
+    await waitFor(() =>
+      expect(operationsApi.listMedicalReferrals).toHaveBeenLastCalledWith({ status: "scheduled" })
+    );
+  });
+
+  it("schedules and cancels an issued referral", async () => {
+    (operationsApi.listMedicalReferrals as any).mockResolvedValue([
+      { id: "r1", person_id: "p1", exam_kind: "periodic", due_at: null, status: "issued", medical_org_name: null, result_exam_id: null, is_overdue: false },
+    ]);
+    render(<MedicalPage />);
+    const scheduleBtn = await screen.findByRole("button", { name: "Запланировать" });
+    fireEvent.click(scheduleBtn);
+    await waitFor(() =>
+      expect(operationsApi.transitionMedicalReferral).toHaveBeenCalledWith("r1", { to: "scheduled" })
+    );
+    const cancelBtn = await screen.findByRole("button", { name: "Отменить" });
+    fireEvent.click(cancelBtn);
+    await waitFor(() =>
+      expect(operationsApi.transitionMedicalReferral).toHaveBeenCalledWith("r1", { to: "cancelled" })
+    );
+  });
+});
