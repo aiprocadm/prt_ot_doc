@@ -141,3 +141,57 @@ async def test_create_psychiatric_exam_persists_new_fields(
     data = r.json()
     assert data["psychiatric_protocol_no"] == "ПРО-99"
     assert data["psychiatric_activity_codes"] == ["height"]
+
+
+@pytest.mark.asyncio
+async def test_set_position_activities_unknown_position_404(
+    async_client, sessionmaker, data_factory, make_auth_headers
+):
+    async with sessionmaker() as session:
+        await data_factory.ensure_tenant(session=session)
+        await session.commit()
+    headers = await make_auth_headers(RoleEnum.ADMIN)
+    await async_client.post(
+        "/api/v1/medical/psychiatric/activity-types/seed-defaults", headers=headers
+    )
+    r = await async_client.put(
+        "/api/v1/medical/psychiatric/positions/does-not-exist/activities",
+        headers=headers, json={"activity_codes": ["height"]},
+    )
+    assert r.status_code == status.HTTP_404_NOT_FOUND, r.text
+    # the _error(...) code is promoted to the top-level machine code in the error contract
+    assert r.json()["code"] == "position_not_found"
+
+
+@pytest.mark.asyncio
+async def test_activity_type_cross_tenant_isolation(
+    async_client, sessionmaker, data_factory, make_auth_headers
+):
+    async with sessionmaker() as session:
+        await data_factory.ensure_tenant(session=session, slug="psy-tenant-a")
+        await data_factory.ensure_tenant(session=session, slug="psy-tenant-b")
+        await session.commit()
+    # distinct email per tenant (cross-tenant workaround documented in conftest)
+    headers_a = await make_auth_headers(
+        RoleEnum.ADMIN, tenant="psy-tenant-a", email="admin-psy-a@example.com"
+    )
+    headers_b = await make_auth_headers(
+        RoleEnum.ADMIN, tenant="psy-tenant-b", email="admin-psy-b@example.com"
+    )
+    created = await async_client.post(
+        "/api/v1/medical/psychiatric/activity-types",
+        headers=headers_a, json={"code": "height", "name": "Работы на высоте"},
+    )
+    assert created.status_code == status.HTTP_201_CREATED, created.text
+    aid = created.json()["id"]
+    # tenant B must not see tenant A's activity type by id
+    got = await async_client.get(
+        f"/api/v1/medical/psychiatric/activity-types/{aid}", headers=headers_b
+    )
+    assert got.status_code == status.HTTP_404_NOT_FOUND
+    # ... nor in its list
+    lst = await async_client.get(
+        "/api/v1/medical/psychiatric/activity-types", headers=headers_b
+    )
+    assert lst.status_code == status.HTTP_200_OK
+    assert all(a["id"] != aid for a in lst.json()["items"])
