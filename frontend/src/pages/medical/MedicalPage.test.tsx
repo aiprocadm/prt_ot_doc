@@ -198,3 +198,34 @@ describe("MedicalPage referrals section", () => {
     );
   });
 });
+
+describe("MedicalPage referral completion", () => {
+  it("completes a scheduled referral with a selected result exam", async () => {
+    (operationsApi.listMedicalReferrals as any).mockResolvedValue([
+      { id: "r1", person_id: "p1", exam_kind: "periodic", due_at: null, status: "scheduled", medical_org_name: null, result_exam_id: null, is_overdue: false },
+    ]);
+    render(<MedicalPage />);
+    const completeBtn = await screen.findByRole("button", { name: "Завершить" });
+    fireEvent.click(completeBtn);
+    const examSelect = await screen.findByLabelText("Осмотр-результат");
+    const confirmBtn = screen.getByRole("button", { name: "Подтвердить" });
+    expect(confirmBtn).toBeDisabled();
+    fireEvent.change(examSelect, { target: { value: "e1" } });
+    expect(confirmBtn).not.toBeDisabled();
+    fireEvent.click(confirmBtn);
+    await waitFor(() =>
+      expect(operationsApi.transitionMedicalReferral).toHaveBeenCalledWith("r1", { to: "completed", result_exam_id: "e1" })
+    );
+  });
+
+  it("shows a hint instead of the picker when the person has no exams", async () => {
+    (operationsApi.listMedicalReferrals as any).mockResolvedValue([
+      { id: "r2", person_id: "p2", exam_kind: "periodic", due_at: null, status: "scheduled", medical_org_name: null, result_exam_id: null, is_overdue: false },
+    ]);
+    render(<MedicalPage />);
+    const completeBtn = await screen.findByRole("button", { name: "Завершить" });
+    fireEvent.click(completeBtn);
+    expect(await screen.findByText("Сначала зафиксируйте осмотр в реестре выше.")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Осмотр-результат")).not.toBeInTheDocument();
+  });
+});

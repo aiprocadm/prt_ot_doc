@@ -433,6 +433,19 @@ const MedicalPage = () => {
                           Запланировать
                         </button>
                       ) : null}
+                      {referral.status === "scheduled" ? (
+                        <button
+                          type="button"
+                          className="rounded-md border border-border px-2 py-1 text-xs"
+                          onClick={() => {
+                            setCompletingId((current) => (current === referral.id ? null : referral.id));
+                            setResultExamId("");
+                          }}
+                          disabled={transitioningId === referral.id}
+                        >
+                          Завершить
+                        </button>
+                      ) : null}
                       {referral.status === "issued" || referral.status === "scheduled" ? (
                         <button
                           type="button"
@@ -444,6 +457,39 @@ const MedicalPage = () => {
                         </button>
                       ) : null}
                     </div>
+                    {completingId === referral.id ? (
+                      (() => {
+                        const personExams = data.exams.filter((exam) => exam.person_id === referral.person_id);
+                        if (personExams.length === 0) {
+                          return <p className="mt-2 text-xs text-muted-foreground">Сначала зафиксируйте осмотр в реестре выше.</p>;
+                        }
+                        return (
+                          <div className="mt-2 flex flex-wrap items-center gap-2">
+                            <select
+                              aria-label="Осмотр-результат"
+                              className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                              value={resultExamId}
+                              onChange={(e) => setResultExamId(e.target.value)}
+                            >
+                              <option value="">Выберите осмотр…</option>
+                              {personExams.map((exam) => (
+                                <option key={exam.id} value={exam.id}>
+                                  {examKindLabel(exam.exam_type)} · {formatDate(exam.exam_date)}
+                                </option>
+                              ))}
+                            </select>
+                            <button
+                              type="button"
+                              className="rounded-md border border-border px-2 py-1 text-xs"
+                              onClick={() => void onTransitionReferral(referral.id, "completed", resultExamId)}
+                              disabled={!resultExamId || transitioningId === referral.id}
+                            >
+                              Подтвердить
+                            </button>
+                          </div>
+                        );
+                      })()
+                    ) : null}
                   </TableCell>
                 </TableRow>
               ))}
