@@ -8,7 +8,7 @@ Legend: **FIXED** = applied + regression-checked · **DEFERRED** = real, but nee
 design/domain decision (recorded here with a recommendation) · **NOT A BUG** = a
 verified false positive.
 
-## Fixed (33)
+## Fixed (36)
 
 Crashes / missing methods
 - `routes/briefings.py:399` — `bulk-create` passed `person_id` twice (inherited via `**base`) → guaranteed `TypeError` on every call. Excluded the inherited key.
@@ -42,7 +42,9 @@ State-machine guards
 - `routes/edo_workflow.py:473` — `decide_approval_request` could mutate a terminal request. Guard `status is RUNNING`.
 - `routes/approval_signing_v1.py:429` — re-deciding a DONE task re-advanced the process (duplicate tasks). Guard `status is OPEN`.
 - `routes/safety_ops.py` — `complete_action`/`verify_action` had no state guard (regressed verified actions / verified un-completed ones). Guarded against terminal regression and verify-before-complete.
-- **#14 (terminal half)** `modules/incidents/operations.py` — `update_incident` wrote `status` with no guard, so a CLOSED/CANCELLED incident could be reopened via a generic PATCH. Now leaving a terminal state is rejected (400). Regression test added. Forward-order enforcement across non-terminal states still needs the documented lifecycle (see deferred #14-forward).
+- **#14 (full)** `modules/incidents/operations.py` — `update_incident` wrote `status` with no guard. Now enforces the incident lifecycle: terminal CLOSED/CANCELLED can't be changed (400); open states advance forward `reported → investigating → corrective_actions → closed` (skip-ahead allowed, backward rejected); cancel is allowed from any open state. **Documented decision** (owner may override the transition rules). Regression tests for both terminal-reopen and backward-move.
+- **#16** `modules/projections/services.py` — the person-compliance projection hardcoded `readiness_status="unknown"` and never populated `overdue_trainings`/`overdue_briefings`, so dependent KPIs were permanently 0. Now computed per person (grouped, no N+1): overdue = a lapsed validity — a training enrolment past `expires_at` or a briefing past `valid_until`; `readiness_status` = "blocked" if any overdue else "ready" (**documented decision**). Also fixed a pre-existing latent crash on the same path: `row.site_id = person.site_id` (`Person` has no `site_id` since the ARCH-2 split) now uses `getattr(..., None)`. Regression test added.
+- **#29** `modules/analytics/services.py` + `modules/projections/services.py` — `trend_series` re-ran the same current aggregate for every bucket (flat line). Now the latest bucket uses the live value and each past bucket reads the most recent daily `DashboardKpiSnapshot` on/before that date; the snapshot builder was extended to record all trend metrics (from the same read models) and to use the read models' correct open-count semantics. Real trends fill in as daily snapshots accumulate. Regression test asserts a past bucket differs from the live value.
 - **#15** `routes/training_next.py` — `mark-passed` set only `status/completed_at`, so passed enrolments read as incomplete/overdue everywhere. Now mirrors the canonical `submit_attempt` completion: sets `completion_status="completed"`, `progress_percent=100`, and `expires_at` from the program's `validity_months`. Regression test added.
 
 Security / authorization
@@ -50,12 +52,11 @@ Security / authorization
 - **#4** `routes/edo_workflow.py:487` — `decide_approval_request` never checked the step's required role, so any actor could approve every step of a multi-step route. Now the actor must hold `rules.steps[i].role` (admin/owner may approve any step).
 - **#17** `domains/work_permits/service.py:388` — `signed_closing_kinds` derived both сдал/принял kinds from one person holding two roles (single-signature two-party bypass). Now each closing kind must be backed by a distinct signer (greedy bipartite assignment).
 
-## Deferred — need a design/domain decision (4)
+## Deferred — needs a packs-v2 redesign, not implementable as-is (1)
 
-1. **#14-forward Incident forward-order transitions** (`modules/incidents/operations.py:191`). The terminal-reopen guard is **FIXED** (a CLOSED/CANCELLED incident can't be reopened). Enforcing the *order* of the non-terminal states (e.g. can `reported` jump straight to `closed`? can it move backward?) still needs the real lifecycle spec: the existing `IncidentCaseService.validate_transition` uses a *stale vocabulary* (`draft/registered/awaiting_actions/archived`) that doesn't match the real `IncidentStatus` enum (`reported/investigating/corrective_actions/closed/cancelled`), so it can't be wired in as-is.
-2. **#16 Person-compliance projection hardcodes `unknown`** (`modules/projections/services.py:364`). `overdue_trainings`/`overdue_briefings` never populated → dependent KPIs are permanently 0. Needs the per-person overdue computation.
-3. **#29 Analytics `trend_series` is flat** (`modules/analytics/services.py:97`). Every time bucket runs the same current-snapshot query; the read-models store no history, so a real trend cannot be reconstructed without a time-series snapshot table.
-4. **#32 `pack_safety_summary` — person-scoping half (design mismatch, not a schema fix)** (`routes/packs/run.py:447`). The isolation/correctness half is **FIXED** (a bogus/cross-tenant `pack_run_id` now 404s instead of returning a 200 with arbitrary persons). Investigated the remaining "scope to the run's persons" half and it is **not a `PackRunItem.person_id` migration**: the packs-v2 `PackRun`/`PackRunItem` flow is created purely from `selected_rows` + `source_file_id` (no `person_ids` anywhere — the person-based list lives in the *separate* `run_pack`/`PackRunRequest` flow). A `person_id` column would have no reliable population source (only fuzzy source-row re-derivation) and stay NULL. The real question is a product one: should this endpoint be person-scoped at all given packs-v2 is row/document-based, or should packs-v2 track subjects? Left as-is (returns tenant persons for a validated run).
+1. **#32 `pack_safety_summary` — person-scoping half (not implementable without redesign)** (`routes/packs/run.py:447`). The isolation/correctness half is **FIXED** (a bogus/cross-tenant `pack_run_id` now 404s instead of returning a 200 with arbitrary persons). The remaining "scope to the run's persons" half was investigated and determined **not implementable with the current data model**: the packs-v2 `PackRun`/`PackRunItem` flow is created purely from `selected_rows` + `source_file_id` with **no `person_ids` and no `company_id`** anywhere (the person-based list lives in the *separate* `run_pack`/`PackRunRequest` flow, which does not feed this endpoint). A `PackRunItem.person_id` column would have no reliable population source (only fuzzy source-row re-derivation) and would stay NULL — dead schema. Truly per-run person-scoping requires a packs-v2 redesign to track subjects per run (a product decision). Left as tenant-wide person readiness for a validated run.
+
+Everything else from the sweep is fixed or a verified false positive.
 
 ## Not a bug (1)
 

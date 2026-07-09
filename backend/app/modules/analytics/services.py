@@ -26,6 +26,7 @@ from app.models.notifications import (
 )
 from app.modules.projections.models import (
     ContractorReadinessReadModel,
+    DashboardKpiSnapshot,
     PackageReadModel,
     PersonComplianceReadModel,
     SiteSafetyReadModel,
@@ -89,71 +90,80 @@ class AnalyticsAggregationService:
             "open_inspections": int(await self.session.scalar(inspections_stmt) or 0),
         }
 
+    _TREND_SNAPSHOT_KEY = {
+        "incidents": "incidents_open",
+        "inspections": "inspections_open",
+        "packages": "packages_total",
+        "trainings": "overdue_trainings",
+        "compliance": "overdue_compliance",
+    }
+
+    async def _current_metric_value(self, metric: str) -> int:
+        """Live value of a trend metric from the read models (the same figures the
+        dashboard shows)."""
+        if metric == "incidents":
+            stmt = select(func.sum(SiteSafetyReadModel.open_incidents_count)).where(
+                SiteSafetyReadModel.tenant_id == self.tenant_id
+            )
+        elif metric == "inspections":
+            stmt = select(func.sum(SiteSafetyReadModel.open_inspections_count)).where(
+                SiteSafetyReadModel.tenant_id == self.tenant_id
+            )
+        elif metric == "packages":
+            stmt = (
+                select(func.count())
+                .select_from(PackageReadModel)
+                .where(PackageReadModel.tenant_id == self.tenant_id)
+            )
+        elif metric == "trainings":
+            stmt = select(func.sum(PersonComplianceReadModel.overdue_trainings)).where(
+                PersonComplianceReadModel.tenant_id == self.tenant_id
+            )
+        elif metric == "compliance":
+            stmt = select(
+                func.sum(
+                    PersonComplianceReadModel.overdue_trainings
+                    + PersonComplianceReadModel.overdue_briefings
+                )
+            ).where(PersonComplianceReadModel.tenant_id == self.tenant_id)
+        else:
+            stmt = select(func.sum(ContractorReadinessReadModel.active_packages_count)).where(
+                ContractorReadinessReadModel.tenant_id == self.tenant_id
+            )
+        return int(await self.session.scalar(stmt) or 0)
+
     async def trend_series(
         self, metric: str, period: str = "daily", points: int = 12
     ) -> dict[str, Any]:
         today = date.today()
         step_days = 1 if period == "daily" else 7 if period == "weekly" else 30
+        # Real trend (#29): the latest bucket uses the live current value (robust even
+        # before today's snapshot job runs), and each past bucket reads the most recent
+        # daily DashboardKpiSnapshot on/before that date — instead of re-running the
+        # same current aggregate for every bucket, which produced a flat line. Past
+        # buckets read 0 until snapshots accumulate.
+        snapshot_key = self._TREND_SNAPSHOT_KEY.get(metric, "contractors")
+        current_value = await self._current_metric_value(metric)
         values: list[dict[str, Any]] = []
         for idx in reversed(range(points)):
             point_date = today - timedelta(days=idx * step_days)
-            if metric == "incidents":
-                value = int(
-                    await self.session.scalar(
-                        select(func.sum(SiteSafetyReadModel.open_incidents_count)).where(
-                            SiteSafetyReadModel.tenant_id == self.tenant_id
-                        )
-                    )
-                    or 0
-                )
-            elif metric == "inspections":
-                value = int(
-                    await self.session.scalar(
-                        select(func.sum(SiteSafetyReadModel.open_inspections_count)).where(
-                            SiteSafetyReadModel.tenant_id == self.tenant_id
-                        )
-                    )
-                    or 0
-                )
-            elif metric == "packages":
-                value = int(
-                    await self.session.scalar(
-                        select(func.count())
-                        .select_from(PackageReadModel)
-                        .where(PackageReadModel.tenant_id == self.tenant_id)
-                    )
-                    or 0
-                )
-            elif metric == "trainings":
-                value = int(
-                    await self.session.scalar(
-                        select(func.sum(PersonComplianceReadModel.overdue_trainings)).where(
-                            PersonComplianceReadModel.tenant_id == self.tenant_id
-                        )
-                    )
-                    or 0
-                )
-            elif metric == "compliance":
-                value = int(
-                    await self.session.scalar(
-                        select(
-                            func.sum(
-                                PersonComplianceReadModel.overdue_trainings
-                                + PersonComplianceReadModel.overdue_briefings
-                            )
-                        ).where(PersonComplianceReadModel.tenant_id == self.tenant_id)
-                    )
-                    or 0
-                )
+            if point_date >= today:
+                value = current_value
             else:
-                value = int(
-                    await self.session.scalar(
-                        select(func.sum(ContractorReadinessReadModel.active_packages_count)).where(
-                            ContractorReadinessReadModel.tenant_id == self.tenant_id
+                payload = (
+                    await self.session.execute(
+                        select(DashboardKpiSnapshot.payload)
+                        .where(
+                            DashboardKpiSnapshot.tenant_id == self.tenant_id,
+                            DashboardKpiSnapshot.scope_type == "tenant",
+                            DashboardKpiSnapshot.scope_id.is_(None),
+                            DashboardKpiSnapshot.snapshot_date <= point_date,
                         )
+                        .order_by(DashboardKpiSnapshot.snapshot_date.desc())
+                        .limit(1)
                     )
-                    or 0
-                )
+                ).scalar_one_or_none() or {}
+                value = int(payload.get(snapshot_key, 0) or 0)
             values.append({"date": point_date.isoformat(), "value": value})
         return {"metric": metric, "period": period, "series": values}
 
