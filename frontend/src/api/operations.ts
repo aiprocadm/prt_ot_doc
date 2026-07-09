@@ -329,14 +329,6 @@ export const operationsApi = {
     return response.data;
   },
 
-  setPositionActivities: async (positionId: string, activityCodes: string[]) => {
-    const response = await apiClient.put<{ position_id: string; activity_codes: string[] }>(
-      `/medical/psychiatric/positions/${positionId}/activities`,
-      { activity_codes: activityCodes }
-    );
-    return response.data;
-  },
-
   getFireSafetySnapshot: async () => {
     const [sitesResponse, inspectionsResponse, tasksResponse] = await Promise.all([
       apiClient.get<{ items: SiteDto[]; total: number }>("/sites", { params: { limit: 100, offset: 0 } }),
