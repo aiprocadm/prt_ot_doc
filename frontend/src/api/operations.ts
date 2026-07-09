@@ -1,4 +1,5 @@
 import { apiClient } from "@/api/client";
+import { downloadBlob } from "@/utils/download";
 import { briefingsApi, type BriefingEntryDto, type BriefingJournalDto, type BriefingTemplateDto } from "@/api/briefings";
 import { opsApi, type CorrectiveActionDto, type InspectionDto, type PrescriptionDto, type PpeItemDto } from "@/api/ops";
 import type { PersonDto } from "@/types/dto/persons";
@@ -119,6 +120,53 @@ export type MedicalExamDto = {
   valid_until: string;
   created_at: string;
   updated_at: string;
+};
+
+export type ContingentRegisterRowDto = {
+  position_id: string;
+  position_name: string;
+  factors: { code: string; name: string }[];
+  headcount: number;
+  exam_kinds: string[];
+  periodicity_months?: number | null;
+};
+
+export type NamedListRowDto = {
+  person_id: string;
+  full_name: string;
+  position_name?: string | null;
+  department?: string | null;
+  factors: { code: string; name: string }[];
+  required_kinds: string[];
+  last_exam_date?: string | null;
+  next_due_date?: string | null;
+  status: string;
+};
+
+export type MedicalReferralDto = {
+  id: string;
+  person_id: string;
+  exam_kind: string;
+  due_at?: string | null;
+  status: "issued" | "scheduled" | "completed" | "cancelled";
+  medical_org_name?: string | null;
+  result_exam_id?: string | null;
+  is_overdue: boolean;
+};
+
+export type MedicalSuspensionDto = {
+  id: string;
+  person_id: string;
+  reason: "unfit" | "contraindication";
+  status: "active" | "lifted";
+  source_exam_id?: string | null;
+};
+
+export type MedicalSummaryDto = {
+  by_status: Record<string, number>;
+  total: number;
+  overdue_count: number;
+  suspended_count: number;
 };
 
 export type OutboxDto = { id: string; status: string; event_type: string; destination: string; attempts: number; created_at: string };
@@ -326,6 +374,69 @@ export const operationsApi = {
     const response = await apiClient.post<{ count: number }>(
       "/medical/psychiatric/activity-types/seed-defaults"
     );
+    return response.data;
+  },
+
+  getMedicalOversightSnapshot: async () => {
+    const [summaryResponse, registerResponse, namedListResponse] = await Promise.all([
+      apiClient.get<MedicalSummaryDto>("/medical/summary"),
+      apiClient.get<{ items: ContingentRegisterRowDto[]; total: number }>("/medical/contingent/register"),
+      apiClient.get<{ items: NamedListRowDto[]; total: number }>("/medical/named-list")
+    ]);
+    return {
+      summary: summaryResponse.data,
+      register: registerResponse.data.items ?? [],
+      namedList: namedListResponse.data.items ?? []
+    };
+  },
+
+  downloadContingentRegisterPrint: async (fmt: "docx" | "pdf") => {
+    const { data } = await apiClient.get<Blob>("/medical/contingent/register/print", {
+      params: { format: fmt },
+      responseType: "blob"
+    });
+    downloadBlob(data, `contingent-register.${fmt}`);
+  },
+
+  downloadNamedListPrint: async (fmt: "docx" | "pdf") => {
+    const { data } = await apiClient.get<Blob>("/medical/named-list/print", {
+      params: { format: fmt },
+      responseType: "blob"
+    });
+    downloadBlob(data, `named-list.${fmt}`);
+  },
+
+  listMedicalReferrals: async (params?: { status?: string }) => {
+    const response = await apiClient.get<{ items: MedicalReferralDto[]; total: number }>("/medical/referrals", {
+      params: { limit: 100, offset: 0, ...(params?.status ? { status: params.status } : {}) }
+    });
+    return response.data.items ?? [];
+  },
+
+  createMedicalReferral: async (payload: { person_id: string; exam_kind: string; due_at?: string; medical_org_name?: string }) => {
+    const response = await apiClient.post<MedicalReferralDto>("/medical/referrals", payload);
+    return response.data;
+  },
+
+  transitionMedicalReferral: async (referralId: string, payload: { to: string; result_exam_id?: string }) => {
+    const response = await apiClient.post<MedicalReferralDto>(`/medical/referrals/${referralId}/transition`, payload);
+    return response.data;
+  },
+
+  generateMedicalReferrals: async () => {
+    const response = await apiClient.post<{ count: number }>("/medical/contingent/generate-referrals");
+    return response.data;
+  },
+
+  listMedicalSuspensions: async (params?: { status?: "active" }) => {
+    const response = await apiClient.get<{ items: MedicalSuspensionDto[]; total: number }>("/medical/suspensions", {
+      params: params?.status ? { status: params.status } : {}
+    });
+    return response.data.items ?? [];
+  },
+
+  liftMedicalSuspension: async (suspensionId: string) => {
+    const response = await apiClient.post<MedicalSuspensionDto>(`/medical/suspensions/${suspensionId}/lift`);
     return response.data;
   },
 
