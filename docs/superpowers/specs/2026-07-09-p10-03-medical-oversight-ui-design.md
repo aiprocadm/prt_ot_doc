@@ -160,7 +160,7 @@ export type MedicalSummaryDto = {
 
 ## Тестирование
 
-`frontend/src/__tests__/MedicalPage.test.tsx` расширяется (мок `operationsApi` — полный, по граблям
+`frontend/src/pages/medical/MedicalPage.test.tsx` (co-located) расширяется (мок `operationsApi` — полный, по граблям
 `OpsPages.test.tsx`: страница на маунте зовёт ВСЕ методы):
 
 1. секции «Контингент», «Направления», «Отстранения» рендерятся с данными (имена person резолвятся);
