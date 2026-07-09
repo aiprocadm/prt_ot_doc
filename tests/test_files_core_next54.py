@@ -8,12 +8,23 @@ from app.modules.files.service import FileService
 from app.modules.files.storage import assert_tenant_key, build_tenant_key
 
 
+class _Scalars:
+    def __init__(self, values):
+        self._values = values
+
+    def all(self):
+        return list(self._values)
+
+
 class _Scalar:
     def __init__(self, value):
         self._value = value
 
     def scalar_one_or_none(self):
         return self._value
+
+    def scalars(self):
+        return _Scalars([self._value] if self._value is not None else [])
 
 
 class DummySession:
@@ -135,6 +146,48 @@ async def test_create_upload_session_dedupe_merges_metadata(
     assert ttl == 0
     assert record.metadata_json["old"] == "1"
     assert record.metadata_json["new"] == "2"
+    get_settings.cache_clear()  # type: ignore[attr-defined]
+
+
+@pytest.mark.asyncio
+async def test_create_upload_session_dedupe_scoped_to_company(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A same-sha clean record belonging to another company must NOT be deduped into
+    (it would reassign/clobber that company's file). The caller's company gets its own
+    record."""
+    from app.core.config import get_settings
+
+    existing = FileRecord(
+        id="existing",
+        tenant_id="t1",
+        bucket="ptd",
+        object_key="t1/2026/03/03/existing/a.txt",
+        content_type="text/plain",
+        size_bytes=1,
+        sha256="b" * 64,
+        status=FileStatus.clean.value,
+        av_result_json={},
+        metadata_json={"company_id": "A"},
+    )
+    session = DummySession(None, dedupe=existing)
+    svc = FileService(session=session, tenant_id="t1")
+
+    monkeypatch.setenv("FILE_ALLOWED_MIME", "text/plain")
+    get_settings.cache_clear()  # type: ignore[attr-defined]
+    monkeypatch.setattr(
+        "app.modules.files.service.s3.generate_presigned_put_url",
+        lambda key, **kwargs: "http://put",
+    )
+    record, upload_url, _ttl = await svc.create_upload_session(
+        filename="a.txt",
+        content_type="text/plain",
+        size_bytes=1,
+        metadata_json={"sha256": "b" * 64, "company_id": "B"},
+    )
+    # Different company -> not a dedup hit: a fresh record + a real upload URL.
+    assert record.id != "existing"
+    assert upload_url == "http://put"
     get_settings.cache_clear()  # type: ignore[attr-defined]
 
 

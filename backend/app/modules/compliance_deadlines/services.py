@@ -34,7 +34,10 @@ class ComplianceDeadlineService:
             if row["valid_until"] is None:
                 continue
             due_dt = datetime.combine(row["valid_until"], datetime.min.time(), tzinfo=timezone.utc)
-            status = "overdue" if due_dt < now else "upcoming"
+            # Compare on date grain: a certificate whose valid_until is today is still
+            # valid for all of today, so it is not overdue until tomorrow (matches the
+            # medical-exam `valid_until < today` reference semantics).
+            status = "overdue" if row["valid_until"] < now.date() else "upcoming"
             session.add(
                 ComplianceDeadline(
                     tenant_id=tenant_id,

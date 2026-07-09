@@ -352,6 +352,9 @@ class WebhookDelivery(TenantBaseModel):
 
     endpoint_id: Mapped[str] = mapped_column(String(36), nullable=False)
     event_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    # Explicit link back to the source Outbox row so :retry can re-drive delivery
+    # (the OutboxProcessor is the actual delivery engine; this table is a mirror).
+    outbox_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     status: Mapped[str] = mapped_column(String(32), nullable=False)
     attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     request_headers: Mapped[dict[str, Any] | None] = mapped_column(

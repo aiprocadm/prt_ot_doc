@@ -209,3 +209,43 @@ async def test_transfer_unknown_source_raises(sessionmaker, data_factory: TestDa
                 to_location="B",
                 quantity=1,
             )
+
+
+@pytest.mark.asyncio
+async def test_transfer_copies_unit_cost_to_dest_batch(
+    sessionmaker, data_factory: TestDataFactory
+):
+    """The auto-created dest batch inherits the source's per-unit cost (provenance),
+    so a later receipt onto it is priced instead of silently dropped from the safety
+    budget's ``actual_total`` as an unpriced receipt."""
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        item = PPEItem(tenant_id=tenant.id, name="Каска")
+        session.add(item)
+        await session.flush()
+        source = PPEStockBatch(
+            tenant_id=tenant.id,
+            item_id=item.id,
+            batch_no="B-1",
+            quantity=8,
+            location="A",
+            unit_cost=125,
+        )
+        session.add(source)
+        await session.flush()
+
+        result = await transfer_stock(
+            session,
+            tenant_id=tenant.id,
+            source_batch_id=source.id,
+            to_location="B",
+            quantity=3,
+        )
+        dest = (
+            await session.execute(
+                select(PPEStockBatch).where(PPEStockBatch.id == result.dest_batch_id)
+            )
+        ).scalar_one()
+
+    assert dest.unit_cost is not None
+    assert float(dest.unit_cost) == 125.0

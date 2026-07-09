@@ -220,11 +220,18 @@ async def _tenant_scoped_list(
 ):
     limit = max(1, min(limit, 100))
     offset = max(offset, 0)
-    sort_column = getattr(model, sort_by, None) or getattr(model, "updated_at")
+    # Only allow sorting by a real table column; an arbitrary attribute name (e.g.
+    # "metadata", a relationship) would resolve via getattr to a non-orderable object
+    # and crash desc()/asc() with a 500.
+    sortable = set(model.__table__.columns.keys())
+    sort_key = sort_by if sort_by in sortable else "updated_at"
+    sort_column = getattr(model, sort_key)
     order_by = desc(sort_column) if sort_order.lower() == "desc" else asc(sort_column)
-    base_stmt = _apply_filters(
-        select(model).where(model.tenant_id == tenant_id), model, q, status_value
-    )
+    base = select(model).where(model.tenant_id == tenant_id)
+    # Never expose soft-deleted rows through the public API.
+    if hasattr(model, "deleted_at"):
+        base = base.where(model.deleted_at.is_(None))
+    base_stmt = _apply_filters(base, model, q, status_value)
     total = int(
         (await session.execute(select(func.count()).select_from(base_stmt.subquery()))).scalar_one()
     )

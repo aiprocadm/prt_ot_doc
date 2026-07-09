@@ -178,6 +178,32 @@ async def update_incident(
     elif "pack_id" in updates and updates["pack_id"] is None:
         incident.pack_id = None
 
+    if "status" in updates:
+        current_status = incident.status
+        target_status = updates["status"]
+        current_val = getattr(current_status, "value", current_status)
+        # Lifecycle (documented decision, review sweep #14): the open states advance in
+        # order reported -> investigating -> corrective_actions -> closed (forward or
+        # skip-ahead allowed, backward moves rejected); cancelled is reachable from any
+        # open state; closed/cancelled are terminal (no change out of them).
+        _order = {
+            IncidentStatus.REPORTED: 0,
+            IncidentStatus.INVESTIGATING: 1,
+            IncidentStatus.ACTIONS: 2,
+            IncidentStatus.CLOSED: 3,
+        }
+        if current_status in (IncidentStatus.CLOSED, IncidentStatus.CANCELLED):
+            if target_status != current_status:
+                raise ValueError(f"cannot change status of a {current_val} incident")
+        elif target_status != current_status and target_status != IncidentStatus.CANCELLED:
+            cur_rank = _order.get(current_status)
+            tgt_rank = _order.get(target_status)
+            if cur_rank is not None and tgt_rank is not None and tgt_rank < cur_rank:
+                tgt_val = getattr(target_status, "value", target_status)
+                raise ValueError(
+                    f"invalid incident transition: {current_val} -> {tgt_val} (backward)"
+                )
+
     for key in {
         "title",
         "description",

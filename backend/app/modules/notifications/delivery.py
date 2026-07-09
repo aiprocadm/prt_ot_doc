@@ -129,6 +129,10 @@ async def _escalate(
         },
         priority=notification.priority,
         dedup_key=f"{notification.dedup_key}:esc{tier}",
+        # next_escalation_channel already vetted this channel (an enabled channel or
+        # the guaranteed-terminal in-app one); force delivery so a disabled in-app
+        # opt-out cannot silently swallow the escalation.
+        force=True,
     )
     logger.info(
         "notifications.escalated",

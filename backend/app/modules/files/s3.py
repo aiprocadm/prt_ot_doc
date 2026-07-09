@@ -31,6 +31,7 @@ __all__ = [
     "ensure_bucket",
     "put_object",
     "head_object",
+    "delete_object",
     "stream_object",
     "get_client",
     "reset_client_cache",
@@ -398,6 +399,43 @@ def head_object(*, key: str) -> dict[str, Any] | None:
         "etag": response.get("ETag", "").strip('"'),
         "last_modified": response.get("LastModified"),
     }
+
+
+def delete_object(*, key: str) -> None:
+    """Remove an object by key from the active backend.
+
+    Idempotent: a missing key is not an error (mirrors S3 ``DeleteObject``
+    semantics), so cleanup paths (aborted uploads, soft-deletes) can call it safely.
+    """
+
+    settings = get_settings()
+    if _using_memory_backend():
+        MemoryStorageService.default().delete(key)
+        logger.info("files.memory.object.deleted", extra={"key": key})
+        return
+    if _using_local_backend():
+        storage = _get_local_storage()
+        storage.delete(key)
+        try:
+            _local_metadata_path(storage, key).unlink(missing_ok=True)
+        except OSError:  # pragma: no cover - defensive
+            pass
+        logger.info("files.local.object.deleted", extra={"key": key})
+        return
+
+    client = get_client()
+    try:
+        client.delete_object(Bucket=settings.s3_bucket, Key=key)
+    except ClientError as exc:
+        error_code = exc.response.get("Error", {}).get("Code") if exc.response else None
+        if error_code in {"404", "NoSuchKey", "NotFound"}:
+            return
+        raise S3OperationError.from_client_error(
+            "delete_object", exc, bucket=settings.s3_bucket, key=key
+        ) from exc
+    logger.info(
+        "files.s3.object.deleted", extra={"bucket": settings.s3_bucket, "key": key}
+    )
 
 
 @contextmanager

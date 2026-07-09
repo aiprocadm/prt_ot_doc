@@ -249,6 +249,7 @@ async def _find_or_create_dest_batch(
         certificate_no=source.certificate_no,
         certificate_expires_at=source.certificate_expires_at,
         supplier_id=source.supplier_id,
+        unit_cost=source.unit_cost,
     )
     session.add(dest)
     await session.flush()

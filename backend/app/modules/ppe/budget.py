@@ -44,6 +44,19 @@ class BudgetNotFound(Exception):
         self.budget_id = budget_id
 
 
+class BudgetPeriodInvalid(Exception):
+    """Raised when an update would leave ``period_end`` before ``period_start``.
+
+    The create path guards this via the Pydantic ``model_validator``, but a partial
+    PATCH (only one period bound in the body) has nothing to compare against, so the
+    invariant is re-checked here against the merged stored+incoming values.
+    """
+
+    def __init__(self, budget_id: str) -> None:
+        super().__init__(f"period_end must be >= period_start (budget {budget_id})")
+        self.budget_id = budget_id
+
+
 async def _load_budget(session: AsyncSession, tenant_id: str, budget_id: str) -> PPESafetyBudget:
     stmt = select(PPESafetyBudget).where(
         PPESafetyBudget.id == budget_id,
@@ -111,8 +124,23 @@ async def list_budgets(
 async def update_budget(
     session: AsyncSession, tenant_id: str, budget_id: str, **fields
 ) -> PPESafetyBudget:
-    """Update a budget; only keys in ``_UPDATABLE_FIELDS`` are applied."""
+    """Update a budget; only keys in ``_UPDATABLE_FIELDS`` are applied.
+
+    Re-validates the period against the merged stored+incoming values: a partial
+    PATCH carrying only one bound cannot be checked by the request-only Pydantic
+    validator, so we guard the effective range here to avoid an inverted period
+    (``period_end < period_start``) that ``compute_budget_actual`` would silently
+    turn into a zero actual.
+    """
     budget = await _load_budget(session, tenant_id, budget_id)
+    effective_start = fields["period_start"] if "period_start" in fields else budget.period_start
+    effective_end = fields["period_end"] if "period_end" in fields else budget.period_end
+    if (
+        effective_start is not None
+        and effective_end is not None
+        and effective_end < effective_start
+    ):
+        raise BudgetPeriodInvalid(budget_id)
     for key, value in fields.items():
         if key in _UPDATABLE_FIELDS:
             setattr(budget, key, value)

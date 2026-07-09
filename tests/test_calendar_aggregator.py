@@ -509,6 +509,58 @@ class TestCalendarAggregatorService:
         assert len(within_window.items) == 1
         assert within_window.items[0].extra["entity_type"] == "medical_exam"
 
+    async def test_date_range_windows_source_counts(
+        self,
+        test_db_session: AsyncSession,
+        data_factory: TestDataFactory,
+    ) -> None:
+        """Per-source count/total must respect from_at/to_at and match the windowed
+        item list (regression: counts previously reported the all-time total)."""
+        tenant = await data_factory.ensure_tenant(session=test_db_session)
+        company = await data_factory.create_company(tenant=tenant, session=test_db_session)
+        person = await data_factory.create_person(
+            tenant=tenant,
+            company=company,
+            session=test_db_session,
+            first_name="Window",
+            last_name="Counts",
+            email="window-counts@example.com",
+        )
+        now = datetime.now(timezone.utc)
+        test_db_session.add_all(
+            [
+                ComplianceDeadline(
+                    tenant_id=tenant.id,
+                    entity_type="medical_exam",
+                    entity_id="in-window",
+                    person_id=person.id,
+                    due_at=now + timedelta(days=5),
+                    status="upcoming",
+                ),
+                ComplianceDeadline(
+                    tenant_id=tenant.id,
+                    entity_type="training_session",
+                    entity_id="out-of-window",
+                    person_id=person.id,
+                    due_at=now + timedelta(days=200),  # outside the 14-day window
+                    status="upcoming",
+                ),
+            ]
+        )
+        await test_db_session.commit()
+
+        service = CalendarAggregatorService(tenant_id=str(tenant.id), db=test_db_session)
+        windowed = await service.list_events(
+            from_at=now,
+            to_at=now + timedelta(days=14),
+            source_types=["compliance_deadline"],
+        )
+        by_source = {row.source_type: row for row in windowed.by_source}
+        # Only the in-window deadline is counted — not the all-time total of 2.
+        assert len(windowed.items) == 1
+        assert by_source["compliance_deadline"].count == 1
+        assert windowed.total == 1
+
     async def test_unknown_source_type_raises(
         self,
         test_db_session: AsyncSession,

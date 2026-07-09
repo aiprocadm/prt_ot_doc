@@ -39,6 +39,7 @@ from app.core.tracing import get_trace_id
 from app.models.file import File as StoredFile
 from app.models.file import FileScanStatus
 from app.models.models import (
+    PackRun,
     Person,
     PipelineRun,
     PipelineRunStatus,
@@ -443,6 +444,22 @@ async def pack_safety_summary(
 
     del access
     tenant_scope = _tenant_scope_values(tenant)
+
+    # Validate the referenced run: a bogus or cross-tenant pack_run_id must 404, not
+    # silently return a 200 with arbitrary tenant data. (Scoping the summary to the
+    # run's specific persons is not possible today — PackRunItem has no person link;
+    # see docs/stabilization/CODE_REVIEW_SWEEP_2026-07-08.md #32.)
+    run = (
+        await session.execute(
+            select(PackRun).where(
+                PackRun.id == pack_run_id,
+                PackRun.tenant_id.in_(tenant_scope),
+                PackRun.deleted_at.is_(None),
+            )
+        )
+    ).scalar_one_or_none()
+    if run is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "pack run not found")
 
     people_stmt = (
         select(Person)

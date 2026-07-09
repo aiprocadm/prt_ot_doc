@@ -13,6 +13,8 @@ read-models, which keeps the suite fast and deterministic.
 
 from __future__ import annotations
 
+from datetime import date, timedelta
+
 import pytest
 from sqlalchemy import select
 
@@ -24,6 +26,7 @@ from app.modules.analytics.services import (
 )
 from app.modules.projections.models import (
     ContractorReadinessReadModel,
+    DashboardKpiSnapshot,
     PackageReadModel,
     PersonComplianceReadModel,
     SiteSafetyReadModel,
@@ -367,6 +370,43 @@ async def test_trend_series_packages_metric(sessionmaker) -> None:
             "packages", points=1
         )
     assert result["series"][0]["value"] == 3
+
+
+@pytest.mark.anyio
+async def test_trend_series_past_bucket_reads_snapshot(sessionmaker) -> None:
+    """The trend is no longer flat (#29): the latest bucket is the live value, past
+    buckets read the daily DashboardKpiSnapshot history."""
+    async with sessionmaker() as session:
+        tenant_id = await _tenant_id(session)
+        # Live value = 5 open incidents.
+        await _seed_site_safety(
+            session,
+            tenant_id=tenant_id,
+            site_id="s1",
+            open_incidents_count=5,
+            open_inspections_count=0,
+        )
+        # A historical snapshot 3 days ago recorded only 2.
+        session.add(
+            DashboardKpiSnapshot(
+                tenant_id=tenant_id,
+                scope_type="tenant",
+                scope_id=None,
+                snapshot_date=date.today() - timedelta(days=3),
+                payload={"incidents_open": 2},
+            )
+        )
+        await session.commit()
+        result = await AnalyticsAggregationService(session, tenant_id).trend_series(
+            "incidents", period="daily", points=4
+        )
+    series = result["series"]
+    assert len(series) == 4
+    # Oldest bucket (today-3) reads the snapshot; latest (today) is the live value.
+    assert series[0]["value"] == 2
+    assert series[-1]["value"] == 5
+    # Not a flat line.
+    assert {p["value"] for p in series} != {5}
 
 
 @pytest.mark.anyio

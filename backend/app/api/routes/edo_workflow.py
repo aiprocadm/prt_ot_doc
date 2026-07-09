@@ -473,6 +473,17 @@ async def decide_approval_request(
     approval_request = await session.get(ApprovalRequest, request_id)
     if approval_request is None or approval_request.tenant_id != str(tenant.id):
         raise _edo_not_found("approval_request")
+    # Only an in-flight request may be decided; a terminal one (approved/rejected/
+    # canceled) must not be flipped by a later decision.
+    if approval_request.status is not ApprovalRequestStatus.RUNNING:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=api_problem_detail(
+                code="EDO_INVALID_STATE",
+                message="approval request is not running",
+                error_type="edo",
+            ),
+        )
 
     decision = ApprovalDecision(
         tenant_id=str(tenant.id),
@@ -489,7 +500,23 @@ async def decide_approval_request(
         if route is None or str(route.tenant_id) != str(tenant.id):
             raise _edo_not_found("approval_route")
         rules = ApprovalRules.validate_rules(route.rules_json)
-        next_index = approval_request.current_step_index + 1
+        step_index = approval_request.current_step_index
+        # Enforce the step's required role: only an actor holding that role (or an
+        # admin/owner) may approve this step, else one actor could walk every step of
+        # a multi-step route.
+        if 0 <= step_index < len(rules.steps):
+            required_role = rules.steps[step_index].role
+            actor_role = access.user.role
+            if actor_role not in (RoleEnum.OWNER, RoleEnum.ADMIN) and actor_role != required_role:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=api_problem_detail(
+                        code="EDO_STEP_ROLE_MISMATCH",
+                        message="actor role does not match the approval step role",
+                        error_type="edo",
+                    ),
+                )
+        next_index = step_index + 1
         if next_index >= len(rules.steps):
             approval_request.status = ApprovalRequestStatus.APPROVED
             approval_request.finished_at = datetime.now(tz=timezone.utc)
@@ -761,8 +788,13 @@ async def edo_webhook(
     raw = await request.body()
     configured_secret = (tenant.settings or {}).get("edo_webhook_secret")
     if configured_secret:
+        # A configured secret makes the signature mandatory: a missing X-Signature must
+        # be rejected, not silently accepted (else an attacker bypasses HMAC by omitting
+        # the header). Sanctioned tightening of the prior optional-signature behavior.
+        if not x_signature:
+            raise _edo_unauthorized("Missing webhook signature")
         expected = hmac.new(str(configured_secret).encode("utf-8"), raw, hashlib.sha256).hexdigest()
-        if x_signature and not hmac.compare_digest(expected, x_signature):
+        if not hmac.compare_digest(expected, x_signature):
             raise _edo_unauthorized("Invalid webhook signature")
 
     payload_hash = hashlib.sha256(raw).hexdigest()

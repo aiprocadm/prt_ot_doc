@@ -377,6 +377,9 @@ async def transition_referral(
                 select(MedicalExam).where(
                     MedicalExam.id == payload.result_exam_id,
                     MedicalExam.tenant_id == tenant.id,
+                    # The result exam must belong to the same person as the referral,
+                    # else one person's referral could be closed with another's exam.
+                    MedicalExam.person_id == record.person_id,
                     MedicalExam.deleted_at.is_(None),
                 )
             )
@@ -386,7 +389,7 @@ async def transition_referral(
                 status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail=_error(
                     "result_exam_not_found",
-                    "result_exam_id does not reference an exam in this tenant",
+                    "result_exam_id does not reference an exam for this referral's person",
                 ),
             )
         record.result_exam_id = payload.result_exam_id

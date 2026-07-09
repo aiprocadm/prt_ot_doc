@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime, timezone
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,13 +8,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.finance import Contract, Order
 from app.models.models import (
     NPA,
+    BriefingEntry,
     ClientPackageRun,
     Company,
     Incident,
+    IncidentStatus,
     Inspection,
+    InspectionStatus,
     Person,
     Prescription,
     Site,
+    TrainingEnrollment,
 )
 from app.models.notifications import PlanTask
 from app.modules.client_portal.services import SafePortalPayloadService
@@ -75,14 +79,24 @@ class SiteSafetyProjectionService:
         incidents_by_site = (
             await self.session.execute(
                 select(Incident.site_id, func.count(Incident.id))
-                .where(Incident.tenant_id == self.tenant_id)
+                .where(
+                    Incident.tenant_id == self.tenant_id,
+                    Incident.deleted_at.is_(None),
+                    Incident.status.notin_([IncidentStatus.CLOSED, IncidentStatus.CANCELLED]),
+                )
                 .group_by(Incident.site_id)
             )
         ).all()
         inspections_by_site = (
             await self.session.execute(
                 select(Inspection.site_id, func.count(Inspection.id))
-                .where(Inspection.tenant_id == self.tenant_id)
+                .where(
+                    Inspection.tenant_id == self.tenant_id,
+                    Inspection.deleted_at.is_(None),
+                    Inspection.status.notin_(
+                        [InspectionStatus.COMPLETED, InspectionStatus.CANCELLED]
+                    ),
+                )
                 .group_by(Inspection.site_id)
             )
         ).all()
@@ -346,6 +360,43 @@ class ProjectionOrchestrator:
             .scalars()
             .all()
         )
+        # Per-person overdue counts, grouped once to avoid N+1. Decision (documented
+        # in the review sweep #16): "overdue" = a lapsed validity — a training
+        # enrolment whose certificate expiry (expires_at) or a briefing whose
+        # valid_until is in the past. readiness_status is "blocked" when the person has
+        # any overdue item, else "ready".
+        now = datetime.now(tz=timezone.utc)
+        overdue_trainings_by_person = {
+            pid: int(cnt)
+            for pid, cnt in (
+                await self.session.execute(
+                    select(TrainingEnrollment.person_id, func.count())
+                    .where(
+                        TrainingEnrollment.tenant_id == self.tenant_id,
+                        TrainingEnrollment.deleted_at.is_(None),
+                        TrainingEnrollment.expires_at.is_not(None),
+                        TrainingEnrollment.expires_at < now,
+                    )
+                    .group_by(TrainingEnrollment.person_id)
+                )
+            ).all()
+        }
+        overdue_briefings_by_person = {
+            pid: int(cnt)
+            for pid, cnt in (
+                await self.session.execute(
+                    select(BriefingEntry.person_id, func.count())
+                    .where(
+                        BriefingEntry.tenant_id == self.tenant_id,
+                        BriefingEntry.deleted_at.is_(None),
+                        BriefingEntry.person_id.is_not(None),
+                        BriefingEntry.valid_until.is_not(None),
+                        BriefingEntry.valid_until < now,
+                    )
+                    .group_by(BriefingEntry.person_id)
+                )
+            ).all()
+        }
         count = 0
         for person in persons:
             row = (
@@ -360,8 +411,16 @@ class ProjectionOrchestrator:
                 row = PersonComplianceReadModel(tenant_id=self.tenant_id, person_id=person.id)
                 self.session.add(row)
             row.company_id = person.company_id
-            row.site_id = person.site_id
-            row.readiness_status = "unknown"
+            # Person has no site_id column (ARCH-2 decomposition); guard defensively so
+            # the projection can't AttributeError on it.
+            row.site_id = getattr(person, "site_id", None)
+            overdue_trainings = overdue_trainings_by_person.get(person.id, 0)
+            overdue_briefings = overdue_briefings_by_person.get(person.id, 0)
+            row.overdue_trainings = overdue_trainings
+            row.overdue_briefings = overdue_briefings
+            row.readiness_status = (
+                "blocked" if (overdue_trainings + overdue_briefings) > 0 else "ready"
+            )
             row.search_text = " ".join(
                 filter(None, [person.last_name, person.first_name, person.middle_name])
             )
@@ -776,19 +835,33 @@ class ProjectionOrchestrator:
             )
             or 0
         )
-        incidents_open = int(
-            await self.session.scalar(
-                select(func.count())
-                .select_from(Incident)
-                .where(Incident.tenant_id == self.tenant_id)
+        # Snapshot the same KPI values the trend series reads (from the read models),
+        # so a daily snapshot captures the dashboard figures and trend_series can read
+        # this history instead of re-running a flat current query (#29). Reading the
+        # SiteSafety read model also inherits its correct open-count semantics.
+        incidents_open, inspections_open = (
+            await self.session.execute(
+                select(
+                    func.coalesce(func.sum(SiteSafetyReadModel.open_incidents_count), 0),
+                    func.coalesce(func.sum(SiteSafetyReadModel.open_inspections_count), 0),
+                ).where(SiteSafetyReadModel.tenant_id == self.tenant_id)
             )
-            or 0
-        )
-        inspections_open = int(
+        ).one()
+        overdue_trainings, overdue_briefings = (
+            await self.session.execute(
+                select(
+                    func.coalesce(func.sum(PersonComplianceReadModel.overdue_trainings), 0),
+                    func.coalesce(func.sum(PersonComplianceReadModel.overdue_briefings), 0),
+                ).where(PersonComplianceReadModel.tenant_id == self.tenant_id)
+            )
+        ).one()
+        contractors_active = int(
             await self.session.scalar(
-                select(func.count())
-                .select_from(Inspection)
-                .where(Inspection.tenant_id == self.tenant_id)
+                select(
+                    func.coalesce(
+                        func.sum(ContractorReadinessReadModel.active_packages_count), 0
+                    )
+                ).where(ContractorReadinessReadModel.tenant_id == self.tenant_id)
             )
             or 0
         )
@@ -812,8 +885,11 @@ class ProjectionOrchestrator:
             self.session.add(snapshot)
         snapshot.payload = {
             "packages_total": packages_total,
-            "incidents_open": incidents_open,
-            "inspections_open": inspections_open,
+            "incidents_open": int(incidents_open or 0),
+            "inspections_open": int(inspections_open or 0),
+            "overdue_trainings": int(overdue_trainings or 0),
+            "overdue_compliance": int((overdue_trainings or 0) + (overdue_briefings or 0)),
+            "contractors": int(contractors_active or 0),
         }
         await self.session.commit()
         return snapshot
