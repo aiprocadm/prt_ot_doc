@@ -102,7 +102,7 @@ const MedicalPage = () => {
   const [generatedCount, setGeneratedCount] = useState<number | null>(null);
   const [creatingReferral, setCreatingReferral] = useState(false);
   const [newReferral, setNewReferral] = useState({ person_id: "", exam_kind: "periodic", due_at: "", medical_org_name: "" });
-  const [transitioningId, setTransitioningId] = useState<string | null>(null);
+  const [transitioning, setTransitioning] = useState<ReadonlySet<string>>(new Set());
   const [completingId, setCompletingId] = useState<string | null>(null);
   const [resultExamId, setResultExamId] = useState("");
 
@@ -131,6 +131,7 @@ const MedicalPage = () => {
     if (!newReferral.person_id) return;
     setCreatingReferral(true);
     setReferralError(null);
+    setGeneratedCount(null);
     try {
       await operationsApi.createMedicalReferral({
         person_id: newReferral.person_id,
@@ -149,8 +150,13 @@ const MedicalPage = () => {
 
   const onTransitionReferral = useCallback(
     async (referralId: string, to: string, resultExam?: string) => {
-      setTransitioningId(referralId);
+      setTransitioning((prev) => {
+        const next = new Set(prev);
+        next.add(referralId);
+        return next;
+      });
       setReferralError(null);
+      setGeneratedCount(null);
       try {
         await operationsApi.transitionMedicalReferral(referralId, {
           to,
@@ -162,7 +168,11 @@ const MedicalPage = () => {
       } catch (err) {
         setReferralError(mutationErrorText(err, "Не удалось изменить статус направления"));
       } finally {
-        setTransitioningId(null);
+        setTransitioning((prev) => {
+          const next = new Set(prev);
+          next.delete(referralId);
+          return next;
+        });
       }
     },
     [referrals]
@@ -428,7 +438,7 @@ const MedicalPage = () => {
                           type="button"
                           className="rounded-md border border-border px-2 py-1 text-xs"
                           onClick={() => void onTransitionReferral(referral.id, "scheduled")}
-                          disabled={transitioningId === referral.id}
+                          disabled={transitioning.has(referral.id)}
                         >
                           Запланировать
                         </button>
@@ -441,7 +451,7 @@ const MedicalPage = () => {
                             setCompletingId((current) => (current === referral.id ? null : referral.id));
                             setResultExamId("");
                           }}
-                          disabled={transitioningId === referral.id}
+                          disabled={transitioning.has(referral.id)}
                         >
                           Завершить
                         </button>
@@ -451,7 +461,7 @@ const MedicalPage = () => {
                           type="button"
                           className="rounded-md border border-border px-2 py-1 text-xs"
                           onClick={() => void onTransitionReferral(referral.id, "cancelled")}
-                          disabled={transitioningId === referral.id}
+                          disabled={transitioning.has(referral.id)}
                         >
                           Отменить
                         </button>
@@ -482,7 +492,7 @@ const MedicalPage = () => {
                               type="button"
                               className="rounded-md border border-border px-2 py-1 text-xs"
                               onClick={() => void onTransitionReferral(referral.id, "completed", resultExamId)}
-                              disabled={!resultExamId || transitioningId === referral.id}
+                              disabled={!resultExamId || transitioning.has(referral.id)}
                             >
                               Подтвердить
                             </button>

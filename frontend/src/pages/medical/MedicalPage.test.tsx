@@ -197,6 +197,17 @@ describe("MedicalPage referrals section", () => {
       expect(operationsApi.transitionMedicalReferral).toHaveBeenCalledWith("r1", { to: "cancelled" })
     );
   });
+
+  it("surfaces a transition error in the alert region", async () => {
+    (operationsApi.listMedicalReferrals as any).mockResolvedValue([
+      { id: "r1", person_id: "p1", exam_kind: "periodic", due_at: null, status: "issued", medical_org_name: null, result_exam_id: null, is_overdue: false },
+    ]);
+    (operationsApi.transitionMedicalReferral as any).mockRejectedValue({ status: 409, message: "Invalid transition" });
+    render(<MedicalPage />);
+    const scheduleBtn = await screen.findByRole("button", { name: "Запланировать" });
+    fireEvent.click(scheduleBtn);
+    expect(await screen.findByRole("alert")).toHaveTextContent("Invalid transition");
+  });
 });
 
 describe("MedicalPage referral completion", () => {
