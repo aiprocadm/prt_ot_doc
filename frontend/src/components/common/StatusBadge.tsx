@@ -20,7 +20,13 @@ const statusColors: Record<string, "default" | "secondary" | "destructive"> = {
   cancelled: "destructive",
   archived: "destructive",
   issued: "default",
-  closed: "secondary"
+  closed: "secondary",
+  overdue: "destructive",
+  missing: "destructive",
+  due_soon: "secondary",
+  scheduled: "secondary",
+  completed: "default",
+  lifted: "secondary"
 };
 
 /** Подписи для типичных статусов API; неизвестные значения показываем как есть. */
@@ -49,7 +55,13 @@ const statusLabelsRu: Record<string, string> = {
   terminated: "Прекращён",
   on_leave: "В отпуске",
   issued: "Выдан",
-  closed: "Закрыт"
+  closed: "Закрыт",
+  overdue: "Просрочен",
+  due_soon: "Истекает",
+  missing: "Отсутствует",
+  scheduled: "Запланировано",
+  completed: "Завершено",
+  lifted: "Снято"
 };
 
 export const StatusBadge = ({ status }: { status?: string | null }) => {
