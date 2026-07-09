@@ -111,3 +111,33 @@ async def test_activity_types_require_write_role(
         headers=headers, json={"code": "x", "name": "y"},
     )
     assert r.status_code in (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN)
+
+
+@pytest.mark.asyncio
+async def test_create_psychiatric_exam_persists_new_fields(
+    async_client, sessionmaker, data_factory, make_auth_headers
+):
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        company = await data_factory.create_company(tenant=tenant, session=session)
+        person = await data_factory.create_person(
+            tenant=tenant, company=company, session=session,
+            first_name="Марк", last_name="Лев",
+        )
+        await session.commit()
+        pid = person.id
+    headers = await make_auth_headers(RoleEnum.ADMIN)
+    body = {
+        "person_id": pid,
+        "exam_kind": "psychiatric",
+        "exam_date": "2026-01-01",
+        "fitness": "fit",
+        "medical_org_name": "ВК № 7",
+        "psychiatric_protocol_no": "ПРО-99",
+        "psychiatric_activity_codes": ["height"],
+    }
+    r = await async_client.post("/api/v1/medical/exams", headers=headers, json=body)
+    assert r.status_code == status.HTTP_201_CREATED, r.text
+    data = r.json()
+    assert data["psychiatric_protocol_no"] == "ПРО-99"
+    assert data["psychiatric_activity_codes"] == ["height"]
