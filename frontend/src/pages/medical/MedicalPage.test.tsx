@@ -262,6 +262,20 @@ describe("MedicalPage suspensions section", () => {
     fireEvent.click(liftBtn);
     await waitFor(() => expect(operationsApi.liftMedicalSuspension).toHaveBeenCalledWith("s1"));
     expect((operationsApi.getMedicalOversightSnapshot as any).mock.calls.length).toBeGreaterThanOrEqual(2);
+    await waitFor(() => expect((operationsApi.listMedicalSuspensions as any).mock.calls.length).toBeGreaterThanOrEqual(2));
+    confirmSpy.mockRestore();
+  });
+
+  it("surfaces a lift error in the alert region", async () => {
+    (operationsApi.listMedicalSuspensions as any).mockResolvedValue([
+      { id: "s1", person_id: "p1", reason: "unfit", status: "active", source_exam_id: null },
+    ]);
+    (operationsApi.liftMedicalSuspension as any).mockRejectedValue({ status: 403, message: "Only admin or owner may lift a medical suspension" });
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    render(<MedicalPage />);
+    const liftBtn = await screen.findByRole("button", { name: "Снять отстранение" });
+    fireEvent.click(liftBtn);
+    expect(await screen.findByRole("alert")).toHaveTextContent("Only admin or owner may lift a medical suspension");
     confirmSpy.mockRestore();
   });
 

@@ -155,7 +155,7 @@ const MedicalPage = () => {
   }, [newReferral, referrals]);
 
   const onTransitionReferral = useCallback(
-    async (referralId: string, to: string, resultExam?: string) => {
+    async (referralId: string, to: MedicalReferralDto["status"], resultExam?: string) => {
       setTransitioning((prev) => {
         const next = new Set(prev);
         next.add(referralId);

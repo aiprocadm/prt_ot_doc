@@ -418,7 +418,7 @@ export const operationsApi = {
     return response.data;
   },
 
-  transitionMedicalReferral: async (referralId: string, payload: { to: string; result_exam_id?: string }) => {
+  transitionMedicalReferral: async (referralId: string, payload: { to: MedicalReferralDto["status"]; result_exam_id?: string }) => {
     const response = await apiClient.post<MedicalReferralDto>(`/medical/referrals/${referralId}/transition`, payload);
     return response.data;
   },
