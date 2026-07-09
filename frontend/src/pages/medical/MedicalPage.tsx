@@ -141,15 +141,23 @@ const MedicalPage = () => {
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
+              aria-pressed={contingentView === "register"}
               className={`rounded-md border px-3 py-1.5 text-sm ${contingentView === "register" ? "border-primary font-medium" : "border-border"}`}
-              onClick={() => setContingentView("register")}
+              onClick={() => {
+                setPrintError(null);
+                setContingentView("register");
+              }}
             >
               По должностям
             </button>
             <button
               type="button"
+              aria-pressed={contingentView === "named"}
               className={`rounded-md border px-3 py-1.5 text-sm ${contingentView === "named" ? "border-primary font-medium" : "border-border"}`}
-              onClick={() => setContingentView("named")}
+              onClick={() => {
+                setPrintError(null);
+                setContingentView("named");
+              }}
             >
               Поимённый список
             </button>
@@ -162,7 +170,7 @@ const MedicalPage = () => {
           </div>
         </div>
         <ErrorState error={oversight.error ?? undefined} onRetry={() => void oversight.reload()} />
-        {printError ? <p className="text-sm text-destructive">{printError}</p> : null}
+        {printError ? <p role="alert" className="text-sm text-destructive">{printError}</p> : null}
         {contingentView === "register" ? (
           oversight.data.register.length > 0 ? (
             <Table>

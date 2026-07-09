@@ -31,7 +31,7 @@ beforeEach(() => {
         exam_type: "periodic",
         exam_date: "2026-01-10",
         conclusion: null,
-        valid_until: "2027-01-10",
+        valid_until: "2099-01-10",
         created_at: "2026-01-10T00:00:00Z",
         updated_at: "2026-01-10T00:00:00Z",
       },
