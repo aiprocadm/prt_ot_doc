@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 import { reportBuilderApi } from "@/api/reportBuilder";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
@@ -11,6 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAsyncResource } from "@/hooks/useAsyncResource";
+import { usePolling } from "@/hooks/usePolling";
 import type {
   ReportColumnMetaDto,
   ReportConfigDto,
@@ -70,7 +71,6 @@ export default function ReportBuilderPage() {
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [exportState, setExportState] = useState<ExportState>({ phase: "idle" });
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const datasets = datasetsRes.data.items;
   const definitions = definitionsRes.data.items;
@@ -83,14 +83,6 @@ export default function ReportBuilderPage() {
     dataset?.columns.forEach((c) => map.set(c.key, c));
     return map;
   }, [dataset]);
-
-  const stopPolling = useCallback(() => {
-    if (pollRef.current) {
-      clearInterval(pollRef.current);
-      pollRef.current = null;
-    }
-  }, []);
-  useEffect(() => stopPolling, [stopPolling]);
 
   const resetEditor = useCallback(
     (ds?: string) => {
@@ -107,10 +99,9 @@ export default function ReportBuilderPage() {
       setPreviewError(null);
       setSaveError(null);
       setExportState({ phase: "idle" });
-      stopPolling();
       if (ds !== undefined) setDatasetCode(ds);
     },
-    [stopPolling]
+    []
   );
 
   const buildConfig = useCallback((): ReportConfigDto => {
@@ -127,18 +118,30 @@ export default function ReportBuilderPage() {
       if (!row.field || !row.op) continue;
       const col = columnsByKey.get(row.field);
       if (!col) continue;
+      if (row.op !== "in" && row.value.trim() === "") continue; // нет значения — нет фильтра
       let value: unknown = row.value;
       if (col.kind === "number") value = Number(row.value);
       if (col.kind === "bool") value = row.value === "true";
-      if (row.op === "in")
-        value = row.value
+      if (row.op === "in") {
+        const values = row.value
           .split(",")
           .map((v) => v.trim())
           .filter(Boolean);
+        if (values.length === 0) continue; // пустой in — не отправляем
+        value = values;
+      }
       parsed.push({ field: row.field, op: row.op as ReportFilterDto["op"], value });
     }
     if (parsed.length > 0) config.filters = parsed;
-    if (sortField) config.sort = [{ field: sortField, dir: sortDir }];
+    // stale sortField (например, после смены колонок/группировки) не отправляем
+    const validSortKeys = new Set(
+      groupBy.length > 0
+        ? [...groupBy, "count", ...(sumField ? [`sum_${sumField}`] : [])]
+        : selectedColumns.length > 0
+          ? selectedColumns
+          : [...columnsByKey.keys()]
+    );
+    if (sortField && validSortKeys.has(sortField)) config.sort = [{ field: sortField, dir: sortDir }];
     return config;
   }, [columnsByKey, filters, groupBy, selectedColumns, sortDir, sortField, sumField]);
 
@@ -221,42 +224,49 @@ export default function ReportBuilderPage() {
   const startExport = useCallback(
     async (format: ReportExportFormat) => {
       if (!editingId) return;
-      stopPolling();
       try {
         const { job_id } = await reportBuilderApi.runDefinition(editingId, format);
         setExportState({ phase: "polling", jobId: job_id, format, ticks: 0 });
-        pollRef.current = setInterval(async () => {
-          try {
-            const job = await reportBuilderApi.getExportJob(job_id);
-            if (job.status === "done") {
-              stopPolling();
-              setExportState({ phase: "done", jobId: job_id, format });
-            } else if (job.status === "failed") {
-              stopPolling();
-              const code = job.error_payload?.code ?? "";
-              setExportState({
-                phase: "failed",
-                message: JOB_ERROR_LABELS[code] ?? "Экспорт не удался — попробуйте ещё раз"
-              });
-            } else {
-              setExportState((prev) => {
-                if (prev.phase !== "polling") return prev;
-                if (prev.ticks + 1 >= POLL_MAX_TICKS) {
-                  stopPolling();
-                  return { phase: "failed", message: "Экспорт занял слишком много времени" };
-                }
-                return { ...prev, ticks: prev.ticks + 1 };
-              });
-            }
-          } catch {
-            /* транзиентная ошибка поллинга — ждём следующего тика */
-          }
-        }, POLL_INTERVAL_MS);
       } catch {
         setExportState({ phase: "failed", message: "Не удалось запустить экспорт" });
       }
     },
-    [editingId, stopPolling]
+    [editingId]
+  );
+
+  // Поллинг job'а экспорта: usePolling даёт in-flight guard и cleanup;
+  // callback пересоздаётся на каждый рендер и читает jobId из актуального exportState,
+  // поэтому повторный экспорт не может «доехать» результатом старого job'а
+  // (терминальные переходы дополнительно защищены сверкой prev.jobId в updater'е).
+  usePolling(
+    async () => {
+      if (exportState.phase !== "polling") return;
+      const { jobId, format, ticks } = exportState;
+      const job = await reportBuilderApi.getExportJob(jobId);
+      if (job.status === "done") {
+        setExportState((prev) =>
+          prev.phase === "polling" && prev.jobId === jobId ? { phase: "done", jobId, format } : prev
+        );
+      } else if (job.status === "failed") {
+        const code = job.error_payload?.code ?? "";
+        setExportState((prev) =>
+          prev.phase === "polling" && prev.jobId === jobId
+            ? { phase: "failed", message: JOB_ERROR_LABELS[code] ?? "Экспорт не удался — попробуйте ещё раз" }
+            : prev
+        );
+      } else if (ticks + 1 >= POLL_MAX_TICKS) {
+        setExportState({ phase: "failed", message: "Экспорт занял слишком много времени" });
+      } else {
+        setExportState((prev) =>
+          prev.phase === "polling" && prev.jobId === jobId ? { ...prev, ticks: prev.ticks + 1 } : prev
+        );
+      }
+    },
+    POLL_INTERVAL_MS,
+    {
+      enabled: exportState.phase === "polling"
+      // транзиентную ошибку поллинга хук проглатывает (onError не задан) — ждём следующего тика
+    }
   );
 
   const downloadCurrent = useCallback(async () => {

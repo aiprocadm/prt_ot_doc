@@ -118,6 +118,21 @@ describe("ReportBuilderPage", () => {
     );
   });
 
+  it("does not emit a filter row with empty value", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText("Открытые инциденты");
+    await user.selectOptions(screen.getByLabelText("Датасет"), "incidents");
+    await user.click(screen.getByRole("button", { name: "Добавить фильтр" }));
+    const filterRow = screen.getByTestId("filter-row-0");
+    await user.selectOptions(within(filterRow).getByLabelText("Поле"), "status");
+    // значение намеренно не выбираем — пустой фильтр не должен попасть в config
+    await user.click(screen.getByRole("button", { name: "Предпросмотр" }));
+    await waitFor(() => expect(api.preview).toHaveBeenCalled());
+    const [payload] = api.preview.mock.calls[0];
+    expect(payload.config_json.filters).toBeUndefined();
+  });
+
   it("saves a new definition", async () => {
     api.createDefinition.mockResolvedValue({ ...SYSTEM_DEF, id: "d2", is_system: false, name: "Мой отчёт" });
     const user = userEvent.setup();
@@ -146,9 +161,13 @@ describe("ReportBuilderPage", () => {
   // for the initial async data load — under fake timers React's scheduler never gets a
   // macrotask tick to flush the pending update unless the fake clock is advanced, so the
   // wait deadlocks until the outer vitest test timeout. We enable fake timers only right
-  // before triggering the polling `setInterval`, and use `fireEvent` (not `userEvent`) for
-  // clicks issued while fake timers are active, since userEvent's own internal async
-  // machinery has the same deadlock issue with fake timers.
+  // before triggering the export, and use `fireEvent` (not `userEvent`) for clicks issued
+  // while fake timers are active, since userEvent's own internal async machinery has the
+  // same deadlock issue with fake timers.
+  //
+  // Polling now runs through the house `usePolling` hook: the interval is created by a
+  // useEffect after the "polling" state renders, so we flush that render/effect with an
+  // empty act() before advancing the fake clock (otherwise the first advance fires zero ticks).
   it("exports: run → poll → download via dedicated route; uses job id", async () => {
     const user = userEvent.setup();
     api.runDefinition.mockResolvedValue({ job_id: "j1", status: "queued" });
@@ -162,6 +181,7 @@ describe("ReportBuilderPage", () => {
     vi.useFakeTimers();
     fireEvent.click(screen.getByRole("button", { name: "XLSX" }));
     expect(api.runDefinition).toHaveBeenCalledWith("sys-1", "xlsx");
+    await act(async () => {}); // flush: runDefinition → polling state → usePolling effect
     await act(async () => {
       await vi.advanceTimersByTimeAsync(1600);
     });
@@ -186,6 +206,7 @@ describe("ReportBuilderPage", () => {
 
     vi.useFakeTimers();
     fireEvent.click(screen.getByRole("button", { name: "PDF" }));
+    await act(async () => {}); // flush: runDefinition → polling state → usePolling effect
     await act(async () => {
       await vi.advanceTimersByTimeAsync(1600);
     });
