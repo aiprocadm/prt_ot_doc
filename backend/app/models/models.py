@@ -219,6 +219,9 @@ from app.models.ppe import (
     PPESupplier,
 )
 
+# P10-07 rb01: re-export report-builder models from app.models.report_builder.
+from app.models.report_builder import ReportDefinition
+
 # ARCH-2: re-export risk_register models moved to app.models.risk_register.
 from app.models.risk_register import (
     NPA,
@@ -610,3 +613,5 @@ __all__ += [
     "TemplateVersion",
     "TemplateUsage",
 ]
+
+__all__ += ["ReportDefinition"]
