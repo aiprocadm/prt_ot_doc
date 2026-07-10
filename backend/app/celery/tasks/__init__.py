@@ -1,3 +1,9 @@
+# Import the MODULE (not the task function): the function shares the submodule's
+# name, and a `from .report_export_job import report_export_job` would rebind the
+# package attribute `app.celery.tasks.report_export_job` from module to function,
+# breaking dotted-path monkeypatch resolution in tests. A module import keeps the
+# attribute a submodule while still registering @celery_app.task on worker boot.
+from . import report_export_job  # noqa: F401
 from .apply_headers_job import apply_headers_job
 from .audit_export_job import export_audit_job
 from .convert_pdf_job import convert_pdf_job
