@@ -2,13 +2,16 @@ from __future__ import annotations
 
 from datetime import date
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import status as http_status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.core.errors import api_problem_detail
 from app.core.security import abac
 from app.models.models import Tenant
+from app.modules.analytics.breakdown import BREAKDOWN_DIMENSIONS, compute_breakdown
 from app.modules.analytics.services import (
     AnalyticsAggregationService,
     DashboardFilters,
@@ -245,6 +248,28 @@ async def ppe_trends(
     tenant: Tenant = Depends(get_tenant_record),
 ) -> dict:
     return await AnalyticsAggregationService(session, str(tenant.id)).trend_series("ppe", period)
+
+
+@router.get("/dashboard/breakdown")
+async def dashboard_breakdown(
+    dimension: str = Query(...),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+) -> dict:
+    if dimension not in BREAKDOWN_DIMENSIONS:
+        raise HTTPException(
+            http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=api_problem_detail(
+                code="breakdown_dimension_unknown",
+                message=f"Unknown dimension: {dimension}",
+                error_type="analytics",
+            ),
+        )
+    return await compute_breakdown(
+        session, str(tenant.id), dimension, date_from=date_from, date_to=date_to
+    )
 
 
 @router.post("/recompute", dependencies=[_AdminGuard])
