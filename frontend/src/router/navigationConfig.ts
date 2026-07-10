@@ -109,6 +109,7 @@ export const MAIN_NAV_GROUPS: NavGroup[] = [
       { label: "CRM / Финансы", to: "/crm-finance", icon: Briefcase, permission: PERMISSIONS.CRM_FINANCE_VIEW },
       { label: "НПА / Нормативная база", to: "/npa", icon: BookOpen, permission: PERMISSIONS.NPA_VIEW },
       { label: "Отчёты", to: "/reports", icon: ShieldCheck, permission: PERMISSIONS.REPORTS_VIEW },
+      { label: "Конструктор отчётов", to: "/reports/builder", icon: ShieldCheck, permission: PERMISSIONS.REPORTS_VIEW },
       { label: "Тренды", to: "/analytics/trends", icon: Activity, permission: PERMISSIONS.REPORTS_VIEW },
       { label: "Кабинет клиента", to: "/client-portal/dashboard", icon: Users, permission: PERMISSIONS.CLIENT_PORTAL_VIEW }
     ]

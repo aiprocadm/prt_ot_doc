@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 
 import { reportsApi } from "@/api/reports";
 import { ErrorState } from "@/components/common/ErrorState";
@@ -93,6 +93,9 @@ const ReportsPage = () => {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Breadcrumb items={[{ label: "Главная", to: "/dashboard" }, { label: "Отчёты" }]} />
         <div className="flex gap-2">
+          <Button variant="outline" asChild>
+            <Link to="/reports/builder">Конструктор отчётов</Link>
+          </Button>
           <Button
             variant="outline"
             disabled={exporting || !canExportReports}
