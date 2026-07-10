@@ -20,7 +20,6 @@ from app.core.tenant import tenant_context
 from app.db.session import ensure_tenant_schema, session_scope
 from app.db.tenant_row_guard import assert_tenant_row_matches_session
 from app.models.file import File, FileKind, FileScanStatus
-from app.models.models import Tenant
 from app.models.report_builder import ReportDefinition
 from app.modules.projections.models import ExportJob
 from app.modules.report_builder.engine import (
@@ -57,22 +56,6 @@ def report_export_job(*, job_id: str, tenant_id: str) -> dict[str, str]:
         with tenant_context(tenant_id):
             ensure_tenant_schema(tenant_id)
             async with session_scope(tenant=tenant_id) as session:
-                # ``session_scope(tenant=...)`` expects a slug, but this task (mirroring
-                # ``audit_export_job.py``) is invoked with a tenant UUID. ``AsyncSessionLocal``
-                # then mislabels ``session.info["tenant_slug"]`` as that same UUID, and
-                # ``_hydrate_async_session_tenant_identity``'s early-return (all three info
-                # fields already truthy) skips the correcting DB lookup. Left uncorrected,
-                # ``_apply_default_tenant``'s before_flush guard false-positives on any NEW
-                # tenant-scoped row we add below (``tenant_id == tenant_slug`` bytewise, since
-                # both hold the UUID) and raises "must store tenant.id, not tenant.slug".
-                # Resolve and store the real slug so that guard compares against the actual
-                # value instead of the UUID accidentally duplicated into both fields.
-                real_slug = await session.scalar(select(Tenant.slug).where(Tenant.id == tenant_id))
-                if real_slug:
-                    normalized_slug = str(real_slug).strip().lower()
-                    session.info["tenant_slug"] = normalized_slug
-                    session.info["tenant"] = normalized_slug
-
                 job = await session.get(ExportJob, job_id)
                 if job is None or job.export_type != "report":
                     return {"status": "missing"}
