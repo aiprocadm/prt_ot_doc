@@ -58,9 +58,7 @@ class ReportBuilderService:
         rows = list(
             (
                 await self.session.execute(
-                    stmt.order_by(
-                        ReportDefinition.is_system.desc(), ReportDefinition.name.asc()
-                    )
+                    stmt.order_by(ReportDefinition.is_system.desc(), ReportDefinition.name.asc())
                     .offset(offset)
                     .limit(limit)
                 )

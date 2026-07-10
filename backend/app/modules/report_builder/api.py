@@ -39,6 +39,8 @@ from app.modules.report_builder.schemas import (
     ReportDefinitionUpdate,
     ReportPreviewIn,
     ReportPreviewOut,
+    ReportRunIn,
+    ReportRunOut,
 )
 from app.modules.report_builder.service import (
     ReportBuilderService,
@@ -124,9 +126,7 @@ async def _audit(
 
 
 def _config_error(exc: ReportConfigError) -> HTTPException:
-    return HTTPException(
-        status.HTTP_422_UNPROCESSABLE_ENTITY, detail=_error(exc.code, exc.message)
-    )
+    return HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail=_error(exc.code, exc.message))
 
 
 @router.get("/datasets", response_model=ReportDatasetPage, dependencies=[FeatureGate])
@@ -211,7 +211,9 @@ async def create_definition(
     except ReportNameConflict as exc:
         raise HTTPException(
             status.HTTP_409_CONFLICT,
-            detail=_error("definition_name_conflict", f"Report name already exists: {payload.name}"),
+            detail=_error(
+                "definition_name_conflict", f"Report name already exists: {payload.name}"
+            ),
         ) from exc
     await _audit(session, request, access, str(tenant.id), action="create", object_id=record.id)
     await session.commit()
@@ -336,3 +338,39 @@ async def preview_report(
         rows=result.rows,
         total=result.total,
     )
+
+
+@router.post(
+    "/definitions/{definition_id}/run",
+    response_model=ReportRunOut,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[FeatureGate],
+)
+async def run_definition(
+    request: Request,
+    definition_id: str,
+    payload: ReportRunIn,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: ReadAccess,
+) -> ReportRunOut:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    service = ReportBuilderService(session, str(tenant.id))
+    try:
+        record = await service.get_definition(definition_id)
+    except ReportDefinitionNotFound as exc:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND, detail=_error("definition_not_found", "Report not found")
+        ) from exc
+    job = await service.run_definition(record, fmt=payload.format)
+    await _audit(
+        session,
+        request,
+        access,
+        str(tenant.id),
+        action="run",
+        object_id=record.id,
+        details={"format": payload.format, "job_id": job.id},
+    )
+    await session.commit()
+    return ReportRunOut(job_id=job.id, status=job.status)

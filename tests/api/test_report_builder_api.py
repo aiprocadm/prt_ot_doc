@@ -25,9 +25,7 @@ async def _enable_flag(sessionmaker, data_factory: TestDataFactory, *, on: bool 
             feature = Feature(code="report_builder", title="Конструктор отчётов")
             session.add(feature)
             await session.flush()
-        session.add(
-            FeatureEnablement(tenant_id=str(tenant.id), feature_id=feature.id, on=on)
-        )
+        session.add(FeatureEnablement(tenant_id=str(tenant.id), feature_id=feature.id, on=on))
         await session.commit()
         return str(tenant.id)
 
@@ -40,7 +38,9 @@ DEFINITION = {
 
 
 @pytest.mark.asyncio
-async def test_flag_off_404(async_client: AsyncClient, make_auth_headers, sessionmaker, data_factory):
+async def test_flag_off_404(
+    async_client: AsyncClient, make_auth_headers, sessionmaker, data_factory
+):
     async with sessionmaker() as session:
         await data_factory.ensure_tenant(session=session)
         await session.commit()
@@ -123,15 +123,20 @@ async def test_crud_flow_and_conflicts(async_client, make_auth_headers, sessionm
 
 
 @pytest.mark.asyncio
-async def test_system_definition_immutable(async_client, make_auth_headers, sessionmaker, data_factory):
+async def test_system_definition_immutable(
+    async_client, make_auth_headers, sessionmaker, data_factory
+):
     from app.models.models import ReportDefinition
 
     tenant_id = await _enable_flag(sessionmaker, data_factory)
     async with sessionmaker() as session:
         session.add(
             ReportDefinition(
-                tenant_id=tenant_id, name="Системный", dataset_code="risks",
-                config_json={}, is_system=True,
+                tenant_id=tenant_id,
+                name="Системный",
+                dataset_code="risks",
+                config_json={},
+                is_system=True,
             )
         )
         await session.commit()
