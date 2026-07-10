@@ -255,7 +255,11 @@ export default function ReportBuilderPage() {
             : prev
         );
       } else if (ticks + 1 >= POLL_MAX_TICKS) {
-        setExportState({ phase: "failed", message: "Экспорт занял слишком много времени" });
+        setExportState((prev) =>
+          prev.phase === "polling" && prev.jobId === jobId
+            ? { phase: "failed", message: "Экспорт занял слишком много времени" }
+            : prev
+        );
       } else {
         setExportState((prev) =>
           prev.phase === "polling" && prev.jobId === jobId ? { ...prev, ticks: prev.ticks + 1 } : prev
