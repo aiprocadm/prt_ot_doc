@@ -68,9 +68,10 @@ def get_dataset(dataset_code: str) -> DatasetSpec:
 
 
 def _require_column(spec: DatasetSpec, key: Any, *, context: str) -> ColumnSpec:
-    if not isinstance(key, str) or spec.column(key) is None:
+    col = spec.column(key) if isinstance(key, str) else None
+    if col is None:
         raise ReportConfigError("column_unknown", f"Unknown column in {context}: {key}")
-    return spec.column(key)  # type: ignore[return-value]
+    return col
 
 
 def _coerce_filter_value(col: ColumnSpec, op: str, value: Any) -> Any:
@@ -141,6 +142,8 @@ def _apply_filters(stmt, sq, spec: DatasetSpec, filters: list[Any]):
             stmt = stmt.where(column <= value)
         elif op == "in":
             stmt = stmt.where(column.in_(value))
+        else:  # pragma: no cover — недостижимо, пока op-ветки покрывают OPS_BY_KIND
+            raise ReportConfigError("filter_op_invalid", f"Unhandled operator: {op!r}")
     return stmt
 
 

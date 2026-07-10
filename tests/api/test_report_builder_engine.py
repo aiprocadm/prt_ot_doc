@@ -214,3 +214,128 @@ async def test_validation_errors(sessionmaker, data_factory: TestDataFactory):
         with pytest.raises(ReportConfigError):
             validate_config("employees_training", {"columns": ["bogus"]})
         validate_config("employees_training", {"columns": ["person_name"]})  # не бросает
+
+
+@pytest.mark.asyncio
+async def test_contains_filter_binds_metacharacters(sessionmaker, data_factory: TestDataFactory):
+    from app.modules.report_builder.engine import run_report
+
+    async with sessionmaker() as session:
+        tid = await _seed_training(session, data_factory)
+        result = await run_report(
+            session,
+            tenant_id=tid,
+            dataset_code="employees_training",
+            config={
+                "columns": ["course_name"],
+                "filters": [{"field": "course_name", "op": "contains", "value": "хран"}],
+            },
+            limit=100,
+        )
+        assert result.total == 2  # обе «Охрана труда»
+        # метасимволы связаны bind-параметром — ни исключения, ни инъекции
+        hostile = await run_report(
+            session,
+            tenant_id=tid,
+            dataset_code="employees_training",
+            config={
+                "columns": ["course_name"],
+                "filters": [{"field": "course_name", "op": "contains", "value": "100%';DROP"}],
+            },
+            limit=100,
+        )
+        assert hostile.total == 0
+
+
+@pytest.mark.asyncio
+async def test_in_filter_on_enum(sessionmaker, data_factory: TestDataFactory):
+    from app.modules.report_builder.engine import run_report
+
+    async with sessionmaker() as session:
+        tid = await _seed_training(session, data_factory)
+        result = await run_report(
+            session,
+            tenant_id=tid,
+            dataset_code="employees_training",
+            config={
+                "columns": ["course_name"],
+                "filters": [{"field": "status", "op": "in", "value": ["completed"]}],
+            },
+            limit=100,
+        )
+        assert result.total == 2
+
+
+@pytest.mark.asyncio
+async def test_sum_aggregate_success(sessionmaker, data_factory: TestDataFactory):
+    from app.models.risk import Risk
+    from app.modules.report_builder.engine import run_report
+
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        tid = str(tenant.id)
+        company = Company(tenant_id=tid, name="ООО Вектор")
+        session.add(company)
+        await session.flush()
+        session.add_all(
+            [
+                Risk(
+                    tenant_id=tid,
+                    company_id=company.id,
+                    hazard="Шум",
+                    probability=2,
+                    severity=3,
+                    level=6,
+                ),
+                Risk(
+                    tenant_id=tid,
+                    company_id=company.id,
+                    hazard="Вибрация",
+                    probability=3,
+                    severity=3,
+                    level=9,
+                ),
+            ]
+        )
+        await session.commit()
+        result = await run_report(
+            session,
+            tenant_id=tid,
+            dataset_code="risks",
+            config={
+                "group_by": ["company_name"],
+                "aggregates": [{"fn": "sum", "field": "level"}],
+            },
+            limit=100,
+        )
+        assert [(c.key, c.label) for c in result.columns] == [
+            ("company_name", "Компания"),
+            ("sum_level", "Сумма: Уровень"),
+        ]
+        assert result.rows[0]["sum_level"] == 15
+
+
+@pytest.mark.asyncio
+async def test_datetime_gte_filter(sessionmaker, data_factory: TestDataFactory):
+    from app.modules.report_builder.engine import run_report
+
+    async with sessionmaker() as session:
+        tid = await _seed_training(session, data_factory)
+        result = await run_report(
+            session,
+            tenant_id=tid,
+            dataset_code="employees_training",
+            config={
+                "columns": ["course_name"],
+                "filters": [
+                    {
+                        "field": "expires_at",
+                        "op": "gte",
+                        "value": (NOW + timedelta(days=1)).isoformat(),
+                    }
+                ],
+            },
+            limit=100,
+        )
+        assert result.total == 1
+        assert result.rows[0]["course_name"] == "Первая помощь"

@@ -85,3 +85,29 @@ def test_pdf_builds_docx_before_convert() -> None:
     assert body == b"%PDF-fake"
     # DOCX действительно собран (zip-магия PK)
     assert captured["docx"][:2] == b"PK"
+
+
+def test_formula_injection_neutralized() -> None:
+    from openpyxl import load_workbook
+
+    from app.modules.report_builder.renderers import render_csv, render_xlsx
+
+    hostile = ReportResult(
+        columns=[ColumnMeta(key="name", label="Название", kind="string")],
+        rows=[
+            {"name": '=HYPERLINK("http://evil")'},
+            {"name": "@cmd"},
+            {"name": "обычный текст"},
+        ],
+        total=3,
+    )
+    csv_text = render_csv(hostile).decode("utf-8")
+    assert "'=HYPERLINK" in csv_text and "'@cmd" in csv_text
+    wb = load_workbook(io.BytesIO(render_xlsx(hostile, title="x")))
+    ws = wb.active
+    # ни одна ячейка не стала живой формулой (CWE-1236)
+    assert all(ws.cell(row=r, column=1).data_type != "f" for r in (2, 3, 4))
+    # содержимое не потеряно: апостроф-префикс для опасных, обычный текст нетронут
+    assert ws.cell(row=2, column=1).value == '\'=HYPERLINK("http://evil")'
+    assert ws.cell(row=3, column=1).value == "'@cmd"
+    assert ws.cell(row=4, column=1).value == "обычный текст"

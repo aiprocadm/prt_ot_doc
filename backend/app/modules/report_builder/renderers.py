@@ -36,12 +36,23 @@ class PdfRendererUnavailable(Exception):
     """LibreOffice pool отсутствует/упал — PDF сейчас недоступен."""
 
 
+_FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
+
+
+def _neutralize(text: str) -> str:
+    # OWASP CSV-injection mitigation: апостроф-префикс выключает
+    # интерпретацию формул в Excel/LibreOffice, не меняя видимый текст
+    if text.startswith(_FORMULA_PREFIXES):
+        return "'" + text
+    return text
+
+
 def _cell(value: object) -> str:
     if value is None:
         return ""
     if isinstance(value, bool):
         return "да" if value else "нет"
-    return str(value)
+    return _neutralize(str(value))
 
 
 def render_csv(result: ReportResult) -> bytes:
@@ -60,6 +71,14 @@ def _sheet_title(title: str) -> str:
     return clean[:31]
 
 
+def _xlsx_cell(value: object) -> object:
+    if isinstance(value, bool):
+        return "да" if value else "нет"
+    if isinstance(value, str):
+        return _neutralize(value)  # типы чисел/дат не трогаем — только строки
+    return value
+
+
 def render_xlsx(result: ReportResult, *, title: str) -> bytes:
     from openpyxl import Workbook
 
@@ -68,16 +87,7 @@ def render_xlsx(result: ReportResult, *, title: str) -> bytes:
     ws.title = _sheet_title(title)
     ws.append([c.label for c in result.columns])
     for row in result.rows:
-        ws.append(
-            [
-                (
-                    ("да" if row[c.key] else "нет")
-                    if isinstance(row.get(c.key), bool)
-                    else row.get(c.key)
-                )
-                for c in result.columns
-            ]
-        )
+        ws.append([_xlsx_cell(row.get(c.key)) for c in result.columns])
     out = io.BytesIO()
     wb.save(out)
     return out.getvalue()
