@@ -8,8 +8,10 @@ admin/owner/ot_specialist/line_manager; write = admin/owner/ot_specialist.
 from __future__ import annotations
 
 from typing import Annotated
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
@@ -22,7 +24,9 @@ from app.core.errors import api_problem_detail
 from app.core.feature_flags import is_feature_enabled
 from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
+from app.models.file import File
 from app.models.models import Tenant
+from app.modules.projections.models import ExportJob
 from app.modules.report_builder.datasets import DATASETS
 from app.modules.report_builder.engine import (
     PREVIEW_LIMIT,
@@ -49,6 +53,7 @@ from app.modules.report_builder.service import (
     SystemDefinitionImmutable,
 )
 from app.services.audit import AuditService
+from app.services.file_storage import FileStorageService
 
 router = APIRouter(prefix="/report-builder", tags=["report-builder"])
 
@@ -374,3 +379,47 @@ async def run_definition(
     )
     await session.commit()
     return ReportRunOut(job_id=job.id, status=job.status)
+
+
+@router.get("/exports/{job_id}/download", dependencies=[FeatureGate])
+async def download_report_export(
+    job_id: str,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: ReadAccess,
+) -> Response:
+    """Стрим готового файла напрямую из FileStorageService (паттерн audit-экспорта):
+    legacy /files/{file_id}/download не работает для generated-ключей
+    ``{tenant}/exports/reports/...`` (требует префикс tenants/* и MinIO-backend)."""
+    TenantContextValidator.ensure_tenant_context(tenant)
+    _ = access
+    job = await session.scalar(
+        select(ExportJob).where(
+            ExportJob.id == job_id,
+            ExportJob.tenant_id == str(tenant.id),
+            ExportJob.export_type == "report",
+        )
+    )
+    if job is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND, detail=_error("export_not_found", "Export job not found")
+        )
+    if job.status != "done" or not job.file_id:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, detail=_error("export_not_ready", "Export file not ready")
+        )
+    file = await session.get(File, job.file_id)
+    if file is None or file.tenant_id != str(tenant.id):
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND, detail=_error("export_not_found", "Export file not found")
+        )
+    body = FileStorageService.default().get(file.storage_key)
+    fallback = f"report.{file.storage_key.rsplit('.', 1)[-1]}"
+    quoted = quote(file.original_name or fallback)
+    return Response(
+        content=body,
+        media_type=file.mime,
+        headers={
+            "Content-Disposition": f"attachment; filename=\"{fallback}\"; filename*=UTF-8''{quoted}"
+        },
+    )
