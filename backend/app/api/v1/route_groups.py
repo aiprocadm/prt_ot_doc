@@ -145,7 +145,6 @@ OPERATIONS_ROUTER_REGISTRATIONS: tuple[RouterRegistration, ...] = (
     (prescriptions.router, {"tags": ["prescriptions"]}),
     (safety_ops.router, {"tags": ["safety-ops"]}),
     (obligations.router, {"tags": ["obligations"]}),
-    (operational_dashboard.router, {"prefix": "", "tags": ["operational"]}),
     (jobs.router, {}),
     (tasks.router, {"prefix": "/tasks", "tags": ["tasks"]}),
     (operational_dashboard.router, {"tags": ["operational"]}),
