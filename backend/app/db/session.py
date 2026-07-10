@@ -105,10 +105,19 @@ def _resolve_session_tenant_identity(session) -> tuple[str | None, str | None, s
         return None, None, None
 
     tenant_id = _normalize_tenant_id(info.get("tenant_id"))
-    tenant_slug = str(info.get("tenant_slug") or info.get("tenant") or "").strip().lower() or None
+    raw_slug = str(info.get("tenant_slug") or info.get("tenant") or "").strip().lower() or None
     tenant_schema = str(info.get("tenant_schema") or "").strip() or None
+    # Celery tasks pass tenant UUIDs where a slug is expected
+    # (``session_scope(tenant=str(tenant.id))``); a "slug" that parses as a
+    # UUID is really a tenant id and must never be compared against
+    # ``tenant_id`` values by the before_flush guard — resolve the real slug
+    # from the Tenant row instead.
+    slug_as_id = _normalize_tenant_id(raw_slug)
+    tenant_slug = raw_slug if slug_as_id is None else None
+    if tenant_id is None:
+        tenant_id = slug_as_id
 
-    if tenant_id is not None:
+    if tenant_id is not None and slug_as_id is None:
         info["tenant_id"] = tenant_id
         if tenant_slug:
             info.setdefault("tenant_slug", tenant_slug)
@@ -116,35 +125,36 @@ def _resolve_session_tenant_identity(session) -> tuple[str | None, str | None, s
             info.setdefault("tenant_schema", tenant_schema)
         return tenant_id, tenant_slug, tenant_schema
 
-    if not tenant_slug:
-        legacy_identifier = _normalize_tenant_id(info.get("tenant"))
-        if legacy_identifier is not None:
-            info["tenant_id"] = legacy_identifier
-            return legacy_identifier, None, tenant_schema
+    if tenant_id is None and not tenant_slug:
         return None, None, tenant_schema
 
     try:
         from app.models.models import Tenant
     except Exception:
-        return None, tenant_slug, tenant_schema
+        return tenant_id, tenant_slug, tenant_schema
+
+    conditions = []
+    if tenant_id is not None:
+        conditions.append(Tenant.id == tenant_id)
+    if tenant_slug:
+        conditions.extend((Tenant.slug == tenant_slug, Tenant.code == tenant_slug))
 
     row = (
         session.connection()
-        .execute(
-            select(Tenant.id, Tenant.slug, Tenant.schema_name).where(
-                or_(Tenant.slug == tenant_slug, Tenant.code == tenant_slug)
-            )
-        )
+        .execute(select(Tenant.id, Tenant.slug, Tenant.schema_name).where(or_(*conditions)))
         .first()
     )
     if row is None:
-        return None, tenant_slug, tenant_schema
+        if tenant_id is not None:
+            info["tenant_id"] = tenant_id
+        return tenant_id, tenant_slug, tenant_schema
 
     tenant_id = str(row.id)
     resolved_slug = str(row.slug).strip().lower()
     resolved_schema = str(row.schema_name or tenant_schema or "").strip() or None
     info["tenant_id"] = tenant_id
     info["tenant_slug"] = resolved_slug
+    info["tenant"] = resolved_slug
     if resolved_schema:
         info["tenant_schema"] = resolved_schema
     return tenant_id, resolved_slug, resolved_schema
@@ -165,8 +175,17 @@ async def _hydrate_async_session_tenant_identity(
     tenant_id = _normalize_tenant_id(info.get("tenant_id"))
     tenant_slug = str(info.get("tenant_slug") or info.get("tenant") or "").strip().lower() or None
     tenant_schema_name = str(info.get("tenant_schema") or "").strip() or None
+    # Celery tasks pass tenant UUIDs where a slug is expected
+    # (``tenant_context(tenant_id)`` + ``session_scope(tenant=tenant_id)``,
+    # see audit_export_job). The UUID then lands in ``tenant_slug`` and the
+    # schema/search_path derived from it are bogus — distrust them and
+    # resolve the real identity from the Tenant row by id.
+    slug_as_id = _normalize_tenant_id(tenant_slug)
+    stale_schema = tenant_schema(tenant_slug) if slug_as_id is not None else None
+    if stale_schema and tenant_schema_name == stale_schema:
+        tenant_schema_name = None
 
-    if tenant_id and tenant_slug and tenant_schema_name:
+    if tenant_id and tenant_slug and tenant_schema_name and slug_as_id is None:
         info["tenant_id"] = tenant_id
         info["tenant_slug"] = tenant_slug
         info["tenant_schema"] = tenant_schema_name
@@ -176,7 +195,9 @@ async def _hydrate_async_session_tenant_identity(
     filters = []
     if tenant_id:
         filters.append(Tenant.id == tenant_id)
-    if tenant_slug:
+    if slug_as_id is not None and slug_as_id != tenant_id:
+        filters.append(Tenant.id == slug_as_id)
+    if tenant_slug and slug_as_id is None:
         filters.extend((Tenant.slug == tenant_slug, Tenant.code == tenant_slug))
     if not filters:
         return tenant_id, tenant_slug, tenant_schema_name
@@ -212,6 +233,15 @@ async def _hydrate_async_session_tenant_identity(
     info["tenant_slug"] = resolved_tenant_slug
     info["tenant_schema"] = resolved_tenant_schema
     info["tenant"] = resolved_tenant_slug
+    if stale_schema:
+        # Replace the schema derived from the mislabelled slug before
+        # _apply_search_path (which runs after hydration in __aenter__)
+        # sends the bogus "tenant_<uuid>" entry to Postgres.
+        search_path = info.get("search_path")
+        if isinstance(search_path, list) and stale_schema in search_path:
+            info["search_path"] = [
+                resolved_tenant_schema if entry == stale_schema else entry for entry in search_path
+            ]
     return resolved_tenant_id, resolved_tenant_slug, resolved_tenant_schema
 
 
@@ -450,6 +480,13 @@ def ensure_tenant_schema(
         return
     if not _SUPPORTS_SCHEMAS:
         return
+    if schema_name is None and _normalize_tenant_id(slug) is not None:
+        # ``slug`` is actually a tenant UUID (celery-task calling convention);
+        # deriving a schema from it would bootstrap a spurious empty
+        # "tenant_<uuid>" schema. Session hydration resolves the real schema
+        # from the Tenant row instead.
+        _logger.warning("tenant.schema.ensure.uuid_slug_skipped", extra={"slug": slug})
+        return
     schema = str(schema_name or tenant_schema(slug)).strip()
     if not schema:
         return
@@ -493,6 +530,11 @@ async def aensure_tenant_schema(
     if implicit and not _settings.runtime_schema_bootstrap:
         return
     if not _SUPPORTS_SCHEMAS:
+        return
+    if schema_name is None and _normalize_tenant_id(slug) is not None:
+        # Same guard as ensure_tenant_schema: never derive a schema name
+        # from a tenant UUID mislabelled as slug.
+        _logger.warning("tenant.schema.ensure.uuid_slug_skipped", extra={"slug": slug})
         return
     schema = str(schema_name or tenant_schema(slug)).strip()
     if not schema:

@@ -8,6 +8,7 @@ from sqlalchemy import select
 import app.api.dependencies as api_dependencies
 import app.db.session as db_session
 from app.core.config import Settings
+from app.core.tenant import tenant_context
 from app.models.finance import Department
 from app.models.models import Company, Person, Position, Site, Tenant, TrainingCourse
 from app.services.demo_bootstrap import bootstrap_demo_tenant
@@ -39,6 +40,58 @@ async def test_before_flush_rejects_slug_written_into_uuid_tenant_id(sessionmake
 
         with pytest.raises(ValueError, match="tenant.id"):
             await session.flush()
+
+
+@pytest.mark.anyio
+async def test_session_scope_accepts_tenant_uuid_for_new_tenant_scoped_rows(sessionmaker) -> None:
+    """Regression: celery tasks pass tenant UUID where a slug is expected.
+
+    ``audit_export_job``/``report_export_job`` invoke
+    ``tenant_context(tenant_id)`` + ``ensure_tenant_schema(tenant_id)`` +
+    ``session_scope(tenant=tenant_id)`` with ``tenant_id=str(tenant.id)``.
+    Hydration must detect the UUID mislabelled as ``tenant_slug`` and resolve
+    the real tenant identity; otherwise ``_apply_default_tenant`` rejects
+    legitimate new rows whose ``tenant_id`` equals that UUID ("must store
+    tenant.id, not tenant.slug" — both fields hold the same UUID).
+    """
+
+    async with sessionmaker() as seed:
+        tenant = (await seed.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()
+
+    tenant_uuid = str(tenant.id)
+    with tenant_context(tenant_uuid):
+        db_session.ensure_tenant_schema(tenant_uuid)
+        async with db_session.session_scope(tenant=tenant_uuid) as session:
+            explicit = Company(tenant_id=tenant.id, name="UUID Tenant Explicit Row")
+            auto = Company(name="UUID Tenant Auto Row")
+            session.add_all([explicit, auto])
+            await session.flush()
+
+            assert explicit.tenant_id == tenant.id
+            assert auto.tenant_id == tenant.id
+            assert session.info["tenant_id"] == tenant.id
+            assert session.info["tenant_slug"] == tenant.slug
+            assert session.info["tenant"] == tenant.slug
+
+
+@pytest.mark.anyio
+async def test_before_flush_ignores_tenant_uuid_mislabelled_as_slug(sessionmaker) -> None:
+    """Same bug, sync path: sessions that skip ``__aenter__`` hydration must
+    still not treat a UUID stored in ``session.info["tenant_slug"]`` as a slug
+    inside the before_flush guard."""
+
+    async with sessionmaker() as session:
+        tenant = (await session.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()
+        session.info["tenant_id"] = tenant.id
+        session.info["tenant_slug"] = str(tenant.id)
+        session.info["tenant_schema"] = "public"
+
+        company = Company(tenant_id=tenant.id, name="Guard UUID Slug Row")
+        session.add(company)
+        await session.flush()
+
+        assert company.tenant_id == tenant.id
+        assert session.info["tenant_slug"] == tenant.slug
 
 
 @pytest.mark.anyio
