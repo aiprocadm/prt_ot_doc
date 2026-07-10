@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 from tests.utils.factories import TestDataFactory
 
@@ -57,3 +59,54 @@ async def test_model_roundtrip(sessionmaker, data_factory: TestDataFactory) -> N
         assert row.is_system is False  # ORM default
         assert row.deleted_at is None
         assert row.config_json == {"columns": ["title"]}
+
+
+@pytest.mark.asyncio
+async def test_name_unique_including_soft_deleted(
+    sessionmaker, data_factory: TestDataFactory
+) -> None:
+    """uq_report_definition_tenant_name действует БЕЗ фильтра deleted_at:
+    soft-deleted тёзка не освобождает слот (паттерн PPESupplier, честный 409)."""
+    from app.models.models import ReportDefinition
+
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        # rollback() ниже экспирит все объекты сессии; ленивое чтение
+        # tenant.id после него — sync IO → MissingGreenlet. Кэшируем заранее.
+        tenant_id = str(tenant.id)
+        first = ReportDefinition(
+            tenant_id=tenant_id,
+            name="Дубль",
+            dataset_code="incidents",
+            config_json={},
+        )
+        session.add(first)
+        await session.commit()
+
+        session.add(
+            ReportDefinition(
+                tenant_id=tenant_id,
+                name="Дубль",
+                dataset_code="risks",
+                config_json={},
+            )
+        )
+        with pytest.raises(IntegrityError):
+            await session.commit()
+        await session.rollback()
+
+        first.deleted_at = datetime.now(tz=timezone.utc)
+        session.add(first)
+        await session.commit()
+
+        session.add(
+            ReportDefinition(
+                tenant_id=tenant_id,
+                name="Дубль",
+                dataset_code="risks",
+                config_json={},
+            )
+        )
+        with pytest.raises(IntegrityError):
+            await session.commit()
+        await session.rollback()

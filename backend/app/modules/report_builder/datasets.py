@@ -6,6 +6,16 @@ SELECT. Engine оборачивает базовый select в subquery и пр�
 вычислимые колонки (is_overdue, on_hand, below_min) ОБЯЗАНЫ быть
 SQL-выражениями, а не Python-постобработкой. Ключи labeled-колонок билдера
 байт-в-байт совпадают со списком ``columns`` (пинуется тестом реестра).
+
+Enum-контракт. Enum-колонки намеренно сохраняют ORM Enum-тип; engine ОБЯЗАН
+фильтровать по типизированной колонке (никогда не cast к тексту) и рендерить
+через ``member.value``. ``enum_values`` в ``ColumnSpec`` — это .value-токены
+для UI/валидации, а физическое хранение может быть NAME-based (plain
+``sa.Enum``: Training.status, Incident.incident_type/status/severity хранят
+'REPORTED', 'COMPLETED', ...) или value-based (``native_enum``:
+PPEItem.category хранит 'head', ...). Bind processor типизированной колонки
+нормализует оба случая при фильтрации; cast к тексту или рендер без
+``.value`` дадут тихо неверные результаты.
 """
 
 from __future__ import annotations
