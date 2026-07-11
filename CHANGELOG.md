@@ -1,5 +1,37 @@
 # CHANGELOG
 
+## 2026-07-11 (feat/p10-07-management-dashboards — P10-07 Analytics: управленческие дашборды §24.2)
+
+### Added
+- **Управленческая аналитика (P10-07, ТЗ B.23 → vNext §24.2)** — хаб `/analytics` («Бизнес и аналитика» →
+  «Управленческая аналитика», новое право `ANALYTICS_VIEW` у admin/owner/ot_pb_head + ot_specialist/
+  line_manager/hr): фильтр-бар (компания/объект/подрядчик/период — backend принимал эти фильтры, фронт
+  впервые их передаёт) → KPI-карточки (executive + overdue + sla-load) → **графики 6 трендов** (первая
+  chart-библиотека проекта: recharts 2.x — 3.x требует TS≥5.4 через @reduxjs/toolkit, проект на 5.3.3;
+  обёртка `TrendLineChart`, период day/week/month) → **разрез по компаниям/объектам/подрядчикам**
+  (клик по строке = drill-down фильтр) → карточки-ссылки на 5 профильных суб-дашбордов (были
+  «сиротскими» маршрутами вне навигации).
+- **Breakdown-эндпоинт** `GET /analytics/dashboard/breakdown?dimension=company|site|contractor`
+  (+date-окно по инцидентам): по одному SQL GROUP BY на метрику (инциденты/предписания/high-риски,
+  для компаний + обучение и СИЗ; подрядчики — из readiness read-model), нулевые сущности включены,
+  синтетическая строка «— без объекта» для рисков/предписаний без площадки (иначе тихая несверка
+  с executive-итогом — находка ревью), сортировка «худшие сверху», cap 200. Без миграций/персистенса.
+
+### Fixed / Security
+- **RBAC на analytics-роутере** (пре-существующая дыра): все `GET /analytics/*` — только управленческие
+  роли (admin/owner/hr/ot_pb_lead/line_manager/ot_specialist/manager), `POST /analytics/recompute` —
+  только admin/owner. Раньше управленческие KPI были видны любому аутентифицированному пользователю тенанта.
+- **RBAC на export_center** (`/exports*`): read — офисные роли (без worker/employee/contractor_inspector),
+  write (создание job/schedules/kpis/retry) — узкий список.
+- **Дубль-регистрация operational_dashboard-роутера** убрана (`route_groups.py` — источник
+  «Duplicate Operation ID» warning в OpenAPI; путь `/operational/dashboard` не изменился).
+- Тесты: backend 11 (RBAC-матрица 4 + breakdown 7), frontend 14 (страница 8 + analyticsApi 4 +
+  TrendLineChart 2); +ResizeObserver-полифилл в vitest.setup.
+- **Осознанно вне объёма (follow-up):** «активность пользователей» и «состояние системы» из §24.2
+  (нет агрегаторов); пере-вёрстка 5 суб-дашбордов (остаются JsonKpiGrid); ETag/кэш на analytics;
+  keyboard-доступность клика по строке разреза; секционный loader вместо full-page на смену фильтра;
+  PG-проверка `func.date(occurred_at)` на timestamptz.
+
 ## 2026-07-10 (feat/p10-07-report-builder-mvp — P10-07 Analytics: конструктор отчётов end-to-end)
 
 ### Added

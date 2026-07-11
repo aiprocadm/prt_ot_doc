@@ -48,6 +48,7 @@ export const TrainingDashboardPage = lazy(() => import("@/pages/dashboard/Traini
 export const PpeDashboardPage = lazy(() => import("@/pages/dashboard/PpeDashboardPage"));
 export const ClientDeliveryDashboardPage = lazy(() => import("@/pages/dashboard/ClientDeliveryDashboardPage"));
 export const TrendsPage = lazy(() => import("@/pages/analytics/TrendsPage"));
+export const ManagementDashboardPage = lazy(() => import("@/pages/analytics/ManagementDashboardPage"));
 export const ExportsPage = lazy(() => import("@/pages/exports/ExportsPage"));
 export const ClientPortalDashboardPage = lazy(() => import("@/pages/client-portal/ClientPortalDashboardPage"));
 export const ClientPortalPackagesPage = lazy(() => import("@/pages/client-portal/ClientPortalPackagesPage"));

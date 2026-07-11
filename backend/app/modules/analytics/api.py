@@ -2,12 +2,16 @@ from __future__ import annotations
 
 from datetime import date
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import status as http_status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.core.errors import api_problem_detail
+from app.core.security import abac
 from app.models.models import Tenant
+from app.modules.analytics.breakdown import BREAKDOWN_DIMENSIONS, compute_breakdown
 from app.modules.analytics.services import (
     AnalyticsAggregationService,
     DashboardFilters,
@@ -16,7 +20,36 @@ from app.modules.analytics.services import (
 from app.modules.projections.models import DashboardKpiSnapshot
 from app.modules.projections.services import ProjectionOrchestrator
 
-router = APIRouter(prefix="/analytics", tags=["analytics"])
+
+def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> str | None:
+    return getattr(tenant, "id", None)
+
+
+# Управленческие KPI: union прецедентов dashboard/operational/reports
+# (_SUMMARY_ROLES + manager + ot_specialist). Worker/employee/client-роли не входят.
+_ANALYTICS_READ_ROLES = [
+    "admin",
+    "owner",
+    "hr",
+    "ot_pb_lead",
+    "line_manager",
+    "ot_specialist",
+    "manager",
+]
+_ANALYTICS_ADMIN_ROLES = ["admin", "owner"]
+
+_ReadGuard = Depends(
+    abac(_tenant_resource_id, required_roles=_ANALYTICS_READ_ROLES, action="read analytics")
+)
+_AdminGuard = Depends(
+    abac(
+        _tenant_resource_id,
+        required_roles=_ANALYTICS_ADMIN_ROLES,
+        action="recompute analytics",
+    )
+)
+
+router = APIRouter(prefix="/analytics", tags=["analytics"], dependencies=[_ReadGuard])
 
 
 def _filters(
@@ -217,7 +250,38 @@ async def ppe_trends(
     return await AnalyticsAggregationService(session, str(tenant.id)).trend_series("ppe", period)
 
 
-@router.post("/recompute")
+@router.get("/dashboard/breakdown")
+async def dashboard_breakdown(
+    dimension: str = Query(...),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+) -> dict:
+    if dimension not in BREAKDOWN_DIMENSIONS:
+        raise HTTPException(
+            http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=api_problem_detail(
+                code="breakdown_dimension_unknown",
+                message=f"Unknown dimension: {dimension}",
+                error_type="analytics",
+            ),
+        )
+    if date_from is not None and date_to is not None and date_from > date_to:
+        raise HTTPException(
+            http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=api_problem_detail(
+                code="breakdown_window_invalid",
+                message="date_from must not be after date_to",
+                error_type="analytics",
+            ),
+        )
+    return await compute_breakdown(
+        session, str(tenant.id), dimension, date_from=date_from, date_to=date_to
+    )
+
+
+@router.post("/recompute", dependencies=[_AdminGuard])
 async def recompute_dashboard(
     session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)
 ) -> dict:
