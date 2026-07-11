@@ -6,6 +6,14 @@ ETag не нужен. Date-окно применяется ТОЛЬКО к incid
 overdue-метрики описывают состояние «на сегодня», окно к ним не применимо.
 Contractor-разрез использует собственный набор метрик из
 ``ContractorReadinessReadModel`` (у пяти общих метрик нет FK на подрядчика).
+
+None-bucket (site-разрез): ``Risk.site_id`` и ``Inspection.site_id`` nullable —
+high-риски и просроченные предписания без привязки к объекту не должны тихо
+исчезать из site-разреза (иначе итоги не сойдутся с executive-дашбордом).
+Их счётчики собираются в синтетическую строку ``{"id": "", "name": "— без
+объекта"}``, которая добавляется только когда хотя бы один её счётчик > 0 и
+участвует в общей сортировке. ``Incident.site_id`` NOT NULL — инциденты в
+None-bucket не попадают. Company-разрез: все company_id NOT NULL, bucket не нужен.
 """
 
 from __future__ import annotations
@@ -33,10 +41,27 @@ from app.modules.projections.models import ContractorReadinessReadModel
 BREAKDOWN_DIMENSIONS = ("company", "site", "contractor")
 BREAKDOWN_ROW_CAP = 200
 
+# Порог «высокого» риска — как в operational_dashboard/service.py:211
+# (Risk.level >= 15). Шкала modules/risk/calc.py: high = 10-16, crit >= 17 —
+# т.е. это top-slice high-диапазона плюс все критические.
+HIGH_RISK_LEVEL_THRESHOLD = 15
 
-async def _grouped_counts(session: AsyncSession, stmt) -> dict[str, int]:
+NO_SITE_BUCKET_ID = ""
+NO_SITE_BUCKET_NAME = "— без объекта"
+
+
+async def _grouped_counts(session: AsyncSession, stmt) -> tuple[dict[str, int], int]:
+    """Counts по ключу группировки + отдельный итог для key=None (None-bucket)."""
+
     rows = (await session.execute(stmt)).all()
-    return {str(key): int(value or 0) for key, value in rows if key is not None}
+    counts: dict[str, int] = {}
+    none_total = 0
+    for key, value in rows:
+        if key is None:
+            none_total += int(value or 0)
+        else:
+            counts[str(key)] = int(value or 0)
+    return counts, none_total
 
 
 async def compute_breakdown(
@@ -76,7 +101,7 @@ async def compute_breakdown(
 
     risks_stmt = (
         select(dim_risks, func.count())
-        .where(Risk.tenant_id == tenant_id, Risk.level >= 15)
+        .where(Risk.tenant_id == tenant_id, Risk.level >= HIGH_RISK_LEVEL_THRESHOLD)
         .group_by(dim_risks)
     )
 
@@ -93,14 +118,15 @@ async def compute_breakdown(
         .group_by(dim_prescriptions)
     )
 
-    incidents = await _grouped_counts(session, incidents_stmt)
-    risks = await _grouped_counts(session, risks_stmt)
-    prescriptions = await _grouped_counts(session, prescriptions_stmt)
+    # Incident.site_id/company_id NOT NULL — none_total у инцидентов всегда 0.
+    incidents, _ = await _grouped_counts(session, incidents_stmt)
+    risks, risks_no_site = await _grouped_counts(session, risks_stmt)
+    prescriptions, prescriptions_no_site = await _grouped_counts(session, prescriptions_stmt)
 
     trainings: dict[str, int] = {}
     ppe: dict[str, int] = {}
     if dimension == "company":
-        trainings = await _grouped_counts(
+        trainings, _ = await _grouped_counts(
             session,
             select(TrainingPlan.company_id, func.count())
             .where(
@@ -111,7 +137,7 @@ async def compute_breakdown(
             )
             .group_by(TrainingPlan.company_id),
         )
-        ppe = await _grouped_counts(
+        ppe, _ = await _grouped_counts(
             session,
             select(Person.company_id, func.count())
             .select_from(PPEIssue)
@@ -144,13 +170,25 @@ async def compute_breakdown(
             "prescriptions_overdue": prescriptions.get(eid, 0),
             "risks_high": risks.get(eid, 0),
         }
+        total = row["incidents_open"] + row["prescriptions_overdue"] + row["risks_high"]
         if dimension == "company":
             row["trainings_overdue"] = trainings.get(eid, 0)
             row["ppe_overdue"] = ppe.get(eid, 0)
-        row["total_issues"] = sum(
-            v for k, v in row.items() if k not in {"id", "name", "total_issues"}
-        )
+            total += row["trainings_overdue"] + row["ppe_overdue"]
+        row["total_issues"] = total
         items.append(row)
+
+    if dimension == "site" and (risks_no_site > 0 or prescriptions_no_site > 0):
+        items.append(
+            {
+                "id": NO_SITE_BUCKET_ID,
+                "name": NO_SITE_BUCKET_NAME,
+                "incidents_open": 0,
+                "prescriptions_overdue": prescriptions_no_site,
+                "risks_high": risks_no_site,
+                "total_issues": prescriptions_no_site + risks_no_site,
+            }
+        )
 
     items.sort(key=lambda r: (-r["total_issues"], r["name"]))
     return {"dimension": dimension, "items": items[:BREAKDOWN_ROW_CAP], "total": len(items)}

@@ -267,6 +267,15 @@ async def dashboard_breakdown(
                 error_type="analytics",
             ),
         )
+    if date_from is not None and date_to is not None and date_from > date_to:
+        raise HTTPException(
+            http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=api_problem_detail(
+                code="breakdown_window_invalid",
+                message="date_from must not be after date_to",
+                error_type="analytics",
+            ),
+        )
     return await compute_breakdown(
         session, str(tenant.id), dimension, date_from=date_from, date_to=date_to
     )

@@ -111,6 +111,39 @@ async def test_site_breakdown_counts_and_order(
 
 
 @pytest.mark.asyncio
+async def test_site_breakdown_null_site_bucket(
+    async_client, make_auth_headers, sessionmaker, data_factory
+):
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        tid = str(tenant.id)
+        company = Company(tenant_id=tid, name="ООО Безобъектная")
+        session.add(company)
+        await session.flush()
+        session.add(
+            Risk(
+                tenant_id=tid,
+                company_id=company.id,
+                site_id=None,
+                hazard="Общий",
+                probability=4,
+                severity=4,
+                level=16,
+            )
+        )
+        await session.commit()
+    headers = await make_auth_headers(RoleEnum.ADMIN)
+    resp = await async_client.get(f"{BASE}?dimension=site", headers=headers)
+    assert resp.status_code == status.HTTP_200_OK, resp.text
+    body = resp.json()
+    bucket = next(i for i in body["items"] if i["name"] == "— без объекта")
+    assert bucket["id"] == ""
+    assert bucket["risks_high"] == 1
+    assert bucket["incidents_open"] == 0
+    assert bucket["total_issues"] == 1
+
+
+@pytest.mark.asyncio
 async def test_company_breakdown_includes_trainings(
     async_client, make_auth_headers, sessionmaker, data_factory
 ):
@@ -157,6 +190,43 @@ async def test_contractor_breakdown_zero_row(
 
 
 @pytest.mark.asyncio
+async def test_contractor_breakdown_populated_row(
+    async_client, make_auth_headers, sessionmaker, data_factory
+):
+    from app.modules.contractors.models import ContractorRegistry
+    from app.modules.projections.models import ContractorReadinessReadModel
+
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        tid = str(tenant.id)
+        contractor = ContractorRegistry(tenant_id=tid, name="СтройПодряд")
+        session.add(contractor)
+        await session.flush()
+        session.add(
+            ContractorReadinessReadModel(
+                tenant_id=tid,
+                contractor_id=contractor.id,
+                workers_blocked=2,
+                missing_docs_count=1,
+                missing_training_count=0,
+                overdue_items_count=3,
+                active_packages_count=5,
+            )
+        )
+        await session.commit()
+    headers = await make_auth_headers(RoleEnum.ADMIN)
+    resp = await async_client.get(f"{BASE}?dimension=contractor", headers=headers)
+    assert resp.status_code == status.HTTP_200_OK
+    row = resp.json()["items"][0]
+    assert row["workers_blocked"] == 2
+    assert row["missing_docs"] == 1
+    assert row["overdue_items"] == 3
+    assert row["active_packages"] == 5
+    # active_packages — информационная метрика, в total_issues НЕ входит
+    assert row["total_issues"] == 6
+
+
+@pytest.mark.asyncio
 async def test_unknown_dimension_422_and_isolation(
     async_client, make_auth_headers, sessionmaker, data_factory
 ):
@@ -168,3 +238,9 @@ async def test_unknown_dimension_422_and_isolation(
     # smoke: без dimension тоже 422 (обязательный параметр)
     missing = await async_client.get(BASE, headers=headers)
     assert missing.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+    # инвертированное окно (date_from > date_to) → 422 breakdown_window_invalid
+    inverted = await async_client.get(
+        f"{BASE}?dimension=site&date_from=2026-07-10&date_to=2026-07-01",
+        headers=headers,
+    )
+    assert inverted.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
