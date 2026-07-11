@@ -41,6 +41,7 @@ export const NpaPage = lazy(() => import("@/pages/npa/NpaPage"));
 export const AuditPage = lazy(() => import("@/pages/audit/AuditPage"));
 export const SettingsPage = lazy(() => import("@/pages/settings/SettingsPage"));
 export const ReportsPage = lazy(() => import("@/pages/reports/ReportsPage"));
+export const ReportBuilderPage = lazy(() => import("@/pages/reports/ReportBuilderPage"));
 export const ExecutiveDashboardPage = lazy(() => import("@/pages/dashboard/ExecutiveDashboardPage"));
 export const SafetyDashboardPage = lazy(() => import("@/pages/dashboard/SafetyDashboardPage"));
 export const TrainingDashboardPage = lazy(() => import("@/pages/dashboard/TrainingDashboardPage"));

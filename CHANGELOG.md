@@ -32,6 +32,56 @@
   keyboard-доступность клика по строке разреза; секционный loader вместо full-page на смену фильтра;
   PG-проверка `func.date(occurred_at)` на timestamptz.
 
+## 2026-07-10 (feat/p10-07-report-builder-mvp — P10-07 Analytics: конструктор отчётов end-to-end)
+
+### Added
+- **Report-builder MVP (P10-07, ТЗ B.23 → vNext §24.3)** — конструктор отчётов end-to-end: сохранённая
+  сущность отчёта + sync-предпросмотр + celery-материализатор CSV/XLSX/PDF поверх существующего
+  ExportJob-конвейера + страница-конструктор. Всё за новым default-off фичефлагом `report_builder`
+  (паттерн committees; demo-сид включает для demo-тенанта).
+  - **Модель `ReportDefinition`** (миграция `rb01`, чисто аддитивная): датасет + `config_json`
+    (колонки / фильтры / сортировка / группировки с агрегатами count/sum) + `is_system`
+    («готовые шаблоны» из ТЗ — неизменяемые, на фронте «Дублировать»); имя уникально per tenant.
+  - **Декларативный реестр датасетов** (`modules/report_builder/datasets.py`) — 4 ядровых:
+    обучение сотрудников, инциденты, реестр рисков, СИЗ-остатки; вычислимые колонки
+    (просрочено / остаток / ниже минимума) — SQL-выражения, фильтруются наравне с физическими;
+    задокументирован enum-контракт (NAME-based vs value-based хранение, фильтр только по
+    типизированной колонке).
+  - **Engine** (`engine.py`) — один компилятор для предпросмотра (limit 100) и экспорта (hard cap
+    50 000): whitelist-валидация колонок/операторов/сортировки (422 со структурным кодом),
+    коэрсия значений по типу, GROUP BY + count/sum на уровне SQL, total отдельным count.
+  - **Renderers** (`renderers.py`) — CSV (`;`, UTF-8 BOM, экранирование), XLSX (openpyxl,
+    санитайзер имени листа), PDF (python-docx landscape → LibreOffice; недоступен →
+    типизированный `pdf_renderer_unavailable`); **нейтрализация CSV/XLSX formula-injection**
+    (OWASP-префикс `'` для `=`,`+`,`-`,`@`,Tab,CR — из адверсариального ревью, с regression-тестом).
+  - **API `/report-builder/*`** (9 роутов, RBAC read=admin/owner/ot_specialist/line_manager,
+    write без line_manager; audit на write/run; ETag+304 на списке): каталог датасетов,
+    CRUD сохранённых отчётов (409 дубль имени, 400 system-immutable, 422 битый config),
+    inline-предпросмотр, `POST /definitions/{id}/run {format}` → ExportJob,
+    `GET /exports/{job_id}/download` — выделенное скачивание (legacy `/files/{id}/download`
+    требует MinIO и префикс `tenants/` — недоступен на dev; паттерн audit-экспорта).
+  - **Материализатор `report_export_job`** (celery, зеркало audit_export_job): engine → renderer →
+    `FileStorageService` + строка `File` → `job.file_id/row_count/done`; typed-ошибки
+    (`definition_missing`/`row_limit_exceeded`/`pdf_row_limit_exceeded` при >2000 строк для PDF/
+    `pdf_renderer_unavailable`) + **broad-except → `internal_error`** (job не застревает в running),
+    terminal-guard от повторной доставки; модуль зарегистрирован для worker discovery.
+  - **Demo-сид**: флаг + 4 системных шаблона («Просроченное обучение», «Открытые инциденты»,
+    «Риски высокого уровня», «СИЗ ниже минимального остатка») — идемпотентно.
+  - **`ReportBuilderPage`** (`/reports/builder`, право REPORTS_VIEW, пункт «Конструктор отчётов»
+    в навигации + кнопка с ReportsPage): сохранённые отчёты (системные — badge, дублирование),
+    конструктор (датасет → колонки/группировка → типо-зависимые фильтры → сортировка),
+    предпросмотр ≤100 строк, экспорт CSV/XLSX/PDF с поллингом job (house-хук `usePolling`)
+    и скачиванием; RU-сообщения по кодам ошибок job. Пустые значения фильтров не отправляются
+    (ревью-фикс: `Number("")→0` тихо искажал отчёт).
+  - Тесты: backend 34 (модель/миграция 3, реестр 2, engine 10, renderers 5, API 6, материализатор
+    и download 7, сид 1) + frontend 13 (api-клиент 5, страница 8).
+  - **Осознанно вне объёма (follow-up):** остальные 4 датасета каталога Export Center
+    (реестр делает добавление механическим); cron-исполнение `ExportSchedule` + email-доставка
+    (run-now работает); графики/heatmap (уйдут в срез управленческих дашбордов); anonymization;
+    подключение старой кнопки ReportsPage (`reports:xlsx` job'ы) к материализатору; RBAC на
+    generic `/exports/*`-чтениях + no-op `retry` для report-job'ов; сброс кнопки «Скачать»
+    при правке конфига; server-side пагинация предпросмотра.
+
 ## 2026-07-09 (feat/p10-03-medical-oversight-ui — P10-03 Медосмотры: фронт контингента / направлений / отстранений)
 
 ### Added
