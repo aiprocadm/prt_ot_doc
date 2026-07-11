@@ -110,6 +110,7 @@ export const MAIN_NAV_GROUPS: NavGroup[] = [
       { label: "НПА / Нормативная база", to: "/npa", icon: BookOpen, permission: PERMISSIONS.NPA_VIEW },
       { label: "Отчёты", to: "/reports", icon: ShieldCheck, permission: PERMISSIONS.REPORTS_VIEW },
       { label: "Тренды", to: "/analytics/trends", icon: Activity, permission: PERMISSIONS.REPORTS_VIEW },
+      { label: "Управленческая аналитика", to: "/analytics", icon: Activity, permission: PERMISSIONS.ANALYTICS_VIEW },
       { label: "Кабинет клиента", to: "/client-portal/dashboard", icon: Users, permission: PERMISSIONS.CLIENT_PORTAL_VIEW }
     ]
   },

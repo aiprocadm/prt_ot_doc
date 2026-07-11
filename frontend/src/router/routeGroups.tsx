@@ -43,6 +43,7 @@ import {
   InspectionsPage,
   HealthStatusPage,
   IntegrationsPage,
+  ManagementDashboardPage,
   MedicalPage,
   MobileIssuePage,
   NotificationsPage,
@@ -211,6 +212,10 @@ export const buildProtectedRouteGroups = (): ReactElement[] => {
         <Route key="/analytics/trends" path="/analytics/trends" element={<TrendsPage />} />,
         <Route key="/portal-requests" path="/portal-requests" element={<PortalRequestsPage />} />
       ]
+    },
+    {
+      permission: PERMISSIONS.ANALYTICS_VIEW,
+      routes: [<Route key="/analytics" path="/analytics" element={<ManagementDashboardPage />} />]
     },
     {
       permission: PERMISSIONS.CLIENT_PORTAL_VIEW,
