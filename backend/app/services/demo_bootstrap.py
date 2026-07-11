@@ -713,6 +713,98 @@ async def _seed_committees_demo(session, tenant_db_id: str) -> None:
         session.add(FeatureEnablement(tenant_id=tenant_db_id, feature_id=feature.id, on=True))
 
 
+async def _seed_report_builder_demo(session, tenant_db_id: str) -> None:
+    """Seed the default-off ``report_builder`` flag (enabled for the demo
+    tenant) + 4 системных шаблона отчётов (P10-07, «готовые шаблоны» из §24.3).
+    Idempotent: flag keyed on Feature.code, templates keyed on (tenant, name)."""
+
+    from app.models.feature import Feature, FeatureEnablement
+    from app.models.report_builder import ReportDefinition
+
+    feature = (
+        await session.execute(select(Feature).where(Feature.code == "report_builder"))
+    ).scalar_one_or_none()
+    if feature is None:
+        feature = Feature(code="report_builder", title="Конструктор отчётов")
+        session.add(feature)
+        await session.flush()
+    enablement = (
+        await session.execute(
+            select(FeatureEnablement).where(
+                FeatureEnablement.tenant_id == tenant_db_id,
+                FeatureEnablement.feature_id == feature.id,
+            )
+        )
+    ).scalar_one_or_none()
+    if enablement is None:
+        session.add(FeatureEnablement(tenant_id=tenant_db_id, feature_id=feature.id, on=True))
+
+    templates: list[dict] = [
+        {
+            "name": "Просроченное обучение",
+            "description": "Сотрудники с истёкшим сроком действия обучения",
+            "dataset_code": "employees_training",
+            "config_json": {
+                "columns": ["person_name", "position_title", "course_name", "expires_at"],
+                "filters": [{"field": "is_overdue", "op": "eq", "value": True}],
+                "sort": [{"field": "expires_at", "dir": "asc"}],
+            },
+        },
+        {
+            "name": "Открытые инциденты",
+            "description": "Инциденты вне статусов closed/cancelled",
+            "dataset_code": "incidents",
+            "config_json": {
+                "columns": [
+                    "title",
+                    "incident_type",
+                    "severity",
+                    "status",
+                    "occurred_at",
+                    "site_name",
+                ],
+                "filters": [
+                    {
+                        "field": "status",
+                        "op": "in",
+                        "value": ["reported", "investigating", "corrective_actions"],
+                    }
+                ],
+                "sort": [{"field": "occurred_at", "dir": "desc"}],
+            },
+        },
+        {
+            "name": "Риски высокого уровня",
+            "description": "Записи реестра рисков с уровнем 15 и выше",
+            "dataset_code": "risks",
+            "config_json": {
+                "columns": ["hazard", "level", "company_name", "site_name"],
+                "filters": [{"field": "level", "op": "gte", "value": 15}],
+                "sort": [{"field": "level", "dir": "desc"}],
+            },
+        },
+        {
+            "name": "СИЗ ниже минимального остатка",
+            "description": "Позиции склада СИЗ с остатком ниже min_stock",
+            "dataset_code": "ppe_warehouse",
+            "config_json": {
+                "columns": ["item_name", "category", "on_hand", "min_stock"],
+                "filters": [{"field": "below_min", "op": "eq", "value": True}],
+            },
+        },
+    ]
+    for tpl in templates:
+        exists = await session.scalar(
+            select(ReportDefinition).where(
+                ReportDefinition.tenant_id == tenant_db_id,
+                ReportDefinition.name == tpl["name"],
+                ReportDefinition.deleted_at.is_(None),
+            )
+        )
+        if exists is None:
+            session.add(ReportDefinition(tenant_id=tenant_db_id, is_system=True, **tpl))
+
+
 async def _seed_sout_demo(session, tenant_db_id: str, position_id: str | None = None) -> None:
     """Seed a minimal СОУТ demo (P10-04 срез-1).
 
@@ -1057,6 +1149,7 @@ async def bootstrap_demo_tenant(settings: Settings) -> None:
         await _seed_sout_demo(
             session, tenant_db_id, str(position.id) if position is not None else None
         )
+        await _seed_report_builder_demo(session, tenant_db_id)
         logger.info(
             "demo.bootstrap.done",
             extra={"tenant": tenant_slug, "company": company_name, "site": site_name},

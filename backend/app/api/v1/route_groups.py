@@ -81,6 +81,7 @@ from app.modules.packs import api as packs_v2_api
 from app.modules.pdf import api as pdf_api
 from app.modules.pipelines import api as pipelines_api
 from app.modules.replace import api as replace_api
+from app.modules.report_builder.api import router as report_builder_router
 from app.modules.search.api import router as search_router
 from app.modules.workflow.api import router as workflow_router
 
@@ -183,6 +184,7 @@ DOCUMENT_CORE_ROUTER_REGISTRATIONS: tuple[RouterRegistration, ...] = (
     (search_router, {"tags": ["search"]}),
     (analytics_router, {"tags": ["analytics"]}),
     (export_center_router, {"tags": ["exports"]}),
+    (report_builder_router, {"tags": ["report-builder"]}),
 )
 
 PLATFORM_EXTENSION_ROUTER_REGISTRATIONS: tuple[RouterRegistration, ...] = (

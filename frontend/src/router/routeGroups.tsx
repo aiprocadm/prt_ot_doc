@@ -56,6 +56,7 @@ import {
   PermitsPage,
   PrescriptionsPage,
   ReferencePage,
+  ReportBuilderPage,
   ReportsPage,
   RiskPage,
   SafetyDashboardPage,
@@ -207,6 +208,7 @@ export const buildProtectedRouteGroups = (): ReactElement[] => {
       permission: PERMISSIONS.REPORTS_VIEW,
       routes: [
         <Route key="/reports" path="/reports" element={<ReportsPage />} />,
+        <Route key="/reports/builder" path="/reports/builder" element={<ReportBuilderPage />} />,
         <Route key="/exports" path="/exports" element={<ExportsPage />} />,
         <Route key="/analytics/trends" path="/analytics/trends" element={<TrendsPage />} />,
         <Route key="/portal-requests" path="/portal-requests" element={<PortalRequestsPage />} />
