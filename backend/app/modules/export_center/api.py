@@ -1,16 +1,46 @@
 from __future__ import annotations
 
+from uuid import UUID
+
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.core.security import AccessContext, abac
 from app.models.models import Tenant
 from app.modules.export_center.service import ExportCenterService
 from app.modules.projections.models import ExportJob, ExportSchedule, KpiDefinition
 
 router = APIRouter(prefix="/exports", tags=["exports"])
+
+_EXPORT_READ_ROLES = [
+    "admin",
+    "owner",
+    "hr",
+    "line_manager",
+    "manager",
+    "ot_pb_lead",
+    "ot_head",
+    "ot_specialist",
+    "pb_engineer",
+    "accountant",
+    "auditor_ro",
+]
+_EXPORT_WRITE_ROLES = ["admin", "owner", "ot_specialist"]
+
+
+def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> UUID | None:
+    return getattr(tenant, "id", None)
+
+
+ExportReadAccess = Depends(
+    abac(_tenant_resource_id, required_roles=_EXPORT_READ_ROLES, action="read exports")
+)
+ExportWriteAccess = Depends(
+    abac(_tenant_resource_id, required_roles=_EXPORT_WRITE_ROLES, action="manage exports")
+)
 
 
 class ExportCreate(BaseModel):
@@ -46,7 +76,9 @@ class KpiDefinitionCreate(BaseModel):
 
 @router.get("")
 async def list_exports(
-    session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = ExportReadAccess,
 ):
     rows = (
         (
@@ -63,7 +95,7 @@ async def list_exports(
 
 
 @router.get("/datasets")
-async def list_export_datasets():
+async def list_export_datasets(_: AccessContext = ExportReadAccess):
     return {
         "items": ExportCenterService.dataset_catalog(),
         "total": len(ExportCenterService.dataset_catalog()),
@@ -76,6 +108,7 @@ async def create_export(
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = ExportWriteAccess,
 ):
     service = ExportCenterService(session, str(tenant.id))
     return await service.create_job(
@@ -93,7 +126,9 @@ async def create_export(
 
 @router.get("/schedules")
 async def list_schedules(
-    session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = ExportReadAccess,
 ):
     rows = (
         (
@@ -114,6 +149,7 @@ async def create_schedule(
     payload: ExportScheduleCreate,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = ExportWriteAccess,
 ):
     return await ExportCenterService(session, str(tenant.id)).create_schedule_with_schema(
         name=payload.name,
@@ -132,6 +168,7 @@ async def run_schedule_now(
     schedule_id: str,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = ExportWriteAccess,
 ):
     schedule = (
         await session.execute(
@@ -147,7 +184,9 @@ async def run_schedule_now(
 
 @router.get("/kpis")
 async def list_kpis(
-    session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = ExportReadAccess,
 ):
     rows = (
         (
@@ -168,6 +207,7 @@ async def create_kpi(
     payload: KpiDefinitionCreate,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = ExportWriteAccess,
 ):
     return await ExportCenterService(session, str(tenant.id)).create_kpi_definition(
         code=payload.code,
@@ -184,6 +224,7 @@ async def get_export(
     job_id: str,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = ExportReadAccess,
 ):
     job = (
         await session.execute(
@@ -200,6 +241,7 @@ async def retry_export(
     job_id: str,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = ExportWriteAccess,
 ):
     job = (
         await session.execute(
@@ -218,6 +260,7 @@ async def export_download_link(
     job_id: str,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = ExportReadAccess,
 ):
     job = (
         await session.execute(

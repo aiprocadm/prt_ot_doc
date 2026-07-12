@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 from datetime import date
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.core.security import AccessContext, abac
 from app.models.models import Tenant
 from app.modules.analytics.services import (
     AnalyticsAggregationService,
@@ -17,6 +19,33 @@ from app.modules.projections.models import DashboardKpiSnapshot
 from app.modules.projections.services import ProjectionOrchestrator
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
+
+_ANALYTICS_READ_ROLES = [
+    "admin",
+    "owner",
+    "hr",
+    "line_manager",
+    "manager",
+    "ot_pb_lead",
+    "ot_head",
+    "ot_specialist",
+    "pb_engineer",
+    "accountant",
+    "auditor_ro",
+]
+_RECOMPUTE_ROLES = ["admin", "owner"]
+
+
+def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> UUID | None:
+    return getattr(tenant, "id", None)
+
+
+AnalyticsReadAccess = Depends(
+    abac(_tenant_resource_id, required_roles=_ANALYTICS_READ_ROLES, action="read analytics")
+)
+RecomputeAccess = Depends(
+    abac(_tenant_resource_id, required_roles=_RECOMPUTE_ROLES, action="recompute analytics")
+)
 
 
 def _filters(
@@ -44,6 +73,7 @@ async def executive_dashboard(
     filters: DashboardFilters = Depends(_filters),
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = AnalyticsReadAccess,
 ) -> dict:
     today = date.today()
     snapshot = (
@@ -68,6 +98,7 @@ async def safety_dashboard(
     filters: DashboardFilters = Depends(_filters),
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = AnalyticsReadAccess,
 ) -> dict:
     return await KpiDashboardService(session, str(tenant.id)).safety(filters)
 
@@ -77,6 +108,7 @@ async def client_delivery_dashboard(
     filters: DashboardFilters = Depends(_filters),
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = AnalyticsReadAccess,
 ) -> dict:
     return await KpiDashboardService(session, str(tenant.id)).client_delivery(filters)
 
@@ -86,6 +118,7 @@ async def incidents_dashboard(
     filters: DashboardFilters = Depends(_filters),
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = AnalyticsReadAccess,
 ) -> dict:
     return await KpiDashboardService(session, str(tenant.id)).incidents(filters)
 
@@ -95,6 +128,7 @@ async def inspections_dashboard(
     filters: DashboardFilters = Depends(_filters),
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = AnalyticsReadAccess,
 ) -> dict:
     return await KpiDashboardService(session, str(tenant.id)).inspections(filters)
 
@@ -104,6 +138,7 @@ async def prescriptions_dashboard(
     filters: DashboardFilters = Depends(_filters),
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = AnalyticsReadAccess,
 ) -> dict:
     return await KpiDashboardService(session, str(tenant.id)).prescriptions(filters)
 
@@ -113,6 +148,7 @@ async def overdue_dashboard(
     filters: DashboardFilters = Depends(_filters),
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = AnalyticsReadAccess,
 ) -> dict:
     return await KpiDashboardService(session, str(tenant.id)).overdue(filters)
 
@@ -122,6 +158,7 @@ async def sla_load_dashboard(
     filters: DashboardFilters = Depends(_filters),
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = AnalyticsReadAccess,
 ) -> dict:
     return await KpiDashboardService(session, str(tenant.id)).sla_load(filters)
 
@@ -131,6 +168,7 @@ async def edo_dashboard(
     filters: DashboardFilters = Depends(_filters),
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = AnalyticsReadAccess,
 ) -> dict:
     return await KpiDashboardService(session, str(tenant.id)).edo(filters)
 
@@ -140,6 +178,7 @@ async def ppe_dashboard(
     filters: DashboardFilters = Depends(_filters),
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = AnalyticsReadAccess,
 ) -> dict:
     return await KpiDashboardService(session, str(tenant.id)).ppe(filters)
 
@@ -149,6 +188,7 @@ async def training_dashboard(
     filters: DashboardFilters = Depends(_filters),
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = AnalyticsReadAccess,
 ) -> dict:
     return await KpiDashboardService(session, str(tenant.id)).training(filters)
 
@@ -158,6 +198,7 @@ async def incidents_trends(
     period: str = Query(default="daily", pattern="^(daily|weekly|monthly)$"),
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = AnalyticsReadAccess,
 ) -> dict:
     return await AnalyticsAggregationService(session, str(tenant.id)).trend_series(
         "incidents", period
@@ -169,6 +210,7 @@ async def compliance_trends(
     period: str = Query(default="daily", pattern="^(daily|weekly|monthly)$"),
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = AnalyticsReadAccess,
 ) -> dict:
     return await AnalyticsAggregationService(session, str(tenant.id)).trend_series(
         "compliance", period
@@ -180,6 +222,7 @@ async def packages_trends(
     period: str = Query(default="daily", pattern="^(daily|weekly|monthly)$"),
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = AnalyticsReadAccess,
 ) -> dict:
     return await AnalyticsAggregationService(session, str(tenant.id)).trend_series(
         "packages", period
@@ -191,6 +234,7 @@ async def trainings_trends(
     period: str = Query(default="daily", pattern="^(daily|weekly|monthly)$"),
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = AnalyticsReadAccess,
 ) -> dict:
     return await AnalyticsAggregationService(session, str(tenant.id)).trend_series(
         "trainings", period
@@ -202,6 +246,7 @@ async def inspections_trends(
     period: str = Query(default="daily", pattern="^(daily|weekly|monthly)$"),
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = AnalyticsReadAccess,
 ) -> dict:
     return await AnalyticsAggregationService(session, str(tenant.id)).trend_series(
         "inspections", period
@@ -213,13 +258,16 @@ async def ppe_trends(
     period: str = Query(default="daily", pattern="^(daily|weekly|monthly)$"),
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = AnalyticsReadAccess,
 ) -> dict:
     return await AnalyticsAggregationService(session, str(tenant.id)).trend_series("ppe", period)
 
 
 @router.post("/recompute")
 async def recompute_dashboard(
-    session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = RecomputeAccess,
 ) -> dict:
     snapshot = await ProjectionOrchestrator(session, str(tenant.id)).rebuild_dashboard_snapshot(
         date.today()
