@@ -60,12 +60,15 @@ async def test_search_over_projection_index(
 
 
 @pytest.mark.anyio
-async def test_export_center_idempotent_creation(async_client, sessionmaker, data_factory):
+async def test_export_center_idempotent_creation(
+    async_client, sessionmaker, data_factory, make_auth_headers
+):
     async with sessionmaker() as session:  # type: AsyncSession
         await data_factory.ensure_tenant(session=session)
         await session.commit()
 
-    headers = {"Idempotency-Key": "same-export"}
+    auth_headers = await make_auth_headers(RoleEnum.ADMIN)
+    headers = {**auth_headers, "Idempotency-Key": "same-export"}
     body = {
         "export_type": "training_matrix",
         "scope_json": {"scope": "tenant"},
@@ -82,7 +85,7 @@ async def test_export_center_idempotent_creation(async_client, sessionmaker, dat
     assert r1.json()["id"] == r2.json()["id"]
 
     details = await async_client.get(
-        f"/api/v1/exports/{r1.json()['id']}", headers={"X-Tenant": "test"}
+        f"/api/v1/exports/{r1.json()['id']}", headers={**auth_headers, "X-Tenant": "test"}
     )
     assert details.status_code == 200
 
