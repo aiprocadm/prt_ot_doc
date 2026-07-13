@@ -608,21 +608,32 @@ async def _seed_work_permit_excavation_demo(session, tenant_db_id: str, person) 
 
 
 async def _seed_committees_demo(session, tenant_db_id: str) -> None:
-    """Seed a minimal committees demo (P10-01 срез-1).
+    """Seed a minimal committees demo (P10-01 срез-1) plus срез-2 quorum /
+    numbered protocol / votes data.
 
-    Does NOT require a Person row — all person FK fields are left NULL to keep
-    this seed independent of the rest of the demo bootstrap.  Idempotent:
-    keyed on (tenant_id, name) for the Committee root.
+    срез-1 (committee/meeting/agenda/decision/task) does NOT require a Person
+    row — those person FK fields stay NULL so that chain is independent of the
+    rest of the demo bootstrap. срез-2 (members/attendance/protocol
+    numbering/votes) additionally needs a Company row for the tenant; if none
+    exists yet it is skipped gracefully and the срез-1 seed still runs.
+    Idempotent: keyed on (tenant_id, name) for the Committee root; member
+    persons are additionally found-or-created keyed on (tenant_id,
+    personnel_number).
     """
     from app.models.committees import (
         Committee,
         CommitteeAgendaItem,
         CommitteeDecision,
         CommitteeDecisionTask,
+        CommitteeDecisionVote,
         CommitteeKind,
         CommitteeMeeting,
+        CommitteeMeetingAttendance,
+        CommitteeMember,
+        CommitteeMemberRole,
         DecisionTaskStatus,
         MeetingStatus,
+        VoteChoice,
     )
 
     committee = (
@@ -647,6 +658,61 @@ async def _seed_committees_demo(session, tenant_db_id: str) -> None:
     session.add(committee)
     await session.flush()
 
+    # срез-2: committee members (chair/secretary/2×member). Find-or-create up
+    # to 4 member-persons keyed on personnel_number so this is idempotent even
+    # if the wider demo bootstrap already created "Иван Иванов" (D-001).
+    company = (
+        await session.execute(select(Company).where(Company.tenant_id == tenant_db_id).limit(1))
+    ).scalar_one_or_none()
+
+    members: list[Person] = []
+    if company is not None:
+        member_specs = [
+            ("D-001", "Иван", "Иванов", "ivanov@example.local"),
+            ("D-C02", "Пётр", "Петров", "petrov@example.local"),
+            ("D-C03", "Сергей", "Сидоров", "sidorov@example.local"),
+            ("D-C04", "Анна", "Кузнецова", "kuznecova@example.local"),
+        ]
+        for personnel_number, first_name, last_name, email in member_specs:
+            member_person = (
+                await session.execute(
+                    select(Person).where(
+                        Person.tenant_id == tenant_db_id,
+                        Person.personnel_number == personnel_number,
+                    )
+                )
+            ).scalar_one_or_none()
+            if member_person is None:
+                member_person = Person(
+                    tenant_id=tenant_db_id,
+                    company_id=company.id,
+                    position_id=None,
+                    first_name=first_name,
+                    last_name=last_name,
+                    personnel_number=personnel_number,
+                    email=email,
+                )
+                session.add(member_person)
+                await session.flush()
+            members.append(member_person)
+
+        member_roles = [
+            CommitteeMemberRole.CHAIR,
+            CommitteeMemberRole.SECRETARY,
+            CommitteeMemberRole.MEMBER,
+            CommitteeMemberRole.MEMBER,
+        ]
+        for member_person, role in zip(members, member_roles):
+            session.add(
+                CommitteeMember(
+                    tenant_id=tenant_db_id,
+                    committee_id=committee.id,
+                    person_id=member_person.id,
+                    role=role,
+                )
+            )
+        await session.flush()
+
     meeting = CommitteeMeeting(
         tenant_id=tenant_db_id,
         committee_id=committee.id,
@@ -656,6 +722,33 @@ async def _seed_committees_demo(session, tenant_db_id: str) -> None:
     )
     session.add(meeting)
     await session.flush()
+
+    # срез-2: attendance + numbered protocol + quorum. First 3 members present,
+    # the 4th (if any) absent — 3 of 4 present → quorum met. If fewer than 4
+    # members exist, everyone present.
+    present_members: list[Person] = []
+    if members:
+        present_count = 3 if len(members) >= 4 else len(members)
+        for idx, member_person in enumerate(members):
+            present = idx < present_count
+            session.add(
+                CommitteeMeetingAttendance(
+                    tenant_id=tenant_db_id,
+                    meeting_id=meeting.id,
+                    person_id=member_person.id,
+                    present=present,
+                )
+            )
+            if present:
+                present_members.append(member_person)
+
+        meeting.protocol_seq = 1
+        meeting.protocol_year = meeting.scheduled_at.year
+        meeting.held_at = meeting.scheduled_at
+        meeting.members_total = len(members)
+        meeting.present_count = present_count
+        meeting.quorum_met = present_count * 2 > len(members)
+        await session.flush()
 
     agenda_item = CommitteeAgendaItem(
         tenant_id=tenant_db_id,
@@ -676,6 +769,20 @@ async def _seed_committees_demo(session, tenant_db_id: str) -> None:
     )
     session.add(decision)
     await session.flush()
+
+    # срез-2: votes from the present members (FOR, FOR, AGAINST → carried).
+    vote_choices = [VoteChoice.FOR, VoteChoice.FOR, VoteChoice.AGAINST]
+    for member_person, choice in zip(present_members, vote_choices):
+        session.add(
+            CommitteeDecisionVote(
+                tenant_id=tenant_db_id,
+                decision_id=decision.id,
+                person_id=member_person.id,
+                choice=choice,
+            )
+        )
+    if present_members:
+        await session.flush()
 
     # due_date in the past → overdue badge is visible on first login
     session.add(
