@@ -277,3 +277,66 @@ async def test_search_returns_total_and_extended_filters(
     assert payload["items"][0]["entity_id"] == "incident-prj-1"
     assert payload["facets"]["project_counts"]["project-1"] == 1
     assert payload["facets"]["risk_level_counts"]["high"] == 1
+
+
+@pytest.mark.anyio
+async def test_search_hides_sensitive_types_from_unprivileged_role(
+    async_client, sessionmaker, data_factory, make_auth_headers
+):
+    """Confidential entity titles (incident/inspection/prescription — these can name
+    injured people) must not surface via global search or suggest to a caller lacking
+    the domain read permission. Catalog-ish types (person) stay tenant-global."""
+    async with sessionmaker() as session:  # type: AsyncSession
+        tenant = await data_factory.ensure_tenant(session=session)
+        session.add_all(
+            [
+                SearchIndexEntry(
+                    tenant_id=tenant.id,
+                    entity_type="incident",
+                    entity_id="inc-1",
+                    title="Инцидент: травма",
+                    route="/incidents/inc-1",
+                    search_text="Инцидент травма",
+                ),
+                SearchIndexEntry(
+                    tenant_id=tenant.id,
+                    entity_type="person",
+                    entity_id="person-1",
+                    title="Иван Иванов",
+                    route="/persons/person-1",
+                    search_text="Иван Иванов",
+                ),
+            ]
+        )
+        await session.commit()
+
+    params = {"entity_types": "incident,person"}
+
+    # Lawyer holds documents:* only — no incidents:read → incident hidden, person kept.
+    lawyer = await make_auth_headers(RoleEnum.LAWYER)
+    resp = await async_client.get(
+        "/api/v1/search", params=params, headers={**lawyer, "X-Tenant": "test"}
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    kept_types = {item["entity_type"] for item in body["items"]}
+    assert "incident" not in kept_types
+    assert "person" in kept_types
+    # facet counts must not leak the hidden type either
+    assert "incident" not in body["facets"]["type_counts"]
+
+    # /search/suggest is filtered the same way
+    suggest = await async_client.get(
+        "/api/v1/search/suggest", params={"q": ""}, headers={**lawyer, "X-Tenant": "test"}
+    )
+    assert suggest.status_code == 200
+    assert all(item["entity_type"] != "incident" for item in suggest.json()["items"])
+
+    # Admin (full permission set) still sees the incident.
+    admin = await make_auth_headers(RoleEnum.ADMIN)
+    resp_admin = await async_client.get(
+        "/api/v1/search", params=params, headers={**admin, "X-Tenant": "test"}
+    )
+    assert resp_admin.status_code == 200
+    admin_types = {item["entity_type"] for item in resp_admin.json()["items"]}
+    assert {"incident", "person"} <= admin_types
