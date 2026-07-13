@@ -77,6 +77,14 @@ export interface Protocol {
 
 // ── Срез-2: attendance, votes, protocol journal ────────────────────────────
 
+export interface MemberDetail {
+  id: string;
+  committee_id: string;
+  person_id: string;
+  role: string;
+  person_fio?: string | null;
+}
+
 export interface Attendance {
   id: string;
   meeting_id: string;
@@ -168,6 +176,10 @@ export const committeesApi = {
         payload,
       )
     ).data;
+  },
+
+  async listMembers(committeeId: string): Promise<MemberDetail[]> {
+    return (await apiClient.get<MemberDetail[]>(`${base}/${committeeId}/members`)).data;
   },
 
   async removeMember(committeeId: string, memberId: string): Promise<void> {
