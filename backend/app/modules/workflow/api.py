@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Annotated, Any
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, Query, Response, status
 from pydantic import BaseModel, ConfigDict, Field
@@ -8,7 +9,7 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
-from app.core.security import AccessContext, rbac
+from app.core.security import AccessContext, abac, rbac
 from app.models.models import Tenant
 from app.modules.workflow.models import (
     WorkflowInstanceStatus,
@@ -19,6 +20,26 @@ router = APIRouter(prefix="/workflow", tags=["workflow"])
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 TenantDep = Annotated[Tenant, Depends(get_tenant_record)]
 AccessDep = Annotated[AccessContext, Depends(rbac())]
+
+# Reads, `POST /definitions/validate` (pure graph validation, no write), self-scoped
+# `GET /tasks`, and the task actions (complete/reassign/delegate/escalate — already
+# guarded in-service against the task's `assignee_role_code`) stay on the authn-only
+# `AccessDep`. Authoring/publishing workflow definitions and starting instances are
+# tenant-wide engine config with NO in-service role check, so they get least-privilege
+# gating mirroring 618614d9: DOC_WRITE (admin/owner/ot_specialist).
+_WF_WRITE_ROLES = ["admin", "owner", "ot_specialist"]
+
+
+def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> UUID | None:
+    return getattr(tenant, "id", None)
+
+
+WorkflowDefinitionWriteAccess = Depends(
+    abac(_tenant_resource_id, required_roles=_WF_WRITE_ROLES, action="manage workflow definition")
+)
+WorkflowInstanceWriteAccess = Depends(
+    abac(_tenant_resource_id, required_roles=_WF_WRITE_ROLES, action="start workflow instance")
+)
 
 
 def _extract_role_codes(access: AccessContext) -> list[str]:
@@ -165,7 +186,10 @@ def _serialize_task(item) -> WorkflowTaskRead:
     "/definitions", response_model=WorkflowVersionRead, status_code=status.HTTP_201_CREATED
 )
 async def create_definition(
-    payload: WorkflowDefinitionIn, session: SessionDep, tenant: TenantDep, access: AccessDep
+    payload: WorkflowDefinitionIn,
+    session: SessionDep,
+    tenant: TenantDep,
+    access: AccessContext = WorkflowDefinitionWriteAccess,
 ) -> WorkflowVersionRead:
     version = await _service(session, tenant).create_definition(
         code=payload.code,
@@ -226,7 +250,10 @@ async def list_definitions(
 
 @router.post("/versions/{version_id}/publish", response_model=WorkflowVersionRead)
 async def publish_version(
-    version_id: str, session: SessionDep, tenant: TenantDep, access: AccessDep
+    version_id: str,
+    session: SessionDep,
+    tenant: TenantDep,
+    access: AccessContext = WorkflowDefinitionWriteAccess,
 ) -> WorkflowVersionRead:
     version = await _service(session, tenant).publish_version(version_id, access.user.id)
     await session.commit()
@@ -235,7 +262,10 @@ async def publish_version(
 
 @router.post("/versions/{version_id}/archive", response_model=WorkflowVersionRead)
 async def archive_version(
-    version_id: str, session: SessionDep, tenant: TenantDep, access: AccessDep
+    version_id: str,
+    session: SessionDep,
+    tenant: TenantDep,
+    access: AccessContext = WorkflowDefinitionWriteAccess,
 ) -> WorkflowVersionRead:
     version = await _service(session, tenant).archive_version(version_id, access.user.id)
     await session.commit()
@@ -249,7 +279,7 @@ async def start_instance(
     x_correlation_id: str | None = Header(default=None, alias="X-Correlation-ID"),
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
-    access: AccessContext = Depends(rbac()),
+    access: AccessContext = WorkflowInstanceWriteAccess,
 ) -> WorkflowInstanceRead:
     instance = await _service(session, tenant).start_instance(
         definition_code=payload.definition_code,

@@ -13,6 +13,7 @@ from app.api.dependencies import get_session, get_tenant_record
 from app.api.deps.tracing import get_trace_id
 from app.core.audit_decorator import audit_operation
 from app.core.errors import api_problem_detail
+from app.core.inbound_webhook_auth import enforce_webhook_hmac
 from app.core.security import AccessContext, abac
 from app.models.document import DocumentVersion
 from app.models.models import PackRun, Tenant
@@ -873,6 +874,16 @@ async def edo_webhook(
     tenant: TenantDep,
 ):
     cid = _correlation_id(request, response)
+    raw = await request.body()
+    # Unauthenticated receiver (only an X-Tenant header is required to reach it) — the HMAC
+    # signature is the sole authentication. Fail closed: no per-tenant secret configured ->
+    # reject, never drive EdoMessage status transitions from an anonymous body.
+    enforce_webhook_hmac(
+        raw_body=raw,
+        request=request,
+        secret=(tenant.settings or {}).get("edo_webhook_secret"),
+        signature_headers=("x-signature",),
+    )
     dedupe_key = (
         request.headers.get("X-Dedupe-Key")
         or payload.get("external_event_id")
@@ -926,6 +937,16 @@ async def sign_webhook(
     tenant: TenantDep,
 ):
     cid = _correlation_id(request, response)
+    raw = await request.body()
+    # Unauthenticated receiver — the HMAC signature is the sole authentication. Fail closed:
+    # no per-tenant secret configured -> reject, never mutate SignatureRequest status from an
+    # anonymous body.
+    enforce_webhook_hmac(
+        raw_body=raw,
+        request=request,
+        secret=(tenant.settings or {}).get("sign_webhook_secret"),
+        signature_headers=("x-signature",),
+    )
     request_id = payload.get("request_id")
     if not request_id:
         raise _approval_orchestration_unprocessable("request_id required")

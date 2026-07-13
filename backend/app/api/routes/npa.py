@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Annotated
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
@@ -11,7 +12,7 @@ from sqlalchemy.orm import selectinload
 
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.audit_decorator import audit_operation
-from app.core.security import rbac
+from app.core.security import abac, rbac
 from app.core.tenant_validation import TenantContextValidator
 from app.domains.npa.impact import NpaImpactService
 from app.models.models import Tenant
@@ -21,6 +22,15 @@ from app.schemas.npa import NpaActListResponse, NpaActRead
 router = APIRouter(tags=["npa"])
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
+
+# NPA reads (`GET /npa*`) stay authn-only — normative acts are reference data. Creating
+# update tasks from an act's impact writes tenant-wide task rows -> DOC_WRITE (mirrors
+# the export/report write set: admin/owner/ot_specialist).
+_IMPACT_WRITE_ROLES = ["admin", "owner", "ot_specialist"]
+
+
+def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> UUID | None:
+    return getattr(tenant, "id", None)
 
 
 @router.get("/npa", response_model=NpaActListResponse)
@@ -59,7 +69,13 @@ async def create_npa_update_tasks(
     session: SessionDep,
     revision_id: str | None = Query(default=None),
     tenant: Tenant = Depends(get_tenant_record),
-    access=Depends(rbac()),
+    access=Depends(
+        abac(
+            _tenant_resource_id,
+            required_roles=_IMPACT_WRITE_ROLES,
+            action="create npa update tasks",
+        )
+    ),
 ) -> dict:
     TenantContextValidator.ensure_tenant_context(tenant)
 
