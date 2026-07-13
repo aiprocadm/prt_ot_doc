@@ -12,7 +12,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependencies import get_session, get_tenant_record
 from app.api.deps.tracing import get_trace_id
 from app.core.audit_decorator import audit_operation
+from app.core.config import get_settings
 from app.core.errors import api_problem_detail
+from app.core.inbound_webhook_auth import verify_inbound_webhook_body_hmac
 from app.core.security import AccessContext, abac
 from app.models.document import DocumentVersion
 from app.models.models import PackRun, Tenant
@@ -872,6 +874,12 @@ async def edo_webhook(
     session: SessionDep,
     tenant: TenantDep,
 ):
+    # Inbound machine webhook — authenticate the payload by HMAC (there is no user
+    # token). Mirrors webhooks.py /inbound/{source}; enforced when the global
+    # INBOUND_WEBHOOK_HMAC_SECRET is configured.
+    verify_inbound_webhook_body_hmac(
+        settings=get_settings(), raw_body=await request.body(), request=request
+    )
     cid = _correlation_id(request, response)
     dedupe_key = (
         request.headers.get("X-Dedupe-Key")
@@ -925,6 +933,11 @@ async def sign_webhook(
     session: SessionDep,
     tenant: TenantDep,
 ):
+    # Inbound machine webhook — authenticate the payload by HMAC before touching
+    # signing state (enforced when INBOUND_WEBHOOK_HMAC_SECRET is configured).
+    verify_inbound_webhook_body_hmac(
+        settings=get_settings(), raw_body=await request.body(), request=request
+    )
     cid = _correlation_id(request, response)
     request_id = payload.get("request_id")
     if not request_id:
