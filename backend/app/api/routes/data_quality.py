@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Depends, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -18,13 +18,37 @@ router = APIRouter(prefix="/data-quality", tags=["data-quality"])
 _DQ_READ_ROLES = ["admin", "owner", "hr", "ot_pb_lead", "line_manager"]
 
 
-def _tenant_uuid_from_request(request: Request, _access: AccessContext) -> str | None:
-    """Tenant UUID/subject binding must come from request headers (explicit scope)."""
+def _authenticated_tenant_scope(request: Request, access: AccessContext) -> str | None:
+    """Resolve the queried tenant strictly from the authenticated context.
+
+    The tenant UUID whose data-quality report is computed MUST come from the
+    verified token/user (``AccessContext``), never the raw ``X-Tenant-Id``
+    header — otherwise an authenticated caller of tenant A could read tenant B's
+    report by setting the header to a foreign tenant id. When a client still
+    supplies an explicit tenant header it must match the authenticated tenant
+    (defense-in-depth); a mismatch is rejected with 403 rather than silently
+    serving a cross-tenant scope.
+    """
+    authoritative = access.tenant_id or getattr(access.user, "tenant_id", None)
+    if authoritative is None:
+        return None
+    authoritative = str(authoritative)
+
+    known = {authoritative.lower()}
+    if access.tenant_slug:
+        known.add(str(access.tenant_slug).strip().lower())
+    user_tenant = getattr(access.user, "tenant_id", None)
+    if user_tenant:
+        known.add(str(user_tenant).lower())
+
     for key in ("X-Tenant-Id", "x-tenant-id", "x-tenant"):
         raw = request.headers.get(key)
-        if raw and str(raw).strip():
-            return str(raw).strip()
-    return None
+        if raw and str(raw).strip() and str(raw).strip().lower() not in known:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Tenant scope mismatch",
+            )
+    return authoritative
 
 
 @router.get(
@@ -53,7 +77,7 @@ async def get_data_quality_report(
     - Breakdown by entity type (employee, contractor, document, etc.)
     - Top 20 issues with severity and details
     """
-    tenant_id = _tenant_uuid_from_request(request, access)
+    tenant_id = _authenticated_tenant_scope(request, access)
 
     if not tenant_id:
         return JSONResponse(
@@ -92,7 +116,7 @@ async def check_data_quality(
 
     Returns JSON response with check results.
     """
-    tenant_id = _tenant_uuid_from_request(request, access)
+    tenant_id = _authenticated_tenant_scope(request, access)
 
     if not tenant_id:
         return JSONResponse(
