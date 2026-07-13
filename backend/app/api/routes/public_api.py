@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from typing import Any
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
@@ -10,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.audit_decorator import audit_operation
-from app.core.security import api_key_auth
+from app.core.security import abac, api_key_auth
 from app.models.document import Document
 from app.models.models import (
     ApiKey,
@@ -29,9 +30,27 @@ from app.models.risk import RiskAssessment
 from app.modules.projections.models import ExportJob
 from app.services.api_keys import create_api_key, rotate_api_key
 
+
+def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> UUID | None:
+    return getattr(tenant, "id", None)
+
+
+# Machine-key management (issue/rotate/revoke/list) mints tenant API credentials —
+# owner/admin only. Marketplace publish/install mutates tenant catalog config.
+_MachineKeyAccess = Depends(
+    abac(_tenant_resource_id, required_roles=["admin", "owner"], action="manage machine keys")
+)
+_MarketplaceAccess = Depends(
+    abac(_tenant_resource_id, required_roles=["admin", "owner"], action="manage marketplace")
+)
+
 router = APIRouter(prefix="/public", tags=["public-api"])
-admin_router = APIRouter(prefix="/machine-keys", tags=["machine-keys"])
-marketplace_router = APIRouter(prefix="/marketplace", tags=["marketplace"])
+admin_router = APIRouter(
+    prefix="/machine-keys", tags=["machine-keys"], dependencies=[_MachineKeyAccess]
+)
+marketplace_router = APIRouter(
+    prefix="/marketplace", tags=["marketplace"], dependencies=[_MarketplaceAccess]
+)
 
 
 class MachineKeyCreate(BaseModel):

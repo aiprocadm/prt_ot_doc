@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from typing import Any
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
 from pydantic import BaseModel, Field
@@ -13,6 +13,7 @@ from app.api.dependencies import get_session, get_tenant_record
 from app.api.deps.tracing import get_trace_id
 from app.core.audit_decorator import audit_operation
 from app.core.errors import api_problem_detail
+from app.core.security import abac
 from app.models.approval_signing import (
     ApprovalDecisionLog,
     ApprovalProcess,
@@ -31,7 +32,19 @@ from app.services.outbox import OutboxService
 from app.services.pep_signing import PepConflict, PepNotFound, PepSigningService
 from app.services.provider_registry import provider_response_meta
 
-router = APIRouter()
+
+def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> UUID | None:
+    return getattr(tenant, "id", None)
+
+
+# The bespoke X-User-Id assignee check below is not authentication (the header is
+# attacker-controlled). Enforce real authn + roles at router level for every route,
+# mirroring approval_orchestration / pep_signing (admin/employee).
+_ApprovalSigningAccess = Depends(
+    abac(_tenant_resource_id, required_roles=["admin", "employee"], action="approval signing")
+)
+
+router = APIRouter(dependencies=[_ApprovalSigningAccess])
 
 
 def _approval_signing_error(*, code: str, message: str, status_code: int) -> HTTPException:

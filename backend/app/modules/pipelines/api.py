@@ -5,6 +5,7 @@ import hashlib
 import json
 from datetime import datetime
 from typing import Any
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response, status
 from fastapi.responses import StreamingResponse
@@ -14,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.idempotency import compute_request_hash
+from app.core.security import AccessContext, abac
 from app.models.job_engine import DocumentJob, DocumentJobStep
 from app.models.models import Tenant
 from app.modules.pipelines.repo import PipelineProfileRepo
@@ -30,6 +32,31 @@ from app.services.idempotency import IdempotencyService, normalize_idempotency_k
 from app.services.pipelines_orchestrator import DocumentPipelineOrchestrator
 
 router = APIRouter(prefix="/pipelines", tags=["pipelines"])
+
+_READ_ROLES = [
+    "admin",
+    "owner",
+    "hr",
+    "line_manager",
+    "manager",
+    "ot_pb_lead",
+    "ot_head",
+    "ot_specialist",
+    "pb_engineer",
+    "accountant",
+    "auditor_ro",
+]
+_WRITE_ROLES = ["admin", "owner", "ot_specialist"]
+
+
+def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> UUID | None:
+    return getattr(tenant, "id", None)
+
+
+ReadAccess = Depends(abac(_tenant_resource_id, required_roles=_READ_ROLES, action="read pipelines"))
+WriteAccess = Depends(
+    abac(_tenant_resource_id, required_roles=_WRITE_ROLES, action="write pipelines")
+)
 
 
 def _serialize_profile(model) -> PipelineProfileRead:
@@ -106,6 +133,7 @@ async def create_profile(
     payload: PipelineProfileCreate,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = WriteAccess,
 ) -> PipelineProfileRead:
     repo = PipelineProfileRepo(session)
     try:
@@ -122,6 +150,7 @@ async def list_profiles(
     active: bool | None = None,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = ReadAccess,
 ) -> list[PipelineProfileRead]:
     rows = await PipelineProfileRepo(session).list(tenant_id=str(tenant.id), active=active)
     return [_serialize_profile(r) for r in rows]
@@ -132,6 +161,7 @@ async def get_profile(
     profile_id: str,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = ReadAccess,
 ) -> PipelineProfileRead:
     model = await PipelineProfileRepo(session).get(tenant_id=str(tenant.id), profile_id=profile_id)
     if model is None:
@@ -145,6 +175,7 @@ async def patch_profile(
     payload: PipelineProfilePatch,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = WriteAccess,
 ) -> PipelineProfileRead:
     repo = PipelineProfileRepo(session)
     model = await repo.get(tenant_id=str(tenant.id), profile_id=profile_id)
@@ -161,6 +192,7 @@ async def put_profile(
     payload: PipelineProfilePatch,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = WriteAccess,
 ) -> PipelineProfileRead:
     return await patch_profile(
         profile_id=profile_id, payload=payload, session=session, tenant=tenant
@@ -172,6 +204,7 @@ async def activate_profile(
     profile_id: str,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = WriteAccess,
 ) -> PipelineProfileRead:
     repo = PipelineProfileRepo(session)
     model = await repo.get(tenant_id=str(tenant.id), profile_id=profile_id)
@@ -189,6 +222,7 @@ async def delete_profile(
     profile_id: str,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = WriteAccess,
 ) -> None:
     repo = PipelineProfileRepo(session)
     model = await repo.get(tenant_id=str(tenant.id), profile_id=profile_id)
@@ -218,6 +252,7 @@ async def run_pipeline(
     x_tenant: str | None = Header(default=None, alias="X-Tenant"),
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = WriteAccess,
 ) -> PipelineRunAccepted:
     if not x_tenant:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "X-Tenant is required")
@@ -306,6 +341,7 @@ async def run_pipeline_compat(
     x_tenant: str | None = Header(default=None, alias="X-Tenant"),
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = WriteAccess,
 ) -> PipelineRunAccepted:
     return await run_pipeline(
         payload=payload,
@@ -326,6 +362,7 @@ async def list_runs(
     date_from: datetime | None = Query(default=None),
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = ReadAccess,
 ) -> list[PipelineRunRead]:
     stmt = (
         select(DocumentJob)
@@ -359,6 +396,7 @@ async def bulk_update_runs(
     action: str = Query(pattern="^(retry|cancel)$"),
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = WriteAccess,
 ) -> list[PipelineRunRead]:
     orchestrator = DocumentPipelineOrchestrator(session)
     updated: list[PipelineRunRead] = []
@@ -380,6 +418,7 @@ async def get_run(
     run_id: str,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = ReadAccess,
 ) -> PipelineRunRead:
     run = await session.get(DocumentJob, run_id)
     if run is None or str(run.tenant_id) != str(tenant.id):
@@ -392,6 +431,7 @@ async def stream_run_events(
     run_id: str,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = ReadAccess,
 ) -> StreamingResponse:
     run = await session.get(DocumentJob, run_id)
     if run is None or str(run.tenant_id) != str(tenant.id):
@@ -432,6 +472,7 @@ async def cancel_run(
     run_id: str,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = WriteAccess,
 ) -> PipelineRunRead:
     run = await session.get(DocumentJob, run_id)
     if run is None or str(run.tenant_id) != str(tenant.id):
@@ -446,6 +487,7 @@ async def retry_run(
     run_id: str,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = WriteAccess,
 ) -> PipelineRunRead:
     run = await session.get(DocumentJob, run_id)
     if run is None or str(run.tenant_id) != str(tenant.id):
@@ -461,6 +503,7 @@ async def retry_step_run(
     step_run_id: str,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = WriteAccess,
 ) -> PipelineRunRead:
     run = await session.get(DocumentJob, run_id)
     if run is None or str(run.tenant_id) != str(tenant.id):

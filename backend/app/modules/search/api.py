@@ -161,7 +161,9 @@ async def search_suggest(
 
 @router.post("/search/reindex")
 async def reindex_all(
-    session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = Depends(rbac(["admin", "owner"])),
 ) -> dict:
     count = await ProjectionOrchestrator(session, str(tenant.id)).rebuild_search_index()
     return {"status": "ok", "indexed": count}
@@ -172,6 +174,7 @@ async def reindex_by_entity(
     entity_type: str,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = Depends(rbac(["admin", "owner"])),
 ) -> dict:
     if entity_type not in _ALLOWED_TYPES:
         return {"status": "skipped", "entity_type": entity_type}
