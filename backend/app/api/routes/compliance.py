@@ -8,22 +8,45 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.audit_decorator import audit_operation
-from app.core.security import AccessContext, abac, rbac
+from app.core.security import AccessContext, abac
 from app.models.models import ComplianceDeadline, Tenant
 from app.modules.compliance_deadlines.services import ComplianceDeadlineService
 
 router = APIRouter(prefix="/compliance", tags=["compliance"])
-_AuthDep = Depends(rbac())
 
 # `/deadlines/recompute` rebuilds tenant-wide compliance deadlines — a privileged,
 # side-effectful admin action. Mirror analytics `/recompute` (admin/owner only).
 _RECOMPUTE_ROLES = ["admin", "owner"]
+
+# The GET reads expose tenant-wide workforce compliance standing (per-person deadline
+# status), so they are gated with the management/HR/specialist read set (mirrors
+# branding/analytics MGMT_READ); rank-and-file worker/employee/client roles are excluded.
+_READ_ROLES = [
+    "admin",
+    "owner",
+    "hr",
+    "line_manager",
+    "manager",
+    "ot_pb_lead",
+    "ot_head",
+    "ot_specialist",
+    "pb_engineer",
+    "accountant",
+    "auditor_ro",
+]
 
 
 def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> UUID | None:
     return getattr(tenant, "id", None)
 
 
+_ReadAccess = Depends(
+    abac(
+        _tenant_resource_id,
+        required_roles=_READ_ROLES,
+        action="read compliance deadlines",
+    )
+)
 _RecomputeAccess = Depends(
     abac(
         _tenant_resource_id,
@@ -37,7 +60,7 @@ _RecomputeAccess = Depends(
 async def list_deadlines(
     tenant: Tenant = Depends(get_tenant_record),
     session: AsyncSession = Depends(get_session),
-    _: AccessContext = _AuthDep,
+    _: AccessContext = _ReadAccess,
 ):
     items = (
         (
@@ -69,7 +92,7 @@ async def person_summary(
     person_id: str,
     tenant: Tenant = Depends(get_tenant_record),
     session: AsyncSession = Depends(get_session),
-    _: AccessContext = _AuthDep,
+    _: AccessContext = _ReadAccess,
 ):
     stmt = (
         select(ComplianceDeadline.status, func.count())
