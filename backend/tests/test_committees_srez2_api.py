@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -124,3 +124,91 @@ async def test_attendance_on_held_409(monkeypatch):
             access=SimpleNamespace(),
         )
     assert getattr(exc.value, "status_code", None) == 409
+
+
+# --- positive paths ---
+@pytest.mark.asyncio
+async def test_hold_with_quorum_assigns_protocol(monkeypatch):
+    """PLANNED → HELD with quorum assigns protocol_seq=1 and marks quorum_met."""
+    session = AsyncMock()
+    session.add = MagicMock()
+    # Shared result mock: feature-flag query reads .scalar_one_or_none() (truthy →
+    # enabled); the protocol-seq query reads .scalars().all() (empty → seq starts 1).
+    result = MagicMock()
+    result.scalars.return_value.all.return_value = []
+    session.execute = AsyncMock(return_value=result)
+    monkeypatch.setattr(
+        routes, "_get_meeting", AsyncMock(return_value=_meeting(MeetingStatus.PLANNED))
+    )
+    monkeypatch.setattr(routes, "_count_members", AsyncMock(return_value=3))
+    monkeypatch.setattr(routes, "_count_present", AsyncMock(return_value=2))  # 2*2 > 3 → quorum
+    out = await routes.update_meeting(
+        mid="m1",
+        payload=MeetingStatusUpdate(status=MeetingStatus.HELD),
+        tenant=_tenant(),
+        session=session,
+        access=SimpleNamespace(),
+    )
+    assert out.status == MeetingStatus.HELD
+    assert out.protocol_seq == 1
+    assert out.quorum_met is True
+
+
+@pytest.mark.asyncio
+async def test_attendance_dedup_idempotent(monkeypatch):
+    """Regression for FIX A: a duplicated person_id collapses to one row (no 500)."""
+    session = AsyncMock()
+    session.add = MagicMock()
+    result = MagicMock()
+    result.scalars.return_value.all.return_value = []  # no existing attendance rows
+    session.execute = AsyncMock(return_value=result)
+    monkeypatch.setattr(
+        routes, "_get_meeting", AsyncMock(return_value=_meeting(MeetingStatus.PLANNED))
+    )
+    monkeypatch.setattr(routes, "_committee_member_person_ids", AsyncMock(return_value={"p1"}))
+    out = await routes.put_attendance(
+        mid="m1",
+        payload=AttendanceBulkUpdate(
+            items=[
+                AttendanceItem(person_id="p1", present=True),
+                AttendanceItem(person_id="p1", present=False),  # duplicate → last wins
+            ]
+        ),
+        tenant=_tenant(),
+        session=session,
+        access=SimpleNamespace(),
+    )
+    assert out == []  # get_attendance re-read yields the mocked empty set
+    assert session.add.call_count == 1  # exactly one attendance row inserted, not two
+
+
+@pytest.mark.asyncio
+async def test_cast_vote_upsert_updates_existing(monkeypatch):
+    """Re-voting updates the existing vote row in place instead of inserting a new one."""
+    session = AsyncMock()
+    session.add = MagicMock()
+    existing_vote = SimpleNamespace(
+        id="v1", decision_id="d1", person_id="p1", choice=VoteChoice.AGAINST
+    )
+    result = MagicMock()
+    result.scalar_one_or_none.return_value = existing_vote
+    session.execute = AsyncMock(return_value=result)
+    monkeypatch.setattr(
+        routes,
+        "_get_decision",
+        AsyncMock(return_value=SimpleNamespace(id="d1", meeting_id="m1", tenant_id="tenant-1")),
+    )
+    monkeypatch.setattr(
+        routes, "_get_meeting", AsyncMock(return_value=_meeting(MeetingStatus.HELD))
+    )
+    monkeypatch.setattr(routes, "_is_present", AsyncMock(return_value=True))
+    out = await routes.cast_vote(
+        did="d1",
+        payload=VoteCreate(person_id="p1", choice=VoteChoice.FOR),
+        tenant=_tenant(),
+        session=session,
+        access=SimpleNamespace(),
+    )
+    assert existing_vote.choice == VoteChoice.FOR  # updated in place
+    assert session.add.call_count == 0  # no new vote row
+    assert out.choice == VoteChoice.FOR

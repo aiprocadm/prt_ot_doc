@@ -43,7 +43,7 @@ def vote_summary(decision_id: str, votes) -> DecisionVoteSummary:
     """Tally raw vote rows into a ``DecisionVoteSummary`` projection."""
     choices = [v.choice for v in votes]
     votes_for, votes_against, votes_abstain = tally_votes(choices)
-    outcome = decision_outcome(votes_for, votes_against).value if votes else "rejected"
+    outcome = decision_outcome(votes_for, votes_against).value if votes else None
     return DecisionVoteSummary(
         decision_id=decision_id,
         votes_for=votes_for,

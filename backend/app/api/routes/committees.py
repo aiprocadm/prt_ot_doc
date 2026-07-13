@@ -26,7 +26,6 @@ from app.domains.committees.lifecycle import (
     ensure_meeting_held,
     is_quorum,
     next_protocol_seq,
-    validate_hold,
     validate_meeting_transition,
 )
 from app.domains.committees.service import build_protocol, task_to_read, vote_summary
@@ -41,6 +40,7 @@ from app.models.committees import (
     CommitteeMember,
     MeetingStatus,
 )
+from app.models.master_data import Person
 from app.models.tenanting import Tenant
 from app.schemas.committees import (
     AgendaItemCreate,
@@ -62,6 +62,7 @@ from app.schemas.committees import (
     MeetingRead,
     MeetingStatusUpdate,
     MemberCreate,
+    MemberDetailRead,
     MemberRead,
     ProtocolJournalItem,
     ProtocolJournalPage,
@@ -454,6 +455,50 @@ async def remove_member(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
+@router.get("/{cid}/members", response_model=list[MemberDetailRead])
+async def list_members(
+    cid: str, tenant: TenantDep, session: SessionDep, access: Access
+) -> list[MemberDetailRead]:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    await _require_committees_enabled(session, tenant)
+    await _get_committee(session, tenant, cid)
+    rows = (
+        await session.execute(
+            select(CommitteeMember, Person)
+            .join(Person, Person.id == CommitteeMember.person_id)
+            .where(
+                CommitteeMember.committee_id == cid,
+                CommitteeMember.tenant_id == tenant.id,
+            )
+            .order_by(CommitteeMember.role.asc())
+        )
+    ).all()
+    result = []
+    for m, pers in rows:
+        fio = (
+            " ".join(
+                p
+                for p in [
+                    getattr(pers, "last_name", None),
+                    getattr(pers, "first_name", None),
+                    getattr(pers, "middle_name", None),
+                ]
+                if p
+            )
+            or None
+        )
+        result.append(
+            MemberDetailRead(
+                id=m.id,
+                committee_id=m.committee_id,
+                person_id=m.person_id,
+                role=m.role,
+                person_fio=fio,
+            )
+        )
+    return result
+
+
 # --- Meetings ---
 @router.get("/{cid}/meetings", response_model=MeetingPage)
 async def list_meetings(
@@ -545,19 +590,18 @@ async def update_meeting(
     await _require_committees_enabled(session, tenant)
     row = await _get_meeting(session, tenant, mid)
     if payload.status is MeetingStatus.HELD:
+        try:
+            validate_meeting_transition(row.status, MeetingStatus.HELD)
+        except MeetingTransitionError as exc:
+            raise _conflict(exc)
         members_total = await _count_members(session, tenant, row.committee_id)
         present_count = await _count_present(session, tenant, mid)
-        quorum = is_quorum(members_total, present_count)
-        try:
-            validate_hold(row.status, quorum)
-        except MeetingTransitionError as exc:
-            if not quorum:
-                raise _err(
-                    "COMMITTEE_QUORUM_NOT_MET",
-                    "Quorum not met",
-                    status.HTTP_409_CONFLICT,
-                )
-            raise _conflict(exc)
+        if not is_quorum(members_total, present_count):
+            raise _err(
+                "COMMITTEE_QUORUM_NOT_MET",
+                "Quorum not met",
+                status.HTTP_409_CONFLICT,
+            )
         now = datetime.now(tz=timezone.utc)
         year = now.year
         seqs = (
@@ -642,12 +686,18 @@ async def put_attendance(
             "Attendance editable only before the meeting is held",
             status.HTTP_409_CONFLICT,
         )
-    member_ids = await _committee_member_person_ids(session, tenant, meeting.committee_id)
+    # Dedupe by person_id (last-write-wins, insertion-ordered) so a person_id
+    # repeated in the payload collapses to a single attendance row instead of
+    # inserting twice → violating uq_committee_attendance → IntegrityError → 500.
+    desired: dict[str, bool] = {}
     for item in payload.items:
-        if item.person_id not in member_ids:
+        desired[item.person_id] = item.present
+    member_ids = await _committee_member_person_ids(session, tenant, meeting.committee_id)
+    for person_id in desired:
+        if person_id not in member_ids:
             raise _err(
                 "COMMITTEE_NOT_A_MEMBER",
-                f"person {item.person_id} is not a committee member",
+                f"person {person_id} is not a committee member",
                 status.HTTP_422_UNPROCESSABLE_ENTITY,
             )
     existing = (
@@ -663,18 +713,18 @@ async def put_attendance(
         .all()
     )
     by_person = {r.person_id: r for r in existing}
-    for item in payload.items:
-        row = by_person.get(item.person_id)
+    for person_id, present in desired.items():
+        row = by_person.get(person_id)
         if row is None:
             row = CommitteeMeetingAttendance(
                 tenant_id=tenant.id,
                 meeting_id=mid,
-                person_id=item.person_id,
-                present=item.present,
+                person_id=person_id,
+                present=present,
             )
             session.add(row)
         else:
-            row.present = item.present
+            row.present = present
     await session.flush()
     return await get_attendance(mid=mid, tenant=tenant, session=session, access=access)
 

@@ -12,7 +12,6 @@ from app.domains.committees.lifecycle import (
     is_quorum,
     next_protocol_seq,
     tally_votes,
-    validate_hold,
 )
 from app.models.committees import MeetingStatus, VoteChoice
 
@@ -51,20 +50,6 @@ def test_next_protocol_seq():
     assert next_protocol_seq([]) == 1
     assert next_protocol_seq([1, 2]) == 3
     assert next_protocol_seq([2, 5, 3]) == 6
-
-
-def test_validate_hold_ok():
-    validate_hold(MeetingStatus.PLANNED, quorum_met=True)  # no raise
-
-
-def test_validate_hold_no_quorum():
-    with pytest.raises(MeetingTransitionError):
-        validate_hold(MeetingStatus.PLANNED, quorum_met=False)
-
-
-def test_validate_hold_bad_transition():
-    with pytest.raises(MeetingTransitionError):
-        validate_hold(MeetingStatus.HELD, quorum_met=True)
 
 
 def test_ensure_can_vote():

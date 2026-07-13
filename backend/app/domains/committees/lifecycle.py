@@ -78,13 +78,6 @@ def next_protocol_seq(existing_seqs: Iterable[int]) -> int:
     return max(existing_seqs, default=0) + 1
 
 
-def validate_hold(current: MeetingStatus, quorum_met: bool) -> None:
-    """Holding a meeting requires a legal transition AND quorum."""
-    validate_meeting_transition(current, MeetingStatus.HELD)
-    if not quorum_met:
-        raise MeetingTransitionError("Cannot hold meeting without quorum")
-
-
 def ensure_can_vote(meeting_status: MeetingStatus) -> None:
     if meeting_status is not MeetingStatus.HELD:
         raise MeetingTransitionError(

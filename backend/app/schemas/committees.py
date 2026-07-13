@@ -61,6 +61,14 @@ class MemberRead(BaseSchema):
     role: CommitteeMemberRole
 
 
+class MemberDetailRead(BaseSchema):
+    id: str
+    committee_id: str
+    person_id: str
+    role: CommitteeMemberRole
+    person_fio: str | None = None
+
+
 # --- Meeting ---
 class MeetingCreate(BaseSchema):
     scheduled_at: datetime
@@ -189,7 +197,7 @@ class DecisionVoteSummary(BaseSchema):
     votes_for: int
     votes_against: int
     votes_abstain: int
-    outcome: str  # "carried" | "rejected"
+    outcome: str | None = None  # "carried" | "rejected" | None (no votes yet)
     votes: list[VoteRead]
 
 
