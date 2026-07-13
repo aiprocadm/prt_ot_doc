@@ -25,6 +25,13 @@ export interface Meeting {
   scheduled_at: string;
   location?: string | null;
   status: string;
+  held_at?: string | null;
+  protocol_seq?: number | null;
+  protocol_year?: number | null;
+  members_total?: number | null;
+  present_count?: number | null;
+  quorum_met?: boolean | null;
+  protocol_no?: string | null;
   created_at?: string;
   updated_at?: string;
 }
@@ -56,11 +63,61 @@ export interface Decision {
 export interface ProtocolDecision {
   decision: Decision;
   tasks: DecisionTask[];
+  votes_for?: number;
+  votes_against?: number;
+  votes_abstain?: number;
+  outcome?: "carried" | "rejected" | null;
+  votes?: Vote[];
 }
 
 export interface Protocol {
   meeting: Meeting;
   decisions: ProtocolDecision[];
+}
+
+// ── Срез-2: attendance, votes, protocol journal ────────────────────────────
+
+export interface Attendance {
+  id: string;
+  meeting_id: string;
+  person_id: string;
+  present: boolean;
+}
+
+export type VoteChoice = "for" | "against" | "abstain";
+
+export interface Vote {
+  id: string;
+  decision_id: string;
+  person_id: string;
+  choice: VoteChoice;
+}
+
+export interface DecisionVoteSummary {
+  decision_id: string;
+  votes_for: number;
+  votes_against: number;
+  votes_abstain: number;
+  outcome: "carried" | "rejected";
+  votes: Vote[];
+}
+
+export interface ProtocolJournalItem {
+  meeting_id: string;
+  committee_id: string;
+  committee_name: string;
+  protocol_no: string;
+  held_at: string;
+  members_total: number | null;
+  present_count: number | null;
+  decisions_count: number;
+}
+
+export interface ProtocolJournalPage {
+  items: ProtocolJournalItem[];
+  total: number;
+  limit: number;
+  offset: number;
 }
 
 // ── API ────────────────────────────────────────────────────────────────────
@@ -88,5 +145,103 @@ export const committeesApi = {
 
   async getProtocol(meetingId: string): Promise<Protocol> {
     return (await apiClient.get<Protocol>(`${base}/meetings/${meetingId}/protocol`)).data;
+  },
+
+  // ── Write helpers (срез-1 create/update) ──────────────────────────────
+
+  async createCommittee(payload: {
+    kind: string;
+    name: string;
+    description?: string | null;
+    is_active?: boolean;
+  }): Promise<Committee> {
+    return (await apiClient.post<Committee>(base, payload)).data;
+  },
+
+  async addMember(
+    committeeId: string,
+    payload: { person_id: string; role?: string },
+  ): Promise<{ id: string; committee_id: string; person_id: string; role: string }> {
+    return (
+      await apiClient.post<{ id: string; committee_id: string; person_id: string; role: string }>(
+        `${base}/${committeeId}/members`,
+        payload,
+      )
+    ).data;
+  },
+
+  async removeMember(committeeId: string, memberId: string): Promise<void> {
+    await apiClient.delete(`${base}/${committeeId}/members/${memberId}`);
+  },
+
+  async createMeeting(
+    committeeId: string,
+    payload: { scheduled_at: string; location?: string | null },
+  ): Promise<Meeting> {
+    return (await apiClient.post<Meeting>(`${base}/${committeeId}/meetings`, payload)).data;
+  },
+
+  async createDecision(
+    meetingId: string,
+    payload: { text: string; agenda_item_id?: string | null },
+  ): Promise<Decision> {
+    return (await apiClient.post<Decision>(`${base}/meetings/${meetingId}/decisions`, payload)).data;
+  },
+
+  async createTask(
+    decisionId: string,
+    payload: { assignee_person_id?: string | null; due_date?: string | null; evidence_note?: string | null },
+  ): Promise<DecisionTask> {
+    return (await apiClient.post<DecisionTask>(`${base}/decisions/${decisionId}/tasks`, payload)).data;
+  },
+
+  async updateTask(
+    taskId: string,
+    payload: {
+      assignee_person_id?: string | null;
+      due_date?: string | null;
+      status?: string;
+      evidence_note?: string | null;
+    },
+  ): Promise<DecisionTask> {
+    return (await apiClient.patch<DecisionTask>(`${base}/tasks/${taskId}`, payload)).data;
+  },
+
+  // ── Срез-2: attendance, quorum-hold, votes, protocol journal ──────────
+
+  async getAttendance(meetingId: string): Promise<Attendance[]> {
+    return (await apiClient.get<Attendance[]>(`${base}/meetings/${meetingId}/attendance`)).data;
+  },
+
+  async putAttendance(
+    meetingId: string,
+    items: { person_id: string; present: boolean }[],
+  ): Promise<Attendance[]> {
+    return (
+      await apiClient.put<Attendance[]>(`${base}/meetings/${meetingId}/attendance`, { items })
+    ).data;
+  },
+
+  async holdMeeting(meetingId: string): Promise<Meeting> {
+    return (await apiClient.patch<Meeting>(`${base}/meetings/${meetingId}`, { status: "held" })).data;
+  },
+
+  async castVote(decisionId: string, person_id: string, choice: VoteChoice): Promise<Vote> {
+    return (
+      await apiClient.post<Vote>(`${base}/decisions/${decisionId}/votes`, { person_id, choice })
+    ).data;
+  },
+
+  async getVotes(decisionId: string): Promise<DecisionVoteSummary> {
+    return (await apiClient.get<DecisionVoteSummary>(`${base}/decisions/${decisionId}/votes`)).data;
+  },
+
+  async listProtocols(
+    params: { committee_id?: string; limit?: number; offset?: number } = {},
+  ): Promise<ProtocolJournalPage> {
+    const r = await apiClient.get<ProtocolJournalPage>(`${base}/protocols`, {
+      params: { limit: 100, offset: 0, ...params },
+    });
+    return r.data;
   },
 };
