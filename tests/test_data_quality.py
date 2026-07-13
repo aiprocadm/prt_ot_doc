@@ -243,6 +243,50 @@ class TestDataQualityEndpoints:
 
 
 @pytest.mark.anyio
+class TestDataQualityCrossTenantHeader:
+    """``X-Tenant-Id`` must not let an authenticated caller read another tenant's DQ report.
+
+    Security regression guard: the queried tenant scope must come from the
+    verified token/user, never the raw ``X-Tenant-Id`` header. A caller
+    authenticated for tenant A that sets ``X-Tenant-Id`` to tenant B's id must
+    either be rejected (403) or scoped back to tenant A — a 200 whose
+    ``tenant_id`` is tenant B's is a cross-tenant read.
+    """
+
+    async def _distinct_tenants(self, make_auth_headers) -> tuple[dict[str, str], str, str]:
+        # ``acme`` and ``beta`` are seeded tenants; distinct per-tenant emails
+        # avoid the documented cross-tenant user-reuse gotcha in make_auth_headers.
+        acme = await make_auth_headers(RoleEnum.ADMIN, tenant="acme", email="admin-acme@dq.test")
+        beta = await make_auth_headers(RoleEnum.ADMIN, tenant="beta", email="admin-beta@dq.test")
+        acme_id = acme["x-tenant"]
+        beta_id = beta["x-tenant"]
+        assert acme_id != beta_id
+        headers = dict(acme)
+        headers["X-Tenant-Id"] = beta_id  # authenticated as acme, header points at beta
+        return headers, acme_id, beta_id
+
+    async def test_report_ignores_cross_tenant_header(
+        self, async_client: AsyncClient, make_auth_headers
+    ) -> None:
+        headers, acme_id, beta_id = await self._distinct_tenants(make_auth_headers)
+        resp = await async_client.get(f"{API_PREFIX}/data-quality/report", headers=headers)
+        assert resp.status_code in (200, 403)
+        if resp.status_code == 200:
+            assert resp.json()["tenant_id"] == acme_id
+            assert resp.json()["tenant_id"] != beta_id
+
+    async def test_check_ignores_cross_tenant_header(
+        self, async_client: AsyncClient, make_auth_headers
+    ) -> None:
+        headers, acme_id, beta_id = await self._distinct_tenants(make_auth_headers)
+        resp = await async_client.get(f"{API_PREFIX}/data-quality/check", headers=headers)
+        assert resp.status_code in (200, 403)
+        if resp.status_code == 200:
+            assert resp.json()["tenant_id"] == acme_id
+            assert resp.json()["tenant_id"] != beta_id
+
+
+@pytest.mark.anyio
 class TestExpiredPermitsRule:
     """Permits past valid_until that are still ACTIVE must be flagged."""
 

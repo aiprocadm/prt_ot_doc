@@ -236,9 +236,10 @@ class TestOperationalDashboardAuthScope:
     ) -> None:
         """Sending both ``x-tenant`` and ``X-Tenant-Id`` with the same UUID is OK.
 
-        The route's ``_tenant_uuid_from_request`` reads from
-        ``(X-Tenant-Id, x-tenant-id, x-tenant)`` in order; production clients
-        often send both forms for resilience. Pin that redundancy is harmless.
+        The route derives scope from the authenticated context and only checks a
+        supplied tenant header (``X-Tenant-Id`` / ``x-tenant-id`` / ``x-tenant``)
+        *matches* it; production clients often send both forms for resilience, so
+        pin that a matching redundant pair is harmless.
         """
         base = await make_auth_headers(RoleEnum.ADMIN)
         tid = base["x-tenant"]
@@ -563,6 +564,52 @@ class TestOperationalDashboardTenantIsolation:
 
         assert "unassigned_task" in cats_a
         assert "unassigned_task" not in cats_b
+
+    async def test_x_tenant_id_header_cannot_override_authenticated_scope(
+        self,
+        async_client: AsyncClient,
+        make_auth_headers,
+        sessionmaker,
+        data_factory: TestDataFactory,
+    ) -> None:
+        """A tenant-A caller must not read tenant B by setting a foreign ``X-Tenant-Id``.
+
+        Unlike the two cases above (which use *separate*, correctly-scoped admins
+        per tenant), this pins the header-trust attack directly: one caller
+        authenticated for tenant A sends ``x-tenant`` = A (so the tenant
+        middleware / ``rbac`` token check pass) but ``X-Tenant-Id`` = B. The
+        queried scope must come from the verified token/user — never the raw
+        ``X-Tenant-Id`` header — so tenant B's alerts must not surface. The route
+        may either reject the mismatched header (403) or silently scope back to
+        the caller's own tenant, but a 200 carrying B's data is a cross-tenant
+        read.
+        """
+        async with sessionmaker() as session:
+            tenant_a = await data_factory.ensure_tenant(slug="opsdash-xhdr-a", session=session)
+            tenant_b = await data_factory.ensure_tenant(slug="opsdash-xhdr-b", session=session)
+            # Seed a tenant-B-only alert (open task without assignee → MEDIUM).
+            await _seed_unassigned_task(session, str(tenant_b.id), title="B-only-secret")
+            await session.commit()
+            tenant_a_id = str(tenant_a.id)
+            tenant_b_id = str(tenant_b.id)
+
+        assert tenant_a_id != tenant_b_id
+
+        headers = dict(await _admin_for(make_auth_headers, "opsdash-xhdr-a"))
+        headers["X-Tenant-Id"] = tenant_b_id  # point the (previously trusted) header at tenant B
+
+        response = await async_client.get(DASHBOARD_PATH, headers=headers)
+
+        assert response.status_code in (status.HTTP_200_OK, status.HTTP_403_FORBIDDEN)
+        if response.status_code == status.HTTP_200_OK:
+            data = response.json()
+            assert (
+                data["tenant_id"] == tenant_a_id
+            ), "scope must fall back to the authenticated tenant, not the X-Tenant-Id header"
+            assert data["tenant_id"] != tenant_b_id
+            assert not any(
+                a["category"] == "unassigned_task" for a in data["alerts"]
+            ), "tenant B's unassigned-task alert leaked to a tenant-A caller via X-Tenant-Id"
 
 
 # =============================================================================
