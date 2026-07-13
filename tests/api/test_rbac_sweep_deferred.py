@@ -155,6 +155,56 @@ async def test_compliance_recompute_allowed_for_admin(async_client, make_auth_he
     assert response.status_code != 403
 
 
+# ---------------------------------------------------------------- compliance reads
+# The two GET reads expose tenant-wide workforce compliance data (per-person deadline
+# status). Role-less like recompute was, so a rank-and-file ``worker`` could enumerate
+# every person's compliance standing. Gate with MGMT_READ (read = management/HR/specialist
+# set, mirrors branding/analytics). The audit listed only ``persons/{id}/summary``; the
+# sibling ``GET /deadlines`` is the same sensitivity and root cause, so both are closed.
+
+
+@pytest.mark.anyio
+async def test_compliance_deadlines_read_forbidden_for_worker(
+    async_client, make_auth_headers
+) -> None:
+    headers = await make_auth_headers(RoleEnum.WORKER)
+    response = await async_client.get("/api/v1/compliance/deadlines", headers=headers)
+    assert response.status_code == 403
+    assert response.json()["code"] == "FORBIDDEN"
+
+
+@pytest.mark.anyio
+async def test_compliance_deadlines_read_allowed_for_line_manager(
+    async_client, make_auth_headers
+) -> None:
+    headers = await make_auth_headers(RoleEnum.LINE_MANAGER)
+    response = await async_client.get("/api/v1/compliance/deadlines", headers=headers)
+    assert response.status_code != 403
+
+
+@pytest.mark.anyio
+async def test_compliance_person_summary_read_forbidden_for_worker(
+    async_client, make_auth_headers
+) -> None:
+    headers = await make_auth_headers(RoleEnum.WORKER)
+    response = await async_client.get(
+        f"/api/v1/compliance/persons/{_FAKE_ID}/summary", headers=headers
+    )
+    assert response.status_code == 403
+    assert response.json()["code"] == "FORBIDDEN"
+
+
+@pytest.mark.anyio
+async def test_compliance_person_summary_read_allowed_for_line_manager(
+    async_client, make_auth_headers
+) -> None:
+    headers = await make_auth_headers(RoleEnum.LINE_MANAGER)
+    response = await async_client.get(
+        f"/api/v1/compliance/persons/{_FAKE_ID}/summary", headers=headers
+    )
+    assert response.status_code != 403
+
+
 # ---------------------------------------------------------------- headers / layout presets
 
 
