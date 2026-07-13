@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 import hashlib
-import hmac
 import json
 from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,6 +15,7 @@ from app.api.dependencies import get_session, get_tenant_record
 from app.api.deps.tracing import get_trace_id
 from app.core.audit_decorator import audit_operation
 from app.core.errors import api_problem_detail
+from app.core.inbound_webhook_auth import enforce_webhook_hmac
 from app.core.security import AccessContext, abac
 from app.models.document import DocumentVersion
 from app.models.job_engine import InboundWebhookDedup
@@ -91,13 +91,6 @@ def _edo_not_found(resource: str) -> HTTPException:
             details={"resource": resource},
             error_type="edo",
         ),
-    )
-
-
-def _edo_unauthorized(message: str) -> HTTPException:
-    return HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail=api_problem_detail(code="EDO_UNAUTHORIZED", message=message, error_type="edo"),
     )
 
 
@@ -770,7 +763,7 @@ async def edo_status_webhook_v1(
     session: AsyncSession = SessionDep,
     tenant: Tenant = TenantDep,
 ):
-    return await edo_webhook("internal-fallback", payload, request, response, session, tenant, None)
+    return await edo_webhook("internal-fallback", payload, request, response, session, tenant)
 
 
 @router.post("/edo/webhooks/{provider_code}")
@@ -782,20 +775,18 @@ async def edo_webhook(
     response: Response,
     session: AsyncSession = SessionDep,
     tenant: Tenant = TenantDep,
-    x_signature: str | None = Header(default=None, alias="X-Signature"),
 ):
     cid = _correlation_id(request, response)
     raw = await request.body()
-    configured_secret = (tenant.settings or {}).get("edo_webhook_secret")
-    if configured_secret:
-        # A configured secret makes the signature mandatory: a missing X-Signature must
-        # be rejected, not silently accepted (else an attacker bypasses HMAC by omitting
-        # the header). Sanctioned tightening of the prior optional-signature behavior.
-        if not x_signature:
-            raise _edo_unauthorized("Missing webhook signature")
-        expected = hmac.new(str(configured_secret).encode("utf-8"), raw, hashlib.sha256).hexdigest()
-        if not hmac.compare_digest(expected, x_signature):
-            raise _edo_unauthorized("Invalid webhook signature")
+    # Public receiver (tenant-middleware allowlist) — the HMAC signature is the only
+    # authentication. Fail closed: no per-tenant secret configured -> reject, never accept
+    # an anonymous status mutation.
+    enforce_webhook_hmac(
+        raw_body=raw,
+        request=request,
+        secret=(tenant.settings or {}).get("edo_webhook_secret"),
+        signature_headers=("x-signature",),
+    )
 
     payload_hash = hashlib.sha256(raw).hexdigest()
     dedup_key = str(payload.event_id or payload_hash)
