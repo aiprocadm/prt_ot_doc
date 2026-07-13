@@ -183,9 +183,7 @@ class CommitteeMeetingAttendance(TenantBaseModel):
     present: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
     __table_args__ = (
-        UniqueConstraint(
-            "tenant_id", "meeting_id", "person_id", name="uq_committee_attendance"
-        ),
+        UniqueConstraint("tenant_id", "meeting_id", "person_id", name="uq_committee_attendance"),
     )
 
 

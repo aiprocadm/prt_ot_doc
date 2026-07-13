@@ -20,9 +20,7 @@ down_revision = "20260710_rb01_report_definition"
 branch_labels = None
 depends_on = None
 
-_VOTE_CHOICE = postgresql.ENUM(
-    "for", "against", "abstain", name="votechoice", create_type=False
-)
+_VOTE_CHOICE = postgresql.ENUM("for", "against", "abstain", name="votechoice", create_type=False)
 
 
 def _common(*extra: sa.Column) -> list[sa.Column]:
@@ -81,9 +79,7 @@ def upgrade() -> None:
             ),
             sa.Column("present", sa.Boolean(), nullable=False, server_default=sa.true()),
         ),
-        sa.UniqueConstraint(
-            "tenant_id", "meeting_id", "person_id", name="uq_committee_attendance"
-        ),
+        sa.UniqueConstraint("tenant_id", "meeting_id", "person_id", name="uq_committee_attendance"),
     )
     op.create_table(
         "committee_decision_vote",
@@ -112,7 +108,14 @@ def downgrade() -> None:
     op.drop_table("committee_decision_vote")
     op.drop_table("committee_meeting_attendance")
     op.drop_index("uq_committee_protocol_no", table_name="committee_meeting")
-    for col in ("quorum_met", "present_count", "members_total", "protocol_year", "protocol_seq", "held_at"):
+    for col in (
+        "quorum_met",
+        "present_count",
+        "members_total",
+        "protocol_year",
+        "protocol_seq",
+        "held_at",
+    ):
         op.drop_column("committee_meeting", col)
     bind = op.get_bind()
     _VOTE_CHOICE.drop(bind, checkfirst=True)
