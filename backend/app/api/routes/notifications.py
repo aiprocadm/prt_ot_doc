@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.audit_decorator import audit_operation
-from app.core.security import AccessContext, rbac
+from app.core.security import AccessContext, abac, rbac
 from app.core.tenant_validation import TenantContextValidator
 from app.models.models import Tenant
 from app.modules.notifications import (
@@ -26,6 +26,16 @@ router = APIRouter(prefix="/notifications", tags=["notifications"])
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 TenantDep = Annotated[Tenant, Depends(get_tenant_record)]
 AccessDep = Annotated[AccessContext, Depends(rbac())]
+
+
+def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> str | None:
+    return getattr(tenant, "id", None)
+
+
+_NOTIF_WRITE_ROLES = ["admin", "owner"]
+NotifWriteAccess = Depends(
+    abac(_tenant_resource_id, required_roles=_NOTIF_WRITE_ROLES, action="manage notifications")
+)
 
 
 def _service(
@@ -118,6 +128,7 @@ async def upsert_template(
     session: SessionDep,
     tenant: TenantDep,
     access: AccessDep,
+    _: AccessContext = NotifWriteAccess,
 ) -> NotificationTemplateOut:
     TenantContextValidator.ensure_tenant_context(tenant)
 

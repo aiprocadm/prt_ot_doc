@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependencies import get_session, get_tenant_record
 from app.api.helpers.upload import reject_oversize_upload
 from app.core.idempotency import compute_request_hash
+from app.core.security import AccessContext, abac
 from app.models.document import DocumentVersion
 from app.models.models import Tenant
 from app.modules.replace.csv_parser import parse_replace_csv
@@ -47,12 +48,45 @@ from app.services.idempotency import IdempotencyService, normalize_idempotency_k
 router = APIRouter()
 
 
+def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> str | None:
+    return getattr(tenant, "id", None)
+
+
+_REPLACE_READ_ROLES = [
+    "admin",
+    "owner",
+    "ot_pb_lead",
+    "ot_head",
+    "ot_specialist",
+    "pb_engineer",
+    "manager",
+    "line_manager",
+    "auditor_ro",
+]
+_REPLACE_WRITE_ROLES = [
+    "admin",
+    "owner",
+    "ot_pb_lead",
+    "ot_head",
+    "ot_specialist",
+    "pb_engineer",
+    "manager",
+]
+ReplaceReadAccess = Depends(
+    abac(_tenant_resource_id, required_roles=_REPLACE_READ_ROLES, action="read replace")
+)
+ReplaceWriteAccess = Depends(
+    abac(_tenant_resource_id, required_roles=_REPLACE_WRITE_ROLES, action="manage replace")
+)
+
+
 @router.post("/replace-maps", response_model=ReplaceMapRead, status_code=status.HTTP_201_CREATED)
 async def create_replace_map(
     payload: str | None = Form(default=None),
     replace_csv: UploadFile | None = File(default=None),
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = ReplaceWriteAccess,
 ) -> ReplaceMapRead:
     if replace_csv is not None:
         reject_oversize_upload(
@@ -81,7 +115,9 @@ async def create_replace_map(
 
 @router.get("/replace-maps", response_model=ReplaceMapList)
 async def get_maps(
-    session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = ReplaceReadAccess,
 ) -> ReplaceMapList:
     return ReplaceMapList(
         items=[
@@ -96,6 +132,7 @@ async def get_map(
     replace_map_id: str,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = ReplaceReadAccess,
 ) -> ReplaceMapRead:
     row = await session.get(ReplaceMap, replace_map_id)
     if row is None or row.tenant_id != str(tenant.id) or row.deleted_at is not None:
@@ -109,6 +146,7 @@ async def patch_map(
     payload: ReplaceMapPatch,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = ReplaceWriteAccess,
 ) -> ReplaceMapRead:
     row = await session.get(ReplaceMap, replace_map_id)
     if row is None or row.tenant_id != str(tenant.id) or row.deleted_at is not None:
@@ -127,6 +165,7 @@ async def delete_map(
     replace_map_id: str,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = ReplaceWriteAccess,
 ) -> None:
     row = await session.get(ReplaceMap, replace_map_id)
     if row is None or row.tenant_id != str(tenant.id) or row.deleted_at is not None:
@@ -267,6 +306,7 @@ async def replace_dry_run(
     _idempotency: str | None = Header(default=None, alias="Idempotency-Key"),
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = ReplaceWriteAccess,
 ) -> ReplaceLaunchResponse:
     return await _launch(
         document_version_id, payload, "dry_run", session, tenant, request, _idempotency
@@ -281,6 +321,7 @@ async def replace_apply(
     _idempotency: str | None = Header(default=None, alias="Idempotency-Key"),
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = ReplaceWriteAccess,
 ) -> ReplaceLaunchResponse:
     return await _launch(
         document_version_id, payload, "apply", session, tenant, request, _idempotency
@@ -294,6 +335,7 @@ async def replace_rollback(
     request: Request,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = ReplaceWriteAccess,
 ) -> ReplaceLaunchResponse:
     run = await get_replace_run(session, tenant_id=str(tenant.id), run_id=replace_run_id)
     if run is None or run.mode != "apply":
@@ -377,6 +419,7 @@ async def get_run(
     replace_run_id: str,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = ReplaceReadAccess,
 ) -> ReplaceRunRead:
     run = await get_replace_run(session, tenant_id=str(tenant.id), run_id=replace_run_id)
     if run is None:
@@ -389,6 +432,7 @@ async def get_report(
     replace_run_id: str,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = ReplaceReadAccess,
 ) -> dict:
     run = await get_replace_run(session, tenant_id=str(tenant.id), run_id=replace_run_id)
     if run is None:
@@ -401,6 +445,7 @@ async def get_report_csv(
     replace_run_id: str,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = ReplaceReadAccess,
 ) -> StreamingResponse:
     run = await get_replace_run(session, tenant_id=str(tenant.id), run_id=replace_run_id)
     if run is None:

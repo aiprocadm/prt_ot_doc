@@ -13,6 +13,7 @@ from app.api.dependencies import get_session, get_tenant_record
 from app.api.deps.tracing import get_trace_id
 from app.core.audit_decorator import audit_operation
 from app.core.errors import api_problem_detail
+from app.core.security import AccessContext, abac
 from app.models.approval_signing import (
     ApprovalDecisionLog,
     ApprovalProcess,
@@ -32,6 +33,48 @@ from app.services.pep_signing import PepConflict, PepNotFound, PepSigningService
 from app.services.provider_registry import provider_response_meta
 
 router = APIRouter()
+
+
+def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> str | None:
+    return getattr(tenant, "id", None)
+
+
+# RBAC guards for the approval/signing route group (security hardening sweep).
+# READ = list/detail GETs; WRITE = start/cancel/sign/routes/webhooks mutations.
+_APPROVAL_SIGNING_READ_ROLES = [
+    "admin",
+    "owner",
+    "ot_pb_lead",
+    "ot_head",
+    "ot_specialist",
+    "pb_engineer",
+    "manager",
+    "line_manager",
+    "auditor_ro",
+]
+_APPROVAL_SIGNING_WRITE_ROLES = [
+    "admin",
+    "owner",
+    "ot_pb_lead",
+    "ot_head",
+    "ot_specialist",
+    "pb_engineer",
+    "manager",
+]
+ApprovalSigningReadAccess = Depends(
+    abac(
+        _tenant_resource_id,
+        required_roles=_APPROVAL_SIGNING_READ_ROLES,
+        action="read approval/signing",
+    )
+)
+ApprovalSigningWriteAccess = Depends(
+    abac(
+        _tenant_resource_id,
+        required_roles=_APPROVAL_SIGNING_WRITE_ROLES,
+        action="manage approval/signing",
+    )
+)
 
 
 def _approval_signing_error(*, code: str, message: str, status_code: int) -> HTTPException:
@@ -254,6 +297,7 @@ async def approvals_start(
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
     x_user_id: str = Header(default="system", alias="X-User-Id"),
+    _: AccessContext = ApprovalSigningWriteAccess,
 ):
     cid = _correlation_id(request, response)
     key = request.headers.get("Idempotency-Key")
@@ -330,6 +374,7 @@ async def approval_processes(
     object_id: str | None = None,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = ApprovalSigningReadAccess,
 ):
     stmt = select(ApprovalProcess).where(ApprovalProcess.tenant_id == str(tenant.id))
     if status:
@@ -357,6 +402,7 @@ async def approval_process_detail(
     process_id: str,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = ApprovalSigningReadAccess,
 ):
     p = await session.get(ApprovalProcess, process_id)
     if not p or p.tenant_id != str(tenant.id):
@@ -394,6 +440,7 @@ async def approval_tasks(
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
     x_user_id: str = Header(default="system", alias="X-User-Id"),
+    _: AccessContext = ApprovalSigningReadAccess,
 ):
     stmt = select(ApprovalTask).where(
         ApprovalTask.tenant_id == str(tenant.id), ApprovalTask.status == status
@@ -563,6 +610,7 @@ async def approval_cancel(
     process_id: str,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = ApprovalSigningWriteAccess,
 ):
     p = await session.get(ApprovalProcess, process_id)
     if not p or p.tenant_id != str(tenant.id):
@@ -591,6 +639,7 @@ async def sign_request(
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
     x_user_id: str = Header(default="system", alias="X-User-Id"),
+    _: AccessContext = ApprovalSigningWriteAccess,
 ):
     cid = _correlation_id(request, response)
     object_id = _require_document_object_id(payload.document_version_id, payload.object_id)
@@ -644,6 +693,7 @@ async def sign_requests(
     object_id: str | None = None,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = ApprovalSigningReadAccess,
 ):
     stmt = select(SignatureRequest).where(SignatureRequest.tenant_id == str(tenant.id))
     if status:
@@ -671,6 +721,7 @@ async def sign_request_get(
     request_id: str,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = ApprovalSigningReadAccess,
 ):
     row = await session.get(SignatureRequest, request_id)
     if not row or row.tenant_id != str(tenant.id):
@@ -752,6 +803,7 @@ async def approvals_start_v1(
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
     x_user_id: str = Header(default="system", alias="X-User-Id"),
+    _: AccessContext = ApprovalSigningWriteAccess,
 ):
     return await approvals_start(payload, request, response, session, tenant, x_user_id)
 
@@ -761,6 +813,7 @@ async def approval_instances(
     document_version_id: str | None = None,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = ApprovalSigningReadAccess,
 ):
     items = (
         (
@@ -797,6 +850,7 @@ async def approval_tasks_v1(
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
     x_user_id: str = Header(default="system", alias="X-User-Id"),
+    _: AccessContext = ApprovalSigningReadAccess,
 ):
     stmt = select(ApprovalTask).where(ApprovalTask.tenant_id == str(tenant.id))
     if mine:
@@ -859,6 +913,7 @@ async def sign_request_v1(
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
     x_user_id: str = Header(default="system", alias="X-User-Id"),
+    _: AccessContext = ApprovalSigningWriteAccess,
 ):
     return await sign_request(payload, request, response, session, tenant, x_user_id)
 
@@ -870,6 +925,7 @@ async def sign_submit_v1(
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
     x_user_id: str = Header(default="system", alias="X-User-Id"),
+    _: AccessContext = ApprovalSigningWriteAccess,
 ):
     cert_info = payload.cert_info or {}
     _validate_certificate_period(cert_info)
@@ -898,6 +954,7 @@ async def sign_status_v1(
     document_version_id: str,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = ApprovalSigningReadAccess,
 ):
     rows = (
         (
@@ -960,7 +1017,9 @@ async def edo_webhook_status(
 
 @router.get("/approvals/routes")
 async def approval_routes_v1(
-    session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = ApprovalSigningReadAccess,
 ):
     rows = (
         (
@@ -994,6 +1053,7 @@ async def approval_routes_create_v1(
     payload: ApprovalRouteIn,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = ApprovalSigningWriteAccess,
 ):
     row = ApprovalRoute(
         tenant_id=str(tenant.id),
@@ -1017,6 +1077,7 @@ async def approval_routes_patch_v1(
     payload: ApprovalRouteIn,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = ApprovalSigningWriteAccess,
 ):
     row = await session.get(ApprovalRoute, route_id)
     if not row or row.tenant_id != str(tenant.id):
@@ -1032,7 +1093,9 @@ async def approval_routes_patch_v1(
 
 @router.get("/webhooks")
 async def webhooks_v1(
-    session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = ApprovalSigningReadAccess,
 ):
     rows = (
         (
@@ -1064,6 +1127,7 @@ async def webhooks_create_v1(
     payload: WebhookSubscriptionIn,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = ApprovalSigningWriteAccess,
 ):
     row = WebhookEndpoint(
         tenant_id=str(tenant.id),
@@ -1089,6 +1153,7 @@ async def webhooks_disable_v1(
     webhook_id: str,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = ApprovalSigningWriteAccess,
 ):
     row = await session.get(WebhookEndpoint, webhook_id)
     if not row or row.tenant_id != str(tenant.id):

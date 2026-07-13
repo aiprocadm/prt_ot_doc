@@ -8,7 +8,7 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
-from app.core.security import AccessContext, rbac
+from app.core.security import AccessContext, abac, rbac
 from app.models.models import Tenant
 from app.modules.workflow.models import (
     WorkflowInstanceStatus,
@@ -19,6 +19,34 @@ router = APIRouter(prefix="/workflow", tags=["workflow"])
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 TenantDep = Annotated[Tenant, Depends(get_tenant_record)]
 AccessDep = Annotated[AccessContext, Depends(rbac())]
+
+# RBAC role split for the workflow module. Reads are broadly available to the OT/PB
+# staff + read-only auditor; writes (definitions, version publish/archive, instance
+# start) are admin-grade workflow/process config → tighter set.
+_WORKFLOW_READ_ROLES = [
+    "admin",
+    "owner",
+    "ot_pb_lead",
+    "ot_head",
+    "ot_specialist",
+    "pb_engineer",
+    "manager",
+    "line_manager",
+    "auditor_ro",
+]
+_WORKFLOW_WRITE_ROLES = ["admin", "owner", "ot_pb_lead"]
+
+
+def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> str | None:
+    return getattr(tenant, "id", None)
+
+
+WorkflowReadAccess = Depends(
+    abac(_tenant_resource_id, required_roles=_WORKFLOW_READ_ROLES, action="read workflow")
+)
+WorkflowWriteAccess = Depends(
+    abac(_tenant_resource_id, required_roles=_WORKFLOW_WRITE_ROLES, action="manage workflow")
+)
 
 
 def _extract_role_codes(access: AccessContext) -> list[str]:
@@ -165,7 +193,11 @@ def _serialize_task(item) -> WorkflowTaskRead:
     "/definitions", response_model=WorkflowVersionRead, status_code=status.HTTP_201_CREATED
 )
 async def create_definition(
-    payload: WorkflowDefinitionIn, session: SessionDep, tenant: TenantDep, access: AccessDep
+    payload: WorkflowDefinitionIn,
+    session: SessionDep,
+    tenant: TenantDep,
+    access: AccessDep,
+    _: AccessContext = WorkflowWriteAccess,
 ) -> WorkflowVersionRead:
     version = await _service(session, tenant).create_definition(
         code=payload.code,
@@ -194,7 +226,10 @@ async def validate_definition(
 
 @router.get("/definitions", response_model=list[WorkflowDefinitionRead])
 async def list_definitions(
-    session: SessionDep, tenant: TenantDep, access: AccessDep
+    session: SessionDep,
+    tenant: TenantDep,
+    access: AccessDep,
+    _: AccessContext = WorkflowReadAccess,
 ) -> list[WorkflowDefinitionRead]:
     _ = access
     service = _service(session, tenant)
@@ -226,7 +261,11 @@ async def list_definitions(
 
 @router.post("/versions/{version_id}/publish", response_model=WorkflowVersionRead)
 async def publish_version(
-    version_id: str, session: SessionDep, tenant: TenantDep, access: AccessDep
+    version_id: str,
+    session: SessionDep,
+    tenant: TenantDep,
+    access: AccessDep,
+    _: AccessContext = WorkflowWriteAccess,
 ) -> WorkflowVersionRead:
     version = await _service(session, tenant).publish_version(version_id, access.user.id)
     await session.commit()
@@ -235,7 +274,11 @@ async def publish_version(
 
 @router.post("/versions/{version_id}/archive", response_model=WorkflowVersionRead)
 async def archive_version(
-    version_id: str, session: SessionDep, tenant: TenantDep, access: AccessDep
+    version_id: str,
+    session: SessionDep,
+    tenant: TenantDep,
+    access: AccessDep,
+    _: AccessContext = WorkflowWriteAccess,
 ) -> WorkflowVersionRead:
     version = await _service(session, tenant).archive_version(version_id, access.user.id)
     await session.commit()
@@ -250,6 +293,7 @@ async def start_instance(
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
     access: AccessContext = Depends(rbac()),
+    _: AccessContext = WorkflowWriteAccess,
 ) -> WorkflowInstanceRead:
     instance = await _service(session, tenant).start_instance(
         definition_code=payload.definition_code,
@@ -297,6 +341,7 @@ async def list_instances(
     access: AccessDep,
     status_filter: WorkflowInstanceStatus | None = Query(default=None, alias="status"),
     entity_type: str | None = Query(default=None),
+    _: AccessContext = WorkflowReadAccess,
 ) -> list[WorkflowInstanceListItem]:
     _ = access
     try:
@@ -327,7 +372,11 @@ async def list_instances(
 
 @router.get("/instances/{instance_id}", response_model=WorkflowInstanceRead)
 async def get_instance(
-    instance_id: str, session: SessionDep, tenant: TenantDep, access: AccessDep
+    instance_id: str,
+    session: SessionDep,
+    tenant: TenantDep,
+    access: AccessDep,
+    _: AccessContext = WorkflowReadAccess,
 ) -> WorkflowInstanceRead:
     _ = access
     instance, timeline, tasks = await _service(session, tenant).get_instance_history(instance_id)
@@ -362,6 +411,7 @@ async def list_tasks(
     tenant: TenantDep,
     access: AccessDep,
     assignee: str | None = Query(default="me"),
+    _: AccessContext = WorkflowReadAccess,
 ) -> list[WorkflowTaskRead]:
     role_codes = _extract_role_codes(access)
     try:
@@ -455,7 +505,11 @@ async def escalate_task(
 
 @router.get("/definitions/{definition_id}", response_model=WorkflowDefinitionRead)
 async def get_definition(
-    definition_id: str, session: SessionDep, tenant: TenantDep, access: AccessDep
+    definition_id: str,
+    session: SessionDep,
+    tenant: TenantDep,
+    access: AccessDep,
+    _: AccessContext = WorkflowReadAccess,
 ) -> WorkflowDefinitionRead:
     _ = access
     service = _service(session, tenant)

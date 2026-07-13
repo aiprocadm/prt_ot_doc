@@ -11,7 +11,7 @@ from sqlalchemy.orm import selectinload
 
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.audit_decorator import audit_operation
-from app.core.security import rbac
+from app.core.security import AccessContext, abac, rbac
 from app.core.tenant_validation import TenantContextValidator
 from app.domains.npa.impact import NpaImpactService
 from app.models.models import Tenant
@@ -21,6 +21,27 @@ from app.schemas.npa import NpaActListResponse, NpaActRead
 router = APIRouter(tags=["npa"])
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
+
+
+def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> str | None:
+    return getattr(tenant, "id", None)
+
+
+# NPA impact tooling mutates the legal domain (creates update tasks), so writes
+# include the lawyer role alongside the standard OT/PB management roles.
+_NPA_WRITE_ROLES = [
+    "admin",
+    "owner",
+    "ot_pb_lead",
+    "ot_head",
+    "ot_specialist",
+    "pb_engineer",
+    "manager",
+    "lawyer",
+]
+NpaWriteAccess = Depends(
+    abac(_tenant_resource_id, required_roles=_NPA_WRITE_ROLES, action="manage npa")
+)
 
 
 @router.get("/npa", response_model=NpaActListResponse)
@@ -60,6 +81,7 @@ async def create_npa_update_tasks(
     revision_id: str | None = Query(default=None),
     tenant: Tenant = Depends(get_tenant_record),
     access=Depends(rbac()),
+    _: AccessContext = NpaWriteAccess,
 ) -> dict:
     TenantContextValidator.ensure_tenant_context(tenant)
 

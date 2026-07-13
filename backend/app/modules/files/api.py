@@ -410,7 +410,9 @@ async def reindex_file_content_v2(
     file_id: str,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    access: AccessContext = WRITE_ACCESS_DEP,
 ) -> ReindexFileResponse:
+    _enforce_access_role(access, _FILE_UPLOAD_ROLES)
     file_record = await session.get(FileRecord, file_id)
     if file_record is None:
         raise HTTPException(status_code=404, detail="file_not_found")

@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.core.security import AccessContext, abac
 from app.models.models import Tenant
 
 from .schemas import (
@@ -18,6 +19,39 @@ from .service import BrandingService
 
 router = APIRouter(prefix="/branding", tags=["branding"])
 
+_BRANDING_READ_ROLES = [
+    "admin",
+    "owner",
+    "ot_pb_lead",
+    "ot_head",
+    "ot_specialist",
+    "pb_engineer",
+    "manager",
+    "line_manager",
+    "auditor_ro",
+]
+_BRANDING_WRITE_ROLES = [
+    "admin",
+    "owner",
+    "ot_pb_lead",
+    "ot_head",
+    "ot_specialist",
+    "pb_engineer",
+    "manager",
+]
+
+
+def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> str | None:
+    return getattr(tenant, "id", None)
+
+
+BrandingReadAccess = Depends(
+    abac(_tenant_resource_id, required_roles=_BRANDING_READ_ROLES, action="read branding")
+)
+BrandingWriteAccess = Depends(
+    abac(_tenant_resource_id, required_roles=_BRANDING_WRITE_ROLES, action="manage branding")
+)
+
 
 @router.get("/profile", response_model=BrandingProfileRead)
 async def get_branding_profile(
@@ -25,6 +59,7 @@ async def get_branding_profile(
     site_id: str | None = None,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = BrandingReadAccess,
 ) -> BrandingProfileRead:
     service = BrandingService(session, tenant)
     company = await service.get_company(company_id)
@@ -38,6 +73,7 @@ async def update_branding_profile(
     payload: BrandingProfilePatch,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = BrandingWriteAccess,
 ) -> BrandingProfileRead:
     service = BrandingService(session, tenant)
     company = await service.get_company(company_id)
@@ -72,6 +108,7 @@ async def get_branding_history(
     limit: int = 20,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = BrandingReadAccess,
 ) -> BrandingGenerationHistoryResponse:
     service = BrandingService(session, tenant)
     items = await service.list_generation_history(
@@ -87,6 +124,7 @@ async def preview_branding(
     payload: BrandingPreviewRequest,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = BrandingWriteAccess,
 ) -> BrandingPreviewResponse:
     service = BrandingService(session, tenant)
     profile, preset, sections, unresolved = await service.render_preview(
