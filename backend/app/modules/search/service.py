@@ -244,6 +244,7 @@ class SearchService:
         sort: str,
         limit: int,
         cursor: str | None,
+        exclude_entity_types: set[str] | None = None,
     ) -> dict[str, Any]:
         offset = int(cursor or "0") if (cursor or "0").isdigit() else 0
         criteria: list = [SearchIndexEntry.tenant_id == self.tenant_id]
@@ -260,6 +261,11 @@ class SearchService:
         resolved_types = self._resolve_entity_types(types)
         if resolved_types:
             criteria.append(SearchIndexEntry.entity_type.in_(resolved_types))
+        # Confidential types the caller may not see (canonical entity_type values).
+        # Applied as a SQL exclusion so it also constrains the facet/total queries
+        # (which reuse filter_expr) and is immune to type-alias expansion.
+        if exclude_entity_types:
+            criteria.append(SearchIndexEntry.entity_type.notin_(sorted(exclude_entity_types)))
         if filters.status:
             criteria.append(SearchIndexEntry.status == filters.status)
         if filters.site_id:

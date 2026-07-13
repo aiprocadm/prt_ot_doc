@@ -9,6 +9,7 @@ from sqlalchemy.exc import MissingGreenlet, OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.core.rbac_abac import ROLE_PERMISSIONS
 from app.core.security import AccessContext, rbac
 from app.models.models import Tenant
 from app.modules.projections.models import SearchIndexEntry
@@ -62,6 +63,34 @@ _ALLOWED_TYPES = {
     "orders",
 }
 
+# Canonical entity_type -> read permissions (any-of) that authorize seeing it in the
+# global index. These rows carry confidential titles (an incident/inspection/prescription
+# title can name an injured person), so a caller lacking the domain read permission must
+# not see them via search or suggest. Entity types absent here stay tenant-global and
+# rely on detail-page RBAC (catalog-ish data: person, company, site, document, file, …).
+_SENSITIVE_ENTITY_PERMISSIONS: dict[str, tuple[str, ...]] = {
+    "incident": ("incidents:read", "incidents:list"),
+    "inspection": ("inspections:read", "inspections:list"),
+    "prescription": ("inspections:read", "inspections:list"),
+}
+
+
+def _restricted_entity_types(access: AccessContext) -> set[str]:
+    """Sensitive canonical entity types the caller may NOT see in search results.
+
+    Empty for admins/owners (their permission set is the full catalog). Resolved from
+    the same role->permission map used elsewhere (``ROLE_PERMISSIONS``)."""
+    granted = {
+        permission
+        for role in access.to_auth_context().roles
+        for permission in ROLE_PERMISSIONS.get(role, set())
+    }
+    return {
+        entity_type
+        for entity_type, required in _SENSITIVE_ENTITY_PERMISSIONS.items()
+        if not any(permission in granted for permission in required)
+    }
+
 
 @router.get("/search")
 async def global_search(
@@ -100,7 +129,13 @@ async def global_search(
     service = SearchService(session=session, tenant_id=str(tenant.id))
     try:
         payload = await service.search(
-            q=q, types=requested_types, filters=filters, sort=sort, limit=limit, cursor=cursor
+            q=q,
+            types=requested_types,
+            filters=filters,
+            sort=sort,
+            limit=limit,
+            cursor=cursor,
+            exclude_entity_types=_restricted_entity_types(access),
         )
     except (OperationalError, MissingGreenlet):
         await session.rollback()
@@ -139,6 +174,9 @@ async def search_suggest(
 ) -> dict:
     like = f"%{q}%"
     stmt = select(SearchIndexEntry).where(SearchIndexEntry.tenant_id == str(tenant.id))
+    restricted = _restricted_entity_types(access)
+    if restricted:
+        stmt = stmt.where(SearchIndexEntry.entity_type.notin_(sorted(restricted)))
     if q:
         stmt = stmt.where(SearchIndexEntry.title.ilike(like))
     rows = (
