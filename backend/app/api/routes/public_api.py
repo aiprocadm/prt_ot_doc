@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.audit_decorator import audit_operation
-from app.core.security import api_key_auth
+from app.core.security import AccessContext, abac, api_key_auth
 from app.models.document import Document
 from app.models.models import (
     ApiKey,
@@ -32,6 +32,28 @@ from app.services.api_keys import create_api_key, rotate_api_key
 router = APIRouter(prefix="/public", tags=["public-api"])
 admin_router = APIRouter(prefix="/machine-keys", tags=["machine-keys"])
 marketplace_router = APIRouter(prefix="/marketplace", tags=["marketplace"])
+
+
+def _tenant_resource_id(
+    tenant: Tenant = Depends(get_tenant_record),
+) -> str | None:  # pragma: no cover - fastapi wiring
+    return getattr(tenant, "id", None)
+
+
+# Machine-key management mints/rotates credentials and returns plaintext secrets;
+# marketplace publish/install mutates tenant catalog content. Both the admin_router
+# and marketplace_router previously carried NO role guard (only get_session +
+# get_tenant_record), so any tenant role — including worker — could issue API keys
+# or publish content. The api_key_auth/_ensure_scope guards apply only to the
+# machine-authed ``router`` ("/public/*"), not these human-facing admin routers.
+_MACHINE_KEY_ROLES = ["admin", "owner"]
+_MARKETPLACE_ROLES = ["admin", "owner"]
+MachineKeyAccess = Depends(
+    abac(_tenant_resource_id, required_roles=_MACHINE_KEY_ROLES, action="manage machine keys")
+)
+MarketplaceAccess = Depends(
+    abac(_tenant_resource_id, required_roles=_MARKETPLACE_ROLES, action="manage marketplace")
+)
 
 
 class MachineKeyCreate(BaseModel):
@@ -87,7 +109,9 @@ def _ensure_scope(record: ApiKey, scope: str) -> None:
 
 @admin_router.get("")
 async def list_machine_keys(
-    session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = MachineKeyAccess,
 ):
     rows = (
         (
@@ -126,6 +150,7 @@ async def issue_machine_key(
     payload: MachineKeyCreate,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = MachineKeyAccess,
 ):
     secret = await create_api_key(
         session, tenant_id=str(tenant.id), name=payload.name, scopes=payload.scopes or ["api:read"]
@@ -148,6 +173,7 @@ async def revoke_machine_key(
     item_id: str,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = MachineKeyAccess,
 ):
     record = await session.get(ApiKey, item_id)
     if not record or record.tenant_id != tenant.id:
@@ -164,6 +190,7 @@ async def rotate_machine_key(
     item_id: str,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = MachineKeyAccess,
 ):
     record = await session.get(ApiKey, item_id)
     if not record or record.tenant_id != tenant.id:
@@ -551,6 +578,7 @@ async def publish_marketplace_item(
     payload: MarketplaceItemCreate,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = MarketplaceAccess,
 ):
     item = MarketplaceCatalogItem(tenant_id=tenant.id, status="published", **payload.model_dump())
     session.add(item)
@@ -566,6 +594,7 @@ async def install_marketplace_item(
     payload: MarketplaceInstallRequest,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = MarketplaceAccess,
 ):
     item = await session.get(MarketplaceCatalogItem, item_id)
     if not item or item.tenant_id != tenant.id or item.deleted_at is not None:

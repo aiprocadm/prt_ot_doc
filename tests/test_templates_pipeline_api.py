@@ -330,8 +330,12 @@ async def test_pipeline_async_enqueue(
 
 
 @pytest.mark.anyio
-async def test_tenant_listing(async_client: AsyncClient) -> None:
-    response = await async_client.get("/api/v1/tenants", headers={"X-Tenant": "test"})
+async def test_tenant_listing(async_client: AsyncClient, make_auth_headers) -> None:
+    # Tenant listing requires an admin token — previously this endpoint was
+    # reachable with only a tenant-slug header (auth bypass, fixed in the RBAC
+    # route-group sweep); the test now authenticates as admin.
+    headers = await make_auth_headers()
+    response = await async_client.get("/api/v1/tenants", headers=headers)
     assert response.status_code == 200
     payload = response.json()
     assert payload["total"] >= 1

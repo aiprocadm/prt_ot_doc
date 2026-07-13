@@ -17,6 +17,14 @@ from app.modules.search.service import SearchFilters, SearchService
 
 router = APIRouter()
 
+# Rebuilding the search index is a tenant-wide maintenance operation — restrict to
+# tenant administrators (mirrors analytics ``_RECOMPUTE_ROLES``). Adding the guard
+# also closes an authentication bypass: the reindex routes previously depended only
+# on ``get_session`` + ``get_tenant_record``, neither of which inspects the bearer
+# token, so any caller with a tenant-slug header could trigger a full reindex.
+_REINDEX_ROLES = ["admin", "owner"]
+ReindexAccess = Depends(rbac(_REINDEX_ROLES))
+
 _ALLOWED_TYPES = {
     "person",
     "people",
@@ -161,7 +169,9 @@ async def search_suggest(
 
 @router.post("/search/reindex")
 async def reindex_all(
-    session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = ReindexAccess,
 ) -> dict:
     count = await ProjectionOrchestrator(session, str(tenant.id)).rebuild_search_index()
     return {"status": "ok", "indexed": count}
@@ -172,6 +182,7 @@ async def reindex_by_entity(
     entity_type: str,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = ReindexAccess,
 ) -> dict:
     if entity_type not in _ALLOWED_TYPES:
         return {"status": "skipped", "entity_type": entity_type}

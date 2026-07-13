@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.audit_decorator import audit_operation
 from app.core.config import get_settings
+from app.core.security import AccessContext, abac
 from app.models.models import (
     ClientPackagePreset,
     ClientPackageRun,
@@ -35,6 +36,56 @@ from app.services.file_storage import FileStorageService
 router = APIRouter(prefix="/portal", tags=["client-portal"])
 internal_router = APIRouter(prefix="/packages", tags=["packages"])
 presets_router = APIRouter(prefix="/presets/packages", tags=["package-presets"])
+
+# The internal_router / presets_router are STAFF-facing (distinct from the
+# token-authed ``router`` /portal/* endpoints, which are guarded by _portal_auth).
+# They previously carried only get_session + get_tenant_record, so any tenant role
+# could read/mutate package presets & runs and — most sensitively — mint an
+# external 24h magic-link (create_portal_link) granting anonymous download/upload/
+# ticket access to run artifacts. Guard with least-privilege RBAC; link-minting is
+# tighter than general write access.
+_PORTAL_READ_ROLES = [
+    "admin",
+    "owner",
+    "ot_pb_lead",
+    "ot_head",
+    "ot_specialist",
+    "pb_engineer",
+    "manager",
+    "line_manager",
+    "auditor_ro",
+]
+_PORTAL_WRITE_ROLES = [
+    "admin",
+    "owner",
+    "ot_pb_lead",
+    "ot_head",
+    "ot_specialist",
+    "pb_engineer",
+    "manager",
+]
+_PORTAL_LINK_ROLES = ["admin", "owner", "ot_pb_lead", "ot_head", "manager"]
+
+
+def _tenant_resource_id(
+    tenant: Tenant = Depends(get_tenant_record),
+) -> str | None:  # pragma: no cover - fastapi wiring
+    return getattr(tenant, "id", None)
+
+
+PortalReadAccess = Depends(
+    abac(_tenant_resource_id, required_roles=_PORTAL_READ_ROLES, action="read package presets/runs")
+)
+PortalWriteAccess = Depends(
+    abac(
+        _tenant_resource_id,
+        required_roles=_PORTAL_WRITE_ROLES,
+        action="manage package presets/runs",
+    )
+)
+PortalLinkAccess = Depends(
+    abac(_tenant_resource_id, required_roles=_PORTAL_LINK_ROLES, action="issue portal link")
+)
 
 
 def _utcnow() -> datetime:
@@ -259,6 +310,7 @@ async def _get_run_for_tenant(
 async def list_presets(
     session: Annotated[AsyncSession, Depends(get_session)],
     tenant: Annotated[Tenant, Depends(get_tenant_record)],
+    _: AccessContext = PortalReadAccess,
 ):
     rows = (
         (
@@ -281,6 +333,7 @@ async def create_preset(
     payload: PackagePresetCreate,
     session: Annotated[AsyncSession, Depends(get_session)],
     tenant: Annotated[Tenant, Depends(get_tenant_record)],
+    _: AccessContext = PortalWriteAccess,
 ):
     record = ClientPackagePreset(tenant_id=tenant.id, **payload.model_dump())
     session.add(record)
@@ -296,6 +349,7 @@ async def patch_preset(
     payload: PackagePresetPatch,
     session: Annotated[AsyncSession, Depends(get_session)],
     tenant: Annotated[Tenant, Depends(get_tenant_record)],
+    _: AccessContext = PortalWriteAccess,
 ):
     record = await session.get(ClientPackagePreset, preset_id)
     if record is None or record.tenant_id != tenant.id or record.deleted_at is not None:
@@ -313,6 +367,7 @@ async def create_run(
     payload: PackageRunCreate,
     session: Annotated[AsyncSession, Depends(get_session)],
     tenant: Annotated[Tenant, Depends(get_tenant_record)],
+    _: AccessContext = PortalWriteAccess,
 ):
     preset = (
         await session.execute(
@@ -422,6 +477,7 @@ async def create_run(
 async def list_runs(
     session: Annotated[AsyncSession, Depends(get_session)],
     tenant: Annotated[Tenant, Depends(get_tenant_record)],
+    _: AccessContext = PortalReadAccess,
 ):
     rows = (
         (
@@ -443,6 +499,7 @@ async def get_run(
     run_id: str,
     session: Annotated[AsyncSession, Depends(get_session)],
     tenant: Annotated[Tenant, Depends(get_tenant_record)],
+    _: AccessContext = PortalReadAccess,
 ):
     return _serialize_package_run(
         await _get_run_for_tenant(session, run_id=run_id, tenant_id=str(tenant.id))
@@ -455,6 +512,7 @@ async def create_portal_link(
     run_id: str,
     session: Annotated[AsyncSession, Depends(get_session)],
     tenant: Annotated[Tenant, Depends(get_tenant_record)],
+    _: AccessContext = PortalLinkAccess,
 ):
     run = await _get_run_for_tenant(session, run_id=run_id, tenant_id=str(tenant.id))
     plain = secrets.token_urlsafe(24)

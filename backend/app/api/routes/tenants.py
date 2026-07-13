@@ -56,11 +56,14 @@ async def list_tenants_endpoint(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ) -> TenantPage:
-    if credentials:
-        payload = _require_admin(credentials)
-        token_tenant_slug = str(payload.get("tenant") or "").strip() or None
-        if token_tenant_slug and token_tenant_slug != tenant.slug:
-            raise HTTPException(status.HTTP_403_FORBIDDEN, "Tenant scope mismatch")
+    # Authentication is mandatory: HTTPBearer(auto_error=False) yields None for an
+    # anonymous caller, and the previous ``if credentials:`` guard silently skipped
+    # the admin check — letting an unauthenticated tenant-slug-only request list
+    # tenants. Always require an admin token.
+    payload = _require_admin(credentials)
+    token_tenant_slug = str(payload.get("tenant") or "").strip() or None
+    if token_tenant_slug and token_tenant_slug != tenant.slug:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Tenant scope mismatch")
 
     items, total = await list_tenants(session, tenant.slug, limit=limit, offset=offset)
     return TenantPage(items=items, total=total)
@@ -141,7 +144,12 @@ async def create_tenant_admin_endpoint(
 async def get_my_tenant_endpoint(
     session: SessionDep,
     tenant: Tenant = Depends(get_tenant_record),
+    access=Depends(abac(_tenant_resource_id, required_roles=_MANAGEMENT_ROLES, action="read")),
 ) -> dict[str, object]:
+    # Exposes tenant billing quotas — was reachable with no bearer token at all
+    # (only get_session + get_tenant_record). Gate to tenant management; general
+    # tenant context for any authenticated user is served by /tenancy/context.
+    _ = access
     quota = (
         await session.execute(select(TenantQuota).where(TenantQuota.tenant_id == tenant.id))
     ).scalar_one_or_none()
