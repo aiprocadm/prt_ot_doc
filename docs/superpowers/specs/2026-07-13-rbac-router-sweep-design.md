@@ -67,6 +67,43 @@ Read vs write rule: `GET` = read; `POST/PATCH/PUT/DELETE` that mutates = write;
 - Additional lower-severity / different-class hardening items are tracked as separate
   internal tasks (not enumerated here — public repo).
 
+### Follow-up — lax role granularity (resolved 2026-07-13)
+
+These endpoints already required auth (`rbac([])`) but imposed **no role** — any
+authenticated tenant user, incl. a `worker`, could perform tenant-wide config writes.
+Restricted to management/specialist roles, mirroring the 618614d9 read/write sets
+(`abac(_tenant_resource_id, required_roles=…)`):
+
+| Router | Endpoint(s) | Guard |
+|--------|-------------|-------|
+| `notifications` | `GET /templates` / `POST /templates` | MGMT_READ / DOC_WRITE |
+| `npa` | `POST /{act_id}/impact/tasks` | DOC_WRITE (reads stay authn-only) |
+| `compliance` | `POST /deadlines/recompute` | ADMIN_OWNER (mirrors analytics `/recompute`) |
+| `headers` | `GET /layout-presets*` / `POST·PATCH·DELETE /layout-presets*`, `POST /documents/{id}/apply-headers` | MGMT_READ / DOC_WRITE |
+| `workflow` | `POST /definitions`, `/versions/{id}/publish·archive`, `POST /instances` | DOC_WRITE |
+
+`workflow` gating is deliberately surgical: `GET /tasks` (self-scoped) and the task
+actions (complete/reassign/delegate/escalate — already guarded in-service against the
+task's `assignee_role_code`) stay authn-only, or a worker could not action their own
+tasks. `POST /definitions/validate` is pure graph validation (no write) → authn-only.
+
+**Self-scoped views reviewed — in-body scoping confirmed sufficient, no gating added**
+(gating would break the workers they serve):
+- `pwa_sync` — every write attributed to `access.user.id`, payload sanitised of
+  `tenant_id`/`user_id` spoofing; `sync_status`/`resolve_conflict` gated by
+  `_ensure_owner_or_admin`; `bootstrap` returns only the caller's own scoped data.
+- `workspace` — `_worker_like_role` scopes worker task queries to `assignee_id ==
+  user.id`; `role-summary`/`users/me/workspace` return the caller's own projection.
+- `search` — query/suggest tenant-scoped via `SearchService(tenant_id=…)`;
+  recent/saved scoped by `user_id`; `reindex` already gated admin/owner in the sweep.
+- `tenancy` — `GET /context` returns only the caller's own tenant quota/usage; noted
+  as a minor infoleak candidate (`schema_name`) but left authn-only since the frontend
+  loads it globally and it is not cross-tenant.
+
+Tests: `tests/api/test_rbac_sweep_deferred.py` (23 cases, incl. regression guards that
+the un-gated self-scoped views stay open to a worker). Gates: ruff+black clean; OpenAPI
+ARCH-4 unchanged (848 ops / 696 schemas).
+
 ## Test plan
 
 Tests in `tests/api/` using the DB fixtures from `tests/conftest.py`. Contract mirrors
