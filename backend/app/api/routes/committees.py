@@ -1,11 +1,13 @@
-"""Endpoints for committees / commissions / meetings (P10-01 срез-1, TZ B.17)."""
+"""Endpoints for committees / commissions / meetings (P10-01 срез-1/срез-2, TZ B.17)."""
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
@@ -20,22 +22,31 @@ from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
 from app.domains.committees.lifecycle import (
     MeetingTransitionError,
+    ensure_can_vote,
     ensure_meeting_held,
+    is_quorum,
+    next_protocol_seq,
+    validate_hold,
     validate_meeting_transition,
 )
-from app.domains.committees.service import build_protocol, task_to_read
+from app.domains.committees.service import build_protocol, task_to_read, vote_summary
 from app.models.committees import (
     Committee,
     CommitteeAgendaItem,
     CommitteeDecision,
     CommitteeDecisionTask,
+    CommitteeDecisionVote,
     CommitteeMeeting,
+    CommitteeMeetingAttendance,
     CommitteeMember,
+    MeetingStatus,
 )
 from app.models.tenanting import Tenant
 from app.schemas.committees import (
     AgendaItemCreate,
     AgendaItemRead,
+    AttendanceBulkUpdate,
+    AttendanceRead,
     CommitteeCreate,
     CommitteePage,
     CommitteeRead,
@@ -45,13 +56,18 @@ from app.schemas.committees import (
     DecisionTaskCreate,
     DecisionTaskRead,
     DecisionTaskUpdate,
+    DecisionVoteSummary,
     MeetingCreate,
     MeetingPage,
     MeetingRead,
     MeetingStatusUpdate,
     MemberCreate,
     MemberRead,
+    ProtocolJournalItem,
+    ProtocolJournalPage,
     ProtocolRead,
+    VoteCreate,
+    VoteRead,
 )
 
 router = APIRouter(prefix="/committees", tags=["committees"])
@@ -99,6 +115,13 @@ def _conflict(exc: MeetingTransitionError) -> HTTPException:
 
 def _not_found(what: str) -> HTTPException:
     return HTTPException(status.HTTP_404_NOT_FOUND, f"{what} not found")
+
+
+def _err(code: str, message: str, status_code: int) -> HTTPException:
+    return HTTPException(
+        status_code=status_code,
+        detail=api_problem_detail(code=code, message=message, error_type="committees"),
+    )
 
 
 # --- tenant-scoped getters (patched in tests) ---
@@ -159,6 +182,70 @@ async def _get_task(session: AsyncSession, tenant: Tenant, tid: str) -> Committe
     return row
 
 
+# --- proceedings query helpers (patched in tests → module-level functions) ---
+async def _count_members(session: AsyncSession, tenant: Tenant, committee_id: str) -> int:
+    return int(
+        (
+            await session.execute(
+                select(func.count(func.distinct(CommitteeMember.person_id))).where(
+                    CommitteeMember.committee_id == committee_id,
+                    CommitteeMember.tenant_id == tenant.id,
+                )
+            )
+        ).scalar_one()
+        or 0
+    )
+
+
+async def _count_present(session: AsyncSession, tenant: Tenant, meeting_id: str) -> int:
+    return int(
+        (
+            await session.execute(
+                select(func.count()).where(
+                    CommitteeMeetingAttendance.meeting_id == meeting_id,
+                    CommitteeMeetingAttendance.tenant_id == tenant.id,
+                    CommitteeMeetingAttendance.present.is_(True),
+                )
+            )
+        ).scalar_one()
+        or 0
+    )
+
+
+async def _is_present(
+    session: AsyncSession, tenant: Tenant, meeting_id: str, person_id: str
+) -> bool:
+    row = (
+        await session.execute(
+            select(CommitteeMeetingAttendance.id).where(
+                CommitteeMeetingAttendance.meeting_id == meeting_id,
+                CommitteeMeetingAttendance.tenant_id == tenant.id,
+                CommitteeMeetingAttendance.person_id == person_id,
+                CommitteeMeetingAttendance.present.is_(True),
+            )
+        )
+    ).scalar_one_or_none()
+    return row is not None
+
+
+async def _committee_member_person_ids(
+    session: AsyncSession, tenant: Tenant, committee_id: str
+) -> set[str]:
+    rows = (
+        (
+            await session.execute(
+                select(CommitteeMember.person_id).where(
+                    CommitteeMember.committee_id == committee_id,
+                    CommitteeMember.tenant_id == tenant.id,
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return set(rows)
+
+
 # --- Committees ---
 @router.get("", response_model=CommitteePage)
 async def list_committees(
@@ -203,6 +290,87 @@ async def list_committees(
         limit=limit,
         offset=offset,
     )
+
+
+# NOTE: /protocols MUST be declared before GET /{cid} — FastAPI matches by
+# declaration order; otherwise GET /committees/protocols binds cid="protocols".
+@router.get("/protocols", response_model=ProtocolJournalPage)
+async def list_protocols(
+    request: Request,
+    response: Response,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: Access,
+    committee_id: str | None = Query(None),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+) -> ProtocolJournalPage | Response:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    await _require_committees_enabled(session, tenant)
+    conds = [
+        CommitteeMeeting.tenant_id == tenant.id,
+        CommitteeMeeting.deleted_at.is_(None),
+        CommitteeMeeting.protocol_seq.is_not(None),
+    ]
+    if committee_id:
+        conds.append(CommitteeMeeting.committee_id == committee_id)
+    stmt = (
+        select(CommitteeMeeting, Committee.name)
+        .join(Committee, Committee.id == CommitteeMeeting.committee_id)
+        .where(*conds)
+        .order_by(
+            CommitteeMeeting.protocol_year.desc(),
+            CommitteeMeeting.protocol_seq.desc(),
+        )
+        .limit(limit)
+        .offset(offset)
+    )
+    rows = list((await session.execute(stmt)).all())
+    total = (await session.execute(select(func.count()).where(*conds))).scalar_one()
+    # decisions_count per meeting (single grouped query)
+    meeting_ids = [m.id for m, _ in rows]
+    counts: dict[str, int] = {}
+    if meeting_ids:
+        for mid_, cnt in (
+            await session.execute(
+                select(CommitteeDecision.meeting_id, func.count())
+                .where(
+                    CommitteeDecision.meeting_id.in_(meeting_ids),
+                    CommitteeDecision.tenant_id == tenant.id,
+                )
+                .group_by(CommitteeDecision.meeting_id)
+            )
+        ).all():
+            counts[mid_] = cnt
+    items = [
+        ProtocolJournalItem(
+            meeting_id=m.id,
+            committee_id=m.committee_id,
+            committee_name=name,
+            protocol_no=f"{m.protocol_seq}/{m.protocol_year}",
+            held_at=m.held_at,
+            members_total=m.members_total,
+            present_count=m.present_count,
+            decisions_count=counts.get(m.id, 0),
+        )
+        for m, name in rows
+    ]
+    etag = compute_list_etag(
+        tenant_id=str(tenant.id),
+        items=[m for m, _ in rows],
+        scalars=[
+            ("total", int(total or 0)),
+            ("limit", limit),
+            ("offset", offset),
+            ("cid", committee_id or ""),
+        ],
+    )
+    apply_etag_response_headers(response, etag)
+    if request.headers.get("if-none-match") == etag:
+        return Response(
+            status_code=status.HTTP_304_NOT_MODIFIED, headers=build_not_modified_headers(etag)
+        )
+    return ProtocolJournalPage(items=items, total=int(total or 0), limit=limit, offset=offset)
 
 
 @router.post("", response_model=CommitteeRead, status_code=status.HTTP_201_CREATED)
@@ -376,6 +544,54 @@ async def update_meeting(
     TenantContextValidator.ensure_tenant_context(tenant)
     await _require_committees_enabled(session, tenant)
     row = await _get_meeting(session, tenant, mid)
+    if payload.status is MeetingStatus.HELD:
+        members_total = await _count_members(session, tenant, row.committee_id)
+        present_count = await _count_present(session, tenant, mid)
+        quorum = is_quorum(members_total, present_count)
+        try:
+            validate_hold(row.status, quorum)
+        except MeetingTransitionError as exc:
+            if not quorum:
+                raise _err(
+                    "COMMITTEE_QUORUM_NOT_MET",
+                    "Quorum not met",
+                    status.HTTP_409_CONFLICT,
+                )
+            raise _conflict(exc)
+        now = datetime.now(tz=timezone.utc)
+        year = now.year
+        seqs = (
+            (
+                await session.execute(
+                    select(CommitteeMeeting.protocol_seq).where(
+                        CommitteeMeeting.committee_id == row.committee_id,
+                        CommitteeMeeting.tenant_id == tenant.id,
+                        CommitteeMeeting.protocol_year == year,
+                        CommitteeMeeting.protocol_seq.is_not(None),
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        row.protocol_seq = next_protocol_seq([s for s in seqs if s is not None])
+        row.protocol_year = year
+        row.held_at = now
+        row.members_total = members_total
+        row.present_count = present_count
+        row.quorum_met = True
+        row.status = MeetingStatus.HELD
+        try:
+            await session.flush()
+        except IntegrityError:
+            await session.rollback()
+            raise _err(
+                "COMMITTEE_PROTOCOL_CONFLICT",
+                "Protocol number conflict, retry",
+                status.HTTP_409_CONFLICT,
+            )
+        await session.refresh(row)
+        return MeetingRead.model_validate(row, from_attributes=True)
     try:
         validate_meeting_transition(row.status, payload.status)
     except MeetingTransitionError as exc:
@@ -384,6 +600,83 @@ async def update_meeting(
     await session.flush()
     await session.refresh(row)
     return MeetingRead.model_validate(row, from_attributes=True)
+
+
+# --- Attendance ---
+@router.get("/meetings/{mid}/attendance", response_model=list[AttendanceRead])
+async def get_attendance(
+    mid: str, tenant: TenantDep, session: SessionDep, access: Access
+) -> list[AttendanceRead]:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    await _require_committees_enabled(session, tenant)
+    await _get_meeting(session, tenant, mid)
+    rows = (
+        (
+            await session.execute(
+                select(CommitteeMeetingAttendance).where(
+                    CommitteeMeetingAttendance.meeting_id == mid,
+                    CommitteeMeetingAttendance.tenant_id == tenant.id,
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return [AttendanceRead.model_validate(r, from_attributes=True) for r in rows]
+
+
+@router.put("/meetings/{mid}/attendance", response_model=list[AttendanceRead])
+async def put_attendance(
+    mid: str,
+    payload: AttendanceBulkUpdate,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: Access,
+) -> list[AttendanceRead]:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    await _require_committees_enabled(session, tenant)
+    meeting = await _get_meeting(session, tenant, mid)
+    if meeting.status is not MeetingStatus.PLANNED:
+        raise _err(
+            "COMMITTEE_MEETING_NOT_PLANNED",
+            "Attendance editable only before the meeting is held",
+            status.HTTP_409_CONFLICT,
+        )
+    member_ids = await _committee_member_person_ids(session, tenant, meeting.committee_id)
+    for item in payload.items:
+        if item.person_id not in member_ids:
+            raise _err(
+                "COMMITTEE_NOT_A_MEMBER",
+                f"person {item.person_id} is not a committee member",
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
+    existing = (
+        (
+            await session.execute(
+                select(CommitteeMeetingAttendance).where(
+                    CommitteeMeetingAttendance.meeting_id == mid,
+                    CommitteeMeetingAttendance.tenant_id == tenant.id,
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    by_person = {r.person_id: r for r in existing}
+    for item in payload.items:
+        row = by_person.get(item.person_id)
+        if row is None:
+            row = CommitteeMeetingAttendance(
+                tenant_id=tenant.id,
+                meeting_id=mid,
+                person_id=item.person_id,
+                present=item.present,
+            )
+            session.add(row)
+        else:
+            row.present = item.present
+    await session.flush()
+    return await get_attendance(mid=mid, tenant=tenant, session=session, access=access)
 
 
 @router.post(
@@ -457,7 +750,7 @@ async def get_protocol(
         .scalars()
         .all()
     )
-    pairs = []
+    triples = []
     for d in decisions:
         tasks = list(
             (
@@ -471,8 +764,20 @@ async def get_protocol(
             .scalars()
             .all()
         )
-        pairs.append((d, tasks))
-    return build_protocol(meeting, pairs)
+        votes = list(
+            (
+                await session.execute(
+                    select(CommitteeDecisionVote).where(
+                        CommitteeDecisionVote.decision_id == d.id,
+                        CommitteeDecisionVote.tenant_id == tenant.id,
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        triples.append((d, tasks, votes))
+    return build_protocol(meeting, triples)
 
 
 @router.post(
@@ -509,3 +814,68 @@ async def update_task(
     await session.flush()
     await session.refresh(row)
     return task_to_read(row)
+
+
+# --- Votes ---
+@router.post("/decisions/{did}/votes", response_model=VoteRead, status_code=status.HTTP_201_CREATED)
+async def cast_vote(
+    did: str, payload: VoteCreate, tenant: TenantDep, session: SessionDep, access: Access
+) -> VoteRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    await _require_committees_enabled(session, tenant)
+    decision = await _get_decision(session, tenant, did)
+    meeting = await _get_meeting(session, tenant, decision.meeting_id)
+    try:
+        ensure_can_vote(meeting.status)
+    except MeetingTransitionError as exc:
+        raise _err("COMMITTEE_DECISION_NOT_HELD", str(exc), status.HTTP_409_CONFLICT)
+    if not await _is_present(session, tenant, decision.meeting_id, payload.person_id):
+        raise _err(
+            "COMMITTEE_VOTER_ABSENT",
+            "Voter not present at meeting",
+            status.HTTP_409_CONFLICT,
+        )
+    existing = (
+        await session.execute(
+            select(CommitteeDecisionVote).where(
+                CommitteeDecisionVote.decision_id == did,
+                CommitteeDecisionVote.tenant_id == tenant.id,
+                CommitteeDecisionVote.person_id == payload.person_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if existing is None:
+        existing = CommitteeDecisionVote(
+            tenant_id=tenant.id,
+            decision_id=did,
+            person_id=payload.person_id,
+            choice=payload.choice,
+        )
+        session.add(existing)
+    else:
+        existing.choice = payload.choice
+    await session.flush()
+    await session.refresh(existing)
+    return VoteRead.model_validate(existing, from_attributes=True)
+
+
+@router.get("/decisions/{did}/votes", response_model=DecisionVoteSummary)
+async def get_votes(
+    did: str, tenant: TenantDep, session: SessionDep, access: Access
+) -> DecisionVoteSummary:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    await _require_committees_enabled(session, tenant)
+    await _get_decision(session, tenant, did)
+    votes = (
+        (
+            await session.execute(
+                select(CommitteeDecisionVote).where(
+                    CommitteeDecisionVote.decision_id == did,
+                    CommitteeDecisionVote.tenant_id == tenant.id,
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return vote_summary(did, votes)
