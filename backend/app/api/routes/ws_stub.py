@@ -15,9 +15,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.core.security import AccessContext, rbac
 from app.models.models import Outbox, Tenant
 
 router = APIRouter()
+
+# Outbox event/destination metadata is integration-internal; restrict to admin/owner.
+_WsEventsAccess = Depends(rbac(["admin", "owner"]))
 
 
 class WsEventItem(BaseModel):
@@ -47,6 +51,7 @@ async def ws_events_stub(
     tenant: Tenant = Depends(get_tenant_record),
     limit: int = Query(50, ge=1, le=200),
     since: datetime | None = Query(default=None),
+    _: AccessContext = _WsEventsAccess,
 ) -> WsEventsFallbackResponse:
     stmt = select(Outbox).where(Outbox.tenant_id == str(tenant.id))
     if since is not None:

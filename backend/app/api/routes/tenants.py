@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.audit_decorator import audit_operation
-from app.core.security import abac, verify_token
+from app.core.security import AccessContext, abac, rbac, verify_token
 from app.db.session import _create_tenant_schema, resolve_tenant_schema
 from app.models.models import RoleEnum, Tenant, TenantQuota, TenantSettings
 from app.repository import list_tenants
@@ -56,11 +56,14 @@ async def list_tenants_endpoint(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ) -> TenantPage:
-    if credentials:
-        payload = _require_admin(credentials)
-        token_tenant_slug = str(payload.get("tenant") or "").strip() or None
-        if token_tenant_slug and token_tenant_slug != tenant.slug:
-            raise HTTPException(status.HTTP_403_FORBIDDEN, "Tenant scope mismatch")
+    # Authentication is mandatory: previously the admin check ran only ``if
+    # credentials`` — an anonymous caller (tenant slug only, no token) skipped it and
+    # received the tenant record page. ``_require_admin`` raises 401 when no token is
+    # present and 403 for a non-admin role.
+    payload = _require_admin(credentials)
+    token_tenant_slug = str(payload.get("tenant") or "").strip() or None
+    if token_tenant_slug and token_tenant_slug != tenant.slug:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Tenant scope mismatch")
 
     items, total = await list_tenants(session, tenant.slug, limit=limit, offset=offset)
     return TenantPage(items=items, total=total)
@@ -141,6 +144,7 @@ async def create_tenant_admin_endpoint(
 async def get_my_tenant_endpoint(
     session: SessionDep,
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = Depends(rbac()),
 ) -> dict[str, object]:
     quota = (
         await session.execute(select(TenantQuota).where(TenantQuota.tenant_id == tenant.id))

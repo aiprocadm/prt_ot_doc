@@ -410,6 +410,7 @@ async def reindex_file_content_v2(
     file_id: str,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = WRITE_ACCESS_DEP,
 ) -> ReindexFileResponse:
     file_record = await session.get(FileRecord, file_id)
     if file_record is None:

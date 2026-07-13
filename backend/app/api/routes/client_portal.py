@@ -6,6 +6,7 @@ import json
 import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Annotated, Any
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from fastapi.encoders import jsonable_encoder
@@ -16,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.audit_decorator import audit_operation
 from app.core.config import get_settings
+from app.core.security import AccessContext, abac
 from app.models.models import (
     ClientPackagePreset,
     ClientPackageRun,
@@ -35,6 +37,34 @@ from app.services.file_storage import FileStorageService
 router = APIRouter(prefix="/portal", tags=["client-portal"])
 internal_router = APIRouter(prefix="/packages", tags=["packages"])
 presets_router = APIRouter(prefix="/presets/packages", tags=["package-presets"])
+
+
+_STAFF_READ_ROLES = [
+    "admin",
+    "owner",
+    "hr",
+    "line_manager",
+    "manager",
+    "ot_pb_lead",
+    "ot_head",
+    "ot_specialist",
+    "pb_engineer",
+    "accountant",
+    "auditor_ro",
+]
+_STAFF_WRITE_ROLES = ["admin", "owner", "ot_specialist"]
+
+
+def _staff_tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> UUID | None:
+    return getattr(tenant, "id", None)
+
+
+StaffReadAccess = Depends(
+    abac(_staff_tenant_resource_id, required_roles=_STAFF_READ_ROLES, action="read packages")
+)
+StaffWriteAccess = Depends(
+    abac(_staff_tenant_resource_id, required_roles=_STAFF_WRITE_ROLES, action="manage packages")
+)
 
 
 def _utcnow() -> datetime:
@@ -259,6 +289,7 @@ async def _get_run_for_tenant(
 async def list_presets(
     session: Annotated[AsyncSession, Depends(get_session)],
     tenant: Annotated[Tenant, Depends(get_tenant_record)],
+    _: AccessContext = StaffReadAccess,
 ):
     rows = (
         (
@@ -281,6 +312,7 @@ async def create_preset(
     payload: PackagePresetCreate,
     session: Annotated[AsyncSession, Depends(get_session)],
     tenant: Annotated[Tenant, Depends(get_tenant_record)],
+    _: AccessContext = StaffWriteAccess,
 ):
     record = ClientPackagePreset(tenant_id=tenant.id, **payload.model_dump())
     session.add(record)
@@ -296,6 +328,7 @@ async def patch_preset(
     payload: PackagePresetPatch,
     session: Annotated[AsyncSession, Depends(get_session)],
     tenant: Annotated[Tenant, Depends(get_tenant_record)],
+    _: AccessContext = StaffWriteAccess,
 ):
     record = await session.get(ClientPackagePreset, preset_id)
     if record is None or record.tenant_id != tenant.id or record.deleted_at is not None:
@@ -313,6 +346,7 @@ async def create_run(
     payload: PackageRunCreate,
     session: Annotated[AsyncSession, Depends(get_session)],
     tenant: Annotated[Tenant, Depends(get_tenant_record)],
+    _: AccessContext = StaffWriteAccess,
 ):
     preset = (
         await session.execute(
@@ -422,6 +456,7 @@ async def create_run(
 async def list_runs(
     session: Annotated[AsyncSession, Depends(get_session)],
     tenant: Annotated[Tenant, Depends(get_tenant_record)],
+    _: AccessContext = StaffReadAccess,
 ):
     rows = (
         (
@@ -443,6 +478,7 @@ async def get_run(
     run_id: str,
     session: Annotated[AsyncSession, Depends(get_session)],
     tenant: Annotated[Tenant, Depends(get_tenant_record)],
+    _: AccessContext = StaffReadAccess,
 ):
     return _serialize_package_run(
         await _get_run_for_tenant(session, run_id=run_id, tenant_id=str(tenant.id))
@@ -455,6 +491,7 @@ async def create_portal_link(
     run_id: str,
     session: Annotated[AsyncSession, Depends(get_session)],
     tenant: Annotated[Tenant, Depends(get_tenant_record)],
+    _: AccessContext = StaffWriteAccess,
 ):
     run = await _get_run_for_tenant(session, run_id=run_id, tenant_id=str(tenant.id))
     plain = secrets.token_urlsafe(24)

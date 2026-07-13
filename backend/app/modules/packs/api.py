@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Response, status
 from sqlalchemy import select
@@ -8,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.errors import api_problem_detail
+from app.core.security import AccessContext, abac
 from app.models.models import (
     PackagePresetItem,
     PackRun,
@@ -46,6 +48,29 @@ from app.modules.packs.service import (
 router = APIRouter(tags=["packs-v2"])
 
 _PACKS_V2_TYPE = "packs"
+
+_READ_ROLES = [
+    "admin",
+    "owner",
+    "hr",
+    "line_manager",
+    "manager",
+    "ot_pb_lead",
+    "ot_head",
+    "ot_specialist",
+    "pb_engineer",
+    "accountant",
+    "auditor_ro",
+]
+_WRITE_ROLES = ["admin", "owner", "ot_specialist"]
+
+
+def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> UUID | None:
+    return getattr(tenant, "id", None)
+
+
+ReadAccess = Depends(abac(_tenant_resource_id, required_roles=_READ_ROLES, action="read packs"))
+WriteAccess = Depends(abac(_tenant_resource_id, required_roles=_WRITE_ROLES, action="write packs"))
 
 
 def _not_found(code: str, message: str) -> HTTPException:
@@ -137,6 +162,7 @@ async def create_profile(
     payload: PackageProfileCreate,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = WriteAccess,
 ) -> PackageProfileRead:
     model = await PackageService(session).create_profile(
         tenant_id=str(tenant.id), payload=payload.model_dump()
@@ -147,7 +173,9 @@ async def create_profile(
 
 @router.get("/package-profiles", response_model=list[PackageProfileRead])
 async def list_profiles(
-    session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = ReadAccess,
 ) -> list[PackageProfileRead]:
     rows = await PackageService(session).list_profiles(tenant_id=str(tenant.id))
     return [_profile_read(row) for row in rows]
@@ -158,6 +186,7 @@ async def get_profile(
     profile_id: str,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = ReadAccess,
 ) -> PackageProfileRead:
     model = await PackageService(session).get_profile(
         tenant_id=str(tenant.id), profile_id=profile_id
@@ -173,6 +202,7 @@ async def patch_profile(
     payload: PackageProfilePatch,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = WriteAccess,
 ) -> PackageProfileRead:
     model = await PackageService(session).get_profile(
         tenant_id=str(tenant.id), profile_id=profile_id
@@ -190,6 +220,7 @@ async def delete_profile(
     profile_id: str,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = WriteAccess,
 ) -> Response:
     model = await PackageService(session).get_profile(
         tenant_id=str(tenant.id), profile_id=profile_id
@@ -210,6 +241,7 @@ async def create_preset(
     payload: PackagePresetCreate,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = WriteAccess,
 ) -> PackagePresetRead:
     service = PackageService(session)
     model = await service.create_preset(tenant_id=str(tenant.id), payload=payload.model_dump())
@@ -219,7 +251,9 @@ async def create_preset(
 
 @router.get("/package-presets", response_model=list[PackagePresetRead])
 async def list_presets(
-    session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = ReadAccess,
 ) -> list[PackagePresetRead]:
     service = PackageService(session)
     rows = await service.list_presets(tenant_id=str(tenant.id))
@@ -231,6 +265,7 @@ async def get_preset(
     preset_id: str,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = ReadAccess,
 ) -> PackagePresetRead:
     service = PackageService(session)
     model = await service.get_preset(tenant_id=str(tenant.id), preset_id=preset_id)
@@ -245,6 +280,7 @@ async def patch_preset(
     payload: PackagePresetPatch,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = WriteAccess,
 ) -> PackagePresetRead:
     service = PackageService(session)
     model = await service.get_preset(tenant_id=str(tenant.id), preset_id=preset_id)
@@ -266,6 +302,7 @@ async def create_preset_item(
     payload: PackagePresetItemCreate,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = WriteAccess,
 ) -> PackagePresetItemRead:
     service = PackageService(session)
     preset = await service.get_preset(tenant_id=str(tenant.id), preset_id=preset_id)
@@ -283,6 +320,7 @@ async def patch_preset_item(
     payload: PackagePresetItemPatch,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = WriteAccess,
 ) -> PackagePresetItemRead:
     service = PackageService(session)
     item = await service.get_item(str(tenant.id), preset_id, item_id)
@@ -305,6 +343,7 @@ async def delete_preset_item(
     item_id: str,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = WriteAccess,
 ) -> Response:
     from datetime import datetime, timezone
 
@@ -322,6 +361,7 @@ async def delete_preset(
     preset_id: str,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = WriteAccess,
 ) -> Response:
     from datetime import datetime, timezone
 
@@ -339,6 +379,7 @@ async def validate_preset(
     preset_id: str,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = ReadAccess,
 ) -> dict[str, Any]:
     service = PackageService(session)
     preset = await service.get_preset(tenant_id=str(tenant.id), preset_id=preset_id)
@@ -373,6 +414,7 @@ async def upload_source_preview(
     payload: MappingPreviewRequest,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = ReadAccess,
 ) -> SourcePreviewRead:
     service = PackageService(session)
     preset = await service.get_preset(tenant_id=str(tenant.id), preset_id=preset_id)
@@ -396,6 +438,7 @@ async def preview_mapping(
     payload: MappingPreviewRequest,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = ReadAccess,
 ) -> dict[str, Any]:
     service = PackageService(session)
     preset = await service.get_preset(tenant_id=str(tenant.id), preset_id=preset_id)
@@ -417,6 +460,7 @@ async def create_pack_run(
     x_tenant: str | None = Header(default=None, alias="X-Tenant"),
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = WriteAccess,
 ) -> PackRunAccepted:
     if not x_tenant:
         raise _bad_request("X_TENANT_REQUIRED", "X-Tenant header is required", field="X-Tenant")
@@ -445,7 +489,9 @@ async def create_pack_run(
 
 @router.get("/pack-runs", response_model=list[PackRunRead])
 async def list_runs(
-    session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = ReadAccess,
 ) -> list[PackRunRead]:
     rows = (
         (
@@ -480,6 +526,7 @@ async def get_run(
     run_id: str,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = ReadAccess,
 ) -> PackRunRead:
     row = await session.get(PackRun, run_id)
     if row is None or row.tenant_id != str(tenant.id):
@@ -503,6 +550,7 @@ async def list_run_items(
     run_id: str,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = ReadAccess,
 ) -> list[PackRunItemRead]:
     rows = (
         (
@@ -532,6 +580,7 @@ async def get_timeline(
     run_id: str,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = ReadAccess,
 ) -> list[PackRunLogRead]:
     rows = (
         (
@@ -552,6 +601,7 @@ async def cancel_run(
     run_id: str,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = WriteAccess,
 ) -> PackRunRead:
     row = await session.get(PackRun, run_id)
     if row is None or row.tenant_id != str(tenant.id):
@@ -566,6 +616,7 @@ async def retry_failed(
     run_id: str,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = WriteAccess,
 ) -> dict[str, int]:
     rows = (
         (
@@ -593,6 +644,7 @@ async def download_run(
     run_id: str,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = ReadAccess,
 ) -> DownloadRead:
     row = await session.get(PackRun, run_id)
     if row is None or row.tenant_id != str(tenant.id):
