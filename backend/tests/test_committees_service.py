@@ -1,10 +1,11 @@
 """Unit: committees service projection helpers (P10-01)."""
+
 from __future__ import annotations
 
 from datetime import date, datetime, timezone
 from types import SimpleNamespace
 
-from app.domains.committees.service import task_to_read, build_protocol
+from app.domains.committees.service import build_protocol, task_to_read
 from app.models.committees import DecisionTaskStatus, MeetingStatus
 
 TODAY = date(2026, 6, 25)
@@ -12,8 +13,12 @@ TODAY = date(2026, 6, 25)
 
 def _task(**kw):
     base = dict(
-        id="t1", decision_id="d1", assignee_person_id=None,
-        due_date=None, status=DecisionTaskStatus.OPEN, evidence_note=None,
+        id="t1",
+        decision_id="d1",
+        assignee_person_id=None,
+        due_date=None,
+        status=DecisionTaskStatus.OPEN,
+        evidence_note=None,
     )
     base.update(kw)
     return SimpleNamespace(**base)
@@ -33,18 +38,23 @@ def test_task_to_read_done_not_overdue():
 
 def test_build_protocol_groups_tasks_under_decisions():
     meeting = SimpleNamespace(
-        id="m1", committee_id="c1",
+        id="m1",
+        committee_id="c1",
         scheduled_at=datetime(2026, 6, 20, tzinfo=timezone.utc),
-        location=None, status=MeetingStatus.HELD,
+        location=None,
+        status=MeetingStatus.HELD,
         created_at=datetime(2026, 6, 20, tzinfo=timezone.utc),
         updated_at=datetime(2026, 6, 20, tzinfo=timezone.utc),
     )
     decision = SimpleNamespace(
-        id="d1", meeting_id="m1", agenda_item_id=None,
-        text="Закупить СИЗ", decided_at=datetime(2026, 6, 20, tzinfo=timezone.utc),
+        id="d1",
+        meeting_id="m1",
+        agenda_item_id=None,
+        text="Закупить СИЗ",
+        decided_at=datetime(2026, 6, 20, tzinfo=timezone.utc),
     )
     tasks = [_task(id="t1", decision_id="d1", due_date=date(2026, 6, 1))]
-    proto = build_protocol(meeting, [(decision, tasks)], today=TODAY)
+    proto = build_protocol(meeting, [(decision, tasks, [])], today=TODAY)
     assert proto.meeting.id == "m1"
     assert len(proto.decisions) == 1
     assert proto.decisions[0].decision.text == "Закупить СИЗ"
