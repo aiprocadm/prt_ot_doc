@@ -41,6 +41,7 @@ export const PERMISSIONS = {
   FIRE_INSPECTIONS_VIEW: "fire_inspections.view",
   REFERENCE_VIEW: "reference.view",
   CONTRACTOR_VIEW: "contractor.view",
+  CONTRACTOR_MANAGE: "contractor.manage",
   CRM_FINANCE_VIEW: "crm_finance.view",
   INTEGRATIONS_VIEW: "integrations.view",
   CLIENT_PORTAL_VIEW: "client_portal.view",

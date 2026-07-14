@@ -32,6 +32,7 @@ export const FireTrainingPage = lazy(() => import("@/pages/fire-training/FireTra
 export const FireInspectionsPage = lazy(() => import("@/pages/fire-inspections/FireInspectionsPage"));
 export const ReferencePage = lazy(() => import("@/pages/reference/ReferencePage"));
 export const ContractorsPage = lazy(() => import("@/pages/contractors/ContractorsPage"));
+export const ContractorDetailPage = lazy(() => import("@/pages/contractors/ContractorDetailPage"));
 export const AdminPage = lazy(() => import("@/pages/admin/AdminPage"));
 export const OutboxPage = lazy(() => import("@/pages/admin/OutboxPage"));
 export const HealthStatusPage = lazy(() => import("@/pages/admin/HealthStatusPage"));

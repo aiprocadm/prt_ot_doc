@@ -3,12 +3,10 @@ import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import AdminPage from "@/pages/admin/AdminPage";
-import ContractorsPage from "@/pages/contractors/ContractorsPage";
 import MedicalPage from "@/pages/medical/MedicalPage";
 import SettingsPage from "@/pages/settings/SettingsPage";
 
 const operationsApiMock = vi.hoisted(() => ({
-  getContractorSnapshot: vi.fn(),
   getSettingsSnapshot: vi.fn(),
   getMedicalSnapshot: vi.fn(),
   getAdminSnapshot: vi.fn(),
@@ -33,27 +31,9 @@ describe("real-data operational pages", () => {
     Object.values(operationsApiMock).forEach((mock) => mock.mockReset());
   });
 
-  it("renders contractors registry from companies/sites/contracts snapshot", async () => {
-    operationsApiMock.getContractorSnapshot.mockResolvedValue({
-      companies: [{ id: "ctr-1", name: "ООО Альфа Подряд", status: "active", company_id: "c-1" }],
-      hostCompanies: [{ id: "c-1", name: "ООО Альфа", activity_type: "Монтаж", hazardous_factors: ["noise"] }],
-      sites: [{ id: "s-1", company_id: "c-1", name: "Площадка 1" }],
-      contracts: [{ id: "ctr-1", company_id: "c-1", status: "active" }],
-      employees: [],
-      incidents: [],
-      complianceSummary: { employees_total: 0, admission: {}, training: {}, medical: {} }
-    });
-
-    render(
-      <MemoryRouter>
-        <ContractorsPage />
-      </MemoryRouter>
-    );
-
-    expect(await screen.findByText("ООО Альфа Подряд")).toBeInTheDocument();
-    expect(screen.getAllByText("ООО Альфа").length).toBeGreaterThan(0);
-    expect(screen.getByText("Низкий")).toBeInTheDocument();
-  });
+  // Contractors moved off the operations-snapshot pattern to a dedicated
+  // contractorsApi client; its coverage now lives in
+  // src/pages/contractors/ContractorsPage.test.tsx.
 
   it("renders tenant settings snapshot instead of placeholder copy", async () => {
     operationsApiMock.getSettingsSnapshot.mockResolvedValue({
