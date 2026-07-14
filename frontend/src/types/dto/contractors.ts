@@ -12,7 +12,7 @@ export type DocType =
   | "qualification"
   | "other";
 export type DocScope = "company" | "employee";
-export type AdmissionStatus = "ok" | "warning" | "blocked";
+export type AdmissionStatus = "allowed" | "warning" | "blocked";
 
 export interface ContractorRegistry {
   id: string;

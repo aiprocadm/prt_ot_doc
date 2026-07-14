@@ -62,4 +62,15 @@ describe("ContractorsPage registry tab", () => {
       expect(contractorsApi.createRegistry).toHaveBeenCalledWith(expect.objectContaining({ name: "Новый" }))
     );
   });
+
+  it("still renders the registry when expiring-docs is feature-disabled (404)", async () => {
+    (contractorsApi.listExpiringDocuments as any).mockRejectedValue({
+      status: 404,
+      message: "Contractors feature is not enabled for this tenant"
+    });
+    renderPage();
+    // The ungated registry must survive a feature-disabled expiring-docs call
+    // (not collapse the whole page into an error state).
+    expect(await screen.findByText("ООО Подрядчик")).toBeInTheDocument();
+  });
 });

@@ -89,7 +89,7 @@ export const EmployeeAdmissionDialog = ({ employee, trigger, onAdmitted }: Props
           <div className="space-y-1 text-sm">
             <div>
               Готовность:{" "}
-              <Badge variant={readiness.status === "ok" ? "default" : readiness.status === "blocked" ? "destructive" : "secondary"}>
+              <Badge variant={readiness.status === "allowed" ? "default" : readiness.status === "blocked" ? "destructive" : "secondary"}>
                 {ADMISSION_STATUS_LABELS[readiness.status] ?? readiness.status}
               </Badge>
             </div>

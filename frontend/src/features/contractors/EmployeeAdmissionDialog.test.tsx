@@ -49,6 +49,19 @@ describe("EmployeeAdmissionDialog", () => {
     expect(await screen.findByText("Медосмотр истекает")).toBeInTheDocument();
   });
 
+  it("renders the translated cleared label on the allowed happy path", async () => {
+    (contractorsApi.getEmployeeReadiness as any).mockResolvedValue({ employee_id: "e1", status: "allowed", violations: [], warnings: [] });
+    (contractorsApi.admitEmployee as any).mockResolvedValue({ employee_id: "e1", status: "allowed", violations: [], warnings: [] });
+    await open();
+    // Readiness badge shows the translated label, never the raw backend enum "allowed".
+    expect(await screen.findByText("Допущен")).toBeInTheDocument();
+    expect(screen.queryByText("allowed")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Допустить" }));
+    await waitFor(() => expect(contractorsApi.admitEmployee).toHaveBeenCalledWith("e1"));
+    // Success verdict line is non-empty (was blank when the label was keyed "ok").
+    expect((await screen.findAllByText("Допущен")).length).toBeGreaterThan(0);
+  });
+
   it("admits successfully with a warning verdict", async () => {
     (contractorsApi.admitEmployee as any).mockResolvedValue({ employee_id: "e1", status: "warning", violations: [], warnings: ["ок с замечаниями"] });
     await open();

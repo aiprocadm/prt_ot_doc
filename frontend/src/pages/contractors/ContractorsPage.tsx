@@ -2,7 +2,7 @@ import { useCallback, useMemo } from "react";
 import { Link } from "react-router-dom";
 import type { ColumnDef } from "@tanstack/react-table";
 
-import { contractorsApi } from "@/api/contractors";
+import { contractorsApi, isFeatureDisabledError } from "@/api/contractors";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingScreen } from "@/components/common/LoadingScreen";
@@ -32,7 +32,14 @@ const ContractorsPage = () => {
       contractorsApi.listRegistry(),
       contractorsApi.listEmployees(),
       contractorsApi.listIncidents(),
-      contractorsApi.listExpiringDocuments()
+      // Expiring-docs is behind the tenant `contractors` feature gate, unlike the
+      // registry/employees/incidents endpoints. Degrade gracefully so a
+      // feature-opt-out tenant still sees the (ungated) registry instead of a
+      // page-wide error; the stat just reads 0.
+      contractorsApi.listExpiringDocuments().catch((e) => {
+        if (isFeatureDisabledError(e)) return { items: [], total: 0 };
+        throw e;
+      })
     ]);
     const employeeCounts = new Map<string, number>();
     employees.items.forEach((e) => employeeCounts.set(e.contractor_id, (employeeCounts.get(e.contractor_id) ?? 0) + 1));

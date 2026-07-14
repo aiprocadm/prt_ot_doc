@@ -71,7 +71,7 @@ export const EXPIRY_BADGE_VARIANT: Record<ExpiryStatus, "default" | "secondary" 
 };
 
 export const ADMISSION_STATUS_LABELS: Record<AdmissionStatus, string> = {
-  ok: "Допущен",
+  allowed: "Допущен",
   warning: "Допущен с замечаниями",
   blocked: "Не допущен"
 };
