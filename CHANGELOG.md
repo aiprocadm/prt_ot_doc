@@ -1,5 +1,45 @@
 # CHANGELOG
 
+## 2026-07-14 (feat/p10-01-committees-srez2-proceedings — P10-01 Комитеты срез-2: ядро заседаний)
+
+### Added
+- **Комитеты срез-2 — ядро заседаний (P10-01, ТЗ B.17)** — присутствие + кворум-гейт на проведение,
+  голосование по решениям с подсчётом, авто-нумерация и журнал протоколов, полный write-UI. Миграция
+  `cmt02` (аддитивная): таблицы `committee_meeting_attendance` (present per person) и
+  `committee_decision_vote` (enum `votechoice` for/against/abstain); на `committee_meeting` —
+  `held_at`, `protocol_seq`/`protocol_year` и иммутабельный снапшот кворума `members_total`/
+  `present_count`/`quorum_met`; partial unique index номера протокола (per комитет/год, PG16).
+- **Правило кворума = простое большинство** (кворум = присутствует строго >½ действующих членов —
+  по DISTINCT person_id; решение «принято» если голосов «за» > «против», воздержавшиеся в кворуме но
+  не в подсчёте, ничья → «отклонено»). Итог решения вычисляется на лету; снапшот кворума
+  фиксируется на момент проведения.
+- **Нумерация протокола = авто при проведении** (формат `N/ГГГГ`, сквозная per-комитет в пределах года,
+  гонка закрыта unique-констрейнтом → 409 при коллизии).
+- **API** (admin-only router, флаг `committees` default-off): `GET/PUT /committees/meetings/{mid}/attendance`
+  (bulk-замена, дедуп по person_id, 422 не-член, 409 после проведения); `PATCH /committees/meetings/{mid}`
+  (`status:"held"` — кворум-гейт → 409 `COMMITTEE_QUORUM_NOT_MET`, авто-номер + снапшот);
+  `POST/GET /committees/decisions/{did}/votes` (upsert голоса + tally/outcome); расширенный
+  `GET /committees/meetings/{mid}/protocol` (номер+снапшот+tally+голоса); журнал
+  `GET /committees/protocols`; `GET /committees/{cid}/members` (с ФИО). Demo-сид: 4 члена +
+  проведённое заседание с кворумом + номер `1/ГГГГ` + голоса (за/за/против → принято).
+- **Frontend** — `CommitteesPage` из read-only срез-1 стал полностью рабочим: create-формы
+  (комитет/заседание/решение/задача/член), присутствие (чекбоксы + индикатор кворума + «Провести
+  заседание»), голосование per присутствующий член (бейдж «Принято/Отклонено» + tally), журнал
+  протоколов. RU-лейблы kind/role/choice/outcome. Маршрут `/committees` не менялся.
+
+### Fixed
+- **put_attendance**: дублированный `person_id` в bulk-payload больше не даёт `IntegrityError`/HTTP 500
+  (дедуп last-write-wins); **update_meeting**: нелегальный переход при отсутствии кворума теперь
+  сообщает реальную причину (легальность перехода проверяется до кворума), а не маскируется под
+  `COMMITTEE_QUORUM_NOT_MET`; **outcome** решения без голосов сериализуется одинаково (`null`) в обоих
+  эндпоинтах. Найдено adversarial-review Workflow'ом (5 линз + verify).
+
+### Notes
+- Backend pytest / PG16-гейт / OpenAPI baseline reген **отложены на CI (Py3.12.12)** — локальный
+  Python-env сломан (базовый интерпретатор `.venv` деинсталлирован; доступен только Py3.14 без wheel
+  для pinned pydantic-core). Фронт-гейты пройдены локально полностью (vitest 127 файлов / 495 тестов,
+  tsc, build). OpenAPI baseline требует регена: +6 operationId (attendance×2/votes×2/protocols/members).
+
 ## 2026-07-11 (feat/p10-07-management-dashboards — P10-07 Analytics: управленческие дашборды §24.2)
 
 ### Added

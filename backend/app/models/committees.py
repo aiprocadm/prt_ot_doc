@@ -43,6 +43,12 @@ class DecisionTaskStatus(str, enum.Enum):
     DONE = "done"
 
 
+class VoteChoice(str, enum.Enum):
+    FOR = "for"
+    AGAINST = "against"
+    ABSTAIN = "abstain"
+
+
 class Committee(TenantBaseModel, SoftDeleteMixin):
     __tablename__ = "committee"
 
@@ -86,6 +92,22 @@ class CommitteeMeeting(TenantBaseModel, SoftDeleteMixin):
         native_enum(MeetingStatus, name="meetingstatus"),
         nullable=False,
         default=MeetingStatus.PLANNED,
+    )
+    held_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    protocol_seq: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    protocol_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    members_total: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    present_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    quorum_met: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id",
+            "committee_id",
+            "protocol_year",
+            "protocol_seq",
+            name="uq_committee_protocol_no",
+        ),
     )
 
 
@@ -144,3 +166,43 @@ class CommitteeDecisionTask(TenantBaseModel):
         default=DecisionTaskStatus.OPEN,
     )
     evidence_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class CommitteeMeetingAttendance(TenantBaseModel):
+    __tablename__ = "committee_meeting_attendance"
+
+    meeting_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("committee_meeting.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    person_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("person.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    present: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "meeting_id", "person_id", name="uq_committee_attendance"),
+    )
+
+
+class CommitteeDecisionVote(TenantBaseModel):
+    __tablename__ = "committee_decision_vote"
+
+    decision_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("committee_decision.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    person_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("person.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    choice: Mapped[VoteChoice] = mapped_column(
+        native_enum(VoteChoice, name="votechoice"), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "decision_id", "person_id", name="uq_committee_vote"),
+    )
