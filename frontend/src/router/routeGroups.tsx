@@ -26,6 +26,7 @@ import {
   BranchesPage,
   CompaniesPage,
   ContractorsPage,
+  ContractorDetailPage,
   CorrectiveActionsPage,
   CrmFinancePage,
   DashboardPage,
@@ -178,7 +179,13 @@ export const buildProtectedRouteGroups = (): ReactElement[] => {
     { permission: PERMISSIONS.FIRE_TRAINING_VIEW, routes: [<Route key="/fire-training" path="/fire-training" element={<FireTrainingPage />} />] },
     { permission: PERMISSIONS.FIRE_INSPECTIONS_VIEW, routes: [<Route key="/fire-inspections" path="/fire-inspections" element={<FireInspectionsPage />} />] },
     { permission: PERMISSIONS.REFERENCE_VIEW, routes: [<Route key="/reference" path="/reference" element={<ReferencePage />} />] },
-    { permission: PERMISSIONS.CONTRACTOR_VIEW, routes: [<Route key="/contractors" path="/contractors" element={<ContractorsPage />} />] },
+    {
+      permission: PERMISSIONS.CONTRACTOR_VIEW,
+      routes: [
+        <Route key="/contractors" path="/contractors" element={<ContractorsPage />} />,
+        <Route key="/contractors/:id" path="/contractors/:id" element={<ContractorDetailPage />} />
+      ]
+    },
     {
       permission: PERMISSIONS.WORK_PERMIT_VIEW,
       routes: [
