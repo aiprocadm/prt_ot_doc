@@ -37,42 +37,6 @@ export type ContractDto = {
 
 
 
-export type ContractorRegistryDto = {
-  id: string;
-  name: string;
-  status: string;
-  company_id?: string | null;
-  contact_person?: string | null;
-  contact_phone?: string | null;
-};
-
-export type ContractorEmployeeDto = {
-  id: string;
-  contractor_id: string;
-  full_name: string;
-  position?: string | null;
-  access_status: string;
-  training_status: string;
-  medical_status: string;
-};
-
-export type ContractorIncidentDto = {
-  id: string;
-  contractor_id: string;
-  employee_id?: string | null;
-  incident_type: string;
-  severity: string;
-  status: string;
-  occurred_at: string;
-};
-
-export type ContractorComplianceSummaryDto = {
-  contractor_id?: string | null;
-  employees_total: number;
-  admission: Record<string, number>;
-  training: Record<string, number>;
-  medical: Record<string, number>;
-};
 export type TrainingProgramDto = {
   id: string;
   title?: string;
@@ -278,27 +242,6 @@ export type RoleWorkspaceSummaryDto = {
 };
 
 export const operationsApi = {
-  getContractorSnapshot: async () => {
-    const [registryResponse, employeesResponse, incidentsResponse, summaryResponse, companiesResponse] = await Promise.all([
-      apiClient.get<{ items: ContractorRegistryDto[]; total: number }>("/contractors/registry", { params: { limit: 100, offset: 0 } }),
-      apiClient.get<{ items: ContractorEmployeeDto[]; total: number }>("/contractors/employees"),
-      apiClient.get<{ items: ContractorIncidentDto[]; total: number }>("/contractors/incidents"),
-      apiClient.get<ContractorComplianceSummaryDto>("/contractors/compliance-summary"),
-      apiClient
-        .get<{ items: CompanyDto[]; total?: number }>("/companies", { params: { limit: 200, offset: 0 } })
-        .catch(() => ({ data: { items: [] as CompanyDto[] } }))
-    ]);
-    return {
-      companies: registryResponse.data.items ?? [],
-      hostCompanies: companiesResponse.data.items ?? [],
-      sites: [],
-      contracts: [],
-      employees: employeesResponse.data.items ?? [],
-      incidents: incidentsResponse.data.items ?? [],
-      complianceSummary: summaryResponse.data
-    };
-  },
-
   getReferenceSnapshot: async () => {
     const [npaResponse, ppeResponse, programsResponse, templatesResponse, briefingTemplates] = await Promise.all([
       apiClient.get<{ items: Array<{ id: string; code: string; title: string }> }>("/npa"),
@@ -544,7 +487,6 @@ export type InspectionWorkspaceSnapshot = Awaited<ReturnType<typeof operationsAp
 export type AdminSnapshot = Awaited<ReturnType<typeof operationsApi.getAdminSnapshot>>;
 export type MedicalSnapshot = Awaited<ReturnType<typeof operationsApi.getMedicalSnapshot>>;
 export type SettingsSnapshot = Awaited<ReturnType<typeof operationsApi.getSettingsSnapshot>>;
-export type ContractorSnapshot = Awaited<ReturnType<typeof operationsApi.getContractorSnapshot>>;
 export type ReferenceSnapshot = Awaited<ReturnType<typeof operationsApi.getReferenceSnapshot>>;
 export type ActivitiesSnapshot = Awaited<ReturnType<typeof operationsApi.getActivitiesSnapshot>>;
 export type FireSafetySnapshot = Awaited<ReturnType<typeof operationsApi.getFireSafetySnapshot>>;
