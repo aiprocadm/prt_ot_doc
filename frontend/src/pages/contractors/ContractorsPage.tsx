@@ -1,125 +1,144 @@
 import { useCallback, useMemo } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link } from "react-router-dom";
+import type { ColumnDef } from "@tanstack/react-table";
 
-import { type ContractorComplianceSummaryDto, type ContractorRegistryDto, operationsApi } from "@/api/operations";
+import { contractorsApi } from "@/api/contractors";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingScreen } from "@/components/common/LoadingScreen";
 import { RegistryPageHeader } from "@/components/common/RegistryPageHeader";
 import { RegistryTable } from "@/components/common/RegistryTable";
+import { Can } from "@/components/permissions/Can";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ContractorFormDialog } from "@/features/contractors/ContractorFormDialog";
+import { ContractorExpiringTab } from "@/features/contractors/ContractorExpiringTab";
+import { ContractorRequirementsTab } from "@/features/contractors/ContractorRequirementsTab";
 import { useAsyncResource } from "@/hooks/useAsyncResource";
 import { useLocalRegistry } from "@/hooks/useLocalRegistry";
+import { PERMISSIONS } from "@/permissions/permissions";
+import type { ContractorRegistry } from "@/types/dto/contractors";
 
-const emptyComplianceSummary = (): ContractorComplianceSummaryDto => ({
-  employees_total: 0,
-  admission: {},
-  training: {},
-  medical: {}
-});
-
-const complianceRiskLabel = (companyId: string, incidents: Array<{ contractor_id: string; severity: string }>) => {
-  const hasCritical = incidents.some((item) => item.contractor_id === companyId && ["critical", "high"].includes(item.severity));
-  if (hasCritical) return "Высокий";
-  const hasMedium = incidents.some((item) => item.contractor_id === companyId && item.severity === "medium");
-  if (hasMedium) return "Средний";
-  return "Низкий";
+type RegistryData = {
+  contractors: ContractorRegistry[];
+  employeeCounts: Map<string, number>;
+  incidentCounts: Map<string, number>;
+  expiringTotal: number;
 };
 
 const ContractorsPage = () => {
-  const [searchParams, setSearchParams] = useSearchParams();
-  const load = useCallback(() => operationsApi.getContractorSnapshot(), []);
-  const { data, loading, error, reload } = useAsyncResource({
-    loader: load,
-    initialData: { companies: [], hostCompanies: [], sites: [], contracts: [], employees: [], incidents: [], complianceSummary: emptyComplianceSummary() },
+  const loader = useCallback(async (): Promise<RegistryData> => {
+    const [registry, employees, incidents, expiring] = await Promise.all([
+      contractorsApi.listRegistry(),
+      contractorsApi.listEmployees(),
+      contractorsApi.listIncidents(),
+      contractorsApi.listExpiringDocuments()
+    ]);
+    const employeeCounts = new Map<string, number>();
+    employees.items.forEach((e) => employeeCounts.set(e.contractor_id, (employeeCounts.get(e.contractor_id) ?? 0) + 1));
+    const incidentCounts = new Map<string, number>();
+    incidents.items.forEach((i) => incidentCounts.set(i.contractor_id, (incidentCounts.get(i.contractor_id) ?? 0) + 1));
+    return { contractors: registry.items, employeeCounts, incidentCounts, expiringTotal: expiring.total };
+  }, []);
+
+  const { data, loading, error, reload } = useAsyncResource<RegistryData>({
+    loader,
+    initialData: { contractors: [], employeeCounts: new Map(), incidentCounts: new Map(), expiringTotal: 0 },
     errorMessage: "Не удалось загрузить реестр подрядчиков"
   });
-  const selectedCompanyId = searchParams.get("company_id") ?? "";
-  const hostCompanyById = useMemo(() => new Map((data.hostCompanies ?? []).map((company) => [company.id, company.name])), [data.hostCompanies]);
-  const items = useMemo(() => {
-    const contractorCompanies = data.companies ?? [];
-    const employees = data.employees ?? [];
-    const incidents = data.incidents ?? [];
-    return contractorCompanies.map((company: ContractorRegistryDto) => {
-      const employeeCount = employees.filter((employee) => employee.contractor_id === company.id).length;
-      const incidentCount = incidents.filter((incident) => incident.contractor_id === company.id).length;
-      const hostCompanyName = company.company_id ? (hostCompanyById.get(company.company_id) ?? company.company_id) : "Не привязан";
-      return { ...company, employeeCount, incidentCount, risk: complianceRiskLabel(company.id, incidents), hostCompanyName };
-    });
-  }, [data.companies, data.employees, data.incidents, hostCompanyById]);
-  const filteredItems = useMemo(
-    () => (selectedCompanyId ? items.filter((item) => item.company_id === selectedCompanyId) : items),
-    [items, selectedCompanyId]
+
+  const rows = useMemo(
+    () =>
+      data.contractors.map((c) => ({
+        ...c,
+        employeeCount: data.employeeCounts.get(c.id) ?? 0,
+        incidentCount: data.incidentCounts.get(c.id) ?? 0
+      })),
+    [data]
   );
 
   const registry = useLocalRegistry({
-    items: filteredItems,
+    items: rows,
     match: (item, query) =>
-      [item.name, item.status, item.contact_person, item.risk, item.hostCompanyName].filter(Boolean).join(" ").toLowerCase().includes(query)
+      [item.name, item.status, item.inn, item.contact_person].filter(Boolean).join(" ").toLowerCase().includes(query)
   });
+
+  const columns: ColumnDef<(typeof rows)[number], unknown>[] = [
+    {
+      accessorKey: "name",
+      header: "Контрагент",
+      cell: ({ row }) => (
+        <Link to={`/contractors/${row.original.id}`} className="font-medium text-primary hover:underline">
+          {row.original.name}
+        </Link>
+      )
+    },
+    { accessorKey: "status", header: "Статус", cell: ({ row }) => row.original.status || "—" },
+    { accessorKey: "inn", header: "ИНН", cell: ({ row }) => row.original.inn || "—" },
+    { accessorKey: "employeeCount", header: "Сотрудники", cell: ({ row }) => `${row.original.employeeCount} чел.` },
+    { accessorKey: "incidentCount", header: "Инциденты", cell: ({ row }) => `${row.original.incidentCount} шт.` },
+    {
+      accessorKey: "contact_person",
+      header: "Контакт",
+      cell: ({ row }) => row.original.contact_person || row.original.contact_phone || "—"
+    }
+  ];
 
   return (
     <div className="space-y-4">
       <RegistryPageHeader
         title="Контрагенты и подрядчики"
-        description="Страница использует API реестра подрядчиков `/contractors/*` с допусками, обучениями, медосмотрами и инцидентами."
-        actions={<Button asChild><Link to="/companies">Открыть компании</Link></Button>}
+        description="Реестр подрядчиков поверх backend `/contractors/*`: сотрудники, документы, допуски, инциденты."
+        actions={
+          <Can permission={PERMISSIONS.CONTRACTOR_MANAGE} fallback={<Button disabled>Новый контрагент</Button>}>
+            <ContractorFormDialog trigger={<Button>Новый контрагент</Button>} onSubmitted={() => void reload()} />
+          </Can>
+        }
         stats={[
-          { label: "Контрагентов", value: items.length },
-          { label: "Привязано к компаниям", value: items.filter((item) => Boolean(item.company_id)).length },
-          { label: "Сотрудников", value: (data.employees ?? []).length },
-          { label: "Инцидентов", value: (data.incidents ?? []).length }
+          { label: "Контрагентов", value: data.contractors.length },
+          { label: "Сотрудников", value: [...data.employeeCounts.values()].reduce((a, b) => a + b, 0) },
+          { label: "Инцидентов", value: [...data.incidentCounts.values()].reduce((a, b) => a + b, 0) },
+          { label: "Истекающих документов", value: data.expiringTotal }
         ]}
       />
-      <div className="flex items-center gap-2">
-        <label htmlFor="contractors-company-filter" className="text-sm text-muted-foreground">Компания:</label>
-        <select
-          id="contractors-company-filter"
-          className="h-10 min-w-64 rounded-md border px-3"
-          value={selectedCompanyId}
-          onChange={(event) => {
-            const next = new URLSearchParams(searchParams);
-            if (event.target.value) next.set("company_id", event.target.value);
-            else next.delete("company_id");
-            setSearchParams(next, { replace: true });
-          }}
-        >
-          <option value="">Все компании</option>
-          {(data.hostCompanies ?? []).map((company) => (
-            <option key={company.id} value={company.id}>{company.name}</option>
-          ))}
-        </select>
-      </div>
-      <ErrorState error={error ?? undefined} onRetry={() => void reload()} />
-      {loading ? <LoadingScreen label="Загрузка подрядчиков" /> : null}
-      {!loading && !error && registry.total === 0 ? (
-        <EmptyState
-          title="Подрядчики не найдены"
-          description={selectedCompanyId ? "Для выбранной компании подрядчики не найдены." : "Измените поиск или добавьте компании в тенанте."}
-        />
-      ) : null}
-      {!loading && !error && registry.total > 0 ? (
-        <RegistryTable
-          columns={[
-            { accessorKey: "name", header: "Контрагент" },
-            { accessorKey: "hostCompanyName", header: "Компания-заказчик" },
-            { accessorKey: "status", header: "Статус", cell: ({ row }) => row.original.status || "—" },
-            { accessorKey: "risk", header: "Риск" },
-            { accessorKey: "employeeCount", header: "Сотрудники", cell: ({ row }) => `${row.original.employeeCount} чел.` },
-            { accessorKey: "incidentCount", header: "Инциденты", cell: ({ row }) => `${row.original.incidentCount} шт.` },
-            { accessorKey: "contact_person", header: "Контакт", cell: ({ row }) => row.original.contact_person || row.original.contact_phone || "—" }
-          ]}
-          data={registry.pagedItems}
-          pageIndex={registry.pageIndex}
-          pageSize={registry.pageSize}
-          total={registry.total}
-          onPageChange={registry.onPageChange}
-          onPageSizeChange={registry.onPageSizeChange}
-          onSearchChange={registry.onSearchChange}
-          searchPlaceholder="Поиск по названию, профилю, контакту"
-          caption="Реестр подрядчиков"
-        />
-      ) : null}
+
+      <Tabs defaultValue="registry">
+        <TabsList>
+          <TabsTrigger value="registry">Реестр</TabsTrigger>
+          <TabsTrigger value="expiring">Истекающие документы</TabsTrigger>
+          <TabsTrigger value="requirements">Требования к документам</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="registry" className="space-y-3">
+          <ErrorState error={error ?? undefined} onRetry={() => void reload()} />
+          {loading ? <LoadingScreen label="Загрузка подрядчиков" /> : null}
+          {!loading && !error && registry.total === 0 ? (
+            <EmptyState title="Подрядчики не найдены" description="Добавьте контрагента или измените поиск." />
+          ) : null}
+          {!loading && !error && registry.total > 0 ? (
+            <RegistryTable
+              columns={columns}
+              data={registry.pagedItems}
+              pageIndex={registry.pageIndex}
+              pageSize={registry.pageSize}
+              total={registry.total}
+              onPageChange={registry.onPageChange}
+              onPageSizeChange={registry.onPageSizeChange}
+              onSearchChange={registry.onSearchChange}
+              searchPlaceholder="Поиск по названию, ИНН, контакту"
+              caption="Реестр подрядчиков"
+            />
+          ) : null}
+        </TabsContent>
+
+        <TabsContent value="expiring">
+          <ContractorExpiringTab />
+        </TabsContent>
+
+        <TabsContent value="requirements">
+          <ContractorRequirementsTab />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 };
