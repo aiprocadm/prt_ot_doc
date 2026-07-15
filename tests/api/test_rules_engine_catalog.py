@@ -10,6 +10,12 @@ def test_catalog_covers_registered_events_except_rule_triggered():
     types_ = known_event_types()
     assert "IncidentCreated" in types_
     assert "rule.triggered" not in types_
+    # Legacy-алиасы исключены: outbox персистит только канонические значения,
+    # правило на алиас было бы мёртвым.
+    assert "Signed" not in types_
+    assert "Exported" not in types_
+    assert "DocumentSigned" in types_
+    assert "DocumentExported" in types_
 
 
 def test_incident_fields_and_kinds():

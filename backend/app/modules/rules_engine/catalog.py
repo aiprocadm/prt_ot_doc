@@ -9,8 +9,16 @@ from typing import Any
 
 from app.services.events import _PAYLOADS, EventType
 
-# rule.triggered исключён: правила на события самого движка запрещены (guard от каскада).
-EXCLUDED_EVENT_TYPES = frozenset({EventType.RULE_TRIGGERED.value})
+# rule.triggered исключён (guard от каскада); Signed/Exported — legacy-алиасы
+# webhook-фильтров: enqueue всегда персистит канонические DocumentSigned/DocumentExported,
+# правило на алиас никогда бы не сработало.
+EXCLUDED_EVENT_TYPES = frozenset(
+    {
+        EventType.RULE_TRIGGERED.value,
+        EventType.SIGNED.value,
+        EventType.EXPORTED.value,
+    }
+)
 
 _SCALARS: list[tuple[type, str]] = [
     (bool, "boolean"),
