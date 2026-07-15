@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -73,6 +74,7 @@ export const ContractorIncidentFormDialog = ({ trigger, contractorId, onSubmitte
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Новый инцидент подрядчика</DialogTitle>
+          <DialogDescription>Регистрация инцидента с участием подрядчика.</DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
           <div className="space-y-2">

@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -52,6 +53,7 @@ export const DocumentRequirementFormDialog = ({ trigger, onSubmitted }: Props) =
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Новое требование к документу</DialogTitle>
+          <DialogDescription>Тип документа и область применения обязательного требования.</DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
           <div className="space-y-2">

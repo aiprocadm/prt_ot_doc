@@ -1,5 +1,28 @@
 # CHANGELOG
 
+## 2026-07-14 (feat/contractors-frontend — Контрагенты/подрядчики: фронт поверх всех 23 backend-эндпоинтов)
+
+### Added
+- **Контур «Контрагенты и подрядчики» на фронте (ТЗ §12.x подрядчики)** — типизированный
+  `api/contractors.ts` (23 метода поверх `/api/v1/contractors/*`) + DTO/vocab, новое право
+  **`CONTRACTOR_MANAGE`** (`contractor.manage`; owner/admin/ot_pb_head через `ALL_PERMISSIONS`),
+  backend остаётся истинным энфорсером.
+- **`/contractors`** переведён с legacy-снапшота (`operationsApi.getContractorSnapshot`) на
+  `contractorsApi`: вкладки **Реестр** (create/поиск/пагинация + ссылки на детальную) ·
+  **Истекающие документы** · **Требования к документам** (tenant-политика: добавить/удалить,
+  409 `requirement_exists`). KPI-шапка (контрагенты/сотрудники/инциденты/истекающие).
+- **`/contractors/:id`** — детальная страница (паттерн `WorkPermitDetailPage`, lazy-чанк) с шапкой,
+  «Изменить» и 4 вкладками: **Обзор** (compliance-сводка допуск/обучение/медосмотр по бакетам
+  ComplianceStatus) · **Сотрудники** (create/edit + вход в допуск) · **Документы** (фильтр по типу,
+  create/edit/archive) · **Инциденты** (регистрация).
+- **Поток допуска сотрудника** — `EmployeeAdmissionDialog`: readiness + document-checklist + «Допустить»
+  с рендером вердикта (ok/warning/blocked), нарушений и обработкой 409 `requirements_not_met`.
+- **Мягкое состояние feature-flag** — документы/допуск/требования за флагом `contractors`
+  (`is_feature_enabled` default-ON): 404 «feature is not enabled» рендерит пустое состояние, не ошибку.
+
+### Notes
+- Чисто фронтовый срез: 0 изменений `backend/`, 0 миграций, OpenAPI-baseline/PG16-гейт не трогались.
+
 ## 2026-07-14 (feat/p10-01-committees-srez2-proceedings — P10-01 Комитеты срез-2: ядро заседаний)
 
 ### Added

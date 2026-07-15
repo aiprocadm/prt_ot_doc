@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -81,6 +82,7 @@ export const EmployeeAdmissionDialog = ({ employee, trigger, onAdmitted }: Props
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Допуск: {employee.full_name}</DialogTitle>
+          <DialogDescription>Проверка готовности документов и оформление допуска сотрудника.</DialogDescription>
         </DialogHeader>
 
         {loading ? <p className="text-sm text-muted-foreground">Загрузка готовности...</p> : null}

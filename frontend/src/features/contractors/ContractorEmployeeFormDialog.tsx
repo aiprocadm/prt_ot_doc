@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -105,6 +106,7 @@ export const ContractorEmployeeFormDialog = ({ trigger, contractorId, initialDat
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{isEdit ? "Редактировать сотрудника" : "Новый сотрудник подрядчика"}</DialogTitle>
+          <DialogDescription>Данные сотрудника подрядчика и статусы соответствия.</DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
           {!isEdit ? (
