@@ -75,6 +75,17 @@ def test_match_all_vs_any():
 def test_empty_conditions_match_everything():
     assert evaluate({}, PAYLOAD) is True
     assert evaluate(None, PAYLOAD) is True
+    assert evaluate({"conditions": []}, PAYLOAD) is True
+
+
+def test_nan_values_do_not_raise_and_do_not_match():
+    assert evaluate_condition({"field": "x", "op": "gt", "value": "nan"}, {"x": 5}) is False
+    assert evaluate_condition({"field": "x", "op": "gt", "value": 5}, {"x": float("nan")}) is False
+
+
+def test_malformed_shapes_fail_closed():
+    assert evaluate_condition("not-a-dict", PAYLOAD) is False
+    assert evaluate({"conditions": "abc"}, PAYLOAD) is False
 
 
 @pytest.mark.parametrize(

@@ -2,12 +2,15 @@
 
 Формат: {"match": "all"|"any", "conditions": [{"field","op","value"}]}.
 ``field`` — dot-путь по нормализованному payload события.
-Оценка устойчива: отсутствующее поле / несравнимые типы → условие НЕ матчится
-(исключений наружу нет); ``exists`` — единственный op, матчащийся на отсутствии.
+Оценка устойчива: отсутствующее поле / несравнимые типы / NaN → условие НЕ матчится
+(исключений наружу нет); малформатная структура (не-Mapping условие, не-list
+``conditions``) оценивается fail-closed (False — правило не срабатывает);
+``exists`` — единственный op, матчащийся на отсутствии.
 """
 
 from __future__ import annotations
 
+import operator
 import re
 from decimal import Decimal, InvalidOperation
 from typing import Any, Mapping
@@ -20,6 +23,8 @@ MAX_CONDITIONS = 20
 MAX_IN_VALUES = 50
 
 _FIELD_RE = re.compile(r"^[A-Za-z0-9_]+(\.[A-Za-z0-9_]+)*$")
+
+_ORDERING_OPS = {"gt": operator.gt, "gte": operator.ge, "lt": operator.lt, "lte": operator.le}
 
 
 class ConditionsError(ValueError):
@@ -85,9 +90,10 @@ def _as_decimal(value: Any) -> Decimal | None:
     if isinstance(value, bool):
         return None
     try:
-        return Decimal(str(value))
+        d = Decimal(str(value))
     except (InvalidOperation, TypeError, ValueError):
         return None
+    return None if d.is_nan() else d
 
 
 def _loose_eq(actual: Any, expected: Any) -> bool:
@@ -107,10 +113,12 @@ def _compare(actual: Any, expected: Any, op: str) -> bool:
         a, b = actual, expected  # ISO-даты сравниваются лексикографически корректно
     else:
         return False
-    return {"gt": a > b, "gte": a >= b, "lt": a < b, "lte": a <= b}[op]
+    return _ORDERING_OPS[op](a, b)
 
 
 def evaluate_condition(cond: Mapping[str, Any], payload: Mapping[str, Any]) -> bool:
+    if not isinstance(cond, Mapping):
+        return False
     field = str(cond.get("field", ""))
     op = str(cond.get("op", ""))
     expected = cond.get("value")
@@ -140,10 +148,13 @@ def evaluate_condition(cond: Mapping[str, Any], payload: Mapping[str, Any]) -> b
 
 
 def evaluate(conditions_json: Mapping[str, Any] | None, payload: Mapping[str, Any]) -> bool:
-    """Пустые условия = матч любого события своего event_type."""
-    raw = conditions_json or {}
-    conditions = raw.get("conditions") or []
-    if not conditions:
+    """Пустые условия = матч любого события своего event_type;
+    испорченная структура = fail-closed (False), действия не запускаются."""
+    raw = conditions_json if isinstance(conditions_json, Mapping) else {}
+    conditions = raw.get("conditions")
+    if conditions is None or conditions == []:
         return True
+    if not isinstance(conditions, list):
+        return False
     results = (evaluate_condition(c, payload) for c in conditions)
     return any(results) if raw.get("match", "all") == "any" else all(results)
