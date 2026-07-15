@@ -51,7 +51,10 @@ def upgrade() -> None:
     if bind.dialect.name == "postgresql":
         _TRIGGER_STATUS.create(bind, checkfirst=True)
         # Новый label для notify-действия движка. IF NOT EXISTS — идемпотентно (PG>=12).
-        op.execute("ALTER TYPE notificationtype ADD VALUE IF NOT EXISTS 'AutomationRule'")
+        # POST-2: enum extension commits outside the migration tx (PG forbids
+        # using a new value in the tx that added it).
+        with op.get_context().autocommit_block():
+            op.execute("ALTER TYPE notificationtype ADD VALUE IF NOT EXISTS 'AutomationRule'")
 
     op.create_table(
         "automation_rule",

@@ -7,12 +7,18 @@ from typing import Any
 
 from sqlalchemy import Boolean, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.ext.mutable import MutableDict, MutableList
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import JSON
 
 from app.models.base import SoftDeleteMixin, TenantBaseModel, native_enum
 
-JSONBType = JSONB().with_variant(JSON(), "sqlite")
+# Mutable.as_mutable ассоциируется с конкретным ИНСТАНСОМ типа: один инстанс
+# нельзя делить между MutableDict и MutableList (coerce-конфликт: list-колонка
+# получает dict-коэрсер и падает ValueError). Поэтому — по инстансу на обёртку
+# (document.py делит один инстанс между колонками, но там обёртка только MutableDict).
+JSONBDictType = JSONB().with_variant(JSON(), "sqlite")
+JSONBListType = JSONB().with_variant(JSON(), "sqlite")
 
 
 class RuleTriggerStatus(str, enum.Enum):
@@ -33,9 +39,11 @@ class AutomationRule(TenantBaseModel, SoftDeleteMixin):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     event_type: Mapped[str] = mapped_column(String(64), nullable=False)
-    conditions_json: Mapped[dict[str, Any]] = mapped_column(JSONBType, nullable=False, default=dict)
+    conditions_json: Mapped[dict[str, Any]] = mapped_column(
+        MutableDict.as_mutable(JSONBDictType), nullable=False, default=dict
+    )
     actions_json: Mapped[list[dict[str, Any]]] = mapped_column(
-        JSONBType, nullable=False, default=list
+        MutableList.as_mutable(JSONBListType), nullable=False, default=list
     )
     priority: Mapped[int] = mapped_column(Integer, nullable=False, default=100)
     is_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
@@ -57,12 +65,14 @@ class AutomationRuleTrigger(TenantBaseModel):
     event_type: Mapped[str] = mapped_column(String(64), nullable=False)
     event_key: Mapped[str] = mapped_column(String(255), nullable=False)
     correlation_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
-    event_payload: Mapped[dict[str, Any]] = mapped_column(JSONBType, nullable=False, default=dict)
+    event_payload: Mapped[dict[str, Any]] = mapped_column(
+        MutableDict.as_mutable(JSONBDictType), nullable=False, default=dict
+    )
     status: Mapped[RuleTriggerStatus] = mapped_column(
         native_enum(RuleTriggerStatus, name="ruletriggerstatus"), nullable=False
     )
     actions_result: Mapped[list[dict[str, Any]]] = mapped_column(
-        JSONBType, nullable=False, default=list
+        MutableList.as_mutable(JSONBListType), nullable=False, default=list
     )
 
     __table_args__ = (
