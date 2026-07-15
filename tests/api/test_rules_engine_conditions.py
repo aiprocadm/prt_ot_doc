@@ -105,6 +105,9 @@ def test_malformed_shapes_fail_closed():
             {"conditions": [{"field": "a", "op": "eq", "value": 1}] * 21},
             "too_many_conditions",
         ),
+        # Unhashable значения — typed 422, а не TypeError от `in frozenset` (review Task 4).
+        ({"match": ["all"]}, "invalid_match"),
+        ({"conditions": [{"field": "a", "op": ["eq"]}]}, "invalid_condition_op"),
     ],
 )
 def test_validate_conditions_errors(raw, code):

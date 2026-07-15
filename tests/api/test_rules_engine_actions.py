@@ -364,6 +364,24 @@ def test_validate_actions_errors() -> None:
         validate_actions([{"type": "create_task", "title_template": "Т", "due_in_days": 400}])
     assert excinfo.value.code == "invalid_action"
 
+    # Unhashable значения — typed 422, а не TypeError от `in frozenset` (review Task 4).
+    with pytest.raises(ActionsError) as excinfo:
+        validate_actions([{"type": ["create_task"]}])
+    assert excinfo.value.code == "invalid_action_type"
+
+    with pytest.raises(ActionsError) as excinfo:
+        validate_actions(
+            [
+                {
+                    "type": "notify",
+                    "title_template": "Т",
+                    "body_template": "Б",
+                    "recipient_mode": {"x": 1},
+                }
+            ]
+        )
+    assert excinfo.value.code == "invalid_action"
+
     # Валидные конфигурации проходят без исключений.
     validate_actions(
         [

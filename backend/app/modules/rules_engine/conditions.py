@@ -42,7 +42,8 @@ def validate_conditions(raw: Any, *, known_fields: frozenset[str] | None = None)
     if not isinstance(raw, Mapping):
         raise ConditionsError("invalid_conditions", "conditions_json must be an object")
     match = raw.get("match", "all")
-    if match not in ALLOWED_MATCH:
+    # isinstance-guard: unhashable значение (list/dict) в `in frozenset` даёт TypeError.
+    if not isinstance(match, str) or match not in ALLOWED_MATCH:
         raise ConditionsError("invalid_match", f"match must be one of {sorted(ALLOWED_MATCH)}")
     conditions = raw.get("conditions", [])
     if not isinstance(conditions, list):
@@ -56,7 +57,7 @@ def validate_conditions(raw: Any, *, known_fields: frozenset[str] | None = None)
         op = cond.get("op")
         if not isinstance(field, str) or not _FIELD_RE.match(field):
             raise ConditionsError("invalid_condition_field", f"condition #{idx}: bad field")
-        if op not in ALLOWED_OPS:
+        if not isinstance(op, str) or op not in ALLOWED_OPS:
             raise ConditionsError("invalid_condition_op", f"condition #{idx}: bad op {op!r}")
         if known_fields is not None and field.split(".", 1)[0] not in known_fields:
             raise ConditionsError(

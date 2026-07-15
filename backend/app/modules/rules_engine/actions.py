@@ -74,10 +74,10 @@ def _require_template(idx: int, action: Mapping[str, Any], key: str) -> None:
 def _validate_create_task(idx: int, action: Mapping[str, Any]) -> None:
     _require_template(idx, action, "title_template")
     priority = action.get("priority", "medium")
-    if priority not in _TASK_PRIORITIES:
+    if not isinstance(priority, str) or priority not in _TASK_PRIORITIES:
         raise ActionsError("invalid_action", f"action #{idx}: bad priority {priority!r}")
     assignee_mode = action.get("assignee_mode", "none")
-    if assignee_mode not in _ASSIGNEE_MODES:
+    if not isinstance(assignee_mode, str) or assignee_mode not in _ASSIGNEE_MODES:
         raise ActionsError("invalid_action", f"action #{idx}: bad assignee_mode {assignee_mode!r}")
     if assignee_mode == "user_id" and not action.get("user_id"):
         raise ActionsError(
@@ -98,7 +98,7 @@ def _validate_notify(idx: int, action: Mapping[str, Any]) -> None:
     _require_template(idx, action, "title_template")
     _require_template(idx, action, "body_template")
     mode = action.get("recipient_mode")
-    if mode not in _RECIPIENT_MODES:
+    if not isinstance(mode, str) or mode not in _RECIPIENT_MODES:
         raise ActionsError("invalid_action", f"action #{idx}: bad recipient_mode {mode!r}")
     if mode == "user_id" and not action.get("user_id"):
         raise ActionsError(
@@ -112,7 +112,7 @@ def _validate_notify(idx: int, action: Mapping[str, Any]) -> None:
             if str(role).lower() not in _KNOWN_ROLES:
                 raise ActionsError("invalid_action", f"action #{idx}: unknown role {role!r}")
     priority = action.get("priority", "medium")
-    if priority not in _NOTIFY_PRIORITIES:
+    if not isinstance(priority, str) or priority not in _NOTIFY_PRIORITIES:
         raise ActionsError("invalid_action", f"action #{idx}: bad priority {priority!r}")
 
 
@@ -126,7 +126,8 @@ def validate_actions(raw: Any) -> None:
         if not isinstance(action, Mapping):
             raise ActionsError("invalid_action", f"action #{idx} must be an object")
         a_type = action.get("type")
-        if a_type not in ALLOWED_ACTION_TYPES:
+        # isinstance-guard: unhashable значение (list/dict) в `in frozenset` даёт TypeError.
+        if not isinstance(a_type, str) or a_type not in ALLOWED_ACTION_TYPES:
             raise ActionsError("invalid_action_type", f"action #{idx}: bad type {a_type!r}")
         if a_type == "create_task":
             _validate_create_task(idx, action)
