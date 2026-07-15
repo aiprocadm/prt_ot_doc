@@ -82,6 +82,29 @@ async def test_export_center_rbac(async_client, make_auth_headers, sessionmaker,
     assert created.status_code == status.HTTP_201_CREATED
 
 
+@pytest.mark.asyncio
+async def test_export_center_read_only_role_forbidden_write(
+    async_client, make_auth_headers, sessionmaker, data_factory
+):
+    """A read-allowed but write-denied role pins the exports read/write boundary.
+
+    ``auditor_ro`` sits in ``_EXPORT_READ_ROLES`` but not ``_EXPORT_WRITE_ROLES``,
+    so it must GET /exports (200) yet be denied job creation (403). The existing
+    matrix only exercises ``worker`` (denied both) and ``admin`` (allowed both),
+    which cannot catch a regression that leaks write access to a read-only role.
+    """
+    await _tenant(sessionmaker, data_factory)
+    auditor = await make_auth_headers(RoleEnum.AUDITOR_RO)
+
+    read = await async_client.get("/api/v1/exports", headers=auditor)
+    assert read.status_code == status.HTTP_200_OK
+
+    write = await async_client.post(
+        "/api/v1/exports", json={"export_type": "reports:test"}, headers=auditor
+    )
+    assert write.status_code == status.HTTP_403_FORBIDDEN
+
+
 def test_operational_dashboard_registered_once() -> None:
     src = ROUTE_GROUPS.read_text(encoding="utf-8")
     assert src.count("(operational_dashboard.router") == 1
