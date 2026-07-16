@@ -65,6 +65,13 @@ const ROLE_OPTIONS: Array<[string, string]> = [
   ["hr", "HR"]
 ];
 
+/** Для boolean-полей осмысленны только eq/ne/exists — сравнения и списки скрываем. */
+const BOOLEAN_OPS: RuleConditionOp[] = ["eq", "ne", "exists"];
+
+/** exists и boolean-поля редактируются селектом да/нет — стартуем с "true", чтобы UI и submit совпадали. */
+const defaultConditionValue = (kind: string, op: RuleConditionOp): string =>
+  op === "exists" || kind === "boolean" ? "true" : "";
+
 const emptyAction = (): ActionRow => ({
   type: "create_task",
   title_template: "",
@@ -160,8 +167,9 @@ export const RuleFormDialog = ({ trigger, eventTypes, initialData, onSubmitted }
     const built: RuleCondition[] = [];
     for (const row of conditions) {
       if (!row.field) continue;
-      if (row.op === "exists") {
-        // Пустое значение трактуем как true — селект в этом случае показывает «да».
+      if (row.op === "exists" || fieldKind(row.field) === "boolean") {
+        // Селект да/нет → настоящий boolean: строка "true" на backend никогда не
+        // совпадёт с True (_loose_eq не коэрсит bool). Пустое значение — как true.
         built.push({ field: row.field, op: row.op, value: row.value !== "false" });
         continue;
       }
@@ -333,12 +341,17 @@ export const RuleFormDialog = ({ trigger, eventTypes, initialData, onSubmitted }
                 size="sm"
                 variant="outline"
                 disabled={!selectedEvent}
-                onClick={() =>
+                onClick={() => {
+                  const firstField = selectedEvent?.fields[0];
                   setConditions((prev) => [
                     ...prev,
-                    { field: selectedEvent?.fields[0]?.name ?? "", op: "eq", value: "" }
-                  ])
-                }
+                    {
+                      field: firstField?.name ?? "",
+                      op: "eq",
+                      value: defaultConditionValue(firstField?.kind ?? "string", "eq")
+                    }
+                  ]);
+                }}
               >
                 Добавить условие
               </Button>
@@ -355,7 +368,17 @@ export const RuleFormDialog = ({ trigger, eventTypes, initialData, onSubmitted }
                     aria-label="Поле"
                     className="h-9 rounded-md border border-input bg-background px-2 text-sm"
                     value={row.field}
-                    onChange={(e) => setCondition(idx, { field: e.target.value, value: "" })}
+                    onChange={(e) => {
+                      const nextField = e.target.value;
+                      const kind = fieldKind(nextField);
+                      // Для boolean-поля недопустимый оператор откатываем на eq.
+                      const nextOp = kind === "boolean" && !BOOLEAN_OPS.includes(row.op) ? "eq" : row.op;
+                      setCondition(idx, {
+                        field: nextField,
+                        op: nextOp,
+                        value: defaultConditionValue(kind, nextOp)
+                      });
+                    }}
                   >
                     {(selectedEvent?.fields ?? []).map((f) => (
                       <option key={f.name} value={f.name}>
@@ -373,12 +396,18 @@ export const RuleFormDialog = ({ trigger, eventTypes, initialData, onSubmitted }
                     value={row.op}
                     onChange={(e) => {
                       const nextOp = e.target.value as RuleConditionOp;
-                      // Для exists стартовое значение "true" — иначе селект показывает «да»,
-                      // а на submit ушло бы value: false.
-                      setCondition(idx, { op: nextOp, value: nextOp === "exists" ? "true" : "" });
+                      // Стартовое значение согласовано с виджетом: для да/нет-селекта — "true",
+                      // иначе селект показывал бы «да», а на submit ушло бы false.
+                      setCondition(idx, {
+                        op: nextOp,
+                        value: defaultConditionValue(fieldKind(row.field), nextOp)
+                      });
                     }}
                   >
-                    {(Object.keys(OP_LABELS) as RuleConditionOp[]).map((op) => (
+                    {(fieldKind(row.field) === "boolean"
+                      ? BOOLEAN_OPS
+                      : (Object.keys(OP_LABELS) as RuleConditionOp[])
+                    ).map((op) => (
                       <option key={op} value={op}>
                         {OP_LABELS[op]}
                       </option>
@@ -387,7 +416,7 @@ export const RuleFormDialog = ({ trigger, eventTypes, initialData, onSubmitted }
                 </div>
                 <div className="space-y-1">
                   <Label htmlFor={`rule-cond-value-${idx}`}>Значение</Label>
-                  {row.op === "exists" ? (
+                  {row.op === "exists" || fieldKind(row.field) === "boolean" ? (
                     <select
                       id={`rule-cond-value-${idx}`}
                       aria-label="Значение"

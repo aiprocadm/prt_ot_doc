@@ -38,7 +38,13 @@ const EVENT_TYPES: EventTypeMeta[] = [
       { name: "injury_count", kind: "number" }
     ]
   },
-  { event_type: "TaskOverdue", fields: [{ name: "task_id", kind: "string" }] }
+  {
+    event_type: "TaskOverdue",
+    fields: [
+      { name: "task_id", kind: "string" },
+      { name: "overdue", kind: "boolean" }
+    ]
+  }
 ];
 
 const RULE: AutomationRuleRead = {
@@ -155,6 +161,36 @@ describe("RulesPage", () => {
       title_template: "Заголовок",
       body_template: "Текст"
     });
+  });
+
+  it("submits boolean-field condition values as real booleans, not strings", async () => {
+    (rulesApi.create as any).mockResolvedValue({ ...RULE, id: "r3", name: "Булево правило" });
+    renderPage();
+    await screen.findAllByText("Критичные инциденты");
+
+    fireEvent.click(screen.getByRole("button", { name: "Новое правило" }));
+    const dialog = await screen.findByRole("dialog");
+
+    fireEvent.change(within(dialog).getByLabelText("Имя"), { target: { value: "Булево правило" } });
+    fireEvent.change(within(dialog).getByLabelText("Событие"), { target: { value: "TaskOverdue" } });
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Добавить условие" }));
+    const conditionRow = within(dialog).getByTestId("cond-row-0");
+    // Переключение на boolean-поле: значение сидится "true", виджет — селект да/нет.
+    fireEvent.change(within(conditionRow).getByLabelText("Поле"), { target: { value: "overdue" } });
+    expect(within(conditionRow).getByLabelText("Значение")).toHaveValue("true");
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Добавить действие" }));
+    const actionCard = within(dialog).getByTestId("action-card-0");
+    fireEvent.change(within(actionCard).getByLabelText("Тип действия"), { target: { value: "webhook" } });
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Сохранить" }));
+
+    await waitFor(() => expect(rulesApi.create).toHaveBeenCalled());
+    const [payload] = (rulesApi.create as any).mock.calls[0];
+    // Строгая проверка: настоящий boolean true, не строка "true".
+    expect(payload.conditions_json.conditions[0]).toEqual({ field: "overdue", op: "eq", value: true });
+    expect(payload.actions_json).toEqual([{ type: "webhook" }]);
   });
 
   it("runs a dry-run and shows the matched badge", async () => {
