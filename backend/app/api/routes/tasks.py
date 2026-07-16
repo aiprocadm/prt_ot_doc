@@ -19,7 +19,7 @@ from app.api.helpers.etag import (
 from app.core.errors import api_problem_detail
 from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
-from app.models.models import PipelineRun, Tenant
+from app.models.models import PipelineRun, Tenant, User
 from app.models.obligations import Task, TaskPriority, TaskStatus
 from app.schemas.task import (
     TaskCreate,
@@ -73,6 +73,19 @@ def _task_not_found(
         status_code=status.HTTP_404_NOT_FOUND,
         detail=api_problem_detail(code=code, message=message, error_type="tasks"),
     )
+
+
+async def _ensure_assignee_in_tenant(
+    session: AsyncSession, tenant_id: UUID | str, assignee_id: str
+) -> None:
+    """user.id глобален — без проверки тенанта чужой UUID утёк бы через joined Task.assignee."""
+    stmt = select(User.id).where(
+        User.id == assignee_id,
+        User.tenant_id == tenant_id,
+        User.deleted_at.is_(None),
+    )
+    if (await session.execute(stmt)).scalar_one_or_none() is None:
+        raise _task_unprocessable("assignee_id must reference a user of the current tenant")
 
 
 def _normalize_meta_value(value):
@@ -286,6 +299,8 @@ async def create_task(
     TenantContextValidator.ensure_tenant_context(tenant)
 
     priority = _normalize_task_priority(payload.priority) or TaskPriority.MEDIUM
+    if payload.assignee_id is not None:
+        await _ensure_assignee_in_tenant(session, tenant.id, payload.assignee_id)
     task = Task(
         tenant_id=str(tenant.id),
         title=payload.title,
@@ -367,6 +382,8 @@ async def update_task(
         )
 
     updates = payload.model_dump(exclude_unset=True)
+    if updates.get("assignee_id") is not None:
+        await _ensure_assignee_in_tenant(session, tenant.id, updates["assignee_id"])
     status_value = _normalize_task_status(updates.pop("status", None))
     if status_value is not None:
         task.status = status_value
