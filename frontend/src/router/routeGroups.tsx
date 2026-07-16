@@ -61,6 +61,7 @@ import {
   ReportBuilderPage,
   ReportsPage,
   RiskPage,
+  RulesPage,
   SafetyDashboardPage,
   SettingsPage,
   SyncConflictHelpPage,
@@ -239,7 +240,8 @@ export const buildProtectedRouteGroups = (): ReactElement[] => {
     { permission: PERMISSIONS.CRM_FINANCE_VIEW, routes: [<Route key="/crm-finance" path="/crm-finance" element={<CrmFinancePage />} />] },
     { permission: PERMISSIONS.INTEGRATIONS_VIEW, routes: [<Route key="/integrations" path="/integrations" element={<IntegrationsPage />} />] },
     { permission: PERMISSIONS.COMMITTEE_VIEW, routes: [<Route key="/committees" path="/committees" element={<CommitteesPage />} />] },
-    { permission: PERMISSIONS.SOUT_VIEW, routes: [<Route key="/sout" path="/sout" element={<SoutPage />} />] }
+    { permission: PERMISSIONS.SOUT_VIEW, routes: [<Route key="/sout" path="/sout" element={<SoutPage />} />] },
+    { permission: PERMISSIONS.RULES_VIEW, routes: [<Route key="/rules" path="/rules" element={<RulesPage />} />] }
   ];
 
   return groups.map(renderGuardedGroup);

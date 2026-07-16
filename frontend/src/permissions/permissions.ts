@@ -64,6 +64,8 @@ export const PERMISSIONS = {
   SOUT_VIEW: "sout.view",
   BRANCH_VIEW: "branch.view",
   BRANCH_MANAGE: "branch.manage",
+  RULES_VIEW: "rules.view",
+  RULES_MANAGE: "rules.manage",
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
