@@ -162,6 +162,27 @@ async def test_crud_flow(async_client, make_auth_headers, sessionmaker, data_fac
     assert disabled.status_code == status.HTTP_200_OK
     assert disabled.json()["is_enabled"] is False
 
+    # Explicit null на NOT NULL полях → 422 (не 409/500 от IntegrityError на flush).
+    null_priority = await async_client.patch(
+        f"{BASE}/{rule_id}", json={"priority": None}, headers=headers
+    )
+    assert null_priority.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+    assert "invalid_field_null" in null_priority.text
+    null_enabled = await async_client.patch(
+        f"{BASE}/{rule_id}", json={"is_enabled": None}, headers=headers
+    )
+    assert null_enabled.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+    assert "invalid_field_null" in null_enabled.text
+    null_name = await async_client.patch(f"{BASE}/{rule_id}", json={"name": None}, headers=headers)
+    assert null_name.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+    assert "invalid_field_null" in null_name.text
+    # Nullable-поле по-прежнему очищается explicit null'ом.
+    cleared = await async_client.patch(
+        f"{BASE}/{rule_id}", json={"description": None}, headers=headers
+    )
+    assert cleared.status_code == status.HTTP_200_OK
+    assert cleared.json()["description"] is None
+
     deleted = await async_client.delete(f"{BASE}/{rule_id}", headers=headers)
     assert deleted.status_code == status.HTTP_204_NO_CONTENT
     gone = await async_client.get(f"{BASE}/{rule_id}", headers=headers)

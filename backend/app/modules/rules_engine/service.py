@@ -134,6 +134,12 @@ class RulesEngineService:
     async def update_rule(self, rule_id: str, patch: AutomationRuleUpdate) -> AutomationRule:
         rule = await self.get_rule(rule_id)
         fields = patch.model_dump(exclude_unset=True)
+        # Explicit null на NOT NULL колонках дошёл бы до flush и IntegrityError
+        # мис-мапился бы в 409 → ловим до применения (422 через RulesConfigError).
+        # Конфигурационные null'ы ловит _validate_config (unknown_event_type / ...).
+        for key in ("name", "priority", "is_enabled"):
+            if key in fields and fields[key] is None:
+                raise RulesConfigError("invalid_field_null", f"{key} cannot be null")
         if any(key in fields for key in _CONFIG_FIELDS):
             self._validate_config(
                 fields.get("event_type", rule.event_type),
