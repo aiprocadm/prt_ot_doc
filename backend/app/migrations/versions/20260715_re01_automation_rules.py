@@ -2,10 +2,12 @@
 
 Additive. Adds:
 - enum ruletriggerstatus + tables automation_rule / automation_rule_trigger
-- enum label 'AutomationRule' on notificationtype (notify-действие движка)
+- enum label 'AutomationRule' on notificationtype AND notificationtemplatetype
+  (оба PG-типа маппятся на один Python-enum NotificationType; parity-guard
+  требует label в обоих) — notify-действие движка
 
-Chains off cmt02. Downgrade drops tables/enum; enum LABEL на notificationtype
-не удаляется (PG не умеет DROP VALUE) — безопасный no-op.
+Chains off cmt02. Downgrade drops tables/enum; enum LABELs на notificationtype /
+notificationtemplatetype не удаляются (PG не умеет DROP VALUE) — безопасный no-op.
 """
 
 from __future__ import annotations
@@ -51,10 +53,16 @@ def upgrade() -> None:
     if bind.dialect.name == "postgresql":
         _TRIGGER_STATUS.create(bind, checkfirst=True)
         # Новый label для notify-действия движка. IF NOT EXISTS — идемпотентно (PG>=12).
+        # NotificationType маппится на ДВА PG-типа (notifications.type →
+        # notificationtype, notification_templates.type → notificationtemplatetype);
+        # parity-guard требует label в обоих.
         # POST-2: enum extension commits outside the migration tx (PG forbids
         # using a new value in the tx that added it).
         with op.get_context().autocommit_block():
             op.execute("ALTER TYPE notificationtype ADD VALUE IF NOT EXISTS 'AutomationRule'")
+            op.execute(
+                "ALTER TYPE notificationtemplatetype ADD VALUE IF NOT EXISTS 'AutomationRule'"
+            )
 
     op.create_table(
         "automation_rule",
@@ -118,4 +126,5 @@ def downgrade() -> None:
     op.drop_table("automation_rule")
     if bind.dialect.name == "postgresql":
         _TRIGGER_STATUS.drop(bind, checkfirst=True)
-        # label 'AutomationRule' на notificationtype остаётся — PG не умеет удалять значения enum.
+        # label 'AutomationRule' на notificationtype / notificationtemplatetype
+        # остаётся — PG не умеет удалять значения enum.
