@@ -289,6 +289,96 @@ async def test_action_error_isolated_partial(sessionmaker, data_factory: TestDat
 
 
 @pytest.mark.asyncio
+async def test_action_savepoint_rolls_back_flushed_writes(
+    sessionmaker, data_factory: TestDataFactory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Пин ревью Task 5: per-action SAVEPOINT откатывает УЖЕ flushed-записи действия.
+
+    Первый получатель notify реально создаётся и flush'ится в БД, второй роняет
+    RuntimeError — savepoint действия обязан откатить первый INSERT, а соседнее
+    create_task (свой savepoint) — выжить.
+    """
+    # Патчим по месту импорта: actions.py импортирует ИМЯ send_notification.
+    import app.modules.rules_engine.actions as actions_mod
+    from app.services.notifications import send_notification as real_send_notification
+
+    tenant_id = await _enable_flag(sessionmaker, data_factory)
+
+    calls = {"count": 0}
+
+    async def _flaky_send_notification(session: AsyncSession, **kwargs: Any):
+        calls["count"] += 1
+        if calls["count"] >= 2:
+            raise RuntimeError("boom")
+        row = await real_send_notification(session, **kwargs)
+        await session.flush()  # гарантия: INSERT дошёл до БД внутри savepoint до сбоя
+        return row
+
+    monkeypatch.setattr(actions_mod, "send_notification", _flaky_send_notification)
+
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        # Два админа → два вызова send_notification внутри ОДНОГО действия notify.
+        await data_factory.create_user(
+            tenant=tenant, email="sp-admin-1@example.com", session=session
+        )
+        await data_factory.create_user(
+            tenant=tenant, email="sp-admin-2@example.com", session=session
+        )
+        rule = await _make_rule(
+            session,
+            tenant_id,
+            name="Savepoint откатывает flush",
+            actions_json=[
+                {
+                    "type": "notify",
+                    "title_template": "Т",
+                    "body_template": "Б",
+                    "recipient_mode": "role",
+                    "roles": ["admin"],
+                },
+                {"type": "create_task", "title_template": "Задача выжила"},
+            ],
+        )
+        await _enqueue_incident(session, tenant_id, _incident(tenant_id))
+        await session.commit()
+
+        assert calls["count"] == 2  # первый создан+flushed, второй упал
+
+        triggers = await _trigger_rows(session, tenant_id)
+        assert len(triggers) == 1
+        trigger = triggers[0]
+        assert trigger.status == RuleTriggerStatus.PARTIAL
+        assert trigger.actions_result[0]["outcome"] == "error"
+        assert trigger.actions_result[0]["detail"] == "RuntimeError"
+        assert trigger.actions_result[1]["outcome"] == "created"
+
+        # Flushed-уведомление первого получателя откатил savepoint действия.
+        leaked = (
+            await session.execute(
+                select(func.count())
+                .select_from(Notification)
+                .where(
+                    Notification.tenant_id == tenant_id,
+                    Notification.dedup_key.like(f"rules:{rule.id}:%"),
+                )
+            )
+        ).scalar_one()
+        assert leaked == 0
+
+        # Соседнее действие (свой savepoint) пережило откат.
+        task = (
+            await session.execute(
+                select(Task).where(
+                    Task.tenant_id == tenant_id, Task.entity_type == "automation_rule"
+                )
+            )
+        ).scalar_one()
+        assert task.entity_id == rule.id
+        assert task.title == "Задача выжила"
+
+
+@pytest.mark.asyncio
 async def test_engine_error_does_not_break_enqueue(
     sessionmaker, data_factory: TestDataFactory, monkeypatch: pytest.MonkeyPatch
 ) -> None:
