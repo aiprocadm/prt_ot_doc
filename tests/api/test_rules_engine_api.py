@@ -105,6 +105,64 @@ async def test_rbac(async_client, make_auth_headers, sessionmaker, data_factory)
 
 
 @pytest.mark.asyncio
+async def test_rule_rejects_cross_tenant_user_id(
+    async_client, make_auth_headers, sessionmaker, data_factory
+):
+    await _enable_flag(sessionmaker, data_factory)
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        own_user = await data_factory.create_user(
+            tenant=tenant, email="own-rule-user@example.com", session=session
+        )
+        foreign_tenant = await data_factory.ensure_tenant(slug="foreign-rules", session=session)
+        foreign_user = await data_factory.create_user(
+            tenant=foreign_tenant, email="foreign-rule-user@example.com", session=session
+        )
+        await session.commit()
+    headers = await make_auth_headers(RoleEnum.ADMIN)
+
+    task_action = {
+        "type": "create_task",
+        "title_template": "Задача",
+        "assignee_mode": "user_id",
+        "user_id": str(foreign_user.id),
+    }
+    denied_task = await async_client.post(
+        BASE,
+        json={**RULE, "name": "Чужой assignee", "actions_json": [task_action]},
+        headers=headers,
+    )
+    assert denied_task.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY, denied_task.text
+    assert "unknown_user_id" in denied_task.text
+
+    notify_action = {
+        "type": "notify",
+        "recipient_mode": "user_id",
+        "user_id": str(foreign_user.id),
+        "title_template": "Т",
+        "body_template": "Б",
+    }
+    denied_notify = await async_client.post(
+        BASE,
+        json={**RULE, "name": "Чужой получатель", "actions_json": [notify_action]},
+        headers=headers,
+    )
+    assert denied_notify.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY, denied_notify.text
+    assert "unknown_user_id" in denied_notify.text
+
+    allowed = await async_client.post(
+        BASE,
+        json={
+            **RULE,
+            "name": "Свой assignee",
+            "actions_json": [{**task_action, "user_id": str(own_user.id)}],
+        },
+        headers=headers,
+    )
+    assert allowed.status_code == status.HTTP_201_CREATED, allowed.text
+
+
+@pytest.mark.asyncio
 async def test_crud_flow(async_client, make_auth_headers, sessionmaker, data_factory):
     await _enable_flag(sessionmaker, data_factory)
     headers = await make_auth_headers(RoleEnum.ADMIN)

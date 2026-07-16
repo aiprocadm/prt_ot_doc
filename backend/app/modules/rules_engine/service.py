@@ -89,7 +89,7 @@ class RulesEngineService:
             raise RuleNotFound(rule_id)
         return row
 
-    def _validate_config(
+    async def _validate_config(
         self, event_type: str, conditions_json: dict[str, Any], actions_json: list[dict[str, Any]]
     ) -> None:
         if event_type not in catalog.known_event_types():
@@ -98,6 +98,9 @@ class RulesEngineService:
             conditions_json, known_fields=catalog.known_fields_for(event_type)
         )
         actions_mod.validate_actions(actions_json)
+        await actions_mod.validate_action_user_ids(
+            self.session, tenant_id=self.tenant_id, actions=actions_json
+        )
 
     async def _ensure_name_free(self, name: str) -> None:
         # Осознанно БЕЗ фильтра deleted_at: soft-deleted тёзка блокирует создание
@@ -111,7 +114,7 @@ class RulesEngineService:
             raise RuleNameConflict(name)
 
     async def create_rule(self, data: AutomationRuleCreate) -> AutomationRule:
-        self._validate_config(data.event_type, data.conditions_json, data.actions_json)
+        await self._validate_config(data.event_type, data.conditions_json, data.actions_json)
         await self._ensure_name_free(data.name)
         record = AutomationRule(
             tenant_id=self.tenant_id,
@@ -141,7 +144,7 @@ class RulesEngineService:
             if key in fields and fields[key] is None:
                 raise RulesConfigError("invalid_field_null", f"{key} cannot be null")
         if any(key in fields for key in _CONFIG_FIELDS):
-            self._validate_config(
+            await self._validate_config(
                 fields.get("event_type", rule.event_type),
                 fields.get("conditions_json", rule.conditions_json),
                 fields.get("actions_json", rule.actions_json),
@@ -164,7 +167,7 @@ class RulesEngineService:
         await self.session.flush()
 
     async def dry_run(self, body: DryRunIn) -> DryRunOut:
-        self._validate_config(
+        await self._validate_config(
             body.rule.event_type, body.rule.conditions_json, body.rule.actions_json
         )
         if body.event.event_type not in catalog.known_event_types():

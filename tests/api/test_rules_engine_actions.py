@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-from uuid import uuid4
 
 import pytest
 from sqlalchemy import func, select
@@ -127,6 +126,88 @@ async def test_create_task_assignee_modes(sessionmaker, data_factory: TestDataFa
 
 
 @pytest.mark.asyncio
+async def test_create_task_refuses_cross_tenant_assignee(
+    sessionmaker, data_factory: TestDataFactory
+) -> None:
+    from app.models.obligations import Task
+    from app.modules.rules_engine.actions import execute_action
+
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        foreign_tenant = await data_factory.ensure_tenant(slug="foreign-actions", session=session)
+        foreign_user = await data_factory.create_user(
+            tenant=foreign_tenant, email="foreign-assignee@example.com", session=session
+        )
+        rule = await _make_rule(session, str(tenant.id), name="Кросс-tenant assignee")
+
+        outcome = await execute_action(
+            session,
+            tenant_id=str(tenant.id),
+            rule=rule,
+            action={
+                "type": "create_task",
+                "title_template": "Проверка",
+                "assignee_mode": "user_id",
+                "user_id": str(foreign_user.id),
+            },
+            event_key="incident:xt-1",
+            payload={},
+            already_triggered=False,
+        )
+
+        assert outcome.outcome == "error"
+        count = (
+            await session.execute(
+                select(func.count()).select_from(Task).where(Task.tenant_id == str(tenant.id))
+            )
+        ).scalar_one()
+        assert count == 0
+
+
+@pytest.mark.asyncio
+async def test_notify_suppresses_cross_tenant_recipient(
+    sessionmaker, data_factory: TestDataFactory
+) -> None:
+    from app.models.notifications import Notification
+    from app.modules.rules_engine.actions import execute_action
+
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        foreign_tenant = await data_factory.ensure_tenant(slug="foreign-notify", session=session)
+        foreign_user = await data_factory.create_user(
+            tenant=foreign_tenant, email="foreign-recipient@example.com", session=session
+        )
+        rule = await _make_rule(session, str(tenant.id), name="Кросс-tenant notify")
+
+        outcome = await execute_action(
+            session,
+            tenant_id=str(tenant.id),
+            rule=rule,
+            action={
+                "type": "notify",
+                "title_template": "Т",
+                "body_template": "Б",
+                "recipient_mode": "user_id",
+                "user_id": str(foreign_user.id),
+            },
+            event_key="incident:xt-2",
+            payload={},
+            already_triggered=False,
+        )
+
+        assert outcome.outcome == "suppressed"
+        assert outcome.detail == "no recipients"
+        count = (
+            await session.execute(
+                select(func.count())
+                .select_from(Notification)
+                .where(Notification.user_id == str(foreign_user.id))
+            )
+        ).scalar_one()
+        assert count == 0
+
+
+@pytest.mark.asyncio
 async def test_create_task_deduped_on_repeat(sessionmaker, data_factory: TestDataFactory) -> None:
     from app.models.obligations import Task
     from app.modules.rules_engine.actions import execute_action
@@ -161,7 +242,10 @@ async def test_notify_user_id_created_then_deduped(
     async with sessionmaker() as session:
         tenant = await data_factory.ensure_tenant(session=session)
         rule = await _make_rule(session, str(tenant.id), name="Уведомление по user_id")
-        user_id = str(uuid4())
+        recipient = await data_factory.create_user(
+            tenant=tenant, email="actions-recipient@example.com", session=session
+        )
+        user_id = str(recipient.id)
         event_key = "incident:5"
         action = {
             "type": "notify",

@@ -166,6 +166,73 @@ async def test_overdue_filter(async_client, sessionmaker, data_factory, make_aut
 
 
 @pytest.mark.anyio
+async def test_create_task_rejects_assignee_from_another_tenant(
+    async_client, sessionmaker, data_factory, make_auth_headers
+):
+    headers = await make_auth_headers(RoleEnum.ADMIN)
+    async with sessionmaker() as session:
+        await data_factory.ensure_tenant(session=session)
+        foreign_tenant = await data_factory.ensure_tenant(slug="foreign-tasks", session=session)
+        foreign_user = await data_factory.create_user(
+            tenant=foreign_tenant, email="foreign-task-assignee@example.com", session=session
+        )
+        await session.commit()
+
+    payload = {"title": "Чужой исполнитель", "assignee_id": foreign_user.id}
+    response = await async_client.post("/api/v1/tasks", json=payload, headers=headers)
+    assert response.status_code == 422
+    assert "TASK_VALIDATION_ERROR" in response.text
+
+
+@pytest.mark.anyio
+async def test_create_task_accepts_assignee_from_own_tenant(
+    async_client, sessionmaker, data_factory, make_auth_headers
+):
+    headers = await make_auth_headers(RoleEnum.ADMIN)
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        assignee = await data_factory.create_user(
+            tenant=tenant,
+            email="own-task-assignee@example.com",
+            role=RoleEnum.WORKER,
+            session=session,
+        )
+        await session.commit()
+
+    payload = {"title": "Свой исполнитель", "assignee_id": assignee.id}
+    response = await async_client.post("/api/v1/tasks", json=payload, headers=headers)
+    assert response.status_code == 201
+    assert response.json()["assignee_id"] == assignee.id
+
+
+@pytest.mark.anyio
+async def test_update_task_rejects_assignee_from_another_tenant(
+    async_client, sessionmaker, data_factory, make_auth_headers
+):
+    headers = await make_auth_headers(RoleEnum.ADMIN)
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        foreign_tenant = await data_factory.ensure_tenant(slug="foreign-tasks-upd", session=session)
+        foreign_user = await data_factory.create_user(
+            tenant=foreign_tenant, email="foreign-task-upd@example.com", session=session
+        )
+        task = Task(
+            tenant_id=tenant.id,
+            title="Task to reassign",
+            status=TaskStatus.OPEN,
+            priority=TaskPriority.MEDIUM,
+        )
+        session.add(task)
+        await session.commit()
+
+    response = await async_client.patch(
+        f"/api/v1/tasks/{task.id}", json={"assignee_id": foreign_user.id}, headers=headers
+    )
+    assert response.status_code == 422
+    assert "TASK_VALIDATION_ERROR" in response.text
+
+
+@pytest.mark.anyio
 async def test_priority_filter(async_client, sessionmaker, data_factory, make_auth_headers):
     headers = await make_auth_headers(RoleEnum.ADMIN)
     async with sessionmaker() as session:

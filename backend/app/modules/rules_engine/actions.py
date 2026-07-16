@@ -136,6 +136,57 @@ def validate_actions(raw: Any) -> None:
         # webhook: параметров нет
 
 
+def _collect_action_user_ids(raw: Any) -> set[str]:
+    ids: set[str] = set()
+    for action in raw if isinstance(raw, list) else []:
+        if not isinstance(action, Mapping):
+            continue
+        a_type = action.get("type")
+        user_id = action.get("user_id")
+        if not user_id:
+            continue
+        if (a_type == "create_task" and action.get("assignee_mode") == "user_id") or (
+            a_type == "notify" and action.get("recipient_mode") == "user_id"
+        ):
+            ids.add(str(user_id))
+    return ids
+
+
+async def validate_action_user_ids(session: AsyncSession, *, tenant_id: str, actions: Any) -> None:
+    """user_id в действиях обязан принадлежать тенанту: user.id глобален, и чужой UUID
+    утёк бы (имя/email) через joined Task.assignee / Notification."""
+    wanted = _collect_action_user_ids(actions)
+    if not wanted:
+        return
+    rows = (
+        (
+            await session.execute(
+                select(User.id).where(
+                    User.id.in_(wanted),
+                    User.tenant_id == tenant_id,
+                    User.deleted_at.is_(None),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    missing = wanted - {str(r) for r in rows}
+    if missing:
+        raise ActionsError("unknown_user_id", f"user_id not found in tenant: {sorted(missing)[0]}")
+
+
+async def _user_in_tenant(session: AsyncSession, *, tenant_id: str, user_id: str) -> bool:
+    row = await session.scalar(
+        select(User.id).where(
+            User.id == user_id,
+            User.tenant_id == tenant_id,
+            User.deleted_at.is_(None),
+        )
+    )
+    return row is not None
+
+
 def render_template(template: str, payload: Mapping[str, Any], *, limit: int) -> str:
     def _sub(match: re.Match[str]) -> str:
         found, value = resolve_field(payload, match.group(1))
@@ -185,7 +236,13 @@ async def _resolve_recipients(
         return [actor_id] if actor_id else []
     if mode == "user_id":
         user_id = action.get("user_id")
-        return [str(user_id)] if user_id else []
+        if not user_id:
+            return []
+        # Fail-closed для правил, сохранённых до тенант-валидации user_id (или после
+        # удаления пользователя): чужой/несуществующий получатель молча отбрасывается.
+        if not await _user_in_tenant(session, tenant_id=tenant_id, user_id=str(user_id)):
+            return []
+        return [str(user_id)]
     if mode == "role":
         # Прецедент: _resolve_rule_recipients в app/tasks/notification_jobs.py —
         # lowercase-значения RoleEnum сравниваются напрямую через .in_().
@@ -228,6 +285,13 @@ async def _execute_create_task(
         assignee_id = payload.get("actor_id")
     elif assignee_mode == "user_id":
         assignee_id = action.get("user_id")
+        # Fail-closed для правил, сохранённых до тенант-валидации user_id.
+        if assignee_id and not await _user_in_tenant(
+            session, tenant_id=tenant_id, user_id=str(assignee_id)
+        ):
+            return ActionOutcome(
+                type="create_task", outcome="error", detail="assignee is not in tenant"
+            )
     actor_id = payload.get("actor_id")
     title = render_template(str(action.get("title_template", "")), payload, limit=255)
     description = render_template(
