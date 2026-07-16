@@ -14,7 +14,28 @@ from app.models.models import (
     ApprovalInstanceStepStatus,
     ApprovalRoute,
     ApprovalRouteStep,
+    User,
 )
+
+
+async def _tenant_member_ids(session: AsyncSession, tenant_id: str, user_ids: set[str]) -> set[str]:
+    """user.id глобален — вернуть подмножество user_ids, принадлежащее тенанту."""
+    if not user_ids:
+        return set()
+    rows = (
+        (
+            await session.execute(
+                select(User.id).where(
+                    User.id.in_(user_ids),
+                    User.tenant_id == str(tenant_id),
+                    User.deleted_at.is_(None),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return {str(row) for row in rows}
 
 
 class ApprovalRouteService:
@@ -93,6 +114,14 @@ class ApprovalInstanceService:
         )
         if not steps:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Approval route has no steps")
+        # Fail-closed для маршрутов, сохранённых до тенант-валидации user_id
+        # (или после удаления пользователя): чужой id не материализуется в шаг.
+        step_user_ids = {str(step.user_id) for step in steps if step.user_id}
+        members = await _tenant_member_ids(self.session, self.tenant_id, step_user_ids)
+        if step_user_ids - members:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT, "route step user is not a member of the tenant"
+            )
         instance = ApprovalInstance(
             tenant_id=self.tenant_id,
             entity_type=entity_type,
@@ -183,6 +212,12 @@ class ApprovalDecisionService:
                 raise HTTPException(
                     status.HTTP_422_UNPROCESSABLE_ENTITY, "target_user_id is required for delegate"
                 )
+            # user.id глобален — делегат обязан принадлежать текущему тенанту.
+            if not await _tenant_member_ids(self.session, self.tenant_id, {str(target_user_id)}):
+                raise HTTPException(
+                    status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    "target_user_id must reference a user of the current tenant",
+                )
             step.delegated_from_user_id = step.assignee_user_id
             step.assignee_user_id = target_user_id
             step.status = ApprovalInstanceStepStatus.PENDING
@@ -248,11 +283,26 @@ class EscalationService:
                 )
             )
         ).all()
+        # user.id глобален — легаси-шаг с чужим escalation_user_id не должен
+        # переназначать шаг на пользователя другого тенанта (fail-closed skip).
+        escalation_user_ids = {
+            str(route_step.escalation_user_id)
+            for _, route_step in rows
+            if route_step.escalation_user_id
+        }
+        members = await _tenant_member_ids(self.session, self.tenant_id, escalation_user_ids)
         updated = 0
         for step, route_step in rows:
+            escalation_user_id = (
+                str(route_step.escalation_user_id)
+                if route_step.escalation_user_id and str(route_step.escalation_user_id) in members
+                else None
+            )
+            if not escalation_user_id and not route_step.escalation_role_code:
+                continue
             step.delegated_from_user_id = step.assignee_user_id
-            if route_step.escalation_user_id:
-                step.assignee_user_id = route_step.escalation_user_id
+            if escalation_user_id:
+                step.assignee_user_id = escalation_user_id
             if route_step.escalation_role_code:
                 step.assignee_role_code = route_step.escalation_role_code
             updated += 1

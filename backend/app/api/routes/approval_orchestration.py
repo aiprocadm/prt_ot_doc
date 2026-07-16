@@ -16,7 +16,7 @@ from app.core.errors import api_problem_detail
 from app.core.inbound_webhook_auth import enforce_webhook_hmac
 from app.core.security import AccessContext, abac
 from app.models.document import DocumentVersion
-from app.models.models import PackRun, Tenant
+from app.models.models import PackRun, Tenant, User
 from app.models.workflow import (
     ApprovalDecision,
     ApprovalInstance,
@@ -192,6 +192,32 @@ async def _get_pack_for_tenant(
     return row
 
 
+async def _ensure_step_users_in_tenant(
+    session: AsyncSession, tenant_id: str, payload: ApprovalRouteStepCreate
+) -> None:
+    """user.id глобален — user_id/escalation_user_id шага обязаны принадлежать текущему тенанту."""
+    wanted = {str(v) for v in (payload.user_id, payload.escalation_user_id) if v}
+    if not wanted:
+        return
+    rows = (
+        (
+            await session.execute(
+                select(User.id).where(
+                    User.id.in_(wanted),
+                    User.tenant_id == tenant_id,
+                    User.deleted_at.is_(None),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if wanted - {str(row) for row in rows}:
+        raise _approval_orchestration_unprocessable(
+            "step user_id must reference a user of the current tenant"
+        )
+
+
 async def _assert_entity_belongs_to_tenant(
     *,
     session: AsyncSession,
@@ -302,6 +328,7 @@ async def create_approval_route_step(
     route = await session.get(ApprovalRoute, route_id)
     if route is None or route.tenant_id != _tenant_id_value(tenant):
         raise _approval_orchestration_not_found("approval_route")
+    await _ensure_step_users_in_tenant(session, _tenant_id_value(tenant), payload)
     row = ApprovalRouteStep(
         tenant_id=_tenant_id_value(tenant), approval_route_id=route_id, **payload.model_dump()
     )
@@ -326,6 +353,7 @@ async def patch_approval_route_step(
     row = await session.get(ApprovalRouteStep, step_id)
     if not row or row.tenant_id != _tenant_id_value(tenant) or row.approval_route_id != route_id:
         raise _approval_orchestration_not_found("approval_route_step")
+    await _ensure_step_users_in_tenant(session, _tenant_id_value(tenant), payload)
     for k, v in payload.model_dump().items():
         setattr(row, k, v)
     await session.flush()

@@ -14,6 +14,8 @@ from app.models.models import (
     ApprovalRoute,
     ApprovalRouteStatus,
     ApprovalRouteStep,
+    RoleEnum,
+    User,
 )
 from app.modules.approvals.service import (
     ApprovalDecisionService,
@@ -36,6 +38,18 @@ async def db_session():
         yield session
 
     await engine.dispose()
+
+
+def _user(tenant_id: str, user_id: str) -> User:
+    """user.id глобален — сервисные проверки членства требуют реальную строку."""
+    return User(
+        id=user_id,
+        tenant_id=tenant_id,
+        email=f"{user_id}@example.com",
+        full_name=user_id,
+        role=RoleEnum.EMPLOYEE,
+        hashed_password="x",
+    )
 
 
 @pytest.mark.asyncio
@@ -86,6 +100,7 @@ async def test_delegate_keeps_step_pending_with_new_assignee(db_session) -> None
         conditions_json={},
     )
     db_session.add(route)
+    db_session.add_all([_user(tenant_id, "user-a"), _user(tenant_id, "user-b")])
     await db_session.flush()
     step = ApprovalRouteStep(
         tenant_id=tenant_id,
@@ -115,7 +130,9 @@ async def test_delegate_keeps_step_pending_with_new_assignee(db_session) -> None
 
     instance_step = (
         await db_session.execute(
-            select(ApprovalInstanceStep).where(ApprovalInstanceStep.approval_instance_id == instance.id)
+            select(ApprovalInstanceStep).where(
+                ApprovalInstanceStep.approval_instance_id == instance.id
+            )
         )
     ).scalar_one()
     assert instance_step.status == ApprovalInstanceStepStatus.PENDING
@@ -135,6 +152,7 @@ async def test_escalation_reassigns_overdue_step(db_session) -> None:
         conditions_json={},
     )
     db_session.add(route)
+    db_session.add(_user(tenant_id, "user-escalated"))
     await db_session.flush()
     route_step = ApprovalRouteStep(
         tenant_id=tenant_id,
@@ -175,3 +193,60 @@ async def test_escalation_reassigns_overdue_step(db_session) -> None:
     assert changed == 1
     assert instance_step.assignee_user_id == "user-escalated"
     assert instance_step.delegated_from_user_id == "user-a"
+
+
+@pytest.mark.asyncio
+async def test_escalation_skips_foreign_escalation_user(db_session) -> None:
+    """user.id глобален — легаси-шаг с чужим escalation_user_id не должен
+    переназначать шаг на пользователя другого тенанта (fail-closed skip)."""
+    tenant_id = "tenant-1"
+    route = ApprovalRoute(
+        tenant_id=tenant_id,
+        code="route-3",
+        name="R3",
+        status=ApprovalRouteStatus.ACTIVE,
+        applies_to="document",
+        conditions_json={},
+    )
+    db_session.add(route)
+    db_session.add(_user("tenant-2", "foreign-escalated"))
+    await db_session.flush()
+    route_step = ApprovalRouteStep(
+        tenant_id=tenant_id,
+        approval_route_id=route.id,
+        order_no=1,
+        user_id="user-a",
+        step_type="approve",
+        escalation_user_id="foreign-escalated",
+    )
+    db_session.add(route_step)
+    await db_session.flush()
+
+    instance = ApprovalInstance(
+        tenant_id=tenant_id,
+        entity_type="document",
+        entity_id="doc-3",
+        approval_route_id=route.id,
+        status="running",
+        started_by="starter",
+        current_step_no=1,
+    )
+    db_session.add(instance)
+    await db_session.flush()
+
+    instance_step = ApprovalInstanceStep(
+        tenant_id=tenant_id,
+        approval_instance_id=instance.id,
+        route_step_id=route_step.id,
+        order_no=1,
+        assignee_user_id="user-a",
+        status=ApprovalInstanceStepStatus.PENDING,
+        due_at=datetime.now(tz=timezone.utc) - timedelta(hours=1),
+    )
+    db_session.add(instance_step)
+    await db_session.flush()
+
+    changed = await EscalationService(db_session, tenant_id).escalate_overdue()
+    assert changed == 0
+    assert instance_step.assignee_user_id == "user-a"
+    assert instance_step.delegated_from_user_id is None
