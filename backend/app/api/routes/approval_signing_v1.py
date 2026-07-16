@@ -24,7 +24,7 @@ from app.models.approval_signing import (
     SignatureRequest,
     WebhookEndpoint,
 )
-from app.models.models import IdempotencyStatus, UserRole
+from app.models.models import IdempotencyStatus, User, UserRole
 from app.models.tenanting import Tenant
 from app.modules.approval.core import cond_matches, make_request_hash
 from app.services.idempotency import IdempotencyService, normalize_idempotency_key
@@ -198,6 +198,48 @@ class WebhookSubscriptionIn(BaseModel):
     secret: str
 
 
+async def _user_in_tenant(session: AsyncSession, tenant_id: str, user_id: str) -> bool:
+    row = await session.scalar(
+        select(User.id).where(
+            User.id == user_id, User.tenant_id == tenant_id, User.deleted_at.is_(None)
+        )
+    )
+    return row is not None
+
+
+async def _ensure_step_users_in_tenant(
+    session: AsyncSession, tenant_id: str, steps: list[dict[str, Any]]
+) -> None:
+    """user.id глобален — user_id шага обязан принадлежать текущему тенанту."""
+    wanted: set[str] = set()
+    for step in steps or []:
+        if not isinstance(step, dict) or step.get("type") != "user":
+            continue
+        user_id = step.get("user_id")
+        if not user_id:
+            raise _approval_signing_unprocessable("steps: user step requires user_id")
+        wanted.add(str(user_id))
+    if not wanted:
+        return
+    rows = (
+        (
+            await session.execute(
+                select(User.id).where(
+                    User.id.in_(wanted),
+                    User.tenant_id == tenant_id,
+                    User.deleted_at.is_(None),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if wanted - {str(r) for r in rows}:
+        raise _approval_signing_unprocessable(
+            "steps: user_id must reference a user of the current tenant"
+        )
+
+
 async def _create_tasks(
     session: AsyncSession, process: ApprovalProcess, route: ApprovalRoute, step_no: int
 ) -> None:
@@ -222,13 +264,20 @@ async def _create_tasks(
     if step.get("due_hours"):
         due += timedelta(hours=int(step["due_hours"]))
     if step.get("type") == "user":
+        assignee_id = step.get("user_id")
+        # Fail-closed для маршрутов, сохранённых до тенант-валидации user_id
+        # (или после удаления пользователя): чужой id не материализуется в задачу.
+        if not assignee_id or not await _user_in_tenant(
+            session, str(process.tenant_id), str(assignee_id)
+        ):
+            raise _approval_signing_conflict("route step user is not a member of the tenant")
         session.add(
             ApprovalTask(
                 tenant_id=process.tenant_id,
                 process_id=process.id,
                 step_no=step_no,
                 assignee_type="user",
-                assignee_id=step["user_id"],
+                assignee_id=str(assignee_id),
                 due_at=due,
             )
         )
@@ -543,6 +592,11 @@ async def approval_delegate(
         raise _approval_signing_not_found("task")
     if task.assignee_id != x_user_id:
         raise _approval_signing_forbidden("Task assignee mismatch")
+    # user.id глобален — делегат обязан принадлежать текущему тенанту.
+    if not await _user_in_tenant(session, str(tenant.id), payload.to_user_id):
+        raise _approval_signing_unprocessable(
+            "to_user_id must reference a user of the current tenant"
+        )
     task.status = ApprovalTaskStatus.CANCELED
     new_task = ApprovalTask(
         tenant_id=str(tenant.id),
@@ -554,6 +608,7 @@ async def approval_delegate(
         delegated_from=task.id,
     )
     session.add(new_task)
+    await session.flush()
     session.add(
         ApprovalDecisionLog(
             tenant_id=str(tenant.id),
@@ -1008,6 +1063,7 @@ async def approval_routes_create_v1(
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
 ):
+    await _ensure_step_users_in_tenant(session, str(tenant.id), payload.steps)
     row = ApprovalRoute(
         tenant_id=str(tenant.id),
         code=payload.code,
@@ -1034,6 +1090,7 @@ async def approval_routes_patch_v1(
     row = await session.get(ApprovalRoute, route_id)
     if not row or row.tenant_id != str(tenant.id):
         raise _approval_signing_not_found("route")
+    await _ensure_step_users_in_tenant(session, str(tenant.id), payload.steps)
     row.name = payload.name
     row.conditions = payload.conditions
     row.steps = payload.steps
