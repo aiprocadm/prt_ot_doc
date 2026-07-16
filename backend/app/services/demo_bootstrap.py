@@ -912,6 +912,98 @@ async def _seed_report_builder_demo(session, tenant_db_id: str) -> None:
             session.add(ReportDefinition(tenant_id=tenant_db_id, is_system=True, **tpl))
 
 
+async def _seed_rules_engine_demo(session, tenant_db_id: str) -> None:
+    """Seed the default-off ``rules_engine`` flag (enabled for the demo tenant)
+    + 2 демо-правила автоматизации (P10-10). Idempotent: flag keyed on
+    Feature.code, rules bail out entirely if the first rule's name already
+    exists for the tenant."""
+
+    from app.models.feature import Feature, FeatureEnablement
+    from app.models.rules_engine import AutomationRule
+
+    feature = (
+        await session.execute(select(Feature).where(Feature.code == "rules_engine"))
+    ).scalar_one_or_none()
+    if feature is None:
+        feature = Feature(code="rules_engine", title="Правила автоматизации")
+        session.add(feature)
+        await session.flush()
+    enablement = (
+        await session.execute(
+            select(FeatureEnablement).where(
+                FeatureEnablement.tenant_id == tenant_db_id,
+                FeatureEnablement.feature_id == feature.id,
+            )
+        )
+    ).scalar_one_or_none()
+    if enablement is None:
+        session.add(FeatureEnablement(tenant_id=tenant_db_id, feature_id=feature.id, on=True))
+
+    first_rule_name = "Критичный инцидент — задача и уведомление"
+    exists = await session.scalar(
+        select(AutomationRule).where(
+            AutomationRule.tenant_id == tenant_db_id,
+            AutomationRule.name == first_rule_name,
+        )
+    )
+    if exists is not None:
+        return  # already seeded — full idempotent bail-out
+
+    session.add_all(
+        [
+            AutomationRule(
+                tenant_id=tenant_db_id,
+                name=first_rule_name,
+                description=(
+                    "Демо: при инциденте high/critical создать задачу и уведомить "
+                    "администраторов"
+                ),
+                event_type="IncidentCreated",
+                conditions_json={
+                    "match": "all",
+                    "conditions": [
+                        {"field": "severity", "op": "in", "value": ["high", "critical"]}
+                    ],
+                },
+                actions_json=[
+                    {
+                        "type": "create_task",
+                        "title_template": "Разобрать инцидент ({severity})",
+                        "priority": "high",
+                        "due_in_days": 3,
+                        "assignee_mode": "none",
+                    },
+                    {
+                        "type": "notify",
+                        "recipient_mode": "role",
+                        "roles": ["admin"],
+                        "title_template": "Критичный инцидент",
+                        "body_template": "Тип: {incident_type}, серьёзность: {severity}",
+                    },
+                ],
+                priority=10,
+            ),
+            AutomationRule(
+                tenant_id=tenant_db_id,
+                name="Истекающий документ подрядчика — уведомление",
+                description=("Демо: уведомить администраторов об истекающем документе подрядчика"),
+                event_type="contractor.document_expiring",
+                conditions_json={},
+                actions_json=[
+                    {
+                        "type": "notify",
+                        "recipient_mode": "role",
+                        "roles": ["admin"],
+                        "title_template": "Истекает документ подрядчика",
+                        "body_template": "Проверьте раздел подрядчиков",
+                    }
+                ],
+                priority=100,
+            ),
+        ]
+    )
+
+
 async def _seed_sout_demo(session, tenant_db_id: str, position_id: str | None = None) -> None:
     """Seed a minimal СОУТ demo (P10-04 срез-1).
 
@@ -1257,6 +1349,7 @@ async def bootstrap_demo_tenant(settings: Settings) -> None:
             session, tenant_db_id, str(position.id) if position is not None else None
         )
         await _seed_report_builder_demo(session, tenant_db_id)
+        await _seed_rules_engine_demo(session, tenant_db_id)
         logger.info(
             "demo.bootstrap.done",
             extra={"tenant": tenant_slug, "company": company_name, "site": site_name},
