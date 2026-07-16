@@ -154,6 +154,7 @@ class OutboxService:
                     session=self.session,
                 )
             created: list[Outbox] = []
+            new_entries = 0
             now = datetime.now(tz=timezone.utc)
             if not destinations:
                 logger.warning(
@@ -188,6 +189,7 @@ class OutboxService:
                         entry.payload = {**entry.payload, "event_id": entry.id}
                         await self.session.flush()
                     created.append(entry)
+                    new_entries += 1
             else:
                 for target in destinations:
                     merged_headers = self._merge_headers(target.headers, headers)
@@ -222,6 +224,7 @@ class OutboxService:
                         entry.payload = {**entry.payload, "event_id": entry.id}
                         await self.session.flush()
                     created.append(entry)
+                    new_entries += 1
                     self.metrics.record_outbox_enqueued(
                         event_type=entry.event_type,
                         destination=entry.destination,
@@ -248,6 +251,20 @@ class OutboxService:
                 self.metrics.record_ppe_issued()
             elif resolved == EventType.TRAINING_COMPLETED:
                 self.metrics.record_training_completed()
+
+        if new_entries and resolved.value != "rule.triggered" and key:
+            # P10-10: синхронная оценка правил автоматизации (той же транзакцией).
+            # Только для НОВЫХ логических событий (dedup-реплей не перезапускает правила);
+            # события самого движка (rule.triggered) не оцениваются — guard от каскада.
+            from app.modules.rules_engine.engine import evaluate_event_safe
+
+            await evaluate_event_safe(
+                self.session,
+                tenant_id=tenant_id,
+                event_type=resolved.value,
+                payload=normalized_payload,
+                event_key=key,
+            )
 
         self.metrics.record_pipeline_stage_end(
             pipeline=pipeline,

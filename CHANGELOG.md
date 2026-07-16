@@ -1,5 +1,50 @@
 # CHANGELOG
 
+## 2026-07-16 (feat/p10-10-rules-engine-srez1 — P10-10 Rules-engine срез-1: событийные правила автоматизации)
+
+### Added
+- **Rules-engine срез-1 (P10-10, ТЗ B.24 → vNext §25.2)** — tenant-scoped правила «событие →
+  условия → действия» с приоритетами, логом срабатываний, dry-run/тестом по истории и admin-UI.
+  Миграция `re01` (аддитивная): таблицы `automation_rule` (unique имя per tenant БЕЗ deleted_at-фильтра,
+  паттерн ReportDefinition) и `automation_rule_trigger` (append-only лог, enum `ruletriggerstatus`
+  success/partial/error); label `AutomationRule` добавлен в оба PG-типа `notificationtype` и
+  `notificationtemplatetype` (parity-гейт ORM↔pg_enum).
+- **Точка срабатывания — синхронный hook в `OutboxService.enqueue`**: оценка правил в той же
+  транзакции, что и доменное событие; только для НОВЫХ outbox-строк (dedup-реплеи тиков не
+  перезапускают правила); события самого движка (`rule.triggered`) не оцениваются (глубина каскада 1).
+  Изоляция — двухуровневые SAVEPOINT'ы (`begin_nested`): внешний вокруг всей оценки + вложенный
+  на каждое действие; IntegrityError действия не отравляет доменную транзакцию (пин-тест на откат
+  flushed-записей).
+- **Условия** — декларативный JSON (`match` all/any + строки field/op/value; 10 операторов
+  eq/ne/in/not_in/gt/gte/lt/lte/contains/exists; dot-пути по payload; NaN-safe сравнения,
+  fail-closed на битой структуре) с whitelist-валидацией против каталога событий
+  (интроспекция typed payload-моделей; legacy-алиасы Signed/Exported исключены как «мёртвые»).
+- **Действия**: `create_task` (операционная задача, `entity_type="automation_rule"`, дедуп по
+  (rule, event_key)); `notify` (in-app уведомление типа `AutomationRule` по actor/user_id/роли,
+  дедуп по нативному dedup_key с sha-хешем event_key); `webhook` (typed-событие `rule.triggered`
+  в существующий outbox-конвейер). Шаблоны `{field}`-подстановки без eval.
+- **API `/api/v1/rules/*`** (9 роутов; ABAC admin/owner router-wide + FeatureGate флага
+  `rules_engine` default-off → 404 `RULES_ENGINE_DISABLED`): CRUD (409 `RULE_NAME_EXISTS`,
+  422 typed-коды валидации вкл. `invalid_field_null` на explicit null), `GET /rules/event-types`
+  (каталог полей для конструктора), `POST /rules/dry-run` (per-condition разбор + would-actions,
+  без записей), `POST /rules/{id}/test` (прогон по истории outbox с дедупом по idempotency_key),
+  `GET /rules/triggers` (журнал). ETag/304 на списке; audit на write.
+- **Фронт `/rules` («Правила автоматизации», право `RULES_VIEW`/`RULES_MANAGE`)** — реестр правил
+  (вкл/выкл-Switch, тест по истории, удаление), `RuleFormDialog` (событие → условия с типо-зависимыми
+  контролами: boolean → да/нет-селект с коэрсией в настоящий boolean, number-коэрсия без ловушки
+  `Number("")→0`, in/not_in через запятую → действия-карточки), Dry-run панель (JSON-песочница
+  со скелетом payload), журнал срабатываний с фильтром; feature-off → EmptyState.
+- **Demo-сид**: флаг `rules_engine` + 2 образцовых правила («Критичный инцидент — задача и
+  уведомление», «Истекающий документ подрядчика — уведомление»), идемпотентно.
+
+### Notes
+- Гейты: backend pytest (модель/условия/каталог/действия/движок/API/сид + смежный регресс) зелёные;
+  ruff/black clean; **OpenAPI baseline 855→864 операций (+9 /rules/*, чистый аддитив, ✓ ARCH-4)**;
+  **PG16-гейт ЗЕЛЁНЫЙ** (round-trip `re01`, после фикса parity-лейбла второго enum-типа);
+  фронт tsc/vitest/build зелёные.
+- Осознанно отложено (срез-2): версии правил, tenant overrides/системный каталог, действие
+  «запустить workflow», email/telegram-каналы notify, метрика движка, retention лога.
+
 ## 2026-07-14 (feat/contractors-frontend — Контрагенты/подрядчики: фронт поверх всех 23 backend-эндпоинтов)
 
 ### Added

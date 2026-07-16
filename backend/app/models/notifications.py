@@ -61,6 +61,7 @@ class NotificationType(str, enum.Enum):
     INTEGRATION_ERROR = "IntegrationError"
     EDO_STATUS_CHANGED = "EdoStatusChanged"
     BILLING_LIMIT_WARNING = "BillingLimitWarning"
+    AUTOMATION_RULE = "AutomationRule"
 
 
 class NotificationTemplate(TenantBaseModel, SoftDeleteMixin):

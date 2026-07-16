@@ -234,6 +234,13 @@ from app.models.risk_register import (
     WorkplaceHazardLink,
 )
 
+# P10-10 re01: re-export rules-engine models from app.models.rules_engine.
+from app.models.rules_engine import (  # noqa: E402
+    AutomationRule,
+    AutomationRuleTrigger,
+    RuleTriggerStatus,
+)
+
 # ARCH-2: re-export templates-domain models moved to app.models.templates.
 from app.models.templates import (
     Template,
@@ -615,3 +622,5 @@ __all__ += [
 ]
 
 __all__ += ["ReportDefinition"]
+
+__all__ += ["AutomationRule", "AutomationRuleTrigger", "RuleTriggerStatus"]

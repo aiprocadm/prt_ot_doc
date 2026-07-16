@@ -40,6 +40,7 @@ class EventType(str, enum.Enum):
     PPE_REPLACEMENT_DUE = "PPEReplacementDue"
     PEP_SIGNED = "PEPSigned"
     PEP_DECLINED = "PEPDeclined"
+    RULE_TRIGGERED = "rule.triggered"
 
 
 class BaseEventPayload(BaseModel):
@@ -243,6 +244,14 @@ class PersonReinstatedPayload(BaseEventPayload):
     person_id: str
 
 
+class RuleTriggeredPayload(BaseEventPayload):
+    rule_id: str
+    rule_name: str
+    source_event_type: str
+    source_event_key: str
+    source_payload: Mapping[str, Any] = Field(default_factory=dict)
+
+
 _PAYLOADS: dict[EventType, type[BaseEventPayload]] = {
     EventType.DOCUMENT_CREATED: DocumentCreatedPayload,
     EventType.DOCUMENT_GENERATED: DocumentGeneratedPayload,
@@ -276,6 +285,7 @@ _PAYLOADS: dict[EventType, type[BaseEventPayload]] = {
     EventType.CONTRACTOR_READINESS_WARNING: InternalEventPayload,
     EventType.CONTRACTOR_DOCUMENT_EXPIRING: InternalEventPayload,
     EventType.CONTRACTOR_DOCUMENT_EXPIRED: InternalEventPayload,
+    EventType.RULE_TRIGGERED: RuleTriggeredPayload,
 }
 
 
@@ -336,6 +346,8 @@ def dedupe_key_for(event_type: EventType, payload: BaseEventPayload) -> str:
         return payload.prescription_id
     if isinstance(payload, TaskDuePayload):
         return payload.task_id
+    if isinstance(payload, RuleTriggeredPayload):
+        return f"rule-triggered:{payload.rule_id}:{payload.source_event_key}"
     if isinstance(payload, InternalEventPayload):
         return payload.event_id or f"internal:{event_type.value}:{payload.occurred_at.isoformat()}"
     if isinstance(payload, IncidentCreatedPayload):

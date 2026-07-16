@@ -70,5 +70,6 @@ export const WorkPermitsPage = lazy(() => import("@/pages/work-permits/WorkPermi
 export const WorkPermitDetailPage = lazy(() => import("@/pages/work-permits/WorkPermitDetailPage"));
 export const CommitteesPage = lazy(() => import("@/pages/committees/CommitteesPage"));
 export const SoutPage = lazy(() => import("@/pages/sout/SoutPage"));
+export const RulesPage = lazy(() => import("@/pages/rules/RulesPage"));
 export * from "@/router/pageRegistry/documents";
 export * from "@/router/pageRegistry/search";
