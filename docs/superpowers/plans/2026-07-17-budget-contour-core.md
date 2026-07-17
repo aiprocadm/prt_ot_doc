@@ -818,7 +818,7 @@ async def test_expense_rejects_foreign_tenant_site(session, tenant_id, other_ten
     сортировка `amount desc, name asc`, cap 200 (создать 2 строки, проверить порядок; cap —
     юнитом на константу), `total` = строк до капа; unknown dimension →
     `BudgetValidationError("breakdown_dimension_unknown")`; `date_from > date_to` →
-    `BudgetValidationError("breakdown_window_invalid")`. СИЗ-расходы в breakdown НЕ входят
+    `BudgetValidationError("window_invalid")` (ревью-переименование). СИЗ-расходы в breakdown НЕ входят
     (тест: склад-receipt есть, breakdown по domain не содержит `ppe`).
 
 - [ ] **Step 2: Прогнать — ImportError.**
@@ -918,7 +918,7 @@ async def compute_breakdown(session, tenant_id, dimension, date_from, date_to) -
   - `GET /overview`: `date_from: date | None = Query(None)`, `date_to: date | None = Query(None)`;
     дефолт — текущий календарный год (`date(today.year,1,1)`/`date(today.year,12,31)`,
     `today = datetime.now(timezone.utc).date()`); `date_from > date_to` → 422
-    `breakdown_window_invalid` (тот же код — единая семантика окна).
+    `window_invalid` (тот же код — единая семантика окна; ревью-переименование с breakdown_window_invalid).
   - `GET /breakdown`: те же query + `dimension: str = Query(...)`;
     `BudgetValidationError` → 422 c `detail=api_problem_detail(code=exc.code, ...)`.
   - Маппинг исключений: `BudgetNotFound`/`ArticleNotFound`/`ExpenseNotFound` → 404;
@@ -1164,5 +1164,5 @@ python scripts/ci/check_openapi_snapshot.py --compare   # ожидание: ARCH
   `compute_overview`/`compute_breakdown`/`EXPENSE_ENTITY_TYPES` — имена совпадают в Tasks 1-6;
   DTO фронта зеркалят схемы Task 2; коды ошибок (`unknown_*`, `article_domain_mismatch`,
   `article_inactive`, `invalid_entity_type`, `unknown_entity`, `ARTICLE_CODE_EXISTS`,
-  `breakdown_dimension_unknown`, `breakdown_window_invalid`, `BUDGET_DISABLED`) — единый список
+  `breakdown_dimension_unknown`, `window_invalid`, `BUDGET_DISABLED`) — единый список
   в Tasks 4-6 и тестах.

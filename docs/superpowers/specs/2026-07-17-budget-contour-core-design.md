@@ -173,7 +173,8 @@ async def compute_breakdown(session, tenant_id, dimension, date_from, date_to) -
   `{"id": "", "name": "— без привязки"}` (для article — «— без статьи») только при ненулевой
   сумме; сортировка `amount desc, name asc`; cap 200 строк (`total` — до капа); unknown dimension
   → `BudgetValidationError("breakdown_dimension_unknown")` → 422; `date_from > date_to` → 422
-  `breakdown_window_invalid` (коды зеркалят analytics/breakdown). СИЗ-факт в breakdown **не
+  `window_invalid` (нейтральный код — общий для overview и breakdown; ревью-решение волны:
+  не «breakdown»-имя на /overview). СИЗ-факт в breakdown **не
   входит** (у складского леджера нет измерений компания/филиал/объект — задокументировано в
   docstring и в UI-подписи; follow-up срез-2).
 
@@ -275,7 +276,7 @@ required_roles=..., action=...)` — Annotated-депсы Read/Write per-endpoin
 | статья другого домена / неактивная | 422 `article_domain_mismatch` / `article_inactive` |
 | `entity_type` не соответствует домену / `entity_id` без типа / запись не найдена в tenant | 422 `invalid_entity_type` / `unknown_entity` |
 | дубль кода статьи (в т.ч. с soft-deleted тёзкой) | 409 `ARTICLE_CODE_EXISTS` (пин-тест) |
-| `dimension` вне whitelist / `date_from > date_to` | 422 `breakdown_dimension_unknown` / `breakdown_window_invalid` |
+| `dimension` вне whitelist / `date_from > date_to` | 422 `breakdown_dimension_unknown` / `window_invalid` |
 | расход без статьи | учитывается в факте; в разрезе по статьям — bucket «— без статьи» |
 | нет расходов в периоде | `actual=0`, `remaining=planned` |
 | пересекающиеся периоды бюджетов | допускаются; факт бюджета — по его периоду; overview честно суммирует планы пересекающихся с окном |
