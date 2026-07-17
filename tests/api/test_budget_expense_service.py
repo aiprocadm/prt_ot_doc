@@ -360,7 +360,7 @@ async def test_expense_article_inactive(sessionmaker, data_factory: TestDataFact
         assert exc_info.value.code == "article_inactive"
 
         # existing expense on an inactive article: update WITHOUT touching article_id
-        # must NOT re-check is_active (check_article_active only when article_id in fields)
+        # must NOT re-check the article at all (only touched refs are revalidated)
         active_article = await svc.create_article(
             BudgetArticleCreate(code="active_one", name="Активная")
         )
@@ -447,6 +447,66 @@ async def test_expense_entity_link(sessionmaker, data_factory: TestDataFactory) 
         )
         assert expense.entity_id == own_action.id
         assert expense.entity_type == "corrective_action"
+
+
+@pytest.mark.asyncio
+async def test_expense_update_validates_touched_ref(
+    sessionmaker, data_factory: TestDataFactory
+) -> None:
+    """A ref supplied in the PATCH body is validated tenant-scoped on update."""
+    async with sessionmaker() as session:
+        t1 = await data_factory.ensure_tenant(session=session)
+        t2 = await data_factory.ensure_tenant(session=session, slug="other")
+        svc1 = BudgetService(session, t1.id)
+
+        company1 = await _make_company(session, t1.id)
+        own_site = await _make_site(session, t1.id, company1.id)
+        company2 = await _make_company(session, t2.id, name="ООО Чужая")
+        foreign_site = await _make_site(session, t2.id, company2.id, name="Чужая площадка")
+
+        expense = await svc1.create_expense(
+            BudgetExpenseCreate(
+                domain="training",
+                title="X",
+                occurred_on=date(2026, 1, 1),
+                amount=1,
+                site_id=own_site.id,
+            )
+        )
+
+        with pytest.raises(BudgetValidationError) as exc_info:
+            await svc1.update_expense(
+                expense.id, BudgetExpenseUpdate(site_id=foreign_site.id)
+            )
+        assert exc_info.value.code == "unknown_site"
+
+
+@pytest.mark.asyncio
+async def test_expense_update_skips_untouched_stale_refs(
+    sessionmaker, data_factory: TestDataFactory
+) -> None:
+    """A stored ref whose target was later soft-deleted must not block unrelated PATCHes."""
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        svc = BudgetService(session, tenant.id)
+
+        article = await svc.create_article(BudgetArticleCreate(code="other", name="Прочее"))
+        expense = await svc.create_expense(
+            BudgetExpenseCreate(
+                domain="training",
+                article_id=article.id,
+                title="X",
+                occurred_on=date(2026, 1, 1),
+                amount=1,
+            )
+        )
+
+        await svc.delete_article(article.id)
+
+        # amount-only PATCH does not revalidate the (now soft-deleted) stored article
+        updated = await svc.update_expense(expense.id, BudgetExpenseUpdate(amount=5))
+        assert float(updated.amount) == 5.0
+        assert updated.article_id == article.id
 
 
 # ---------------------------------------------------------------------------

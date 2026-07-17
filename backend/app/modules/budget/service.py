@@ -52,6 +52,10 @@ _ENTITY_MODELS: dict[str, type] = {
     "medical_exam": MedicalExam,
     "corrective_action": CorrectiveAction,
 }
+# Map-parity pin: every entity_type reachable via EXPENSE_ENTITY_TYPES must have a
+# model here (and vice versa) — a new domain added in models without wiring the
+# validator would otherwise KeyError at request time instead of failing at import.
+assert set(EXPENSE_ENTITY_TYPES.values()) == set(_ENTITY_MODELS)
 
 # Fields that must never be explicitly nulled via PATCH (rules_engine convention:
 # a client-supplied `null` on a non-nullable business field is a validation error,
@@ -476,6 +480,8 @@ class BudgetService:
         )
         rows = (
             await self.session.execute(
+                # outerjoin WITHOUT a deleted_at filter on the article: historical
+                # expenses deliberately keep showing the name of a soft-deleted article.
                 select(BudgetExpense, BudgetExpenseArticle.name)
                 .outerjoin(
                     BudgetExpenseArticle, BudgetExpenseArticle.id == BudgetExpense.article_id
@@ -495,10 +501,6 @@ class BudgetService:
         fields = payload.model_dump(exclude_unset=True)
         _reject_explicit_nulls(fields, _EXPENSE_NON_NULLABLE)
 
-        merged_article_id = fields.get("article_id", expense.article_id)
-        merged_company_id = fields.get("company_id", expense.company_id)
-        merged_branch_id = fields.get("branch_id", expense.branch_id)
-        merged_site_id = fields.get("site_id", expense.site_id)
         merged_entity_type = fields.get("entity_type", expense.entity_type)
         merged_entity_id = fields.get("entity_id", expense.entity_id)
 
@@ -506,21 +508,29 @@ class BudgetService:
         # {"entity_type": null} alone) — the schema validates each request in
         # isolation and cannot see the stored counterpart, so the merged pairing is
         # re-checked here before touching refs/row (mirrors update_budget's merged
-        # period re-check).
+        # period re-check). Always on merged values, regardless of which side was sent.
         if (merged_entity_type is None) != (merged_entity_id is None):
             raise BudgetValidationError(
                 "invalid_entity_link", "entity_type and entity_id must be set together"
             )
 
+        # Revalidate ONLY the refs this PATCH touches: a stored ref whose target was
+        # later soft-deleted (or whose article domain drifted) must not make the
+        # expense uneditable via an unrelated update (e.g. title/amount-only PATCH).
+        # The entity pair participates if EITHER side is in fields — then the MERGED
+        # pair is validated as a whole.
+        # fields.get(key) is None both for an untouched key and for an explicit
+        # null (= clearing the ref) — neither needs validation.
+        touch_entity = "entity_type" in fields or "entity_id" in fields
         await self._validate_expense_refs(
-            article_id=merged_article_id,
-            company_id=merged_company_id,
-            branch_id=merged_branch_id,
-            site_id=merged_site_id,
-            entity_type=merged_entity_type,
-            entity_id=merged_entity_id,
+            article_id=fields.get("article_id"),
+            company_id=fields.get("company_id"),
+            branch_id=fields.get("branch_id"),
+            site_id=fields.get("site_id"),
+            entity_type=merged_entity_type if touch_entity else None,
+            entity_id=merged_entity_id if touch_entity else None,
             domain=expense.domain,
-            check_article_active=("article_id" in fields),
+            check_article_active=True,
         )
 
         for key, value in fields.items():
