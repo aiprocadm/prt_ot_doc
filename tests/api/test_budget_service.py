@@ -143,6 +143,32 @@ async def test_budget_update_partial_and_period_validation(
 
 
 @pytest.mark.asyncio
+async def test_budget_update_explicit_null_rejected(
+    sessionmaker, data_factory: TestDataFactory
+) -> None:
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        svc = BudgetService(session, tenant.id)
+        b = await svc.create_budget(
+            SafetyBudgetCreate(
+                name="Бюджет",
+                domain="training",
+                period_start=date(2026, 1, 1),
+                period_end=date(2026, 3, 31),
+                planned_amount=100000,
+            )
+        )
+
+        # explicit null on a non-nullable field is a validation error, NOT a
+        # TypeError/500 from comparing None with a date at the period-merge check
+        upd = SafetyBudgetUpdate(period_end=None)
+        assert "period_end" in upd.model_dump(exclude_unset=True)
+        with pytest.raises(BudgetValidationError) as exc_info:
+            await svc.update_budget(b.id, upd)
+        assert exc_info.value.code == "invalid_field_null"
+
+
+@pytest.mark.asyncio
 async def test_budget_soft_delete(sessionmaker, data_factory: TestDataFactory) -> None:
     async with sessionmaker() as session:
         tenant = await data_factory.ensure_tenant(session=session)
@@ -233,6 +259,67 @@ async def test_article_update(sessionmaker, data_factory: TestDataFactory) -> No
         assert updated.name == "Закупка СИЗ (обновлено)"
         assert updated.is_active is False
         assert updated.code == "ppe_purchase"
+
+
+@pytest.mark.asyncio
+async def test_article_update_explicit_null_rejected(
+    sessionmaker, data_factory: TestDataFactory
+) -> None:
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        svc = BudgetService(session, tenant.id)
+        art = await svc.create_article(
+            BudgetArticleCreate(code="training_external", name="Обучение", domain="training")
+        )
+
+        with pytest.raises(BudgetValidationError) as exc_info:
+            await svc.update_article(art.id, BudgetArticleUpdate(name=None))
+        assert exc_info.value.code == "invalid_field_null"
+
+        # domain: null stays ALLOWED — legitimate "сделать универсальной"
+        updated = await svc.update_article(art.id, BudgetArticleUpdate(domain=None))
+        assert updated.domain is None
+        assert updated.name == "Обучение"
+
+
+@pytest.mark.asyncio
+async def test_list_articles_includes_inactive(
+    sessionmaker, data_factory: TestDataFactory
+) -> None:
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        svc = BudgetService(session, tenant.id)
+        art = await svc.create_article(BudgetArticleCreate(code="other", name="Прочее"))
+
+        await svc.update_article(art.id, BudgetArticleUpdate(is_active=False))
+
+        items, total = await svc.list_articles()
+        assert total == 1
+        assert items[0].id == art.id
+        assert items[0].is_active is False
+
+
+@pytest.mark.asyncio
+async def test_seed_treats_soft_deleted_default_as_seeded(
+    sessionmaker, data_factory: TestDataFactory
+) -> None:
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        svc = BudgetService(session, tenant.id)
+
+        created, skipped = await svc.seed_default_articles()
+        assert (created, skipped) == (len(DEFAULT_ARTICLES), 0)
+
+        items, _ = await svc.list_articles()
+        one_default = next(i for i in items if i.code == DEFAULT_ARTICLES[0][0])
+        await svc.delete_article(one_default.id)
+
+        created2, skipped2 = await svc.seed_default_articles()
+        assert (created2, skipped2) == (0, len(DEFAULT_ARTICLES))
+
+        remaining, remaining_total = await svc.list_articles()
+        assert remaining_total == len(DEFAULT_ARTICLES) - 1
+        assert one_default.code not in {i.code for i in remaining}
 
 
 @pytest.mark.asyncio

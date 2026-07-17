@@ -8,16 +8,27 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.budget import BudgetExpenseArticle, SafetyBudget
+from app.models.budget import (
+    BudgetExpense,
+    BudgetExpenseArticle,
+    EXPENSE_ENTITY_TYPES,
+    SafetyBudget,
+)
+from app.models.master_data import Branch, Company, Site
+from app.models.medical import MedicalExam
+from app.models.safety_ops import CorrectiveAction
+from app.models.training import TrainingSession
 from app.schemas.budget import (
     BudgetArticleCreate,
     BudgetArticleUpdate,
+    BudgetExpenseCreate,
+    BudgetExpenseUpdate,
     SafetyBudgetCreate,
     SafetyBudgetUpdate,
 )
@@ -31,6 +42,30 @@ __all__ = [
     "BudgetValidationError",
     "BudgetService",
 ]
+
+# entity_type -> polymorphic target model for BudgetExpense.entity_id (see
+# app.models.budget.EXPENSE_ENTITY_TYPES for the domain -> entity_type mapping).
+# TrainingSession has NO SoftDeleteMixin — the deleted_at filter below is applied
+# conditionally via hasattr, not unconditionally.
+_ENTITY_MODELS: dict[str, type] = {
+    "training_session": TrainingSession,
+    "medical_exam": MedicalExam,
+    "corrective_action": CorrectiveAction,
+}
+
+# Fields that must never be explicitly nulled via PATCH (rules_engine convention:
+# a client-supplied `null` on a non-nullable business field is a validation error,
+# not a silent no-op / TypeError at flush time). Keyed per update schema.
+_BUDGET_NON_NULLABLE = frozenset({"name", "period_start", "period_end", "planned_amount"})
+_ARTICLE_NON_NULLABLE = frozenset({"name", "is_active"})
+_EXPENSE_NON_NULLABLE = frozenset({"title", "occurred_on", "amount"})
+
+
+def _reject_explicit_nulls(fields: dict, non_nullable: frozenset[str]) -> None:
+    for key in non_nullable & fields.keys():
+        if fields[key] is None:
+            raise BudgetValidationError("invalid_field_null", f"Field '{key}' cannot be null")
+
 
 # code, name, domain (None = универсальная статья, не привязана к домену)
 DEFAULT_ARTICLES: tuple[tuple[str, str, str | None], ...] = (
@@ -139,6 +174,7 @@ class BudgetService:
         """
         budget = await self._load_budget(budget_id)
         fields = payload.model_dump(exclude_unset=True)
+        _reject_explicit_nulls(fields, _BUDGET_NON_NULLABLE)
         effective_start = fields.get("period_start", budget.period_start)
         effective_end = fields.get("period_end", budget.period_end)
         if effective_end < effective_start:
@@ -193,6 +229,9 @@ class BudgetService:
         try:
             await self.session.flush()
         except IntegrityError as exc:  # гонка параллельных create — паттерн rules_engine
+            # rollback() откатывает ВСЮ транзакцию запроса, а не только этот flush —
+            # вызывающий код не может продолжить работу с session в той же транзакции
+            # после этого except (никаких доп. операций catch-and-continue здесь и выше).
             await self.session.rollback()
             raise ArticleCodeConflict(payload.code) from exc
         await self.session.refresh(article)
@@ -223,6 +262,7 @@ class BudgetService:
     ) -> BudgetExpenseArticle:
         article = await self._load_article(article_id)
         fields = payload.model_dump(exclude_unset=True)
+        _reject_explicit_nulls(fields, _ARTICLE_NON_NULLABLE)
         for key, value in fields.items():
             setattr(article, key, value)
         await self.session.flush()
@@ -266,3 +306,230 @@ class BudgetService:
         await self.session.flush()
         skipped = len(DEFAULT_ARTICLES) - created
         return created, skipped
+
+    # ------------------------------------------------------------------
+    # expenses
+    # ------------------------------------------------------------------
+
+    def _expense_base(self):
+        return select(BudgetExpense).where(
+            BudgetExpense.tenant_id == self.tenant_id,
+            BudgetExpense.deleted_at.is_(None),
+        )
+
+    async def _load_expense(self, expense_id: str) -> BudgetExpense:
+        row = await self.session.scalar(
+            self._expense_base().where(BudgetExpense.id == expense_id)
+        )
+        if row is None:
+            raise ExpenseNotFound(expense_id)
+        return row
+
+    async def _validate_expense_refs(
+        self,
+        *,
+        article_id: str | None,
+        company_id: str | None,
+        branch_id: str | None,
+        site_id: str | None,
+        entity_type: str | None,
+        entity_id: str | None,
+        domain: str,
+        check_article_active: bool,
+    ) -> None:
+        """Tenant-scoped existence/consistency checks for every non-None reference.
+
+        Each ref is checked with its own ``select`` (no join fan-out); callers pass
+        the values that will actually be persisted (either the create payload as-is,
+        or the update's merged stored+incoming values — see update_expense).
+        """
+        if article_id is not None:
+            row = (
+                await self.session.execute(
+                    select(BudgetExpenseArticle.is_active, BudgetExpenseArticle.domain).where(
+                        BudgetExpenseArticle.tenant_id == self.tenant_id,
+                        BudgetExpenseArticle.id == article_id,
+                        BudgetExpenseArticle.deleted_at.is_(None),
+                    )
+                )
+            ).first()
+            if row is None:
+                raise BudgetValidationError("unknown_article", f"unknown article: {article_id}")
+            is_active, article_domain = row
+            if check_article_active and not is_active:
+                raise BudgetValidationError(
+                    "article_inactive", f"article is inactive: {article_id}"
+                )
+            if article_domain not in (None, domain):
+                raise BudgetValidationError(
+                    "article_domain_mismatch",
+                    f"article domain {article_domain!r} does not match expense domain "
+                    f"{domain!r}",
+                )
+
+        if company_id is not None:
+            exists = await self.session.scalar(
+                select(Company.id).where(
+                    Company.tenant_id == self.tenant_id,
+                    Company.id == company_id,
+                    Company.deleted_at.is_(None),
+                )
+            )
+            if exists is None:
+                raise BudgetValidationError("unknown_company", f"unknown company: {company_id}")
+
+        if branch_id is not None:
+            exists = await self.session.scalar(
+                select(Branch.id).where(
+                    Branch.tenant_id == self.tenant_id,
+                    Branch.id == branch_id,
+                    Branch.deleted_at.is_(None),
+                )
+            )
+            if exists is None:
+                raise BudgetValidationError("unknown_branch", f"unknown branch: {branch_id}")
+
+        if site_id is not None:
+            exists = await self.session.scalar(
+                select(Site.id).where(
+                    Site.tenant_id == self.tenant_id,
+                    Site.id == site_id,
+                    Site.deleted_at.is_(None),
+                )
+            )
+            if exists is None:
+                raise BudgetValidationError("unknown_site", f"unknown site: {site_id}")
+
+        if entity_type is not None:
+            expected_type = EXPENSE_ENTITY_TYPES.get(domain)
+            if entity_type != expected_type:
+                raise BudgetValidationError(
+                    "invalid_entity_type",
+                    f"entity_type {entity_type!r} is not valid for domain {domain!r}",
+                )
+            model = _ENTITY_MODELS[entity_type]
+            stmt = select(model.id).where(
+                model.tenant_id == self.tenant_id, model.id == entity_id
+            )
+            if hasattr(model, "deleted_at"):
+                stmt = stmt.where(model.deleted_at.is_(None))
+            exists = await self.session.scalar(stmt)
+            if exists is None:
+                raise BudgetValidationError(
+                    "unknown_entity", f"unknown entity: {entity_type}:{entity_id}"
+                )
+
+    async def create_expense(self, payload: BudgetExpenseCreate) -> BudgetExpense:
+        await self._validate_expense_refs(
+            article_id=payload.article_id,
+            company_id=payload.company_id,
+            branch_id=payload.branch_id,
+            site_id=payload.site_id,
+            entity_type=payload.entity_type,
+            entity_id=payload.entity_id,
+            domain=payload.domain,
+            check_article_active=True,
+        )
+        expense = BudgetExpense(tenant_id=self.tenant_id, **payload.model_dump())
+        self.session.add(expense)
+        await self.session.flush()
+        await self.session.refresh(expense)
+        return expense
+
+    async def list_expenses(
+        self,
+        *,
+        domain: str | None = None,
+        article_id: str | None = None,
+        date_from: date | None = None,
+        date_to: date | None = None,
+        company_id: str | None = None,
+        branch_id: str | None = None,
+        site_id: str | None = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> tuple[list[tuple[BudgetExpense, str | None]], int]:
+        filters = [
+            BudgetExpense.tenant_id == self.tenant_id,
+            BudgetExpense.deleted_at.is_(None),
+        ]
+        if domain is not None:
+            filters.append(BudgetExpense.domain == domain)
+        if article_id is not None:
+            filters.append(BudgetExpense.article_id == article_id)
+        if date_from is not None:
+            filters.append(BudgetExpense.occurred_on >= date_from)
+        if date_to is not None:
+            filters.append(BudgetExpense.occurred_on <= date_to)
+        if company_id is not None:
+            filters.append(BudgetExpense.company_id == company_id)
+        if branch_id is not None:
+            filters.append(BudgetExpense.branch_id == branch_id)
+        if site_id is not None:
+            filters.append(BudgetExpense.site_id == site_id)
+
+        total = int(
+            await self.session.scalar(
+                select(func.count()).select_from(BudgetExpense).where(*filters)
+            )
+            or 0
+        )
+        rows = (
+            await self.session.execute(
+                select(BudgetExpense, BudgetExpenseArticle.name)
+                .outerjoin(
+                    BudgetExpenseArticle, BudgetExpenseArticle.id == BudgetExpense.article_id
+                )
+                .where(*filters)
+                .order_by(BudgetExpense.occurred_on.desc(), BudgetExpense.id)
+                .limit(limit)
+                .offset(offset)
+            )
+        ).all()
+        return [(row[0], row[1]) for row in rows], total
+
+    async def update_expense(
+        self, expense_id: str, payload: BudgetExpenseUpdate
+    ) -> BudgetExpense:
+        expense = await self._load_expense(expense_id)
+        fields = payload.model_dump(exclude_unset=True)
+        _reject_explicit_nulls(fields, _EXPENSE_NON_NULLABLE)
+
+        merged_article_id = fields.get("article_id", expense.article_id)
+        merged_company_id = fields.get("company_id", expense.company_id)
+        merged_branch_id = fields.get("branch_id", expense.branch_id)
+        merged_site_id = fields.get("site_id", expense.site_id)
+        merged_entity_type = fields.get("entity_type", expense.entity_type)
+        merged_entity_id = fields.get("entity_id", expense.entity_id)
+
+        # A PATCH may clear only one side of the entity_type/entity_id pair (e.g.
+        # {"entity_type": null} alone) — the schema validates each request in
+        # isolation and cannot see the stored counterpart, so the merged pairing is
+        # re-checked here before touching refs/row (mirrors update_budget's merged
+        # period re-check).
+        if (merged_entity_type is None) != (merged_entity_id is None):
+            raise BudgetValidationError(
+                "invalid_entity_link", "entity_type and entity_id must be set together"
+            )
+
+        await self._validate_expense_refs(
+            article_id=merged_article_id,
+            company_id=merged_company_id,
+            branch_id=merged_branch_id,
+            site_id=merged_site_id,
+            entity_type=merged_entity_type,
+            entity_id=merged_entity_id,
+            domain=expense.domain,
+            check_article_active=("article_id" in fields),
+        )
+
+        for key, value in fields.items():
+            setattr(expense, key, value)
+        await self.session.flush()
+        await self.session.refresh(expense)
+        return expense
+
+    async def delete_expense(self, expense_id: str) -> None:
+        expense = await self._load_expense(expense_id)
+        expense.deleted_at = datetime.now(timezone.utc)
+        await self.session.flush()
