@@ -17,6 +17,7 @@ import pytest
 from app.models.budget import BudgetExpense, BudgetExpenseArticle, SafetyBudget
 from app.models.models import Branch, Company, PPEItem, PPEItemCategory, Site
 from app.models.ppe_registry import PPESafetyBudget, PPEStockBatch, PPEStockMovement
+from app.modules.budget import aggregation
 from app.modules.budget.aggregation import (
     BREAKDOWN_DIMENSIONS,
     BREAKDOWN_ROW_CAP,
@@ -304,7 +305,7 @@ async def test_overview_window_inversion_rejected(
 
         with pytest.raises(BudgetValidationError) as exc_info:
             await compute_overview(session, tenant.id, date(2026, 2, 1), date(2026, 1, 1))
-        assert exc_info.value.code == "breakdown_window_invalid"
+        assert exc_info.value.code == "window_invalid"
 
 
 # ---------------------------------------------------------------------------
@@ -428,7 +429,7 @@ async def test_breakdown_validation_codes(sessionmaker, data_factory: TestDataFa
 
         with pytest.raises(BudgetValidationError) as exc_info:
             await compute_breakdown(session, tenant.id, "article", date(2026, 2, 1), date(2026, 1, 1))
-        assert exc_info.value.code == "breakdown_window_invalid"
+        assert exc_info.value.code == "window_invalid"
 
 
 @pytest.mark.asyncio
@@ -468,3 +469,30 @@ async def test_breakdown_cap_wiring(sessionmaker, data_factory: TestDataFactory)
 
         assert result.total == 3
         assert len(result.items) == 3  # under the cap nothing is truncated
+
+
+@pytest.mark.asyncio
+async def test_breakdown_cap_truncation(
+    sessionmaker, data_factory: TestDataFactory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """total counts ALL groups; items are the top-N by amount after the cap."""
+    monkeypatch.setattr(aggregation, "BREAKDOWN_ROW_CAP", 2)
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        art_a = await _article(session, tenant.id, code="a", name="А-статья")
+        art_b = await _article(session, tenant.id, code="b", name="Б-статья")
+        art_c = await _article(session, tenant.id, code="c", name="В-статья")
+        for article, amount in ((art_a, 300), (art_b, 200), (art_c, 100)):
+            await _expense(
+                session, tenant.id, domain="training", amount=amount,
+                occurred_on=date(2026, 1, 5), article_id=article.id,
+            )
+
+        result = await compute_breakdown(session, tenant.id, "article", WIN_FROM, WIN_TO)
+
+        assert result.total == 3
+        assert len(result.items) == 2
+        assert [(i.id, i.amount) for i in result.items] == [
+            (art_a.id, 300.0),
+            (art_b.id, 200.0),
+        ]  # top-2 by amount; В-статья truncated

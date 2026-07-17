@@ -94,10 +94,9 @@ def _as_decimal(value) -> Decimal:
 
 
 def _check_window(date_from: date, date_to: date) -> None:
+    # Neutral code (NOT breakdown_*): shared by compute_overview and compute_breakdown.
     if date_to < date_from:
-        raise BudgetValidationError(
-            "breakdown_window_invalid", "date_to must be >= date_from"
-        )
+        raise BudgetValidationError("window_invalid", "date_to must be >= date_from")
 
 
 async def _domain_fact(
@@ -109,9 +108,10 @@ async def _domain_fact(
 ) -> tuple[Decimal, list[ArticleActual], int]:
     """Decimal total + by-article rows + expense count for one journal domain.
 
-    Single GROUP BY query; the article outerjoin deliberately has NO deleted_at
-    filter — historical expenses keep showing a soft-deleted article's name
-    (mirrors BudgetService.list_expenses).
+    Single GROUP BY query; the article outerjoin is tenant-guarded (defense-in-depth
+    against cross-tenant-FK name leaks) but deliberately has NO deleted_at filter —
+    historical expenses keep showing a soft-deleted article's name (mirrors
+    BudgetService.list_expenses).
     """
     stmt = (
         select(
@@ -121,7 +121,11 @@ async def _domain_fact(
             func.count(),
         )
         .outerjoin(
-            BudgetExpenseArticle, BudgetExpenseArticle.id == BudgetExpense.article_id
+            BudgetExpenseArticle,
+            and_(
+                BudgetExpenseArticle.id == BudgetExpense.article_id,
+                BudgetExpenseArticle.tenant_id == tenant_id,
+            ),
         )
         .where(
             BudgetExpense.tenant_id == tenant_id,
@@ -300,8 +304,9 @@ async def compute_breakdown(
 
     NULL-измерение собирается в None-bucket (id="" / «— без статьи»/«— без
     привязки»); bucket появляется только когда его сумма > 0 (amount > 0 по
-    схеме — существующая группа всегда ненулевая). Живой FK на отсутствующую/
-    soft-deleted master-строку не теряет денег: имя падает на сырой id.
+    схеме — существующая группа всегда ненулевая). Имена резолвятся строго в
+    рамках тенанта, но НЕЗАВИСИМО от soft-delete (историческое имя лучше сырого
+    UUID); fallback на сырой id остаётся только для действительно висячих ссылок.
     """
     if dimension not in BREAKDOWN_DIMENSIONS:
         raise BudgetValidationError(
@@ -325,7 +330,11 @@ async def compute_breakdown(
                 func.sum(BudgetExpense.amount),
             )
             .outerjoin(
-                BudgetExpenseArticle, BudgetExpenseArticle.id == BudgetExpense.article_id
+                BudgetExpenseArticle,
+                and_(
+                    BudgetExpenseArticle.id == BudgetExpense.article_id,
+                    BudgetExpenseArticle.tenant_id == tenant_id,
+                ),
             )
             .where(*filters)
             .group_by(BudgetExpense.article_id, BudgetExpenseArticle.name)
@@ -353,12 +362,13 @@ async def compute_breakdown(
         ref_model = _DIMENSION_MODELS[dimension]
         stmt = (
             select(dim_col, ref_model.name, func.sum(BudgetExpense.amount))
+            # tenant-guarded, БЕЗ deleted_at (политика статей): soft-deleted
+            # company/branch/site показывает историческое имя, не сырой UUID.
             .outerjoin(
                 ref_model,
                 and_(
                     ref_model.id == dim_col,
                     ref_model.tenant_id == tenant_id,
-                    ref_model.deleted_at.is_(None),
                 ),
             )
             .where(*filters)
