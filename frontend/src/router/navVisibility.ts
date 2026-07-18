@@ -15,6 +15,7 @@ export function filterNavGroupsByAccess(
         if (item.to === "/committees" && featureFlags.committees === false) return false;
         if (item.to === "/sout" && featureFlags.sout === false) return false;
         if (item.to === "/rules" && featureFlags.rules_engine === false) return false;
+        if (item.to === "/budget" && featureFlags.budget === false) return false;
         return can(item.permission);
       })
     }))

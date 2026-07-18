@@ -72,6 +72,7 @@ from app.api.routes.files import router as legacy_files_router
 from app.core.config import get_settings
 from app.modules.analytics.api import router as analytics_router
 from app.modules.branding.api import router as branding_router
+from app.modules.budget.api import router as budget_router
 from app.modules.client_portal.api import internal_router as portal_requests_router
 from app.modules.client_portal.api import router as client_portal_v1_router
 from app.modules.export_center.api import router as export_center_router
@@ -186,6 +187,7 @@ DOCUMENT_CORE_ROUTER_REGISTRATIONS: tuple[RouterRegistration, ...] = (
     (export_center_router, {"tags": ["exports"]}),
     (report_builder_router, {"tags": ["report-builder"]}),
     (rules_engine_router, {"tags": ["rules-engine"]}),
+    (budget_router, {"tags": ["budget"]}),
 )
 
 PLATFORM_EXTENSION_ROUTER_REGISTRATIONS: tuple[RouterRegistration, ...] = (

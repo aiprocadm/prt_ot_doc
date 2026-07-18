@@ -241,6 +241,13 @@ from app.models.rules_engine import (  # noqa: E402
     RuleTriggerStatus,
 )
 
+# §12.4 bg01: re-export budget models from app.models.budget.
+from app.models.budget import (  # noqa: E402
+    BudgetExpense,
+    BudgetExpenseArticle,
+    SafetyBudget,
+)
+
 # ARCH-2: re-export templates-domain models moved to app.models.templates.
 from app.models.templates import (
     Template,
@@ -624,3 +631,5 @@ __all__ += [
 __all__ += ["ReportDefinition"]
 
 __all__ += ["AutomationRule", "AutomationRuleTrigger", "RuleTriggerStatus"]
+
+__all__ += ["SafetyBudget", "BudgetExpenseArticle", "BudgetExpense"]
