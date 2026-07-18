@@ -25,6 +25,7 @@ import {
   Truck,
   Users,
   UsersRound,
+  Wallet,
   Wrench,
   Zap
 } from "lucide-react";
@@ -113,7 +114,8 @@ export const MAIN_NAV_GROUPS: NavGroup[] = [
       { label: "Конструктор отчётов", to: "/reports/builder", icon: ShieldCheck, permission: PERMISSIONS.REPORTS_VIEW },
       { label: "Тренды", to: "/analytics/trends", icon: Activity, permission: PERMISSIONS.REPORTS_VIEW },
       { label: "Управленческая аналитика", to: "/analytics", icon: Activity, permission: PERMISSIONS.ANALYTICS_VIEW },
-      { label: "Кабинет клиента", to: "/client-portal/dashboard", icon: Users, permission: PERMISSIONS.CLIENT_PORTAL_VIEW }
+      { label: "Кабинет клиента", to: "/client-portal/dashboard", icon: Users, permission: PERMISSIONS.CLIENT_PORTAL_VIEW },
+      { label: "Бюджет безопасности", to: "/budget", icon: Wallet, permission: PERMISSIONS.BUDGET_VIEW }
     ]
   },
   {
