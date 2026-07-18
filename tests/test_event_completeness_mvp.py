@@ -124,7 +124,14 @@ async def test_event_emission_checklist(
 
     # Report on all events
     total_found = len(events_found)
-    all_events = {"DocumentGenerated", "DocumentSigned", "RiskAssessed", "PPEIssued", "TrainingCompleted", "DocumentExported"}
+    all_events = {
+        "DocumentGenerated",
+        "DocumentSigned",
+        "RiskAssessed",
+        "PPEIssued",
+        "TrainingCompleted",
+        "DocumentExported",
+    }
     missing = all_events - set(events_found.keys())
 
     if total_found == 0:

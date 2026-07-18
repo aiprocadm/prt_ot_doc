@@ -19,7 +19,9 @@ class PrescriptionService:
             return current_status
         if all(status in cls._CLOSED for status in item_statuses):
             return "closed"
-        if any(status in {"in_progress", "resolved", "verified", "closed"} for status in item_statuses):
+        if any(
+            status in {"in_progress", "resolved", "verified", "closed"} for status in item_statuses
+        ):
             return "partially_closed"
         return "active"
 
@@ -44,9 +46,17 @@ class CorrectiveActionService:
         return "overdue" if cls.is_overdue(status, due_date) else status
 
     @staticmethod
-    def apply_verification(*, is_effective: bool, partially_effective: bool = False, comment: str | None = None) -> VerificationResult:
+    def apply_verification(
+        *, is_effective: bool, partially_effective: bool = False, comment: str | None = None
+    ) -> VerificationResult:
         if is_effective:
-            return VerificationResult(status="verified", effectiveness_status="effective", verification_comment=comment)
+            return VerificationResult(
+                status="verified", effectiveness_status="effective", verification_comment=comment
+            )
         if partially_effective:
-            return VerificationResult(status="verified", effectiveness_status="partial", verification_comment=comment)
-        return VerificationResult(status="verified", effectiveness_status="ineffective", verification_comment=comment)
+            return VerificationResult(
+                status="verified", effectiveness_status="partial", verification_comment=comment
+            )
+        return VerificationResult(
+            status="verified", effectiveness_status="ineffective", verification_comment=comment
+        )

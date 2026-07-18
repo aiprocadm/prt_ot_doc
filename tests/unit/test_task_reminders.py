@@ -36,7 +36,11 @@ async def test_task_reminder_emits_outbox(sessionmaker, data_factory):
         processed = await process_task_reminders(session)
         assert processed == 1
 
-        outbox = (await session.execute(select(Outbox).where(Outbox.event_type == "TaskDueSoon"))).scalars().all()
+        outbox = (
+            (await session.execute(select(Outbox).where(Outbox.event_type == "TaskDueSoon")))
+            .scalars()
+            .all()
+        )
         assert outbox
 
 
@@ -65,8 +69,10 @@ async def test_task_reminder_overdue_and_schedule(sessionmaker, data_factory):
         assert processed == 1
 
         outbox = (
-            await session.execute(select(Outbox).where(Outbox.event_type == "TaskOverdue"))
-        ).scalars().all()
+            (await session.execute(select(Outbox).where(Outbox.event_type == "TaskOverdue")))
+            .scalars()
+            .all()
+        )
         assert outbox
         await session.refresh(task)
         assert task.next_remind_at == (now + timedelta(days=1)).replace(tzinfo=None)
@@ -172,6 +178,14 @@ async def test_prescription_overdue_emits_dedicated_outbox_event(sessionmaker, d
         processed = await process_task_reminders(session, now=now)
         assert processed == 1
 
-        outbox = (await session.execute(select(Outbox).where(Outbox.event_type == "PrescriptionOverdue"))).scalars().all()
+        outbox = (
+            (
+                await session.execute(
+                    select(Outbox).where(Outbox.event_type == "PrescriptionOverdue")
+                )
+            )
+            .scalars()
+            .all()
+        )
         assert len(outbox) == 1
         assert outbox[0].payload["prescription_id"] == prescription.id

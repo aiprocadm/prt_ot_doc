@@ -47,9 +47,9 @@ Extended subset (`--grep "credential-based flows"`):
 
 Default deterministic credentials for `bootstrap_local`:
 
-- `E2E_USER_EMAIL=e2e.owner.demo@example.local`
+- `E2E_USER_EMAIL=e2e.owner.demo@example.com`
 - `E2E_USER_PASSWORD=OwnerDemo123!`
-- `E2E_LIMITED_USER_EMAIL=e2e.student.demo@example.local`
+- `E2E_LIMITED_USER_EMAIL=e2e.student.demo@example.com`
 - `E2E_LIMITED_USER_PASSWORD=StudentDemo123!`
 - `E2E_TENANT=demo`
 

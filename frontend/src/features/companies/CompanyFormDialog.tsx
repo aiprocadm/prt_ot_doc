@@ -131,7 +131,7 @@ export const CompanyFormDialog = ({ trigger, initialData, onSubmitted }: Company
             </div>
             <div className="space-y-2">
               <Label htmlFor="status">Статус</Label>
-              <select id="status" className="h-10 rounded-md border px-3" {...form.register("status")}> 
+              <select id="status" className="h-10 rounded-md border px-3" {...form.register("status")}>
                 <option value="draft">Черновик</option>
                 <option value="active">Активна</option>
                 <option value="archived">Архив</option>

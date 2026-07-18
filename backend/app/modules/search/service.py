@@ -89,8 +89,12 @@ class SearchService:
         return f"/{prefix}/{entity_id}"
 
     @staticmethod
-    def _build_snippet(*, q: str, title: str | None, subtitle: str | None, preview_payload: dict[str, Any] | None) -> str | None:
-        haystack = " | ".join(part for part in [title or "", subtitle or "", str(preview_payload or "")] if part).strip()
+    def _build_snippet(
+        *, q: str, title: str | None, subtitle: str | None, preview_payload: dict[str, Any] | None
+    ) -> str | None:
+        haystack = " | ".join(
+            part for part in [title or "", subtitle or "", str(preview_payload or "")] if part
+        ).strip()
         if not haystack:
             return None
         if not q.strip():
@@ -104,13 +108,33 @@ class SearchService:
         end = min(pos + len(q_lower) + 80, len(haystack))
         return haystack[start:end].strip()
 
-    async def track_recent_query(self, *, user_id: str, q: str, entity_types: set[str], filters: SearchFilters) -> None:
+    async def track_recent_query(
+        self, *, user_id: str, q: str, entity_types: set[str], filters: SearchFilters
+    ) -> None:
         query = q.strip()
         if not query:
             return
-        row = (await self.session.execute(select(SearchRecentQuery).where(and_(SearchRecentQuery.tenant_id == self.tenant_id, SearchRecentQuery.user_id == user_id, SearchRecentQuery.query_text == query, SearchRecentQuery.deleted_at.is_(None))))).scalar_one_or_none()
+        row = (
+            await self.session.execute(
+                select(SearchRecentQuery).where(
+                    and_(
+                        SearchRecentQuery.tenant_id == self.tenant_id,
+                        SearchRecentQuery.user_id == user_id,
+                        SearchRecentQuery.query_text == query,
+                        SearchRecentQuery.deleted_at.is_(None),
+                    )
+                )
+            )
+        ).scalar_one_or_none()
         if row is None:
-            row = SearchRecentQuery(tenant_id=self.tenant_id, user_id=user_id, query_text=query, entity_types=sorted(entity_types), hit_count=1, last_used_at=datetime.now(tz=timezone.utc))
+            row = SearchRecentQuery(
+                tenant_id=self.tenant_id,
+                user_id=user_id,
+                query_text=query,
+                entity_types=sorted(entity_types),
+                hit_count=1,
+                last_used_at=datetime.now(tz=timezone.utc),
+            )
             self.session.add(row)
         else:
             row.entity_types = sorted(entity_types)
@@ -119,15 +143,86 @@ class SearchService:
         await self.session.flush()
 
     async def list_recent_queries(self, *, user_id: str, limit: int = 8) -> list[dict[str, Any]]:
-        rows = (await self.session.execute(select(SearchRecentQuery).where(SearchRecentQuery.tenant_id == self.tenant_id, SearchRecentQuery.user_id == user_id, SearchRecentQuery.deleted_at.is_(None)).order_by(SearchRecentQuery.last_used_at.desc().nullslast(), SearchRecentQuery.updated_at.desc()).limit(limit))).scalars().all()
-        return [{"id": row.id, "q": row.query_text, "types": row.entity_types or [], "hit_count": row.hit_count, "last_used_at": row.last_used_at.isoformat() if row.last_used_at else None} for row in rows]
+        rows = (
+            (
+                await self.session.execute(
+                    select(SearchRecentQuery)
+                    .where(
+                        SearchRecentQuery.tenant_id == self.tenant_id,
+                        SearchRecentQuery.user_id == user_id,
+                        SearchRecentQuery.deleted_at.is_(None),
+                    )
+                    .order_by(
+                        SearchRecentQuery.last_used_at.desc().nullslast(),
+                        SearchRecentQuery.updated_at.desc(),
+                    )
+                    .limit(limit)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        return [
+            {
+                "id": row.id,
+                "q": row.query_text,
+                "types": row.entity_types or [],
+                "hit_count": row.hit_count,
+                "last_used_at": row.last_used_at.isoformat() if row.last_used_at else None,
+            }
+            for row in rows
+        ]
 
     async def list_saved_queries(self, *, user_id: str) -> list[dict[str, Any]]:
-        rows = (await self.session.execute(select(SearchSavedQuery).where(SearchSavedQuery.tenant_id == self.tenant_id, or_(SearchSavedQuery.user_id == user_id, SearchSavedQuery.is_shared.is_(True)), SearchSavedQuery.deleted_at.is_(None)).order_by(SearchSavedQuery.created_at.desc()))).scalars().all()
-        return [{"id": row.id, "name": row.name, "q": row.query_text, "types": row.entity_types or [], "filters": row.filters_json or {}, "is_shared": row.is_shared} for row in rows]
+        rows = (
+            (
+                await self.session.execute(
+                    select(SearchSavedQuery)
+                    .where(
+                        SearchSavedQuery.tenant_id == self.tenant_id,
+                        or_(
+                            SearchSavedQuery.user_id == user_id,
+                            SearchSavedQuery.is_shared.is_(True),
+                        ),
+                        SearchSavedQuery.deleted_at.is_(None),
+                    )
+                    .order_by(SearchSavedQuery.created_at.desc())
+                )
+            )
+            .scalars()
+            .all()
+        )
+        return [
+            {
+                "id": row.id,
+                "name": row.name,
+                "q": row.query_text,
+                "types": row.entity_types or [],
+                "filters": row.filters_json or {},
+                "is_shared": row.is_shared,
+            }
+            for row in rows
+        ]
 
-    async def save_query(self, *, user_id: str, name: str, q: str, entity_types: set[str], filters: dict[str, Any], is_shared: bool = False) -> SearchSavedQuery:
-        item = SearchSavedQuery(tenant_id=self.tenant_id, user_id=user_id, name=name, query_text=q.strip(), entity_types=sorted(entity_types), filters_json=filters, is_shared=is_shared)
+    async def save_query(
+        self,
+        *,
+        user_id: str,
+        name: str,
+        q: str,
+        entity_types: set[str],
+        filters: dict[str, Any],
+        is_shared: bool = False,
+    ) -> SearchSavedQuery:
+        item = SearchSavedQuery(
+            tenant_id=self.tenant_id,
+            user_id=user_id,
+            name=name,
+            query_text=q.strip(),
+            entity_types=sorted(entity_types),
+            filters_json=filters,
+            is_shared=is_shared,
+        )
         self.session.add(item)
         await self.session.flush()
         return item
@@ -149,6 +244,7 @@ class SearchService:
         sort: str,
         limit: int,
         cursor: str | None,
+        exclude_entity_types: set[str] | None = None,
     ) -> dict[str, Any]:
         offset = int(cursor or "0") if (cursor or "0").isdigit() else 0
         criteria: list = [SearchIndexEntry.tenant_id == self.tenant_id]
@@ -165,6 +261,11 @@ class SearchService:
         resolved_types = self._resolve_entity_types(types)
         if resolved_types:
             criteria.append(SearchIndexEntry.entity_type.in_(resolved_types))
+        # Confidential types the caller may not see (canonical entity_type values).
+        # Applied as a SQL exclusion so it also constrains the facet/total queries
+        # (which reuse filter_expr) and is immune to type-alias expansion.
+        if exclude_entity_types:
+            criteria.append(SearchIndexEntry.entity_type.notin_(sorted(exclude_entity_types)))
         if filters.status:
             criteria.append(SearchIndexEntry.status == filters.status)
         if filters.site_id:
@@ -172,7 +273,9 @@ class SearchService:
         if filters.company_id:
             criteria.append(SearchIndexEntry.tags_json["company_id"].astext == filters.company_id)
         if filters.contractor_id:
-            criteria.append(SearchIndexEntry.tags_json["contractor_id"].astext == filters.contractor_id)
+            criteria.append(
+                SearchIndexEntry.tags_json["contractor_id"].astext == filters.contractor_id
+            )
         if filters.project_id:
             criteria.append(SearchIndexEntry.tags_json["project_id"].astext == filters.project_id)
         if filters.risk_level:
@@ -196,7 +299,9 @@ class SearchService:
                 lower_text = func.lower(cast(SearchIndexEntry.search_text, String))
                 q_lower = query.lower()
                 order_by = [
-                    case((lower_title == q_lower, 0), (lower_title.like(f"{q_lower}%"), 1), else_=2),
+                    case(
+                        (lower_title == q_lower, 0), (lower_title.like(f"{q_lower}%"), 1), else_=2
+                    ),
                     case((lower_subtitle.like(f"{q_lower}%"), 0), else_=1),
                     func.instr(lower_text, q_lower),
                     desc(SearchIndexEntry.updated_at),
@@ -211,7 +316,9 @@ class SearchService:
         facet_rows = (await self.session.execute(facet_stmt)).all()
         status_rows = (
             await self.session.execute(
-                select(SearchIndexEntry.status, func.count()).where(filter_expr).group_by(SearchIndexEntry.status)
+                select(SearchIndexEntry.status, func.count())
+                .where(filter_expr)
+                .group_by(SearchIndexEntry.status)
             )
         ).all()
         company_rows = (
@@ -242,21 +349,51 @@ class SearchService:
                 .group_by(SearchIndexEntry.tags_json["risk_level"].astext)
             )
         ).all()
-        total = int(await self.session.scalar(select(func.count()).select_from(SearchIndexEntry).where(filter_expr)) or 0)
-        rows = (await self.session.execute(stmt.order_by(*order_by).offset(offset).limit(limit + 1))) if isinstance(order_by, list) else (await self.session.execute(stmt.order_by(order_by).offset(offset).limit(limit + 1)))
+        total = int(
+            await self.session.scalar(
+                select(func.count()).select_from(SearchIndexEntry).where(filter_expr)
+            )
+            or 0
+        )
+        rows = (
+            (await self.session.execute(stmt.order_by(*order_by).offset(offset).limit(limit + 1)))
+            if isinstance(order_by, list)
+            else (
+                await self.session.execute(stmt.order_by(order_by).offset(offset).limit(limit + 1))
+            )
+        )
         rows = rows.scalars().all()
         has_more = len(rows) > limit
         items = rows[:limit]
-        type_counts: dict[str, int] = {str(entity_type): int(total) for entity_type, total in facet_rows}
-        status_counts: dict[str, int] = {str(status or "unknown"): int(total) for status, total in status_rows}
-        company_counts: dict[str, int] = {str(company_id): int(total) for company_id, total in company_rows if company_id}
-        site_counts: dict[str, int] = {str(site_id): int(total) for site_id, total in site_rows if site_id}
-        project_counts: dict[str, int] = {str(project_id): int(total) for project_id, total in project_rows if project_id}
-        risk_counts: dict[str, int] = {str(risk_level): int(total) for risk_level, total in risk_rows if risk_level}
+        type_counts: dict[str, int] = {
+            str(entity_type): int(total) for entity_type, total in facet_rows
+        }
+        status_counts: dict[str, int] = {
+            str(status or "unknown"): int(total) for status, total in status_rows
+        }
+        company_counts: dict[str, int] = {
+            str(company_id): int(total) for company_id, total in company_rows if company_id
+        }
+        site_counts: dict[str, int] = {
+            str(site_id): int(total) for site_id, total in site_rows if site_id
+        }
+        project_counts: dict[str, int] = {
+            str(project_id): int(total) for project_id, total in project_rows if project_id
+        }
+        risk_counts: dict[str, int] = {
+            str(risk_level): int(total) for risk_level, total in risk_rows if risk_level
+        }
         return {
             "q": q,
             "total": total,
-            "facets": {"type_counts": type_counts, "status_counts": status_counts, "company_counts": company_counts, "site_counts": site_counts, "project_counts": project_counts, "risk_level_counts": risk_counts},
+            "facets": {
+                "type_counts": type_counts,
+                "status_counts": status_counts,
+                "company_counts": company_counts,
+                "site_counts": site_counts,
+                "project_counts": project_counts,
+                "risk_level_counts": risk_counts,
+            },
             "items": [
                 {
                     "kind": "entity",
@@ -268,7 +405,12 @@ class SearchService:
                     "route": row.route,
                     "deeplink": row.route or self._build_entity_url(row.entity_type, row.entity_id),
                     "preview_payload": row.preview_payload,
-                    "snippet": self._build_snippet(q=q, title=row.title, subtitle=row.subtitle, preview_payload=row.preview_payload),
+                    "snippet": self._build_snippet(
+                        q=q,
+                        title=row.title,
+                        subtitle=row.subtitle,
+                        preview_payload=row.preview_payload,
+                    ),
                     "tags": row.tags_json or {},
                 }
                 for row in items

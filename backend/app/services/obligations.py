@@ -85,7 +85,9 @@ def _next_reminder_after_send(
 
 async def _get_reminder_days(session: AsyncSession) -> list[int]:
     tenant_id = str(session.info.get("tenant_id") or "").strip() or None
-    tenant_slug = str(session.info.get("tenant_slug") or session.info.get("tenant") or "").strip() or None
+    tenant_slug = (
+        str(session.info.get("tenant_slug") or session.info.get("tenant") or "").strip() or None
+    )
     if tenant_id:
         stmt = select(Tenant).where(Tenant.id == tenant_id)
     elif tenant_slug:
@@ -101,9 +103,7 @@ async def _get_reminder_days(session: AsyncSession) -> list[int]:
     return _normalize_reminder_days(reminder_days)
 
 
-async def next_task_reminder(
-    session: AsyncSession, *, due_at: datetime | None
-) -> datetime | None:
+async def next_task_reminder(session: AsyncSession, *, due_at: datetime | None) -> datetime | None:
     reminder_days = await _get_reminder_days(session)
     return _next_reminder(due_at, reminder_days=reminder_days)
 

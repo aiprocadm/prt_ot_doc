@@ -43,15 +43,11 @@ DEFAULT_DOMAIN = "ot-platform.local"
 _CRLF = "\r\n"
 _LINE_LIMIT = 75  # octets, RFC 5545 §3.1
 
-_CONFIRMED_STATUSES = frozenset(
-    {"active", "approved", "completed", "issued", "signed", "valid"}
-)
+_CONFIRMED_STATUSES = frozenset({"active", "approved", "completed", "issued", "signed", "valid"})
 _TENTATIVE_STATUSES = frozenset(
     {"draft", "generated", "planned", "review", "scheduled", "upcoming"}
 )
-_CANCELLED_STATUSES = frozenset(
-    {"archived", "cancelled", "canceled", "closed", "revoked"}
-)
+_CANCELLED_STATUSES = frozenset({"archived", "cancelled", "canceled", "closed", "revoked"})
 
 
 def _escape_text(value: str) -> str:
@@ -129,9 +125,7 @@ def _status_value(item: CalendarEventItem) -> str:
     return "CONFIRMED"
 
 
-def _build_event(
-    item: CalendarEventItem, *, dtstamp: datetime, domain: str
-) -> Iterable[str]:
+def _build_event(item: CalendarEventItem, *, dtstamp: datetime, domain: str) -> Iterable[str]:
     yield "BEGIN:VEVENT"
     yield _fold(f"UID:{item.id}@{domain}")
     yield f"DTSTAMP:{_format_dt(dtstamp)}"
@@ -200,17 +194,9 @@ def render_calendar_ics(
         _fold(f"X-WR-CALNAME:{_escape_text(calendar_name)}"),
     ]
     if response.range_from is not None or response.range_to is not None:
-        from_label = (
-            response.range_from.date().isoformat() if response.range_from else "—"
-        )
-        to_label = (
-            response.range_to.date().isoformat() if response.range_to else "—"
-        )
-        lines.append(
-            _fold(
-                f"X-WR-CALDESC:{_escape_text(f'Период: {from_label} … {to_label}')}"
-            )
-        )
+        from_label = response.range_from.date().isoformat() if response.range_from else "—"
+        to_label = response.range_to.date().isoformat() if response.range_to else "—"
+        lines.append(_fold(f"X-WR-CALDESC:{_escape_text(f'Период: {from_label} … {to_label}')}"))
 
     for item in response.items:
         lines.extend(_build_event(item, dtstamp=response.generated_at, domain=domain))

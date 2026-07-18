@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Depends, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import get_settings
 from app.api.dependencies import get_session
+from app.core.config import get_settings
 from app.core.security import AccessContext, rbac
 from app.modules.operational_dashboard import OperationalDashboardService
 
@@ -19,13 +19,36 @@ router = APIRouter(prefix="/operational", tags=["operational"])
 _OPS_DASHBOARD_ROLES = ["admin", "owner", "hr", "ot_pb_lead", "line_manager", "manager"]
 
 
-def _tenant_uuid_from_request(request: Request, _access: AccessContext) -> str | None:
-    """Operational dashboard alerts are scoped strictly by tenant headers."""
+def _authenticated_tenant_scope(request: Request, access: AccessContext) -> str | None:
+    """Resolve the queried tenant strictly from the authenticated context.
+
+    The tenant scope MUST come from the verified token/user (``AccessContext``),
+    never the raw ``X-Tenant-Id`` header — otherwise an authenticated caller of
+    tenant A could read tenant B's aggregates by setting the header to a foreign
+    tenant id. When a client still supplies an explicit tenant header it must
+    match the authenticated tenant (defense-in-depth); a mismatch is rejected
+    with 403 rather than silently serving a cross-tenant scope.
+    """
+    authoritative = access.tenant_id or getattr(access.user, "tenant_id", None)
+    if authoritative is None:
+        return None
+    authoritative = str(authoritative)
+
+    known = {authoritative.lower()}
+    if access.tenant_slug:
+        known.add(str(access.tenant_slug).strip().lower())
+    user_tenant = getattr(access.user, "tenant_id", None)
+    if user_tenant:
+        known.add(str(user_tenant).lower())
+
     for key in ("X-Tenant-Id", "x-tenant-id", "x-tenant"):
         raw = request.headers.get(key)
-        if raw and str(raw).strip():
-            return str(raw).strip()
-    return None
+        if raw and str(raw).strip() and str(raw).strip().lower() not in known:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Tenant scope mismatch",
+            )
+    return authoritative
 
 
 @router.get(
@@ -56,7 +79,7 @@ async def get_operational_dashboard(
     """
     settings = get_settings()
 
-    tenant_id = _tenant_uuid_from_request(request, access)
+    tenant_id = _authenticated_tenant_scope(request, access)
 
     if not tenant_id:
         return JSONResponse(
@@ -68,14 +91,13 @@ async def get_operational_dashboard(
         service = OperationalDashboardService(settings)
         dashboard = await service.get_dashboard(tenant_id=tenant_id, db=db)
 
-        code = (
-            status.HTTP_200_OK
-            if dashboard.status == "ok"
-            else status.HTTP_200_OK
-        )
+        code = status.HTTP_200_OK if dashboard.status == "ok" else status.HTTP_200_OK
         return JSONResponse(status_code=code, content=dashboard.model_dump(mode="json"))
     except Exception as e:
         logger.exception("operational_dashboard.get_dashboard_failed")
+        # Handler returns normally, so the session dependency commits on teardown;
+        # an aborted transaction must be rolled back or that commit raises.
+        await db.rollback()
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content={"error": "dashboard retrieval failed", "detail": str(e)[:100]},

@@ -146,7 +146,9 @@ async def test_prepare_parameters_requires_tenant_binding() -> None:
     )
     fake_session = SimpleNamespace(info={})
 
-    template = Template(tenant_id="ignored", name="tpl", description=None, metadata_json={}, storage_key="key")
+    template = Template(
+        tenant_id="ignored", name="tpl", description=None, metadata_json={}, storage_key="key"
+    )
     template.tenant_id = None  # type: ignore[assignment]
     version = TemplateVersion(
         tenant_id="ignored",
@@ -233,7 +235,9 @@ async def test_normalize_error_details_maps_template_missing() -> None:
 
 
 @pytest.mark.asyncio()
-async def test_ensure_pending_run_detects_request_conflicts(session_factory: async_sessionmaker[AsyncSession]) -> None:
+async def test_ensure_pending_run_detects_request_conflicts(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
     async with session_factory() as session:
         tenant = await _create_tenant(session, "conflict")
         template, version = await _create_template(session, tenant)

@@ -179,7 +179,9 @@ def test_create_upload_session_rejects_dangerous_double_extension(monkeypatch: p
         file_allowed_extensions={"pdf"},
         presign_download_ttl_seconds=600,
     )
-    monkeypatch.setattr("app.modules.files.service.get_settings", lambda: settings)
+    # create_upload_session lives in the _uploads mixin (ARCH-4 slice 10 split); patch
+    # get_settings where that method looks it up.
+    monkeypatch.setattr("app.modules.files.service._uploads.get_settings", lambda: settings)
     svc = FileService(session=_FakeSession(record=None), tenant_id="tenant-a")
 
     async def _run() -> None:

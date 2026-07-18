@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import hashlib
+from datetime import date, datetime, timedelta, timezone
+
 import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -94,7 +96,9 @@ class TestMissingMandatoryFieldsRule:
 
         assert any(i.affected_entity_id == person.id for i in rule.issues)
         assert any("email" in i.additional_info.get("missing_fields", []) for i in rule.issues)
-        assert any("position_id" in i.additional_info.get("missing_fields", []) for i in rule.issues)
+        assert any(
+            "position_id" in i.additional_info.get("missing_fields", []) for i in rule.issues
+        )
 
     async def test_ok_complete_person(
         self,
@@ -193,6 +197,9 @@ class TestDataQualityService:
             "document_readiness",
             "document_person_company_mismatch",
             "potential_duplicates",
+            # Added by the medical contour (PR #643): flags persons with an
+            # unfit medical verdict but no active suspension.
+            "unfit_without_suspension",
         }
         assert expected_rules.issubset(rule_names)
         assert len(report.check_results) == len(expected_rules)
@@ -238,6 +245,50 @@ class TestDataQualityEndpoints:
 
 
 @pytest.mark.anyio
+class TestDataQualityCrossTenantHeader:
+    """``X-Tenant-Id`` must not let an authenticated caller read another tenant's DQ report.
+
+    Security regression guard: the queried tenant scope must come from the
+    verified token/user, never the raw ``X-Tenant-Id`` header. A caller
+    authenticated for tenant A that sets ``X-Tenant-Id`` to tenant B's id must
+    either be rejected (403) or scoped back to tenant A — a 200 whose
+    ``tenant_id`` is tenant B's is a cross-tenant read.
+    """
+
+    async def _distinct_tenants(self, make_auth_headers) -> tuple[dict[str, str], str, str]:
+        # ``acme`` and ``beta`` are seeded tenants; distinct per-tenant emails
+        # avoid the documented cross-tenant user-reuse gotcha in make_auth_headers.
+        acme = await make_auth_headers(RoleEnum.ADMIN, tenant="acme", email="admin-acme@dq.test")
+        beta = await make_auth_headers(RoleEnum.ADMIN, tenant="beta", email="admin-beta@dq.test")
+        acme_id = acme["x-tenant"]
+        beta_id = beta["x-tenant"]
+        assert acme_id != beta_id
+        headers = dict(acme)
+        headers["X-Tenant-Id"] = beta_id  # authenticated as acme, header points at beta
+        return headers, acme_id, beta_id
+
+    async def test_report_ignores_cross_tenant_header(
+        self, async_client: AsyncClient, make_auth_headers
+    ) -> None:
+        headers, acme_id, beta_id = await self._distinct_tenants(make_auth_headers)
+        resp = await async_client.get(f"{API_PREFIX}/data-quality/report", headers=headers)
+        assert resp.status_code in (200, 403)
+        if resp.status_code == 200:
+            assert resp.json()["tenant_id"] == acme_id
+            assert resp.json()["tenant_id"] != beta_id
+
+    async def test_check_ignores_cross_tenant_header(
+        self, async_client: AsyncClient, make_auth_headers
+    ) -> None:
+        headers, acme_id, beta_id = await self._distinct_tenants(make_auth_headers)
+        resp = await async_client.get(f"{API_PREFIX}/data-quality/check", headers=headers)
+        assert resp.status_code in (200, 403)
+        if resp.status_code == 200:
+            assert resp.json()["tenant_id"] == acme_id
+            assert resp.json()["tenant_id"] != beta_id
+
+
+@pytest.mark.anyio
 class TestExpiredPermitsRule:
     """Permits past valid_until that are still ACTIVE must be flagged."""
 
@@ -272,9 +323,7 @@ class TestExpiredPermitsRule:
         await rule.check()
 
         assert any(i.affected_entity_id == str(expired.id) for i in rule.issues)
-        assert all(
-            i.issue_type == IssueType.EXPIRED_RECORD for i in rule.issues
-        )
+        assert all(i.issue_type == IssueType.EXPIRED_RECORD for i in rule.issues)
 
     async def test_ignores_revoked_or_future_permits(
         self,
@@ -353,9 +402,7 @@ class TestExpiredPPEIssuesRule:
         await rule.check()
 
         assert any(i.affected_entity_id == str(issuance.id) for i in rule.issues)
-        assert all(
-            i.affected_entity_type == "ppe_issue" for i in rule.issues
-        )
+        assert all(i.affected_entity_type == "ppe_issue" for i in rule.issues)
 
     async def test_ignores_returned_or_unexpired_ppe(
         self,
@@ -434,9 +481,7 @@ class TestDocumentPersonCompanyMismatchRule:
         await rule.check()
 
         assert any(i.affected_entity_id == str(document.id) for i in rule.issues)
-        assert all(
-            i.issue_type == IssueType.DATA_MISMATCH for i in rule.issues
-        )
+        assert all(i.issue_type == IssueType.DATA_MISMATCH for i in rule.issues)
         flagged = next(i for i in rule.issues if i.affected_entity_id == str(document.id))
         assert flagged.additional_info["person_company_id"] == str(person_company.id)
         assert flagged.additional_info["document_company_id"] == str(document_company.id)
@@ -756,9 +801,7 @@ class TestOrphanedAssignmentsRule:
 
         flagged = [i for i in rule.issues if i.affected_entity_id == str(person.id)]
         assert flagged, "Expected an orphaned-assignment issue for the test person"
-        assert any(
-            i.additional_info.get("reason") == "position_soft_deleted" for i in flagged
-        )
+        assert any(i.additional_info.get("reason") == "position_soft_deleted" for i in flagged)
         assert all(i.severity == IssueSeverity.HIGH for i in flagged)
 
     async def test_flags_active_person_with_deleted_workplace(
@@ -864,9 +907,7 @@ class TestCompanyRequisitesRule:
         flagged = [i for i in rule.issues if i.affected_entity_id == str(company.id)]
         assert flagged
         assert all(i.severity == IssueSeverity.HIGH for i in flagged)
-        assert any(
-            "inn" in i.additional_info.get("missing_critical", []) for i in flagged
-        )
+        assert any("inn" in i.additional_info.get("missing_critical", []) for i in flagged)
 
     async def test_flags_only_recommended_with_low_severity(
         self,
@@ -887,9 +928,7 @@ class TestCompanyRequisitesRule:
         flagged = [i for i in rule.issues if i.affected_entity_id == str(company.id)]
         assert flagged
         assert all(i.severity == IssueSeverity.LOW for i in flagged)
-        assert all(
-            not i.additional_info.get("missing_critical") for i in flagged
-        )
+        assert all(not i.additional_info.get("missing_critical") for i in flagged)
         recommended = {
             field
             for issue in flagged
@@ -915,9 +954,7 @@ class TestCompanyRequisitesRule:
         rule = CompanyRequisitesRule(str(tenant.id), test_db_session)
         await rule.check()
 
-        assert not any(
-            i.affected_entity_id == str(company.id) for i in rule.issues
-        )
+        assert not any(i.affected_entity_id == str(company.id) for i in rule.issues)
 
 
 @pytest.mark.anyio
@@ -949,12 +986,9 @@ class TestDocumentReadinessRule:
         assert all(i.severity == IssueSeverity.MEDIUM for i in flagged)
         assert all(i.issue_type == IssueType.MISSING_FIELD for i in flagged)
         assert any(
-            "missing_template_version" in i.additional_info.get("missing", [])
-            for i in flagged
+            "missing_template_version" in i.additional_info.get("missing", []) for i in flagged
         )
-        assert all(
-            i.additional_info.get("age_days", 0) >= 14 for i in flagged
-        )
+        assert all(i.additional_info.get("age_days", 0) >= 14 for i in flagged)
 
     async def test_flags_old_draft_without_generated_file(
         self,
@@ -994,8 +1028,7 @@ class TestDocumentReadinessRule:
         flagged = [i for i in rule.issues if i.affected_entity_id == str(document.id)]
         assert flagged
         assert any(
-            "missing_generated_file" in i.additional_info.get("missing", [])
-            for i in flagged
+            "missing_generated_file" in i.additional_info.get("missing", []) for i in flagged
         )
 
     async def test_ignores_recent_drafts(
@@ -1018,9 +1051,7 @@ class TestDocumentReadinessRule:
         rule = DocumentReadinessRule(str(tenant.id), test_db_session)
         await rule.check()
 
-        assert not any(
-            i.affected_entity_id == str(document.id) for i in rule.issues
-        )
+        assert not any(i.affected_entity_id == str(document.id) for i in rule.issues)
 
     async def test_ignores_non_draft_status(
         self,
@@ -1042,6 +1073,4 @@ class TestDocumentReadinessRule:
         rule = DocumentReadinessRule(str(tenant.id), test_db_session)
         await rule.check()
 
-        assert not any(
-            i.affected_entity_id == str(document.id) for i in rule.issues
-        )
+        assert not any(i.affected_entity_id == str(document.id) for i in rule.issues)

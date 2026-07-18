@@ -29,7 +29,7 @@ Design notes
 from __future__ import annotations
 
 from datetime import date, datetime, time, timezone
-from typing import Iterable
+from typing import Any, Iterable
 
 from sqlalchemy import Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -42,6 +42,7 @@ from app.models.models import (
     Inspection,
     InspectionStatus,
     MedicalExam,
+    MedicalReferral,
     Permit,
     PermitStatus,
     PPEIssue,
@@ -66,6 +67,7 @@ MAX_ITEMS_PER_SOURCE = 50
 
 ALL_SOURCES: tuple[str, ...] = (
     "medical_exam",
+    "medical_referral",
     "ppe_issue",
     "permit",
     "training_session",
@@ -85,6 +87,7 @@ _CLOSED_DEADLINE_STATUSES = frozenset({"closed", "completed", "cancelled"})
 # v1.1 follow-up that introduces tenant-configurable bands).
 _SLA_THRESHOLDS: dict[str, tuple[int, int]] = {
     "medical_exam": (7, 30),
+    "medical_referral": (7, 30),
     "ppe_issue": (7, 30),
     "permit": (7, 30),
     "training_session": (3, 14),
@@ -108,9 +111,7 @@ def _coerce_dt(value: date | datetime | None) -> datetime | None:
     return datetime.combine(value, time.min, tzinfo=timezone.utc)
 
 
-def _variance_days(
-    expected: datetime | None, actual: datetime | None
-) -> int | None:
+def _variance_days(expected: datetime | None, actual: datetime | None) -> int | None:
     """Return whole-day delta `actual - expected` (positive = late)."""
     if expected is None or actual is None:
         return None
@@ -129,9 +130,7 @@ def _days_to_due(anchor: datetime | None, now: datetime) -> int | None:
     return (anchor.date() - now.date()).days
 
 
-def _sla_band(
-    source_type: str, *, days_to_due: int | None, is_overdue: bool
-) -> str | None:
+def _sla_band(source_type: str, *, days_to_due: int | None, is_overdue: bool) -> str | None:
     """Bucket the event into an SLA band (`overdue`/`critical`/`warning`/`ok`).
 
     `is_overdue=True` is the single source of truth for past-due rows —
@@ -190,8 +189,22 @@ class CalendarAggregatorService:
             )
             items.extend(collected)
             by_source.append(
+                CalendarSourceCount(source_type="medical_exam", count=total, overdue_count=overdue)
+            )
+
+        if "medical_referral" in sources:
+            collected, total, overdue = await self._build_medical_referrals(
+                from_at=from_at,
+                to_at=to_at,
+                person_id=person_id,
+                now=now,
+                include_fact=include_fact,
+                include_sla=include_sla,
+            )
+            items.extend(collected)
+            by_source.append(
                 CalendarSourceCount(
-                    source_type="medical_exam", count=total, overdue_count=overdue
+                    source_type="medical_referral", count=total, overdue_count=overdue
                 )
             )
 
@@ -206,9 +219,7 @@ class CalendarAggregatorService:
             )
             items.extend(collected)
             by_source.append(
-                CalendarSourceCount(
-                    source_type="ppe_issue", count=total, overdue_count=overdue
-                )
+                CalendarSourceCount(source_type="ppe_issue", count=total, overdue_count=overdue)
             )
 
         if "permit" in sources:
@@ -222,9 +233,7 @@ class CalendarAggregatorService:
             )
             items.extend(collected)
             by_source.append(
-                CalendarSourceCount(
-                    source_type="permit", count=total, overdue_count=overdue
-                )
+                CalendarSourceCount(source_type="permit", count=total, overdue_count=overdue)
             )
 
         if "training_session" in sources:
@@ -254,9 +263,7 @@ class CalendarAggregatorService:
             )
             items.extend(collected)
             by_source.append(
-                CalendarSourceCount(
-                    source_type="inspection", count=total, overdue_count=overdue
-                )
+                CalendarSourceCount(source_type="inspection", count=total, overdue_count=overdue)
             )
 
         if "compliance_deadline" in sources:
@@ -397,14 +404,103 @@ class CalendarAggregatorService:
                 )
             )
 
-        total = await self._count(
-            self._scoped_count(MedicalExam, person_id=person_id)
+        base_count = self._apply_window(
+            self._scoped_count(MedicalExam, person_id=person_id),
+            MedicalExam.valid_until,
+            from_at,
+            to_at,
+            as_date=True,
         )
-        overdue = await self._count(
-            self._scoped_count(MedicalExam, person_id=person_id).where(
-                MedicalExam.valid_until < today
+        total = await self._count(base_count)
+        overdue = await self._count(base_count.where(MedicalExam.valid_until < today))
+        return items, total, overdue
+
+    async def _build_medical_referrals(
+        self,
+        *,
+        from_at: datetime | None,
+        to_at: datetime | None,
+        person_id: str | None,
+        now: datetime,
+        include_fact: bool = False,
+        include_sla: bool = False,
+    ) -> tuple[list[CalendarEventItem], int, int]:
+        today = now.date()
+        stmt = (
+            select(MedicalReferral)
+            .where(
+                MedicalReferral.tenant_id == self.tenant_id,
+                MedicalReferral.deleted_at.is_(None),
+                MedicalReferral.due_at.is_not(None),
             )
+            .order_by(MedicalReferral.due_at.asc())
+            .limit(MAX_ITEMS_PER_SOURCE)
         )
+        if person_id:
+            stmt = stmt.where(MedicalReferral.person_id == person_id)
+        if from_at is not None:
+            stmt = stmt.where(MedicalReferral.due_at >= from_at.date())
+        if to_at is not None:
+            stmt = stmt.where(MedicalReferral.due_at <= to_at.date())
+
+        rows = (await self.db.execute(stmt)).scalars().all()
+        items: list[CalendarEventItem] = []
+        for ref in rows:
+            anchor = _coerce_dt(ref.due_at)
+            if anchor is None:
+                continue
+            is_overdue = ref.due_at < today
+            expected_at = anchor if include_fact else None
+            days_to_due = _days_to_due(anchor, now) if include_sla else None
+            sla_band = (
+                _sla_band(
+                    "medical_referral",
+                    days_to_due=days_to_due,
+                    is_overdue=is_overdue,
+                )
+                if include_sla
+                else None
+            )
+            items.append(
+                CalendarEventItem(
+                    id=f"medical_referral:{ref.id}",
+                    source_type="medical_referral",
+                    source_id=str(ref.id),
+                    title=f"Направление на медосмотр: {ref.exam_kind.value}",
+                    starts_at=anchor,
+                    ends_at=None,
+                    status="expired" if is_overdue else "active",
+                    is_overdue=is_overdue,
+                    person_id=str(ref.person_id) if ref.person_id else None,
+                    site_id=None,
+                    company_id=None,
+                    expected_at=expected_at,
+                    actual_at=None,
+                    variance_days=None,
+                    days_to_due=days_to_due,
+                    sla_band=sla_band,
+                    extra={
+                        "exam_kind": ref.exam_kind.value,
+                        "due_at": ref.due_at.isoformat() if ref.due_at else None,
+                        "status": (
+                            ref.status.value if hasattr(ref.status, "value") else str(ref.status)
+                        ),
+                        "medical_org_name": ref.medical_org_name,
+                    },
+                )
+            )
+
+        base_count = self._apply_window(
+            self._scoped_count(MedicalReferral, person_id=person_id).where(
+                MedicalReferral.due_at.is_not(None)
+            ),
+            MedicalReferral.due_at,
+            from_at,
+            to_at,
+            as_date=True,
+        )
+        total = await self._count(base_count)
+        overdue = await self._count(base_count.where(MedicalReferral.due_at < today))
         return items, total, overdue
 
     async def _build_ppe(
@@ -440,9 +536,7 @@ class CalendarAggregatorService:
             anchor = _coerce_dt(issue.expires_at)
             if anchor is None:
                 continue
-            is_overdue = bool(
-                issue.status == PPEIssueStatus.ISSUED and anchor < now
-            )
+            is_overdue = bool(issue.status == PPEIssueStatus.ISSUED and anchor < now)
             status_value = (
                 "expired"
                 if is_overdue
@@ -479,21 +573,24 @@ class CalendarAggregatorService:
                     extra={
                         "item_name": issue.item_name,
                         "quantity": issue.quantity,
-                        "issued_at": issue.issued_at.isoformat()
-                        if issue.issued_at
-                        else None,
-                        "expires_at": issue.expires_at.isoformat()
-                        if issue.expires_at
-                        else None,
-                        "raw_status": issue.status.value
-                        if hasattr(issue.status, "value")
-                        else str(issue.status),
+                        "issued_at": issue.issued_at.isoformat() if issue.issued_at else None,
+                        "expires_at": issue.expires_at.isoformat() if issue.expires_at else None,
+                        "raw_status": (
+                            issue.status.value
+                            if hasattr(issue.status, "value")
+                            else str(issue.status)
+                        ),
                     },
                 )
             )
 
-        base_count = self._scoped_count(PPEIssue, person_id=person_id).where(
-            PPEIssue.expires_at.is_not(None)
+        base_count = self._apply_window(
+            self._scoped_count(PPEIssue, person_id=person_id).where(
+                PPEIssue.expires_at.is_not(None)
+            ),
+            PPEIssue.expires_at,
+            from_at,
+            to_at,
         )
         total = await self._count(base_count)
         overdue = await self._count(
@@ -538,13 +635,11 @@ class CalendarAggregatorService:
             if anchor is None:
                 continue
             is_overdue = bool(
-                permit.status == PermitStatus.ACTIVE
+                permit.status == PermitStatus.ACTIVE.value
                 and permit.valid_until is not None
                 and permit.valid_until < today
             )
-            status_value = (
-                permit.status.value if hasattr(permit.status, "value") else str(permit.status)
-            )
+            status_value = permit.status
             expected_at = anchor if include_fact else None
             actual_at = _coerce_dt(permit.issued_at) if include_fact else None
             days_to_due = _days_to_due(anchor, now) if include_sla else None
@@ -571,24 +666,28 @@ class CalendarAggregatorService:
                     sla_band=sla_band,
                     extra={
                         "permit_type": permit.permit_type,
-                        "issued_at": permit.issued_at.isoformat()
-                        if permit.issued_at
-                        else None,
-                        "valid_until": permit.valid_until.isoformat()
-                        if permit.valid_until
-                        else None,
+                        "issued_at": permit.issued_at.isoformat() if permit.issued_at else None,
+                        "valid_until": (
+                            permit.valid_until.isoformat() if permit.valid_until else None
+                        ),
                         "raw_status": status_value,
                     },
                 )
             )
 
-        base_count = self._scoped_count(Permit, person_id=person_id).where(
-            Permit.valid_until.is_not(None)
+        base_count = self._apply_window(
+            self._scoped_count(Permit, person_id=person_id).where(
+                Permit.valid_until.is_not(None)
+            ),
+            Permit.valid_until,
+            from_at,
+            to_at,
+            as_date=True,
         )
         total = await self._count(base_count)
         overdue = await self._count(
             base_count.where(
-                Permit.status == PermitStatus.ACTIVE,
+                Permit.status == PermitStatus.ACTIVE.value,
                 Permit.valid_until < today,
             )
         )
@@ -643,9 +742,7 @@ class CalendarAggregatorService:
             )
             days_to_due = _days_to_due(anchor, now) if include_sla else None
             sla_band = (
-                _sla_band(
-                    "training_session", days_to_due=days_to_due, is_overdue=is_overdue
-                )
+                _sla_band("training_session", days_to_due=days_to_due, is_overdue=is_overdue)
                 if include_sla
                 else None
             )
@@ -654,9 +751,7 @@ class CalendarAggregatorService:
                     id=f"training_session:{session_row.id}",
                     source_type="training_session",
                     source_id=str(session_row.id),
-                    title=(
-                        f"Обучение: {course_title}" if course_title else "Обучение (сессия)"
-                    ),
+                    title=(f"Обучение: {course_title}" if course_title else "Обучение (сессия)"),
                     starts_at=anchor,
                     ends_at=_coerce_dt(session_row.completed_at),
                     status=status_raw,
@@ -668,9 +763,7 @@ class CalendarAggregatorService:
                     days_to_due=days_to_due,
                     sla_band=sla_band,
                     extra={
-                        "course_id": str(session_row.course_id)
-                        if session_row.course_id
-                        else None,
+                        "course_id": str(session_row.course_id) if session_row.course_id else None,
                         "course_title": course_title,
                         "plan_id": str(session_row.plan_id) if session_row.plan_id else None,
                         "score": session_row.score,
@@ -678,7 +771,12 @@ class CalendarAggregatorService:
                 )
             )
 
-        base_count = self._scoped_count(TrainingSession, person_id=person_id)
+        base_count = self._apply_window(
+            self._scoped_count(TrainingSession, person_id=person_id),
+            anchor_col,
+            from_at,
+            to_at,
+        )
         total = await self._count(base_count)
         # Approximate overdue: SCHEDULED with anchor < now.
         overdue = await self._count(
@@ -757,9 +855,9 @@ class CalendarAggregatorService:
                     is_overdue=is_overdue,
                     site_id=str(inspection.site_id) if inspection.site_id else None,
                     company_id=str(inspection.company_id) if inspection.company_id else None,
-                    assigned_user_id=str(inspection.responsible_id)
-                    if inspection.responsible_id
-                    else None,
+                    assigned_user_id=(
+                        str(inspection.responsible_id) if inspection.responsible_id else None
+                    ),
                     expected_at=expected_at,
                     actual_at=actual_at,
                     variance_days=_variance_days(expected_at, actual_at),
@@ -768,12 +866,14 @@ class CalendarAggregatorService:
                     extra={
                         "authority": inspection.authority,
                         "purpose": inspection.purpose,
-                        "inspection_type": inspection.inspection_type.value
-                        if hasattr(inspection.inspection_type, "value")
-                        else str(inspection.inspection_type),
-                        "scheduled_at": inspection.scheduled_at.isoformat()
-                        if inspection.scheduled_at
-                        else None,
+                        "inspection_type": (
+                            inspection.inspection_type.value
+                            if hasattr(inspection.inspection_type, "value")
+                            else str(inspection.inspection_type)
+                        ),
+                        "scheduled_at": (
+                            inspection.scheduled_at.isoformat() if inspection.scheduled_at else None
+                        ),
                     },
                 )
             )
@@ -789,6 +889,9 @@ class CalendarAggregatorService:
         )
         if site_id:
             base_count = base_count.where(Inspection.site_id == site_id)
+        base_count = self._apply_window(
+            base_count, Inspection.scheduled_at, from_at, to_at, as_date=True
+        )
         total = await self._count(base_count)
         overdue = await self._count(
             base_count.where(
@@ -830,9 +933,7 @@ class CalendarAggregatorService:
             anchor = _coerce_dt(deadline.due_at)
             if anchor is None:
                 continue
-            is_overdue = bool(
-                deadline.status not in _CLOSED_DEADLINE_STATUSES and anchor < now
-            )
+            is_overdue = bool(deadline.status not in _CLOSED_DEADLINE_STATUSES and anchor < now)
             expected_at = anchor if include_fact else None
             days_to_due = _days_to_due(anchor, now) if include_sla else None
             sla_band = (
@@ -869,8 +970,11 @@ class CalendarAggregatorService:
                 )
             )
 
-        base_count = self._scoped_count(
-            ComplianceDeadline, person_id=person_id, site_id=site_id
+        base_count = self._apply_window(
+            self._scoped_count(ComplianceDeadline, person_id=person_id, site_id=site_id),
+            ComplianceDeadline.due_at,
+            from_at,
+            to_at,
         )
         total = await self._count(base_count)
         overdue = await self._count(
@@ -925,9 +1029,7 @@ class CalendarAggregatorService:
             if anchor is None:
                 continue
             valid_until_dt = _coerce_dt(entry.valid_until)
-            is_overdue = bool(
-                valid_until_dt is not None and valid_until_dt < now
-            )
+            is_overdue = bool(valid_until_dt is not None and valid_until_dt < now)
             title = (
                 f"Инструктаж: {template_title}"
                 if template_title
@@ -937,9 +1039,7 @@ class CalendarAggregatorService:
             actual_at = _coerce_dt(entry.briefing_date) if include_fact else None
             days_to_due = _days_to_due(anchor, now) if include_sla else None
             sla_band = (
-                _sla_band(
-                    "briefing_entry", days_to_due=days_to_due, is_overdue=is_overdue
-                )
+                _sla_band("briefing_entry", days_to_due=days_to_due, is_overdue=is_overdue)
                 if include_sla
                 else None
             )
@@ -962,22 +1062,23 @@ class CalendarAggregatorService:
                     sla_band=sla_band,
                     extra={
                         "briefing_type": entry.briefing_type,
-                        "briefing_template_id": str(entry.briefing_template_id)
-                        if entry.briefing_template_id
-                        else None,
+                        "briefing_template_id": (
+                            str(entry.briefing_template_id) if entry.briefing_template_id else None
+                        ),
                         "briefing_template_title": template_title,
-                        "briefing_date": entry.briefing_date.isoformat()
-                        if entry.briefing_date
-                        else None,
-                        "valid_until": entry.valid_until.isoformat()
-                        if entry.valid_until
-                        else None,
+                        "briefing_date": (
+                            entry.briefing_date.isoformat() if entry.briefing_date else None
+                        ),
+                        "valid_until": entry.valid_until.isoformat() if entry.valid_until else None,
                     },
                 )
             )
 
-        base_count = self._scoped_count(
-            BriefingEntry, person_id=person_id, site_id=site_id
+        base_count = self._apply_window(
+            self._scoped_count(BriefingEntry, person_id=person_id, site_id=site_id),
+            anchor_col,
+            from_at,
+            to_at,
         )
         total = await self._count(base_count)
         overdue = await self._count(
@@ -1021,9 +1122,7 @@ class CalendarAggregatorService:
             expected_at = anchor if include_fact else None
             days_to_due = _days_to_due(anchor, now) if include_sla else None
             sla_band = (
-                _sla_band(
-                    "calendar_event", days_to_due=days_to_due, is_overdue=is_overdue
-                )
+                _sla_band("calendar_event", days_to_due=days_to_due, is_overdue=is_overdue)
                 if include_sla
                 else None
             )
@@ -1038,9 +1137,9 @@ class CalendarAggregatorService:
                     status=event.status,
                     is_overdue=is_overdue,
                     site_id=str(event.site_id) if event.site_id else None,
-                    assigned_user_id=str(event.assigned_user_id)
-                    if event.assigned_user_id
-                    else None,
+                    assigned_user_id=(
+                        str(event.assigned_user_id) if event.assigned_user_id else None
+                    ),
                     expected_at=expected_at,
                     actual_at=None,
                     variance_days=None,
@@ -1060,6 +1159,7 @@ class CalendarAggregatorService:
         )
         if site_id:
             base_count = base_count.where(CalendarEvent.site_id == site_id)
+        base_count = self._apply_window(base_count, CalendarEvent.starts_at, from_at, to_at)
         total = await self._count(base_count)
         overdue = await self._count(
             base_count.where(
@@ -1075,7 +1175,7 @@ class CalendarAggregatorService:
 
     def _scoped_count(
         self,
-        model: type,
+        model: type[Any],
         *,
         person_id: str | None = None,
         site_id: str | None = None,
@@ -1087,6 +1187,26 @@ class CalendarAggregatorService:
             stmt = stmt.where(model.person_id == person_id)
         if site_id and hasattr(model, "site_id"):
             stmt = stmt.where(model.site_id == site_id)
+        return stmt
+
+    @staticmethod
+    def _apply_window(
+        stmt: Select[tuple[int]],
+        column: Any,
+        from_at: datetime | None,
+        to_at: datetime | None,
+        *,
+        as_date: bool = False,
+    ) -> Select[tuple[int]]:
+        """Apply the same from_at/to_at window to a count query that the matching
+        item-list query uses, so per-source totals/overdue match the windowed list
+        (a count without the window reports all-time figures)."""
+        lo = from_at.date() if (as_date and from_at is not None) else from_at
+        hi = to_at.date() if (as_date and to_at is not None) else to_at
+        if lo is not None:
+            stmt = stmt.where(column >= lo)
+        if hi is not None:
+            stmt = stmt.where(column <= hi)
         return stmt
 
     async def _count(self, stmt: Select[tuple[int]]) -> int:

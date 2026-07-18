@@ -71,24 +71,17 @@ def test_metrics_recording_pipeline_and_errors() -> None:
     total_sum = next(
         sample
         for sample in total_histogram.samples
-        if sample.name.endswith("_sum")
-        and sample.labels["pipeline"] == PipelineType.DOCUMENT.value
+        if sample.name.endswith("_sum") and sample.labels["pipeline"] == PipelineType.DOCUMENT.value
     )
     assert total_sum.value == pytest.approx(0.0)
 
     histogram = metrics.pipeline_pdf_duration_seconds.collect()[0]
-    sum_sample = next(
-        sample
-        for sample in histogram.samples
-        if sample.name.endswith("_sum")
-    )
+    sum_sample = next(sample for sample in histogram.samples if sample.name.endswith("_sum"))
     # The histogram sum should be clamped to zero when observing negative durations.
     assert sum_sample.value == pytest.approx(0.0)
 
     pdf_histogram = metrics.pdf_libreoffice_duration_seconds.collect()[0]
-    pdf_sum = next(
-        sample for sample in pdf_histogram.samples if sample.name.endswith("_sum")
-    )
+    pdf_sum = next(sample for sample in pdf_histogram.samples if sample.name.endswith("_sum"))
     assert pdf_sum.value == pytest.approx(0.0)
 
     attempt_samples = metrics.pdf_libreoffice_attempts_total.collect()[0].samples
@@ -147,13 +140,17 @@ def test_metrics_recording_outbox_flow() -> None:
         destination="https://example.test/hooks",
         tenant_id="tenant-1",
     )
-    metrics.record_outbox_sent(event_type="DocumentCreated", destination="https://example.test/hooks")
+    metrics.record_outbox_sent(
+        event_type="DocumentCreated", destination="https://example.test/hooks"
+    )
     metrics.record_outbox_failed(
         event_type="DocumentCreated",
         destination="https://example.test/hooks",
         error_class="timeout",
     )
-    metrics.record_outbox_dead(event_type="DocumentCreated", destination="https://example.test/hooks")
+    metrics.record_outbox_dead(
+        event_type="DocumentCreated", destination="https://example.test/hooks"
+    )
     metrics.observe_outbox_attempts(
         event_type="DocumentCreated",
         destination="https://example.test/hooks",

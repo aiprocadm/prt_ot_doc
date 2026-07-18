@@ -131,19 +131,27 @@ def _eval_ast(node: ast.AST, ctx: dict[str, Any]) -> Any:
             ok = (
                 left == right
                 if isinstance(op, ast.Eq)
-                else left != right
-                if isinstance(op, ast.NotEq)
-                else left in right
-                if isinstance(op, ast.In)
-                else left not in right
-                if isinstance(op, ast.NotIn)
-                else left < right
-                if isinstance(op, ast.Lt)
-                else left <= right
-                if isinstance(op, ast.LtE)
-                else left > right
-                if isinstance(op, ast.Gt)
-                else left >= right
+                else (
+                    left != right
+                    if isinstance(op, ast.NotEq)
+                    else (
+                        left in right
+                        if isinstance(op, ast.In)
+                        else (
+                            left not in right
+                            if isinstance(op, ast.NotIn)
+                            else (
+                                left < right
+                                if isinstance(op, ast.Lt)
+                                else (
+                                    left <= right
+                                    if isinstance(op, ast.LtE)
+                                    else left > right if isinstance(op, ast.Gt) else left >= right
+                                )
+                            )
+                        )
+                    )
+                )
             )
             if not ok:
                 return False
@@ -156,14 +164,29 @@ def _eval_ast(node: ast.AST, ctx: dict[str, Any]) -> Any:
     if isinstance(node, ast.Tuple):
         return tuple(_eval_ast(el, ctx) for el in node.elts)
     if isinstance(node, ast.Dict):
-        return {_eval_ast(k, ctx): _eval_ast(v, ctx) for k, v in zip(node.keys, node.values, strict=False)}
+        return {
+            _eval_ast(k, ctx): _eval_ast(v, ctx)
+            for k, v in zip(node.keys, node.values, strict=False)
+        }
     raise ValueError("unsafe expression")
 
 
 def safe_eval_condition(expression: str, ctx: dict[str, Any]) -> bool:
     tree = ast.parse(expression, mode="eval")
     for node in ast.walk(tree):
-        if isinstance(node, (ast.Import, ast.ImportFrom, ast.Lambda, ast.FunctionDef, ast.ClassDef, ast.Assign, ast.AugAssign, ast.BinOp)):
+        if isinstance(
+            node,
+            (
+                ast.Import,
+                ast.ImportFrom,
+                ast.Lambda,
+                ast.FunctionDef,
+                ast.ClassDef,
+                ast.Assign,
+                ast.AugAssign,
+                ast.BinOp,
+            ),
+        ):
             raise ValueError("unsafe expression")
     value = _eval_ast(tree, ctx)
     return bool(value)

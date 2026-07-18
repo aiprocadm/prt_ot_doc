@@ -45,17 +45,19 @@ async def test_session_scope_commit(monkeypatch) -> None:
     SessionFactory, tenant = await _prepare_database(engine)
 
     monkeypatch.setattr(db_session, "SessionLocal", SessionFactory)
-    monkeypatch.setattr(db_session, "AsyncSessionLocal", lambda *args, **kwargs: SessionFactory(), raising=False)
+    monkeypatch.setattr(
+        db_session, "AsyncSessionLocal", lambda *args, **kwargs: SessionFactory(), raising=False
+    )
     monkeypatch.setattr(db, "SessionLocal", SessionFactory, raising=False)
-    monkeypatch.setattr(db, "AsyncSessionLocal", lambda *args, **kwargs: SessionFactory(), raising=False)
+    monkeypatch.setattr(
+        db, "AsyncSessionLocal", lambda *args, **kwargs: SessionFactory(), raising=False
+    )
 
     async with db.session_scope(tenant=tenant.slug) as session:
         await create_company(session, tenant.id, CompanyCreate(name="Committed"))
 
     async with SessionFactory() as session:
-        result = await session.execute(
-            select(Company).where(Company.name == "Committed")
-        )
+        result = await session.execute(select(Company).where(Company.name == "Committed"))
         assert result.scalar_one() is not None
 
     await engine.dispose()
@@ -67,9 +69,13 @@ async def test_session_scope_rollback(monkeypatch) -> None:
     SessionFactory, tenant = await _prepare_database(engine)
 
     monkeypatch.setattr(db_session, "SessionLocal", SessionFactory)
-    monkeypatch.setattr(db_session, "AsyncSessionLocal", lambda *args, **kwargs: SessionFactory(), raising=False)
+    monkeypatch.setattr(
+        db_session, "AsyncSessionLocal", lambda *args, **kwargs: SessionFactory(), raising=False
+    )
     monkeypatch.setattr(db, "SessionLocal", SessionFactory, raising=False)
-    monkeypatch.setattr(db, "AsyncSessionLocal", lambda *args, **kwargs: SessionFactory(), raising=False)
+    monkeypatch.setattr(
+        db, "AsyncSessionLocal", lambda *args, **kwargs: SessionFactory(), raising=False
+    )
 
     with pytest.raises(RuntimeError):
         async with db.session_scope(tenant=tenant.slug) as session:

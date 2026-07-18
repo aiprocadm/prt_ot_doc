@@ -26,7 +26,9 @@ class TrainingEnrollmentService:
         day = min(value.day, calendar.monthrange(year, month)[1])
         return value.replace(year=year, month=month, day=day)
 
-    async def start(self, session: AsyncSession, enrollment: TrainingEnrollment) -> TrainingEnrollment:
+    async def start(
+        self, session: AsyncSession, enrollment: TrainingEnrollment
+    ) -> TrainingEnrollment:
         enrollment.status = "in_progress"
         enrollment.completion_status = "in_progress"
         enrollment.started_at = enrollment.started_at or datetime.now(tz=timezone.utc)
@@ -44,13 +46,17 @@ class TrainingEnrollmentService:
     ) -> TrainingEnrollment:
         if progress_percent is None:
             module_ids = (
-                await session.execute(
-                    select(TrainingModule.id).where(
-                        TrainingModule.training_program_id == enrollment.training_program_id,
-                        TrainingModule.tenant_id == enrollment.tenant_id,
+                (
+                    await session.execute(
+                        select(TrainingModule.id).where(
+                            TrainingModule.training_program_id == enrollment.training_program_id,
+                            TrainingModule.tenant_id == enrollment.tenant_id,
+                        )
                     )
                 )
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
             lesson_total = (
                 await session.execute(
                     select(func.count())
@@ -62,7 +68,11 @@ class TrainingEnrollmentService:
                 )
             ).scalar_one()
             completed = len(set(completed_lesson_ids or []))
-            progress_percent = 100.0 if lesson_total == 0 else round(min(100.0, (completed / lesson_total) * 100), 2)
+            progress_percent = (
+                100.0
+                if lesson_total == 0
+                else round(min(100.0, (completed / lesson_total) * 100), 2)
+            )
         enrollment.progress_percent = progress_percent
         if runtime_state:
             enrollment.external_runtime_state = {
@@ -94,7 +104,11 @@ class TrainingEnrollmentService:
             TrainingTest.deleted_at.is_(None),
         )
         test = (await session.execute(test_stmt)).scalar_one_or_none()
-        if test is not None and test.attempts_limit is not None and enrollment.attempt_count >= test.attempts_limit:
+        if (
+            test is not None
+            and test.attempts_limit is not None
+            and enrollment.attempt_count >= test.attempts_limit
+        ):
             raise ValueError("attempts_limit_exceeded")
         if test is not None:
             passed = score >= test.passing_score
@@ -111,7 +125,9 @@ class TrainingEnrollmentService:
                 and str(program.tenant_id) == str(enrollment.tenant_id)
                 and program.validity_months
             ):
-                enrollment.expires_at = self._add_months(enrollment.completed_at, program.validity_months).replace(microsecond=0)
+                enrollment.expires_at = self._add_months(
+                    enrollment.completed_at, program.validity_months
+                ).replace(microsecond=0)
         else:
             enrollment.status = "failed"
             enrollment.completion_status = "retake_required"
@@ -172,41 +188,79 @@ class TrainingEnrollmentService:
 
     async def build_analytics_overview(self, session: AsyncSession, *, tenant_id: str) -> dict:
         enrollments = (
-            await session.execute(
-                select(TrainingEnrollment).where(
-                    TrainingEnrollment.tenant_id == tenant_id,
-                    TrainingEnrollment.deleted_at.is_(None),
+            (
+                await session.execute(
+                    select(TrainingEnrollment).where(
+                        TrainingEnrollment.tenant_id == tenant_id,
+                        TrainingEnrollment.deleted_at.is_(None),
+                    )
                 )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         attempts = (
-            await session.execute(
-                select(TrainingAttempt).where(TrainingAttempt.tenant_id == tenant_id)
+            (
+                await session.execute(
+                    select(TrainingAttempt).where(TrainingAttempt.tenant_id == tenant_id)
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         programs = (
-            await session.execute(
-                select(TrainingProgram).where(TrainingProgram.tenant_id == tenant_id)
+            (
+                await session.execute(
+                    select(TrainingProgram).where(TrainingProgram.tenant_id == tenant_id)
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         modules = (
-            await session.execute(
-                select(TrainingModule).where(TrainingModule.tenant_id == tenant_id)
+            (
+                await session.execute(
+                    select(TrainingModule).where(TrainingModule.tenant_id == tenant_id)
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         lessons = (
-            await session.execute(
-                select(TrainingLesson).where(TrainingLesson.tenant_id == tenant_id)
+            (
+                await session.execute(
+                    select(TrainingLesson).where(TrainingLesson.tenant_id == tenant_id)
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
 
-        completion_total = sum(1 for row in enrollments if row.completion_status in {"completed", "confirmed"})
-        retake_total = sum(1 for row in enrollments if row.completion_status in {"retake_required", "retake_assigned"})
-        avg_progress = round(sum(float(row.progress_percent or 0) for row in enrollments) / len(enrollments), 2) if enrollments else 0.0
-        avg_score = round(sum(float(item.score or 0) for item in attempts) / len(attempts), 2) if attempts else 0.0
+        completion_total = sum(
+            1 for row in enrollments if row.completion_status in {"completed", "confirmed"}
+        )
+        retake_total = sum(
+            1
+            for row in enrollments
+            if row.completion_status in {"retake_required", "retake_assigned"}
+        )
+        avg_progress = (
+            round(
+                sum(float(row.progress_percent or 0) for row in enrollments) / len(enrollments), 2
+            )
+            if enrollments
+            else 0.0
+        )
+        avg_score = (
+            round(sum(float(item.score or 0) for item in attempts) / len(attempts), 2)
+            if attempts
+            else 0.0
+        )
         material_types: dict[str, int] = {}
         for lesson in lessons:
-            material_types[str(lesson.content_type)] = material_types.get(str(lesson.content_type), 0) + 1
+            material_types[str(lesson.content_type)] = (
+                material_types.get(str(lesson.content_type), 0) + 1
+            )
         return {
             "programs_total": len(programs),
             "modules_total": len(modules),
@@ -222,8 +276,10 @@ class TrainingEnrollmentService:
 
 class TrainingCertificateService:
     async def next_code(self, session: AsyncSession, tenant_id: str) -> str:
-        count_stmt = select(func.count()).select_from(TrainingCertificate).where(
-            TrainingCertificate.tenant_id == tenant_id
+        count_stmt = (
+            select(func.count())
+            .select_from(TrainingCertificate)
+            .where(TrainingCertificate.tenant_id == tenant_id)
         )
         count = (await session.execute(count_stmt)).scalar_one()
         return f"CERT-{date.today():%Y%m%d}-{count + 1:05d}"

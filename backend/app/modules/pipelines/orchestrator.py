@@ -78,10 +78,16 @@ class PipelineEngine:
             not_found_message="job_not_found",
         )
         steps = (
-            await self.session.execute(
-                select(DocumentJobStep).where(DocumentJobStep.job_id == job_id).order_by(DocumentJobStep.order.asc())
+            (
+                await self.session.execute(
+                    select(DocumentJobStep)
+                    .where(DocumentJobStep.job_id == job_id)
+                    .order_by(DocumentJobStep.order.asc())
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         for step in steps:
             if step.order < restart_from_order:
                 continue
@@ -110,8 +116,14 @@ class PipelineEngine:
         job.status = DocumentJobStatus.CANCELED.value
         job.ended_at = datetime.now(timezone.utc)
         steps = (
-            await self.session.execute(select(DocumentJobStep).where(DocumentJobStep.job_id == job_id))
-        ).scalars().all()
+            (
+                await self.session.execute(
+                    select(DocumentJobStep).where(DocumentJobStep.job_id == job_id)
+                )
+            )
+            .scalars()
+            .all()
+        )
         for step in steps:
             if step.status in {JobStepStatus.QUEUED.value, JobStepStatus.RUNNING.value}:
                 step.status = JobStepStatus.CANCELED.value

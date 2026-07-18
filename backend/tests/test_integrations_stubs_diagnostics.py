@@ -4,7 +4,6 @@ import pytest
 
 from app.services.integrations.stubs import (
     StubAccountingIntegration,
-    StubEDOIntegration,
     StubEISOTIntegration,
     StubFRDOIntegration,
 )
@@ -28,14 +27,11 @@ async def test_stub_accounting_export_has_non_production_details() -> None:
     assert status.details["received"] is True
 
 
-@pytest.mark.asyncio
-async def test_stub_edo_send_has_non_production_details() -> None:
-    provider = StubEDOIntegration()
+def test_stub_edo_integration_removed() -> None:
+    """ЭДО-стаб удалён: симуляция отправки документов больше не существует в кодовой базе."""
+    import app.services.integrations.stubs as stubs
 
-    status = await provider.send_document(content=b"pdf", filename="doc.pdf", metadata={"job": "j-1"})
-
-    _assert_non_production_details(status.details, provider=provider.name, operation="send_document")
-    assert status.details["filename"] == "doc.pdf"
+    assert not hasattr(stubs, "StubEDOIntegration")
 
 
 @pytest.mark.asyncio

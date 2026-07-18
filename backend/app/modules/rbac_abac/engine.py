@@ -66,11 +66,15 @@ def _match_condition(cond: dict[str, Any], attrs: dict[str, Any], scope: dict[st
     op = str(cond.get("op") or "eq")
     left = _read_attr(attr, attrs, scope)
     raw = cond.get("value")
-    right = _read_attr(raw, attrs, scope) if isinstance(raw, str) and raw.startswith("$scope.") else raw
+    right = (
+        _read_attr(raw, attrs, scope) if isinstance(raw, str) and raw.startswith("$scope.") else raw
+    )
     return _op_eval(op=op, left=left, right=right)
 
 
-def _match_policy_conditions(conditions: dict[str, Any], attrs: dict[str, Any], scope: dict[str, Any]) -> bool:
+def _match_policy_conditions(
+    conditions: dict[str, Any], attrs: dict[str, Any], scope: dict[str, Any]
+) -> bool:
     all_conditions = conditions.get("all") or []
     any_conditions = conditions.get("any") or []
     all_ok = all(_match_condition(cond, attrs, scope) for cond in all_conditions)
@@ -84,7 +88,11 @@ def check_module_access(subject: Subject, module_name: str) -> tuple[bool, str]:
 
     Returns: (allowed: bool, reason: str)
     """
-    normalized_role = str(subject.roles[0]).lower() if subject.roles else "default"
+    first_role = subject.roles[0] if subject.roles else "default"
+    # RoleEnum is ``(str, Enum)``; on Python 3.11+ ``str(member)`` yields
+    # "RoleEnum.OWNER", not the value. Use ``.value`` for enum members and
+    # fall back to the raw string for plain-string roles.
+    normalized_role = str(getattr(first_role, "value", first_role)).lower()
     allowed_modules = ROLE_MODULE_DEFAULTS.get(normalized_role, [])
 
     if module_name in allowed_modules:
@@ -95,7 +103,15 @@ def check_module_access(subject: Subject, module_name: str) -> tuple[bool, str]:
 def _get_cached_policies(ctx: PolicyContext) -> tuple[AuthzPolicy, ...]:
     provided = (ctx.request_attrs or {}).get("policies")
     if isinstance(provided, (list, tuple)):
-        return tuple(item for item in provided if isinstance(item, AuthzPolicy))
+        # Explicit injection seam (overrides / tests): trust duck-typed policy
+        # objects that expose the fields the matcher needs, rather than requiring
+        # the SQLAlchemy ``AuthzPolicy`` type. The DB branch below still yields
+        # real ``AuthzPolicy`` rows, so production behaviour is unchanged.
+        return tuple(
+            item
+            for item in provided
+            if hasattr(item, "resource") and hasattr(item, "action") and hasattr(item, "effect")
+        )
     session = (ctx.request_attrs or {}).get("db_session")
     if session is None or not ctx.tenant_id:
         return ()
@@ -107,7 +123,9 @@ def _get_cached_policies(ctx: PolicyContext) -> tuple[AuthzPolicy, ...]:
     return ()
 
 
-def evaluate(subject: Subject, action: str, resource: Resource, context: PolicyContext | None = None) -> Decision:
+def evaluate(
+    subject: Subject, action: str, resource: Resource, context: PolicyContext | None = None
+) -> Decision:
     actor = _to_actor(subject)
     ctx = dict(resource.attrs)
     if context:
@@ -115,16 +133,12 @@ def evaluate(subject: Subject, action: str, resource: Resource, context: PolicyC
     if context and context.tenant_id:
         ctx.setdefault("tenant_id", context.tenant_id)
 
-    # Module-level access control (vNext-SEC-01)
-    module_name = resource.attrs.get("module") or resource.resource_type.split(".")[0]
-    if module_name:
-        module_ok, module_reason = check_module_access(subject, module_name)
-        if not module_ok:
-            return Decision(
-                allow=False,
-                reason=f"module_access_denied",
-                audit_fields={"module": module_name, "resource": resource.resource_type}
-            )
+    # NOTE: Module-level gating is intentionally NOT enforced here. ``evaluate``
+    # is the ABAC policy engine: access can be granted by explicit permissions or
+    # tenant ABAC allow-policies, which a hardcoded role→module table must not
+    # short-circuit. Coarse module gating lives in ``app.core.rbac_abac``
+    # (System B, ``policy_engine.can``); ``check_module_access`` /
+    # ``ROLE_MODULE_DEFAULTS`` here are for UI-navigation filtering.
 
     # RBAC precondition
     normalized_permission = f"{resource.resource_type}:{action}".lower()
@@ -132,10 +146,16 @@ def evaluate(subject: Subject, action: str, resource: Resource, context: PolicyC
     if {str(role).lower() for role in subject.roles} & {"owner", "admin"}:
         explicit_permissions.add(normalized_permission)
     if normalized_permission not in explicit_permissions:
-        return Decision(allow=False, reason="missing_permission", audit_fields={"permission": normalized_permission})
+        return Decision(
+            allow=False,
+            reason="missing_permission",
+            audit_fields={"permission": normalized_permission},
+        )
 
     # fallback static policy engine (deny-by-default)
-    result = policy_engine.authorize(actor=actor, action=action, resource=resource.resource_type, ctx=ctx)
+    result = policy_engine.authorize(
+        actor=actor, action=action, resource=resource.resource_type, ctx=ctx
+    )
 
     # ABAC dynamic policies (best-effort; deny override)
     matched_policy_id: str | None = None
@@ -148,7 +168,9 @@ def evaluate(subject: Subject, action: str, resource: Resource, context: PolicyC
         ]
         applicable.sort(key=lambda item: item.priority)
         matched: list[AuthzPolicy] = [
-            rule for rule in applicable if _match_policy_conditions(rule.conditions_json or {}, ctx, context.abac_scopes or {})
+            rule
+            for rule in applicable
+            if _match_policy_conditions(rule.conditions_json or {}, ctx, context.abac_scopes or {})
         ]
         if matched:
             top_priority = matched[0].priority
@@ -156,7 +178,9 @@ def evaluate(subject: Subject, action: str, resource: Resource, context: PolicyC
             deny_rule = next((item for item in top if (item.effect or "").lower() == "deny"), None)
             if deny_rule is not None:
                 return Decision(allow=False, reason="policy_deny", matched_policy_id=deny_rule.id)
-            allow_rule = next((item for item in top if (item.effect or "").lower() == "allow"), None)
+            allow_rule = next(
+                (item for item in top if (item.effect or "").lower() == "allow"), None
+            )
             if allow_rule is not None:
                 return Decision(allow=True, reason="policy_allow", matched_policy_id=allow_rule.id)
 
@@ -164,9 +188,15 @@ def evaluate(subject: Subject, action: str, resource: Resource, context: PolicyC
         allow=result.allowed,
         reason=result.reason,
         matched_policy_id=matched_policy_id,
-        audit_fields={"resource": resource.resource_type, "requested_action": action, **result.audit_meta},
+        audit_fields={
+            "resource": resource.resource_type,
+            "requested_action": action,
+            **result.audit_meta,
+        },
     )
 
 
-def authorize(subject: Subject, action: str, resource: Resource, context: PolicyContext | None = None) -> Decision:
+def authorize(
+    subject: Subject, action: str, resource: Resource, context: PolicyContext | None = None
+) -> Decision:
     return evaluate(subject, action, resource, context)

@@ -43,7 +43,9 @@ WriteAccess = Annotated[
 def _order_unprocessable(message: str) -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-        detail=api_problem_detail(code="ORDER_VALIDATION_ERROR", message=message, error_type="orders"),
+        detail=api_problem_detail(
+            code="ORDER_VALIDATION_ERROR", message=message, error_type="orders"
+        ),
     )
 
 

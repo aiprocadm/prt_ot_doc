@@ -125,6 +125,26 @@ const PersonsPage = () => {
                   ) : null
                 }
               </Can>
+              <Can permission={PERMISSIONS.PERSON_CREATE}>
+                {(allowed) =>
+                  allowed ? (
+                    <PersonFormDialog
+                      key={selectedPerson.id}
+                      initialData={selectedPerson}
+                      trigger={
+                        <Button size="sm" variant="outline">
+                          Изменить
+                        </Button>
+                      }
+                      onSubmitted={(person) => {
+                        setSelectedPerson(person);
+                        toast.success(`Сотрудник "${person.full_name}" обновлён`);
+                        void list();
+                      }}
+                    />
+                  ) : null
+                }
+              </Can>
               {focusedPersonId ? (
                 <>
                   <Button size="sm" variant="ghost" asChild>

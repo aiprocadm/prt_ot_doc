@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import AliasChoices, EmailStr, Field
+from pydantic import AliasChoices, EmailStr, Field, field_validator
 
 from app.schemas.base import BaseSchema
 
@@ -43,6 +43,8 @@ class CompanyCreate(BaseSchema):
     hazardous_factors: list[str] = Field(default_factory=list)
     is_hazardous_production_facility: bool = False
     has_dangerous_objects: bool = False
+    status: str = Field(default="active", max_length=32)
+    tags: list[str] = Field(default_factory=list)
 
 
 class CompanyRead(BaseSchema):
@@ -72,6 +74,20 @@ class CompanyRead(BaseSchema):
     hazardous_factors: list[str] = Field(default_factory=list)
     is_hazardous_production_facility: bool = False
     has_dangerous_objects: bool = False
+    status: str = Field(default="active", max_length=32)
+    tags: list[str] = Field(default_factory=list)
+
+    @field_validator("status", mode="before")
+    @classmethod
+    def _status_default(cls, value: object) -> object:
+        if value is None or (isinstance(value, str) and not value.strip()):
+            return "active"
+        return value
+
+    @field_validator("tags", mode="before")
+    @classmethod
+    def _tags_default(cls, value: object) -> object:
+        return value if isinstance(value, list) else []
 
 
 class CompanyPage(BaseSchema):
@@ -115,3 +131,5 @@ class CompanyUpdate(BaseSchema):
     hazardous_factors: list[str] | None = None
     is_hazardous_production_facility: bool | None = None
     has_dangerous_objects: bool | None = None
+    status: str | None = Field(default=None, max_length=32)
+    tags: list[str] | None = None

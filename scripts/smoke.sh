@@ -76,7 +76,7 @@ import os
 import zipfile
 from app.modules.pdf.service_pool import LibreOfficePool
 from app.modules.pdf.convert import convert_docx_bytes
-from app.domains.files import s3
+from app.modules.files import s3
 
 buf = io.BytesIO()
 with zipfile.ZipFile(buf, 'w') as z:
@@ -101,7 +101,7 @@ import os
 import zipfile
 from app.modules.pdf.service_pool import LibreOfficePool
 from app.modules.pdf.convert import convert_docx_bytes
-from app.domains.files import s3
+from app.modules.files import s3
 
 buf = io.BytesIO()
 with zipfile.ZipFile(buf, 'w') as z:

@@ -47,9 +47,7 @@ async def obligations_summary(
     open_statuses = [TaskStatus.OPEN, TaskStatus.IN_PROGRESS]
     overdue_case = case(
         (
-            Task.due_at.is_not(None)
-            & (Task.due_at < now)
-            & Task.status.in_(open_statuses),
+            Task.due_at.is_not(None) & (Task.due_at < now) & Task.status.in_(open_statuses),
             1,
         ),
         else_=0,

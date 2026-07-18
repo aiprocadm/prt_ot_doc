@@ -37,7 +37,9 @@ class DataQualityIssue(BaseModel):
     severity: IssueSeverity = Field(..., description="Severity level")
     title: str = Field(..., description="Short description")
     description: str | None = Field(None, description="Detailed explanation")
-    affected_entity_type: str = Field(..., description="Type of affected entity (employee, site, document, etc.)")
+    affected_entity_type: str = Field(
+        ..., description="Type of affected entity (employee, site, document, etc.)"
+    )
     affected_entity_id: str = Field(..., description="ID of affected entity")
     affected_entity_name: str | None = Field(None, description="Human-readable name")
     additional_info: dict[str, Any] = Field(default_factory=dict, description="Extra context")
@@ -66,7 +68,11 @@ class DataQualityReport(BaseModel):
     medium_issues: int = Field(..., description="Count of medium severity issues")
     low_issues: int = Field(..., description="Count of low severity issues")
     issue_breakdown: dict[str, int] = Field(default_factory=dict, description="Issues by type")
-    entity_breakdown: dict[str, int] = Field(default_factory=dict, description="Issues by entity type")
+    entity_breakdown: dict[str, int] = Field(
+        default_factory=dict, description="Issues by entity type"
+    )
     issues: list[DataQualityIssue] = Field(default_factory=list, description="Top issues")
-    check_results: list[DataQualityCheckResult] = Field(default_factory=list, description="Individual rule results")
+    check_results: list[DataQualityCheckResult] = Field(
+        default_factory=list, description="Individual rule results"
+    )
     generated_at: datetime = Field(default_factory=datetime.utcnow)

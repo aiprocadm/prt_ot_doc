@@ -36,7 +36,7 @@ test.describe("smoke", () => {
     test("login page renders", async ({ page }) => {
       await page.goto("/auth/login", { waitUntil: "domcontentloaded" });
       await expect(page.getByRole("heading", { name: "Вход в платформу" })).toBeVisible();
-      await expect(page.getByLabel("Tenant")).toBeVisible();
+      await expect(page.getByLabel("Тенант")).toBeVisible();
       await expect(page.getByLabel("E-mail")).toBeVisible();
       await expect(page.getByLabel("Пароль")).toBeVisible();
     });
@@ -66,7 +66,7 @@ test.describe("smoke", () => {
       test.skip(!process.env.E2E_USER_EMAIL, "Set E2E_USER_EMAIL (password may be wrong on purpose)");
       const tenant = process.env.E2E_TENANT ?? "demo";
       await page.goto("/auth/login", { waitUntil: "domcontentloaded" });
-      await page.getByLabel("Tenant").fill(tenant);
+      await page.getByLabel("Тенант").fill(tenant);
       await page.getByLabel("E-mail").fill(process.env.E2E_USER_EMAIL!);
       await page.getByLabel("Пароль").fill("__e2e_wrong_password__");
       await page.getByRole("button", { name: "Войти" }).click();

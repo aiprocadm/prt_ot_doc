@@ -53,9 +53,11 @@ describe("ApprovalTimeline", () => {
 
     render(<ApprovalTimeline items={items} currentStep={3} />);
 
-    expect(screen.getByText(/Step 1:.*Approved.*Initial review/)).toBeInTheDocument();
-    expect(screen.getByText(/Step 2:.*Rejected.*Missing signature/)).toBeInTheDocument();
-    expect(screen.getByText(/Step 3:.*Approved.*Signature added/)).toBeInTheDocument();
+    // Component renders `Step N: <b>{decision}</b> — {comment}` — text is split across
+    // text nodes, so use textContent of the enclosing element for multi-fragment matching.
+    expect(screen.getByText(/Step 1:/).textContent).toMatch(/Step 1: Approved\s+—\s+Initial review/);
+    expect(screen.getByText(/Step 2:/).textContent).toMatch(/Step 2: Rejected\s+—\s+Missing signature/);
+    expect(screen.getByText(/Step 3:/).textContent).toMatch(/Step 3: Approved\s+—\s+Signature added/);
   });
 
   it("renders decision without comment", () => {
@@ -69,10 +71,11 @@ describe("ApprovalTimeline", () => {
 
     render(<ApprovalTimeline items={items} currentStep={2} />);
 
-    expect(screen.getByText(/Step 2:.*Pending/)).toBeInTheDocument();
-    // Should not have dash when no comment
+    // textContent inspection avoids the multi-text-node matching gotcha.
     const stepText = screen.getByText(/Step 2:/);
-    expect(stepText.textContent).toMatch(/^Step 2: Pending$/);
+    expect(stepText.textContent).toMatch(/Step 2: Pending/);
+    // Should not have dash when no comment — component emits trailing space only.
+    expect(stepText.textContent?.trim()).toBe("Step 2: Pending");
   });
 
   it("renders decision with undefined comment", () => {
@@ -86,7 +89,7 @@ describe("ApprovalTimeline", () => {
 
     render(<ApprovalTimeline items={items} currentStep={1} />);
 
-    expect(screen.getByText(/Step 1:.*Reviewed/)).toBeInTheDocument();
+    expect(screen.getByText(/Step 1:/).textContent).toMatch(/Step 1: Reviewed/);
   });
 
   it("renders many timeline steps", () => {

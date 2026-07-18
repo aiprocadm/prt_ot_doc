@@ -31,26 +31,34 @@ def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> str | No
 
 ReadAccess = Annotated[
     AccessContext,
-    Depends(abac(_tenant_resource_id, required_roles=_CONTRACT_READ_ROLES, action="read contracts")),
+    Depends(
+        abac(_tenant_resource_id, required_roles=_CONTRACT_READ_ROLES, action="read contracts")
+    ),
 ]
 
 WriteAccess = Annotated[
     AccessContext,
-    Depends(abac(_tenant_resource_id, required_roles=_CONTRACT_WRITE_ROLES, action="manage contracts")),
+    Depends(
+        abac(_tenant_resource_id, required_roles=_CONTRACT_WRITE_ROLES, action="manage contracts")
+    ),
 ]
 
 
 def _contract_bad_request(message: str) -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,
-        detail=api_problem_detail(code="CONTRACT_VALIDATION_ERROR", message=message, error_type="contracts"),
+        detail=api_problem_detail(
+            code="CONTRACT_VALIDATION_ERROR", message=message, error_type="contracts"
+        ),
     )
 
 
 def _contract_unprocessable(message: str) -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-        detail=api_problem_detail(code="CONTRACT_VALIDATION_ERROR", message=message, error_type="contracts"),
+        detail=api_problem_detail(
+            code="CONTRACT_VALIDATION_ERROR", message=message, error_type="contracts"
+        ),
     )
 
 
@@ -66,9 +74,7 @@ async def _get_company(session: AsyncSession, tenant: Tenant, company_id: str) -
     return company
 
 
-async def _get_department(
-    session: AsyncSession, tenant: Tenant, department_id: str
-) -> Department:
+async def _get_department(session: AsyncSession, tenant: Tenant, department_id: str) -> Department:
     stmt = select(Department).where(
         Department.id == department_id,
         Department.tenant_id == tenant.id,

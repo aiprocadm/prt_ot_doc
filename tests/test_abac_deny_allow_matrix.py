@@ -11,10 +11,6 @@ Tests cover:
 
 from __future__ import annotations
 
-from dataclasses import replace
-
-import pytest
-
 from app.modules.rbac_abac.engine import evaluate
 from app.modules.rbac_abac.types import Decision, PolicyContext, Resource, Subject
 
@@ -108,9 +104,7 @@ class TestABACDenyRules:
                             "action": "update",
                             "effect": "deny",
                             "conditions_json": {
-                                "all": [
-                                    {"attr": "owner_id", "op": "ne", "value": "$scope.user_id"}
-                                ]
+                                "all": [{"attr": "owner_id", "op": "ne", "value": "$scope.user_id"}]
                             },
                             "priority": 50,
                             "enabled": True,
@@ -156,9 +150,7 @@ class TestABACAllowRules:
                             "action": "read",
                             "effect": "allow",
                             "conditions_json": {
-                                "all": [
-                                    {"attr": "company_id", "op": "in", "value": ["company-a"]}
-                                ]
+                                "all": [{"attr": "company_id", "op": "in", "value": ["company-a"]}]
                             },
                             "priority": 20,
                             "enabled": True,
@@ -251,9 +243,7 @@ class TestABACAttributes:
                 "action": "read",
                 "effect": "allow",
                 "conditions_json": {
-                    "all": [
-                        {"attr": "company_id", "op": "in", "value": ["company-safe"]}
-                    ]
+                    "all": [{"attr": "company_id", "op": "in", "value": ["company-safe"]}]
                 },
                 "priority": 10,
                 "enabled": True,
@@ -347,10 +337,23 @@ class TestABACAttributes:
                 "enabled": True,
             },
         )()
+        policy_allow_read = type(
+            "AuthzPolicy",
+            (),
+            {
+                "id": "allow-document-read",
+                "resource": "document",
+                "action": "read",
+                "effect": "allow",
+                "conditions_json": {"all": []},
+                "priority": 100,
+                "enabled": True,
+            },
+        )()
         context = PolicyContext(
             tenant_id="tenant-1",
             abac_scopes={"user_id": "employee-1"},
-            request_attrs={"policies": [policy_deny_draft]},
+            request_attrs={"policies": [policy_allow_read, policy_deny_draft]},
         )
 
         result_draft = evaluate(subject, "read", resource_draft, context)
@@ -389,23 +392,34 @@ class TestABACAttributes:
                 "action": "read",
                 "effect": "deny",
                 "conditions_json": {
-                    "all": [
-                        {"attr": "risk_level", "op": "gt", "value": "$scope.max_risk_level"}
-                    ]
+                    "all": [{"attr": "risk_level", "op": "gt", "value": "$scope.max_risk_level"}]
                 },
                 "priority": 10,
+                "enabled": True,
+            },
+        )()
+        policy_allow_risk = type(
+            "AuthzPolicy",
+            (),
+            {
+                "id": "allow-risk-read",
+                "resource": "risk",
+                "action": "read",
+                "effect": "allow",
+                "conditions_json": {"all": []},
+                "priority": 100,
                 "enabled": True,
             },
         )()
         context_employee = PolicyContext(
             tenant_id="tenant-1",
             abac_scopes={"max_risk_level": 1},
-            request_attrs={"policies": [policy]},
+            request_attrs={"policies": [policy_allow_risk, policy]},
         )
         context_manager = PolicyContext(
             tenant_id="tenant-1",
             abac_scopes={"max_risk_level": 3},
-            request_attrs={"policies": [policy]},
+            request_attrs={"policies": [policy_allow_risk, policy]},
         )
 
         result_employee = evaluate(subject_employee, "read", resource_high, context_employee)
@@ -443,16 +457,33 @@ class TestABACAttributes:
                 "effect": "deny",
                 "conditions_json": {
                     "all": [
-                        {"attr": "project_id", "op": "not_in", "value": ["project-alpha", "project-beta"]}
+                        {
+                            "attr": "project_id",
+                            "op": "not_in",
+                            "value": ["project-alpha", "project-beta"],
+                        }
                     ]
                 },
                 "priority": 10,
                 "enabled": True,
             },
         )()
+        policy_allow_project = type(
+            "AuthzPolicy",
+            (),
+            {
+                "id": "allow-project-read",
+                "resource": "project",
+                "action": "read",
+                "effect": "allow",
+                "conditions_json": {"all": []},
+                "priority": 100,
+                "enabled": True,
+            },
+        )()
         context = PolicyContext(
             tenant_id="tenant-1",
-            request_attrs={"policies": [policy]},
+            request_attrs={"policies": [policy_allow_project, policy]},
         )
 
         result_assigned = evaluate(subject, "read", resource_assigned, context)
@@ -616,9 +647,7 @@ class TestABACDenyByDefault:
                 "resource": "document",
                 "action": "read",
                 "effect": "allow",
-                "conditions_json": {
-                    "all": [{"attr": "status", "op": "eq", "value": "published"}]
-                },
+                "conditions_json": {"all": [{"attr": "status", "op": "eq", "value": "published"}]},
                 "priority": 10,
                 "enabled": True,
             },
@@ -699,9 +728,7 @@ class TestABACEdgeCases:
                 "resource": "document",
                 "action": "approve",
                 "effect": "allow",
-                "conditions_json": {
-                    "all": [{"attr": "reviewer_id", "op": "exists"}]
-                },
+                "conditions_json": {"all": [{"attr": "reviewer_id", "op": "exists"}]},
                 "priority": 10,
                 "enabled": True,
             },
@@ -788,9 +815,7 @@ class TestABACEdgeCases:
                 "resource": "expense",
                 "action": "approve",
                 "effect": "allow",
-                "conditions_json": {
-                    "all": [{"attr": "amount", "op": "lt", "value": 100}]
-                },
+                "conditions_json": {"all": [{"attr": "amount", "op": "lt", "value": 100}]},
                 "priority": 10,
                 "enabled": True,
             },
@@ -921,9 +946,7 @@ class TestABACNegativeScenarios:
                     "resource": "risk",
                     "action": "delete",
                     "effect": "deny",
-                    "conditions_json": {
-                        "all": [{"attr": "risk_level", "op": "gt", "value": 3}]
-                    },
+                    "conditions_json": {"all": [{"attr": "risk_level", "op": "gt", "value": 3}]},
                     "priority": 10,  # Higher priority (lower number)
                     "enabled": True,
                 },

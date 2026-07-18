@@ -18,13 +18,21 @@ def _normalize(value: Any) -> Any:
     if isinstance(value, Enum):
         return value.value
     if isinstance(value, Mapping):
-        return {str(key): _normalize(value[key]) for key in sorted(value.keys(), key=lambda item: str(item))}
+        return {
+            str(key): _normalize(value[key])
+            for key in sorted(value.keys(), key=lambda item: str(item))
+        }
     if isinstance(value, list):
         return [_normalize(item) for item in value]
     return value
 
 
-def field_diff(before: Mapping[str, Any] | None, after: Mapping[str, Any] | None, *, exclude: set[str] | None = None) -> dict[str, Any]:
+def field_diff(
+    before: Mapping[str, Any] | None,
+    after: Mapping[str, Any] | None,
+    *,
+    exclude: set[str] | None = None,
+) -> dict[str, Any]:
     before_data = _normalize(before or {})
     after_data = _normalize(after or {})
     skipped = {"updated_at", "created_at", "version", *(exclude or set())}

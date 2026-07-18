@@ -43,17 +43,32 @@ def _normalize_datetime(value: datetime | None) -> datetime | None:
 
 
 def _pipeline_for_event(event_type: str) -> PipelineType:
-    resolved = resolve_event_type(event_type)
+    try:
+        resolved = resolve_event_type(event_type)
+    except ValueError:
+        # Generic / external events (webhook-only, test, or future events) are not
+        # in the typed EventType enum. The outbox still delivers them; they simply
+        # map to the UNKNOWN pipeline (no type-specific routing or metrics). Emit
+        # (``enqueue``) stays strict — it builds typed payloads — but delivery is
+        # generic, matching the ``Outbox.event_type`` String column contract.
+        return PipelineType.UNKNOWN
     if resolved in {
         EventType.DOCUMENT_CREATED,
         EventType.DOCUMENT_GENERATED,
         EventType.DOCUMENT_SIGNED,
         EventType.DOCUMENT_EXPORTED,
+        EventType.PEP_SIGNED,
+        EventType.PEP_DECLINED,
     }:
         return PipelineType.DOCUMENT
     if resolved == EventType.RISK_ASSESSED:
         return PipelineType.RISK
-    if resolved in {EventType.PPE_ISSUED, EventType.PPE_RETURNED}:
+    if resolved in {
+        EventType.PPE_ISSUED,
+        EventType.PPE_RETURNED,
+        EventType.PPE_WRITTEN_OFF,
+        EventType.PPE_REPLACEMENT_DUE,
+    }:
         return PipelineType.PPE
     if resolved in {EventType.TRAINING_ASSIGNED, EventType.TRAINING_COMPLETED}:
         return PipelineType.TRAINING
@@ -139,6 +154,7 @@ class OutboxService:
                     session=self.session,
                 )
             created: list[Outbox] = []
+            new_entries = 0
             now = datetime.now(tz=timezone.utc)
             if not destinations:
                 logger.warning(
@@ -146,28 +162,42 @@ class OutboxService:
                     extra={"tenant_id": tenant_id, "event_type": resolved.value},
                 )
                 self.metrics.record_outbox_no_destination(event_type=resolved.value)
-                entry = Outbox(
-                    tenant_id=tenant_id,
-                    event_type=resolved.value,
-                    destination="noop://local",
-                    payload=normalized_payload,
-                    headers=None,
-                    idempotency_key=key,
-                    status=OutboxStatus.SENT,
-                    next_attempt_at=None,
-                    sent_at=now,
-                )
-                self.session.add(entry)
-                await self.session.flush()
-                if entry.payload.get("event_id") is None:
-                    entry.payload = {**entry.payload, "event_id": entry.id}
+                existing_noop = None
+                if key:
+                    existing_noop = await self._find_existing(
+                        tenant_id=tenant_id,
+                        destination="noop://local",
+                        idempotency_key=key,
+                    )
+                if existing_noop:
+                    created.append(existing_noop)
+                else:
+                    entry = Outbox(
+                        tenant_id=tenant_id,
+                        event_type=resolved.value,
+                        destination="noop://local",
+                        payload=normalized_payload,
+                        headers=None,
+                        idempotency_key=key,
+                        status=OutboxStatus.SENT,
+                        next_attempt_at=None,
+                        sent_at=now,
+                    )
+                    self.session.add(entry)
                     await self.session.flush()
-                created.append(entry)
+                    if entry.payload.get("event_id") is None:
+                        entry.payload = {**entry.payload, "event_id": entry.id}
+                        await self.session.flush()
+                    created.append(entry)
+                    new_entries += 1
             else:
                 for target in destinations:
                     merged_headers = self._merge_headers(target.headers, headers)
                     if target.endpoint_id:
-                        merged_headers = {**(merged_headers or {}), "X-Webhook-Endpoint-Id": target.endpoint_id}
+                        merged_headers = {
+                            **(merged_headers or {}),
+                            "X-Webhook-Endpoint-Id": target.endpoint_id,
+                        }
                     existing = None
                     if key:
                         existing = await self._find_existing(
@@ -194,6 +224,7 @@ class OutboxService:
                         entry.payload = {**entry.payload, "event_id": entry.id}
                         await self.session.flush()
                     created.append(entry)
+                    new_entries += 1
                     self.metrics.record_outbox_enqueued(
                         event_type=entry.event_type,
                         destination=entry.destination,
@@ -220,6 +251,20 @@ class OutboxService:
                 self.metrics.record_ppe_issued()
             elif resolved == EventType.TRAINING_COMPLETED:
                 self.metrics.record_training_completed()
+
+        if new_entries and resolved.value != "rule.triggered" and key:
+            # P10-10: синхронная оценка правил автоматизации (той же транзакцией).
+            # Только для НОВЫХ логических событий (dedup-реплей не перезапускает правила);
+            # события самого движка (rule.triggered) не оцениваются — guard от каскада.
+            from app.modules.rules_engine.engine import evaluate_event_safe
+
+            await evaluate_event_safe(
+                self.session,
+                tenant_id=tenant_id,
+                event_type=resolved.value,
+                payload=normalized_payload,
+                event_key=key,
+            )
 
         self.metrics.record_pipeline_stage_end(
             pipeline=pipeline,
@@ -252,11 +297,15 @@ class OutboxService:
         destination: str,
         idempotency_key: str,
     ) -> Outbox | None:
-        stmt = select(Outbox).where(
-            Outbox.tenant_id == tenant_id,
-            Outbox.destination == destination,
-            Outbox.idempotency_key == idempotency_key,
-        ).limit(1)
+        stmt = (
+            select(Outbox)
+            .where(
+                Outbox.tenant_id == tenant_id,
+                Outbox.destination == destination,
+                Outbox.idempotency_key == idempotency_key,
+            )
+            .limit(1)
+        )
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
@@ -599,7 +648,9 @@ class OutboxProcessor:
         )
 
     async def _already_delivered(self, entry: Outbox) -> bool:
-        subscription_id = (entry.headers or {}).get("X-Webhook-Endpoint-Id") or (entry.headers or {}).get("X-Webhook-Subscription-Id")
+        subscription_id = (entry.headers or {}).get("X-Webhook-Endpoint-Id") or (
+            entry.headers or {}
+        ).get("X-Webhook-Subscription-Id")
         event_id = str((entry.payload or {}).get("event_id") or entry.id)
         if not subscription_id:
             return False
@@ -619,7 +670,9 @@ class OutboxProcessor:
         status_code: int | None = None,
         error: dict[str, Any] | None = None,
     ) -> None:
-        subscription_id = (entry.headers or {}).get("X-Webhook-Endpoint-Id") or (entry.headers or {}).get("X-Webhook-Subscription-Id")
+        subscription_id = (entry.headers or {}).get("X-Webhook-Endpoint-Id") or (
+            entry.headers or {}
+        ).get("X-Webhook-Subscription-Id")
         event_id = str((entry.payload or {}).get("event_id") or entry.id)
         if not subscription_id:
             return
@@ -635,6 +688,7 @@ class OutboxProcessor:
                 event_id=event_id,
             )
             self.session.add(existing)
+        existing.outbox_id = entry.id
         existing.status = "success" if success else "failed"
         existing.attempts = entry.attempts
         existing.last_status_code = status_code

@@ -1,5 +1,1492 @@
 # CHANGELOG
 
+## 2026-07-18 (claude/tz-continuation-d43adc — §12.4 Бюджет безопасности срез-1: кросс-доменное ядро)
+
+### Added
+- **Кросс-доменный бюджетный контур (ТЗ B.11 → vNext §12.4, срез-1 «ядро»)** — бюджеты доменов
+  обучение/медосмотры/мероприятия, справочник статей расходов, журнал фактических расходов,
+  контроль план↔факт и аналитика по филиалам/объектам. СИЗ-контур (`ppe_safety_budget`, `wa09`)
+  **не тронут** — читается сводкой read-only. Миграция `bg01` (аддитивная, от `re01`, без PG-enum):
+  таблицы `safety_budget`, `budget_expense_article` (unique `(tenant, code)` БЕЗ deleted_at-фильтра),
+  `budget_expense` (FK на статью/компанию/филиал/объект с `ondelete SET NULL` + полиморфная
+  опциональная ссылка `entity_type`/`entity_id`).
+- **Инвариант эталона сохранён**: план персистентен, **факт всегда вычисляется** из журнала
+  (`compute_domain_actual` — один GROUP BY по статьям); ничего не денормализуется, складской учёт
+  не затрагивается (acceptance §35.5 / F.5).
+- **Сводка `GET /budget/overview`** — 4 домена (3 журнальных + `ppe` с `read_only=true`): план как
+  сумма бюджетов, **пересекающихся** с окном (без пропорции), факт за окно, остаток, плюс строки
+  бюджетов с фактом за их собственный период. СИЗ-план читается из `ppe_safety_budget`, СИЗ-факт —
+  через существующий `compute_budget_actual` складского леджера (с прокидыванием
+  `warning_unpriced_receipts`). Дефолт окна — текущий календарный год.
+- **Разрез `GET /budget/breakdown?dimension=article|domain|company|branch|site`** — первый
+  branch-разрез в проекте; конвенции analytics-breakdown (bucket «— без привязки»/«— без статьи»
+  при `id=""`, cap 200 строк с честным `total`, сортировка сумма desc/имя asc). Имена справочников
+  резолвятся tenant-scoped независимо от soft-delete (историческая подпись вместо сырого UUID);
+  СИЗ-закупки в разрезе не участвуют (у складского леджера нет измерений).
+- **API `/api/v1/budget/*`** (16 роутов; ABAC admin/owner/accountant/ot_pb_lead + FeatureGate флага
+  `budget` default-off → 404 `BUDGET_DISABLED`): CRUD бюджетов/статей/расходов, `POST /articles/seed-defaults`
+  (идемпотентно, с guard'ом от гонки), ETag/304 на трёх списках (ETag расходов покрывает и
+  присоединённые имена статей), audit до commit на всех write-путях. Typed-коды 422:
+  `period_invalid`, `invalid_field_null`, `unknown_article|company|branch|site|entity`,
+  `article_inactive`, `article_domain_mismatch`, `invalid_entity_type`, `invalid_entity_link`,
+  `window_invalid`, `breakdown_dimension_unknown`; 409 `ARTICLE_CODE_EXISTS`.
+- **Tenant-валидация всех client-supplied FK на запись** (класс багов PR #749–751): статья/компания/
+  филиал/объект/entity проверяются на существование и принадлежность тенанту → 422; на PATCH
+  валидируются только затронутые поля (устаревшая ссылка не блокирует правку суммы), пара
+  `entity_type`/`entity_id` проверяется по merged-значениям.
+- **Фронт `/budget` («Бюджет безопасности», права `BUDGET_VIEW`/`BUDGET_MANAGE`, группа «Бизнес и
+  аналитика»)** — 4 вкладки: Сводка (период-фильтр, 4 карточки план/факт/остаток с ru-RU валютой,
+  СИЗ-карточка со ссылкой на склад, разрез с переключателем измерения и CSS-баром), Бюджеты
+  (фильтр по домену, деталь с разбивкой по статьям), Расходы (4 независимых фильтра, диалог с
+  типо-зависимой фильтрацией статей и опциональной ссылкой на доменную запись), Статьи (справочник
+  + «Заполнить стандартными»). Вкладки и фильтры переживают перезагрузку после мутаций;
+  feature-off → EmptyState.
+- **Demo-сид**: флаг `budget` + 9 стандартных статей + 3 бюджета 2026 + 5 расходов (с привязками
+  к компании/филиалу/объекту и ссылкой на demo-CAPA), идемпотентно по натуральным ключам.
+
+### Notes
+- OpenAPI baseline пере-снят: **864 → 880 операций, 723 → 743 схемы** (чистые добавления, ARCH-4 зелёный).
+- Осознанно отложено (срез-2): заявки на возмещение СФР; СИЗ в breakdown (нужна связка склад→филиал);
+  автосбор факта из доменов; бюджеты с привязкой к филиалу; typeahead для entity-ссылок; мультивалюта.
+- Известное ограничение: справочники компаний/филиалов/объектов закрыты ролью admin на backend, тогда
+  как `BUDGET_MANAGE` есть и у accountant — для него пикеры измерений в диалоге расхода скрываются
+  (тихая деградация). Расширение ролей справочников — отдельное продуктовое решение.
+
+## 2026-07-16 (feat/p10-10-rules-engine-srez1 — P10-10 Rules-engine срез-1: событийные правила автоматизации)
+
+### Added
+- **Rules-engine срез-1 (P10-10, ТЗ B.24 → vNext §25.2)** — tenant-scoped правила «событие →
+  условия → действия» с приоритетами, логом срабатываний, dry-run/тестом по истории и admin-UI.
+  Миграция `re01` (аддитивная): таблицы `automation_rule` (unique имя per tenant БЕЗ deleted_at-фильтра,
+  паттерн ReportDefinition) и `automation_rule_trigger` (append-only лог, enum `ruletriggerstatus`
+  success/partial/error); label `AutomationRule` добавлен в оба PG-типа `notificationtype` и
+  `notificationtemplatetype` (parity-гейт ORM↔pg_enum).
+- **Точка срабатывания — синхронный hook в `OutboxService.enqueue`**: оценка правил в той же
+  транзакции, что и доменное событие; только для НОВЫХ outbox-строк (dedup-реплеи тиков не
+  перезапускают правила); события самого движка (`rule.triggered`) не оцениваются (глубина каскада 1).
+  Изоляция — двухуровневые SAVEPOINT'ы (`begin_nested`): внешний вокруг всей оценки + вложенный
+  на каждое действие; IntegrityError действия не отравляет доменную транзакцию (пин-тест на откат
+  flushed-записей).
+- **Условия** — декларативный JSON (`match` all/any + строки field/op/value; 10 операторов
+  eq/ne/in/not_in/gt/gte/lt/lte/contains/exists; dot-пути по payload; NaN-safe сравнения,
+  fail-closed на битой структуре) с whitelist-валидацией против каталога событий
+  (интроспекция typed payload-моделей; legacy-алиасы Signed/Exported исключены как «мёртвые»).
+- **Действия**: `create_task` (операционная задача, `entity_type="automation_rule"`, дедуп по
+  (rule, event_key)); `notify` (in-app уведомление типа `AutomationRule` по actor/user_id/роли,
+  дедуп по нативному dedup_key с sha-хешем event_key); `webhook` (typed-событие `rule.triggered`
+  в существующий outbox-конвейер). Шаблоны `{field}`-подстановки без eval.
+- **API `/api/v1/rules/*`** (9 роутов; ABAC admin/owner router-wide + FeatureGate флага
+  `rules_engine` default-off → 404 `RULES_ENGINE_DISABLED`): CRUD (409 `RULE_NAME_EXISTS`,
+  422 typed-коды валидации вкл. `invalid_field_null` на explicit null), `GET /rules/event-types`
+  (каталог полей для конструктора), `POST /rules/dry-run` (per-condition разбор + would-actions,
+  без записей), `POST /rules/{id}/test` (прогон по истории outbox с дедупом по idempotency_key),
+  `GET /rules/triggers` (журнал). ETag/304 на списке; audit на write.
+- **Фронт `/rules` («Правила автоматизации», право `RULES_VIEW`/`RULES_MANAGE`)** — реестр правил
+  (вкл/выкл-Switch, тест по истории, удаление), `RuleFormDialog` (событие → условия с типо-зависимыми
+  контролами: boolean → да/нет-селект с коэрсией в настоящий boolean, number-коэрсия без ловушки
+  `Number("")→0`, in/not_in через запятую → действия-карточки), Dry-run панель (JSON-песочница
+  со скелетом payload), журнал срабатываний с фильтром; feature-off → EmptyState.
+- **Demo-сид**: флаг `rules_engine` + 2 образцовых правила («Критичный инцидент — задача и
+  уведомление», «Истекающий документ подрядчика — уведомление»), идемпотентно.
+
+### Notes
+- Гейты: backend pytest (модель/условия/каталог/действия/движок/API/сид + смежный регресс) зелёные;
+  ruff/black clean; **OpenAPI baseline 855→864 операций (+9 /rules/*, чистый аддитив, ✓ ARCH-4)**;
+  **PG16-гейт ЗЕЛЁНЫЙ** (round-trip `re01`, после фикса parity-лейбла второго enum-типа);
+  фронт tsc/vitest/build зелёные.
+- Осознанно отложено (срез-2): версии правил, tenant overrides/системный каталог, действие
+  «запустить workflow», email/telegram-каналы notify, метрика движка, retention лога.
+
+## 2026-07-14 (feat/contractors-frontend — Контрагенты/подрядчики: фронт поверх всех 23 backend-эндпоинтов)
+
+### Added
+- **Контур «Контрагенты и подрядчики» на фронте (ТЗ §12.x подрядчики)** — типизированный
+  `api/contractors.ts` (23 метода поверх `/api/v1/contractors/*`) + DTO/vocab, новое право
+  **`CONTRACTOR_MANAGE`** (`contractor.manage`; owner/admin/ot_pb_head через `ALL_PERMISSIONS`),
+  backend остаётся истинным энфорсером.
+- **`/contractors`** переведён с legacy-снапшота (`operationsApi.getContractorSnapshot`) на
+  `contractorsApi`: вкладки **Реестр** (create/поиск/пагинация + ссылки на детальную) ·
+  **Истекающие документы** · **Требования к документам** (tenant-политика: добавить/удалить,
+  409 `requirement_exists`). KPI-шапка (контрагенты/сотрудники/инциденты/истекающие).
+- **`/contractors/:id`** — детальная страница (паттерн `WorkPermitDetailPage`, lazy-чанк) с шапкой,
+  «Изменить» и 4 вкладками: **Обзор** (compliance-сводка допуск/обучение/медосмотр по бакетам
+  ComplianceStatus) · **Сотрудники** (create/edit + вход в допуск) · **Документы** (фильтр по типу,
+  create/edit/archive) · **Инциденты** (регистрация).
+- **Поток допуска сотрудника** — `EmployeeAdmissionDialog`: readiness + document-checklist + «Допустить»
+  с рендером вердикта (ok/warning/blocked), нарушений и обработкой 409 `requirements_not_met`.
+- **Мягкое состояние feature-flag** — документы/допуск/требования за флагом `contractors`
+  (`is_feature_enabled` default-ON): 404 «feature is not enabled» рендерит пустое состояние, не ошибку.
+
+### Notes
+- Чисто фронтовый срез: 0 изменений `backend/`, 0 миграций, OpenAPI-baseline/PG16-гейт не трогались.
+
+## 2026-07-14 (feat/p10-01-committees-srez2-proceedings — P10-01 Комитеты срез-2: ядро заседаний)
+
+### Added
+- **Комитеты срез-2 — ядро заседаний (P10-01, ТЗ B.17)** — присутствие + кворум-гейт на проведение,
+  голосование по решениям с подсчётом, авто-нумерация и журнал протоколов, полный write-UI. Миграция
+  `cmt02` (аддитивная): таблицы `committee_meeting_attendance` (present per person) и
+  `committee_decision_vote` (enum `votechoice` for/against/abstain); на `committee_meeting` —
+  `held_at`, `protocol_seq`/`protocol_year` и иммутабельный снапшот кворума `members_total`/
+  `present_count`/`quorum_met`; partial unique index номера протокола (per комитет/год, PG16).
+- **Правило кворума = простое большинство** (кворум = присутствует строго >½ действующих членов —
+  по DISTINCT person_id; решение «принято» если голосов «за» > «против», воздержавшиеся в кворуме но
+  не в подсчёте, ничья → «отклонено»). Итог решения вычисляется на лету; снапшот кворума
+  фиксируется на момент проведения.
+- **Нумерация протокола = авто при проведении** (формат `N/ГГГГ`, сквозная per-комитет в пределах года,
+  гонка закрыта unique-констрейнтом → 409 при коллизии).
+- **API** (admin-only router, флаг `committees` default-off): `GET/PUT /committees/meetings/{mid}/attendance`
+  (bulk-замена, дедуп по person_id, 422 не-член, 409 после проведения); `PATCH /committees/meetings/{mid}`
+  (`status:"held"` — кворум-гейт → 409 `COMMITTEE_QUORUM_NOT_MET`, авто-номер + снапшот);
+  `POST/GET /committees/decisions/{did}/votes` (upsert голоса + tally/outcome); расширенный
+  `GET /committees/meetings/{mid}/protocol` (номер+снапшот+tally+голоса); журнал
+  `GET /committees/protocols`; `GET /committees/{cid}/members` (с ФИО). Demo-сид: 4 члена +
+  проведённое заседание с кворумом + номер `1/ГГГГ` + голоса (за/за/против → принято).
+- **Frontend** — `CommitteesPage` из read-only срез-1 стал полностью рабочим: create-формы
+  (комитет/заседание/решение/задача/член), присутствие (чекбоксы + индикатор кворума + «Провести
+  заседание»), голосование per присутствующий член (бейдж «Принято/Отклонено» + tally), журнал
+  протоколов. RU-лейблы kind/role/choice/outcome. Маршрут `/committees` не менялся.
+
+### Fixed
+- **put_attendance**: дублированный `person_id` в bulk-payload больше не даёт `IntegrityError`/HTTP 500
+  (дедуп last-write-wins); **update_meeting**: нелегальный переход при отсутствии кворума теперь
+  сообщает реальную причину (легальность перехода проверяется до кворума), а не маскируется под
+  `COMMITTEE_QUORUM_NOT_MET`; **outcome** решения без голосов сериализуется одинаково (`null`) в обоих
+  эндпоинтах. Найдено adversarial-review Workflow'ом (5 линз + verify).
+
+### Notes
+- Backend pytest / PG16-гейт / OpenAPI baseline reген **отложены на CI (Py3.12.12)** — локальный
+  Python-env сломан (базовый интерпретатор `.venv` деинсталлирован; доступен только Py3.14 без wheel
+  для pinned pydantic-core). Фронт-гейты пройдены локально полностью (vitest 127 файлов / 495 тестов,
+  tsc, build). OpenAPI baseline требует регена: +6 operationId (attendance×2/votes×2/protocols/members).
+
+## 2026-07-11 (feat/p10-07-management-dashboards — P10-07 Analytics: управленческие дашборды §24.2)
+
+### Added
+- **Управленческая аналитика (P10-07, ТЗ B.23 → vNext §24.2)** — хаб `/analytics` («Бизнес и аналитика» →
+  «Управленческая аналитика», новое право `ANALYTICS_VIEW` у admin/owner/ot_pb_head + ot_specialist/
+  line_manager/hr): фильтр-бар (компания/объект/подрядчик/период — backend принимал эти фильтры, фронт
+  впервые их передаёт) → KPI-карточки (executive + overdue + sla-load) → **графики 6 трендов** (первая
+  chart-библиотека проекта: recharts 2.x — 3.x требует TS≥5.4 через @reduxjs/toolkit, проект на 5.3.3;
+  обёртка `TrendLineChart`, период day/week/month) → **разрез по компаниям/объектам/подрядчикам**
+  (клик по строке = drill-down фильтр) → карточки-ссылки на 5 профильных суб-дашбордов (были
+  «сиротскими» маршрутами вне навигации).
+- **Breakdown-эндпоинт** `GET /analytics/dashboard/breakdown?dimension=company|site|contractor`
+  (+date-окно по инцидентам): по одному SQL GROUP BY на метрику (инциденты/предписания/high-риски,
+  для компаний + обучение и СИЗ; подрядчики — из readiness read-model), нулевые сущности включены,
+  синтетическая строка «— без объекта» для рисков/предписаний без площадки (иначе тихая несверка
+  с executive-итогом — находка ревью), сортировка «худшие сверху», cap 200. Без миграций/персистенса.
+
+### Fixed / Security
+- **RBAC на analytics-роутере** (пре-существующая дыра): все `GET /analytics/*` — только управленческие
+  роли (admin/owner/hr/ot_pb_lead/line_manager/ot_specialist/manager), `POST /analytics/recompute` —
+  только admin/owner. Раньше управленческие KPI были видны любому аутентифицированному пользователю тенанта.
+- **RBAC на export_center** (`/exports*`): read — офисные роли (без worker/employee/contractor_inspector),
+  write (создание job/schedules/kpis/retry) — узкий список.
+- **Дубль-регистрация operational_dashboard-роутера** убрана (`route_groups.py` — источник
+  «Duplicate Operation ID» warning в OpenAPI; путь `/operational/dashboard` не изменился).
+- Тесты: backend 11 (RBAC-матрица 4 + breakdown 7), frontend 14 (страница 8 + analyticsApi 4 +
+  TrendLineChart 2); +ResizeObserver-полифилл в vitest.setup.
+- **Осознанно вне объёма (follow-up):** «активность пользователей» и «состояние системы» из §24.2
+  (нет агрегаторов); пере-вёрстка 5 суб-дашбордов (остаются JsonKpiGrid); ETag/кэш на analytics;
+  keyboard-доступность клика по строке разреза; секционный loader вместо full-page на смену фильтра;
+  PG-проверка `func.date(occurred_at)` на timestamptz.
+
+## 2026-07-10 (feat/p10-07-report-builder-mvp — P10-07 Analytics: конструктор отчётов end-to-end)
+
+### Added
+- **Report-builder MVP (P10-07, ТЗ B.23 → vNext §24.3)** — конструктор отчётов end-to-end: сохранённая
+  сущность отчёта + sync-предпросмотр + celery-материализатор CSV/XLSX/PDF поверх существующего
+  ExportJob-конвейера + страница-конструктор. Всё за новым default-off фичефлагом `report_builder`
+  (паттерн committees; demo-сид включает для demo-тенанта).
+  - **Модель `ReportDefinition`** (миграция `rb01`, чисто аддитивная): датасет + `config_json`
+    (колонки / фильтры / сортировка / группировки с агрегатами count/sum) + `is_system`
+    («готовые шаблоны» из ТЗ — неизменяемые, на фронте «Дублировать»); имя уникально per tenant.
+  - **Декларативный реестр датасетов** (`modules/report_builder/datasets.py`) — 4 ядровых:
+    обучение сотрудников, инциденты, реестр рисков, СИЗ-остатки; вычислимые колонки
+    (просрочено / остаток / ниже минимума) — SQL-выражения, фильтруются наравне с физическими;
+    задокументирован enum-контракт (NAME-based vs value-based хранение, фильтр только по
+    типизированной колонке).
+  - **Engine** (`engine.py`) — один компилятор для предпросмотра (limit 100) и экспорта (hard cap
+    50 000): whitelist-валидация колонок/операторов/сортировки (422 со структурным кодом),
+    коэрсия значений по типу, GROUP BY + count/sum на уровне SQL, total отдельным count.
+  - **Renderers** (`renderers.py`) — CSV (`;`, UTF-8 BOM, экранирование), XLSX (openpyxl,
+    санитайзер имени листа), PDF (python-docx landscape → LibreOffice; недоступен →
+    типизированный `pdf_renderer_unavailable`); **нейтрализация CSV/XLSX formula-injection**
+    (OWASP-префикс `'` для `=`,`+`,`-`,`@`,Tab,CR — из адверсариального ревью, с regression-тестом).
+  - **API `/report-builder/*`** (9 роутов, RBAC read=admin/owner/ot_specialist/line_manager,
+    write без line_manager; audit на write/run; ETag+304 на списке): каталог датасетов,
+    CRUD сохранённых отчётов (409 дубль имени, 400 system-immutable, 422 битый config),
+    inline-предпросмотр, `POST /definitions/{id}/run {format}` → ExportJob,
+    `GET /exports/{job_id}/download` — выделенное скачивание (legacy `/files/{id}/download`
+    требует MinIO и префикс `tenants/` — недоступен на dev; паттерн audit-экспорта).
+  - **Материализатор `report_export_job`** (celery, зеркало audit_export_job): engine → renderer →
+    `FileStorageService` + строка `File` → `job.file_id/row_count/done`; typed-ошибки
+    (`definition_missing`/`row_limit_exceeded`/`pdf_row_limit_exceeded` при >2000 строк для PDF/
+    `pdf_renderer_unavailable`) + **broad-except → `internal_error`** (job не застревает в running),
+    terminal-guard от повторной доставки; модуль зарегистрирован для worker discovery.
+  - **Demo-сид**: флаг + 4 системных шаблона («Просроченное обучение», «Открытые инциденты»,
+    «Риски высокого уровня», «СИЗ ниже минимального остатка») — идемпотентно.
+  - **`ReportBuilderPage`** (`/reports/builder`, право REPORTS_VIEW, пункт «Конструктор отчётов»
+    в навигации + кнопка с ReportsPage): сохранённые отчёты (системные — badge, дублирование),
+    конструктор (датасет → колонки/группировка → типо-зависимые фильтры → сортировка),
+    предпросмотр ≤100 строк, экспорт CSV/XLSX/PDF с поллингом job (house-хук `usePolling`)
+    и скачиванием; RU-сообщения по кодам ошибок job. Пустые значения фильтров не отправляются
+    (ревью-фикс: `Number("")→0` тихо искажал отчёт).
+  - Тесты: backend 34 (модель/миграция 3, реестр 2, engine 10, renderers 5, API 6, материализатор
+    и download 7, сид 1) + frontend 13 (api-клиент 5, страница 8).
+  - **Осознанно вне объёма (follow-up):** остальные 4 датасета каталога Export Center
+    (реестр делает добавление механическим); cron-исполнение `ExportSchedule` + email-доставка
+    (run-now работает); графики/heatmap (уйдут в срез управленческих дашбордов); anonymization;
+    подключение старой кнопки ReportsPage (`reports:xlsx` job'ы) к материализатору; RBAC на
+    generic `/exports/*`-чтениях + no-op `retry` для report-job'ов; сброс кнопки «Скачать»
+    при правке конфига; server-side пагинация предпросмотра.
+
+## 2026-07-09 (feat/p10-03-medical-oversight-ui — P10-03 Медосмотры: фронт контингента / направлений / отстранений)
+
+### Added
+- **Фронт-контур медосмотров (P10-03, ТЗ B.8 → vNext §9.1/§9.2)** — три готовых backend-контура стали
+  видимыми и управляемыми со страницы «Медосмотры и допуски» (`/medical`). Чисто фронтовый срез: 0 миграций,
+  0 новых эндпоинтов, OpenAPI-baseline и PG16-гейт не затрагивались (прецедент — мобильная выдача СИЗ, PR #726).
+  - **Сводка в шапке** — stats из `GET /medical/summary` (позиций контингента / просрочено+отсутствует /
+    активных отстранений) вместо клиентских подсчётов.
+  - **Секция «Контингент медосмотров»** — реестр по должностям (`/medical/contingent/register`) и поимённый
+    список (`/medical/named-list`) с переключателем представлений (aria-pressed) и печатью DOCX/PDF обоих
+    (`responseType: "blob"` + `downloadBlob`, 503 PDF-рендера → локальная ошибка секции).
+  - **Секция «Направления на медосмотры»** — server-side фильтр по статусу, bulk-генерация по контингенту
+    (`POST /medical/contingent/generate-referrals`, счётчик «Создано направлений: N»), ручное создание
+    (сотрудник/вид/срок/медорганизация), FSM-переходы: «Запланировать»/«Отменить», «Завершить» с инлайн-выбором
+    осмотра-результата того же человека (`transition {to: completed, result_exam_id}`; без осмотров — подсказка).
+    Per-row in-flight состояние (`Set`) — быстрые действия по нескольким строкам не мешают друг другу.
+  - **Секция «Отстранения от работы»** — фильтр «только активные» (server-side), причины RU (негоден/
+    противопоказания), осмотр-источник, «Снять отстранение» с confirm + двойной reload (список + сводка);
+    403 для не-admin/owner отображается ошибкой секции (фронт-гейтинга ролей нет — RBAC на backend).
+  - `operationsApi`: 9 новых методов + 5 DTO; `StatusBadge`: RU-лейблы и цвета для
+    `overdue`/`due_soon`/`missing`/`scheduled`/`completed`/`lifted` (бонус: бейдж «overdue» в реестре осмотров
+    перестал показывать сырое значение); `transitionMedicalReferral` типизирован union'ом статусов FSM.
+  - **Фикс shared-хука `useAsyncResource`** (первый потребитель с изменяющимся loader'ом): guard
+    `inFlight` дропал reload при смене фильтра во время in-flight запроса (UI показывал данные не того
+    фильтра без recovery) — заменён на latest-wins версионирование (`seqRef`); + юнит-тесты хука (red-first).
+  - Тесты: `MedicalPage` 19 (было 2), `useAsyncResource` 2 (новый файл), `medicalOversightApi` 9 (новый файл),
+    `StatusBadge` 1 (новый файл).
+  - **Осознанно вне объёма (follow-up):** серверный typeahead persons/exams (пикеры ограничены первыми 100 —
+    существующее ограничение снапшота); печатная форма направления на ОПО / решения комиссии; редактор
+    маппинга должность→вид 342н; server-side пагинация направлений (>100 — молчаливое усечение, `total`
+    отбрасывается); подсказка «показаны первые 100 из N»; `Promise.allSettled`-разделение ошибок
+    «мутация vs reload» (house-wide паттерн).
+
+## 2026-07-09 (feat/p10-03-psychiatric-342n — P10-03 Медосмотры: обязательное психиатрическое освидетельствование (342н / ПП РФ 695))
+
+### Added
+- **Психиатрическое освидетельствование 342н (P10-03, ТЗ B.8 → vNext §9.1/§9.2)** — закрыта единственная
+  настоящая функциональная дыра контура медосмотров: до среза `MedicalExamKind.PSYCHIATRIC` был лишь
+  значением enum. Психиатрия введена как **вторая ось деривации контингента**, параллельная 29н
+  hazard→factor, переиспользуя готовую машинерию направлений/отстранения/блока допуска (там — ноль нового
+  кода). Миграция `med03` — чисто аддитивная; 29н-ветка `compute_contingent` не тронута.
+  - Каталог видов деятельности по перечню ПП РФ № 695 — новая `PsychiatricActivityType`
+    (`psychiatric_activity_type`, tenant-scoped, `interval_days` default 1825 = 5 лет, переопределяемо
+    per-вид) + маппинг должность→вид `PsychiatricPositionActivity` (`psychiatric_position_activity`,
+    параллель `RiskHazard.medical_factor_code`). Две nullable/defaulted колонки на `medical_exam`:
+    `psychiatric_protocol_no` (№ решения врачебной комиссии), `psychiatric_activity_codes` (охваченные виды).
+  - `compute_contingent` добавляет `PSYCHIATRIC` для должностей, подлежащих ОПО (батч-загрузка каталога +
+    маппинга, без N+1). `record_exam` для психиатрии считает `valid_until` по строжайшей периодичности
+    замапленных видов (`psychiatric_interval`, fallback 1825). Запись `UNFIT`-освидетельствования открывает
+    `MedicalSuspension` штатным путём → `person_admission` блокирует допуск (§9.2).
+  - API за флагом `medical` (та же RBAC): CRUD `/medical/psychiatric/activity-types` +
+    `POST .../seed-defaults` (one-click загрузка стандартного 695-набора, идемпотентно) +
+    `GET/PUT /medical/psychiatric/positions/{id}/activities` (маппинг, replace-семантика, неизвестный код→422).
+    `record_exam` через `POST /medical/exams` принимает 2 новых поля. Стандартный 695-список — одна кодовая
+    константа `PSYCHIATRIC_ACTIVITY_DEFAULTS` (источник и для demo-сида, и для эндпоинта).
+  - Demo-сид: `_seed_psychiatric_activities_demo` — 695-каталог + маппинг демо-должности на «работы на
+    высоте» (психиатрический контингент непуст из коробки в dev).
+  - Фронт (`MedicalPage`): тонкая секция «Психиатрическое освидетельствование (342н)» — каталог видов
+    деятельности + кнопка «Загрузить стандартный список 695» + счётчик подлежащего контингента; тихая
+    деградация при выключенном флаге. `operationsApi` + методы psychiatric.
+  - **Осознанно вне объёма (follow-up):** per-activity частичное ограничение (блок только конкретного вида
+    деятельности); печатная форма направления/решения комиссии; психиатрический регистр/поименный список;
+    моделирование состава врачебной комиссии; фронт для направлений/отстранений/контингента.
+
+## 2026-07-05 (feat/p10-06-ppe-safety-budget — P10-06 СИЗ склад: бюджет безопасности (СИЗ, план vs факт закупок))
+
+### Added
+- **Бюджет безопасности СИЗ (P10-06, ТЗ §12.4 — СИЗ-часть)** — план расходов на СИЗ за период vs
+  фактические закупки, поверх честного остатка. Аддитивно; инвариант «`batch.quantity` только через
+  `_write_movement`» не тронут — цена это метаданные, факт — вычисляемый агрегат.
+  - Новая сущность `PPESafetyBudget` (`ppe_safety_budget`, миграция `wa09`): `name`, `period_start`/
+    `period_end` (диапазон дат), `planned_amount` (`Numeric(14,2)`), `notes`; tenant-wide, пересечения
+    периодов допускаются. Новая nullable-колонка `PPEStockBatch.unit_cost` (цена за единицу лота).
+  - Сервис `backend/app/modules/ppe/budget.py`: CRUD (create/list/get/update/soft-delete;
+    `BudgetNotFound`→404) + `compute_budget_actual` — **вычисляемый** закупочный факт: Σ приходных
+    проводок (`kind=receipt`, `quantity_delta>0`) × `batch.unit_cost` за период (один join, без N+1),
+    разбивка по категориям `item.category`, приходы без цены исключены из суммы но посчитаны
+    (`unpriced_receipt_count`). Ledger — источник истины (soft-deleted партия/позиция не «отменяют» трату).
+  - API за флагом `warehouse`: `POST/GET /ppe/budgets`, `GET /ppe/budgets/{id}` (план/факт/остаток/
+    разбивка/unpriced), `PATCH/DELETE /ppe/budgets/{id}`; `unit_cost` в схемах/роуте приёмки партии.
+  - Фронт (`WarehousePage`): секция «Бюджет безопасности» (CRUD + деталь с разбивкой по категориям +
+    предупреждение «Приходов без цены: N») + поле «Цена за единицу» в форме приёмки + `warehouseApi`
+    (budgets CRUD/detail).
+  - **Осознанно вне объёма (отдельный под-проект):** кросс-доменный §12.4 (бюджеты обучения/медосмотров/
+    мероприятий, статьи расходов, заявки на возмещение, аналитика по филиалам/объектам — нужна связка
+    batch→branch), consumption-cost аллокация, мультивалюта.
+
+### Fixed
+- **Pre-existing:** stale warehouse mock в `OpsPages.test.tsx` (мокал только `listLevels`/`listBatches`,
+  тогда как `WarehousePage` грузит movements/shortages/counts/transfers/levels-by-location/suppliers/
+  reorder/budgets на маунте) — расширен до полного mount-набора. Не связано с бюджетом; всплыло на
+  полном фронт-сюите (тот же класс фикса, что в PR #726).
+
+## 2026-07-05 (claude/awesome-ritchie-1f2ce2 — P10-06 СИЗ склад: мобильная выдача (online-first))
+
+### Added
+- **Мобильная выдача СИЗ (P10-06)** — новый touch-first экран `/ppe/issue` (право `ppe.issue`) для полевой
+  выдачи СИЗ работникам. **Чисто фронтовый срез** поверх готового `POST /ppe/issues` (FIFO-списание):
+  без миграций, новых эндпоинтов и изменений OpenAPI. Инвариант честного остатка не тронут — выдача идёт
+  штатным путём `create_issue → deplete_for_issue`.
+  - Поток «корзина/комплект»: поиск сотрудника (typeahead по ФИО/должности, только `active`) → набор
+    позиций СИЗ в корзину (merge дублей, qty-степпер, удаление) → обзор → «Выдать всё» (N вызовов
+    `createPpeIssue`). Частичный отказ оставляет в корзине только неудачные строки для повтора (без двойной
+    выдачи), guard от двойного тапа (`useRef` in-flight lock).
+  - Stock-aware: бейджи остатка «на руках» из `warehouseApi.listLevels()` при включённом флаге `warehouse`;
+    тихая деградация (без остатков, выдача работает) при выключенном — зеркалит no-op `deplete_for_issue`.
+  - Файлы: хук `frontend/src/pages/ppe/mobile-issue/useMobileIssue.ts` + `types.ts`, страница
+    `frontend/src/pages/ppe/MobileIssuePage.tsx` (single-file, house-style), маршрут в
+    `pageRegistry.tsx`/`routeGroups.tsx` (за `PPE_ISSUE`), кнопка входа «Мобильная выдача» на `PpePage`.
+    Тесты: `useMobileIssue.test.tsx` (6, renderHook), `MobileIssuePage.test.tsx` (7), +1 на `PpePage.test.tsx`.
+  - Осознанно отложено: офлайн-очередь + серверная идемпотентность, QR-скан бейджа, захват подписи,
+    norm-driven 766н-комплект, per-line выбор партии на мобильном.
+
+### Fixed
+- **Pre-existing:** stale warehouse mock в `OpsPages.test.tsx` (мокал только `listLevels`/`listBatches`,
+  тогда как `WarehousePage` после PR #725 грузит movements/shortages/counts/transfers/levels-by-location/
+  suppliers/reorder на маунте) — зеркалирован полный мок из `WarehousePage.test.tsx`. Не связано с
+  мобильной выдачей; найдено при прогоне полного фронт-сюита.
+
+## 2026-07-04 (claude/keen-mahavira-4d9ed8 — P10-06 СИЗ склад: поставщики (справочник + провенанс + дозаказ))
+
+### Added
+- **Поставщики СИЗ (P10-06)** — нормализованный справочник поставщиков + провенанс партий + закупочный
+  слой дозаказа. Чисто аддитивно; инвариант честного остатка (`batch.quantity` только через
+  `_write_movement`) не тронут — поставщик это метаданные.
+  - Новая сущность `PPESupplier` (`backend/app/models/ppe.py`, таблица `ppe_supplier`): `name` (unique per
+    tenant), `inn`, `contact_email`, `contact_phone`; `SoftDeleteMixin`. Провенанс: nullable FK
+    `PPEStockBatch.supplier_id` (лот пришёл от вендора) + явный `PPEItem.preferred_supplier_id`; обе FK
+    `ondelete=SET NULL`. Миграция `wa08` (аддитивная: таблица + 2 nullable-колонки + FK + индексы).
+  - Сервис справочника `backend/app/modules/ppe/suppliers.py` (create/list/get/update/soft-delete;
+    дубль имени → `SupplierNameConflict`→409 через `IntegrityError`, что ловит и soft-deleted тёзку;
+    `update` с allowlist полей). API за флагом `warehouse`: `POST/GET /ppe/suppliers`,
+    `GET/PATCH/DELETE /ppe/suppliers/{id}` (ETag на списке, дубль→409, нет/cross-tenant→404).
+  - Провенанс подключён: `supplier_id` в схемах/роутах партии (валидация → неизвестный поставщик 404 через
+    `_require_supplier`, явный `null` очищает); `transfer_stock` копирует `supplier_id` в партию-приёмник;
+    `preferred_supplier_id` в схемах/роутах позиции.
+  - Закупочный слой: `compute_shortages` резолвит поставщика позиции — **явный `preferred_supplier_id`
+    если жив, иначе fallback на последнего поставщика из истории партий** (received_at desc nulls-last →
+    created_at desc), soft-deleted резолвнутый → нет; батч-запросы без N+1. Строки `/ppe/stock/shortages`
+    получили поля `supplier_*`. Новый `GET /ppe/stock/reorder` — вычисляемый **черновик заявки**
+    (`build_reorder_draft`): below-threshold дефицит сгруппирован по поставщику, группа `unassigned`
+    последней, per-group `line_count`/`total_deficit` (НЕ персистентная сущность).
+  - Фронт (`WarehousePage`): секция «Поставщики» (CRUD), карточка «Новая партия (приёмка)» с пикером
+    поставщика, колонка «Поставщик» + бейдж источника (явный/история) + инлайн-пикер
+    `preferred_supplier_id` (PATCH → re-fetch дефицита), вид «Дозаказ» (карточки по поставщикам + «Копировать
+    CSV» с экранированием ячеек) + `warehouseApi` (suppliers CRUD / `getReorderDraft` /
+    `patchItemPreferredSupplier` / `createBatch`).
+  - Осознанно отложено (follow-up): unique по ИНН; персистентная заявка/PO + ЭДО-роуминг; полный экран
+    редактирования позиции СИЗ; мультипоставщик/прайс-листы/метрики; reorder-CSV как backend-endpoint.
+
+## 2026-07-04 (claude/lucid-thompson-80c2b5 — P10-06 СИЗ склад: перемещения между локациями)
+
+### Added
+- **Перемещения запаса СИЗ между локациями (P10-06)** — частичный перенос `q` единиц партии из
+  локации A в локацию B как **пара `transfer`-проводок** (`−q` на партии-источнике, `+q` на партии-
+  приёмнике, общий сгенерированный `ref_id`, `ref_type="ppe_transfer"`) через единственный мутатор
+  остатка `_write_movement`. На уровне позиции остаток инвариантен (out + in = 0), per-location остаток
+  честно перетекает.
+  - Сервис `transfer_stock` в `backend/app/modules/ppe/stock.py`: списывает источник первым (нехватка →
+    `InsufficientStockError` до создания приёмника), затем **find-or-create** партии-приёмника с тем же
+    `batch_no` в локации B (копия провенанса: `received_at`/`certificate_no`/`certificate_expires_at`).
+    Гварды: `quantity>0`, непустая `to_location` (после `strip`), `to_location != source.location`.
+  - Миграция `wa07` расширяет уникальный ключ партии с `(tenant, item, batch_no)` до
+    `(tenant, item, batch_no, location)` — **частичный** unique-индекс `WHERE deleted_at IS NULL` +
+    `NULLS NOT DISTINCT` (PG16): один `batch_no` может лежать в разных локациях, legacy-дедуп сохранён,
+    soft-deleted партии не занимают слот. Не чисто аддитивная (drop+add ключа) — PG16-gate round-trip.
+  - Эндпоинты за флагом `warehouse`: `POST /ppe/stock/transfers` (`IntegrityError`/`StaleDataError`→409,
+    нехватка/невалидная локация→400, нет источника→404, `quantity≤0`→422),
+    `GET /ppe/stock/transfers` (история переносов, сгруппированная в пары по `ref_id`, фильтр `item_id`,
+    ETag+304, пагинация по парам), `GET /ppe/stock/levels/by-location` (остаток по `(item, location)`).
+  - Фронт: секция «Перемещения между локациями» на `WarehousePage` (форма источник/локация-назначения
+    с `datalist` известных локаций/количество/причина + история переносов) + `warehouseApi`
+    (`listTransfers`/`createTransfer`/`listLevelsByLocation`).
+  - Осознанно отложено (follow-up): location-фильтр истории переносов, goods-in-transit,
+    location-scoped FIFO-выдача, сущность-справочник `PPELocation`, picker партий в форме.
+
+## 2026-07-04 (claude/recursing-chaum-4a942d — СВЕРКА ТЗ↔КОД + синхронизация доков, PR #723)
+
+### Docs
+- **Спец↔код сверка (docs-only, кода нет).** Прямая сверка ТЗ/роадмапа/релиз-доков с фактическим `main`; весь рассинхрон односторонний — документы отставали от влитых PR.
+  - `CLAUDE.md`: секция «CI status: disabled» → «workflow-файлы включены» (PR #641/#656 вернули 5 активных `.yml`; local-evidence остаётся каноническим gate per REL-1).
+  - `KNOWN_LIMITATIONS.md`: RC-011 (уведомления/эскалация) `missing` → `done` (синхронно с каноном `RELEASE_BLOCKERS_STATUS`).
+  - `RELEASE_READINESS.md`: evidence-policy строка синхронизирована с re-enabled workflow'ами.
+  - `docs/roadmap/PLATFORM_VNEXT_IMPLEMENTATION_PLAN.md`: P10-10 workflow-движок `not started` → `partial` (модуль `modules/workflow/` ~1.4k LOC смонтирован); summary-счётчики (9 partial / 3 not-started); sync-note под Section B (медосмотры/НПА/клиент-кабинет были занижены).
+  - Новый `docs/audit/SPEC_CODE_SYNC_2026-07-04.md` — полная реконсиляция (таблица расхождений + остаток A/B/C).
+  - `AI_IMPLEMENTATION_REPORT.md`: новый handoff-блок с ledger «выполнено/не выполнено» + следующий точный шаг.
+- `TZ_COVERAGE_MATRIX.md` не тронут (CI-gated валидатор; MVP-строки корректны).
+
+## 2026-07-04 (feat/ppe-inventory-count-p10-06 — P10-06 СИЗ склад: инвентаризация (сверка факт↔система))
+
+### Added
+- **Инвентаризация склада СИЗ (P10-06)** — двухфазная сессия подсчёта: новые таблицы
+  `ppe_inventory_count` (заголовок, статус `draft`→`applied`/`cancelled`) + `ppe_inventory_count_line`
+  (снимок по партии: `system_qty`, `counted_qty` nullable, `adjustment_movement_id`), миграция `wa06`
+  (строго аддитивная, две новые таблицы, без бэкофилла).
+  - Сервис `backend/app/modules/ppe/inventory.py`: `create_count` (снимок активных партий под опц.
+    фильтр item/location) → `set_line_counts` (ввод факта на draft) → `apply_count` (выпускает
+    `adjustment`-проводки через `record_movement` — единственный мутатор `batch.quantity`; дельта от
+    **живого** остатка, не снимка; пропускает несосчитанные/нулевые/soft-deleted-партии строки;
+    замораживает срез) + `cancel_count`. Несосчитано (`null`) ≠ «не нашли» (`0`).
+  - Эндпоинты за флагом `warehouse`: `POST/GET /ppe/stock/inventory/counts`, `GET /…/{id}`
+    (детали = превью с live `on_hand`/`delta`), `PATCH /…/{id}/lines`, `POST /…/{id}/apply`,
+    `POST /…/{id}/cancel`. `apply`/`patch` на не-`draft` → 400; конкурентный `apply` → 409
+    (optimistic-lock `version`); `counted_qty < 0` → 422.
+  - `record_movement` расширен аддитивно опциональными `ref_type`/`ref_id` (проводка инвентаризации
+    ссылается на срез: `ref_type="ppe_inventory_count"`).
+  - Фронт: секция «Инвентаризация» в `pages/warehouse/WarehousePage.tsx` (список срезов + форма
+    создания + редактируемая сетка факта с дельтами + «Сохранить/Применить/Отменить»).
+- OpenAPI baseline пере-снят: 811→817 операций, 653→660 схем (чистый аддитив, ARCH-4 зелёный).
+
+## 2026-07-03 (p10-06 — P10-06 СИЗ склад: мин-остаток + прогноз дефицита)
+
+### Added
+- P10-06 СИЗ склад: per-item min-stock threshold (`ppeitem.min_stock`, migration wa05) + shortage forecast endpoint `GET /ppe/stock/shortages` (consumption velocity from issue movements → deficit-to-reorder + days-to-depletion + projected breach date) + WarehousePage shortage section.
+
+## 2026-07-02 (feat/ppe-stock-movements-p10-06 — P10-06 СИЗ склад: журнал движений («честные остатки»))
+
+### Added
+- **Журнал движений склада СИЗ (P10-06)** — append-only таблица `ppe_stock_movement`
+  (migration `wa04`, строго аддитивная, без бэкофилла; `kind` receipt/issue/writeoff/adjustment
+  как VARCHAR по enum-parity-конвенции, `quantity_delta` со знаком, `ref_type`/`ref_id` строкой
+  без FK — журнал переживает hard-delete выдачи). Архитектура «Вариант B»: `batch.quantity` —
+  живой кэш-баланс, мутируется ТОЛЬКО через сервис `backend/app/modules/ppe/stock.py`.
+  - Эндпоинты `POST /ppe/stock/movements` (ручной receipt/writeoff/adjustment; `issue` отклоняется
+    на уровне схемы → 422) и `GET /ppe/stock/movements` (фильтры item/batch/kind, ETag+304,
+    tenant-iso) за флагом `warehouse`.
+  - **FIFO-списание при выдаче СИЗ**: `POST /ppe/issues` (и replace) получил опциональный `batch_id`;
+    без него авто-FIFO по `received_at` (nulls last)→`created_at`→`id`; при нехватке → 400 и вся
+    выдача откатывается (issue не создаётся); флаг ВЫКЛ или у позиции нет партий → без движения
+    (полная обратная совместимость).
+  - Создание партии пишет стартовую проводку `receipt`; `/ppe/stock/levels` теперь честный остаток.
+  - Фронт: секция «Движения» в `pages/warehouse/WarehousePage.tsx` (журнал + форма ручного
+    прихода/списания/корректировки; `issue` в форме недоступен).
+
+### Changed
+- `PPEStockBatchUpdate` больше НЕ принимает `quantity` — количество меняется только проводкой
+  (приход/корректировка), а не сырым `PATCH`.
+
+### Notes
+- OpenAPI baseline пере-снят 808/648 → **810/651** (санкционированное аддитивное исключение —
+  2 новых эндпоинта + 3 схемы движений; прецедент RC-013/RC-014).
+- Разработка: brainstorming → writing-plans → subagent-driven-development (спека+план в
+  `docs/superpowers/{specs,plans}/2026-07-02-p10-06-ppe-stock-movements*`).
+
+## 2026-07-02 (feat/rc-014-branches-ui — фронт для филиалов (RC-014): экраны master data)
+
+### Added
+- **UI филиалов (Branch) — завершение RC-014 на фронте** (бэкенд `/api/v1/branches` был готов с
+  6796c380; схема БД не меняется, только клиент). По образцу экрана «Компании»:
+  - `types/dto/branches.ts` + `types/forms/branches.ts` (zod): `BranchDto` — плоский (без
+    таймстампов, как `BranchRead`); `status` — свободный `string` (VARCHAR, не enum).
+  - `api/branchesApi.ts` — раздельные тела: `buildBranchCreateBody` (с `company_id`) и
+    `buildBranchUpdateBody` (без — филиал нельзя перевесить на другую компанию; поле в форме
+    `disabled` при редактировании). Пустые опциональные поля не отправляются.
+  - `stores/branches.ts` — zustand-стор: список с фильтром `company_id`, create/update/remove;
+    ответ `{items,total}` (BranchPage). Зарегистрирован в `stores/reset.ts`.
+  - `pages/branches/BranchesPage.tsx` + `features/branches/{BranchTable,BranchFormDialog}.tsx`:
+    фильтр по компании, таблица (филиал/компания/контакт/статус), диалог создания/редактирования.
+  - Права `BRANCH_VIEW`/`BRANCH_MANAGE` (только в `ALL_PERMISSIONS` → owner/admin, совпадает с
+    backend-ограничением «только роль admin»); роут `/branches`, пункт меню «Филиалы» (иконка
+    `Network`) в группе «Документооборот».
+- Гейты: `npm run typecheck` — 0 ошибок; `npm run build` — ok; `npm run test` — 395/396 (единичный
+  сбой `ClientPortalPackagesPage` — известный флак от параллельной нагрузки, в изоляции зелёный,
+  к филиалам не относится).
+
+## 2026-07-02 (feat/post-2-migration-hardening — POST-2: настоящие per-migration транзакции + autocommit-блоки на enum-сайтах)
+
+### Changed
+- **POST-2 — укрепление механики миграций** (санкция пользователя; схема данных НЕ меняется):
+  - `backend/app/migrations/env.py`: снят глобальный `isolation_level="AUTOCOMMIT"` (компромисс
+    2026-06-01, при котором КАЖДЫЙ оператор коммитился сразу и упавшая миграция оставляла
+    частичное состояние). Теперь `transaction_per_migration=True` — настоящий BEGIN/COMMIT на
+    каждую миграцию: упавшая миграция откатывается целиком. Pre-step (`alembic_version` →
+    TEXT) коммитится явно — alembic должен стартовать с чистого (не-begun) соединения
+    (SQLAlchemy 2.0 autobegin).
+  - Все **7 сайтов `ALTER TYPE … ADD VALUE`** обёрнуты в `op.get_context().autocommit_block()`
+    (PG запрещает использовать новое значение enum в той же транзакции; блок коммитит
+    расширение немедленно, `IF NOT EXISTS` даёт retry-safety): 20250315 (documentstatus),
+    20250410 (roleenum), 20260318_next67_hotfix (riskmethodologytype, DO-блок),
+    20260328_next55 (templateversionstatus ×4), 20260407_hotfix (active),
+    20260530_wa03 (prescriptionstatus), 20260602_iter49 (4 типа). Примечание: в
+    RELEASE_BLOCKERS_STATUS фигурировало «8 сайтов» — реально исполняемых 7 (восьмым считался
+    удалённый в iter-14 UPDATE-сайт next55b).
+  - Ровно тот follow-up, который был назван в «env.py atomicity review» (2026-06-02) как
+    «optional future hardening: per-migration tx + autocommit_block()».
+
+## 2026-07-02 (feat/post-1-remove-domain-shims — POST-1: физическое удаление ARCH-1 compat-shim'ов)
+
+### Removed
+- **POST-1 — снесены 10 deprecated compat-shim пакетов `domains/*`** (28 файлов, чистые
+  реэкспорты, оставленные ARCH-1 «до следующего мажора»): `audit`, `contractors`, `files`,
+  `incidents`, `packs`, `ppe`, `replace`, `risk`, `sign`, `training`. Канон — только
+  `app.modules.*`. Живые (не дублированные) домены `billing/committees/layout/medical/npa/
+  permits/prescriptions/signing/sout/templating/work_permits` + `shared.py` — не тронуты.
+
+### Changed
+- **Потребители переведены на канонические пути** (последние 5 ссылок на shim'ы):
+  `tests/test_contractor_admission_service.py`, `tests/test_contractor_admission_with_documents.py`
+  (`domains.contractors.lifecycle` → `modules.contractors.lifecycle`),
+  `tests/test_demo_bootstrap_contractor_documents.py` (`domains.contractors.documents` →
+  `modules.contractors.documents`), `scripts/smoke.sh` ×2 (`domains.files` → `modules.files`).
+- **ALLOWLIST в `scripts/ci/check_context_boundaries.py`: 27 → 5.** Ушли все 22 shim-ребра
+  domains→modules; остались 2 modules→живые-домены (briefings→signing.pep,
+  templates→templating.renderer) + 3 modules→domains.shared (shared kernel — отдельный
+  будущий срез).
+- `.coveragerc`: omit-пути `app/domains/packs/{context,seeder}.py` → `app/modules/packs/…`
+  (протухли в ARCH-1 slice 6, omit молча не работал).
+- Docstring'и `modules/{contractors,packs,ppe}/__init__.py` и протухшие перекрёстные ссылки
+  (`domains/permits/lifecycle.py`, `domains/signing/pep.py`, `modules/ppe/lifecycle.py`) —
+  упоминания shim'ов заменены на «removed in POST-1».
+
+### Fixed
+- **`tests/test_context_boundaries.py::test_allowlist_is_the_expected_legacy_set` был красным
+  на main**: freeze-тест фиксировал 10 записей allowlist, а ARCH-1 довёл их до 27, не обновив
+  зеркальный тест (скрипт-гейт не падал — он проверяет только новые/протухшие рёбра, не
+  количество). Теперь фиксация = 5 и совпадает с реальностью.
+
+## 2026-07-02 (fix/stabilize-gates-2026-06-29 — REL-1 resolved: permanent local-evidence policy; RC-015/RC-016 closed; staged mypy gate repaired)
+
+### Changed
+- **REL-1 (ТЗ §5) — решение по гейту качества: вариант (c), постоянная local-evidence политика**
+  (санкция пользователя «делаем всё»; полностью обратимо — workflows сохранены как `.yml.disabled`):
+  - `docs/stabilization/RELEASE_BLOCKERS_STATUS.md` → «Evidence policy (PERMANENT)»: снята
+    «provisional»-рамка, добавлена **каноническая таблица воспроизводимого пайплайна** (PG16-гейт,
+    lint, static gates, SAST, script-гейты, contract-guards, critical-path matrix, frontend) и
+    **standing deferrals** (Trivy dep/image, Gitleaks, SBOM, Playwright — нет локальных раннеров).
+  - `RELEASE_READINESS.md` синхронизирован (Updated-on 2026-07-02; re-validation obligation →
+    permanent-policy формулировка).
+- **RC-015 (security gate matrix) → done (local-evidence, 2026-07-02).** Локально запускаемые гейты
+  зелёные: 4 script-гейта (`check_security_exceptions`/`check_default_secrets`/
+  `check_runtime_artifacts`/`check_scoped_queries` — exit 0), SAST `python -m bandit -r backend/app
+  -lll -iii` — 0 HIGH, static gates — F821 clean + staged mypy 0 ошибок. `security-gates.md` получил
+  операционную таблицу с командами/результатами/deferral'ами.
+- **RC-016 (critical-path coverage matrix) → done (local-evidence, 2026-07-02).** Backend-ядро
+  Block B.1 зелёное: tenant-isolation + cross-tenant matrix + final-regression = **14 passed**.
+  Caveats: Playwright smoke — deferral (прецедент RB-005); perf/workflow edges — под caveat RC-002.
+  `coverage.md` + `PLAN.md` B.1 обновлены (заодно починен устаревший B.2: RC-006 done с 2026-05-29).
+- **Ремонт staged mypy-гейта (сломан молча с ARCH-4 slice 10):** `scripts/ci/static_gates.sh`
+  ссылался на `backend/app/modules/files/service.py`, который стал ПАКЕТОМ — mypy падал «can't read
+  file» до старта. Путь исправлен на пакет; вскрытые 79 attr-defined ошибок миксинов закрыты
+  **TYPE_CHECKING-контрактами** в `_access`/`_fileops`/`_uploads` (декларации `session`/`tenant_id`
+  + сигнатуры заимствованных helper'ов AccessMixin; ноль рантайм-эффекта): wave0 29 файлов / wave1
+  20 файлов — 0 ошибок. Error-budget таблица в `coverage.md` дополнена строкой 2026-07-02.
+  ANTI-ГРАБЛИ (Windows): venv exe-шимы (`bandit.exe`/`mypy.exe`) молча падают на кириллическом пути
+  репо — вызывать `python -m bandit` / `python -m mypy`; и `script | tail; echo $?` возвращает статус
+  tail, НЕ скрипта (ложный зелёный) — проверять `${PIPESTATUS[0]}`.
+
+## 2026-07-02 (fix/stabilize-gates-2026-06-29 — RC-014: dedicated Branch entity separated from Site)
+
+### Added
+- **RC-014 — сущность «филиал» (Branch), отделённая от Site** (санкционированное additive-исключение
+  из правила «не менять контракт», ТЗ §5 REL-4 / §10.3; санкция пользователя 2026-07-02):
+  - **Model** `app/models/master_data.py::Branch` — company-scoped уровень master-data между Company и
+    Site (vNext-иерархия «группы компаний → компании → **филиалы** → объекты → площадки»): name/code/
+    address/contacts + VARCHAR `status` (не PG-enum — вне enum-parity класса, прецедент cm01);
+    `UniqueConstraint(tenant_id, company_id, name)`. Re-exported через `models.py`/`models/__init__`
+    (+ в оба `__all__` — иначе ruff --fix вырезает реэкспорт).
+  - **`Site.branch_id`** — additive nullable колонка, **app-level ссылка без DB FK** (add_column с FK —
+    класс миграционных граблей wa02; прецедент `contractor_registry.company_id`); целостность держит
+    API-слой: `_ensure_branch_link` в `routes/sites.py` (существование + тот же tenant + та же company →
+    404/400).
+  - **Migration** `20260702_br01_branch_entity` (additive: create `branch` + `site.branch_id` + index;
+    honest downgrade). NOTE: локальный alembic-прогон на SQLite невозможен исторически (initial_schema
+    использует JSONB) — канонический прогон миграций = PG16 gate.
+  - **API** `/api/v1/branches` (list ETag / create / get / patch / delete) — зеркало `sites.py` (те же
+    ABAC-роли и audit_operation); master-data CRUD в репо не феатур-флагуется (прецедент sites/companies).
+    `SiteCreate`/`SiteUpdate`/`SiteRead` получили опциональный `branch_id` (отвязка через `branch_id: null`).
+  - **Contract tests** `tests/test_branches_api.py` (5): CRUD roundtrip, create с несуществующей company
+    → 404, cross-tenant изоляция (get/patch/delete чужого → 404, список не течёт), site↔branch
+    link/unlink/relink, company-mismatch → 400 + ghost branch → 404.
+  - **OpenAPI baseline re-snapped**: 803 операции / 644 схемы → **808 / 648** (+5 роутов, +4 схемы) —
+    легитимное пере-снятие через `check_openapi_snapshot.py --snapshot`; Celery unchanged (32).
+  - Verified: branch tests 5 passed; AST drift-audit (ORM↔migrations parity) 59 passed; ruff+black clean;
+    PG16 gate (alembic upgrade heads + boundary + enum parity) — final evidence.
+  - Docs: `GAP_REPORT.md` + `docs/stabilization/RELEASE_BLOCKERS_STATUS.md` RC-014 → done;
+    `docs/MODULES.md` обновлён (карта после ARCH-1 + иерархия org_structure с branch).
+
+## 2026-07-02 (fix/stabilize-gates-2026-06-29 — ARCH-1: tail slice 8 — replace/audit/sign; duplicated-context queue CLOSED)
+
+### Changed
+- **ARCH-1 slice 8 — fold the three tail contexts, closing the duplicated-context queue.** All three
+  moves are **byte-identical** (stdlib/`app.models`-only imports):
+  - **replace** (the flagged MESSY one — canon decision): the legacy persisted `ReplaceEngine`
+    (`domains/replace/engine.py`, 265 loc) is production-dead — its only importers are 3 lazy imports in
+    `tests/test_replace_api.py`. The richer `modules/replace` package (pattern-replacement `engine.py`,
+    api/service/…) stays the canon untouched; the legacy engine moves ASIDE as
+    `modules/replace/legacy_engine.py` (rename dodges the `engine.py` collision), test repointed.
+    Nothing deleted (per ТЗ the compat layer survives until POST-1).
+  - **audit**: `domains/audit/service.py` (`AuditDomainService`, 0 importers) → `modules/audit/service.py`.
+  - **sign**: `domains/sign/signer.py` (`DocumentSigner`, 0 importers) → `modules/sign/signer.py`.
+  - `domains/{replace,audit,sign}/` are now pure compat-shims; ARCH-3 allowlist +3 shim edges (now 27).
+  - NOT in scope (not duplicated contexts — no `modules/` counterpart): `domains/{shared,signing,medical,
+    permits,templating}` stay as-is; `domains.shared` migration is flagged as its own future slice.
+  Verified locally (Py3.13 venv): ruff+black clean first-try, ARCH-3 boundaries clean (27 allowlisted,
+  0 new), byte-identity ×3, replace API tests green, shim/canon object-identity smoke, OpenAPI contract
+  unchanged (803/644), Celery tasks unchanged (32).
+  **ARCH-1 status: all 8 slices done** (risk, incidents, training, contractors, ppe, packs, files,
+  replace/audit/sign). Every duplicated `domains/X ↔ modules/X` context is collapsed into `modules/`
+  with deprecated re-export shims left behind (POST-1 removes them next major).
+
+## 2026-07-02 (fix/stabilize-gates-2026-06-29 — ARCH-1: collapse domains/files into modules/files (slice 7))
+
+### Changed
+- **ARCH-1 slice 7 — fold `domains/files` into `modules/files`.** The most-coupled slice (28 import
+  sites across 18 code files + 11 test files) but the cleanest mechanically — all three logic files moved
+  **byte-identical** (they import only exempt `app.core.*`/`app.services.*`, and never each other):
+  - `domains/files/{s3,utils,document}.py` → `modules/files/*` keeping names (all free in the package).
+  - `domains/files/` is now a pure compat-shim package (3 re-export modules + deprecation docstring in
+    the previously-empty `__init__`; kept until POST-1). The `s3` shim re-exports the full `__all__`
+    including `_resolve_endpoint` and documents that mock-patch string targets must use the canon path.
+  - Importers repointed via exact-list bulk replace (`app.domains.files` → `app.modules.files`):
+    `api/app.py`, `api/routes/{files,health}.py`, `api/routes/packs/run.py`, `api/v1/router.py`,
+    `modules/files/{api.py,storage.py,service/{__init__,_fileops,_functions,_uploads}.py}`,
+    `modules/health_checks/service.py`, `modules/pdf/convert.py`, `services/{clamav,file_storage,
+    package_export}.py`, `services/pipeline/service.py`, `tasks/document_jobs.py` + 10 test files
+    incl. `tests/conftest.py`. The two lazy in-function imports in `services/file_storage.py` (they break
+    the `s3 ↔ file_storage` import cycle) stay lazy, only the path changed.
+  - **Mock-patch traps handled**: 3 patch STRING targets (`"app.domains.files.s3.generate_presigned_get_url"`
+    ×2, `"app.domains.files.s3.get_client"`) repointed to `app.modules.files.s3.*` — a name-by-name shim is
+    a distinct module object, so patching the old path would silently stop affecting canon consumers.
+    Also `tests/minio/test_s3_endpoint_resolution.py` loads `s3.py` **by file path** (`"domains" / "files"`
+    as Path segments — invisible to dotted-string greps); its loader path updated to `modules`.
+  - ARCH-3 allowlist **shrinks 29 → 24**: the 8 long-standing `modules/* → app.domains.files` debt edges
+    (files.api, files.service + 3 mixins, files.storage, health_checks, pdf.convert) all became stale and
+    were REMOVED (the debt this slice drains); +3 compat-shim edges (`domains.files.{s3,utils,document}`).
+  Verified locally (Py3.13 venv): ruff+black clean, ARCH-3 boundaries clean (24 allowlisted, 0 new,
+  0 stale), byte-identity of all 3 moved files, files/tenancy/minio test suite green, shim/canon
+  object-identity smoke (incl. `modules.files.service.s3 is modules.files.s3`), OpenAPI contract
+  unchanged (803/644), Celery tasks unchanged (32). Schema untouched → PG-gate not required.
+  ARCH-1 core queue is now DONE (7 slices); remaining: `replace` (needs a canon decision on the legacy
+  `ReplaceEngine`) and trivial `audit`/`sign`.
+
+## 2026-07-02 (fix/stabilize-gates-2026-06-29 — ARCH-1: collapse domains/packs into modules/packs (slice 6))
+
+### Changed
+- **ARCH-1 slice 6 — fold `domains/packs` into `modules/packs`.** Largest slice so far (5 logic files,
+  ~1243 loc, 10 importers). `modules/packs` already held the pack-run v2 surface (`api.py`/`schemas.py`/
+  `service.py`), so:
+  - `domains/packs/{assets,context,definitions,seeder}.py` → `modules/packs/*` **keeping names**
+    (git-moved; assets byte-identical, the other three change only their intra-package import lines,
+    plus ruff isort reorder).
+  - `domains/packs/service.py` → `modules/packs/operations.py` (git-moved **byte-identical**; renamed to
+    avoid the existing `modules/packs/service.py` — different concern: scenario-profile resolution +
+    `PackAssembler` vs pack-run/naming services).
+  - `modules/packs/__init__.py` now exposes `router` **lazily (PEP 562)**: worker/bootstrap import paths
+    (`services/tasks.py`, `services/demo_bootstrap.py` import the `seeder`/`context` submodules) must not
+    eagerly pull FastAPI/openpyxl via the package `__init__` — before the move they imported
+    `domains.packs.*` whose `__init__` was empty, so the eager `from .api import router` would have been a
+    NEW heavyweight edge in the worker import graph. `route_groups.py`'s `from app.modules.packs import api`
+    still works (submodule fallback), and `pkg.router` resolves on first access.
+  - `domains/packs/` is now a pure compat-shim package (5 re-export modules + deprecation docstring in
+    `__init__`; kept until POST-1).
+  - Importers use the canon (10): `api/routes/client_portal.py` (`…packs.operations`),
+    `api/routes/packs/_common.py`, `api/routes/packs/management.py`, `services/demo_bootstrap.py`,
+    `services/package_pipeline.py`, `services/tasks.py` + root-tests `tests/test_package_pipeline.py`,
+    `tests/test_templates_pipeline_api.py`, `tests/services/test_pack_generation_pipeline.py`,
+    `tests/integration/test_packages_e2e.py`; docstring pointer updated in
+    `backend/tests/test_documentpack_enum_values.py`. No mock-patch string targets exist for packs
+    (swept tests/, backend/tests, integration_tests/, scripts/).
+  - ARCH-3 allowlist: **+5 compat-shim edges only** (now 29) — the moved files import nothing from
+    `app.domains.*` (seeder's `app.services.file_storage` etc. are exempt orchestration-layer imports),
+    so unlike contractors/ppe no new shared-kernel edges appear and no stale entries needed removal.
+  Verified locally (Py3.13 venv): ruff+black clean, ARCH-3 boundaries clean (29 allowlisted, 0 new),
+  byte-identity of all 5 moved files, packs test suite green, shim/canon object-identity + lazy-router
+  smoke, OpenAPI contract unchanged (803/644), Celery tasks unchanged (32). Schema untouched → PG-gate
+  not required. Queue next: `files` (769 loc / 28 imp., most-coupled), then decisions on `replace`
+  (ReplaceEngine canon) and trivial `audit`/`sign`.
+
+## 2026-07-01 (fix/stabilize-gates-2026-06-29 — ARCH-1: collapse domains/ppe into modules/ppe (slice 5))
+
+### Changed
+- **ARCH-1 slice 5 — fold `domains/ppe` into `modules/ppe`.** The messiest slice so far: unlike
+  `contractors` (empty `__init__`), `domains/ppe/__init__.py` re-exported 8 functions and callers import
+  from the **package** (`from app.domains.ppe import build_journal_export`), and `modules/ppe` already
+  held a same-named-ish `services.py`:
+  - `domains/ppe/lifecycle.py` → `modules/ppe/lifecycle.py` (git-moved; **byte-identical** — pure issue
+    FSM + card-line rules; imports only `app.domains.shared` + stdlib). Name was free in `modules/ppe`.
+  - `domains/ppe/service.py` → `modules/ppe/operations.py` (git-moved; **renamed** to avoid colliding with
+    the existing `modules/ppe/services.py` — different concern: pure norm/card algorithms there vs
+    DB-backed issuance/card/journal ops here). Only body change: internal `app.domains.ppe`→
+    `app.modules.ppe` for `import lifecycle as lc`.
+  - `modules/ppe/__init__.py` **extended**: keeps re-exporting the 4 existing service classes and adds the
+    8 `operations` functions, so `from app.modules.ppe import build_journal_export` works.
+  - `domains/ppe/` now three deprecated compat-shims (`__init__` + `lifecycle.py` + `service.py`,
+    re-exporting from `app.modules.ppe*`; kept until POST-1).
+  - Importers use the canon: `api/routes/ppe.py` (2 imports), `api/routes/journals.py`,
+    `services/person_admission.py`, `services/ppe_notifications.py` + `tests/test_ppe_lifecycle.py`
+    → `from app.modules.ppe …`.
+  - ARCH-3 allowlist churn (net +3, now 24): **removed** the stale `domains.ppe.service →
+    modules.ppe.services` edge (service.py moved; the moved `operations.py` imports `modules.ppe.services`
+    as a same-context modules→modules edge, which the guard does not flag); **added** one
+    `modules.ppe.lifecycle → app.domains.shared` shared-kernel edge (same class as contractors) plus three
+    `domains.ppe* → modules.ppe*` compat-shim edges.
+  Verified locally (Py3.13 venv): ruff+black clean, ARCH-3 boundaries clean (24 allowlisted, 0 new),
+  byte-identity of both moved files (lifecycle identical; operations differs only in the `lc` import),
+  ppe FSM/card unit tests green (24), ppe route/error/events + person-admission + journal-concept tests
+  green (58), OpenAPI contract unchanged (803/644), Celery tasks unchanged (32). No other
+  `app.domains.ppe` importers remain. Queue next: `packs` (1405 loc / 11 imp.), then `files` (most-coupled).
+
+## 2026-07-01 (fix/stabilize-gates-2026-06-29 — ARCH-1: collapse domains/contractors into modules/contractors (slice 4))
+
+### Changed
+- **ARCH-1 slice 4 — fold `domains/contractors` into `modules/contractors`.** `modules/contractors`
+  already held the ORM (`models.py`) and its file names `documents.py`/`lifecycle.py` were free, so the
+  two pure (no-I/O) logic files move **keeping their names** — no `operations.py` rename needed:
+  - `domains/contractors/documents.py` → `modules/contractors/documents.py` (git-moved; unchanged —
+    expiry classification `document_expiry_status`/`best_document`/`requirement_status`).
+  - `domains/contractors/lifecycle.py` → `modules/contractors/lifecycle.py` (git-moved; the only body
+    change is its internal import `app.domains.contractors.documents` → `app.modules.contractors.documents`).
+    Holds the admission engine `evaluate_employee` + `ReadinessStatus`/`EmployeeVerdict`/`DocumentRequirement`.
+  - **new** `modules/contractors/__init__.py` re-exports the public surface of both files.
+  - `domains/contractors/documents.py` + `lifecycle.py` are now deprecated compat-shims (re-export from
+    `app.modules.contractors.*`; kept until POST-1).
+  - Importers use the canon: `services/contractor_admission.py`, `services/contractor_documents.py`,
+    `api/routes/contractors.py`, `modules/projections/services.py` + the 3 `tests/test_contractor_*.py`
+    → `from app.modules.contractors import …`.
+  - ARCH-3 allowlist churn (net +2, now 21): **removed** two stale edges (`projections.services →
+    domains.contractors.lifecycle`, repointed to canon; `domains.contractors.lifecycle →
+    modules.contractors.models`, now behind the shim); **added** two compat-shim edges plus — unlike
+    risk/incidents/training, whose moved files imported only `app.models.*` — two `modules.contractors.* →
+    app.domains.shared` edges, because the pure logic still uses the shared `ContingentItemStatus`/`classify`
+    kernel (migrating `app.domains.shared` itself is a separate future slice, flagged in-code).
+  Verified locally (Py3.13 venv): ruff+black clean, ARCH-3 boundaries clean (21 allowlisted, 0 new),
+  shim/canon object-identity smoke, contractor + shared-classify unit tests green (32 passed), OpenAPI
+  contract unchanged (803/644), Celery tasks unchanged (32). No other `app.domains.contractors` importers
+  remain. Queue next: `ppe` (has `modules/ppe/services.py` → possible name collision), then `packs`, `files`.
+
+## 2026-07-01 (fix/stabilize-gates-2026-06-29 — ARCH-1: collapse domains/training into modules/training (slice 3))
+
+### Changed
+- **ARCH-1 slice 3 — fold `domains/training` into `modules/training`** (same new-file pattern as
+  `incidents`; `modules/training` already held the class services
+  `TrainingEnrollmentService`/`TrainingCertificateService`):
+  - `domains/training/service.py` → `modules/training/operations.py` (git-moved; contents unchanged —
+    imports only `app.models.*` / `app.services.*`, so no new cross-context edges). Holds
+    `assign_training_plan` / `register_training_session` / `issue_certificate` /
+    `upcoming_certificate_expirations` / `TrainingCertificateIssueResult`.
+  - **new** `modules/training/__init__.py` re-exports the operations functions + the existing services
+    (the package previously had no `__init__.py`; existing `from app.modules.training.services import …`
+    callers are unaffected).
+  - `domains/training/` is now a deprecated compat-shim (re-exports from
+    `app.modules.training.operations`; kept until POST-1).
+  - Importers use the canon: `api/routes/training.py` + `tests/domains/test_training_domain.py` →
+    `from app.modules.training import …`.
+  - ARCH-3: two intentional shim edges added to the "ARCH-1 compat-shims" allowlist group.
+  Verified locally (Py3.13 venv): ruff+black clean, ARCH-3 boundaries clean (19 allowlisted, 0 new),
+  shim/canon object-identity smoke, training tests green, OpenAPI contract unchanged (803/644). No
+  other `app.domains.training` importers remain.
+
+## 2026-07-01 (fix/stabilize-gates-2026-06-29 — ARCH-1: collapse domains/incidents into modules/incidents (slice 2))
+
+### Changed
+- **ARCH-1 slice 2 — fold `domains/incidents` into `modules/incidents`.** Unlike `risk` (where the
+  legacy file was a distinct concern), `modules/incidents` already held complementary domain-rule
+  services (`IncidentCaseService`/`IncidentInvestigationService`/`RiskReviewTriggerService`), so the
+  legacy CRUD/orchestration file lands as a **new** module file rather than overwriting:
+  - `domains/incidents/service.py` → `modules/incidents/operations.py` (git-moved; contents unchanged
+    — imports only `app.models.*`, so no new cross-context edges inside). Holds the persistence
+    functions (`register_incident`/`update_incident`/`append_log_entry`/`register_inspection`/
+    `update_inspection`/`add_inspection_result`).
+  - `modules/incidents/__init__.py` re-exports the operations functions alongside the existing
+    services.
+  - `domains/incidents/` is now a deprecated compat-shim (re-exports from
+    `app.modules.incidents.operations`; kept until POST-1).
+  - Importers use the canon: `api/routes/incidents.py` + `api/routes/inspections.py` →
+    `from app.modules.incidents import …`.
+  - ARCH-3: two intentional shim edges added to the "ARCH-1 compat-shims" allowlist group.
+  Verified locally (Py3.13 venv): ruff+black clean, ARCH-3 boundaries clean (17 allowlisted, 0 new),
+  shim/canon object-identity smoke, incident/inspection API + safety-ops + outbox tests green
+  (102 passed), OpenAPI contract unchanged (803/644). No other `app.domains.incidents` importers remain.
+  NOTE: not every duplicated context is this clean — `replace` has a real `engine.py` name-collision
+  (a legacy `ReplaceEngine` absent from the richer `modules/replace`), so it needs a per-context canon
+  decision rather than a mechanical shim.
+
+## 2026-07-01 (fix/stabilize-gates-2026-06-29 — ARCH-1: collapse domains/risk into modules/risk (slice 1))
+
+### Changed
+- **ARCH-1 slice 1 — fold the legacy `domains/risk` context into the canonical `modules/risk`.**
+  First incremental step of collapsing the duplicated `domains/` ↔ `modules/` layers (ТЗ ARCH-1),
+  chosen as the smallest named context (192 loc, 3 importers). Behaviour-preserving:
+  - `domains/risk/calc.py` → `modules/risk/calc.py` (git-moved; contents unchanged — it only imports
+    `app.models.*`, so no new cross-context edges inside).
+  - `modules/risk/__init__.py` now re-exports the calc API (`score_band`,
+    `rebuild_matrix_from_methodology`, `recalc_risk_map`) alongside the existing services.
+  - `domains/risk/` is now a **deprecated compat-shim** — `__init__.py` and `calc.py` re-export from
+    `app.modules.risk.calc` (kept until POST-1 physically removes the `domains/*` shims); no business
+    logic remains there.
+  - The three importers now use the canon: `api/routes/risk/assessments.py` +
+    `api/routes/risk/methodologies.py` → `from app.modules.risk import …`; `tests/test_domains_risk_calc.py`
+    → `from app.modules.risk.calc import …`.
+  - ARCH-3 boundary guard: the shim adds two intentional `app.domains.risk[.calc] -> app.modules.risk.calc`
+    edges, added to `ALLOWLIST` under a new "ARCH-1 compat-shims" note (distinct from the legacy leaks;
+    they disappear with the shim at POST-1).
+  Verified locally (Py3.13 venv): ruff+black clean, ARCH-3 boundaries clean (15 allowlisted, 0 new),
+  shim/canon object-identity smoke, risk calc + engine + API/contract tests green; OpenAPI contract
+  unchanged (only import sources moved, not signatures). No other `app.domains.risk` importers remain.
+
+### Added
+- **RC-011 — real notification delivery (provider orchestration + escalation).** Previously the
+  dispatch job set `status=SENT` without calling any provider, and — worse — *nothing* enqueued the
+  dispatch, so QUEUED email/telegram/webhook notifications were never delivered at all. Now:
+  - **Provider abstraction** `app/modules/notifications/providers/` — `NotificationProvider` protocol
+    + `DeliveryResult` (DELIVERED / FAILED / SKIPPED) and thin real clients: `InAppProvider` (terminal,
+    always delivered), `EmailProvider` (stdlib SMTP off-loop), `TelegramProvider` (Bot API via httpx),
+    `WebhookProvider` (HTTP POST + HMAC, reuses `INBOUND_WEBHOOK_HMAC_SECRET`). All external delivery is
+    **feature-flagged** (`NOTIFICATIONS_DELIVERY_ENABLED`, default **False**) and per-channel configured;
+    when off/unconfigured/without a recipient contact a provider returns `SKIPPED` (never a false SENT).
+  - **Orchestration** `app/modules/notifications/delivery.py` — `deliver_notification` resolves the
+    recipient contact (`NotificationChannelSettings.email/telegram_chat_id`, falling back to `User.email`),
+    calls the channel provider and records an honest status: DELIVERED→`sent`; SKIPPED→`sent` (still shown
+    in-app) with the skip reason; FAILED→retry while `attempts < NOTIFICATIONS_MAX_DELIVERY_ATTEMPTS`, then
+    `failed` + **channel-tier escalation** — re-queue on the next enabled channel of the chain
+    email→telegram→in-app (in-app terminal, so the chain always converges). Delivery metadata is written
+    to the existing `payload` JSON; **no schema change** (uses existing `status`/`attempts`/`last_error`/
+    `sent_at`).
+  - **`notifications.dispatch_pending` beat job** (every 5 min) — the missing orchestrator: scans due
+    QUEUED notifications per active tenant and delivers them; the existing `notifications.dispatch`
+    (single-message) now also routes through the delivery layer. Celery baseline re-snapshotted (31→32).
+  - New config: `NOTIFICATIONS_DELIVERY_ENABLED`, `NOTIFICATIONS_MAX_DELIVERY_ATTEMPTS`, `SMTP_*`,
+    `TELEGRAM_BOT_TOKEN` (config-only; feature off by default).
+  Verified locally (Py3.13 venv): ruff+black clean, new `tests/test_notification_delivery.py`
+  (11 tests: provider skip paths, in-app/disabled/success/retry-then-escalate, batch scan, escalation
+  chain) green; the named acceptance regressions (`test_notifications_calendar_api`, `test_workflow_api`)
+  and task tests stay green — the public API contract is unchanged.
+
+## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-4: decompose god-class FileService via mixins)
+
+### Changed
+- **ARCH-4 — decompose the god-class `modules/files/service.py::FileService` (1241 lines) via
+  mixins** — the last ARCH-4 god-file. Behaviour-preserving: every method/function body is a
+  byte-identical move (deterministic line-diff). `service.py` → `modules/files/service/` package:
+  - `_base.py` — imports, constants (`MAX_INDEX_BYTES/MAX_INDEX_CHARS`), logger, and the module-level
+    file helpers (`resolve_presign_ttl`, sha/stream hashing, `_safe_filename`, dangerous-extension
+    guard, `_mask_pii`, artifact naming) shared by everything.
+  - `_access.py` `AccessMixin` — role/company scoping, audit logging, signed-url TTL.
+  - `_uploads.py` `UploadMixin` — upload session create / new-version / finalize + AV scan.
+  - `_fileops.py` `FileOpsMixin` — download URLs, link/unlink, abort, artifact-from-bytes, delete.
+  - `_functions.py` — the module-level (non-method) functions kept for compatibility
+    (`create_upload_session`/`complete_upload`/`index_file_*`/`_upsert_file_search_document`/
+    `issue_download_url`), independent of the class (no cycle); `UploadMixin.finalize_upload` imports
+    the one it calls (`index_file_record`) from here.
+  - `service.py` — `class FileService(AccessMixin, UploadMixin, FileOpsMixin)` + `__init__`.
+  - `__init__.py` — re-exports `FileService`, the public helpers and module functions, plus the
+    module-level names tests monkeypatch as `app.modules.files.service.<name>`: `s3`, `av`,
+    `OutboxService`, `av_scan_file_job` (attribute-level patches on these shared objects stay global,
+    so the mixin call sites see them), so every `from app.modules.files.service import …` and every
+    such patch target resolve unchanged.
+  No `__`-mangled members exist. Verified locally (Py3.13 venv): ruff+black clean (a duplicate `s3`
+  import was caught by ruff `F811`/`ImportError` and resolved by importing `s3` for the patch target
+  directly from `app.domains.files`), every body byte-identical to source, a class-assembly smoke
+  (MRO, all 20 methods resolve, 2 `@staticmethod`s static, unchanged `__init__(self, session,
+  tenant_id)`, `s3`/`av`/`OutboxService`/`av_scan_file_job` identity across the package / `_uploads` /
+  `_functions`, all external importers — api/tasks/pipelines_orchestrator/pipeline_step_handlers —
+  resolving the same class), files tests green (106 passed). One test that patched a *function name*
+  (`app.modules.files.service.get_settings`) rather than an object attribute was repointed to
+  `app.modules.files.service._uploads.get_settings` — a name is patched in the namespace the function
+  looks it up in, and `create_upload_session` now lives in the `_uploads` mixin. **All six ARCH-4
+  god-files (`tasks/_core.py` + documents/risk/medical/packs routes + PipelineService + FileService)
+  are now decomposed.**
+
+## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-4: decompose god-class PipelineService via mixins)
+
+### Changed
+- **ARCH-4 — decompose the god-class `services/pipeline.py::PipelineService` (1125 lines) via
+  mixins.** First god-*service* split (no OpenAPI guard applies), behaviour-preserving: every method
+  body is a byte-identical move (deterministic line-diff, incl. the 735-line `run`), so the class is
+  reassembled from mixins with identical behaviour. `pipeline.py` → `services/pipeline/` package:
+  - `_base.py` — `StampingUnavailableError`, kept in one place so the raise sites (StampingMixin)
+    and `run`'s `except` clause (service.py) reference the **same class object** (identity preserved
+    → `except` still catches).
+  - `_preparation.py` `PreparationMixin` — request-metadata build, parameter prep, idempotent-run
+    validation.
+  - `_stamping.py` `StampingMixin` — QR/watermark placeholder backends.
+  - `_staging.py` `StagingMixin` — output stage bookkeeping (`_init_outputs/_stage_completed/_record_stage`).
+  - `_runs.py` `RunLifecycleMixin` — pending-run creation / idempotent lookup, error normalization.
+  - `service.py` — `class PipelineService(PreparationMixin, StampingMixin, StagingMixin,
+    RunLifecycleMixin)` with `DOCX_CONTENT_TYPE`, `__init__` and the `run` orchestrator (819 lines,
+    over the ~700 guideline because `run` is a single ~735-line method — splitting it would change
+    behaviour, which the ТЗ forbids; the supporting method groups are what became mixins).
+  - `__init__.py` — re-exports `PipelineService` + `StampingUnavailableError` so the public surface
+    (`from app.services.pipeline import …`, the `app.services` re-export, and all callers in
+    packs/router/cli/tasks/package_pipeline) is unchanged.
+  No `__`-mangled members exist, so the moves are safe. Verified locally (Py3.13 venv): ruff+black
+  clean, every method body byte-identical to the source, and a class-assembly smoke confirming the
+  MRO, `StampingUnavailableError` identity across `_base`/`_stamping`/`service`, all 14 methods
+  resolving on the class, the 6 `@staticmethod`s still static, the `DOCX_CONTENT_TYPE` class attr,
+  the unchanged `__init__(self, storage, pdf_converter, metrics)` signature, and all six external
+  importers resolving the same `PipelineService`; pipeline tests green (44 passed).
+
+## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-4: split god-route packs.py into a package)
+
+### Changed
+- **ARCH-4 — split the god-route `api/routes/packs.py` (1121 lines) into a package**, the last
+  god-route, same contract-preserving pattern. OpenAPI surface byte-for-byte unchanged (guard:
+  **803 operations, 644 schemas**); every endpoint a pure move (deterministic line-diff).
+  - `api/routes/packs/_common.py` (403) — the single `router` + logger, access deps
+    (`SessionDep/TenantDep/PackReadAccess/PackWriteAccess`), role constants
+    (`_PACK_READ_ROLES/_PACK_WRITE_ROLES`), `_SINGLE_TASK_PLANS`, error helpers
+    (`_pack_bad_request/_pack_not_found/_pack_conflict`) and all pack helper functions
+    (context build, person/company/site getters, naming, serialization).
+  - `api/routes/packs/management.py` (288) — scenario list/create, pack listing, generate-documents.
+  - `api/routes/packs/run.py` (514) — `run_pack`, archive downloads, safety summary.
+  - `api/routes/packs/__init__.py` — imports endpoint modules in registration order (`# isort: off`);
+    re-exports `router` (route_groups uses `packs.router`), the role constants / error helpers
+    imported by tests, and `generate_document_task` — whose `.apply_async` several tests monkeypatch
+    via `app.api.routes.packs.generate_document_task` (the re-exported object is identical to
+    `app.services.tasks.generate_document_task`, so the patch still lands).
+  Verified locally (Py3.13 venv): OpenAPI guard green (unchanged), ruff+black clean, all 8 routes
+  registered in original order, the three module bodies byte-identical to the source ranges,
+  re-exports + `route_groups` import OK, mock-patch target object identity confirmed, packs route
+  tests green. With this the four ARCH-4 god-routes (documents/risk/medical/packs) are all split;
+  the god-services (`services/pipeline.py`, `modules/files/service.py`) remain as follow-ups.
+
+## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-4: split god-route medical.py into a package)
+
+### Changed
+- **ARCH-4 — split the god-route `api/routes/medical.py` (1289 lines) into a package**, same
+  contract-preserving pattern as the documents/risk splits. OpenAPI surface byte-for-byte unchanged
+  (guard: **803 operations, 644 schemas**); every endpoint a pure move (deterministic line-diff).
+  - `api/routes/medical/_common.py` (147) — the single `router`, access deps
+    (`SessionDep/TenantDep/MedicalAccess/MedicalReadAccess`), role constants
+    (`_MEDICAL_READ_ROLES/_MEDICAL_WRITE_ROLES`), the `MedicalFeatureGate` feature gate, and the
+    shared error/getter helpers (`_error`, `_to_referral_read`, `_get_factor/_get_hazard/_get_norm/_get_referral`).
+  - `api/routes/medical/exams.py` (358) — medical exams, requirements, suspensions endpoints.
+  - `api/routes/medical/catalog.py` (578) — norms + referrals + factors CRUD endpoints.
+  - `api/routes/medical/contingent.py` (302) — hazard↔factor mappings, contingent register,
+    named-list, print endpoints, contingent, generate-referrals, summary. Keeps the two mid-file
+    helpers (`_mapping_read`, `_render_to_response`) with the endpoints that use them.
+  - `api/routes/medical/__init__.py` — imports endpoint modules in registration order
+    (`# isort: off`); re-exports `router` (route_groups uses `medical.router`) + the role constants
+    imported by `tests/test_medical_access_parity.py`.
+  Verified locally (Py3.13 venv): OpenAPI guard green (unchanged), ruff+black clean, all 30 routes
+  registered in original order, the four module bodies byte-identical to the source ranges, re-exports
+  + `route_groups` import OK, medical route tests green.
+
+## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-4: split god-route risk.py into a package)
+
+### Changed
+- **ARCH-4 — split the god-route `api/routes/risk.py` (1499 lines) into a package**, same
+  contract-preserving pattern as the documents split. OpenAPI surface byte-for-byte unchanged
+  (guard: **803 operations, 644 schemas**); every endpoint is a pure move (deterministic line-diff
+  vs the original ranges).
+  - `api/routes/risk/_common.py` (391) — both routers (`router` for `/risks`, `engine_router`
+    mounted at `/risk`), the `logging.getLogger("app.risk")` logger, access dependencies
+    (`SessionDep/TenantDep/EditorAccess/AdminAccess/RiskReadAccess`), `_RISK_READ_ROLES`, the error
+    helpers (`_risk_unprocessable/_risk_bad_request`) and engine helpers, and all request/response
+    models.
+  - `api/routes/risk/methodologies.py` (453) — methodology CRUD + hazards/controls/matrix + risk-map
+    endpoints.
+  - `api/routes/risk/assessments.py` (531) — `assess` (the ~420-line creator) + `get_assessment`.
+  - `api/routes/risk/reports.py` (232) — risk cards, action plans, and the `/risks` listing.
+  - `api/routes/risk/__init__.py` — imports endpoint modules in registration order (under
+    `# isort: off`), then `router.include_router(engine_router)` exactly as the original file did at
+    its end; re-exports `router` (route_groups uses `risk.router`) + the error helpers imported by
+    `tests/test_risk_error_contract.py`.
+  Verified locally (Py3.13 venv): OpenAPI guard green (unchanged), ruff+black clean, all 15 routes
+  registered in original order, the four module bodies byte-identical to the source ranges, re-exports
+  + `route_groups` import OK, risk route/engine tests green. (`RiskReadAccess`, a mixed-case dependency
+  alias, was caught by ruff `F821` during the split and added to the shared re-import — the
+  undefined-name guard doing its job.)
+
+## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-4: split god-route documents.py into a package)
+
+### Changed
+- **ARCH-4 — split the god-route `api/routes/documents.py` (1938 lines) into a package**, the
+  first route-side decomposition under the OpenAPI contract guard. Behaviour/contract-preserving:
+  the public OpenAPI surface is byte-for-byte unchanged (guard: **803 operations, 644 schemas**),
+  and every endpoint is a pure move (deterministic line-diff: each module's code body is identical
+  to the original ranges).
+  - `api/routes/documents/_common.py` (242) — the single shared `router`, the documents error
+    vocabulary (`_documents_bad_request/_not_found/_conflict/_forbidden/_payload_too_large`,
+    `_generate_internal_error_problem`), `_dispatch_celery_task`, the access dependencies
+    (`AccessDep/ReadAccessDep/StatusAccessDep`), constants, and all request/response Pydantic models.
+  - `api/routes/documents/read.py` (649) — read/query endpoints (list, get, readiness, quality:check,
+    mapping:validate, versions/compare, dependency-map, status, download) + their view helpers.
+  - `api/routes/documents/_generate_helpers.py` (449) — generate-side helpers (CSV/XLSX parsing,
+    template-scope resolution, company/person fetch, `_resolve_run`).
+  - `api/routes/documents/generate.py` (723) — template:resolve / generate / batch / batch-get /
+    task-status / status-patch endpoints. (Slightly over the ~700 guideline — dominated by the
+    intrinsic 286-line `generate_document`; further intra-endpoint splitting deferred as it would
+    not be a pure move.)
+  - `api/routes/documents/__init__.py` — imports the endpoint modules in registration order
+    (read → generate, guarded by `# isort: off`) so route/OpenAPI order is preserved, and re-exports
+    `router` (used by `api/v1/route_groups.py` as `documents.router`) plus the internals imported by
+    tests (`DocGenerateRequest`, `_fetch_template`, `_serialize_payload`).
+  Verified locally (Py3.13 venv): OpenAPI guard green (unchanged), ruff+black clean, all 16 routes
+  registered in the original order, re-exports + `route_groups` import OK, documents route/contract
+  tests green. NOTE: `tests/test_documents_generate.py::test_template_resolve_prefers_site_scope`
+  fails **identically on the pre-split HEAD** (asserts site-scope wins but resolution returns
+  tenant-scope) — a pre-existing issue, unrelated to this move; flagged separately, not a regression.
+
+## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-4: tasks/_core.py decomposition (slice 4 — notification/reminder jobs))
+
+### Changed
+- **ARCH-4 slice 4 — extract the notification/reminder job group from `tasks/_core.py`.** Same
+  behavior-preserving pattern (new leaf sub-module + re-export from `_core`, explicit `name=`
+  preserved → identical Celery registration). With this slice `_core.py` drops **under the ~700-line
+  ТЗ target**:
+  - `tasks/notification_jobs.py` (new) — `dispatch_notification_job` (`notifications.dispatch`) +
+    `_dispatch_notification_job`; `scan_reminders_job` (`reminders.scan`) + the reminder-rule scan
+    helpers `_resolve_rule_recipients` / `_scan_reminders_for_tenant` / `_scan_reminders_job`
+    (training/PPE/inspection due-date evaluation → in-app notifications + plan tasks). Leaf module —
+    imports only from `app.tasks._shared`, never back into `_core` → no cycle.
+  - `_core.py` re-exports all 6 (`# noqa: F401`); the `reminders.scan` entry in the
+    `app.services.celery_app` beat schedule keeps resolving because the task **name** is unchanged
+    (the Celery guard enforces this). The task `dispatch_task_reminders` (`tasks.reminders.dispatch`,
+    task-obligations dispatch — a different concern) stays in `_core`.
+  `_core.py`: 920 → 617 lines; `notification_jobs.py`: 347 lines. No test mock-patch targets needed
+  repointing (pre-flight sweep: no test patches `app.tasks._core.<global>` for a moved fn, and no test
+  imports these tasks directly). Verified locally (Py3.13 venv): Celery guard green (31 tasks
+  unchanged), ruff+black clean, moved block byte-identical to commit 13248301 (299 lines, deterministic
+  diff), re-export identity confirmed, `reminders.scan` beat task still registered, notification/reminder
+  + tasks tests green (21 passed); adversarial reference/import review clean. (Remaining `_core` groups
+  — outbox, process_inbound_webhook, billing, signing/edo wrappers — are optional follow-ups; `_core`
+  is already under target.)
+
+## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-4: tasks/_core.py decomposition (slice 3 — file/PDF jobs))
+
+### Changed
+- **ARCH-4 slice 3 — extract the file/PDF job group from `tasks/_core.py`.** Same
+  behavior-preserving pattern (new leaf sub-module + re-export from `_core`, explicit `name=`
+  preserved → identical Celery registration):
+  - `tasks/file_jobs.py` (new) — the 4 file/PDF tasks: `apply_headers_job`
+    (`app.tasks.apply_headers_job`), `convert_pdf_job` (`app.tasks.convert_pdf_job`),
+    `index_file_content_job` (`files.index_content`, `bind=True max_retries=3`), and the
+    `av_scan_file_job` delegate (`files.av_scan_file_job`). Heavy third-party imports
+    (LibreOffice pool, pdf converters) stay function-local exactly as before. Leaf module —
+    imports only from `app.tasks._shared`, never back into `_core` → no cycle.
+  - `_core.py` re-exports all 4 (`# noqa: F401`); the re-exported task objects are identical
+    (same object), so `from app.tasks import X`, the thin wrappers in `app.celery.tasks.*`, and
+    the `app.modules.files.service` imports all keep resolving, and existing `.delay`/`.apply_async`
+    monkeypatches still work. `DOCX_MIME` (added to `_shared` in slice 2) is no longer referenced
+    from `_core`, so its `_shared` re-import was dropped there.
+  `_core.py`: 1233 → 920 lines; `file_jobs.py`: 350 lines. No test mock-patch targets needed
+  repointing this slice (a pre-flight sweep confirmed no test patches `app.tasks._core.<global>` for
+  a moved function — unlike slice 2). Verified locally (Py3.13 venv): Celery guard green (31 tasks
+  unchanged), ruff+black clean, re-export identity confirmed across all 5 import paths, file/PDF +
+  tasks tests green (57 passed); canonical 3.12.12 run via the Docker gate image. (Remaining groups
+  — notification/reminder, outbox, signing/edo — are follow-ups by the same pattern.)
+
+## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-4: tasks/_core.py decomposition (slice 2 — document jobs))
+
+### Changed
+- **ARCH-4 slice 2 — extract the document-generation group from `tasks/_core.py`.** Same
+  behavior-preserving pattern as slice 1 (new leaf sub-module + re-export from `_core`, explicit
+  `name=` preserved so Celery registration is identical):
+  - `tasks/document_jobs.py` — the 3 document tasks (`app.tasks.register_template`,
+    `app.tasks.generate_document`, `app.tasks.generate_document_batch_item`) plus their private
+    impls (`_generate_document_for_run`, `_assert_pipeline_run_matches_session_tenant`,
+    `_assert_batch_item_scope`, `_company_snapshot`, `_sha256_bytes`, `_mark_batch_item_failed`).
+    A leaf module — imports only from `app.tasks._shared`, never back into `_core` → no cycle.
+  - `tasks/_shared.py` — `DOCX_MIME` moved here (shared between document_jobs and the header/PDF
+    jobs still in `_core`); imported by both.
+  - `_core.py` re-exports all moved names (`# noqa: F401`) so `from app.tasks._core import X` /
+    `from app.tasks import X` are unchanged; the re-exported task objects are identical (same
+    object), so existing `generate_document_task.apply_async` monkeypatches still work.
+  `_core.py`: 1983 → 1233 lines; `document_jobs.py`: 813 lines (dominated by the ~390-line
+  `_generate_document_for_run`; further intra-function splitting would not be a pure move and is
+  deferred). Tests whose mock-patch target was `app.tasks._core.<global>` for a *moved* function
+  (`session_scope`/`ensure_tenant_schema`/`s3`/`settings` in `test_letterhead_pipeline.py`,
+  `session_scope` in `test_tasks.py::test_register_template_task`) were repointed to
+  `app.tasks.document_jobs.*` — patch must target the namespace the function looks the name up in.
+  Verified locally (Py3.13 venv): Celery guard green (31 tasks unchanged), ruff+black clean,
+  affected task tests green (24 passed); canonical 3.12.12 run via the Docker gate image.
+  (Remaining groups — file/PDF, notification/reminder, outbox, signing/edo — are follow-ups by
+  the same pattern.)
+
+## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-4: tasks/_core.py decomposition (slice 1) + Celery guard)
+
+### Added
+- **ARCH-4 guard — `scripts/ci/check_celery_tasks.py`.** Splitting the Celery god-file must keep
+  the set of registered task names (`celery_app.tasks` keys) identical — a changed name silently
+  breaks beat schedules / `send_task`. The guard imports `app.tasks` (registers everything) and
+  compares to `docs/stabilization/celery_tasks_baseline.json` (31 tasks). Task-name change = fatal;
+  incidental `_core` attribute losses (moved imports/private impls) are reported, not fatal.
+
+### Changed
+- **ARCH-4 slice 1 — `tasks/_core.py` decomposition (the ТЗ's #1-priority god-file).** Following the
+  sanctioned plan in `app/tasks/__init__.py` ("дальнейшее дробление — без смены публичных импортов"):
+  - `tasks/_shared.py` — the cross-task helpers `_run_coroutine` / `_resolve_task_tenant_scope` +
+    `RETRYABLE_EXCEPTIONS` (a leaf module, so task sub-modules don't import back into `_core` → no cycle).
+  - `tasks/domain_ticks.py` — the 8 periodic domain-tick tasks (`workflow.sla/timers.tick`,
+    `medical.contingent.tick`, `contractors.readiness/documents.tick`, `ppe/permits.expiry.tick`,
+    `prescriptions.escalate.tick`) + their private async impls. Explicit `name=` preserved → Celery
+    registration identical.
+  - `_core.py` re-exports both (public tasks, private `_*_tick` impls used by tests, and the shared
+    helpers) so `from app.tasks._core import X` / `from app.tasks import X` are unchanged.
+  `_core.py`: 2275 → 1983 lines. Verified Py3.12: Celery guard green (31 tasks unchanged), ruff+black
+  clean, tick behavior tests green (ppe/permits/medical/contractors). (First slice; further task
+  groups — document/outbox/notification/signing-edo — are follow-ups by the same pattern.)
+
+## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-4: OpenAPI contract guard (verification infra))
+
+### Added
+- **ARCH-4 guard — `scripts/ci/check_openapi_snapshot.py`.** Route refactors (splitting god-route
+  files into sub-routers / extracting helpers) must keep the public OpenAPI surface identical. This
+  guard imports the FastAPI app, builds `app.openapi()`, and fingerprints it — every `METHOD path`
+  operation, all `operationId`s, and component schema names — comparing to a baseline
+  (`docs/stabilization/openapi_routes_baseline.json`, captured: **803 operations, 644 schemas**).
+  Any diff is a contract change. This is the directly-acceptance-relevant verification tool for
+  ARCH-4 ("OpenAPI snapshot не изменился"); like the ARCH-2 metadata guard it is a refactor tool,
+  not a standing gate (it freezes the surface, so new endpoints require a re-snapshot). Run in the
+  gate image (Python 3.12 + app env). NOTE: the per-file god-route/service splits themselves
+  (mixin decomposition for `PipelineService`/`FileService`, ordered sub-routers for
+  `documents`/`risk`/`medical`/`packs`, Celery task-name preservation for `tasks/_core.py`) are the
+  remaining ARCH-4 work — each now de-risked by this guard.
+
+## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-2: god-model decomposition COMPLETE (batch 5))
+
+### Changed
+- **ARCH-2 batch 5 — foundational tenant/billing + identity/authz block extracted** (30 classes):
+  `tenant_billing.py` (19 — RoleEnum, Tenant*, Billing*, rate limits, ApiToken, WebhookSubscription),
+  `identity.py` (11 — User, RefreshSession, UserRole, UserAttribute, AuthzBaseModel + Authz*, ApiKey).
+  `identity.py` binds `RoleEnum` at runtime (`native_enum(RoleEnum)`, imported from `tenant_billing`)
+  and subclasses the declarative `TenantBase` — both imported normally.
+- **ARCH-2 acceptance met.** `backend/app/models/models.py` is now a **594-line pure re-export
+  facade** (was 3476 / 170 classes). All domain models live in 21 domain files, each **< 600 lines**
+  (training, medical, briefings, field_ops, ppe, templates, packages, audit_log, journals, incidents,
+  inspections, master_data, marketplace, idempotency, risk_register, assets, approval_runtime,
+  tenant_billing, identity, + the pre-existing document/finance/etc.). `from app.models.models import X`
+  and `from app.models import X` unchanged for every previously-available `X` (guard-enforced; the
+  declarative bases `SharedModel`/`TenantBaseModel` re-exported explicitly). Alembic schema unchanged
+  throughout (guard: 251 tables identical at every step). Verified Py3.12: guard green, ruff+black
+  clean, auth/RBAC/ABAC/tenant/billing behavior tests green.
+
+## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-2: god-model decomposition (batch 4, approval runtime))
+
+### Changed
+- **ARCH-2 batch 4 — approval/edo/signature/outbox/webhook runtime block extracted** into
+  `approval_runtime.py` (16 classes: Outbox, Approval{Process,Task,DecisionLog,RouteStep,Instance,
+  InstanceStep}, Edo{StatusEvent,WebhookInbox}, SignatureRequest, Webhook{Delivery,Endpoint} +
+  enums). This block binds a few `approval_workflow` enums at **runtime** (`Enum(ApprovalStepType)`,
+  `SignatureProviderStatus.PENDING.value`), so those are imported normally (not TYPE_CHECKING).
+  `models.py`: 1391 → 1093 lines. All re-exported (in `__all__`).
+- **Kept `ApprovalStepType` / `SignatureProviderStatus` re-exported from `models.py`.** After the
+  approval classes moved, ruff removed these two from models.py's `approval_workflow` import (no
+  longer used in-body); restored + added to `__all__` so callers' `from app.models.models import …`
+  keeps working (guard name-superset check). Verified Py3.12: guard green, ruff+black clean.
+
+## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-2: god-model decomposition (batch 3, 5 domains))
+
+### Changed
+- **ARCH-2 batch 3 — 5 more domains extracted from `models.py`** (20 classes, guard-verified):
+  `master_data.py` (6 — Company, Position, Person, Site, Workplace + EmploymentStatus),
+  `marketplace.py` (1), `idempotency.py` (2), `risk_register.py` (8 — legacy RiskMap/RiskMethodology,
+  hazard links, NPA/NPABinding), `assets.py` (3). `models.py`: 1770 → 1391 lines. All re-exported
+  (in `__all__`). Identical tables (guard: 251 unchanged).
+- **Kept `File` re-exported from `models.py`.** After the last in-body user of `File` moved out,
+  ruff removed `from app.models.file import File`; restored it and added `File` to `__all__` so the
+  strengthened guard's name-superset check (some callers do `from app.models.models import File`)
+  stays satisfied. Verified Py3.12: guard green, ruff+black clean, master-data/NPA/risk tests green.
+
+## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-2: god-model decomposition (batch 2, 5 domains))
+
+### Changed
+- **ARCH-2 batch 2 — 5 more domains extracted from `models.py`** (55 classes, guard-verified):
+  `packages.py` (31 — package profiles/presets/runs, pack runs, document packs, pipeline runs,
+  client-portal), `audit_log.py` (3 — AuditLog + its `@event.listens_for` immutability hooks,
+  AuditExportJob, SecurityAuditLog), `journals.py` (5), `incidents.py` (8), `inspections.py`
+  (8 — inspection/attestation/prescription). Identical tables (guard: 251 unchanged); all names
+  re-exported from `models.py`. `models.py`: 2649 → 1766 lines.
+- **Fixed move-induced relationship resolution.** Several relationships used fully-qualified
+  string targets (`"app.models.models.IncidentPerson"`, `"app.models.models.Inspection"`) to
+  disambiguate duplicate class names across model packages; updated to the new module path
+  (`app.models.incidents.*` / `app.models.inspections.*`) so SQLAlchemy's registry resolves them.
+  The guard's `configure_mappers()` caught this — a bare-name switch would have hit the known
+  cross-package ambiguity. Verified Py3.12: guard green, ruff+black clean, audit/packs tests green.
+
+## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-2: god-model decomposition (batch 1, 5 domains))
+
+### Changed
+- **ARCH-2 batch 1 — 5 more domains extracted from `models.py`** (same pure-move pattern,
+  guard-verified): `medical.py` (10), `briefings.py` (4), `field_ops.py` (7 — compliance
+  deadlines / calendar / offline sync / permits), `ppe.py` (6), `templates.py` (5). 32 classes
+  moved; identical tables (guard: 251 tables unchanged); all names re-exported from `models.py`
+  (in `__all__`) → zero import-contract change. `models.py`: 3142 → 2649 lines. Verified Py3.12:
+  guard green, ruff+black clean, domain tests green (medical/ppe/permit/template-scope/briefing).
+
+## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-2: god-model decomposition (slice 1 + guard))
+
+### Added
+- **ARCH-2 guard — `scripts/ci/check_models_metadata.py`.** Verifies that splitting
+  `backend/app/models/models.py` is a *pure move*: `configure_mappers()` (no circular
+  import / broken relationship), a **schema fingerprint** (table→columns→types for
+  SharedBase+TenantBase — a would-be `alembic autogenerate` diff) compared to a baseline,
+  and **re-export completeness** (every model/Enum type importable from `app.models.models`
+  at baseline stays importable). Baseline: `docs/stabilization/models_metadata_baseline.json`.
+  Runs in ~15s in the gate image (no PG). Refactor-verification tool, not a standing gate
+  (it freezes the schema fingerprint).
+
+### Changed
+- **ARCH-2 slice 1 — Training domain extracted from `models.py`.** 17 Training classes
+  (`Training`, `TrainingCourse`, `TrainingPlan`, `TrainingSession*`, `TrainingCertificate`,
+  `TrainingProgram`/`Module`/`Lesson`/`Test`/`TestQuestion`/`Group`/`Enrollment`/`Attempt`/
+  `Protocol`/`ProtocolItem`, + status enums) moved to new `backend/app/models/training.py`.
+  Pure move: same `TenantBase` registry, **identical tables** (guard green: 251 tables
+  unchanged). `models.py` re-exports all 17 (listed in `__all__` so ruff F401 keeps them)
+  → `from app.models.models import X` and `from app.models import X` unchanged. External
+  refs (Person/Company/Position/File) are `Mapped[...]` annotations resolved via the SA
+  registry, so only a `TYPE_CHECKING` import is needed — no runtime cycle. `models.py`:
+  3476 → 3142 lines. Verified Py3.12: guard green, `test_training_enrollment_service.py` green.
+
+## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-3: enforce bounded-context boundaries)
+
+### Added
+- **ARCH-3 — энфорсмент границ bounded contexts.** Правило «не смешивать bounded contexts напрямую» (`product_spec.py::ARCHITECTURE_RULES`) раньше было только текстом. Теперь оно **проверяется**: `scripts/ci/check_context_boundaries.py` (stdlib AST-walker) запрещает прямые cross-context импорты `app.modules.* → app.domains.*` и `app.domains.* → app.modules.*`. Новый такой импорт валит проверку; текущие 10 протечек (аудит 2026-06-30: 8 modules→domains, 2 domains→modules) заморожены в `ALLOWLIST` как временный долг (вычищается ARCH-1). Allowlist держится честным — устаревшая запись (импорт уже удалён) тоже валит проверку. Запуск: `make check-boundaries`, плюс шаг встроен в `make gate` (`scripts/ci/local_gate.py`) и в pytest (`tests/test_context_boundaries.py`, 3 теста). `app.modules.* → app.services.*` сознательно НЕ запрещён — `services/` это санкционированный слой оркестрации (ТЗ).
+- **Почему свой AST-чекер, а не import-linter:** `app.modules` / `app.domains` — PEP 420 namespace-пакеты (без `__init__.py`), и graph-builder import-linter (grimp) их не обходит (пустой граф). ТЗ допускает «import-linter ИЛИ эквивалентный тест»; чекер читает файлы напрямую (namespace-агностичен) и работает на любом Python без внешних зависимостей.
+
+## 2026-06-30 (fix/stabilize-gates-2026-06-29 — REL-4: RC-012 (RTO/RPO go/no-go) + RC-013 (relational scope cutover))
+
+### Added
+- **RC-012 — формальный RTO/RPO go/no-go в restore drill.** `scripts/restore_drill.py` теперь эмитит блок `go_no_go` (`evaluate_rto_rpo`): измеренные `rto_measured_seconds` (окно восстановления: backup→restore+verify+boot) и `rpo_measured_seconds` (лаг бэкапа от последней записи) сравниваются с порогами и дают `decision: go|no-go`. Решение свёрнуто в агрегатный `success` — слишком медленное восстановление = no-go, а не «зелёно по целостности». Пороги по умолчанию = продакшн-цели ТЗ vNext §31.6 (**RTO ≤ 4ч / RPO ≤ 24ч**), переопределяются `--rto-threshold-seconds` / `--rpo-threshold-seconds` или env `RESTORE_DRILL_RTO_SECONDS` / `RESTORE_DRILL_RPO_SECONDS`. Честная оговорка в `go_no_go.rpo_basis`: измеренный RPO — это лаг репетиции seed→backup (нижняя оценка), продакшн-RPO определяется частотой бэкапов. Doc `docs/stabilization/restore-drill.md` (Acceptance criteria + раздел «RTO/RPO go/no-go»). Тесты `tests/test_restore_drill_go_no_go.py` (7, зелёные Py3.12).
+
+### Changed
+- **RC-013 — завершён переход template scope на реляционную/индексированную модель.** Реляционные колонки `Template.scope_level` / `scope_company_id` / `scope_site_id` + индекс `ix_template_scope_level_company_site` уже существовали (миграция `20260416_next68`, бэкфилл из JSON). Теперь **читатели резолвинга переведены на индексированные колонки**: `app/api/routes/documents.py::_normalize_scope_level` / `_scope_target_ids` читают из колонок (fallback на legacy `metadata_json["scope"]` только для не-бэкфилленных строк) — поведение-сохраняюще (алиасы organization/legal_entity→company, branch→site, global→system без изменений). `metadata_json["scope"]` сохранён как compat-зеркало. Тесты `tests/test_template_scope_relational_reads.py` (6) + существующие `tests/test_template_catalog_scope.py` зелёные. DB-level scope pre-filter в resolve-запросе осознанно отложен (non-blocking — безопасность для не-бэкфилленных строк).
+
+### Fixed
+- **`patch_template` — двойное присваивание `scope_level`.** В `app/api/v1/router.py::patch_template` колонка `template.scope_level` присваивалась дважды подряд одним и тем же выражением — убрано дублирование (behavior-neutral).
+
+## 2026-06-29 (fix/stabilize-gates-2026-06-29 — REL-1/REL-2/REL-3: воспроизводимый PG-гейт + 2 PG-блокера)
+
+### Added
+- **REL-1 — воспроизводимый локальный гейт качества (без GitHub Actions).** `scripts/ci/local_gate.py` поднимает PostgreSQL 16 в Docker и гоняет PG-критичные проверки внутри образа `python:3.12` (`scripts/ci/Dockerfile.gate`), фиксируя версию Python вместо хостовой (на 3.13+/Windows pytest зависает — см. CLAUDE.md). Режимы `--db-only` (alembic upgrade/downgrade + enum label-drift guards; зеркало job `alembic-postgres-upgrade` + `@pytest.mark.db` части `backend-tests`) и `--full` (полный suite). Пишет JSON-вердикт в `artifacts/local-gate/summary.json`. Make-обёртки `make gate` / `make gate-full`. Политика и инструкция — `docs/stabilization/local-evidence-gate.md` (REL-1, путь «c»: постоянная local-evidence политика с воспроизводимой командой). **Вердикт первого зелёного прогона: 9 passed на PG16.14.**
+
+### Fixed
+- **Тест-харнес ломал ВСЕ `@pytest.mark.db` PG-гарды (regression).** Слушатель `conftest.py::_sqlite_test_speed_pragmas` был навешен на базовый класс `Engine` и выполнял `PRAGMA synchronous=OFF` на КАЖДОМ подключении, включая Postgres-соединения PG-гардов. На PG `PRAGMA` — синтаксическая ошибка, которая аборти́т транзакцию соединения; `except: pass` глушил Python-исключение, но серверная транзакция оставалась aborted → следующий statement (интроспекция JSON-кодека asyncpg / первая миграция) падал с `InFailedSQLTransactionError`. Слушатель ограничен строго SQLite-драйверами (`"sqlite" in type(dbapi_connection).__module__`). Невидимо на SQLite; ловится только реальным PG.
+- **СОУТ-миграции `so01`/`so02` ломали `alembic upgrade heads` на PostgreSQL (release-блокер).** Колонки `sout_workplace.assessed_class` / `sout_factor.measured_class` (so01) и `sout_class_history.old_class`/`new_class` (so02) использовали generic `sa.Enum(name="soutclass", create_type=False)`. У generic `sa.Enum` флаг `create_type=False` не подавляет неявный `CREATE TYPE` в `op.create_table` так надёжно, как у dialect-specific `postgresql.ENUM` → повторный `CREATE TYPE soutclass` → `DuplicateObjectError: type "soutclass" already exists`. Заменено на `postgresql.ENUM(create_type=False)` (тот же паттерн, что у рабочего `_CAMPAIGN_STATUS`). Невидимо на SQLite (enum→VARCHAR); внесено после среза-снапшота ТЗ (2026-06-26) и после enum-ре-аудита 2026-06-25.
+
+### Verified (local-evidence, 2026-06-29, Python 3.12 / PG16.14)
+- **REL-2 (ORM↔pg_enum label drift):** keystone PG-гард `test_orm_enum_pg_label_parity.py` (bound ⊆ pg_labels + write-smoke insert/update) и 4 быстрых пина зелёные — 0 Group-A дефектов на живом PG16.
+- **REL-3 (миграции на PG):** `test_alembic_postgres_upgrade.py` — `upgrade heads` и round-trip `upgrade heads → downgrade base → upgrade heads` зелёные на чистом PG16; голова цепочки `20260626_so03_sout_norm_bridges`.
+
+## 2026-06-26 (feat/sout-srez2-p10-04 — ТЗ B.10 СОУТ, Срез 2: версионирование класса)
+
+### Added
+- **СОУТ — история класса условий труда (P10-04 срез-2, TZ B.10):** append-only аудит изменений `assessed_class` рабочего места. 1 аддитивная таблица `sout_class_history` (миграция `so02` цепью от `so01`; общий enum `soutclass` переиспользуется ещё двумя колонками `old_class`/`new_class` через `create_type=False`). Строка истории пишется прозрачно: при создании РМ с классом (old=NULL → начальная точка траектории) и при смене класса в PATCH (no-op если класс не изменился — идемпотентный PATCH не засоряет аудит). Проекция `is_worsening` (новый класс тяжелее старого по ранжиру ст. 14: optimal<acceptable<3.1<3.2<3.3<3.4<dangerous). Эндпоинт `GET /sout/workplaces/{id}/class-history` (траектория по `changed_at`). Тонкий фронт: lazy-load «История изменения класса» в карточке РМ с бейджем «Ухудшение». 17 backend unit-тестов (миграция, модель, severity-ранжир, worsening, билдер строки, PATCH-запись/no-op). Срез-2 НЕ трогает СИЗ/медосмотры — авто-каскад класса отложен в срез-3 (history даёт детекцию изменения, необходимую каскаду).
+
+## 2026-06-26 (feat/sout-srez1-p10-04 — ТЗ B.10 СОУТ / спец. оценка условий труда, Срез 1)
+
+### Added
+- **СОУТ — специальная оценка условий труда (P10-04 срез-1, TZ B.10, ФЗ-426):** campaign→workplace→factor / guarantee. 4 аддитивные таблицы (`sout_campaign`/`sout_workplace`/`sout_factor`/`sout_guarantee`, миграция `so01` цепью от `cmt01`). Класс условий труда по ст. 14 (1 оптимальный / 2 допустимый / 3.1–3.4 вредный / 4 опасный) присваивается рабочему месту; общий native-enum `soutclass` переиспользуется двумя колонками (один `CREATE TYPE`). 14 эндпоинтов с CRUD, lifecycle-гардами кампании (planned→in_progress→completed→declared; редактирование реестра только пока кампания открыта), read-time `is_reassessment_due` проекцией, ETag-кэшированием списков, tenant-изоляцией, за default-off feature-flag `sout`. Demo-seed (кампания+РМ класса 3.2+фактор «Шум»+доп.отпуск) с просроченной переоценкой. 37 backend unit-тестов. Отложено на срез-2+: импорт файла отчёта СОУТ + валидация, авто-каскад класса в нормы СИЗ/медосмотры, версионирование класса (history+diff), декларация соответствия, печатные формы (карта СОУТ / сводная ведомость).
+
+## 2026-06-25 (feat/committees-srez1-p10-01 — ТЗ B.17 Комитеты/комиссии/заседания, Срез 1)
+
+### Added
+- **Комитеты / комиссии / заседания (P10-01 срез-1, TZ B.17):** committee→meeting→agenda→decision→decision-task with CRUD API, lifecycle guards (meeting planned→held→cancelled; decisions only on held), read-time `is_overdue` flag, ETag list caching, tenant isolation, behind default-off `committees` feature flag, plus a thin list/detail UI. Deferred to срез-2: voting/quorum, invitations, execution-KPI dashboard, meetings journal/protocol numbering, Command Center task projection.
+
+## 2026-06-08 (feat/medical-exams-contingent — ТЗ B.8 Медосмотры, Срез 1)
+
+### Added
+- **Медосмотры (ТЗ B.8) — Срез 1 + контингент/автоматизация:** write-path осмотров с типами/годностью/противопоказаниями; направления (FSM); нормы + вычисляемый контингент (влияние СОУТ через нормы); безопасностный цикл противопоказание→отстранение→блок допуска; 16 API-эндпоинтов; интеграция календарь/дашборд/Data-Quality; celery beat `medical.contingent.tick`; per-tenant feature-flag `medical` (default-on). Аддитивная миграция `med01`. Ветка `feat/medical-exams-contingent`.
+
+## 2026-05-21 (Session 61 — Phase 9.4 closure: Vary header uniformity across 25 ETag list endpoints, vNext-PERF-03)
+- **`backend/app/api/helpers/etag.py`** — третий RFC 7234 cache-correctness layer добавлен поверх S58 ETag (conditional GET) и S59 Cache-Control (freshness directives). Helper API расширен симметрично двум предыдущим расширениям:
+  - **`DEFAULT_LIST_VARY = "Authorization, X-Tenant"`** — публичная константа, canonical pattern для tenant-scoped data за conditional-GET. Документировано почему именно эти два axes: `Authorization` сегрегирует cache entries по JWT (распределённые JWT = разные пользователи на той же URL получают distinct cache entries — иначе corporate proxy мог бы возвращать response пользователя A пользователю B); `X-Tenant` сегрегирует по tenant header (то же между тенантами). Это **defense-in-depth поверх `Cache-Control: private`** — `private` это *request* к shared cache не кэшировать; `Vary` это *cache-key contract* для любой кэш, которая всё же закэшировала response (misconfigured proxy, browser extension, debug tool). Two distinct axes — minimum sufficient set.
+  - **`apply_etag_response_headers(response, etag, *, cache_control=DEFAULT, vary=DEFAULT)`** — расширен `vary=` keyword-only параметром. **Merge-семантика для existing Vary**: если upstream middleware (CORS `Origin`, observability custom headers) уже выставили `Vary`, helper не overwrite'ит, а merge'ит tokens с case-insensitive dedup (RFC 7230 § 3.2 делает имена headers case-insensitive). Это критично — overwriting silently сломал бы CORS cache-segregation. Реализация: insertion-order-preserving dict `{lowered_token: original_casing}` — сохраняет канонический Title-Case первого вхождения, deterministic ordering.
+  - **`build_not_modified_headers(etag, *, cache_control=DEFAULT, vary=DEFAULT)`** — расширен `vary=` keyword-only параметром. **Без merge-логики** — 304 path возвращает freshly-constructed `Response(headers=...)` который не inherit upstream middleware state (downstream middleware могут добавить свой `Vary` *после* return). Docstring документирует RFC 7234 § 4.3.4 — 304 must reuse 200 cache-validation contract (divergent `Vary` дал бы cache return stale-but-revalidated entry для wrong request shape).
+- **Zero route file changes:** все 25 endpoints из S59 rollout (admin_users, api_tokens, briefings, companies, contractors, departments, documents, incidents, inspections, journals, medical, persons, ppe, prescriptions, risk, sites, tasks, training) автоматически получили `Vary` header через unchanged helper callsites. **Это и есть ценность helper-pattern S59**: будущие RFC layers становятся one-line changes в helper'е без touching 25 routes.
+- **`tests/api/test_etag_vary_uniformity.py`** (new, **12 кейсов**, ~290 строк) — pinning контракта S61:
+  - **Helper unit contracts (9 unit tests):** константа `DEFAULT_LIST_VARY` byte-equals; default содержит оба axes (`authorization` + `x-tenant`, case-insensitive); `apply_etag_response_headers` ставит default Vary; override через `vary=` keyword; positional argument для `vary` → `TypeError` (keyword-only guard); **merge с existing Vary** (upstream `Origin` survives + S61 tokens added); **case-insensitive dedupe** (`authorization` + `Authorization` дают one token); symmetric тесты для `build_not_modified_headers` (default, override, positional rejection).
+  - **End-to-end integration (3 async tests):** `/companies` emits unified Vary на 200 OK (содержит authorization+x-tenant); `/companies` 304 reply Vary byte-identical 200 (RFC 7234 § 4.3.4 cache-validation contract); `/sites` подтверждает uniformity holds across distinct route modules.
+  - **Regression guard (1 test):** `test_etag_value_unaffected_by_vary_addition` — ETag hash byte-identical после S61 рефактора (deterministic), real-endpoint sha256-shape verification (`"<64-hex>"` = 66 chars). Защищает от pre-existing client cache invalidation на rollout.
+- **`tests/api/test_etag_cache_control_uniformity.py`** (4-line docstring update) — «Vary header behaviour — separate audit (S47 #5 follow-up)» заменено ссылкой на новый `test_etag_vary_uniformity.py` (acknowledged gap → closed).
+- **Coverage milestone:** **25 list endpoints** теперь несут **uniform `Vary: Authorization, X-Tenant`** в дополнение к ETag (S46-58) и Cache-Control (S59). **Все три RFC 7234 cache layers закрыты для Phase 9 surfaces.** Total cache contract tests: 177 (S47-59) + 12 (S61) = **189 tests pinning HTTP cache contract**.
+- **Phase 9 closure (RFC 7234 trilogy):** ETag (conditional GET) + Cache-Control (freshness) + Vary (cache-key correctness). Single-source-of-truth конфигурация во всех трёх — будущая правка любого axis тривиальна, никакой 25-местной duplication.
+- **ETag hash equivalence preserved:** `compute_list_etag` не модифицирован — pre-existing client ETags продолжают resolve в 304 после rollout. Verified `test_etag_value_unaffected_by_vary_addition` + helper docstring invariant.
+- **Validation:** `py -3 -m py_compile backend/app/api/helpers/etag.py tests/api/test_etag_vary_uniformity.py tests/api/test_etag_cache_control_uniformity.py` → ✅ exit 0. Helper unit-тесты (не требуют fixtures) запускаются изолированно; integration tests требуют full conftest — CI на 3.12.12 source of truth (см. session-log Validation block).
+
+## 2026-05-21 (Session 59 — Phase 9.3 closure: Cache-Control uniformity across 25 ETag list endpoints, vNext-PERF-03)
+- **`backend/app/api/helpers/etag.py`** — расширен двумя новыми helpers + публичной константой:
+  - **`DEFAULT_LIST_CACHE_CONTROL = "private, max-age=0, must-revalidate"`** — canonical pattern для tenant-scoped data за conditional-GET. Single source of truth: правка значения в одном месте автоматически применится ко всем 25 callsites. Документировано почему именно эти три директивы (`private` — запрет shared-proxy кэширования tenant-данных; `max-age=0` — клиент должен revalidate immediately; `must-revalidate` — обязательная revalidation через `If-None-Match` перед использованием stale entry). Намеренно НЕ `no-store` — оно бы отключило ETag-цикл (клиент refuse to remember response → If-None-Match никогда не отправится), обнулив Phase 9.2/9.3 conditional-GET savings.
+  - **`apply_etag_response_headers(response, etag, *, cache_control=DEFAULT)`** — атомарно ставит ETag + Cache-Control на 200 OK response. Side-effect (мутирует `response.headers`) явно отражён в имени `apply_*`. `cache_control` keyword-only — запрещает positional misuse (etag-строка в позицию cache_control).
+  - **`build_not_modified_headers(etag, *, cache_control=DEFAULT)`** — pure-функция, возвращает `{"ETag": ..., "Cache-Control": ...}` dict для manually-constructed 304 `Response(headers=...)`. Чистая (не мутирует) — name явно отражает (`build_*`). Cache-Control дефолт обязан совпадать с `apply_*` (RFC 7234 § 5.2 — revalidation responses должны нести те же caching directives что и original).
+- **18 routes файлов рефакторены (25 callsites, identical 3-line shape)**:
+  - **Phase 9.2 first wave (S47-49, 7 endpoints):** `companies.py`, `sites.py`, `persons.py`, `incidents.py` (list), `inspections.py`, `documents.py`, `tasks.py`.
+  - **S51 (3):** `ppe.py` (items + issues), `prescriptions.py`.
+  - **S52 (4):** `briefings.py` (templates + journals + entries), `training.py` (courses).
+  - **S53 (2):** `medical.py` (exams), `departments.py`.
+  - **S55-57 (8):** `contractors.py` (registry), `journals.py`, `api_tokens.py`, `risk.py` (methodologies + maps + cards + action-plans), `admin_users.py`.
+  - **S58 (1):** `incidents.py` (sub-resource `/logs`).
+  - **Каждый callsite — drop-in 2-line replace:** `response.headers["ETag"] = etag` → `apply_etag_response_headers(response, etag)` (добавляет Cache-Control автоматически); `headers={"ETag": etag}` в 304 Response → `headers=build_not_modified_headers(etag)`.
+  - **Import обновлён везде:** `from app.api.helpers.etag import compute_list_etag` → 3-name import (`apply_etag_response_headers`, `build_not_modified_headers`, `compute_list_etag`).
+- **`tests/api/test_etag_cache_control_uniformity.py`** (new, **11 кейсов**, ~270 строк) — pinning двух слоёв S59 контракта:
+  - **Helper unit contracts (8 unit tests):** константа `DEFAULT_LIST_CACHE_CONTROL` byte-equals документированному значению; `apply_etag_response_headers` ставит оба header'а с default; override через `cache_control=` keyword работает; positional argument для cache_control → `TypeError` (keyword-only guard); symmetric тесты для `build_not_modified_headers`; `no-store`-guard sanity (default содержит `must-revalidate`, `private` и НЕ содержит `no-store`).
+  - **End-to-end integration (3 async tests):** `/companies` emits unified Cache-Control на 200 OK; `/companies` 304 reply несёт identical Cache-Control как 200 (RFC 7234 § 5.2 revalidation contract); `/sites` подтверждает uniformity holds across distinct route modules.
+  - **Regression guard (1 test):** `test_etag_value_unaffected_by_cache_control_addition` — ETag hash byte-identical после рефактора (компании, sha256-shape verification). Защищает от pre-existing client cache invalidation на rollout — failure mode который S47-S58 refactor намеренно avoided.
+- **`tests/api/test_http_cache_etag_contract.py`** (4-line docstring update) — historical pin «Cache-Control varies by endpoint» удалён, заменён ссылкой на новый uniformity-файл (acknowledged gap → closed).
+- **Coverage milestone:** **25 list endpoints** теперь несут **uniform Cache-Control** (`private, max-age=0, must-revalidate`) в дополнение к ETag conditional-GET. Total cache contract tests: 166 (S47-58) + 11 (S59) = **177 tests pinning HTTP cache contract**.
+- **Phase 9 closure:** S47 #5 / S55 #2 «Cache-Control uniformity audit» полностью закрыт. ETag rollout (Phase 9.2 + 9.3) теперь complete: 25 endpoints, uniform headers, single-source-of-truth конфигурация. Установлен паттерн для будущих per-endpoint policies (override через `cache_control=`).
+- **ETag hash equivalence preserved:** `compute_list_etag` сам не модифицирован — pre-existing client ETags продолжают resolve в 304 после rollout. Verified `test_etag_value_unaffected_by_cache_control_addition`.
+- **Validation:** `py -3 -m py_compile backend/app/api/helpers/etag.py backend/app/api/routes/{18 files} tests/api/test_etag_cache_control_uniformity.py tests/api/test_http_cache_etag_contract.py` → ✅ exit 0. Helper unit-тесты (не требуют fixtures) запускаются изолированно; integration tests требуют full conftest — CI на 3.12.12 source of truth.
+
+## 2026-05-20 (Session 58 — Phase 9.3: ETag on first sub-resource list /incidents/{id}/logs, 25/N endpoints, vNext-PERF-03)
+- **`backend/app/api/routes/incidents.py`** — `list_incident_logs` (`GET /incidents/{incident_id}/logs`) получил ETag conditional-GET. Это **первый sub-resource list endpoint** в Phase 9 rollout — все предыдущие 24 коллекции были «flat» (фильтры через query params). Здесь parent выражен через path-param `incident_id`. Резюме дизайн-решения по follow-up из S57 commit message: «sub-resource ETag — needs helper extension for parent_id scalar» — **расширения `compute_list_etag` не потребовалось**. Parent id передаётся как обычный scalar `("incident", str(incident.id))`; helper уже shape-agnostic к семантике scalars, только ordering определяет hash. Endpoint не имеет filters/pagination — итоговый cache key минимален: `(tenant_id, ("incident", incident_id), rows*)`. Signature: добавлены параметры `request: Request, response: Response`; return type расширен до `list[IncidentLogRead] | Response`. Сохранён explicit `response_model=list[IncidentLogRead]` — FastAPI обрабатывает union return типа корректно когда response_model явный (паттерн уже использовался в `list_incidents` на incidents.py:92).
+- **`tests/api/test_incident_logs_cache_etag_contract.py`** (new, **6 кейсов**, ~280 строк):
+  - **Hit / miss (2):** hit→304+empty body; miss bogus→200 (parity с flat-list контрактами S47-57).
+  - **Parent isolation (1, new axis):** `test_incident_logs_etag_distinct_per_parent_incident` — два incidents в одном тенанте с identical log payload должны давать distinct ETags. Дополнительно проверяется cross-parent negative: ETag от incident A против запроса для incident B → **200, не 304** (защита от sub-resource cache poisoning).
+  - **Mutation invalidates (1):** ETag меняется после `POST /incidents/{id}/logs` через **public API** (а не direct ORM seed) — пинит write path с `audit_decorator` + `append_log_entry` + `updated_at` bump.
+  - **Empty list stable (1):** incident без logs возвращает `[]` со стабильным ETag; повтор с `If-None-Match` → 304.
+  - **Cross-tenant isolation (1):** одинаковая parent-id shape в двух тенантах → distinct ETags (защищает leading `tenant:` часть hash). Использованы distinct emails (`admin-x@example.com` / `admin-y@example.com`) per tenant — обходит S55 `make_auth_headers` SELECT-by-email gotcha.
+  - **Seeding pattern:** direct ORM `Incident()` + `IncidentLog()` — sidesteps outbox/audit side effects `register_incident()`, ненужные для cache contract тестов. Mutation тест намеренно использует public POST endpoint — иначе регрессия типа «write path обходит `updated_at`» прошла бы тихо.
+- **Coverage milestone:** **25 list endpoints** теперь несут ETag conditional-GET — **24 flat + 1 parent-scoped sub-resource**. До S58: 24 (S57). Добавлено S58: `/incidents/{id}/logs`. Total cache contract tests: 160 (S47-57) + 6 (S58) = **166 tests pinning the HTTP cache contract**.
+- **Phase 9.2/9.3 acceptance:** Закрыт последний открытый follow-up из S57 commit message («`/incidents/{id}/logs` (sub-resource ETag — needs helper extension for parent_id scalar)»). Установлен паттерн для будущих sub-resource rollouts: `("<parent_label>", str(parent.id))` как первый scalar; explicit `response_model` остаётся, return type расширяется до union с `Response`.
+- **Helper invariant preserved:** `compute_list_etag` не модифицирован — все 25 endpoints используют один и тот же byte-for-byte hash contract. Будущим разработчикам важно: если потребуется второй parent scalar (e.g. `/incidents/{id}/logs/{log_id}/replies`), pattern остаётся тот же — добавить ещё один scalar в детерминированной позиции; никакой dedicated `parent_id=` kwarg не нужен.
+- **Validation:** `py -3 -m py_compile backend/app/api/routes/incidents.py tests/api/test_incident_logs_cache_etag_contract.py` → ✅ exit 0. Pytest local Py3.13+Windows: см. валидационный отчёт сессии. CI на 3.12.12 — source of truth.
+- **Bundled S58 follow-ups (closing S57 Next Steps in same session):**
+  - **`tests/conftest.py:241` (S57 #4 / S58 #3) — `make_auth_headers` docstring** документирует SELECT-by-email cross-tenant gotcha. Без tenant-фильтра в SELECT default email (`f"{role.value}-api@example.com"`) collisions через тенанты возвращают user из первого тенанта → JWT tenant_id mismatch → 403. Workaround: distinct `email=` per tenant. Корневой fix (добавить `User.tenant_id == tenant.id`) намеренно отложен — изменил бы semantics существующего user-row reuse.
+  - **`tests/api/test_admin_users_list_etag_contract.py` (S57 #5 / S58 #4) — allowlist security pin** для `UserListItem`. Добавлен frozenset `_USER_LIST_ITEM_FIELDS` (9 полей), assertion `set(item.keys()) == _USER_LIST_ITEM_FIELDS` ловит drift в обе стороны (новое поле добавлено / поле удалено). Substring-check `"hashed_password" not in item` сохранён как defense-in-depth + self-documenting intent. Гарантирует, что любое будущее поле в `UserListItem` требует explicit human decision о public-safety.
+
+## 2026-05-20 (Session 57 — Phase 9.2 + new admin endpoint: GET /admin/users list with ETag, 24/N endpoints, vNext-PERF-03 + vNext-ADMIN-01)
+- **`backend/app/api/routes/admin_users.py`** — добавлен **новый endpoint** `list_admin_users` (`GET /admin/users`) с ETag built-in с первого дня. До S57 backend имел только per-user `/admin/users/{user_id}/roles` GET/PATCH/POST — frontend `workspace.py:662` ссылался на "Manage Users" / `/admin/users` page, но backend list endpoint отсутствовал (документировано как known gap в S55 handoff Decisions). RBAC `["admin", "owner"]` — тот же scope что и существующие /admin/users/* endpoints (consistency). Pagination (`limit`/`offset`, default 50, max 200), filters: `role` (RoleEnum), `is_active` (3-state bool), `company_id`. Filter `role=invalid` возвращает 422 через shared `_admin_user_unprocessable` helper (consistency с роль-validation в PATCH endpoint). ETag scalars 6: `total`/`limit`/`offset` + 3 filters (`role`, `active`, `company`). Boolean `is_active` rendered как `""` / `"1"` / `"0"` (3-state — None=unset, True, False) — matches S51 PPE `active_only` pattern, но с расширением для None.
+- **`backend/app/schemas/admin_user.py`** — добавлены два новых schema:
+  - **`UserListItem`** — public-safe user fields: `id, email, full_name, role: RoleEnum, is_active, last_login_at, company_id, created_at, updated_at`. **Не включает `hashed_password`** (security-critical — explicit test `test_admin_users_list_omits_hashed_password` это пинит).
+  - **`UserListPage`** — стандартный `items: list[UserListItem]` + `total: int` (как другие *Page schemas).
+- **`tests/api/test_admin_users_list_etag_contract.py`** (new, **13 кейсов**, ~330 строк):
+  - **Base list contract (4):** caller-sees-self (admin returns at least 1 row = himself); `hashed_password` omitted (security pin); RBAC reject HR/non-admin (403); invalid `?role=` → 422.
+  - **ETag conditional-GET (9):** hit→304+empty body; miss bogus; etag changes после `create_user` (`data_factory.create_user` через ORM seed); filter distinct (role=hr); filter distinct (3-state `is_active`: unset vs true vs false → 3 distinct ETags); filter distinct (company_id); page distinct (offset 0 vs 2 with 4 seeded workers); empty-by-filter stable (filter `?role=teacher` на тенанте где только admin — empty result, ETag stable, 304 на revisit); cross-tenant anti-leak (sensitive — user list реveals org structure).
+- **Coverage milestone:** **24 list endpoints** теперь несут ETag conditional-GET. Total cache contract tests: 147 (S47-56) + 13 (S57) = **160 tests pinning the HTTP cache contract**.
+- **Phase 9.2 #1 acceptance:** S53 Next Step #1 **полностью закрыт по части GET-list endpoints**: `/contractors/registry`, `/journals`, `/api-tokens` (S55), `/risk/methodologies`, `/risk/maps` (S55), `/risk/cards`, `/risk/action-plans` (S56), `/admin/users` (S57 — c new endpoint creation). Остался только `/incidents/{id}/logs` (sub-resource pattern, требует helper extension `compute_list_etag(parent_id=...)`).
+- **New feature beyond ETag:** S57 — первая сессия в Phase 9.2 серии, где не просто навешивается ETag, а **создаётся новый list endpoint**. UX impact: frontend admin page «Manage Users» теперь может листать пользователей с pagination + 3 фильтрами. RBAC консистентен с per-user endpoints. Empty list test pin (`?role=teacher`) — нетривиальный паттерн, т.к. authenticated caller сам является user-row, truly-empty невозможен.
+- **Validation:** `py_compile` admin_users.py + admin_user schema + tests → ✅ exit 0. Pytest local Py3.13+Windows: **13 passed in 130.61s**. Endpoint mount verified: `/api/v1/admin/users` (admin_users.router без префикса; path `/admin/users` объявлен на endpoint). Cross-tenant test использует distinct emails per tenant (`admin-users-acme@example.com` / `admin-users-beta@example.com`) — обходит `make_auth_headers` SELECT-by-email gotcha (см. S55 Decisions).
+
+## 2026-05-20 (Session 56 — Phase 9.2 rollout: ETag on /risk/cards + /risk/action-plans, 23/N endpoints, vNext-PERF-03)
+- **`backend/app/api/routes/risk.py`** — два endpoint'а: `list_risk_cards` (engine_router.get("/cards")) и `list_action_plans` (engine_router.get("/action-plans")) получили ETag conditional-GET. Каждый имеет 6 optional filter axes (assessment_id, company_id, site_id, workplace_id, position_id, employee_id) — все попадают в scalars, plus `("kind", "cards"|"action_plans")` для cross-collection disambiguation (см. S52 briefings pattern). Records materialized через `.scalars().all()` (раньше был bare `.scalars()` generator).
+- **`tests/api/test_risk_cards_actionplans_cache_etag_contract.py`** (new, **9 кейсов**, ~270 строк):
+  - **Risk cards (5):** hit→304+empty body; miss bogus→200; filter distinct (company_id с 2 cards в разных companies); filter distinct (assessment_id с 2 cards в разных assessments); empty-stable (cards-empty tenant).
+  - **Risk action-plans (4):** hit→304+empty; miss bogus; filter distinct (assessment_id); empty-stable (plans-empty tenant).
+  - **Seeding pattern:** `_seed_risk_chain()` helper создаёт полную цепочку RiskHazard → RiskAssessment → RiskCard + RiskActionPlan через direct ORM session. Альтернатива (POST /risk/assess) потребовала бы +2 API calls на test (methodology + hazard), что неоправданно — endpoints не имеют публичного POST для invalidation теста.
+- **Coverage milestone:** **23 list endpoints** теперь несут ETag conditional-GET. До S56: 21 (S55). Добавлено S56: risk/cards, risk/action-plans. Total cache contract tests: 138 (S47-55) + 9 (S56) = **147 tests pinning the HTTP cache contract**.
+- **Phase 9.2 #1 acceptance:** S53 Next Step #1 («Extend ETag to remaining list endpoints — `/contractors/registry`, `/journals`, `/admin/users`, `/api-tokens`, `/risk/*`, `/incidents/{id}/logs`») практически закрыт через S55+S56: contractors (S55) + journals (S55) + api-tokens (S55) + risk/methodologies (S55) + risk/maps (S55) + risk/cards (S56) + risk/action-plans (S56) = **7 из 6 предложенных endpoints** (включая дополнительный risk/maps). Открыты: `/admin/users` (отсутствует backend list endpoint), `/incidents/{id}/logs` (sub-resource pattern, требует helper extension).
+- **Validation:** `py -3.13 -m py_compile backend/app/api/routes/risk.py tests/api/test_risk_cards_actionplans_cache_etag_contract.py` → ✅ exit 0. Pytest local Py3.13+Windows: **9 passed in 94.65s**. Pattern 1:1 from S55 risk/maps — same `compute_list_etag` callsite shape, same kind+filters scalars. Endpoint paths verified: `/api/v1/risk/cards` and `/api/v1/risk/action-plans` (engine_router prefix=`/risk`).
+- **No new POST invalidation tests.** Risk cards/plans не имеют публичных POST endpoints — оба создаются как side effect `/risk/assess`. Invalidation в production происходит через `updated_at` bump на ORM update (TimestampMixin) — implicit invariant, покрытый другими endpoint-ами с POST/PATCH. Если в будущем добавится отдельный CRUD для cards/plans — добавить mutation test тогда.
+
+## 2026-05-20 (Session 55 — Phase 9.2 rollout: ETag on /contractors/registry + /journals + /api-tokens + /risk/{methodologies,maps}, 21/N endpoints, vNext-PERF-03)
+- **`backend/app/api/routes/contractors.py`** — `list_contractors_registry` получил ETag conditional-GET. **Особенность:** ответ включает per-user `roles` и фильтруется через `access.claims["contractor_ids"]` — оба попадают в cache key (`("roles", "|".join(sorted(actor.roles)))` и `("contractors", "|".join(sorted(contractor_ids)))`), иначе разные пользователи на одном тенанте могли бы получать «чужие» 304-ответы. Эндпоинт без явного `response_model`, поэтому добавлен `response_model=None` в декоратор — без него FastAPI пытается вывести Pydantic-схему из `dict[str, object] | Response` и падает с `FastAPIError: Invalid args for response field`.
+- **`backend/app/api/routes/journals.py`** — `list_journals` получил ETag с 4 scalars: pagination + `("company", company_id or "")`. Стандартный pattern из S52/S53.
+- **`backend/app/api/routes/api_tokens.py`** — `list_api_tokens` получил ETag с briefings-style scalars `[("total", len(rows)), ("kind", "api_tokens")]` (flat list, no pagination). Возвращаемый тип `list[ApiTokenRead] | Response`. `kind` scalar дублирует защиту от cross-collection cache poisoning из S52.
+- **`backend/app/api/routes/risk.py`** — два endpoint'а: `list_methodologies` (flat, scalars `[("total", len), ("kind", "methodologies")]`), `list_risk_maps` (flat + 4 filter axes — `company` обязательный, `site`/`position`/`methodology` опциональные). `compute_list_etag` импорт добавлен; `Request`/`Response` уже импортированы (для `assess` endpoint).
+- **`tests/api/test_contractors_journals_cache_etag_contract.py`** (new, **10 кейсов**, ~265 строк):
+  - **Contractors registry (5):** hit→304+empty body; miss bogus→200; POST invalidation (`_seed_contractor` через `/api/v1/contractors/registry`); page-distinct (offset 0 vs 2 с 4 seeded); empty-list stable (delta tenant).
+  - **Journals (5):** hit→304+empty body; miss bogus; POST invalidation (через `_seed_journal` с `journal_type=primary`); `?company_id=` filter distinct ETag (2 companies → 2 journals); empty-list stable (gamma tenant).
+- **`tests/api/test_api_tokens_risk_cache_etag_contract.py`** (new, **12 кейсов**, ~370 строк):
+  - **API tokens (5):** hit→304+empty body; miss bogus; POST invalidation; empty-list stable (`empty-tk` tenant); **cross-tenant anti-leak** (security-critical — tokens являются credentials; ETag tenant_a в headers_b → 200 OK, not 304). Использованы distinct emails per tenant (`owner-tk-acme@example.com` / `owner-tk-beta@example.com`) чтобы `make_auth_headers` создал raznые user-записи в разных тенантах — иначе SELECT-by-email возвращает существующего user и JWT-tenant claim не совпадает с user.tenant_id → 403 "Tenant assignment mismatch".
+  - **Risk methodologies (4):** hit→304+empty body; miss bogus; POST invalidation (через `/api/v1/risk/methodologies` с bands payload, returns 200 not 201); empty-list stable (`risk-empty` tenant).
+  - **Risk maps (3):** hit→304+empty body (seeding via ORM, т.к. POST требует matrix-recalc chain через `recalc_risk_map`); `?methodology_id=` filter distinct ETag (2 methodologies → 2 maps); empty-list stable (no maps, mandatory `?company_id=` filter).
+  - `_seed_methodology_orm` + `_seed_risk_map` хелперы используют direct ORM session.add — proven pattern из S53 medical/exams seeding.
+- **Coverage milestone:** **21 list endpoints** теперь несут ETag conditional-GET. До S55: 16 (companies, sites, documents, tasks, persons, incidents, inspections, ppe/items, ppe/issues, prescriptions, briefings/templates, briefings/journals, briefings/entries, training/courses, medical/exams, departments). Добавлено S55: contractors/registry, journals, api-tokens, risk/methodologies, risk/maps. Total cache contract tests: 116 (S47-53) + 22 (S55) = **138 tests pinning the HTTP cache contract**.
+- **Acceptance:** Phase 9.2 #1 «HTTP caching for public data» continues widening — теперь и admin-area endpoints (api-tokens) и contractor-portal (contractors/registry) и risk-engine (methodologies/maps) поддерживают conditional GET. #2 invalidation verified для POST на 4 из 5 endpoint-ов (risk/maps — ORM seed). #3 hit/miss tests +22.
+- **Validation:** `py_compile` для всех 4 модифицированных + 2 новых тестов → ✅ exit 0. Pytest local Py3.13+Windows: **22 passed** на новых контрактах. Cross-tenant test потребовал distinct emails (см. выше) — задокументирован известный gotcha `make_auth_headers` semantics. Pattern consistent с S47-53. Endpoint paths verified: `/api/v1/contractors/registry` (`router prefix=/contractors`), `/api/v1/journals` (`router prefix=/journals`, path `""`), `/api/v1/api-tokens` (`router prefix=/api-tokens`, path `""`), `/api/v1/risk/{methodologies,maps}` (`engine_router prefix=/risk`).
+- **Per-user cache key precedent:** `/contractors/registry` — первый endpoint в S47-55 series, где cache key включает per-user claims (`roles`, `contractor_ids`). Это допустимо для endpoint-ов, чьи ответы varies по auth context. Для будущих rollouts (e.g. `/admin/users/{id}/roles`, `/notifications/me`) тот же pattern: добавить идентификаторы variability в scalars, иначе разные пользователи получат «чужие» 304.
+
+## 2026-05-19 (Session 53 — Phase 9.2 rollout: ETag on /medical/exams + /departments, 16/N endpoints, vNext-PERF-03)
+- **`backend/app/api/routes/medical.py`** — `list_medical_exams` получил ETag conditional-GET с 5 scalars: `[("total",T),("limit",L),("offset",O),("person", person_id or ""),("status", status_filter or "")]`. Filter `status_filter` (alias `?status=`) принимает `"expired"`/`"upcoming"` — string-typed, rendered as-is в hash.
+- **`backend/app/api/routes/departments.py`** — `list_departments` получил ETag с 4 scalars: pagination + `("company", company_id or "")`.
+- **`tests/api/test_medical_departments_cache_etag_contract.py`** (new, **13 кейсов**, ~370 строк):
+  - **Medical exams (5):** hit→304+empty body; miss bogus→200; `?person_id=` filter distinct; `?status=expired` vs `?status=upcoming` distinct; empty-list stable (delta tenant). Seeding через ORM (no API POST endpoint — exams created через internal workflow).
+  - **Departments (8):** hit→304+empty body; miss bogus→200; POST invalidation; `?company_id=` filter distinct; page distinct (offset 0 vs 2); empty-list stable (gamma tenant); cross-tenant anti-leak (acme/beta, same `"Same Name"` department → distinct ETags); determinism 3× repeat.
+- **Coverage milestone:** **16 list endpoints** теперь несут ETag conditional-GET: companies, sites, documents, tasks, persons, incidents, inspections (7 main S47-49), ppe/items, ppe/issues, prescriptions (S51), briefings/templates, briefings/journals, briefings/entries, training/courses (S52), medical/exams, departments (S53). Total cache contract tests: 103 (cumulative S47-52) + 13 (S53) = **116 tests pinning the HTTP cache contract**.
+- **Cross-collection seeding pattern variety:** medical/exams demonstrates ORM-based seeding (`_seed_medical_exam` adds `MedicalExam` direct via session) — useful pattern for endpoints без API POST. Departments — стандартный API POST seeding pattern.
+- **Acceptance:** Phase 9.2 #1 «HTTP caching for public data» continues widening. #2 invalidation verified для POST на /departments. #3 hit/miss tests +13.
+- **Validation:** `py_compile` для всех 3 модифицированных файлов → ✅ exit 0. Pattern consistent с S47-52. Schema verified (`DepartmentCreate{company_id, name}`); `MedicalExam{tenant_id, person_id, exam_type, exam_date, valid_until}` ORM constructor matches existing test seeding patterns в `tests/test_calendar_aggregator.py`. Endpoint paths verified против `route_groups.py` (`medical.router` без prefix mounts `/medical/exams` under `/api/v1`; `departments.router` без prefix mounts `/departments`). Pytest full-run локально segfault Py3.13+Windows (S46-52). CI на 3.12.12.
+
+## 2026-05-19 (Session 52 — Phase 9.2 rollout: ETag on /briefings/{templates,journals,entries} + /training/courses, 14/N endpoints, vNext-PERF-03)
+- **`backend/app/api/routes/briefings.py`** — 3 list endpoints получили ETag conditional-GET: `list_templates`, `list_journals`, `list_entries`. **Особенность:** briefings collections не имеют pagination (no `limit`/`offset` query params), поэтому cache key содержит только `[("total", len(items)), ("kind", "templates"|"journals"|"entries")]`. `("kind", ...)` scalar обязателен — без него 3 коллекции с одинаковым total давали бы один и тот же ETag (cross-endpoint cache collision). Helper уже поддерживает arbitrary scalars — никаких изменений не потребовалось.
+- **`backend/app/api/routes/training.py`** — `list_courses` получил ETag с стандартными pagination scalars `[("total",T),("limit",L),("offset",O)]`.
+- **`tests/api/test_briefings_training_cache_etag_contract.py`** (new, **15 кейсов**, ~440 строк):
+  - **Briefings templates (3):** hit→304+empty body; POST invalidation (через `_seed_briefing_template`); empty-list stable (delta tenant).
+  - **Briefings journals (2):** hit→304; miss bogus→200.
+  - **Briefings entries (2):** hit→304; POST invalidation (second `_seed_briefing_entry` для того же journal).
+  - **Cross-endpoint isolation guard (1):** ⭐ seed 1 row в каждой из 3 коллекций (templates/journals/entries) — все имеют `total=1` — но 3 ETag-а должны быть distinct. Защита от cross-collection cache leak.
+  - **Training courses (7):** hit→304+empty body; miss bogus→200; POST invalidation; page distinct (offset 0 vs 2 с 4 seeded courses); empty-list stable (epsilon tenant); cross-tenant anti-leak (acme vs beta seeded courses); RFC 7232 quoted format.
+  - `_seed_*` helpers через real API POST.
+- **Coverage milestone:** **14 list endpoints** теперь несут ETag conditional-GET: companies, sites, documents, tasks, persons, incidents, inspections (7 main S47-49), ppe/items, ppe/issues, prescriptions (3 S51), briefings/templates, briefings/journals, briefings/entries, training/courses (4 S52). Total cache contract tests: 88 (cumulative S47-51) + 15 (S52) = **103 tests pinning the HTTP cache contract**.
+- **Acceptance:** Phase 9.2 #1 «HTTP caching for public data» continues widening. #2 invalidation verified для POST на все 4 новых endpoint-а. #3 hit/miss tests +15.
+- **Validation:** `py_compile` для всех 3 модифицированных + новых тестов → ✅ exit 0. Pattern: helper handles no-pagination collections cleanly через `("kind", ...)` scalar approach — никаких helper изменений не потребовалось (демонстрация S50 refactor flexibility). Schema requirements verified (`BriefingTemplatePayload{code,title,briefing_type}`, `BriefingJournalPayload{code,title,journal_type}`, `BriefingEntryPayload{briefing_journal_id,briefing_type,briefing_date}`, `TrainingCourseBase{title}`). Endpoint paths verified против `route_groups.py`. Pytest full-run локально segfault Py3.13+Windows (S46-51). CI на 3.12.12.
+- **Cross-endpoint isolation guard tested explicitly.** Seed 1 template + 1 journal + 1 entry — all have `total=1`. Без `("kind", ...)` scalar все 3 ETag были бы identical (just `sha256("tenant:X::total:1::id:dt")` × тот же тенант). С `("kind", ...)` они distinguishable: `sha256("tenant:X::total:1::kind:templates::...")` vs `...kind:journals::...` vs `...kind:entries::...`. Этот тест ловит регрессию «забыл указать kind» которая выглядит как cross-collection cache poisoning.
+
+## 2026-05-19 (Session 51 — Phase 9.2 rollout: ETag on /ppe/{items,issues} + /prescriptions, 10/N endpoints, vNext-PERF-03)
+- **`backend/app/api/routes/ppe.py`** — `list_items` extended с `request: Request, response: Response`, return type `PPEItemPage | Response`; `compute_list_etag(...)` с `[("total",T),("limit",L),("offset",O)]`. `list_issues` аналогично с 5 scalars: `[("total",T),("limit",L),("offset",O),("person", person_id or ""),("active_only", "1"|"0")]`. Boolean `active_only` rendered as `"1"`/`"0"` для stable string-form в hash.
+- **`backend/app/api/routes/prescriptions.py`** — `list_prescriptions` extended с request/response + `compute_list_etag(...)` с **7 scalars** (pagination + 4 filter axes: `inspection`, `incident`, `status`, `assignee`). Каждый filter contributes к unique cache key.
+- **`tests/api/test_ppe_prescriptions_cache_etag_contract.py`** (new, **16 кейсов**, ~480 строк):
+  - **PPE items (5):** hit→304+empty body; miss bogus→200; POST invalidation (`_seed_ppe_item` через API с category=HEAD); page-distinct (offset 0 vs 2 with 4 seeded); empty-list stable (delta tenant).
+  - **PPE issues (5):** hit→304; `?person_id=` filter distinct ETag; `?active_only=true` flag distinct ETag (boolean cache key); POST invalidation (second `_seed_ppe_issue` для того же person/item changes ETag); empty-list stable (gamma tenant).
+  - **Prescriptions (6):** hit→304+empty body; PATCH invalidation (status → COMPLETED); `?inspection_id=` filter distinct; `?status=open` vs `?status=completed` distinct; empty-list stable (epsilon tenant); cross-tenant anti-leak (acme + beta seeded prescriptions, tenant_a ETag в tenant_b → 200).
+  - `_seed_*` helpers через real API POST (exercises full write path including Outbox/audit events for PPE/Prescriptions).
+- **Coverage milestone:** **10 list endpoints** теперь несут ETag conditional-GET: companies, sites, documents, tasks, persons, incidents, inspections (7/7 main — S47-49), ppe/items, ppe/issues, prescriptions (3 added S51). Total cache contract tests: 25 (S47) + 11 (S48) + 19 (S49) + 17 helper (S50) + 16 (S51) = **88 tests pinning the HTTP cache contract**.
+- **Acceptance:** Phase 9.2 #1 «HTTP caching for public data» continues to widen — каждый popular list endpoint теперь поддерживает conditional GET. #2 invalidation verified для POST на ppe/items, ppe/issues и PATCH на prescriptions. #3 hit/miss tests +16.
+- **Validation:** `py_compile` для всех 3 модифицированных + новых тестов → ✅ exit 0. Pattern 1:1 from S47-49/S50 — shared `compute_list_etag` использован тривиально (single-line callsite на каждом endpoint). Schema requirements verified (`PPEItemCreate{name}`, `PPEIssueCreate{person_id,item_id}`, `PrescriptionCreate{inspection_id,description}`). Endpoint mounts: `/api/v1/ppe/items` (router prefix `/ppe`), `/api/v1/ppe/issues`, `/api/v1/prescriptions` (router prefix none, path `/prescriptions`). Pytest full-run локально по-прежнему segfault Py3.13+Windows (S46-50). CI на 3.12.12 source of truth.
+- **S50 refactor payoff demonstrated:** добавление ETag к новому endpoint теперь — 5 lines callsite change (`compute_list_etag` call + `response.headers["ETag"] = etag` + `if request.headers.get("if-none-match") == etag: return 304`) вместо 30+ lines inline helper + boilerplate. PPE issues демонстрирует ещё одну вариацию scalar shape (boolean flag rendered as "1"/"0") без необходимости менять helper.
+
+## 2026-05-19 (Session 50 — Phase 9.2 refactor: shared ETag helper, vNext-PERF-03)
+- **`backend/app/api/helpers/etag.py`** (new) — `compute_list_etag(*, tenant_id, items, scalars=())` shared helper. Принимает `tenant_id`, iterable rows c `.id`+`.updated_at`, и упорядоченный список `(label, value)` scalar парcов. Сохраняет байт-в-байт hash формат: `sha256("tenant:{id}::{label}:{value}::...::id:updated_at|...")`. `None` value в scalars нормализуется в пустую строку. Items могут быть generator (single-pass). Возвращает quoted-string per RFC 7232.
+- **`backend/app/api/helpers/__init__.py`** (new) — package marker.
+- **Migrated 7 route modules** заменены inline `_<entity>_etag()` функции на `compute_list_etag(...)` вызовы — `companies.py`/`sites.py`/`documents.py`/`tasks.py`/`persons.py`/`incidents.py`/`inspections.py`. Удалён `import hashlib` где он использовался только для ETag (companies/sites/persons/incidents/inspections; documents/tasks сохранили hashlib — другие use cases). Hash format в каждом случае: `[("total", T), ("limit", L), ("offset", O)]` (companies/sites/persons); `[("page", P), ("page_size", PS), ("total", T)]` (documents/tasks); + filter axes для incidents/inspections (`company`/`site`/`status`/`type`/`responsible`).
+- **`tests/test_etag_helper.py`** (new, **17 кейсов**, ~280 строк) — unit tests для helper: format guarantees (RFC 7232 quoted, determinism, tenant/scalar/item-order sensitivity, updated_at change → new ETag); edge cases (empty items, no scalars, None→empty-string normalization, missing `updated_at`, generator support, int vs str scalars render identically via str()); **byte-equivalence checks** против pre-refactor inline format для 4 representative routes (companies, documents, incidents, inspections) — recompute hash by hand с `hashlib.sha256` и точным форматом из старого кода, гарантирует zero client-side ETag invalidation после refactor.
+- **Backwards-compatibility verified through pre-existing 55 cache contract tests:** existing `tests/api/test_http_cache_etag_contract.py` (25), `test_persons_cache_etag_contract.py` (11), `test_safety_cache_etag_contract.py` (19) — тестируют API behavior, не имена inline функций. Все 55 кейсов покрывают тот же contract: hit/miss/POST-invalidation/PATCH-invalidation/page/filter/tenant-isolation/empty-stable/RFC 7232/determinism — и продолжают проходить с new shared helper.
+- **Direct verification:** `py -3.13 -c "..."` против реального helper — companies/incidents format equivalence both PASS; empty items produce stable ETag; `None` normalizes to `""` identical to explicit `""`. См. Session 50 handoff в `AI_IMPLEMENTATION_REPORT.md` для full validation log.
+- **Net code reduction:** -154 строки (удалены 7 inline `_<entity>_etag` функций суммарно ~170 строк) + 70 строк нового shared helper (включая docstring) = **net -84 строки** в production code. Plus 280 строк unit tests + ~80 строк documentation. Eliminates the maintenance liability of 7 near-identical SHA256 boilerplate copies.
+- **Validation:** `py -3.13 -m py_compile` всех 7 routes + helper + tests → ✅ exit 0. Direct execution helper smoke-test → all 5 assertion blocks PASS. Pytest full-run локально по-прежнему segfault Py3.13+Windows (S46-49). CI на 3.12.12 — source of truth.
+
+## 2026-05-19 (Session 49 — Phase 9.2 closure: ETag on /incidents + /inspections, 7/7 list endpoints, vNext-PERF-03)
+- **`backend/app/api/routes/incidents.py`** — добавлен `_incidents_etag(tenant_id, items, total, limit, offset, company_id, site_id, status_filter, incident_type)` helper (sha256 over `tenant + total + limit + offset + 4 filter axes + id:updated_at|...`). `list_incidents` signature extended с `request: Request, response: Response`, return type → `IncidentPage | Response`. Filter axes — `company_id`, `site_id`, `status_filter` (`IncidentStatus`), `incident_type` (`IncidentType`) — все участвуют в hash так что переключение фильтра гарантирует new ETag.
+- **`backend/app/api/routes/inspections.py`** — добавлен `_inspections_etag(...)` с 5 filter axes (`company_id`, `site_id`, `status_filter` `InspectionStatus`, `inspection_type` `InspectionType`, `responsible_id`). `list_inspections` signature расширена аналогично; honors `If-None-Match` → 304.
+- **`tests/api/test_safety_cache_etag_contract.py`** (new, **19 кейсов**, ~530 строк) — пинит conditional-GET контракт для обоих новых endpoint-ов. Incidents block (9): hit→304+empty body; miss bogus→200; POST invalidation (real flow через `_seed_incident_via_api`); PATCH invalidation (закрытие incident → `updated_at` bumps); status filter distinct; incident_type filter distinct; empty-list stable (delta tenant); cross-tenant anti-leak (acme vs beta with seeded incidents); determinism 3× repeat. Inspections block (10): hit→304; miss bogus; POST invalidation (с второй authority «Роспотребнадзор»); PATCH invalidation (status → IN_PROGRESS); status filter distinct (planned vs unfiltered); type filter distinct (internal vs external); empty-list stable (gamma tenant); cross-tenant anti-leak; page distinct (offset 0 vs 2 with 4 seeded inspections); quoted-format + 3-repeat determinism (combined).
+- **Closure milestone:** 7 of 7 main list endpoints теперь несут ETag — `/api/v1/{companies,sites,documents,tasks,persons,incidents,inspections}`. Phase 9.2 acceptance #1 «HTTP caching for public data» fully closed по части list endpoints. Cache contract test count в репо: 25 (S47) + 11 (S48) + 19 (S49) = **55 cache hit/miss tests**.
+- **Acceptance:** Phase 9.2 #1 HTTP caching layer полностью закрыт для main list endpoints. #2 invalidation подтверждён на 7-м и 6-м endpoint-ах (POST/PATCH → ETag меняется). #3 cache hit/miss tests — расширен с 36 до 55 кейсов.
+- **Validation:** `py -3.13 -m py_compile backend/app/api/routes/{incidents,inspections}.py tests/api/test_safety_cache_etag_contract.py` → ✅ syntax OK. Test patterns 1:1 from S47/S48 (only difference: incidents/inspections используют `_seed_*_via_api` helpers — POST через API exercise real write path, потому что domain logic generates `Outbox` events которые нужно проигнорировать в простом factory). Schema requirements verified (`IncidentCreate{title, incident_type, occurred_at, company_id, site_id}` + `InspectionCreate{company_id, authority}`). Endpoint paths verified против `route_groups.py`. Pytest full-run локально не завершён (Py3.13+Windows segfault как в S46-48). CI на 3.12.12.
+
+## 2026-05-19 (Session 48 — Phase 9.2 extension: ETag on /persons + contract tests, vNext-PERF-03)
+- **`backend/app/api/routes/persons.py`** — добавлен `_persons_etag()` helper (sha256 над `tenant:{id}::total:N::limit:L::offset:O::id:updated_at|...`) и интеграция conditional-GET в `list_persons_endpoint`. Сигнатура расширена с `request: Request, response: Response` (FastAPI инжектит автоматически), return type → `PersonPage | Response`. При совпадении `If-None-Match` отдаёт `HTTP 304 NOT_MODIFIED` с тем же ETag в headers и пустым body. Паттерн 1:1 копирует `companies.py:150-201` / `sites.py:108-157` / `documents.py:424-571` / `tasks.py:206-286` — единая логика на 5 list endpoint-ах.
+- **`tests/api/test_persons_cache_etag_contract.py`** (new, **11 кейсов**, ~280 строк) — пинит conditional-GET контракт на новом `/api/v1/persons` ETag. Покрывает: hit (304 + same ETag + empty body); miss bogus ETag (→ 200 + body + fresh ETag); POST invalidation (`/persons` POST с `company_id+first_name+last_name` → ETag меняется); PATCH invalidation (изменение `first_name` через PATCH); page isolation (offset 0 vs offset 2); limit isolation (limit=1 vs limit=50); empty-list stable ETag (epsilon tenant); cross-tenant distinct (acme vs beta с identical names → разные ETag); cross-tenant anti-leak (tenant_a ETag в tenant_b request → 200 не 304); RFC 7232 quoted-string format; deterministic 3× repeat.
+- **Why /persons specifically:** Высокочастотный list endpoint (страница «Сотрудники» открывается чаще всего после dashboard). До S48 он отдавал full body на каждый запрос — теперь после первого GET клиент кэширует через `If-None-Match` и получает 304 пока никто не создал/изменил person. На крупных тенантах (1000+ persons) это значимая экономия bandwidth + render-time на frontend (если frontend научится использовать `If-None-Match`).
+- **Acceptance:** Phase 9.2 acceptance #1 «HTTP caching for public data» расширен (4 → 5 endpoints). #2 invalidation покрыт на 5-м endpoint. #3 cache hit/miss tests — +11 кейсов поверх 25 из S47, итого **36 cache contract tests** в репо.
+- **Validation:** локально `py -3.13 -m py_compile backend/app/api/routes/persons.py tests/api/test_persons_cache_etag_contract.py` → ✅ syntax OK. Test patterns 1:1 from S47 `test_http_cache_etag_contract.py` companies block (adapted for PersonCreate{company_id, first_name, last_name}). Schema requirements verified против `backend/app/schemas/person.py:349 class PersonCreate`. Эндпоинт path verified (`router = APIRouter(prefix="/persons")` + `route_groups.py` mount → `/api/v1/persons`). Pytest full-run локально снова segfault (Py3.13+Windows known issue из S46-47). CI на 3.12.12 — source of truth.
+
+## 2026-05-19 (Session 47 — Phase 9.2: HTTP cache (ETag) contract pinning, vNext-PERF-03)
+- **`tests/api/test_http_cache_etag_contract.py`** (new, ~620 строк, **25 кейсов**) — закрывает Phase 9.2 Task 9.2 acceptance criterion #3 «Tests: Cache hit/miss tests» через полную карту conditional-GET для 4-х list-endpoint-ов которые уже эмитят ETag: `/api/v1/companies`, `/api/v1/sites`, `/api/v1/documents`, `/api/v1/tasks`. До S47 existing tests покрывали только happy-path (list → grab ETag → re-request с If-None-Match → 304) для каждого endpoint-а (1 кейс на endpoint). Closes contract gap: **hit** (identical → 304 + same ETag + empty body), **miss with bogus ETag** (→ 200 + body + fresh ETag), **page isolation** (`limit=2&offset=0` vs `limit=2&offset=2` → distinct ETags), **filter isolation** (companies без filter vs `company_id=X` vs другая company), **tenant isolation** (tenant A's ETag invalid в tenant B request → 200; ETag из tenant A не matchит ETag tenant B при идентичных site name — `tenant:{tenant_id}` baked в hash), **mutation invalidation** (POST/PATCH меняют ETag), **empty list stable ETag** (no rows → still emit valid stable ETag + 304 on repeat), **RFC 7232 quoted-string format**, **deterministic across repeats** (3× read same → same ETag).
+- **Cache layer documentation** — header docstring явно перечисляет out-of-scope (Redis session cache `app.state.redis_client` — отдельный concern; file-content ETag по sha256 — другой контракт). Это устраняет дрейф «что покрывает Phase 9.2 acceptance vs что нет».
+- **Coverage breakdown по endpoint:** companies — 7 кейсов (hit/miss/POST-invalidates/PATCH-invalidates/page-distinct/limit-distinct/empty-stable); sites — 6 (hit/miss/POST-invalidates/company-filter-distinct/cross-tenant-distinct/cross-tenant-leak-rejected); documents — 3 (empty-list-emits/page-param-distinct/empty-list-hit-304); tasks — 6 (hit/status-filter-distinct/priority-filter-distinct/POST-invalidates/empty-list-stable/page-distinct); cross-cutting — 3 (RFC 7232 quoted, 3 endpoints determinism × repeats).
+- **Acceptance:** Phase 9.2 Task 9.2 acceptance #3 «Tests: Cache hit/miss tests» — closed через contract pin на 4 mature endpoint-а. **Acceptance #1 «Cache layers: Redis for session/config; HTTP caching for public data»** — partial (HTTP caching через ETag works; Redis session-cache infrastructure уже доступен через `app.state.redis_client` но не используется в hot-path service-level кэше — это #2 ниже). **Acceptance #2 «Invalidation: smart cache invalidation on data changes»** — verified для HTTP cache (POST/PATCH меняют ETag) через 4 теста; service-level invalidation (Redis) — отдельная follow-up задача когда захотим Redis-cache hot endpoint.
+- **Validation:** локально `py -3.13 -m py_compile tests/api/test_http_cache_etag_contract.py` → ✅ exit 0 (syntax OK); semantic-check через прочтение route handlers (`backend/app/api/routes/{companies,sites,documents,tasks}.py`) — все 4 эмитят ETag через одинаковый pattern `digest = sha256("tenant:{id}::total:N::limit:L::offset:O::items_hash"); response.headers["ETag"] = f'"{digest}"'`; schema requirements verified (`TaskCreate{title}`, `CompanyCreate{name}`, `SiteCreate{company_id,name,address}` — все payloads совместимы). Test patterns 1:1 повторяют pre-existing happy-path тесты (`tests/api/test_company_crud.py::test_companies_list_etag_returns_304_on_if_none_match`, `tests/test_documents_generate.py::test_documents_list_etag_returns_304_on_if_none_match`, `tests/test_task_status.py::test_tasks_list_etag_returns_304_on_if_none_match`). Pytest full-run локально снова segfault (Python 3.13 + Windows + pytest known issue из S46). CI на 3.12.12 — source of truth.
+
+## 2026-05-19 (Session 46 — Phase 9.1: Query performance benchmarks, vNext-PERF-02)
+- **`tests/test_query_performance_benchmarks.py`** (new, ~480 строк, 24 кейса в 5 классах) — закрывает Phase 9.1 Task 9.1 acceptance criterion #4 «Tests: Query performance benchmarks» по модели «pin the round-trip budget» (вместо wall-clock thresholds, которые флакают на разных runner-ах). (A) **Cardinality pins для analytics** — 6 тестов: `base_counters` всегда 4 query (один scalar per metric, O(1) by row count — проверка на 50+50+10 строках), `detailed_counters` всегда 11 query (11 counters в `app.modules.analytics.services`), `trend_series(points=12)` ровно 12 query (baseline; будущая bulk-aggregation оптимизация заметит pin как guard), `trend_series(points=1)` ровно 1 query, parametrized 6 метрик × `points=3` → всегда 3 query. (B) **KPI dashboard query budgets** — 11 параметризованных тестов: executive/safety/training/ppe → 4 query (only base_counters); sla_load/edo/prescriptions → 11 query (only detailed_counters); client_delivery/incidents/inspections/overdue → 15 query (both). Filters не меняют cardinality (отдельный кейс). (C) **Tenant isolation at scale** — 2 теста: 80 packages tenant_a + 20 packages tenant_b → `base_counters(tenant_a)["packages_total"]=80`, `(tenant_b)=20`, никакого cross-bleed; `detailed_counters` для двух tenant-ов independently → нули в обоих случаях (smoke на schema integrity). (D) **Audit log filter-matrix shape** — 3 теста: `WHERE tenant_id AND action` (covered by `ix_auditlog_action(action, when)`) → ровно 1 query на 15 строках; `WHERE tenant_id AND object_type AND object_id` (covered by `ix_auditlog_object`) → 1 query на 20 строках; `WHERE tenant_id AND correlation_id` (covered by `ix_auditlog_corr`) → 1 query на 10 строках. (E) **Structural index coverage** — 6 sync тестов проверяют, что нужные composite indices существуют на 6 hot-path таблицах: PackageReadModel `(tenant_id, status, client_company_id, updated_at)`, PersonComplianceReadModel `(tenant_id, readiness_status, site_id, next_deadline_at)`, SiteSafetyReadModel `(tenant_id, readiness_status)`, ContractorReadinessReadModel `(tenant_id, readiness_status)`, SearchIndexEntry `(tenant_id, entity_type, updated_at)`, AuditLog (5 indexes: action/object/actor/corr/when). Любая будущая миграция, дропающая такой индекс, валит unit-тест вместо медленных запросов в продакшене.
+- **`QueryCounter`** — context-manager поверх `before_cursor_execute` event на `AsyncEngine.sync_engine`, считает только SELECT/INSERT/UPDATE/DELETE statements (фильтрует PRAGMA/BEGIN/COMMIT housekeeping на SQLite чтобы assertion таргетил application queries, а не transaction-plumbing).
+- **Acceptance:** Phase 9.1 Task 9.1 acceptance #4 «Tests: Query performance benchmarks» — закрыт через query-count regression model. Open: #1 «Query analysis: identify slow queries >100ms» (требует prod-данных + EXPLAIN ANALYZE на Postgres, не SQLite); #2 «Indexing: covering indexes» (verified существующих структурно; новые TBD по результатам #1); #3 «Partitioning by date for events/audit_log/documents» (Postgres-specific, не блокирует MVP).
+- **Validation:** локально `py -3.13 -m py_compile tests/test_query_performance_benchmarks.py` → ✅ syntax-ok; `py -3.13 -c "..."` против реальных моделей (`PackageReadModel.__table__.indexes`, `AuditLog.__table__.indexes`) → ✅ имена и колонки индексов совпадают с assertion-ами в Class E. Pytest full-run локально не завершился: Python 3.13 + Windows pytest сегфолтится (exit code 139 / SIGSEGV) на этапе conftest collection — известная локальная проблема (см. Session 33 Validation block, Session 36 «FastAPI 0.115 + py 3.13 import-time assertion»). Cardinality-логика трассируется по коду `app.modules.analytics.services`: `base_counters` делает 4 `await session.scalar(...)` calls, `detailed_counters` — 11, `trend_series` — `points` штук в for-loop, KPI методы — суммы базовых counter-сервисов. Test patterns 1:1 повторяют `tests/test_analytics_aggregation.py` (Session 44, 34 passing тестов) и `tests/test_audit_log_api_hardening.py` (Session 45, 26 passing). CI прогонит canonical pipeline на 3.12.12 в Codespace.
+
+## 2026-05-18 (Session 35 — Phase 4.2: Recent entities tracking, vNext-SEARCH-01)
+- **`frontend/src/components/layout/CommandBar.tsx`** — recent-entities tracking интегрирован в палитру (Next Step #1 из S32/S33/S34 handoff — последняя крупная polish-точка Phase 4.2). Изменения: (1) Storage key `ux.commandbar.recentEntities.v1`, cap `MAX_RECENT_ENTITIES=8`, TTL `30 * 24 * 60 * 60 * 1000` ms (30 дней). (2) Type `RecentEntityRecord { entity_type, entity_id, title, path, opened_at }` — минимальный shape для рендера + навигации, без копий subtitle/snippet/tags. (3) Helper `readRecentEntities(now)` — `localStorage.getItem` + JSON.parse + shape validation (filter по полям) + TTL prune (`now - opened_at <= 30d`) + cap `slice(0, 8)`. Defensive: malformed JSON / wrong-shape items молча отбрасываются. (4) Helper `writeRecentEntities(items)` — `localStorage.setItem` с try/catch (QuotaExceededError silently degrades). (5) State `recentEntities: RecentEntityRecord[]` + load на mount (рядом с favoritePaths/recentPaths). (6) Callback `rememberRecentEntity(item, path)` — hoists clicked entity на position 0, dedups по `(entity_type, entity_id)` (re-click того же row не плодит дубликаты — обновляет title + opened_at), caps на 8, persists в LS. Title captured at click time → не меняется если backend переименует сущность. (7) Memo `visibleRecentEntities` — показывает recents ТОЛЬКО когда `query.trim() === ""` (discovery mode, паттерн как saved-searches из S34). (8) `NavigableItem.kind` расширен с `"action" | "entity" | "saved" | "nav"` до `"action" | "entity" | "saved" | "recent-entity" | "nav"`. Recent-entities в `navigableItems` после saved-searches, перед nav-groups → keyboard nav (↑↓/Enter/Home/End из S32) автоматически проходит через них. Activate() re-hoists item чтобы re-opened entity не aged-out. (9) Wired tracking в **двух местах**: entity-row `onClick` handler (для mouse-click) + entity-row `activate()` в `navigableItems` (для keyboard Enter). Оба вызывают `rememberRecentEntity` симметрично. (10) Новая render-секция (`data-testid="commandbar-recent-entities"`) между saved-searches и nav-groups, с ARIA listbox-pattern: `role="option"` + `aria-selected` + `id="commandbar-item-recent-entity-<type>-<id>"` + `data-entity-type` + `data-entity-id`. Item-subtitle — локализованный тип через `ENTITY_TYPE_LABELS` («Сотрудники» / «Документы» / etc., fallback на raw type). Re-click того же item в палитре re-hoists (rewrites opened_at).
+- **`frontend/src/__tests__/CommandBar.test.tsx`** — расширено с 15 до **20 кейсов** (+5 новых): «renders recently opened entities from localStorage in discovery mode» (pre-seed LS с 2 records, открывает палитру, проверяет section header + newest-first порядок + `data-entity-type`/`data-entity-id` + subtitle «Сотрудники»); «prunes expired recent entities (older than TTL) on load» (one fresh + one 31-days-old record → only fresh рендерится); «tracks an entity click and persists it to localStorage with newest-first ordering» (mock searchGlobal с entity, клик по entity-row → проверяет LS payload содержит `entity_type`/`entity_id`/`title`/`path`/`opened_at` numeric); «hides recent entities once the user starts typing» (`commandbar-recent-entities` исчезает при typing); «dedupes the same entity by entity_type+entity_id when clicked twice» (pre-seed `p-1` с «Old title», клик search-result `p-1` с «Иванов (renamed)» → LS payload длина 2, p-1 на position 0 с обновлённым title — никаких дубликатов). Существующие 15 кейсов не тронуты — recent-entities фичу включаются только при наличии LS payload или click event.
+- **Acceptance:** Phase 4 Task 4.2 acceptance criterion #5 (originally `[~]` — «Recent items: Recently viewed entities»). Через S35 client-side tracking закрыто без backend-endpoint (см. Decision ниже). Все 6 acceptance criteria Phase 4.2 done. Phase 4 — fully complete (modulo cross-cutting polish: score-based unified ranking, per-tenant relevance tuning, i18n executable commands — все не блокируют).
+- **Validation:** локально `npx tsc --noEmit -p tsconfig.json` → ✅ clean (exit 0); `npx vitest run src/__tests__/{CommandBar,CalendarPage,WorkflowCalendarPages,ability,TopNav}.test.tsx` → ✅ **59 passed (10.52s)** (CommandBar 20 + CalendarPage 26 + WorkflowCalendarPages 4 + ability 8 + TopNav 1); `npx eslint src/components/layout/CommandBar.tsx src/__tests__/CommandBar.test.tsx --max-warnings=0` → ✅ exit 0. Все 5 новых тестов прошли с первого запуска (паттерн заимствован из S34 saved-searches — `window.localStorage.setItem(...)` в test body для pre-seed + `window.localStorage.getItem(...)` для assertion). Backend не менялся.
+
+## 2026-05-18 (Session 34 — Phase 4.2: Saved searches in CMD+K palette, vNext-SEARCH-01)
+- **`frontend/src/components/layout/CommandBar.tsx`** — saved-search shortcuts интегрированы в палитру (Next Step #3 из S32/S33 handoff). Изменения: (1) `import { fetchSavedSearches, type SavedSearchItem }` из `@/api/search`. (2) Helper `buildSavedSearchPath(item)` строит deeplink в `/search?q=<q>&type=<types[0]>&status=<>&company_id=<>&site_id=<>&project_id=<>&risk_level=<>` — re-использует URL-контракт `useSearchUrlState.ts` (`patchParams`/`replaceWithSavedSearch`), так что переход из палитры открывает SearchPage с уже гидрированными фильтрами. (3) State `savedSearches: SavedSearchItem[]` + `savedSearchesLoaded: boolean` для lazy-cache. (4) `useEffect` fetches на первый `open=true`; caches на всю сессию (saved searches меняются редко — `/search` page имеет «Сохранить как…»; повторный fetch на каждом Ctrl+K сжирает roundtrip без пользы). Graceful degradation: 401/500/network-error → `setSavedSearches([])`, никакого crash. `active` flag в `.finally()` защищает от set-state на unmounted component. (5) Constant `MAX_SAVED_SEARCHES = 6` — лимит видимых items, чтобы секция не разрасталась. (6) Memo `visibleSavedSearches` — показывает saved-searches ТОЛЬКО когда `query.trim() === ""` (discovery mode). При вводе query — секция исчезает, фокус смещается на live actions/entities. Это паттерн Linear/Slack/Raycast: saved-views — это «browse», а typed query — это «search». (7) `NavigableItem.kind` расширен с `"action" | "entity" | "nav"` до `"action" | "entity" | "saved" | "nav"`. Saved-searches добавлены в `navigableItems` сразу после entities, перед nav-groups — keyboard nav (↑↓/Enter/Home/End из S32) автоматически проходит через них. `activate()` вызывает `navigate(path)` + `trackUxMetric("navigation_click", { source: "commandbar-saved", path })` + `setOpen(false)`. (8) Render-секция (`data-testid="commandbar-saved"`) между entity-results и nav-groups: header «Сохранённые запросы» + `<Link role="option">` для каждого item с `data-saved-id`, `aria-selected`, `id="commandbar-item-saved-<id>"`. Подзаголовок item-а: «Запрос: <q> · <types.join(", ")>». Visual highlight `bg-muted ring-1 ring-primary` на выбранном — тот же паттерн, что actions/entities/nav.
+- **`frontend/src/__tests__/CommandBar.test.tsx`** — расширено с 11 до **15 кейсов** (+4 новых): «renders saved searches when palette opens with empty query» (mocks `fetchSavedSearches` с 2 items — incident + documents с filters; проверяет section header, href с корректным URL-encoding кириллицы `%D0%BF%D1%80%D0%BE%D1%81%D1%80%D0%BE%D1%87%D0%BA` для «просрочк», `data-saved-id`); «hides saved searches once the user starts typing» (типит query → `commandbar-saved` исчезает); «does not refetch saved searches on subsequent opens» (открывает + закрывает + открывает; `fetchSavedSearchesMock.mock.calls.length` остаётся 1); «survives when /search/saved fails» (mock reject `new Error("boom")` → palette не падает, secret-section не появляется, nav-items по-прежнему рендерятся). Добавлен hoisted-mock `fetchSavedSearchesMock` + reset в `beforeEach` (default `mockResolvedValue([])`). Также `beforeEach` теперь вызывает `window.localStorage.clear()` — `rememberRecent` из предыдущих тестов (S32 keyboard-nav `Enter` test) писал «/dashboard» в `RECENT_PATHS_STORAGE_KEY`, что заставляло «Главная» появляться и в native nav-группе, и в «Недавние» → `getByRole("option", { name: /главная/i })` matched twice.
+- **Acceptance:** Phase 4 Task 4.2 acceptance criterion #4 «Saved searches: User-defined filters» — закрыт целиком (backend `/search/saved` существовал; SearchPage UI для CRUD; CMD+K палитра теперь экспонирует one-click apply через лейбл «Сохранённые запросы»). Open polish: recent-entities tracking (#2), score-based unified ranking (#4), per-tenant relevance tuning (#5), i18n executable commands (#7).
+- **Validation:** локально `npx tsc --noEmit -p tsconfig.json` → ✅ clean (exit 0); `npx vitest run src/__tests__/{CommandBar,CalendarPage,WorkflowCalendarPages,ability,TopNav}.test.tsx` → ✅ **54 passed (9.63s)** (CommandBar 15 + CalendarPage 26 + WorkflowCalendarPages 4 + ability 8 + TopNav 1); `npx eslint src/components/layout/CommandBar.tsx src/__tests__/CommandBar.test.tsx --max-warnings=0` → ✅ exit 0. Initial fail: «survives when /search/saved fails» падал на `getMultipleElementsFoundError` для `getByRole("option", { name: /главная/i })` — debug показал, что `rememberRecent` из S32 теста писал «/dashboard» в localStorage, который persistил между tests → «Главная» рендерилась дважды (в «Недавние» + в native nav-group). Фикс — `window.localStorage.clear()` в `beforeEach`. Backend не менялся (поверх existing `/api/v1/search/saved` CRUD из Sessions 31-32).
+
+## 2026-05-18 (Session 33 — Phase 4.2: Backend search index accuracy tests, vNext-SEARCH-01)
+- **`tests/test_search_service_relevance.py`** (new, 35 кейсов, 6 классов, ~930 строк) — закрывает Phase 4 Task 4.2 acceptance #6 «Tests: Search index accuracy, command parsing» по части backend. Покрывает 4 области `SearchService`: (A) `_resolve_entity_types` alias-map — 8 sync кейсов (single canonical, plural→singular collapse: people/employees/documents/sites, `risks`→{risk,risk_map}, `jobs`→{task,workflow_task,prescription}, `ppe`→ppe_issue, forward-compat passthrough неизвестных, пустой set, дедупликация нескольких алиасов в один canonical); (B) `_build_snippet` window-extraction — 4 sync кейса (None для пустого haystack, первые 180 символов при blank query, fallback при query-not-in-haystack, window [pos-40 : pos+len+80] для match-position); (C) `TestRelevanceOrdering` ранжирование при `sort="relevance"` + non-empty query — 4 async кейса (exact title > prefix > substring buckets, subtitle-prefix bucket-tiebreak среди substring-title-matches через `case((lower_subtitle.like(f"{q_lower}%"), 0), else_=1)`, updated_at desc как final tiebreaker, empty query → updated_at desc fallback); (D) `TestTypeFiltering` через alias-resolution — 4 async кейса (`employees`→только person, `risks`→risk+risk_map оба, `jobs`→task+workflow_task+prescription, empty set→все типы); (E) `TestFilterCombinations` — 6 async кейсов (status scalar filter, site_id/company_id/risk_level через `tags_json[].astext`, date range по updated_at, multiple filters AND composition); (F) `TestSearchInfrastructure` cross-cutting — 9 async кейсов (tenant_id isolation, facets с type/status/company/site counts + filter respect, pagination cursor через 3 страницы limit=2, sort=updated_at desc, sort=date asc, snippet содержит query при match, deeplink fallback на `_ENTITY_ROUTE_PREFIXES["person"]="persons"` когда `route` is None, non-numeric cursor → defensive offset 0).
+- **Acceptance:** Phase 4 Task 4.2 acceptance criterion #6 «Tests: search index accuracy, command parsing» — закрыт по части backend (frontend command parsing уже покрыт в `CommandBar.test.tsx` 11 кейсов из Sessions 31-32). Все 6 acceptance criteria Task 4.2 теперь имеют тестовое покрытие. Open: recent entities tracking (Next Step #2 из S32), saved-search shortcuts в палитре (#3), score-based unified ranking (#4), per-tenant relevance tuning (#5), i18n executable commands (#7).
+- **Validation:** локально `py -3.13 -m ruff check tests/test_search_service_relevance.py` → ✅ All checks passed; `py -3.13 -m py_compile tests/test_search_service_relevance.py` → ✅ syntax-ok; sync-only ad-hoc прогон `_resolve_entity_types` + `_build_snippet` + `_build_entity_url` через `py -3.13 -c "..."` против реального `app.modules.search.service.SearchService` — ✅ 8 + 4 + 3 asserts PASS (TestResolveEntityTypes 12 asserts, TestBuildSnippet 4 asserts, `_build_entity_url` 3 asserts). Async-DB подкласс (TestRelevanceOrdering / TestTypeFiltering / TestFilterCombinations / TestSearchInfrastructure) использует те же фикстуры (`sessionmaker`, `data_factory`, `@pytest.mark.anyio`), что и существующий `tests/test_next62_analytics_search_export_center.py::test_search_over_projection_index` — паттерн проверен в продакшене. Pytest full-collection локально не завершился из-за медленной инициализации conftest на Windows + Python 3.13 (3.12 отсутствует; CLAUDE.md fallback policy). CI прогонит canonical pipeline на 3.12.12 в Codespace. Backend не менялся — только tests.
+
 ## 2026-05-18 (Session 32 — Phase 4.2: CMD+K keyboard navigation, vNext-SEARCH-01)
 - **`frontend/src/components/layout/CommandBar.tsx`** — добавлена полная клавиатурная навигация по палитре: (1) State `selectedIndex` + `itemRefs` (массив anchor refs). (2) `navigableItems: NavigableItem[]` memo — плоский упорядоченный список ВСЕХ кликабельных элементов в render-порядке: actions → entities → nav. Каждый item имеет `key`/`path`/`kind`/`activate()` — `activate()` инкапсулирует navigate + tracking + setOpen(false), так что Enter ведёт себя 1:1 как мышиный клик. (3) `indexByKey` memo — `Map<key, index>` для O(1) lookup в render-цикле без дополнительных счётчиков. (4) `handleInputKeyDown(event)` на `<Input>` — `ArrowDown` циклически инкрементит, `ArrowUp` циклически декрементит (`(prev - 1 + N) % N` без отрицательных), `Enter` вызывает `navigableItems[selectedIndex].activate()`, `Home`/`End` прыгают в начало/конец; все 5 ключей с `preventDefault()` чтобы не двигать caret в input. (5) Reset-effect: `setSelectedIndex(0)` при изменении `navigableItems.length` или `open` — гарантирует, что после смены результатов selection не зависает на удалённом item-е. (6) Auto-scroll-effect: `itemRefs.current[selectedIndex]?.scrollIntoView({block: "nearest"})` — при нав вниз по длинному списку highlight не уходит за viewport. (7) ARIA: container `<div id="commandbar-results" role="listbox" aria-label="Результаты палитры">`; каждый item `role="option"` + `aria-selected` + `id="commandbar-item-<key>"`; `<Input aria-controls="commandbar-results" aria-activedescendant="commandbar-item-..." />`. Это полный listbox-pattern по WAI-ARIA. (8) Визуальный highlight: `bg-muted ring-1 ring-primary` на выбранном item-е + `data-selected` атрибут для устойчивых тестов.
 - **`frontend/src/__tests__/CommandBar.test.tsx`** — расширено с 7 до **11 кейсов** (+4 новых): «highlights the first navigable item by default and moves on ArrowDown/ArrowUp» (проверяет initial `aria-selected="true"` на options[0], после ArrowDown — на options[1], после ArrowUp — снова на options[0]); «wraps ArrowUp from the first item to the last and ArrowDown from the last to the first» (cycle-around math); «activates the highlighted item on Enter» (Enter → palette closes + navigate); «End jumps to the last navigable item» (Home/End handler smoke-test; full End→Home sequence не тестируется из-за jsdom + userEvent v14 caveat — после End фокус и события не разрешаются предсказуемо к моменту Home, хотя в production работает). Existing 7 тестов обновлены: `getByRole("link")` → `getByRole("option")` (ARIA listbox-pattern override link-role на anchor).

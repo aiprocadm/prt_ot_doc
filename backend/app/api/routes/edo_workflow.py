@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 import hashlib
-import hmac
 import json
 from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,31 +15,32 @@ from app.api.dependencies import get_session, get_tenant_record
 from app.api.deps.tracing import get_trace_id
 from app.core.audit_decorator import audit_operation
 from app.core.errors import api_problem_detail
+from app.core.inbound_webhook_auth import enforce_webhook_hmac
 from app.core.security import AccessContext, abac
 from app.models.document import DocumentVersion
 from app.models.job_engine import InboundWebhookDedup
-from app.models.models import IdempotencyStatus, RoleEnum, Tenant
+from app.models.models import IdempotencyStatus, RoleEnum, SignatureRequest, Tenant
 from app.models.workflow import (
     ApprovalDecision,
     ApprovalDecisionType,
     ApprovalRequest,
     ApprovalRequestStatus,
     ApprovalRoute,
-    EdoDirection,
     EdoMessage,
     EdoStatus,
-    EdoStatusHistory,
-    Signature,
-    SignatureStatus,
     SignatureType,
 )
 from app.services.billing import BillingService
-from app.services.events import EventType
-from app.services.file_storage import FileStorageService
 from app.services.idempotency import IdempotencyService, normalize_idempotency_key
 from app.services.outbox import OutboxService
+from app.services.pep_signing import (
+    PepApprovalRequired,
+    PepConflict,
+    PepNotFound,
+    PepSigningService,
+)
 from app.services.provider_registry import provider_response_meta
-from app.tasks import edo_status_simulation_job, process_inbound_webhook, send_edo_job
+from app.tasks import process_inbound_webhook
 
 router = APIRouter()
 SessionDep = Depends(get_session)
@@ -51,13 +51,34 @@ def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> UUID | N
     return getattr(tenant, "id", None)
 
 
-AccessDep = Depends(abac(_tenant_resource_id, required_roles=["admin", "employee"], action="manage edo"))
+AccessDep = Depends(
+    abac(_tenant_resource_id, required_roles=["admin", "employee"], action="manage edo")
+)
 
 
 def _edo_unprocessable(message: str) -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         detail=api_problem_detail(code="EDO_VALIDATION_ERROR", message=message, error_type="edo"),
+    )
+
+
+def _provider_not_configured(kind: str) -> HTTPException:
+    """Честный отказ вместо симуляции: внешний провайдер не настроен (Срез-1 ПЭП).
+
+    Codes: EDO_PROVIDER_NOT_CONFIGURED | SIGNATURE_PROVIDER_NOT_CONFIGURED
+    """
+    code = f"{kind.upper()}_PROVIDER_NOT_CONFIGURED"
+    return HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail=api_problem_detail(
+            code=code,
+            message=(
+                f"external {kind} provider is not configured; "
+                "internal PEP signing is available at /sign/pep"
+            ),
+            error_type="edo",
+        ),
     )
 
 
@@ -70,13 +91,6 @@ def _edo_not_found(resource: str) -> HTTPException:
             details={"resource": resource},
             error_type="edo",
         ),
-    )
-
-
-def _edo_unauthorized(message: str) -> HTTPException:
-    return HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail=api_problem_detail(code="EDO_UNAUTHORIZED", message=message, error_type="edo"),
     )
 
 
@@ -177,7 +191,9 @@ def _request_hash(*, request: Request, tenant: Tenant, user_id: str | None, body
         "tenant": str(tenant.id),
         "body": body,
     }
-    return hashlib.sha256(json.dumps(payload, sort_keys=True, default=str).encode("utf-8")).hexdigest()
+    return hashlib.sha256(
+        json.dumps(payload, sort_keys=True, default=str).encode("utf-8")
+    ).hexdigest()
 
 
 def _correlation_id(request: Request, response: Response) -> str:
@@ -201,8 +217,12 @@ async def _idempotent_or_replay(
     if key_header is None:
         return None, None
     key = normalize_idempotency_key(key_header)
-    service = IdempotencyService(session=session, tenant_id=str(tenant.id), endpoint=request.url.path)
-    digest = _request_hash(request=request, tenant=tenant, user_id=user_id, body=model.model_dump(mode="json"))
+    service = IdempotencyService(
+        session=session, tenant_id=str(tenant.id), endpoint=request.url.path
+    )
+    digest = _request_hash(
+        request=request, tenant=tenant, user_id=user_id, body=model.model_dump(mode="json")
+    )
     record, created = await service.acquire(
         key=key,
         request_hash=digest,
@@ -243,9 +263,24 @@ async def create_approval_route(
 
 
 @router.get("/approvals/routes")
-async def list_approval_routes(session: AsyncSession = SessionDep, tenant: Tenant = TenantDep, _: AccessContext = AccessDep):
-    rows = (await session.execute(select(ApprovalRoute).where(ApprovalRoute.tenant_id == str(tenant.id)))).scalars().all()
-    return {"items": [{"id": row.id, "code": row.code, "name": row.name, "version": row.version} for row in rows]}
+async def list_approval_routes(
+    session: AsyncSession = SessionDep, tenant: Tenant = TenantDep, _: AccessContext = AccessDep
+):
+    rows = (
+        (
+            await session.execute(
+                select(ApprovalRoute).where(ApprovalRoute.tenant_id == str(tenant.id))
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return {
+        "items": [
+            {"id": row.id, "code": row.code, "name": row.name, "version": row.version}
+            for row in rows
+        ]
+    }
 
 
 @router.patch("/approvals/routes/{route_id}")
@@ -270,7 +305,12 @@ async def update_approval_route(
     route.version = payload.version
     route.is_active = payload.is_active
     await session.flush()
-    return {"id": route.id, "version": route.version, "is_active": route.is_active, "correlation_id": cid}
+    return {
+        "id": route.id,
+        "version": route.version,
+        "is_active": route.is_active,
+        "correlation_id": cid,
+    }
 
 
 @router.post("/approvals/requests")
@@ -286,7 +326,12 @@ async def start_approval_request(
     _correlation_id(request, response)
     await BillingService(session).assert_allowed(tenant, "edo.send")
     idem_service, replay = await _idempotent_or_replay(
-        request=request, response=response, session=session, tenant=tenant, user_id=str(access.user.id), model=payload
+        request=request,
+        response=response,
+        session=session,
+        tenant=tenant,
+        user_id=str(access.user.id),
+        model=payload,
     )
     if replay is not None:
         return replay
@@ -323,12 +368,20 @@ async def start_approval_request(
     await OutboxService(session).enqueue(
         tenant_id=str(tenant.id),
         event_type="approval.started",
-        payload={"tenant_id": str(tenant.id), "event_id": str(uuid4()), "metadata": {"request_id": approval_request.id}},
+        payload={
+            "tenant_id": str(tenant.id),
+            "event_id": str(uuid4()),
+            "metadata": {"request_id": approval_request.id},
+        },
         destination="internal://approval",
         idempotency_key=f"approval.started:{approval_request.id}",
     )
     await session.flush()
-    body = {"id": approval_request.id, "status": approval_request.status.value, "correlation_id": get_trace_id(request)}
+    body = {
+        "id": approval_request.id,
+        "status": approval_request.status.value,
+        "correlation_id": get_trace_id(request),
+    }
     if idem_service is not None:
         record = getattr(request.state, "idempotency_record", None)
         if record is not None:
@@ -359,8 +412,19 @@ async def list_approval_instances(
     stmt = select(ApprovalRequest).where(ApprovalRequest.tenant_id == str(tenant.id))
     if document_version_id:
         stmt = stmt.where(ApprovalRequest.document_version_id == document_version_id)
-    items = (await session.execute(stmt.order_by(ApprovalRequest.created_at.desc()))).scalars().all()
-    return {"items": [{"id": row.id, "status": row.status.value, "document_version_id": row.document_version_id} for row in items]}
+    items = (
+        (await session.execute(stmt.order_by(ApprovalRequest.created_at.desc()))).scalars().all()
+    )
+    return {
+        "items": [
+            {
+                "id": row.id,
+                "status": row.status.value,
+                "document_version_id": row.document_version_id,
+            }
+            for row in items
+        ]
+    }
 
 
 @router.get("/approvals/tasks")
@@ -376,8 +440,15 @@ async def list_approval_tasks(
         stmt = stmt.where(ApprovalDecision.actor_user_id == access.user.id)
     if status_filter:
         stmt = stmt.where(ApprovalDecision.decision == ApprovalDecisionType(status_filter))
-    items = (await session.execute(stmt.order_by(ApprovalDecision.created_at.desc()))).scalars().all()
-    return {"items": [{"id": row.id, "request_id": row.request_id, "decision": row.decision.value} for row in items]}
+    items = (
+        (await session.execute(stmt.order_by(ApprovalDecision.created_at.desc()))).scalars().all()
+    )
+    return {
+        "items": [
+            {"id": row.id, "request_id": row.request_id, "decision": row.decision.value}
+            for row in items
+        ]
+    }
 
 
 @router.post("/approvals/requests/{request_id}/decide")
@@ -395,6 +466,17 @@ async def decide_approval_request(
     approval_request = await session.get(ApprovalRequest, request_id)
     if approval_request is None or approval_request.tenant_id != str(tenant.id):
         raise _edo_not_found("approval_request")
+    # Only an in-flight request may be decided; a terminal one (approved/rejected/
+    # canceled) must not be flipped by a later decision.
+    if approval_request.status is not ApprovalRequestStatus.RUNNING:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=api_problem_detail(
+                code="EDO_INVALID_STATE",
+                message="approval request is not running",
+                error_type="edo",
+            ),
+        )
 
     decision = ApprovalDecision(
         tenant_id=str(tenant.id),
@@ -411,7 +493,23 @@ async def decide_approval_request(
         if route is None or str(route.tenant_id) != str(tenant.id):
             raise _edo_not_found("approval_route")
         rules = ApprovalRules.validate_rules(route.rules_json)
-        next_index = approval_request.current_step_index + 1
+        step_index = approval_request.current_step_index
+        # Enforce the step's required role: only an actor holding that role (or an
+        # admin/owner) may approve this step, else one actor could walk every step of
+        # a multi-step route.
+        if 0 <= step_index < len(rules.steps):
+            required_role = rules.steps[step_index].role
+            actor_role = access.user.role
+            if actor_role not in (RoleEnum.OWNER, RoleEnum.ADMIN) and actor_role != required_role:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=api_problem_detail(
+                        code="EDO_STEP_ROLE_MISMATCH",
+                        message="actor role does not match the approval step role",
+                        error_type="edo",
+                    ),
+                )
+        next_index = step_index + 1
         if next_index >= len(rules.steps):
             approval_request.status = ApprovalRequestStatus.APPROVED
             approval_request.finished_at = datetime.now(tz=timezone.utc)
@@ -425,7 +523,11 @@ async def decide_approval_request(
     await outbox.enqueue(
         tenant_id=str(tenant.id),
         event_type="approval.decision_made",
-        payload={"tenant_id": str(tenant.id), "event_id": str(uuid4()), "metadata": {"request_id": approval_request.id}},
+        payload={
+            "tenant_id": str(tenant.id),
+            "event_id": str(uuid4()),
+            "metadata": {"request_id": approval_request.id},
+        },
         destination="internal://approval",
         idempotency_key=f"approval.decision:{decision.id}",
     )
@@ -433,12 +535,20 @@ async def decide_approval_request(
         await outbox.enqueue(
             tenant_id=str(tenant.id),
             event_type="approval.completed",
-            payload={"tenant_id": str(tenant.id), "event_id": str(uuid4()), "metadata": {"request_id": approval_request.id}},
+            payload={
+                "tenant_id": str(tenant.id),
+                "event_id": str(uuid4()),
+                "metadata": {"request_id": approval_request.id},
+            },
             destination="internal://approval",
             idempotency_key=f"approval.completed:{approval_request.id}",
         )
     await session.flush()
-    return {"status": approval_request.status.value, "current_step_index": approval_request.current_step_index, "correlation_id": cid}
+    return {
+        "status": approval_request.status.value,
+        "current_step_index": approval_request.current_step_index,
+        "correlation_id": cid,
+    }
 
 
 @router.post("/signatures")
@@ -452,42 +562,36 @@ async def create_signature(
     access: AccessContext = AccessDep,
 ):
     cid = _correlation_id(request, response)
+    if payload.type is not SignatureType.INTERNAL:
+        raise _provider_not_configured("signature")
     doc_ver = await session.get(DocumentVersion, payload.document_version_id)
     if doc_ver is None or str(doc_ver.tenant_id) != str(tenant.id):
         raise _edo_not_found("document_version")
-    now = datetime.now(tz=timezone.utc)
-    signature = Signature(
-        tenant_id=str(tenant.id),
-        document_version_id=payload.document_version_id,
-        type=payload.type,
-        status=SignatureStatus.PENDING,
-        signer_user_id=access.user.id,
-    )
-    if payload.type is SignatureType.INTERNAL:
-        signature.status = SignatureStatus.SIGNED
-        signature.signed_at = now
-    session.add(signature)
-    await session.flush()
-    storage = FileStorageService.default()
-    receipt = {"signature_id": signature.id, "status": signature.status.value, "signed_at": now.isoformat()}
-    receipt_key = f"{tenant.slug}/signatures/{uuid4().hex}.json"
-    storage.put(receipt_key, json.dumps(receipt).encode("utf-8"), content_type="application/json")
-    signature.receipts_s3_key = receipt_key
-    await session.flush()
-    await OutboxService(session).enqueue(
-        tenant_id=str(tenant.id),
-        event_type=EventType.DOCUMENT_SIGNED.value,
-        payload={
-            "tenant_id": str(tenant.id),
-            "event_id": str(uuid4()),
-            "document_id": payload.document_version_id,
-            "document_version_id": payload.document_version_id,
-            "status": signature.status.value,
-            "signed_at": (signature.signed_at or now).isoformat(),
-        },
-        idempotency_key=f"signature:{signature.id}",
-    )
-    return {"id": signature.id, "status": signature.status.value, "receipts_s3_key": signature.receipts_s3_key, "correlation_id": cid}
+    svc = PepSigningService(session, str(tenant.id))
+    try:
+        req, _code = await svc.create_request(
+            object_type="document_version",
+            object_id=payload.document_version_id,
+            purpose="document",
+            requested_by=str(access.user.id),
+            signer_user_id=str(access.user.id),
+        )
+    except PepNotFound:
+        raise _edo_not_found("document_version")
+    except PepConflict as exc:
+        # PepApprovalRequired (гейт согласования) — отдельный код; прочее — PEP_CONFLICT.
+        code = "PEP_APPROVAL_REQUIRED" if isinstance(exc, PepApprovalRequired) else "PEP_CONFLICT"
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=api_problem_detail(code=code, message=str(exc), error_type="edo"),
+        ) from exc
+    await session.commit()
+    return {
+        "id": req.id,
+        "status": req.status,
+        "receipts_s3_key": None,
+        "correlation_id": cid,
+    }
 
 
 @router.post("/sign/request")
@@ -500,7 +604,14 @@ async def sign_request(
     tenant: Tenant = TenantDep,
     access: AccessContext = AccessDep,
 ):
-    return await create_signature(SignatureCreate(document_version_id=payload.document_version_id, type=payload.kind), request, response, session, tenant, access)
+    return await create_signature(
+        SignatureCreate(document_version_id=payload.document_version_id, type=payload.kind),
+        request,
+        response,
+        session,
+        tenant,
+        access,
+    )
 
 
 @router.post("/sign/submit")
@@ -514,24 +625,31 @@ async def sign_submit(
     access: AccessContext = AccessDep,
 ):
     cid = _correlation_id(request, response)
-    signature = Signature(
-        tenant_id=str(tenant.id),
-        document_version_id=payload.document_version_id,
-        type=payload.kind,
-        status=SignatureStatus.SIGNED,
-        signer_user_id=access.user.id,
-        cert_info_json=payload.cert_info,
-        signed_at=datetime.now(tz=timezone.utc),
-    )
-    session.add(signature)
-    await session.flush()
-    await OutboxService(session).enqueue(
-        tenant_id=str(tenant.id),
-        event_type=EventType.DOCUMENT_SIGNED.value,
-        payload={"tenant_id": str(tenant.id), "event_id": str(uuid4()), "document_version_id": payload.document_version_id, "status": signature.status.value},
-        idempotency_key=f"signature:submit:{signature.id}",
-    )
-    return {"id": signature.id, "status": signature.status.value, "correlation_id": cid}
+    if payload.kind is not SignatureType.INTERNAL:
+        raise _provider_not_configured("signature")
+    doc_ver = await session.get(DocumentVersion, payload.document_version_id)
+    if doc_ver is None or str(doc_ver.tenant_id) != str(tenant.id):
+        raise _edo_not_found("document_version")
+    svc = PepSigningService(session, str(tenant.id))
+    try:
+        req, _code = await svc.create_request(
+            object_type="document_version",
+            object_id=payload.document_version_id,
+            purpose="document",
+            requested_by=str(access.user.id),
+            signer_user_id=str(access.user.id),
+        )
+    except PepNotFound:
+        raise _edo_not_found("document_version")
+    except PepConflict as exc:
+        # PepApprovalRequired (гейт согласования) — отдельный код; прочее — PEP_CONFLICT.
+        code = "PEP_APPROVAL_REQUIRED" if isinstance(exc, PepApprovalRequired) else "PEP_CONFLICT"
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=api_problem_detail(code=code, message=str(exc), error_type="edo"),
+        ) from exc
+    await session.commit()
+    return {"id": req.id, "status": req.status, "correlation_id": cid}
 
 
 @router.get("/sign/status")
@@ -541,21 +659,51 @@ async def sign_status(
     tenant: Tenant = TenantDep,
     _: AccessContext = AccessDep,
 ):
+    # Легаси-таблица signatures дропнута (ed02); живой источник — signature_requests
+    # (ПЭП-ядро). Статус в БД — VARCHAR (ed01), отдаём строку без .value.
     items = (
-        await session.execute(
-            select(Signature).where(Signature.tenant_id == str(tenant.id), Signature.document_version_id == document_version_id)
+        (
+            await session.execute(
+                select(SignatureRequest).where(
+                    SignatureRequest.tenant_id == str(tenant.id),
+                    SignatureRequest.object_type == "document_version",
+                    SignatureRequest.object_id == document_version_id,
+                )
+            )
         )
-    ).scalars().all()
-    return {"items": [{"id": row.id, "status": row.status.value, "kind": row.type.value} for row in items]}
+        .scalars()
+        .all()
+    )
+    return {
+        "items": [
+            {"id": row.id, "status": str(getattr(row.status, "value", row.status)), "kind": "pep"}
+            for row in items
+        ]
+    }
 
 
 @router.get("/signatures")
-async def list_signatures(document_version_id: str | None = None, session: AsyncSession = SessionDep, tenant: Tenant = TenantDep, _: AccessContext = AccessDep):
-    stmt = select(Signature).where(Signature.tenant_id == str(tenant.id))
+async def list_signatures(
+    document_version_id: str | None = None,
+    session: AsyncSession = SessionDep,
+    tenant: Tenant = TenantDep,
+    _: AccessContext = AccessDep,
+):
+    stmt = select(SignatureRequest).where(
+        SignatureRequest.tenant_id == str(tenant.id),
+        SignatureRequest.object_type == "document_version",
+    )
     if document_version_id:
-        stmt = stmt.where(Signature.document_version_id == document_version_id)
-    items = (await session.execute(stmt.order_by(Signature.created_at.desc()))).scalars().all()
-    return {"items": [{"id": row.id, "status": row.status.value, "type": row.type.value} for row in items]}
+        stmt = stmt.where(SignatureRequest.object_id == document_version_id)
+    items = (
+        (await session.execute(stmt.order_by(SignatureRequest.created_at.desc()))).scalars().all()
+    )
+    return {
+        "items": [
+            {"id": row.id, "status": str(getattr(row.status, "value", row.status)), "type": "pep"}
+            for row in items
+        ]
+    }
 
 
 @router.post("/edo/send")
@@ -566,56 +714,20 @@ async def send_to_edo(
     response: Response,
     session: AsyncSession = SessionDep,
     tenant: Tenant = TenantDep,
-    access: AccessContext = AccessDep
+    access: AccessContext = AccessDep,
 ):
     _correlation_id(request, response)
-    await BillingService(session).assert_allowed(tenant, "edo.send")
     idem_service, replay = await _idempotent_or_replay(
-        request=request, response=response, session=session, tenant=tenant, user_id=str(access.user.id), model=payload
+        request=request,
+        response=response,
+        session=session,
+        tenant=tenant,
+        user_id=str(access.user.id),
+        model=payload,
     )
     if replay is not None:
         return replay
-    message = EdoMessage(
-        tenant_id=str(tenant.id),
-        direction=EdoDirection.OUTGOING,
-        document_version_id=payload.document_version_id,
-        provider_code=payload.resolved_provider(),
-        status=EdoStatus.QUEUED,
-        payload_json={"document_version_id": payload.document_version_id},
-    )
-    session.add(message)
-    await session.flush()
-    message.external_id = f"{payload.resolved_provider()}-{message.id}"
-    message.status = EdoStatus.SENT
-    history = EdoStatusHistory(
-        tenant_id=str(tenant.id),
-        edo_message_id=message.id,
-        status=EdoStatus.SENT,
-        raw_payload_json={"provider": payload.resolved_provider()},
-    )
-    session.add(history)
-    await OutboxService(session).enqueue(
-        tenant_id=str(tenant.id),
-        event_type="edo.sent",
-        payload={"tenant_id": str(tenant.id), "event_id": str(uuid4()), "metadata": {"edo_message_id": message.id}},
-        destination="internal://edo",
-        idempotency_key=f"edo.sent:{message.id}",
-    )
-    await BillingService(session).add_usage(tenant_id=str(tenant.id), edo_outgoing=1)
-    body = {
-        "id": message.id,
-        "external_id": message.external_id,
-        "status": message.status.value,
-        **provider_response_meta(payload.resolved_provider()),
-    }
-    send_edo_job.delay(message_id=message.id, tenant_id=str(tenant.id), provider_code=payload.resolved_provider())
-    edo_status_simulation_job.delay(message_id=message.id, tenant_id=str(tenant.id), status="delivered")
-    edo_status_simulation_job.delay(message_id=message.id, tenant_id=str(tenant.id), status="accepted")
-    if idem_service is not None:
-        record = getattr(request.state, "idempotency_record", None)
-        if record is not None:
-            await idem_service.store_success(record, status_code=200, body=body)
-    return body
+    raise _provider_not_configured("edo")
 
 
 @router.get("/edo-workflow/messages")
@@ -651,7 +763,7 @@ async def edo_status_webhook_v1(
     session: AsyncSession = SessionDep,
     tenant: Tenant = TenantDep,
 ):
-    return await edo_webhook("internal-fallback", payload, request, response, session, tenant, None)
+    return await edo_webhook("internal-fallback", payload, request, response, session, tenant)
 
 
 @router.post("/edo/webhooks/{provider_code}")
@@ -663,15 +775,18 @@ async def edo_webhook(
     response: Response,
     session: AsyncSession = SessionDep,
     tenant: Tenant = TenantDep,
-    x_signature: str | None = Header(default=None, alias="X-Signature"),
 ):
     cid = _correlation_id(request, response)
     raw = await request.body()
-    configured_secret = (tenant.settings or {}).get("edo_webhook_secret")
-    if configured_secret:
-        expected = hmac.new(str(configured_secret).encode("utf-8"), raw, hashlib.sha256).hexdigest()
-        if x_signature and not hmac.compare_digest(expected, x_signature):
-            raise _edo_unauthorized("Invalid webhook signature")
+    # Public receiver (tenant-middleware allowlist) — the HMAC signature is the only
+    # authentication. Fail closed: no per-tenant secret configured -> reject, never accept
+    # an anonymous status mutation.
+    enforce_webhook_hmac(
+        raw_body=raw,
+        request=request,
+        secret=(tenant.settings or {}).get("edo_webhook_secret"),
+        signature_headers=("x-signature",),
+    )
 
     payload_hash = hashlib.sha256(raw).hexdigest()
     dedup_key = str(payload.event_id or payload_hash)
@@ -687,7 +802,11 @@ async def edo_webhook(
         await session.flush()
     except Exception:
         await session.rollback()
-        return {"status": "duplicate", "correlation_id": cid, **provider_response_meta(provider_code)}
+        return {
+            "status": "duplicate",
+            "correlation_id": cid,
+            **provider_response_meta(provider_code),
+        }
 
     process_inbound_webhook.delay(
         source="edo",

@@ -103,7 +103,8 @@ Top-level JSON keys:
 - `restore.state`: restored state snapshot.
 - `restore.verification`: boolean checks + mismatch list.
 - `smoke_boot`: CLI health check command/result.
-- `success`: aggregate pass/fail.
+- `go_no_go`: formal RTO/RPO decision (RC-012) — measured vs threshold + `decision`.
+- `success`: aggregate pass/fail (integrity **and** `go_no_go.decision == "go"`).
 
 ## Acceptance criteria
 
@@ -115,17 +116,43 @@ A drill run is **accepted** only when all conditions are true:
 - `restore.verification.object_content_and_metadata_match == true`
 - `restore.verification.object_mismatches` is empty
 - `smoke_boot.exit_code == 0`
+- `go_no_go.rto_met == true` — recovery completed within the RTO budget
+- `go_no_go.rpo_met == true` — backup staleness within the RPO budget
+- `go_no_go.decision == "go"`
 
 Any failed condition is a **restore drill failure** and requires rollback/retry handling.
 
-## RTO/RPO assumptions
+## RTO/RPO go/no-go (RC-012)
 
-Current encoded assumptions in evidence JSON:
+The drill now emits a formal go/no-go decision (`go_no_go` block), not just static
+assumptions:
 
-- `assumed_rto_seconds = 900` (15 minutes)
-- `assumed_rpo_seconds = 300` (5 minutes)
+- **RTO (Recovery Time Objective)** — `rto_measured_seconds` is the wall-clock from
+  "backup available" to "restored + verified + booted" (restore + verification + smoke).
+  `rto_met = rto_measured_seconds <= rto_threshold_seconds`.
+- **RPO (Recovery Point Objective)** — `rpo_measured_seconds` is the backup staleness
+  vs the last write (the rehearsal's seed→backup lag; see `rpo_basis`).
+  `rpo_met = rpo_measured_seconds <= rpo_threshold_seconds`.
+- **`decision`** is `go` only when data-integrity checks pass **and** both objectives
+  are met; otherwise `no-go`. This is folded into `success`.
 
-These are stabilization assumptions for rehearsal scoring only and are not production compliance guarantees.
+Budgets (thresholds) default to the production targets from ТЗ vNext §31.6 —
+**RTO ≤ 4h (`14400`s), RPO ≤ 24h (`86400`s)** — and are overridable:
+
+```bash
+python scripts/restore_drill.py --mode postgres-minio \
+  --rto-threshold-seconds 14400 --rpo-threshold-seconds 86400
+# or via env: RESTORE_DRILL_RTO_SECONDS / RESTORE_DRILL_RPO_SECONDS
+```
+
+The legacy `drill.assumed_rto_seconds` / `assumed_rpo_seconds` keys are retained for
+back-compat and now mirror the configured thresholds; the authoritative go/no-go lives
+in the `go_no_go` block.
+
+**Caveat (honest scope):** the rehearsal seeds then immediately backs up, so the measured
+RPO reflects this drill's own backup lag — a lower bound. **Production RPO is governed by
+backup *cadence*, not by this drill**; `go_no_go.rpo_basis` states this in the evidence
+so the number is never mistaken for a production guarantee.
 
 ## Explicit limitations
 

@@ -37,7 +37,9 @@ def test_rebuild_dashboard_snapshots_job_parses_snapshot_date(monkeypatch):
 
     monkeypatch.setattr(projections_jobs, "_run_projection_job", fake_run)
 
-    result = projections_jobs.rebuild_dashboard_snapshots_job(tenant_id="tenant-z", snapshot_date="2026-05-03")
+    result = projections_jobs.rebuild_dashboard_snapshots_job(
+        tenant_id="tenant-z", snapshot_date="2026-05-03"
+    )
 
     assert result["status"] == "ok"
     assert captured["tenant_id"] == "tenant-z"

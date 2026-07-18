@@ -3,6 +3,7 @@
 Revision ID: 20260410_next65
 Revises: 20260409_next64
 """
+
 from __future__ import annotations
 
 from typing import Union
@@ -31,11 +32,25 @@ def upgrade() -> None:
         sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True),
         sa.ForeignKeyConstraint(["tenant_id"], ["tenant.id"]),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("tenant_id", "user_id", "query_text", name="uq_search_recent_queries_scope"),
+        sa.UniqueConstraint(
+            "tenant_id", "user_id", "query_text", name="uq_search_recent_queries_scope"
+        ),
     )
-    op.create_index("ix_search_recent_queries_tenant_user_last_used", "search_recent_queries", ["tenant_id", "user_id", "last_used_at"], unique=False)
-    op.create_index(op.f("ix_search_recent_queries_tenant_id"), "search_recent_queries", ["tenant_id"], unique=False)
-    op.create_index(op.f("ix_search_recent_queries_user_id"), "search_recent_queries", ["user_id"], unique=False)
+    op.create_index(
+        "ix_search_recent_queries_tenant_user_last_used",
+        "search_recent_queries",
+        ["tenant_id", "user_id", "last_used_at"],
+        unique=False,
+    )
+    op.create_index(
+        op.f("ix_search_recent_queries_tenant_id"),
+        "search_recent_queries",
+        ["tenant_id"],
+        unique=False,
+    )
+    op.create_index(
+        op.f("ix_search_recent_queries_user_id"), "search_recent_queries", ["user_id"], unique=False
+    )
 
     op.create_table(
         "search_saved_queries",
@@ -52,11 +67,25 @@ def upgrade() -> None:
         sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True),
         sa.ForeignKeyConstraint(["tenant_id"], ["tenant.id"]),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("tenant_id", "user_id", "name", name="uq_search_saved_queries_scope_name"),
+        sa.UniqueConstraint(
+            "tenant_id", "user_id", "name", name="uq_search_saved_queries_scope_name"
+        ),
     )
-    op.create_index("ix_search_saved_queries_tenant_user_created", "search_saved_queries", ["tenant_id", "user_id", "created_at"], unique=False)
-    op.create_index(op.f("ix_search_saved_queries_tenant_id"), "search_saved_queries", ["tenant_id"], unique=False)
-    op.create_index(op.f("ix_search_saved_queries_user_id"), "search_saved_queries", ["user_id"], unique=False)
+    op.create_index(
+        "ix_search_saved_queries_tenant_user_created",
+        "search_saved_queries",
+        ["tenant_id", "user_id", "created_at"],
+        unique=False,
+    )
+    op.create_index(
+        op.f("ix_search_saved_queries_tenant_id"),
+        "search_saved_queries",
+        ["tenant_id"],
+        unique=False,
+    )
+    op.create_index(
+        op.f("ix_search_saved_queries_user_id"), "search_saved_queries", ["user_id"], unique=False
+    )
 
 
 def downgrade() -> None:
@@ -67,5 +96,7 @@ def downgrade() -> None:
 
     op.drop_index(op.f("ix_search_recent_queries_user_id"), table_name="search_recent_queries")
     op.drop_index(op.f("ix_search_recent_queries_tenant_id"), table_name="search_recent_queries")
-    op.drop_index("ix_search_recent_queries_tenant_user_last_used", table_name="search_recent_queries")
+    op.drop_index(
+        "ix_search_recent_queries_tenant_user_last_used", table_name="search_recent_queries"
+    )
     op.drop_table("search_recent_queries")

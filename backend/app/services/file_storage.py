@@ -105,14 +105,18 @@ class BlobMeta:
 class StorageAdapter(Protocol):
     name: str
 
-    def put(self, key: str, data: bytes, *, content_type: str | None = None, quarantined: bool = False) -> BlobMeta: ...
+    def put(
+        self, key: str, data: bytes, *, content_type: str | None = None, quarantined: bool = False
+    ) -> BlobMeta: ...
     def get(self, key: str) -> bytes: ...
     def head(self, key: str) -> BlobMeta | None: ...
     def has(self, key: str) -> bool: ...
     def delete(self, key: str) -> None: ...
     def clear(self) -> None: ...
     def ensure_ready(self) -> None: ...
-    def mark_quarantined(self, key: str, *, quarantined: bool, reason: str | None = None) -> BlobMeta | None: ...
+    def mark_quarantined(
+        self, key: str, *, quarantined: bool, reason: str | None = None
+    ) -> BlobMeta | None: ...
 
 
 class _MemoryAdapter:
@@ -123,7 +127,9 @@ class _MemoryAdapter:
         self._data: dict[str, Blob] = {}
         self._meta: dict[str, BlobMeta] = {}
 
-    def put(self, key: str, data: bytes, *, content_type: str | None = None, quarantined: bool = False) -> BlobMeta:
+    def put(
+        self, key: str, data: bytes, *, content_type: str | None = None, quarantined: bool = False
+    ) -> BlobMeta:
         now = datetime.now(tz=timezone.utc)
         existing = self._meta.get(key)
         meta = BlobMeta(
@@ -135,7 +141,9 @@ class _MemoryAdapter:
             updated_at=now,
             quarantined=quarantined,
             adapter=self.name,
-            etag=hashlib.md5(data).hexdigest(),  # noqa: S324 - eTag compatibility only
+            etag=hashlib.md5(
+                data, usedforsecurity=False
+            ).hexdigest(),  # noqa: S324  # nosec B324 - S3-compatible eTag, content fingerprint only
             scan_status="quarantined" if quarantined else "clean",
             tags=dict(existing.tags) if existing is not None else {},
             last_validated_mime=content_type,
@@ -173,7 +181,9 @@ class _MemoryAdapter:
     def ensure_ready(self) -> None:
         return None
 
-    def mark_quarantined(self, key: str, *, quarantined: bool, reason: str | None = None) -> BlobMeta | None:
+    def mark_quarantined(
+        self, key: str, *, quarantined: bool, reason: str | None = None
+    ) -> BlobMeta | None:
         with self._lock:
             meta = self._meta.get(key)
             if meta is None:
@@ -197,7 +207,9 @@ class _LocalAdapter:
     def _path(self, key: str) -> Path:
         return self._root / key
 
-    def put(self, key: str, data: bytes, *, content_type: str | None = None, quarantined: bool = False) -> BlobMeta:
+    def put(
+        self, key: str, data: bytes, *, content_type: str | None = None, quarantined: bool = False
+    ) -> BlobMeta:
         path = self._path(key)
         path.parent.mkdir(parents=True, exist_ok=True)
         tmp = path.parent / f".{path.name}.{os.getpid()}.{time.time_ns()}.tmp"
@@ -215,7 +227,9 @@ class _LocalAdapter:
                 updated_at=now,
                 quarantined=quarantined,
                 adapter=self.name,
-                etag=hashlib.md5(data).hexdigest(),  # noqa: S324
+                etag=hashlib.md5(
+                    data, usedforsecurity=False
+                ).hexdigest(),  # noqa: S324  # nosec B324 - S3-compatible eTag
                 scan_status="quarantined" if quarantined else "clean",
                 tags=dict(existing.tags) if existing else {},
                 last_validated_mime=content_type,
@@ -240,7 +254,9 @@ class _LocalAdapter:
                     created_at=now,
                     updated_at=now,
                     adapter=self.name,
-                    etag=hashlib.md5(payload).hexdigest(),  # noqa: S324
+                    etag=hashlib.md5(
+                        payload, usedforsecurity=False
+                    ).hexdigest(),  # noqa: S324  # nosec B324 - S3-compatible eTag
                     scan_status="clean",
                 )
                 self._meta[key] = meta
@@ -264,7 +280,9 @@ class _LocalAdapter:
     def ensure_ready(self) -> None:
         self._root.mkdir(parents=True, exist_ok=True)
 
-    def mark_quarantined(self, key: str, *, quarantined: bool, reason: str | None = None) -> BlobMeta | None:
+    def mark_quarantined(
+        self, key: str, *, quarantined: bool, reason: str | None = None
+    ) -> BlobMeta | None:
         with self._lock:
             meta = self._meta.get(key)
             if meta is None:
@@ -277,19 +295,19 @@ class _LocalAdapter:
             return _clone_blob_meta(meta)
 
 
-
-
 class _S3Adapter:
     name = "s3"
 
     def __init__(self) -> None:
-        from app.domains.files import s3 as s3_domain
+        from app.modules.files import s3 as s3_domain
 
         self._s3 = s3_domain
         self._meta: dict[str, BlobMeta] = {}
         self._lock = threading.RLock()
 
-    def put(self, key: str, data: bytes, *, content_type: str | None = None, quarantined: bool = False) -> BlobMeta:
+    def put(
+        self, key: str, data: bytes, *, content_type: str | None = None, quarantined: bool = False
+    ) -> BlobMeta:
         now = datetime.now(tz=timezone.utc)
         mime = content_type or "application/octet-stream"
         self._s3.ensure_bucket()
@@ -328,7 +346,8 @@ class _S3Adapter:
             meta = BlobMeta(
                 key=key,
                 size=int(remote.get("size") or (cached.size if cached else 0)),
-                content_type=remote.get("content_type") or (cached.content_type if cached else None),
+                content_type=remote.get("content_type")
+                or (cached.content_type if cached else None),
                 sha256=cached.sha256 if cached else "",
                 created_at=cached.created_at if cached else now,
                 updated_at=now,
@@ -337,7 +356,9 @@ class _S3Adapter:
                 etag=remote.get("etag") or (cached.etag if cached else None),
                 scan_status=cached.scan_status if cached else "pending",
                 tags=dict(cached.tags) if cached else {},
-                last_validated_mime=cached.last_validated_mime if cached else remote.get("content_type"),
+                last_validated_mime=(
+                    cached.last_validated_mime if cached else remote.get("content_type")
+                ),
             )
             self._meta[key] = meta
             return _clone_blob_meta(meta)
@@ -356,7 +377,9 @@ class _S3Adapter:
     def ensure_ready(self) -> None:
         self._s3.ensure_bucket()
 
-    def mark_quarantined(self, key: str, *, quarantined: bool, reason: str | None = None) -> BlobMeta | None:
+    def mark_quarantined(
+        self, key: str, *, quarantined: bool, reason: str | None = None
+    ) -> BlobMeta | None:
         with self._lock:
             meta = self._meta.get(key)
             if meta is None:
@@ -378,10 +401,14 @@ class FileStorageService:
     _instance: ClassVar[FileStorageService | None] = None
     _instance_lock: ClassVar[threading.RLock] = threading.RLock()
 
-    def __init__(self, *, adapter: StorageAdapter | None = None, signing_secret: str | None = None) -> None:
+    def __init__(
+        self, *, adapter: StorageAdapter | None = None, signing_secret: str | None = None
+    ) -> None:
         self._settings = get_settings()
         self._adapter = adapter or self._build_adapter()
-        self._signing_secret = (signing_secret or self._settings.secret_key or "change-me").encode("utf-8")
+        self._signing_secret = (signing_secret or self._settings.secret_key or "change-me").encode(
+            "utf-8"
+        )
 
     @staticmethod
     def _ensure_raw_key_is_valid(key: str) -> None:
@@ -392,7 +419,13 @@ class FileStorageService:
             raise ValueError("Storage key must not contain parent directory segments")
         for character in key:
             category = unicodedata.category(character)
-            if ((character != " " and character.isspace()) or category in {"Cc", "Cf", "Cs", "Co", "Cn"}):
+            if (character != " " and character.isspace()) or category in {
+                "Cc",
+                "Cf",
+                "Cs",
+                "Co",
+                "Cn",
+            }:
                 raise ValueError("Storage key must not contain invisible characters")
 
     @classmethod
@@ -424,7 +457,9 @@ class FileStorageService:
                     cls._instance = FileStorageService()
         return cls._instance
 
-    def put(self, key: str, data: bytes, *, content_type: str | None = None, quarantined: bool = False) -> None:
+    def put(
+        self, key: str, data: bytes, *, content_type: str | None = None, quarantined: bool = False
+    ) -> None:
         normalized_key = self._normalize_key(key)
         self._adapter.put(normalized_key, data, content_type=content_type, quarantined=quarantined)
 
@@ -432,12 +467,21 @@ class FileStorageService:
         normalized_key = self._normalize_key(key)
         return self._adapter.get(normalized_key)
 
-    def upload(self, key: str, data: BinaryIO, *, content_type: str | None = None, quarantined: bool = False) -> BlobMeta:
+    def upload(
+        self,
+        key: str,
+        data: BinaryIO,
+        *,
+        content_type: str | None = None,
+        quarantined: bool = False,
+    ) -> BlobMeta:
         payload = data.read()
         if not isinstance(payload, bytes):
             payload = bytes(payload)
         normalized_key = self._normalize_key(key)
-        return self._adapter.put(normalized_key, payload, content_type=content_type, quarantined=quarantined)
+        return self._adapter.put(
+            normalized_key, payload, content_type=content_type, quarantined=quarantined
+        )
 
     def download(self, key: str) -> bytes:
         return self.get(key)
@@ -472,9 +516,13 @@ class FileStorageService:
             handle.write(payload)
             return handle.name
 
-    def mark_quarantined(self, key: str, *, quarantined: bool = True, reason: str | None = None) -> dict[str, object] | None:
+    def mark_quarantined(
+        self, key: str, *, quarantined: bool = True, reason: str | None = None
+    ) -> dict[str, object] | None:
         normalized_key = self._normalize_key(key)
-        meta = self._adapter.mark_quarantined(normalized_key, quarantined=quarantined, reason=reason)
+        meta = self._adapter.mark_quarantined(
+            normalized_key, quarantined=quarantined, reason=reason
+        )
         return None if meta is None else meta.to_dict()
 
     def antivirus_scan_hook_payload(self, key: str) -> dict[str, object]:
@@ -489,7 +537,9 @@ class FileStorageService:
             "quarantined": meta["quarantined"],
         }
 
-    def mime_validation_hook_payload(self, key: str, *, detected_mime: str | None = None) -> dict[str, object]:
+    def mime_validation_hook_payload(
+        self, key: str, *, detected_mime: str | None = None
+    ) -> dict[str, object]:
         meta = self.head(key)
         if meta is None:
             raise KeyError(key)
@@ -500,16 +550,22 @@ class FileStorageService:
             "sha256": meta["sha256"],
         }
 
-    def create_signed_url(self, key: str, *, expires_in: int | None = None, download_name: str | None = None) -> str:
+    def create_signed_url(
+        self, key: str, *, expires_in: int | None = None, download_name: str | None = None
+    ) -> str:
         normalized_key = self._normalize_key(key)
         ttl = int(expires_in or self._settings.presign_download_ttl_seconds)
         if getattr(self._adapter, "name", "") == "s3" and self._settings.s3_backend == "minio":
-            from app.domains.files.s3 import generate_presigned_get_url
+            from app.modules.files.s3 import generate_presigned_get_url
 
             response_headers = {}
             if download_name:
-                response_headers["ResponseContentDisposition"] = f'attachment; filename="{download_name}"'
-            presigned = generate_presigned_get_url(normalized_key, expires_in=ttl, response_headers=response_headers or None)
+                response_headers["ResponseContentDisposition"] = (
+                    f'attachment; filename="{download_name}"'
+                )
+            presigned = generate_presigned_get_url(
+                normalized_key, expires_in=ttl, response_headers=response_headers or None
+            )
             if presigned:
                 return presigned
         expires_at = int((datetime.now(tz=timezone.utc) + timedelta(seconds=ttl)).timestamp())

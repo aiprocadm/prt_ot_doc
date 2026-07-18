@@ -3,11 +3,16 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.api.helpers.etag import (
+    apply_etag_response_headers,
+    build_not_modified_headers,
+    compute_list_etag,
+)
 from app.core.audit_decorator import audit_operation
 from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
@@ -35,12 +40,18 @@ def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> str | No
 
 DepartmentReadAccess = Annotated[
     AccessContext,
-    Depends(abac(_tenant_resource_id, required_roles=_DEPARTMENT_READ_ROLES, action="read departments")),
+    Depends(
+        abac(_tenant_resource_id, required_roles=_DEPARTMENT_READ_ROLES, action="read departments")
+    ),
 ]
 
 DepartmentWriteAccess = Annotated[
     AccessContext,
-    Depends(abac(_tenant_resource_id, required_roles=_DEPARTMENT_WRITE_ROLES, action="manage departments")),
+    Depends(
+        abac(
+            _tenant_resource_id, required_roles=_DEPARTMENT_WRITE_ROLES, action="manage departments"
+        )
+    ),
 ]
 
 
@@ -70,13 +81,15 @@ async def _get_department(session: AsyncSession, tenant: Tenant, department_id: 
 
 @router.get("/departments", response_model=DepartmentPage)
 async def list_departments(
+    request: Request,
+    response: Response,
     tenant: TenantDep,
     session: SessionDep,
     _: DepartmentReadAccess,
     company_id: str | None = Query(default=None, min_length=1, max_length=36),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
-) -> DepartmentPage:
+) -> DepartmentPage | Response:
     TenantContextValidator.ensure_tenant_context(tenant)
 
     stmt = select(Department).where(
@@ -89,6 +102,22 @@ async def list_departments(
     stmt = stmt.order_by(Department.created_at.desc()).offset(offset).limit(limit)
     items = list((await session.execute(stmt)).scalars().all())
     total = await session.scalar(total_stmt)
+    etag = compute_list_etag(
+        tenant_id=str(tenant.id),
+        items=items,
+        scalars=[
+            ("total", int(total or 0)),
+            ("limit", limit),
+            ("offset", offset),
+            ("company", company_id or ""),
+        ],
+    )
+    apply_etag_response_headers(response, etag)
+    if request.headers.get("if-none-match") == etag:
+        return Response(
+            status_code=status.HTTP_304_NOT_MODIFIED,
+            headers=build_not_modified_headers(etag),
+        )
     return DepartmentPage(items=items, total=int(total or 0))
 
 

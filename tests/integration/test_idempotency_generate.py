@@ -7,14 +7,21 @@ from app.modules.pipelines.models import PipelineProfile
 
 
 @pytest.mark.anyio
-async def test_pipeline_run_idempotency_returns_same_job(app_fixture, make_auth_headers, sessionmaker, data_factory) -> None:
+async def test_pipeline_run_idempotency_returns_same_job(
+    app_fixture, make_auth_headers, sessionmaker, data_factory
+) -> None:
     async with sessionmaker() as session:
         tenant = await data_factory.ensure_tenant(session=session)
         profile = PipelineProfile(
             tenant_id=str(tenant.id),
             code="doc_gen_default",
             name="Doc Gen",
-            steps=[{"code":"render_docx"},{"code":"apply_headers"},{"code":"replace"},{"code":"convert_pdf"}],
+            steps=[
+                {"code": "render_docx"},
+                {"code": "apply_headers"},
+                {"code": "replace"},
+                {"code": "convert_pdf"},
+            ],
             limits={"max_parallel": 2},
             is_active=True,
         )

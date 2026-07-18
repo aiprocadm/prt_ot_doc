@@ -24,12 +24,12 @@ from app.core.rate_limit import (
     configure_rate_limiter,
     limiter,
 )
-from app.db.session import dispose_engine
-from app.domains.files import s3
+from app.db.session import aensure_shared_schema, dispose_engine
 from app.middleware.billing_guard import BillingGuardMiddleware
 from app.middleware.global_error_handler import GlobalErrorHandlerMiddleware
 from app.middleware.observability import ObservabilityMiddleware
 from app.middleware.tenant import TenantMiddleware
+from app.modules.files import s3
 from app.services.demo_bootstrap import bootstrap_demo_tenant
 from app.services.dev_bootstrap import bootstrap_admin_user
 
@@ -99,16 +99,33 @@ def _create_lifespan(settings: Settings) -> Callable[[FastAPI], AsyncIterator[No
             extra={
                 "run_mode": settings.app_run_mode,
                 "storage_backend": settings.s3_backend,
-                "storage_root": str(settings.storage_root_path)
-                if settings.s3_backend == "local"
-                else None,
+                "storage_root": (
+                    str(settings.storage_root_path) if settings.s3_backend == "local" else None
+                ),
                 "celery_eager": settings.celery_eager,
                 "redis_enabled": settings.redis_enabled,
                 "settings": settings.redacted(),
             },
         )
         try:
+            # Register cross-base FK resolution so that string-form
+            # ForeignKey("tenant.id") on TenantBaseModel subclasses can resolve
+            # at flush time. Safe to call multiple times; must run before the
+            # first session.flush (bootstrap_demo_tenant below is the first
+            # flush in the lifespan).
+            from app.db.session import register_cross_base_fk_resolution
+
+            register_cross_base_fk_resolution()
             s3.ensure_bucket()
+            # iter-22: provision the shared schema on this loop BEFORE any
+            # session_scope / AsyncSessionLocal call. Without this, the first
+            # implicit ensure_shared_schema(implicit=True) from AsyncSessionLocal
+            # spawns a worker thread + asyncio.run, which seeds the engine's
+            # connection pool with futures bound to that worker loop. When the
+            # worker thread exits and the next access comes from the lifespan
+            # loop, asyncpg raises "Future attached to a different loop" and
+            # bootstrap_demo_tenant fails at _create_tenant_schema.
+            await aensure_shared_schema()
             await bootstrap_admin_user(settings)
             await bootstrap_demo_tenant(settings)
         except Exception:  # pragma: no cover - infrastructure guard
@@ -140,6 +157,7 @@ def _register_metrics_endpoint(app: FastAPI, settings: Settings) -> None:
         )
         return Response(content=payload, media_type=content_type)
 
+
 def _register_idempotency_middleware(app: FastAPI) -> None:
     logger = logging.getLogger("app.idempotency")
 
@@ -156,7 +174,6 @@ def _register_idempotency_middleware(app: FastAPI) -> None:
         except Exception:  # pragma: no cover - defensive logging
             logger.debug("app.idempotency.store_failed", exc_info=True)
         return response
-
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:

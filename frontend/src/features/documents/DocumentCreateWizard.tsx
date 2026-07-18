@@ -57,6 +57,9 @@ export const DocumentCreateWizard = () => {
         if (normalized === "done") {
           listDocuments().catch(() => undefined);
           toast.success("Документ успешно поставлен в реестр.");
+          // Ключ идемпотентности «израсходован» успешной генерацией: ротируем его, иначе
+          // повторный «Запустить генерацию» вернёт ту же задачу, и новый документ не создастся.
+          setIdempotencyKey(createIdempotencyKey());
           window.clearInterval(timer);
         }
         if (normalized === "error") {

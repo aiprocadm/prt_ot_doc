@@ -181,9 +181,7 @@ class TestRenderCalendarIcs:
             range_to=None,
             total=1,
             overdue_count=0,
-            by_source=[
-                CalendarSourceCount(source_type="medical_exam", count=1, overdue_count=0)
-            ],
+            by_source=[CalendarSourceCount(source_type="medical_exam", count=1, overdue_count=0)],
             items=[item],
         )
         text = render_calendar_ics(response, domain="ot.example")
@@ -217,9 +215,7 @@ class TestRenderCalendarIcs:
             range_to=None,
             total=1,
             overdue_count=1,
-            by_source=[
-                CalendarSourceCount(source_type="permit", count=1, overdue_count=1)
-            ],
+            by_source=[CalendarSourceCount(source_type="permit", count=1, overdue_count=1)],
             items=[item],
         )
         text = render_calendar_ics(response)
@@ -269,9 +265,7 @@ class TestRenderCalendarIcs:
             total=1,
             overdue_count=0,
             by_source=[
-                CalendarSourceCount(
-                    source_type="training_session", count=1, overdue_count=0
-                )
+                CalendarSourceCount(source_type="training_session", count=1, overdue_count=0)
             ],
             items=[item],
         )
@@ -317,11 +311,7 @@ class TestRenderCalendarIcs:
             range_to=None,
             total=1,
             overdue_count=0,
-            by_source=[
-                CalendarSourceCount(
-                    source_type="inspection", count=1, overdue_count=0
-                )
-            ],
+            by_source=[CalendarSourceCount(source_type="inspection", count=1, overdue_count=0)],
             items=[item],
         )
         text = render_calendar_ics(response)
@@ -352,9 +342,7 @@ class TestRenderCalendarIcs:
             range_to=None,
             total=1,
             overdue_count=0,
-            by_source=[
-                CalendarSourceCount(source_type="permit", count=1, overdue_count=0)
-            ],
+            by_source=[CalendarSourceCount(source_type="permit", count=1, overdue_count=0)],
             items=[item],
         )
         text = render_calendar_ics(response)
@@ -381,11 +369,7 @@ class TestRenderCalendarIcs:
             range_to=None,
             total=1,
             overdue_count=0,
-            by_source=[
-                CalendarSourceCount(
-                    source_type="ppe_issue", count=1, overdue_count=0
-                )
-            ],
+            by_source=[CalendarSourceCount(source_type="ppe_issue", count=1, overdue_count=0)],
             items=[item],
         )
         text = render_calendar_ics(response)
@@ -414,9 +398,7 @@ class TestRenderCalendarIcs:
             range_to=None,
             total=1,
             overdue_count=0,
-            by_source=[
-                CalendarSourceCount(source_type="permit", count=1, overdue_count=0)
-            ],
+            by_source=[CalendarSourceCount(source_type="permit", count=1, overdue_count=0)],
             items=[item],
         )
         text = render_calendar_ics(response)
@@ -441,9 +423,7 @@ class TestRenderCalendarIcs:
             range_to=None,
             total=1,
             overdue_count=0,
-            by_source=[
-                CalendarSourceCount(source_type="permit", count=1, overdue_count=0)
-            ],
+            by_source=[CalendarSourceCount(source_type="permit", count=1, overdue_count=0)],
             items=[item],
         )
         text = render_calendar_ics(response)
@@ -497,11 +477,7 @@ class TestRenderCalendarIcs:
             range_to=None,
             total=3,
             overdue_count=1,
-            by_source=[
-                CalendarSourceCount(
-                    source_type="medical_exam", count=3, overdue_count=1
-                )
-            ],
+            by_source=[CalendarSourceCount(source_type="medical_exam", count=3, overdue_count=1)],
             items=items,
         )
         text = render_calendar_ics(response)
@@ -531,9 +507,7 @@ class TestCalendarIcsEndpoint:
     ) -> None:
         async with sessionmaker() as session:
             tenant = await data_factory.ensure_tenant(session=session)
-            company = await data_factory.create_company(
-                tenant=tenant, session=session
-            )
+            company = await data_factory.create_company(tenant=tenant, session=session)
             person = await data_factory.create_person(
                 tenant=tenant,
                 company=company,
@@ -555,9 +529,7 @@ class TestCalendarIcsEndpoint:
             await session.commit()
 
         headers = _ics_headers(await make_auth_headers(RoleEnum.ADMIN))
-        response = await async_client.get(
-            f"{API_PREFIX}/calendar/events.ics", headers=headers
-        )
+        response = await async_client.get(f"{API_PREFIX}/calendar/events.ics", headers=headers)
         assert response.status_code == status.HTTP_200_OK, response.text
         # Media type is text/calendar with utf-8 charset.
         ctype = response.headers["content-type"].lower()
@@ -586,9 +558,7 @@ class TestCalendarIcsEndpoint:
             await session.commit()
 
         headers = _ics_headers(await make_auth_headers(RoleEnum.ADMIN))
-        response = await async_client.get(
-            f"{API_PREFIX}/calendar/events.ics", headers=headers
-        )
+        response = await async_client.get(f"{API_PREFIX}/calendar/events.ics", headers=headers)
         assert response.status_code == status.HTTP_200_OK, response.text
         body = response.text
         assert "BEGIN:VEVENT" not in body
@@ -625,9 +595,7 @@ class TestCalendarIcsEndpoint:
             await session.commit()
 
         headers = _ics_headers(await make_auth_headers(RoleEnum.STUDENT))
-        response = await async_client.get(
-            f"{API_PREFIX}/calendar/events.ics", headers=headers
-        )
+        response = await async_client.get(f"{API_PREFIX}/calendar/events.ics", headers=headers)
         assert response.status_code in {
             status.HTTP_401_UNAUTHORIZED,
             status.HTTP_403_FORBIDDEN,

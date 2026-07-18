@@ -2,17 +2,21 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.api.helpers.etag import (
+    apply_etag_response_headers,
+    build_not_modified_headers,
+    compute_list_etag,
+)
 from app.core.audit_decorator import audit_operation
 from app.core.errors import api_problem_detail
 from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
-from app.domains.incidents import append_log_entry, register_incident, update_incident
 from app.models.models import (
     Incident,
     IncidentLog,
@@ -21,6 +25,7 @@ from app.models.models import (
     IncidentType,
     Tenant,
 )
+from app.modules.incidents import append_log_entry, register_incident, update_incident
 from app.schemas.incidents import (
     IncidentCreate,
     IncidentLogCreate,
@@ -47,18 +52,24 @@ def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> str | No
 
 ManagerAccess = Annotated[
     AccessContext,
-    Depends(abac(_tenant_resource_id, required_roles=_INCIDENT_READ_ROLES, action="read incidents")),
+    Depends(
+        abac(_tenant_resource_id, required_roles=_INCIDENT_READ_ROLES, action="read incidents")
+    ),
 ]
 EditorAccess = Annotated[
     AccessContext,
-    Depends(abac(_tenant_resource_id, required_roles=_INCIDENT_WRITE_ROLES, action="manage incidents")),
+    Depends(
+        abac(_tenant_resource_id, required_roles=_INCIDENT_WRITE_ROLES, action="manage incidents")
+    ),
 ]
 
 
 def _incident_bad_request(message: str) -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,
-        detail=api_problem_detail(code="INCIDENT_VALIDATION_ERROR", message=message, error_type="incidents"),
+        detail=api_problem_detail(
+            code="INCIDENT_VALIDATION_ERROR", message=message, error_type="incidents"
+        ),
     )
 
 
@@ -66,7 +77,11 @@ async def _get_incident(session: AsyncSession, tenant: Tenant, incident_id: str)
     stmt = (
         select(Incident)
         .options(selectinload(Incident.participants))
-        .where(Incident.id == incident_id, Incident.tenant_id == tenant.id, Incident.deleted_at.is_(None))
+        .where(
+            Incident.id == incident_id,
+            Incident.tenant_id == tenant.id,
+            Incident.deleted_at.is_(None),
+        )
     )
     record = (await session.execute(stmt)).scalar_one_or_none()
     if record is None:
@@ -90,6 +105,8 @@ def _serialize_incident(instance: Incident, victim_ids: list[str] | None = None)
 
 @router.get("/incidents", response_model=IncidentPage)
 async def list_incidents(
+    request: Request,
+    response: Response,
     tenant: TenantDep,
     session: SessionDep,
     _: ManagerAccess,
@@ -99,11 +116,13 @@ async def list_incidents(
     incident_type: IncidentType | None = Query(default=None),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
-) -> IncidentPage:
+) -> IncidentPage | Response:
     TenantContextValidator.ensure_tenant_context(tenant)
 
-    stmt = select(Incident).options(selectinload(Incident.participants)).where(
-        Incident.tenant_id == tenant.id, Incident.deleted_at.is_(None)
+    stmt = (
+        select(Incident)
+        .options(selectinload(Incident.participants))
+        .where(Incident.tenant_id == tenant.id, Incident.deleted_at.is_(None))
     )
     if company_id:
         stmt = stmt.where(Incident.company_id == company_id)
@@ -116,8 +135,27 @@ async def list_incidents(
 
     total_stmt = select(func.count()).select_from(stmt.subquery())
     stmt = stmt.order_by(Incident.occurred_at.desc()).offset(offset).limit(limit)
-    items = (await session.execute(stmt)).scalars().unique().all()
+    items = list((await session.execute(stmt)).scalars().unique().all())
     total = await session.scalar(total_stmt)
+    etag = compute_list_etag(
+        tenant_id=str(tenant.id),
+        items=items,
+        scalars=[
+            ("total", int(total or 0)),
+            ("limit", limit),
+            ("offset", offset),
+            ("company", company_id or ""),
+            ("site", site_id or ""),
+            ("status", status_filter.value if status_filter else ""),
+            ("type", incident_type.value if incident_type else ""),
+        ],
+    )
+    apply_etag_response_headers(response, etag)
+    if request.headers.get("if-none-match") == etag:
+        return Response(
+            status_code=status.HTTP_304_NOT_MODIFIED,
+            headers=build_not_modified_headers(etag),
+        )
     return IncidentPage(items=[_serialize_incident(item) for item in items], total=int(total or 0))
 
 
@@ -219,7 +257,11 @@ async def patch_incident(
     return _serialize_incident(updated, victim_ids=victim_ids)
 
 
-@router.post("/incidents/{incident_id}/logs", response_model=IncidentLogRead, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/incidents/{incident_id}/logs",
+    response_model=IncidentLogRead,
+    status_code=status.HTTP_201_CREATED,
+)
 @audit_operation("create_log", "incident_log")
 async def add_incident_log(
     incident_id: str,
@@ -249,10 +291,12 @@ async def add_incident_log(
 @router.get("/incidents/{incident_id}/logs", response_model=list[IncidentLogRead])
 async def list_incident_logs(
     incident_id: str,
+    request: Request,
+    response: Response,
     tenant: TenantDep,
     session: SessionDep,
     _: ManagerAccess,
-) -> list[IncidentLogRead]:
+) -> list[IncidentLogRead] | Response:
     TenantContextValidator.ensure_tenant_context(tenant)
 
     incident = await _get_incident(session, tenant, incident_id)
@@ -262,4 +306,15 @@ async def list_incident_logs(
         .order_by(IncidentLog.created_at.asc())
     )
     records = list((await session.execute(stmt)).scalars().all())
+    etag = compute_list_etag(
+        tenant_id=str(tenant.id),
+        items=records,
+        scalars=[("incident", str(incident.id))],
+    )
+    apply_etag_response_headers(response, etag)
+    if request.headers.get("if-none-match") == etag:
+        return Response(
+            status_code=status.HTTP_304_NOT_MODIFIED,
+            headers=build_not_modified_headers(etag),
+        )
     return [IncidentLogRead.model_validate(record) for record in records]

@@ -85,7 +85,6 @@ class PermissionsResponse(BaseModel):
     abac_scopes: dict[str, list[str] | int | None] = Field(default_factory=dict)
 
 
-
 async def _resolve_login_tenant(request: Request) -> Tenant | None:
     try:
         return await get_tenant_record(request)
@@ -93,6 +92,7 @@ async def _resolve_login_tenant(request: Request) -> Tenant | None:
         if exc.status_code in {status.HTTP_400_BAD_REQUEST, status.HTTP_404_NOT_FOUND}:
             return None
         raise
+
 
 def _invalid_credentials() -> HTTPException:
     return HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid email or password")
@@ -255,8 +255,6 @@ async def me(access: AccessContext = Depends(rbac())) -> MeResponse:
     )
 
 
-
-
 @router.get(
     "/me/permissions",
     response_model=PermissionsResponse,
@@ -267,7 +265,13 @@ async def me_permissions(access: AccessContext = Depends(rbac())) -> Permissions
     """Return effective permission codes and ABAC scopes for the authenticated subject."""
 
     context = access.to_auth_context()
-    permissions = sorted({perm.replace(":", ".") for role in context.roles for perm in ROLE_PERMISSIONS.get(role, set())})
+    permissions = sorted(
+        {
+            perm.replace(":", ".")
+            for role in context.roles
+            for perm in ROLE_PERMISSIONS.get(role, set())
+        }
+    )
     return PermissionsResponse(
         roles=context.roles,
         permissions=permissions,

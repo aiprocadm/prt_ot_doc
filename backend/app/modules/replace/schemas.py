@@ -52,11 +52,10 @@ class ReplaceLaunchRequest(BaseModel):
     options: ReplaceOptions = Field(default_factory=ReplaceOptions)
 
 
-
-
 class ReplaceRollbackRequest(BaseModel):
     target_document_version_id: str | None = None
     rollback_to_version_number: int | None = None
+
 
 class ReplaceLaunchResponse(BaseModel):
     job_id: str

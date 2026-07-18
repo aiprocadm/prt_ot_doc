@@ -50,15 +50,23 @@ def assert_safe_http_base_url(
     try:
         ip = ipaddress.ip_address(host)
         if ip.is_private or ip.is_link_local or ip.is_multicast or ip.is_reserved:
-            raise UnsafeIntegrationURLError("Integration base URL must not target a private or link-local address")
+            raise UnsafeIntegrationURLError(
+                "Integration base URL must not target a private or link-local address"
+            )
         if ip.is_loopback and parsed.scheme != "https" and app_env in ("production", "staging"):
             # Loopback over http only in dev/test
-            raise UnsafeIntegrationURLError("Integration base URL must use https in this environment")
+            raise UnsafeIntegrationURLError(
+                "Integration base URL must use https in this environment"
+            )
     except ValueError:
         # Not a literal IP; hostname labels — block obvious numeric private forms
         if re.fullmatch(r"(?:\d{1,3}\.){3}\d{1,3}", host):
-            raise UnsafeIntegrationURLError("Integration base URL must not use ambiguous numeric hosts")
+            raise UnsafeIntegrationURLError(
+                "Integration base URL must not use ambiguous numeric hosts"
+            )
 
     if app_env in ("production", "staging") and parsed.scheme == "http":
         if not (allow_http_localhost and host in ("localhost", "127.0.0.1", "::1")):
-            raise UnsafeIntegrationURLError("Integration base URL must use https in production and staging")
+            raise UnsafeIntegrationURLError(
+                "Integration base URL must use https in production and staging"
+            )

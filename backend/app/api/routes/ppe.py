@@ -5,27 +5,139 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
-from sqlalchemy import func, select
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from sqlalchemy import func, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.exc import StaleDataError
 
 from app.api.dependencies import get_correlation_id, get_session, get_tenant_record
+from app.api.helpers.etag import (
+    apply_etag_response_headers,
+    build_not_modified_headers,
+    compute_list_etag,
+)
 from app.core.audit_decorator import audit_operation
 from app.core.errors import api_problem_detail
+from app.core.feature_flags import is_feature_enabled
 from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
-from app.domains.ppe import issue_ppe_item, list_expiring_issues
-from app.models.ppe_registry import PPEIssue, PPEIssueStatus, PPEItem
+from app.models.models import Person, Position, PPENorm
+from app.models.ppe_registry import (
+    PPEIssue,
+    PPEIssueStatus,
+    PPEItem,
+    PPEStockBatch,
+    PPEStockMovement,
+)
+from app.models.risk import RiskHazard
 from app.models.tenanting import Tenant
+from app.modules.ppe import (
+    build_personal_card_766n,
+    deplete_for_issue,
+    issue_ppe_item,
+    list_expiring_issues,
+    record_movement,
+    replace_issue,
+    return_issue,
+    writeoff_issue,
+)
+from app.modules.ppe.budget import (
+    BudgetNotFound,
+    BudgetPeriodInvalid,
+    compute_budget_actual,
+    create_budget,
+    get_budget,
+    list_budgets,
+    soft_delete_budget,
+    update_budget,
+)
+from app.modules.ppe.inventory import (
+    CountDetailView,
+    CountSummaryView,
+    InventoryCountNotDraft,
+    InventoryCountNotFound,
+    apply_count,
+    cancel_count,
+    create_count,
+    get_count_detail,
+    list_counts,
+    set_line_counts,
+)
+from app.modules.ppe.lifecycle import PPETransitionError, validate_transition
+from app.modules.ppe.stock import (
+    KIND_TRANSFER,
+    InsufficientStockError,
+    StockBatchNotFound,
+    build_reorder_draft,
+    compute_shortages,
+    transfer_stock,
+)
+from app.modules.ppe.suppliers import (
+    SupplierNameConflict,
+    SupplierNotFound,
+    create_supplier,
+    get_supplier,
+    list_suppliers,
+    soft_delete_supplier,
+    update_supplier,
+)
 from app.schemas.ppe import (
+    PPEBudgetCategoryActualRead,
+    PPECardRead,
+    PPECardRequiredLine,
+    PPECardTimelineEvent,
+    PPEInventoryCountCreate,
+    PPEInventoryCountDetail,
+    PPEInventoryCountLineRead,
+    PPEInventoryCountLinesUpdate,
+    PPEInventoryCountPage,
+    PPEInventoryCountRead,
     PPEIssueCreate,
     PPEIssuePage,
     PPEIssueRead,
+    PPEIssueReplaceRequest,
+    PPEIssueReturnRequest,
     PPEIssueUpdate,
+    PPEIssueWriteoffRequest,
     PPEItemCreate,
     PPEItemPage,
     PPEItemRead,
     PPEItemUpdate,
+    PPENormCreate,
+    PPENormPage,
+    PPENormRead,
+    PPENormUpdate,
+    PPEReorderDraftRead,
+    PPEReorderGroupRead,
+    PPEReorderLineRead,
+    PPESafetyBudgetCreate,
+    PPESafetyBudgetDetail,
+    PPESafetyBudgetPage,
+    PPESafetyBudgetRead,
+    PPESafetyBudgetUpdate,
+    PPESizesRead,
+    PPESizesUpdate,
+    PPEStockBatchCreate,
+    PPEStockBatchPage,
+    PPEStockBatchRead,
+    PPEStockBatchUpdate,
+    PPEStockLevelByLocationPage,
+    PPEStockLevelByLocationRead,
+    PPEStockLevelPage,
+    PPEStockLevelRead,
+    PPEStockMovementCreate,
+    PPEStockMovementPage,
+    PPEStockMovementRead,
+    PPEStockShortagePage,
+    PPEStockShortageRead,
+    PPEStockTransferCreate,
+    PPEStockTransferPage,
+    PPEStockTransferRead,
+    PPESupplierCreate,
+    PPESupplierPage,
+    PPESupplierRead,
+    PPESupplierUpdate,
 )
 from app.services.events import EventType
 from app.services.outbox import OutboxService
@@ -59,6 +171,33 @@ def _ppe_bad_request(message: str) -> HTTPException:
     )
 
 
+def _ppe_conflict(message: str) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail=api_problem_detail(
+            code="PPE_INVENTORY_COUNT_CONFLICT", message=message, error_type="ppe"
+        ),
+    )
+
+
+def _ppe_supplier_conflict(message: str) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail=api_problem_detail(code="PPE_SUPPLIER_CONFLICT", message=message, error_type="ppe"),
+    )
+
+
+def _transition_conflict(exc: PPETransitionError) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail=api_problem_detail(
+            code="PPE_TRANSITION_INVALID",
+            message=str(exc),
+            error_type="ppe",
+        ),
+    )
+
+
 async def _get_item(session: AsyncSession, tenant: Tenant, item_id: str) -> PPEItem:
     stmt = select(PPEItem).where(
         PPEItem.id == item_id,
@@ -69,6 +208,13 @@ async def _get_item(session: AsyncSession, tenant: Tenant, item_id: str) -> PPEI
     if item is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "PPE item not found")
     return item
+
+
+async def _require_supplier(session: AsyncSession, tenant: Tenant, supplier_id: str) -> None:
+    try:
+        await get_supplier(session, tenant.id, supplier_id)
+    except SupplierNotFound as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "PPE supplier not found") from exc
 
 
 async def _get_issue(session: AsyncSession, tenant: Tenant, issue_id: str) -> PPEIssue:
@@ -93,12 +239,14 @@ def _issue_schema(issue: PPEIssue) -> PPEIssueRead:
 
 @router.get("/items", response_model=PPEItemPage)
 async def list_items(
+    request: Request,
+    response: Response,
     tenant: TenantDep,
     session: SessionDep,
     access: ManagerAccess,
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
-) -> PPEItemPage:
+) -> PPEItemPage | Response:
     TenantContextValidator.ensure_tenant_context(tenant)
 
     stmt = (
@@ -108,14 +256,23 @@ async def list_items(
         .limit(limit)
         .offset(offset)
     )
-    items = (await session.execute(stmt)).scalars().all()
+    items = list((await session.execute(stmt)).scalars().all())
     total = (
         await session.execute(
-            select(func.count()).where(
-                PPEItem.tenant_id == tenant.id, PPEItem.deleted_at.is_(None)
-            )
+            select(func.count()).where(PPEItem.tenant_id == tenant.id, PPEItem.deleted_at.is_(None))
         )
     ).scalar_one()
+    etag = compute_list_etag(
+        tenant_id=str(tenant.id),
+        items=items,
+        scalars=[("total", int(total or 0)), ("limit", limit), ("offset", offset)],
+    )
+    apply_etag_response_headers(response, etag)
+    if request.headers.get("if-none-match") == etag:
+        return Response(
+            status_code=status.HTTP_304_NOT_MODIFIED,
+            headers=build_not_modified_headers(etag),
+        )
     return PPEItemPage(items=[_item_schema(item) for item in items], total=total)
 
 
@@ -129,6 +286,9 @@ async def create_item(
 ) -> PPEItemRead:
     TenantContextValidator.ensure_tenant_context(tenant)
 
+    if payload.preferred_supplier_id is not None:
+        await _require_supplier(session, tenant, payload.preferred_supplier_id)
+
     item = PPEItem(
         tenant_id=tenant.id,
         name=payload.name,
@@ -136,6 +296,8 @@ async def create_item(
         category=payload.category,
         description=payload.description,
         default_wear_days=payload.default_wear_days,
+        min_stock=payload.min_stock,
+        preferred_supplier_id=payload.preferred_supplier_id,
         metadata_json=payload.metadata_json,
     )
     session.add(item)
@@ -145,8 +307,13 @@ async def create_item(
 
 
 @router.get("/items/{item_id}", response_model=PPEItemRead)
-async def get_item(item_id: str, tenant: TenantDep, session: SessionDep, access: ManagerAccess,
-    correlation_id: str = Depends(get_correlation_id)) -> PPEItemRead:
+async def get_item(
+    item_id: str,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: ManagerAccess,
+    correlation_id: str = Depends(get_correlation_id),
+) -> PPEItemRead:
     TenantContextValidator.ensure_tenant_context(tenant)
 
     item = await _get_item(session, tenant, item_id)
@@ -165,7 +332,10 @@ async def update_item(
     TenantContextValidator.ensure_tenant_context(tenant)
 
     item = await _get_item(session, tenant, item_id)
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    updates = payload.model_dump(exclude_unset=True)
+    if updates.get("preferred_supplier_id") is not None:
+        await _require_supplier(session, tenant, updates["preferred_supplier_id"])
+    for field, value in updates.items():
         setattr(item, field, value)
     await session.flush()
     await session.refresh(item)
@@ -186,8 +356,211 @@ async def delete_item(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
+def _norm_schema(norm: PPENorm) -> PPENormRead:
+    return PPENormRead.model_validate(norm)
+
+
+async def _get_norm(session: AsyncSession, tenant: Tenant, norm_id: str) -> PPENorm:
+    stmt = select(PPENorm).where(PPENorm.id == norm_id, PPENorm.tenant_id == tenant.id)
+    norm = (await session.execute(stmt)).scalar_one_or_none()
+    if norm is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "PPE norm not found")
+    return norm
+
+
+async def _check_norm_refs(
+    session: AsyncSession, tenant: Tenant, *, position_id: str, hazard_id: str, item_id: str
+) -> PPEItem:
+    position = (
+        await session.execute(
+            select(Position).where(
+                Position.id == position_id,
+                Position.tenant_id == tenant.id,
+                Position.deleted_at.is_(None),
+            )
+        )
+    ).scalar_one_or_none()
+    if position is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Position not found")
+    hazard = (
+        await session.execute(
+            select(RiskHazard).where(
+                RiskHazard.id == hazard_id,
+                RiskHazard.tenant_id == tenant.id,
+            )
+        )
+    ).scalar_one_or_none()
+    if hazard is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Hazard not found")
+    return await _get_item(session, tenant, item_id)
+
+
+def _norm_duplicate_conflict() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail=api_problem_detail(
+            code="PPE_NORM_DUPLICATE",
+            message="A norm for this position/hazard/item already exists",
+            error_type="ppe",
+        ),
+    )
+
+
+@router.get("/norms", response_model=PPENormPage)
+async def list_norms(
+    request: Request,
+    response: Response,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: ManagerAccess,
+    position_id: str | None = None,
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+) -> PPENormPage | Response:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
+    stmt = select(PPENorm).where(PPENorm.tenant_id == tenant.id)
+    count_stmt = select(func.count()).where(PPENorm.tenant_id == tenant.id)
+    if position_id:
+        stmt = stmt.where(PPENorm.position_id == position_id)
+        count_stmt = count_stmt.where(PPENorm.position_id == position_id)
+    stmt = stmt.order_by(PPENorm.item_name.asc()).limit(limit).offset(offset)
+    norms = list((await session.execute(stmt)).scalars().all())
+    total = (await session.execute(count_stmt)).scalar_one()
+    etag = compute_list_etag(
+        tenant_id=str(tenant.id),
+        items=norms,
+        scalars=[
+            ("total", int(total or 0)),
+            ("limit", limit),
+            ("offset", offset),
+            ("position", position_id or ""),
+        ],
+    )
+    apply_etag_response_headers(response, etag)
+    if request.headers.get("if-none-match") == etag:
+        return Response(
+            status_code=status.HTTP_304_NOT_MODIFIED,
+            headers=build_not_modified_headers(etag),
+        )
+    return PPENormPage(items=[_norm_schema(n) for n in norms], total=total)
+
+
+@router.post("/norms", response_model=PPENormRead, status_code=status.HTTP_201_CREATED)
+@audit_operation("create", "ppe_norm")
+async def create_norm(
+    payload: PPENormCreate,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: EditorAccess,
+) -> PPENormRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
+    item = await _check_norm_refs(
+        session,
+        tenant,
+        position_id=payload.position_id,
+        hazard_id=payload.hazard_id,
+        item_id=payload.item_id,
+    )
+    existing = (
+        (
+            await session.execute(
+                select(PPENorm).where(
+                    PPENorm.tenant_id == tenant.id,
+                    PPENorm.position_id == payload.position_id,
+                    PPENorm.hazard_id == payload.hazard_id,
+                    or_(PPENorm.item_name == item.name, PPENorm.item_id == item.id),
+                )
+            )
+        )
+        .scalars()
+        .first()
+    )
+    if existing is not None:
+        raise _norm_duplicate_conflict()
+
+    norm = PPENorm(
+        tenant_id=tenant.id,
+        position_id=payload.position_id,
+        hazard_id=payload.hazard_id,
+        item_id=item.id,
+        item_name=item.name,  # денормализация: ключ сопоставления для legacy-строк
+        quantity=payload.quantity,
+        interval_days=payload.interval_days,
+    )
+    session.add(norm)
+    await session.flush()
+    await session.refresh(norm)
+    return _norm_schema(norm)
+
+
+@router.get("/norms/{norm_id}", response_model=PPENormRead)
+async def get_norm(
+    norm_id: str, tenant: TenantDep, session: SessionDep, access: ManagerAccess
+) -> PPENormRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    return _norm_schema(await _get_norm(session, tenant, norm_id))
+
+
+@router.patch("/norms/{norm_id}", response_model=PPENormRead)
+@audit_operation("update", "ppe_norm")
+async def update_norm(
+    norm_id: str,
+    payload: PPENormUpdate,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: EditorAccess,
+) -> PPENormRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
+    norm = await _get_norm(session, tenant, norm_id)
+    updates = payload.model_dump(exclude_unset=True)
+    new_item_id = updates.pop("item_id", None)
+    if new_item_id is not None:
+        item = await _get_item(session, tenant, new_item_id)
+        dup = (
+            (
+                await session.execute(
+                    select(PPENorm).where(
+                        PPENorm.tenant_id == tenant.id,
+                        PPENorm.position_id == norm.position_id,
+                        PPENorm.hazard_id == norm.hazard_id,
+                        or_(PPENorm.item_name == item.name, PPENorm.item_id == item.id),
+                        PPENorm.id != norm.id,
+                    )
+                )
+            )
+            .scalars()
+            .first()
+        )
+        if dup is not None:
+            raise _norm_duplicate_conflict()
+        norm.item_id = item.id
+        norm.item_name = item.name
+    for field, value in updates.items():
+        setattr(norm, field, value)
+    await session.flush()
+    await session.refresh(norm)
+    return _norm_schema(norm)
+
+
+@router.delete("/norms/{norm_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
+@audit_operation("delete", "ppe_norm")
+async def delete_norm(
+    norm_id: str, tenant: TenantDep, session: SessionDep, access: EditorAccess
+) -> None:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    norm = await _get_norm(session, tenant, norm_id)
+    await session.delete(norm)  # PPENorm has no SoftDeleteMixin — hard delete
+    await session.flush()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 @router.get("/issues", response_model=PPEIssuePage)
 async def list_issues(
+    request: Request,
+    response: Response,
     tenant: TenantDep,
     session: SessionDep,
     access: ManagerAccess,
@@ -195,7 +568,7 @@ async def list_issues(
     active_only: bool = False,
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
-) -> PPEIssuePage:
+) -> PPEIssuePage | Response:
     TenantContextValidator.ensure_tenant_context(tenant)
 
     stmt = select(PPEIssue).where(PPEIssue.tenant_id == tenant.id, PPEIssue.deleted_at.is_(None))
@@ -204,7 +577,7 @@ async def list_issues(
     if active_only:
         stmt = stmt.where(PPEIssue.status == PPEIssueStatus.ISSUED)
     stmt = stmt.order_by(PPEIssue.issued_at.desc()).limit(limit).offset(offset)
-    issues = (await session.execute(stmt)).scalars().all()
+    issues = list((await session.execute(stmt)).scalars().all())
     count_stmt = select(func.count()).where(
         PPEIssue.tenant_id == tenant.id,
         PPEIssue.deleted_at.is_(None),
@@ -214,6 +587,23 @@ async def list_issues(
     if active_only:
         count_stmt = count_stmt.where(PPEIssue.status == PPEIssueStatus.ISSUED)
     total = (await session.execute(count_stmt)).scalar_one()
+    etag = compute_list_etag(
+        tenant_id=str(tenant.id),
+        items=issues,
+        scalars=[
+            ("total", int(total or 0)),
+            ("limit", limit),
+            ("offset", offset),
+            ("person", person_id or ""),
+            ("active_only", "1" if active_only else "0"),
+        ],
+    )
+    apply_etag_response_headers(response, etag)
+    if request.headers.get("if-none-match") == etag:
+        return Response(
+            status_code=status.HTTP_304_NOT_MODIFIED,
+            headers=build_not_modified_headers(etag),
+        )
     return PPEIssuePage(items=[_issue_schema(item) for item in issues], total=total)
 
 
@@ -250,9 +640,27 @@ async def create_issue(
             issued_at=payload.issued_at,
             wear_days=payload.wear_days,
             expires_at=payload.expires_at,
+            certificate_no=payload.certificate_no,
+            wear_percent=payload.wear_percent,
+            signature_doc_ref=payload.signature_doc_ref,
         )
     except ValueError as exc:
         raise _ppe_bad_request(str(exc)) from exc
+
+    try:
+        await deplete_for_issue(
+            session,
+            tenant_id=str(tenant.id),
+            item_id=issue.item_id,
+            quantity=issue.quantity,
+            batch_id=payload.batch_id,
+            ref_id=issue.id,
+        )
+    except StockBatchNotFound as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
+    except InsufficientStockError as exc:
+        raise _ppe_bad_request(str(exc)) from exc
+
     outbox = OutboxService(session)
     await outbox.enqueue(
         tenant_id=str(tenant.id),
@@ -267,10 +675,161 @@ async def create_issue(
             "quantity": issue.quantity,
             "issued_at": issue.issued_at,
             "expires_at": issue.expires_at,
-            "status": issue.status.value,
+            "status": issue.status,
         },
     )
     return _issue_schema(issue)
+
+
+@router.post("/issues/{issue_id}/return", response_model=PPEIssueRead)
+@audit_operation("update", "ppe_issue")
+async def return_issue_endpoint(
+    issue_id: str,
+    payload: PPEIssueReturnRequest,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: EditorAccess,
+) -> PPEIssueRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    try:
+        issue = await return_issue(
+            session,
+            tenant_id=tenant.id,
+            issue_id=issue_id,
+            returned_at=payload.returned_at,
+            return_wear_percent=payload.return_wear_percent,
+            signature_doc_ref=payload.signature_doc_ref,
+        )
+    except PPETransitionError as exc:
+        raise _transition_conflict(exc) from exc
+    if issue is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "PPE issue not found")
+    outbox = OutboxService(session)
+    await outbox.enqueue(
+        tenant_id=str(tenant.id),
+        event_type=EventType.PPE_RETURNED.value,
+        payload={
+            "tenant_id": str(tenant.id),
+            "actor_id": access.user.id if access else None,
+            "occurred_at": issue.returned_at,
+            "ppe_issue_id": issue.id,
+            "person_id": issue.person_id,
+            "item_id": issue.item_id,
+            "quantity": issue.quantity,
+            "returned_at": issue.returned_at,
+            "status": issue.status,
+        },
+    )
+    return _issue_schema(issue)
+
+
+@router.post("/issues/{issue_id}/writeoff", response_model=PPEIssueRead)
+@audit_operation("update", "ppe_issue")
+async def writeoff_issue_endpoint(
+    issue_id: str,
+    payload: PPEIssueWriteoffRequest,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: EditorAccess,
+) -> PPEIssueRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    try:
+        issue = await writeoff_issue(
+            session,
+            tenant_id=tenant.id,
+            issue_id=issue_id,
+            reason=payload.writeoff_reason,
+        )
+    except PPETransitionError as exc:
+        raise _transition_conflict(exc) from exc
+    if issue is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "PPE issue not found")
+    outbox = OutboxService(session)
+    await outbox.enqueue(
+        tenant_id=str(tenant.id),
+        event_type=EventType.PPE_WRITTEN_OFF.value,
+        payload={
+            "tenant_id": str(tenant.id),
+            "actor_id": access.user.id if access else None,
+            "occurred_at": datetime.now(timezone.utc),
+            "ppe_issue_id": issue.id,
+            "person_id": issue.person_id,
+            "item_id": issue.item_id,
+            "quantity": issue.quantity,
+            "reason": issue.writeoff_reason,
+            "status": issue.status,
+        },
+    )
+    return _issue_schema(issue)
+
+
+@router.post(
+    "/issues/{issue_id}/replace",
+    response_model=PPEIssueRead,
+    status_code=status.HTTP_201_CREATED,
+)
+@audit_operation("update", "ppe_issue")
+async def replace_issue_endpoint(
+    issue_id: str,
+    payload: PPEIssueReplaceRequest,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: EditorAccess,
+) -> PPEIssueRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    try:
+        result = await replace_issue(
+            session,
+            tenant_id=tenant.id,
+            issue_id=issue_id,
+            item_id=payload.item_id,
+            quantity=payload.quantity,
+            wear_days=payload.wear_days,
+            expires_at=payload.expires_at,
+            certificate_no=payload.certificate_no,
+            wear_percent=payload.wear_percent,
+            signature_doc_ref=payload.signature_doc_ref,
+        )
+    except PPETransitionError as exc:
+        raise _transition_conflict(exc) from exc
+    except ValueError as exc:
+        raise _ppe_bad_request(str(exc)) from exc
+    if result is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "PPE issue not found")
+    _old, new_issue = result
+
+    try:
+        await deplete_for_issue(
+            session,
+            tenant_id=str(tenant.id),
+            item_id=new_issue.item_id,
+            quantity=new_issue.quantity,
+            batch_id=payload.batch_id,
+            ref_id=new_issue.id,
+        )
+    except StockBatchNotFound as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
+    except InsufficientStockError as exc:
+        raise _ppe_bad_request(str(exc)) from exc
+
+    outbox = OutboxService(session)
+    await outbox.enqueue(
+        tenant_id=str(tenant.id),
+        event_type=EventType.PPE_ISSUED.value,
+        payload={
+            "tenant_id": str(tenant.id),
+            "actor_id": access.user.id if access else None,
+            "occurred_at": new_issue.issued_at,
+            "ppe_issue_id": new_issue.id,
+            "person_id": new_issue.person_id,
+            "item_id": new_issue.item_id,
+            "quantity": new_issue.quantity,
+            "issued_at": new_issue.issued_at,
+            "expires_at": new_issue.expires_at,
+            "status": new_issue.status,
+        },
+    )
+    return _issue_schema(new_issue)
 
 
 @router.get("/issues/{issue_id}", response_model=PPEIssueRead)
@@ -299,6 +858,14 @@ async def update_issue(
     issue = await _get_issue(session, tenant, issue_id)
     previous_status = issue.status
     updates = payload.model_dump(exclude_unset=True)
+    if isinstance(updates.get("status"), PPEIssueStatus):
+        updates["status"] = updates["status"].value
+    new_status = updates.get("status")
+    if new_status is not None and new_status != issue.status:
+        try:
+            validate_transition(str(issue.status), str(new_status))
+        except PPETransitionError as exc:
+            raise _transition_conflict(exc) from exc
     for field, value in updates.items():
         setattr(issue, field, value)
     if issue.status == PPEIssueStatus.RETURNED and issue.returned_at is None:
@@ -319,7 +886,1225 @@ async def update_issue(
                 "item_id": issue.item_id,
                 "quantity": issue.quantity,
                 "returned_at": issue.returned_at or datetime.now(timezone.utc),
-                "status": issue.status.value,
+                "status": issue.status,
             },
         )
     return _issue_schema(issue)
+
+
+# --- PPE warehouse (stock) pilot feature gate (W-A / TZ-3.2-V11-01) ---------
+# The /ppe/stock/* endpoints sit behind the per-tenant ``warehouse`` pilot flag
+# (docs/FEATURE_FLAGS.md). Default-on: a tenant only loses access by storing
+# FeatureEnablement(on=False) for Feature(code="warehouse"). Disabled tenants
+# get 404 (feature stays invisible) rather than 403.
+_WAREHOUSE_FEATURE_CODE = "warehouse"
+
+
+async def require_warehouse_feature(tenant: TenantDep, session: SessionDep) -> None:
+    if not await is_feature_enabled(session, str(tenant.id), _WAREHOUSE_FEATURE_CODE):
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            "PPE warehouse feature is not enabled for this tenant",
+        )
+
+
+WarehouseFeatureGate = Depends(require_warehouse_feature)
+
+
+# --- PPE supplier directory (P10-06) ----------------------------------------
+
+
+@router.post(
+    "/suppliers",
+    response_model=PPESupplierRead,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[WarehouseFeatureGate],
+)
+@audit_operation("create", "ppe_supplier")
+async def create_supplier_endpoint(
+    payload: PPESupplierCreate,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: EditorAccess,
+) -> PPESupplierRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    try:
+        sup = await create_supplier(
+            session,
+            tenant_id=tenant.id,
+            name=payload.name,
+            inn=payload.inn,
+            contact_email=payload.contact_email,
+            contact_phone=payload.contact_phone,
+        )
+    except SupplierNameConflict as exc:
+        raise _ppe_supplier_conflict(str(exc)) from exc
+    return PPESupplierRead.model_validate(sup)
+
+
+@router.get(
+    "/suppliers",
+    response_model=PPESupplierPage,
+    dependencies=[WarehouseFeatureGate],
+)
+async def list_suppliers_endpoint(
+    request: Request,
+    response: Response,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: ManagerAccess,
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+) -> PPESupplierPage | Response:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    items, total = await list_suppliers(session, tenant.id, limit=limit, offset=offset)
+    etag = compute_list_etag(
+        tenant_id=str(tenant.id),
+        items=items,
+        scalars=[("total", total), ("limit", limit), ("offset", offset)],
+    )
+    apply_etag_response_headers(response, etag)
+    if request.headers.get("if-none-match") == etag:
+        return Response(
+            status_code=status.HTTP_304_NOT_MODIFIED,
+            headers=build_not_modified_headers(etag),
+        )
+    return PPESupplierPage(items=[PPESupplierRead.model_validate(s) for s in items], total=total)
+
+
+@router.get(
+    "/suppliers/{supplier_id}",
+    response_model=PPESupplierRead,
+    dependencies=[WarehouseFeatureGate],
+)
+async def get_supplier_endpoint(
+    supplier_id: str,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: ManagerAccess,
+) -> PPESupplierRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    try:
+        sup = await get_supplier(session, tenant.id, supplier_id)
+    except SupplierNotFound as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "PPE supplier not found") from exc
+    return PPESupplierRead.model_validate(sup)
+
+
+@router.patch(
+    "/suppliers/{supplier_id}",
+    response_model=PPESupplierRead,
+    dependencies=[WarehouseFeatureGate],
+)
+@audit_operation("update", "ppe_supplier")
+async def update_supplier_endpoint(
+    supplier_id: str,
+    payload: PPESupplierUpdate,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: EditorAccess,
+) -> PPESupplierRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    try:
+        sup = await update_supplier(
+            session, tenant.id, supplier_id, **payload.model_dump(exclude_unset=True)
+        )
+    except SupplierNotFound as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "PPE supplier not found") from exc
+    except SupplierNameConflict as exc:
+        raise _ppe_supplier_conflict(str(exc)) from exc
+    return PPESupplierRead.model_validate(sup)
+
+
+@router.delete(
+    "/suppliers/{supplier_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_model=None,
+    dependencies=[WarehouseFeatureGate],
+)
+@audit_operation("delete", "ppe_supplier")
+async def delete_supplier_endpoint(
+    supplier_id: str,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: EditorAccess,
+) -> None:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    try:
+        await soft_delete_supplier(session, tenant.id, supplier_id)
+    except SupplierNotFound as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "PPE supplier not found") from exc
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# --- PPE safety budget (P10-06 §12.4, СИЗ scope) ----------------------------
+
+
+@router.post(
+    "/budgets",
+    response_model=PPESafetyBudgetRead,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[WarehouseFeatureGate],
+)
+@audit_operation("create", "ppe_safety_budget")
+async def create_budget_endpoint(
+    payload: PPESafetyBudgetCreate,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: EditorAccess,
+) -> PPESafetyBudgetRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    budget = await create_budget(
+        session,
+        tenant_id=tenant.id,
+        name=payload.name,
+        period_start=payload.period_start,
+        period_end=payload.period_end,
+        planned_amount=payload.planned_amount,
+        notes=payload.notes,
+    )
+    return PPESafetyBudgetRead.model_validate(budget)
+
+
+@router.get(
+    "/budgets",
+    response_model=PPESafetyBudgetPage,
+    dependencies=[WarehouseFeatureGate],
+)
+async def list_budgets_endpoint(
+    request: Request,
+    response: Response,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: ManagerAccess,
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+) -> PPESafetyBudgetPage | Response:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    items, total = await list_budgets(session, tenant.id, limit=limit, offset=offset)
+    etag = compute_list_etag(
+        tenant_id=str(tenant.id),
+        items=items,
+        scalars=[("total", total), ("limit", limit), ("offset", offset)],
+    )
+    apply_etag_response_headers(response, etag)
+    if request.headers.get("if-none-match") == etag:
+        return Response(
+            status_code=status.HTTP_304_NOT_MODIFIED,
+            headers=build_not_modified_headers(etag),
+        )
+    return PPESafetyBudgetPage(
+        items=[PPESafetyBudgetRead.model_validate(b) for b in items], total=total
+    )
+
+
+@router.get(
+    "/budgets/{budget_id}",
+    response_model=PPESafetyBudgetDetail,
+    dependencies=[WarehouseFeatureGate],
+)
+async def get_budget_endpoint(
+    budget_id: str,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: ManagerAccess,
+) -> PPESafetyBudgetDetail:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    try:
+        budget = await get_budget(session, tenant.id, budget_id)
+    except BudgetNotFound as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "PPE safety budget not found") from exc
+    actual = await compute_budget_actual(session, tenant.id, budget.period_start, budget.period_end)
+    base = PPESafetyBudgetRead.model_validate(budget)
+    return PPESafetyBudgetDetail(
+        **base.model_dump(),
+        actual_total=actual.actual_total,
+        remaining=float(base.planned_amount) - actual.actual_total,
+        by_category=[
+            PPEBudgetCategoryActualRead(category=c.category, amount=c.amount)
+            for c in actual.by_category
+        ],
+        priced_receipt_count=actual.priced_receipt_count,
+        unpriced_receipt_count=actual.unpriced_receipt_count,
+    )
+
+
+@router.patch(
+    "/budgets/{budget_id}",
+    response_model=PPESafetyBudgetRead,
+    dependencies=[WarehouseFeatureGate],
+)
+@audit_operation("update", "ppe_safety_budget")
+async def update_budget_endpoint(
+    budget_id: str,
+    payload: PPESafetyBudgetUpdate,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: EditorAccess,
+) -> PPESafetyBudgetRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    try:
+        budget = await update_budget(
+            session, tenant.id, budget_id, **payload.model_dump(exclude_unset=True)
+        )
+    except BudgetNotFound as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "PPE safety budget not found") from exc
+    except BudgetPeriodInvalid as exc:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY, "period_end must be >= period_start"
+        ) from exc
+    return PPESafetyBudgetRead.model_validate(budget)
+
+
+@router.delete(
+    "/budgets/{budget_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_model=None,
+    dependencies=[WarehouseFeatureGate],
+)
+@audit_operation("delete", "ppe_safety_budget")
+async def delete_budget_endpoint(
+    budget_id: str,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: EditorAccess,
+) -> None:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    try:
+        await soft_delete_budget(session, tenant.id, budget_id)
+    except BudgetNotFound as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "PPE safety budget not found") from exc
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+async def _get_batch(session: AsyncSession, tenant: Tenant, batch_id: str) -> PPEStockBatch:
+    stmt = select(PPEStockBatch).where(
+        PPEStockBatch.id == batch_id,
+        PPEStockBatch.tenant_id == tenant.id,
+        PPEStockBatch.deleted_at.is_(None),
+    )
+    batch = (await session.execute(stmt)).scalar_one_or_none()
+    if batch is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "PPE stock batch not found")
+    return batch
+
+
+@router.get(
+    "/stock/batches",
+    response_model=PPEStockBatchPage,
+    dependencies=[WarehouseFeatureGate],
+)
+async def list_stock_batches(
+    request: Request,
+    response: Response,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: ManagerAccess,
+    item_id: str | None = None,
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+) -> PPEStockBatchPage | Response:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
+    stmt = select(PPEStockBatch).where(
+        PPEStockBatch.tenant_id == tenant.id, PPEStockBatch.deleted_at.is_(None)
+    )
+    if item_id:
+        stmt = stmt.where(PPEStockBatch.item_id == item_id)
+    stmt = stmt.order_by(PPEStockBatch.batch_no.asc()).limit(limit).offset(offset)
+    batches = list((await session.execute(stmt)).scalars().all())
+
+    count_stmt = select(func.count()).where(
+        PPEStockBatch.tenant_id == tenant.id, PPEStockBatch.deleted_at.is_(None)
+    )
+    if item_id:
+        count_stmt = count_stmt.where(PPEStockBatch.item_id == item_id)
+    total = (await session.execute(count_stmt)).scalar_one()
+
+    etag = compute_list_etag(
+        tenant_id=str(tenant.id),
+        items=batches,
+        scalars=[
+            ("total", int(total or 0)),
+            ("limit", limit),
+            ("offset", offset),
+            ("item", item_id or ""),
+        ],
+    )
+    apply_etag_response_headers(response, etag)
+    if request.headers.get("if-none-match") == etag:
+        return Response(
+            status_code=status.HTTP_304_NOT_MODIFIED,
+            headers=build_not_modified_headers(etag),
+        )
+    return PPEStockBatchPage(
+        items=[PPEStockBatchRead.model_validate(b) for b in batches], total=total
+    )
+
+
+@router.post(
+    "/stock/batches",
+    response_model=PPEStockBatchRead,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[WarehouseFeatureGate],
+)
+@audit_operation("create", "ppe_stock_batch")
+async def create_stock_batch(
+    payload: PPEStockBatchCreate,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: EditorAccess,
+) -> PPEStockBatchRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
+    await _get_item(session, tenant, payload.item_id)
+
+    if payload.supplier_id is not None:
+        await _require_supplier(session, tenant, payload.supplier_id)
+
+    batch = PPEStockBatch(
+        tenant_id=tenant.id,
+        item_id=payload.item_id,
+        batch_no=payload.batch_no,
+        quantity=0,
+        received_at=payload.received_at,
+        certificate_no=payload.certificate_no,
+        certificate_expires_at=payload.certificate_expires_at,
+        location=payload.location,
+        supplier_id=payload.supplier_id,
+        unit_cost=payload.unit_cost,
+    )
+    session.add(batch)
+    await session.flush()
+    if payload.quantity > 0:
+        await record_movement(
+            session,
+            tenant_id=tenant.id,
+            batch_id=batch.id,
+            kind="receipt",
+            quantity=payload.quantity,
+            reason="opening balance",
+        )
+    await session.refresh(batch)
+    return PPEStockBatchRead.model_validate(batch)
+
+
+@router.get(
+    "/stock/batches/{batch_id}",
+    response_model=PPEStockBatchRead,
+    dependencies=[WarehouseFeatureGate],
+)
+async def get_stock_batch(
+    batch_id: str,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: ManagerAccess,
+) -> PPEStockBatchRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    batch = await _get_batch(session, tenant, batch_id)
+    return PPEStockBatchRead.model_validate(batch)
+
+
+@router.patch(
+    "/stock/batches/{batch_id}",
+    response_model=PPEStockBatchRead,
+    dependencies=[WarehouseFeatureGate],
+)
+@audit_operation("update", "ppe_stock_batch")
+async def update_stock_batch(
+    batch_id: str,
+    payload: PPEStockBatchUpdate,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: EditorAccess,
+) -> PPEStockBatchRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    batch = await _get_batch(session, tenant, batch_id)
+    updates = payload.model_dump(exclude_unset=True)
+    if updates.get("supplier_id") is not None:
+        await _require_supplier(session, tenant, updates["supplier_id"])
+    for field, value in updates.items():
+        setattr(batch, field, value)
+    await session.flush()
+    await session.refresh(batch)
+    return PPEStockBatchRead.model_validate(batch)
+
+
+@router.get(
+    "/stock/levels",
+    response_model=PPEStockLevelPage,
+    dependencies=[WarehouseFeatureGate],
+)
+async def list_stock_levels(
+    tenant: TenantDep,
+    session: SessionDep,
+    access: ManagerAccess,
+) -> PPEStockLevelPage:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
+    agg_stmt = (
+        select(
+            PPEStockBatch.item_id,
+            func.coalesce(func.sum(PPEStockBatch.quantity), 0),
+            func.count(PPEStockBatch.id),
+            func.min(PPEStockBatch.certificate_expires_at),
+        )
+        .where(
+            PPEStockBatch.tenant_id == tenant.id,
+            PPEStockBatch.deleted_at.is_(None),
+        )
+        .group_by(PPEStockBatch.item_id)
+    )
+    rows = (await session.execute(agg_stmt)).all()
+
+    names: dict[str, str] = {}
+    item_ids = [row[0] for row in rows]
+    if item_ids:
+        name_rows = (
+            await session.execute(select(PPEItem.id, PPEItem.name).where(PPEItem.id.in_(item_ids)))
+        ).all()
+        names = {item_id: name for item_id, name in name_rows}
+
+    levels = [
+        PPEStockLevelRead(
+            item_id=row[0],
+            item_name=names.get(row[0], ""),
+            total_quantity=int(row[1] or 0),
+            batch_count=int(row[2] or 0),
+            nearest_certificate_expiry=row[3],
+        )
+        for row in rows
+    ]
+    return PPEStockLevelPage(items=levels, total=len(levels))
+
+
+@router.get(
+    "/stock/levels/by-location",
+    response_model=PPEStockLevelByLocationPage,
+    dependencies=[WarehouseFeatureGate],
+)
+async def list_stock_levels_by_location(
+    tenant: TenantDep,
+    session: SessionDep,
+    access: ManagerAccess,
+) -> PPEStockLevelByLocationPage:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
+    agg_stmt = (
+        select(
+            PPEStockBatch.item_id,
+            PPEStockBatch.location,
+            func.coalesce(func.sum(PPEStockBatch.quantity), 0),
+            func.count(PPEStockBatch.id),
+        )
+        .where(
+            PPEStockBatch.tenant_id == tenant.id,
+            PPEStockBatch.deleted_at.is_(None),
+        )
+        .group_by(PPEStockBatch.item_id, PPEStockBatch.location)
+    )
+    rows = (await session.execute(agg_stmt)).all()
+
+    names: dict[str, str] = {}
+    item_ids = [row[0] for row in rows]
+    if item_ids:
+        names = {
+            iid: name
+            for iid, name in (
+                await session.execute(
+                    select(PPEItem.id, PPEItem.name).where(
+                        PPEItem.tenant_id == tenant.id,
+                        PPEItem.id.in_(item_ids),
+                    )
+                )
+            ).all()
+        }
+
+    items = [
+        PPEStockLevelByLocationRead(
+            item_id=row[0],
+            item_name=names.get(row[0], ""),
+            location=row[1],
+            quantity=int(row[2] or 0),
+            batch_count=int(row[3] or 0),
+        )
+        for row in rows
+    ]
+    return PPEStockLevelByLocationPage(items=items, total=len(items))
+
+
+@router.get(
+    "/stock/shortages",
+    response_model=PPEStockShortagePage,
+    dependencies=[WarehouseFeatureGate],
+)
+async def list_stock_shortages(
+    tenant: TenantDep,
+    session: SessionDep,
+    access: ManagerAccess,
+    window_days: int = Query(90, ge=1, le=365),
+    only_below: bool = Query(False),
+) -> PPEStockShortagePage:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    rows = await compute_shortages(
+        session,
+        tenant.id,
+        now=datetime.now(tz=timezone.utc),
+        window_days=window_days,
+        only_below=only_below,
+    )
+    items = [
+        PPEStockShortageRead(
+            item_id=r.item_id,
+            item_name=r.item_name,
+            min_stock=r.min_stock,
+            on_hand=r.on_hand,
+            deficit=r.deficit,
+            below_threshold=r.below_threshold,
+            avg_daily_consumption=r.avg_daily_consumption,
+            days_to_depletion=r.days_to_depletion,
+            projected_breach_date=r.projected_breach_date,
+            supplier_id=r.supplier_id,
+            supplier_name=r.supplier_name,
+            supplier_inn=r.supplier_inn,
+            supplier_contact=r.supplier_contact,
+            supplier_source=r.supplier_source,
+        )
+        for r in rows
+    ]
+    return PPEStockShortagePage(items=items, total=len(items), window_days=window_days)
+
+
+@router.get(
+    "/stock/reorder",
+    response_model=PPEReorderDraftRead,
+    dependencies=[WarehouseFeatureGate],
+)
+async def get_reorder_draft(
+    tenant: TenantDep,
+    session: SessionDep,
+    access: ManagerAccess,
+    window_days: int = Query(90, ge=1, le=365),
+) -> PPEReorderDraftRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    rows = await compute_shortages(
+        session,
+        tenant.id,
+        now=datetime.now(tz=timezone.utc),
+        window_days=window_days,
+        only_below=True,
+    )
+    draft = build_reorder_draft(rows)
+    return PPEReorderDraftRead(
+        groups=[
+            PPEReorderGroupRead(
+                supplier_id=g.supplier_id,
+                supplier_name=g.supplier_name,
+                supplier_inn=g.supplier_inn,
+                supplier_contact=g.supplier_contact,
+                lines=[
+                    PPEReorderLineRead(
+                        item_id=ln.item_id, item_name=ln.item_name, deficit=ln.deficit
+                    )
+                    for ln in g.lines
+                ],
+                line_count=g.line_count,
+                total_deficit=g.total_deficit,
+            )
+            for g in draft.groups
+        ],
+        total_lines=draft.total_lines,
+        total_deficit=draft.total_deficit,
+    )
+
+
+@router.post(
+    "/stock/movements",
+    response_model=PPEStockMovementRead,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[WarehouseFeatureGate],
+)
+@audit_operation("create", "ppe_stock_movement")
+async def create_stock_movement(
+    payload: PPEStockMovementCreate,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: EditorAccess,
+) -> PPEStockMovementRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    try:
+        movement = await record_movement(
+            session,
+            tenant_id=tenant.id,
+            batch_id=payload.batch_id,
+            kind=payload.kind,
+            quantity=payload.quantity,
+            reason=payload.reason,
+            occurred_at=payload.occurred_at,
+        )
+    except StockBatchNotFound as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
+    except InsufficientStockError as exc:
+        raise _ppe_bad_request(str(exc)) from exc
+    except ValueError as exc:
+        raise _ppe_bad_request(str(exc)) from exc
+    return PPEStockMovementRead.model_validate(movement)
+
+
+@router.get(
+    "/stock/movements",
+    response_model=PPEStockMovementPage,
+    dependencies=[WarehouseFeatureGate],
+)
+async def list_stock_movements(
+    request: Request,
+    response: Response,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: ManagerAccess,
+    item_id: str | None = None,
+    batch_id: str | None = None,
+    kind: str | None = None,
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+) -> PPEStockMovementPage | Response:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
+    base = select(PPEStockMovement).where(PPEStockMovement.tenant_id == tenant.id)
+    if item_id:
+        base = base.where(PPEStockMovement.item_id == item_id)
+    if batch_id:
+        base = base.where(PPEStockMovement.batch_id == batch_id)
+    if kind:
+        base = base.where(PPEStockMovement.kind == kind)
+
+    stmt = (
+        base.order_by(PPEStockMovement.occurred_at.desc(), PPEStockMovement.id.desc())
+        .limit(limit)
+        .offset(offset)
+    )
+    movements = list((await session.execute(stmt)).scalars().all())
+
+    count_stmt = select(func.count()).select_from(base.subquery())
+    total = (await session.execute(count_stmt)).scalar_one()
+
+    etag = compute_list_etag(
+        tenant_id=str(tenant.id),
+        items=movements,
+        scalars=[
+            ("total", int(total or 0)),
+            ("limit", limit),
+            ("offset", offset),
+            ("item", item_id or ""),
+            ("batch", batch_id or ""),
+            ("kind", kind or ""),
+        ],
+    )
+    apply_etag_response_headers(response, etag)
+    if request.headers.get("if-none-match") == etag:
+        return Response(
+            status_code=status.HTTP_304_NOT_MODIFIED,
+            headers=build_not_modified_headers(etag),
+        )
+    return PPEStockMovementPage(
+        items=[PPEStockMovementRead.model_validate(m) for m in movements], total=total
+    )
+
+
+@router.post(
+    "/stock/transfers",
+    response_model=PPEStockTransferRead,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[WarehouseFeatureGate],
+)
+@audit_operation("create", "ppe_stock_transfer")
+async def create_stock_transfer(
+    payload: PPEStockTransferCreate,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: EditorAccess,
+) -> PPEStockTransferRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    try:
+        result = await transfer_stock(
+            session,
+            tenant_id=tenant.id,
+            source_batch_id=payload.source_batch_id,
+            to_location=payload.to_location,
+            quantity=payload.quantity,
+            reason=payload.reason,
+            occurred_at=payload.occurred_at,
+        )
+    except StockBatchNotFound as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
+    except InsufficientStockError as exc:
+        raise _ppe_bad_request(str(exc)) from exc
+    except ValueError as exc:
+        raise _ppe_bad_request(str(exc)) from exc
+    except IntegrityError as exc:
+        # Concurrent transfer created the same destination (item, batch_no, location)
+        # slot first; the unique index rejected our insert. Report as a conflict.
+        raise _ppe_conflict("stock batch location conflict (concurrent transfer)") from exc
+    except StaleDataError as exc:
+        raise _ppe_conflict("stock batch was modified concurrently") from exc
+
+    item_name = (
+        await session.execute(
+            select(PPEItem.name).where(
+                PPEItem.tenant_id == tenant.id,
+                PPEItem.id == result.out_movement.item_id,
+            )
+        )
+    ).scalar_one_or_none() or ""
+    return PPEStockTransferRead(
+        ref_id=result.ref_id,
+        item_id=result.out_movement.item_id,
+        item_name=item_name,
+        batch_no=result.batch_no,
+        from_location=result.from_location,
+        to_location=result.to_location,
+        quantity=result.quantity,
+        source_batch_id=result.source_batch_id,
+        dest_batch_id=result.dest_batch_id,
+        out_movement_id=result.out_movement.id,
+        in_movement_id=result.in_movement.id,
+        reason=result.out_movement.reason,
+        occurred_at=result.out_movement.occurred_at,
+    )
+
+
+@router.get(
+    "/stock/transfers",
+    response_model=PPEStockTransferPage,
+    dependencies=[WarehouseFeatureGate],
+)
+async def list_stock_transfers(
+    request: Request,
+    response: Response,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: ManagerAccess,
+    item_id: str | None = None,
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+) -> PPEStockTransferPage | Response:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
+    pair_filter = [
+        PPEStockMovement.tenant_id == tenant.id,
+        PPEStockMovement.kind == KIND_TRANSFER,
+    ]
+    if item_id:
+        pair_filter.append(PPEStockMovement.item_id == item_id)
+
+    pair_stmt = (
+        select(
+            PPEStockMovement.ref_id.label("ref"),
+            func.max(PPEStockMovement.occurred_at).label("occ"),
+        )
+        .where(*pair_filter)
+        .group_by(PPEStockMovement.ref_id)
+    )
+    total = (
+        await session.execute(select(func.count()).select_from(pair_stmt.subquery()))
+    ).scalar_one()
+
+    page_rows = (
+        await session.execute(
+            pair_stmt.order_by(
+                func.max(PPEStockMovement.occurred_at).desc(),
+                PPEStockMovement.ref_id.desc(),
+            )
+            .limit(limit)
+            .offset(offset)
+        )
+    ).all()
+    page_refs = [r.ref for r in page_rows]
+
+    movements: list[PPEStockMovement] = []
+    if page_refs:
+        movements = list(
+            (
+                await session.execute(
+                    select(PPEStockMovement).where(
+                        PPEStockMovement.tenant_id == tenant.id,
+                        PPEStockMovement.kind == KIND_TRANSFER,
+                        PPEStockMovement.ref_id.in_(page_refs),
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+    batch_ids = {m.batch_id for m in movements if m.batch_id}
+    batch_map: dict[str, PPEStockBatch] = {}
+    if batch_ids:
+        # tenant-scoped; NOT deleted_at-filtered on purpose — history must still show
+        # the from/to of a transfer even if a batch was later soft-deleted.
+        batch_map = {
+            b.id: b
+            for b in (
+                await session.execute(
+                    select(PPEStockBatch).where(
+                        PPEStockBatch.tenant_id == tenant.id,
+                        PPEStockBatch.id.in_(batch_ids),
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        }
+    item_ids = {m.item_id for m in movements}
+    names: dict[str, str] = {}
+    if item_ids:
+        names = {
+            iid: name
+            for iid, name in (
+                await session.execute(
+                    select(PPEItem.id, PPEItem.name).where(
+                        PPEItem.tenant_id == tenant.id,
+                        PPEItem.id.in_(item_ids),
+                    )
+                )
+            ).all()
+        }
+
+    grouped: dict[str, list[PPEStockMovement]] = {}
+    for m in movements:
+        grouped.setdefault(m.ref_id, []).append(m)
+
+    items: list[PPEStockTransferRead] = []
+    for ref in page_refs:
+        pair = grouped.get(ref, [])
+        out = next((m for m in pair if m.quantity_delta < 0), None)
+        inc = next((m for m in pair if m.quantity_delta > 0), None)
+        if out is None or inc is None:
+            continue
+        out_batch = batch_map.get(out.batch_id or "")
+        in_batch = batch_map.get(inc.batch_id or "")
+        items.append(
+            PPEStockTransferRead(
+                ref_id=ref,
+                item_id=out.item_id,
+                item_name=names.get(out.item_id, ""),
+                batch_no=out_batch.batch_no if out_batch else "",
+                from_location=out_batch.location if out_batch else None,
+                to_location=in_batch.location if in_batch else "",
+                quantity=inc.quantity_delta,
+                source_batch_id=out.batch_id or "",
+                dest_batch_id=inc.batch_id or "",
+                out_movement_id=out.id,
+                in_movement_id=inc.id,
+                reason=out.reason,
+                occurred_at=out.occurred_at,
+            )
+        )
+
+    etag = compute_list_etag(
+        tenant_id=str(tenant.id),
+        items=sorted(movements, key=lambda m: m.id),
+        scalars=[
+            ("total", int(total or 0)),
+            ("limit", limit),
+            ("offset", offset),
+            ("item", item_id or ""),
+        ],
+    )
+    apply_etag_response_headers(response, etag)
+    if request.headers.get("if-none-match") == etag:
+        return Response(
+            status_code=status.HTTP_304_NOT_MODIFIED,
+            headers=build_not_modified_headers(etag),
+        )
+    return PPEStockTransferPage(items=items, total=total)
+
+
+def _inventory_count_read(view: CountSummaryView) -> PPEInventoryCountRead:
+    c = view.count
+    return PPEInventoryCountRead(
+        id=c.id,
+        status=c.status,
+        scope_item_id=c.scope_item_id,
+        scope_location=c.scope_location,
+        note=c.note,
+        applied_at=c.applied_at,
+        created_at=c.created_at,
+        line_count=view.line_count,
+        counted_count=view.counted_count,
+    )
+
+
+def _inventory_count_detail(detail: CountDetailView) -> PPEInventoryCountDetail:
+    c = detail.count
+    return PPEInventoryCountDetail(
+        id=c.id,
+        status=c.status,
+        scope_item_id=c.scope_item_id,
+        scope_location=c.scope_location,
+        note=c.note,
+        applied_at=c.applied_at,
+        created_at=c.created_at,
+        line_count=detail.line_count,
+        counted_count=detail.counted_count,
+        diff_count=detail.diff_count,
+        lines=[
+            PPEInventoryCountLineRead(
+                id=v.id,
+                batch_id=v.batch_id,
+                item_id=v.item_id,
+                batch_no=v.batch_no,
+                location=v.location,
+                item_name=v.item_name,
+                system_qty=v.system_qty,
+                counted_qty=v.counted_qty,
+                on_hand=v.on_hand,
+                delta=v.delta,
+                adjustment_movement_id=v.adjustment_movement_id,
+            )
+            for v in detail.lines
+        ],
+    )
+
+
+@router.post(
+    "/stock/inventory/counts",
+    response_model=PPEInventoryCountDetail,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[WarehouseFeatureGate],
+)
+@audit_operation("create", "ppe_inventory_count")
+async def create_inventory_count(
+    payload: PPEInventoryCountCreate,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: EditorAccess,
+) -> PPEInventoryCountDetail:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    if payload.scope_item_id is not None:
+        await _get_item(session, tenant, payload.scope_item_id)
+    count = await create_count(
+        session,
+        tenant_id=tenant.id,
+        scope_item_id=payload.scope_item_id,
+        scope_location=payload.scope_location,
+        note=payload.note,
+    )
+    detail = await get_count_detail(session, tenant.id, count.id)
+    return _inventory_count_detail(detail)
+
+
+@router.get(
+    "/stock/inventory/counts",
+    response_model=PPEInventoryCountPage,
+    dependencies=[WarehouseFeatureGate],
+)
+async def list_inventory_counts(
+    request: Request,
+    response: Response,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: ManagerAccess,
+    status_filter: str | None = Query(None, alias="status"),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+) -> PPEInventoryCountPage | Response:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    views, total = await list_counts(
+        session, tenant.id, status=status_filter, limit=limit, offset=offset
+    )
+    etag = compute_list_etag(
+        tenant_id=str(tenant.id),
+        items=[v.count for v in views],
+        scalars=[
+            ("total", total),
+            ("limit", limit),
+            ("offset", offset),
+            ("status", status_filter or ""),
+        ],
+    )
+    apply_etag_response_headers(response, etag)
+    if request.headers.get("if-none-match") == etag:
+        return Response(
+            status_code=status.HTTP_304_NOT_MODIFIED,
+            headers=build_not_modified_headers(etag),
+        )
+    return PPEInventoryCountPage(items=[_inventory_count_read(v) for v in views], total=total)
+
+
+@router.get(
+    "/stock/inventory/counts/{count_id}",
+    response_model=PPEInventoryCountDetail,
+    dependencies=[WarehouseFeatureGate],
+)
+async def get_inventory_count(
+    count_id: str,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: ManagerAccess,
+) -> PPEInventoryCountDetail:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    try:
+        detail = await get_count_detail(session, tenant.id, count_id)
+    except InventoryCountNotFound as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
+    return _inventory_count_detail(detail)
+
+
+@router.patch(
+    "/stock/inventory/counts/{count_id}/lines",
+    response_model=PPEInventoryCountDetail,
+    dependencies=[WarehouseFeatureGate],
+)
+@audit_operation("update", "ppe_inventory_count")
+async def update_inventory_count_lines(
+    count_id: str,
+    payload: PPEInventoryCountLinesUpdate,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: EditorAccess,
+) -> PPEInventoryCountDetail:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    entries = [(entry.line_id, entry.counted_qty) for entry in payload.entries]
+    try:
+        await set_line_counts(session, tenant_id=tenant.id, count_id=count_id, entries=entries)
+    except InventoryCountNotFound as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
+    except InventoryCountNotDraft as exc:
+        raise _ppe_bad_request(str(exc)) from exc
+    detail = await get_count_detail(session, tenant.id, count_id)
+    return _inventory_count_detail(detail)
+
+
+@router.post(
+    "/stock/inventory/counts/{count_id}/apply",
+    response_model=PPEInventoryCountDetail,
+    dependencies=[WarehouseFeatureGate],
+)
+@audit_operation("update", "ppe_inventory_count")
+async def apply_inventory_count(
+    count_id: str,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: EditorAccess,
+) -> PPEInventoryCountDetail:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    try:
+        await apply_count(
+            session,
+            tenant_id=tenant.id,
+            count_id=count_id,
+            now=datetime.now(tz=timezone.utc),
+        )
+    except InventoryCountNotFound as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
+    except InventoryCountNotDraft as exc:
+        raise _ppe_bad_request(str(exc)) from exc
+    except InsufficientStockError as exc:
+        raise _ppe_bad_request(str(exc)) from exc
+    except StaleDataError as exc:
+        raise _ppe_conflict("inventory count was modified concurrently") from exc
+    detail = await get_count_detail(session, tenant.id, count_id)
+    return _inventory_count_detail(detail)
+
+
+@router.post(
+    "/stock/inventory/counts/{count_id}/cancel",
+    response_model=PPEInventoryCountDetail,
+    dependencies=[WarehouseFeatureGate],
+)
+@audit_operation("update", "ppe_inventory_count")
+async def cancel_inventory_count(
+    count_id: str,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: EditorAccess,
+) -> PPEInventoryCountDetail:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    try:
+        await cancel_count(session, tenant_id=tenant.id, count_id=count_id)
+    except InventoryCountNotFound as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
+    except InventoryCountNotDraft as exc:
+        raise _ppe_bad_request(str(exc)) from exc
+    detail = await get_count_detail(session, tenant.id, count_id)
+    return _inventory_count_detail(detail)
+
+
+# --- 766н: личная карточка учёта СИЗ + размеры работника ---------------------
+
+
+@router.get("/employees/{person_id}/card", response_model=PPECardRead)
+async def get_personal_card(
+    person_id: str,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: ManagerAccess,
+) -> PPECardRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    card = await build_personal_card_766n(session, tenant_id=tenant.id, person_id=person_id)
+    if card is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Person not found")
+    person = card.person
+    full_name = " ".join(
+        part for part in (person.last_name, person.first_name, person.middle_name) if part
+    )
+    return PPECardRead(
+        person_id=person.id,
+        full_name=full_name,
+        personnel_number=person.personnel_number,
+        hired_at=person.hired_at,
+        position_name=card.position.name if card.position else None,
+        sizes=person.ppe_sizes,
+        required=[
+            PPECardRequiredLine(
+                item_id=line.item_id,
+                item_name=line.item_name,
+                required_quantity=line.required_quantity,
+                interval_days=line.interval_days,
+                status=line.status,
+            )
+            for line in card.required
+        ],
+        issues=[_issue_schema(issue) for issue in card.issues],
+        timeline=[
+            PPECardTimelineEvent(
+                occurred_at=event.occurred_at,
+                event=event.event,
+                issue_id=event.issue_id,
+                item_name=event.item_name,
+            )
+            for event in card.timeline
+        ],
+        summary_status=card.summary_status,
+    )
+
+
+@router.put("/employees/{person_id}/sizes", response_model=PPESizesRead)
+@audit_operation("update", "person_ppe_sizes")
+async def put_person_sizes(
+    person_id: str,
+    payload: PPESizesUpdate,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: EditorAccess,
+) -> PPESizesRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    person = (
+        await session.execute(
+            select(Person).where(
+                Person.id == person_id,
+                Person.tenant_id == tenant.id,
+                Person.deleted_at.is_(None),
+            )
+        )
+    ).scalar_one_or_none()
+    if person is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Person not found")
+    # PUT-семантика: полная замена; None-поля выбрасываются.
+    person.ppe_sizes = {
+        key: value for key, value in payload.model_dump().items() if value is not None
+    } or None
+    await session.flush()
+    await session.refresh(person)
+    return PPESizesRead(person_id=person.id, sizes=person.ppe_sizes)

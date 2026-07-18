@@ -20,7 +20,9 @@ def upgrade() -> None:
         sa.Column("code", sa.String(length=128), nullable=False),
         sa.Column("name", sa.String(length=255), nullable=False),
         sa.Column("different_first", sa.Boolean(), nullable=False, server_default=sa.text("false")),
-        sa.Column("different_odd_even", sa.Boolean(), nullable=False, server_default=sa.text("false")),
+        sa.Column(
+            "different_odd_even", sa.Boolean(), nullable=False, server_default=sa.text("false")
+        ),
         sa.Column("header_first_xml", sa.Text(), nullable=True),
         sa.Column("header_odd_xml", sa.Text(), nullable=True),
         sa.Column("header_even_xml", sa.Text(), nullable=True),
@@ -38,7 +40,9 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("tenant_id", "code", name="uq_header_footer_preset_tenant_code"),
     )
-    op.create_index("ix_header_footer_preset_tenant_code", "header_footer_presets", ["tenant_id", "code"])
+    op.create_index(
+        "ix_header_footer_preset_tenant_code", "header_footer_presets", ["tenant_id", "code"]
+    )
     op.create_index("ix_header_footer_preset_updated_at", "header_footer_presets", ["updated_at"])
 
 

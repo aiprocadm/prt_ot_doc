@@ -40,7 +40,9 @@ def _word_pattern(source: str, whole_word: bool, case_sensitive: bool) -> re.Pat
     return re.compile(escaped, flags)
 
 
-def replace_docx(docx_bytes: bytes, rules: list[dict], *, case_sensitive: bool, whole_word: bool) -> tuple[bytes, list[Hit]]:
+def replace_docx(
+    docx_bytes: bytes, rules: list[dict], *, case_sensitive: bool, whole_word: bool
+) -> tuple[bytes, list[Hit]]:
     doc = Document(BytesIO(docx_bytes))
     hits: list[Hit] = []
 
@@ -61,7 +63,15 @@ def replace_docx(docx_bytes: bytes, rules: list[dict], *, case_sensitive: bool, 
             pattern = _word_pattern(src, whole_word, case_sensitive)
             replaced = pattern.sub(dst, text)
             if replaced != text:
-                hits.append(Hit(location=location, rule_from=src, rule_to=dst, before=text[:220], after=replaced[:220]))
+                hits.append(
+                    Hit(
+                        location=location,
+                        rule_from=src,
+                        rule_to=dst,
+                        before=text[:220],
+                        after=replaced[:220],
+                    )
+                )
                 text = replaced
         if text != original:
             if paragraph.runs:

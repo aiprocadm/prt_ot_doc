@@ -4,7 +4,7 @@ const resolveTenant = () => process.env.E2E_TENANT ?? "demo";
 
 export const loginWithCredentials = async (page: Page, email: string, password: string) => {
   await page.goto("/auth/login", { waitUntil: "domcontentloaded" });
-  await page.getByLabel("Tenant").fill(resolveTenant());
+  await page.getByLabel("Тенант").fill(resolveTenant());
   await page.getByLabel("E-mail").fill(email);
   await page.getByLabel("Пароль").fill(password);
   await page.getByRole("button", { name: "Войти" }).click();

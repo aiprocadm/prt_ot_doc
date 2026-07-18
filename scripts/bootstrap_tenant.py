@@ -39,7 +39,9 @@ def _offline_dry_run_summary(args: argparse.Namespace) -> dict:
 
 
 async def _run(args: argparse.Namespace) -> dict:
-    async with AsyncSessionLocal(tenant="public", include_public=False, create_schema=False) as session:
+    async with AsyncSessionLocal(
+        tenant="public", include_public=False, create_schema=False
+    ) as session:
         service = BootstrapTenantService(session)
         summary = await service.run(
             tenant_slug=args.tenant,
@@ -55,7 +57,9 @@ async def _run(args: argparse.Namespace) -> dict:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Bootstrap tenant with starter packs and owner user.")
+    parser = argparse.ArgumentParser(
+        description="Bootstrap tenant with starter packs and owner user."
+    )
     parser.add_argument("--tenant", required=True, help="Tenant slug")
     parser.add_argument("--name", required=True, help="Tenant display name")
     parser.add_argument("--owner-email", required=True, help="Owner admin email")

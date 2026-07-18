@@ -69,7 +69,9 @@ class AuditExportRead(BaseModel):
 def _audit_bad_request(message: str) -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,
-        detail=api_problem_detail(code="AUDIT_VALIDATION_ERROR", message=message, error_type="audit"),
+        detail=api_problem_detail(
+            code="AUDIT_VALIDATION_ERROR", message=message, error_type="audit"
+        ),
     )
 
 
@@ -137,14 +139,24 @@ async def get_audit_history(
         stmt = stmt.where(AuditLog.when <= to)
         total_stmt = total_stmt.where(AuditLog.when <= to)
 
-    rows = (await session.execute(stmt.order_by(AuditLog.when.desc()).limit(limit).offset(offset))).scalars().all()
+    rows = (
+        (await session.execute(stmt.order_by(AuditLog.when.desc()).limit(limit).offset(offset)))
+        .scalars()
+        .all()
+    )
     total = (await session.execute(total_stmt)).scalar_one()
     return AuditLogHistory(total=total, items=[_to_entry(item) for item in rows])
 
 
 @router.get("/logs/{audit_id}", response_model=AuditLogEntry)
-async def get_audit_log(audit_id: str, *, tenant: TenantDep, _: AdminAccess, session: SessionDep,
-    correlation_id: str = Depends(get_correlation_id)) -> AuditLogEntry:
+async def get_audit_log(
+    audit_id: str,
+    *,
+    tenant: TenantDep,
+    _: AdminAccess,
+    session: SessionDep,
+    correlation_id: str = Depends(get_correlation_id),
+) -> AuditLogEntry:
     TenantContextValidator.ensure_tenant_context(tenant)
 
     row = await session.get(AuditLog, audit_id)
@@ -153,13 +165,23 @@ async def get_audit_log(audit_id: str, *, tenant: TenantDep, _: AdminAccess, ses
     return _to_entry(row)
 
 
-@router.post("/exports", response_model=AuditExportCreateResponse, status_code=status.HTTP_202_ACCEPTED)
+@router.post(
+    "/exports", response_model=AuditExportCreateResponse, status_code=status.HTTP_202_ACCEPTED
+)
 @audit_operation("create", "audit_export")
-async def create_export(payload: AuditExportCreate, *, tenant: TenantDep, _: AdminAccess, session: SessionDep,
-    correlation_id: str = Depends(get_correlation_id)) -> AuditExportCreateResponse:
+async def create_export(
+    payload: AuditExportCreate,
+    *,
+    tenant: TenantDep,
+    _: AdminAccess,
+    session: SessionDep,
+    correlation_id: str = Depends(get_correlation_id),
+) -> AuditExportCreateResponse:
     TenantContextValidator.ensure_tenant_context(tenant)
 
-    job = AuditExportJob(tenant_id=str(tenant.id), filters=payload.filters, format=payload.format, status="queued")
+    job = AuditExportJob(
+        tenant_id=str(tenant.id), filters=payload.filters, format=payload.format, status="queued"
+    )
     session.add(job)
     await session.flush()
     export_audit_job.delay(export_id=job.id, tenant_id=str(tenant.id))
@@ -167,11 +189,15 @@ async def create_export(payload: AuditExportCreate, *, tenant: TenantDep, _: Adm
     return AuditExportCreateResponse(export_job_id=job.id)
 
 
-
-
 @router.get("/exports/{export_id}", response_model=AuditExportRead)
-async def get_export(export_id: str, *, tenant: TenantDep, _: AdminAccess, session: SessionDep,
-    correlation_id: str = Depends(get_correlation_id)) -> AuditExportRead:
+async def get_export(
+    export_id: str,
+    *,
+    tenant: TenantDep,
+    _: AdminAccess,
+    session: SessionDep,
+    correlation_id: str = Depends(get_correlation_id),
+) -> AuditExportRead:
     TenantContextValidator.ensure_tenant_context(tenant)
 
     row = await session.get(AuditExportJob, export_id)
@@ -188,8 +214,14 @@ async def get_export(export_id: str, *, tenant: TenantDep, _: AdminAccess, sessi
 
 
 @router.get("/exports/{export_id}/download")
-async def download_export(export_id: str, *, tenant: TenantDep, _: AdminAccess, session: SessionDep,
-    correlation_id: str = Depends(get_correlation_id)) -> StreamingResponse:
+async def download_export(
+    export_id: str,
+    *,
+    tenant: TenantDep,
+    _: AdminAccess,
+    session: SessionDep,
+    correlation_id: str = Depends(get_correlation_id),
+) -> StreamingResponse:
     TenantContextValidator.ensure_tenant_context(tenant)
 
     row = await session.get(AuditExportJob, export_id)
@@ -236,8 +268,13 @@ async def backward_list(
 
 
 @router.get("/export")
-async def backward_export(*, tenant: TenantDep, _: AdminAccess, session: SessionDep,
-    correlation_id: str = Depends(get_correlation_id)) -> Response:
+async def backward_export(
+    *,
+    tenant: TenantDep,
+    _: AdminAccess,
+    session: SessionDep,
+    correlation_id: str = Depends(get_correlation_id),
+) -> Response:
     TenantContextValidator.ensure_tenant_context(tenant)
 
     raise HTTPException(status.HTTP_410_GONE, "use POST /v1/audit/exports")

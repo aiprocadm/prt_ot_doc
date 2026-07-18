@@ -91,7 +91,13 @@ const resolvePermissions = (user: UserDto | null): Set<Permission> => {
     const normalized = user.permissions
       .map((permission) => PERMISSION_ALIASES[permission] ?? permission)
       .filter((permission): permission is Permission => ALL_PERMISSIONS.includes(permission as Permission));
-    return new Set(normalized);
+    // Only treat the server permission list as authoritative when at least one entry
+    // is recognized; if every entry was filtered out (e.g. renamed/unknown perms with
+    // no alias), fall through to the role-based permissions instead of locking the
+    // user out of everything.
+    if (normalized.length) {
+      return new Set(normalized);
+    }
   }
   const permissions = new Set<Permission>();
   user.roles.forEach((role) => {

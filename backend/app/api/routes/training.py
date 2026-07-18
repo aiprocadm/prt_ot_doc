@@ -5,21 +5,20 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta, timezone
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.api.helpers.etag import (
+    apply_etag_response_headers,
+    build_not_modified_headers,
+    compute_list_etag,
+)
 from app.core.audit_decorator import audit_operation
 from app.core.errors import api_problem_detail
 from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
-from app.domains.training import (
-    assign_training_plan,
-    issue_certificate,
-    register_training_session,
-    upcoming_certificate_expirations,
-)
 from app.models.file import File
 from app.models.models import (
     Company,
@@ -28,6 +27,12 @@ from app.models.models import (
     TrainingCourse,
     TrainingPlan,
     TrainingSessionStatus,
+)
+from app.modules.training import (
+    assign_training_plan,
+    issue_certificate,
+    register_training_session,
+    upcoming_certificate_expirations,
 )
 from app.schemas.training import (
     TrainingCertificateCreate,
@@ -71,7 +76,9 @@ EditorAccess = Annotated[
 def _training_bad_request(message: str) -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,
-        detail=api_problem_detail(code="TRAINING_VALIDATION_ERROR", message=message, error_type="training"),
+        detail=api_problem_detail(
+            code="TRAINING_VALIDATION_ERROR", message=message, error_type="training"
+        ),
     )
 
 
@@ -139,12 +146,14 @@ async def _get_plan(session: AsyncSession, tenant: Tenant, plan_id: str) -> Trai
 
 @router.get("/courses", response_model=TrainingCoursePage)
 async def list_courses(
+    request: Request,
+    response: Response,
     tenant: TenantDep,
     session: SessionDep,
     access: ManagerAccess,
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
-) -> TrainingCoursePage:
+) -> TrainingCoursePage | Response:
     TenantContextValidator.ensure_tenant_context(tenant)
 
     stmt = (
@@ -154,11 +163,24 @@ async def list_courses(
         .limit(limit)
         .offset(offset)
     )
-    items = (await session.execute(stmt)).scalars().all()
-    total_stmt = select(func.count()).select_from(TrainingCourse).where(
-        TrainingCourse.tenant_id == tenant.id, TrainingCourse.deleted_at.is_(None)
+    items = list((await session.execute(stmt)).scalars().all())
+    total_stmt = (
+        select(func.count())
+        .select_from(TrainingCourse)
+        .where(TrainingCourse.tenant_id == tenant.id, TrainingCourse.deleted_at.is_(None))
     )
     total = (await session.execute(total_stmt)).scalar_one()
+    etag = compute_list_etag(
+        tenant_id=str(tenant.id),
+        items=items,
+        scalars=[("total", int(total or 0)), ("limit", limit), ("offset", offset)],
+    )
+    apply_etag_response_headers(response, etag)
+    if request.headers.get("if-none-match") == etag:
+        return Response(
+            status_code=status.HTTP_304_NOT_MODIFIED,
+            headers=build_not_modified_headers(etag),
+        )
     return TrainingCoursePage(items=[_course_to_schema(item) for item in items], total=total)
 
 
@@ -331,7 +353,9 @@ async def create_session(
     return TrainingSessionRead.model_validate(record)
 
 
-@router.post("/certificates", response_model=TrainingCertificateRead, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/certificates", response_model=TrainingCertificateRead, status_code=status.HTTP_201_CREATED
+)
 @audit_operation("create", "training_certificate")
 async def create_certificate(
     payload: TrainingCertificateCreate,
@@ -378,6 +402,8 @@ async def list_expiring_certificates(
     TenantContextValidator.ensure_tenant_context(tenant)
 
     cutoff = date.today() + timedelta(days=within_days)
-    certificates = await upcoming_certificate_expirations(session, tenant_id=tenant.id, before=cutoff)
+    certificates = await upcoming_certificate_expirations(
+        session, tenant_id=tenant.id, before=cutoff
+    )
     items = [TrainingCertificateRead.model_validate(item) for item in certificates]
     return TrainingCertificatePage(items=items, total=len(items))

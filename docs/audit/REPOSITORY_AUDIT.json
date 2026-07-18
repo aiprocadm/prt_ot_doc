@@ -364,7 +364,9 @@
       ".cursor",
       ".devcontainer",
       ".github",
+      ".grimp_cache",
       ".hypothesis",
+      ".import_linter_cache",
       ".local_storage",
       ".mypy_cache",
       ".ruff_cache",
@@ -381,9 +383,7 @@
       "samples",
       "scripts",
       "seed",
-      "tests",
-      "Создание платформы по ОТ",
-      "Создание платформы по ОТs"
+      "tests"
     ]
   },
   "findings": {

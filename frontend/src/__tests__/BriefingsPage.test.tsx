@@ -12,6 +12,8 @@ const listJournalsMock = vi.fn();
 const listEntriesMock = vi.fn();
 const listOverdueMock = vi.fn();
 const remindOverdueMock = vi.fn();
+const createEntryMock = vi.fn();
+const fetchAllPersonsMock = vi.fn();
 
 vi.mock("@/api/briefings", () => ({
   briefingsApi: {
@@ -22,17 +24,14 @@ vi.mock("@/api/briefings", () => ({
     remindOverdue: () => remindOverdueMock(),
     createTemplate: vi.fn(),
     createJournal: vi.fn(),
-    createEntry: vi.fn(),
+    createEntry: (...a: unknown[]) => createEntryMock(...a),
     sign: vi.fn(),
     complete: vi.fn()
   }
 }));
 
-vi.mock("@/stores/companies", () => ({
-  useCompaniesStore: () => ({
-    items: [],
-    list: vi.fn().mockResolvedValue(undefined)
-  })
+vi.mock("@/api/personsApi", () => ({
+  fetchAllPersons: () => fetchAllPersonsMock()
 }));
 
 describe("BriefingsPage", () => {
@@ -43,11 +42,16 @@ describe("BriefingsPage", () => {
     listOverdueMock.mockReset();
     remindOverdueMock.mockReset();
 
+    createEntryMock.mockReset();
+    fetchAllPersonsMock.mockReset();
+
     listTemplatesMock.mockResolvedValue([]);
     listJournalsMock.mockResolvedValue([]);
     listEntriesMock.mockResolvedValue([]);
     listOverdueMock.mockResolvedValue([]);
     remindOverdueMock.mockResolvedValue({ count: 1 });
+    createEntryMock.mockResolvedValue({});
+    fetchAllPersonsMock.mockResolvedValue([]);
 
     useAuthStore.setState({
       user: {
@@ -107,5 +111,31 @@ describe("BriefingsPage", () => {
 
     await user.click(remindButton);
     expect(remindOverdueMock).toHaveBeenCalled();
+  });
+
+  it("назначает инструктаж выбранному сотруднику (person_id из persons, не company-id)", async () => {
+    useAuthStore.setState((state) => ({
+      ...state,
+      user: state.user
+        ? { ...state.user, permissions: [PERMISSIONS.TRAINING_VIEW, PERMISSIONS.TRAINING_ASSIGN] }
+        : null
+    }));
+    fetchAllPersonsMock.mockResolvedValue([
+      { id: "person-1", full_name: "Иванов Иван Иванович", first_name: "Иван", last_name: "Иванов", status: "active" }
+    ]);
+
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter>
+        <BriefingsPage />
+      </MemoryRouter>
+    );
+
+    const personSelect = await screen.findByLabelText("Сотрудник");
+    await user.selectOptions(personSelect, "person-1");
+    await user.click(screen.getByRole("button", { name: "Назначить" }));
+
+    await waitFor(() => expect(createEntryMock).toHaveBeenCalled());
+    expect(createEntryMock.mock.calls[0][0]).toMatchObject({ person_id: "person-1" });
   });
 });

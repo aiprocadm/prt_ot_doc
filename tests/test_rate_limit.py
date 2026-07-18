@@ -12,8 +12,8 @@ from app.core.rate_limit import (
     login_per_identity,
     upload_per_tenant,
 )
-from app.domains.files import s3
 from app.models.models import RoleEnum, Tenant, User
+from app.modules.files import s3
 from app.services.auth import hash_password
 
 
@@ -97,11 +97,12 @@ async def test_login_rate_limit(
 
 @pytest.mark.anyio("asyncio")
 @pytest.mark.usefixtures("aws", "configure_storage")
-async def test_upload_rate_limit(
-    async_client: AsyncClient, make_auth_headers
-) -> None:
+async def test_upload_rate_limit(async_client: AsyncClient, make_auth_headers) -> None:
     payload = b"throttle"
-    headers = {**dict(async_client.headers), **await make_auth_headers(email="uploader@example.com")}
+    headers = {
+        **dict(async_client.headers),
+        **await make_auth_headers(email="uploader@example.com"),
+    }
 
     assert upload_per_tenant() == "2/minute"
 

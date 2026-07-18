@@ -12,8 +12,12 @@ from .types import Subject
 
 def apply_abac_filters(query: Select, subject: Subject, model: type[Any]) -> Select:
     table_name = str(getattr(model, "__tablename__", ""))
-    scoped_model = any(hasattr(model, field) for field in ("company_id", "site_id", "project_id", "contractor_id")) or table_name in {"company", "site", "project", "contractor"}
-    if scoped_model and not any((subject.company_ids, subject.site_ids, subject.project_ids, subject.contractor_ids)):
+    scoped_model = any(
+        hasattr(model, field) for field in ("company_id", "site_id", "project_id", "contractor_id")
+    ) or table_name in {"company", "site", "project", "contractor"}
+    if scoped_model and not any(
+        (subject.company_ids, subject.site_ids, subject.project_ids, subject.contractor_ids)
+    ):
         return query.where(false())
 
     actor = ActorContext(

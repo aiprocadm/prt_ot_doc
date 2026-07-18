@@ -8,7 +8,7 @@ from httpx import AsyncClient
 
 from app.api.v1.router import MAX_METADATA_JSON_BYTES
 from app.core.payload_constraints import MAX_STRING_VALUE_LENGTH
-from app.domains.packs.definitions import (
+from app.modules.packs.definitions import (
     PACK_CODE_INCIDENT,
     PACK_CODE_INSPECTION_PREP,
     PACK_CODE_SITE_ACCESS,
@@ -129,9 +129,7 @@ async def test_pack_scenarios_listing_and_creation(
 
 
 @pytest.mark.anyio
-async def test_template_metadata_validation(
-    async_client: AsyncClient, make_auth_headers
-) -> None:
+async def test_template_metadata_validation(async_client: AsyncClient, make_auth_headers) -> None:
     headers = {**dict(async_client.headers), **await make_auth_headers()}
     template_bytes = _build_template()
 
@@ -199,9 +197,7 @@ async def test_template_creation_rejects_large_metadata(
     assert response.status_code == 413
     body = response.json()
     assert body["code"] == "PAYLOAD_TOO_LARGE"
-    assert body["message"] == (
-        f"metadata payload cannot exceed {MAX_METADATA_JSON_BYTES} bytes"
-    )
+    assert body["message"] == (f"metadata payload cannot exceed {MAX_METADATA_JSON_BYTES} bytes")
     assert body["trace_id"]
 
 
@@ -317,9 +313,7 @@ async def test_pipeline_async_enqueue(
         assert headers.get("trace_id")
         return StubResult()
 
-    monkeypatch.setattr(
-        "app.api.v1.router.run_pipeline_task.apply_async", _fake_apply_async
-    )
+    monkeypatch.setattr("app.api.v1.router.run_pipeline_task.apply_async", _fake_apply_async)
 
     payload = {"context": {"name": "Async"}, "output_basename": "async"}
     response = await async_client.post(
@@ -336,8 +330,11 @@ async def test_pipeline_async_enqueue(
 
 
 @pytest.mark.anyio
-async def test_tenant_listing(async_client: AsyncClient) -> None:
-    response = await async_client.get("/api/v1/tenants", headers={"X-Tenant": "test"})
+async def test_tenant_listing(async_client: AsyncClient, make_auth_headers) -> None:
+    # /api/v1/tenants now requires an admin token (RBAC router sweep closed the
+    # optional-bearer bypass that let a tenant-slug-only caller read the listing).
+    headers = await make_auth_headers(tenant="test")
+    response = await async_client.get("/api/v1/tenants", headers=headers)
     assert response.status_code == 200
     payload = response.json()
     assert payload["total"] >= 1

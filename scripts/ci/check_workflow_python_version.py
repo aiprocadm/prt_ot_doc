@@ -33,7 +33,9 @@ def main() -> int:
             print(f" - {item}", file=sys.stderr)
         return 1
 
-    print(f"Workflow Python version guard passed (all setup-python entries use {CANONICAL_PYTHON}).")
+    print(
+        f"Workflow Python version guard passed (all setup-python entries use {CANONICAL_PYTHON})."
+    )
     return 0
 
 

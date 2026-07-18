@@ -2,6 +2,34 @@ import { apiClient } from "@/api/client";
 import type { PersonDto, PersonStatus } from "@/types/dto/persons";
 import type { PersonFormValues } from "@/types/forms/persons";
 
+/** Формирует запись electrical_safety_group из полей формы (или undefined, если группа не выбрана). */
+const buildElectricalGroupQual = (
+  values: PersonFormValues
+): Record<string, unknown> | undefined => {
+  if (!values.electrical_group) return undefined;
+  return {
+    kind: "electrical_safety_group",
+    level: values.electrical_group,
+    name: "Группа по электробезопасности",
+    ...(values.electrical_group_valid_until
+      ? { valid_until: values.electrical_group_valid_until }
+      : {})
+  };
+};
+
+/**
+ * Merge-safe: берёт существующие qualifications (кроме electrical_safety_group),
+ * добавляет новую запись если группа выбрана.
+ */
+export const mergeElectricalGroupQuals = (
+  existingQuals: Array<Record<string, unknown>>,
+  values: PersonFormValues
+): Array<Record<string, unknown>> => {
+  const others = existingQuals.filter((q) => q.kind !== "electrical_safety_group");
+  const newEntry = buildElectricalGroupQual(values);
+  return newEntry ? [...others, newEntry] : others;
+};
+
 type ApiEmploymentStatus = "active" | "on_leave" | "suspended" | "terminated";
 
 const toApiEmploymentStatus = (status: PersonFormValues["status"]): ApiEmploymentStatus => {
@@ -49,11 +77,16 @@ export const normalizePersonRead = (raw: unknown): PersonDto => {
     last_name: last,
     middle_name: middle,
     full_name: fullName,
-    position: typeof r.position === "string" ? r.position : undefined,
+    position: typeof r.position_title === "string" ? r.position_title : undefined,
     email: r.email != null ? String(r.email) : undefined,
     phone: r.phone != null ? String(r.phone) : undefined,
     status: employmentStatusToUi(employment),
-    company_id: typeof r.company_id === "string" ? r.company_id : undefined
+    company_id: typeof r.company_id === "string" ? r.company_id : undefined,
+    // Прокидываем qualifications, чтобы будущий edit-режим формы не затирал прочие квалификации
+    // (merge в PersonFormDialog читает их из initialData). См. handoff: пробел захвата.
+    qualifications: Array.isArray(r.qualifications)
+      ? (r.qualifications as Array<Record<string, unknown>>)
+      : [],
   };
 };
 
@@ -62,9 +95,11 @@ export const buildPersonCreateBody = (values: PersonFormValues) => ({
   first_name: values.first_name.trim(),
   last_name: values.last_name.trim(),
   middle_name: values.middle_name?.trim() || undefined,
+  position_title: values.position?.trim() || undefined,
   email: values.email?.trim() || undefined,
   phone: values.phone?.trim() || undefined,
-  employment_status: toApiEmploymentStatus(values.status)
+  employment_status: toApiEmploymentStatus(values.status),
+  ...(values.qualifications !== undefined ? { qualifications: values.qualifications } : {})
 });
 
 export const buildPersonPatchBody = (values: PersonFormValues) => ({
@@ -72,9 +107,11 @@ export const buildPersonPatchBody = (values: PersonFormValues) => ({
   first_name: values.first_name.trim(),
   last_name: values.last_name.trim(),
   middle_name: values.middle_name?.trim() || undefined,
+  position_title: values.position?.trim() || undefined,
   email: values.email?.trim() || undefined,
   phone: values.phone?.trim() || undefined,
-  employment_status: toApiEmploymentStatus(values.status)
+  employment_status: toApiEmploymentStatus(values.status),
+  ...(values.qualifications !== undefined ? { qualifications: values.qualifications } : {})
 });
 
 type PersonListResponse = { items?: unknown[]; total?: number };
@@ -89,4 +126,12 @@ export async function fetchPersonsForCompany(companyId: string, listLimit = 200)
   });
   const rows = (data.items ?? []).map((row) => normalizePersonRead(row));
   return rows.filter((p) => p.company_id === companyId);
+}
+
+/** Все сотрудники тенанта (для маппинга person_id→ФИО и выпадающего списка в форме допуска). */
+export async function fetchAllPersons(listLimit = 500): Promise<PersonDto[]> {
+  const { data } = await apiClient.get<PersonListResponse>("/persons", {
+    params: { limit: listLimit, offset: 0 }
+  });
+  return (data.items ?? []).map((row) => normalizePersonRead(row));
 }

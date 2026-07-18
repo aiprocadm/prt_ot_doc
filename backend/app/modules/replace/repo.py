@@ -6,7 +6,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.modules.replace.models import ReplaceMap, ReplaceRun
 
 
-async def get_replace_map_by_code(session: AsyncSession, *, tenant_id: str, code: str) -> ReplaceMap | None:
+async def get_replace_map_by_code(
+    session: AsyncSession, *, tenant_id: str, code: str
+) -> ReplaceMap | None:
     return (
         await session.execute(
             select(ReplaceMap).where(
@@ -20,15 +22,21 @@ async def get_replace_map_by_code(session: AsyncSession, *, tenant_id: str, code
 
 async def list_replace_maps(session: AsyncSession, *, tenant_id: str) -> list[ReplaceMap]:
     return (
-        await session.execute(
-            select(ReplaceMap)
-            .where(ReplaceMap.tenant_id == tenant_id, ReplaceMap.deleted_at.is_(None))
-            .order_by(ReplaceMap.updated_at.desc())
+        (
+            await session.execute(
+                select(ReplaceMap)
+                .where(ReplaceMap.tenant_id == tenant_id, ReplaceMap.deleted_at.is_(None))
+                .order_by(ReplaceMap.updated_at.desc())
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
 
 
-async def get_replace_run(session: AsyncSession, *, tenant_id: str, run_id: str) -> ReplaceRun | None:
+async def get_replace_run(
+    session: AsyncSession, *, tenant_id: str, run_id: str
+) -> ReplaceRun | None:
     row = await session.get(ReplaceRun, run_id)
     if row is None or str(row.tenant_id) != str(tenant_id):
         return None

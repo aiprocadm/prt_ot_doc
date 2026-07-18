@@ -14,7 +14,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.config import Settings
 from app.db.session import engine
-from app.domains.files import s3
+from app.modules.files import s3
 from app.modules.health_checks.schemas import (
     HealthCheckComprehensiveResponse,
     HealthCheckItem,
@@ -41,9 +41,7 @@ class HealthCheckCache:
             return None
         return result
 
-    def set(
-        self, tenant_id: str, result: HealthCheckComprehensiveResponse
-    ) -> None:
+    def set(self, tenant_id: str, result: HealthCheckComprehensiveResponse) -> None:
         """Cache a result."""
         self.cache[tenant_id] = (datetime.utcnow(), result)
 
@@ -346,13 +344,13 @@ class HealthCheckService:
         # Failed optional checks → "degraded"
         # All ok → "ok"
         has_failed_critical = any(
-            results.get(check, HealthCheckItem(name="", status="unknown")).status
+            results.get(check, HealthCheckItem(name="", status="unknown", duration_ms=0.0)).status
             == "failed"
             for check in ["postgres", "redis", "minio"]
         )
 
         has_failed_optional = any(
-            results.get(check, HealthCheckItem(name="", status="unknown")).status
+            results.get(check, HealthCheckItem(name="", status="unknown", duration_ms=0.0)).status
             == "failed"
             for check in results.keys()
             if check not in ["postgres", "redis", "minio"]

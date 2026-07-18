@@ -65,9 +65,7 @@ class CalendarViewsService:
         stmt = select(SavedCalendarView).where(and_(*criteria))
         return (await self.db.execute(stmt)).scalar_one_or_none()
 
-    async def create(
-        self, *, name: str, payload: dict[str, Any]
-    ) -> SavedCalendarView:
+    async def create(self, *, name: str, payload: dict[str, Any]) -> SavedCalendarView:
         existing = await self._find_by_name(name)
         if existing is not None:
             raise SavedCalendarViewNameConflictError(

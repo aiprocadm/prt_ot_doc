@@ -5,7 +5,14 @@ from fastapi import status
 
 
 @pytest.mark.asyncio
-async def test_edo_send_and_webhook_expose_non_production_provider_metadata(async_client, sessionmaker, make_auth_headers, data_factory):
+async def test_edo_send_returns_409_provider_not_configured(
+    async_client, sessionmaker, make_auth_headers, data_factory
+):
+    """Честный контракт: /edo/send без настроенного провайдера → 409 EDO_PROVIDER_NOT_CONFIGURED.
+
+    Прежний тест проверял 200 + provider_mode (симуляция). После чистки симуляции
+    эндпоинт сразу отказывает с корректным problem-detail.
+    """
     async with sessionmaker() as session:
         tenant = await data_factory.ensure_tenant(session=session)
         tenant.settings = {"edo_webhook_secret": "dev-secret"}
@@ -19,23 +26,20 @@ async def test_edo_send_and_webhook_expose_non_production_provider_metadata(asyn
         headers=headers,
     )
 
-    assert send.status_code == status.HTTP_200_OK
-    assert send.json()["provider_mode"] == "non_production"
-    assert send.json()["provider_production_ready"] is False
-
-    hook = await async_client.post(
-        "/api/v1/edo/webhooks/mock",
-        json={"event_id": "evt-provider-meta", "external_id": send.json()["external_id"], "status": "accepted", "raw_payload": {}},
-        headers=headers,
-    )
-
-    assert hook.status_code == status.HTTP_200_OK
-    assert hook.json()["provider_code"] == "mock"
-    assert hook.json()["provider_mode"] == "non_production"
+    assert send.status_code == status.HTTP_409_CONFLICT
+    detail = send.json()["detail"]
+    assert detail["code"] == "EDO_PROVIDER_NOT_CONFIGURED"
 
 
 @pytest.mark.asyncio
-async def test_approval_sign_request_lists_provider_metadata(async_client, sessionmaker, make_auth_headers, data_factory):
+async def test_sign_requests_non_pep_returns_409_provider_not_configured(
+    async_client, sessionmaker, make_auth_headers, data_factory
+):
+    """Честный контракт: POST /sign/requests с signature_type != "pep" → 409 SIGNATURE_PROVIDER_NOT_CONFIGURED.
+
+    Оркестратор принимает только ПЭП-тип; все внешние провайдеры подписи
+    (KEP, UNEP, МЧД и любой неизвестный тип) не сконфигурированы.
+    """
     async with sessionmaker() as session:
         tenant = await data_factory.ensure_tenant(session=session)
         _, version = await data_factory.create_document(tenant=tenant, session=session)
@@ -53,9 +57,6 @@ async def test_approval_sign_request_lists_provider_metadata(async_client, sessi
         headers=headers,
     )
 
-    assert create.status_code == status.HTTP_200_OK
-    assert create.json()["provider_mode"] == "non_production"
-
-    listing = await async_client.get("/api/v1/sign/requests", headers=headers)
-    assert listing.status_code == status.HTTP_200_OK
-    assert listing.json()["items"][0]["provider_mode"] == "non_production"
+    assert create.status_code == status.HTTP_409_CONFLICT
+    detail = create.json()["detail"]
+    assert detail["code"] == "SIGNATURE_PROVIDER_NOT_CONFIGURED"

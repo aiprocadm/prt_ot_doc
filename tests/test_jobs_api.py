@@ -402,7 +402,9 @@ async def test_jobs_ws_stream_endpoint(
 
 
 @pytest.mark.anyio
-async def test_job_steps_timeline_endpoint(async_client, make_auth_headers, sessionmaker, data_factory) -> None:
+async def test_job_steps_timeline_endpoint(
+    async_client, make_auth_headers, sessionmaker, data_factory
+) -> None:
     async with sessionmaker() as session:
         tenant = await data_factory.ensure_tenant(session=session)
         job = DocumentJob(
@@ -454,7 +456,9 @@ async def test_job_steps_timeline_endpoint(async_client, make_auth_headers, sess
 
 
 @pytest.mark.anyio
-async def test_retry_job_with_step_code_query(async_client, make_auth_headers, sessionmaker, data_factory) -> None:
+async def test_retry_job_with_step_code_query(
+    async_client, make_auth_headers, sessionmaker, data_factory
+) -> None:
     async with sessionmaker() as session:
         tenant = await data_factory.ensure_tenant(session=session)
         job = DocumentJob(
@@ -490,7 +494,9 @@ async def test_retry_job_with_step_code_query(async_client, make_auth_headers, s
     headers = await make_auth_headers()
     headers["x-tenant"] = str(tenant.id)
     await _ensure_global_tenant(slug=tenant.slug, tenant_id=str(tenant.id))
-    resp = await async_client.post(f"/api/v1/jobs/{job_id}/retry", params={"step_code": "convert_pdf"}, headers=headers)
+    resp = await async_client.post(
+        f"/api/v1/jobs/{job_id}/retry", params={"step_code": "convert_pdf"}, headers=headers
+    )
     assert resp.status_code == 200, resp.text
     assert resp.json()["job"]["id"] == job_id
 

@@ -65,10 +65,10 @@ const AppRouter = () => {
           <Route path="/auth" element={<AuthLayout />}>
             <Route path="login" element={<LoginPage />} />
           </Route>
+          <Route path="/no-access" element={<AccessDeniedPage />} />
           <Route element={<ProtectedRoute />}>
             <Route element={<MainLayout />}>
               <Route index element={<LandingRedirect />} />
-              <Route path="/no-access" element={<AccessDeniedPage />} />
               {buildProtectedRouteGroups()}
             </Route>
           </Route>

@@ -33,7 +33,7 @@ class Checklist(TenantBaseModel):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     inspections = relationship(
-        "Inspection",
+        "app.models.checks.Inspection",
         back_populates="checklist",
         cascade="all, delete-orphan",
         passive_deletes=True,
@@ -123,9 +123,9 @@ class Violation(TenantBaseModel):
     photo_key: Mapped[str | None] = mapped_column(String(255))
     description: Mapped[str | None] = mapped_column(Text)
 
-    inspection = relationship("Inspection", back_populates="violations")
+    inspection = relationship("app.models.checks.Inspection", back_populates="violations")
     corrective_actions = relationship(
-        "CorrectiveAction",
+        "app.models.checks.CorrectiveAction",
         back_populates="violation",
         cascade="all, delete-orphan",
         passive_deletes=True,

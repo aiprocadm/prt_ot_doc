@@ -36,11 +36,21 @@ def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> str | No
 
 ManagerAccess = Annotated[
     AccessContext,
-    Depends(abac(_tenant_resource_id, required_roles=_ATTESTATION_READ_ROLES, action="read attestations")),
+    Depends(
+        abac(
+            _tenant_resource_id, required_roles=_ATTESTATION_READ_ROLES, action="read attestations"
+        )
+    ),
 ]
 EditorAccess = Annotated[
     AccessContext,
-    Depends(abac(_tenant_resource_id, required_roles=_ATTESTATION_WRITE_ROLES, action="manage attestations")),
+    Depends(
+        abac(
+            _tenant_resource_id,
+            required_roles=_ATTESTATION_WRITE_ROLES,
+            action="manage attestations",
+        )
+    ),
 ]
 
 
@@ -65,7 +75,9 @@ async def _get_position(session: AsyncSession, tenant_id: str, position_id: str)
 
 
 async def _get_user(session: AsyncSession, tenant_id: str, user_id: str) -> User:
-    stmt = select(User).where(User.id == user_id, User.tenant_id == tenant_id, User.deleted_at.is_(None))
+    stmt = select(User).where(
+        User.id == user_id, User.tenant_id == tenant_id, User.deleted_at.is_(None)
+    )
     user = (await session.execute(stmt)).scalar_one_or_none()
     if user is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
@@ -111,7 +123,9 @@ async def list_attestations(
     stmt = stmt.offset(offset).limit(limit)
     items = list((await session.execute(stmt)).scalars().all())
     total = await session.scalar(total_stmt)
-    return AttestationPage(items=[AttestationRead.model_validate(item) for item in items], total=int(total or 0))
+    return AttestationPage(
+        items=[AttestationRead.model_validate(item) for item in items], total=int(total or 0)
+    )
 
 
 @router.post("/attestations", response_model=AttestationRead, status_code=status.HTTP_201_CREATED)
