@@ -12,7 +12,12 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.tenant import TENANT_HEADER, tenant_required
-from app.db.session import AsyncSessionLocal, ensure_tenant_schema, get_tenant_session
+from app.db.session import (
+    AsyncSessionLocal,
+    ensure_tenant_schema,
+    get_tenant_session,
+    transaction_scope,
+)
 from app.models.models import Tenant
 from app.services.file_storage import FileStorageService
 from app.services.integrations import (
@@ -234,7 +239,11 @@ async def get_session(tenant: Tenant = Depends(get_tenant_record)) -> AsyncItera
         if getattr(tenant, "id", None) is not None:
             info["tenant_id"] = str(tenant.id)
         info.setdefault("token_tenant_id", None)
-        yield session
+        # Own the request transaction. ``get_tenant_session`` only routes the schema
+        # and closes the session, so without this a handler that merely flushes
+        # returns 2xx and loses the write.
+        async with transaction_scope(session):
+            yield session
 
 
 @lru_cache()

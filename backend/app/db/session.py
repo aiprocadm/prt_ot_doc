@@ -629,6 +629,25 @@ def AsyncSessionLocal(
 
 
 @asynccontextmanager
+async def transaction_scope(session: AsyncSession) -> AsyncIterator[AsyncSession]:
+    """Own the transaction for an existing session: commit on clean exit, roll back on error.
+
+    Single source of truth for the request-transaction contract. Both the API
+    dependency (``app.api.dependencies.get_session``) and the test double in
+    ``tests/conftest.py`` route through this, so the harness cannot drift into
+    being more forgiving than production — the divergence that let flush-only
+    handlers return 2xx while discarding their writes.
+    """
+
+    try:
+        yield session
+        await session.commit()
+    except Exception:
+        await session.rollback()
+        raise
+
+
+@asynccontextmanager
 async def session_scope(
     *, tenant: str | None = None, schema_name: str | None = None
 ) -> AsyncIterator[AsyncSession]:
@@ -642,12 +661,8 @@ async def session_scope(
     """
 
     async with AsyncSessionLocal(tenant=tenant, schema_name=schema_name) as session:
-        try:
+        async with transaction_scope(session):
             yield session
-            await session.commit()
-        except Exception:
-            await session.rollback()
-            raise
 
 
 async def get_session() -> AsyncIterator[AsyncSession]:
@@ -760,6 +775,7 @@ __all__ = [
     "engine",
     "supports_schemas",
     "session_scope",
+    "transaction_scope",
     "get_session",
     "resolve_tenant_schema",
     "with_tenant_session",

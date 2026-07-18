@@ -58,7 +58,7 @@ from app.api.dependencies import get_session, get_tenant_record
 from app.core.security import issue_access_token
 from app.core.tenant import TENANT_HEADER, tenant_required
 from app.db import Base, SharedBase
-from app.db.session import AsyncSessionLocal, configure_engine
+from app.db.session import AsyncSessionLocal, configure_engine, transaction_scope
 from app.models.models import Company, RoleEnum, Tenant, User
 from app.modules.files import s3
 from app.services.clamav import reset_quarantine_publisher
@@ -185,13 +185,12 @@ async def app_fixture():
         await seed_session.commit()
 
     async def override_session() -> AsyncIterator[AsyncSession]:
+        # Swap only the engine binding; the transaction contract must stay identical
+        # to production (app.api.dependencies.get_session) or the suite silently
+        # stops catching missing-commit bugs.
         async with TestSession() as session:
-            try:
+            async with transaction_scope(session):
                 yield session
-                await session.commit()
-            except Exception:
-                await session.rollback()
-                raise
 
     app = create_app()
     app.dependency_overrides[get_session] = override_session

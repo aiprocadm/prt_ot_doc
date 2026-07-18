@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from types import SimpleNamespace
 
 import pytest
+from sqlalchemy import select
 from starlette.requests import Request
 
 from app.api import dependencies
+from app.models.models import Tenant
+from app.models.ppe import PPESupplier
 
 
 @pytest.fixture(autouse=True)
@@ -82,6 +86,61 @@ async def test_get_session_uses_tenant_session_factory(monkeypatch: pytest.Monke
 
     await generator.aclose()
     assert recorder.contexts[0].exited is True
+
+
+async def _tenant_ref(sessionmaker) -> SimpleNamespace:
+    """Detached view of the seeded ``test`` tenant with the attrs get_session reads."""
+
+    async with sessionmaker() as session:
+        tenant = (await session.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()
+        return SimpleNamespace(slug=tenant.slug, id=tenant.id, schema_name=tenant.schema_name)
+
+
+async def test_get_session_commits_on_clean_exit(sessionmaker) -> None:
+    """A write made through the request session must survive the request.
+
+    Regression guard for the silent-discard class: ``get_session`` used to yield
+    without committing, so every handler that only flushed returned 2xx while the
+    row was thrown away on session close. FastAPI drives yield-dependencies through
+    ``asynccontextmanager``, so this exercises the real teardown path.
+    """
+
+    tenant = await _tenant_ref(sessionmaker)
+    name = "commit-contract-clean-exit"
+
+    async with asynccontextmanager(dependencies.get_session)(tenant) as session:
+        session.add(PPESupplier(tenant_id=tenant.id, name=name))
+
+    async with sessionmaker() as fresh:
+        row = (
+            await fresh.execute(select(PPESupplier).where(PPESupplier.name == name))
+        ).scalar_one_or_none()
+
+    assert row is not None, "write made through get_session was discarded (missing commit)"
+
+
+async def test_get_session_rolls_back_when_handler_raises(sessionmaker) -> None:
+    """A failed request must leave nothing behind.
+
+    Guards the other half of the transaction contract: commit-on-success must not
+    be added without rollback-on-error, or a handler that raises after mutating
+    would leak partial writes.
+    """
+
+    tenant = await _tenant_ref(sessionmaker)
+    name = "commit-contract-rollback"
+
+    with pytest.raises(RuntimeError):
+        async with asynccontextmanager(dependencies.get_session)(tenant) as session:
+            session.add(PPESupplier(tenant_id=tenant.id, name=name))
+            raise RuntimeError("handler failed after mutating")
+
+    async with sessionmaker() as fresh:
+        row = (
+            await fresh.execute(select(PPESupplier).where(PPESupplier.name == name))
+        ).scalar_one_or_none()
+
+    assert row is None, "failed request leaked a partial write"
 
 
 def test_resolve_tenant_helpers_keep_slug_and_id_separate() -> None:

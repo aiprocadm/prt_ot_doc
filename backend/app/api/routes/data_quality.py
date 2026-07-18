@@ -95,6 +95,9 @@ async def get_data_quality_report(
         )
     except Exception as e:
         logger.error(f"Error generating data quality report: {e}", exc_info=True)
+        # Swallowing the error means the request ends normally, so the session
+        # dependency will try to commit an aborted transaction. Clean it up first.
+        await db.rollback()
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content={"detail": "Failed to generate data quality report"},
@@ -134,6 +137,7 @@ async def check_data_quality(
         )
     except Exception as e:
         logger.error(f"Error running data quality check: {e}", exc_info=True)
+        await db.rollback()
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content={"detail": "Failed to run data quality check"},
