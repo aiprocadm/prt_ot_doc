@@ -1,3 +1,10 @@
+# Legacy testing doc pointer
+
+This file is kept only for backward-compatible links.
+
+Use the canonical testing guide instead:
+
+- `docs/TESTING.md`
 # Тестирование (канонический гайд)
 
 Короткие пути в репозитории; детализация по слоям — в `docs/TEST_BASELINE.md`, `docs/CI_PIPELINE_OVERVIEW.md`, `docs/stabilization/`.

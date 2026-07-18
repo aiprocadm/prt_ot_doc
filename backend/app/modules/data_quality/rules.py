@@ -708,6 +708,9 @@ class DocumentReadinessRule(DataQualityRule):
                             "missing_fields": missing_reasons,
                             "age_days": age_days,
                             "draft_age_threshold_days": DOCUMENT_READINESS_STALE_DRAFT_DAYS,
+                            "created_at": doc.created_at.isoformat()
+                            if doc.created_at
+                            else None,
                             "created_at": doc.created_at.isoformat() if doc.created_at else None,
                         },
                     )
@@ -737,6 +740,10 @@ class DocumentReadinessRule(DataQualityRule):
             tv_map: dict[str, TemplateVersion] = {}
             if tv_ids:
                 tv_rows = (
+                    await self.db.execute(
+                        select(TemplateVersion).where(TemplateVersion.id.in_(tv_ids))
+                    )
+                ).scalars().all()
                     (
                         await self.db.execute(
                             select(TemplateVersion).where(TemplateVersion.id.in_(tv_ids))

@@ -205,6 +205,11 @@ def _map_document_status(document: Document) -> str:
     if document.status in {DocumentStatus.GENERATED, DocumentStatus.APPROVED, DocumentStatus.SIGNED, DocumentStatus.ARCHIVED}:
         return "ready"
     if document.status is DocumentStatus.REVOKED:
+    if document.job and document.job.status == DocumentJobStatus.FAILED:
+        return "error"
+    if document.status in {DocumentStatus.GENERATED, DocumentStatus.APPROVED, DocumentStatus.SIGNED, DocumentStatus.ARCHIVED}:
+        return "ready"
+    if document.status == DocumentStatus.REVOKED:
         return "error"
     return "draft"
 
@@ -677,6 +682,7 @@ async def _resolve_run(
         if existing.context != context:
             raise HTTPException(status.HTTP_409_CONFLICT, "Idempotency key already used")
         if existing.status is PipelineRunStatus.ERROR:
+        if existing.status == PipelineRunStatus.ERROR:
             raise HTTPException(
                 status.HTTP_409_CONFLICT,
                 "Idempotency key refers to a failed generation task",
