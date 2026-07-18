@@ -540,6 +540,7 @@ class TestDocumentPersonCompanyMismatchRule:
 
 
 @pytest.mark.anyio
+class TestDocumentReadinessRule:
 class TestDocumentReadinessRuleRequiredFields:
     """Draft documents: stale without template version, or missing required wizard fields."""
 

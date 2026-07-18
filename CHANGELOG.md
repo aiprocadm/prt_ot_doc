@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## 2026-05-05 (Session 17 — Phase 3.1d: DocumentReadinessRule)
+- **`backend/app/modules/data_quality/rules.py`** — добавлено правило **`DocumentReadinessRule`** (`document_readiness`): DRAFT-документы старше **7** суток без `template_version_id` (MEDIUM, `missing_field`); DRAFT с привязанной `TemplateVersion`, у которой в `required_fields_schema` задан массив **`required`**, — проверка последней ревизии `DocumentVersion.data_json` на пустые обязательные поля (учёт вложенных корней `values` / `payload` / `fields` / `data`). Движок: **10 правил**.
+- **`tests/test_data_quality.py`** — класс `TestDocumentReadinessRule` (4 кейса), `expected_rules` в `TestDataQualityService` дополнен `document_readiness`.
+- **Frontend:** без изменений (`document` + `missing_field` уже в `WorkspaceDataQualityPage.tsx`).
+- **Validation:** локальный прогон `pytest tests/test_data_quality.py` в этой сессии не выполнен (Python runtime недоступен в agent shell); ожидается CI / локально: `python -m pytest tests/test_data_quality.py -p no:schemathesis`.
 ## 2026-07-18 (claude/tz-continuation-d43adc — §12.4 Бюджет безопасности срез-1: кросс-доменное ядро)
 
 ### Added
