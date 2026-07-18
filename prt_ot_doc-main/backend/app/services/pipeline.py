@@ -467,6 +467,7 @@ class PipelineService:
             )
             if (
                 previous_status is PipelineRunStatus.ERROR
+                previous_status == PipelineRunStatus.ERROR
                 and self._stage_completed(outputs, "store")
                 and outputs.get("docx_storage_key")
                 and outputs.get("pdf_storage_key")

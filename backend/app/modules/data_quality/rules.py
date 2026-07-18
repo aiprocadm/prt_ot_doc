@@ -33,6 +33,10 @@ from app.models.models import (
     Workplace,
 )
 
+
+# Drafts older than this without a pinned TemplateVersion are reported (wizard abandon).
+DOCUMENT_READINESS_STALE_DRAFT_DAYS = 7
+
 from .schemas import DataQualityIssue, IssueSeverity, IssueType
 
 logger = logging.getLogger("app.modules.data_quality")
@@ -633,6 +637,7 @@ class CompanyRequisitesRule(DataQualityRule):
 
 
 class DocumentReadinessRule(DataQualityRule):
+    """Draft documents that are stuck (no template version) or miss required wizard data."""
     """Draft documents that are stuck (template/file missing) or miss required wizard data."""
 
     @property
@@ -642,6 +647,8 @@ class DocumentReadinessRule(DataQualityRule):
     @property
     def rule_description(self) -> str:
         return (
+            "Draft documents stale without a pinned template version, or missing "
+            "fields required by the template JSON schema"
             "Draft documents stale without a pinned template version or generated file, "
             "or missing fields required by the template JSON schema"
         )
@@ -662,11 +669,21 @@ class DocumentReadinessRule(DataQualityRule):
             stale_stmt = select(Document).where(
                 Document.tenant_id == self.tenant_id,
                 Document.status == DocumentStatus.DRAFT,
+                Document.template_version_id.is_(None),
                 Document.created_at < stale_cutoff,
             )
             stale_docs = (await self.db.execute(stale_stmt)).scalars().all()
 
             for doc in stale_docs:
+                self.issues.append(
+                    DataQualityIssue(
+                        id=f"{self.rule_name}:document:{doc.id}:stale_no_template_version",
+                        issue_type=IssueType.MISSING_FIELD,
+                        severity=IssueSeverity.MEDIUM,
+                        title=f"Draft document {doc.id} stuck without template version",
+                        description=(
+                            f"This draft was created more than {DOCUMENT_READINESS_STALE_DRAFT_DAYS} days ago "
+                            "but still has no pinned template_version_id. Pin a version or delete the abandoned draft."
                 missing_reasons: list[str] = []
                 if not doc.template_version_id:
                     missing_reasons.append("missing_template_version")
@@ -703,11 +720,19 @@ class DocumentReadinessRule(DataQualityRule):
                         affected_entity_type="document",
                         affected_entity_id=str(doc.id),
                         additional_info={
+                            "reason": "stale_draft_missing_template_version",
+                            "created_at": doc.created_at.isoformat()
+                            if doc.created_at
+                            else None,
+                            "threshold_days": DOCUMENT_READINESS_STALE_DRAFT_DAYS,
                             "reason": primary_reason,
                             "missing": missing_reasons,
                             "missing_fields": missing_reasons,
                             "age_days": age_days,
                             "draft_age_threshold_days": DOCUMENT_READINESS_STALE_DRAFT_DAYS,
+                            "created_at": doc.created_at.isoformat()
+                            if doc.created_at
+                            else None,
                             "created_at": doc.created_at.isoformat() if doc.created_at else None,
                         },
                     )
@@ -737,6 +762,10 @@ class DocumentReadinessRule(DataQualityRule):
             tv_map: dict[str, TemplateVersion] = {}
             if tv_ids:
                 tv_rows = (
+                    await self.db.execute(
+                        select(TemplateVersion).where(TemplateVersion.id.in_(tv_ids))
+                    )
+                ).scalars().all()
                     (
                         await self.db.execute(
                             select(TemplateVersion).where(TemplateVersion.id.in_(tv_ids))
@@ -763,6 +792,7 @@ class DocumentReadinessRule(DataQualityRule):
                     continue
 
                 data_json = latest_payload.get(doc.id, {})
+                missing = [k for k in required if _wizard_required_value_blank(_lookup_wizard_field(data_json, k))]
                 missing = [
                     k
                     for k in required
