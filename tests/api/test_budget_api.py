@@ -243,6 +243,68 @@ async def test_budgets_list_etag_304(async_client, make_auth_headers, sessionmak
 
 
 @pytest.mark.asyncio
+async def test_expenses_list_etag_updates_on_article_rename(
+    async_client, make_auth_headers, sessionmaker, data_factory
+):
+    """Joined article_name участвует в теле ответа — rename не должен отдавать 304."""
+    await _enable_flag(sessionmaker, data_factory)
+    headers = await make_auth_headers(RoleEnum.ADMIN)
+
+    article = await async_client.post(
+        f"{BASE}/articles",
+        json={"code": "rename_me", "name": "Старое имя"},
+        headers=headers,
+    )
+    assert article.status_code == status.HTTP_201_CREATED, article.text
+    article_id = article.json()["id"]
+    expense = await async_client.post(
+        f"{BASE}/expenses",
+        json={
+            "domain": "training",
+            "article_id": article_id,
+            "title": "Расход",
+            "occurred_on": "2026-05-01",
+            "amount": 300,
+        },
+        headers=headers,
+    )
+    assert expense.status_code == status.HTTP_201_CREATED, expense.text
+    expense_id = expense.json()["id"]
+
+    lst = await async_client.get(f"{BASE}/expenses", headers=headers)
+    assert lst.status_code == status.HTTP_200_OK
+    etag = lst.headers.get("etag")
+    assert etag
+    replay = await async_client.get(f"{BASE}/expenses", headers={**headers, "If-None-Match": etag})
+    assert replay.status_code == status.HTTP_304_NOT_MODIFIED
+
+    renamed = await async_client.patch(
+        f"{BASE}/articles/{article_id}", json={"name": "Новое имя"}, headers=headers
+    )
+    assert renamed.status_code == status.HTTP_200_OK, renamed.text
+
+    fresh = await async_client.get(f"{BASE}/expenses", headers={**headers, "If-None-Match": etag})
+    assert fresh.status_code == status.HTTP_200_OK, fresh.text
+    assert fresh.json()["items"][0]["article_name"] == "Новое имя"
+
+    # Остальные ранее непокрытые роуты e2e: PATCH/DELETE expense, DELETE article.
+    patched = await async_client.patch(
+        f"{BASE}/expenses/{expense_id}", json={"amount": 450}, headers=headers
+    )
+    assert patched.status_code == status.HTTP_200_OK, patched.text
+    assert patched.json()["amount"] == 450.0
+
+    gone_expense = await async_client.delete(f"{BASE}/expenses/{expense_id}", headers=headers)
+    assert gone_expense.status_code == status.HTTP_204_NO_CONTENT
+    emptied = await async_client.get(f"{BASE}/expenses", headers=headers)
+    assert emptied.status_code == status.HTTP_200_OK
+    assert emptied.json()["total"] == 0
+
+    gone_article = await async_client.delete(f"{BASE}/articles/{article_id}", headers=headers)
+    assert gone_article.status_code == status.HTTP_204_NO_CONTENT
+
+
+@pytest.mark.asyncio
 async def test_budget_patch_explicit_null_422(
     async_client, make_auth_headers, sessionmaker, data_factory
 ):

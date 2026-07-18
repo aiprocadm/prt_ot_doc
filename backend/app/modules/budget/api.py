@@ -322,16 +322,17 @@ async def seed_default_articles(
 ) -> BudgetSeedResult:
     TenantContextValidator.ensure_tenant_context(tenant)
     created, skipped = await BudgetService(session, str(tenant.id)).seed_default_articles()
-    await _audit(
-        session,
-        request,
-        access,
-        str(tenant.id),
-        action="seed",
-        object_type="budget_expense_article",
-        object_id="defaults",
-        details={"created": created, "skipped": skipped},
-    )
+    if created > 0:  # no-op повторный сид не пишет audit-строку
+        await _audit(
+            session,
+            request,
+            access,
+            str(tenant.id),
+            action="seed",
+            object_type="budget_expense_article",
+            object_id="defaults",
+            details={"created": created, "skipped": skipped},
+        )
     await session.commit()
     return BudgetSeedResult(created=created, skipped=skipped)
 
@@ -475,6 +476,10 @@ async def list_expenses(
             ("company_id", company_id or ""),
             ("branch_id", branch_id or ""),
             ("site_id", site_id or ""),
+            # Joined article names участвуют в теле ответа, но не в (id, updated_at)
+            # строк расходов — без этого скаляра rename статьи отдавал бы 304 со
+            # старым именем.
+            ("article_names", "|".join((name or "") for _, name in rows)),
         ],
     )
     if request.headers.get("if-none-match") == etag:

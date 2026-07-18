@@ -15,9 +15,9 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.budget import (
+    EXPENSE_ENTITY_TYPES,
     BudgetExpense,
     BudgetExpenseArticle,
-    EXPENSE_ENTITY_TYPES,
     SafetyBudget,
 )
 from app.models.master_data import Branch, Company, Site
@@ -278,13 +278,12 @@ class BudgetService:
         article.deleted_at = datetime.now(timezone.utc)
         await self.session.flush()
 
-    async def seed_default_articles(self) -> tuple[int, int]:
-        """Insert the DEFAULT_ARTICLES catalog for this tenant; existing codes are kept as-is.
+    async def _seed_default_articles_pass(self) -> int:
+        """One membership+insert+flush pass of the default-articles seed.
 
-        A single membership query (no ``deleted_at`` filter — a soft-deleted default
-        counts as "already seeded", it is not silently resurrected) decides what is
-        missing; a pre-existing custom article sharing a default code is never
-        overwritten.
+        The membership query has no ``deleted_at`` filter — a soft-deleted default
+        counts as "already seeded", it is not silently resurrected — and a
+        pre-existing custom article sharing a default code is never overwritten.
         """
         existing_codes = set(
             (
@@ -302,14 +301,26 @@ class BudgetService:
             if code in existing_codes:
                 continue
             self.session.add(
-                BudgetExpenseArticle(
-                    tenant_id=self.tenant_id, code=code, name=name, domain=domain
-                )
+                BudgetExpenseArticle(tenant_id=self.tenant_id, code=code, name=name, domain=domain)
             )
             created += 1
         await self.session.flush()
-        skipped = len(DEFAULT_ARTICLES) - created
-        return created, skipped
+        return created
+
+    async def seed_default_articles(self) -> tuple[int, int]:
+        """Insert the DEFAULT_ARTICLES catalog for this tenant; existing codes are kept as-is.
+
+        Гонка параллельных сидов (паттерн create_article): проигравший flush ловит
+        IntegrityError по uq_budget_expense_article_tenant_code, откатывает
+        транзакцию и повторяет проход ОДИН раз — второй проход видит победившие
+        коды и пропускает их, возвращая свои счётчики.
+        """
+        try:
+            created = await self._seed_default_articles_pass()
+        except IntegrityError:
+            await self.session.rollback()
+            created = await self._seed_default_articles_pass()
+        return created, len(DEFAULT_ARTICLES) - created
 
     # ------------------------------------------------------------------
     # expenses
@@ -322,9 +333,7 @@ class BudgetService:
         )
 
     async def _load_expense(self, expense_id: str) -> BudgetExpense:
-        row = await self.session.scalar(
-            self._expense_base().where(BudgetExpense.id == expense_id)
-        )
+        row = await self.session.scalar(self._expense_base().where(BudgetExpense.id == expense_id))
         if row is None:
             raise ExpenseNotFound(expense_id)
         return row
@@ -412,9 +421,7 @@ class BudgetService:
                     f"entity_type {entity_type!r} is not valid for domain {domain!r}",
                 )
             model = _ENTITY_MODELS[entity_type]
-            stmt = select(model.id).where(
-                model.tenant_id == self.tenant_id, model.id == entity_id
-            )
+            stmt = select(model.id).where(model.tenant_id == self.tenant_id, model.id == entity_id)
             if hasattr(model, "deleted_at"):
                 stmt = stmt.where(model.deleted_at.is_(None))
             exists = await self.session.scalar(stmt)
@@ -494,9 +501,7 @@ class BudgetService:
         ).all()
         return [(row[0], row[1]) for row in rows], total
 
-    async def update_expense(
-        self, expense_id: str, payload: BudgetExpenseUpdate
-    ) -> BudgetExpense:
+    async def update_expense(self, expense_id: str, payload: BudgetExpenseUpdate) -> BudgetExpense:
         expense = await self._load_expense(expense_id)
         fields = payload.model_dump(exclude_unset=True)
         _reject_explicit_nulls(fields, _EXPENSE_NON_NULLABLE)
