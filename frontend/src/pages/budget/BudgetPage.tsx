@@ -6,6 +6,8 @@ import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingScreen } from "@/components/common/LoadingScreen";
 import { RegistryPageHeader } from "@/components/common/RegistryPageHeader";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { BudgetsTab } from "@/features/budget/BudgetsTab";
+import { OverviewTab } from "@/features/budget/OverviewTab";
 import { useAsyncResource } from "@/hooks/useAsyncResource";
 import type {
   BudgetArticlePageDto,
@@ -47,6 +49,17 @@ const BudgetPage = () => {
     errorMessage: "Не удалось загрузить данные бюджета безопасности"
   });
 
+  // Смена периода на вкладке «Сводка» перегружает только overview (остальные разделы страницы
+  // от окна дат не зависят) — патчим срез через setData вместо отдельного состояния.
+  const onWindowChange = async (range: { date_from: string; date_to: string }) => {
+    try {
+      const overview = await budgetApi.getOverview(range);
+      budgetRes.setData((prev) => ({ ...prev, overview }));
+    } catch {
+      // Ошибку уже показал глобальный обработчик API.
+    }
+  };
+
   if (budgetRes.error && isFeatureDisabledError(budgetRes.error)) {
     return (
       <EmptyState title="Функция недоступна" description="Бюджет безопасности не включён для этого тенанта." />
@@ -60,7 +73,7 @@ const BudgetPage = () => {
         description="Плановые бюджеты, статьи и журнал расходов по доменам обучения, медосмотров и мероприятий."
       />
 
-      <ErrorState error={budgetRes.error ?? undefined} onRetry={() => void budgetRes.reload()} />
+      <ErrorState error={budgetRes.error ?? undefined} onRetry={() => void budgetRes.reload().catch(() => undefined)} />
       {budgetRes.loading ? <LoadingScreen label="Загрузка бюджета" /> : null}
 
       {!budgetRes.loading && !budgetRes.error ? (
@@ -71,11 +84,14 @@ const BudgetPage = () => {
             <TabsTrigger value="expenses">Расходы</TabsTrigger>
             <TabsTrigger value="articles">Статьи</TabsTrigger>
           </TabsList>
-          <TabsContent value="overview">
-            <div data-testid="budget-tab-overview" />
+          <TabsContent value="overview" data-testid="budget-tab-overview">
+            <OverviewTab overview={budgetRes.data.overview} onWindowChange={(range) => void onWindowChange(range)} />
           </TabsContent>
-          <TabsContent value="budgets">
-            <div data-testid="budget-tab-budgets" />
+          <TabsContent value="budgets" data-testid="budget-tab-budgets">
+            <BudgetsTab
+              budgets={budgetRes.data.budgets}
+              onChanged={() => void budgetRes.reload().catch(() => undefined)}
+            />
           </TabsContent>
           <TabsContent value="expenses">
             <div data-testid="budget-tab-expenses" />
