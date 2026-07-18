@@ -8,8 +8,11 @@ from datetime import date, datetime, timezone
 from enum import Enum
 from typing import Any, Mapping
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
+
+# Fixed key for the global audit hash-chain advisory lock (arbitrary but stable).
+_AUDIT_CHAIN_LOCK_KEY = 6_120_2025
 
 from app.core.config import get_settings
 from app.core.tracing import get_trace_id
@@ -173,12 +176,10 @@ def field_level_diff(
         or isinstance(normalized_after.get(key), list)
     }
     for key in sorted(collection_keys):
-        before_list = (
-            normalized_before.get(key) if isinstance(normalized_before.get(key), list) else []
-        )
-        after_list = (
-            normalized_after.get(key) if isinstance(normalized_after.get(key), list) else []
-        )
+        _before_raw = normalized_before.get(key)
+        before_list: list[Any] = _before_raw if isinstance(_before_raw, list) else []
+        _after_raw = normalized_after.get(key)
+        after_list: list[Any] = _after_raw if isinstance(_after_raw, list) else []
         diff = _list_collection_diff(before_list, after_list)
         if diff["added"] or diff["removed"] or diff["updated"]:
             collections[key] = diff
@@ -211,6 +212,25 @@ class AuditService:
     async def _prev_hash(self) -> str | None:
         stmt = select(AuditLog.hash).order_by(AuditLog.when.desc()).limit(1)
         return (await self.session.execute(stmt)).scalar_one_or_none()
+
+    def _is_postgres(self) -> bool:
+        try:
+            bind = self.session.bind
+            return bind is not None and bind.dialect.name == "postgresql"
+        except Exception:  # pragma: no cover - defensive: any detection failure -> skip
+            return False
+
+    async def _lock_chain(self) -> None:
+        """Serialize audit appends on PostgreSQL via a transaction-scoped advisory lock
+        so two concurrent writers can't read the same ``prev_hash`` and fork the global
+        hash chain. Released automatically at transaction commit/rollback. No-op on
+        other backends (SQLite serializes writes already). The throughput tradeoff —
+        audit appends are globally serialized — is intentional."""
+        if self._is_postgres():
+            await self.session.execute(
+                text("SELECT pg_advisory_xact_lock(:key)"),
+                {"key": _AUDIT_CHAIN_LOCK_KEY},
+            )
 
     @staticmethod
     def _canonical_hash_payload(payload: Mapping[str, Any], prev_hash: str | None) -> str:
@@ -259,6 +279,9 @@ class AuditService:
         payload = _sanitize_mapping(details)
         safe_diff = _sanitize_mapping(changed_fields)
         correlation_id = request_id or get_trace_id(default="unknown")
+        # Serialize concurrent appends (PG advisory lock) before reading the previous
+        # hash, so two writers can't chain onto the same prev_hash and fork the chain.
+        await self._lock_chain()
         prev_hash = await self._prev_hash()
         hash_payload = {
             "tenant_id": tenant_id,
@@ -473,7 +496,6 @@ class AuditService:
             after_hash=compute_snapshot_hash(after),
         )
 
-
     async def log_change(
         self,
         *,
@@ -522,9 +544,7 @@ class AuditService:
         """Backward-compatible wrapper for logging audit events."""
 
         tenant_id = str(
-            self.session.info.get("tenant_id")
-            or self.session.info.get("token_tenant_id")
-            or ""
+            self.session.info.get("tenant_id") or self.session.info.get("token_tenant_id") or ""
         ).strip()
         return await self.log_event(
             tenant_id=tenant_id,

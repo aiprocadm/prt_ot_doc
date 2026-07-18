@@ -10,6 +10,7 @@ from sqlalchemy import select
 
 from app.core.tenant import tenant_context
 from app.db.session import ensure_tenant_schema, session_scope
+from app.db.tenant_row_guard import assert_tenant_row_matches_session
 from app.models.models import AuditExportJob, AuditLog
 from app.services.celery_app import celery_app
 from app.services.file_storage import FileStorageService
@@ -26,10 +27,20 @@ def export_audit_job(*, export_id: str, tenant_id: str) -> dict[str, str]:
                 job = await session.get(AuditExportJob, export_id)
                 if job is None:
                     return {"status": "missing"}
+                try:
+                    assert_tenant_row_matches_session(
+                        session,
+                        job,
+                        mismatch_event="audit_export_job.tenant_scope_mismatch",
+                        not_found_message="missing",
+                    )
+                except ValueError:
+                    return {"status": "missing"}
+                resolved_tenant_id = str(session.info.get("tenant_id") or "").strip() or tenant_id
                 job.status = "running"
                 await session.flush()
 
-                stmt = select(AuditLog).where(AuditLog.tenant_id == tenant_id)
+                stmt = select(AuditLog).where(AuditLog.tenant_id == resolved_tenant_id)
                 filters = job.filters or {}
                 if filters.get("entity_type"):
                     stmt = stmt.where(AuditLog.object_type == filters["entity_type"])
@@ -48,36 +59,57 @@ def export_audit_job(*, export_id: str, tenant_id: str) -> dict[str, str]:
                 if job.format == "csv":
                     buff = io.StringIO()
                     writer = csv.writer(buff)
-                    writer.writerow(["ts", "actor", "action", "entity_type", "entity_id", "correlation_id", "diff_json"])
+                    writer.writerow(
+                        [
+                            "ts",
+                            "actor",
+                            "action",
+                            "entity_type",
+                            "entity_id",
+                            "correlation_id",
+                            "diff_json",
+                        ]
+                    )
                     for row in rows:
-                        writer.writerow([
-                            row.when.isoformat(),
-                            row.user_id or "",
-                            row.action,
-                            row.object_type,
-                            row.object_id,
-                            row.correlation_id or row.request_id or "",
-                            json.dumps(row.changed_fields or {}, ensure_ascii=False),
-                        ])
+                        writer.writerow(
+                            [
+                                row.when.isoformat(),
+                                row.user_id or "",
+                                row.action,
+                                row.object_type,
+                                row.object_id,
+                                row.correlation_id or row.request_id or "",
+                                json.dumps(row.changed_fields or {}, ensure_ascii=False),
+                            ]
+                        )
                     body = buff.getvalue().encode("utf-8")
                 else:
                     lines = []
                     for row in rows:
-                        lines.append(json.dumps({
-                            "ts": row.when.isoformat(),
-                            "actor_id": row.user_id,
-                            "action": row.action,
-                            "entity_type": row.object_type,
-                            "entity_id": row.object_id,
-                            "correlation_id": row.correlation_id or row.request_id,
-                            "diff": row.changed_fields or {},
-                            "meta": row.details or {},
-                        }, ensure_ascii=False))
+                        lines.append(
+                            json.dumps(
+                                {
+                                    "ts": row.when.isoformat(),
+                                    "actor_id": row.user_id,
+                                    "action": row.action,
+                                    "entity_type": row.object_type,
+                                    "entity_id": row.object_id,
+                                    "correlation_id": row.correlation_id or row.request_id,
+                                    "diff": row.changed_fields or {},
+                                    "meta": row.details or {},
+                                },
+                                ensure_ascii=False,
+                            )
+                        )
                     body = ("\n".join(lines) + ("\n" if lines else "")).encode("utf-8")
 
                 extension = "csv" if job.format == "csv" else "jsonl"
                 key = f"{tenant_id}/exports/audit/{job.id}.{extension}"
-                FileStorageService.default().put(key, body, content_type="text/csv" if extension == "csv" else "application/x-ndjson")
+                FileStorageService.default().put(
+                    key,
+                    body,
+                    content_type="text/csv" if extension == "csv" else "application/x-ndjson",
+                )
 
                 job.storage_key = key
                 job.sha256 = hashlib.sha256(body).hexdigest()

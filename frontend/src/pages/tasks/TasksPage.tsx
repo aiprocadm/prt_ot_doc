@@ -1,11 +1,9 @@
 import { addDays, endOfDay, isWithinInterval, startOfDay } from "date-fns";
-import { useEffect, useMemo } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import { toast } from "sonner";
 
-import { EmptyState } from "@/components/common/EmptyState";
-import { ErrorState } from "@/components/common/ErrorState";
-import { LoadingScreen } from "@/components/common/LoadingScreen";
+import { ListStateGuard } from "@/components/common/ListStateGuard";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -16,7 +14,9 @@ import { TaskTable } from "@/features/tasks/TaskTable";
 import { PERMISSIONS } from "@/permissions/permissions";
 import { useTasksStore } from "@/stores/tasks";
 import type { TaskPriority } from "@/types/dto/tasks";
-import { entityCardLink, entityContextPath } from "@/utils/workspaceNavigation";
+import { ROUTES } from "@/router/routes";
+import { TaskFocusCard } from "@/widgets/tasks/TaskFocusCard";
+import { TaskCreateForm } from "@/widgets/tasks/TaskCreateForm";
 
 const TASK_TYPE_OPTIONS = [
   { value: "", label: "Все типы" },
@@ -45,42 +45,77 @@ const TASK_PRIORITIES: TaskPriority[] = ["low", "medium", "high", "critical"];
 const isTaskPriority = (value: string): value is TaskPriority => TASK_PRIORITIES.includes(value as TaskPriority);
 
 const TasksPage = () => {
-  const { list, loading, error, filters, setFilters, items, item, getById, patchTask, pagination } = useTasksStore();
-  const [searchParams] = useSearchParams();
+  const {
+    list,
+    loading,
+    error,
+    filters,
+    setFilters,
+    items,
+    item,
+    getById,
+    patchTask,
+    createTask,
+    pagination,
+    taskFocusLoadError,
+    clearTaskFocusState
+  } = useTasksStore();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const updateFilterQuery = (patch: { type?: string; overdue?: boolean; priority?: string }) => {
+    const next = new URLSearchParams(searchParams);
+    if ("type" in patch) {
+      if (patch.type) next.set("type", patch.type);
+      else next.delete("type");
+    }
+    if ("overdue" in patch) {
+      if (patch.overdue === undefined) next.delete("overdue");
+      else next.set("overdue", String(patch.overdue));
+    }
+    if ("priority" in patch) {
+      if (patch.priority) next.set("priority", patch.priority);
+      else next.delete("priority");
+    }
+    setSearchParams(next, { replace: true });
+  };
+
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [newTaskTitle, setNewTaskTitle] = useState("");
+  const [newTaskDescription, setNewTaskDescription] = useState("");
+  const [newTaskPriority, setNewTaskPriority] = useState<TaskPriority>("medium");
+  const [newTaskDueAt, setNewTaskDueAt] = useState("");
+  const [newTaskLinkType, setNewTaskLinkType] = useState<"" | "employee" | "company" | "task">("");
+  const [newTaskLinkEntityId, setNewTaskLinkEntityId] = useState("");
   const focusedTaskId = searchParams.get("task_id") ?? undefined;
   const focusedEntityType = searchParams.get("entity_type") ?? undefined;
   const focusedEntityId = searchParams.get("entity_id") ?? undefined;
 
+  const queryString = searchParams.toString();
+
   useEffect(() => {
-    const type = searchParams.get("type") ?? undefined;
-    const overdueParam = searchParams.get("overdue");
+    const params = new URLSearchParams(queryString);
+    const type = params.get("type") ?? undefined;
+    const overdueParam = params.get("overdue");
     const overdue =
       overdueParam === "true" ? true : overdueParam === "false" ? false : undefined;
-    const priorityParam = searchParams.get("priority");
+    const priorityParam = params.get("priority");
     const priority = priorityParam && isTaskPriority(priorityParam) ? priorityParam : undefined;
     setFilters({ type, overdue, priority });
     list({ type, overdue, priority });
-  }, [list, searchParams, setFilters]);
+  }, [list, queryString, setFilters]);
 
   useEffect(() => {
-    if (!focusedTaskId) return;
+    if (!focusedTaskId) {
+      clearTaskFocusState();
+      return;
+    }
     void getById(focusedTaskId);
-  }, [focusedTaskId, getById]);
+  }, [focusedTaskId, getById, clearTaskFocusState]);
 
   const focusedTask = useMemo(() => {
     if (!focusedTaskId) return null;
     return items.find((task) => task.id === focusedTaskId) ?? (item?.id === focusedTaskId ? item : null);
   }, [focusedTaskId, item, items]);
-
-  const focusedEntitySummaryLink = useMemo(
-    () => entityCardLink(focusedTask?.entity_type ?? focusedEntityType, focusedTask?.entity_id ?? focusedEntityId, "summary"),
-    [focusedEntityId, focusedEntityType, focusedTask?.entity_id, focusedTask?.entity_type]
-  );
-
-  const focusedEntityTimelineLink = useMemo(
-    () => entityCardLink(focusedTask?.entity_type ?? focusedEntityType, focusedTask?.entity_id ?? focusedEntityId, "timeline"),
-    [focusedEntityId, focusedEntityType, focusedTask?.entity_id, focusedTask?.entity_type]
-  );
 
   const stats = useMemo(() => {
     const now = new Date();
@@ -104,41 +139,111 @@ const TasksPage = () => {
   }, [items]);
 
   const handleTypeChange = (value: string) => {
-    setFilters({ type: value || undefined });
-    list({ type: value || undefined });
+    const type = value || undefined;
+    setFilters({ type });
+    updateFilterQuery({ type });
   };
 
   const handleDueFilterChange = (value: string) => {
     const overdue = value === "overdue" ? true : value === "upcoming" ? false : undefined;
     setFilters({ overdue });
-    list({ overdue });
+    updateFilterQuery({ overdue });
   };
 
   const handlePriorityChange = (value: string) => {
     const priority = value && isTaskPriority(value) ? value : undefined;
     setFilters({ priority });
-    list({ priority });
+    updateFilterQuery({ priority });
+  };
+
+  const resetCreateForm = () => {
+    setNewTaskTitle("");
+    setNewTaskDescription("");
+    setNewTaskPriority("medium");
+    setNewTaskDueAt("");
+    setNewTaskLinkType("");
+    setNewTaskLinkEntityId("");
+  };
+
+  const handleCreateTask = async () => {
+    const title = newTaskTitle.trim();
+    if (!title) {
+      toast.error("Введите название задачи");
+      return;
+    }
+    setCreating(true);
+    const dueAtIso = newTaskDueAt ? new Date(newTaskDueAt).toISOString() : null;
+    const entityId = newTaskLinkEntityId.trim() || null;
+    const entityType =
+      newTaskLinkType === "employee"
+        ? "person"
+        : newTaskLinkType === "company"
+          ? "company"
+          : newTaskLinkType === "task"
+            ? "task"
+            : null;
+    if (newTaskLinkType && !entityId) {
+      setCreating(false);
+      toast.error("Укажите ID для выбранной привязки");
+      return;
+    }
+    const created = await createTask({
+      title,
+      description: newTaskDescription.trim() || null,
+      priority: newTaskPriority,
+      due_at: dueAtIso,
+      entity_type: entityType,
+      entity_id: entityId,
+      assignee_id: newTaskLinkType === "employee" ? entityId : null
+    });
+    setCreating(false);
+    if (!created) {
+      toast.error("Не удалось добавить задачу");
+      return;
+    }
+    toast.success("Задача добавлена");
+    resetCreateForm();
+    setShowCreateForm(false);
+    const next = new URLSearchParams(searchParams);
+    next.set("task_id", created.id);
+    setSearchParams(next, { replace: true });
+    void list();
   };
 
   return (
     <div className="space-y-6">
-      <Breadcrumb items={[{ label: "Главная", to: "/dashboard" }, { label: "Задачи" }]} />
+      <Breadcrumb items={[{ label: "Главная", to: ROUTES.DASHBOARD }, { label: "Задачи" }]} />
       <RegistryPageHeader
         title="Задачи и обязательства"
         description="Контроль сроков, статусов и исполнителей по обязательствам."
         actions={
           <>
+            <ActionButton
+              permission={PERMISSIONS.TASK_UPDATE}
+              onClick={() => {
+                if (showCreateForm) {
+                  setShowCreateForm(false);
+                  resetCreateForm();
+                  return;
+                }
+                setShowCreateForm(true);
+              }}
+              title={showCreateForm ? "Скрыть форму добавления задачи" : "Добавить задачу"}
+              disabledReason="Недостаточно прав для добавления задачи"
+            >
+              {showCreateForm ? "Скрыть форму" : "Добавить задачу"}
+            </ActionButton>
             <Button
-              variant="outline"
+              variant="ghost"
               onClick={() => {
                 setFilters({ type: undefined, overdue: undefined });
-                list({ type: undefined, overdue: undefined });
+                updateFilterQuery({ type: undefined, overdue: undefined, priority: undefined });
               }}
               disabled={loading}
             >
               Сбросить фильтры
             </Button>
-            <Button variant="default" onClick={() => list()} disabled={loading}>
+            <Button variant="outline" onClick={() => list()} disabled={loading}>
               Обновить
             </Button>
           </>
@@ -153,62 +258,16 @@ const TasksPage = () => {
       <Card>
         <CardContent className="py-6">
           {focusedTaskId ? (
-            <div className="mb-4 rounded-md border bg-muted/20 p-4" data-testid="task-focus-card">
-              <div className="text-sm font-semibold">Фокус задачи из рабочего пространства</div>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {focusedTask
-                  ? `${focusedTask.title} · ${focusedTask.status} · ${focusedTask.priority}`
-                  : `Задача ${focusedTaskId.slice(0, 8)} загружается...`}
-              </p>
-              <div className="mt-2 flex flex-wrap gap-2 text-xs">
-                {focusedTask?.entity_type || focusedEntityType ? (
-                  <span className="rounded border px-2 py-1">
-                    entity_type: {focusedTask?.entity_type ?? focusedEntityType}
-                  </span>
-                ) : null}
-                {focusedTask?.entity_id || focusedEntityId ? (
-                  <span className="rounded border px-2 py-1">
-                    entity_id: {(focusedTask?.entity_id ?? focusedEntityId)?.slice(0, 12)}
-                  </span>
-                ) : null}
-              </div>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <ActionButton
-                  size="sm"
-                  variant="outline"
-                  permission={PERMISSIONS.TASK_UPDATE}
-                  onClick={() => {
-                    if (!focusedTask || focusedTask.status === "done") return;
-                    void patchTask(focusedTask.id, { status: "done" });
-                  }}
-                  disabled={!focusedTask || focusedTask.status === "done"}
-                  title="Закрыть фокусную задачу"
-                  disabledReason="Недостаточно прав для изменения статуса задачи"
-                >
-                  Закрыть фокусную задачу
-                </ActionButton>
-                {focusedEntitySummaryLink ? (
-                  <Button size="sm" variant="outline" asChild>
-                    <Link to={focusedEntitySummaryLink}>Открыть summary сущности</Link>
-                  </Button>
-                ) : null}
-                {focusedEntityTimelineLink ? (
-                  <Button size="sm" variant="outline" asChild>
-                    <Link to={focusedEntityTimelineLink}>Открыть timeline сущности</Link>
-                  </Button>
-                ) : null}
-                {entityContextPath(focusedTask?.entity_type ?? focusedEntityType) ? (
-                  <Button size="sm" variant="outline" asChild>
-                    <Link to={entityContextPath(focusedTask?.entity_type ?? focusedEntityType) ?? "/tasks"}>
-                      Открыть контекст сущности
-                    </Link>
-                  </Button>
-                ) : null}
-                <Button size="sm" variant="ghost" asChild>
-                  <Link to="/tasks">Сбросить фокус</Link>
-                </Button>
-              </div>
-            </div>
+            <TaskFocusCard
+              focusedTaskId={focusedTaskId}
+              focusedTask={focusedTask}
+              focusLoadError={taskFocusLoadError}
+              focusedEntityType={focusedEntityType}
+              focusedEntityId={focusedEntityId}
+              onCloseTask={(taskId) => {
+                void patchTask(taskId, { status: "done" });
+              }}
+            />
           ) : null}
 
           <div className="mb-4 flex flex-wrap gap-4">
@@ -255,10 +314,40 @@ const TasksPage = () => {
               </select>
             </FilterField>
           </div>
-          <TaskTable />
-          <ErrorState error={error ?? undefined} onRetry={() => void list()} />
-          {loading && items.length === 0 ? <LoadingScreen label="Загрузка задач" /> : null}
-          {!loading && !error && items.length === 0 ? <EmptyState title="Задач нет" description="Измените фильтры или дождитесь появления новых обязательств." /> : null}
+          <TaskCreateForm
+            visible={showCreateForm}
+            title={newTaskTitle}
+            description={newTaskDescription}
+            dueAt={newTaskDueAt}
+            priority={newTaskPriority}
+            linkType={newTaskLinkType}
+            linkEntityId={newTaskLinkEntityId}
+            creating={creating}
+            priorityOptions={PRIORITY_OPTIONS}
+            isTaskPriority={isTaskPriority}
+            setTitle={setNewTaskTitle}
+            setDescription={setNewTaskDescription}
+            setDueAt={setNewTaskDueAt}
+            setPriority={setNewTaskPriority}
+            setLinkType={setNewTaskLinkType}
+            setLinkEntityId={setNewTaskLinkEntityId}
+            onSubmit={() => void handleCreateTask()}
+            onCancel={() => {
+              setShowCreateForm(false);
+              resetCreateForm();
+            }}
+          />
+          <ListStateGuard
+            error={error}
+            loading={loading}
+            itemsCount={items.length}
+            loadingLabel="Загрузка задач"
+            emptyTitle="Задач нет"
+            emptyDescription="Измените фильтры или дождитесь появления новых обязательств."
+            onRetry={() => void list()}
+          >
+            <TaskTable />
+          </ListStateGuard>
         </CardContent>
       </Card>
     </div>

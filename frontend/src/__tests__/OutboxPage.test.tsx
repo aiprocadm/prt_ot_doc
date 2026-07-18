@@ -35,16 +35,16 @@ describe("OutboxPage", () => {
       </MemoryRouter>
     );
 
-    await screen.findByText(/webhook endpoints отсутствуют/i);
-    fireEvent.change(screen.getByPlaceholderText("https://example/webhook"), { target: { value: "https://hook.test" } });
-    fireEvent.change(screen.getByPlaceholderText("secret"), { target: { value: "secret-1" } });
-    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+    await screen.findByText(/точки вебхуков отсутствуют/i);
+    fireEvent.change(screen.getByPlaceholderText("https://example.com/webhook"), { target: { value: "https://hook.test" } });
+    fireEvent.change(screen.getByPlaceholderText("Секрет"), { target: { value: "secret-1" } });
+    fireEvent.click(screen.getByRole("button", { name: "Создать" }));
 
     await waitFor(() => {
       expect(screen.getByRole("alert")).toHaveTextContent("endpoint create failed");
     });
-    expect(screen.getByPlaceholderText("https://example/webhook")).toHaveValue("https://hook.test");
-    expect(screen.getByPlaceholderText("secret")).toHaveValue("secret-1");
+    expect(screen.getByPlaceholderText("https://example.com/webhook")).toHaveValue("https://hook.test");
+    expect(screen.getByPlaceholderText("Секрет")).toHaveValue("secret-1");
   });
 
   it("keeps endpoint list visible when test action fails", async () => {
@@ -65,7 +65,7 @@ describe("OutboxPage", () => {
     );
 
     await screen.findByText(/https:\/\/hook\.test/i);
-    fireEvent.click(screen.getByRole("button", { name: "Test" }));
+    fireEvent.click(screen.getByRole("button", { name: "Тест" }));
 
     await waitFor(() => {
       expect(screen.getByRole("alert")).toHaveTextContent("endpoint test failed");

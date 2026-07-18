@@ -360,12 +360,17 @@
       "frontend/src/router/AppRouter.tsx"
     ],
     "repo_level_directories": [
+      ".claude",
+      ".cursor",
       ".devcontainer",
       ".github",
       ".hypothesis",
       ".local_storage",
+      ".mypy_cache",
+      ".ruff_cache",
       ".vscode",
       "app",
+      "artifacts",
       "backend",
       "config",
       "docs",

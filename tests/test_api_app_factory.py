@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from httpx import ASGITransport, AsyncClient
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from app.api.app import _normalize_patterns, create_app
+from app.api.app import _CORS_ALLOW_HEADERS, _CORS_ALLOW_METHODS, _normalize_patterns, create_app
 from app.core.config import Settings
 from app.middleware.tenant import TenantMiddleware
 
@@ -38,6 +38,7 @@ async def test_create_app_configures_middlewares_and_routes() -> None:
     assert app.title == "Docs"
     assert app.docs_url == "/api/docs"
     assert app.openapi_url == "/api/openapi.json"
+    assert app.redoc_url == "/api/redoc"
     assert app.state.settings is settings
     assert app.state.debug is settings.debug
 
@@ -49,6 +50,8 @@ async def test_create_app_configures_middlewares_and_routes() -> None:
     cors_middleware = next(m for m in app.user_middleware if m.cls is CORSMiddleware)
     assert cors_middleware.kwargs["allow_origins"] == ["https://frontend.local"]
     assert cors_middleware.kwargs["allow_credentials"] is True
+    assert cors_middleware.kwargs["allow_methods"] == list(_CORS_ALLOW_METHODS)
+    assert cors_middleware.kwargs["allow_headers"] == list(_CORS_ALLOW_HEADERS)
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://example.com") as client:

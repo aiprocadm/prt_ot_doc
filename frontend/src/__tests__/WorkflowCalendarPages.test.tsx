@@ -4,8 +4,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import CalendarPage from "@/pages/calendar/CalendarPage";
 import WorkflowPage from "@/pages/workflow/WorkflowPage";
+import type { CalendarEventsResponseDto } from "@/types/dto/calendar";
 
 const getMock = vi.fn();
+const getCalendarEventsMock = vi.fn();
 
 vi.mock("@/api/client", () => ({
   apiClient: {
@@ -14,13 +16,30 @@ vi.mock("@/api/client", () => ({
   }
 }));
 
+vi.mock("@/api/calendar", () => ({
+  calendarApi: {
+    getEvents: (...args: unknown[]) => getCalendarEventsMock(...args)
+  }
+}));
+
+const emptyCalendar: CalendarEventsResponseDto = {
+  generated_at: "2026-05-07T10:00:00Z",
+  range_from: null,
+  range_to: null,
+  total: 0,
+  overdue_count: 0,
+  by_source: [],
+  items: []
+};
+
 describe("Workflow and Calendar operational states", () => {
   beforeEach(() => {
     getMock.mockReset();
+    getCalendarEventsMock.mockReset();
   });
 
   it("shows empty state on CalendarPage when no events exist", async () => {
-    getMock.mockResolvedValue({ data: [] });
+    getCalendarEventsMock.mockResolvedValue(emptyCalendar);
 
     render(
       <MemoryRouter>
@@ -28,7 +47,27 @@ describe("Workflow and Calendar operational states", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText(/события календаря отсутствуют/i)).toBeInTheDocument();
+    expect(await screen.findByText(/событий в календаре нет/i)).toBeInTheDocument();
+  });
+
+  it("forwards source_types and view from query params", async () => {
+    getCalendarEventsMock.mockResolvedValue(emptyCalendar);
+
+    render(
+      <MemoryRouter initialEntries={["/calendar?view=week&sources=training_session"]}>
+        <CalendarPage />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(getCalendarEventsMock).toHaveBeenCalledWith({
+        source_types: ["training_session"],
+        person_id: undefined,
+        site_id: undefined,
+        include_fact: undefined,
+        include_sla: undefined
+      });
+    });
   });
 
   it("shows workflow empty states when definitions, tasks and instances are empty", async () => {
@@ -45,10 +84,10 @@ describe("Workflow and Calendar operational states", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText(/workflow данные отсутствуют/i)).toBeInTheDocument();
-    expect(screen.getByText(/workflow definitions отсутствуют/i)).toBeInTheDocument();
-    expect(screen.getByText(/workflow instances отсутствуют/i)).toBeInTheDocument();
-    expect(screen.getByText(/workflow tasks отсутствуют/i)).toBeInTheDocument();
+    expect(await screen.findByText(/нет данных по процессам/i)).toBeInTheDocument();
+    expect(screen.getByText(/нет описаний процессов/i)).toBeInTheDocument();
+    expect(screen.getByText(/нет экземпляров процессов/i)).toBeInTheDocument();
+    expect(screen.getByText(/нет задач процесса/i)).toBeInTheDocument();
   });
 
   it("shows workflow error state when initial load fails", async () => {

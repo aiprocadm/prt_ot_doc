@@ -6,11 +6,57 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.core.security import abac
 from app.models.models import Tenant
 from app.modules.export_center.service import ExportCenterService
 from app.modules.projections.models import ExportJob, ExportSchedule, KpiDefinition
 
-router = APIRouter(prefix="/exports", tags=["exports"])
+
+def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> str | None:
+    return getattr(tenant, "id", None)
+
+
+# Read: все «офисные» роли (зеркало REPORTS_VIEW/DOCUMENT_EXPORT-матрицы фронта);
+# исключены worker / employee / contractor_inspector.
+_EXPORT_READ_ROLES = [
+    "admin",
+    "owner",
+    "ot_pb_lead",
+    "ot_head",
+    "hr",
+    "manager",
+    "line_manager",
+    "ot_specialist",
+    "pb_engineer",
+    "ecologist",
+    "accountant",
+    "lawyer",
+    "client_admin",
+    "client_user",
+    "auditor_ro",
+]
+_EXPORT_WRITE_ROLES = [
+    "admin",
+    "owner",
+    "ot_pb_lead",
+    "ot_head",
+    "ot_specialist",
+    "pb_engineer",
+    "ecologist",
+    "accountant",
+    "lawyer",
+    "line_manager",
+    "manager",
+]
+
+_ExportReadGuard = Depends(
+    abac(_tenant_resource_id, required_roles=_EXPORT_READ_ROLES, action="read exports")
+)
+_ExportWriteGuard = Depends(
+    abac(_tenant_resource_id, required_roles=_EXPORT_WRITE_ROLES, action="write exports")
+)
+
+router = APIRouter(prefix="/exports", tags=["exports"], dependencies=[_ExportReadGuard])
 
 
 class ExportCreate(BaseModel):
@@ -45,17 +91,32 @@ class KpiDefinitionCreate(BaseModel):
 
 
 @router.get("")
-async def list_exports(session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)):
-    rows = (await session.execute(select(ExportJob).where(ExportJob.tenant_id == str(tenant.id)).order_by(ExportJob.updated_at.desc()))).scalars().all()
+async def list_exports(
+    session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)
+):
+    rows = (
+        (
+            await session.execute(
+                select(ExportJob)
+                .where(ExportJob.tenant_id == str(tenant.id))
+                .order_by(ExportJob.updated_at.desc())
+            )
+        )
+        .scalars()
+        .all()
+    )
     return {"items": rows, "total": len(rows)}
 
 
 @router.get("/datasets")
 async def list_export_datasets():
-    return {"items": ExportCenterService.dataset_catalog(), "total": len(ExportCenterService.dataset_catalog())}
+    return {
+        "items": ExportCenterService.dataset_catalog(),
+        "total": len(ExportCenterService.dataset_catalog()),
+    }
 
 
-@router.post("", status_code=status.HTTP_201_CREATED)
+@router.post("", status_code=status.HTTP_201_CREATED, dependencies=[_ExportWriteGuard])
 async def create_export(
     payload: ExportCreate,
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
@@ -77,13 +138,29 @@ async def create_export(
 
 
 @router.get("/schedules")
-async def list_schedules(session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)):
-    rows = (await session.execute(select(ExportSchedule).where(ExportSchedule.tenant_id == str(tenant.id)).order_by(ExportSchedule.updated_at.desc()))).scalars().all()
+async def list_schedules(
+    session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)
+):
+    rows = (
+        (
+            await session.execute(
+                select(ExportSchedule)
+                .where(ExportSchedule.tenant_id == str(tenant.id))
+                .order_by(ExportSchedule.updated_at.desc())
+            )
+        )
+        .scalars()
+        .all()
+    )
     return {"items": rows, "total": len(rows)}
 
 
-@router.post("/schedules", status_code=status.HTTP_201_CREATED)
-async def create_schedule(payload: ExportScheduleCreate, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)):
+@router.post("/schedules", status_code=status.HTTP_201_CREATED, dependencies=[_ExportWriteGuard])
+async def create_schedule(
+    payload: ExportScheduleCreate,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+):
     return await ExportCenterService(session, str(tenant.id)).create_schedule_with_schema(
         name=payload.name,
         dataset_code=payload.dataset_code,
@@ -96,22 +173,52 @@ async def create_schedule(payload: ExportScheduleCreate, session: AsyncSession =
     )
 
 
-@router.post("/schedules/{schedule_id}/run-now", status_code=status.HTTP_201_CREATED)
-async def run_schedule_now(schedule_id: str, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)):
-    schedule = (await session.execute(select(ExportSchedule).where(ExportSchedule.id == schedule_id, ExportSchedule.tenant_id == str(tenant.id)))).scalar_one_or_none()
+@router.post(
+    "/schedules/{schedule_id}/run-now",
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[_ExportWriteGuard],
+)
+async def run_schedule_now(
+    schedule_id: str,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+):
+    schedule = (
+        await session.execute(
+            select(ExportSchedule).where(
+                ExportSchedule.id == schedule_id, ExportSchedule.tenant_id == str(tenant.id)
+            )
+        )
+    ).scalar_one_or_none()
     if schedule is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Export schedule not found")
     return await ExportCenterService(session, str(tenant.id)).run_schedule_now(schedule)
 
 
 @router.get("/kpis")
-async def list_kpis(session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)):
-    rows = (await session.execute(select(KpiDefinition).where(KpiDefinition.tenant_id == str(tenant.id)).order_by(KpiDefinition.updated_at.desc()))).scalars().all()
+async def list_kpis(
+    session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)
+):
+    rows = (
+        (
+            await session.execute(
+                select(KpiDefinition)
+                .where(KpiDefinition.tenant_id == str(tenant.id))
+                .order_by(KpiDefinition.updated_at.desc())
+            )
+        )
+        .scalars()
+        .all()
+    )
     return {"items": rows, "total": len(rows)}
 
 
-@router.post("/kpis", status_code=status.HTTP_201_CREATED)
-async def create_kpi(payload: KpiDefinitionCreate, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)):
+@router.post("/kpis", status_code=status.HTTP_201_CREATED, dependencies=[_ExportWriteGuard])
+async def create_kpi(
+    payload: KpiDefinitionCreate,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+):
     return await ExportCenterService(session, str(tenant.id)).create_kpi_definition(
         code=payload.code,
         name=payload.name,
@@ -123,16 +230,32 @@ async def create_kpi(payload: KpiDefinitionCreate, session: AsyncSession = Depen
 
 
 @router.get("/{job_id}")
-async def get_export(job_id: str, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)):
-    job = (await session.execute(select(ExportJob).where(ExportJob.id == job_id, ExportJob.tenant_id == str(tenant.id)))).scalar_one_or_none()
+async def get_export(
+    job_id: str,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+):
+    job = (
+        await session.execute(
+            select(ExportJob).where(ExportJob.id == job_id, ExportJob.tenant_id == str(tenant.id))
+        )
+    ).scalar_one_or_none()
     if job is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Export job not found")
     return job
 
 
-@router.post("/{job_id}/retry")
-async def retry_export(job_id: str, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)):
-    job = (await session.execute(select(ExportJob).where(ExportJob.id == job_id, ExportJob.tenant_id == str(tenant.id)))).scalar_one_or_none()
+@router.post("/{job_id}/retry", dependencies=[_ExportWriteGuard])
+async def retry_export(
+    job_id: str,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+):
+    job = (
+        await session.execute(
+            select(ExportJob).where(ExportJob.id == job_id, ExportJob.tenant_id == str(tenant.id))
+        )
+    ).scalar_one_or_none()
     if job is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Export job not found")
     job.status = "queued"
@@ -141,8 +264,16 @@ async def retry_export(job_id: str, session: AsyncSession = Depends(get_session)
 
 
 @router.get("/{job_id}/download-link")
-async def export_download_link(job_id: str, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)):
-    job = (await session.execute(select(ExportJob).where(ExportJob.id == job_id, ExportJob.tenant_id == str(tenant.id)))).scalar_one_or_none()
+async def export_download_link(
+    job_id: str,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+):
+    job = (
+        await session.execute(
+            select(ExportJob).where(ExportJob.id == job_id, ExportJob.tenant_id == str(tenant.id))
+        )
+    ).scalar_one_or_none()
     if job is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Export job not found")
     if not job.file_id:

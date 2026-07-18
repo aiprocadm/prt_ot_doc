@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from io import BytesIO
+from uuid import UUID
 
 from fastapi import (
     APIRouter,
@@ -20,7 +21,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.api.helpers.upload import reject_oversize_upload
 from app.core.idempotency import compute_request_hash
+from app.core.security import AccessContext, abac
 from app.models.document import DocumentVersion
 from app.models.models import Tenant
 from app.modules.replace.csv_parser import parse_replace_csv
@@ -39,10 +42,36 @@ from app.modules.replace.schemas import (
 )
 from app.modules.replace.service import create_document_version_from_bytes, execute_replace
 from app.services.audit import AuditService, field_level_diff
+from app.services.billing import BillingService
 from app.services.file_storage import FileStorageService
 from app.services.idempotency import IdempotencyService, normalize_idempotency_key
 
 router = APIRouter()
+
+_READ_ROLES = [
+    "admin",
+    "owner",
+    "hr",
+    "line_manager",
+    "manager",
+    "ot_pb_lead",
+    "ot_head",
+    "ot_specialist",
+    "pb_engineer",
+    "accountant",
+    "auditor_ro",
+]
+_WRITE_ROLES = ["admin", "owner", "ot_specialist"]
+
+
+def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> UUID | None:
+    return getattr(tenant, "id", None)
+
+
+ReadAccess = Depends(abac(_tenant_resource_id, required_roles=_READ_ROLES, action="read replace"))
+WriteAccess = Depends(
+    abac(_tenant_resource_id, required_roles=_WRITE_ROLES, action="write replace")
+)
 
 
 @router.post("/replace-maps", response_model=ReplaceMapRead, status_code=status.HTTP_201_CREATED)
@@ -51,10 +80,22 @@ async def create_replace_map(
     replace_csv: UploadFile | None = File(default=None),
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = WriteAccess,
 ) -> ReplaceMapRead:
     if replace_csv is not None:
+        reject_oversize_upload(
+            replace_csv,
+            code="REPLACE_MAP_UPLOAD_TOO_LARGE",
+            error_type="replace",
+            message="Файл карты замен превышает максимальный размер загрузки",
+        )
         rules = parse_replace_csv(await replace_csv.read())
-        data = ReplaceMapCreate(code=replace_csv.filename or "replace_map", name=replace_csv.filename or "csv", source_type="csv", rules=rules)
+        data = ReplaceMapCreate(
+            code=replace_csv.filename or "replace_map",
+            name=replace_csv.filename or "csv",
+            source_type="csv",
+            rules=rules,
+        )
     elif payload is not None:
         data = ReplaceMapCreate.model_validate_json(payload)
     else:
@@ -67,12 +108,26 @@ async def create_replace_map(
 
 
 @router.get("/replace-maps", response_model=ReplaceMapList)
-async def get_maps(session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> ReplaceMapList:
-    return ReplaceMapList(items=[ReplaceMapRead.model_validate(x) for x in await list_replace_maps(session, tenant_id=str(tenant.id))])
+async def get_maps(
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = ReadAccess,
+) -> ReplaceMapList:
+    return ReplaceMapList(
+        items=[
+            ReplaceMapRead.model_validate(x)
+            for x in await list_replace_maps(session, tenant_id=str(tenant.id))
+        ]
+    )
 
 
 @router.get("/replace-maps/{replace_map_id}", response_model=ReplaceMapRead)
-async def get_map(replace_map_id: str, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> ReplaceMapRead:
+async def get_map(
+    replace_map_id: str,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = ReadAccess,
+) -> ReplaceMapRead:
     row = await session.get(ReplaceMap, replace_map_id)
     if row is None or row.tenant_id != str(tenant.id) or row.deleted_at is not None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Replace map not found")
@@ -80,7 +135,13 @@ async def get_map(replace_map_id: str, session: AsyncSession = Depends(get_sessi
 
 
 @router.patch("/replace-maps/{replace_map_id}", response_model=ReplaceMapRead)
-async def patch_map(replace_map_id: str, payload: ReplaceMapPatch, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> ReplaceMapRead:
+async def patch_map(
+    replace_map_id: str,
+    payload: ReplaceMapPatch,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = WriteAccess,
+) -> ReplaceMapRead:
     row = await session.get(ReplaceMap, replace_map_id)
     if row is None or row.tenant_id != str(tenant.id) or row.deleted_at is not None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Replace map not found")
@@ -91,8 +152,15 @@ async def patch_map(replace_map_id: str, payload: ReplaceMapPatch, session: Asyn
     return ReplaceMapRead.model_validate(row)
 
 
-@router.delete("/replace-maps/{replace_map_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
-async def delete_map(replace_map_id: str, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> None:
+@router.delete(
+    "/replace-maps/{replace_map_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None
+)
+async def delete_map(
+    replace_map_id: str,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = WriteAccess,
+) -> None:
     row = await session.get(ReplaceMap, replace_map_id)
     if row is None or row.tenant_id != str(tenant.id) or row.deleted_at is not None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Replace map not found")
@@ -101,19 +169,43 @@ async def delete_map(replace_map_id: str, session: AsyncSession = Depends(get_se
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-async def _launch(document_version_id: str, payload: ReplaceLaunchRequest, mode: str, session: AsyncSession, tenant: Tenant, request: Request, idempotency_key: str | None) -> ReplaceLaunchResponse:
+async def _launch(
+    document_version_id: str,
+    payload: ReplaceLaunchRequest,
+    mode: str,
+    session: AsyncSession,
+    tenant: Tenant,
+    request: Request,
+    idempotency_key: str | None,
+) -> ReplaceLaunchResponse:
     endpoint = f"replace.{mode}"
     idem = IdempotencyService(session=session, tenant_id=str(tenant.id), endpoint=endpoint)
     idem_key = normalize_idempotency_key(idempotency_key)
-    req_hash = compute_request_hash({"document_version_id": document_version_id, "mode": mode, **payload.model_dump(mode="json")})
-    record, created = await idem.acquire(key=idem_key, request_hash=req_hash, method=request.method.upper(), path=request.url.path)
+    req_hash = compute_request_hash(
+        {
+            "document_version_id": document_version_id,
+            "mode": mode,
+            **payload.model_dump(mode="json"),
+        }
+    )
+    record, created = await idem.acquire(
+        key=idem_key, request_hash=req_hash, method=request.method.upper(), path=request.url.path
+    )
     if not created:
         return await idem.respond_from_store(record, model=ReplaceLaunchResponse)
+    if mode == "apply":
+        await BillingService(session).assert_allowed(tenant, "documents.generate")
 
     version = await session.get(DocumentVersion, document_version_id)
     if version is None or version.tenant_id != str(tenant.id):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Document version not found")
-    replace_map = await session.get(ReplaceMap, payload.replace_map_id) if payload.replace_map_id else await get_replace_map_by_code(session, tenant_id=str(tenant.id), code=str(payload.replace_map_code))
+    replace_map = (
+        await session.get(ReplaceMap, payload.replace_map_id)
+        if payload.replace_map_id
+        else await get_replace_map_by_code(
+            session, tenant_id=str(tenant.id), code=str(payload.replace_map_code)
+        )
+    )
     if replace_map is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Replace map not found")
 
@@ -125,6 +217,8 @@ async def _launch(document_version_id: str, payload: ReplaceLaunchRequest, mode:
         rules=replace_map.rules or [],
         case_sensitive=payload.options.case_sensitive,
         whole_word=payload.options.whole_word,
+        regex_enabled=payload.options.regex_enabled,
+        scope=payload.options.scope,
         storage=storage,
         run_id=record.id,
     )
@@ -176,8 +270,16 @@ async def _launch(document_version_id: str, payload: ReplaceLaunchRequest, mode:
             ip=request.client.host if request.client else "unknown",
             request_id=getattr(request.state, "trace_id", None),
             changed_fields=field_level_diff(
-                {"file_key": version.file_key, "file_id": version.file_id, "version_number": version.version_number},
-                {"file_key": new_version.file_key, "file_id": new_version.file_id, "version_number": new_version.version_number},
+                {
+                    "file_key": version.file_key,
+                    "file_id": version.file_id,
+                    "version_number": version.version_number,
+                },
+                {
+                    "file_key": new_version.file_key,
+                    "file_id": new_version.file_id,
+                    "version_number": new_version.version_number,
+                },
             ),
             details={"replace_run_id": run.id, "source_document_version_id": version.id},
         )
@@ -188,14 +290,36 @@ async def _launch(document_version_id: str, payload: ReplaceLaunchRequest, mode:
     return response
 
 
-@router.post("/documents/{document_version_id}/replace:dry-run", response_model=ReplaceLaunchResponse)
-async def replace_dry_run(document_version_id: str, payload: ReplaceLaunchRequest, request: Request, _idempotency: str | None = Header(default=None, alias="Idempotency-Key"), session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> ReplaceLaunchResponse:
-    return await _launch(document_version_id, payload, "dry_run", session, tenant, request, _idempotency)
+@router.post(
+    "/documents/{document_version_id}/replace:dry-run", response_model=ReplaceLaunchResponse
+)
+async def replace_dry_run(
+    document_version_id: str,
+    payload: ReplaceLaunchRequest,
+    request: Request,
+    _idempotency: str | None = Header(default=None, alias="Idempotency-Key"),
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = WriteAccess,
+) -> ReplaceLaunchResponse:
+    return await _launch(
+        document_version_id, payload, "dry_run", session, tenant, request, _idempotency
+    )
 
 
 @router.post("/documents/{document_version_id}/replace:apply", response_model=ReplaceLaunchResponse)
-async def replace_apply(document_version_id: str, payload: ReplaceLaunchRequest, request: Request, _idempotency: str | None = Header(default=None, alias="Idempotency-Key"), session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> ReplaceLaunchResponse:
-    return await _launch(document_version_id, payload, "apply", session, tenant, request, _idempotency)
+async def replace_apply(
+    document_version_id: str,
+    payload: ReplaceLaunchRequest,
+    request: Request,
+    _idempotency: str | None = Header(default=None, alias="Idempotency-Key"),
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = WriteAccess,
+) -> ReplaceLaunchResponse:
+    return await _launch(
+        document_version_id, payload, "apply", session, tenant, request, _idempotency
+    )
 
 
 @router.post("/replace-runs/{replace_run_id}/rollback", response_model=ReplaceLaunchResponse)
@@ -205,6 +329,7 @@ async def replace_rollback(
     request: Request,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = WriteAccess,
 ) -> ReplaceLaunchResponse:
     run = await get_replace_run(session, tenant_id=str(tenant.id), run_id=replace_run_id)
     if run is None or run.mode != "apply":
@@ -227,9 +352,14 @@ async def replace_rollback(
         )
         target_version = (await session.execute(stmt)).scalar_one_or_none()
     if target_version is None:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "target_document_version_id or rollback_to_version_number is required")
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "target_document_version_id or rollback_to_version_number is required",
+        )
     if target_version.document_id != source_version.document_id:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Target document version belongs to another document")
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, "Target document version belongs to another document"
+        )
 
     storage = FileStorageService.default()
     restored_bytes = storage.get(target_version.file_key)
@@ -251,8 +381,16 @@ async def replace_rollback(
         ip=request.client.host if request.client else "unknown",
         request_id=getattr(request.state, "trace_id", None),
         changed_fields=field_level_diff(
-            {"file_key": source_version.file_key, "file_id": source_version.file_id, "version_number": source_version.version_number},
-            {"file_key": new_version.file_key, "file_id": new_version.file_id, "version_number": new_version.version_number},
+            {
+                "file_key": source_version.file_key,
+                "file_id": source_version.file_id,
+                "version_number": source_version.version_number,
+            },
+            {
+                "file_key": new_version.file_key,
+                "file_id": new_version.file_id,
+                "version_number": new_version.version_number,
+            },
         ),
         details={"replace_run_id": run.id, "restored_from_version_id": target_version.id},
     )
@@ -271,7 +409,12 @@ async def replace_rollback(
 
 
 @router.get("/replace-runs/{replace_run_id}", response_model=ReplaceRunRead)
-async def get_run(replace_run_id: str, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> ReplaceRunRead:
+async def get_run(
+    replace_run_id: str,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = ReadAccess,
+) -> ReplaceRunRead:
     run = await get_replace_run(session, tenant_id=str(tenant.id), run_id=replace_run_id)
     if run is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Replace run not found")
@@ -279,7 +422,12 @@ async def get_run(replace_run_id: str, session: AsyncSession = Depends(get_sessi
 
 
 @router.get("/replace-runs/{replace_run_id}/report")
-async def get_report(replace_run_id: str, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> dict:
+async def get_report(
+    replace_run_id: str,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = ReadAccess,
+) -> dict:
     run = await get_replace_run(session, tenant_id=str(tenant.id), run_id=replace_run_id)
     if run is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Replace run not found")
@@ -287,7 +435,12 @@ async def get_report(replace_run_id: str, session: AsyncSession = Depends(get_se
 
 
 @router.get("/replace-runs/{replace_run_id}/report.csv")
-async def get_report_csv(replace_run_id: str, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> StreamingResponse:
+async def get_report_csv(
+    replace_run_id: str,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = ReadAccess,
+) -> StreamingResponse:
     run = await get_replace_run(session, tenant_id=str(tenant.id), run_id=replace_run_id)
     if run is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Replace run not found")

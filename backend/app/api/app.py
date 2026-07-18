@@ -24,16 +24,42 @@ from app.core.rate_limit import (
     configure_rate_limiter,
     limiter,
 )
-from app.db.session import dispose_engine
-from app.domains.files import s3
+from app.db.session import aensure_shared_schema, dispose_engine
 from app.middleware.billing_guard import BillingGuardMiddleware
 from app.middleware.global_error_handler import GlobalErrorHandlerMiddleware
 from app.middleware.observability import ObservabilityMiddleware
 from app.middleware.tenant import TenantMiddleware
+from app.modules.files import s3
 from app.services.demo_bootstrap import bootstrap_demo_tenant
 from app.services.dev_bootstrap import bootstrap_admin_user
 
 __all__ = ["create_app", "SettingsError"]
+
+_CORS_ALLOW_METHODS = ("GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
+_CORS_ALLOW_HEADERS = (
+    "Accept",
+    "Accept-Language",
+    "Authorization",
+    "Cache-Control",
+    "Content-Type",
+    "Idempotency-Key",
+    "If-Match",
+    "If-None-Match",
+    "X-Actor-Id",
+    "X-Attributes",
+    "X-Correlation-Id",
+    "X-Inbound-Webhook-Signature",
+    "X-Replace-Options",
+    "X-Request-Id",
+    "X-Roles",
+    "X-Signature",
+    "X-Tenant",
+    "X-Tenant-Code",
+    "X-Tenant-Slug",
+    "X-Trace-Id",
+    "X-User-Id",
+    "X-Webhook-Signature",
+)
 
 
 def _normalize_patterns(values: Iterable[str]) -> list[str]:
@@ -44,7 +70,7 @@ def _normalize_patterns(values: Iterable[str]) -> list[str]:
 def _configure_middlewares(app: FastAPI, settings: Settings) -> None:
     # Global error handler must be first to catch all exceptions
     app.add_middleware(GlobalErrorHandlerMiddleware)
-    
+
     allowed_hosts = _normalize_patterns(settings.allowed_hosts)
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=allowed_hosts)
 
@@ -53,8 +79,8 @@ def _configure_middlewares(app: FastAPI, settings: Settings) -> None:
         CORSMiddleware,
         allow_origins=allow_origins,
         allow_credentials=settings.cors_allow_credentials,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_methods=list(_CORS_ALLOW_METHODS),
+        allow_headers=list(_CORS_ALLOW_HEADERS),
     )
     app.add_middleware(TenantMiddleware, metrics_enabled=settings.enable_metrics)
     app.add_middleware(BillingGuardMiddleware)
@@ -73,16 +99,33 @@ def _create_lifespan(settings: Settings) -> Callable[[FastAPI], AsyncIterator[No
             extra={
                 "run_mode": settings.app_run_mode,
                 "storage_backend": settings.s3_backend,
-                "storage_root": str(settings.storage_root_path)
-                if settings.s3_backend == "local"
-                else None,
+                "storage_root": (
+                    str(settings.storage_root_path) if settings.s3_backend == "local" else None
+                ),
                 "celery_eager": settings.celery_eager,
                 "redis_enabled": settings.redis_enabled,
                 "settings": settings.redacted(),
             },
         )
         try:
+            # Register cross-base FK resolution so that string-form
+            # ForeignKey("tenant.id") on TenantBaseModel subclasses can resolve
+            # at flush time. Safe to call multiple times; must run before the
+            # first session.flush (bootstrap_demo_tenant below is the first
+            # flush in the lifespan).
+            from app.db.session import register_cross_base_fk_resolution
+
+            register_cross_base_fk_resolution()
             s3.ensure_bucket()
+            # iter-22: provision the shared schema on this loop BEFORE any
+            # session_scope / AsyncSessionLocal call. Without this, the first
+            # implicit ensure_shared_schema(implicit=True) from AsyncSessionLocal
+            # spawns a worker thread + asyncio.run, which seeds the engine's
+            # connection pool with futures bound to that worker loop. When the
+            # worker thread exits and the next access comes from the lifespan
+            # loop, asyncpg raises "Future attached to a different loop" and
+            # bootstrap_demo_tenant fails at _create_tenant_schema.
+            await aensure_shared_schema()
             await bootstrap_admin_user(settings)
             await bootstrap_demo_tenant(settings)
         except Exception:  # pragma: no cover - infrastructure guard
@@ -114,6 +157,7 @@ def _register_metrics_endpoint(app: FastAPI, settings: Settings) -> None:
         )
         return Response(content=payload, media_type=content_type)
 
+
 def _register_idempotency_middleware(app: FastAPI) -> None:
     logger = logging.getLogger("app.idempotency")
 
@@ -132,17 +176,27 @@ def _register_idempotency_middleware(app: FastAPI) -> None:
         return response
 
 
-
 def create_app(settings: Settings | None = None) -> FastAPI:
     """Create and configure a FastAPI application instance."""
 
     settings = settings or bootstrap("api")
 
+    api_prefix = settings.api_prefix.rstrip("/") or ""
+    if settings.enable_openapi_docs:
+        docs_url = f"{api_prefix}/docs"
+        openapi_url = f"{api_prefix}/openapi.json"
+        redoc_url = f"{api_prefix}/redoc"
+    else:
+        docs_url = None
+        openapi_url = None
+        redoc_url = None
+
     app = FastAPI(
         title=settings.app_name,
         debug=False,
-        docs_url=f"{settings.api_prefix}/docs",
-        openapi_url=f"{settings.api_prefix}/openapi.json",
+        docs_url=docs_url,
+        openapi_url=openapi_url,
+        redoc_url=redoc_url,
         lifespan=_create_lifespan(settings),
     )
 
@@ -165,6 +219,3 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     register_exception_handlers(app)
 
     return app
-
-
-app = create_app()

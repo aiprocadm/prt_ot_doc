@@ -14,6 +14,15 @@ const createIdempotencyKey = () =>
     ? crypto.randomUUID()
     : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
+const normalizePipelineState = (status: string): "queued" | "running" | "done" | "error" => {
+  const normalized = String(status).toLowerCase();
+  if (normalized === "queued") return "queued";
+  if (normalized === "running" || normalized === "processing" || normalized === "pending") return "running";
+  if (normalized === "done" || normalized === "success" || normalized === "completed") return "done";
+  if (normalized === "error" || normalized === "failed" || normalized === "failure" || normalized === "canceled") return "error";
+  return "running";
+};
+
 export const DocumentCreateWizard = () => {
   const { items: companies, list: listCompanies } = useCompaniesStore();
   const { generateDocument, getGenerationStatus, list: listDocuments } = useDocumentsStore();
@@ -39,22 +48,28 @@ export const DocumentCreateWizard = () => {
     const timer = window.setInterval(async () => {
       try {
         const status = await getGenerationStatus(taskId);
-        const normalized = status.status === "done" || status.status === "error" ? status.status : "running";
+        const normalized = normalizePipelineState(status.status);
         setPipelineState(normalized);
         setRequestId(String(status.metadata?.request_id ?? ""));
         if (status.error) {
           setPipelineError(status.error);
         }
-        if (status.status === "done") {
+        if (normalized === "done") {
           listDocuments().catch(() => undefined);
           toast.success("Документ успешно поставлен в реестр.");
+          // Ключ идемпотентности «израсходован» успешной генерацией: ротируем его, иначе
+          // повторный «Запустить генерацию» вернёт ту же задачу, и новый документ не создастся.
+          setIdempotencyKey(createIdempotencyKey());
           window.clearInterval(timer);
         }
-        if (status.status === "error") {
+        if (normalized === "error") {
           toast.error("Генерация завершилась ошибкой. Можно повторить с тем же ключом.");
           window.clearInterval(timer);
         }
       } catch {
+        setPipelineState("error");
+        setPipelineError("Не удалось получить статус генерации. Попробуйте обновить страницу.");
+        toast.error("Не удалось обновить статус генерации.");
         window.clearInterval(timer);
       }
     }, 2500);
@@ -74,9 +89,9 @@ export const DocumentCreateWizard = () => {
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid gap-3 md:grid-cols-3">
-          <Input placeholder="template_code" value={templateCode} onChange={(event) => setTemplateCode(event.target.value)} />
+          <Input placeholder="Код шаблона" value={templateCode} onChange={(event) => setTemplateCode(event.target.value)} />
           <Input
-            placeholder="template_version"
+            placeholder="Версия шаблона"
             type="number"
             min={1}
             value={templateVersion}
@@ -103,7 +118,7 @@ export const DocumentCreateWizard = () => {
           </Button>
           <Button
             type="button"
-            disabled={!canSubmit || pipelineState === "running"}
+            disabled={!canSubmit || pipelineState === "queued" || pipelineState === "running"}
             onClick={async () => {
               setPipelineState("queued");
               setPipelineError(null);

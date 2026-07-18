@@ -17,8 +17,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.db import get_tenant_session
-from app.domains.files import s3
 from app.models.file import File, FileScanStatus
+from app.modules.files import s3
 
 logger = logging.getLogger(__name__)
 
@@ -109,7 +109,7 @@ class ClamAVClient:
         connection = self._connection()
         try:
             if hasattr(stream, "seek"):
-                stream.seek(0)  # type: ignore[arg-type]
+                stream.seek(0)
         except Exception:  # pragma: no cover - defensive best effort
             pass
 
@@ -381,9 +381,9 @@ async def process_scan_request(
     if outcome.signature:
         log_payload["signature"] = outcome.signature
 
-    if outcome.status is ClamAVVerdict.INFECTED:
+    if outcome.status == ClamAVVerdict.INFECTED:
         logger.warning("files.clamav.detected", extra=log_payload)
-    elif outcome.status is ClamAVVerdict.ERROR:
+    elif outcome.status == ClamAVVerdict.ERROR:
         logger.error("files.clamav.error", extra=log_payload)
     else:
         logger.info("files.clamav.scanned", extra=log_payload)

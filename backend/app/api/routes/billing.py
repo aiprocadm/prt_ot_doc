@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.audit_decorator import audit_operation
+from app.core.errors import api_problem_detail
 from app.core.security import AccessContext, abac
 from app.models.models import BillingSubscription, BillingSubscriptionStatus, Tenant
 from app.schemas.billing import (
@@ -28,7 +29,7 @@ SessionDep = Annotated[AsyncSession, Depends(get_session)]
 def _billing_bad_request(code: str, message: str) -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,
-        detail={"code": code, "message": message},
+        detail=api_problem_detail(code=code, message=message, error_type="billing"),
     )
 
 
@@ -43,22 +44,36 @@ OwnerAdminAccess = Annotated[
 
 
 @router.get("/plan", response_model=BillingSummaryRead)
-async def billing_plan(session: SessionDep, access: OwnerAdminAccess, tenant: Tenant = Depends(get_tenant_record)) -> BillingSummaryRead:
+async def billing_plan(
+    session: SessionDep, access: OwnerAdminAccess, tenant: Tenant = Depends(get_tenant_record)
+) -> BillingSummaryRead:
     _ = access
     service = BillingService(session)
     ctx = await service.get_context(tenant)
     remaining = BillingService.compute_remaining(ctx.limits, ctx.usage)
     return BillingSummaryRead(
-        plan={"code": ctx.plan.code, "name": ctx.plan.name} if ctx.plan else {"code": "free", "name": "Free"},
-        subscription={
-            "status": ctx.subscription.status.value,
-            "period_start": ctx.subscription.period_start,
-            "period_end": ctx.subscription.period_end,
-            "grace_until": ctx.subscription.grace_until,
-            "auto_renew": ctx.subscription.auto_renew,
-        }
-        if ctx.subscription
-        else {"status": "trial", "period_start": None, "period_end": None, "grace_until": None, "auto_renew": False},
+        plan=(
+            {"code": ctx.plan.code, "name": ctx.plan.name}
+            if ctx.plan
+            else {"code": "free", "name": "Free"}
+        ),
+        subscription=(
+            {
+                "status": ctx.subscription.status.value,
+                "period_start": ctx.subscription.period_start,
+                "period_end": ctx.subscription.period_end,
+                "grace_until": ctx.subscription.grace_until,
+                "auto_renew": ctx.subscription.auto_renew,
+            }
+            if ctx.subscription
+            else {
+                "status": "trial",
+                "period_start": None,
+                "period_end": None,
+                "grace_until": None,
+                "auto_renew": False,
+            }
+        ),
         limits=ctx.limits,
         features=ctx.features,
         usage={
@@ -104,7 +119,9 @@ async def billing_usage(
         if raw_limit in (None, 0):
             percentages[usage_key] = None
             continue
-        percentages[usage_key] = round((float(usage_payload[usage_key]) / float(raw_limit)) * 100, 2)
+        percentages[usage_key] = round(
+            (float(usage_payload[usage_key]) / float(raw_limit)) * 100, 2
+        )
 
     return {
         "period": selected_period,
@@ -136,19 +153,36 @@ async def billing_events(
 
 
 @router.get("/limits")
-async def billing_limits(session: SessionDep, access: OwnerAdminAccess, tenant: Tenant = Depends(get_tenant_record)) -> dict[str, Any]:
+async def billing_limits(
+    session: SessionDep, access: OwnerAdminAccess, tenant: Tenant = Depends(get_tenant_record)
+) -> dict[str, Any]:
     _ = access
     ctx = await BillingService(session).get_context(tenant)
-    return {"plan": ctx.plan.code if ctx.plan else "free", "limits": ctx.limits, "features": ctx.features}
+    return {
+        "plan": ctx.plan.code if ctx.plan else "free",
+        "limits": ctx.limits,
+        "features": ctx.features,
+    }
 
 
 @router.get("/plans", response_model=list[BillingPlanRead])
-async def billing_plans(session: SessionDep, access: OwnerAdminAccess, tenant: Tenant = Depends(get_tenant_record)) -> list[BillingPlanRead]:
+async def billing_plans(
+    session: SessionDep, access: OwnerAdminAccess, tenant: Tenant = Depends(get_tenant_record)
+) -> list[BillingPlanRead]:
     _ = (tenant, access)
     from app.models.models import BillingPlan
 
-    plans = list((await session.execute(select(BillingPlan).order_by(BillingPlan.name.asc()))).scalars().all())
-    return [BillingPlanRead(code=item.code, name=item.name, limits=item.limits or {}, features=item.features or {}) for item in plans]
+    plans = list(
+        (await session.execute(select(BillingPlan).order_by(BillingPlan.name.asc())))
+        .scalars()
+        .all()
+    )
+    return [
+        BillingPlanRead(
+            code=item.code, name=item.name, limits=item.limits or {}, features=item.features or {}
+        )
+        for item in plans
+    ]
 
 
 @router.post("/plan/change")
@@ -181,9 +215,22 @@ async def mark_past_due(
     tenant: Tenant = Depends(get_tenant_record),
 ) -> dict[str, str]:
     _ = access
-    sub = (await session.execute(select(BillingSubscription).where(BillingSubscription.tenant_id == tenant.id).order_by(BillingSubscription.created_at.desc()))).scalars().first()
+    sub = (
+        (
+            await session.execute(
+                select(BillingSubscription)
+                .where(BillingSubscription.tenant_id == tenant.id)
+                .order_by(BillingSubscription.created_at.desc())
+            )
+        )
+        .scalars()
+        .first()
+    )
     if sub is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail={"code": "SUBSCRIPTION_NOT_FOUND", "message": "Subscription not found"})
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            detail={"code": "SUBSCRIPTION_NOT_FOUND", "message": "Subscription not found"},
+        )
     sub.status = BillingSubscriptionStatus.PAST_DUE
     sub.grace_until = datetime.now(tz=timezone.utc) + timedelta(days=payload.grace_days)
     await session.commit()
@@ -192,11 +239,26 @@ async def mark_past_due(
 
 @router.post("/subscription/mark_paid")
 @audit_operation("mark_paid", "billing_subscription")
-async def mark_paid(session: SessionDep, access: OwnerAdminAccess, tenant: Tenant = Depends(get_tenant_record)) -> dict[str, str]:
+async def mark_paid(
+    session: SessionDep, access: OwnerAdminAccess, tenant: Tenant = Depends(get_tenant_record)
+) -> dict[str, str]:
     _ = access
-    sub = (await session.execute(select(BillingSubscription).where(BillingSubscription.tenant_id == tenant.id).order_by(BillingSubscription.created_at.desc()))).scalars().first()
+    sub = (
+        (
+            await session.execute(
+                select(BillingSubscription)
+                .where(BillingSubscription.tenant_id == tenant.id)
+                .order_by(BillingSubscription.created_at.desc())
+            )
+        )
+        .scalars()
+        .first()
+    )
     if sub is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail={"code": "SUBSCRIPTION_NOT_FOUND", "message": "Subscription not found"})
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            detail={"code": "SUBSCRIPTION_NOT_FOUND", "message": "Subscription not found"},
+        )
     sub.status = BillingSubscriptionStatus.ACTIVE
     sub.grace_until = None
     await session.commit()
@@ -205,11 +267,26 @@ async def mark_paid(session: SessionDep, access: OwnerAdminAccess, tenant: Tenan
 
 @router.post("/subscription/suspend")
 @audit_operation("suspend", "billing_subscription")
-async def suspend(session: SessionDep, access: OwnerAdminAccess, tenant: Tenant = Depends(get_tenant_record)) -> dict[str, str]:
+async def suspend(
+    session: SessionDep, access: OwnerAdminAccess, tenant: Tenant = Depends(get_tenant_record)
+) -> dict[str, str]:
     _ = access
-    sub = (await session.execute(select(BillingSubscription).where(BillingSubscription.tenant_id == tenant.id).order_by(BillingSubscription.created_at.desc()))).scalars().first()
+    sub = (
+        (
+            await session.execute(
+                select(BillingSubscription)
+                .where(BillingSubscription.tenant_id == tenant.id)
+                .order_by(BillingSubscription.created_at.desc())
+            )
+        )
+        .scalars()
+        .first()
+    )
     if sub is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail={"code": "SUBSCRIPTION_NOT_FOUND", "message": "Subscription not found"})
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            detail={"code": "SUBSCRIPTION_NOT_FOUND", "message": "Subscription not found"},
+        )
     sub.status = BillingSubscriptionStatus.SUSPENDED
     await session.commit()
     return {"status": "ok"}
@@ -217,11 +294,26 @@ async def suspend(session: SessionDep, access: OwnerAdminAccess, tenant: Tenant 
 
 @router.post("/subscription/activate")
 @audit_operation("activate", "billing_subscription")
-async def activate(session: SessionDep, access: OwnerAdminAccess, tenant: Tenant = Depends(get_tenant_record)) -> dict[str, str]:
+async def activate(
+    session: SessionDep, access: OwnerAdminAccess, tenant: Tenant = Depends(get_tenant_record)
+) -> dict[str, str]:
     _ = access
-    sub = (await session.execute(select(BillingSubscription).where(BillingSubscription.tenant_id == tenant.id).order_by(BillingSubscription.created_at.desc()))).scalars().first()
+    sub = (
+        (
+            await session.execute(
+                select(BillingSubscription)
+                .where(BillingSubscription.tenant_id == tenant.id)
+                .order_by(BillingSubscription.created_at.desc())
+            )
+        )
+        .scalars()
+        .first()
+    )
     if sub is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail={"code": "SUBSCRIPTION_NOT_FOUND", "message": "Subscription not found"})
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            detail={"code": "SUBSCRIPTION_NOT_FOUND", "message": "Subscription not found"},
+        )
     sub.status = BillingSubscriptionStatus.ACTIVE
     await session.commit()
     return {"status": "ok"}

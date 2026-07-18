@@ -2,6 +2,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { ReactNode } from "react";
 
 const { listMock, createMock } = vi.hoisted(() => ({
   listMock: vi.fn(),
@@ -27,6 +28,17 @@ vi.mock("@/api/incidents", () => ({
     list: listMock,
     create: createMock
   }
+}));
+
+vi.mock("@/components/ui/dialog", () => ({
+  Dialog: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  DialogTrigger: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  DialogContent: ({ children }: { children: ReactNode }) => <div role="dialog">{children}</div>,
+  DialogHeader: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  DialogTitle: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  DialogDescription: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  DialogFooter: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  DialogClose: ({ children }: { children: ReactNode }) => <div>{children}</div>
 }));
 
 import { PERMISSIONS } from "@/permissions/permissions";
@@ -76,7 +88,22 @@ describe("IncidentsPage", () => {
     await waitFor(() => {
       expect(screen.getByText("Падение с высоты")).toBeInTheDocument();
     });
+    expect(screen.getByText("Травма")).toBeInTheDocument();
     expect(listMock).toHaveBeenCalledOnce();
+  });
+
+  it("initializes status filter from query params", async () => {
+    listMock.mockResolvedValue({ items: [mockIncident], total: 1 });
+
+    render(
+      <MemoryRouter initialEntries={["/incidents?status=closed"]}>
+        <IncidentsPage />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(listMock).toHaveBeenCalledWith({ limit: 100, status_filter: "closed" });
+    });
   });
 
   it("shows empty state when no incidents", async () => {

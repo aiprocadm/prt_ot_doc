@@ -84,7 +84,7 @@ describe("run details operational states", () => {
     apiClientMock.get.mockImplementation((url: string) => {
       if (url === "/pack-runs/pack-1/items" || url === "/pack-runs/pack-1/timeline") {
         if (shouldFail) {
-          return Promise.reject({ status: 500, message: "pack load failed" });
+          return Promise.reject({ status: 400, message: "pack load failed" });
         }
         return Promise.resolve({ data: [] });
       }
@@ -103,21 +103,21 @@ describe("run details operational states", () => {
       await user.click(screen.getByRole("button", { name: "Повторить" }));
     });
 
-    expect(await screen.findByText(/элементы pack run отсутствуют/i)).toBeInTheDocument();
-    expect(screen.getByText(/timeline пуст/i)).toBeInTheDocument();
+    expect(await screen.findByText(/строк запуска пакета нет/i)).toBeInTheDocument();
+    expect(screen.getByText(/хронология пуста/i)).toBeInTheDocument();
   });
 
   it("shows PipelineRunDetails error state instead of hanging on loading and recovers on retry", async () => {
     let shouldFail = true;
 
     apiClientMock.get.mockImplementation((url: string) => {
-      if (url === "/v1/pipelines/runs/run-1") {
+      if (url === "/pipelines/runs/run-1") {
         if (shouldFail) {
-          return Promise.reject({ status: 500, message: "run load failed" });
+          return Promise.reject({ status: 400, message: "run load failed" });
         }
         return Promise.resolve({ data: pipelineRun });
       }
-      if (url === "/v1/files/entities/job/run-1/files") {
+      if (url === "/files/entities/job/run-1/files") {
         return Promise.resolve({ data: [] });
       }
       throw new Error(`Unexpected GET ${url}`);
@@ -130,7 +130,7 @@ describe("run details operational states", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent("run load failed");
     await waitFor(() => {
-      expect(screen.queryByText(/загрузка pipeline run/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/загрузка запуска пайплайна/i)).not.toBeInTheDocument();
     });
 
     shouldFail = false;
@@ -138,7 +138,7 @@ describe("run details operational states", () => {
       await user.click(screen.getByRole("button", { name: "Повторить" }));
     });
 
-    expect(await screen.findByText("Job run-1")).toBeInTheDocument();
+    expect(await screen.findByText("Задание run-1")).toBeInTheDocument();
     expect(screen.getByText(/логи пока отсутствуют/i)).toBeInTheDocument();
     expect(screen.getByTestId("job-timeline")).toHaveTextContent("1");
   });

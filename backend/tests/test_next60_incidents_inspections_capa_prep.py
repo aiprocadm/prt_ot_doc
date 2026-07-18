@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import datetime, timedelta, timezone
 
 from app.modules.capa.service import CorrectiveActionService, FindingService, PrescriptionService
 from app.modules.incidents.service import IncidentCaseService, RiskReviewTriggerService
@@ -42,10 +42,12 @@ def test_prescription_aggregate_status_rules() -> None:
 
 
 def test_corrective_action_overdue_logic() -> None:
-    overdue_date = date.today() - timedelta(days=1)
-    assert CorrectiveActionService.is_overdue(due_date=overdue_date, status="open") is True
+    # Service uses UTC date; local date.today() can disagree near timezone boundaries.
+    today_utc = datetime.now(tz=timezone.utc).date()
+    overdue_date = today_utc - timedelta(days=1)
+    assert CorrectiveActionService.is_overdue("open", overdue_date) is True
     assert CorrectiveActionService.mark_overdue_if_needed(due_date=overdue_date, status="open") == "overdue"
-    assert CorrectiveActionService.is_overdue(due_date=overdue_date, status="verified") is False
+    assert CorrectiveActionService.is_overdue("verified", overdue_date) is False
 
 
 def test_inspection_prep_gap_detection_logic() -> None:

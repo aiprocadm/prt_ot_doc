@@ -30,7 +30,7 @@ def _iter_section_paragraphs(section: object) -> Iterable[Paragraph]:
     yield from _iter_paragraphs(getattr(section, "footer", None))
 
 
-def _iter_document_paragraphs(document: Document) -> Iterable[Paragraph]:
+def _iter_document_paragraphs(document: Any) -> Iterable[Paragraph]:
     yield from _iter_paragraphs(document)
     if hasattr(document, "sections"):
         for section in document.sections:
@@ -94,9 +94,7 @@ class DocxService:
         return out.getvalue()
 
     @staticmethod
-    def _select_section_text(
-        value: str | Sequence[str | None] | None, index: int
-    ) -> str | None:
+    def _select_section_text(value: str | Sequence[str | None] | None, index: int) -> str | None:
         if value is None:
             return None
         if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):

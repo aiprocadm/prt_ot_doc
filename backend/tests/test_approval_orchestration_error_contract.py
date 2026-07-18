@@ -11,10 +11,9 @@ def test_approval_orchestration_unprocessable_returns_structured_detail() -> Non
 
     assert isinstance(exc, HTTPException)
     assert exc.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
-    assert exc.detail == {
-        "code": "approval_orchestration_validation_error",
-        "message": "request_id required",
-    }
+    assert exc.detail["code"] == "APPROVAL_ORCHESTRATION_VALIDATION_ERROR"
+    assert exc.detail["error_code"] == "APPROVAL_ORCHESTRATION_VALIDATION_ERROR"
+    assert exc.detail["message"] == "request_id required"
 
 
 def test_approval_orchestration_not_found_returns_structured_detail() -> None:
@@ -22,7 +21,7 @@ def test_approval_orchestration_not_found_returns_structured_detail() -> None:
 
     assert isinstance(exc, HTTPException)
     assert exc.status_code == status.HTTP_404_NOT_FOUND
-    assert exc.detail == {
-        "code": "approval_orchestration_not_found",
-        "message": "approval_route not found",
-    }
+    assert exc.detail["code"] == "APPROVAL_ORCHESTRATION_NOT_FOUND"
+    assert exc.detail["error_code"] == "APPROVAL_ORCHESTRATION_NOT_FOUND"
+    assert exc.detail["message"] == "approval_route not found"
+    assert exc.detail["details"]["resource"] == "approval_route"

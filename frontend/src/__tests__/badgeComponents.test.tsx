@@ -22,10 +22,10 @@ describe("badge components", () => {
     expect(emptyContainer.firstChild).toBeNull();
 
     render(<StatusBadge status="error" />);
-    expect(screen.getByText("error")).toHaveClass("bg-destructive");
+    expect(screen.getAllByText("Ошибка").pop()).toHaveClass("bg-destructive");
 
     render(<StatusBadge status="queued" />);
-    expect(screen.getByText("queued")).toHaveClass("bg-secondary");
+    expect(screen.getByText("В очереди")).toHaveClass("bg-secondary");
   });
 
   it("renders SLA indicators with expected styles", () => {

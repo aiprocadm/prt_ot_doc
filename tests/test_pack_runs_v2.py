@@ -7,22 +7,26 @@ from io import BytesIO
 import pytest
 from httpx import AsyncClient
 from openpyxl import Workbook
-from sqlalchemy import select
 
 from app.models.file import File, FileKind, FileScanStatus
-from app.models.models import Tenant
 
 
 @pytest.mark.anyio
-async def test_pack_runs_requires_tenant_and_idem(async_client: AsyncClient, make_auth_headers) -> None:
+async def test_pack_runs_requires_tenant_and_idem(
+    async_client: AsyncClient, make_auth_headers
+) -> None:
     headers = await make_auth_headers()
-    response = await async_client.post("/api/v1/pack-runs", json={"package_preset_id": "x"}, headers=headers)
+    response = await async_client.post(
+        "/api/v1/pack-runs", json={"package_preset_id": "x"}, headers=headers
+    )
     assert response.status_code == 400
     assert "Idempotency-Key" in response.text
 
 
 @pytest.mark.anyio
-async def test_pack_run_idempotent_returns_same_run_id(async_client: AsyncClient, make_auth_headers) -> None:
+async def test_pack_run_idempotent_returns_same_run_id(
+    async_client: AsyncClient, make_auth_headers
+) -> None:
     headers = {**await make_auth_headers(), **dict(async_client.headers)}
     profile_payload = {
         "code": f"pp-{uuid.uuid4().hex[:8]}",
@@ -30,7 +34,9 @@ async def test_pack_run_idempotent_returns_same_run_id(async_client: AsyncClient
         "pipeline_steps_json": [{"step": "render_docx", "enabled": True}],
         "status": "active",
     }
-    p_resp = await async_client.post("/api/v1/package-profiles", json=profile_payload, headers=headers)
+    p_resp = await async_client.post(
+        "/api/v1/package-profiles", json=profile_payload, headers=headers
+    )
     assert p_resp.status_code == 201, p_resp.text
     profile_id = p_resp.json()["id"]
 
@@ -40,10 +46,15 @@ async def test_pack_run_idempotent_returns_same_run_id(async_client: AsyncClient
         "package_profile_id": profile_id,
         "naming_rule": "<doc>_<date>",
         "source_type": "json",
-        "mapping_json": {"doc": {"type": "literal", "value": "test"}, "date": {"type": "literal", "value": "20260329"}},
+        "mapping_json": {
+            "doc": {"type": "literal", "value": "test"},
+            "date": {"type": "literal", "value": "20260329"},
+        },
         "status": "active",
     }
-    preset_resp = await async_client.post("/api/v1/package-presets", json=preset_payload, headers=headers)
+    preset_resp = await async_client.post(
+        "/api/v1/package-presets", json=preset_payload, headers=headers
+    )
     assert preset_resp.status_code == 201, preset_resp.text
     preset_id = preset_resp.json()["id"]
 
@@ -69,7 +80,9 @@ async def test_pack_run_idempotent_returns_same_run_id(async_client: AsyncClient
 
 
 @pytest.mark.anyio
-async def test_pack_run_unique_filenames_when_same_mapping(async_client: AsyncClient, make_auth_headers) -> None:
+async def test_pack_run_unique_filenames_when_same_mapping(
+    async_client: AsyncClient, make_auth_headers
+) -> None:
     headers = {**await make_auth_headers(), **dict(async_client.headers)}
     profile_payload = {
         "code": f"pp-{uuid.uuid4().hex[:8]}",
@@ -77,7 +90,9 @@ async def test_pack_run_unique_filenames_when_same_mapping(async_client: AsyncCl
         "pipeline_steps_json": [{"step": "render_docx", "enabled": True}],
         "status": "active",
     }
-    p_resp = await async_client.post("/api/v1/package-profiles", json=profile_payload, headers=headers)
+    p_resp = await async_client.post(
+        "/api/v1/package-profiles", json=profile_payload, headers=headers
+    )
     assert p_resp.status_code == 201, p_resp.text
     profile_id = p_resp.json()["id"]
 
@@ -90,7 +105,9 @@ async def test_pack_run_unique_filenames_when_same_mapping(async_client: AsyncCl
         "mapping_json": {"doc": {"type": "literal", "value": "same"}},
         "status": "active",
     }
-    preset_resp = await async_client.post("/api/v1/package-presets", json=preset_payload, headers=headers)
+    preset_resp = await async_client.post(
+        "/api/v1/package-presets", json=preset_payload, headers=headers
+    )
     assert preset_resp.status_code == 201, preset_resp.text
     preset_id = preset_resp.json()["id"]
 
@@ -114,7 +131,9 @@ async def test_pack_run_unique_filenames_when_same_mapping(async_client: AsyncCl
 
 
 @pytest.mark.anyio
-async def test_preview_mapping_supports_xlsx_source(async_client: AsyncClient, sessionmaker, make_auth_headers) -> None:
+async def test_preview_mapping_supports_xlsx_source(
+    async_client: AsyncClient, sessionmaker, data_factory, make_auth_headers
+) -> None:
     headers = {**await make_auth_headers(), **dict(async_client.headers)}
 
     profile_payload = {
@@ -123,7 +142,9 @@ async def test_preview_mapping_supports_xlsx_source(async_client: AsyncClient, s
         "pipeline_steps_json": [{"step": "render_docx", "enabled": True}],
         "status": "active",
     }
-    p_resp = await async_client.post("/api/v1/package-profiles", json=profile_payload, headers=headers)
+    p_resp = await async_client.post(
+        "/api/v1/package-profiles", json=profile_payload, headers=headers
+    )
     assert p_resp.status_code == 201, p_resp.text
     profile_id = p_resp.json()["id"]
 
@@ -136,7 +157,9 @@ async def test_preview_mapping_supports_xlsx_source(async_client: AsyncClient, s
         "mapping_json": {"doc": "фио", "unit": {"type": "column", "value": "подразделение"}},
         "status": "active",
     }
-    preset_resp = await async_client.post("/api/v1/package-presets", json=preset_payload, headers=headers)
+    preset_resp = await async_client.post(
+        "/api/v1/package-presets", json=preset_payload, headers=headers
+    )
     assert preset_resp.status_code == 201, preset_resp.text
     preset_id = preset_resp.json()["id"]
 
@@ -149,8 +172,7 @@ async def test_preview_mapping_supports_xlsx_source(async_client: AsyncClient, s
     wb.save(buf)
 
     async with sessionmaker() as session:
-        tenant = (await session.execute(select(Tenant).order_by(Tenant.created_at.asc()))).scalars().first()
-        assert tenant is not None
+        tenant = await data_factory.ensure_tenant(session=session)
         source_file = File(
             tenant_id=tenant.id,
             storage_key=f"inline/source-{uuid.uuid4().hex}.xlsx",
@@ -161,7 +183,10 @@ async def test_preview_mapping_supports_xlsx_source(async_client: AsyncClient, s
             kind=FileKind.DOCUMENT,
             scan_status=FileScanStatus.CLEAN,
             is_quarantined=False,
-            meta_json={"source_type": "xlsx", "inline_content_b64": base64.b64encode(buf.getvalue()).decode("ascii")},
+            meta_json={
+                "source_type": "xlsx",
+                "inline_content_b64": base64.b64encode(buf.getvalue()).decode("ascii"),
+            },
         )
         session.add(source_file)
         await session.commit()
@@ -181,7 +206,9 @@ async def test_preview_mapping_supports_xlsx_source(async_client: AsyncClient, s
 
 
 @pytest.mark.anyio
-async def test_pack_run_naming_rule_supports_yyyymmdd_token(async_client: AsyncClient, make_auth_headers) -> None:
+async def test_pack_run_naming_rule_supports_yyyymmdd_token(
+    async_client: AsyncClient, make_auth_headers
+) -> None:
     headers = {**await make_auth_headers(), **dict(async_client.headers)}
     profile_payload = {
         "code": f"pp-{uuid.uuid4().hex[:8]}",
@@ -189,7 +216,9 @@ async def test_pack_run_naming_rule_supports_yyyymmdd_token(async_client: AsyncC
         "pipeline_steps_json": [{"step": "render_docx", "enabled": True}],
         "status": "active",
     }
-    p_resp = await async_client.post("/api/v1/package-profiles", json=profile_payload, headers=headers)
+    p_resp = await async_client.post(
+        "/api/v1/package-profiles", json=profile_payload, headers=headers
+    )
     assert p_resp.status_code == 201, p_resp.text
     profile_id = p_resp.json()["id"]
 
@@ -202,7 +231,9 @@ async def test_pack_run_naming_rule_supports_yyyymmdd_token(async_client: AsyncC
         "mapping_json": {"doc": {"type": "literal", "value": "акт"}},
         "status": "active",
     }
-    preset_resp = await async_client.post("/api/v1/package-presets", json=preset_payload, headers=headers)
+    preset_resp = await async_client.post(
+        "/api/v1/package-presets", json=preset_payload, headers=headers
+    )
     assert preset_resp.status_code == 201, preset_resp.text
     preset_id = preset_resp.json()["id"]
 

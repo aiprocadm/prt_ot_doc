@@ -12,9 +12,7 @@ from app.services.documents import DocumentVersionUpdateError
 @pytest.mark.asyncio()
 async def test_document_and_versions_relationship(sessionmaker):
     async with sessionmaker() as session:
-        tenant = (
-            await session.execute(select(Tenant).where(Tenant.slug == "test"))
-        ).scalar_one()
+        tenant = (await session.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()
 
         user = User(
             tenant_id=tenant.id,
@@ -72,9 +70,7 @@ async def test_document_and_versions_relationship(sessionmaker):
         assert refreshed_document.versions[0].data_json == {"field": "value"}
 
         stored_version = (
-            await session.execute(
-                select(DocumentVersion).where(DocumentVersion.id == version.id)
-            )
+            await session.execute(select(DocumentVersion).where(DocumentVersion.id == version.id))
         ).scalar_one()
         assert stored_version.document.id == refreshed_document.id
 
@@ -82,9 +78,7 @@ async def test_document_and_versions_relationship(sessionmaker):
 @pytest.mark.asyncio()
 async def test_document_version_update_is_forbidden(sessionmaker):
     async with sessionmaker() as session:
-        tenant = (
-            await session.execute(select(Tenant).where(Tenant.slug == "test"))
-        ).scalar_one()
+        tenant = (await session.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()
 
         user = User(
             tenant_id=tenant.id,
@@ -121,9 +115,7 @@ async def test_document_version_update_is_forbidden(sessionmaker):
         await session.commit()
 
         stored_version = (
-            await session.execute(
-                select(DocumentVersion).where(DocumentVersion.id == version.id)
-            )
+            await session.execute(select(DocumentVersion).where(DocumentVersion.id == version.id))
         ).scalar_one()
         stored_version.file_key = "immutable-v1-updated.docx"
 

@@ -41,7 +41,8 @@ const resources = {
         materials: "Материалы",
         lessonStructure: "Структура курса",
         noSchedule: "Нет запланированной даты",
-        learnerHint: "SCORM/xAPI/proctoring-ready ingestion отражается в статусах завершения и деталях назначения.",
+        learnerHint:
+          "Интеграции SCORM/xAPI и прокторинг отражаются в статусах завершения и в карточке назначения.",
         analytics: "Аналитика обучения",
         retakes: "Пересдачи",
         averageScore: "Средний балл",

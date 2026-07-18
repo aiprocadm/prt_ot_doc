@@ -51,7 +51,7 @@ describe("BillingPage", () => {
   });
 
   it("shows action error and keeps plan cards visible when plan change fails", async () => {
-    changeBillingPlanMock.mockRejectedValueOnce({ status: 500, message: "plan change failed" });
+    changeBillingPlanMock.mockRejectedValueOnce({ status: 400, message: "plan change failed" });
 
     render(
       <MemoryRouter>
@@ -60,7 +60,11 @@ describe("BillingPage", () => {
     );
 
     await screen.findByText("Тариф и статус");
-    fireEvent.click(screen.getByRole("button", { name: "Сменить" }));
+    const switchPlanButtons = screen
+      .getAllByRole("button")
+      .filter((el) => (el.textContent ?? "").trim() === "Сменить");
+    expect(switchPlanButtons.length).toBeGreaterThanOrEqual(1);
+    fireEvent.click(switchPlanButtons[0]!);
 
     await waitFor(() => {
       expect(screen.getByRole("alert")).toHaveTextContent("plan change failed");
@@ -70,7 +74,7 @@ describe("BillingPage", () => {
   });
 
   it("shows action error and keeps current subscription section visible when mark past due fails", async () => {
-    markSubscriptionPastDueMock.mockRejectedValueOnce({ status: 500, message: "mark past due failed" });
+    markSubscriptionPastDueMock.mockRejectedValueOnce({ status: 400, message: "mark past due failed" });
 
     render(
       <MemoryRouter>

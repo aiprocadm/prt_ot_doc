@@ -26,11 +26,11 @@ describe("PipelineBuilderPage", () => {
     let shouldFail = true;
 
     apiClientMock.get.mockImplementation((url: string) => {
-      if (url !== "/v1/pipelines/profiles") {
+      if (url !== "/pipelines/profiles") {
         throw new Error(`Unexpected GET ${url}`);
       }
       if (shouldFail) {
-        return Promise.reject({ status: 500, message: "profiles load failed" });
+        return Promise.reject({ status: 400, message: "profiles load failed" });
       }
       return Promise.resolve({
         data: [
@@ -105,7 +105,7 @@ describe("PipelineBuilderPage", () => {
           {
             id: "profile-2",
             code: "doc-default",
-            name: "Default pipeline",
+            name: "Профиль по умолчанию",
             profile_version: 1,
             graph: { nodes: [{ id: "render", type: "render_docx" }], edges: [{ from: "render", to: "pdf" }] },
           },
@@ -126,10 +126,10 @@ describe("PipelineBuilderPage", () => {
     });
 
     expect(apiClientMock.post).toHaveBeenCalledWith(
-      "/v1/pipelines/profiles",
+      "/pipelines/profiles",
       expect.objectContaining({
         code: "doc-default",
-        name: "Default pipeline",
+        name: "Профиль по умолчанию",
         is_active: true,
       })
     );

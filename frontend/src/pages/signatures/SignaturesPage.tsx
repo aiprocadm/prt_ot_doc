@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 
 import { signApi, type SignatureRequest } from "@/api/sign";
+import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingScreen } from "@/components/common/LoadingScreen";
@@ -12,6 +14,7 @@ const SignaturesPage = () => {
   const [items, setItems] = useState<SignatureRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<ApiError | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -22,6 +25,19 @@ const SignaturesPage = () => {
       setError((nextError as ApiError) ?? { status: 0, message: "Не удалось загрузить запросы на подпись" });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const runAction = async (id: string, fn: () => Promise<unknown>, okMsg: string) => {
+    setBusyId(id);
+    try {
+      await fn();
+      toast.success(okMsg);
+      await load();
+    } catch {
+      toast.error("Не удалось выполнить действие");
+    } finally {
+      setBusyId(null);
     }
   };
 
@@ -50,9 +66,15 @@ const SignaturesPage = () => {
           ) : null}
           {!loading && !error && items.length > 0 ? (
             items.map((it) => (
-              <div key={it.id} className="rounded border p-3 text-sm">
-                <div>{it.id.slice(0, 8)} — {it.status}</div>
-                <div className="text-muted-foreground">provider: {it.provider}</div>
+              <div key={it.id} className="flex items-center justify-between gap-3 rounded border p-3 text-sm">
+                <div>
+                  <div>{it.id.slice(0, 8)} — {it.status}</div>
+                  <div className="text-muted-foreground">provider: {it.provider}</div>
+                </div>
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" disabled={busyId === it.id} onClick={() => void runAction(it.id, () => signApi.refresh(it.id), "Статус обновлён")}>Обновить</Button>
+                  <Button variant="outline" size="sm" disabled={busyId === it.id} onClick={() => void runAction(it.id, () => signApi.verify(it.id), "Проверка выполнена")}>Проверить</Button>
+                </div>
               </div>
             ))
           ) : null}

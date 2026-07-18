@@ -15,6 +15,7 @@ try:  # pragma: no cover - exercised in integration tests
     from slowapi.middleware import SlowAPIMiddleware
     from slowapi.util import get_remote_address
 except ImportError:  # pragma: no cover - fallback when slowapi is unavailable
+
     class RateLimitExceeded(Exception):
         """Fallback rate limit exception used when slowapi isn't installed."""
 

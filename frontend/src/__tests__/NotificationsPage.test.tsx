@@ -50,7 +50,7 @@ describe("NotificationsPage", () => {
 
     await waitFor(() => expect(screen.getByText("Approval due")).toBeInTheDocument());
     const user = userEvent.setup();
-    await user.click(screen.getByLabelText("select-n1"));
+    await user.click(screen.getByLabelText("Выбрать уведомление n1"));
     await user.click(screen.getByRole("button", { name: /отметить выбранные/i }));
 
     await waitFor(() => expect(postMock).toHaveBeenCalledWith("/notifications/mark-read", { ids: ["n1"] }));
@@ -75,7 +75,7 @@ describe("NotificationsPage", () => {
         }
       });
     });
-    postMock.mockRejectedValueOnce({ status: 500, message: "mark read failed" });
+    postMock.mockRejectedValueOnce({ status: 400, message: "mark read failed" });
 
     render(
       <MemoryRouter>
@@ -102,7 +102,7 @@ describe("NotificationsPage", () => {
       }
       return Promise.resolve({ data: { unread_count: 0, items: [] } });
     });
-    putMock.mockRejectedValueOnce({ status: 500, message: "settings save failed" });
+    putMock.mockRejectedValueOnce({ status: 400, message: "settings save failed" });
 
     render(
       <MemoryRouter>
@@ -110,13 +110,45 @@ describe("NotificationsPage", () => {
       </MemoryRouter>
     );
 
-    const digestInput = await screen.findByPlaceholderText("Digest mode (off/daily/weekly)");
+    const digestInput = await screen.findByPlaceholderText("Режим дайджеста: off / daily / weekly");
     fireEvent.change(digestInput, { target: { value: "weekly" } });
     fireEvent.click(screen.getByRole("button", { name: /сохранить настройки/i }));
 
     await waitFor(() => {
       expect(screen.getByRole("alert")).toHaveTextContent("settings save failed");
     });
-    expect(screen.getByPlaceholderText("Digest mode (off/daily/weekly)")).toHaveValue("weekly");
+    expect(screen.getByPlaceholderText("Режим дайджеста: off / daily / weekly")).toHaveValue("weekly");
+  });
+
+  it("initializes filters from query params", async () => {
+    getMock.mockImplementation((url: string) => {
+      if (url === "/notifications/settings/me") {
+        return Promise.resolve({ data: { email_enabled: true, telegram_enabled: false, inapp_enabled: true } });
+      }
+      if (url === "/notifications/templates") {
+        return Promise.resolve({ data: [] });
+      }
+      return Promise.resolve({ data: { unread_count: 0, items: [] } });
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/notifications?status=failed&channel=email&priority=critical&type=ApprovalDeadline"]}>
+        <NotificationsPage />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(getMock).toHaveBeenCalledWith(
+        "/notifications",
+        expect.objectContaining({
+          params: {
+            status: "failed",
+            channel: "email",
+            priority: "critical",
+            type: "ApprovalDeadline"
+          }
+        })
+      );
+    });
   });
 });

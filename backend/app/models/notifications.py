@@ -5,10 +5,11 @@ from __future__ import annotations
 import enum
 from datetime import datetime
 
-from sqlalchemy import JSON, Boolean, DateTime, Enum, Index, String, Text, UniqueConstraint, text
+from sqlalchemy import JSON, Boolean, DateTime, Index, String, Text, UniqueConstraint, text
+from sqlalchemy.ext.mutable import MutableDict
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.models.base import SoftDeleteMixin, TenantBaseModel
+from app.models.base import SoftDeleteMixin, TenantBaseModel, native_enum
 
 
 class NotificationChannel(str, enum.Enum):
@@ -60,23 +61,32 @@ class NotificationType(str, enum.Enum):
     INTEGRATION_ERROR = "IntegrationError"
     EDO_STATUS_CHANGED = "EdoStatusChanged"
     BILLING_LIMIT_WARNING = "BillingLimitWarning"
+    AUTOMATION_RULE = "AutomationRule"
 
 
 class NotificationTemplate(TenantBaseModel, SoftDeleteMixin):
     __tablename__ = "notification_templates"
 
     code: Mapped[str] = mapped_column(String(128), nullable=False)
-    channel: Mapped[NotificationChannel] = mapped_column(Enum(NotificationChannel, name="notificationtemplatechannel"), nullable=False)
-    type: Mapped[NotificationType] = mapped_column(Enum(NotificationType, name="notificationtemplatetype"), nullable=False)
+    channel: Mapped[NotificationChannel] = mapped_column(
+        native_enum(NotificationChannel, name="notificationtemplatechannel"), nullable=False
+    )
+    type: Mapped[NotificationType] = mapped_column(
+        native_enum(NotificationType, name="notificationtemplatetype"), nullable=False
+    )
     locale: Mapped[str] = mapped_column(String(16), nullable=False, default="ru")
     subject_template: Mapped[str | None] = mapped_column(String(255), nullable=True)
     body_template: Mapped[str] = mapped_column(Text, nullable=False)
     title_template: Mapped[str | None] = mapped_column(String(255), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    variables_schema: Mapped[dict[str, object] | None] = mapped_column(JSON, nullable=True)
+    variables_schema: Mapped[dict[str, object] | None] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=True
+    )
 
     __table_args__ = (
-        UniqueConstraint("tenant_id", "code", "channel", "locale", name="uq_notification_templates_scope"),
+        UniqueConstraint(
+            "tenant_id", "code", "channel", "locale", name="uq_notification_templates_scope"
+        ),
         Index("ix_notification_templates_lookup", "tenant_id", "channel", "type", "is_active"),
     )
 
@@ -90,24 +100,46 @@ class NotificationChannelSettings(TenantBaseModel, SoftDeleteMixin):
     inapp_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     email: Mapped[str | None] = mapped_column(String(255))
     telegram_chat_id: Mapped[str | None] = mapped_column(String(255))
-    quiet_hours: Mapped[dict[str, str] | None] = mapped_column(JSON, nullable=True)
+    quiet_hours: Mapped[dict[str, str] | None] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=True
+    )
     digest_mode: Mapped[str | None] = mapped_column(String(32), nullable=True)
-    channel_preferences: Mapped[dict[str, object] | None] = mapped_column(JSON, nullable=True)
+    channel_preferences: Mapped[dict[str, object] | None] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=True
+    )
 
-    __table_args__ = (UniqueConstraint("tenant_id", "user_id", name="uq_notification_channel_settings_tenant_user"),)
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id", "user_id", name="uq_notification_channel_settings_tenant_user"
+        ),
+    )
 
 
 class Notification(TenantBaseModel, SoftDeleteMixin):
     __tablename__ = "notifications"
 
     user_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
-    channel: Mapped[NotificationChannel] = mapped_column(Enum(NotificationChannel, name="notificationchannel"), nullable=False)
-    type: Mapped[NotificationType] = mapped_column(Enum(NotificationType, name="notificationtype"), nullable=False)
+    channel: Mapped[NotificationChannel] = mapped_column(
+        native_enum(NotificationChannel, name="notificationchannel"), nullable=False
+    )
+    type: Mapped[NotificationType] = mapped_column(
+        native_enum(NotificationType, name="notificationtype"), nullable=False
+    )
     title: Mapped[str] = mapped_column(Text, nullable=False)
     body: Mapped[str] = mapped_column(Text, nullable=False)
-    payload: Mapped[dict[str, object] | None] = mapped_column(JSON, nullable=True)
-    priority: Mapped[NotificationPriority] = mapped_column(Enum(NotificationPriority, name="notificationpriority"), nullable=False, default=NotificationPriority.MEDIUM)
-    status: Mapped[NotificationStatus] = mapped_column(Enum(NotificationStatus, name="notificationstatus"), nullable=False, default=NotificationStatus.QUEUED)
+    payload: Mapped[dict[str, object] | None] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=True
+    )
+    priority: Mapped[NotificationPriority] = mapped_column(
+        native_enum(NotificationPriority, name="notificationpriority"),
+        nullable=False,
+        default=NotificationPriority.MEDIUM,
+    )
+    status: Mapped[NotificationStatus] = mapped_column(
+        native_enum(NotificationStatus, name="notificationstatus"),
+        nullable=False,
+        default=NotificationStatus.QUEUED,
+    )
     dedup_key: Mapped[str] = mapped_column(String(255), nullable=False)
     scheduled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -143,11 +175,19 @@ class ReminderRule(TenantBaseModel, SoftDeleteMixin):
     code: Mapped[str] = mapped_column(String(128), nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     is_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    entity_type: Mapped[ReminderEntityType] = mapped_column(Enum(ReminderEntityType, name="reminderentitytype"), nullable=False)
+    entity_type: Mapped[ReminderEntityType] = mapped_column(
+        native_enum(ReminderEntityType, name="reminderentitytype"), nullable=False
+    )
     date_field: Mapped[str] = mapped_column(String(64), nullable=False)
-    schedule: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False, default=dict)
-    recipients: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False, default=dict)
-    action: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False, default=dict)
+    schedule: Mapped[dict[str, object]] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=False, default=dict
+    )
+    recipients: Mapped[dict[str, object]] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=False, default=dict
+    )
+    action: Mapped[dict[str, object]] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=False, default=dict
+    )
 
     __table_args__ = (UniqueConstraint("tenant_id", "code", name="uq_reminder_rules_tenant_code"),)
 
@@ -168,7 +208,13 @@ class PlanTask(TenantBaseModel, SoftDeleteMixin):
     entity_type: Mapped[str] = mapped_column(String(64), nullable=False)
     entity_id: Mapped[str] = mapped_column(String(36), nullable=False)
     assignee_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
-    status: Mapped[PlanTaskStatus] = mapped_column(Enum(PlanTaskStatus, name="plantaskstatus_v2"), nullable=False, default=PlanTaskStatus.OPEN)
+    status: Mapped[PlanTaskStatus] = mapped_column(
+        native_enum(PlanTaskStatus, name="plantaskstatus_v2"),
+        nullable=False,
+        default=PlanTaskStatus.OPEN,
+    )
     due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    __table_args__ = (Index("ix_plan_tasks_assignee_status_due", "tenant_id", "assignee_id", "status", "due_at"),)
+    __table_args__ = (
+        Index("ix_plan_tasks_assignee_status_due", "tenant_id", "assignee_id", "status", "due_at"),
+    )

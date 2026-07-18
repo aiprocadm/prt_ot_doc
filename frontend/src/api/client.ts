@@ -1,4 +1,4 @@
-import axios, { type AxiosError, type AxiosInstance } from "axios";
+import axios, { type AxiosError, type AxiosInstance, type InternalAxiosRequestConfig } from "axios";
 import { appConfig } from "@/config/env";
 import { handleApiError } from "@/api/errorHandling";
 import { tokenStorage } from "@/api/tokenStorage";
@@ -41,6 +41,13 @@ const isTenantRequiredPath = (path: string) => {
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null;
 
+type RequestWithServerRetry = InternalAxiosRequestConfig & { _serverRetryCount?: number };
+
+const SERVER_RETRY_STATUSES = new Set([500, 502, 503, 504]);
+const MAX_SERVER_RETRIES = 2;
+
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
 const normalizeFieldErrors = (value: unknown): ApiFieldError[] => {
   if (!Array.isArray(value)) return [];
   const items: ApiFieldError[] = [];
@@ -79,7 +86,13 @@ const normalizeApiError = (payload: unknown, fallback: { status: number; message
 };
 
 const notifySubscribers = (token: string | null) => {
-  subscribers.splice(0, subscribers.length).forEach((cb) => cb(token));
+  subscribers.splice(0, subscribers.length).forEach((cb) => {
+    try {
+      cb(token);
+    } catch {
+      // Продолжаем уведомлять остальных подписчиков даже при ошибке
+    }
+  });
 };
 
 const addSubscriber = (callback: (token: string | null) => void) => {
@@ -125,13 +138,15 @@ const refreshToken = async (): Promise<string | null> => {
     } catch {
       tokenStorage.clear();
       return null;
-    } finally {
-      isRefreshing = false;
     }
   })();
 
+  // isRefreshing и refreshPromise сбрасываются ПОСЛЕ notifySubscribers,
+  // чтобы новые 401-запросы не запустили параллельный refresh в микро-окне
+  // между завершением IIFE и уведомлением ожидающих подписчиков.
   refreshPromise.finally(() => {
     notifySubscribers(tokenStorage.getAccessToken());
+    isRefreshing = false;
     refreshPromise = null;
   });
 
@@ -181,24 +196,67 @@ apiClient.interceptors.response.use(
     const originalRequest = error.config;
     const status = error.response?.status ?? 0;
     if (status === 401 && originalRequest && !originalRequest._retry) {
-      originalRequest._retry = true;
-
-      if (isRefreshing) {
-        return new Promise((resolve, reject) => {
-          addSubscriber((token) => {
-            if (token && originalRequest.headers) {
-              originalRequest.headers.Authorization = `Bearer ${token}`;
-              resolve(apiClient(originalRequest));
-            } else {
-              reject(error);
-            }
-          });
+      const requestAuthHeader = originalRequest.headers?.Authorization;
+      const hasAccessToken = Boolean(
+        (typeof requestAuthHeader === "string" && requestAuthHeader.trim()) || tokenStorage.getAccessToken()
+      );
+      if (!hasAccessToken) {
+        // No token present: do not storm /auth/refresh, but keep unified auth handling.
+        const apiError = normalizeApiError(error.response?.data, {
+          status,
+          message: error.message ?? "Unauthorized",
+          details: error.response?.data
         });
-      }
+        handleApiError(apiError, originalRequest?.url);
+        return Promise.reject(apiError);
+      } else {
+        originalRequest._retry = true;
 
-      const newToken = await refreshToken();
-      if (newToken && originalRequest.headers) {
-        originalRequest.headers.Authorization = `Bearer ${newToken}`;
+        if (isRefreshing) {
+          return new Promise((resolve, reject) => {
+            addSubscriber((token) => {
+              if (token && originalRequest.headers) {
+                originalRequest.headers.Authorization = `Bearer ${token}`;
+                resolve(apiClient(originalRequest));
+              } else {
+                // Refresh failed: reject with a normalized ApiError (and run unified
+                // handling) so queued 401s surface like every other error path, not as
+                // a raw AxiosError missing .status/.field_errors.
+                const apiError = normalizeApiError(error.response?.data, {
+                  status,
+                  message: error.message ?? "Unauthorized",
+                  details: error.response?.data
+                });
+                handleApiError(apiError, originalRequest?.url);
+                reject(apiError);
+              }
+            });
+          });
+        }
+
+        const newToken = await refreshToken();
+        if (newToken && originalRequest.headers) {
+          originalRequest.headers.Authorization = `Bearer ${newToken}`;
+          return apiClient(originalRequest);
+        }
+        const apiError = normalizeApiError(error.response?.data, {
+          status,
+          message: error.message ?? "Unauthorized",
+          details: error.response?.data
+        });
+        handleApiError(apiError, originalRequest?.url);
+        return Promise.reject(apiError);
+      }
+    }
+
+    if (originalRequest) {
+      const method = (originalRequest.method ?? "get").toLowerCase();
+      const cfg = originalRequest as RequestWithServerRetry;
+      const attempt = cfg._serverRetryCount ?? 0;
+      if (method === "get" && SERVER_RETRY_STATUSES.has(status) && attempt < MAX_SERVER_RETRIES) {
+        cfg._serverRetryCount = attempt + 1;
+        const backoff = 400 * 2 ** attempt + Math.floor(Math.random() * 250);
+        await sleep(backoff);
         return apiClient(originalRequest);
       }
     }

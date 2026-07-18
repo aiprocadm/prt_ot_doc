@@ -10,7 +10,9 @@ class ReminderEvaluation:
     is_overdue: bool
 
 
-def evaluate_due_date(*, due_date: date, today: date, offsets_days: list[int]) -> ReminderEvaluation | None:
+def evaluate_due_date(
+    *, due_date: date, today: date, offsets_days: list[int]
+) -> ReminderEvaluation | None:
     """Evaluate reminder state for a single due date.
 
     Returns matching offset for a due-soon reminder or overdue marker.
@@ -23,4 +25,3 @@ def evaluate_due_date(*, due_date: date, today: date, offsets_days: list[int]) -
     if days_left in normalized:
         return ReminderEvaluation(offset_day=days_left, is_overdue=False)
     return None
-

@@ -5,10 +5,10 @@ from __future__ import annotations
 import enum
 from datetime import date
 
-from sqlalchemy import Date, Enum, ForeignKey, Index, Numeric, String, Text, UniqueConstraint
+from sqlalchemy import Date, ForeignKey, Index, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.models.base import SoftDeleteMixin, TenantBaseModel
+from app.models.base import SoftDeleteMixin, TenantBaseModel, native_enum
 
 __all__ = [
     "Contract",
@@ -66,7 +66,9 @@ class Contract(TenantBaseModel, SoftDeleteMixin):
     counterparty_name: Mapped[str] = mapped_column(String(255), nullable=False)
     contract_number: Mapped[str | None] = mapped_column(String(128))
     status: Mapped[ContractStatus] = mapped_column(
-        Enum(ContractStatus, name="contractstatus"), nullable=False, default=ContractStatus.DRAFT
+        native_enum(ContractStatus, name="contractstatus"),
+        nullable=False,
+        default=ContractStatus.DRAFT,
     )
     signed_at: Mapped[date | None] = mapped_column(Date)
     valid_from: Mapped[date | None] = mapped_column(Date)
@@ -78,9 +80,7 @@ class Contract(TenantBaseModel, SoftDeleteMixin):
     department = relationship("Department", backref="contracts")
     site = relationship("Site", backref="contracts")
 
-    __table_args__ = (
-        Index("ix_contract_company", "tenant_id", "company_id"),
-    )
+    __table_args__ = (Index("ix_contract_company", "tenant_id", "company_id"),)
 
 
 class OrderStatus(str, enum.Enum):
@@ -100,7 +100,7 @@ class Order(TenantBaseModel, SoftDeleteMixin):
     )
     order_number: Mapped[str] = mapped_column(String(128), nullable=False)
     status: Mapped[OrderStatus] = mapped_column(
-        Enum(OrderStatus, name="orderstatus"), nullable=False, default=OrderStatus.DRAFT
+        native_enum(OrderStatus, name="orderstatus"), nullable=False, default=OrderStatus.DRAFT
     )
     ordered_at: Mapped[date | None] = mapped_column(Date)
     total_amount: Mapped[float | None] = mapped_column(Numeric(12, 2))
@@ -133,7 +133,9 @@ class Invoice(TenantBaseModel, SoftDeleteMixin):
     )
     invoice_number: Mapped[str] = mapped_column(String(128), nullable=False)
     status: Mapped[InvoiceStatus] = mapped_column(
-        Enum(InvoiceStatus, name="invoicestatus"), nullable=False, default=InvoiceStatus.ISSUED
+        native_enum(InvoiceStatus, name="invoicestatus"),
+        nullable=False,
+        default=InvoiceStatus.ISSUED,
     )
     issued_at: Mapped[date | None] = mapped_column(Date)
     due_at: Mapped[date | None] = mapped_column(Date)

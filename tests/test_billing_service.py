@@ -16,7 +16,14 @@ from app.services.billing import BillingService
 
 
 class _StubSession:
-    def __init__(self, *, tenant: Tenant, plan: BillingPlan, sub: BillingSubscription, usage: BillingUsageCounter):
+    def __init__(
+        self,
+        *,
+        tenant: Tenant,
+        plan: BillingPlan,
+        sub: BillingSubscription,
+        usage: BillingUsageCounter,
+    ):
         self._tenant = tenant
         self._plan = plan
         self._sub = sub
@@ -63,8 +70,22 @@ class _StubSession:
 
 
 def _prepare(status: BillingSubscriptionStatus, grace_delta_days: int = -1):
-    tenant = Tenant(id="t1", slug="t", name="T", contact_email="a@b.c", kind="customer", is_active=True, settings={})
-    plan = BillingPlan(code="pro", name="Pro", limits={"generations_per_month": 10}, features={"edo": True}, price={})
+    tenant = Tenant(
+        id="t1",
+        slug="t",
+        name="T",
+        contact_email="a@b.c",
+        kind="customer",
+        is_active=True,
+        settings={},
+    )
+    plan = BillingPlan(
+        code="pro",
+        name="Pro",
+        limits={"generations_per_month": 10},
+        features={"edo": True},
+        price={},
+    )
     sub = BillingSubscription(
         tenant_id="t1",
         plan_id="p1",
@@ -88,8 +109,12 @@ async def test_assert_allowed_blocks_past_due_after_grace() -> None:
 
 
 def test_compute_remaining() -> None:
-    usage = BillingUsageCounter(tenant_id="t1", period_yyyymm=202603, docs_generated=5, edo_outgoing=3)
-    remaining = BillingService.compute_remaining({"generations_per_month": 10, "edo_outgoing_per_month": 5}, usage)
+    usage = BillingUsageCounter(
+        tenant_id="t1", period_yyyymm=202603, docs_generated=5, edo_outgoing=3
+    )
+    remaining = BillingService.compute_remaining(
+        {"generations_per_month": 10, "edo_outgoing_per_month": 5}, usage
+    )
     assert remaining["generations_per_month"] == 5
     assert remaining["edo_outgoing_per_month"] == 2
 

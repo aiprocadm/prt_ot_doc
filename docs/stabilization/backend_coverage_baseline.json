@@ -1,0 +1,62 @@
+{
+  "measured_at": "2026-04-19",
+  "source": "pytest targeted stabilization suites with branch coverage",
+  "overall": {
+    "line_percent": 47.0,
+    "branch_percent": 36.0
+  },
+  "modules": {
+    "auth": {
+      "line_percent": 65.5,
+      "branch_percent": 49.4,
+      "patterns": [
+        "backend/app/api/routes/auth.py",
+        "backend/app/core/security.py",
+        "backend/app/core/security/",
+        "backend/app/core/permission_checker.py"
+      ]
+    },
+    "rbac_abac": {
+      "line_percent": 66.2,
+      "branch_percent": 46.3,
+      "patterns": [
+        "backend/app/core/rbac_abac.py",
+        "backend/app/modules/rbac_abac/",
+        "backend/app/core/policy_engine.py"
+      ]
+    },
+    "tenancy": {
+      "line_percent": 72.2,
+      "branch_percent": 57.8,
+      "patterns": [
+        "backend/app/core/tenant.py",
+        "backend/app/core/tenancy.py",
+        "backend/app/middleware/tenant.py",
+        "backend/app/db/tenant_row_guard.py",
+        "backend/app/api/tenant_row_http.py",
+        "backend/app/tenancy/"
+      ]
+    },
+    "files": {
+      "line_percent": 55.7,
+      "branch_percent": 39.6,
+      "patterns": [
+        "backend/app/api/routes/files.py",
+        "backend/app/domains/files/",
+        "backend/app/modules/files/"
+      ]
+    },
+    "jobs_outbox": {
+      "line_percent": 31.9,
+      "branch_percent": 31.5,
+      "patterns": [
+        "backend/app/api/routes/jobs.py",
+        "backend/app/modules/jobs/",
+        "backend/app/modules/outbox/",
+        "backend/app/tasks/",
+        "backend/app/core/task_context.py",
+        "backend/app/tasks_replace.py"
+      ]
+    }
+  }
+}

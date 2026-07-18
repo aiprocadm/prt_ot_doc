@@ -24,16 +24,12 @@ async def test_person_crud_flow(
         "personnel_number": "123",
     }
 
-    create_response = await async_client.post(
-        "/api/v1/persons", json=payload, headers=headers
-    )
+    create_response = await async_client.post("/api/v1/persons", json=payload, headers=headers)
     assert create_response.status_code == status.HTTP_201_CREATED
     person = create_response.json()
     assert person["company_id"] == company.id
 
-    get_response = await async_client.get(
-        f"/api/v1/persons/{person['id']}", headers=headers
-    )
+    get_response = await async_client.get(f"/api/v1/persons/{person['id']}", headers=headers)
     assert get_response.status_code == status.HTTP_200_OK
 
     patch_response = await async_client.patch(
@@ -48,9 +44,7 @@ async def test_person_crud_flow(
     assert list_response.status_code == status.HTTP_200_OK
     assert list_response.json()["total"] == 1
 
-    delete_response = await async_client.delete(
-        f"/api/v1/persons/{person['id']}", headers=headers
-    )
+    delete_response = await async_client.delete(f"/api/v1/persons/{person['id']}", headers=headers)
     assert delete_response.status_code == status.HTTP_204_NO_CONTENT
 
     final_list = await async_client.get("/api/v1/persons", headers=headers)

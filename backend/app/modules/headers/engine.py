@@ -88,7 +88,9 @@ def _ensure_document_relationships(files: dict[str, bytes]) -> etree._Element:
     if rels_path in files:
         return etree.fromstring(files[rels_path])
     root = etree.Element(_rel("Relationships"), nsmap={None: REL_NS})
-    files[rels_path] = etree.tostring(root, xml_declaration=True, encoding="UTF-8", standalone="yes")
+    files[rels_path] = etree.tostring(
+        root, xml_declaration=True, encoding="UTF-8", standalone="yes"
+    )
     return root
 
 
@@ -101,17 +103,26 @@ def _next_rid(root: etree._Element) -> str:
     return f"rId{(max(ids) if ids else 0) + 1}"
 
 
-def _ensure_content_type_override(files: dict[str, bytes], *, part_name: str, content_type: str) -> None:
+def _ensure_content_type_override(
+    files: dict[str, bytes], *, part_name: str, content_type: str
+) -> None:
     if "[Content_Types].xml" not in files:
         root = etree.Element(_ct("Types"), nsmap={None: CONTENT_TYPES_NS})
-        etree.SubElement(root, _ct("Default"), Extension="rels", ContentType="application/vnd.openxmlformats-package.relationships+xml")
+        etree.SubElement(
+            root,
+            _ct("Default"),
+            Extension="rels",
+            ContentType="application/vnd.openxmlformats-package.relationships+xml",
+        )
         etree.SubElement(root, _ct("Default"), Extension="xml", ContentType="application/xml")
     else:
         root = etree.fromstring(files["[Content_Types].xml"])
     existing = root.xpath(f"/ct:Types/ct:Override[@PartName='/{part_name}']", namespaces=NS)
     if not existing:
         etree.SubElement(root, _ct("Override"), PartName=f"/{part_name}", ContentType=content_type)
-    files["[Content_Types].xml"] = etree.tostring(root, xml_declaration=True, encoding="UTF-8", standalone="yes")
+    files["[Content_Types].xml"] = etree.tostring(
+        root, xml_declaration=True, encoding="UTF-8", standalone="yes"
+    )
 
 
 def _bind_section_part(
@@ -183,7 +194,11 @@ def apply_headers_to_docx(
             _ensure_settings_flag(files, "evenAndOddHeaders")
 
         unresolved: list[str] = []
-        watermark = watermark_override if watermark_override is not None else (getattr(preset, "watermark", {}) or {})
+        watermark = (
+            watermark_override
+            if watermark_override is not None
+            else (getattr(preset, "watermark", {}) or {})
+        )
         part_specs = [
             ("header", "first", "header1.xml", _resolve_section_content(preset, "header", "first")),
             ("header", "default", "header2.xml", _resolve_section_content(preset, "header", "odd")),
@@ -193,7 +208,12 @@ def apply_headers_to_docx(
             ("footer", "even", "footer3.xml", _resolve_section_content(preset, "footer", "even")),
         ]
         for kind, ref_type, part_name, source in part_specs:
-            if watermark.get("enabled") and watermark.get("text") and kind == "header" and ref_type == "default":
+            if (
+                watermark.get("enabled")
+                and watermark.get("text")
+                and kind == "header"
+                and ref_type == "default"
+            ):
                 source = (source + "\n" + f"WATERMARK:{watermark['text']}").strip()
             rendered, missing = render_placeholders(source, context, strict=True)
             unresolved.extend(missing)
@@ -213,8 +233,12 @@ def apply_headers_to_docx(
             if re.search(r"\{NUMPAGES\}", source):
                 report.fields_added.append("NUMPAGES")
 
-        files["word/document.xml"] = etree.tostring(document, xml_declaration=True, encoding="UTF-8", standalone="yes")
-        files["word/_rels/document.xml.rels"] = etree.tostring(rels_root, xml_declaration=True, encoding="UTF-8", standalone="yes")
+        files["word/document.xml"] = etree.tostring(
+            document, xml_declaration=True, encoding="UTF-8", standalone="yes"
+        )
+        files["word/_rels/document.xml.rels"] = etree.tostring(
+            rels_root, xml_declaration=True, encoding="UTF-8", standalone="yes"
+        )
         report.changed_parts.extend(["word/document.xml", "word/_rels/document.xml.rels"])
         report.unresolved_placeholders = sorted(set(unresolved))
         report.fields_added = sorted(set(report.fields_added))

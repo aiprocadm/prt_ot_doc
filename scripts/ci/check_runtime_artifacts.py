@@ -14,6 +14,7 @@ BLOCKED_PATTERNS = (
     ".vite/**",
     "frontend/dev-dist/**",
     "frontend/.npm-ci.stamp",
+    "prt_ot_doc-main/**",
 )
 
 
@@ -25,9 +26,7 @@ def _match(path: str, pattern: str) -> bool:
 def main() -> int:
     tracked = subprocess.check_output(["git", "ls-files"], text=True).splitlines()
     violations = sorted(
-        path
-        for path in tracked
-        if any(_match(path, pattern) for pattern in BLOCKED_PATTERNS)
+        path for path in tracked if any(_match(path, pattern) for pattern in BLOCKED_PATTERNS)
     )
 
     if not violations:

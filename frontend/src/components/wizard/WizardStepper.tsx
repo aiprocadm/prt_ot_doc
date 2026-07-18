@@ -1,3 +1,5 @@
+import { memo } from "react";
+
 import { cn } from "@/utils/cn";
 
 export type WizardStep = {
@@ -6,12 +8,12 @@ export type WizardStep = {
   description: string;
 };
 
-export const WizardStepper = ({
+export const WizardStepper = memo(({
   steps,
   currentStep,
   onStepClick
 }: {
-  steps: WizardStep[];
+  steps: readonly WizardStep[];
   currentStep: number;
   onStepClick: (step: number) => void;
 }) => (
@@ -37,4 +39,6 @@ export const WizardStepper = ({
       );
     })}
   </div>
-);
+));
+
+WizardStepper.displayName = "WizardStepper";

@@ -35,6 +35,17 @@ export const RiskAssessmentForm = () => {
     append({ hazard_id: hazardId, probability: 1, severity: 1, mitigations: "" });
   };
 
+  const scoreHint = (probability?: number, severity?: number) => {
+    const p = Number(probability ?? 0);
+    const s = Number(severity ?? 0);
+    const score = p * s;
+    if (!score) return "—";
+    if (score >= 15) return `${score} (критический)`;
+    if (score >= 10) return `${score} (высокий)`;
+    if (score >= 6) return `${score} (средний)`;
+    return `${score} (низкий)`;
+  };
+
   const onSubmit = async (values: RiskAssessmentFormValues) => {
     try {
       await createAssessment(values);
@@ -108,6 +119,7 @@ export const RiskAssessmentForm = () => {
                     disabled={!canAssess}
                     {...form.register(`hazards.${index}.probability`, { valueAsNumber: true })}
                   />
+                  <p className="mt-1 text-xs text-muted-foreground">Шкала 1-5</p>
                 </div>
                 <div>
                   <Label htmlFor={`severity-${index}`}>Тяжесть</Label>
@@ -119,6 +131,10 @@ export const RiskAssessmentForm = () => {
                     disabled={!canAssess}
                     {...form.register(`hazards.${index}.severity`, { valueAsNumber: true })}
                   />
+                  <p className="mt-1 text-xs text-muted-foreground">Шкала 1-5</p>
+                </div>
+                <div className="md:col-span-4 text-xs text-muted-foreground">
+                  Индекс по опасности: {scoreHint(form.watch(`hazards.${index}.probability`), form.watch(`hazards.${index}.severity`))}
                 </div>
                 <div className="md:col-span-4">
                   <Label htmlFor={`mitigations-${index}`}>Мероприятия</Label>

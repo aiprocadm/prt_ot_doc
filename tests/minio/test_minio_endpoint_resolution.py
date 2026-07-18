@@ -16,8 +16,7 @@ def _load_file_storage_module(settings: SimpleNamespace):
     module_name = spec.name
 
     previous = {
-        key: sys.modules.get(key)
-        for key in ("app", "app.core", "app.core.config", module_name)
+        key: sys.modules.get(key) for key in ("app", "app.core", "app.core.config", module_name)
     }
     sys.modules["app"] = ModuleType("app")
     sys.modules["app.core"] = ModuleType("app.core")

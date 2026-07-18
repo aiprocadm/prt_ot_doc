@@ -2,14 +2,17 @@ import { Bell, CheckCircle2, ChevronDown, LogOut, Moon, Settings, Sun } from "lu
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
+import { GlobalSearch } from "@/components/GlobalSearch";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { useTenantStore } from "@/stores/tenant";
+import { CommandBar } from "@/components/layout/CommandBar";
+import { MobileNavDrawer } from "@/components/layout/MobileNavDrawer";
+import { getTopNavKpi } from "@/api/navigation";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuthStore } from "@/stores/auth";
-import { GlobalSearch } from "@/components/GlobalSearch";
-import { apiClient } from "@/api/client";
+import { useTenantStore } from "@/stores/tenant";
+import { trackUxMetric } from "@/utils/uxMetrics";
 
 export const TopNav = () => {
   const { user, logout } = useAuthStore();
@@ -21,15 +24,9 @@ export const TopNav = () => {
     let mounted = true;
     const loadCounts = async () => {
       try {
-        const [taskResponse, notificationResponse] = await Promise.all([
-          apiClient.get<Array<unknown>>("/workflow/tasks", { params: { assignee: "me" } }),
-          apiClient.get<{ unread_count: number }>("/notifications", { params: { status: "unread", limit: 1 } })
-        ]);
+        const data = await getTopNavKpi();
         if (!mounted) return;
-        setKpi({
-          tasks: taskResponse.data.length,
-          alerts: notificationResponse.data.unread_count ?? 0
-        });
+        setKpi(data);
       } catch {
         if (mounted) setKpi({ tasks: 0, alerts: 0 });
       }
@@ -44,17 +41,19 @@ export const TopNav = () => {
 
   return (
     <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur">
-      <div className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between gap-4 px-4">
-        <div className="flex items-center gap-3">
-          <span className="text-lg font-semibold">Единый контур ОТ/ПБ</span>
+      <div className="mx-auto flex h-16 w-full max-w-7xl items-center gap-2 px-4">
+        <div className="flex min-w-0 shrink-0 items-center gap-2 sm:gap-3">
+          <MobileNavDrawer />
+          <span className="truncate text-base font-semibold sm:text-lg">Единый контур ОТ/ПБ</span>
           <div className="hidden items-center gap-2 rounded-full border bg-muted/40 px-3 py-1 text-xs text-muted-foreground lg:flex">
             RBAC · ABAC · ЭДО
           </div>
         </div>
-        <div className="hidden flex-1 items-center justify-center px-4 lg:flex">
+        <div className="flex min-w-0 flex-1 items-center justify-center px-1 sm:px-4">
           <GlobalSearch />
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-1 sm:gap-2">
+          <CommandBar />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" className="gap-2">
@@ -78,24 +77,40 @@ export const TopNav = () => {
               ))}
             </DropdownMenuContent>
           </DropdownMenu>
-          <Button variant="ghost" size="icon" aria-label="Единый реестр задач" className="relative">
-            <CheckCircle2 className="h-5 w-5" />
-            <Badge className="absolute -right-1 -top-1 hidden h-5 min-w-[20px] items-center justify-center rounded-full px-1 text-[10px] sm:flex">
-              {kpi.tasks}
-            </Badge>
+          <Button asChild variant="ghost" size="icon" aria-label="Единый реестр задач" className="relative h-11 w-11">
+            <Link
+              to="/tasks"
+              onClick={() => {
+                trackUxMetric("navigation_click", { source: "topnav", target: "tasks" });
+                trackUxMetric("time_to_first_action", { source: "topnav" });
+              }}
+            >
+              <CheckCircle2 className="h-5 w-5" />
+              <Badge className="absolute -right-1 -top-1 hidden h-5 min-w-[20px] items-center justify-center rounded-full px-1 text-[10px] sm:flex">
+                {kpi.tasks}
+              </Badge>
+            </Link>
           </Button>
-          <Button asChild variant="ghost" size="icon" aria-label="Уведомления" className="relative"><Link to="/notifications">
-            <Bell className="h-5 w-5" />
-            <Badge variant="destructive" className="absolute -right-1 -top-1 hidden h-5 min-w-[20px] items-center justify-center rounded-full px-1 text-[10px] sm:flex">
-              {kpi.alerts}
-            </Badge>
-          </Link></Button>
-          <Button variant="ghost" size="icon" aria-label="Toggle theme" onClick={toggleTheme}>
+          <Button asChild variant="ghost" size="icon" aria-label="Уведомления" className="relative h-11 w-11">
+            <Link
+              to="/notifications"
+              onClick={() => {
+                trackUxMetric("navigation_click", { source: "topnav", target: "notifications" });
+                trackUxMetric("time_to_first_action", { source: "topnav" });
+              }}
+            >
+              <Bell className="h-5 w-5" />
+              <Badge variant="destructive" className="absolute -right-1 -top-1 hidden h-5 min-w-[20px] items-center justify-center rounded-full px-1 text-[10px] sm:flex">
+                {kpi.alerts}
+              </Badge>
+            </Link>
+          </Button>
+          <Button variant="ghost" size="icon" aria-label="Переключить тему оформления" onClick={toggleTheme} className="h-11 w-11">
             {theme === "light" ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
           </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="gap-2">
+              <Button variant="ghost" className="gap-2" data-testid="user-menu-trigger">
                 <Settings className="h-4 w-4" />
                 <span className="hidden sm:inline">{user?.full_name ?? user?.email ?? "Профиль"}</span>
               </Button>

@@ -4,19 +4,29 @@ from __future__ import annotations
 
 import sqlalchemy as sa
 from alembic import op
+from sqlalchemy.dialects import postgresql
 
 revision = "20250420_p1_obligations_inspections_attestations"
-down_revision = "20250410_p1_entities_tasks_roles"
+down_revision = "20250415_create_regulatory_inspection_base"
 branch_labels = None
 depends_on = None
 
 
 def upgrade() -> None:
     bind = op.get_bind()
-    inspection_type = sa.Enum("internal", "external", name="inspectiontype")
-    attestation_status = sa.Enum("active", "expired", "revoked", name="attestationstatus")
-    prescription_status = sa.Enum(
-        "open", "in_progress", "completed", "cancelled", name="prescriptionstatus"
+    inspection_type = postgresql.ENUM(
+        "internal", "external", name="inspectiontype", create_type=False
+    )
+    attestation_status = postgresql.ENUM(
+        "active", "expired", "revoked", name="attestationstatus", create_type=False
+    )
+    prescription_status = postgresql.ENUM(
+        "open",
+        "in_progress",
+        "completed",
+        "cancelled",
+        name="prescriptionstatus",
+        create_type=False,
     )
     if bind.dialect.name == "postgresql":
         inspection_type.create(bind, checkfirst=True)
@@ -83,9 +93,13 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["tenant_id"], ["tenant.id"]),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index("ix_attestation_person", "attestation", ["tenant_id", "person_id"], unique=False)
+    op.create_index(
+        "ix_attestation_person", "attestation", ["tenant_id", "person_id"], unique=False
+    )
     op.create_index("ix_attestation_status", "attestation", ["tenant_id", "status"], unique=False)
-    op.create_index("ix_attestation_expires", "attestation", ["tenant_id", "expires_at"], unique=False)
+    op.create_index(
+        "ix_attestation_expires", "attestation", ["tenant_id", "expires_at"], unique=False
+    )
 
     op.create_table(
         "inspection_prescription",
@@ -101,7 +115,9 @@ def upgrade() -> None:
         sa.Column("version", sa.Integer(), nullable=False),
         sa.Column("id", sa.String(length=36), nullable=False),
         sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True),
-        sa.ForeignKeyConstraint(["inspection_id"], ["regulatory_inspection.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(
+            ["inspection_id"], ["regulatory_inspection.id"], ondelete="CASCADE"
+        ),
         sa.ForeignKeyConstraint(["incident_id"], ["incident.id"], ondelete="SET NULL"),
         sa.ForeignKeyConstraint(["assignee_id"], ["user.id"], ondelete="SET NULL"),
         sa.ForeignKeyConstraint(["tenant_id"], ["tenant.id"]),

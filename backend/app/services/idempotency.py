@@ -22,9 +22,7 @@ def normalize_idempotency_key(value: str | None) -> str:
     """Validate and normalize an idempotency key value."""
 
     if value is None:
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST, "Idempotency-Key header is required"
-        )
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Idempotency-Key header is required")
     candidate = value.strip()
     if not candidate:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Idempotency-Key cannot be blank")
@@ -80,14 +78,19 @@ class IdempotencyService:
                 existing.method = method
             if path and not existing.path:
                 existing.path = path
-            if existing.status is IdempotencyStatus.PENDING:
-                deadline = datetime.now(tz=timezone.utc).timestamp() + max(wait_timeout_seconds, 0.0)
-                while existing.status is IdempotencyStatus.PENDING and datetime.now(tz=timezone.utc).timestamp() < deadline:
+            if existing.status == IdempotencyStatus.PENDING:
+                deadline = datetime.now(tz=timezone.utc).timestamp() + max(
+                    wait_timeout_seconds, 0.0
+                )
+                while (
+                    existing.status == IdempotencyStatus.PENDING
+                    and datetime.now(tz=timezone.utc).timestamp() < deadline
+                ):
                     await self.session.refresh(existing)
-                    if existing.status is not IdempotencyStatus.PENDING:
+                    if existing.status != IdempotencyStatus.PENDING:
                         break
                     await asyncio.sleep(max(poll_interval_seconds, 0.01))
-                if existing.status is IdempotencyStatus.PENDING:
+                if existing.status == IdempotencyStatus.PENDING:
                     raise HTTPException(
                         status.HTTP_409_CONFLICT,
                         {
@@ -191,7 +194,7 @@ class IdempotencyService:
         if response is not None:
             response.status_code = status_code
 
-        if record.status is IdempotencyStatus.SUCCEEDED:
+        if record.status == IdempotencyStatus.SUCCEEDED:
             return model.model_validate(body)
 
         if isinstance(body, dict) and "detail" in body:
@@ -205,7 +208,7 @@ class IdempotencyService:
         document_version_id: str,
     ) -> None:
         record = await self.get(key=key)
-        if record is None or record.status is not IdempotencyStatus.SUCCEEDED:
+        if record is None or record.status != IdempotencyStatus.SUCCEEDED:
             return
 
         body: dict[str, Any] = {}

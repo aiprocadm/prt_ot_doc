@@ -5,6 +5,7 @@ Revises: 20250305_add_outbox_delivery_metadata
 Create Date: 2025-03-12 00:00:00.000000
 
 """
+
 from __future__ import annotations
 
 import sqlalchemy as sa

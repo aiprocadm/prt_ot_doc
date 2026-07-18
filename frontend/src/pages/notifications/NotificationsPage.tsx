@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 
-import { apiClient } from "@/api/client";
+import { notificationsApi } from "@/api/notifications";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingScreen } from "@/components/common/LoadingScreen";
@@ -50,11 +51,39 @@ type NotificationTemplate = {
 };
 
 const NotificationsPage = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [items, setItems] = useState<NotificationItem[]>([]);
-  const [statusFilter, setStatusFilter] = useState<(typeof statuses)[number]>("unread");
-  const [channel, setChannel] = useState<(typeof channels)[number]>("all");
-  const [priority, setPriority] = useState<(typeof priorities)[number]>("all");
-  const [type, setType] = useState("");
+  const [statusFilter, setStatusFilter] = useState<(typeof statuses)[number]>(
+    (statuses.find((item) => item === searchParams.get("status")) ?? "unread") as (typeof statuses)[number]
+  );
+  const [channel, setChannel] = useState<(typeof channels)[number]>(
+    (channels.find((item) => item === searchParams.get("channel")) ?? "all") as (typeof channels)[number]
+  );
+  const [priority, setPriority] = useState<(typeof priorities)[number]>(
+    (priorities.find((item) => item === searchParams.get("priority")) ?? "all") as (typeof priorities)[number]
+  );
+  const [type, setType] = useState(searchParams.get("type") ?? "");
+  const patchQuery = useCallback((patch: { status?: string; channel?: string; priority?: string; type?: string }) => {
+    const next = new URLSearchParams(searchParams);
+    if ("status" in patch) {
+      if (patch.status && patch.status !== "all") next.set("status", patch.status);
+      else next.delete("status");
+    }
+    if ("channel" in patch) {
+      if (patch.channel && patch.channel !== "all") next.set("channel", patch.channel);
+      else next.delete("channel");
+    }
+    if ("priority" in patch) {
+      if (patch.priority && patch.priority !== "all") next.set("priority", patch.priority);
+      else next.delete("priority");
+    }
+    if ("type" in patch) {
+      if (patch.type) next.set("type", patch.type);
+      else next.delete("type");
+    }
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
+
   const [settings, setSettings] = useState<NotificationSettings | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -62,20 +91,18 @@ const NotificationsPage = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const response = await apiClient.get<{ items: NotificationItem[]; unread_count: number }>("/notifications", {
-        params: {
-          ...(statusFilter !== "all" ? { status: statusFilter } : {}),
-          ...(channel !== "all" ? { channel } : {}),
-          ...(priority !== "all" ? { priority } : {}),
-          ...(type ? { type } : {})
-        }
+      const response = await notificationsApi.list<NotificationItem>({
+        ...(statusFilter !== "all" ? { status: statusFilter } : {}),
+        ...(channel !== "all" ? { channel } : {}),
+        ...(priority !== "all" ? { priority } : {}),
+        ...(type ? { type } : {})
       });
-      setItems(response.data.items);
-      setUnreadCount(response.data.unread_count);
+      setItems(response.items);
+      setUnreadCount(response.unread_count);
       setSelectedIds([]);
     } catch (err) {
       const apiError = (err as ApiError) ?? { status: 500, message: "Не удалось загрузить уведомления" };
@@ -83,34 +110,34 @@ const NotificationsPage = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [channel, priority, statusFilter, type]);
 
-  const loadSettings = async () => {
+  const loadSettings = useCallback(async () => {
     try {
-      const response = await apiClient.get<NotificationSettings>("/notifications/settings/me");
-      setSettings(response.data);
+      const response = await notificationsApi.getMySettings<NotificationSettings>();
+      setSettings(response);
     } catch {
       setSettings(null);
     }
-  };
+  }, []);
 
-  const loadTemplates = async () => {
+  const loadTemplates = useCallback(async () => {
     try {
-      const response = await apiClient.get<NotificationTemplate[]>("/notifications/templates");
-      setTemplates(response.data);
+      const response = await notificationsApi.listTemplates<NotificationTemplate>();
+      setTemplates(response);
     } catch {
       setTemplates([]);
     }
-  };
+  }, []);
 
   useEffect(() => {
     void load();
-  }, [statusFilter, channel, priority, type]);
+  }, [load]);
 
   useEffect(() => {
     void loadSettings();
     void loadTemplates();
-  }, []);
+  }, [loadSettings, loadTemplates]);
 
   const selectedUnreadIds = useMemo(() => items.filter((item) => selectedIds.includes(item.id) && !item.is_read).map((item) => item.id), [items, selectedIds]);
   const groupedByType = useMemo(() => Array.from(new Set(items.map((item) => item.type))).sort(), [items]);
@@ -123,7 +150,7 @@ const NotificationsPage = () => {
     if (!ids.length) return;
     setError(null);
     try {
-      await apiClient.post("/notifications/mark-read", { ids });
+      await notificationsApi.markRead(ids);
       await load();
     } catch (err) {
       const apiError = (err as ApiError) ?? { status: 500, message: "Не удалось отметить уведомления как прочитанные" };
@@ -135,7 +162,7 @@ const NotificationsPage = () => {
     if (!settings) return;
     setError(null);
     try {
-      await apiClient.put("/notifications/settings/me", settings);
+      await notificationsApi.saveMySettings(settings);
       await loadSettings();
     } catch (err) {
       const apiError = (err as ApiError) ?? { status: 500, message: "Не удалось сохранить настройки уведомлений" };
@@ -165,22 +192,54 @@ const NotificationsPage = () => {
             <EmptyState title="Уведомления отсутствуют" description="Новые события появятся здесь автоматически." />
           ) : null}
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-            <select className="h-10 rounded-md border px-3" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as (typeof statuses)[number])}>
+            <select
+              className="h-10 rounded-md border px-3"
+              value={statusFilter}
+              onChange={(event) => {
+                const next = event.target.value as (typeof statuses)[number];
+                setStatusFilter(next);
+                patchQuery({ status: next });
+              }}
+            >
               {statuses.map((item) => <option key={item} value={item}>{item}</option>)}
             </select>
-            <select className="h-10 rounded-md border px-3" value={channel} onChange={(event) => setChannel(event.target.value as (typeof channels)[number])}>
+            <select
+              className="h-10 rounded-md border px-3"
+              value={channel}
+              onChange={(event) => {
+                const next = event.target.value as (typeof channels)[number];
+                setChannel(next);
+                patchQuery({ channel: next });
+              }}
+            >
               {channels.map((item) => <option key={item} value={item}>{item}</option>)}
             </select>
-            <select className="h-10 rounded-md border px-3" value={priority} onChange={(event) => setPriority(event.target.value as (typeof priorities)[number])}>
+            <select
+              className="h-10 rounded-md border px-3"
+              value={priority}
+              onChange={(event) => {
+                const next = event.target.value as (typeof priorities)[number];
+                setPriority(next);
+                patchQuery({ priority: next });
+              }}
+            >
               {priorities.map((item) => <option key={item} value={item}>{item}</option>)}
             </select>
-            <Input placeholder="Тип уведомления" value={type} onChange={(event) => setType(event.target.value)} />
+            <Input
+              placeholder="Тип уведомления"
+              value={type}
+              onChange={(event) => {
+                const next = event.target.value;
+                setType(next);
+                patchQuery({ type: next });
+              }}
+            />
             <div className="rounded-md border px-3 py-2 text-sm text-muted-foreground">Типы: {groupedByType.join(", ") || "—"}</div>
           </div>
           {!loading ? items.map((item) => (
             <div key={item.id} className={`rounded-md border p-3 ${item.is_read ? "bg-muted/30" : "border-primary/40"}`}>
               <div className="flex items-start gap-3">
-                <input type="checkbox" className="mt-1" checked={selectedIds.includes(item.id)} onChange={() => toggleSelected(item.id)} aria-label={`select-${item.id}`} />
+                <input type="checkbox" className="mt-1" checked={selectedIds.includes(item.id)} onChange={() => toggleSelected(item.id)} aria-label={`Выбрать уведомление ${item.id}`} />
                 <div className="flex-1">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
@@ -195,8 +254,8 @@ const NotificationsPage = () => {
                   </div>
                   <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
                     <span className="rounded-full border px-2 py-1">{item.type}</span>
-                    <span className="rounded-full border px-2 py-1">{item.is_read ? "read" : "unread"}</span>
-                    {!item.is_read ? <Button size="sm" variant="ghost" onClick={() => void markRead([item.id])}>Mark read</Button> : null}
+                    <span className="rounded-full border px-2 py-1">{item.is_read ? "прочитано" : "непрочитано"}</span>
+                    {!item.is_read ? <Button size="sm" variant="ghost" onClick={() => void markRead([item.id])}>Пометить прочитанным</Button> : null}
                     {item.deeplink || item.payload?.deeplink ? (
                       <Link className="text-primary underline" to={item.deeplink ?? item.payload?.deeplink ?? "#"}>
                         Открыть связанную сущность
@@ -211,23 +270,23 @@ const NotificationsPage = () => {
       </Card>
 
       <Card>
-        <CardHeader><CardTitle>Предпочтения и quiet hours</CardTitle></CardHeader>
+        <CardHeader><CardTitle>Предпочтения и тихие часы</CardTitle></CardHeader>
         <CardContent className="grid gap-3 md:grid-cols-2">
-          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={Boolean(settings?.email_enabled)} onChange={(e) => setSettings((prev) => (prev ? { ...prev, email_enabled: e.target.checked } : prev))} /> Email</label>
-          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={Boolean(settings?.telegram_enabled)} onChange={(e) => setSettings((prev) => (prev ? { ...prev, telegram_enabled: e.target.checked } : prev))} /> Telegram</label>
-          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={Boolean(settings?.inapp_enabled)} onChange={(e) => setSettings((prev) => (prev ? { ...prev, inapp_enabled: e.target.checked } : prev))} /> In-app</label>
-          <Input placeholder="Digest mode (off/daily/weekly)" value={settings?.digest_mode ?? ""} onChange={(e) => setSettings((prev) => (prev ? { ...prev, digest_mode: e.target.value } : prev))} />
-          <Input placeholder="Email" value={settings?.email ?? ""} onChange={(e) => setSettings((prev) => (prev ? { ...prev, email: e.target.value } : prev))} />
-          <Input placeholder="Telegram chat id" value={settings?.telegram_chat_id ?? ""} onChange={(e) => setSettings((prev) => (prev ? { ...prev, telegram_chat_id: e.target.value } : prev))} />
-          <Input placeholder="Quiet hours from (22:00)" value={settings?.quiet_hours?.from ?? ""} onChange={(e) => setSettings((prev) => (prev ? { ...prev, quiet_hours: { ...(prev.quiet_hours ?? {}), from: e.target.value } } : prev))} />
-          <Input placeholder="Quiet hours to (08:00)" value={settings?.quiet_hours?.to ?? ""} onChange={(e) => setSettings((prev) => (prev ? { ...prev, quiet_hours: { ...(prev.quiet_hours ?? {}), to: e.target.value } } : prev))} />
-          <Input placeholder="Timezone (Europe/Moscow)" value={settings?.quiet_hours?.tz ?? ""} onChange={(e) => setSettings((prev) => (prev ? { ...prev, quiet_hours: { ...(prev.quiet_hours ?? {}), tz: e.target.value } } : prev))} />
+          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={Boolean(settings?.email_enabled)} onChange={(e) => setSettings((prev) => (prev ? { ...prev, email_enabled: e.target.checked } : prev))} /> Электронная почта</label>
+          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={Boolean(settings?.telegram_enabled)} onChange={(e) => setSettings((prev) => (prev ? { ...prev, telegram_enabled: e.target.checked } : prev))} /> Телеграм</label>
+          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={Boolean(settings?.inapp_enabled)} onChange={(e) => setSettings((prev) => (prev ? { ...prev, inapp_enabled: e.target.checked } : prev))} /> В приложении</label>
+          <Input placeholder="Режим дайджеста: off / daily / weekly" value={settings?.digest_mode ?? ""} onChange={(e) => setSettings((prev) => (prev ? { ...prev, digest_mode: e.target.value } : prev))} />
+          <Input placeholder="Адрес электронной почты" value={settings?.email ?? ""} onChange={(e) => setSettings((prev) => (prev ? { ...prev, email: e.target.value } : prev))} />
+          <Input placeholder="ID чата Телеграм" value={settings?.telegram_chat_id ?? ""} onChange={(e) => setSettings((prev) => (prev ? { ...prev, telegram_chat_id: e.target.value } : prev))} />
+          <Input placeholder="Тихие часы: с (например 22:00)" value={settings?.quiet_hours?.from ?? ""} onChange={(e) => setSettings((prev) => (prev ? { ...prev, quiet_hours: { ...(prev.quiet_hours ?? {}), from: e.target.value } } : prev))} />
+          <Input placeholder="Тихие часы: до (например 08:00)" value={settings?.quiet_hours?.to ?? ""} onChange={(e) => setSettings((prev) => (prev ? { ...prev, quiet_hours: { ...(prev.quiet_hours ?? {}), to: e.target.value } } : prev))} />
+          <Input placeholder="Часовой пояс (Europe/Moscow)" value={settings?.quiet_hours?.tz ?? ""} onChange={(e) => setSettings((prev) => (prev ? { ...prev, quiet_hours: { ...(prev.quiet_hours ?? {}), tz: e.target.value } } : prev))} />
           <Button className="md:col-span-2" onClick={() => void saveSettings()}>Сохранить настройки</Button>
         </CardContent>
       </Card>
 
       <Card>
-        <CardHeader><CardTitle>Notification templates foundation</CardTitle></CardHeader>
+        <CardHeader><CardTitle>Шаблоны уведомлений</CardTitle></CardHeader>
         <CardContent className="space-y-3">
           {templates.length ? templates.map((template) => (
             <div key={template.id} className="rounded border p-3">
@@ -236,12 +295,12 @@ const NotificationsPage = () => {
                   <div className="font-medium">{template.code}</div>
                   <div className="text-xs text-muted-foreground">{template.type} · {template.channel} · {template.locale}</div>
                 </div>
-                <div className="rounded-full border px-2 py-1 text-xs">{template.is_active ? "active" : "disabled"}</div>
+                <div className="rounded-full border px-2 py-1 text-xs">{template.is_active ? "активен" : "отключён"}</div>
               </div>
               <div className="mt-2 text-sm text-muted-foreground">{template.title_template ?? template.subject_template ?? "Без заголовка"}</div>
               <div className="mt-1 text-xs text-muted-foreground line-clamp-2">{template.body_template}</div>
             </div>
-          )) : <div className="text-sm text-muted-foreground">Шаблоны пока не настроены — foundation для tenant-scoped templates готов.</div>}
+          )) : <div className="text-sm text-muted-foreground">Шаблоны пока не настроены — база для шаблонов в области тенанта готова.</div>}
         </CardContent>
       </Card>
     </div>

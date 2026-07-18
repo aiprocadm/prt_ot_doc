@@ -25,7 +25,7 @@ async def test_client_user_cannot_access_managed_resources(
     response = await async_client.get("/api/v1/companies", headers=headers)
     assert response.status_code == 403
     body = response.json()
-    assert body["code"] == "forbidden"
+    assert body["code"] == "FORBIDDEN"
     assert body["message"] == "Insufficient role"
 
 
@@ -69,9 +69,7 @@ async def test_cross_tenant_write_is_rejected(
 
 
 @pytest.mark.anyio("asyncio")
-async def test_cross_tenant_read_is_forbidden(
-    async_client: AsyncClient, make_auth_headers
-) -> None:
+async def test_cross_tenant_read_is_forbidden(async_client: AsyncClient, make_auth_headers) -> None:
     headers = {**dict(async_client.headers), **await make_auth_headers()}
     headers["x-tenant"] = "acme"
 

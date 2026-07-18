@@ -104,4 +104,21 @@ describe("ReportsPage", () => {
     await user.click(xlsxButton);
     expect(postMock).not.toHaveBeenCalled();
   });
+
+  it("initializes date range from query params", async () => {
+    render(
+      <MemoryRouter initialEntries={["/reports?date_from=2024-01-10&date_to=2024-01-20"]}>
+        <ReportsPage />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(getMock).toHaveBeenCalledWith("/reports/kpi", {
+        params: { date_from: "2024-01-10", date_to: "2024-01-20" }
+      });
+    });
+
+    expect(screen.getByLabelText("С")).toHaveValue("2024-01-10");
+    expect(screen.getByLabelText("По")).toHaveValue("2024-01-20");
+  });
 });

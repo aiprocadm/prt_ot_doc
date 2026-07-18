@@ -31,11 +31,11 @@ const FireInspectionsPage = () => {
     <div className="space-y-4">
       <RegistryPageHeader
         title="Пожарная безопасность · проверки и предписания"
-        description="Реестр показывает реальные inspections, а также связанную нагрузку по предписаниям и задачам."
+        description="Реестр показывает реальные проверки, а также связанную нагрузку по предписаниям и задачам."
         stats={[
           { label: "Проверок", value: data.inspections.length },
           { label: "Предписаний", value: data.prescriptions.length },
-          { label: "Открытых tasks", value: data.tasks.filter((item) => item.status !== "done").length }
+          { label: "Открытых задач", value: data.tasks.filter((item) => item.status !== "done").length }
         ]}
       />
       <ErrorState error={error ?? undefined} onRetry={() => void reload()} />
@@ -43,7 +43,7 @@ const FireInspectionsPage = () => {
       {!loading && !error && hasBlockers ? (
         <Card className="border-orange-200 bg-orange-50/40">
           <CardHeader>
-            <CardTitle className="text-base">Blockers и next actions</CardTitle>
+            <CardTitle className="text-base">Блокеры и дальнейшие действия</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3 text-sm">
             <p>Открытые узкие места: предписания {openPrescriptions}, просроченные задачи {overdueTasks}, просроченные проверки {overdueInspections}.</p>
@@ -55,7 +55,7 @@ const FireInspectionsPage = () => {
           </CardContent>
         </Card>
       ) : null}
-      {!loading && !error && registry.total === 0 ? <EmptyState title="Проверки не найдены" description="Создайте inspections или загрузите данные." /> : null}
+      {!loading && !error && registry.total === 0 ? <EmptyState title="Проверки не найдены" description="Создайте записи проверок или загрузите данные." /> : null}
       {!loading && !error && registry.total > 0 ? (
         <RegistryTable
           columns={[

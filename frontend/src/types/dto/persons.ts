@@ -12,6 +12,7 @@ export interface CertificationDto {
 }
 
 export interface PersonDto extends BaseEntityDto {
+  company_id?: string;
   first_name: string;
   last_name: string;
   middle_name?: string;
@@ -22,9 +23,11 @@ export interface PersonDto extends BaseEntityDto {
   status: PersonStatus;
   certifications?: CertificationDto[];
   photo?: FileLinkDto | null;
+  qualifications?: Array<Record<string, unknown>>;
 }
 
 export interface UpdatePersonDto {
+  company_id?: string;
   first_name: string;
   last_name: string;
   middle_name?: string;

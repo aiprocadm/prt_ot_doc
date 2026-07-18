@@ -15,9 +15,13 @@ depends_on = None
 
 def upgrade() -> None:
     op.drop_index("ix_job_steps_tenant_job_order", table_name="document_job_steps")
-    op.create_index("ix_job_steps_tenant_job_order", "document_job_steps", ["tenant_id", "job_id", "step_order"])
+    op.create_index(
+        "ix_job_steps_tenant_job_order", "document_job_steps", ["tenant_id", "job_id", "step_order"]
+    )
 
 
 def downgrade() -> None:
     op.drop_index("ix_job_steps_tenant_job_order", table_name="document_job_steps")
-    op.create_index("ix_job_steps_tenant_job_order", "document_job_steps", ["tenant_id", "job_id", "order"])
+    op.create_index(
+        "ix_job_steps_tenant_job_order", "document_job_steps", ["tenant_id", "job_id", "order"]
+    )

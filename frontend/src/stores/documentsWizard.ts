@@ -2,10 +2,23 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
 import type { BrandingPreviewDto } from "@/api/branding";
-import type { DocumentBatchRun, ReplaceDryRunResponse } from "@/api/documents";
+import type { DocumentBatchRun, MappingValidationResponse, ReplaceDryRunResponse } from "@/api/documents";
 import type { PipelineRun } from "@/api/pipelines";
+import type { QualityReport } from "@/types/dto/documentQuality";
 
 type RowStatusFilter = "all" | "success" | "failed";
+type QuickGenerationHistoryItem = {
+  id: string;
+  createdAt: string;
+  personId: string;
+  companyId: string;
+  siteId: string;
+  caseType: string;
+  templateCode: string;
+  templateVersion: number;
+  taskId: string;
+  status: string;
+};
 
 const getPreviewHistoryKey = (preview: BrandingPreviewDto) => {
   const generatedAt = String(preview.profile.reproducibility?.generated_at ?? "");
@@ -29,6 +42,8 @@ export type DocumentsWizardState = {
   headerOptions: Record<string, string>;
   replaceMapFileName: string;
   replaceDryRun: ReplaceDryRunResponse | null;
+  mappingValidation: MappingValidationResponse | null;
+  qualityReport: QualityReport | null;
   batch: DocumentBatchRun | null;
   taskId: string;
   pipelineRun: PipelineRun | null;
@@ -36,7 +51,9 @@ export type DocumentsWizardState = {
   brandingPreviewHistory: BrandingPreviewDto[];
   idempotencyKey: string;
   rowStatusFilter: RowStatusFilter;
+  quickGenerationHistory: QuickGenerationHistoryItem[];
   pushBrandingPreview: (preview: BrandingPreviewDto) => void;
+  pushQuickGenerationHistory: (entry: QuickGenerationHistoryItem) => void;
   setPartial: (next: Partial<DocumentsWizardState>) => void;
   reset: () => void;
 };
@@ -60,13 +77,16 @@ const baseState = {
   headerOptions: {},
   replaceMapFileName: "",
   replaceDryRun: null,
+  mappingValidation: null,
+  qualityReport: null,
   batch: null,
   taskId: "",
   pipelineRun: null,
   brandingPreview: null,
   brandingPreviewHistory: [],
   idempotencyKey: createIdempotencyKey(),
-  rowStatusFilter: "all" as RowStatusFilter
+  rowStatusFilter: "all" as RowStatusFilter,
+  quickGenerationHistory: []
 };
 
 export const useDocumentsWizardStore = create<DocumentsWizardState>()(
@@ -84,6 +104,16 @@ export const useDocumentsWizardStore = create<DocumentsWizardState>()(
                 index
             )
             .slice(0, 5)
+        })),
+      pushQuickGenerationHistory: (entry) =>
+        set((state) => ({
+          ...state,
+          quickGenerationHistory: [entry, ...state.quickGenerationHistory]
+            .filter(
+              (item, index, items) =>
+                items.findIndex((candidate) => candidate.id === item.id) === index
+            )
+            .slice(0, 10),
         })),
       setPartial: (next) => set((state) => ({ ...state, ...next })),
       reset: () => set({ ...baseState, idempotencyKey: createIdempotencyKey() })
@@ -103,10 +133,13 @@ export const useDocumentsWizardStore = create<DocumentsWizardState>()(
         headerPreset: state.headerPreset,
         headerOptions: state.headerOptions,
         replaceMapFileName: state.replaceMapFileName,
+        mappingValidation: state.mappingValidation,
+        qualityReport: state.qualityReport,
         brandingPreview: state.brandingPreview,
         brandingPreviewHistory: state.brandingPreviewHistory,
         idempotencyKey: state.idempotencyKey,
-        rowStatusFilter: state.rowStatusFilter
+        rowStatusFilter: state.rowStatusFilter,
+        quickGenerationHistory: state.quickGenerationHistory
       })
     }
   )

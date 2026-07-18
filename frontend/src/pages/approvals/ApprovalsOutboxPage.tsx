@@ -1,7 +1,7 @@
 import { RotateCcw } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
-import { apiClient } from "@/api/client";
+import { integrationsApi } from "@/api/integrations";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingScreen } from "@/components/common/LoadingScreen";
@@ -54,11 +54,11 @@ const ApprovalsOutboxPage = () => {
     setError(null);
     try {
       const [outboxResponse, eventsResponse] = await Promise.all([
-        apiClient.get<{ items: OutboxEntry[] }>("/admin/outbox"),
-        apiClient.get<{ items: OutboxEventEntry[] }>("/admin/outbox/events"),
+        integrationsApi.getOutbox<OutboxEntry>(),
+        integrationsApi.getOutboxEvents<OutboxEventEntry>(),
       ]);
-      setDeliveries((outboxResponse.data.items ?? []).filter((item) => isApprovalEvent(item.event_type)));
-      setEvents((eventsResponse.data.items ?? []).filter((item) => isApprovalEvent(item.event_type)));
+      setDeliveries((outboxResponse.items ?? []).filter((item) => isApprovalEvent(item.event_type)));
+      setEvents((eventsResponse.items ?? []).filter((item) => isApprovalEvent(item.event_type)));
     } catch (err) {
       setError((err as ApiError) ?? { message: "Не удалось загрузить исходящие согласования", status: 0 });
     } finally {
@@ -73,7 +73,7 @@ const ApprovalsOutboxPage = () => {
   const retryDelivery = async (id: string) => {
     setRetryingId(id);
     try {
-      await apiClient.post(`/admin/outbox/${id}/retry`);
+      await integrationsApi.retryOutboxDelivery(id);
       await load();
     } finally {
       setRetryingId(null);
@@ -83,7 +83,7 @@ const ApprovalsOutboxPage = () => {
   const requeueEvent = async (id: string) => {
     setRetryingId(id);
     try {
-      await apiClient.post(`/admin/outbox/events/${id}/requeue`);
+      await integrationsApi.retryOutboxEvent(id);
       await load();
     } finally {
       setRetryingId(null);
@@ -112,7 +112,7 @@ const ApprovalsOutboxPage = () => {
           <CardContent>
             <EmptyState
               title="Исходящие согласования пока отсутствуют"
-              description="После запуска согласований здесь появятся статусы доставок и событий outbox." 
+              description="После запуска согласований здесь появятся статусы доставок и событий исходящей очереди." 
             />
           </CardContent>
         </Card>
@@ -146,9 +146,9 @@ const ApprovalsOutboxPage = () => {
                     <TableCell><StatusBadge status={item.status} /></TableCell>
                     <TableCell>{item.attempts}</TableCell>
                     <TableCell>
-                      <div className="text-sm">created: {formatDateTime(item.created_at)}</div>
-                      <div className="text-xs text-muted-foreground">next: {formatDateTime(item.next_attempt_at)}</div>
-                      <div className="text-xs text-muted-foreground">sent: {formatDateTime(item.sent_at)}</div>
+                      <div className="text-sm">создано: {formatDateTime(item.created_at)}</div>
+                      <div className="text-xs text-muted-foreground">следующая попытка: {formatDateTime(item.next_attempt_at)}</div>
+                      <div className="text-xs text-muted-foreground">отправлено: {formatDateTime(item.sent_at)}</div>
                     </TableCell>
                     <TableCell className="text-right">
                       {RETRYABLE_OUTBOX_STATUSES.has(item.status) ? (
@@ -159,7 +159,7 @@ const ApprovalsOutboxPage = () => {
                             onClick={() => void retryDelivery(item.id)}
                             disabled={retryingId === item.id}
                           >
-                            <RotateCcw className="mr-2 h-4 w-4" /> Retry
+                            <RotateCcw className="mr-2 h-4 w-4" /> Повторить
                           </Button>
                         </Can>
                       ) : (
@@ -209,7 +209,7 @@ const ApprovalsOutboxPage = () => {
                             onClick={() => void requeueEvent(item.id)}
                             disabled={retryingId === item.id}
                           >
-                            <RotateCcw className="mr-2 h-4 w-4" /> Requeue
+                            <RotateCcw className="mr-2 h-4 w-4" /> В очередь
                           </Button>
                         </Can>
                       ) : (

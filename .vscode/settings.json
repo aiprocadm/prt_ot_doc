@@ -13,5 +13,8 @@
     "${workspaceFolder}"
   ],
   "vitest.enable": true,
-  "testing.automaticallyOpenPeekView": "never"
+  "testing.automaticallyOpenPeekView": "never",
+  "cursorpyright.analysis.extraPaths": [
+    "${workspaceFolder}"
+  ]
 }

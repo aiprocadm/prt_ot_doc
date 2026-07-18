@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { apiClient } from "@/api/client";
+import { reportsApi } from "@/api/reports";
 import { EmptyState } from "@/components/common/EmptyState";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,13 +18,13 @@ const ExportsPage = () => {
   const [datasets, setDatasets] = useState<DatasetCatalog["items"]>([]);
 
   useEffect(() => {
-    void apiClient.get<Collection>("/exports").then(({ data }) => {
+    void reportsApi.getExports<NonNullable<Collection["items"]>[number]>().then((data) => {
       setJobs(data.total);
       setJobPreview(data.items ?? []);
     }).catch(() => undefined);
-    void apiClient.get<Collection>("/exports/schedules").then(({ data }) => setSchedules(data.total)).catch(() => undefined);
-    void apiClient.get<Collection>("/exports/kpis").then(({ data }) => setKpis(data.total)).catch(() => undefined);
-    void apiClient.get<DatasetCatalog>("/exports/datasets").then(({ data }) => setDatasets(data.items ?? [])).catch(() => undefined);
+    void reportsApi.getExportSchedules().then((data) => setSchedules(data.total)).catch(() => undefined);
+    void reportsApi.getExportKpis().then((data) => setKpis(data.total)).catch(() => undefined);
+    void reportsApi.getDatasets<NonNullable<DatasetCatalog["items"]>[number]>().then((data) => setDatasets(data.items ?? [])).catch(() => undefined);
   }, []);
 
   return (

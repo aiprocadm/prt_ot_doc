@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_correlation_id, get_session, get_tenant_record
 from app.core.audit_decorator import audit_operation
+from app.core.errors import api_problem_detail
 from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
 from app.models.finance import Contract, Invoice, InvoiceStatus, Order
@@ -35,21 +36,27 @@ ReadAccess = Annotated[
 
 WriteAccess = Annotated[
     AccessContext,
-    Depends(abac(_tenant_resource_id, required_roles=_INVOICE_WRITE_ROLES, action="manage invoices")),
+    Depends(
+        abac(_tenant_resource_id, required_roles=_INVOICE_WRITE_ROLES, action="manage invoices")
+    ),
 ]
 
 
 def _invoice_bad_request(message: str) -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,
-        detail={"code": "invoice_validation_error", "message": message},
+        detail=api_problem_detail(
+            code="INVOICE_VALIDATION_ERROR", message=message, error_type="invoices"
+        ),
     )
 
 
 def _invoice_unprocessable(message: str) -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-        detail={"code": "invoice_validation_error", "message": message},
+        detail=api_problem_detail(
+            code="INVOICE_VALIDATION_ERROR", message=message, error_type="invoices"
+        ),
     )
 
 
@@ -197,9 +204,19 @@ async def update_invoice(
         invoice.order_id = order.id
     if "status" in updates and updates["status"]:
         try:
-            updates["status"] = InvoiceStatus(str(updates["status"]).lower())
+            new_status = InvoiceStatus(str(updates["status"]).lower())
         except ValueError as exc:
             raise _invoice_unprocessable("Unsupported invoice status") from exc
+        # PAID and VOID are terminal: block reverting a settled/voided invoice back to
+        # issued (or flipping paid<->void), which would corrupt AR/revenue state.
+        if new_status != invoice.status and invoice.status in (
+            InvoiceStatus.PAID,
+            InvoiceStatus.VOID,
+        ):
+            raise _invoice_bad_request(
+                f"Cannot change status of a {InvoiceStatus(invoice.status).value} invoice"
+            )
+        updates["status"] = new_status
     for key, value in updates.items():
         setattr(invoice, key, value)
     await session.commit()

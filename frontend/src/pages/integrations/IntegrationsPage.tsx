@@ -2,7 +2,7 @@ import { RotateCcw } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 
-import { apiClient } from "@/api/client";
+import { integrationsApi } from "@/api/integrations";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingScreen } from "@/components/common/LoadingScreen";
@@ -49,14 +49,14 @@ const formatDateTime = (value?: string | null) => (value ? new Date(value).toLoc
 const IntegrationsPage = () => {
   const loadIntegrations = useCallback(async () => {
     const [outboxResponse, eventResponse, readinessResponse] = await Promise.all([
-      apiClient.get<{ items: OutboxEntry[] }>("/admin/outbox"),
-      apiClient.get<{ items: OutboxEventEntry[] }>("/admin/outbox/events"),
-      apiClient.get<ReadinessResponse>("/integrations/readiness"),
+      integrationsApi.getOutbox<OutboxEntry>(),
+      integrationsApi.getOutboxEvents<OutboxEventEntry>(),
+      integrationsApi.getReadiness<ReadinessResponse>(),
     ]);
     return {
-      deliveries: outboxResponse.data.items ?? [],
-      events: eventResponse.data.items ?? [],
-      readiness: readinessResponse.data ?? null,
+      deliveries: outboxResponse.items ?? [],
+      events: eventResponse.items ?? [],
+      readiness: readinessResponse ?? null,
     };
   }, []);
 
@@ -93,7 +93,7 @@ const IntegrationsPage = () => {
   const retryDelivery = async (id: string) => {
     setRetryingId(id);
     try {
-      await apiClient.post(`/admin/outbox/${id}/retry`);
+      await integrationsApi.retryOutboxDelivery(id);
       await reload();
     } catch (error) {
       toast.error((error as ApiError)?.message ?? "Не удалось повторить доставку");
@@ -105,7 +105,7 @@ const IntegrationsPage = () => {
   const retryEvent = async (id: string) => {
     setRetryingId(id);
     try {
-      await apiClient.post(`/admin/outbox/events/${id}/requeue`);
+      await integrationsApi.retryOutboxEvent(id);
       await reload();
     } catch (error) {
       toast.error((error as ApiError)?.message ?? "Не удалось вернуть событие в очередь");
@@ -118,12 +118,12 @@ const IntegrationsPage = () => {
     <div className="space-y-4">
       <RegistryPageHeader
         title="Интеграции"
-        description="Delivery history, retry-safe обработка и прозрачность статусов интеграций через outbox/event pipeline."
+        description="История доставок, безопасные повторы и прозрачность статусов интеграций через исходящую очередь и конвейер событий."
       />
       <ErrorState error={error ?? undefined} onRetry={() => void reload()} />
       {loading ? <LoadingScreen label="Загрузка интеграций" /> : null}
       {!loading && !error && data.deliveries.length + data.events.length === 0 ? (
-        <EmptyState title="Интеграционные события отсутствуют" description="После первых webhook/outbox операций здесь появится журнал доставок." />
+        <EmptyState title="Интеграционные события отсутствуют" description="После первых операций с вебхуками и исходящей очередью здесь появится журнал доставок." />
       ) : null}
 
       <div className="grid gap-4 md:grid-cols-4">
@@ -135,30 +135,30 @@ const IntegrationsPage = () => {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Provider readiness</CardTitle>
+          <CardTitle className="text-base">Готовность провайдеров</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-4 md:grid-cols-3">
-            <Card><CardContent className="py-4"><div className="text-sm text-muted-foreground">Webhook endpoints</div><div className="text-xl font-semibold">{data.readiness?.webhooks.configured_total ?? 0}</div></CardContent></Card>
-            <Card><CardContent className="py-4"><div className="text-sm text-muted-foreground">Enabled endpoints</div><div className="text-xl font-semibold">{data.readiness?.webhooks.enabled_total ?? 0}</div></CardContent></Card>
-            <Card><CardContent className="py-4"><div className="text-sm text-muted-foreground">Failed deliveries</div><div className="text-xl font-semibold">{data.readiness?.webhooks.delivery_failed_total ?? 0}</div></CardContent></Card>
+            <Card><CardContent className="py-4"><div className="text-sm text-muted-foreground">Точки вебхуков</div><div className="text-xl font-semibold">{data.readiness?.webhooks.configured_total ?? 0}</div></CardContent></Card>
+            <Card><CardContent className="py-4"><div className="text-sm text-muted-foreground">Включённые точки</div><div className="text-xl font-semibold">{data.readiness?.webhooks.enabled_total ?? 0}</div></CardContent></Card>
+            <Card><CardContent className="py-4"><div className="text-sm text-muted-foreground">Сбои доставки</div><div className="text-xl font-semibold">{data.readiness?.webhooks.delivery_failed_total ?? 0}</div></CardContent></Card>
           </div>
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Provider</TableHead>
-                <TableHead>Adapter</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Configured</TableHead>
+                <TableHead>Провайдер</TableHead>
+                <TableHead>Адаптер</TableHead>
+                <TableHead>Статус</TableHead>
+                <TableHead>Настроен</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {data.readiness?.providers.map((item) => (
                 <TableRow key={item.provider}>
                   <TableCell className="font-medium">{item.provider}</TableCell>
-                  <TableCell>{item.adapter ?? "contract-only"}</TableCell>
+                  <TableCell>{item.adapter ?? "только контракт"}</TableCell>
                   <TableCell><StatusBadge status={item.health_status} /></TableCell>
-                  <TableCell>{item.configured ? "yes" : "no"}</TableCell>
+                  <TableCell>{item.configured ? "да" : "нет"}</TableCell>
                 </TableRow>
               )) ?? null}
             </TableBody>
@@ -169,13 +169,13 @@ const IntegrationsPage = () => {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <div className="flex items-center gap-3">
-            <CardTitle className="text-base">Outbound delivery history</CardTitle>
+            <CardTitle className="text-base">История исходящих доставок</CardTitle>
             <select className="h-9 rounded-md border px-3 text-sm" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
               <option value="all">Все статусы</option>
-              <option value="pending">pending</option>
-              <option value="failed">failed</option>
-              <option value="dead">dead</option>
-              <option value="sent">sent</option>
+              <option value="pending">ожидание</option>
+              <option value="failed">сбой</option>
+              <option value="dead">окончательный сбой</option>
+              <option value="sent">отправлено</option>
             </select>
           </div>
           <Button variant="outline" onClick={() => void reload()} disabled={loading}>Обновить</Button>
@@ -203,9 +203,9 @@ const IntegrationsPage = () => {
                   <TableCell><StatusBadge status={item.status} /></TableCell>
                   <TableCell>{item.attempts}</TableCell>
                   <TableCell>
-                    <div className="text-sm">created: {formatDateTime(item.created_at)}</div>
-                    <div className="text-xs text-muted-foreground">next: {formatDateTime(item.next_attempt_at)}</div>
-                    <div className="text-xs text-muted-foreground">sent: {formatDateTime(item.sent_at)}</div>
+                    <div className="text-sm">создано: {formatDateTime(item.created_at)}</div>
+                    <div className="text-xs text-muted-foreground">следующая попытка: {formatDateTime(item.next_attempt_at)}</div>
+                    <div className="text-xs text-muted-foreground">отправлено: {formatDateTime(item.sent_at)}</div>
                   </TableCell>
                   <TableCell className="text-right">
                     {(item.status === "failed" || item.status === "dead") ? (
@@ -216,7 +216,7 @@ const IntegrationsPage = () => {
                           onClick={() => void retryDelivery(item.id)}
                           disabled={retryingId === item.id}
                         >
-                          <RotateCcw className="mr-2 h-4 w-4" /> Retry
+                          <RotateCcw className="mr-2 h-4 w-4" /> Повторить
                         </Button>
                       </Can>
                     ) : (
@@ -231,15 +231,15 @@ const IntegrationsPage = () => {
       </Card>
 
       <Card>
-        <CardHeader><CardTitle className="text-base">Integration event pipeline</CardTitle></CardHeader>
+        <CardHeader><CardTitle className="text-base">Конвейер событий интеграций</CardTitle></CardHeader>
         <CardContent>
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Event</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Attempts</TableHead>
-                <TableHead>Created</TableHead>
+                <TableHead>Событие</TableHead>
+                <TableHead>Статус</TableHead>
+                <TableHead>Попытки</TableHead>
+                <TableHead>Создано</TableHead>
                 <TableHead>Ошибка</TableHead>
                 <TableHead className="text-right">Действие</TableHead>
               </TableRow>
@@ -264,7 +264,7 @@ const IntegrationsPage = () => {
                           onClick={() => void retryEvent(item.id)}
                           disabled={retryingId === item.id}
                         >
-                          <RotateCcw className="mr-2 h-4 w-4" /> Requeue
+                          <RotateCcw className="mr-2 h-4 w-4" /> В очередь
                         </Button>
                       </Can>
                     ) : (

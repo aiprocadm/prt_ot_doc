@@ -58,9 +58,9 @@ describe("AdminPage", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText("Tenant health score")).toBeInTheDocument();
-    expect(screen.getByText("Score: 88 / 100")).toBeInTheDocument();
-    expect(screen.getByText("Role: admin")).toBeInTheDocument();
-    expect(screen.getByText("Blocking providers: 1")).toBeInTheDocument();
+    expect(await screen.findByText("Оценка здоровья тенанта")).toBeInTheDocument();
+    expect(screen.getByText(/Балл: 88 \/ 100/)).toBeInTheDocument();
+    expect(screen.getByText(/Роль: admin/)).toBeInTheDocument();
+    expect(screen.getByText(/Блокирующих провайдеров: 1/)).toBeInTheDocument();
   });
 });

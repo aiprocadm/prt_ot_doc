@@ -4,6 +4,7 @@ Revision ID: 20250322_risk_cards_action_plans
 Revises: 20250321_outbox_dedupe_key
 Create Date: 2025-03-22 00:00:00.000000
 """
+
 from __future__ import annotations
 
 import sqlalchemy as sa
@@ -35,9 +36,7 @@ def upgrade() -> None:
         )
 
     with op.batch_alter_table("risk_assessments", schema=None) as batch:
-        batch.add_column(
-            sa.Column("assessment_key", sa.String(length=64), nullable=True)
-        )
+        batch.add_column(sa.Column("assessment_key", sa.String(length=64), nullable=True))
         batch.add_column(
             sa.Column("assessment_version", sa.Integer(), nullable=False, server_default="1")
         )
@@ -45,9 +44,7 @@ def upgrade() -> None:
         batch.add_column(sa.Column("methodology_version", sa.Integer(), nullable=True))
         batch.add_column(sa.Column("workplace_id", sa.String(length=36), nullable=True))
         batch.add_column(sa.Column("employee_id", sa.String(length=36), nullable=True))
-        batch.create_index(
-            "ix_risk_assessments_methodology_id", ["methodology_id"], unique=False
-        )
+        batch.create_index("ix_risk_assessments_methodology_id", ["methodology_id"], unique=False)
         batch.create_index("ix_risk_assessments_workplace_id", ["workplace_id"], unique=False)
         batch.create_index("ix_risk_assessments_employee_id", ["employee_id"], unique=False)
         batch.create_unique_constraint(
@@ -74,9 +71,7 @@ def upgrade() -> None:
         )
 
     op.execute(
-        sa.text(
-            "UPDATE risk_assessments SET assessment_key = id WHERE assessment_key IS NULL"
-        )
+        sa.text("UPDATE risk_assessments SET assessment_key = id WHERE assessment_key IS NULL")
     )
 
     with op.batch_alter_table("risk_assessments", schema=None) as batch:
@@ -160,12 +155,8 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index("ix_risk_cards_tenant_id", "risk_cards", ["tenant_id"], unique=False)
-    op.create_index(
-        "ix_risk_cards_assessment_id", "risk_cards", ["assessment_id"], unique=False
-    )
-    op.create_index(
-        "ix_risk_cards_methodology_id", "risk_cards", ["methodology_id"], unique=False
-    )
+    op.create_index("ix_risk_cards_assessment_id", "risk_cards", ["assessment_id"], unique=False)
+    op.create_index("ix_risk_cards_methodology_id", "risk_cards", ["methodology_id"], unique=False)
     op.create_index(
         "ix_risk_cards_tenant_assessment",
         "risk_cards",

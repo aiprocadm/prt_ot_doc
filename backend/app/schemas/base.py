@@ -28,4 +28,3 @@ class BaseSchema(BaseModel):
         populate_by_name=True,
         json_encoders={datetime: serialize_datetime},
     )
-

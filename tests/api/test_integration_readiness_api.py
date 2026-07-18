@@ -6,7 +6,9 @@ from app.models.models import RoleEnum, TenantIntegrationKey
 
 
 @pytest.mark.anyio
-async def test_integration_readiness_summary(async_client, sessionmaker, data_factory, make_auth_headers):
+async def test_integration_readiness_summary(
+    async_client, sessionmaker, data_factory, make_auth_headers
+):
     async with sessionmaker() as session:  # type: AsyncSession
         tenant = await data_factory.ensure_tenant(session=session)
         session.add(
@@ -20,7 +22,9 @@ async def test_integration_readiness_summary(async_client, sessionmaker, data_fa
         await session.commit()
 
     headers = await make_auth_headers(RoleEnum.ADMIN)
-    response = await async_client.get("/api/v1/integrations/readiness", headers={**headers, "X-Tenant": "test"})
+    response = await async_client.get(
+        "/api/v1/integrations/readiness", headers={**headers, "X-Tenant": "test"}
+    )
     assert response.status_code == 200
     body = response.json()
     assert body["webhooks"]["configured_total"] == 0

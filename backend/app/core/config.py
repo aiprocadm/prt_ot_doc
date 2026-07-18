@@ -169,7 +169,7 @@ DEFAULT_ALLOWED_FILE_EXTENSIONS: Final[list[str]] = [
 
 
 def _parse_file_allowed_mime(value: object) -> list[str]:
-    items = split_csv(value, default=DEFAULT_ALLOWED_FILE_MIME)
+    items = split_csv(value, default=DEFAULT_ALLOWED_FILE_MIME)  # type: ignore[arg-type]
     normalized: list[str] = []
     for item in items:
         candidate = str(item).strip().lower()
@@ -181,7 +181,7 @@ def _parse_file_allowed_mime(value: object) -> list[str]:
 
 
 def _parse_file_allowed_extensions(value: object) -> list[str]:
-    items = split_csv(value, default=DEFAULT_ALLOWED_FILE_EXTENSIONS)
+    items = split_csv(value, default=DEFAULT_ALLOWED_FILE_EXTENSIONS)  # type: ignore[arg-type]
     normalized: list[str] = []
     for item in items:
         candidate = str(item).strip().lower().lstrip(".")
@@ -225,7 +225,9 @@ def _decode_complex_value_with_fallback(
     return value
 
 
-settings_sources.PydanticBaseSettingsSource.decode_complex_value = (
+# NOTE: patching pydantic-settings is brittle across upgrades; prefer a custom
+# SettingsSource when bumping pydantic-settings major versions.
+settings_sources.PydanticBaseSettingsSource.decode_complex_value = (  # type: ignore[method-assign]
     _decode_complex_value_with_fallback
 )
 
@@ -286,9 +288,7 @@ class Settings(BaseSettings):
     shared_schema: str = Field("public", alias="SHARED_SCHEMA")
     runtime_schema_bootstrap: bool = Field(False, alias="RUNTIME_SCHEMA_BOOTSTRAP")
 
-    storage_backend: Literal["local", "s3", "memory"] = Field(
-        "memory", alias="STORAGE_BACKEND"
-    )
+    storage_backend: Literal["local", "s3", "memory"] = Field("memory", alias="STORAGE_BACKEND")
     storage_root: str = Field("./.local_storage", alias="STORAGE_ROOT")
     s3_backend: Literal["memory", "minio", "local"] = Field("memory", alias="S3_BACKEND")
     s3_endpoint: str = Field("http://minio:9000", alias="S3_ENDPOINT")
@@ -310,6 +310,21 @@ class Settings(BaseSettings):
     admin_email: str = Field("admin@example.com", alias="ADMIN_EMAIL")
     admin_password: str = Field("", alias="ADMIN_PASSWORD")
     admin_tenant: str = Field("public", alias="ADMIN_TENANT")
+    webhook_notification_url: str | None = Field(None, alias="WEBHOOK_NOTIFICATION_URL")
+    # RC-011 notification delivery (feature-flagged; default OFF -> no external send).
+    notifications_delivery_enabled: bool = Field(
+        False, alias="NOTIFICATIONS_DELIVERY_ENABLED"
+    )
+    notifications_max_delivery_attempts: int = Field(
+        3, alias="NOTIFICATIONS_MAX_DELIVERY_ATTEMPTS"
+    )
+    smtp_host: str = Field("", alias="SMTP_HOST")
+    smtp_port: int = Field(587, alias="SMTP_PORT")
+    smtp_username: str = Field("", alias="SMTP_USERNAME")
+    smtp_password: str = Field("", alias="SMTP_PASSWORD")
+    smtp_from: str = Field("", alias="SMTP_FROM")
+    smtp_use_tls: bool = Field(True, alias="SMTP_USE_TLS")
+    telegram_bot_token: str = Field("", alias="TELEGRAM_BOT_TOKEN")
     demo_bootstrap: bool = Field(False, alias="DEMO_BOOTSTRAP")
     demo_tenant_id: str = Field("demo", alias="DEMO_TENANT_ID")
     demo_company_name: str = Field("ООО Демо Строй", alias="DEMO_COMPANY_NAME")
@@ -336,9 +351,8 @@ class Settings(BaseSettings):
     pdf_worker_concurrency: int = Field(2, alias="PDF_WORKER_CONCURRENCY")
     doc_pipeline_enable_qr: bool = Field(False, alias="DOC_PIPELINE_ENABLE_QR")
     doc_pipeline_enable_watermark: bool = Field(False, alias="DOC_PIPELINE_ENABLE_WATERMARK")
-    doc_pipeline_watermark_text: str = Field(
-        "CONFIDENTIAL", alias="DOC_PIPELINE_WATERMARK_TEXT"
-    )
+    doc_pipeline_letterhead_auto: bool = Field(False, alias="DOC_PIPELINE_LETTERHEAD_AUTO")
+    doc_pipeline_watermark_text: str = Field("CONFIDENTIAL", alias="DOC_PIPELINE_WATERMARK_TEXT")
 
     redis_url: str = Field("redis://localhost:6379/0", alias="REDIS_URL")
     redis_result_url_env: str | None = Field(None, alias="REDIS_RESULT_URL")
@@ -366,15 +380,11 @@ class Settings(BaseSettings):
     webhook_document_signed_urls: CsvUrlList = Field(
         default_factory=list, alias="WEBHOOK_URLS_DOCUMENT_SIGNED"
     )
-    webhook_signed_urls: CsvUrlList = Field(
-        default_factory=list, alias="WEBHOOK_URLS_SIGNED"
-    )
+    webhook_signed_urls: CsvUrlList = Field(default_factory=list, alias="WEBHOOK_URLS_SIGNED")
     webhook_document_exported_urls: CsvUrlList = Field(
         default_factory=list, alias="WEBHOOK_URLS_DOCUMENT_EXPORTED"
     )
-    webhook_exported_urls: CsvUrlList = Field(
-        default_factory=list, alias="WEBHOOK_URLS_EXPORTED"
-    )
+    webhook_exported_urls: CsvUrlList = Field(default_factory=list, alias="WEBHOOK_URLS_EXPORTED")
     webhook_risk_assessed_urls: CsvUrlList = Field(
         default_factory=list, alias="WEBHOOK_URLS_RISK_ASSESSED"
     )
@@ -391,11 +401,12 @@ class Settings(BaseSettings):
         default_factory=list, alias="WEBHOOK_URLS_TRAINING_ASSIGNED"
     )
     webhook_timeout_seconds: float = Field(10.0, alias="WEBHOOK_TIMEOUT_SECONDS")
+    inbound_webhook_hmac_secret: str = Field("", alias="INBOUND_WEBHOOK_HMAC_SECRET")
     log_level: str = Field("INFO", alias="LOG_LEVEL")
     log_json: bool = Field(True, alias="LOG_JSON")
 
     @classmethod
-    def model_validate(cls, obj: object, **kwargs) -> "Settings":  # type: ignore[override]
+    def model_validate(cls, obj: object, **kwargs) -> "Settings":  # noqa: PYI034
         if isinstance(obj, dict):
             data = dict(obj)
             data.setdefault("APP_ENV", cls.model_fields["app_env"].default)
@@ -406,14 +417,20 @@ class Settings(BaseSettings):
     rate_limit_storage_uri: str = Field("memory://", alias="RATE_LIMIT_STORAGE_URI")
     rate_limit_login_per_identity: str = Field("5/minute", alias="RATE_LIMIT_LOGIN_PER_IDENTITY")
     rate_limit_upload_per_tenant: str = Field("10/minute", alias="RATE_LIMIT_UPLOAD_PER_TENANT")
-    rate_limit_generate_per_tenant: str = Field(
-        "20/minute", alias="RATE_LIMIT_GENERATE_PER_TENANT"
-    )
+    rate_limit_generate_per_tenant: str = Field("20/minute", alias="RATE_LIMIT_GENERATE_PER_TENANT")
 
     use_1c_integration: bool = Field(False, alias="USE_1C_INTEGRATION")
     use_edo_integration: bool = Field(False, alias="USE_EDO_INTEGRATION")
     use_frdo_integration: bool = Field(False, alias="USE_FRDO_INTEGRATION")
     use_eisot_integration: bool = Field(False, alias="USE_EISOT_INTEGRATION")
+
+    edo_integration_base_url: str | None = Field(None, alias="EDO_INTEGRATION_BASE_URL")
+    edo_integration_api_token: str | None = Field(None, alias="EDO_INTEGRATION_API_TOKEN")
+    edo_integration_timeout_seconds: float = Field(30.0, alias="EDO_INTEGRATION_TIMEOUT_SECONDS")
+    edo_integration_outbound_path: str = Field(
+        "/v1/outbound/documents",
+        alias="EDO_INTEGRATION_OUTBOUND_PATH",
+    )
 
     json_max_bytes: int = Field(JSON_MAX_DEFAULT, alias="JSON_MAX")
     max_upload_size: int = Field(
@@ -437,9 +454,7 @@ class Settings(BaseSettings):
     )
 
     clamav_queue_url: str = Field("memory://", alias="CLAMAV_QUEUE_URL")
-    clamav_quarantine_queue: str = Field(
-        "clamav.quarantine", alias="CLAMAV_QUARANTINE_QUEUE"
-    )
+    clamav_quarantine_queue: str = Field("clamav.quarantine", alias="CLAMAV_QUARANTINE_QUEUE")
     clamav_scan_queue: str = Field("clamav.scan", alias="CLAMAV_SCAN_QUEUE")
     clamav_host: str = Field("clamav", alias="CLAMAV_HOST")
     clamav_port: int = Field(3310, alias="CLAMAV_PORT")
@@ -447,7 +462,16 @@ class Settings(BaseSettings):
     clamav_unix_socket: str | None = Field(None, alias="CLAMAV_UNIX_SOCKET")
 
     enable_metrics: bool = Field(True, alias="ENABLE_METRICS")
+    enable_openapi_docs: bool = Field(True, alias="ENABLE_OPENAPI_DOCS")
     enable_gzip: bool = Field(True, alias="ENABLE_GZIP")
+    enable_files_legacy_routes: bool = Field(True, alias="ENABLE_FILES_LEGACY_ROUTES")
+    health_check_comprehensive_enabled: bool = Field(
+        False, alias="HEALTH_CHECK_COMPREHENSIVE_ENABLED"
+    )
+    health_check_cache_ttl_seconds: int = Field(60, alias="HEALTH_CHECK_CACHE_TTL_SECONDS")
+    health_check_timeout_per_check_seconds: float = Field(
+        5.0, alias="HEALTH_CHECK_TIMEOUT_PER_CHECK_SECONDS"
+    )
     max_request_body_bytes: int = Field(1_048_576, alias="MAX_REQUEST_BODY_BYTES")
     request_timeout_seconds: float = Field(15.0, alias="REQUEST_TIMEOUT_SECONDS")
     trace_header_name: str = Field("X-Correlation-Id", alias="TRACE_HEADER_NAME")
@@ -467,7 +491,7 @@ class Settings(BaseSettings):
             "worker_queues": ["default"],
         }
 
-        default = defaults.get(info.field_name, [])
+        default = defaults.get(info.field_name or "", [])
         return split_csv(value, default=default)
 
     @field_validator("libreoffice_bin")
@@ -530,7 +554,7 @@ class Settings(BaseSettings):
     @classmethod
     def _validate_positive_sizes(cls, value: int, info: ValidationInfo) -> int:
         if value <= 0:
-            raise ValueError(f"{info.field_name.upper()} must be greater than zero")
+            raise ValueError(f"{(info.field_name or '').upper()} must be greater than zero")
         return value
 
     @field_validator(
@@ -543,7 +567,7 @@ class Settings(BaseSettings):
         if isinstance(value, str):
             value = float(value)
         if value <= 0:
-            raise ValueError(f"{info.field_name.upper()} must be greater than zero")
+            raise ValueError(f"{(info.field_name or '').upper()} must be greater than zero")
         return float(value)
 
     @field_validator("pdf_worker_queue")
@@ -594,15 +618,23 @@ class Settings(BaseSettings):
         private_key = self.jwt_private_key_pem.strip()
         public_key = self.jwt_public_key_pem.strip()
 
-        if private_key and public_key:
+        if self.app_env in ("production", "staging"):
+            if not private_key or not public_key:
+                raise SettingsError(
+                    "PRIVATE_KEY_PEM and PUBLIC_KEY_PEM must be configured in staging/production"
+                )
+            if private_key == DEV_PRIVATE_KEY.strip() or public_key == DEV_PUBLIC_KEY.strip():
+                raise SettingsError(
+                    "Staging/production must not use bundled development JWT key pair"
+                )
             self.jwt_private_key_pem = private_key
             self.jwt_public_key_pem = public_key
             return self
 
-        if self.app_env == "production":
-            raise SettingsError(
-                "PRIVATE_KEY_PEM and PUBLIC_KEY_PEM must be configured in production"
-            )
+        if private_key and public_key:
+            self.jwt_private_key_pem = private_key
+            self.jwt_public_key_pem = public_key
+            return self
 
         logger.warning(
             (
@@ -615,8 +647,24 @@ class Settings(BaseSettings):
         return self
 
     @model_validator(mode="after")
+    def _validate_edo_integration_base_url(self) -> Settings:
+        base = (self.edo_integration_base_url or "").strip()
+        if not base:
+            return self
+        from app.core.integration_url_validation import (
+            UnsafeIntegrationURLError,
+            assert_safe_http_base_url,
+        )
+
+        try:
+            assert_safe_http_base_url(base, app_env=self.app_env)
+        except UnsafeIntegrationURLError as exc:
+            raise ValueError(str(exc)) from exc
+        return self
+
+    @model_validator(mode="after")
     def _ensure_production_secrets(self) -> Settings:
-        if self.app_env != "production":
+        if self.app_env not in ("production", "staging"):
             return self
 
         missing: list[str] = []
@@ -630,12 +678,23 @@ class Settings(BaseSettings):
             missing.append("S3_SECRET_KEY")
         if self.s3_backend == "memory":
             missing.append("S3_BACKEND")
+        if not self.inbound_webhook_hmac_secret.strip():
+            missing.append("INBOUND_WEBHOOK_HMAC_SECRET")
 
         if missing:
             raise SettingsError(
-                "Production configuration must override defaults: "
+                f"{self.app_env.title()} configuration must override defaults: "
                 + ", ".join(missing)
             )
+        return self
+
+    @model_validator(mode="after")
+    def _disable_openapi_in_production(self) -> Settings:
+        """Production must not expose interactive OpenAPI/Swagger (override ENABLE_OPENAPI_DOCS)."""
+
+        if self.app_env == "production":
+            self.enable_openapi_docs = False
+            self.enable_files_legacy_routes = False
         return self
 
     @property
@@ -765,6 +824,7 @@ class Settings(BaseSettings):
             "admin_password",
             "jwt_private_key_pem",
             "portal_token_salt",
+            "inbound_webhook_hmac_secret",
         ):
             if key in payload and payload[key]:
                 payload[key] = "***"
@@ -773,7 +833,7 @@ class Settings(BaseSettings):
 
 @lru_cache
 def _load_settings() -> Settings:
-    return Settings()
+    return Settings()  # type: ignore[call-arg]  # pydantic-settings loads fields from env vars
 
 
 def get_settings(*, force_reload: bool = False) -> Settings:
@@ -796,18 +856,17 @@ def bootstrap(role: Literal["api", "worker"]) -> Settings:
     }
     missing = [name for name, value in required_values.items() if not str(value).strip()]
     if missing:
-        raise RuntimeError(
-            "Missing required environment variables for "
-            f"{role}: {', '.join(sorted(missing))}"
+        raise SettingsError(
+            "Missing required environment variables for " f"{role}: {', '.join(sorted(missing))}"
         )
     configure_runtime_locale(
         locale_name=settings.application.default_locale,
         timezone_name=settings.application.default_timezone,
     )
-    if settings.application.runtime.is_production and (
+    if settings.app_env in ("production", "staging") and (
         not settings.application.secret_key or settings.application.secret_key == "change-me"
     ):
-        raise SettingsError("SECRET_KEY must be configured")
+        raise SettingsError("SECRET_KEY must be configured for production and staging")
     return settings
 
 
@@ -840,7 +899,7 @@ def split_csv(
         raw_items = value
     else:
         try:
-            raw_items = list(value)  # type: ignore[arg-type]
+            raw_items = list(value)  # type: ignore[call-overload]
         except TypeError as exc:  # pragma: no cover - defensive programming
             raise TypeError("Expected string or sequence of strings") from exc
 
@@ -867,5 +926,17 @@ def binary_exists(candidate: str) -> bool:
     resolved = which(candidate)
     if resolved is not None:
         return True
+
+    import os
+    import sys
+
+    if sys.platform == "win32":
+        path_dirs = os.environ.get("PATH", "").split(os.pathsep)
+        for path_dir in path_dirs:
+            if not path_dir:
+                continue
+            candidate_path = Path(path_dir) / candidate
+            if candidate_path.exists():
+                return True
 
     return path.exists()

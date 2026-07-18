@@ -27,14 +27,32 @@ def _hash(token: str) -> str:
 async def test_portal_token_can_list_only_scoped_package(async_client, sessionmaker, data_factory):
     async with sessionmaker() as session:  # type: AsyncSession
         tenant = await data_factory.ensure_tenant(session=session)
-        preset = ClientPackagePreset(code="OUT_TO_SITE", name="Out", steps_json={}, required_inputs_json=[], tenant_id=tenant.id)
+        preset = ClientPackagePreset(
+            code="OUT_TO_SITE",
+            name="Out",
+            steps_json={},
+            required_inputs_json=[],
+            tenant_id=tenant.id,
+        )
         session.add(preset)
         await session.flush()
-        run1 = ClientPackageRun(preset_id=preset.id, status=PackageRunStatus.RUNNING, tenant_id=tenant.id)
-        run2 = ClientPackageRun(preset_id=preset.id, status=PackageRunStatus.RUNNING, tenant_id=tenant.id)
+        run1 = ClientPackageRun(
+            preset_id=preset.id, status=PackageRunStatus.RUNNING, tenant_id=tenant.id
+        )
+        run2 = ClientPackageRun(
+            preset_id=preset.id, status=PackageRunStatus.RUNNING, tenant_id=tenant.id
+        )
         session.add_all([run1, run2])
         await session.flush()
-        session.add(ClientPortalToken(token_hash=_hash("scoped-token"), package_run_id=run1.id, scope_json={"package_run_ids": [run1.id], "download": True}, expires_at=datetime.now(tz=timezone.utc) + timedelta(hours=1), tenant_id=tenant.id))
+        session.add(
+            ClientPortalToken(
+                token_hash=_hash("scoped-token"),
+                package_run_id=run1.id,
+                scope_json={"package_run_ids": [run1.id], "download": True},
+                expires_at=datetime.now(tz=timezone.utc) + timedelta(hours=1),
+                tenant_id=tenant.id,
+            )
+        )
         await session.commit()
 
     response = await async_client.get("/api/v1/portal/packages", params={"token": "scoped-token"})
@@ -45,20 +63,42 @@ async def test_portal_token_can_list_only_scoped_package(async_client, sessionma
 
 
 @pytest.mark.anyio
-async def test_portal_token_cannot_access_other_package_403(async_client, sessionmaker, data_factory):
+async def test_portal_token_cannot_access_other_package_403(
+    async_client, sessionmaker, data_factory
+):
     async with sessionmaker() as session:
         tenant = await data_factory.ensure_tenant(session=session)
-        preset = ClientPackagePreset(code="INCIDENT", name="Incident", steps_json={}, required_inputs_json=[], tenant_id=tenant.id)
+        preset = ClientPackagePreset(
+            code="INCIDENT",
+            name="Incident",
+            steps_json={},
+            required_inputs_json=[],
+            tenant_id=tenant.id,
+        )
         session.add(preset)
         await session.flush()
-        run1 = ClientPackageRun(preset_id=preset.id, status=PackageRunStatus.RUNNING, tenant_id=tenant.id)
-        run2 = ClientPackageRun(preset_id=preset.id, status=PackageRunStatus.RUNNING, tenant_id=tenant.id)
+        run1 = ClientPackageRun(
+            preset_id=preset.id, status=PackageRunStatus.RUNNING, tenant_id=tenant.id
+        )
+        run2 = ClientPackageRun(
+            preset_id=preset.id, status=PackageRunStatus.RUNNING, tenant_id=tenant.id
+        )
         session.add_all([run1, run2])
         await session.flush()
-        session.add(ClientPortalToken(token_hash=_hash("scoped-token-2"), package_run_id=run1.id, scope_json={"package_run_ids": [run1.id]}, expires_at=datetime.now(tz=timezone.utc) + timedelta(hours=1), tenant_id=tenant.id))
+        session.add(
+            ClientPortalToken(
+                token_hash=_hash("scoped-token-2"),
+                package_run_id=run1.id,
+                scope_json={"package_run_ids": [run1.id]},
+                expires_at=datetime.now(tz=timezone.utc) + timedelta(hours=1),
+                tenant_id=tenant.id,
+            )
+        )
         await session.commit()
 
-    response = await async_client.get(f"/api/v1/portal/packages/{run2.id}", params={"token": "scoped-token-2"})
+    response = await async_client.get(
+        f"/api/v1/portal/packages/{run2.id}", params={"token": "scoped-token-2"}
+    )
     assert response.status_code == 403
 
 
@@ -66,13 +106,29 @@ async def test_portal_token_cannot_access_other_package_403(async_client, sessio
 async def test_portal_token_expired(async_client, sessionmaker, data_factory):
     async with sessionmaker() as session:
         tenant = await data_factory.ensure_tenant(session=session)
-        preset = ClientPackagePreset(code="INSPECTION_PREP", name="Insp", steps_json={}, required_inputs_json=[], tenant_id=tenant.id)
+        preset = ClientPackagePreset(
+            code="INSPECTION_PREP",
+            name="Insp",
+            steps_json={},
+            required_inputs_json=[],
+            tenant_id=tenant.id,
+        )
         session.add(preset)
         await session.flush()
-        run1 = ClientPackageRun(preset_id=preset.id, status=PackageRunStatus.RUNNING, tenant_id=tenant.id)
+        run1 = ClientPackageRun(
+            preset_id=preset.id, status=PackageRunStatus.RUNNING, tenant_id=tenant.id
+        )
         session.add(run1)
         await session.flush()
-        session.add(ClientPortalToken(token_hash=_hash("expired-token"), package_run_id=run1.id, scope_json={"package_run_ids": [run1.id]}, expires_at=datetime.now(tz=timezone.utc) - timedelta(seconds=1), tenant_id=tenant.id))
+        session.add(
+            ClientPortalToken(
+                token_hash=_hash("expired-token"),
+                package_run_id=run1.id,
+                scope_json={"package_run_ids": [run1.id]},
+                expires_at=datetime.now(tz=timezone.utc) - timedelta(seconds=1),
+                tenant_id=tenant.id,
+            )
+        )
         await session.commit()
 
     response = await async_client.get("/api/v1/portal/packages", params={"token": "expired-token"})
@@ -80,7 +136,9 @@ async def test_portal_token_expired(async_client, sessionmaker, data_factory):
 
 
 @pytest.mark.anyio
-async def test_create_run_generates_pipeline_artifacts_and_history(async_client, sessionmaker, data_factory, make_auth_headers):
+async def test_create_run_generates_pipeline_artifacts_and_history(
+    async_client, sessionmaker, data_factory, make_auth_headers
+):
     storage = FileStorageService.default()
     storage.clear()
     async with sessionmaker() as session:
@@ -100,11 +158,15 @@ async def test_create_run_generates_pipeline_artifacts_and_history(async_client,
         tenant_slug = tenant.slug
 
     headers = {**(await make_auth_headers()), "X-Tenant": tenant_slug}
-    response = await async_client.post("/api/v1/packages/runs", headers=headers, json={"preset_code": "OUT_TO_SITE"})
+    response = await async_client.post(
+        "/api/v1/packages/runs", headers=headers, json={"preset_code": "OUT_TO_SITE"}
+    )
     assert response.status_code == 201, response.text
     run_id = response.json()["id"]
 
-    details = await async_client.post(f"/api/v1/packages/runs/{run_id}/portal-link", headers=headers)
+    details = await async_client.post(
+        f"/api/v1/packages/runs/{run_id}/portal-link", headers=headers
+    )
     assert details.status_code == 200
     token = details.json()["portal_url"].split("token=", 1)[1]
 
@@ -127,17 +189,39 @@ async def test_create_run_generates_pipeline_artifacts_and_history(async_client,
     assert "generated" in payload["history"]["status_flow"]
     assert payload["tickets"] == []
 
-    ticket_resp = await async_client.post(f"/api/v1/portal/packages/{run_id}/tickets", params={"token": token}, json={"title": "Нужен апдейт", "message": "Пришлите новую версию"})
+    ticket_resp = await async_client.post(
+        f"/api/v1/portal/packages/{run_id}/tickets",
+        params={"token": token},
+        json={"title": "Нужен апдейт", "message": "Пришлите новую версию"},
+    )
     assert ticket_resp.status_code == 201, ticket_resp.text
 
-    files_response = await async_client.get(f"/api/v1/portal/packages/{run_id}/files", params={"token": token})
+    files_response = await async_client.get(
+        f"/api/v1/portal/packages/{run_id}/files", params={"token": token}
+    )
     assert files_response.status_code == 200
     files = files_response.json()["files"]
     assert {item["kind"] for item in files} == {"zip", "pdf", "manifest"}
     assert all(item["signed_url"] for item in files)
 
     async with sessionmaker() as session:
-        requirements = (await session.execute(select(PackageRequirement).where(PackageRequirement.package_run_id == run_id))).scalars().all()
-        events = (await session.execute(select(PackageEvent).where(PackageEvent.package_run_id == run_id))).scalars().all()
+        requirements = (
+            (
+                await session.execute(
+                    select(PackageRequirement).where(PackageRequirement.package_run_id == run_id)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        events = (
+            (
+                await session.execute(
+                    select(PackageEvent).where(PackageEvent.package_run_id == run_id)
+                )
+            )
+            .scalars()
+            .all()
+        )
         assert len(requirements) == 2
         assert len(events) >= 4

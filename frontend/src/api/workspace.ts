@@ -57,10 +57,22 @@ export interface WorkspaceTaskInboxDto {
   items: TaskInboxItem[];
 }
 
+export interface WorkspaceConfig {
+  role: string;
+  workspace_type: string;
+  primary_modules: string[];
+  dashboard_route: string;
+  kpis_enabled: string[];
+  quick_actions: Array<{ label: string; route: string }>;
+}
+
 export const workspaceApi = {
   getAttention: (limit = 30): Promise<WorkspaceAttentionDto> =>
     apiClient.get<WorkspaceAttentionDto>(`/workspace/attention?limit=${limit}`).then((r) => r.data),
 
   getTaskInbox: (limit = 50, offset = 0): Promise<WorkspaceTaskInboxDto> =>
     apiClient.get<WorkspaceTaskInboxDto>(`/workspace/task-inbox?limit=${limit}&offset=${offset}`).then((r) => r.data),
+
+  getUserWorkspaceConfig: (): Promise<WorkspaceConfig> =>
+    apiClient.get<WorkspaceConfig>("/users/me/workspace").then((r) => r.data),
 };

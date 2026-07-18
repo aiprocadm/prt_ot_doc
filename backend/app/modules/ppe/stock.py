@@ -1,0 +1,668 @@
+"""PPE warehouse stock ledger (P10-06, Approach B).
+
+``batch.quantity`` is the live cached balance; every change to it is recorded as
+an immutable ``PPEStockMovement`` in the same transaction. FIFO allocation and
+movement recording are the only sanctioned way to mutate stock quantity.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import date, datetime, timedelta, timezone
+from typing import NamedTuple
+from uuid import uuid4
+
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.feature_flags import is_feature_enabled
+from app.models.ppe_registry import PPEItem, PPEStockBatch, PPEStockMovement, PPESupplier
+
+KIND_RECEIPT = "receipt"
+KIND_ISSUE = "issue"
+KIND_WRITEOFF = "writeoff"
+KIND_ADJUSTMENT = "adjustment"
+KIND_TRANSFER = "transfer"
+MANUAL_KINDS = frozenset({KIND_RECEIPT, KIND_WRITEOFF, KIND_ADJUSTMENT})
+WAREHOUSE_FEATURE_CODE = "warehouse"
+
+
+class InsufficientStockError(Exception):
+    """Raised when a depletion would drive on-hand below zero."""
+
+    def __init__(self, requested: int, available: int) -> None:
+        super().__init__(f"insufficient stock: requested {requested}, available {available}")
+        self.requested = requested
+        self.available = available
+
+
+class StockBatchNotFound(Exception):
+    """Raised when a referenced batch does not exist for the tenant/item."""
+
+    def __init__(self, batch_id: str) -> None:
+        super().__init__(f"PPE stock batch not found: {batch_id}")
+        self.batch_id = batch_id
+
+
+@dataclass(slots=True, frozen=True)
+class Allocation:
+    batch_id: str
+    taken: int
+
+
+@dataclass(slots=True, frozen=True)
+class TransferResult:
+    ref_id: str
+    out_movement: PPEStockMovement  # source, delta < 0
+    in_movement: PPEStockMovement  # destination, delta > 0
+    source_batch_id: str
+    dest_batch_id: str
+    batch_no: str
+    from_location: str | None
+    to_location: str
+    quantity: int
+
+
+def allocate_fifo(available: list[tuple[str, int]], quantity: int) -> list[Allocation]:
+    """Allocate ``quantity`` across ``available`` (id, on_hand) pairs, oldest-first.
+
+    ``available`` MUST already be ordered oldest-first by the caller. Raises
+    :class:`InsufficientStockError` when the total on-hand is short.
+    """
+    if quantity <= 0:
+        return []
+    remaining = quantity
+    result: list[Allocation] = []
+    for batch_id, on_hand in available:
+        if remaining <= 0:
+            break
+        if on_hand <= 0:
+            continue
+        take = min(on_hand, remaining)
+        result.append(Allocation(batch_id=batch_id, taken=take))
+        remaining -= take
+    if remaining > 0:
+        raise InsufficientStockError(requested=quantity, available=quantity - remaining)
+    return result
+
+
+@dataclass(slots=True, frozen=True)
+class ShortageProjection:
+    below_threshold: bool
+    deficit: int
+    days_to_depletion: float | None
+    days_to_threshold: float | None
+
+
+def project_shortage(on_hand: int, min_stock: int, avg_daily: float) -> ShortageProjection:
+    """Pure shortage math. ``avg_daily`` is average daily consumption (issues).
+
+    - below_threshold: a positive threshold is set and on-hand is under it.
+    - deficit: units to reorder back up to the threshold.
+    - days_to_depletion: on_hand / avg_daily (None when there is no consumption).
+    - days_to_threshold: days until on-hand reaches the threshold (0 if already
+      at/below it; None when there is no consumption).
+    """
+    below_threshold = min_stock > 0 and on_hand < min_stock
+    deficit = max(0, min_stock - on_hand)
+    if avg_daily > 0:
+        days_to_depletion: float | None = on_hand / avg_daily
+        days_to_threshold: float | None = max(0, on_hand - min_stock) / avg_daily
+    else:
+        days_to_depletion = None
+        days_to_threshold = None
+    return ShortageProjection(
+        below_threshold=below_threshold,
+        deficit=deficit,
+        days_to_depletion=days_to_depletion,
+        days_to_threshold=days_to_threshold,
+    )
+
+
+async def _load_batch(
+    session: AsyncSession,
+    tenant_id: str,
+    batch_id: str,
+    *,
+    item_id: str | None = None,
+) -> PPEStockBatch:
+    stmt = select(PPEStockBatch).where(
+        PPEStockBatch.id == batch_id,
+        PPEStockBatch.tenant_id == tenant_id,
+        PPEStockBatch.deleted_at.is_(None),
+    )
+    if item_id is not None:
+        stmt = stmt.where(PPEStockBatch.item_id == item_id)
+    batch = (await session.execute(stmt)).scalar_one_or_none()
+    if batch is None:
+        raise StockBatchNotFound(batch_id)
+    return batch
+
+
+async def _write_movement(
+    session: AsyncSession,
+    *,
+    tenant_id: str,
+    batch: PPEStockBatch,
+    kind: str,
+    delta: int,
+    reason: str | None = None,
+    occurred_at: datetime | None = None,
+    ref_type: str | None = None,
+    ref_id: str | None = None,
+) -> PPEStockMovement:
+    """Apply ``delta`` to the batch balance and append the journal row.
+
+    The ONLY place ``batch.quantity`` is mutated. Guards on-hand >= 0.
+    """
+    new_qty = batch.quantity + delta
+    if new_qty < 0:
+        raise InsufficientStockError(requested=-delta, available=batch.quantity)
+    batch.quantity = new_qty
+    movement = PPEStockMovement(
+        tenant_id=tenant_id,
+        item_id=batch.item_id,
+        batch_id=batch.id,
+        kind=kind,
+        quantity_delta=delta,
+        occurred_at=occurred_at or datetime.now(tz=timezone.utc),
+        reason=reason,
+        ref_type=ref_type,
+        ref_id=ref_id,
+    )
+    session.add(movement)
+    await session.flush()
+    await session.refresh(movement)
+    return movement
+
+
+async def record_movement(
+    session: AsyncSession,
+    *,
+    tenant_id: str,
+    batch_id: str,
+    kind: str,
+    quantity: int,
+    reason: str | None = None,
+    occurred_at: datetime | None = None,
+    ref_type: str | None = None,
+    ref_id: str | None = None,
+) -> PPEStockMovement:
+    """Manual receipt / writeoff / adjustment against one batch.
+
+    - receipt: +quantity   (quantity must be > 0)
+    - writeoff: -quantity   (quantity must be > 0)
+    - adjustment: set the batch to an absolute ``quantity`` (>= 0)
+    """
+    if kind not in MANUAL_KINDS:
+        raise ValueError(f"unsupported manual movement kind: {kind}")
+    batch = await _load_batch(session, tenant_id, batch_id)
+    if kind == KIND_RECEIPT:
+        if quantity <= 0:
+            raise ValueError("receipt quantity must be positive")
+        delta = quantity
+    elif kind == KIND_WRITEOFF:
+        if quantity <= 0:
+            raise ValueError("writeoff quantity must be positive")
+        delta = -quantity
+    else:  # KIND_ADJUSTMENT — set-to absolute
+        delta = quantity - batch.quantity
+    return await _write_movement(
+        session,
+        tenant_id=tenant_id,
+        batch=batch,
+        kind=kind,
+        delta=delta,
+        reason=reason,
+        occurred_at=occurred_at,
+        ref_type=ref_type,
+        ref_id=ref_id,
+    )
+
+
+async def _find_or_create_dest_batch(
+    session: AsyncSession,
+    *,
+    tenant_id: str,
+    source: PPEStockBatch,
+    to_location: str,
+) -> PPEStockBatch:
+    """Find the sibling batch (same item + batch_no) at ``to_location`` or create it
+    with quantity 0, copying the source batch provenance."""
+    stmt = select(PPEStockBatch).where(
+        PPEStockBatch.tenant_id == tenant_id,
+        PPEStockBatch.item_id == source.item_id,
+        PPEStockBatch.batch_no == source.batch_no,
+        PPEStockBatch.location == to_location,
+        PPEStockBatch.deleted_at.is_(None),
+    )
+    existing = (await session.execute(stmt)).scalar_one_or_none()
+    if existing is not None:
+        return existing
+    dest = PPEStockBatch(
+        tenant_id=tenant_id,
+        item_id=source.item_id,
+        batch_no=source.batch_no,
+        quantity=0,
+        location=to_location,
+        received_at=source.received_at,
+        certificate_no=source.certificate_no,
+        certificate_expires_at=source.certificate_expires_at,
+        supplier_id=source.supplier_id,
+        unit_cost=source.unit_cost,
+    )
+    session.add(dest)
+    await session.flush()
+    return dest
+
+
+async def transfer_stock(
+    session: AsyncSession,
+    *,
+    tenant_id: str,
+    source_batch_id: str,
+    to_location: str,
+    quantity: int,
+    reason: str | None = None,
+    occurred_at: datetime | None = None,
+) -> TransferResult:
+    """Move ``quantity`` of a batch from its location to ``to_location``.
+
+    Emits a pair of ``transfer`` movements (source ``-quantity`` / destination
+    ``+quantity``) sharing a generated ``ref_id`` via ``_write_movement`` — the only
+    sanctioned balance mutator. Item-level on-hand is invariant (out + in = 0).
+    The destination is a find-or-create sibling batch at ``to_location``.
+    """
+    if quantity <= 0:
+        raise ValueError("transfer quantity must be positive")
+    dest_location = (to_location or "").strip()
+    if not dest_location:
+        raise ValueError("transfer destination location must not be empty")
+    source = await _load_batch(session, tenant_id, source_batch_id)
+    if (source.location or "").strip() == dest_location:
+        raise ValueError("transfer destination must differ from source location")
+
+    when = occurred_at or datetime.now(tz=timezone.utc)
+    ref = uuid4().hex
+
+    # Deplete the source first: an insufficient balance raises here, before any
+    # destination batch is created (the whole call is one request transaction).
+    out_movement = await _write_movement(
+        session,
+        tenant_id=tenant_id,
+        batch=source,
+        kind=KIND_TRANSFER,
+        delta=-quantity,
+        reason=reason,
+        occurred_at=when,
+        ref_type="ppe_transfer",
+        ref_id=ref,
+    )
+    dest = await _find_or_create_dest_batch(
+        session, tenant_id=tenant_id, source=source, to_location=dest_location
+    )
+    in_movement = await _write_movement(
+        session,
+        tenant_id=tenant_id,
+        batch=dest,
+        kind=KIND_TRANSFER,
+        delta=quantity,
+        reason=reason,
+        occurred_at=when,
+        ref_type="ppe_transfer",
+        ref_id=ref,
+    )
+    return TransferResult(
+        ref_id=ref,
+        out_movement=out_movement,
+        in_movement=in_movement,
+        source_batch_id=source.id,
+        dest_batch_id=dest.id,
+        batch_no=source.batch_no,
+        from_location=source.location,
+        to_location=dest_location,
+        quantity=quantity,
+    )
+
+
+async def deplete_for_issue(
+    session: AsyncSession,
+    *,
+    tenant_id: str,
+    item_id: str,
+    quantity: int,
+    batch_id: str | None = None,
+    ref_id: str,
+) -> list[PPEStockMovement]:
+    """Deplete stock for a worker issuance. Returns the ``issue`` movements.
+
+    No-op (returns ``[]``) when the warehouse flag is off for the tenant or the
+    item has no stock batches — this preserves the pre-ledger issuance behaviour.
+    Explicit ``batch_id`` depletes that batch; otherwise FIFO by ``received_at``
+    (nulls last), then ``created_at`` (insertion order) and ``id`` as tiebreakers.
+    Raises :class:`InsufficientStockError` when the requested quantity exceeds
+    available on-hand.
+    """
+    if quantity <= 0:
+        return []
+    if not await is_feature_enabled(session, tenant_id, WAREHOUSE_FEATURE_CODE):
+        return []
+
+    if batch_id is not None:
+        candidates = [await _load_batch(session, tenant_id, batch_id, item_id=item_id)]
+    else:
+        stmt = (
+            select(PPEStockBatch).where(
+                PPEStockBatch.tenant_id == tenant_id,
+                PPEStockBatch.item_id == item_id,
+                PPEStockBatch.deleted_at.is_(None),
+                PPEStockBatch.quantity > 0,
+            )
+            # portable NULLS LAST: is_(None) sorts False(0) before True(1).
+            # created_at breaks same-received_at ties by insertion order (true
+            # FIFO); id is a final deterministic tiebreaker (uuid, not ordered).
+            .order_by(
+                PPEStockBatch.received_at.is_(None),
+                PPEStockBatch.received_at.asc(),
+                PPEStockBatch.created_at.asc(),
+                PPEStockBatch.id.asc(),
+            )
+        )
+        candidates = list((await session.execute(stmt)).scalars().all())
+        if not candidates:
+            return []
+
+    by_id = {b.id: b for b in candidates}
+    allocations = allocate_fifo([(b.id, b.quantity) for b in candidates], quantity)
+
+    movements: list[PPEStockMovement] = []
+    for alloc in allocations:
+        movements.append(
+            await _write_movement(
+                session,
+                tenant_id=tenant_id,
+                batch=by_id[alloc.batch_id],
+                kind=KIND_ISSUE,
+                delta=-alloc.taken,
+                ref_type="ppe_issue",
+                ref_id=ref_id,
+            )
+        )
+    return movements
+
+
+@dataclass(slots=True, frozen=True)
+class ShortageRow:
+    item_id: str
+    item_name: str
+    min_stock: int
+    on_hand: int
+    deficit: int
+    below_threshold: bool
+    avg_daily_consumption: float
+    days_to_depletion: float | None
+    projected_breach_date: date | None
+    supplier_id: str | None = None
+    supplier_name: str | None = None
+    supplier_inn: str | None = None
+    supplier_contact: str | None = None
+    supplier_source: str | None = None
+
+
+class _ResolvedSupplier(NamedTuple):
+    supplier: PPESupplier
+    source: str  # "explicit" | "history"
+
+
+async def _resolve_item_suppliers(
+    session: AsyncSession, tenant_id: str, items: list[PPEItem]
+) -> dict[str, _ResolvedSupplier]:
+    """Map item_id -> (supplier, source) for the reorder draft.
+
+    An item's EXPLICIT ``preferred_supplier_id`` wins when it points at a live
+    (non-deleted) supplier. Otherwise — unset, OR set but pointing at a
+    soft-deleted/missing supplier — we fall back to the item's most recently
+    received batch supplier (received_at desc nulls-last, then created_at desc).
+    Only non-deleted suppliers are eligible; an item with neither a usable
+    explicit preference nor a live history supplier is absent from the map
+    (its shortage row shows no supplier).
+    """
+    item_ids = [i.id for i in items]
+    if not item_ids:
+        return {}
+
+    explicit: dict[str, str] = {
+        i.id: i.preferred_supplier_id for i in items if i.preferred_supplier_id
+    }
+
+    # History fallback candidate: latest batch supplier per item. Queried for ALL
+    # items (not just those without an explicit pref) so a soft-deleted explicit
+    # supplier can still fall back to a live historical one.
+    batch_rows = (
+        await session.execute(
+            select(
+                PPEStockBatch.item_id,
+                PPEStockBatch.supplier_id,
+                PPEStockBatch.received_at,
+                PPEStockBatch.created_at,
+            ).where(
+                PPEStockBatch.tenant_id == tenant_id,
+                PPEStockBatch.item_id.in_(item_ids),
+                PPEStockBatch.supplier_id.is_not(None),
+                PPEStockBatch.deleted_at.is_(None),
+            )
+        )
+    ).all()
+    # "latest per item": received_at desc (None last), created_at desc. On an exact
+    # (received_at, created_at) tie the first-seen row wins — arbitrary but stable
+    # within a query (created_at is app-set and near-unique, so ties are rare).
+    best: dict[str, tuple[tuple[bool, date, datetime], str]] = {}
+    for iid, sid, received, created in batch_rows:
+        key = (received is not None, received or date.min, created)
+        if iid not in best or key > best[iid][0]:
+            best[iid] = (key, sid)
+    history: dict[str, str] = {iid: sid for iid, (_key, sid) in best.items()}
+
+    candidate_ids = set(explicit.values()) | set(history.values())
+    if not candidate_ids:
+        return {}
+    suppliers = {
+        s.id: s
+        for s in (
+            await session.execute(
+                select(PPESupplier).where(
+                    PPESupplier.tenant_id == tenant_id,
+                    PPESupplier.id.in_(candidate_ids),
+                    PPESupplier.deleted_at.is_(None),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    }
+
+    resolved: dict[str, _ResolvedSupplier] = {}
+    for iid in item_ids:
+        exp_sid = explicit.get(iid)
+        if exp_sid and exp_sid in suppliers:
+            resolved[iid] = _ResolvedSupplier(suppliers[exp_sid], "explicit")
+        else:
+            hist_sid = history.get(iid)
+            if hist_sid and hist_sid in suppliers:
+                resolved[iid] = _ResolvedSupplier(suppliers[hist_sid], "history")
+    return resolved
+
+
+async def compute_shortages(
+    session: AsyncSession,
+    tenant_id: str,
+    *,
+    now: datetime,
+    window_days: int = 90,
+    only_below: bool = False,
+) -> list[ShortageRow]:
+    """Shortage report over items with a positive ``min_stock`` threshold.
+
+    ``on_hand`` = sum of batch.quantity; ``avg_daily`` = issued units in the
+    trailing ``window_days`` divided by ``window_days``. ``now`` is injected for
+    deterministic tests. Rows are sorted below-threshold-first, then by
+    days-to-depletion ascending (unknown last).
+    """
+    items = list(
+        (
+            await session.execute(
+                select(PPEItem).where(
+                    PPEItem.tenant_id == tenant_id,
+                    PPEItem.deleted_at.is_(None),
+                    PPEItem.min_stock > 0,
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if not items:
+        return []
+    item_ids = [i.id for i in items]
+
+    on_hand_rows = (
+        await session.execute(
+            select(
+                PPEStockBatch.item_id,
+                func.coalesce(func.sum(PPEStockBatch.quantity), 0),
+            )
+            .where(
+                PPEStockBatch.tenant_id == tenant_id,
+                PPEStockBatch.item_id.in_(item_ids),
+                PPEStockBatch.deleted_at.is_(None),
+            )
+            .group_by(PPEStockBatch.item_id)
+        )
+    ).all()
+    on_hand = {iid: int(qty or 0) for iid, qty in on_hand_rows}
+
+    cutoff = now - timedelta(days=window_days)
+    consumed_rows = (
+        await session.execute(
+            select(
+                PPEStockMovement.item_id,
+                func.coalesce(func.sum(-PPEStockMovement.quantity_delta), 0),
+            )
+            .where(
+                PPEStockMovement.tenant_id == tenant_id,
+                PPEStockMovement.item_id.in_(item_ids),
+                PPEStockMovement.kind == KIND_ISSUE,
+                PPEStockMovement.occurred_at >= cutoff,
+            )
+            .group_by(PPEStockMovement.item_id)
+        )
+    ).all()
+    consumed = {iid: int(total or 0) for iid, total in consumed_rows}
+
+    resolved = await _resolve_item_suppliers(session, tenant_id, items)
+
+    rows: list[ShortageRow] = []
+    for item in items:
+        oh = on_hand.get(item.id, 0)
+        avg_daily = consumed.get(item.id, 0) / window_days
+        proj = project_shortage(oh, item.min_stock, avg_daily)
+        if only_below and not proj.below_threshold:
+            continue
+        breach: date | None = None
+        if proj.days_to_threshold is not None:
+            breach = (now + timedelta(days=proj.days_to_threshold)).date()
+        rs = resolved.get(item.id)
+        supplier = rs.supplier if rs else None
+        rows.append(
+            ShortageRow(
+                item_id=item.id,
+                item_name=item.name,
+                min_stock=item.min_stock,
+                on_hand=oh,
+                deficit=proj.deficit,
+                below_threshold=proj.below_threshold,
+                avg_daily_consumption=avg_daily,
+                days_to_depletion=proj.days_to_depletion,
+                projected_breach_date=breach,
+                supplier_id=supplier.id if supplier else None,
+                supplier_name=supplier.name if supplier else None,
+                supplier_inn=supplier.inn if supplier else None,
+                supplier_contact=(
+                    (supplier.contact_email or supplier.contact_phone) if supplier else None
+                ),
+                supplier_source=rs.source if rs else None,
+            )
+        )
+
+    rows.sort(
+        key=lambda r: (
+            not r.below_threshold,
+            r.days_to_depletion if r.days_to_depletion is not None else float("inf"),
+            r.item_id,
+        )
+    )
+    return rows
+
+
+@dataclass(slots=True, frozen=True)
+class ReorderLine:
+    item_id: str
+    item_name: str
+    deficit: int
+
+
+@dataclass(slots=True, frozen=True)
+class ReorderGroup:
+    supplier_id: str | None
+    supplier_name: str | None
+    supplier_inn: str | None
+    supplier_contact: str | None
+    lines: list[ReorderLine]
+    line_count: int
+    total_deficit: int
+
+
+@dataclass(slots=True, frozen=True)
+class ReorderDraft:
+    groups: list[ReorderGroup]
+    total_lines: int
+    total_deficit: int
+
+
+def build_reorder_draft(rows: list[ShortageRow]) -> ReorderDraft:
+    """Group below-threshold shortage rows by resolved supplier. Rows with no
+    supplier fall into a single ``supplier_id=None`` group that always sorts last."""
+    buckets: dict[str | None, list[ShortageRow]] = {}
+    for r in rows:
+        # Guard the public contract explicitly: the /stock/reorder route already
+        # passes only_below rows, but build_reorder_draft is a public pure fn that
+        # other callers may feed unfiltered rows. (below_threshold implies deficit>0
+        # today, but keep both so the contract holds independent of the caller.)
+        if not (r.below_threshold and r.deficit > 0):
+            continue
+        buckets.setdefault(r.supplier_id, []).append(r)
+
+    groups: list[ReorderGroup] = []
+    for sid, rs in buckets.items():
+        lines = [
+            ReorderLine(item_id=r.item_id, item_name=r.item_name, deficit=r.deficit) for r in rs
+        ]
+        head = rs[0]
+        groups.append(
+            ReorderGroup(
+                supplier_id=sid,
+                supplier_name=head.supplier_name if sid else None,
+                supplier_inn=head.supplier_inn if sid else None,
+                supplier_contact=head.supplier_contact if sid else None,
+                lines=lines,
+                line_count=len(lines),
+                total_deficit=sum(ln.deficit for ln in lines),
+            )
+        )
+    # named suppliers by name asc, unassigned (None) last
+    groups.sort(key=lambda g: (g.supplier_id is None, (g.supplier_name or "").lower()))
+    return ReorderDraft(
+        groups=groups,
+        total_lines=sum(g.line_count for g in groups),
+        total_deficit=sum(g.total_deficit for g in groups),
+    )

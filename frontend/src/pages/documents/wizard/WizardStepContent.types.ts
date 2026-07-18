@@ -1,0 +1,45 @@
+import type { DocumentBatchItem, DocumentBatchRun, MappingValidationResponse, ReplaceDryRunResponse } from "@/api/documents";
+import type { BrandingPreviewDto, LayoutPresetDto, SiteDto } from "@/api/branding";
+import type { PipelineRun } from "@/api/pipelines";
+import type { DocumentsWizardState } from "@/stores/documentsWizard";
+import type { QualityReport } from "@/types/dto/documentQuality";
+
+export type RowStatusFilter = "all" | "success" | "failed";
+
+export type WizardStepContentProps = {
+  step: number;
+  canCallApi: boolean;
+  sourceColumns: string[];
+  mapping: Record<string, string>;
+  preset: string;
+  templateCode: string;
+  templateVersion: number;
+  companyId: string;
+  siteId: string;
+  headerPreset: string;
+  idempotencyKey: string;
+  rowStatusFilter: RowStatusFilter;
+  filteredBatchItems: DocumentBatchItem[];
+  replaceDryRunResult: ReplaceDryRunResponse | null;
+  mappingValidation: MappingValidationResponse | null;
+  qualityReport: QualityReport | null;
+  batch: DocumentBatchRun | null;
+  pipelineRun: PipelineRun | null;
+  brandingPreview: BrandingPreviewDto | null;
+  brandingPreviewHistory: BrandingPreviewDto[];
+  brandingProfileScope: string;
+  companies: Array<{ id: string; name: string }>;
+  sites: SiteDto[];
+  layoutPresets: LayoutPresetDto[];
+  sourceFile: File | null;
+  replaceMapFile: File | null;
+  docxFile: File | null;
+  batchErrors: string;
+  setSourceFile: (value: File | null) => void;
+  setReplaceMapFile: (value: File | null) => void;
+  setDocxFile: (value: File | null) => void;
+  setBatchErrors: (value: string) => void;
+  pushBrandingPreview: DocumentsWizardState["pushBrandingPreview"];
+  setPartial: DocumentsWizardState["setPartial"];
+  archiveStatus: { tone: string; title: string; description: string };
+};

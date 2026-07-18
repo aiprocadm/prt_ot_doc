@@ -9,7 +9,7 @@ from typing import Callable
 
 from fastapi import HTTPException, status
 
-from app.core.errors import ErrorBuilder
+from app.core.errors import api_problem_detail
 
 
 class PermissionAction(str, Enum):
@@ -50,19 +50,13 @@ class PermissionChecker:
         if has_permission:
             return
 
-        error = (
-            ErrorBuilder()
-            .with_code("PERMISSION_DENIED")
-            .with_message(f"Permission denied for {action} on {resource}")
-            .with_correlation_id(correlation_id)
-        )
-
-        if metadata:
-            error = error.with_details(metadata)
-
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=error.build().model_dump(),
+            detail=api_problem_detail(
+                code="PERMISSION_DENIED",
+                message=f"Permission denied for {action} on {resource}",
+                details=metadata,
+            ),
         )
 
     @staticmethod
@@ -87,16 +81,12 @@ class PermissionChecker:
         if any(permissions):
             return
 
-        error = (
-            ErrorBuilder()
-            .with_code("PERMISSION_DENIED")
-            .with_message(f"Permission denied for {action} on {resource}")
-            .with_correlation_id(correlation_id)
-        )
-
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=error.build().model_dump(),
+            detail=api_problem_detail(
+                code="PERMISSION_DENIED",
+                message=f"Permission denied for {action} on {resource}",
+            ),
         )
 
     @staticmethod
@@ -121,16 +111,12 @@ class PermissionChecker:
         if all(permissions):
             return
 
-        error = (
-            ErrorBuilder()
-            .with_code("PERMISSION_DENIED")
-            .with_message(f"Permission denied for {action} on {resource}")
-            .with_correlation_id(correlation_id)
-        )
-
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=error.build().model_dump(),
+            detail=api_problem_detail(
+                code="PERMISSION_DENIED",
+                message=f"Permission denied for {action} on {resource}",
+            ),
         )
 
 
