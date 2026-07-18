@@ -40,6 +40,9 @@ const BudgetPage = () => {
   // выбранный пользователем период обратно к дефолтному календарному году.
   // Имя не `window` — глобальный window нужен вкладкам (window.confirm) и затенять его опасно.
   const [dateWindow, setDateWindow] = useState<{ date_from: string; date_to: string } | null>(null);
+  // Активная вкладка тоже управляется страницей: с defaultValue Radix сбрасывал бы её на
+  // «Сводку» при каждом remount поддерева (см. ниже про loading).
+  const [activeTab, setActiveTab] = useState("overview");
 
   const loader = useCallback(async (): Promise<BudgetPageData> => {
     const [overview, budgets, articles, expenses] = await Promise.all([
@@ -67,6 +70,16 @@ const BudgetPage = () => {
   // после любой мутации перезагружает весь набор данных страницы, сохраняя dateWindow.
   const reloadAll = () => void budgetRes.reload().catch(() => undefined);
 
+  // Полноэкранный LoadingScreen — только на ПЕРВОЙ загрузке (данных ещё нет). Дальше
+  // reload() после мутации не должен размонтировать поддерево вкладок: иначе каждое
+  // создание/правка/удаление сбрасывало бы активную вкладку на «Сводку», фильтры
+  // «Расходов», фильтр и панель деталей «Бюджетов» и разрез «Сводки».
+  // Сравнение по ссылке с модульной константой: useAsyncResource кладёт в data новый
+  // объект при первом успешном ответе, поэтому data === INITIAL_DATA означает ровно
+  // «ещё ни разу не загрузились» — без догадок по содержимому полей.
+  const isFirstLoad = budgetRes.loading && budgetRes.data === INITIAL_DATA;
+  const isRefreshing = budgetRes.loading && !isFirstLoad;
+
   return (
     <div className="space-y-4">
       <RegistryPageHeader
@@ -75,10 +88,15 @@ const BudgetPage = () => {
       />
 
       <ErrorState error={budgetRes.error ?? undefined} onRetry={() => void budgetRes.reload().catch(() => undefined)} />
-      {budgetRes.loading ? <LoadingScreen label="Загрузка бюджета" /> : null}
+      {isFirstLoad ? <LoadingScreen label="Загрузка бюджета" /> : null}
 
-      {!budgetRes.loading && !budgetRes.error ? (
-        <Tabs defaultValue="overview">
+      {!isFirstLoad && !budgetRes.error ? (
+        <Tabs value={activeTab} onValueChange={setActiveTab} aria-busy={isRefreshing}>
+          {isRefreshing ? (
+            <p className="pb-2 text-sm text-muted-foreground" role="status">
+              Обновление...
+            </p>
+          ) : null}
           <TabsList>
             <TabsTrigger value="overview">Сводка</TabsTrigger>
             <TabsTrigger value="budgets">Бюджеты</TabsTrigger>

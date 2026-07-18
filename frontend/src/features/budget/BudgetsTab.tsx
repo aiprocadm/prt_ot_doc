@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { BudgetFormDialog } from "@/features/budget/BudgetFormDialog";
-import { BUDGET_DOMAIN_LABELS, formatRub } from "@/pages/budget/budgetVocab";
+import { BUDGET_DOMAIN_LABELS, BUDGET_DOMAINS, formatRub, toApiError } from "@/pages/budget/budgetVocab";
 import { PERMISSIONS } from "@/permissions/permissions";
 import type { ApiError } from "@/types/dto/common";
 import type {
@@ -18,11 +18,6 @@ import type {
   SafetyBudgetDto,
   SafetyBudgetPageDto
 } from "@/types/dto/budget";
-
-const BUDGET_DOMAINS: BudgetDomain[] = ["training", "medical", "events"];
-
-const toApiError =(err: unknown, fallback: string): ApiError =>
-  err && typeof err === "object" && "message" in err ? (err as ApiError) : { status: 0, message: fallback };
 
 interface Props {
   budgets: SafetyBudgetPageDto;

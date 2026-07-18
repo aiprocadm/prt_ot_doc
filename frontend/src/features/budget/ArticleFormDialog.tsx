@@ -14,10 +14,8 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { BUDGET_DOMAIN_LABELS } from "@/pages/budget/budgetVocab";
+import { BUDGET_DOMAIN_LABELS, BUDGET_DOMAINS } from "@/pages/budget/budgetVocab";
 import type { BudgetArticleCreateInput, BudgetArticleDto, BudgetArticleUpdateInput, BudgetDomain } from "@/types/dto/budget";
-
-const ARTICLE_DOMAINS: BudgetDomain[] = ["training", "medical", "events"];
 
 interface Props {
   trigger: ReactNode;
@@ -136,7 +134,7 @@ export const ArticleFormDialog = ({ trigger, initialData, onSubmitted }: Props) 
               onChange={(e) => setForm((prev) => ({ ...prev, domain: e.target.value as BudgetDomain | "" }))}
             >
               <option value="">Универсальная</option>
-              {ARTICLE_DOMAINS.map((d) => (
+              {BUDGET_DOMAINS.map((d) => (
                 <option key={d} value={d}>
                   {BUDGET_DOMAIN_LABELS[d]}
                 </option>

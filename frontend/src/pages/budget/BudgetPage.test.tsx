@@ -195,10 +195,36 @@ const EXPENSES_PAGE: BudgetExpensePageDto = {
   offset: 0
 };
 
+/** Расход со связанной записью — для проверки снятия связи (оба поля должны уйти в null). */
+const LINKED_EXPENSES_PAGE: BudgetExpensePageDto = {
+  items: [
+    {
+      id: "exp9",
+      domain: "events",
+      article_id: "art2",
+      article_name: "Мероприятия по ОТ",
+      title: "КМ по предписанию",
+      occurred_on: "2026-06-01",
+      amount: 7000,
+      company_id: null,
+      branch_id: null,
+      site_id: null,
+      entity_type: "corrective_action",
+      entity_id: "ca-7",
+      notes: null
+    }
+  ],
+  total: 1,
+  limit: 100,
+  offset: 0
+};
+
 const FEATURE_OFF_ERROR = { status: 404, message: "Budget feature is not enabled for this tenant" };
 
 beforeEach(() => {
-  vi.clearAllMocks();
+  // restoreAllMocks (не clearAllMocks): иначе vi.spyOn(window, "confirm") из delete-тестов
+  // остаётся навешанным и протекает в последующие тесты файла.
+  vi.restoreAllMocks();
   (budgetApi.getOverview as any).mockResolvedValue(OVERVIEW);
   (budgetApi.getBreakdown as any).mockImplementation(({ dimension }: { dimension: string }) =>
     Promise.resolve(BREAKDOWN_BY_DIMENSION[dimension])
@@ -224,7 +250,8 @@ const renderPage = () =>
 // but does NOT run the same normalization over a plain-string matcher — so a matcher built
 // from formatRub() (which groups digits with  ) never equals the collapsed DOM text
 // unless we pre-normalize it the same way here.
-const rub = (value: number) => formatRub(value).replace(/ /g, " ");
+// Нормализуем ВСЕ пробельные, а не только U+00A0: ICU в CI может отдавать U+202F.
+const rub = (value: number) => formatRub(value).replace(/\s/g, " ");
 
 const openBudgetsTab = async () => {
   const user = userEvent.setup();
@@ -521,6 +548,89 @@ describe("BudgetPage", () => {
 
     await waitFor(() => expect(budgetApi.seedDefaultArticles).toHaveBeenCalled());
     await waitFor(() => expect(budgetApi.getOverview).toHaveBeenCalledTimes(2));
+  });
+
+  it("stays on the active tab and keeps filters across a mutation-triggered reload", async () => {
+    (budgetApi.listArticles as any).mockResolvedValue(ARTICLES_PAGE);
+    (budgetApi.listExpenses as any).mockResolvedValue(EXPENSES_PAGE);
+    (budgetApi.deleteExpense as any).mockResolvedValue(undefined);
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    renderPage();
+    await openExpensesTab();
+    await screen.findByText("Курс по ОТ");
+
+    fireEvent.change(screen.getByLabelText("Домен"), { target: { value: "training" } });
+    await waitFor(() => expect(budgetApi.listExpenses).toHaveBeenCalledWith({ domain: "training" }));
+
+    const row = screen.getByText("Курс по ОТ").closest("tr");
+    fireEvent.click(within(row as HTMLElement).getByRole("button", { name: "Удалить" }));
+    await waitFor(() => expect(budgetApi.getOverview).toHaveBeenCalledTimes(2));
+
+    // Раньше reload() ставил loading=true и всё поддерево <Tabs> размонтировалось:
+    // активная вкладка отваливалась на «Сводку», а фильтры расходов сбрасывались.
+    expect(screen.getByRole("tab", { name: "Расходы" })).toHaveAttribute("aria-selected", "true");
+    await waitFor(() => expect(screen.getByLabelText("Домен")).toHaveValue("training"));
+  });
+
+  it("clears BOTH entity fields when unchecking the link on an already-linked expense", async () => {
+    (budgetApi.listArticles as any).mockResolvedValue(ARTICLES_PAGE);
+    (budgetApi.listExpenses as any).mockResolvedValue(LINKED_EXPENSES_PAGE);
+    (budgetApi.updateExpense as any).mockResolvedValue(LINKED_EXPENSES_PAGE.items[0]);
+    renderPage();
+    await openExpensesTab();
+    await screen.findByText("КМ по предписанию");
+
+    const row = screen.getByText("КМ по предписанию").closest("tr");
+    fireEvent.click(within(row as HTMLElement).getByRole("button", { name: "Изменить" }));
+    const dialog = await screen.findByRole("dialog");
+
+    // Диалог открылся с уже проставленной связью.
+    const linkCheckbox = within(dialog).getByLabelText("Связать с записью");
+    expect(linkCheckbox).toBeChecked();
+    expect(within(dialog).getByLabelText("ID записи")).toHaveValue("ca-7");
+
+    fireEvent.click(linkCheckbox);
+    fireEvent.click(within(dialog).getByRole("button", { name: "Сохранить" }));
+
+    await waitFor(() => expect(budgetApi.updateExpense).toHaveBeenCalled());
+    // Бэкенд проверяет пару целиком: снять связь можно только обнулив ОБА поля.
+    expect(budgetApi.updateExpense).toHaveBeenCalledWith("exp9", {
+      entity_type: null,
+      entity_id: null
+    });
+  });
+
+  it("resets the picked article when the domain changes on create", async () => {
+    (budgetApi.listArticles as any).mockResolvedValue(ARTICLES_PAGE);
+    (budgetApi.listExpenses as any).mockResolvedValue(EXPENSES_PAGE);
+    (budgetApi.createExpense as any).mockResolvedValue({ ...EXPENSES_PAGE.items[0], id: "exp5" });
+    renderPage();
+    await openExpensesTab();
+    await screen.findByText("Курс по ОТ");
+
+    fireEvent.click(screen.getByRole("button", { name: "Новый расход" }));
+    const dialog = await screen.findByRole("dialog");
+
+    fireEvent.change(within(dialog).getByLabelText("Домен"), { target: { value: "events" } });
+    const articleSelect = within(dialog).getByLabelText("Статья");
+    fireEvent.change(articleSelect, { target: { value: "art2" } });
+    expect(articleSelect).toHaveValue("art2");
+
+    // Смена домена делает выбранную статью невалидной -> выбор должен сброситься в state,
+    // а не просто исчезнуть из списка опций (иначе ушёл бы 422 article_domain_mismatch).
+    fireEvent.change(within(dialog).getByLabelText("Домен"), { target: { value: "training" } });
+    expect(articleSelect).toHaveValue("");
+
+    fireEvent.change(within(dialog).getByLabelText("Название"), { target: { value: "Курс" } });
+    fireEvent.change(within(dialog).getByLabelText("Дата"), { target: { value: "2026-05-03" } });
+    fireEvent.change(within(dialog).getByLabelText("Сумма"), { target: { value: "500" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Сохранить" }));
+
+    await waitFor(() => expect(budgetApi.createExpense).toHaveBeenCalled());
+    expect((budgetApi.createExpense as any).mock.calls.at(-1)[0]).toMatchObject({
+      domain: "training",
+      article_id: null
+    });
   });
 
   it("disables the code field when editing an article", async () => {

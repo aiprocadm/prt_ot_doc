@@ -9,15 +9,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ExpenseFormDialog } from "@/features/budget/ExpenseFormDialog";
-import { BUDGET_DOMAIN_LABELS, formatRub } from "@/pages/budget/budgetVocab";
+import { BUDGET_DOMAIN_LABELS, BUDGET_DOMAINS, formatRub, toApiError } from "@/pages/budget/budgetVocab";
 import { PERMISSIONS } from "@/permissions/permissions";
 import type { ApiError } from "@/types/dto/common";
 import type { BudgetArticlePageDto, BudgetDomain, BudgetExpenseDto, BudgetExpensePageDto } from "@/types/dto/budget";
-
-const EXPENSE_DOMAINS: BudgetDomain[] = ["training", "medical", "events"];
-
-const toApiError = (err: unknown, fallback: string): ApiError =>
-  err && typeof err === "object" && "message" in err ? (err as ApiError) : { status: 0, message: fallback };
 
 interface Props {
   expenses: BudgetExpensePageDto;
@@ -99,7 +94,7 @@ export const ExpensesTab = ({ expenses, articles, onChanged }: Props) => {
               onChange={(e) => setDomainFilter(e.target.value as BudgetDomain | "")}
             >
               <option value="">Все домены</option>
-              {EXPENSE_DOMAINS.map((d) => (
+              {BUDGET_DOMAINS.map((d) => (
                 <option key={d} value={d}>
                   {BUDGET_DOMAIN_LABELS[d]}
                 </option>
@@ -145,7 +140,11 @@ export const ExpensesTab = ({ expenses, articles, onChanged }: Props) => {
       {listLoading ? <LoadingScreen label="Загрузка расходов" /> : null}
 
       {!listLoading && !listError && items.length === 0 ? (
-        <EmptyState title="Расходов нет" description="Добавьте первый расход." />
+        hasFilter ? (
+          <EmptyState title="Ничего не найдено по фильтрам" description="Измените или сбросьте фильтры." />
+        ) : (
+          <EmptyState title="Расходов нет" description="Добавьте первый расход." />
+        )
       ) : null}
 
       {!listLoading && !listError && items.length > 0 ? (

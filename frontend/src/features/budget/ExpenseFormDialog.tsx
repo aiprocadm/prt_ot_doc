@@ -16,7 +16,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { BUDGET_DOMAIN_LABELS } from "@/pages/budget/budgetVocab";
+import { BUDGET_DOMAIN_LABELS, BUDGET_DOMAINS } from "@/pages/budget/budgetVocab";
 import type { DirectoryItemDto } from "@/types/dto/analytics";
 import type {
   BudgetArticlePageDto,
@@ -25,8 +25,6 @@ import type {
   BudgetExpenseDto,
   BudgetExpenseUpdateInput
 } from "@/types/dto/budget";
-
-const EXPENSE_DOMAINS: BudgetDomain[] = ["training", "medical", "events"];
 
 /**
  * entity_type бэкенда для «Связать с записью» выводится из выбранного домена расхода —
@@ -113,6 +111,14 @@ export const ExpenseFormDialog = ({ trigger, initialData, articles, onSubmitted 
 
   useEffect(() => {
     if (!open) return;
+    // Флаги доступности сбрасываются на каждое открытие: иначе один транзиентный 403/500
+    // скрывал бы селект до конца жизни компонента, даже когда справочник снова доступен.
+    setCompaniesAvailable(true);
+    setBranchesAvailable(true);
+    setSitesAvailable(true);
+    setCompanies([]);
+    setBranches([]);
+    setSites([]);
     analyticsApi
       .getCompanies()
       .then((page) => setCompanies(page.items ?? []))
@@ -136,6 +142,20 @@ export const ExpenseFormDialog = ({ trigger, initialData, articles, onSubmitted 
   const availableArticles = articles.items.filter(
     (a) => a.is_active && (a.domain === null || a.domain === form.domain)
   );
+
+  // Расход мог быть заведён на статью, которую позже отключили/удалили: её нет в
+  // отфильтрованном списке, и <select> отрисовал бы «— без статьи», хотя в state лежит id.
+  // Показываем её отдельной disabled-опцией, чтобы UI не утверждал неправду.
+  const staleArticle =
+    form.article_id && !availableArticles.some((a) => a.id === form.article_id)
+      ? {
+          id: form.article_id,
+          name:
+            articles.items.find((a) => a.id === form.article_id)?.name ??
+            initialData?.article_name ??
+            "(недоступная статья)"
+        }
+      : null;
 
   const onDomainChange = (nextDomain: BudgetDomain) => {
     setForm((prev) => {
@@ -244,7 +264,7 @@ export const ExpenseFormDialog = ({ trigger, initialData, articles, onSubmitted 
               disabled={isEdit}
               onChange={(e) => onDomainChange(e.target.value as BudgetDomain)}
             >
-              {EXPENSE_DOMAINS.map((d) => (
+              {BUDGET_DOMAINS.map((d) => (
                 <option key={d} value={d}>
                   {BUDGET_DOMAIN_LABELS[d]}
                 </option>
@@ -260,6 +280,11 @@ export const ExpenseFormDialog = ({ trigger, initialData, articles, onSubmitted 
               onChange={(e) => setField("article_id", e.target.value)}
             >
               <option value="">— без статьи —</option>
+              {staleArticle ? (
+                <option key={staleArticle.id} value={staleArticle.id} disabled>
+                  {staleArticle.name}
+                </option>
+              ) : null}
               {availableArticles.map((a) => (
                 <option key={a.id} value={a.id}>
                   {a.name}
