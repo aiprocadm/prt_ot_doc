@@ -13,6 +13,8 @@ read-models, which keeps the suite fast and deterministic.
 
 from __future__ import annotations
 
+from datetime import date, timedelta
+
 import pytest
 from sqlalchemy import select
 
@@ -24,11 +26,11 @@ from app.modules.analytics.services import (
 )
 from app.modules.projections.models import (
     ContractorReadinessReadModel,
+    DashboardKpiSnapshot,
     PackageReadModel,
     PersonComplianceReadModel,
     SiteSafetyReadModel,
 )
-
 
 # -----------------------------------------------------------------------------
 # Helpers
@@ -222,12 +224,18 @@ async def test_base_counters_overdue_compliance_filtered_by_site(sessionmaker) -
     async with sessionmaker() as session:
         tenant_id = await _tenant_id(session)
         await _seed_person_compliance(
-            session, tenant_id=tenant_id, person_id="p1",
-            readiness_status="blocked", site_id="s-A",
+            session,
+            tenant_id=tenant_id,
+            person_id="p1",
+            readiness_status="blocked",
+            site_id="s-A",
         )
         await _seed_person_compliance(
-            session, tenant_id=tenant_id, person_id="p2",
-            readiness_status="blocked", site_id="s-B",
+            session,
+            tenant_id=tenant_id,
+            person_id="p2",
+            readiness_status="blocked",
+            site_id="s-B",
         )
         await session.commit()
 
@@ -242,12 +250,18 @@ async def test_base_counters_sums_open_incidents_across_sites(sessionmaker) -> N
     async with sessionmaker() as session:
         tenant_id = await _tenant_id(session)
         await _seed_site_safety(
-            session, tenant_id=tenant_id, site_id="s1",
-            open_incidents_count=2, open_inspections_count=3,
+            session,
+            tenant_id=tenant_id,
+            site_id="s1",
+            open_incidents_count=2,
+            open_inspections_count=3,
         )
         await _seed_site_safety(
-            session, tenant_id=tenant_id, site_id="s2",
-            open_incidents_count=5, open_inspections_count=1,
+            session,
+            tenant_id=tenant_id,
+            site_id="s2",
+            open_incidents_count=5,
+            open_inspections_count=1,
         )
         await session.commit()
 
@@ -267,7 +281,9 @@ async def test_base_counters_tenant_isolation(sessionmaker, data_factory) -> Non
         await _seed_package(session, tenant_id=str(other.id), package_id="foreign-pkg")
         await session.commit()
 
-        own = await AnalyticsAggregationService(session, tenant_id).base_counters(DashboardFilters())
+        own = await AnalyticsAggregationService(session, tenant_id).base_counters(
+            DashboardFilters()
+        )
         foreign = await AnalyticsAggregationService(session, str(other.id)).base_counters(
             DashboardFilters()
         )
@@ -330,8 +346,11 @@ async def test_trend_series_incidents_uses_open_incidents_count(sessionmaker) ->
     async with sessionmaker() as session:
         tenant_id = await _tenant_id(session)
         await _seed_site_safety(
-            session, tenant_id=tenant_id, site_id="s1",
-            open_incidents_count=4, open_inspections_count=0,
+            session,
+            tenant_id=tenant_id,
+            site_id="s1",
+            open_incidents_count=4,
+            open_inspections_count=0,
         )
         await session.commit()
         result = await AnalyticsAggregationService(session, tenant_id).trend_series(
@@ -351,6 +370,43 @@ async def test_trend_series_packages_metric(sessionmaker) -> None:
             "packages", points=1
         )
     assert result["series"][0]["value"] == 3
+
+
+@pytest.mark.anyio
+async def test_trend_series_past_bucket_reads_snapshot(sessionmaker) -> None:
+    """The trend is no longer flat (#29): the latest bucket is the live value, past
+    buckets read the daily DashboardKpiSnapshot history."""
+    async with sessionmaker() as session:
+        tenant_id = await _tenant_id(session)
+        # Live value = 5 open incidents.
+        await _seed_site_safety(
+            session,
+            tenant_id=tenant_id,
+            site_id="s1",
+            open_incidents_count=5,
+            open_inspections_count=0,
+        )
+        # A historical snapshot 3 days ago recorded only 2.
+        session.add(
+            DashboardKpiSnapshot(
+                tenant_id=tenant_id,
+                scope_type="tenant",
+                scope_id=None,
+                snapshot_date=date.today() - timedelta(days=3),
+                payload={"incidents_open": 2},
+            )
+        )
+        await session.commit()
+        result = await AnalyticsAggregationService(session, tenant_id).trend_series(
+            "incidents", period="daily", points=4
+        )
+    series = result["series"]
+    assert len(series) == 4
+    # Oldest bucket (today-3) reads the snapshot; latest (today) is the live value.
+    assert series[0]["value"] == 2
+    assert series[-1]["value"] == 5
+    # Not a flat line.
+    assert {p["value"] for p in series} != {5}
 
 
 @pytest.mark.anyio
@@ -375,8 +431,11 @@ async def test_trend_series_compliance_metric_sums_trainings_and_briefings(sessi
     async with sessionmaker() as session:
         tenant_id = await _tenant_id(session)
         await _seed_person_compliance(
-            session, tenant_id=tenant_id, person_id="p1",
-            overdue_trainings=2, overdue_briefings=3,
+            session,
+            tenant_id=tenant_id,
+            person_id="p1",
+            overdue_trainings=2,
+            overdue_briefings=3,
         )
         await session.commit()
         result = await AnalyticsAggregationService(session, tenant_id).trend_series(
@@ -395,9 +454,7 @@ async def test_trend_series_unknown_metric_falls_back_to_contractor_packages(ses
             session, tenant_id=tenant_id, contractor_id="c1", active_packages_count=7
         )
         await session.commit()
-        result = await AnalyticsAggregationService(session, tenant_id).trend_series(
-            "ppe", points=1
-        )
+        result = await AnalyticsAggregationService(session, tenant_id).trend_series("ppe", points=1)
     assert result["series"][0]["value"] == 7
 
 
@@ -596,9 +653,7 @@ async def test_executive_dashboard_endpoint_returns_snapshot_and_dashboard(
 
 
 @pytest.mark.anyio
-async def test_safety_dashboard_endpoint_returns_widgets(
-    async_client, make_auth_headers
-) -> None:
+async def test_safety_dashboard_endpoint_returns_widgets(async_client, make_auth_headers) -> None:
     headers = await make_auth_headers()
     response = await async_client.get("/api/v1/analytics/dashboard/safety", headers=headers)
     assert response.status_code == 200

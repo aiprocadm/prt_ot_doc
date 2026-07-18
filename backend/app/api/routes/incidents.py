@@ -17,7 +17,6 @@ from app.core.audit_decorator import audit_operation
 from app.core.errors import api_problem_detail
 from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
-from app.domains.incidents import append_log_entry, register_incident, update_incident
 from app.models.models import (
     Incident,
     IncidentLog,
@@ -26,6 +25,7 @@ from app.models.models import (
     IncidentType,
     Tenant,
 )
+from app.modules.incidents import append_log_entry, register_incident, update_incident
 from app.schemas.incidents import (
     IncidentCreate,
     IncidentLogCreate,
@@ -52,18 +52,24 @@ def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> str | No
 
 ManagerAccess = Annotated[
     AccessContext,
-    Depends(abac(_tenant_resource_id, required_roles=_INCIDENT_READ_ROLES, action="read incidents")),
+    Depends(
+        abac(_tenant_resource_id, required_roles=_INCIDENT_READ_ROLES, action="read incidents")
+    ),
 ]
 EditorAccess = Annotated[
     AccessContext,
-    Depends(abac(_tenant_resource_id, required_roles=_INCIDENT_WRITE_ROLES, action="manage incidents")),
+    Depends(
+        abac(_tenant_resource_id, required_roles=_INCIDENT_WRITE_ROLES, action="manage incidents")
+    ),
 ]
 
 
 def _incident_bad_request(message: str) -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,
-        detail=api_problem_detail(code="INCIDENT_VALIDATION_ERROR", message=message, error_type="incidents"),
+        detail=api_problem_detail(
+            code="INCIDENT_VALIDATION_ERROR", message=message, error_type="incidents"
+        ),
     )
 
 
@@ -71,7 +77,11 @@ async def _get_incident(session: AsyncSession, tenant: Tenant, incident_id: str)
     stmt = (
         select(Incident)
         .options(selectinload(Incident.participants))
-        .where(Incident.id == incident_id, Incident.tenant_id == tenant.id, Incident.deleted_at.is_(None))
+        .where(
+            Incident.id == incident_id,
+            Incident.tenant_id == tenant.id,
+            Incident.deleted_at.is_(None),
+        )
     )
     record = (await session.execute(stmt)).scalar_one_or_none()
     if record is None:
@@ -109,8 +119,10 @@ async def list_incidents(
 ) -> IncidentPage | Response:
     TenantContextValidator.ensure_tenant_context(tenant)
 
-    stmt = select(Incident).options(selectinload(Incident.participants)).where(
-        Incident.tenant_id == tenant.id, Incident.deleted_at.is_(None)
+    stmt = (
+        select(Incident)
+        .options(selectinload(Incident.participants))
+        .where(Incident.tenant_id == tenant.id, Incident.deleted_at.is_(None))
     )
     if company_id:
         stmt = stmt.where(Incident.company_id == company_id)
@@ -245,7 +257,11 @@ async def patch_incident(
     return _serialize_incident(updated, victim_ids=victim_ids)
 
 
-@router.post("/incidents/{incident_id}/logs", response_model=IncidentLogRead, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/incidents/{incident_id}/logs",
+    response_model=IncidentLogRead,
+    status_code=status.HTTP_201_CREATED,
+)
 @audit_operation("create_log", "incident_log")
 async def add_incident_log(
     incident_id: str,

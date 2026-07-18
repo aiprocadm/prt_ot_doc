@@ -24,7 +24,6 @@ from httpx import AsyncClient
 from app.models.models import RoleEnum
 from tests.utils.factories import TestDataFactory
 
-
 # -----------------------------------------------------------------------------
 # Helpers
 # -----------------------------------------------------------------------------
@@ -61,9 +60,7 @@ async def _seed_journal(
         "journal_type": journal_type,
         "started_at": date.today().isoformat(),
     }
-    response = await async_client.post(
-        "/api/v1/journals", json=payload, headers=headers
-    )
+    response = await async_client.post("/api/v1/journals", json=payload, headers=headers)
     assert response.status_code == status.HTTP_201_CREATED, response.text
     return response.json()
 
@@ -146,12 +143,8 @@ async def test_contractors_registry_etag_distinct_per_page(
     for i in range(4):
         await _seed_contractor(async_client, headers, name=f"Page Contractor {i}")
 
-    a = await async_client.get(
-        "/api/v1/contractors/registry?limit=2&offset=0", headers=headers
-    )
-    b = await async_client.get(
-        "/api/v1/contractors/registry?limit=2&offset=2", headers=headers
-    )
+    a = await async_client.get("/api/v1/contractors/registry?limit=2&offset=0", headers=headers)
+    b = await async_client.get("/api/v1/contractors/registry?limit=2&offset=2", headers=headers)
     assert a.headers["ETag"] != b.headers["ETag"]
 
 
@@ -198,9 +191,7 @@ async def test_journals_hit_returns_304(
     assert first.status_code == status.HTTP_200_OK
     etag = first.headers["ETag"]
 
-    second = await async_client.get(
-        "/api/v1/journals", headers={**headers, "If-None-Match": etag}
-    )
+    second = await async_client.get("/api/v1/journals", headers={**headers, "If-None-Match": etag})
     assert second.status_code == status.HTTP_304_NOT_MODIFIED
     assert second.headers["ETag"] == etag
     assert second.content == b""
@@ -284,7 +275,5 @@ async def test_journals_empty_list_stable_etag(
     etag = first.headers["ETag"]
     assert etag
 
-    second = await async_client.get(
-        "/api/v1/journals", headers={**headers, "If-None-Match": etag}
-    )
+    second = await async_client.get("/api/v1/journals", headers={**headers, "If-None-Match": etag})
     assert second.status_code == status.HTTP_304_NOT_MODIFIED

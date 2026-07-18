@@ -49,7 +49,9 @@ def main() -> int:
             if not normalized:
                 continue
             if normalized in FORBIDDEN_BY_KEY[key]:
-                violations.append(f"{target.relative_to(ROOT)}:{line_no} {key} has forbidden default")
+                violations.append(
+                    f"{target.relative_to(ROOT)}:{line_no} {key} has forbidden default"
+                )
 
     if violations:
         print("Default secret guard failed:", file=sys.stderr)

@@ -108,9 +108,9 @@ class TestResolveEntityTypes:
         assert SearchService._resolve_entity_types(set()) == set()
 
     def test_multiple_aliases_to_same_canonical_deduplicate(self) -> None:
-        assert SearchService._resolve_entity_types({"person", "people", "employee", "employees"}) == {
-            "person"
-        }
+        assert SearchService._resolve_entity_types(
+            {"person", "people", "employee", "employees"}
+        ) == {"person"}
 
 
 # ---------------------------------------------------------------------------
@@ -120,11 +120,16 @@ class TestResolveEntityTypes:
 
 class TestBuildSnippet:
     def test_returns_none_when_haystack_is_empty(self) -> None:
-        assert SearchService._build_snippet(q="foo", title=None, subtitle=None, preview_payload=None) is None
+        assert (
+            SearchService._build_snippet(q="foo", title=None, subtitle=None, preview_payload=None)
+            is None
+        )
 
     def test_returns_first_180_chars_when_query_blank(self) -> None:
         long_title = "a" * 300
-        snippet = SearchService._build_snippet(q="   ", title=long_title, subtitle=None, preview_payload=None)
+        snippet = SearchService._build_snippet(
+            q="   ", title=long_title, subtitle=None, preview_payload=None
+        )
         assert snippet is not None
         assert len(snippet) == 180
         assert snippet == "a" * 180
@@ -714,7 +719,12 @@ class TestSearchInfrastructure:
                 [
                     {"entity_id": "p1", "entity_type": "person", "title": "P1", "status": "active"},
                     {"entity_id": "p2", "entity_type": "person", "title": "P2", "status": "draft"},
-                    {"entity_id": "d1", "entity_type": "document", "title": "D1", "status": "active"},
+                    {
+                        "entity_id": "d1",
+                        "entity_type": "document",
+                        "title": "D1",
+                        "status": "active",
+                    },
                 ],
             )
             await session.commit()
@@ -784,9 +794,7 @@ class TestSearchInfrastructure:
         ids = [item["entity_id"] for item in page1["items"] + page2["items"] + page3["items"]]
         assert sorted(ids) == sorted([f"p-{i}" for i in range(5)])
 
-    async def test_sort_updated_at_returns_newest_first(
-        self, sessionmaker, data_factory
-    ) -> None:
+    async def test_sort_updated_at_returns_newest_first(self, sessionmaker, data_factory) -> None:
         async with sessionmaker() as session:
             tenant = await data_factory.ensure_tenant(session=session, slug="epsilon")
             await _seed(

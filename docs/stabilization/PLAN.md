@@ -29,15 +29,15 @@ Release-critical status values are mirrored from `docs/stabilization/RELEASE_BLO
 ## Block B — Test coverage visibility
 
 ### B.1 Critical-path coverage matrix normalization (`RC-016`)
-- **status:** `partial`
+- **status:** `done` (local-evidence, 2026-07-02 — permanent policy, REL-1(c))
 - **owner:** QA / Backend / Frontend
 - **evidence:**
-  - **test:** `tests/integration/test_tenant_isolation.py`, `tests/integration/test_cross_tenant_resource_matrix.py`, `tests/e2e/final_regression/test_final_regression_api.py`, `frontend/e2e/smoke.spec.ts`
-  - **workflow:** `.github/workflows/ci.yml`, `.github/workflows/e2e-smoke.yml`
-  - **doc:** `docs/stabilization/coverage.md`, `ACCEPTANCE_TEST_MATRIX.md`
+  - **test:** `tests/integration/test_tenant_isolation.py`, `tests/integration/test_cross_tenant_resource_matrix.py`, `tests/e2e/final_regression/test_final_regression_api.py` — 14 passed локально 2026-07-02; `frontend/e2e/smoke.spec.ts` — standing deferral (RB-005 precedent)
+  - **workflow:** `.github/workflows/ci.yml`, `.github/workflows/e2e-smoke.yml` (disabled; выполняются при реактивации)
+  - **doc:** `docs/stabilization/coverage.md`, `ACCEPTANCE_TEST_MATRIX.md`, `docs/stabilization/RELEASE_BLOCKERS_STATUS.md` (RC-016)
 
 ### B.2 Secrets-dependent e2e signal hardening (`RC-006`)
-- **status:** `missing`
+- **status:** `done` (закрыт 2026-05-29 по local-evidence policy — см. `RELEASE_BLOCKERS_STATUS.md` RB-005 / `GAP_REPORT.md` RC-006; строка ниже была устаревшей)
 - **owner:** QA Automation
 - **evidence target:**
   - **workflow:** `.github/workflows/e2e-smoke.yml`

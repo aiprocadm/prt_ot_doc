@@ -69,6 +69,7 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(
             ["tenant_id"], ["tenant.id"], name="fk_inspection_result_tenant"
         ),
+        sa.ForeignKeyConstraint(["tenant_id"], ["tenant.id"], name="fk_inspection_result_tenant"),
         sa.ForeignKeyConstraint(
             ["inspection_id"],
             ["regulatory_inspection.id"],
@@ -114,5 +115,6 @@ def downgrade() -> None:
     op.drop_index(
         "ix_inspection_result_inspection_id", table_name="inspection_result"
     )
+    op.drop_index("ix_inspection_result_inspection_id", table_name="inspection_result")
     op.drop_index("ix_inspection_result_tenant_id", table_name="inspection_result")
     op.drop_table("inspection_result")

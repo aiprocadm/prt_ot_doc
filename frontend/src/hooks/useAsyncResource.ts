@@ -28,24 +28,28 @@ export const useAsyncResource = <TData>({
   const [error, setError] = useState<ApiError | null>(null);
   const errorRef = useRef<ApiError | null>(null);
   errorRef.current = error;
-  const inFlight = useRef(false);
+  const seqRef = useRef(0);
 
   const reload = useCallback(async () => {
-    if (inFlight.current) return;
-    inFlight.current = true;
+    const seq = ++seqRef.current;
     setLoading(true);
     setError(null);
     try {
       const next = await loader();
-      setData(next);
+      if (seq === seqRef.current) {
+        setData(next);
+      }
       return next;
     } catch (err) {
       const normalized = normalizeApiError(err, errorMessage);
-      setError(normalized);
+      if (seq === seqRef.current) {
+        setError(normalized);
+      }
       throw normalized;
     } finally {
-      inFlight.current = false;
-      setLoading(false);
+      if (seq === seqRef.current) {
+        setLoading(false);
+      }
     }
   }, [errorMessage, loader]);
 

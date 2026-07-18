@@ -11,7 +11,9 @@ from tests.utils.factories import TestDataFactory
 
 
 @pytest.mark.asyncio
-async def test_list_and_close_obligations(async_client, make_auth_headers, sessionmaker, data_factory: TestDataFactory) -> None:
+async def test_list_and_close_obligations(
+    async_client, make_auth_headers, sessionmaker, data_factory: TestDataFactory
+) -> None:
     async with sessionmaker() as session:
         tenant = await data_factory.ensure_tenant(session=session)
         overdue = Task(

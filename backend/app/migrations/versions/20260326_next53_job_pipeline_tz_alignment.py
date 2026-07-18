@@ -15,7 +15,9 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column("document_jobs", sa.Column("queued_at", sa.DateTime(timezone=True), nullable=True))
+    op.add_column(
+        "document_jobs", sa.Column("queued_at", sa.DateTime(timezone=True), nullable=True)
+    )
 
     op.add_column("document_job_steps", sa.Column("seq", sa.Integer(), nullable=True))
     op.add_column(
@@ -24,7 +26,9 @@ def upgrade() -> None:
     )
     op.add_column("document_job_steps", sa.Column("logs_ref", sa.String(length=512), nullable=True))
 
-    op.execute("UPDATE document_job_steps SET seq = COALESCE(step_order, \"order\") WHERE seq IS NULL")
+    op.execute(
+        'UPDATE document_job_steps SET seq = COALESCE(step_order, "order") WHERE seq IS NULL'
+    )
     op.execute("UPDATE document_job_steps SET attempt = COALESCE(attempts, 0) WHERE attempt = 0")
 
     op.create_index("ix_document_job_steps_job_seq", "document_job_steps", ["job_id", "seq"])
@@ -40,13 +44,19 @@ def upgrade() -> None:
         "ON document_job_steps (job_id, status)"
     )
 
-    op.add_column("pipeline_profiles", sa.Column("concurrency_limit_per_tenant", sa.Integer(), nullable=True))
+    op.add_column(
+        "pipeline_profiles", sa.Column("concurrency_limit_per_tenant", sa.Integer(), nullable=True)
+    )
 
 
 def downgrade() -> None:
     op.drop_column("pipeline_profiles", "concurrency_limit_per_tenant")
 
-    op.drop_index("ix_document_job_steps_job_status", table_name="document_job_steps")
+    # iter-15c mirror: ix_document_job_steps_job_status is co-created (IF NOT
+    # EXISTS) by both this revision and 20260314_next40 (sibling DAG branch).
+    # The branch that downgrades second would hit "index does not exist", so
+    # drop it idempotently to match the idempotent create above.
+    op.execute("DROP INDEX IF EXISTS ix_document_job_steps_job_status")
     op.drop_index("ix_document_job_steps_job_seq", table_name="document_job_steps")
 
     op.drop_column("document_job_steps", "logs_ref")

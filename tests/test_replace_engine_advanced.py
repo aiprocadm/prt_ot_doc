@@ -39,4 +39,3 @@ def test_replace_engine_supports_whole_word_mode() -> None:
         options=ReplaceOptions(whole_word=True),
     )
     assert _extract_first_paragraph(result.docx_bytes) == "dog concatenate dog"
-

@@ -186,9 +186,7 @@ class Metrics:
     def observe_pdf_libreoffice(self, *, seconds: float, status: str) -> None:
         normalized_status = sanitize_label(status)
         safe_seconds = seconds if seconds >= 0 else 0.0
-        self.pdf_libreoffice_duration_seconds.labels(status=normalized_status).observe(
-            safe_seconds
-        )
+        self.pdf_libreoffice_duration_seconds.labels(status=normalized_status).observe(safe_seconds)
         self.pdf_libreoffice_attempts_total.labels(status=normalized_status).inc()
 
     def record_pipeline_error(
@@ -236,7 +234,9 @@ class Metrics:
     ) -> None:
         if seconds < 0:
             seconds = 0.0
-        self.celery_task_duration_seconds.labels(queue=queue, task=task, status=status).observe(seconds)
+        self.celery_task_duration_seconds.labels(queue=queue, task=task, status=status).observe(
+            seconds
+        )
         self.celery_tasks_in_progress.labels(queue=queue, task=task).dec()
         if error_code:
             self.pipeline_errors_total.labels(
@@ -244,12 +244,10 @@ class Metrics:
                 stage=PipelineStage.UNKNOWN.value,
                 error_class=sanitize_label(error_code),
             ).inc()
-        percentile = self._celery_latency_tracker.observe(
-            key=(queue, task, status), value=seconds
+        percentile = self._celery_latency_tracker.observe(key=(queue, task, status), value=seconds)
+        self.celery_task_latency_p95_seconds.labels(queue=queue, task=task, status=status).set(
+            percentile
         )
-        self.celery_task_latency_p95_seconds.labels(
-            queue=queue, task=task, status=status
-        ).set(percentile)
 
     def set_celery_queue_depth(self, *, queue: str, depth: int) -> None:
         safe_depth = depth if depth >= 0 else 0
@@ -270,24 +268,20 @@ class Metrics:
         self.http_requests_total.labels(
             method=method_label, path=path_label, status=status_label
         ).inc()
-        self.http_request_latency_seconds.labels(
-            method=method_label, path=path_label
-        ).observe(duration)
+        self.http_request_latency_seconds.labels(method=method_label, path=path_label).observe(
+            duration
+        )
         p95 = self._http_latency_tracker.observe(
             method=method_label, path=path_label, duration=duration
         )
-        self.http_request_latency_p95_seconds.labels(
-            method=method_label, path=path_label
-        ).set(p95)
+        self.http_request_latency_p95_seconds.labels(method=method_label, path=path_label).set(p95)
         if status_code >= 400:
             family = f"{status_code // 100}xx"
             self.http_request_errors_total.labels(
                 method=method_label, path=path_label, status=family
             ).inc()
 
-    def record_outbox_enqueued(
-        self, *, event_type: str, destination: str, tenant_id: str
-    ) -> None:
+    def record_outbox_enqueued(self, *, event_type: str, destination: str, tenant_id: str) -> None:
         self.outbox_enqueued_total.labels(
             event_type=sanitize_label(event_type),
             destination=sanitize_label(destination),
@@ -319,9 +313,7 @@ class Metrics:
             destination=sanitize_label(destination),
         ).inc()
 
-    def observe_outbox_attempts(
-        self, *, event_type: str, destination: str, attempts: int
-    ) -> None:
+    def observe_outbox_attempts(self, *, event_type: str, destination: str, attempts: int) -> None:
         safe_attempts = attempts if attempts >= 0 else 0
         self.outbox_attempts_histogram.labels(
             event_type=sanitize_label(event_type),
@@ -352,9 +344,7 @@ class Metrics:
         ).inc()
 
     def record_outbox_no_destination(self, *, event_type: str) -> None:
-        self.outbox_no_destination_total.labels(
-            event_type=sanitize_label(event_type)
-        ).inc()
+        self.outbox_no_destination_total.labels(event_type=sanitize_label(event_type)).inc()
 
     def record_file_presign_download(self, *, tenant: str) -> None:
         self.files_presign_download_total.labels(tenant=sanitize_label(tenant)).inc()

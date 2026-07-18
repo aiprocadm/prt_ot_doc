@@ -8,6 +8,7 @@ from sqlalchemy import select
 import app.api.dependencies as api_dependencies
 import app.db.session as db_session
 from app.core.config import Settings
+from app.core.tenant import tenant_context
 from app.models.finance import Department
 from app.models.models import Company, Person, Position, Site, Tenant, TrainingCourse
 from app.services.demo_bootstrap import bootstrap_demo_tenant
@@ -42,6 +43,58 @@ async def test_before_flush_rejects_slug_written_into_uuid_tenant_id(sessionmake
 
 
 @pytest.mark.anyio
+async def test_session_scope_accepts_tenant_uuid_for_new_tenant_scoped_rows(sessionmaker) -> None:
+    """Regression: celery tasks pass tenant UUID where a slug is expected.
+
+    ``audit_export_job``/``report_export_job`` invoke
+    ``tenant_context(tenant_id)`` + ``ensure_tenant_schema(tenant_id)`` +
+    ``session_scope(tenant=tenant_id)`` with ``tenant_id=str(tenant.id)``.
+    Hydration must detect the UUID mislabelled as ``tenant_slug`` and resolve
+    the real tenant identity; otherwise ``_apply_default_tenant`` rejects
+    legitimate new rows whose ``tenant_id`` equals that UUID ("must store
+    tenant.id, not tenant.slug" — both fields hold the same UUID).
+    """
+
+    async with sessionmaker() as seed:
+        tenant = (await seed.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()
+
+    tenant_uuid = str(tenant.id)
+    with tenant_context(tenant_uuid):
+        db_session.ensure_tenant_schema(tenant_uuid)
+        async with db_session.session_scope(tenant=tenant_uuid) as session:
+            explicit = Company(tenant_id=tenant.id, name="UUID Tenant Explicit Row")
+            auto = Company(name="UUID Tenant Auto Row")
+            session.add_all([explicit, auto])
+            await session.flush()
+
+            assert explicit.tenant_id == tenant.id
+            assert auto.tenant_id == tenant.id
+            assert session.info["tenant_id"] == tenant.id
+            assert session.info["tenant_slug"] == tenant.slug
+            assert session.info["tenant"] == tenant.slug
+
+
+@pytest.mark.anyio
+async def test_before_flush_ignores_tenant_uuid_mislabelled_as_slug(sessionmaker) -> None:
+    """Same bug, sync path: sessions that skip ``__aenter__`` hydration must
+    still not treat a UUID stored in ``session.info["tenant_slug"]`` as a slug
+    inside the before_flush guard."""
+
+    async with sessionmaker() as session:
+        tenant = (await session.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()
+        session.info["tenant_id"] = tenant.id
+        session.info["tenant_slug"] = str(tenant.id)
+        session.info["tenant_schema"] = "public"
+
+        company = Company(tenant_id=tenant.id, name="Guard UUID Slug Row")
+        session.add(company)
+        await session.flush()
+
+        assert company.tenant_id == tenant.id
+        assert session.info["tenant_slug"] == tenant.slug
+
+
+@pytest.mark.anyio
 async def test_demo_bootstrap_uses_tenant_uuid_for_fk_backed_entities(
     sessionmaker,
     monkeypatch: pytest.MonkeyPatch,
@@ -49,7 +102,9 @@ async def test_demo_bootstrap_uses_tenant_uuid_for_fk_backed_entities(
     async def fake_ensure_default_packs(session, *, tenant_slug: str) -> None:
         return None
 
-    monkeypatch.setattr("app.services.demo_bootstrap.ensure_default_packs", fake_ensure_default_packs)
+    monkeypatch.setattr(
+        "app.services.demo_bootstrap.ensure_default_packs", fake_ensure_default_packs
+    )
 
     settings = Settings.model_validate(
         {
@@ -65,13 +120,25 @@ async def test_demo_bootstrap_uses_tenant_uuid_for_fk_backed_entities(
     await bootstrap_demo_tenant(settings)
 
     async with sessionmaker() as session:
-        tenant = (await session.execute(select(Tenant).where(Tenant.slug == "wave1-demo"))).scalar_one()
-        company = (await session.execute(select(Company).where(Company.name == "Wave 1 Demo LLC"))).scalar_one()
+        tenant = (
+            await session.execute(select(Tenant).where(Tenant.slug == "wave1-demo"))
+        ).scalar_one()
+        company = (
+            await session.execute(select(Company).where(Company.name == "Wave 1 Demo LLC"))
+        ).scalar_one()
         site = (await session.execute(select(Site).where(Site.name == "Wave 1 Site"))).scalar_one()
-        department = (await session.execute(select(Department).where(Department.code == "DEMO-PROD"))).scalar_one()
-        position = (await session.execute(select(Position).where(Position.name == "Мастер участка"))).scalar_one()
-        person = (await session.execute(select(Person).where(Person.personnel_number == "D-001"))).scalar_one()
-        course = (await session.execute(select(TrainingCourse).where(TrainingCourse.code == "demo-intro"))).scalar_one()
+        department = (
+            await session.execute(select(Department).where(Department.code == "DEMO-PROD"))
+        ).scalar_one()
+        position = (
+            await session.execute(select(Position).where(Position.name == "Мастер участка"))
+        ).scalar_one()
+        person = (
+            await session.execute(select(Person).where(Person.personnel_number == "D-001"))
+        ).scalar_one()
+        course = (
+            await session.execute(select(TrainingCourse).where(TrainingCourse.code == "demo-intro"))
+        ).scalar_one()
 
         assert company.tenant_id == tenant.id
         assert site.tenant_id == tenant.id
@@ -82,7 +149,9 @@ async def test_demo_bootstrap_uses_tenant_uuid_for_fk_backed_entities(
 
 
 @pytest.mark.anyio
-async def test_async_session_local_ensures_explicit_schema_name(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_async_session_local_ensures_explicit_schema_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     ensured: list[tuple[str, str | None, bool]] = []
 
     monkeypatch.setattr(db_session, "_SUPPORTS_SCHEMAS", True)
@@ -90,7 +159,9 @@ async def test_async_session_local_ensures_explicit_schema_name(monkeypatch: pyt
     monkeypatch.setattr(
         db_session,
         "ensure_tenant_schema",
-        lambda slug, *, schema_name=None, implicit=False: ensured.append((slug, schema_name, implicit)),
+        lambda slug, *, schema_name=None, implicit=False: ensured.append(
+            (slug, schema_name, implicit)
+        ),
     )
 
     session = db_session.AsyncSessionLocal(tenant="schema-demo", schema_name="tenant_schema_demo")
@@ -161,7 +232,9 @@ async def test_fetch_tenant_by_identifier_uses_recorded_schema_name(
     monkeypatch.setattr(
         api_dependencies,
         "ensure_tenant_schema",
-        lambda slug, *, schema_name=None, implicit=False: ensured.append((slug, schema_name, implicit)),
+        lambda slug, *, schema_name=None, implicit=False: ensured.append(
+            (slug, schema_name, implicit)
+        ),
     )
 
     tenant = await api_dependencies._fetch_tenant_by_identifier("schema-demo")
@@ -171,7 +244,9 @@ async def test_fetch_tenant_by_identifier_uses_recorded_schema_name(
     assert ensured == [("schema-demo", "tenant_schema_demo", True)]
 
 
-def test_ensure_tenant_schema_skips_implicit_bootstrap_when_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_ensure_tenant_schema_skips_implicit_bootstrap_when_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setattr(db_session, "_SUPPORTS_SCHEMAS", True)
     monkeypatch.setattr(
         db_session,
@@ -188,7 +263,9 @@ def test_ensure_tenant_schema_skips_implicit_bootstrap_when_disabled(monkeypatch
     assert triggered == []
 
 
-def test_ensure_tenant_schema_allows_explicit_bootstrap_when_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_ensure_tenant_schema_allows_explicit_bootstrap_when_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setattr(db_session, "_SUPPORTS_SCHEMAS", True)
     monkeypatch.setattr(
         db_session,
@@ -305,10 +382,10 @@ async def test_per_request_search_path_switching_between_tenants(
     This validates that search_path is properly applied on session entry and
     correctly switches between consecutive requests to different tenants.
     """
-    # Get reference tenants (test fixture creates "test" and "demo" by default)
+    # Get reference tenants (the test fixture seeds "test", "acme", and others).
     async with sessionmaker() as seed:
         test_tenant = (await seed.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()
-        demo_tenant = (await seed.execute(select(Tenant).where(Tenant.slug == "demo"))).scalar_one()
+        acme_tenant = (await seed.execute(select(Tenant).where(Tenant.slug == "acme"))).scalar_one()
 
     # First request: open session for "test" tenant
     async with db_session.AsyncSessionLocal(tenant="test") as session_a:
@@ -326,20 +403,23 @@ async def test_per_request_search_path_switching_between_tenants(
         tenant_id_a = session_a.info.get("tenant_id")
         assert tenant_id_a == test_tenant.id
 
-    # Second request: open session for "demo" tenant
-    async with db_session.AsyncSessionLocal(tenant="demo") as session_b:
+    # Second request: open session for "acme" tenant
+    async with db_session.AsyncSessionLocal(tenant="acme") as session_b:
         # Validate session info has DIFFERENT search path
         search_path_b = session_b.info.get("search_path")
         tenant_b = session_b.info.get("tenant")
-        assert tenant_b == "demo"
+        assert tenant_b == "acme"
         assert search_path_b is not None
         assert isinstance(search_path_b, list)
-        # search_path should be different from first request
-        assert search_path_b != search_path_a
+        # search_path differs per tenant only on PostgreSQL (schema-per-tenant).
+        # SQLite has no schemas, so both tenants resolve to ['public']; tenant
+        # switching is still validated below via tenant_id.
+        if search_path_a != ["public"]:
+            assert search_path_b != search_path_a
 
         # Verify tenant ID changed
         tenant_id_b = session_b.info.get("tenant_id")
-        assert tenant_id_b == demo_tenant.id
+        assert tenant_id_b == acme_tenant.id
         assert tenant_id_b != tenant_id_a
 
     # Third request: verify switching back to "test" restores original search_path

@@ -18,7 +18,10 @@ def test_build_payload_reports_canonical_roots_and_single_frontend_manifest() ->
     assert any(section["label"] == "backend" for section in payload["canonical_layout"])
     assert payload["findings"]["active_frontend_manifest_count"] == 1
     assert "frontend/package.json" in payload["inventory"]["package_jsons"]
-    assert payload["findings"]["required_docs_present"] == payload["findings"]["required_docs_expected"]
+    assert (
+        payload["findings"]["required_docs_present"]
+        == payload["findings"]["required_docs_expected"]
+    )
     assert any(
         item["path"] == "package.json" and item["status"] == "ok"
         for item in payload["root_expectations"]
@@ -68,7 +71,9 @@ def test_repo_audit_generates_markdown_and_json_snapshots() -> None:
     assert "frontend/package.json" in markdown_report
     assert "Unexpected extra frontend manifests" in markdown_report
 
-    json_report = json.loads((repo / "docs/audit/REPOSITORY_AUDIT.json").read_text(encoding="utf-8"))
+    json_report = json.loads(
+        (repo / "docs/audit/REPOSITORY_AUDIT.json").read_text(encoding="utf-8")
+    )
     assert json_report["inventory"]["package_jsons"] == ["frontend/package.json"]
     assert any(
         item["path"] == "package.json" and item["status"] == "ok"

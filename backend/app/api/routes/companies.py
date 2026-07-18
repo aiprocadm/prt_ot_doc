@@ -46,20 +46,22 @@ ManagerAccess = Annotated[
 ]
 EditorAccess = Annotated[
     AccessContext,
-    Depends(abac(_tenant_resource_id, required_roles=_COMPANY_WRITE_ROLES, action="manage companies")),
+    Depends(
+        abac(_tenant_resource_id, required_roles=_COMPANY_WRITE_ROLES, action="manage companies")
+    ),
 ]
 
 
 def _company_unprocessable(message: str) -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-        detail=api_problem_detail(code="COMPANY_VALIDATION_ERROR", message=message, error_type="companies"),
+        detail=api_problem_detail(
+            code="COMPANY_VALIDATION_ERROR", message=message, error_type="companies"
+        ),
     )
 
 
-async def _get_company_or_404(
-    session: AsyncSession, tenant: Tenant, company_id: str
-) -> Company:
+async def _get_company_or_404(session: AsyncSession, tenant: Tenant, company_id: str) -> Company:
     stmt = select(Company).where(
         Company.id == company_id,
         Company.tenant_id == tenant.id,
@@ -120,7 +122,7 @@ def _apply_company_updates(company: Company, payload: CompanyUpdate) -> None:
         "stamp_file_id",
         "preferred_header_preset_code",
     ]
-    list_fields = ["phone_numbers", "work_types", "hazardous_factors", "okved_codes"]
+    list_fields = ["phone_numbers", "work_types", "hazardous_factors", "okved_codes", "tags"]
 
     for field in str_fields:
         if field in data:
@@ -141,10 +143,11 @@ def _apply_company_updates(company: Company, payload: CompanyUpdate) -> None:
         company.contact_person = _clean_string(data["contact_person"]) or None
     if "contact_phone" in data:
         company.contact_phone = _clean_string(data["contact_phone"]) or None
+    if "status" in data:
+        # status NOT NULL — пустое значение трактуем как «active», а не как NULL
+        company.status = _clean_string(data["status"]) or "active"
     if "is_hazardous_production_facility" in data:
-        company.is_hazardous_production_facility = bool(
-            data["is_hazardous_production_facility"]
-        )
+        company.is_hazardous_production_facility = bool(data["is_hazardous_production_facility"])
     if "has_dangerous_objects" in data:
         company.has_dangerous_objects = bool(data["has_dangerous_objects"])
     if "branding_payload" in data and data["branding_payload"] is not None:

@@ -190,9 +190,10 @@ if str(REPO_ROOT) not in sys.path:
 # it inline would risk drift.
 from tests.test_migrations_cross_branch_deps import (  # noqa: E402
     _audit as _xbranch_audit,
+)
+from tests.test_migrations_cross_branch_deps import (  # noqa: E402
     _collect_all as _xbranch_collect_all,
 )
-
 
 # ---------------------------------------------------------------------------
 # Shared AST helpers
@@ -289,7 +290,9 @@ def _str_tuple(node: ast.AST | None) -> tuple[str, ...]:
     return ()
 
 
-def _parse_revision_metadata(tree: ast.Module) -> tuple[str | None, tuple[str, ...], tuple[str, ...]]:
+def _parse_revision_metadata(
+    tree: ast.Module,
+) -> tuple[str | None, tuple[str, ...], tuple[str, ...]]:
     assigns = _module_assigns(tree)
     rev = _str_const(assigns.get("revision"))
     down = _str_tuple(assigns.get("down_revision"))
@@ -511,10 +514,10 @@ def _build_column_type_index() -> tuple[
 ]:
     """One pass over ``MIGRATIONS_DIR`` building:
 
-      * ``per_migration``: ``rev → {(table, col): type_label}`` from upgrade()
-      * ``predecessors``: ``rev → set[rev]`` transitive closure
-      * ``rev_of_file``: ``filename → revision_id``
-      * ``path_of_rev``: ``rev → Path``
+    * ``per_migration``: ``rev → {(table, col): type_label}`` from upgrade()
+    * ``predecessors``: ``rev → set[rev]`` transitive closure
+    * ``rev_of_file``: ``filename → revision_id``
+    * ``path_of_rev``: ``rev → Path``
     """
     per_migration: dict[str, dict[tuple[str, str], str]] = {}
     rev_meta: dict[str, dict] = {}
@@ -640,9 +643,7 @@ def _a1_audit_one(path: Path) -> list[str]:
     try:
         tree = ast.parse(src)
     except SyntaxError as exc:
-        return [
-            f"{_safe_rel(path)}:{exc.lineno or 0}  parse error: {exc}"
-        ]
+        return [f"{_safe_rel(path)}:{exc.lineno or 0}  parse error: {exc}"]
     if not _a1_uses_create_checkfirst(tree):
         return []
     downgrade_range = _func_lineno_range(tree, "downgrade")
@@ -654,10 +655,7 @@ def _a1_audit_one(path: Path) -> list[str]:
         if match is None:
             continue
         call_str, enum_name = match
-        if (
-            downgrade_range is not None
-            and downgrade_range[0] <= node.lineno <= downgrade_range[1]
-        ):
+        if downgrade_range is not None and downgrade_range[0] <= node.lineno <= downgrade_range[1]:
             continue
         if _a1_has_create_type_false(node):
             continue
@@ -918,9 +916,7 @@ def _a3_audit_one(
             # violation. (May still be a code smell, but iter-14 only blocks
             # the dependency-bearing form.)
             return
-        dep_str = ", ".join(
-            f"{r}/{t}.{c}" for r, t, c in sorted(dependents)[:5]
-        )
+        dep_str = ", ".join(f"{r}/{t}.{c}" for r, t, c in sorted(dependents)[:5])
         if len(dependents) > 5:
             dep_str += f", +{len(dependents) - 5} more"
         violations.append(
@@ -943,9 +939,7 @@ def _a3_audit_one(
         # one ``if dialect == 'postgresql':`` block). This is the natural
         # pattern an engineer would write and the original i+1 lookahead
         # missed it entirely.
-        same_stmt_create = _find_create_after_drop_in_subtree(
-            stmt, var, drop_lineno
-        )
+        same_stmt_create = _find_create_after_drop_in_subtree(stmt, var, drop_lineno)
         if same_stmt_create is not None:
             _emit(drop_lineno, same_stmt_create, var)
             used_drop_idx.add(i)
@@ -983,9 +977,7 @@ def _a4_audit() -> list[str]:
     out: list[str] = []
     for v in raw:
         target = v.table if v.column is None else f"{v.table}.{v.column}"
-        out.append(
-            f"{v.file}  rev={v.migration}  ref={target} — {v.why}"
-        )
+        out.append(f"{v.file}  rev={v.migration}  ref={target} — {v.why}")
     return out
 
 
@@ -1015,8 +1007,7 @@ def _a4_audit() -> list[str]:
 
 
 _ADD_VALUE_RE = re.compile(
-    r"ALTER\s+TYPE\s+(\w+)\s+ADD\s+VALUE\s+(?:IF\s+NOT\s+EXISTS\s+)?"
-    r"['\"](\w+)['\"]",
+    r"ALTER\s+TYPE\s+(\w+)\s+ADD\s+VALUE\s+(?:IF\s+NOT\s+EXISTS\s+)?" r"['\"](\w+)['\"]",
     re.IGNORECASE,
 )
 
@@ -1055,9 +1046,7 @@ def _str_literal_iterable(node: ast.AST) -> list[str] | None:
     return out
 
 
-def _expand_fstring(
-    node: ast.AST, var_bindings: dict[str, list[str]]
-) -> list[str] | None:
+def _expand_fstring(node: ast.AST, var_bindings: dict[str, list[str]]) -> list[str] | None:
     """Materialize all possible concrete strings from a ``JoinedStr`` /
     ``Constant`` AST node, given variable-name → possible-values bindings
     drawn from enclosing ``for x in (lit_a, lit_b):`` loops.
@@ -1095,9 +1084,7 @@ def _expand_fstring(
     return out
 
 
-def _enclosing_for_bindings(
-    fn: ast.FunctionDef, target_node: ast.AST
-) -> dict[str, list[str]]:
+def _enclosing_for_bindings(fn: ast.FunctionDef, target_node: ast.AST) -> dict[str, list[str]]:
     """Walk ``fn`` once and return ``{var_name: [literal, ...]}`` for every
     ``for var in (lit_a, lit_b, ...):`` (or list/set) loop that physically
     encloses ``target_node`` (line-range containment over
@@ -1319,9 +1306,7 @@ def find_violations() -> dict[str, list[str]]:
         scope = predecessors.get(rev, set()) | {rev}
         out["A2"].extend(_a2_audit_one(path, rev, scope, per_migration))
         out["A3"].extend(_a3_audit_one(path, rev, scope, per_migration))
-        out["A5"].extend(
-            _a5_audit_one(path, rev, scope, per_migration, added_values_by_rev)
-        )
+        out["A5"].extend(_a5_audit_one(path, rev, scope, per_migration, added_values_by_rev))
 
     # A4: whole-repo DAG analyzer.
     out["A4"].extend(_a4_audit())
@@ -1391,7 +1376,7 @@ def test_migrations_dir_exists() -> None:
 # catch.
 
 
-SYNTHETIC_A1 = '''
+SYNTHETIC_A1 = """
 import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
@@ -1410,10 +1395,10 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     pass
-'''
+"""
 
 
-SYNTHETIC_A2 = '''
+SYNTHETIC_A2 = """
 import sqlalchemy as sa
 from alembic import op
 
@@ -1430,10 +1415,10 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     pass
-'''
+"""
 
 
-SYNTHETIC_A2_UNKNOWN = '''
+SYNTHETIC_A2_UNKNOWN = """
 import sqlalchemy as sa
 from alembic import op
 
@@ -1451,10 +1436,10 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     pass
-'''
+"""
 
 
-SYNTHETIC_A3_PREDECESSOR = '''
+SYNTHETIC_A3_PREDECESSOR = """
 import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
@@ -1476,13 +1461,13 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     pass
-'''
+"""
 
 
 # A3 with drop+create in the SAME top-level statement (one `if dialect:`
 # block). The pre-fix visitor's i+1 lookahead missed this; with the
 # Change-2 fix it must fire.
-SYNTHETIC_A3 = '''
+SYNTHETIC_A3 = """
 import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
@@ -1503,13 +1488,13 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     pass
-'''
+"""
 
 
 # A5 — ALTER TYPE ADD VALUE and UPDATE in the same revision.
 # Predecessor declares the column so the (table, col) → enum_name lookup
 # succeeds for the UPDATE's resolution.
-SYNTHETIC_A5_PREDECESSOR = '''
+SYNTHETIC_A5_PREDECESSOR = """
 import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
@@ -1529,10 +1514,10 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     pass
-'''
+"""
 
 
-SYNTHETIC_A5_ADDER = '''
+SYNTHETIC_A5_ADDER = """
 import sqlalchemy as sa
 from alembic import op
 
@@ -1549,10 +1534,10 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     pass
-'''
+"""
 
 
-SYNTHETIC_A5 = '''
+SYNTHETIC_A5 = """
 import sqlalchemy as sa
 from alembic import op
 
@@ -1569,7 +1554,7 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     pass
-'''
+"""
 
 
 def _parse(src: str) -> ast.Module:
@@ -1582,9 +1567,9 @@ def test_a1_visitor_fires_on_synthetic(tmp_path) -> None:
     p.write_text(SYNTHETIC_A1, encoding="utf-8")
     violations = _a1_audit_one(p)
     assert violations, "A1 visitor should fire on SYNTHETIC_A1 — none returned"
-    assert any("create_type=False" in v for v in violations), (
-        f"A1 message should mention 'create_type=False'; got: {violations}"
-    )
+    assert any(
+        "create_type=False" in v for v in violations
+    ), f"A1 message should mention 'create_type=False'; got: {violations}"
 
 
 def test_a2_visitor_fires_on_synthetic(tmp_path) -> None:
@@ -1597,9 +1582,9 @@ def test_a2_visitor_fires_on_synthetic(tmp_path) -> None:
     scope = {rev}
     violations = _a2_audit_one(p, rev, scope, per_migration)
     assert violations, "A2 visitor should fire on SYNTHETIC_A2 — none returned"
-    assert any("GIN" in v or "gin" in v for v in violations), (
-        f"A2 message should mention 'GIN'; got: {violations}"
-    )
+    assert any(
+        "GIN" in v or "gin" in v for v in violations
+    ), f"A2 message should mention 'GIN'; got: {violations}"
 
 
 def test_a2_visitor_skips_unknown_type_column(tmp_path) -> None:
@@ -1626,8 +1611,7 @@ def test_a2_visitor_skips_unknown_type_column(tmp_path) -> None:
     scope = {rev}
     violations = _a2_audit_one(p, rev, scope, per_migration)
     assert violations == [], (
-        "A2 visitor must skip unknown-type columns to avoid false "
-        f"positives; got: {violations}"
+        "A2 visitor must skip unknown-type columns to avoid false " f"positives; got: {violations}"
     )
 
 
@@ -1658,12 +1642,12 @@ def test_a3_visitor_fires_on_synthetic_with_predecessor(tmp_path) -> None:
         "A3 visitor should fire on SYNTHETIC_A3 with predecessor — "
         "this is the Change-2 same-statement regression test"
     )
-    assert any("some_enum" in v for v in violations), (
-        f"A3 message should mention enum name 'some_enum'; got: {violations}"
-    )
-    assert any("ALTER TYPE" in v for v in violations), (
-        f"A3 message should reference 'ALTER TYPE' fix; got: {violations}"
-    )
+    assert any(
+        "some_enum" in v for v in violations
+    ), f"A3 message should mention enum name 'some_enum'; got: {violations}"
+    assert any(
+        "ALTER TYPE" in v for v in violations
+    ), f"A3 message should reference 'ALTER TYPE' fix; got: {violations}"
 
 
 def test_a5_visitor_fires_on_synthetic_with_predecessor(tmp_path) -> None:
@@ -1690,20 +1674,16 @@ def test_a5_visitor_fires_on_synthetic_with_predecessor(tmp_path) -> None:
         child_rev: _a5_collect_added_values(_parse(SYNTHETIC_A5)),
     }
     scope = {pred_rev, child_rev}
-    violations = _a5_audit_one(
-        child_path, child_rev, scope, per_migration, added_values_by_rev
-    )
+    violations = _a5_audit_one(child_path, child_rev, scope, per_migration, added_values_by_rev)
     assert violations, (
-        "A5 visitor should fire on SYNTHETIC_A5 — same-revision "
-        "ALTER TYPE ADD VALUE + UPDATE"
+        "A5 visitor should fire on SYNTHETIC_A5 — same-revision " "ALTER TYPE ADD VALUE + UPDATE"
     )
-    assert any("NEWVAL" in v for v in violations), (
-        f"A5 message should reference the added value 'NEWVAL'; got: {violations}"
-    )
-    assert any("UnsafeNewEnumValueUsageError" in v or "outer transaction" in v
-               for v in violations), (
-        f"A5 message should reference the outer-tx mechanism; got: {violations}"
-    )
+    assert any(
+        "NEWVAL" in v for v in violations
+    ), f"A5 message should reference the added value 'NEWVAL'; got: {violations}"
+    assert any(
+        "UnsafeNewEnumValueUsageError" in v or "outer transaction" in v for v in violations
+    ), f"A5 message should reference the outer-tx mechanism; got: {violations}"
 
 
 def test_a5_visitor_fires_cross_revision(tmp_path) -> None:
@@ -1758,9 +1738,7 @@ def test_a5_visitor_fires_cross_revision(tmp_path) -> None:
 
     # Predecessor closure of child rev: {pred, adder}; scope = pred-closure ∪ {child}.
     scope = {pred_rev, adder_rev, child_rev}
-    violations = _a5_audit_one(
-        child_path, child_rev, scope, per_migration, added_values_by_rev
-    )
+    violations = _a5_audit_one(child_path, child_rev, scope, per_migration, added_values_by_rev)
     assert violations, (
         "A5 visitor should fire when an ALTER TYPE adder is in the "
         "predecessor closure and the user UPDATE references the added "

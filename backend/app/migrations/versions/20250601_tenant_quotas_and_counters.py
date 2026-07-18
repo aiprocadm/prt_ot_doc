@@ -24,7 +24,9 @@ depends_on: Union[str, Sequence[str], None] = None
 # Without this, `op.add_column("tenant", sa.Column("kind", sa.Enum(...)))` fails
 # with UndefinedObjectError: type "tenantkind" does not exist on alembic-postgres-upgrade.
 tenant_kind = postgresql.ENUM(
-    "customer", "branch", "contractor",
+    "customer",
+    "branch",
+    "contractor",
     name="tenantkind",
     create_type=False,
 )
@@ -55,7 +57,12 @@ def upgrade() -> None:
         "tenant_quotas",
         sa.Column("tenant_id", sa.String(length=36), nullable=False),
         sa.Column("max_parallel_jobs", sa.Integer(), nullable=False, server_default=sa.text("4")),
-        sa.Column("max_doc_generations_per_month", sa.Integer(), nullable=False, server_default=sa.text("5000")),
+        sa.Column(
+            "max_doc_generations_per_month",
+            sa.Integer(),
+            nullable=False,
+            server_default=sa.text("5000"),
+        ),
         sa.Column("max_storage_mb", sa.Integer(), nullable=False, server_default=sa.text("10240")),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),

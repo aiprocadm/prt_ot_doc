@@ -39,7 +39,6 @@ from app.models.models import (
 )
 from tests.utils.factories import TestDataFactory
 
-
 # -----------------------------------------------------------------------------
 # Helpers
 # -----------------------------------------------------------------------------
@@ -120,9 +119,7 @@ async def test_incident_logs_hit_returns_304(
         incident_id = str(incident.id)
 
     headers = await make_auth_headers(RoleEnum.ADMIN)
-    first = await async_client.get(
-        f"/api/v1/incidents/{incident_id}/logs", headers=headers
-    )
+    first = await async_client.get(f"/api/v1/incidents/{incident_id}/logs", headers=headers)
     assert first.status_code == status.HTTP_200_OK
     etag = first.headers["ETag"]
     assert etag
@@ -250,9 +247,7 @@ async def test_incident_logs_etag_changes_after_new_log(
         incident_id = str(incident.id)
 
     headers = await make_auth_headers(RoleEnum.ADMIN)
-    before = await async_client.get(
-        f"/api/v1/incidents/{incident_id}/logs", headers=headers
-    )
+    before = await async_client.get(f"/api/v1/incidents/{incident_id}/logs", headers=headers)
     assert before.status_code == status.HTTP_200_OK
     etag_before = before.headers["ETag"]
 
@@ -270,9 +265,7 @@ async def test_incident_logs_etag_changes_after_new_log(
     )
     assert new_log.status_code == status.HTTP_201_CREATED
 
-    after = await async_client.get(
-        f"/api/v1/incidents/{incident_id}/logs", headers=headers
-    )
+    after = await async_client.get(f"/api/v1/incidents/{incident_id}/logs", headers=headers)
     assert after.status_code == status.HTTP_200_OK
     assert after.headers["ETag"] != etag_before
 
@@ -300,9 +293,7 @@ async def test_incident_logs_empty_list_stable_etag(
         incident_id = str(incident.id)
 
     headers = await make_auth_headers(RoleEnum.ADMIN)
-    first = await async_client.get(
-        f"/api/v1/incidents/{incident_id}/logs", headers=headers
-    )
+    first = await async_client.get(f"/api/v1/incidents/{incident_id}/logs", headers=headers)
     assert first.status_code == status.HTTP_200_OK
     assert first.json() == []
     etag = first.headers["ETag"]
@@ -375,12 +366,8 @@ async def test_incident_logs_etag_isolated_cross_tenant(
         RoleEnum.ADMIN, tenant="logs-y", email="admin-y@example.com"
     )
 
-    resp_x = await async_client.get(
-        f"/api/v1/incidents/{x_id}/logs", headers=headers_x
-    )
-    resp_y = await async_client.get(
-        f"/api/v1/incidents/{y_id}/logs", headers=headers_y
-    )
+    resp_x = await async_client.get(f"/api/v1/incidents/{x_id}/logs", headers=headers_x)
+    resp_y = await async_client.get(f"/api/v1/incidents/{y_id}/logs", headers=headers_y)
     assert resp_x.status_code == status.HTTP_200_OK
     assert resp_y.status_code == status.HTTP_200_OK
     assert resp_x.headers["ETag"] != resp_y.headers["ETag"]

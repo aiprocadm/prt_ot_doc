@@ -7,7 +7,7 @@ import pytest
 from sqlalchemy import Column, String, Table
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from app.db.session import TenantBase
+from app.db.session import SharedBase, TenantBase
 from app.models.models import BriefingEntry, BriefingJournal, BriefingTemplate
 from app.modules.briefings.services import BriefingEntryService
 
@@ -17,7 +17,14 @@ async def db_session():
     engine = create_async_engine("sqlite+aiosqlite:///:memory:")
     if "tenant" not in TenantBase.metadata.tables:
         Table("tenant", TenantBase.metadata, Column("id", String(36), primary_key=True))
+    # SharedBase tables (webhook_subscription etc.) are needed because
+    # BriefingEntryService.sign now calls PepSigningService → OutboxService
+    # which queries webhook_subscription.
+    SharedBase.metadata.schema = None
+    for table in SharedBase.metadata.tables.values():
+        table.schema = None
     async with engine.begin() as conn:
+        await conn.run_sync(SharedBase.metadata.create_all)
         await conn.run_sync(TenantBase.metadata.create_all)
 
     session_factory = async_sessionmaker(engine, expire_on_commit=False)

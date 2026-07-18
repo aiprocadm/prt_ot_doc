@@ -28,8 +28,8 @@ const ClientPortalPackagesPage = () => {
           <CardHeader><CardTitle>Список пакетов</CardTitle></CardHeader>
           <CardContent className="space-y-3">
             {!loading && !error ? items.map((item) => (
-              <button key={item.id} className="w-full rounded-lg border p-3 text-left hover:bg-muted" onClick={() => void selectRun(item.id)}>
-                <div className="flex items-center justify-between gap-2"><div className="font-medium">{item.id}</div><StatusBadge status={item.status} /></div>
+              <button key={item.id} className="w-full rounded-lg border p-3 text-left hover:bg-muted" onClick={() => void selectRun(item.package_id ?? item.id)}>
+                <div className="flex items-center justify-between gap-2"><div className="font-medium">{item.package_id ?? item.id}</div><StatusBadge status={item.status} /></div>
                 <div className="mt-1 text-sm text-muted-foreground">Запуск: {item.started_at ? formatDate(item.started_at) : "—"}</div>
               </button>
             )) : null}

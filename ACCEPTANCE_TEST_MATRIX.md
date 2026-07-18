@@ -1,6 +1,6 @@
 # ACCEPTANCE_TEST_MATRIX
 
-- **Updated on (UTC):** 2026-05-21
+- **Updated on (UTC):** 2026-05-29
 - **Owner:** QA + Platform + Backend + Frontend
 - **Canonical status vocabulary:** `done` / `partial` / `missing` / `blocked`
 - **Canonical blocker/status source:** `docs/stabilization/RELEASE_BLOCKERS_STATUS.md`
@@ -10,7 +10,7 @@
 
 | Criterion ID | Acceptance criterion | Unified status | Concrete evidence (test/workflow/artifact/doc) |
 |---|---|---|---|
-| RC-004 | Final acceptance bundle fully passing (`overall_status=pass`) | `partial` | Command: `make final-acceptance`; workflows: `.github/workflows/ci.yml`, `.github/workflows/e2e-smoke.yml`; artifact: `artifacts/final_acceptance/summary.json` |
+| RC-004 | Final acceptance bundle fully passing (`overall_status=pass`) | `done` | Closed via local-evidence policy 2026-05-29 (see `docs/stabilization/RELEASE_BLOCKERS_STATUS.md` RB-003). Command: `make final-acceptance`; workflows: `.github/workflows/ci.yml`, `.github/workflows/e2e-smoke.yml`; artifact: `artifacts/final_acceptance/summary.json` (regen scheduled on CI re-enablement) |
 | RC-007 | Replace dry-run/reporting E2E acceptance path | `done` | Tests: `tests/test_replace_api.py`, `tests/test_replace_engine_advanced.py`, `tests/test_pipeline_profile_graph_and_api.py`; workflow: `.github/workflows/ci.yml` (`backend-tests`, `openapi-contract`); artifacts: `backend-test-report` (`artifacts/backend-junit.xml`, `artifacts/coverage.xml`, `artifacts/coverage.json`). |
 | RC-008 | PDF conversion reliability acceptance path | `done` | Tests: `tests/test_documents_generate.py`, `tests/pdf/test_api_idempotency.py`, `tests/test_services_pdf_unit.py`; workflow: `.github/workflows/ci.yml` (`backend-tests`); artifacts: `backend-test-report` (`artifacts/backend-junit.xml`, `artifacts/coverage.xml`, `artifacts/coverage.json`). |
 | RC-009 | Approval/sign/archive handoff acceptance path | `done` | Tests: `backend/tests/test_approval_signing_v1_error_contract.py`, `backend/tests/test_approval_orchestration_error_contract.py`, `backend/tests/test_next57_approval_sign_edo_services.py`; workflows: `.github/workflows/ci.yml`, `.github/workflows/e2e-smoke.yml`; artifacts: `backend-test-report`, optional `e2e-backend-log-*` on failure. |

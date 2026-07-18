@@ -1,4 +1,5 @@
 """Helpers for idempotent HTTP request handling."""
+
 from __future__ import annotations
 
 import hashlib
@@ -95,7 +96,14 @@ async def idempotency_dependency(request: Request) -> Response | None:
     if record is None:
         return None
     if record.request_hash and record.request_hash != fingerprint:
-        raise HTTPException(status.HTTP_409_CONFLICT, {"code":"IDEMPOTENCY_CONFLICT","type":"idempotency","message":"Idempotency key conflict"})
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            {
+                "code": "IDEMPOTENCY_CONFLICT",
+                "type": "idempotency",
+                "message": "Idempotency key conflict",
+            },
+        )
     payload = None
     status_code = record.status_code or status.HTTP_200_OK
     if record.response_body:
@@ -113,7 +121,14 @@ async def idempotency_dependency(request: Request) -> Response | None:
 
 
 async def store_idempotent_response(request: Request, response: Response) -> None:
-    """Placeholder hook for updating stored idempotent responses after processing."""
+    """Persist the finished JSON response against its idempotency key (best-effort).
+
+    Invoked by the idempotency middleware after ``call_next`` (see
+    ``app/api/app.py``). Updates the matching ``IdempotencyKey`` row with the
+    response status/body so a later replay returns the same result. Runs in the
+    post-response phase, so any persistence error is swallowed to a debug log
+    rather than altering the already-sent response.
+    """
 
     state = getattr(request, "state", None)
     idem = getattr(state, "idempotency", None) if state is not None else None
@@ -145,7 +160,14 @@ async def store_idempotent_response(request: Request, response: Response) -> Non
             if record is None:
                 return None
             if record.request_hash and record.request_hash != fingerprint:
-                raise HTTPException(status.HTTP_409_CONFLICT, {"code":"IDEMPOTENCY_CONFLICT","type":"idempotency","message":"Idempotency key conflict"})
+                raise HTTPException(
+                    status.HTTP_409_CONFLICT,
+                    {
+                        "code": "IDEMPOTENCY_CONFLICT",
+                        "type": "idempotency",
+                        "message": "Idempotency key conflict",
+                    },
+                )
 
             record.request_hash = fingerprint
             record.status = IdempotencyStatus.SUCCEEDED
@@ -157,10 +179,19 @@ async def store_idempotent_response(request: Request, response: Response) -> Non
                 except Exception:
                     body = None
             if body and len(body.encode("utf-8")) > MAX_STORED_BODY_BYTES:
-                raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, {"code":"RESOURCES_EXCEEDED","type":"resource","message":"Idempotent response body too large"})
+                raise HTTPException(
+                    status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                    {
+                        "code": "RESOURCES_EXCEEDED",
+                        "type": "resource",
+                        "message": "Idempotent response body too large",
+                    },
+                )
             if body:
                 record.response_body = body
-            record.response_headers = {"Content-Type": getattr(response, "media_type", "application/json")}
+            record.response_headers = {
+                "Content-Type": getattr(response, "media_type", "application/json")
+            }
             await session.commit()
     except Exception:  # pragma: no cover - best-effort persistence
         logger.debug("app.idempotency.store_failed", exc_info=True)

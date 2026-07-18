@@ -45,13 +45,25 @@ class ClientPortalService:
         self.session = session
         self.tenant_id = tenant_id
 
-    async def list_items(self, *, client_company_id: str | None = None, item_type: str | None = None) -> list[ClientPortalReadModel]:
-        stmt = select(ClientPortalReadModel).where(ClientPortalReadModel.tenant_id == self.tenant_id)
+    async def list_items(
+        self, *, client_company_id: str | None = None, item_type: str | None = None
+    ) -> list[ClientPortalReadModel]:
+        stmt = select(ClientPortalReadModel).where(
+            ClientPortalReadModel.tenant_id == self.tenant_id
+        )
         if client_company_id:
             stmt = stmt.where(ClientPortalReadModel.client_company_id == client_company_id)
         if item_type:
             stmt = stmt.where(ClientPortalReadModel.item_type == item_type)
-        rows = (await self.session.execute(stmt.order_by(ClientPortalReadModel.last_event_at.desc().nullslast()))).scalars().all()
+        rows = (
+            (
+                await self.session.execute(
+                    stmt.order_by(ClientPortalReadModel.last_event_at.desc().nullslast())
+                )
+            )
+            .scalars()
+            .all()
+        )
         for row in rows:
             row.safe_payload = SafePortalPayloadService.sanitize(row.safe_payload)
         return rows

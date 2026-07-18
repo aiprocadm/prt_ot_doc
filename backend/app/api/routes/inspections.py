@@ -16,7 +16,6 @@ from app.api.helpers.etag import (
 from app.core.errors import api_problem_detail
 from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
-from app.domains.incidents import add_inspection_result, register_inspection, update_inspection
 from app.models.models import (
     Inspection,
     InspectionResult,
@@ -25,6 +24,7 @@ from app.models.models import (
     Tenant,
     User,
 )
+from app.modules.incidents import add_inspection_result, register_inspection, update_inspection
 from app.schemas.incidents import (
     InspectionCreate,
     InspectionPage,
@@ -52,18 +52,26 @@ def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> str | No
 
 ManagerAccess = Annotated[
     AccessContext,
-    Depends(abac(_tenant_resource_id, required_roles=_INSPECTION_READ_ROLES, action="read inspections")),
+    Depends(
+        abac(_tenant_resource_id, required_roles=_INSPECTION_READ_ROLES, action="read inspections")
+    ),
 ]
 EditorAccess = Annotated[
     AccessContext,
-    Depends(abac(_tenant_resource_id, required_roles=_INSPECTION_WRITE_ROLES, action="manage inspections")),
+    Depends(
+        abac(
+            _tenant_resource_id, required_roles=_INSPECTION_WRITE_ROLES, action="manage inspections"
+        )
+    ),
 ]
 
 
 def _inspection_bad_request(message: str) -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,
-        detail=api_problem_detail(code="INSPECTION_VALIDATION_ERROR", message=message, error_type="inspections"),
+        detail=api_problem_detail(
+            code="INSPECTION_VALIDATION_ERROR", message=message, error_type="inspections"
+        ),
     )
 
 
@@ -97,7 +105,11 @@ async def _get_inspection(session: AsyncSession, tenant: Tenant, inspection_id: 
     stmt = (
         select(Inspection)
         .options(selectinload(Inspection.results))
-        .where(Inspection.id == inspection_id, Inspection.tenant_id == tenant.id, Inspection.deleted_at.is_(None))
+        .where(
+            Inspection.id == inspection_id,
+            Inspection.tenant_id == tenant.id,
+            Inspection.deleted_at.is_(None),
+        )
     )
     inspection = (await session.execute(stmt)).scalar_one_or_none()
     if inspection is None:
@@ -122,8 +134,10 @@ async def list_inspections(
 ) -> InspectionPage | Response:
     TenantContextValidator.ensure_tenant_context(tenant)
 
-    stmt = select(Inspection).options(selectinload(Inspection.results)).where(
-        Inspection.tenant_id == tenant.id, Inspection.deleted_at.is_(None)
+    stmt = (
+        select(Inspection)
+        .options(selectinload(Inspection.results))
+        .where(Inspection.tenant_id == tenant.id, Inspection.deleted_at.is_(None))
     )
     if company_id:
         stmt = stmt.where(Inspection.company_id == company_id)
@@ -137,7 +151,11 @@ async def list_inspections(
         stmt = stmt.where(Inspection.responsible_id == responsible_id)
 
     total_stmt = select(func.count()).select_from(stmt.subquery())
-    stmt = stmt.order_by(Inspection.scheduled_at.desc().nullslast(), Inspection.created_at.desc()).offset(offset).limit(limit)
+    stmt = (
+        stmt.order_by(Inspection.scheduled_at.desc().nullslast(), Inspection.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+    )
     items = list((await session.execute(stmt)).scalars().unique().all())
     total = await session.scalar(total_stmt)
     etag = compute_list_etag(
@@ -160,7 +178,9 @@ async def list_inspections(
             status_code=status.HTTP_304_NOT_MODIFIED,
             headers=build_not_modified_headers(etag),
         )
-    return InspectionPage(items=[_serialize_inspection(item) for item in items], total=int(total or 0))
+    return InspectionPage(
+        items=[_serialize_inspection(item) for item in items], total=int(total or 0)
+    )
 
 
 @router.post("/inspections", response_model=InspectionRead, status_code=status.HTTP_201_CREATED)
@@ -366,7 +386,9 @@ async def list_inspection_results(
     inspection = await _get_inspection(session, tenant, inspection_id)
     stmt = (
         select(InspectionResult)
-        .where(InspectionResult.inspection_id == inspection.id, InspectionResult.tenant_id == tenant.id)
+        .where(
+            InspectionResult.inspection_id == inspection.id, InspectionResult.tenant_id == tenant.id
+        )
         .order_by(InspectionResult.created_at.asc())
     )
     records = list((await session.execute(stmt)).scalars().all())

@@ -10,11 +10,13 @@ import {
   FileArchive,
   FileText,
   Flame,
+  Gauge,
   GraduationCap,
   HeartPulse,
   History,
   Link2,
   LayoutDashboard,
+  Network,
   Package,
   Search,
   Settings,
@@ -22,7 +24,10 @@ import {
   ShieldCheck,
   Truck,
   Users,
-  Wrench
+  UsersRound,
+  Wallet,
+  Wrench,
+  Zap
 } from "lucide-react";
 
 import { PERMISSIONS, type Permission } from "@/permissions/permissions";
@@ -45,6 +50,7 @@ export const MAIN_NAV_GROUPS: NavGroup[] = [
     items: [
       { label: "Главная", to: "/dashboard", icon: LayoutDashboard, permission: PERMISSIONS.DASHBOARD_VIEW },
       { label: "Компании", to: "/companies", icon: Building2, permission: PERMISSIONS.COMPANY_VIEW },
+      { label: "Филиалы", to: "/branches", icon: Network, permission: PERMISSIONS.BRANCH_VIEW },
       { label: "Сотрудники", to: "/persons", icon: Users, permission: PERMISSIONS.PERSON_VIEW },
       { label: "Документы", to: "/documents", icon: FileText, permission: PERMISSIONS.DOCUMENT_VIEW },
       { label: "Шаблоны", to: "/templates", icon: FileArchive, permission: PERMISSIONS.TEMPLATE_VIEW },
@@ -54,6 +60,7 @@ export const MAIN_NAV_GROUPS: NavGroup[] = [
       { label: "Пайплайны и задания", to: "/pipelines/runs", icon: Archive, permission: PERMISSIONS.DOCUMENT_VIEW },
       { label: "Архив", to: "/archive", icon: FileArchive, permission: PERMISSIONS.FILE_VIEW },
       { label: "Поиск", to: "/search", icon: Search, permission: PERMISSIONS.FILE_VIEW },
+      { label: "Командный центр", to: "/command-center", icon: ShieldAlert, permission: PERMISSIONS.DASHBOARD_VIEW },
       { label: "Центр внимания", to: "/workspace/attention", icon: AlertTriangle, permission: PERMISSIONS.DASHBOARD_VIEW },
       { label: "Качество данных", to: "/workspace/data-quality", icon: ClipboardCheck, permission: PERMISSIONS.DATA_QUALITY_VIEW },
       { label: "Экспорты", to: "/exports", icon: Archive, permission: PERMISSIONS.REPORTS_VIEW },
@@ -81,9 +88,13 @@ export const MAIN_NAV_GROUPS: NavGroup[] = [
       { label: "Обучение", to: "/training", icon: GraduationCap, permission: PERMISSIONS.TRAINING_VIEW },
       { label: "Инструктажи", to: "/briefings", icon: GraduationCap, permission: PERMISSIONS.TRAINING_VIEW },
       { label: "Медосмотры/допуски", to: "/medical", icon: HeartPulse, permission: PERMISSIONS.MEDICAL_VIEW },
+      { label: "Личные допуски", to: "/permits", icon: ShieldCheck, permission: PERMISSIONS.PERMIT_VIEW },
+      { label: "Наряды-допуски", to: "/work-permits", icon: ClipboardCheck, permission: PERMISSIONS.WORK_PERMIT_VIEW },
       { label: "Инциденты/НС", to: "/incidents", icon: AlertTriangle, permission: PERMISSIONS.INCIDENT_VIEW },
       { label: "Проверки/предписания", to: "/inspections", icon: ClipboardCheck, permission: PERMISSIONS.INSPECTION_VIEW },
-      { label: "Подготовка к проверке", to: "/audit-prep", icon: Archive, permission: PERMISSIONS.AUDIT_PREP_VIEW }
+      { label: "Подготовка к проверке", to: "/audit-prep", icon: Archive, permission: PERMISSIONS.AUDIT_PREP_VIEW },
+      { label: "Комитеты по ОТ", to: "/committees", icon: UsersRound, permission: PERMISSIONS.COMMITTEE_VIEW },
+      { label: "СОУТ", to: "/sout", icon: Gauge, permission: PERMISSIONS.SOUT_VIEW }
     ]
   },
   {
@@ -100,8 +111,11 @@ export const MAIN_NAV_GROUPS: NavGroup[] = [
       { label: "CRM / Финансы", to: "/crm-finance", icon: Briefcase, permission: PERMISSIONS.CRM_FINANCE_VIEW },
       { label: "НПА / Нормативная база", to: "/npa", icon: BookOpen, permission: PERMISSIONS.NPA_VIEW },
       { label: "Отчёты", to: "/reports", icon: ShieldCheck, permission: PERMISSIONS.REPORTS_VIEW },
+      { label: "Конструктор отчётов", to: "/reports/builder", icon: ShieldCheck, permission: PERMISSIONS.REPORTS_VIEW },
       { label: "Тренды", to: "/analytics/trends", icon: Activity, permission: PERMISSIONS.REPORTS_VIEW },
-      { label: "Кабинет клиента", to: "/client-portal/dashboard", icon: Users, permission: PERMISSIONS.CLIENT_PORTAL_VIEW }
+      { label: "Управленческая аналитика", to: "/analytics", icon: Activity, permission: PERMISSIONS.ANALYTICS_VIEW },
+      { label: "Кабинет клиента", to: "/client-portal/dashboard", icon: Users, permission: PERMISSIONS.CLIENT_PORTAL_VIEW },
+      { label: "Бюджет безопасности", to: "/budget", icon: Wallet, permission: PERMISSIONS.BUDGET_VIEW }
     ]
   },
   {
@@ -118,6 +132,8 @@ export const MAIN_NAV_GROUPS: NavGroup[] = [
       { label: "Тенанты и роли", to: "/admin", icon: Wrench, permission: PERMISSIONS.ADMIN_MANAGE_ROLES },
       { label: "Биллинг", to: "/admin/billing", icon: Briefcase, permission: PERMISSIONS.ADMIN_MANAGE_ROLES },
       { label: "Исходящая очередь", to: "/admin/outbox", icon: Archive, permission: PERMISSIONS.ADMIN_MANAGE_ROLES },
+      { label: "Правила автоматизации", to: "/rules", icon: Zap, permission: PERMISSIONS.RULES_VIEW },
+      { label: "Состояние системы", to: "/admin/health", icon: Activity, permission: PERMISSIONS.ADMIN_MANAGE_ROLES },
       { label: "Журнал аудита", to: "/audit", icon: History, permission: PERMISSIONS.AUDIT_VIEW },
       { label: "Настройки", to: "/settings", icon: Settings, permission: PERMISSIONS.SETTINGS_VIEW },
       { label: "Синхронизация (offline)", to: "/help/sync-conflicts", icon: History, permission: PERMISSIONS.SETTINGS_VIEW }

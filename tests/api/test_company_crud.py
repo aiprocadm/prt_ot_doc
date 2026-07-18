@@ -17,15 +17,11 @@ async def test_company_crud_lifecycle(async_client, make_auth_headers):
         "phone_numbers": ["+7 495 000-00-01"],
     }
 
-    create_response = await async_client.post(
-        "/api/v1/companies", json=payload, headers=headers
-    )
+    create_response = await async_client.post("/api/v1/companies", json=payload, headers=headers)
     assert create_response.status_code == status.HTTP_201_CREATED
     company = create_response.json()
 
-    read_response = await async_client.get(
-        f"/api/v1/companies/{company['id']}", headers=headers
-    )
+    read_response = await async_client.get(f"/api/v1/companies/{company['id']}", headers=headers)
     assert read_response.status_code == status.HTTP_200_OK
     assert read_response.json()["name"] == payload["name"]
 
@@ -62,9 +58,7 @@ async def test_company_isolation_between_tenants(
         await session.commit()
 
     headers = await make_auth_headers(RoleEnum.ADMIN)
-    response = await async_client.get(
-        f"/api/v1/companies/{company.id}", headers=headers
-    )
+    response = await async_client.get(f"/api/v1/companies/{company.id}", headers=headers)
 
     assert response.status_code == status.HTTP_404_NOT_FOUND
 

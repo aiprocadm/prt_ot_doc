@@ -59,36 +59,57 @@ def export_audit_job(*, export_id: str, tenant_id: str) -> dict[str, str]:
                 if job.format == "csv":
                     buff = io.StringIO()
                     writer = csv.writer(buff)
-                    writer.writerow(["ts", "actor", "action", "entity_type", "entity_id", "correlation_id", "diff_json"])
+                    writer.writerow(
+                        [
+                            "ts",
+                            "actor",
+                            "action",
+                            "entity_type",
+                            "entity_id",
+                            "correlation_id",
+                            "diff_json",
+                        ]
+                    )
                     for row in rows:
-                        writer.writerow([
-                            row.when.isoformat(),
-                            row.user_id or "",
-                            row.action,
-                            row.object_type,
-                            row.object_id,
-                            row.correlation_id or row.request_id or "",
-                            json.dumps(row.changed_fields or {}, ensure_ascii=False),
-                        ])
+                        writer.writerow(
+                            [
+                                row.when.isoformat(),
+                                row.user_id or "",
+                                row.action,
+                                row.object_type,
+                                row.object_id,
+                                row.correlation_id or row.request_id or "",
+                                json.dumps(row.changed_fields or {}, ensure_ascii=False),
+                            ]
+                        )
                     body = buff.getvalue().encode("utf-8")
                 else:
                     lines = []
                     for row in rows:
-                        lines.append(json.dumps({
-                            "ts": row.when.isoformat(),
-                            "actor_id": row.user_id,
-                            "action": row.action,
-                            "entity_type": row.object_type,
-                            "entity_id": row.object_id,
-                            "correlation_id": row.correlation_id or row.request_id,
-                            "diff": row.changed_fields or {},
-                            "meta": row.details or {},
-                        }, ensure_ascii=False))
+                        lines.append(
+                            json.dumps(
+                                {
+                                    "ts": row.when.isoformat(),
+                                    "actor_id": row.user_id,
+                                    "action": row.action,
+                                    "entity_type": row.object_type,
+                                    "entity_id": row.object_id,
+                                    "correlation_id": row.correlation_id or row.request_id,
+                                    "diff": row.changed_fields or {},
+                                    "meta": row.details or {},
+                                },
+                                ensure_ascii=False,
+                            )
+                        )
                     body = ("\n".join(lines) + ("\n" if lines else "")).encode("utf-8")
 
                 extension = "csv" if job.format == "csv" else "jsonl"
                 key = f"{tenant_id}/exports/audit/{job.id}.{extension}"
-                FileStorageService.default().put(key, body, content_type="text/csv" if extension == "csv" else "application/x-ndjson")
+                FileStorageService.default().put(
+                    key,
+                    body,
+                    content_type="text/csv" if extension == "csv" else "application/x-ndjson",
+                )
 
                 job.storage_key = key
                 job.sha256 = hashlib.sha256(body).hexdigest()

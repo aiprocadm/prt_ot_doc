@@ -94,9 +94,7 @@ class DocxService:
         return out.getvalue()
 
     @staticmethod
-    def _select_section_text(
-        value: str | Sequence[str | None] | None, index: int
-    ) -> str | None:
+    def _select_section_text(value: str | Sequence[str | None] | None, index: int) -> str | None:
         if value is None:
             return None
         if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):

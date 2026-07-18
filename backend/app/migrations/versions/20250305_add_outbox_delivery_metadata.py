@@ -5,6 +5,7 @@ Revises: 20250218_ot_hazards_workplaces, 8d2c1a6c5e24
 Create Date: 2025-03-05 00:00:00.000000
 
 """
+
 from __future__ import annotations
 
 import sqlalchemy as sa

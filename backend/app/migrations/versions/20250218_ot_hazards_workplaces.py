@@ -5,6 +5,7 @@ Revises: 4a45e0c64b41
 Create Date: 2025-02-18 00:00:00.000000
 
 """
+
 from __future__ import annotations
 
 import sqlalchemy as sa
@@ -65,25 +66,17 @@ def upgrade() -> None:
 
     with op.batch_alter_table("position", schema=None) as batch:
         batch.add_column(sa.Column("safety_category", sa.String(length=64), nullable=True))
+        batch.add_column(sa.Column("working_conditions_class", sa.String(length=32), nullable=True))
         batch.add_column(
-            sa.Column("working_conditions_class", sa.String(length=32), nullable=True)
-        )
-        batch.add_column(
-            sa.Column(
-                "hazardous_factors", json_type, nullable=False, server_default=json_default
-            )
+            sa.Column("hazardous_factors", json_type, nullable=False, server_default=json_default)
         )
         batch.alter_column("hazardous_factors", server_default=None)
 
     with op.batch_alter_table("person", schema=None) as batch:
         batch.add_column(sa.Column("workplace_id", sa.String(length=36), nullable=True))
+        batch.add_column(sa.Column("working_conditions_class", sa.String(length=32), nullable=True))
         batch.add_column(
-            sa.Column("working_conditions_class", sa.String(length=32), nullable=True)
-        )
-        batch.add_column(
-            sa.Column(
-                "hazardous_factors", json_type, nullable=False, server_default=json_default
-            )
+            sa.Column("hazardous_factors", json_type, nullable=False, server_default=json_default)
         )
         batch.alter_column("hazardous_factors", server_default=None)
 
@@ -175,9 +168,7 @@ def upgrade() -> None:
     op.create_index(
         "ix_position_hazard_position_id", "position_hazard", ["position_id"], unique=False
     )
-    op.create_index(
-        "ix_position_hazard_hazard_id", "position_hazard", ["hazard_id"], unique=False
-    )
+    op.create_index("ix_position_hazard_hazard_id", "position_hazard", ["hazard_id"], unique=False)
 
     with op.batch_alter_table("risk_hazards", schema=None) as batch:
         batch.add_column(sa.Column("document_file_id", sa.String(length=36), nullable=True))

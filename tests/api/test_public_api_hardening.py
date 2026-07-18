@@ -21,7 +21,6 @@ from httpx import AsyncClient
 
 from app.models.models import RoleEnum
 
-
 # -----------------------------------------------------------------------------
 # Helpers
 # -----------------------------------------------------------------------------
@@ -52,12 +51,18 @@ async def _seed_tenant_data(sessionmaker, data_factory) -> None:
         tenant = await data_factory.ensure_tenant(session=session)
         company = await data_factory.create_company(session=session, tenant=tenant)
         await data_factory.create_person(
-            session=session, tenant=tenant, company=company,
-            first_name="Ivan", last_name="Petrov",
+            session=session,
+            tenant=tenant,
+            company=company,
+            first_name="Ivan",
+            last_name="Petrov",
         )
         await data_factory.create_person(
-            session=session, tenant=tenant, company=company,
-            first_name="Anna", last_name="Sidorova",
+            session=session,
+            tenant=tenant,
+            company=company,
+            first_name="Anna",
+            last_name="Sidorova",
         )
 
 
@@ -86,8 +91,11 @@ async def test_issue_machine_key_stores_custom_rate_limit(
 ) -> None:
     headers = await make_auth_headers(RoleEnum.ADMIN)
     body = await _issue_key(
-        async_client, headers, name="bot-rl",
-        scopes=["api:read"], rate_limit_per_minute=120,
+        async_client,
+        headers,
+        name="bot-rl",
+        scopes=["api:read"],
+        rate_limit_per_minute=120,
     )
     assert body["rate_limit_per_minute"] == 120
 
@@ -235,7 +243,9 @@ async def test_public_auth_machine_returns_scopes_and_tenant(
 ) -> None:
     headers = await make_auth_headers(RoleEnum.ADMIN)
     issued = await _issue_key(
-        async_client, headers, name="auth-info",
+        async_client,
+        headers,
+        name="auth-info",
         scopes=["api:read", "employees:read"],
     )
     response = await async_client.get(
@@ -410,8 +420,11 @@ async def test_public_employees_returns_only_keys_tenant_data(
         other = await data_factory.ensure_tenant(slug="public-api-other", session=session)
         company_other = await data_factory.create_company(session=session, tenant=other)
         await data_factory.create_person(
-            session=session, tenant=other, company=company_other,
-            first_name="Ghost", last_name="OfTenantB",
+            session=session,
+            tenant=other,
+            company=company_other,
+            first_name="Ghost",
+            last_name="OfTenantB",
         )
 
     headers = await make_auth_headers(RoleEnum.ADMIN)
@@ -436,9 +449,7 @@ async def test_public_webhook_subscription_create_requires_integrations_write(
     async_client: AsyncClient, make_auth_headers
 ) -> None:
     headers = await make_auth_headers(RoleEnum.ADMIN)
-    read_only = await _issue_key(
-        async_client, headers, name="ro", scopes=["integrations:read"]
-    )
+    read_only = await _issue_key(async_client, headers, name="ro", scopes=["integrations:read"])
     response = await async_client.post(
         "/api/v1/public/integrations/webhooks/subscriptions",
         headers={"X-Tenant": "test", "X-API-Key": read_only["token"]},
@@ -452,9 +463,7 @@ async def test_public_webhook_subscription_create_succeeds_with_write_scope(
     async_client: AsyncClient, make_auth_headers
 ) -> None:
     headers = await make_auth_headers(RoleEnum.ADMIN)
-    rw = await _issue_key(
-        async_client, headers, name="rw", scopes=["integrations:write"]
-    )
+    rw = await _issue_key(async_client, headers, name="rw", scopes=["integrations:write"])
     response = await async_client.post(
         "/api/v1/public/integrations/webhooks/subscriptions",
         headers={"X-Tenant": "test", "X-API-Key": rw["token"]},
@@ -478,9 +487,7 @@ async def test_public_webhook_subscription_list_requires_integrations_read(
     async_client: AsyncClient, make_auth_headers
 ) -> None:
     headers = await make_auth_headers(RoleEnum.ADMIN)
-    no_int = await _issue_key(
-        async_client, headers, name="noint", scopes=["api:read"]
-    )
+    no_int = await _issue_key(async_client, headers, name="noint", scopes=["api:read"])
     response = await async_client.get(
         "/api/v1/public/integrations/webhooks",
         headers={"X-Tenant": "test", "X-API-Key": no_int["token"]},

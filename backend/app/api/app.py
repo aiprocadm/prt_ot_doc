@@ -25,11 +25,11 @@ from app.core.rate_limit import (
     limiter,
 )
 from app.db.session import aensure_shared_schema, dispose_engine
-from app.domains.files import s3
 from app.middleware.billing_guard import BillingGuardMiddleware
 from app.middleware.global_error_handler import GlobalErrorHandlerMiddleware
 from app.middleware.observability import ObservabilityMiddleware
 from app.middleware.tenant import TenantMiddleware
+from app.modules.files import s3
 from app.services.demo_bootstrap import bootstrap_demo_tenant
 from app.services.dev_bootstrap import bootstrap_admin_user
 
@@ -99,9 +99,9 @@ def _create_lifespan(settings: Settings) -> Callable[[FastAPI], AsyncIterator[No
             extra={
                 "run_mode": settings.app_run_mode,
                 "storage_backend": settings.s3_backend,
-                "storage_root": str(settings.storage_root_path)
-                if settings.s3_backend == "local"
-                else None,
+                "storage_root": (
+                    str(settings.storage_root_path) if settings.s3_backend == "local" else None
+                ),
                 "celery_eager": settings.celery_eager,
                 "redis_enabled": settings.redis_enabled,
                 "settings": settings.redacted(),
@@ -157,6 +157,7 @@ def _register_metrics_endpoint(app: FastAPI, settings: Settings) -> None:
         )
         return Response(content=payload, media_type=content_type)
 
+
 def _register_idempotency_middleware(app: FastAPI) -> None:
     logger = logging.getLogger("app.idempotency")
 
@@ -173,7 +174,6 @@ def _register_idempotency_middleware(app: FastAPI) -> None:
         except Exception:  # pragma: no cover - defensive logging
             logger.debug("app.idempotency.store_failed", exc_info=True)
         return response
-
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:

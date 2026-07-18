@@ -25,7 +25,9 @@ class ComplianceChecker:
         linked_risks = list(bindings.get("risks") or [])
         linked_checklists = list(bindings.get("checklists") or [])
         linked_tasks = list(bindings.get("tasks") or [])
-        linked_total = len(linked_templates) + len(linked_risks) + len(linked_checklists) + len(linked_tasks)
+        linked_total = (
+            len(linked_templates) + len(linked_risks) + len(linked_checklists) + len(linked_tasks)
+        )
 
         effective_from = context.get("effective_from")
         effective_to = context.get("effective_to")
@@ -35,12 +37,20 @@ class ComplianceChecker:
             start = date.fromisoformat(str(effective_from))
             if effective_to:
                 finish = date.fromisoformat(str(effective_to))
-                effective_status = "expired" if finish < today else ("scheduled" if start > today else "active")
+                effective_status = (
+                    "expired" if finish < today else ("scheduled" if start > today else "active")
+                )
             else:
                 effective_status = "scheduled" if start > today else "active"
 
-        impacted_entities = sorted({*linked_templates, *linked_risks, *linked_checklists, *linked_tasks})
-        status = "ok" if linked_total and not missing_required and effective_status in {"active", "draft"} else "partial" if linked_total or missing_required else "draft"
+        impacted_entities = sorted(
+            {*linked_templates, *linked_risks, *linked_checklists, *linked_tasks}
+        )
+        status = (
+            "ok"
+            if linked_total and not missing_required and effective_status in {"active", "draft"}
+            else "partial" if linked_total or missing_required else "draft"
+        )
         if effective_status == "expired":
             status = "stale"
 
@@ -52,7 +62,11 @@ class ComplianceChecker:
         if not linked_checklists:
             tasks_to_create.append("bind_checklists")
 
-        severity = "high" if missing_required or effective_status == "expired" else "medium" if linked_total == 0 else "low"
+        severity = (
+            "high"
+            if missing_required or effective_status == "expired"
+            else "medium" if linked_total == 0 else "low"
+        )
         return {
             "jurisdiction": self.jurisdiction,
             "missing_required": missing_required,

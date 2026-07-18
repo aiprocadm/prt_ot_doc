@@ -49,9 +49,11 @@ KNOWN_FILTERS: frozenset[str] = frozenset(
 def _iter_docx_xml(docx_bytes: bytes) -> Iterable[tuple[str, str]]:
     with zipfile.ZipFile(BytesIO(docx_bytes)) as zf:
         for name in zf.namelist():
-            if name == "word/document.xml" or (
-                name.startswith("word/header") and name.endswith(".xml")
-            ) or (name.startswith("word/footer") and name.endswith(".xml")):
+            if (
+                name == "word/document.xml"
+                or (name.startswith("word/header") and name.endswith(".xml"))
+                or (name.startswith("word/footer") and name.endswith(".xml"))
+            ):
                 yield name, zf.read(name).decode("utf-8", errors="ignore")
 
 
@@ -116,7 +118,9 @@ def parse_docx_placeholders(docx_bytes: bytes) -> dict[str, Any]:
         text = _extract_text(xml)
         for match in PLACEHOLDER_RE.finditer(text):
             expr = match.group(1).strip()
-            tokens.append({"type": "placeholder", "expr": expr, "source": source, "offset": match.start()})
+            tokens.append(
+                {"type": "placeholder", "expr": expr, "source": source, "offset": match.start()}
+            )
             if not expr:
                 empty_placeholders.append({"source": source, "offset": match.start()})
                 continue
@@ -124,13 +128,17 @@ def parse_docx_placeholders(docx_bytes: bytes) -> dict[str, Any]:
             for field in FIELD_PATH_RE.findall(expr):
                 if field not in ALLOWED_WORDS:
                     field_occurrences[field] += 1
-                    field_locations.setdefault(field, []).append({"source": source, "offset": match.start()})
+                    field_locations.setdefault(field, []).append(
+                        {"source": source, "offset": match.start()}
+                    )
             for filt in FILTER_RE.findall(expr):
                 filters_used[filt] += 1
 
         for match in TAG_RE.finditer(text):
             expr = match.group(1).strip()
-            tokens.append({"type": "block", "expr": expr, "source": source, "offset": match.start()})
+            tokens.append(
+                {"type": "block", "expr": expr, "source": source, "offset": match.start()}
+            )
             if expr.startswith("for ") and " in " in expr:
                 var, _, it = expr[4:].partition(" in ")
                 loops.append(
@@ -167,8 +175,7 @@ def parse_docx_placeholders(docx_bytes: bytes) -> dict[str, Any]:
         "conditions": conditions,
         "raw_tokens": tokens,
         "filters": [
-            {"name": name, "occurrences": count}
-            for name, count in sorted(filters_used.items())
+            {"name": name, "occurrences": count} for name, count in sorted(filters_used.items())
         ],
         "empty_placeholders": empty_placeholders,
         "duplicates": duplicates,
@@ -224,9 +231,7 @@ def lint_template(
         errors.append("Unclosed blocks: " + ", ".join(stack))
 
     for entry in parsed["empty_placeholders"]:
-        errors.append(
-            f"Empty placeholder at offset {entry['offset']} in {entry['source']}"
-        )
+        errors.append(f"Empty placeholder at offset {entry['offset']} in {entry['source']}")
 
     for dup in parsed["duplicates"]:
         if dup["count"] >= 3:

@@ -47,41 +47,67 @@ async def _scalar(session: AsyncSession, stmt) -> int:
 
 
 @router.get("/kpi")
-async def get_kpi(tenant: TenantDep, session: SessionDep, _: ReportAccess,
-    correlation_id: str = Depends(get_correlation_id)) -> dict[str, int]:
+async def get_kpi(
+    tenant: TenantDep,
+    session: SessionDep,
+    _: ReportAccess,
+    correlation_id: str = Depends(get_correlation_id),
+) -> dict[str, int]:
     TenantContextValidator.ensure_tenant_context(tenant)
 
     today = date.today()
 
-    risks_high_stmt = select(func.count()).select_from(RiskAssessmentItem).where(
-        RiskAssessmentItem.tenant_id == tenant.id,
-        RiskAssessmentItem.level.in_(["high", "crit"]),
+    risks_high_stmt = (
+        select(func.count())
+        .select_from(RiskAssessmentItem)
+        .where(
+            RiskAssessmentItem.tenant_id == tenant.id,
+            RiskAssessmentItem.level.in_(["high", "crit"]),
+        )
     )
-    trainings_overdue_stmt = select(func.count()).select_from(TrainingPlan).where(
-        TrainingPlan.tenant_id == tenant.id,
-        TrainingPlan.due_date.is_not(None),
-        TrainingPlan.due_date < today,
+    trainings_overdue_stmt = (
+        select(func.count())
+        .select_from(TrainingPlan)
+        .where(
+            TrainingPlan.tenant_id == tenant.id,
+            TrainingPlan.due_date.is_not(None),
+            TrainingPlan.due_date < today,
+        )
     )
-    month_start = datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    month_start = datetime.now(timezone.utc).replace(
+        day=1, hour=0, minute=0, second=0, microsecond=0
+    )
     if month_start.month == 12:
         next_month = month_start.replace(year=month_start.year + 1, month=1)
     else:
         next_month = month_start.replace(month=month_start.month + 1)
 
-    ppe_issues_month_stmt = select(func.count()).select_from(PPEIssue).where(
-        PPEIssue.tenant_id == tenant.id,
-        PPEIssue.issued_at >= month_start,
-        PPEIssue.issued_at < next_month,
+    ppe_issues_month_stmt = (
+        select(func.count())
+        .select_from(PPEIssue)
+        .where(
+            PPEIssue.tenant_id == tenant.id,
+            PPEIssue.issued_at >= month_start,
+            PPEIssue.issued_at < next_month,
+        )
     )
-    incidents_open_stmt = select(func.count()).select_from(Incident).where(
-        Incident.tenant_id == tenant.id,
-        Incident.status.notin_([IncidentStatus.CLOSED, IncidentStatus.CANCELLED]),
+    incidents_open_stmt = (
+        select(func.count())
+        .select_from(Incident)
+        .where(
+            Incident.tenant_id == tenant.id,
+            Incident.status.notin_([IncidentStatus.CLOSED, IncidentStatus.CANCELLED]),
+        )
     )
-    prescriptions_overdue_stmt = select(func.count()).select_from(Prescription).where(
-        Prescription.tenant_id == tenant.id,
-        Prescription.status.in_([PrescriptionStatus.OPEN, PrescriptionStatus.IN_PROGRESS]),
-        Prescription.due_at.is_not(None),
-        Prescription.due_at < today,
+    prescriptions_overdue_stmt = (
+        select(func.count())
+        .select_from(Prescription)
+        .where(
+            Prescription.tenant_id == tenant.id,
+            Prescription.status.in_([PrescriptionStatus.OPEN, PrescriptionStatus.IN_PROGRESS]),
+            Prescription.due_at.is_not(None),
+            Prescription.due_at < today,
+        )
     )
 
     return {

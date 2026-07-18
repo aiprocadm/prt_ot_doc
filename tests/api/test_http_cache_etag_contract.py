@@ -39,10 +39,9 @@ from fastapi import status
 from httpx import AsyncClient
 from sqlalchemy import select
 
-from app.models.models import Company, RoleEnum, Site, Tenant
+from app.models.models import RoleEnum, Tenant
 from app.models.obligations import Task, TaskPriority, TaskStatus
 from tests.utils.factories import TestDataFactory
-
 
 # =============================================================================
 # Companies list (/api/v1/companies)
@@ -64,9 +63,7 @@ async def test_companies_hit_returns_304_with_same_etag(
     assert first.status_code == status.HTTP_200_OK
     etag = first.headers["ETag"]
 
-    second = await async_client.get(
-        "/api/v1/companies", headers={**headers, "If-None-Match": etag}
-    )
+    second = await async_client.get("/api/v1/companies", headers={**headers, "If-None-Match": etag})
     assert second.status_code == status.HTTP_304_NOT_MODIFIED
     assert second.headers["ETag"] == etag
     assert second.content == b""
@@ -160,9 +157,7 @@ async def test_companies_etag_distinct_per_page(
     async with sessionmaker() as session:
         tenant = await data_factory.ensure_tenant(session=session)
         for i in range(5):
-            await data_factory.create_company(
-                tenant=tenant, name=f"Page Co {i}", session=session
-            )
+            await data_factory.create_company(tenant=tenant, name=f"Page Co {i}", session=session)
         await session.commit()
 
     headers = await make_auth_headers(RoleEnum.ADMIN)
@@ -181,9 +176,7 @@ async def test_companies_etag_distinct_per_limit(
     async with sessionmaker() as session:
         tenant = await data_factory.ensure_tenant(session=session)
         for i in range(3):
-            await data_factory.create_company(
-                tenant=tenant, name=f"LimitCo {i}", session=session
-            )
+            await data_factory.create_company(tenant=tenant, name=f"LimitCo {i}", session=session)
         await session.commit()
 
     headers = await make_auth_headers(RoleEnum.ADMIN)
@@ -232,9 +225,7 @@ async def test_sites_hit_returns_304(
     assert first.status_code == status.HTTP_200_OK
     etag = first.headers["ETag"]
 
-    second = await async_client.get(
-        "/api/v1/sites", headers={**headers, "If-None-Match": etag}
-    )
+    second = await async_client.get("/api/v1/sites", headers={**headers, "If-None-Match": etag})
     assert second.status_code == status.HTTP_304_NOT_MODIFIED
     assert second.headers["ETag"] == etag
 
@@ -308,9 +299,7 @@ async def test_sites_etag_distinct_per_company_filter(
 
     headers = await make_auth_headers(RoleEnum.ADMIN)
     unfiltered = await async_client.get("/api/v1/sites", headers=headers)
-    filtered = await async_client.get(
-        f"/api/v1/sites?company_id={company_a_id}", headers=headers
-    )
+    filtered = await async_client.get(f"/api/v1/sites?company_id={company_a_id}", headers=headers)
     assert unfiltered.headers["ETag"] != filtered.headers["ETag"]
 
 
@@ -354,9 +343,7 @@ async def test_sites_etag_from_tenant_a_does_not_match_tenant_b(
     a = await async_client.get("/api/v1/sites", headers=headers_a)
     etag_a = a.headers["ETag"]
 
-    leaked = await async_client.get(
-        "/api/v1/sites", headers={**headers_b, "If-None-Match": etag_a}
-    )
+    leaked = await async_client.get("/api/v1/sites", headers={**headers_b, "If-None-Match": etag_a})
     # Tenant B sees its own data, not 304 — tenant_a's ETag is invalid here.
     assert leaked.status_code == status.HTTP_200_OK
 
@@ -394,9 +381,7 @@ async def test_documents_etag_distinct_per_page_param(
 
     headers = await make_auth_headers(RoleEnum.ADMIN, tenant="delta")
     page1 = await async_client.get("/api/v1/documents?page=1&page_size=10", headers=headers)
-    page1_size50 = await async_client.get(
-        "/api/v1/documents?page=1&page_size=50", headers=headers
-    )
+    page1_size50 = await async_client.get("/api/v1/documents?page=1&page_size=50", headers=headers)
     assert page1.status_code == status.HTTP_200_OK
     assert page1_size50.status_code == status.HTTP_200_OK
     assert page1.headers["ETag"] != page1_size50.headers["ETag"]
@@ -415,9 +400,7 @@ async def test_documents_empty_list_hit_returns_304(
     first = await async_client.get("/api/v1/documents", headers=headers)
     etag = first.headers["ETag"]
 
-    second = await async_client.get(
-        "/api/v1/documents", headers={**headers, "If-None-Match": etag}
-    )
+    second = await async_client.get("/api/v1/documents", headers={**headers, "If-None-Match": etag})
     assert second.status_code == status.HTTP_304_NOT_MODIFIED
 
 
@@ -459,9 +442,7 @@ async def test_tasks_hit_returns_304(
     assert first.status_code == status.HTTP_200_OK
     etag = first.headers["ETag"]
 
-    second = await async_client.get(
-        "/api/v1/tasks", headers={**headers, "If-None-Match": etag}
-    )
+    second = await async_client.get("/api/v1/tasks", headers={**headers, "If-None-Match": etag})
     assert second.status_code == status.HTTP_304_NOT_MODIFIED
 
 
@@ -534,8 +515,8 @@ async def test_tasks_empty_list_has_etag_and_returns_304_on_repeat(
         zeta = (await session.execute(select(Tenant).where(Tenant.slug == "zeta"))).scalar_one()
         # Ensure no tasks exist for this tenant
         existing = (
-            await session.execute(select(Task).where(Task.tenant_id == zeta.id))
-        ).scalars().all()
+            (await session.execute(select(Task).where(Task.tenant_id == zeta.id))).scalars().all()
+        )
         for t in existing:
             await session.delete(t)
         await session.commit()
@@ -547,9 +528,7 @@ async def test_tasks_empty_list_has_etag_and_returns_304_on_repeat(
     etag = first.headers["ETag"]
     assert etag
 
-    second = await async_client.get(
-        "/api/v1/tasks", headers={**headers, "If-None-Match": etag}
-    )
+    second = await async_client.get("/api/v1/tasks", headers={**headers, "If-None-Match": etag})
     assert second.status_code == status.HTTP_304_NOT_MODIFIED
 
 

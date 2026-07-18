@@ -74,9 +74,7 @@ class TenantContextValidator:
         Returns:
             Error detail dict
         """
-        status_code, default_message = ERROR_CODES.get(
-            error_code, (500, "Unknown error")
-        )
+        status_code, default_message = ERROR_CODES.get(error_code, (500, "Unknown error"))
         return api_problem_detail(
             code=error_code,
             message=default_message,
@@ -85,9 +83,7 @@ class TenantContextValidator:
         )
 
 
-def validate_tenant_in_operation(
-    tenant: Tenant, expected_tenant_id: str | None = None
-) -> None:
+def validate_tenant_in_operation(tenant: Tenant, expected_tenant_id: str | None = None) -> None:
     """
     Validate tenant in business operation.
 

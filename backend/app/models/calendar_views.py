@@ -15,6 +15,7 @@ from __future__ import annotations
 from typing import Any
 
 from sqlalchemy import JSON, ForeignKey, Index, String, UniqueConstraint
+from sqlalchemy.ext.mutable import MutableDict
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import SoftDeleteMixin, TenantBaseModel
@@ -40,7 +41,9 @@ class SavedCalendarView(TenantBaseModel, SoftDeleteMixin):
         index=True,
     )
     name: Mapped[str] = mapped_column(String(128), nullable=False)
-    payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    payload: Mapped[dict[str, Any]] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=False, default=dict
+    )
 
     __table_args__ = (
         UniqueConstraint("tenant_id", "user_id", "name", name="uq_saved_calendar_views_name"),

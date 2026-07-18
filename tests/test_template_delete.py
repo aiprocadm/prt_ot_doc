@@ -184,6 +184,7 @@ async def test_template_delete_guard_409_when_in_use_api_contract(
         user = await data_factory.create_user(tenant=tenant, session=session)
 
         from app.models.document import Document, DocumentStatus
+
         document = Document(
             tenant_id=tenant.id,
             company_id=company.id,

@@ -231,6 +231,7 @@ class QualificationRecord(BaseSchema):
     valid_until: date | None = None
     issuer: str | None = Field(default=None, max_length=255)
     document: str | None = Field(default=None, max_length=255)
+    level: str | None = Field(default=None, max_length=8)
 
 
 class PPEItem(BaseSchema):
@@ -244,6 +245,7 @@ class PersonRead(BaseSchema):
     id: str
     company_id: str
     position_id: str | None = None
+    position_title: str | None = Field(default=None, max_length=255)
     workplace_id: str | None = None
     first_name: str
     last_name: str
@@ -288,7 +290,15 @@ class PersonRead(BaseSchema):
     def _email_blank_or_invalid_to_none(cls, value: object) -> object:
         return _email_str_or_none(value)
 
-    @field_validator("middle_name", "phone", "snils", "passport", "personnel_number", "working_conditions_class", mode="before")
+    @field_validator(
+        "middle_name",
+        "phone",
+        "snils",
+        "passport",
+        "personnel_number",
+        "working_conditions_class",
+        mode="before",
+    )
     @classmethod
     def _optional_str_fields_coerce(cls, value: object, info: ValidationInfo) -> object:
         if value is None:
@@ -349,6 +359,7 @@ class PersonPage(BaseSchema):
 class PersonCreate(BaseSchema):
     company_id: str = Field(min_length=1, max_length=36)
     position_id: str | None = Field(default=None, min_length=1, max_length=36)
+    position_title: str | None = Field(default=None, max_length=255)
     workplace_id: str | None = Field(default=None, min_length=1, max_length=36)
     first_name: str = Field(min_length=1, max_length=100)
     last_name: str = Field(min_length=1, max_length=100)
@@ -375,6 +386,7 @@ class PersonCreate(BaseSchema):
 class PersonUpdate(BaseSchema):
     company_id: str | None = Field(default=None, min_length=1, max_length=36)
     position_id: str | None = Field(default=None, min_length=1, max_length=36)
+    position_title: str | None = Field(default=None, max_length=255)
     workplace_id: str | None = Field(default=None, min_length=1, max_length=36)
     first_name: str | None = Field(default=None, min_length=1, max_length=100)
     last_name: str | None = Field(default=None, min_length=1, max_length=100)

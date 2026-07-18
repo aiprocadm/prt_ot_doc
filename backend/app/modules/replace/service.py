@@ -54,7 +54,9 @@ def _make_file_record(
 
 
 async def _next_version_number(session: AsyncSession, *, document_id: str) -> int:
-    query = select(func.max(DocumentVersion.version_number)).where(DocumentVersion.document_id == document_id)
+    query = select(func.max(DocumentVersion.version_number)).where(
+        DocumentVersion.document_id == document_id
+    )
     max_version = (await session.execute(query)).scalar_one()
     return int(max_version or 0) + 1
 
@@ -89,7 +91,13 @@ async def execute_replace(
     hits = [h.__dict__ for h in result.hits]
     if scope:
         allowed_parts = set(scope)
-        hits = [hit for hit in hits if str(hit.get("part")) in allowed_parts or str(hit.get("part")) == "body" and "body" in allowed_parts]
+        hits = [
+            hit
+            for hit in hits
+            if str(hit.get("part")) in allowed_parts
+            or str(hit.get("part")) == "body"
+            and "body" in allowed_parts
+        ]
     report = build_report(hits, rules)
     examples = [
         {
@@ -103,7 +111,10 @@ async def execute_replace(
         "hits_count": len(hits),
         "examples": examples,
         "report": report,
-        "metrics": {"duration_ms": int((time.perf_counter() - started) * 1000), "rules_count": len(mapping)},
+        "metrics": {
+            "duration_ms": int((time.perf_counter() - started) * 1000),
+            "rules_count": len(mapping),
+        },
     }
     report_bytes = json.dumps(report_payload, ensure_ascii=False).encode("utf-8")
     report_key = f"documents/{source_version.document_id}/replace_report_{run_id}.json"

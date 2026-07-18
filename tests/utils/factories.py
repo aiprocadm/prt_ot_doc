@@ -148,9 +148,7 @@ class TestDataFactory:
         **overrides: Any,
     ) -> Person:
         tenant_obj = tenant or await self.ensure_tenant(slug=tenant_slug, session=session)
-        company_obj = company or await self.create_company(
-            tenant=tenant_obj, session=session
-        )
+        company_obj = company or await self.create_company(tenant=tenant_obj, session=session)
         person = Person(
             tenant_id=tenant_obj.id,
             company_id=company_obj.id,
@@ -197,18 +195,12 @@ class TestDataFactory:
     ) -> tuple[Document, DocumentVersion]:
         tenant_obj = tenant or await self.ensure_tenant(slug=tenant_slug, session=session)
         use_tenant_id = tenant_id if tenant_id else tenant_obj.id
-        template_obj = template or await self.create_template(
-            tenant=tenant_obj, session=session
-        )
-        company_obj = company or await self.create_company(
-            tenant=tenant_obj, session=session
-        )
+        template_obj = template or await self.create_template(tenant=tenant_obj, session=session)
+        company_obj = company or await self.create_company(tenant=tenant_obj, session=session)
         person_obj = person or await self.create_person(
             tenant=tenant_obj, company=company_obj, session=session
         )
-        creator_obj = creator or await self.create_user(
-            tenant=tenant_obj, session=session
-        )
+        creator_obj = creator or await self.create_user(tenant=tenant_obj, session=session)
         # Ensure tenant_id is not duplicated if passed in overrides
         filtered_overrides = {k: v for k, v in overrides.items() if k != "tenant_id"}
         document = Document(

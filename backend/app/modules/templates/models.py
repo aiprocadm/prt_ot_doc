@@ -8,4 +8,10 @@ from app.models.models import (
     TemplateVersionStatus,
 )
 
-__all__ = ["Template", "TemplateStatus", "TemplateVersion", "TemplateVersionStatus", "TemplateUsage"]
+__all__ = [
+    "Template",
+    "TemplateStatus",
+    "TemplateVersion",
+    "TemplateVersionStatus",
+    "TemplateUsage",
+]

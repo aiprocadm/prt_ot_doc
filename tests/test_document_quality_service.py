@@ -22,4 +22,3 @@ def test_quality_report_allows_release_with_only_warnings() -> None:
     assert report.release_blocked is False
     assert report.status == "passed"
     assert report.summary["warning"] == 1
-

@@ -1,4 +1,5 @@
 """Dependency declarations shared across API routers."""
+
 from __future__ import annotations
 
 import logging
@@ -11,7 +12,12 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.tenant import TENANT_HEADER, tenant_required
-from app.db.session import AsyncSessionLocal, ensure_tenant_schema, get_tenant_session
+from app.db.session import (
+    AsyncSessionLocal,
+    ensure_tenant_schema,
+    get_tenant_session,
+    transaction_scope,
+)
 from app.models.models import Tenant
 from app.services.file_storage import FileStorageService
 from app.services.integrations import (
@@ -92,7 +98,9 @@ def _tenant_resolution_policy(request: Request, *, auth_flow: bool) -> dict[str,
 
 
 async def _fetch_tenant_by_identifier(identifier: str) -> Tenant:
-    async with AsyncSessionLocal(tenant="public", include_public=False, create_schema=False) as session:
+    async with AsyncSessionLocal(
+        tenant="public", include_public=False, create_schema=False
+    ) as session:
         filters = [Tenant.slug == identifier, Tenant.code == identifier]
         if len(identifier) == 36:
             filters.append(Tenant.id == identifier)
@@ -158,7 +166,11 @@ async def get_tenant_record(request: Request) -> Tenant:
     if policy["allow_state_or_header"] and isinstance(preloaded, Tenant):
         logger.info(
             "tenant.resolve.success",
-            extra={"path": request.url.path, "tenant": preloaded.slug, "source": "middleware_preloaded"},
+            extra={
+                "path": request.url.path,
+                "tenant": preloaded.slug,
+                "source": "middleware_preloaded",
+            },
         )
         return preloaded
     if policy["allow_state_or_header"]:
@@ -167,7 +179,11 @@ async def get_tenant_record(request: Request) -> Tenant:
             tenant = await _fetch_tenant_by_identifier(tenant_id)
             logger.info(
                 "tenant.resolve.success",
-                extra={"path": request.url.path, "tenant": tenant.slug, "source": "request_state_or_header_id"},
+                extra={
+                    "path": request.url.path,
+                    "tenant": tenant.slug,
+                    "source": "request_state_or_header_id",
+                },
             )
             return tenant
 
@@ -177,10 +193,16 @@ async def get_tenant_record(request: Request) -> Tenant:
             tenant = await _fetch_tenant_by_identifier(info.slug)
             logger.info(
                 "tenant.resolve.success",
-                extra={"path": request.url.path, "tenant": tenant.slug, "source": "request_state_or_header_slug"},
+                extra={
+                    "path": request.url.path,
+                    "tenant": tenant.slug,
+                    "source": "request_state_or_header_slug",
+                },
             )
             return tenant
-    logger.warning("tenant.resolve.failed", extra={"path": request.url.path, "reason": "tenant_not_provided"})
+    logger.warning(
+        "tenant.resolve.failed", extra={"path": request.url.path, "reason": "tenant_not_provided"}
+    )
     raise HTTPException(status.HTTP_404_NOT_FOUND, "Tenant not found")
 
 
@@ -217,7 +239,11 @@ async def get_session(tenant: Tenant = Depends(get_tenant_record)) -> AsyncItera
         if getattr(tenant, "id", None) is not None:
             info["tenant_id"] = str(tenant.id)
         info.setdefault("token_tenant_id", None)
-        yield session
+        # Own the request transaction. ``get_tenant_session`` only routes the schema
+        # and closes the session, so without this a handler that merely flushes
+        # returns 2xx and loses the write.
+        async with transaction_scope(session):
+            yield session
 
 
 @lru_cache()

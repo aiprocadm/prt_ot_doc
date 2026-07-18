@@ -16,7 +16,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.config import Settings, get_settings
 from app.db.session import engine
-from app.domains.files import s3
+from app.modules.files import s3
 from app.modules.health_checks import HealthCheckService
 
 logger = logging.getLogger("app.api.health")
@@ -197,12 +197,8 @@ async def health_comprehensive(
             skip_slow=skip_slow,
         )
 
-        code = (
-            status.HTTP_200_OK
-            if result.status == "ok"
-            else status.HTTP_503_SERVICE_UNAVAILABLE
-        )
-        return JSONResponse(status_code=code, content=result.model_dump())
+        code = status.HTTP_200_OK if result.status == "ok" else status.HTTP_503_SERVICE_UNAVAILABLE
+        return JSONResponse(status_code=code, content=result.model_dump(mode="json"))
     except Exception as e:
         logger.exception("health.comprehensive_failed")
         return JSONResponse(

@@ -70,7 +70,6 @@ from app.api.helpers.etag import (
 from app.models.models import RoleEnum
 from tests.utils.factories import TestDataFactory
 
-
 # =============================================================================
 # Helper unit contracts
 # =============================================================================
@@ -113,9 +112,7 @@ def test_apply_etag_response_headers_accepts_vary_override() -> None:
     """Keyword-only ``vary=`` override lets future endpoints add axes
     (e.g. ``Accept-Language`` for an i18n list endpoint)."""
     response = Response()
-    apply_etag_response_headers(
-        response, '"abc"', vary="Authorization, X-Tenant, Accept-Language"
-    )
+    apply_etag_response_headers(response, '"abc"', vary="Authorization, X-Tenant, Accept-Language")
 
     assert response.headers["Vary"] == "Authorization, X-Tenant, Accept-Language"
 
@@ -185,9 +182,7 @@ def test_build_not_modified_headers_returns_dict_with_default_vary() -> None:
 def test_build_not_modified_headers_accepts_vary_override() -> None:
     """Symmetric override path — must mirror ``apply_etag_response_headers``
     so 200 and 304 paths can be kept in sync at callsites."""
-    headers = build_not_modified_headers(
-        '"xyz"', vary="Authorization, X-Tenant, Accept-Language"
-    )
+    headers = build_not_modified_headers('"xyz"', vary="Authorization, X-Tenant, Accept-Language")
 
     assert headers["Vary"] == "Authorization, X-Tenant, Accept-Language"
 
@@ -256,9 +251,7 @@ async def test_companies_endpoint_emits_unified_vary_on_304(
     etag = first.headers["ETag"]
     vary_200 = first.headers["Vary"]
 
-    second = await async_client.get(
-        "/api/v1/companies", headers={**headers, "If-None-Match": etag}
-    )
+    second = await async_client.get("/api/v1/companies", headers={**headers, "If-None-Match": etag})
     assert second.status_code == status.HTTP_304_NOT_MODIFIED
     assert second.headers["Vary"] == vary_200, (
         "304 must echo the 200's Vary (RFC 7234 § 4.3.4) — divergence breaks "
@@ -296,9 +289,7 @@ async def test_sites_endpoint_emits_unified_vary_on_200_and_304(
     assert "x-tenant" in tokens
     etag = first.headers["ETag"]
 
-    second = await async_client.get(
-        "/api/v1/sites", headers={**headers, "If-None-Match": etag}
-    )
+    second = await async_client.get("/api/v1/sites", headers={**headers, "If-None-Match": etag})
     assert second.status_code == status.HTTP_304_NOT_MODIFIED
     # The 200 and 304 paths must emit byte-identical Vary.
     assert second.headers["Vary"] == vary_200
@@ -340,9 +331,7 @@ async def test_etag_value_unaffected_by_vary_addition(
     # (RFC 7232 § 2.3 syntax).
     async with sessionmaker() as session:
         tenant = await data_factory.ensure_tenant(session=session)
-        await data_factory.create_company(
-            tenant=tenant, name="VaryEtagShape Co", session=session
-        )
+        await data_factory.create_company(tenant=tenant, name="VaryEtagShape Co", session=session)
         await session.commit()
     headers = await make_auth_headers(RoleEnum.ADMIN)
     response = await async_client.get("/api/v1/companies", headers=headers)

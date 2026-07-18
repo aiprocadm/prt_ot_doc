@@ -26,9 +26,7 @@ __all__ = [
 TENANT_HEADER = "x-tenant"
 TENANT_HEADER_ALIASES = (TENANT_HEADER, "x-tenant-slug")
 _settings = get_settings()
-_TENANT_VAR: ContextVar[str] = ContextVar(
-    "tenant_slug", default=_settings.default_tenant_slug
-)
+_TENANT_VAR: ContextVar[str] = ContextVar("tenant_slug", default=_settings.default_tenant_slug)
 _ALLOWED_CHARS = set("abcdefghijklmnopqrstuvwxyz0123456789-_")
 
 
@@ -82,7 +80,11 @@ def tenant_required(slug: str | None) -> TenantInfo:
     if slug is None:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
-            {"code": "TENANT_REQUIRED", "type": "validation", "message": "X-Tenant header required"},
+            {
+                "code": "TENANT_REQUIRED",
+                "type": "validation",
+                "message": "X-Tenant header required",
+            },
         )
     return set_current_tenant(slug)
 

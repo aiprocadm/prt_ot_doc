@@ -10,6 +10,7 @@ Tests verify that:
 4. Cross-module boundary violations are prevented
 5. Negative test cases for unauthorized module access
 """
+
 import pytest
 
 from app.core.rbac_abac import (
@@ -91,26 +92,45 @@ class TestModuleLevelAccessControl:
     def test_module_permissions_all_roles_defined(self):
         """All role-permission mappings should exist for module access."""
         known_roles = {
-            "owner", "admin", "methodist", "lawyer", "project_manager",
-            "executor", "clerk", "instructor", "student",
-            "hse_head", "hse_specialist", "fire_engineer", "ecologist",
-            "hr", "accountant", "line_manager", "client", "auditor_ro",
-            "inspector_contractor", "client_admin", "client_user",
+            "owner",
+            "admin",
+            "methodist",
+            "lawyer",
+            "project_manager",
+            "executor",
+            "clerk",
+            "instructor",
+            "student",
+            "hse_head",
+            "hse_specialist",
+            "fire_engineer",
+            "ecologist",
+            "hr",
+            "accountant",
+            "line_manager",
+            "client",
+            "auditor_ro",
+            "inspector_contractor",
+            "client_admin",
+            "client_user",
         }
         for role in known_roles:
             assert role in MODULE_PERMISSIONS, f"Missing module permissions for role: {role}"
 
-    @pytest.mark.parametrize("role,expected_modules", [
-        ("owner", set(MODULE_NAMES)),
-        ("admin", set(MODULE_NAMES)),
-        ("methodist", {"documents", "templates"}),
-        ("lawyer", {"documents", "templates"}),
-        ("hse_head", {"documents", "risk", "ppe", "inspections", "incidents", "contractors"}),
-        ("hse_specialist", {"documents", "risk", "ppe", "inspections", "incidents"}),
-        ("instructor", {"training", "briefings"}),
-        ("student", {"training"}),
-        ("hr", {"documents", "training"}),
-    ])
+    @pytest.mark.parametrize(
+        "role,expected_modules",
+        [
+            ("owner", set(MODULE_NAMES)),
+            ("admin", set(MODULE_NAMES)),
+            ("methodist", {"documents", "templates"}),
+            ("lawyer", {"documents", "templates"}),
+            ("hse_head", {"documents", "risk", "ppe", "inspections", "incidents", "contractors"}),
+            ("hse_specialist", {"documents", "risk", "ppe", "inspections", "incidents"}),
+            ("instructor", {"training", "briefings"}),
+            ("student", {"training"}),
+            ("hr", {"documents", "training"}),
+        ],
+    )
     def test_role_module_permissions(self, role: str, expected_modules: set[str]):
         """Verify module permissions for each major role."""
         actual_modules = MODULE_PERMISSIONS.get(role, set())
@@ -193,7 +213,10 @@ class TestModuleAccessPolicyEngine:
             resource="trainings",
         )
         # Module check passes, resource check should also pass
-        assert decision.allowed is True or decision.reason in ("missing_permission", "module_access_denied")
+        assert decision.allowed is True or decision.reason in (
+            "missing_permission",
+            "module_access_denied",
+        )
 
     def test_hr_cannot_access_risk_maps(self):
         """HR role denied access to risk_maps (ppe module)."""

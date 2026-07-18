@@ -4,7 +4,7 @@ import pytest
 
 from app.services.integrations import factory as integration_factory
 from app.services.integrations.http_edo import HttpEDOIntegration
-from app.services.integrations.stubs import DisabledEDOIntegration, StubEDOIntegration
+from app.services.integrations.stubs import DisabledEDOIntegration
 
 
 @pytest.fixture(autouse=True)
@@ -29,7 +29,9 @@ def test_edo_disabled_when_flag_off(monkeypatch: pytest.MonkeyPatch) -> None:
     assert isinstance(client, DisabledEDOIntegration)
 
 
-def test_edo_stub_when_flag_on_without_base_url(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_edo_disabled_when_flag_on_without_base_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Флаг включён, но base_url пуст: интеграция не сконфигурирована => честный Disabled, не стаб."""
+
     class S:
         app_env = "test"
         use_edo_integration = True
@@ -41,7 +43,7 @@ def test_edo_stub_when_flag_on_without_base_url(monkeypatch: pytest.MonkeyPatch)
     monkeypatch.setattr(integration_factory, "get_settings", lambda: S())
     integration_factory.reset_integration_providers()
     client = integration_factory.get_edo_integration()
-    assert isinstance(client, StubEDOIntegration)
+    assert isinstance(client, DisabledEDOIntegration)
 
 
 def test_edo_http_when_flag_on_with_base_url(monkeypatch: pytest.MonkeyPatch) -> None:

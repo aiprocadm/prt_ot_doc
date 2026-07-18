@@ -9,9 +9,10 @@ Strategy:
   1. Import the same ``ALEMBIC_METADATA`` Alembic uses for autogenerate
      (this is the authoritative model-side schema).
   2. Parse every migration file under ``backend/app/migrations/versions/``
-     using ``ast`` to extract all ``op.create_table``, ``op.add_column`` and
-     ``op.drop_column`` calls. Build a ``(table, column)`` set representing
-     what migrations actually create.
+     using ``ast`` to extract all ``op.create_table``, ``op.add_column``,
+     ``op.drop_column``, ``op.rename_table`` and ``alter_column(...,
+     new_column_name=...)`` (column rename) calls. Build a ``(table, column)``
+     set representing what migrations actually create.
   3. Diff: model columns not in migration set → drift.
 
 Limitations:
@@ -23,6 +24,14 @@ Limitations:
   - Treats ``schema`` parameters as opaque — a table with the same name in
     ``app_shared`` vs tenant schema is collapsed into one entry. Matches
     how the ORM models declare them (no schema= on the Mapped class).
+  - Column renames are recognized only in the ``with op.batch_alter_table(...)``
+    form (``batch.alter_column("old", new_column_name="new")``) — the form
+    every rename in the repo uses today. A bare top-level
+    ``op.alter_column("table", "old", new_column_name="new")`` is NOT tracked;
+    if a future migration uses it, the old name lingers in the migration set
+    while the model declares the new one — the same business false-positive
+    iter-45 closed for the batch form. Promote it to a batch block, or extend
+    the generic Call-walker, when such a migration is introduced.
 
 Usage::
 
@@ -86,9 +95,7 @@ def _bootstrap_env() -> None:
     # crypt stub for Windows / slim containers (passlib import).
     import types
 
-    sys.modules.setdefault(
-        "crypt", types.SimpleNamespace(crypt=lambda secret, salt: "mocked")
-    )
+    sys.modules.setdefault("crypt", types.SimpleNamespace(crypt=lambda secret, salt: "mocked"))
 
 
 def _load_model_columns() -> dict[str, set[str]]:
@@ -156,11 +163,7 @@ def _column_names_in(nodes: Iterable[ast.AST]) -> list[str]:
     found: list[str] = []
     for root in nodes:
         for node in ast.walk(root):
-            if (
-                isinstance(node, ast.Call)
-                and _call_target_endswith(node, "Column")
-                and node.args
-            ):
+            if isinstance(node, ast.Call) and _call_target_endswith(node, "Column") and node.args:
                 name = _string_arg(node.args[0])
                 if name:
                     found.append(name)
@@ -216,9 +219,7 @@ def _table_creating_helpers(
             continue
         creates_table = False
         for inner in ast.walk(func):
-            if isinstance(inner, ast.Call) and _call_target_endswith(
-                inner, "create_table"
-            ):
+            if isinstance(inner, ast.Call) and _call_target_endswith(inner, "create_table"):
                 # Either direct op.create_table or recursive helper-of-helper.
                 if (
                     isinstance(inner.func, ast.Attribute)
@@ -257,6 +258,7 @@ def _parse_migration(path: Path) -> dict[str, object]:
     drop_column: dict[str, list[str]] = defaultdict(list)
     drop_table: list[str] = []
     rename_table: list[tuple[str, str]] = []  # (old, new)
+    rename_column: list[tuple[str, str, str]] = []  # (table, old, new)
 
     # First: handle `with op.batch_alter_table("t", ...) as batch:` blocks.
     # These hold `batch.add_column(sa.Column("c", ...))` and `batch.drop_column("c")`
@@ -294,16 +296,27 @@ def _parse_migration(path: Path) -> dict[str, object]:
                     col_name = _string_arg(inner.args[0])
                     if col_name:
                         drop_column[table_name].append(col_name)
+                # batch.alter_column("old", new_column_name="new") — a rename.
+                # Plain alter_column (type/nullable/server_default, no
+                # new_column_name) is NOT a rename and is ignored.
+                elif _call_target_endswith(inner, "alter_column") and inner.args:
+                    old_name = _string_arg(inner.args[0])
+                    new_name = next(
+                        (
+                            _string_arg(kw.value)
+                            for kw in inner.keywords
+                            if kw.arg == "new_column_name"
+                        ),
+                        None,
+                    )
+                    if old_name and new_name:
+                        rename_column.append((table_name, old_name, new_name))
 
     for node in ast.walk(walk_target):
         if not isinstance(node, ast.Call):
             continue
         # Local helper that wraps op.create_table?
-        if (
-            isinstance(node.func, ast.Name)
-            and node.func.id in helpers
-            and node.args
-        ):
+        if isinstance(node.func, ast.Name) and node.func.id in helpers and node.args:
             table_name = _string_arg(node.args[0])
             if table_name:
                 # Columns passed positionally to the helper.
@@ -353,6 +366,7 @@ def _parse_migration(path: Path) -> dict[str, object]:
         "drop_column": dict(drop_column),
         "drop_table": drop_table,
         "rename_table": rename_table,
+        "rename_column": rename_column,
         "_path": str(path.relative_to(REPO_ROOT)),
     }
 
@@ -362,12 +376,14 @@ def _collect_migration_columns() -> tuple[dict[str, set[str]], list[dict[str, ob
 
     Aggregate ignores order; we do not attempt topological replay because the
     common drift case (column missing entirely) is order-independent.
-    Dropped columns are subtracted; renamed tables map old→new columns.
+    Dropped columns are subtracted; renamed tables map old→new table; renamed
+    columns (alter_column new_column_name=) map old→new within a table.
     """
     all_files = sorted(MIGRATIONS_DIR.glob("*.py"))
     per_file: list[dict[str, object]] = []
     table_columns: dict[str, set[str]] = defaultdict(set)
     rename_map: dict[str, str] = {}
+    column_renames: list[tuple[str, str, str]] = []  # (table, old, new), file order
 
     for path in all_files:
         if path.name.startswith("__"):
@@ -380,11 +396,24 @@ def _collect_migration_columns() -> tuple[dict[str, set[str]], list[dict[str, ob
             table_columns[table].update(cols)
         for old, new in ops["rename_table"]:  # type: ignore[union-attr]
             rename_map[old] = new
+        column_renames.extend(ops["rename_column"])  # type: ignore[arg-type]
 
     # Apply renames so model's current name finds historical create_table.
     for old, new in rename_map.items():
         if old in table_columns:
             table_columns.setdefault(new, set()).update(table_columns.pop(old))
+
+    # Apply column renames (alter_column new_column_name=). Done after the
+    # table-rename merge so the rename resolves against the table's current
+    # name, and before drop subtraction. Mirrors rename_table at column scope:
+    # the old name yields to the new one the ORM model declares, so a renamed
+    # column is not stranded as a false-positive drift entry.
+    for table, old_col, new_col in column_renames:
+        current = rename_map.get(table, table)
+        cols = table_columns.get(current)
+        if cols is not None:
+            cols.discard(old_col)
+            cols.add(new_col)
 
     # Subtract drops (must be done after rename merge).
     for ops in per_file:
@@ -522,7 +551,14 @@ def _format_summary(drift: dict[str, dict[str, object]]) -> str:
         "",
     ]
     # Sort by descending fix-priority.
-    priority = ["critical", "business", "mixin", "stale_migration_column", "rename", "unloaded_model"]
+    priority = [
+        "critical",
+        "business",
+        "mixin",
+        "stale_migration_column",
+        "rename",
+        "unloaded_model",
+    ]
     for sev in priority:
         tables = buckets.get(sev, [])
         if not tables:
@@ -560,9 +596,7 @@ def _collect_migration_columns_via_alembic() -> dict[str, set[str]] | None:
         return None
 
     cfg = Config(str(BACKEND_ROOT / "app" / "migrations" / "alembic.ini"))
-    cfg.set_main_option(
-        "script_location", str(BACKEND_ROOT / "app" / "migrations")
-    )
+    cfg.set_main_option("script_location", str(BACKEND_ROOT / "app" / "migrations"))
     cfg.set_main_option("sqlalchemy.url", f"sqlite:///{tmp_db}")
 
     try:
@@ -591,7 +625,14 @@ def main(argv: Iterable[str] | None = None) -> int:
     )
     parser.add_argument(
         "--severity",
-        choices=["critical", "business", "mixin", "rename", "unloaded_model", "stale_migration_column"],
+        choices=[
+            "critical",
+            "business",
+            "mixin",
+            "rename",
+            "unloaded_model",
+            "stale_migration_column",
+        ],
         action="append",
         help=(
             "Filter output to one or more severity levels. Repeat the flag "
@@ -615,17 +656,13 @@ def main(argv: Iterable[str] | None = None) -> int:
     if args.use_alembic:
         migration_columns = _collect_migration_columns_via_alembic()
         if migration_columns is None:
-            print(
-                "Alembic mode failed; falling back to AST parser.", file=sys.stderr
-            )
+            print("Alembic mode failed; falling back to AST parser.", file=sys.stderr)
     if migration_columns is None:
         migration_columns, _per_file = _collect_migration_columns()
     drift = _diff(model_columns, migration_columns)
 
     if args.severity:
-        drift = {
-            t: e for t, e in drift.items() if e.get("severity") in set(args.severity)
-        }
+        drift = {t: e for t, e in drift.items() if e.get("severity") in set(args.severity)}
 
     if args.json:
         print(json.dumps(drift, indent=2, sort_keys=True))
@@ -636,9 +673,7 @@ def main(argv: Iterable[str] | None = None) -> int:
 
     # Exit non-zero only for severities that demand a fix (critical/business).
     # Mixin/rename/unloaded_model are informational unless the caller filters.
-    actionable = {
-        t for t, e in drift.items() if e.get("severity") in {"critical", "business"}
-    }
+    actionable = {t for t, e in drift.items() if e.get("severity") in {"critical", "business"}}
     return 1 if actionable else 0
 
 

@@ -22,9 +22,7 @@ def normalize_idempotency_key(value: str | None) -> str:
     """Validate and normalize an idempotency key value."""
 
     if value is None:
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST, "Idempotency-Key header is required"
-        )
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Idempotency-Key header is required")
     candidate = value.strip()
     if not candidate:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Idempotency-Key cannot be blank")
@@ -81,8 +79,13 @@ class IdempotencyService:
             if path and not existing.path:
                 existing.path = path
             if existing.status == IdempotencyStatus.PENDING:
-                deadline = datetime.now(tz=timezone.utc).timestamp() + max(wait_timeout_seconds, 0.0)
-                while existing.status == IdempotencyStatus.PENDING and datetime.now(tz=timezone.utc).timestamp() < deadline:
+                deadline = datetime.now(tz=timezone.utc).timestamp() + max(
+                    wait_timeout_seconds, 0.0
+                )
+                while (
+                    existing.status == IdempotencyStatus.PENDING
+                    and datetime.now(tz=timezone.utc).timestamp() < deadline
+                ):
                     await self.session.refresh(existing)
                     if existing.status != IdempotencyStatus.PENDING:
                         break

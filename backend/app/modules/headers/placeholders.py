@@ -17,7 +17,9 @@ def _resolve_path(data: dict[str, Any], key: str) -> tuple[str | None, bool]:
     return str(node), True
 
 
-def render_placeholders(text: str | None, data: dict[str, Any], *, strict: bool = False) -> tuple[str, list[str]]:
+def render_placeholders(
+    text: str | None, data: dict[str, Any], *, strict: bool = False
+) -> tuple[str, list[str]]:
     unresolved: list[str] = []
     value = text or ""
 

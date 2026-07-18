@@ -125,4 +125,3 @@ def test_disabled_variants_still_available(monkeypatch: pytest.MonkeyPatch) -> N
     monkeypatch.setattr(integration_factory, "get_settings", lambda: S())
     assert isinstance(integration_factory.get_frdo_integration(), DisabledFRDOIntegration)
     assert isinstance(integration_factory.get_eisot_integration(), DisabledEISOTIntegration)
-

@@ -201,9 +201,7 @@ def test_nested_if_for_balanced() -> None:
 
 def test_nested_blocks_with_mismatched_close_is_error() -> None:
     report = lint_template(
-        _docx_with_text(
-            "{% if a %}{% for x in xs %}{{ x }}{% endif %}{% endfor %}"
-        )
+        _docx_with_text("{% if a %}{% for x in xs %}{{ x }}{% endif %}{% endfor %}")
     )
     # The endif comes while still inside the for -> Unexpected endif,
     # and then endfor at outer level is also unexpected.

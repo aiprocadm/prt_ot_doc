@@ -151,8 +151,7 @@ def compute_list_etag(
         parts.append(f"{label}:{rendered}")
     parts.append(
         "|".join(
-            f"{item.id}:{item.updated_at.isoformat() if item.updated_at else ''}"
-            for item in items
+            f"{item.id}:{item.updated_at.isoformat() if item.updated_at else ''}" for item in items
         )
     )
     digest = hashlib.sha256("::".join(parts).encode("utf-8")).hexdigest()

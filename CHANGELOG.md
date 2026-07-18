@@ -1,5 +1,1299 @@
 # CHANGELOG
 
+## 2026-07-18 (claude/tz-continuation-d43adc — §12.4 Бюджет безопасности срез-1: кросс-доменное ядро)
+
+### Added
+- **Кросс-доменный бюджетный контур (ТЗ B.11 → vNext §12.4, срез-1 «ядро»)** — бюджеты доменов
+  обучение/медосмотры/мероприятия, справочник статей расходов, журнал фактических расходов,
+  контроль план↔факт и аналитика по филиалам/объектам. СИЗ-контур (`ppe_safety_budget`, `wa09`)
+  **не тронут** — читается сводкой read-only. Миграция `bg01` (аддитивная, от `re01`, без PG-enum):
+  таблицы `safety_budget`, `budget_expense_article` (unique `(tenant, code)` БЕЗ deleted_at-фильтра),
+  `budget_expense` (FK на статью/компанию/филиал/объект с `ondelete SET NULL` + полиморфная
+  опциональная ссылка `entity_type`/`entity_id`).
+- **Инвариант эталона сохранён**: план персистентен, **факт всегда вычисляется** из журнала
+  (`compute_domain_actual` — один GROUP BY по статьям); ничего не денормализуется, складской учёт
+  не затрагивается (acceptance §35.5 / F.5).
+- **Сводка `GET /budget/overview`** — 4 домена (3 журнальных + `ppe` с `read_only=true`): план как
+  сумма бюджетов, **пересекающихся** с окном (без пропорции), факт за окно, остаток, плюс строки
+  бюджетов с фактом за их собственный период. СИЗ-план читается из `ppe_safety_budget`, СИЗ-факт —
+  через существующий `compute_budget_actual` складского леджера (с прокидыванием
+  `warning_unpriced_receipts`). Дефолт окна — текущий календарный год.
+- **Разрез `GET /budget/breakdown?dimension=article|domain|company|branch|site`** — первый
+  branch-разрез в проекте; конвенции analytics-breakdown (bucket «— без привязки»/«— без статьи»
+  при `id=""`, cap 200 строк с честным `total`, сортировка сумма desc/имя asc). Имена справочников
+  резолвятся tenant-scoped независимо от soft-delete (историческая подпись вместо сырого UUID);
+  СИЗ-закупки в разрезе не участвуют (у складского леджера нет измерений).
+- **API `/api/v1/budget/*`** (16 роутов; ABAC admin/owner/accountant/ot_pb_lead + FeatureGate флага
+  `budget` default-off → 404 `BUDGET_DISABLED`): CRUD бюджетов/статей/расходов, `POST /articles/seed-defaults`
+  (идемпотентно, с guard'ом от гонки), ETag/304 на трёх списках (ETag расходов покрывает и
+  присоединённые имена статей), audit до commit на всех write-путях. Typed-коды 422:
+  `period_invalid`, `invalid_field_null`, `unknown_article|company|branch|site|entity`,
+  `article_inactive`, `article_domain_mismatch`, `invalid_entity_type`, `invalid_entity_link`,
+  `window_invalid`, `breakdown_dimension_unknown`; 409 `ARTICLE_CODE_EXISTS`.
+- **Tenant-валидация всех client-supplied FK на запись** (класс багов PR #749–751): статья/компания/
+  филиал/объект/entity проверяются на существование и принадлежность тенанту → 422; на PATCH
+  валидируются только затронутые поля (устаревшая ссылка не блокирует правку суммы), пара
+  `entity_type`/`entity_id` проверяется по merged-значениям.
+- **Фронт `/budget` («Бюджет безопасности», права `BUDGET_VIEW`/`BUDGET_MANAGE`, группа «Бизнес и
+  аналитика»)** — 4 вкладки: Сводка (период-фильтр, 4 карточки план/факт/остаток с ru-RU валютой,
+  СИЗ-карточка со ссылкой на склад, разрез с переключателем измерения и CSS-баром), Бюджеты
+  (фильтр по домену, деталь с разбивкой по статьям), Расходы (4 независимых фильтра, диалог с
+  типо-зависимой фильтрацией статей и опциональной ссылкой на доменную запись), Статьи (справочник
+  + «Заполнить стандартными»). Вкладки и фильтры переживают перезагрузку после мутаций;
+  feature-off → EmptyState.
+- **Demo-сид**: флаг `budget` + 9 стандартных статей + 3 бюджета 2026 + 5 расходов (с привязками
+  к компании/филиалу/объекту и ссылкой на demo-CAPA), идемпотентно по натуральным ключам.
+
+### Notes
+- OpenAPI baseline пере-снят: **864 → 880 операций, 723 → 743 схемы** (чистые добавления, ARCH-4 зелёный).
+- Осознанно отложено (срез-2): заявки на возмещение СФР; СИЗ в breakdown (нужна связка склад→филиал);
+  автосбор факта из доменов; бюджеты с привязкой к филиалу; typeahead для entity-ссылок; мультивалюта.
+- Известное ограничение: справочники компаний/филиалов/объектов закрыты ролью admin на backend, тогда
+  как `BUDGET_MANAGE` есть и у accountant — для него пикеры измерений в диалоге расхода скрываются
+  (тихая деградация). Расширение ролей справочников — отдельное продуктовое решение.
+
+## 2026-07-16 (feat/p10-10-rules-engine-srez1 — P10-10 Rules-engine срез-1: событийные правила автоматизации)
+
+### Added
+- **Rules-engine срез-1 (P10-10, ТЗ B.24 → vNext §25.2)** — tenant-scoped правила «событие →
+  условия → действия» с приоритетами, логом срабатываний, dry-run/тестом по истории и admin-UI.
+  Миграция `re01` (аддитивная): таблицы `automation_rule` (unique имя per tenant БЕЗ deleted_at-фильтра,
+  паттерн ReportDefinition) и `automation_rule_trigger` (append-only лог, enum `ruletriggerstatus`
+  success/partial/error); label `AutomationRule` добавлен в оба PG-типа `notificationtype` и
+  `notificationtemplatetype` (parity-гейт ORM↔pg_enum).
+- **Точка срабатывания — синхронный hook в `OutboxService.enqueue`**: оценка правил в той же
+  транзакции, что и доменное событие; только для НОВЫХ outbox-строк (dedup-реплеи тиков не
+  перезапускают правила); события самого движка (`rule.triggered`) не оцениваются (глубина каскада 1).
+  Изоляция — двухуровневые SAVEPOINT'ы (`begin_nested`): внешний вокруг всей оценки + вложенный
+  на каждое действие; IntegrityError действия не отравляет доменную транзакцию (пин-тест на откат
+  flushed-записей).
+- **Условия** — декларативный JSON (`match` all/any + строки field/op/value; 10 операторов
+  eq/ne/in/not_in/gt/gte/lt/lte/contains/exists; dot-пути по payload; NaN-safe сравнения,
+  fail-closed на битой структуре) с whitelist-валидацией против каталога событий
+  (интроспекция typed payload-моделей; legacy-алиасы Signed/Exported исключены как «мёртвые»).
+- **Действия**: `create_task` (операционная задача, `entity_type="automation_rule"`, дедуп по
+  (rule, event_key)); `notify` (in-app уведомление типа `AutomationRule` по actor/user_id/роли,
+  дедуп по нативному dedup_key с sha-хешем event_key); `webhook` (typed-событие `rule.triggered`
+  в существующий outbox-конвейер). Шаблоны `{field}`-подстановки без eval.
+- **API `/api/v1/rules/*`** (9 роутов; ABAC admin/owner router-wide + FeatureGate флага
+  `rules_engine` default-off → 404 `RULES_ENGINE_DISABLED`): CRUD (409 `RULE_NAME_EXISTS`,
+  422 typed-коды валидации вкл. `invalid_field_null` на explicit null), `GET /rules/event-types`
+  (каталог полей для конструктора), `POST /rules/dry-run` (per-condition разбор + would-actions,
+  без записей), `POST /rules/{id}/test` (прогон по истории outbox с дедупом по idempotency_key),
+  `GET /rules/triggers` (журнал). ETag/304 на списке; audit на write.
+- **Фронт `/rules` («Правила автоматизации», право `RULES_VIEW`/`RULES_MANAGE`)** — реестр правил
+  (вкл/выкл-Switch, тест по истории, удаление), `RuleFormDialog` (событие → условия с типо-зависимыми
+  контролами: boolean → да/нет-селект с коэрсией в настоящий boolean, number-коэрсия без ловушки
+  `Number("")→0`, in/not_in через запятую → действия-карточки), Dry-run панель (JSON-песочница
+  со скелетом payload), журнал срабатываний с фильтром; feature-off → EmptyState.
+- **Demo-сид**: флаг `rules_engine` + 2 образцовых правила («Критичный инцидент — задача и
+  уведомление», «Истекающий документ подрядчика — уведомление»), идемпотентно.
+
+### Notes
+- Гейты: backend pytest (модель/условия/каталог/действия/движок/API/сид + смежный регресс) зелёные;
+  ruff/black clean; **OpenAPI baseline 855→864 операций (+9 /rules/*, чистый аддитив, ✓ ARCH-4)**;
+  **PG16-гейт ЗЕЛЁНЫЙ** (round-trip `re01`, после фикса parity-лейбла второго enum-типа);
+  фронт tsc/vitest/build зелёные.
+- Осознанно отложено (срез-2): версии правил, tenant overrides/системный каталог, действие
+  «запустить workflow», email/telegram-каналы notify, метрика движка, retention лога.
+
+## 2026-07-14 (feat/contractors-frontend — Контрагенты/подрядчики: фронт поверх всех 23 backend-эндпоинтов)
+
+### Added
+- **Контур «Контрагенты и подрядчики» на фронте (ТЗ §12.x подрядчики)** — типизированный
+  `api/contractors.ts` (23 метода поверх `/api/v1/contractors/*`) + DTO/vocab, новое право
+  **`CONTRACTOR_MANAGE`** (`contractor.manage`; owner/admin/ot_pb_head через `ALL_PERMISSIONS`),
+  backend остаётся истинным энфорсером.
+- **`/contractors`** переведён с legacy-снапшота (`operationsApi.getContractorSnapshot`) на
+  `contractorsApi`: вкладки **Реестр** (create/поиск/пагинация + ссылки на детальную) ·
+  **Истекающие документы** · **Требования к документам** (tenant-политика: добавить/удалить,
+  409 `requirement_exists`). KPI-шапка (контрагенты/сотрудники/инциденты/истекающие).
+- **`/contractors/:id`** — детальная страница (паттерн `WorkPermitDetailPage`, lazy-чанк) с шапкой,
+  «Изменить» и 4 вкладками: **Обзор** (compliance-сводка допуск/обучение/медосмотр по бакетам
+  ComplianceStatus) · **Сотрудники** (create/edit + вход в допуск) · **Документы** (фильтр по типу,
+  create/edit/archive) · **Инциденты** (регистрация).
+- **Поток допуска сотрудника** — `EmployeeAdmissionDialog`: readiness + document-checklist + «Допустить»
+  с рендером вердикта (ok/warning/blocked), нарушений и обработкой 409 `requirements_not_met`.
+- **Мягкое состояние feature-flag** — документы/допуск/требования за флагом `contractors`
+  (`is_feature_enabled` default-ON): 404 «feature is not enabled» рендерит пустое состояние, не ошибку.
+
+### Notes
+- Чисто фронтовый срез: 0 изменений `backend/`, 0 миграций, OpenAPI-baseline/PG16-гейт не трогались.
+
+## 2026-07-14 (feat/p10-01-committees-srez2-proceedings — P10-01 Комитеты срез-2: ядро заседаний)
+
+### Added
+- **Комитеты срез-2 — ядро заседаний (P10-01, ТЗ B.17)** — присутствие + кворум-гейт на проведение,
+  голосование по решениям с подсчётом, авто-нумерация и журнал протоколов, полный write-UI. Миграция
+  `cmt02` (аддитивная): таблицы `committee_meeting_attendance` (present per person) и
+  `committee_decision_vote` (enum `votechoice` for/against/abstain); на `committee_meeting` —
+  `held_at`, `protocol_seq`/`protocol_year` и иммутабельный снапшот кворума `members_total`/
+  `present_count`/`quorum_met`; partial unique index номера протокола (per комитет/год, PG16).
+- **Правило кворума = простое большинство** (кворум = присутствует строго >½ действующих членов —
+  по DISTINCT person_id; решение «принято» если голосов «за» > «против», воздержавшиеся в кворуме но
+  не в подсчёте, ничья → «отклонено»). Итог решения вычисляется на лету; снапшот кворума
+  фиксируется на момент проведения.
+- **Нумерация протокола = авто при проведении** (формат `N/ГГГГ`, сквозная per-комитет в пределах года,
+  гонка закрыта unique-констрейнтом → 409 при коллизии).
+- **API** (admin-only router, флаг `committees` default-off): `GET/PUT /committees/meetings/{mid}/attendance`
+  (bulk-замена, дедуп по person_id, 422 не-член, 409 после проведения); `PATCH /committees/meetings/{mid}`
+  (`status:"held"` — кворум-гейт → 409 `COMMITTEE_QUORUM_NOT_MET`, авто-номер + снапшот);
+  `POST/GET /committees/decisions/{did}/votes` (upsert голоса + tally/outcome); расширенный
+  `GET /committees/meetings/{mid}/protocol` (номер+снапшот+tally+голоса); журнал
+  `GET /committees/protocols`; `GET /committees/{cid}/members` (с ФИО). Demo-сид: 4 члена +
+  проведённое заседание с кворумом + номер `1/ГГГГ` + голоса (за/за/против → принято).
+- **Frontend** — `CommitteesPage` из read-only срез-1 стал полностью рабочим: create-формы
+  (комитет/заседание/решение/задача/член), присутствие (чекбоксы + индикатор кворума + «Провести
+  заседание»), голосование per присутствующий член (бейдж «Принято/Отклонено» + tally), журнал
+  протоколов. RU-лейблы kind/role/choice/outcome. Маршрут `/committees` не менялся.
+
+### Fixed
+- **put_attendance**: дублированный `person_id` в bulk-payload больше не даёт `IntegrityError`/HTTP 500
+  (дедуп last-write-wins); **update_meeting**: нелегальный переход при отсутствии кворума теперь
+  сообщает реальную причину (легальность перехода проверяется до кворума), а не маскируется под
+  `COMMITTEE_QUORUM_NOT_MET`; **outcome** решения без голосов сериализуется одинаково (`null`) в обоих
+  эндпоинтах. Найдено adversarial-review Workflow'ом (5 линз + verify).
+
+### Notes
+- Backend pytest / PG16-гейт / OpenAPI baseline reген **отложены на CI (Py3.12.12)** — локальный
+  Python-env сломан (базовый интерпретатор `.venv` деинсталлирован; доступен только Py3.14 без wheel
+  для pinned pydantic-core). Фронт-гейты пройдены локально полностью (vitest 127 файлов / 495 тестов,
+  tsc, build). OpenAPI baseline требует регена: +6 operationId (attendance×2/votes×2/protocols/members).
+
+## 2026-07-11 (feat/p10-07-management-dashboards — P10-07 Analytics: управленческие дашборды §24.2)
+
+### Added
+- **Управленческая аналитика (P10-07, ТЗ B.23 → vNext §24.2)** — хаб `/analytics` («Бизнес и аналитика» →
+  «Управленческая аналитика», новое право `ANALYTICS_VIEW` у admin/owner/ot_pb_head + ot_specialist/
+  line_manager/hr): фильтр-бар (компания/объект/подрядчик/период — backend принимал эти фильтры, фронт
+  впервые их передаёт) → KPI-карточки (executive + overdue + sla-load) → **графики 6 трендов** (первая
+  chart-библиотека проекта: recharts 2.x — 3.x требует TS≥5.4 через @reduxjs/toolkit, проект на 5.3.3;
+  обёртка `TrendLineChart`, период day/week/month) → **разрез по компаниям/объектам/подрядчикам**
+  (клик по строке = drill-down фильтр) → карточки-ссылки на 5 профильных суб-дашбордов (были
+  «сиротскими» маршрутами вне навигации).
+- **Breakdown-эндпоинт** `GET /analytics/dashboard/breakdown?dimension=company|site|contractor`
+  (+date-окно по инцидентам): по одному SQL GROUP BY на метрику (инциденты/предписания/high-риски,
+  для компаний + обучение и СИЗ; подрядчики — из readiness read-model), нулевые сущности включены,
+  синтетическая строка «— без объекта» для рисков/предписаний без площадки (иначе тихая несверка
+  с executive-итогом — находка ревью), сортировка «худшие сверху», cap 200. Без миграций/персистенса.
+
+### Fixed / Security
+- **RBAC на analytics-роутере** (пре-существующая дыра): все `GET /analytics/*` — только управленческие
+  роли (admin/owner/hr/ot_pb_lead/line_manager/ot_specialist/manager), `POST /analytics/recompute` —
+  только admin/owner. Раньше управленческие KPI были видны любому аутентифицированному пользователю тенанта.
+- **RBAC на export_center** (`/exports*`): read — офисные роли (без worker/employee/contractor_inspector),
+  write (создание job/schedules/kpis/retry) — узкий список.
+- **Дубль-регистрация operational_dashboard-роутера** убрана (`route_groups.py` — источник
+  «Duplicate Operation ID» warning в OpenAPI; путь `/operational/dashboard` не изменился).
+- Тесты: backend 11 (RBAC-матрица 4 + breakdown 7), frontend 14 (страница 8 + analyticsApi 4 +
+  TrendLineChart 2); +ResizeObserver-полифилл в vitest.setup.
+- **Осознанно вне объёма (follow-up):** «активность пользователей» и «состояние системы» из §24.2
+  (нет агрегаторов); пере-вёрстка 5 суб-дашбордов (остаются JsonKpiGrid); ETag/кэш на analytics;
+  keyboard-доступность клика по строке разреза; секционный loader вместо full-page на смену фильтра;
+  PG-проверка `func.date(occurred_at)` на timestamptz.
+
+## 2026-07-10 (feat/p10-07-report-builder-mvp — P10-07 Analytics: конструктор отчётов end-to-end)
+
+### Added
+- **Report-builder MVP (P10-07, ТЗ B.23 → vNext §24.3)** — конструктор отчётов end-to-end: сохранённая
+  сущность отчёта + sync-предпросмотр + celery-материализатор CSV/XLSX/PDF поверх существующего
+  ExportJob-конвейера + страница-конструктор. Всё за новым default-off фичефлагом `report_builder`
+  (паттерн committees; demo-сид включает для demo-тенанта).
+  - **Модель `ReportDefinition`** (миграция `rb01`, чисто аддитивная): датасет + `config_json`
+    (колонки / фильтры / сортировка / группировки с агрегатами count/sum) + `is_system`
+    («готовые шаблоны» из ТЗ — неизменяемые, на фронте «Дублировать»); имя уникально per tenant.
+  - **Декларативный реестр датасетов** (`modules/report_builder/datasets.py`) — 4 ядровых:
+    обучение сотрудников, инциденты, реестр рисков, СИЗ-остатки; вычислимые колонки
+    (просрочено / остаток / ниже минимума) — SQL-выражения, фильтруются наравне с физическими;
+    задокументирован enum-контракт (NAME-based vs value-based хранение, фильтр только по
+    типизированной колонке).
+  - **Engine** (`engine.py`) — один компилятор для предпросмотра (limit 100) и экспорта (hard cap
+    50 000): whitelist-валидация колонок/операторов/сортировки (422 со структурным кодом),
+    коэрсия значений по типу, GROUP BY + count/sum на уровне SQL, total отдельным count.
+  - **Renderers** (`renderers.py`) — CSV (`;`, UTF-8 BOM, экранирование), XLSX (openpyxl,
+    санитайзер имени листа), PDF (python-docx landscape → LibreOffice; недоступен →
+    типизированный `pdf_renderer_unavailable`); **нейтрализация CSV/XLSX formula-injection**
+    (OWASP-префикс `'` для `=`,`+`,`-`,`@`,Tab,CR — из адверсариального ревью, с regression-тестом).
+  - **API `/report-builder/*`** (9 роутов, RBAC read=admin/owner/ot_specialist/line_manager,
+    write без line_manager; audit на write/run; ETag+304 на списке): каталог датасетов,
+    CRUD сохранённых отчётов (409 дубль имени, 400 system-immutable, 422 битый config),
+    inline-предпросмотр, `POST /definitions/{id}/run {format}` → ExportJob,
+    `GET /exports/{job_id}/download` — выделенное скачивание (legacy `/files/{id}/download`
+    требует MinIO и префикс `tenants/` — недоступен на dev; паттерн audit-экспорта).
+  - **Материализатор `report_export_job`** (celery, зеркало audit_export_job): engine → renderer →
+    `FileStorageService` + строка `File` → `job.file_id/row_count/done`; typed-ошибки
+    (`definition_missing`/`row_limit_exceeded`/`pdf_row_limit_exceeded` при >2000 строк для PDF/
+    `pdf_renderer_unavailable`) + **broad-except → `internal_error`** (job не застревает в running),
+    terminal-guard от повторной доставки; модуль зарегистрирован для worker discovery.
+  - **Demo-сид**: флаг + 4 системных шаблона («Просроченное обучение», «Открытые инциденты»,
+    «Риски высокого уровня», «СИЗ ниже минимального остатка») — идемпотентно.
+  - **`ReportBuilderPage`** (`/reports/builder`, право REPORTS_VIEW, пункт «Конструктор отчётов»
+    в навигации + кнопка с ReportsPage): сохранённые отчёты (системные — badge, дублирование),
+    конструктор (датасет → колонки/группировка → типо-зависимые фильтры → сортировка),
+    предпросмотр ≤100 строк, экспорт CSV/XLSX/PDF с поллингом job (house-хук `usePolling`)
+    и скачиванием; RU-сообщения по кодам ошибок job. Пустые значения фильтров не отправляются
+    (ревью-фикс: `Number("")→0` тихо искажал отчёт).
+  - Тесты: backend 34 (модель/миграция 3, реестр 2, engine 10, renderers 5, API 6, материализатор
+    и download 7, сид 1) + frontend 13 (api-клиент 5, страница 8).
+  - **Осознанно вне объёма (follow-up):** остальные 4 датасета каталога Export Center
+    (реестр делает добавление механическим); cron-исполнение `ExportSchedule` + email-доставка
+    (run-now работает); графики/heatmap (уйдут в срез управленческих дашбордов); anonymization;
+    подключение старой кнопки ReportsPage (`reports:xlsx` job'ы) к материализатору; RBAC на
+    generic `/exports/*`-чтениях + no-op `retry` для report-job'ов; сброс кнопки «Скачать»
+    при правке конфига; server-side пагинация предпросмотра.
+
+## 2026-07-09 (feat/p10-03-medical-oversight-ui — P10-03 Медосмотры: фронт контингента / направлений / отстранений)
+
+### Added
+- **Фронт-контур медосмотров (P10-03, ТЗ B.8 → vNext §9.1/§9.2)** — три готовых backend-контура стали
+  видимыми и управляемыми со страницы «Медосмотры и допуски» (`/medical`). Чисто фронтовый срез: 0 миграций,
+  0 новых эндпоинтов, OpenAPI-baseline и PG16-гейт не затрагивались (прецедент — мобильная выдача СИЗ, PR #726).
+  - **Сводка в шапке** — stats из `GET /medical/summary` (позиций контингента / просрочено+отсутствует /
+    активных отстранений) вместо клиентских подсчётов.
+  - **Секция «Контингент медосмотров»** — реестр по должностям (`/medical/contingent/register`) и поимённый
+    список (`/medical/named-list`) с переключателем представлений (aria-pressed) и печатью DOCX/PDF обоих
+    (`responseType: "blob"` + `downloadBlob`, 503 PDF-рендера → локальная ошибка секции).
+  - **Секция «Направления на медосмотры»** — server-side фильтр по статусу, bulk-генерация по контингенту
+    (`POST /medical/contingent/generate-referrals`, счётчик «Создано направлений: N»), ручное создание
+    (сотрудник/вид/срок/медорганизация), FSM-переходы: «Запланировать»/«Отменить», «Завершить» с инлайн-выбором
+    осмотра-результата того же человека (`transition {to: completed, result_exam_id}`; без осмотров — подсказка).
+    Per-row in-flight состояние (`Set`) — быстрые действия по нескольким строкам не мешают друг другу.
+  - **Секция «Отстранения от работы»** — фильтр «только активные» (server-side), причины RU (негоден/
+    противопоказания), осмотр-источник, «Снять отстранение» с confirm + двойной reload (список + сводка);
+    403 для не-admin/owner отображается ошибкой секции (фронт-гейтинга ролей нет — RBAC на backend).
+  - `operationsApi`: 9 новых методов + 5 DTO; `StatusBadge`: RU-лейблы и цвета для
+    `overdue`/`due_soon`/`missing`/`scheduled`/`completed`/`lifted` (бонус: бейдж «overdue» в реестре осмотров
+    перестал показывать сырое значение); `transitionMedicalReferral` типизирован union'ом статусов FSM.
+  - **Фикс shared-хука `useAsyncResource`** (первый потребитель с изменяющимся loader'ом): guard
+    `inFlight` дропал reload при смене фильтра во время in-flight запроса (UI показывал данные не того
+    фильтра без recovery) — заменён на latest-wins версионирование (`seqRef`); + юнит-тесты хука (red-first).
+  - Тесты: `MedicalPage` 19 (было 2), `useAsyncResource` 2 (новый файл), `medicalOversightApi` 9 (новый файл),
+    `StatusBadge` 1 (новый файл).
+  - **Осознанно вне объёма (follow-up):** серверный typeahead persons/exams (пикеры ограничены первыми 100 —
+    существующее ограничение снапшота); печатная форма направления на ОПО / решения комиссии; редактор
+    маппинга должность→вид 342н; server-side пагинация направлений (>100 — молчаливое усечение, `total`
+    отбрасывается); подсказка «показаны первые 100 из N»; `Promise.allSettled`-разделение ошибок
+    «мутация vs reload» (house-wide паттерн).
+
+## 2026-07-09 (feat/p10-03-psychiatric-342n — P10-03 Медосмотры: обязательное психиатрическое освидетельствование (342н / ПП РФ 695))
+
+### Added
+- **Психиатрическое освидетельствование 342н (P10-03, ТЗ B.8 → vNext §9.1/§9.2)** — закрыта единственная
+  настоящая функциональная дыра контура медосмотров: до среза `MedicalExamKind.PSYCHIATRIC` был лишь
+  значением enum. Психиатрия введена как **вторая ось деривации контингента**, параллельная 29н
+  hazard→factor, переиспользуя готовую машинерию направлений/отстранения/блока допуска (там — ноль нового
+  кода). Миграция `med03` — чисто аддитивная; 29н-ветка `compute_contingent` не тронута.
+  - Каталог видов деятельности по перечню ПП РФ № 695 — новая `PsychiatricActivityType`
+    (`psychiatric_activity_type`, tenant-scoped, `interval_days` default 1825 = 5 лет, переопределяемо
+    per-вид) + маппинг должность→вид `PsychiatricPositionActivity` (`psychiatric_position_activity`,
+    параллель `RiskHazard.medical_factor_code`). Две nullable/defaulted колонки на `medical_exam`:
+    `psychiatric_protocol_no` (№ решения врачебной комиссии), `psychiatric_activity_codes` (охваченные виды).
+  - `compute_contingent` добавляет `PSYCHIATRIC` для должностей, подлежащих ОПО (батч-загрузка каталога +
+    маппинга, без N+1). `record_exam` для психиатрии считает `valid_until` по строжайшей периодичности
+    замапленных видов (`psychiatric_interval`, fallback 1825). Запись `UNFIT`-освидетельствования открывает
+    `MedicalSuspension` штатным путём → `person_admission` блокирует допуск (§9.2).
+  - API за флагом `medical` (та же RBAC): CRUD `/medical/psychiatric/activity-types` +
+    `POST .../seed-defaults` (one-click загрузка стандартного 695-набора, идемпотентно) +
+    `GET/PUT /medical/psychiatric/positions/{id}/activities` (маппинг, replace-семантика, неизвестный код→422).
+    `record_exam` через `POST /medical/exams` принимает 2 новых поля. Стандартный 695-список — одна кодовая
+    константа `PSYCHIATRIC_ACTIVITY_DEFAULTS` (источник и для demo-сида, и для эндпоинта).
+  - Demo-сид: `_seed_psychiatric_activities_demo` — 695-каталог + маппинг демо-должности на «работы на
+    высоте» (психиатрический контингент непуст из коробки в dev).
+  - Фронт (`MedicalPage`): тонкая секция «Психиатрическое освидетельствование (342н)» — каталог видов
+    деятельности + кнопка «Загрузить стандартный список 695» + счётчик подлежащего контингента; тихая
+    деградация при выключенном флаге. `operationsApi` + методы psychiatric.
+  - **Осознанно вне объёма (follow-up):** per-activity частичное ограничение (блок только конкретного вида
+    деятельности); печатная форма направления/решения комиссии; психиатрический регистр/поименный список;
+    моделирование состава врачебной комиссии; фронт для направлений/отстранений/контингента.
+
+## 2026-07-05 (feat/p10-06-ppe-safety-budget — P10-06 СИЗ склад: бюджет безопасности (СИЗ, план vs факт закупок))
+
+### Added
+- **Бюджет безопасности СИЗ (P10-06, ТЗ §12.4 — СИЗ-часть)** — план расходов на СИЗ за период vs
+  фактические закупки, поверх честного остатка. Аддитивно; инвариант «`batch.quantity` только через
+  `_write_movement`» не тронут — цена это метаданные, факт — вычисляемый агрегат.
+  - Новая сущность `PPESafetyBudget` (`ppe_safety_budget`, миграция `wa09`): `name`, `period_start`/
+    `period_end` (диапазон дат), `planned_amount` (`Numeric(14,2)`), `notes`; tenant-wide, пересечения
+    периодов допускаются. Новая nullable-колонка `PPEStockBatch.unit_cost` (цена за единицу лота).
+  - Сервис `backend/app/modules/ppe/budget.py`: CRUD (create/list/get/update/soft-delete;
+    `BudgetNotFound`→404) + `compute_budget_actual` — **вычисляемый** закупочный факт: Σ приходных
+    проводок (`kind=receipt`, `quantity_delta>0`) × `batch.unit_cost` за период (один join, без N+1),
+    разбивка по категориям `item.category`, приходы без цены исключены из суммы но посчитаны
+    (`unpriced_receipt_count`). Ledger — источник истины (soft-deleted партия/позиция не «отменяют» трату).
+  - API за флагом `warehouse`: `POST/GET /ppe/budgets`, `GET /ppe/budgets/{id}` (план/факт/остаток/
+    разбивка/unpriced), `PATCH/DELETE /ppe/budgets/{id}`; `unit_cost` в схемах/роуте приёмки партии.
+  - Фронт (`WarehousePage`): секция «Бюджет безопасности» (CRUD + деталь с разбивкой по категориям +
+    предупреждение «Приходов без цены: N») + поле «Цена за единицу» в форме приёмки + `warehouseApi`
+    (budgets CRUD/detail).
+  - **Осознанно вне объёма (отдельный под-проект):** кросс-доменный §12.4 (бюджеты обучения/медосмотров/
+    мероприятий, статьи расходов, заявки на возмещение, аналитика по филиалам/объектам — нужна связка
+    batch→branch), consumption-cost аллокация, мультивалюта.
+
+### Fixed
+- **Pre-existing:** stale warehouse mock в `OpsPages.test.tsx` (мокал только `listLevels`/`listBatches`,
+  тогда как `WarehousePage` грузит movements/shortages/counts/transfers/levels-by-location/suppliers/
+  reorder/budgets на маунте) — расширен до полного mount-набора. Не связано с бюджетом; всплыло на
+  полном фронт-сюите (тот же класс фикса, что в PR #726).
+
+## 2026-07-05 (claude/awesome-ritchie-1f2ce2 — P10-06 СИЗ склад: мобильная выдача (online-first))
+
+### Added
+- **Мобильная выдача СИЗ (P10-06)** — новый touch-first экран `/ppe/issue` (право `ppe.issue`) для полевой
+  выдачи СИЗ работникам. **Чисто фронтовый срез** поверх готового `POST /ppe/issues` (FIFO-списание):
+  без миграций, новых эндпоинтов и изменений OpenAPI. Инвариант честного остатка не тронут — выдача идёт
+  штатным путём `create_issue → deplete_for_issue`.
+  - Поток «корзина/комплект»: поиск сотрудника (typeahead по ФИО/должности, только `active`) → набор
+    позиций СИЗ в корзину (merge дублей, qty-степпер, удаление) → обзор → «Выдать всё» (N вызовов
+    `createPpeIssue`). Частичный отказ оставляет в корзине только неудачные строки для повтора (без двойной
+    выдачи), guard от двойного тапа (`useRef` in-flight lock).
+  - Stock-aware: бейджи остатка «на руках» из `warehouseApi.listLevels()` при включённом флаге `warehouse`;
+    тихая деградация (без остатков, выдача работает) при выключенном — зеркалит no-op `deplete_for_issue`.
+  - Файлы: хук `frontend/src/pages/ppe/mobile-issue/useMobileIssue.ts` + `types.ts`, страница
+    `frontend/src/pages/ppe/MobileIssuePage.tsx` (single-file, house-style), маршрут в
+    `pageRegistry.tsx`/`routeGroups.tsx` (за `PPE_ISSUE`), кнопка входа «Мобильная выдача» на `PpePage`.
+    Тесты: `useMobileIssue.test.tsx` (6, renderHook), `MobileIssuePage.test.tsx` (7), +1 на `PpePage.test.tsx`.
+  - Осознанно отложено: офлайн-очередь + серверная идемпотентность, QR-скан бейджа, захват подписи,
+    norm-driven 766н-комплект, per-line выбор партии на мобильном.
+
+### Fixed
+- **Pre-existing:** stale warehouse mock в `OpsPages.test.tsx` (мокал только `listLevels`/`listBatches`,
+  тогда как `WarehousePage` после PR #725 грузит movements/shortages/counts/transfers/levels-by-location/
+  suppliers/reorder на маунте) — зеркалирован полный мок из `WarehousePage.test.tsx`. Не связано с
+  мобильной выдачей; найдено при прогоне полного фронт-сюита.
+
+## 2026-07-04 (claude/keen-mahavira-4d9ed8 — P10-06 СИЗ склад: поставщики (справочник + провенанс + дозаказ))
+
+### Added
+- **Поставщики СИЗ (P10-06)** — нормализованный справочник поставщиков + провенанс партий + закупочный
+  слой дозаказа. Чисто аддитивно; инвариант честного остатка (`batch.quantity` только через
+  `_write_movement`) не тронут — поставщик это метаданные.
+  - Новая сущность `PPESupplier` (`backend/app/models/ppe.py`, таблица `ppe_supplier`): `name` (unique per
+    tenant), `inn`, `contact_email`, `contact_phone`; `SoftDeleteMixin`. Провенанс: nullable FK
+    `PPEStockBatch.supplier_id` (лот пришёл от вендора) + явный `PPEItem.preferred_supplier_id`; обе FK
+    `ondelete=SET NULL`. Миграция `wa08` (аддитивная: таблица + 2 nullable-колонки + FK + индексы).
+  - Сервис справочника `backend/app/modules/ppe/suppliers.py` (create/list/get/update/soft-delete;
+    дубль имени → `SupplierNameConflict`→409 через `IntegrityError`, что ловит и soft-deleted тёзку;
+    `update` с allowlist полей). API за флагом `warehouse`: `POST/GET /ppe/suppliers`,
+    `GET/PATCH/DELETE /ppe/suppliers/{id}` (ETag на списке, дубль→409, нет/cross-tenant→404).
+  - Провенанс подключён: `supplier_id` в схемах/роутах партии (валидация → неизвестный поставщик 404 через
+    `_require_supplier`, явный `null` очищает); `transfer_stock` копирует `supplier_id` в партию-приёмник;
+    `preferred_supplier_id` в схемах/роутах позиции.
+  - Закупочный слой: `compute_shortages` резолвит поставщика позиции — **явный `preferred_supplier_id`
+    если жив, иначе fallback на последнего поставщика из истории партий** (received_at desc nulls-last →
+    created_at desc), soft-deleted резолвнутый → нет; батч-запросы без N+1. Строки `/ppe/stock/shortages`
+    получили поля `supplier_*`. Новый `GET /ppe/stock/reorder` — вычисляемый **черновик заявки**
+    (`build_reorder_draft`): below-threshold дефицит сгруппирован по поставщику, группа `unassigned`
+    последней, per-group `line_count`/`total_deficit` (НЕ персистентная сущность).
+  - Фронт (`WarehousePage`): секция «Поставщики» (CRUD), карточка «Новая партия (приёмка)» с пикером
+    поставщика, колонка «Поставщик» + бейдж источника (явный/история) + инлайн-пикер
+    `preferred_supplier_id` (PATCH → re-fetch дефицита), вид «Дозаказ» (карточки по поставщикам + «Копировать
+    CSV» с экранированием ячеек) + `warehouseApi` (suppliers CRUD / `getReorderDraft` /
+    `patchItemPreferredSupplier` / `createBatch`).
+  - Осознанно отложено (follow-up): unique по ИНН; персистентная заявка/PO + ЭДО-роуминг; полный экран
+    редактирования позиции СИЗ; мультипоставщик/прайс-листы/метрики; reorder-CSV как backend-endpoint.
+
+## 2026-07-04 (claude/lucid-thompson-80c2b5 — P10-06 СИЗ склад: перемещения между локациями)
+
+### Added
+- **Перемещения запаса СИЗ между локациями (P10-06)** — частичный перенос `q` единиц партии из
+  локации A в локацию B как **пара `transfer`-проводок** (`−q` на партии-источнике, `+q` на партии-
+  приёмнике, общий сгенерированный `ref_id`, `ref_type="ppe_transfer"`) через единственный мутатор
+  остатка `_write_movement`. На уровне позиции остаток инвариантен (out + in = 0), per-location остаток
+  честно перетекает.
+  - Сервис `transfer_stock` в `backend/app/modules/ppe/stock.py`: списывает источник первым (нехватка →
+    `InsufficientStockError` до создания приёмника), затем **find-or-create** партии-приёмника с тем же
+    `batch_no` в локации B (копия провенанса: `received_at`/`certificate_no`/`certificate_expires_at`).
+    Гварды: `quantity>0`, непустая `to_location` (после `strip`), `to_location != source.location`.
+  - Миграция `wa07` расширяет уникальный ключ партии с `(tenant, item, batch_no)` до
+    `(tenant, item, batch_no, location)` — **частичный** unique-индекс `WHERE deleted_at IS NULL` +
+    `NULLS NOT DISTINCT` (PG16): один `batch_no` может лежать в разных локациях, legacy-дедуп сохранён,
+    soft-deleted партии не занимают слот. Не чисто аддитивная (drop+add ключа) — PG16-gate round-trip.
+  - Эндпоинты за флагом `warehouse`: `POST /ppe/stock/transfers` (`IntegrityError`/`StaleDataError`→409,
+    нехватка/невалидная локация→400, нет источника→404, `quantity≤0`→422),
+    `GET /ppe/stock/transfers` (история переносов, сгруппированная в пары по `ref_id`, фильтр `item_id`,
+    ETag+304, пагинация по парам), `GET /ppe/stock/levels/by-location` (остаток по `(item, location)`).
+  - Фронт: секция «Перемещения между локациями» на `WarehousePage` (форма источник/локация-назначения
+    с `datalist` известных локаций/количество/причина + история переносов) + `warehouseApi`
+    (`listTransfers`/`createTransfer`/`listLevelsByLocation`).
+  - Осознанно отложено (follow-up): location-фильтр истории переносов, goods-in-transit,
+    location-scoped FIFO-выдача, сущность-справочник `PPELocation`, picker партий в форме.
+
+## 2026-07-04 (claude/recursing-chaum-4a942d — СВЕРКА ТЗ↔КОД + синхронизация доков, PR #723)
+
+### Docs
+- **Спец↔код сверка (docs-only, кода нет).** Прямая сверка ТЗ/роадмапа/релиз-доков с фактическим `main`; весь рассинхрон односторонний — документы отставали от влитых PR.
+  - `CLAUDE.md`: секция «CI status: disabled» → «workflow-файлы включены» (PR #641/#656 вернули 5 активных `.yml`; local-evidence остаётся каноническим gate per REL-1).
+  - `KNOWN_LIMITATIONS.md`: RC-011 (уведомления/эскалация) `missing` → `done` (синхронно с каноном `RELEASE_BLOCKERS_STATUS`).
+  - `RELEASE_READINESS.md`: evidence-policy строка синхронизирована с re-enabled workflow'ами.
+  - `docs/roadmap/PLATFORM_VNEXT_IMPLEMENTATION_PLAN.md`: P10-10 workflow-движок `not started` → `partial` (модуль `modules/workflow/` ~1.4k LOC смонтирован); summary-счётчики (9 partial / 3 not-started); sync-note под Section B (медосмотры/НПА/клиент-кабинет были занижены).
+  - Новый `docs/audit/SPEC_CODE_SYNC_2026-07-04.md` — полная реконсиляция (таблица расхождений + остаток A/B/C).
+  - `AI_IMPLEMENTATION_REPORT.md`: новый handoff-блок с ledger «выполнено/не выполнено» + следующий точный шаг.
+- `TZ_COVERAGE_MATRIX.md` не тронут (CI-gated валидатор; MVP-строки корректны).
+
+## 2026-07-04 (feat/ppe-inventory-count-p10-06 — P10-06 СИЗ склад: инвентаризация (сверка факт↔система))
+
+### Added
+- **Инвентаризация склада СИЗ (P10-06)** — двухфазная сессия подсчёта: новые таблицы
+  `ppe_inventory_count` (заголовок, статус `draft`→`applied`/`cancelled`) + `ppe_inventory_count_line`
+  (снимок по партии: `system_qty`, `counted_qty` nullable, `adjustment_movement_id`), миграция `wa06`
+  (строго аддитивная, две новые таблицы, без бэкофилла).
+  - Сервис `backend/app/modules/ppe/inventory.py`: `create_count` (снимок активных партий под опц.
+    фильтр item/location) → `set_line_counts` (ввод факта на draft) → `apply_count` (выпускает
+    `adjustment`-проводки через `record_movement` — единственный мутатор `batch.quantity`; дельта от
+    **живого** остатка, не снимка; пропускает несосчитанные/нулевые/soft-deleted-партии строки;
+    замораживает срез) + `cancel_count`. Несосчитано (`null`) ≠ «не нашли» (`0`).
+  - Эндпоинты за флагом `warehouse`: `POST/GET /ppe/stock/inventory/counts`, `GET /…/{id}`
+    (детали = превью с live `on_hand`/`delta`), `PATCH /…/{id}/lines`, `POST /…/{id}/apply`,
+    `POST /…/{id}/cancel`. `apply`/`patch` на не-`draft` → 400; конкурентный `apply` → 409
+    (optimistic-lock `version`); `counted_qty < 0` → 422.
+  - `record_movement` расширен аддитивно опциональными `ref_type`/`ref_id` (проводка инвентаризации
+    ссылается на срез: `ref_type="ppe_inventory_count"`).
+  - Фронт: секция «Инвентаризация» в `pages/warehouse/WarehousePage.tsx` (список срезов + форма
+    создания + редактируемая сетка факта с дельтами + «Сохранить/Применить/Отменить»).
+- OpenAPI baseline пере-снят: 811→817 операций, 653→660 схем (чистый аддитив, ARCH-4 зелёный).
+
+## 2026-07-03 (p10-06 — P10-06 СИЗ склад: мин-остаток + прогноз дефицита)
+
+### Added
+- P10-06 СИЗ склад: per-item min-stock threshold (`ppeitem.min_stock`, migration wa05) + shortage forecast endpoint `GET /ppe/stock/shortages` (consumption velocity from issue movements → deficit-to-reorder + days-to-depletion + projected breach date) + WarehousePage shortage section.
+
+## 2026-07-02 (feat/ppe-stock-movements-p10-06 — P10-06 СИЗ склад: журнал движений («честные остатки»))
+
+### Added
+- **Журнал движений склада СИЗ (P10-06)** — append-only таблица `ppe_stock_movement`
+  (migration `wa04`, строго аддитивная, без бэкофилла; `kind` receipt/issue/writeoff/adjustment
+  как VARCHAR по enum-parity-конвенции, `quantity_delta` со знаком, `ref_type`/`ref_id` строкой
+  без FK — журнал переживает hard-delete выдачи). Архитектура «Вариант B»: `batch.quantity` —
+  живой кэш-баланс, мутируется ТОЛЬКО через сервис `backend/app/modules/ppe/stock.py`.
+  - Эндпоинты `POST /ppe/stock/movements` (ручной receipt/writeoff/adjustment; `issue` отклоняется
+    на уровне схемы → 422) и `GET /ppe/stock/movements` (фильтры item/batch/kind, ETag+304,
+    tenant-iso) за флагом `warehouse`.
+  - **FIFO-списание при выдаче СИЗ**: `POST /ppe/issues` (и replace) получил опциональный `batch_id`;
+    без него авто-FIFO по `received_at` (nulls last)→`created_at`→`id`; при нехватке → 400 и вся
+    выдача откатывается (issue не создаётся); флаг ВЫКЛ или у позиции нет партий → без движения
+    (полная обратная совместимость).
+  - Создание партии пишет стартовую проводку `receipt`; `/ppe/stock/levels` теперь честный остаток.
+  - Фронт: секция «Движения» в `pages/warehouse/WarehousePage.tsx` (журнал + форма ручного
+    прихода/списания/корректировки; `issue` в форме недоступен).
+
+### Changed
+- `PPEStockBatchUpdate` больше НЕ принимает `quantity` — количество меняется только проводкой
+  (приход/корректировка), а не сырым `PATCH`.
+
+### Notes
+- OpenAPI baseline пере-снят 808/648 → **810/651** (санкционированное аддитивное исключение —
+  2 новых эндпоинта + 3 схемы движений; прецедент RC-013/RC-014).
+- Разработка: brainstorming → writing-plans → subagent-driven-development (спека+план в
+  `docs/superpowers/{specs,plans}/2026-07-02-p10-06-ppe-stock-movements*`).
+
+## 2026-07-02 (feat/rc-014-branches-ui — фронт для филиалов (RC-014): экраны master data)
+
+### Added
+- **UI филиалов (Branch) — завершение RC-014 на фронте** (бэкенд `/api/v1/branches` был готов с
+  6796c380; схема БД не меняется, только клиент). По образцу экрана «Компании»:
+  - `types/dto/branches.ts` + `types/forms/branches.ts` (zod): `BranchDto` — плоский (без
+    таймстампов, как `BranchRead`); `status` — свободный `string` (VARCHAR, не enum).
+  - `api/branchesApi.ts` — раздельные тела: `buildBranchCreateBody` (с `company_id`) и
+    `buildBranchUpdateBody` (без — филиал нельзя перевесить на другую компанию; поле в форме
+    `disabled` при редактировании). Пустые опциональные поля не отправляются.
+  - `stores/branches.ts` — zustand-стор: список с фильтром `company_id`, create/update/remove;
+    ответ `{items,total}` (BranchPage). Зарегистрирован в `stores/reset.ts`.
+  - `pages/branches/BranchesPage.tsx` + `features/branches/{BranchTable,BranchFormDialog}.tsx`:
+    фильтр по компании, таблица (филиал/компания/контакт/статус), диалог создания/редактирования.
+  - Права `BRANCH_VIEW`/`BRANCH_MANAGE` (только в `ALL_PERMISSIONS` → owner/admin, совпадает с
+    backend-ограничением «только роль admin»); роут `/branches`, пункт меню «Филиалы» (иконка
+    `Network`) в группе «Документооборот».
+- Гейты: `npm run typecheck` — 0 ошибок; `npm run build` — ok; `npm run test` — 395/396 (единичный
+  сбой `ClientPortalPackagesPage` — известный флак от параллельной нагрузки, в изоляции зелёный,
+  к филиалам не относится).
+
+## 2026-07-02 (feat/post-2-migration-hardening — POST-2: настоящие per-migration транзакции + autocommit-блоки на enum-сайтах)
+
+### Changed
+- **POST-2 — укрепление механики миграций** (санкция пользователя; схема данных НЕ меняется):
+  - `backend/app/migrations/env.py`: снят глобальный `isolation_level="AUTOCOMMIT"` (компромисс
+    2026-06-01, при котором КАЖДЫЙ оператор коммитился сразу и упавшая миграция оставляла
+    частичное состояние). Теперь `transaction_per_migration=True` — настоящий BEGIN/COMMIT на
+    каждую миграцию: упавшая миграция откатывается целиком. Pre-step (`alembic_version` →
+    TEXT) коммитится явно — alembic должен стартовать с чистого (не-begun) соединения
+    (SQLAlchemy 2.0 autobegin).
+  - Все **7 сайтов `ALTER TYPE … ADD VALUE`** обёрнуты в `op.get_context().autocommit_block()`
+    (PG запрещает использовать новое значение enum в той же транзакции; блок коммитит
+    расширение немедленно, `IF NOT EXISTS` даёт retry-safety): 20250315 (documentstatus),
+    20250410 (roleenum), 20260318_next67_hotfix (riskmethodologytype, DO-блок),
+    20260328_next55 (templateversionstatus ×4), 20260407_hotfix (active),
+    20260530_wa03 (prescriptionstatus), 20260602_iter49 (4 типа). Примечание: в
+    RELEASE_BLOCKERS_STATUS фигурировало «8 сайтов» — реально исполняемых 7 (восьмым считался
+    удалённый в iter-14 UPDATE-сайт next55b).
+  - Ровно тот follow-up, который был назван в «env.py atomicity review» (2026-06-02) как
+    «optional future hardening: per-migration tx + autocommit_block()».
+
+## 2026-07-02 (feat/post-1-remove-domain-shims — POST-1: физическое удаление ARCH-1 compat-shim'ов)
+
+### Removed
+- **POST-1 — снесены 10 deprecated compat-shim пакетов `domains/*`** (28 файлов, чистые
+  реэкспорты, оставленные ARCH-1 «до следующего мажора»): `audit`, `contractors`, `files`,
+  `incidents`, `packs`, `ppe`, `replace`, `risk`, `sign`, `training`. Канон — только
+  `app.modules.*`. Живые (не дублированные) домены `billing/committees/layout/medical/npa/
+  permits/prescriptions/signing/sout/templating/work_permits` + `shared.py` — не тронуты.
+
+### Changed
+- **Потребители переведены на канонические пути** (последние 5 ссылок на shim'ы):
+  `tests/test_contractor_admission_service.py`, `tests/test_contractor_admission_with_documents.py`
+  (`domains.contractors.lifecycle` → `modules.contractors.lifecycle`),
+  `tests/test_demo_bootstrap_contractor_documents.py` (`domains.contractors.documents` →
+  `modules.contractors.documents`), `scripts/smoke.sh` ×2 (`domains.files` → `modules.files`).
+- **ALLOWLIST в `scripts/ci/check_context_boundaries.py`: 27 → 5.** Ушли все 22 shim-ребра
+  domains→modules; остались 2 modules→живые-домены (briefings→signing.pep,
+  templates→templating.renderer) + 3 modules→domains.shared (shared kernel — отдельный
+  будущий срез).
+- `.coveragerc`: omit-пути `app/domains/packs/{context,seeder}.py` → `app/modules/packs/…`
+  (протухли в ARCH-1 slice 6, omit молча не работал).
+- Docstring'и `modules/{contractors,packs,ppe}/__init__.py` и протухшие перекрёстные ссылки
+  (`domains/permits/lifecycle.py`, `domains/signing/pep.py`, `modules/ppe/lifecycle.py`) —
+  упоминания shim'ов заменены на «removed in POST-1».
+
+### Fixed
+- **`tests/test_context_boundaries.py::test_allowlist_is_the_expected_legacy_set` был красным
+  на main**: freeze-тест фиксировал 10 записей allowlist, а ARCH-1 довёл их до 27, не обновив
+  зеркальный тест (скрипт-гейт не падал — он проверяет только новые/протухшие рёбра, не
+  количество). Теперь фиксация = 5 и совпадает с реальностью.
+
+## 2026-07-02 (fix/stabilize-gates-2026-06-29 — REL-1 resolved: permanent local-evidence policy; RC-015/RC-016 closed; staged mypy gate repaired)
+
+### Changed
+- **REL-1 (ТЗ §5) — решение по гейту качества: вариант (c), постоянная local-evidence политика**
+  (санкция пользователя «делаем всё»; полностью обратимо — workflows сохранены как `.yml.disabled`):
+  - `docs/stabilization/RELEASE_BLOCKERS_STATUS.md` → «Evidence policy (PERMANENT)»: снята
+    «provisional»-рамка, добавлена **каноническая таблица воспроизводимого пайплайна** (PG16-гейт,
+    lint, static gates, SAST, script-гейты, contract-guards, critical-path matrix, frontend) и
+    **standing deferrals** (Trivy dep/image, Gitleaks, SBOM, Playwright — нет локальных раннеров).
+  - `RELEASE_READINESS.md` синхронизирован (Updated-on 2026-07-02; re-validation obligation →
+    permanent-policy формулировка).
+- **RC-015 (security gate matrix) → done (local-evidence, 2026-07-02).** Локально запускаемые гейты
+  зелёные: 4 script-гейта (`check_security_exceptions`/`check_default_secrets`/
+  `check_runtime_artifacts`/`check_scoped_queries` — exit 0), SAST `python -m bandit -r backend/app
+  -lll -iii` — 0 HIGH, static gates — F821 clean + staged mypy 0 ошибок. `security-gates.md` получил
+  операционную таблицу с командами/результатами/deferral'ами.
+- **RC-016 (critical-path coverage matrix) → done (local-evidence, 2026-07-02).** Backend-ядро
+  Block B.1 зелёное: tenant-isolation + cross-tenant matrix + final-regression = **14 passed**.
+  Caveats: Playwright smoke — deferral (прецедент RB-005); perf/workflow edges — под caveat RC-002.
+  `coverage.md` + `PLAN.md` B.1 обновлены (заодно починен устаревший B.2: RC-006 done с 2026-05-29).
+- **Ремонт staged mypy-гейта (сломан молча с ARCH-4 slice 10):** `scripts/ci/static_gates.sh`
+  ссылался на `backend/app/modules/files/service.py`, который стал ПАКЕТОМ — mypy падал «can't read
+  file» до старта. Путь исправлен на пакет; вскрытые 79 attr-defined ошибок миксинов закрыты
+  **TYPE_CHECKING-контрактами** в `_access`/`_fileops`/`_uploads` (декларации `session`/`tenant_id`
+  + сигнатуры заимствованных helper'ов AccessMixin; ноль рантайм-эффекта): wave0 29 файлов / wave1
+  20 файлов — 0 ошибок. Error-budget таблица в `coverage.md` дополнена строкой 2026-07-02.
+  ANTI-ГРАБЛИ (Windows): venv exe-шимы (`bandit.exe`/`mypy.exe`) молча падают на кириллическом пути
+  репо — вызывать `python -m bandit` / `python -m mypy`; и `script | tail; echo $?` возвращает статус
+  tail, НЕ скрипта (ложный зелёный) — проверять `${PIPESTATUS[0]}`.
+
+## 2026-07-02 (fix/stabilize-gates-2026-06-29 — RC-014: dedicated Branch entity separated from Site)
+
+### Added
+- **RC-014 — сущность «филиал» (Branch), отделённая от Site** (санкционированное additive-исключение
+  из правила «не менять контракт», ТЗ §5 REL-4 / §10.3; санкция пользователя 2026-07-02):
+  - **Model** `app/models/master_data.py::Branch` — company-scoped уровень master-data между Company и
+    Site (vNext-иерархия «группы компаний → компании → **филиалы** → объекты → площадки»): name/code/
+    address/contacts + VARCHAR `status` (не PG-enum — вне enum-parity класса, прецедент cm01);
+    `UniqueConstraint(tenant_id, company_id, name)`. Re-exported через `models.py`/`models/__init__`
+    (+ в оба `__all__` — иначе ruff --fix вырезает реэкспорт).
+  - **`Site.branch_id`** — additive nullable колонка, **app-level ссылка без DB FK** (add_column с FK —
+    класс миграционных граблей wa02; прецедент `contractor_registry.company_id`); целостность держит
+    API-слой: `_ensure_branch_link` в `routes/sites.py` (существование + тот же tenant + та же company →
+    404/400).
+  - **Migration** `20260702_br01_branch_entity` (additive: create `branch` + `site.branch_id` + index;
+    honest downgrade). NOTE: локальный alembic-прогон на SQLite невозможен исторически (initial_schema
+    использует JSONB) — канонический прогон миграций = PG16 gate.
+  - **API** `/api/v1/branches` (list ETag / create / get / patch / delete) — зеркало `sites.py` (те же
+    ABAC-роли и audit_operation); master-data CRUD в репо не феатур-флагуется (прецедент sites/companies).
+    `SiteCreate`/`SiteUpdate`/`SiteRead` получили опциональный `branch_id` (отвязка через `branch_id: null`).
+  - **Contract tests** `tests/test_branches_api.py` (5): CRUD roundtrip, create с несуществующей company
+    → 404, cross-tenant изоляция (get/patch/delete чужого → 404, список не течёт), site↔branch
+    link/unlink/relink, company-mismatch → 400 + ghost branch → 404.
+  - **OpenAPI baseline re-snapped**: 803 операции / 644 схемы → **808 / 648** (+5 роутов, +4 схемы) —
+    легитимное пере-снятие через `check_openapi_snapshot.py --snapshot`; Celery unchanged (32).
+  - Verified: branch tests 5 passed; AST drift-audit (ORM↔migrations parity) 59 passed; ruff+black clean;
+    PG16 gate (alembic upgrade heads + boundary + enum parity) — final evidence.
+  - Docs: `GAP_REPORT.md` + `docs/stabilization/RELEASE_BLOCKERS_STATUS.md` RC-014 → done;
+    `docs/MODULES.md` обновлён (карта после ARCH-1 + иерархия org_structure с branch).
+
+## 2026-07-02 (fix/stabilize-gates-2026-06-29 — ARCH-1: tail slice 8 — replace/audit/sign; duplicated-context queue CLOSED)
+
+### Changed
+- **ARCH-1 slice 8 — fold the three tail contexts, closing the duplicated-context queue.** All three
+  moves are **byte-identical** (stdlib/`app.models`-only imports):
+  - **replace** (the flagged MESSY one — canon decision): the legacy persisted `ReplaceEngine`
+    (`domains/replace/engine.py`, 265 loc) is production-dead — its only importers are 3 lazy imports in
+    `tests/test_replace_api.py`. The richer `modules/replace` package (pattern-replacement `engine.py`,
+    api/service/…) stays the canon untouched; the legacy engine moves ASIDE as
+    `modules/replace/legacy_engine.py` (rename dodges the `engine.py` collision), test repointed.
+    Nothing deleted (per ТЗ the compat layer survives until POST-1).
+  - **audit**: `domains/audit/service.py` (`AuditDomainService`, 0 importers) → `modules/audit/service.py`.
+  - **sign**: `domains/sign/signer.py` (`DocumentSigner`, 0 importers) → `modules/sign/signer.py`.
+  - `domains/{replace,audit,sign}/` are now pure compat-shims; ARCH-3 allowlist +3 shim edges (now 27).
+  - NOT in scope (not duplicated contexts — no `modules/` counterpart): `domains/{shared,signing,medical,
+    permits,templating}` stay as-is; `domains.shared` migration is flagged as its own future slice.
+  Verified locally (Py3.13 venv): ruff+black clean first-try, ARCH-3 boundaries clean (27 allowlisted,
+  0 new), byte-identity ×3, replace API tests green, shim/canon object-identity smoke, OpenAPI contract
+  unchanged (803/644), Celery tasks unchanged (32).
+  **ARCH-1 status: all 8 slices done** (risk, incidents, training, contractors, ppe, packs, files,
+  replace/audit/sign). Every duplicated `domains/X ↔ modules/X` context is collapsed into `modules/`
+  with deprecated re-export shims left behind (POST-1 removes them next major).
+
+## 2026-07-02 (fix/stabilize-gates-2026-06-29 — ARCH-1: collapse domains/files into modules/files (slice 7))
+
+### Changed
+- **ARCH-1 slice 7 — fold `domains/files` into `modules/files`.** The most-coupled slice (28 import
+  sites across 18 code files + 11 test files) but the cleanest mechanically — all three logic files moved
+  **byte-identical** (they import only exempt `app.core.*`/`app.services.*`, and never each other):
+  - `domains/files/{s3,utils,document}.py` → `modules/files/*` keeping names (all free in the package).
+  - `domains/files/` is now a pure compat-shim package (3 re-export modules + deprecation docstring in
+    the previously-empty `__init__`; kept until POST-1). The `s3` shim re-exports the full `__all__`
+    including `_resolve_endpoint` and documents that mock-patch string targets must use the canon path.
+  - Importers repointed via exact-list bulk replace (`app.domains.files` → `app.modules.files`):
+    `api/app.py`, `api/routes/{files,health}.py`, `api/routes/packs/run.py`, `api/v1/router.py`,
+    `modules/files/{api.py,storage.py,service/{__init__,_fileops,_functions,_uploads}.py}`,
+    `modules/health_checks/service.py`, `modules/pdf/convert.py`, `services/{clamav,file_storage,
+    package_export}.py`, `services/pipeline/service.py`, `tasks/document_jobs.py` + 10 test files
+    incl. `tests/conftest.py`. The two lazy in-function imports in `services/file_storage.py` (they break
+    the `s3 ↔ file_storage` import cycle) stay lazy, only the path changed.
+  - **Mock-patch traps handled**: 3 patch STRING targets (`"app.domains.files.s3.generate_presigned_get_url"`
+    ×2, `"app.domains.files.s3.get_client"`) repointed to `app.modules.files.s3.*` — a name-by-name shim is
+    a distinct module object, so patching the old path would silently stop affecting canon consumers.
+    Also `tests/minio/test_s3_endpoint_resolution.py` loads `s3.py` **by file path** (`"domains" / "files"`
+    as Path segments — invisible to dotted-string greps); its loader path updated to `modules`.
+  - ARCH-3 allowlist **shrinks 29 → 24**: the 8 long-standing `modules/* → app.domains.files` debt edges
+    (files.api, files.service + 3 mixins, files.storage, health_checks, pdf.convert) all became stale and
+    were REMOVED (the debt this slice drains); +3 compat-shim edges (`domains.files.{s3,utils,document}`).
+  Verified locally (Py3.13 venv): ruff+black clean, ARCH-3 boundaries clean (24 allowlisted, 0 new,
+  0 stale), byte-identity of all 3 moved files, files/tenancy/minio test suite green, shim/canon
+  object-identity smoke (incl. `modules.files.service.s3 is modules.files.s3`), OpenAPI contract
+  unchanged (803/644), Celery tasks unchanged (32). Schema untouched → PG-gate not required.
+  ARCH-1 core queue is now DONE (7 slices); remaining: `replace` (needs a canon decision on the legacy
+  `ReplaceEngine`) and trivial `audit`/`sign`.
+
+## 2026-07-02 (fix/stabilize-gates-2026-06-29 — ARCH-1: collapse domains/packs into modules/packs (slice 6))
+
+### Changed
+- **ARCH-1 slice 6 — fold `domains/packs` into `modules/packs`.** Largest slice so far (5 logic files,
+  ~1243 loc, 10 importers). `modules/packs` already held the pack-run v2 surface (`api.py`/`schemas.py`/
+  `service.py`), so:
+  - `domains/packs/{assets,context,definitions,seeder}.py` → `modules/packs/*` **keeping names**
+    (git-moved; assets byte-identical, the other three change only their intra-package import lines,
+    plus ruff isort reorder).
+  - `domains/packs/service.py` → `modules/packs/operations.py` (git-moved **byte-identical**; renamed to
+    avoid the existing `modules/packs/service.py` — different concern: scenario-profile resolution +
+    `PackAssembler` vs pack-run/naming services).
+  - `modules/packs/__init__.py` now exposes `router` **lazily (PEP 562)**: worker/bootstrap import paths
+    (`services/tasks.py`, `services/demo_bootstrap.py` import the `seeder`/`context` submodules) must not
+    eagerly pull FastAPI/openpyxl via the package `__init__` — before the move they imported
+    `domains.packs.*` whose `__init__` was empty, so the eager `from .api import router` would have been a
+    NEW heavyweight edge in the worker import graph. `route_groups.py`'s `from app.modules.packs import api`
+    still works (submodule fallback), and `pkg.router` resolves on first access.
+  - `domains/packs/` is now a pure compat-shim package (5 re-export modules + deprecation docstring in
+    `__init__`; kept until POST-1).
+  - Importers use the canon (10): `api/routes/client_portal.py` (`…packs.operations`),
+    `api/routes/packs/_common.py`, `api/routes/packs/management.py`, `services/demo_bootstrap.py`,
+    `services/package_pipeline.py`, `services/tasks.py` + root-tests `tests/test_package_pipeline.py`,
+    `tests/test_templates_pipeline_api.py`, `tests/services/test_pack_generation_pipeline.py`,
+    `tests/integration/test_packages_e2e.py`; docstring pointer updated in
+    `backend/tests/test_documentpack_enum_values.py`. No mock-patch string targets exist for packs
+    (swept tests/, backend/tests, integration_tests/, scripts/).
+  - ARCH-3 allowlist: **+5 compat-shim edges only** (now 29) — the moved files import nothing from
+    `app.domains.*` (seeder's `app.services.file_storage` etc. are exempt orchestration-layer imports),
+    so unlike contractors/ppe no new shared-kernel edges appear and no stale entries needed removal.
+  Verified locally (Py3.13 venv): ruff+black clean, ARCH-3 boundaries clean (29 allowlisted, 0 new),
+  byte-identity of all 5 moved files, packs test suite green, shim/canon object-identity + lazy-router
+  smoke, OpenAPI contract unchanged (803/644), Celery tasks unchanged (32). Schema untouched → PG-gate
+  not required. Queue next: `files` (769 loc / 28 imp., most-coupled), then decisions on `replace`
+  (ReplaceEngine canon) and trivial `audit`/`sign`.
+
+## 2026-07-01 (fix/stabilize-gates-2026-06-29 — ARCH-1: collapse domains/ppe into modules/ppe (slice 5))
+
+### Changed
+- **ARCH-1 slice 5 — fold `domains/ppe` into `modules/ppe`.** The messiest slice so far: unlike
+  `contractors` (empty `__init__`), `domains/ppe/__init__.py` re-exported 8 functions and callers import
+  from the **package** (`from app.domains.ppe import build_journal_export`), and `modules/ppe` already
+  held a same-named-ish `services.py`:
+  - `domains/ppe/lifecycle.py` → `modules/ppe/lifecycle.py` (git-moved; **byte-identical** — pure issue
+    FSM + card-line rules; imports only `app.domains.shared` + stdlib). Name was free in `modules/ppe`.
+  - `domains/ppe/service.py` → `modules/ppe/operations.py` (git-moved; **renamed** to avoid colliding with
+    the existing `modules/ppe/services.py` — different concern: pure norm/card algorithms there vs
+    DB-backed issuance/card/journal ops here). Only body change: internal `app.domains.ppe`→
+    `app.modules.ppe` for `import lifecycle as lc`.
+  - `modules/ppe/__init__.py` **extended**: keeps re-exporting the 4 existing service classes and adds the
+    8 `operations` functions, so `from app.modules.ppe import build_journal_export` works.
+  - `domains/ppe/` now three deprecated compat-shims (`__init__` + `lifecycle.py` + `service.py`,
+    re-exporting from `app.modules.ppe*`; kept until POST-1).
+  - Importers use the canon: `api/routes/ppe.py` (2 imports), `api/routes/journals.py`,
+    `services/person_admission.py`, `services/ppe_notifications.py` + `tests/test_ppe_lifecycle.py`
+    → `from app.modules.ppe …`.
+  - ARCH-3 allowlist churn (net +3, now 24): **removed** the stale `domains.ppe.service →
+    modules.ppe.services` edge (service.py moved; the moved `operations.py` imports `modules.ppe.services`
+    as a same-context modules→modules edge, which the guard does not flag); **added** one
+    `modules.ppe.lifecycle → app.domains.shared` shared-kernel edge (same class as contractors) plus three
+    `domains.ppe* → modules.ppe*` compat-shim edges.
+  Verified locally (Py3.13 venv): ruff+black clean, ARCH-3 boundaries clean (24 allowlisted, 0 new),
+  byte-identity of both moved files (lifecycle identical; operations differs only in the `lc` import),
+  ppe FSM/card unit tests green (24), ppe route/error/events + person-admission + journal-concept tests
+  green (58), OpenAPI contract unchanged (803/644), Celery tasks unchanged (32). No other
+  `app.domains.ppe` importers remain. Queue next: `packs` (1405 loc / 11 imp.), then `files` (most-coupled).
+
+## 2026-07-01 (fix/stabilize-gates-2026-06-29 — ARCH-1: collapse domains/contractors into modules/contractors (slice 4))
+
+### Changed
+- **ARCH-1 slice 4 — fold `domains/contractors` into `modules/contractors`.** `modules/contractors`
+  already held the ORM (`models.py`) and its file names `documents.py`/`lifecycle.py` were free, so the
+  two pure (no-I/O) logic files move **keeping their names** — no `operations.py` rename needed:
+  - `domains/contractors/documents.py` → `modules/contractors/documents.py` (git-moved; unchanged —
+    expiry classification `document_expiry_status`/`best_document`/`requirement_status`).
+  - `domains/contractors/lifecycle.py` → `modules/contractors/lifecycle.py` (git-moved; the only body
+    change is its internal import `app.domains.contractors.documents` → `app.modules.contractors.documents`).
+    Holds the admission engine `evaluate_employee` + `ReadinessStatus`/`EmployeeVerdict`/`DocumentRequirement`.
+  - **new** `modules/contractors/__init__.py` re-exports the public surface of both files.
+  - `domains/contractors/documents.py` + `lifecycle.py` are now deprecated compat-shims (re-export from
+    `app.modules.contractors.*`; kept until POST-1).
+  - Importers use the canon: `services/contractor_admission.py`, `services/contractor_documents.py`,
+    `api/routes/contractors.py`, `modules/projections/services.py` + the 3 `tests/test_contractor_*.py`
+    → `from app.modules.contractors import …`.
+  - ARCH-3 allowlist churn (net +2, now 21): **removed** two stale edges (`projections.services →
+    domains.contractors.lifecycle`, repointed to canon; `domains.contractors.lifecycle →
+    modules.contractors.models`, now behind the shim); **added** two compat-shim edges plus — unlike
+    risk/incidents/training, whose moved files imported only `app.models.*` — two `modules.contractors.* →
+    app.domains.shared` edges, because the pure logic still uses the shared `ContingentItemStatus`/`classify`
+    kernel (migrating `app.domains.shared` itself is a separate future slice, flagged in-code).
+  Verified locally (Py3.13 venv): ruff+black clean, ARCH-3 boundaries clean (21 allowlisted, 0 new),
+  shim/canon object-identity smoke, contractor + shared-classify unit tests green (32 passed), OpenAPI
+  contract unchanged (803/644), Celery tasks unchanged (32). No other `app.domains.contractors` importers
+  remain. Queue next: `ppe` (has `modules/ppe/services.py` → possible name collision), then `packs`, `files`.
+
+## 2026-07-01 (fix/stabilize-gates-2026-06-29 — ARCH-1: collapse domains/training into modules/training (slice 3))
+
+### Changed
+- **ARCH-1 slice 3 — fold `domains/training` into `modules/training`** (same new-file pattern as
+  `incidents`; `modules/training` already held the class services
+  `TrainingEnrollmentService`/`TrainingCertificateService`):
+  - `domains/training/service.py` → `modules/training/operations.py` (git-moved; contents unchanged —
+    imports only `app.models.*` / `app.services.*`, so no new cross-context edges). Holds
+    `assign_training_plan` / `register_training_session` / `issue_certificate` /
+    `upcoming_certificate_expirations` / `TrainingCertificateIssueResult`.
+  - **new** `modules/training/__init__.py` re-exports the operations functions + the existing services
+    (the package previously had no `__init__.py`; existing `from app.modules.training.services import …`
+    callers are unaffected).
+  - `domains/training/` is now a deprecated compat-shim (re-exports from
+    `app.modules.training.operations`; kept until POST-1).
+  - Importers use the canon: `api/routes/training.py` + `tests/domains/test_training_domain.py` →
+    `from app.modules.training import …`.
+  - ARCH-3: two intentional shim edges added to the "ARCH-1 compat-shims" allowlist group.
+  Verified locally (Py3.13 venv): ruff+black clean, ARCH-3 boundaries clean (19 allowlisted, 0 new),
+  shim/canon object-identity smoke, training tests green, OpenAPI contract unchanged (803/644). No
+  other `app.domains.training` importers remain.
+
+## 2026-07-01 (fix/stabilize-gates-2026-06-29 — ARCH-1: collapse domains/incidents into modules/incidents (slice 2))
+
+### Changed
+- **ARCH-1 slice 2 — fold `domains/incidents` into `modules/incidents`.** Unlike `risk` (where the
+  legacy file was a distinct concern), `modules/incidents` already held complementary domain-rule
+  services (`IncidentCaseService`/`IncidentInvestigationService`/`RiskReviewTriggerService`), so the
+  legacy CRUD/orchestration file lands as a **new** module file rather than overwriting:
+  - `domains/incidents/service.py` → `modules/incidents/operations.py` (git-moved; contents unchanged
+    — imports only `app.models.*`, so no new cross-context edges inside). Holds the persistence
+    functions (`register_incident`/`update_incident`/`append_log_entry`/`register_inspection`/
+    `update_inspection`/`add_inspection_result`).
+  - `modules/incidents/__init__.py` re-exports the operations functions alongside the existing
+    services.
+  - `domains/incidents/` is now a deprecated compat-shim (re-exports from
+    `app.modules.incidents.operations`; kept until POST-1).
+  - Importers use the canon: `api/routes/incidents.py` + `api/routes/inspections.py` →
+    `from app.modules.incidents import …`.
+  - ARCH-3: two intentional shim edges added to the "ARCH-1 compat-shims" allowlist group.
+  Verified locally (Py3.13 venv): ruff+black clean, ARCH-3 boundaries clean (17 allowlisted, 0 new),
+  shim/canon object-identity smoke, incident/inspection API + safety-ops + outbox tests green
+  (102 passed), OpenAPI contract unchanged (803/644). No other `app.domains.incidents` importers remain.
+  NOTE: not every duplicated context is this clean — `replace` has a real `engine.py` name-collision
+  (a legacy `ReplaceEngine` absent from the richer `modules/replace`), so it needs a per-context canon
+  decision rather than a mechanical shim.
+
+## 2026-07-01 (fix/stabilize-gates-2026-06-29 — ARCH-1: collapse domains/risk into modules/risk (slice 1))
+
+### Changed
+- **ARCH-1 slice 1 — fold the legacy `domains/risk` context into the canonical `modules/risk`.**
+  First incremental step of collapsing the duplicated `domains/` ↔ `modules/` layers (ТЗ ARCH-1),
+  chosen as the smallest named context (192 loc, 3 importers). Behaviour-preserving:
+  - `domains/risk/calc.py` → `modules/risk/calc.py` (git-moved; contents unchanged — it only imports
+    `app.models.*`, so no new cross-context edges inside).
+  - `modules/risk/__init__.py` now re-exports the calc API (`score_band`,
+    `rebuild_matrix_from_methodology`, `recalc_risk_map`) alongside the existing services.
+  - `domains/risk/` is now a **deprecated compat-shim** — `__init__.py` and `calc.py` re-export from
+    `app.modules.risk.calc` (kept until POST-1 physically removes the `domains/*` shims); no business
+    logic remains there.
+  - The three importers now use the canon: `api/routes/risk/assessments.py` +
+    `api/routes/risk/methodologies.py` → `from app.modules.risk import …`; `tests/test_domains_risk_calc.py`
+    → `from app.modules.risk.calc import …`.
+  - ARCH-3 boundary guard: the shim adds two intentional `app.domains.risk[.calc] -> app.modules.risk.calc`
+    edges, added to `ALLOWLIST` under a new "ARCH-1 compat-shims" note (distinct from the legacy leaks;
+    they disappear with the shim at POST-1).
+  Verified locally (Py3.13 venv): ruff+black clean, ARCH-3 boundaries clean (15 allowlisted, 0 new),
+  shim/canon object-identity smoke, risk calc + engine + API/contract tests green; OpenAPI contract
+  unchanged (only import sources moved, not signatures). No other `app.domains.risk` importers remain.
+
+### Added
+- **RC-011 — real notification delivery (provider orchestration + escalation).** Previously the
+  dispatch job set `status=SENT` without calling any provider, and — worse — *nothing* enqueued the
+  dispatch, so QUEUED email/telegram/webhook notifications were never delivered at all. Now:
+  - **Provider abstraction** `app/modules/notifications/providers/` — `NotificationProvider` protocol
+    + `DeliveryResult` (DELIVERED / FAILED / SKIPPED) and thin real clients: `InAppProvider` (terminal,
+    always delivered), `EmailProvider` (stdlib SMTP off-loop), `TelegramProvider` (Bot API via httpx),
+    `WebhookProvider` (HTTP POST + HMAC, reuses `INBOUND_WEBHOOK_HMAC_SECRET`). All external delivery is
+    **feature-flagged** (`NOTIFICATIONS_DELIVERY_ENABLED`, default **False**) and per-channel configured;
+    when off/unconfigured/without a recipient contact a provider returns `SKIPPED` (never a false SENT).
+  - **Orchestration** `app/modules/notifications/delivery.py` — `deliver_notification` resolves the
+    recipient contact (`NotificationChannelSettings.email/telegram_chat_id`, falling back to `User.email`),
+    calls the channel provider and records an honest status: DELIVERED→`sent`; SKIPPED→`sent` (still shown
+    in-app) with the skip reason; FAILED→retry while `attempts < NOTIFICATIONS_MAX_DELIVERY_ATTEMPTS`, then
+    `failed` + **channel-tier escalation** — re-queue on the next enabled channel of the chain
+    email→telegram→in-app (in-app terminal, so the chain always converges). Delivery metadata is written
+    to the existing `payload` JSON; **no schema change** (uses existing `status`/`attempts`/`last_error`/
+    `sent_at`).
+  - **`notifications.dispatch_pending` beat job** (every 5 min) — the missing orchestrator: scans due
+    QUEUED notifications per active tenant and delivers them; the existing `notifications.dispatch`
+    (single-message) now also routes through the delivery layer. Celery baseline re-snapshotted (31→32).
+  - New config: `NOTIFICATIONS_DELIVERY_ENABLED`, `NOTIFICATIONS_MAX_DELIVERY_ATTEMPTS`, `SMTP_*`,
+    `TELEGRAM_BOT_TOKEN` (config-only; feature off by default).
+  Verified locally (Py3.13 venv): ruff+black clean, new `tests/test_notification_delivery.py`
+  (11 tests: provider skip paths, in-app/disabled/success/retry-then-escalate, batch scan, escalation
+  chain) green; the named acceptance regressions (`test_notifications_calendar_api`, `test_workflow_api`)
+  and task tests stay green — the public API contract is unchanged.
+
+## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-4: decompose god-class FileService via mixins)
+
+### Changed
+- **ARCH-4 — decompose the god-class `modules/files/service.py::FileService` (1241 lines) via
+  mixins** — the last ARCH-4 god-file. Behaviour-preserving: every method/function body is a
+  byte-identical move (deterministic line-diff). `service.py` → `modules/files/service/` package:
+  - `_base.py` — imports, constants (`MAX_INDEX_BYTES/MAX_INDEX_CHARS`), logger, and the module-level
+    file helpers (`resolve_presign_ttl`, sha/stream hashing, `_safe_filename`, dangerous-extension
+    guard, `_mask_pii`, artifact naming) shared by everything.
+  - `_access.py` `AccessMixin` — role/company scoping, audit logging, signed-url TTL.
+  - `_uploads.py` `UploadMixin` — upload session create / new-version / finalize + AV scan.
+  - `_fileops.py` `FileOpsMixin` — download URLs, link/unlink, abort, artifact-from-bytes, delete.
+  - `_functions.py` — the module-level (non-method) functions kept for compatibility
+    (`create_upload_session`/`complete_upload`/`index_file_*`/`_upsert_file_search_document`/
+    `issue_download_url`), independent of the class (no cycle); `UploadMixin.finalize_upload` imports
+    the one it calls (`index_file_record`) from here.
+  - `service.py` — `class FileService(AccessMixin, UploadMixin, FileOpsMixin)` + `__init__`.
+  - `__init__.py` — re-exports `FileService`, the public helpers and module functions, plus the
+    module-level names tests monkeypatch as `app.modules.files.service.<name>`: `s3`, `av`,
+    `OutboxService`, `av_scan_file_job` (attribute-level patches on these shared objects stay global,
+    so the mixin call sites see them), so every `from app.modules.files.service import …` and every
+    such patch target resolve unchanged.
+  No `__`-mangled members exist. Verified locally (Py3.13 venv): ruff+black clean (a duplicate `s3`
+  import was caught by ruff `F811`/`ImportError` and resolved by importing `s3` for the patch target
+  directly from `app.domains.files`), every body byte-identical to source, a class-assembly smoke
+  (MRO, all 20 methods resolve, 2 `@staticmethod`s static, unchanged `__init__(self, session,
+  tenant_id)`, `s3`/`av`/`OutboxService`/`av_scan_file_job` identity across the package / `_uploads` /
+  `_functions`, all external importers — api/tasks/pipelines_orchestrator/pipeline_step_handlers —
+  resolving the same class), files tests green (106 passed). One test that patched a *function name*
+  (`app.modules.files.service.get_settings`) rather than an object attribute was repointed to
+  `app.modules.files.service._uploads.get_settings` — a name is patched in the namespace the function
+  looks it up in, and `create_upload_session` now lives in the `_uploads` mixin. **All six ARCH-4
+  god-files (`tasks/_core.py` + documents/risk/medical/packs routes + PipelineService + FileService)
+  are now decomposed.**
+
+## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-4: decompose god-class PipelineService via mixins)
+
+### Changed
+- **ARCH-4 — decompose the god-class `services/pipeline.py::PipelineService` (1125 lines) via
+  mixins.** First god-*service* split (no OpenAPI guard applies), behaviour-preserving: every method
+  body is a byte-identical move (deterministic line-diff, incl. the 735-line `run`), so the class is
+  reassembled from mixins with identical behaviour. `pipeline.py` → `services/pipeline/` package:
+  - `_base.py` — `StampingUnavailableError`, kept in one place so the raise sites (StampingMixin)
+    and `run`'s `except` clause (service.py) reference the **same class object** (identity preserved
+    → `except` still catches).
+  - `_preparation.py` `PreparationMixin` — request-metadata build, parameter prep, idempotent-run
+    validation.
+  - `_stamping.py` `StampingMixin` — QR/watermark placeholder backends.
+  - `_staging.py` `StagingMixin` — output stage bookkeeping (`_init_outputs/_stage_completed/_record_stage`).
+  - `_runs.py` `RunLifecycleMixin` — pending-run creation / idempotent lookup, error normalization.
+  - `service.py` — `class PipelineService(PreparationMixin, StampingMixin, StagingMixin,
+    RunLifecycleMixin)` with `DOCX_CONTENT_TYPE`, `__init__` and the `run` orchestrator (819 lines,
+    over the ~700 guideline because `run` is a single ~735-line method — splitting it would change
+    behaviour, which the ТЗ forbids; the supporting method groups are what became mixins).
+  - `__init__.py` — re-exports `PipelineService` + `StampingUnavailableError` so the public surface
+    (`from app.services.pipeline import …`, the `app.services` re-export, and all callers in
+    packs/router/cli/tasks/package_pipeline) is unchanged.
+  No `__`-mangled members exist, so the moves are safe. Verified locally (Py3.13 venv): ruff+black
+  clean, every method body byte-identical to the source, and a class-assembly smoke confirming the
+  MRO, `StampingUnavailableError` identity across `_base`/`_stamping`/`service`, all 14 methods
+  resolving on the class, the 6 `@staticmethod`s still static, the `DOCX_CONTENT_TYPE` class attr,
+  the unchanged `__init__(self, storage, pdf_converter, metrics)` signature, and all six external
+  importers resolving the same `PipelineService`; pipeline tests green (44 passed).
+
+## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-4: split god-route packs.py into a package)
+
+### Changed
+- **ARCH-4 — split the god-route `api/routes/packs.py` (1121 lines) into a package**, the last
+  god-route, same contract-preserving pattern. OpenAPI surface byte-for-byte unchanged (guard:
+  **803 operations, 644 schemas**); every endpoint a pure move (deterministic line-diff).
+  - `api/routes/packs/_common.py` (403) — the single `router` + logger, access deps
+    (`SessionDep/TenantDep/PackReadAccess/PackWriteAccess`), role constants
+    (`_PACK_READ_ROLES/_PACK_WRITE_ROLES`), `_SINGLE_TASK_PLANS`, error helpers
+    (`_pack_bad_request/_pack_not_found/_pack_conflict`) and all pack helper functions
+    (context build, person/company/site getters, naming, serialization).
+  - `api/routes/packs/management.py` (288) — scenario list/create, pack listing, generate-documents.
+  - `api/routes/packs/run.py` (514) — `run_pack`, archive downloads, safety summary.
+  - `api/routes/packs/__init__.py` — imports endpoint modules in registration order (`# isort: off`);
+    re-exports `router` (route_groups uses `packs.router`), the role constants / error helpers
+    imported by tests, and `generate_document_task` — whose `.apply_async` several tests monkeypatch
+    via `app.api.routes.packs.generate_document_task` (the re-exported object is identical to
+    `app.services.tasks.generate_document_task`, so the patch still lands).
+  Verified locally (Py3.13 venv): OpenAPI guard green (unchanged), ruff+black clean, all 8 routes
+  registered in original order, the three module bodies byte-identical to the source ranges,
+  re-exports + `route_groups` import OK, mock-patch target object identity confirmed, packs route
+  tests green. With this the four ARCH-4 god-routes (documents/risk/medical/packs) are all split;
+  the god-services (`services/pipeline.py`, `modules/files/service.py`) remain as follow-ups.
+
+## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-4: split god-route medical.py into a package)
+
+### Changed
+- **ARCH-4 — split the god-route `api/routes/medical.py` (1289 lines) into a package**, same
+  contract-preserving pattern as the documents/risk splits. OpenAPI surface byte-for-byte unchanged
+  (guard: **803 operations, 644 schemas**); every endpoint a pure move (deterministic line-diff).
+  - `api/routes/medical/_common.py` (147) — the single `router`, access deps
+    (`SessionDep/TenantDep/MedicalAccess/MedicalReadAccess`), role constants
+    (`_MEDICAL_READ_ROLES/_MEDICAL_WRITE_ROLES`), the `MedicalFeatureGate` feature gate, and the
+    shared error/getter helpers (`_error`, `_to_referral_read`, `_get_factor/_get_hazard/_get_norm/_get_referral`).
+  - `api/routes/medical/exams.py` (358) — medical exams, requirements, suspensions endpoints.
+  - `api/routes/medical/catalog.py` (578) — norms + referrals + factors CRUD endpoints.
+  - `api/routes/medical/contingent.py` (302) — hazard↔factor mappings, contingent register,
+    named-list, print endpoints, contingent, generate-referrals, summary. Keeps the two mid-file
+    helpers (`_mapping_read`, `_render_to_response`) with the endpoints that use them.
+  - `api/routes/medical/__init__.py` — imports endpoint modules in registration order
+    (`# isort: off`); re-exports `router` (route_groups uses `medical.router`) + the role constants
+    imported by `tests/test_medical_access_parity.py`.
+  Verified locally (Py3.13 venv): OpenAPI guard green (unchanged), ruff+black clean, all 30 routes
+  registered in original order, the four module bodies byte-identical to the source ranges, re-exports
+  + `route_groups` import OK, medical route tests green.
+
+## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-4: split god-route risk.py into a package)
+
+### Changed
+- **ARCH-4 — split the god-route `api/routes/risk.py` (1499 lines) into a package**, same
+  contract-preserving pattern as the documents split. OpenAPI surface byte-for-byte unchanged
+  (guard: **803 operations, 644 schemas**); every endpoint is a pure move (deterministic line-diff
+  vs the original ranges).
+  - `api/routes/risk/_common.py` (391) — both routers (`router` for `/risks`, `engine_router`
+    mounted at `/risk`), the `logging.getLogger("app.risk")` logger, access dependencies
+    (`SessionDep/TenantDep/EditorAccess/AdminAccess/RiskReadAccess`), `_RISK_READ_ROLES`, the error
+    helpers (`_risk_unprocessable/_risk_bad_request`) and engine helpers, and all request/response
+    models.
+  - `api/routes/risk/methodologies.py` (453) — methodology CRUD + hazards/controls/matrix + risk-map
+    endpoints.
+  - `api/routes/risk/assessments.py` (531) — `assess` (the ~420-line creator) + `get_assessment`.
+  - `api/routes/risk/reports.py` (232) — risk cards, action plans, and the `/risks` listing.
+  - `api/routes/risk/__init__.py` — imports endpoint modules in registration order (under
+    `# isort: off`), then `router.include_router(engine_router)` exactly as the original file did at
+    its end; re-exports `router` (route_groups uses `risk.router`) + the error helpers imported by
+    `tests/test_risk_error_contract.py`.
+  Verified locally (Py3.13 venv): OpenAPI guard green (unchanged), ruff+black clean, all 15 routes
+  registered in original order, the four module bodies byte-identical to the source ranges, re-exports
+  + `route_groups` import OK, risk route/engine tests green. (`RiskReadAccess`, a mixed-case dependency
+  alias, was caught by ruff `F821` during the split and added to the shared re-import — the
+  undefined-name guard doing its job.)
+
+## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-4: split god-route documents.py into a package)
+
+### Changed
+- **ARCH-4 — split the god-route `api/routes/documents.py` (1938 lines) into a package**, the
+  first route-side decomposition under the OpenAPI contract guard. Behaviour/contract-preserving:
+  the public OpenAPI surface is byte-for-byte unchanged (guard: **803 operations, 644 schemas**),
+  and every endpoint is a pure move (deterministic line-diff: each module's code body is identical
+  to the original ranges).
+  - `api/routes/documents/_common.py` (242) — the single shared `router`, the documents error
+    vocabulary (`_documents_bad_request/_not_found/_conflict/_forbidden/_payload_too_large`,
+    `_generate_internal_error_problem`), `_dispatch_celery_task`, the access dependencies
+    (`AccessDep/ReadAccessDep/StatusAccessDep`), constants, and all request/response Pydantic models.
+  - `api/routes/documents/read.py` (649) — read/query endpoints (list, get, readiness, quality:check,
+    mapping:validate, versions/compare, dependency-map, status, download) + their view helpers.
+  - `api/routes/documents/_generate_helpers.py` (449) — generate-side helpers (CSV/XLSX parsing,
+    template-scope resolution, company/person fetch, `_resolve_run`).
+  - `api/routes/documents/generate.py` (723) — template:resolve / generate / batch / batch-get /
+    task-status / status-patch endpoints. (Slightly over the ~700 guideline — dominated by the
+    intrinsic 286-line `generate_document`; further intra-endpoint splitting deferred as it would
+    not be a pure move.)
+  - `api/routes/documents/__init__.py` — imports the endpoint modules in registration order
+    (read → generate, guarded by `# isort: off`) so route/OpenAPI order is preserved, and re-exports
+    `router` (used by `api/v1/route_groups.py` as `documents.router`) plus the internals imported by
+    tests (`DocGenerateRequest`, `_fetch_template`, `_serialize_payload`).
+  Verified locally (Py3.13 venv): OpenAPI guard green (unchanged), ruff+black clean, all 16 routes
+  registered in the original order, re-exports + `route_groups` import OK, documents route/contract
+  tests green. NOTE: `tests/test_documents_generate.py::test_template_resolve_prefers_site_scope`
+  fails **identically on the pre-split HEAD** (asserts site-scope wins but resolution returns
+  tenant-scope) — a pre-existing issue, unrelated to this move; flagged separately, not a regression.
+
+## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-4: tasks/_core.py decomposition (slice 4 — notification/reminder jobs))
+
+### Changed
+- **ARCH-4 slice 4 — extract the notification/reminder job group from `tasks/_core.py`.** Same
+  behavior-preserving pattern (new leaf sub-module + re-export from `_core`, explicit `name=`
+  preserved → identical Celery registration). With this slice `_core.py` drops **under the ~700-line
+  ТЗ target**:
+  - `tasks/notification_jobs.py` (new) — `dispatch_notification_job` (`notifications.dispatch`) +
+    `_dispatch_notification_job`; `scan_reminders_job` (`reminders.scan`) + the reminder-rule scan
+    helpers `_resolve_rule_recipients` / `_scan_reminders_for_tenant` / `_scan_reminders_job`
+    (training/PPE/inspection due-date evaluation → in-app notifications + plan tasks). Leaf module —
+    imports only from `app.tasks._shared`, never back into `_core` → no cycle.
+  - `_core.py` re-exports all 6 (`# noqa: F401`); the `reminders.scan` entry in the
+    `app.services.celery_app` beat schedule keeps resolving because the task **name** is unchanged
+    (the Celery guard enforces this). The task `dispatch_task_reminders` (`tasks.reminders.dispatch`,
+    task-obligations dispatch — a different concern) stays in `_core`.
+  `_core.py`: 920 → 617 lines; `notification_jobs.py`: 347 lines. No test mock-patch targets needed
+  repointing (pre-flight sweep: no test patches `app.tasks._core.<global>` for a moved fn, and no test
+  imports these tasks directly). Verified locally (Py3.13 venv): Celery guard green (31 tasks
+  unchanged), ruff+black clean, moved block byte-identical to commit 13248301 (299 lines, deterministic
+  diff), re-export identity confirmed, `reminders.scan` beat task still registered, notification/reminder
+  + tasks tests green (21 passed); adversarial reference/import review clean. (Remaining `_core` groups
+  — outbox, process_inbound_webhook, billing, signing/edo wrappers — are optional follow-ups; `_core`
+  is already under target.)
+
+## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-4: tasks/_core.py decomposition (slice 3 — file/PDF jobs))
+
+### Changed
+- **ARCH-4 slice 3 — extract the file/PDF job group from `tasks/_core.py`.** Same
+  behavior-preserving pattern (new leaf sub-module + re-export from `_core`, explicit `name=`
+  preserved → identical Celery registration):
+  - `tasks/file_jobs.py` (new) — the 4 file/PDF tasks: `apply_headers_job`
+    (`app.tasks.apply_headers_job`), `convert_pdf_job` (`app.tasks.convert_pdf_job`),
+    `index_file_content_job` (`files.index_content`, `bind=True max_retries=3`), and the
+    `av_scan_file_job` delegate (`files.av_scan_file_job`). Heavy third-party imports
+    (LibreOffice pool, pdf converters) stay function-local exactly as before. Leaf module —
+    imports only from `app.tasks._shared`, never back into `_core` → no cycle.
+  - `_core.py` re-exports all 4 (`# noqa: F401`); the re-exported task objects are identical
+    (same object), so `from app.tasks import X`, the thin wrappers in `app.celery.tasks.*`, and
+    the `app.modules.files.service` imports all keep resolving, and existing `.delay`/`.apply_async`
+    monkeypatches still work. `DOCX_MIME` (added to `_shared` in slice 2) is no longer referenced
+    from `_core`, so its `_shared` re-import was dropped there.
+  `_core.py`: 1233 → 920 lines; `file_jobs.py`: 350 lines. No test mock-patch targets needed
+  repointing this slice (a pre-flight sweep confirmed no test patches `app.tasks._core.<global>` for
+  a moved function — unlike slice 2). Verified locally (Py3.13 venv): Celery guard green (31 tasks
+  unchanged), ruff+black clean, re-export identity confirmed across all 5 import paths, file/PDF +
+  tasks tests green (57 passed); canonical 3.12.12 run via the Docker gate image. (Remaining groups
+  — notification/reminder, outbox, signing/edo — are follow-ups by the same pattern.)
+
+## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-4: tasks/_core.py decomposition (slice 2 — document jobs))
+
+### Changed
+- **ARCH-4 slice 2 — extract the document-generation group from `tasks/_core.py`.** Same
+  behavior-preserving pattern as slice 1 (new leaf sub-module + re-export from `_core`, explicit
+  `name=` preserved so Celery registration is identical):
+  - `tasks/document_jobs.py` — the 3 document tasks (`app.tasks.register_template`,
+    `app.tasks.generate_document`, `app.tasks.generate_document_batch_item`) plus their private
+    impls (`_generate_document_for_run`, `_assert_pipeline_run_matches_session_tenant`,
+    `_assert_batch_item_scope`, `_company_snapshot`, `_sha256_bytes`, `_mark_batch_item_failed`).
+    A leaf module — imports only from `app.tasks._shared`, never back into `_core` → no cycle.
+  - `tasks/_shared.py` — `DOCX_MIME` moved here (shared between document_jobs and the header/PDF
+    jobs still in `_core`); imported by both.
+  - `_core.py` re-exports all moved names (`# noqa: F401`) so `from app.tasks._core import X` /
+    `from app.tasks import X` are unchanged; the re-exported task objects are identical (same
+    object), so existing `generate_document_task.apply_async` monkeypatches still work.
+  `_core.py`: 1983 → 1233 lines; `document_jobs.py`: 813 lines (dominated by the ~390-line
+  `_generate_document_for_run`; further intra-function splitting would not be a pure move and is
+  deferred). Tests whose mock-patch target was `app.tasks._core.<global>` for a *moved* function
+  (`session_scope`/`ensure_tenant_schema`/`s3`/`settings` in `test_letterhead_pipeline.py`,
+  `session_scope` in `test_tasks.py::test_register_template_task`) were repointed to
+  `app.tasks.document_jobs.*` — patch must target the namespace the function looks the name up in.
+  Verified locally (Py3.13 venv): Celery guard green (31 tasks unchanged), ruff+black clean,
+  affected task tests green (24 passed); canonical 3.12.12 run via the Docker gate image.
+  (Remaining groups — file/PDF, notification/reminder, outbox, signing/edo — are follow-ups by
+  the same pattern.)
+
+## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-4: tasks/_core.py decomposition (slice 1) + Celery guard)
+
+### Added
+- **ARCH-4 guard — `scripts/ci/check_celery_tasks.py`.** Splitting the Celery god-file must keep
+  the set of registered task names (`celery_app.tasks` keys) identical — a changed name silently
+  breaks beat schedules / `send_task`. The guard imports `app.tasks` (registers everything) and
+  compares to `docs/stabilization/celery_tasks_baseline.json` (31 tasks). Task-name change = fatal;
+  incidental `_core` attribute losses (moved imports/private impls) are reported, not fatal.
+
+### Changed
+- **ARCH-4 slice 1 — `tasks/_core.py` decomposition (the ТЗ's #1-priority god-file).** Following the
+  sanctioned plan in `app/tasks/__init__.py` ("дальнейшее дробление — без смены публичных импортов"):
+  - `tasks/_shared.py` — the cross-task helpers `_run_coroutine` / `_resolve_task_tenant_scope` +
+    `RETRYABLE_EXCEPTIONS` (a leaf module, so task sub-modules don't import back into `_core` → no cycle).
+  - `tasks/domain_ticks.py` — the 8 periodic domain-tick tasks (`workflow.sla/timers.tick`,
+    `medical.contingent.tick`, `contractors.readiness/documents.tick`, `ppe/permits.expiry.tick`,
+    `prescriptions.escalate.tick`) + their private async impls. Explicit `name=` preserved → Celery
+    registration identical.
+  - `_core.py` re-exports both (public tasks, private `_*_tick` impls used by tests, and the shared
+    helpers) so `from app.tasks._core import X` / `from app.tasks import X` are unchanged.
+  `_core.py`: 2275 → 1983 lines. Verified Py3.12: Celery guard green (31 tasks unchanged), ruff+black
+  clean, tick behavior tests green (ppe/permits/medical/contractors). (First slice; further task
+  groups — document/outbox/notification/signing-edo — are follow-ups by the same pattern.)
+
+## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-4: OpenAPI contract guard (verification infra))
+
+### Added
+- **ARCH-4 guard — `scripts/ci/check_openapi_snapshot.py`.** Route refactors (splitting god-route
+  files into sub-routers / extracting helpers) must keep the public OpenAPI surface identical. This
+  guard imports the FastAPI app, builds `app.openapi()`, and fingerprints it — every `METHOD path`
+  operation, all `operationId`s, and component schema names — comparing to a baseline
+  (`docs/stabilization/openapi_routes_baseline.json`, captured: **803 operations, 644 schemas**).
+  Any diff is a contract change. This is the directly-acceptance-relevant verification tool for
+  ARCH-4 ("OpenAPI snapshot не изменился"); like the ARCH-2 metadata guard it is a refactor tool,
+  not a standing gate (it freezes the surface, so new endpoints require a re-snapshot). Run in the
+  gate image (Python 3.12 + app env). NOTE: the per-file god-route/service splits themselves
+  (mixin decomposition for `PipelineService`/`FileService`, ordered sub-routers for
+  `documents`/`risk`/`medical`/`packs`, Celery task-name preservation for `tasks/_core.py`) are the
+  remaining ARCH-4 work — each now de-risked by this guard.
+
+## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-2: god-model decomposition COMPLETE (batch 5))
+
+### Changed
+- **ARCH-2 batch 5 — foundational tenant/billing + identity/authz block extracted** (30 classes):
+  `tenant_billing.py` (19 — RoleEnum, Tenant*, Billing*, rate limits, ApiToken, WebhookSubscription),
+  `identity.py` (11 — User, RefreshSession, UserRole, UserAttribute, AuthzBaseModel + Authz*, ApiKey).
+  `identity.py` binds `RoleEnum` at runtime (`native_enum(RoleEnum)`, imported from `tenant_billing`)
+  and subclasses the declarative `TenantBase` — both imported normally.
+- **ARCH-2 acceptance met.** `backend/app/models/models.py` is now a **594-line pure re-export
+  facade** (was 3476 / 170 classes). All domain models live in 21 domain files, each **< 600 lines**
+  (training, medical, briefings, field_ops, ppe, templates, packages, audit_log, journals, incidents,
+  inspections, master_data, marketplace, idempotency, risk_register, assets, approval_runtime,
+  tenant_billing, identity, + the pre-existing document/finance/etc.). `from app.models.models import X`
+  and `from app.models import X` unchanged for every previously-available `X` (guard-enforced; the
+  declarative bases `SharedModel`/`TenantBaseModel` re-exported explicitly). Alembic schema unchanged
+  throughout (guard: 251 tables identical at every step). Verified Py3.12: guard green, ruff+black
+  clean, auth/RBAC/ABAC/tenant/billing behavior tests green.
+
+## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-2: god-model decomposition (batch 4, approval runtime))
+
+### Changed
+- **ARCH-2 batch 4 — approval/edo/signature/outbox/webhook runtime block extracted** into
+  `approval_runtime.py` (16 classes: Outbox, Approval{Process,Task,DecisionLog,RouteStep,Instance,
+  InstanceStep}, Edo{StatusEvent,WebhookInbox}, SignatureRequest, Webhook{Delivery,Endpoint} +
+  enums). This block binds a few `approval_workflow` enums at **runtime** (`Enum(ApprovalStepType)`,
+  `SignatureProviderStatus.PENDING.value`), so those are imported normally (not TYPE_CHECKING).
+  `models.py`: 1391 → 1093 lines. All re-exported (in `__all__`).
+- **Kept `ApprovalStepType` / `SignatureProviderStatus` re-exported from `models.py`.** After the
+  approval classes moved, ruff removed these two from models.py's `approval_workflow` import (no
+  longer used in-body); restored + added to `__all__` so callers' `from app.models.models import …`
+  keeps working (guard name-superset check). Verified Py3.12: guard green, ruff+black clean.
+
+## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-2: god-model decomposition (batch 3, 5 domains))
+
+### Changed
+- **ARCH-2 batch 3 — 5 more domains extracted from `models.py`** (20 classes, guard-verified):
+  `master_data.py` (6 — Company, Position, Person, Site, Workplace + EmploymentStatus),
+  `marketplace.py` (1), `idempotency.py` (2), `risk_register.py` (8 — legacy RiskMap/RiskMethodology,
+  hazard links, NPA/NPABinding), `assets.py` (3). `models.py`: 1770 → 1391 lines. All re-exported
+  (in `__all__`). Identical tables (guard: 251 unchanged).
+- **Kept `File` re-exported from `models.py`.** After the last in-body user of `File` moved out,
+  ruff removed `from app.models.file import File`; restored it and added `File` to `__all__` so the
+  strengthened guard's name-superset check (some callers do `from app.models.models import File`)
+  stays satisfied. Verified Py3.12: guard green, ruff+black clean, master-data/NPA/risk tests green.
+
+## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-2: god-model decomposition (batch 2, 5 domains))
+
+### Changed
+- **ARCH-2 batch 2 — 5 more domains extracted from `models.py`** (55 classes, guard-verified):
+  `packages.py` (31 — package profiles/presets/runs, pack runs, document packs, pipeline runs,
+  client-portal), `audit_log.py` (3 — AuditLog + its `@event.listens_for` immutability hooks,
+  AuditExportJob, SecurityAuditLog), `journals.py` (5), `incidents.py` (8), `inspections.py`
+  (8 — inspection/attestation/prescription). Identical tables (guard: 251 unchanged); all names
+  re-exported from `models.py`. `models.py`: 2649 → 1766 lines.
+- **Fixed move-induced relationship resolution.** Several relationships used fully-qualified
+  string targets (`"app.models.models.IncidentPerson"`, `"app.models.models.Inspection"`) to
+  disambiguate duplicate class names across model packages; updated to the new module path
+  (`app.models.incidents.*` / `app.models.inspections.*`) so SQLAlchemy's registry resolves them.
+  The guard's `configure_mappers()` caught this — a bare-name switch would have hit the known
+  cross-package ambiguity. Verified Py3.12: guard green, ruff+black clean, audit/packs tests green.
+
+## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-2: god-model decomposition (batch 1, 5 domains))
+
+### Changed
+- **ARCH-2 batch 1 — 5 more domains extracted from `models.py`** (same pure-move pattern,
+  guard-verified): `medical.py` (10), `briefings.py` (4), `field_ops.py` (7 — compliance
+  deadlines / calendar / offline sync / permits), `ppe.py` (6), `templates.py` (5). 32 classes
+  moved; identical tables (guard: 251 tables unchanged); all names re-exported from `models.py`
+  (in `__all__`) → zero import-contract change. `models.py`: 3142 → 2649 lines. Verified Py3.12:
+  guard green, ruff+black clean, domain tests green (medical/ppe/permit/template-scope/briefing).
+
+## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-2: god-model decomposition (slice 1 + guard))
+
+### Added
+- **ARCH-2 guard — `scripts/ci/check_models_metadata.py`.** Verifies that splitting
+  `backend/app/models/models.py` is a *pure move*: `configure_mappers()` (no circular
+  import / broken relationship), a **schema fingerprint** (table→columns→types for
+  SharedBase+TenantBase — a would-be `alembic autogenerate` diff) compared to a baseline,
+  and **re-export completeness** (every model/Enum type importable from `app.models.models`
+  at baseline stays importable). Baseline: `docs/stabilization/models_metadata_baseline.json`.
+  Runs in ~15s in the gate image (no PG). Refactor-verification tool, not a standing gate
+  (it freezes the schema fingerprint).
+
+### Changed
+- **ARCH-2 slice 1 — Training domain extracted from `models.py`.** 17 Training classes
+  (`Training`, `TrainingCourse`, `TrainingPlan`, `TrainingSession*`, `TrainingCertificate`,
+  `TrainingProgram`/`Module`/`Lesson`/`Test`/`TestQuestion`/`Group`/`Enrollment`/`Attempt`/
+  `Protocol`/`ProtocolItem`, + status enums) moved to new `backend/app/models/training.py`.
+  Pure move: same `TenantBase` registry, **identical tables** (guard green: 251 tables
+  unchanged). `models.py` re-exports all 17 (listed in `__all__` so ruff F401 keeps them)
+  → `from app.models.models import X` and `from app.models import X` unchanged. External
+  refs (Person/Company/Position/File) are `Mapped[...]` annotations resolved via the SA
+  registry, so only a `TYPE_CHECKING` import is needed — no runtime cycle. `models.py`:
+  3476 → 3142 lines. Verified Py3.12: guard green, `test_training_enrollment_service.py` green.
+
+## 2026-06-30 (fix/stabilize-gates-2026-06-29 — ARCH-3: enforce bounded-context boundaries)
+
+### Added
+- **ARCH-3 — энфорсмент границ bounded contexts.** Правило «не смешивать bounded contexts напрямую» (`product_spec.py::ARCHITECTURE_RULES`) раньше было только текстом. Теперь оно **проверяется**: `scripts/ci/check_context_boundaries.py` (stdlib AST-walker) запрещает прямые cross-context импорты `app.modules.* → app.domains.*` и `app.domains.* → app.modules.*`. Новый такой импорт валит проверку; текущие 10 протечек (аудит 2026-06-30: 8 modules→domains, 2 domains→modules) заморожены в `ALLOWLIST` как временный долг (вычищается ARCH-1). Allowlist держится честным — устаревшая запись (импорт уже удалён) тоже валит проверку. Запуск: `make check-boundaries`, плюс шаг встроен в `make gate` (`scripts/ci/local_gate.py`) и в pytest (`tests/test_context_boundaries.py`, 3 теста). `app.modules.* → app.services.*` сознательно НЕ запрещён — `services/` это санкционированный слой оркестрации (ТЗ).
+- **Почему свой AST-чекер, а не import-linter:** `app.modules` / `app.domains` — PEP 420 namespace-пакеты (без `__init__.py`), и graph-builder import-linter (grimp) их не обходит (пустой граф). ТЗ допускает «import-linter ИЛИ эквивалентный тест»; чекер читает файлы напрямую (namespace-агностичен) и работает на любом Python без внешних зависимостей.
+
+## 2026-06-30 (fix/stabilize-gates-2026-06-29 — REL-4: RC-012 (RTO/RPO go/no-go) + RC-013 (relational scope cutover))
+
+### Added
+- **RC-012 — формальный RTO/RPO go/no-go в restore drill.** `scripts/restore_drill.py` теперь эмитит блок `go_no_go` (`evaluate_rto_rpo`): измеренные `rto_measured_seconds` (окно восстановления: backup→restore+verify+boot) и `rpo_measured_seconds` (лаг бэкапа от последней записи) сравниваются с порогами и дают `decision: go|no-go`. Решение свёрнуто в агрегатный `success` — слишком медленное восстановление = no-go, а не «зелёно по целостности». Пороги по умолчанию = продакшн-цели ТЗ vNext §31.6 (**RTO ≤ 4ч / RPO ≤ 24ч**), переопределяются `--rto-threshold-seconds` / `--rpo-threshold-seconds` или env `RESTORE_DRILL_RTO_SECONDS` / `RESTORE_DRILL_RPO_SECONDS`. Честная оговорка в `go_no_go.rpo_basis`: измеренный RPO — это лаг репетиции seed→backup (нижняя оценка), продакшн-RPO определяется частотой бэкапов. Doc `docs/stabilization/restore-drill.md` (Acceptance criteria + раздел «RTO/RPO go/no-go»). Тесты `tests/test_restore_drill_go_no_go.py` (7, зелёные Py3.12).
+
+### Changed
+- **RC-013 — завершён переход template scope на реляционную/индексированную модель.** Реляционные колонки `Template.scope_level` / `scope_company_id` / `scope_site_id` + индекс `ix_template_scope_level_company_site` уже существовали (миграция `20260416_next68`, бэкфилл из JSON). Теперь **читатели резолвинга переведены на индексированные колонки**: `app/api/routes/documents.py::_normalize_scope_level` / `_scope_target_ids` читают из колонок (fallback на legacy `metadata_json["scope"]` только для не-бэкфилленных строк) — поведение-сохраняюще (алиасы organization/legal_entity→company, branch→site, global→system без изменений). `metadata_json["scope"]` сохранён как compat-зеркало. Тесты `tests/test_template_scope_relational_reads.py` (6) + существующие `tests/test_template_catalog_scope.py` зелёные. DB-level scope pre-filter в resolve-запросе осознанно отложен (non-blocking — безопасность для не-бэкфилленных строк).
+
+### Fixed
+- **`patch_template` — двойное присваивание `scope_level`.** В `app/api/v1/router.py::patch_template` колонка `template.scope_level` присваивалась дважды подряд одним и тем же выражением — убрано дублирование (behavior-neutral).
+
+## 2026-06-29 (fix/stabilize-gates-2026-06-29 — REL-1/REL-2/REL-3: воспроизводимый PG-гейт + 2 PG-блокера)
+
+### Added
+- **REL-1 — воспроизводимый локальный гейт качества (без GitHub Actions).** `scripts/ci/local_gate.py` поднимает PostgreSQL 16 в Docker и гоняет PG-критичные проверки внутри образа `python:3.12` (`scripts/ci/Dockerfile.gate`), фиксируя версию Python вместо хостовой (на 3.13+/Windows pytest зависает — см. CLAUDE.md). Режимы `--db-only` (alembic upgrade/downgrade + enum label-drift guards; зеркало job `alembic-postgres-upgrade` + `@pytest.mark.db` части `backend-tests`) и `--full` (полный suite). Пишет JSON-вердикт в `artifacts/local-gate/summary.json`. Make-обёртки `make gate` / `make gate-full`. Политика и инструкция — `docs/stabilization/local-evidence-gate.md` (REL-1, путь «c»: постоянная local-evidence политика с воспроизводимой командой). **Вердикт первого зелёного прогона: 9 passed на PG16.14.**
+
+### Fixed
+- **Тест-харнес ломал ВСЕ `@pytest.mark.db` PG-гарды (regression).** Слушатель `conftest.py::_sqlite_test_speed_pragmas` был навешен на базовый класс `Engine` и выполнял `PRAGMA synchronous=OFF` на КАЖДОМ подключении, включая Postgres-соединения PG-гардов. На PG `PRAGMA` — синтаксическая ошибка, которая аборти́т транзакцию соединения; `except: pass` глушил Python-исключение, но серверная транзакция оставалась aborted → следующий statement (интроспекция JSON-кодека asyncpg / первая миграция) падал с `InFailedSQLTransactionError`. Слушатель ограничен строго SQLite-драйверами (`"sqlite" in type(dbapi_connection).__module__`). Невидимо на SQLite; ловится только реальным PG.
+- **СОУТ-миграции `so01`/`so02` ломали `alembic upgrade heads` на PostgreSQL (release-блокер).** Колонки `sout_workplace.assessed_class` / `sout_factor.measured_class` (so01) и `sout_class_history.old_class`/`new_class` (so02) использовали generic `sa.Enum(name="soutclass", create_type=False)`. У generic `sa.Enum` флаг `create_type=False` не подавляет неявный `CREATE TYPE` в `op.create_table` так надёжно, как у dialect-specific `postgresql.ENUM` → повторный `CREATE TYPE soutclass` → `DuplicateObjectError: type "soutclass" already exists`. Заменено на `postgresql.ENUM(create_type=False)` (тот же паттерн, что у рабочего `_CAMPAIGN_STATUS`). Невидимо на SQLite (enum→VARCHAR); внесено после среза-снапшота ТЗ (2026-06-26) и после enum-ре-аудита 2026-06-25.
+
+### Verified (local-evidence, 2026-06-29, Python 3.12 / PG16.14)
+- **REL-2 (ORM↔pg_enum label drift):** keystone PG-гард `test_orm_enum_pg_label_parity.py` (bound ⊆ pg_labels + write-smoke insert/update) и 4 быстрых пина зелёные — 0 Group-A дефектов на живом PG16.
+- **REL-3 (миграции на PG):** `test_alembic_postgres_upgrade.py` — `upgrade heads` и round-trip `upgrade heads → downgrade base → upgrade heads` зелёные на чистом PG16; голова цепочки `20260626_so03_sout_norm_bridges`.
+
+## 2026-06-26 (feat/sout-srez2-p10-04 — ТЗ B.10 СОУТ, Срез 2: версионирование класса)
+
+### Added
+- **СОУТ — история класса условий труда (P10-04 срез-2, TZ B.10):** append-only аудит изменений `assessed_class` рабочего места. 1 аддитивная таблица `sout_class_history` (миграция `so02` цепью от `so01`; общий enum `soutclass` переиспользуется ещё двумя колонками `old_class`/`new_class` через `create_type=False`). Строка истории пишется прозрачно: при создании РМ с классом (old=NULL → начальная точка траектории) и при смене класса в PATCH (no-op если класс не изменился — идемпотентный PATCH не засоряет аудит). Проекция `is_worsening` (новый класс тяжелее старого по ранжиру ст. 14: optimal<acceptable<3.1<3.2<3.3<3.4<dangerous). Эндпоинт `GET /sout/workplaces/{id}/class-history` (траектория по `changed_at`). Тонкий фронт: lazy-load «История изменения класса» в карточке РМ с бейджем «Ухудшение». 17 backend unit-тестов (миграция, модель, severity-ранжир, worsening, билдер строки, PATCH-запись/no-op). Срез-2 НЕ трогает СИЗ/медосмотры — авто-каскад класса отложен в срез-3 (history даёт детекцию изменения, необходимую каскаду).
+
+## 2026-06-26 (feat/sout-srez1-p10-04 — ТЗ B.10 СОУТ / спец. оценка условий труда, Срез 1)
+
+### Added
+- **СОУТ — специальная оценка условий труда (P10-04 срез-1, TZ B.10, ФЗ-426):** campaign→workplace→factor / guarantee. 4 аддитивные таблицы (`sout_campaign`/`sout_workplace`/`sout_factor`/`sout_guarantee`, миграция `so01` цепью от `cmt01`). Класс условий труда по ст. 14 (1 оптимальный / 2 допустимый / 3.1–3.4 вредный / 4 опасный) присваивается рабочему месту; общий native-enum `soutclass` переиспользуется двумя колонками (один `CREATE TYPE`). 14 эндпоинтов с CRUD, lifecycle-гардами кампании (planned→in_progress→completed→declared; редактирование реестра только пока кампания открыта), read-time `is_reassessment_due` проекцией, ETag-кэшированием списков, tenant-изоляцией, за default-off feature-flag `sout`. Demo-seed (кампания+РМ класса 3.2+фактор «Шум»+доп.отпуск) с просроченной переоценкой. 37 backend unit-тестов. Отложено на срез-2+: импорт файла отчёта СОУТ + валидация, авто-каскад класса в нормы СИЗ/медосмотры, версионирование класса (history+diff), декларация соответствия, печатные формы (карта СОУТ / сводная ведомость).
+
+## 2026-06-25 (feat/committees-srez1-p10-01 — ТЗ B.17 Комитеты/комиссии/заседания, Срез 1)
+
+### Added
+- **Комитеты / комиссии / заседания (P10-01 срез-1, TZ B.17):** committee→meeting→agenda→decision→decision-task with CRUD API, lifecycle guards (meeting planned→held→cancelled; decisions only on held), read-time `is_overdue` flag, ETag list caching, tenant isolation, behind default-off `committees` feature flag, plus a thin list/detail UI. Deferred to срез-2: voting/quorum, invitations, execution-KPI dashboard, meetings journal/protocol numbering, Command Center task projection.
+
+## 2026-06-08 (feat/medical-exams-contingent — ТЗ B.8 Медосмотры, Срез 1)
+
+### Added
+- **Медосмотры (ТЗ B.8) — Срез 1 + контингент/автоматизация:** write-path осмотров с типами/годностью/противопоказаниями; направления (FSM); нормы + вычисляемый контингент (влияние СОУТ через нормы); безопасностный цикл противопоказание→отстранение→блок допуска; 16 API-эндпоинтов; интеграция календарь/дашборд/Data-Quality; celery beat `medical.contingent.tick`; per-tenant feature-flag `medical` (default-on). Аддитивная миграция `med01`. Ветка `feat/medical-exams-contingent`.
+
 ## 2026-05-21 (Session 61 — Phase 9.4 closure: Vary header uniformity across 25 ETag list endpoints, vNext-PERF-03)
 - **`backend/app/api/helpers/etag.py`** — третий RFC 7234 cache-correctness layer добавлен поверх S58 ETag (conditional GET) и S59 Cache-Control (freshness directives). Helper API расширен симметрично двум предыдущим расширениям:
   - **`DEFAULT_LIST_VARY = "Authorization, X-Tenant"`** — публичная константа, canonical pattern для tenant-scoped data за conditional-GET. Документировано почему именно эти два axes: `Authorization` сегрегирует cache entries по JWT (распределённые JWT = разные пользователи на той же URL получают distinct cache entries — иначе corporate proxy мог бы возвращать response пользователя A пользователю B); `X-Tenant` сегрегирует по tenant header (то же между тенантами). Это **defense-in-depth поверх `Cache-Control: private`** — `private` это *request* к shared cache не кэшировать; `Vary` это *cache-key contract* для любой кэш, которая всё же закэшировала response (misconfigured proxy, browser extension, debug tool). Two distinct axes — minimum sufficient set.

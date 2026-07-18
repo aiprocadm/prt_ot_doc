@@ -15,51 +15,51 @@ from sqlalchemy import select
 
 from app.api.routes.files import max_upload_bytes
 from app.core.config import get_settings
-from app.domains.files import s3
 from app.models.file import File as StoredFile
 from app.models.file import FileKind, FileScanStatus
 from app.models.models import AuditLog, RoleEnum
+from app.modules.files import s3
 from app.services.clamav import (
-        ClamAVScanOutcome,
-        ClamAVScanRequest,
-        ClamAVVerdict,
-        MemoryQuarantinePublisher,
-        get_quarantine_publisher,
-        process_scan_request,
-        reset_clamav_client,
-        reset_quarantine_publisher,
+    ClamAVScanOutcome,
+    ClamAVScanRequest,
+    ClamAVVerdict,
+    MemoryQuarantinePublisher,
+    get_quarantine_publisher,
+    process_scan_request,
+    reset_clamav_client,
+    reset_quarantine_publisher,
 )
 
 
 def _minimal_docx_bytes() -> bytes:
-        buffer = BytesIO()
-        with zipfile.ZipFile(buffer, mode="w") as archive:
-                archive.writestr(
-                        "[Content_Types].xml",
-                        """<?xml version="1.0" encoding="UTF-8"?>
+    buffer = BytesIO()
+    with zipfile.ZipFile(buffer, mode="w") as archive:
+        archive.writestr(
+            "[Content_Types].xml",
+            """<?xml version="1.0" encoding="UTF-8"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
     <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
     <Default Extension="xml" ContentType="application/xml"/>
     <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
 </Types>""",
-                )
-                archive.writestr(
-                        "_rels/.rels",
-                        """<?xml version="1.0" encoding="UTF-8"?>
+        )
+        archive.writestr(
+            "_rels/.rels",
+            """<?xml version="1.0" encoding="UTF-8"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
     <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
 </Relationships>""",
-                )
-                archive.writestr(
-                        "word/document.xml",
-                        """<?xml version="1.0" encoding="UTF-8"?>
+        )
+        archive.writestr(
+            "word/document.xml",
+            """<?xml version="1.0" encoding="UTF-8"?>
 <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
     <w:body>
         <w:p><w:r><w:t>Template</w:t></w:r></w:p>
     </w:body>
 </w:document>""",
-                )
-        return buffer.getvalue()
+        )
+    return buffer.getvalue()
 
 
 @pytest.fixture(autouse=True)
@@ -87,7 +87,7 @@ def _configure_s3(monkeypatch: pytest.MonkeyPatch) -> None:
     reset_clamav_client()
     s3.reset_client_cache()
     monkeypatch.setattr(
-        "app.domains.files.s3.generate_presigned_get_url",
+        "app.modules.files.s3.generate_presigned_get_url",
         lambda key, *, expires_in=3600, bucket=None, response_headers=None: (
             f"https://example.com/download/{key}?expires_in={expires_in}"
         ),
@@ -445,7 +445,9 @@ async def test_process_scan_request_uses_canonical_tenant_session(
             return None
 
     @asynccontextmanager
-    async def fake_get_tenant_session(*, tenant: str | None = None, tenant_id: str | None = None, schema_name: str | None = None):
+    async def fake_get_tenant_session(
+        *, tenant: str | None = None, tenant_id: str | None = None, schema_name: str | None = None
+    ):
         del schema_name
         captured["tenant"] = tenant or ""
         captured["tenant_id"] = tenant_id or ""
@@ -478,8 +480,19 @@ async def test_upload_template_adds_metadata(async_client, make_auth_headers, se
 
     response = await async_client.post(
         "/api/v1/files-legacy/upload-template",
-        files={"file": ("template.docx", payload, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")},
-        data={"template_type": "contract", "scenario": "onboarding", "pack_id": "pack-1", "company_id": "comp-1"},
+        files={
+            "file": (
+                "template.docx",
+                payload,
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            )
+        },
+        data={
+            "template_type": "contract",
+            "scenario": "onboarding",
+            "pack_id": "pack-1",
+            "company_id": "comp-1",
+        },
         headers=headers,
     )
 
@@ -518,7 +531,9 @@ async def test_download_endpoint_returns_presigned_url(
 
     await process_scan_request(message, scanner=_CleanScanner(), session_factory=sessionmaker)
 
-    download = await async_client.get(f"/api/v1/files-legacy/{body['id']}/download", headers=headers)
+    download = await async_client.get(
+        f"/api/v1/files-legacy/{body['id']}/download", headers=headers
+    )
     download = await async_client.get(
         f"/api/v1/files-legacy/{body['id']}/download", headers=headers
     )
@@ -543,9 +558,7 @@ async def test_download_endpoint_returns_presigned_url(
 
 @pytest.mark.anyio
 @pytest.mark.usefixtures("aws")
-async def test_download_blocks_file_while_scan_pending(
-    async_client, make_auth_headers
-) -> None:
+async def test_download_blocks_file_while_scan_pending(async_client, make_auth_headers) -> None:
     payload = b"pending-check"
     headers = {**dict(async_client.headers), **await make_auth_headers()}
 
@@ -559,7 +572,9 @@ async def test_download_blocks_file_while_scan_pending(
     assert body["scan_status"] == FileScanStatus.PENDING.value
     assert body["quarantined"] is True
 
-    download = await async_client.get(f"/api/v1/files-legacy/{body['id']}/download", headers=headers)
+    download = await async_client.get(
+        f"/api/v1/files-legacy/{body['id']}/download", headers=headers
+    )
     download = await async_client.get(
         f"/api/v1/files-legacy/{body['id']}/download", headers=headers
     )
@@ -592,7 +607,9 @@ async def test_download_denies_cross_tenant(async_client, make_auth_headers, ses
     await process_scan_request(message, scanner=_CleanScanner(), session_factory=sessionmaker)
 
     bad_headers = {**headers, "x-tenant": "acme"}
-    download = await async_client.get(f"/api/v1/files-legacy/{body['id']}/download", headers=bad_headers)
+    download = await async_client.get(
+        f"/api/v1/files-legacy/{body['id']}/download", headers=bad_headers
+    )
     download = await async_client.get(
         f"/api/v1/files-legacy/{body['id']}/download", headers=bad_headers
     )
@@ -606,8 +623,12 @@ async def test_download_denies_company_mismatch(
 ) -> None:
     async with sessionmaker() as session:
         tenant = await data_factory.ensure_tenant(session=session)
-        company_a = await data_factory.create_company(tenant=tenant, name="Alpha Co", session=session)
-        company_b = await data_factory.create_company(tenant=tenant, name="Beta Co", session=session)
+        company_a = await data_factory.create_company(
+            tenant=tenant, name="Alpha Co", session=session
+        )
+        company_b = await data_factory.create_company(
+            tenant=tenant, name="Beta Co", session=session
+        )
         await session.commit()
 
     payload = b"company-check"
@@ -629,8 +650,13 @@ async def test_download_denies_company_mismatch(
 
     await process_scan_request(message, scanner=_CleanScanner(), session_factory=sessionmaker)
 
-    client_headers = {**dict(async_client.headers), **await make_auth_headers(RoleEnum.CLIENT_USER, company_id=company_b.id)}
-    download = await async_client.get(f"/api/v1/files-legacy/{body['id']}/download", headers=client_headers)
+    client_headers = {
+        **dict(async_client.headers),
+        **await make_auth_headers(RoleEnum.CLIENT_USER, company_id=company_b.id),
+    }
+    download = await async_client.get(
+        f"/api/v1/files-legacy/{body['id']}/download", headers=client_headers
+    )
     download = await async_client.get(
         f"/api/v1/files-legacy/{body['id']}/download", headers=client_headers
     )
@@ -700,7 +726,7 @@ async def test_upload_returns_503_when_bucket_unavailable(
         def upload_fileobj(self, **kwargs):
             self._raise()
 
-    monkeypatch.setattr("app.domains.files.s3.get_client", lambda: _BrokenClient())
+    monkeypatch.setattr("app.modules.files.s3.get_client", lambda: _BrokenClient())
 
     headers = {**dict(async_client.headers), **await make_auth_headers()}
     response = await async_client.post(

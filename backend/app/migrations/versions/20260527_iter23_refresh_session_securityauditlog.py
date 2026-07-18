@@ -65,26 +65,16 @@ def upgrade() -> None:
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("version", sa.Integer(), nullable=False),
         sa.PrimaryKeyConstraint("id"),
-        sa.ForeignKeyConstraint(
-            ["tenant_id"], ["tenant.id"], name="fk_refresh_session_tenant"
-        ),
+        sa.ForeignKeyConstraint(["tenant_id"], ["tenant.id"], name="fk_refresh_session_tenant"),
         sa.ForeignKeyConstraint(
             ["user_id"], ["user.id"], name="fk_refresh_session_user", ondelete="CASCADE"
         ),
         sa.UniqueConstraint("token_jti", name="uq_refresh_session_token_jti"),
     )
-    op.create_index(
-        "ix_refresh_session_tenant_id", "refresh_session", ["tenant_id"], unique=False
-    )
-    op.create_index(
-        "ix_refresh_session_user_id", "refresh_session", ["user_id"], unique=False
-    )
-    op.create_index(
-        "ix_refresh_session_family_id", "refresh_session", ["family_id"], unique=False
-    )
-    op.create_index(
-        "ix_refresh_session_token_jti", "refresh_session", ["token_jti"], unique=False
-    )
+    op.create_index("ix_refresh_session_tenant_id", "refresh_session", ["tenant_id"], unique=False)
+    op.create_index("ix_refresh_session_user_id", "refresh_session", ["user_id"], unique=False)
+    op.create_index("ix_refresh_session_family_id", "refresh_session", ["family_id"], unique=False)
+    op.create_index("ix_refresh_session_token_jti", "refresh_session", ["token_jti"], unique=False)
     op.create_index(
         "ix_refresh_session_user_family",
         "refresh_session",
@@ -118,9 +108,7 @@ def upgrade() -> None:
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("version", sa.Integer(), nullable=False),
         sa.PrimaryKeyConstraint("id"),
-        sa.ForeignKeyConstraint(
-            ["tenant_id"], ["tenant.id"], name="fk_securityauditlog_tenant"
-        ),
+        sa.ForeignKeyConstraint(["tenant_id"], ["tenant.id"], name="fk_securityauditlog_tenant"),
         sa.ForeignKeyConstraint(
             ["user_id"],
             ["user.id"],
@@ -131,24 +119,16 @@ def upgrade() -> None:
     op.create_index(
         "ix_securityauditlog_tenant_id", "securityauditlog", ["tenant_id"], unique=False
     )
-    op.create_index(
-        "ix_securityauditlog_user_id", "securityauditlog", ["user_id"], unique=False
-    )
-    op.create_index(
-        "ix_security_auditlog_action", "securityauditlog", ["action"], unique=False
-    )
-    op.create_index(
-        "ix_security_auditlog_decision", "securityauditlog", ["decision"], unique=False
-    )
+    op.create_index("ix_securityauditlog_user_id", "securityauditlog", ["user_id"], unique=False)
+    op.create_index("ix_security_auditlog_action", "securityauditlog", ["action"], unique=False)
+    op.create_index("ix_security_auditlog_decision", "securityauditlog", ["decision"], unique=False)
     op.create_index(
         "ix_security_auditlog_resource",
         "securityauditlog",
         ["resource_type", "resource_id"],
         unique=False,
     )
-    op.create_index(
-        "ix_security_auditlog_when", "securityauditlog", ["when"], unique=False
-    )
+    op.create_index("ix_security_auditlog_when", "securityauditlog", ["when"], unique=False)
 
 
 def downgrade() -> None:

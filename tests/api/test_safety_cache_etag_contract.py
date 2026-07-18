@@ -30,7 +30,6 @@ from app.models.models import (
 )
 from tests.utils.factories import TestDataFactory
 
-
 # =============================================================================
 # Helpers
 # =============================================================================
@@ -112,9 +111,7 @@ async def test_incidents_hit_returns_304_with_same_etag(
     assert first.status_code == status.HTTP_200_OK
     etag = first.headers["ETag"]
 
-    second = await async_client.get(
-        "/api/v1/incidents", headers={**headers, "If-None-Match": etag}
-    )
+    second = await async_client.get("/api/v1/incidents", headers={**headers, "If-None-Match": etag})
     assert second.status_code == status.HTTP_304_NOT_MODIFIED
     assert second.headers["ETag"] == etag
     assert second.content == b""
@@ -135,9 +132,7 @@ async def test_incidents_miss_with_bogus_etag_returns_200_and_body(
         site_id = str(site.id)
 
     headers = await make_auth_headers(RoleEnum.ADMIN)
-    await _seed_incident_via_api(
-        async_client, headers, company_id=company_id, site_id=site_id
-    )
+    await _seed_incident_via_api(async_client, headers, company_id=company_id, site_id=site_id)
 
     response = await async_client.get(
         "/api/v1/incidents", headers={**headers, "If-None-Match": '"stale-etag-incidents"'}
@@ -229,9 +224,7 @@ async def test_incidents_etag_distinct_per_status_filter(
         site_id = str(site.id)
 
     headers = await make_auth_headers(RoleEnum.ADMIN)
-    await _seed_incident_via_api(
-        async_client, headers, company_id=company_id, site_id=site_id
-    )
+    await _seed_incident_via_api(async_client, headers, company_id=company_id, site_id=site_id)
 
     unfiltered = await async_client.get("/api/v1/incidents", headers=headers)
     filtered = await async_client.get(
@@ -256,7 +249,10 @@ async def test_incidents_etag_distinct_per_type_filter(
 
     headers = await make_auth_headers(RoleEnum.ADMIN)
     await _seed_incident_via_api(
-        async_client, headers, company_id=company_id, site_id=site_id,
+        async_client,
+        headers,
+        company_id=company_id,
+        site_id=site_id,
         incident_type=IncidentType.ACCIDENT,
     )
 
@@ -285,9 +281,7 @@ async def test_incidents_empty_list_has_stable_etag(
     etag = first.headers["ETag"]
     assert etag
 
-    second = await async_client.get(
-        "/api/v1/incidents", headers={**headers, "If-None-Match": etag}
-    )
+    second = await async_client.get("/api/v1/incidents", headers={**headers, "If-None-Match": etag})
     assert second.status_code == status.HTTP_304_NOT_MODIFIED
 
 
@@ -344,9 +338,7 @@ async def test_incidents_etag_deterministic_across_repeated_reads(
         site_id = str(site.id)
 
     headers = await make_auth_headers(RoleEnum.ADMIN)
-    await _seed_incident_via_api(
-        async_client, headers, company_id=company_id, site_id=site_id
-    )
+    await _seed_incident_via_api(async_client, headers, company_id=company_id, site_id=site_id)
     etags = [
         (await async_client.get("/api/v1/incidents", headers=headers)).headers["ETag"]
         for _ in range(3)
@@ -414,9 +406,7 @@ async def test_inspections_etag_changes_after_create(
         company_id = str(company.id)
 
     headers = await make_auth_headers(RoleEnum.ADMIN)
-    await _seed_inspection_via_api(
-        async_client, headers, company_id=company_id, authority="ГИТ"
-    )
+    await _seed_inspection_via_api(async_client, headers, company_id=company_id, authority="ГИТ")
     first = await async_client.get("/api/v1/inspections", headers=headers)
     initial_etag = first.headers["ETag"]
 
@@ -439,9 +429,7 @@ async def test_inspections_etag_changes_after_patch(
         company_id = str(company.id)
 
     headers = await make_auth_headers(RoleEnum.ADMIN)
-    inspection = await _seed_inspection_via_api(
-        async_client, headers, company_id=company_id
-    )
+    inspection = await _seed_inspection_via_api(async_client, headers, company_id=company_id)
     first = await async_client.get("/api/v1/inspections", headers=headers)
     initial_etag = first.headers["ETag"]
 
@@ -564,12 +552,8 @@ async def test_inspections_etag_distinct_per_page(
             async_client, headers, company_id=company_id, authority=f"Authority {i}"
         )
 
-    page_a = await async_client.get(
-        "/api/v1/inspections?limit=2&offset=0", headers=headers
-    )
-    page_b = await async_client.get(
-        "/api/v1/inspections?limit=2&offset=2", headers=headers
-    )
+    page_a = await async_client.get("/api/v1/inspections?limit=2&offset=0", headers=headers)
+    page_b = await async_client.get("/api/v1/inspections?limit=2&offset=2", headers=headers)
     assert page_a.headers["ETag"] != page_b.headers["ETag"]
 
 

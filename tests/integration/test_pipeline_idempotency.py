@@ -19,10 +19,16 @@ async def test_pipeline_runs_idempotency(async_client, make_auth_headers):
         "is_active": True,
     }
     tenant_headers = {**dict(async_client.headers), **await make_auth_headers()}
-    created = await async_client.post("/api/v1/pipelines/profiles", json=profile_payload, headers=tenant_headers)
+    created = await async_client.post(
+        "/api/v1/pipelines/profiles", json=profile_payload, headers=tenant_headers
+    )
     assert created.status_code == 201
 
-    payload = {"profile_code": "doc_basic_v1", "inputs": {"template_version_id": "tv-1"}, "options": {}}
+    payload = {
+        "profile_code": "doc_basic_v1",
+        "inputs": {"template_version_id": "tv-1"},
+        "options": {},
+    }
     headers = {**tenant_headers, "Idempotency-Key": "next28-k1"}
     first = await async_client.post("/api/v1/pipelines/runs", json=payload, headers=headers)
     second = await async_client.post("/api/v1/pipelines/runs", json=payload, headers=headers)

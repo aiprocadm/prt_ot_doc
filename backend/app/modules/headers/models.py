@@ -34,4 +34,3 @@ class HeaderFooterPreset(TenantBaseModel, SoftDeleteMixin):
         Index("ix_header_footer_preset_tenant_code", "tenant_id", "code"),
         Index("ix_header_footer_preset_updated_at", "updated_at"),
     )
-

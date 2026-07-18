@@ -16,23 +16,44 @@ class RegistryResponse:
 class FRDOAdapter:
     async def send(self, payload: dict) -> RegistryResponse:
         accepted = int(payload.get("entity_id", "0")[-1], 16) % 2 == 0
-        return RegistryResponse(status="accepted" if accepted else "rejected", payload={"provider": "frdo", "accepted": accepted})
+        return RegistryResponse(
+            status="accepted" if accepted else "rejected",
+            payload={"provider": "frdo", "accepted": accepted},
+        )
 
 
 class EISOTAdapter:
     async def send(self, payload: dict) -> RegistryResponse:
         accepted = int(payload.get("entity_id", "0")[-1], 16) % 2 == 1
-        return RegistryResponse(status="accepted" if accepted else "rejected", payload={"provider": "eisot", "accepted": accepted})
+        return RegistryResponse(
+            status="accepted" if accepted else "rejected",
+            payload={"provider": "eisot", "accepted": accepted},
+        )
 
 
 class ExternalRegistryDispatchService:
-    async def enqueue(self, session: AsyncSession, tenant_id: str, entity_type: str, entity_id: str, registry_type: str) -> ExternalRegistryJob:
-        job = ExternalRegistryJob(tenant_id=tenant_id, entity_type=entity_type, entity_id=entity_id, registry_type=registry_type, status="pending")
+    async def enqueue(
+        self,
+        session: AsyncSession,
+        tenant_id: str,
+        entity_type: str,
+        entity_id: str,
+        registry_type: str,
+    ) -> ExternalRegistryJob:
+        job = ExternalRegistryJob(
+            tenant_id=tenant_id,
+            entity_type=entity_type,
+            entity_id=entity_id,
+            registry_type=registry_type,
+            status="pending",
+        )
         session.add(job)
         await session.flush()
         return job
 
-    async def dispatch(self, session: AsyncSession, job: ExternalRegistryJob) -> ExternalRegistryJob:
+    async def dispatch(
+        self, session: AsyncSession, job: ExternalRegistryJob
+    ) -> ExternalRegistryJob:
         adapter = FRDOAdapter() if job.registry_type == "frdo" else EISOTAdapter()
         request_payload = {"entity_type": job.entity_type, "entity_id": job.entity_id}
         response = await adapter.send(request_payload)

@@ -30,19 +30,36 @@ async def run_migrations_online() -> None:
         future=True,
     )
 
-    async with connectable.begin() as connection:
+    # POST-2 migration hardening: real per-migration transactions.
+    # History: 2026-06-01..07-02 the whole run used isolation_level="AUTOCOMMIT"
+    # (every statement committed immediately) because PG forbids *using* an enum
+    # value in the transaction that ADD VALUE'd it. The accepted trade-off was
+    # zero atomicity — a migration failing midway left partial state (see
+    # RELEASE_BLOCKERS_STATUS "env.py atomicity review", which named this exact
+    # hardening as the follow-up). Now: `transaction_per_migration=True` is a
+    # REAL per-migration BEGIN/COMMIT (fail = rollback of that one migration),
+    # and each of the 7 `ALTER TYPE ... ADD VALUE` sites opens its own
+    # `op.get_context().autocommit_block()` — the enum extension commits
+    # immediately (durable + usable by later statements/migrations) and stays
+    # retry-safe via IF NOT EXISTS.
+    async with connectable.connect() as connection:
         await connection.run_sync(do_run_migrations)
     await connectable.dispose()
 
 
 def do_run_migrations(connection) -> None:
     _ensure_alembic_version_table_can_store_long_revisions(connection)
+    # Commit the pre-step explicitly: SQLAlchemy 2.0 connections autobegin on
+    # first statement, and alembic's per-migration transaction management must
+    # start from a clean (non-begun) connection.
+    connection.commit()
     context.configure(
         connection=connection,
         target_metadata=target_metadata,
         include_schemas=True,
         compare_type=True,
         compare_server_default=True,
+        transaction_per_migration=True,
     )
     with context.begin_transaction():
         context.run_migrations()
@@ -64,10 +81,7 @@ def _ensure_alembic_version_table_can_store_long_revisions(connection) -> None:
 
     if connection.dialect.name == "postgresql":
         connection.execute(
-            sa.text(
-                "ALTER TABLE alembic_version "
-                "ALTER COLUMN version_num TYPE TEXT"
-            )
+            sa.text("ALTER TABLE alembic_version " "ALTER COLUMN version_num TYPE TEXT")
         )
 
 

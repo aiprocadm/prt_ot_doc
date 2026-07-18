@@ -41,11 +41,13 @@ from app.models.models import (
     Training,
     TrainingCertificate,
     TrainingCourse,
-    TrainingSession as TrainingSessionModel,
     TrainingSessionStatus,
     User,
     UserRole,
     Workplace,
+)
+from app.models.models import (
+    TrainingSession as TrainingSessionModel,
 )
 from app.schemas.employee import (
     EmployeeAuditItem,
@@ -99,12 +101,8 @@ class EmployeeCardService:
             return None
 
         company = await self._load_company(person.company_id) if person.company_id else None
-        position = (
-            await self._load_position(person.position_id) if person.position_id else None
-        )
-        workplace = (
-            await self._load_workplace(person.workplace_id) if person.workplace_id else None
-        )
+        position = await self._load_position(person.position_id) if person.position_id else None
+        workplace = await self._load_workplace(person.workplace_id) if person.workplace_id else None
 
         personal = self._build_personal(person, company, position, workplace)
         roles = await self._build_roles_and_assignments(person, company, position, workplace)
@@ -171,7 +169,11 @@ class EmployeeCardService:
         position: Position | None,
         workplace: Workplace | None,
     ) -> EmployeePersonal:
-        full_name_parts = [person.last_name or "", person.first_name or "", person.middle_name or ""]
+        full_name_parts = [
+            person.last_name or "",
+            person.first_name or "",
+            person.middle_name or "",
+        ]
         fio = " ".join(part for part in full_name_parts if part).strip()
         return EmployeePersonal(
             id=str(person.id),
@@ -220,13 +222,17 @@ class EmployeeCardService:
             user = (await self.db.execute(stmt)).scalar_one_or_none()
             if user is not None:
                 additional_roles = (
-                    await self.db.execute(
-                        select(UserRole.role).where(
-                            UserRole.tenant_id == self.tenant_id,
-                            UserRole.user_id == user.id,
+                    (
+                        await self.db.execute(
+                            select(UserRole.role).where(
+                                UserRole.tenant_id == self.tenant_id,
+                                UserRole.user_id == user.id,
+                            )
                         )
                     )
-                ).scalars().all()
+                    .scalars()
+                    .all()
+                )
                 user_account = EmployeeUserAccount(
                     user_id=str(user.id),
                     email=user.email,
@@ -261,7 +267,9 @@ class EmployeeCardService:
                 TrainingSessionModel.tenant_id == self.tenant_id,
                 TrainingSessionModel.person_id == person.id,
             )
-            .order_by(desc(TrainingSessionModel.completed_at), desc(TrainingSessionModel.created_at))
+            .order_by(
+                desc(TrainingSessionModel.completed_at), desc(TrainingSessionModel.created_at)
+            )
             .limit(MAX_ITEMS_PER_SECTION)
         )
         rows = (await self.db.execute(sessions_stmt)).all()
@@ -497,7 +505,7 @@ class EmployeeCardService:
                 status=permit.status,
                 position_id=str(permit.position_id) if permit.position_id else None,
                 is_expired=bool(
-                    permit.status == PermitStatus.ACTIVE
+                    permit.status == PermitStatus.ACTIVE.value
                     and permit.valid_until is not None
                     and permit.valid_until < today
                 ),
@@ -518,7 +526,7 @@ class EmployeeCardService:
             .where(
                 Permit.tenant_id == self.tenant_id,
                 Permit.person_id == person.id,
-                Permit.status == PermitStatus.ACTIVE,
+                Permit.status == PermitStatus.ACTIVE.value,
             )
         )
         expired = await self._count(
@@ -527,7 +535,7 @@ class EmployeeCardService:
             .where(
                 Permit.tenant_id == self.tenant_id,
                 Permit.person_id == person.id,
-                Permit.status == PermitStatus.ACTIVE,
+                Permit.status == PermitStatus.ACTIVE.value,
                 Permit.valid_until.is_not(None),
                 Permit.valid_until < today,
             )
@@ -646,9 +654,7 @@ class EmployeeCardService:
                 briefing_date=entry.briefing_date,
                 valid_until=entry.valid_until,
                 status=entry.status,
-                is_expired=bool(
-                    entry.valid_until is not None and entry.valid_until < now
-                ),
+                is_expired=bool(entry.valid_until is not None and entry.valid_until < now),
             )
             for entry, template_title in rows
         ]
@@ -715,8 +721,7 @@ class EmployeeCardService:
         upcoming = sum(
             1
             for item in items
-            if item.status not in {"closed", "completed", "cancelled"}
-            and not item.is_overdue
+            if item.status not in {"closed", "completed", "cancelled"} and not item.is_overdue
         )
         return EmployeeComplianceDeadlinesSection(
             count=total,

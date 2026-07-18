@@ -20,8 +20,11 @@ depends_on = None
 def upgrade() -> None:
     bind = op.get_bind()
     if bind.dialect.name == "postgresql":
-        for value in ("generated", "approved", "revoked"):
-            op.execute(f"ALTER TYPE documentstatus ADD VALUE IF NOT EXISTS '{value}'")
+        # POST-2: enum extension commits outside the migration tx (PG forbids
+        # using a new value in the tx that added it); IF NOT EXISTS = retry-safe.
+        with op.get_context().autocommit_block():
+            for value in ("generated", "approved", "revoked"):
+                op.execute(f"ALTER TYPE documentstatus ADD VALUE IF NOT EXISTS '{value}'")
 
     op.create_table(
         "document_snapshot",
@@ -40,8 +43,12 @@ def upgrade() -> None:
             nullable=False,
             server_default=sa.text("CURRENT_TIMESTAMP"),
         ),
-        sa.Column("document_id", sa.String(length=36), sa.ForeignKey("document.id"), nullable=False),
-        sa.Column("template_id", sa.String(length=36), sa.ForeignKey("template.id"), nullable=False),
+        sa.Column(
+            "document_id", sa.String(length=36), sa.ForeignKey("document.id"), nullable=False
+        ),
+        sa.Column(
+            "template_id", sa.String(length=36), sa.ForeignKey("template.id"), nullable=False
+        ),
         sa.Column(
             "template_version_id",
             sa.String(length=36),
@@ -97,7 +104,9 @@ def upgrade() -> None:
             nullable=False,
             server_default=sa.text("CURRENT_TIMESTAMP"),
         ),
-        sa.Column("template_id", sa.String(length=36), sa.ForeignKey("template.id"), nullable=False),
+        sa.Column(
+            "template_id", sa.String(length=36), sa.ForeignKey("template.id"), nullable=False
+        ),
         sa.Column(
             "template_version_id",
             sa.String(length=36),
@@ -220,10 +229,20 @@ def downgrade() -> None:
     op.drop_index("ix_document_batch_run_tenant_created", table_name="document_batch_run")
     op.drop_table("document_batch_run")
 
+    # Drop the documentversion -> document_snapshot FK (and its column) BEFORE
+    # dropping the referenced document_snapshot table; the original order
+    # dropped the table first, which raises DependentObjectsStillExistError.
+    with op.batch_alter_table("documentversion", schema=None) as batch:
+        batch.drop_constraint("fk_document_version_snapshot", type_="foreignkey")
+        batch.drop_column("snapshot_id")
+
     op.drop_index("ix_document_snapshot_template", table_name="document_snapshot")
     op.drop_index("ix_document_snapshot_document", table_name="document_snapshot")
     op.drop_table("document_snapshot")
 
-    with op.batch_alter_table("documentversion", schema=None) as batch:
-        batch.drop_constraint("fk_document_version_snapshot", type_="foreignkey")
-        batch.drop_column("snapshot_id")
+    if op.get_bind().dialect.name == "postgresql":
+        # Enum types created by this revision are not auto-dropped with their
+        # tables — remove them so a re-upgrade after `downgrade base` does not
+        # collide. PG-only (SQLite degrades Enum to VARCHAR, no DROP TYPE).
+        op.execute("DROP TYPE IF EXISTS documentbatchitemstatus")
+        op.execute("DROP TYPE IF EXISTS documentbatchstatus")

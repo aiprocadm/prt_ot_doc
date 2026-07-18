@@ -93,13 +93,13 @@ async def test_resolve_template_returns_active_version() -> None:
                 return version
             raise AssertionError("Unexpected model request")
 
-        async def execute(self, stmt: Any, params: dict[str, Any]) -> DummyResult:  # noqa: ARG002 - statement unused
+        async def execute(
+            self, stmt: Any, params: dict[str, Any]
+        ) -> DummyResult:  # noqa: ARG002 - statement unused
             assert params["status"] == TemplateVersionStatus.ACTIVE.name
             return DummyResult()
 
-    resolved_template, resolved_version = await _resolve_template(
-        DummySession(), template_id
-    )
+    resolved_template, resolved_version = await _resolve_template(DummySession(), template_id)
 
     assert resolved_template is template
     assert resolved_version is version
@@ -154,7 +154,9 @@ async def test_resolve_template_without_active_version(
     assert "Template has no active version" in captured.err
 
 
-def test_render_command_invokes_pipeline(monkeypatch: pytest.MonkeyPatch, runner: CliRunner, tmp_path: Path) -> None:
+def test_render_command_invokes_pipeline(
+    monkeypatch: pytest.MonkeyPatch, runner: CliRunner, tmp_path: Path
+) -> None:
     payload = {
         "context": {"subject": "Letter"},
         "replacements": {"{{name}}": "Alice"},
@@ -195,7 +197,9 @@ def test_render_command_invokes_pipeline(monkeypatch: pytest.MonkeyPatch, runner
         fake_session_records.append(session)
         yield session
 
-    monkeypatch.setattr("app.cli.main.AsyncSessionLocal", lambda tenant=None: fake_session_factory(tenant=tenant))
+    monkeypatch.setattr(
+        "app.cli.main.AsyncSessionLocal", lambda tenant=None: fake_session_factory(tenant=tenant)
+    )
     monkeypatch.setattr("app.cli.main.PipelineService", lambda: FakePipelineService())
 
     result = runner.invoke(
@@ -223,7 +227,9 @@ def test_render_command_invokes_pipeline(monkeypatch: pytest.MonkeyPatch, runner
     assert fake_session_records[0].tenant == "explicit-tenant"
 
 
-def test_pipeline_command_enqueues_task(monkeypatch: pytest.MonkeyPatch, runner: CliRunner, tmp_path: Path) -> None:
+def test_pipeline_command_enqueues_task(
+    monkeypatch: pytest.MonkeyPatch, runner: CliRunner, tmp_path: Path
+) -> None:
     payload = {
         "context": {"value": 7},
         "idempotency_key": "existing-key",
@@ -317,7 +323,9 @@ def test_header_command_outputs_storage_key(runner: CliRunner) -> None:
     assert "template_key: templates/example.docx" in result.stdout
 
 
-def test_replace_command_updates_document(monkeypatch: pytest.MonkeyPatch, runner: CliRunner, tmp_path: Path) -> None:
+def test_replace_command_updates_document(
+    monkeypatch: pytest.MonkeyPatch, runner: CliRunner, tmp_path: Path
+) -> None:
     class FakeStorage:
         def __init__(self) -> None:
             self.data = b"Hello, {{name}}!"

@@ -51,7 +51,9 @@ class ReplaceRun(TenantBaseModel):
     report_json: Mapped[dict] = mapped_column(JSONBType, nullable=False, default=dict)
     before_file_id: Mapped[str] = mapped_column(String(512), nullable=False)
     after_file_id: Mapped[str | None] = mapped_column(String(512), nullable=True)
-    status: Mapped[str] = mapped_column(String(16), nullable=False, default=ReplaceRunStatus.QUEUED.value)
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default=ReplaceRunStatus.QUEUED.value
+    )
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)

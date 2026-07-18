@@ -27,11 +27,7 @@ celery_app = Celery(
     broker=settings.redis.broker_url,
     backend=settings.redis.result_url,
 )
-default_queue = (
-    settings.celery.worker_queues[0]
-    if settings.celery.worker_queues
-    else "default"
-)
+default_queue = settings.celery.worker_queues[0] if settings.celery.worker_queues else "default"
 pdf_queue = settings.celery.pdf_queue
 
 celery_app.conf.update(
@@ -42,9 +38,7 @@ celery_app.conf.update(
     worker_max_tasks_per_child=100,
     task_always_eager=settings.celery_eager,
     task_eager_propagates=settings.celery_eager,
-    broker_transport_options={
-        "visibility_timeout": max(settings.celery.task_time_limit * 2, 600)
-    },
+    broker_transport_options={"visibility_timeout": max(settings.celery.task_time_limit * 2, 600)},
     beat_scheduler="celery.beat:PersistentScheduler",
     task_default_queue=default_queue,
     task_default_exchange="app.tasks",
@@ -61,7 +55,35 @@ celery_app.conf.beat_schedule = {
     "reminders-scan-hourly": {
         "task": "reminders.scan",
         "schedule": crontab(minute=0),
-    }
+    },
+    "notifications-dispatch-pending": {
+        "task": "notifications.dispatch_pending",
+        "schedule": crontab(minute="*/5"),
+    },
+    "prescriptions-escalate-daily": {
+        "task": "prescriptions.escalate.tick",
+        "schedule": crontab(hour=2, minute=0),
+    },
+    "medical-contingent-daily": {
+        "task": "medical.contingent.tick",
+        "schedule": crontab(hour=3, minute=0),
+    },
+    "contractors-readiness-daily": {
+        "task": "contractors.readiness.tick",
+        "schedule": crontab(hour=3, minute=30),
+    },
+    "contractors-documents-daily": {
+        "task": "contractors.documents.tick",
+        "schedule": crontab(hour=3, minute=45),
+    },
+    "ppe-expiry-daily": {
+        "task": "ppe.expiry.tick",
+        "schedule": crontab(hour=4, minute=15),
+    },
+    "permits-expiry-daily": {
+        "task": "permits.expiry.tick",
+        "schedule": crontab(hour=4, minute=30),
+    },
 }
 
 celery_app.conf.task_queues = (
@@ -103,10 +125,13 @@ def route_task_by_tenant(name, args, kwargs, options, task=None, **kw):
     return None
 
 
-celery_app.conf.task_routes = (route_task_by_tenant, {
-    "app.tasks.*": {"queue": default_queue},
-    "worker.tasks.*": {"queue": default_queue},
-})
+celery_app.conf.task_routes = (
+    route_task_by_tenant,
+    {
+        "app.tasks.*": {"queue": default_queue},
+        "worker.tasks.*": {"queue": default_queue},
+    },
+)
 
 
 _TASK_CONTEXT_TOKENS: dict[
@@ -150,7 +175,9 @@ def _on_task_prerun(
                 or headers.get("X-Request-Id")
             )
 
-    trace_identifier = (trace_header_value or correlation_header_value or task_id).strip() or task_id
+    trace_identifier = (
+        trace_header_value or correlation_header_value or task_id
+    ).strip() or task_id
     trace_token = set_trace_id(trace_identifier)
     correlation_token = CorrelationIDManager.set(
         (correlation_header_value or trace_identifier).strip() or trace_identifier

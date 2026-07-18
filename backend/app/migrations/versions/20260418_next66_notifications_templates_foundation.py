@@ -19,8 +19,12 @@ depends_on = None
 
 def upgrade() -> None:
     channel_enum = postgresql.ENUM(
-        "email", "telegram", "inapp", "webhook",
-        name="notificationtemplatechannel", create_type=False,
+        "email",
+        "telegram",
+        "inapp",
+        "webhook",
+        name="notificationtemplatechannel",
+        create_type=False,
     )
     type_enum = postgresql.ENUM(
         "JobStatusChanged",
@@ -74,10 +78,18 @@ def upgrade() -> None:
         sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True),
         sa.ForeignKeyConstraint(["tenant_id"], ["tenant.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("tenant_id", "code", "channel", "locale", name="uq_notification_templates_scope"),
+        sa.UniqueConstraint(
+            "tenant_id", "code", "channel", "locale", name="uq_notification_templates_scope"
+        ),
     )
-    op.create_index("ix_notification_templates_lookup", "notification_templates", ["tenant_id", "channel", "type", "is_active"])
-    op.create_index(op.f("ix_notification_templates_tenant_id"), "notification_templates", ["tenant_id"])
+    op.create_index(
+        "ix_notification_templates_lookup",
+        "notification_templates",
+        ["tenant_id", "channel", "type", "is_active"],
+    )
+    op.create_index(
+        op.f("ix_notification_templates_tenant_id"), "notification_templates", ["tenant_id"]
+    )
 
 
 def downgrade() -> None:

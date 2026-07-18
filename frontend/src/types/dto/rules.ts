@@ -1,0 +1,124 @@
+export type RuleConditionOp =
+  | "eq"
+  | "ne"
+  | "in"
+  | "not_in"
+  | "gt"
+  | "gte"
+  | "lt"
+  | "lte"
+  | "contains"
+  | "exists";
+
+export type RuleActionType = "create_task" | "notify" | "webhook";
+
+export type TriggerStatus = "success" | "partial" | "error";
+
+export interface RuleCondition {
+  field: string;
+  op: RuleConditionOp;
+  value?: unknown;
+}
+
+export interface RuleConditionsJson {
+  match?: "all" | "any";
+  conditions?: RuleCondition[];
+}
+
+export type RuleAction = { type: RuleActionType } & Record<string, unknown>;
+
+export interface AutomationRuleBase {
+  name: string;
+  description?: string | null;
+  event_type: string;
+  conditions_json: RuleConditionsJson;
+  actions_json: RuleAction[];
+  priority: number;
+  is_enabled: boolean;
+}
+
+export type AutomationRuleCreate = AutomationRuleBase;
+
+export type AutomationRuleUpdate = Partial<AutomationRuleBase>;
+
+export interface AutomationRuleRead extends AutomationRuleBase {
+  id: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AutomationRulePage {
+  items: AutomationRuleRead[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface EventFieldMeta {
+  name: string;
+  kind: string;
+}
+
+export interface EventTypeMeta {
+  event_type: string;
+  fields: EventFieldMeta[];
+}
+
+export interface EventTypePage {
+  items: EventTypeMeta[];
+  total: number;
+}
+
+export interface DryRunEvent {
+  event_type: string;
+  payload: Record<string, unknown>;
+}
+
+export interface DryRunIn {
+  rule: AutomationRuleBase;
+  event: DryRunEvent;
+}
+
+export interface ConditionResult {
+  field: string;
+  op: string;
+  value?: unknown;
+  actual?: unknown;
+  matched: boolean;
+}
+
+export interface DryRunOut {
+  matched: boolean;
+  condition_results: ConditionResult[];
+  would_actions: string[];
+}
+
+export interface RuleTestResultItem {
+  event_key: string;
+  occurred_at?: string | null;
+  matched: boolean;
+}
+
+export interface RuleTestOut {
+  events_checked: number;
+  matched_count: number;
+  results: RuleTestResultItem[];
+}
+
+export interface TriggerRead {
+  id: string;
+  rule_id: string;
+  event_type: string;
+  event_key: string;
+  correlation_id?: string | null;
+  status: TriggerStatus;
+  actions_result: Record<string, unknown>[];
+  created_at: string;
+}
+
+export interface TriggerPage {
+  items: TriggerRead[];
+  total: number;
+  limit: number;
+  offset: number;
+}

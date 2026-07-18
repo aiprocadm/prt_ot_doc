@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 
-import { approvalsApi, type ApprovalProcess, type ApprovalTask } from "@/api/approvals";
+import { approvalsApi, type ApprovalProcess, type ApprovalTask, type ApprovalTimelineItem } from "@/api/approvals";
 import { edoApi, type EdoEnvelope } from "@/api/edo";
 import { signApi, type SignatureRequest } from "@/api/sign";
 import ApprovalTaskCard from "@/components/ApprovalTaskCard";
+import ApprovalTimeline from "@/components/ApprovalTimeline";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingScreen } from "@/components/common/LoadingScreen";
@@ -23,6 +25,34 @@ const ApprovalsInboxPage = () => {
   const [signatures, setSignatures] = useState<SignatureRequest[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
+  const [timeline, setTimeline] = useState<{ id: string; currentStep: number; items: ApprovalTimelineItem[] } | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  const showTimeline = async (p: ApprovalProcess) => {
+    if (timeline?.id === p.id) {
+      setTimeline(null);
+      return;
+    }
+    try {
+      const items = await approvalsApi.getTimeline(p.id);
+      setTimeline({ id: p.id, currentStep: p.current_step ?? 0, items });
+    } catch {
+      toast.error("Не удалось загрузить историю решений");
+    }
+  };
+
+  const runAction = async (id: string, fn: () => Promise<unknown>, okMsg: string) => {
+    setBusyId(id);
+    try {
+      await fn();
+      toast.success(okMsg);
+      await load();
+    } catch {
+      toast.error("Не удалось выполнить действие");
+    } finally {
+      setBusyId(null);
+    }
+  };
 
   const load = async () => {
     setLoading(true);
@@ -124,6 +154,7 @@ const ApprovalsInboxPage = () => {
                       <TableHead>Объект</TableHead>
                       <TableHead>Шаг</TableHead>
                       <TableHead>Статус</TableHead>
+                      <TableHead className="text-right">История</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -133,11 +164,21 @@ const ApprovalsInboxPage = () => {
                         <TableCell>{p.object_id}</TableCell>
                         <TableCell>{p.current_step}</TableCell>
                         <TableCell><StatusBadge status={p.status} /></TableCell>
+                        <TableCell className="text-right">
+                          <Button variant="outline" size="sm" onClick={() => void showTimeline(p)}>
+                            {timeline?.id === p.id ? "Скрыть" : "История"}
+                          </Button>
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
                 </Table>
               )}
+              {timeline ? (
+                <div className="mt-4">
+                  <ApprovalTimeline items={timeline.items} currentStep={timeline.currentStep} />
+                </div>
+              ) : null}
             </CardContent>
           </Card>
         </TabsContent>
@@ -156,8 +197,8 @@ const ApprovalsInboxPage = () => {
                     <TableRow>
                       <TableHead>ID</TableHead>
                       <TableHead>Провайдер</TableHead>
-                      <TableHead>Дата</TableHead>
                       <TableHead>Статус</TableHead>
+                      <TableHead className="text-right">Действия</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -165,8 +206,13 @@ const ApprovalsInboxPage = () => {
                       <TableRow key={s.id}>
                         <TableCell className="font-medium">#{s.id.slice(0, 8)}</TableCell>
                         <TableCell>{s.provider}</TableCell>
-                        <TableCell>—</TableCell>
                         <TableCell><StatusBadge status={s.status} /></TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-2">
+                            <Button variant="outline" size="sm" disabled={busyId === s.id} onClick={() => void runAction(s.id, () => signApi.refresh(s.id), "Статус обновлён")}>Обновить</Button>
+                            <Button variant="outline" size="sm" disabled={busyId === s.id} onClick={() => void runAction(s.id, () => signApi.verify(s.id), "Проверка выполнена")}>Проверить</Button>
+                          </div>
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -190,8 +236,8 @@ const ApprovalsInboxPage = () => {
                     <TableRow>
                       <TableHead>ID</TableHead>
                       <TableHead>Внешний ID</TableHead>
-                      <TableHead>Дата</TableHead>
                       <TableHead>Статус</TableHead>
+                      <TableHead className="text-right">Действия</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -199,8 +245,10 @@ const ApprovalsInboxPage = () => {
                       <TableRow key={e.id}>
                         <TableCell className="font-medium">#{e.id.slice(0, 8)}</TableCell>
                         <TableCell>{e.external_id ?? "—"}</TableCell>
-                        <TableCell>—</TableCell>
                         <TableCell><StatusBadge status={e.status} /></TableCell>
+                        <TableCell className="text-right">
+                          <Button variant="outline" size="sm" disabled={busyId === e.id} onClick={() => void runAction(e.id, () => edoApi.refreshStatus(e.id), "Статус обновлён")}>Обновить статус</Button>
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>

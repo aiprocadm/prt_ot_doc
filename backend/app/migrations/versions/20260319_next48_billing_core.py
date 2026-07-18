@@ -16,12 +16,20 @@ depends_on = None
 
 
 subscription_status = postgresql.ENUM(
-    "active", "trial", "past_due", "suspended", "canceled",
+    "active",
+    "trial",
+    "past_due",
+    "suspended",
+    "canceled",
     name="billingsubscriptionstatus",
     create_type=False,
 )
 invoice_status = postgresql.ENUM(
-    "draft", "issued", "paid", "overdue", "void",
+    "draft",
+    "issued",
+    "paid",
+    "overdue",
+    "void",
     name="billinginvoicestatus",
     create_type=False,
 )
@@ -36,9 +44,24 @@ def upgrade() -> None:
         sa.Column("id", sa.String(length=36), nullable=False),
         sa.Column("code", sa.String(length=32), nullable=False),
         sa.Column("name", sa.String(length=128), nullable=False),
-        sa.Column("limits", postgresql.JSONB(astext_type=sa.Text()), nullable=False, server_default=sa.text("'{}'::jsonb")),
-        sa.Column("features", postgresql.JSONB(astext_type=sa.Text()), nullable=False, server_default=sa.text("'{}'::jsonb")),
-        sa.Column("price", postgresql.JSONB(astext_type=sa.Text()), nullable=False, server_default=sa.text("'{}'::jsonb")),
+        sa.Column(
+            "limits",
+            postgresql.JSONB(astext_type=sa.Text()),
+            nullable=False,
+            server_default=sa.text("'{}'::jsonb"),
+        ),
+        sa.Column(
+            "features",
+            postgresql.JSONB(astext_type=sa.Text()),
+            nullable=False,
+            server_default=sa.text("'{}'::jsonb"),
+        ),
+        sa.Column(
+            "price",
+            postgresql.JSONB(astext_type=sa.Text()),
+            nullable=False,
+            server_default=sa.text("'{}'::jsonb"),
+        ),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("version", sa.Integer(), nullable=False, server_default="1"),
@@ -66,8 +89,15 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["tenant_id"], ["tenant.id"]),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index("ix_subscriptions_tenant_status", "subscriptions", ["tenant_id", "status"], unique=False)
-    op.create_index("ix_subscriptions_tenant_period_end", "subscriptions", ["tenant_id", "period_end"], unique=False)
+    op.create_index(
+        "ix_subscriptions_tenant_status", "subscriptions", ["tenant_id", "status"], unique=False
+    )
+    op.create_index(
+        "ix_subscriptions_tenant_period_end",
+        "subscriptions",
+        ["tenant_id", "period_end"],
+        unique=False,
+    )
 
     op.create_table(
         "usage_counters",
@@ -96,7 +126,12 @@ def upgrade() -> None:
         sa.Column("amount", sa.Numeric(14, 2), nullable=False, server_default="0"),
         sa.Column("status", invoice_status, nullable=False, server_default="draft"),
         sa.Column("due_date", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("payload", postgresql.JSONB(astext_type=sa.Text()), nullable=False, server_default=sa.text("'{}'::jsonb")),
+        sa.Column(
+            "payload",
+            postgresql.JSONB(astext_type=sa.Text()),
+            nullable=False,
+            server_default=sa.text("'{}'::jsonb"),
+        ),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("version", sa.Integer(), nullable=False, server_default="1"),
@@ -109,8 +144,18 @@ def upgrade() -> None:
         "tenant_limits_override",
         sa.Column("id", sa.String(length=36), nullable=False),
         sa.Column("tenant_id", sa.String(length=36), nullable=False),
-        sa.Column("limits", postgresql.JSONB(astext_type=sa.Text()), nullable=False, server_default=sa.text("'{}'::jsonb")),
-        sa.Column("features", postgresql.JSONB(astext_type=sa.Text()), nullable=False, server_default=sa.text("'{}'::jsonb")),
+        sa.Column(
+            "limits",
+            postgresql.JSONB(astext_type=sa.Text()),
+            nullable=False,
+            server_default=sa.text("'{}'::jsonb"),
+        ),
+        sa.Column(
+            "features",
+            postgresql.JSONB(astext_type=sa.Text()),
+            nullable=False,
+            server_default=sa.text("'{}'::jsonb"),
+        ),
         sa.Column("effective_from", sa.DateTime(timezone=True), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),

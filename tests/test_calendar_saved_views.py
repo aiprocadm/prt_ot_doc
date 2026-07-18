@@ -97,12 +97,8 @@ class TestCalendarViewsService:
         test_db_session: AsyncSession,
         data_factory: TestDataFactory,
     ) -> None:
-        tenant_a = await data_factory.ensure_tenant(
-            slug="cv-tenant-a", session=test_db_session
-        )
-        tenant_b = await data_factory.ensure_tenant(
-            slug="cv-tenant-b", session=test_db_session
-        )
+        tenant_a = await data_factory.ensure_tenant(slug="cv-tenant-a", session=test_db_session)
+        tenant_b = await data_factory.ensure_tenant(slug="cv-tenant-b", session=test_db_session)
         user_a = await data_factory.create_user(
             tenant=tenant_a,
             email="cv-tenant-a-user@example.com",
@@ -185,9 +181,7 @@ class TestCalendarViewsService:
         view = await svc.create(name="Old", payload={"view": "month"})
         await test_db_session.commit()
 
-        updated = await svc.update(
-            view, name="New", payload={"view": "week", "include_sla": True}
-        )
+        updated = await svc.update(view, name="New", payload={"view": "week", "include_sla": True})
         await test_db_session.commit()
         assert updated.name == "New"
         assert updated.payload == {"view": "week", "include_sla": True}
@@ -288,9 +282,7 @@ class TestCalendarViewsEndpoints:
         assert upd_body["payload"]["sources"] == ["medical_exam"]
 
         # Delete.
-        deleted = await async_client.delete(
-            f"{SAVED_VIEWS_PATH}/{view_id}", headers=headers
-        )
+        deleted = await async_client.delete(f"{SAVED_VIEWS_PATH}/{view_id}", headers=headers)
         assert deleted.status_code == status.HTTP_204_NO_CONTENT, deleted.text
 
         # Empty list again.

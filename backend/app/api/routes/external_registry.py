@@ -35,7 +35,17 @@ async def list_jobs(
     session: SessionDep,
     _: ReaderAccess,
 ):
-    items = (await session.execute(select(ExternalRegistryJob).where(ExternalRegistryJob.tenant_id == tenant.id).order_by(ExternalRegistryJob.created_at.desc()))).scalars().all()
+    items = (
+        (
+            await session.execute(
+                select(ExternalRegistryJob)
+                .where(ExternalRegistryJob.tenant_id == tenant.id)
+                .order_by(ExternalRegistryJob.created_at.desc())
+            )
+        )
+        .scalars()
+        .all()
+    )
     return {"items": items, "total": len(items)}
 
 

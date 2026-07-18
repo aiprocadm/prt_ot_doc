@@ -23,7 +23,6 @@ from docx import Document
 from app.modules.headers.engine import apply_headers_to_docx
 from app.modules.headers.placeholders import render_placeholders
 
-
 # -----------------------------------------------------------------------------
 # Test fixtures — a minimal preset dataclass mirrors the ORM model fields the
 # engine actually reads. Using a dataclass keeps tests independent of the DB.
@@ -149,9 +148,7 @@ def test_placeholders_multiple_occurrences() -> None:
 
 
 def test_placeholders_unresolved_lists_each_distinct_key_once_or_more() -> None:
-    rendered, unresolved = render_placeholders(
-        "{{ a }} {{ b }} {{ a }}", {}, strict=False
-    )
+    rendered, unresolved = render_placeholders("{{ a }} {{ b }} {{ a }}", {}, strict=False)
     # Each occurrence appends to the list — caller may dedupe with set() if needed.
     assert unresolved == ["a", "b", "a"]
     assert rendered == "  "
@@ -377,7 +374,10 @@ def test_apply_raises_when_document_has_no_section() -> None:
             "<?xml version='1.0'?><w:document xmlns:w='http://schemas.openxmlformats.org/wordprocessingml/2006/main'>"
             "<w:body><w:p><w:r><w:t>hi</w:t></w:r></w:p></w:body></w:document>",
         )
-        zf.writestr("[Content_Types].xml", "<?xml version='1.0'?><Types xmlns='http://schemas.openxmlformats.org/package/2006/content-types'/>")
+        zf.writestr(
+            "[Content_Types].xml",
+            "<?xml version='1.0'?><Types xmlns='http://schemas.openxmlformats.org/package/2006/content-types'/>",
+        )
     try:
         apply_headers_to_docx(
             docx_bytes=buf.getvalue(),

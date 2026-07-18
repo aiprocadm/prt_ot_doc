@@ -364,10 +364,7 @@ def test_validate_templates_cli_text_format_renders_summary() -> None:
     from pathlib import Path
 
     cli_path = (
-        Path(__file__).resolve().parent.parent
-        / "scripts"
-        / "audit"
-        / "validate_templates.py"
+        Path(__file__).resolve().parent.parent / "scripts" / "audit" / "validate_templates.py"
     )
     spec = importlib.util.spec_from_file_location("validate_templates_cli", cli_path)
     assert spec and spec.loader
@@ -440,16 +437,15 @@ def test_validate_templates_cli_text_format_handles_empty_report() -> None:
     from pathlib import Path
 
     cli_path = (
-        Path(__file__).resolve().parent.parent
-        / "scripts"
-        / "audit"
-        / "validate_templates.py"
+        Path(__file__).resolve().parent.parent / "scripts" / "audit" / "validate_templates.py"
     )
     spec = importlib.util.spec_from_file_location("validate_templates_cli", cli_path)
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    text = module._format_text({"summary": {"total": 0, "ok": 0, "warnings": 0, "errors": 0}, "items": []})
+    text = module._format_text(
+        {"summary": {"total": 0, "ok": 0, "warnings": 0, "errors": 0}, "items": []}
+    )
     assert "No template versions to audit." in text
 
 
@@ -475,4 +471,13 @@ async def test_audit_report_to_dict_shape(sessionmaker) -> None:
     assert set(payload["summary"]) == {"total", "ok", "warnings", "errors"}
     assert len(payload["items"]) == 1
     item = payload["items"][0]
-    assert {"template_id", "template_code", "version_id", "version_number", "errors", "warnings", "summary", "severity"} <= set(item)
+    assert {
+        "template_id",
+        "template_code",
+        "version_id",
+        "version_number",
+        "errors",
+        "warnings",
+        "summary",
+        "severity",
+    } <= set(item)

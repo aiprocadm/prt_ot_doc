@@ -51,14 +51,18 @@ EditorAccess = Annotated[
 def _person_bad_request(message: str) -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,
-        detail=api_problem_detail(code="PERSON_VALIDATION_ERROR", message=message, error_type="persons"),
+        detail=api_problem_detail(
+            code="PERSON_VALIDATION_ERROR", message=message, error_type="persons"
+        ),
     )
 
 
 def _person_unprocessable(message: str) -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-        detail=api_problem_detail(code="PERSON_VALIDATION_ERROR", message=message, error_type="persons"),
+        detail=api_problem_detail(
+            code="PERSON_VALIDATION_ERROR", message=message, error_type="persons"
+        ),
     )
 
 
@@ -86,9 +90,7 @@ async def _get_position(session: AsyncSession, tenant: Tenant, position_id: str)
     return position
 
 
-async def _get_workplace(
-    session: AsyncSession, tenant: Tenant, workplace_id: str
-) -> Workplace:
+async def _get_workplace(session: AsyncSession, tenant: Tenant, workplace_id: str) -> Workplace:
     stmt = select(Workplace).where(
         Workplace.id == workplace_id,
         Workplace.tenant_id == tenant.id,
@@ -201,6 +203,7 @@ async def create_person_endpoint(
         first_name=_clean_string(payload.first_name) or payload.first_name,
         last_name=_clean_string(payload.last_name) or payload.last_name,
         middle_name=_clean_string(payload.middle_name),
+        position_title=_clean_string(payload.position_title),
         birth_date=payload.birth_date,
         personnel_number=_clean_string(payload.personnel_number),
         hired_at=payload.hired_at,
@@ -289,6 +292,7 @@ async def update_person_endpoint(
         "first_name": (True, person.first_name),
         "last_name": (True, person.last_name),
         "middle_name": (False, person.middle_name),
+        "position_title": (False, person.position_title),
         "personnel_number": (False, person.personnel_number),
         "snils": (False, person.snils),
         "passport": (False, person.passport),

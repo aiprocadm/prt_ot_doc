@@ -81,8 +81,12 @@ async def test_file_detail_denies_client_from_other_company(
 ) -> None:
     async with sessionmaker() as session:
         tenant = await data_factory.ensure_tenant(session=session)
-        company_a = await data_factory.create_company(tenant=tenant, name="Uploader Co", session=session)
-        company_b = await data_factory.create_company(tenant=tenant, name="Viewer Co", session=session)
+        company_a = await data_factory.create_company(
+            tenant=tenant, name="Uploader Co", session=session
+        )
+        company_b = await data_factory.create_company(
+            tenant=tenant, name="Viewer Co", session=session
+        )
         await session.commit()
 
     admin_headers = await make_auth_headers(RoleEnum.ADMIN)
@@ -101,7 +105,9 @@ async def test_file_detail_denies_client_from_other_company(
         company_id=company_b.id,
     )
 
-    detail = await async_client.get(f"/api/v1/files-legacy/{file_id}", headers=other_company_headers)
+    detail = await async_client.get(
+        f"/api/v1/files-legacy/{file_id}", headers=other_company_headers
+    )
     detail = await async_client.get(
         f"/api/v1/files-legacy/{file_id}", headers=other_company_headers
     )

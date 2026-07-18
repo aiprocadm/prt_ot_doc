@@ -13,7 +13,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.models import RoleEnum, Tenant, User
-from app.modules.rbac_abac import check_module_access, ROLE_MODULE_DEFAULTS
+from app.modules.rbac_abac import ROLE_MODULE_DEFAULTS, check_module_access
 from app.modules.rbac_abac.types import Subject
 from app.services.dev_bootstrap import create_test_user
 
@@ -255,9 +255,7 @@ def test_cross_module_boundary_violations(role: RoleEnum, denied_module: str):
         permissions=[],
     )
     allowed, reason = check_module_access(subject, denied_module)
-    assert (
-        allowed is False
-    ), f"{role.value} should not have access to {denied_module}"
+    assert allowed is False, f"{role.value} should not have access to {denied_module}"
 
 
 @pytest.mark.parametrize(

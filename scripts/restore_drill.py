@@ -59,6 +59,55 @@ def _utc_now() -> str:
     return datetime.now(UTC).isoformat(timespec="seconds")
 
 
+# RC-012 — formal recovery objectives. Production targets from ТЗ vNext §31.6
+# (TZ_FULL_UNIFIED.md): RTO ≤ 4h, RPO ≤ 24h. These are the go/no-go *budgets* the
+# drill must meet; override via CLI flags / env for stricter SLAs.
+DEFAULT_RTO_SECONDS = int(os.getenv("RESTORE_DRILL_RTO_SECONDS", str(4 * 60 * 60)))
+DEFAULT_RPO_SECONDS = int(os.getenv("RESTORE_DRILL_RPO_SECONDS", str(24 * 60 * 60)))
+
+
+def evaluate_rto_rpo(
+    *,
+    rto_measured_seconds: float,
+    rpo_measured_seconds: float,
+    rto_threshold_seconds: int,
+    rpo_threshold_seconds: int,
+    integrity_ok: bool,
+) -> dict[str, object]:
+    """Formal RTO/RPO go/no-go decision (RC-012).
+
+    RTO (Recovery Time Objective): measured = wall-clock from "backup available"
+    to "restored system verified & boots" (restore + verification + smoke). Must
+    be ≤ the RTO budget.
+
+    RPO (Recovery Point Objective): measured = staleness of the backup relative to
+    the last committed write — here the rehearsal's seed→backup lag. Must be ≤ the
+    RPO budget. NOTE: in production RPO is governed by backup *cadence*; this drill
+    measures only its own rehearsal lag (a lower bound), made explicit in
+    ``rpo_basis`` so the number is never mistaken for a production guarantee.
+
+    ``decision`` is ``go`` only when data-integrity checks pass AND both objectives
+    are met — so a future restore that breaches the RTO budget flips the drill to
+    ``no-go`` instead of silently passing on integrity alone.
+    """
+    rto_met = rto_measured_seconds <= rto_threshold_seconds
+    rpo_met = rpo_measured_seconds <= rpo_threshold_seconds
+    return {
+        "rto_threshold_seconds": rto_threshold_seconds,
+        "rto_measured_seconds": round(rto_measured_seconds, 3),
+        "rto_met": rto_met,
+        "rpo_threshold_seconds": rpo_threshold_seconds,
+        "rpo_measured_seconds": round(rpo_measured_seconds, 3),
+        "rpo_met": rpo_met,
+        "rpo_basis": (
+            "seed→backup lag measured in this rehearsal; production RPO is governed "
+            "by backup cadence, not by this drill"
+        ),
+        "integrity_ok": bool(integrity_ok),
+        "decision": "go" if (rto_met and rpo_met and integrity_ok) else "no-go",
+    }
+
+
 def _build_seed_objects(tenant_slug: str) -> list[ObjectSeed]:
     return [
         ObjectSeed(
@@ -69,7 +118,9 @@ def _build_seed_objects(tenant_slug: str) -> list[ObjectSeed]:
         ObjectSeed(
             key=f"{tenant_slug}/exports/checklist.json",
             content_type="application/json",
-            content=json.dumps({"tenant": tenant_slug, "kind": "checklist", "v": 1}, separators=(",", ":")).encode("utf-8"),
+            content=json.dumps(
+                {"tenant": tenant_slug, "kind": "checklist", "v": 1}, separators=(",", ":")
+            ).encode("utf-8"),
         ),
         ObjectSeed(
             key=f"{tenant_slug}/audit/events.log",
@@ -79,7 +130,9 @@ def _build_seed_objects(tenant_slug: str) -> list[ObjectSeed]:
     ]
 
 
-def _seed_source_sqlite(source_db: Path, source_objects: Path, tenant_slug: str) -> dict[str, object]:
+def _seed_source_sqlite(
+    source_db: Path, source_objects: Path, tenant_slug: str
+) -> dict[str, object]:
     source_objects.mkdir(parents=True, exist_ok=True)
     objects = _build_seed_objects(tenant_slug)
 
@@ -148,8 +201,13 @@ def _ensure_schema_sqlite(cur: sqlite3.Cursor) -> None:
     )
 
 
-def _seed_rows_sqlite(cur: sqlite3.Cursor, tenant_slug: str, objects: list[ObjectSeed], source_objects: Path) -> None:
-    cur.execute("INSERT OR REPLACE INTO tenants(id, slug, name) VALUES (1, ?, ?)", (tenant_slug, f"Tenant {tenant_slug}"))
+def _seed_rows_sqlite(
+    cur: sqlite3.Cursor, tenant_slug: str, objects: list[ObjectSeed], source_objects: Path
+) -> None:
+    cur.execute(
+        "INSERT OR REPLACE INTO tenants(id, slug, name) VALUES (1, ?, ?)",
+        (tenant_slug, f"Tenant {tenant_slug}"),
+    )
     docs = ["Policy A", "Risk Register", "Training Matrix", "Incident Procedure"]
     for idx, title in enumerate(docs, start=1):
         checksum = _sha256_bytes(f"{tenant_slug}:{title}:{idx}".encode("utf-8"))
@@ -171,7 +229,13 @@ def _seed_rows_sqlite(cur: sqlite3.Cursor, tenant_slug: str, objects: list[Objec
             INSERT INTO object_index(tenant_id, object_key, content_type, bytes_size, sha256, metadata_json)
             VALUES (1, ?, ?, ?, ?, ?)
             """,
-            (obj.key, obj.content_type, len(obj.content), digest, json.dumps(metadata, sort_keys=True)),
+            (
+                obj.key,
+                obj.content_type,
+                len(obj.content),
+                digest,
+                json.dumps(metadata, sort_keys=True),
+            ),
         )
 
 
@@ -199,7 +263,9 @@ def _backup_sqlite(source_db: Path, source_objects: Path, backup_dir: Path) -> d
     }
 
 
-def _restore_sqlite(db_backup: Path, storage_backup: Path, target_db: Path, target_objects: Path) -> None:
+def _restore_sqlite(
+    db_backup: Path, storage_backup: Path, target_db: Path, target_objects: Path
+) -> None:
     shutil.copy2(db_backup, target_db)
     target_objects.mkdir(parents=True, exist_ok=True)
     with tarfile.open(storage_backup, "r:gz") as tf:
@@ -258,7 +324,12 @@ def _run_cmd(cmd: list[str], env: dict[str, str] | None = None) -> None:
 
 
 def _minio_client(cfg: PostgresMinioConfig) -> Minio:
-    return Minio(cfg.minio_endpoint, access_key=cfg.minio_access_key, secret_key=cfg.minio_secret_key, secure=cfg.minio_secure)
+    return Minio(
+        cfg.minio_endpoint,
+        access_key=cfg.minio_access_key,
+        secret_key=cfg.minio_secret_key,
+        secure=cfg.minio_secure,
+    )
 
 
 def _ensure_empty_bucket(client: Minio, bucket: str) -> None:
@@ -362,7 +433,9 @@ async def _seed_source_postgres(cfg: PostgresMinioConfig, tenant_slug: str) -> d
         document_count = await source_conn.fetchval("SELECT COUNT(*) FROM documents")
         object_count = await source_conn.fetchval("SELECT COUNT(*) FROM object_index")
         checks = await source_conn.fetch("SELECT checksum FROM documents ORDER BY id")
-        documents_checksum = _sha256_bytes("|".join(row["checksum"] for row in checks).encode("utf-8"))
+        documents_checksum = _sha256_bytes(
+            "|".join(row["checksum"] for row in checks).encode("utf-8")
+        )
     finally:
         await source_conn.close()
 
@@ -375,16 +448,30 @@ async def _seed_source_postgres(cfg: PostgresMinioConfig, tenant_slug: str) -> d
     }
 
 
-def _backup_postgres_minio(cfg: PostgresMinioConfig, backup_dir: Path, object_prefix: str) -> dict[str, object]:
+def _backup_postgres_minio(
+    cfg: PostgresMinioConfig, backup_dir: Path, object_prefix: str
+) -> dict[str, object]:
     backup_dir.mkdir(parents=True, exist_ok=True)
     db_backup = backup_dir / "db_backup.dump"
     storage_backup = backup_dir / "objects_backup.tar.gz"
 
-    _run_cmd(["pg_dump", "--format=custom", "--no-owner", "--no-privileges", "--file", str(db_backup), cfg.postgres_source_dsn])
+    _run_cmd(
+        [
+            "pg_dump",
+            "--format=custom",
+            "--no-owner",
+            "--no-privileges",
+            "--file",
+            str(db_backup),
+            cfg.postgres_source_dsn,
+        ]
+    )
 
     client = _minio_client(cfg)
     with tarfile.open(storage_backup, "w:gz") as tf:
-        for obj in client.list_objects(cfg.source_bucket, prefix=f"{object_prefix}/", recursive=True):
+        for obj in client.list_objects(
+            cfg.source_bucket, prefix=f"{object_prefix}/", recursive=True
+        ):
             response = client.get_object(cfg.source_bucket, obj.object_name)
             try:
                 payload = response.read()
@@ -398,7 +485,11 @@ def _backup_postgres_minio(cfg: PostgresMinioConfig, backup_dir: Path, object_pr
 
             meta = {
                 "content_type": stat.content_type,
-                "metadata": {k.lower(): v for k, v in (stat.metadata or {}).items() if k.lower().startswith("x-amz-meta-")},
+                "metadata": {
+                    k.lower(): v
+                    for k, v in (stat.metadata or {}).items()
+                    if k.lower().startswith("x-amz-meta-")
+                },
             }
             meta_bytes = json.dumps(meta, sort_keys=True).encode("utf-8")
             meta_info = tarfile.TarInfo(name=f"objects/{obj.object_name}.meta.json")
@@ -413,8 +504,21 @@ def _backup_postgres_minio(cfg: PostgresMinioConfig, backup_dir: Path, object_pr
     }
 
 
-def _restore_postgres_minio(cfg: PostgresMinioConfig, db_backup: Path, storage_backup: Path) -> None:
-    _run_cmd(["pg_restore", "--clean", "--if-exists", "--no-owner", "--no-privileges", "--dbname", cfg.postgres_restore_dsn, str(db_backup)])
+def _restore_postgres_minio(
+    cfg: PostgresMinioConfig, db_backup: Path, storage_backup: Path
+) -> None:
+    _run_cmd(
+        [
+            "pg_restore",
+            "--clean",
+            "--if-exists",
+            "--no-owner",
+            "--no-privileges",
+            "--dbname",
+            cfg.postgres_restore_dsn,
+            str(db_backup),
+        ]
+    )
 
     client = _minio_client(cfg)
     _ensure_empty_bucket(client, cfg.restore_bucket)
@@ -429,9 +533,15 @@ def _restore_postgres_minio(cfg: PostgresMinioConfig, db_backup: Path, storage_b
                 continue
             object_name = str(file_path.relative_to(objects_root)).replace("\\", "/")
             meta_path = file_path.with_suffix(file_path.suffix + ".meta.json")
-            metadata_payload = json.loads(meta_path.read_text(encoding="utf-8")) if meta_path.exists() else {}
+            metadata_payload = (
+                json.loads(meta_path.read_text(encoding="utf-8")) if meta_path.exists() else {}
+            )
             raw_meta = metadata_payload.get("metadata", {})
-            user_meta = {k.replace("x-amz-meta-", ""): v for k, v in raw_meta.items() if k.startswith("x-amz-meta-")}
+            user_meta = {
+                k.replace("x-amz-meta-", ""): v
+                for k, v in raw_meta.items()
+                if k.startswith("x-amz-meta-")
+            }
             content_type = metadata_payload.get("content_type") or "application/octet-stream"
             payload = file_path.read_bytes()
             client.put_object(
@@ -452,7 +562,9 @@ async def _read_restore_state_postgres(cfg: PostgresMinioConfig) -> dict[str, ob
         document_count = await conn.fetchval("SELECT COUNT(*) FROM documents")
         object_count = await conn.fetchval("SELECT COUNT(*) FROM object_index")
         checks = await conn.fetch("SELECT checksum FROM documents ORDER BY id")
-        documents_checksum = _sha256_bytes("|".join(row["checksum"] for row in checks).encode("utf-8"))
+        documents_checksum = _sha256_bytes(
+            "|".join(row["checksum"] for row in checks).encode("utf-8")
+        )
 
         objs = []
         rows = await conn.fetch(
@@ -467,7 +579,11 @@ async def _read_restore_state_postgres(cfg: PostgresMinioConfig) -> dict[str, ob
                 response.close()
                 response.release_conn()
             stat = client.stat_object(cfg.restore_bucket, key)
-            actual_metadata = {k.lower(): v for k, v in (stat.metadata or {}).items() if k.lower().startswith("x-amz-meta-")}
+            actual_metadata = {
+                k.lower(): v
+                for k, v in (stat.metadata or {}).items()
+                if k.lower().startswith("x-amz-meta-")
+            }
             expected_metadata = {
                 f"x-amz-meta-{k.lower()}": v for k, v in json.loads(row["metadata_json"]).items()
             }
@@ -495,7 +611,9 @@ async def _read_restore_state_postgres(cfg: PostgresMinioConfig) -> dict[str, ob
     }
 
 
-def _app_smoke_boot(*, database_url: str, s3_env: dict[str, str] | None = None) -> dict[str, object]:
+def _app_smoke_boot(
+    *, database_url: str, s3_env: dict[str, str] | None = None
+) -> dict[str, object]:
     cmd = [sys.executable, "-m", "backend.app.cli.main", "health", "check", "--json"]
     env = os.environ.copy()
     env["DATABASE_URL"] = database_url
@@ -522,7 +640,13 @@ def _app_smoke_boot(*, database_url: str, s3_env: dict[str, str] | None = None) 
     return payload
 
 
-def run_drill_sqlite(output_dir: Path, tenant_slug: str) -> Path:
+def run_drill_sqlite(
+    output_dir: Path,
+    tenant_slug: str,
+    *,
+    rto_threshold_seconds: int = DEFAULT_RTO_SECONDS,
+    rpo_threshold_seconds: int = DEFAULT_RPO_SECONDS,
+) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
     started = time.monotonic()
     timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
@@ -537,15 +661,43 @@ def run_drill_sqlite(output_dir: Path, tenant_slug: str) -> Path:
         target_db.parent.mkdir(parents=True, exist_ok=True)
 
         seeded = _seed_source_sqlite(source_db, source_objects, tenant_slug)
+        seed_completed = time.monotonic()  # last write to source
         backup = _backup_sqlite(source_db, source_objects, backup_dir)
-        _restore_sqlite(Path(backup["db_backup_path"]), Path(backup["storage_backup_path"]), target_db, target_objects)
+        backup_completed = time.monotonic()  # backup snapshot captured; recovery begins
+        _restore_sqlite(
+            Path(backup["db_backup_path"]),
+            Path(backup["storage_backup_path"]),
+            target_db,
+            target_objects,
+        )
         restored = _read_restore_state_sqlite(target_db, target_objects)
         smoke = _app_smoke_boot(database_url=f"sqlite+aiosqlite:///{target_db}")
 
-    return _write_evidence(output_dir, timestamp, started, tenant_slug, "sqlite", seeded, backup, restored, smoke)
+    return _write_evidence(
+        output_dir,
+        timestamp,
+        started,
+        tenant_slug,
+        "sqlite",
+        seeded,
+        backup,
+        restored,
+        smoke,
+        seed_completed=seed_completed,
+        backup_completed=backup_completed,
+        rto_threshold_seconds=rto_threshold_seconds,
+        rpo_threshold_seconds=rpo_threshold_seconds,
+    )
 
 
-def run_drill_postgres_minio(output_dir: Path, tenant_slug: str, cfg: PostgresMinioConfig) -> Path:
+def run_drill_postgres_minio(
+    output_dir: Path,
+    tenant_slug: str,
+    cfg: PostgresMinioConfig,
+    *,
+    rto_threshold_seconds: int = DEFAULT_RTO_SECONDS,
+    rpo_threshold_seconds: int = DEFAULT_RPO_SECONDS,
+) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
     started = time.monotonic()
     timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
@@ -555,15 +707,25 @@ def run_drill_postgres_minio(output_dir: Path, tenant_slug: str, cfg: PostgresMi
         backup_dir = workspace / "backup"
 
         seeded = asyncio.run(_seed_source_postgres(cfg, tenant_slug=tenant_slug))
+        seed_completed = time.monotonic()  # last write to source
         backup = _backup_postgres_minio(cfg, backup_dir, object_prefix=tenant_slug)
-        _restore_postgres_minio(cfg, Path(backup["db_backup_path"]), Path(backup["storage_backup_path"]))
+        backup_completed = time.monotonic()  # backup snapshot captured; recovery begins
+        _restore_postgres_minio(
+            cfg, Path(backup["db_backup_path"]), Path(backup["storage_backup_path"])
+        )
         restored = asyncio.run(_read_restore_state_postgres(cfg))
         smoke = _app_smoke_boot(
-            database_url=cfg.postgres_restore_dsn.replace("postgresql://", "postgresql+asyncpg://", 1),
+            database_url=cfg.postgres_restore_dsn.replace(
+                "postgresql://", "postgresql+asyncpg://", 1
+            ),
             s3_env={
                 "STORAGE_BACKEND": "s3",
                 "S3_BACKEND": "minio",
-                "S3_ENDPOINT": (f"https://{cfg.minio_endpoint}" if cfg.minio_secure else f"http://{cfg.minio_endpoint}"),
+                "S3_ENDPOINT": (
+                    f"https://{cfg.minio_endpoint}"
+                    if cfg.minio_secure
+                    else f"http://{cfg.minio_endpoint}"
+                ),
                 "S3_BUCKET": cfg.restore_bucket,
                 "S3_ACCESS_KEY": cfg.minio_access_key,
                 "S3_SECRET_KEY": cfg.minio_secret_key,
@@ -571,7 +733,21 @@ def run_drill_postgres_minio(output_dir: Path, tenant_slug: str, cfg: PostgresMi
             },
         )
 
-    return _write_evidence(output_dir, timestamp, started, tenant_slug, "postgres-minio", seeded, backup, restored, smoke)
+    return _write_evidence(
+        output_dir,
+        timestamp,
+        started,
+        tenant_slug,
+        "postgres-minio",
+        seeded,
+        backup,
+        restored,
+        smoke,
+        seed_completed=seed_completed,
+        backup_completed=backup_completed,
+        rto_threshold_seconds=rto_threshold_seconds,
+        rpo_threshold_seconds=rpo_threshold_seconds,
+    )
 
 
 def _write_evidence(
@@ -584,8 +760,16 @@ def _write_evidence(
     backup: dict[str, object],
     restored: dict[str, object],
     smoke: dict[str, object],
+    *,
+    seed_completed: float,
+    backup_completed: float,
+    rto_threshold_seconds: int = DEFAULT_RTO_SECONDS,
+    rpo_threshold_seconds: int = DEFAULT_RPO_SECONDS,
 ) -> Path:
-    verify_counts = seeded["document_count"] == restored["document_count"] and seeded["object_count"] == restored["object_count"]
+    verify_counts = (
+        seeded["document_count"] == restored["document_count"]
+        and seeded["object_count"] == restored["object_count"]
+    )
     verify_checksum = seeded["documents_checksum"] == restored["documents_checksum"]
 
     def _canon_meta(meta: dict[str, object] | None) -> dict[str, object]:
@@ -603,7 +787,20 @@ def _write_evidence(
     ]
     verify_objects = len(metadata_mismatch) == 0
 
-    duration_seconds = round(time.monotonic() - started, 3)
+    now = time.monotonic()
+    duration_seconds = round(now - started, 3)
+    integrity_ok = bool(
+        verify_counts and verify_checksum and verify_objects and smoke["exit_code"] == 0
+    )
+    # RTO = recovery window (backup-available → restored+verified+booted); RPO =
+    # backup staleness vs last write (seed→backup lag). See evaluate_rto_rpo().
+    go_no_go = evaluate_rto_rpo(
+        rto_measured_seconds=now - backup_completed,
+        rpo_measured_seconds=backup_completed - seed_completed,
+        rto_threshold_seconds=rto_threshold_seconds,
+        rpo_threshold_seconds=rpo_threshold_seconds,
+        integrity_ok=integrity_ok,
+    )
     evidence = {
         "drill": {
             "id": f"restore-drill-{mode}-{timestamp}",
@@ -611,8 +808,9 @@ def _write_evidence(
             "executed_at_utc": _utc_now(),
             "duration_seconds": duration_seconds,
             "tenant_slug": tenant_slug,
-            "assumed_rto_seconds": 900,
-            "assumed_rpo_seconds": 300,
+            # Retained for back-compat; authoritative budgets live in go_no_go.
+            "assumed_rto_seconds": rto_threshold_seconds,
+            "assumed_rpo_seconds": rpo_threshold_seconds,
         },
         "seed": seeded,
         "backup": backup,
@@ -626,11 +824,16 @@ def _write_evidence(
             },
         },
         "smoke_boot": smoke,
-        "success": bool(verify_counts and verify_checksum and verify_objects and smoke["exit_code"] == 0),
+        # RC-012: formal go/no-go on recovery objectives.
+        "go_no_go": go_no_go,
+        # success now requires integrity AND meeting both objectives (decision=go).
+        "success": go_no_go["decision"] == "go",
     }
 
     output_path = output_dir / f"{mode}-{timestamp}.json"
-    output_path.write_text(json.dumps(evidence, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+    output_path.write_text(
+        json.dumps(evidence, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8"
+    )
 
     latest_path = output_dir / f"latest-{mode}.json"
     latest_path.write_text(output_path.read_text(encoding="utf-8"), encoding="utf-8")
@@ -638,18 +841,81 @@ def _write_evidence(
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run backup/restore drills and emit JSON evidence.")
-    parser.add_argument("--output-dir", default="artifacts/restore-drill", help="Directory for JSON evidence artifacts.")
-    parser.add_argument("--tenant-slug", default="restore-drill-tenant", help="Tenant slug used for representative seed data.")
-    parser.add_argument("--mode", choices=["sqlite", "postgres-minio"], default="sqlite", help="Drill mode.")
-    parser.add_argument("--postgres-source-dsn", default=os.getenv("RESTORE_DRILL_POSTGRES_SOURCE_DSN", ""), help="Postgres source DSN.")
-    parser.add_argument("--postgres-restore-dsn", default=os.getenv("RESTORE_DRILL_POSTGRES_RESTORE_DSN", ""), help="Postgres restore DSN.")
-    parser.add_argument("--minio-endpoint", default=os.getenv("RESTORE_DRILL_MINIO_ENDPOINT", "localhost:9000"), help="MinIO endpoint host:port.")
-    parser.add_argument("--minio-access-key", default=os.getenv("RESTORE_DRILL_MINIO_ACCESS_KEY", "minioadmin"), help="MinIO access key.")
-    parser.add_argument("--minio-secret-key", default=os.getenv("RESTORE_DRILL_MINIO_SECRET_KEY", "minioadmin"), help="MinIO secret key.")
-    parser.add_argument("--minio-secure", action="store_true", default=os.getenv("RESTORE_DRILL_MINIO_SECURE", "false").lower() == "true", help="Use TLS for MinIO.")
-    parser.add_argument("--minio-source-bucket", default=os.getenv("RESTORE_DRILL_MINIO_SOURCE_BUCKET", "restore-drill-source"), help="MinIO source bucket.")
-    parser.add_argument("--minio-restore-bucket", default=os.getenv("RESTORE_DRILL_MINIO_RESTORE_BUCKET", "restore-drill-restored"), help="MinIO restore bucket.")
+    parser = argparse.ArgumentParser(
+        description="Run backup/restore drills and emit JSON evidence."
+    )
+    parser.add_argument(
+        "--output-dir",
+        default="artifacts/restore-drill",
+        help="Directory for JSON evidence artifacts.",
+    )
+    parser.add_argument(
+        "--tenant-slug",
+        default="restore-drill-tenant",
+        help="Tenant slug used for representative seed data.",
+    )
+    parser.add_argument(
+        "--mode", choices=["sqlite", "postgres-minio"], default="sqlite", help="Drill mode."
+    )
+    parser.add_argument(
+        "--postgres-source-dsn",
+        default=os.getenv("RESTORE_DRILL_POSTGRES_SOURCE_DSN", ""),
+        help="Postgres source DSN.",
+    )
+    parser.add_argument(
+        "--postgres-restore-dsn",
+        default=os.getenv("RESTORE_DRILL_POSTGRES_RESTORE_DSN", ""),
+        help="Postgres restore DSN.",
+    )
+    parser.add_argument(
+        "--minio-endpoint",
+        default=os.getenv("RESTORE_DRILL_MINIO_ENDPOINT", "localhost:9000"),
+        help="MinIO endpoint host:port.",
+    )
+    parser.add_argument(
+        "--minio-access-key",
+        default=os.getenv("RESTORE_DRILL_MINIO_ACCESS_KEY", "minioadmin"),
+        help="MinIO access key.",
+    )
+    parser.add_argument(
+        "--minio-secret-key",
+        default=os.getenv("RESTORE_DRILL_MINIO_SECRET_KEY", "minioadmin"),
+        help="MinIO secret key.",
+    )
+    parser.add_argument(
+        "--minio-secure",
+        action="store_true",
+        default=os.getenv("RESTORE_DRILL_MINIO_SECURE", "false").lower() == "true",
+        help="Use TLS for MinIO.",
+    )
+    parser.add_argument(
+        "--minio-source-bucket",
+        default=os.getenv("RESTORE_DRILL_MINIO_SOURCE_BUCKET", "restore-drill-source"),
+        help="MinIO source bucket.",
+    )
+    parser.add_argument(
+        "--minio-restore-bucket",
+        default=os.getenv("RESTORE_DRILL_MINIO_RESTORE_BUCKET", "restore-drill-restored"),
+        help="MinIO restore bucket.",
+    )
+    parser.add_argument(
+        "--rto-threshold-seconds",
+        type=int,
+        default=DEFAULT_RTO_SECONDS,
+        help=(
+            "RTO go/no-go budget in seconds (default 14400 = 4h, ТЗ vNext §31.6; "
+            "env RESTORE_DRILL_RTO_SECONDS)."
+        ),
+    )
+    parser.add_argument(
+        "--rpo-threshold-seconds",
+        type=int,
+        default=DEFAULT_RPO_SECONDS,
+        help=(
+            "RPO go/no-go budget in seconds (default 86400 = 24h, ТЗ vNext §31.6; "
+            "env RESTORE_DRILL_RPO_SECONDS)."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -663,7 +929,12 @@ def main() -> int:
     args = parse_args()
     output_dir = Path(args.output_dir)
     if args.mode == "sqlite":
-        output_path = run_drill_sqlite(output_dir, tenant_slug=args.tenant_slug)
+        output_path = run_drill_sqlite(
+            output_dir,
+            tenant_slug=args.tenant_slug,
+            rto_threshold_seconds=args.rto_threshold_seconds,
+            rpo_threshold_seconds=args.rpo_threshold_seconds,
+        )
     else:
         cfg = PostgresMinioConfig(
             postgres_source_dsn=_require(args.postgres_source_dsn, "--postgres-source-dsn"),
@@ -675,9 +946,19 @@ def main() -> int:
             source_bucket=args.minio_source_bucket,
             restore_bucket=args.minio_restore_bucket,
         )
-        output_path = run_drill_postgres_minio(output_dir, tenant_slug=args.tenant_slug, cfg=cfg)
+        output_path = run_drill_postgres_minio(
+            output_dir,
+            tenant_slug=args.tenant_slug,
+            cfg=cfg,
+            rto_threshold_seconds=args.rto_threshold_seconds,
+            rpo_threshold_seconds=args.rpo_threshold_seconds,
+        )
 
-    print(json.dumps({"status": "ok", "mode": args.mode, "evidence": str(output_path)}, ensure_ascii=False))
+    print(
+        json.dumps(
+            {"status": "ok", "mode": args.mode, "evidence": str(output_path)}, ensure_ascii=False
+        )
+    )
     return 0
 
 

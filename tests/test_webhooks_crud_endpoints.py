@@ -38,7 +38,6 @@ from app.models.models import (
     WebhookEndpoint,
 )
 
-
 # -----------------------------------------------------------------------------
 # Helpers — small shared seeding utilities to keep tests focused.
 # -----------------------------------------------------------------------------
@@ -252,9 +251,7 @@ async def test_patch_webhook_replaces_secret_when_provided(
 
 
 @pytest.mark.anyio
-async def test_patch_webhook_404_when_missing(
-    async_client: AsyncClient, make_auth_headers
-) -> None:
+async def test_patch_webhook_404_when_missing(async_client: AsyncClient, make_auth_headers) -> None:
     headers = await make_auth_headers()
     response = await async_client.patch(
         "/api/v1/webhooks/endpoints/does-not-exist",
@@ -407,10 +404,16 @@ async def test_test_endpoint_queues_outbox_event(
     # Outbox row was created for this tenant + endpoint.
     async with sessionmaker() as session:
         rows = (
-            await session.execute(
-                select(Outbox).where(Outbox.tenant_id == tenant_id, Outbox.status == OutboxStatus.PENDING)
+            (
+                await session.execute(
+                    select(Outbox).where(
+                        Outbox.tenant_id == tenant_id, Outbox.status == OutboxStatus.PENDING
+                    )
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         assert any(row.payload.get("event_id") == f"test-{endpoint_id}" for row in rows)
 
 
@@ -665,6 +668,53 @@ async def test_retry_delivery_marks_pending_and_clears_schedule(
     async with sessionmaker() as session:
         refreshed = await session.get(WebhookDelivery, delivery_id)
         assert refreshed.status == "pending"
+
+
+@pytest.mark.anyio
+async def test_retry_delivery_redrives_source_outbox(
+    async_client: AsyncClient, make_auth_headers, sessionmaker
+) -> None:
+    """:retry must re-drive the linked Outbox entry (PENDING, attempts=0) so delivery
+    is actually re-attempted — flipping WebhookDelivery.status alone is a no-op because
+    the OutboxProcessor is the real delivery engine."""
+    async with sessionmaker() as session:
+        tenant = (await session.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()
+        endpoint = await _seed_endpoint(session, tenant_id=str(tenant.id))
+        outbox = Outbox(
+            tenant_id=str(tenant.id),
+            event_type="DocumentGenerated",
+            destination="https://example.test/webhook",
+            payload={"marker": "redrive"},
+            headers={},
+            idempotency_key="k-redrive",
+            status=OutboxStatus.DEAD,
+            attempts=11,
+        )
+        session.add(outbox)
+        await session.flush()
+        delivery = WebhookDelivery(
+            tenant_id=str(tenant.id),
+            endpoint_id=endpoint.id,
+            event_id=outbox.id,
+            outbox_id=outbox.id,
+            status="failed",
+            attempts=11,
+        )
+        session.add(delivery)
+        await session.commit()
+        delivery_id = delivery.id
+        outbox_id = outbox.id
+
+    headers = await make_auth_headers()
+    response = await async_client.post(
+        f"/api/v1/webhooks/deliveries/{delivery_id}:retry", headers=headers
+    )
+    assert response.status_code == 200, response.text
+
+    async with sessionmaker() as session:
+        ob = await session.get(Outbox, outbox_id)
+        assert ob.status == OutboxStatus.PENDING
+        assert ob.attempts == 0
 
 
 @pytest.mark.anyio

@@ -5,6 +5,7 @@ from typing import Any
 
 from pydantic import Field, field_validator
 
+from app.modules.branding.schemas import LetterheadOverride
 from app.schemas.base import BaseSchema
 
 
@@ -59,12 +60,14 @@ class PackFromScenarioRequest(BaseSchema):
     description: str | None = None
     is_active: bool = True
 
+
 class PackRunRequest(BaseSchema):
     pack_code: str
     company_id: str
     site_id: str | None = None
     person_ids: list[str] = Field(default_factory=list)
     data: dict[str, Any] = Field(default_factory=dict)
+    letterhead: LetterheadOverride | None = None
 
 
 class PackRunTask(BaseSchema):

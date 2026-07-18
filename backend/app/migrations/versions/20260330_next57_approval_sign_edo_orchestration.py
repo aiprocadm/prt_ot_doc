@@ -18,7 +18,9 @@ def upgrade() -> None:
     op.add_column("documentversion", sa.Column("approval_status", sa.Text(), nullable=True))
     op.add_column("documentversion", sa.Column("signature_status", sa.Text(), nullable=True))
     op.add_column("documentversion", sa.Column("edo_status", sa.Text(), nullable=True))
-    op.add_column("documentversion", sa.Column("released_at", sa.DateTime(timezone=True), nullable=True))
+    op.add_column(
+        "documentversion", sa.Column("released_at", sa.DateTime(timezone=True), nullable=True)
+    )
 
     op.add_column("pack_runs", sa.Column("approval_status", sa.Text(), nullable=True))
     op.add_column("pack_runs", sa.Column("signature_status", sa.Text(), nullable=True))
@@ -84,7 +86,9 @@ def upgrade() -> None:
         sa.Column("payload_json", sa.JSON(), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
-        sa.ForeignKeyConstraint(["approval_instance_id"], ["approval_instances.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(
+            ["approval_instance_id"], ["approval_instances.id"], ondelete="CASCADE"
+        ),
         sa.ForeignKeyConstraint(["route_step_id"], ["approval_route_steps.id"]),
         sa.PrimaryKeyConstraint("id"),
     )
@@ -132,42 +136,114 @@ def upgrade() -> None:
     # clearly separated and avoids re-introducing the same class of bug for
     # later columns added to the same tables.
     op.add_column("approval_routes", sa.Column("description", sa.Text(), nullable=True))
-    op.add_column("approval_routes", sa.Column("applies_to", sa.String(length=16), nullable=False, server_default="document"))
-    op.add_column("approval_routes", sa.Column("conditions_json", sa.JSON(), nullable=False, server_default="{}"))
-    op.add_column("approval_routes", sa.Column("is_default", sa.Boolean(), nullable=False, server_default=sa.text("false")))
-    op.add_column("approval_routes", sa.Column("status", sa.String(length=16), nullable=False, server_default="draft"))
+    op.add_column(
+        "approval_routes",
+        sa.Column("applies_to", sa.String(length=16), nullable=False, server_default="document"),
+    )
+    op.add_column(
+        "approval_routes",
+        sa.Column("conditions_json", sa.JSON(), nullable=False, server_default="{}"),
+    )
+    op.add_column(
+        "approval_routes",
+        sa.Column("is_default", sa.Boolean(), nullable=False, server_default=sa.text("false")),
+    )
+    op.add_column(
+        "approval_routes",
+        sa.Column("status", sa.String(length=16), nullable=False, server_default="draft"),
+    )
 
-    op.add_column("signature_requests", sa.Column("requested_by", sa.String(length=36), nullable=True))
-    op.add_column("signature_requests", sa.Column("approval_instance_id", sa.String(length=36), nullable=True))
-    op.add_column("signature_requests", sa.Column("signature_type", sa.String(length=16), nullable=False, server_default="kep"))
-    op.add_column("signature_requests", sa.Column("provider_code", sa.String(length=64), nullable=True))
-    op.add_column("signature_requests", sa.Column("external_request_id", sa.String(length=255), nullable=True))
-    op.add_column("signature_requests", sa.Column("certificate_thumbprint", sa.String(length=255), nullable=True))
-    op.add_column("signature_requests", sa.Column("signer_name", sa.String(length=255), nullable=True))
-    op.add_column("signature_requests", sa.Column("signed_at", sa.DateTime(timezone=True), nullable=True))
-    op.add_column("signature_requests", sa.Column("verification_result_json", sa.JSON(), nullable=True))
+    op.add_column(
+        "signature_requests", sa.Column("requested_by", sa.String(length=36), nullable=True)
+    )
+    op.add_column(
+        "signature_requests", sa.Column("approval_instance_id", sa.String(length=36), nullable=True)
+    )
+    op.add_column(
+        "signature_requests",
+        sa.Column("signature_type", sa.String(length=16), nullable=False, server_default="kep"),
+    )
+    op.add_column(
+        "signature_requests", sa.Column("provider_code", sa.String(length=64), nullable=True)
+    )
+    op.add_column(
+        "signature_requests", sa.Column("external_request_id", sa.String(length=255), nullable=True)
+    )
+    op.add_column(
+        "signature_requests",
+        sa.Column("certificate_thumbprint", sa.String(length=255), nullable=True),
+    )
+    op.add_column(
+        "signature_requests", sa.Column("signer_name", sa.String(length=255), nullable=True)
+    )
+    op.add_column(
+        "signature_requests", sa.Column("signed_at", sa.DateTime(timezone=True), nullable=True)
+    )
+    op.add_column(
+        "signature_requests", sa.Column("verification_result_json", sa.JSON(), nullable=True)
+    )
 
     op.add_column("edo_messages", sa.Column("entity_type", sa.String(length=16), nullable=True))
     op.add_column("edo_messages", sa.Column("entity_id", sa.String(length=36), nullable=True))
     op.add_column("edo_messages", sa.Column("operator_code", sa.String(length=64), nullable=True))
     op.add_column("edo_messages", sa.Column("message_type", sa.String(length=64), nullable=True))
-    op.add_column("edo_messages", sa.Column("external_message_id", sa.String(length=255), nullable=True))
-    op.add_column("edo_messages", sa.Column("external_thread_id", sa.String(length=255), nullable=True))
+    op.add_column(
+        "edo_messages", sa.Column("external_message_id", sa.String(length=255), nullable=True)
+    )
+    op.add_column(
+        "edo_messages", sa.Column("external_thread_id", sa.String(length=255), nullable=True)
+    )
     op.add_column("edo_messages", sa.Column("roaming_status", sa.String(length=64), nullable=True))
-    op.add_column("edo_messages", sa.Column("last_status_at", sa.DateTime(timezone=True), nullable=True))
+    op.add_column(
+        "edo_messages", sa.Column("last_status_at", sa.DateTime(timezone=True), nullable=True)
+    )
     op.add_column("edo_messages", sa.Column("request_payload_json", sa.JSON(), nullable=True))
     op.add_column("edo_messages", sa.Column("response_payload_json", sa.JSON(), nullable=True))
-    op.add_column("edo_messages", sa.Column("protocol_file_id", sa.String(length=36), nullable=True))
+    op.add_column(
+        "edo_messages", sa.Column("protocol_file_id", sa.String(length=36), nullable=True)
+    )
     op.add_column("edo_messages", sa.Column("created_by", sa.String(length=36), nullable=True))
 
-    op.create_index("ix_approval_instances_entity", "approval_instances", ["tenant_id", "entity_type", "entity_id"])
-    op.create_index("ix_approval_instance_steps_lookup", "approval_instance_steps", ["approval_instance_id", "status", "order_no"])
-    op.create_index("ix_signature_requests_entity_status", "signature_requests", ["tenant_id", "object_type", "object_id", "status"])
-    op.create_index("ix_edo_messages_entity_status_created", "edo_messages", ["tenant_id", "entity_type", "entity_id", "status", "created_at"])
-    op.create_index("ix_edo_status_events_message_received", "edo_status_events", ["edo_message_id", "received_at"])
+    op.create_index(
+        "ix_approval_instances_entity",
+        "approval_instances",
+        ["tenant_id", "entity_type", "entity_id"],
+    )
+    op.create_index(
+        "ix_approval_instance_steps_lookup",
+        "approval_instance_steps",
+        ["approval_instance_id", "status", "order_no"],
+    )
+    op.create_index(
+        "ix_signature_requests_entity_status",
+        "signature_requests",
+        ["tenant_id", "object_type", "object_id", "status"],
+    )
+    op.create_index(
+        "ix_edo_messages_entity_status_created",
+        "edo_messages",
+        ["tenant_id", "entity_type", "entity_id", "status", "created_at"],
+    )
+    op.create_index(
+        "ix_edo_status_events_message_received",
+        "edo_status_events",
+        ["edo_message_id", "received_at"],
+    )
 
 
 def downgrade() -> None:
+    # Drop indexes BEFORE the columns/tables they span. Postgres auto-drops an
+    # index when a column it covers is dropped, so the original order
+    # (drop_column first) made the later drop_index raise "index ... does not
+    # exist" — e.g. ix_edo_messages_entity_status_created spans entity_type /
+    # entity_id, dropped just below. Mirrors upgrade(), which deliberately
+    # creates these indexes only AFTER the add_column calls.
+    op.drop_index("ix_edo_status_events_message_received", table_name="edo_status_events")
+    op.drop_index("ix_edo_messages_entity_status_created", table_name="edo_messages")
+    op.drop_index("ix_signature_requests_entity_status", table_name="signature_requests")
+    op.drop_index("ix_approval_instance_steps_lookup", table_name="approval_instance_steps")
+    op.drop_index("ix_approval_instances_entity", table_name="approval_instances")
+
     op.drop_column("edo_messages", "created_by")
     op.drop_column("edo_messages", "protocol_file_id")
     op.drop_column("edo_messages", "response_payload_json")
@@ -196,12 +272,6 @@ def downgrade() -> None:
     op.drop_column("approval_routes", "conditions_json")
     op.drop_column("approval_routes", "applies_to")
     op.drop_column("approval_routes", "description")
-
-    op.drop_index("ix_edo_status_events_message_received", table_name="edo_status_events")
-    op.drop_index("ix_edo_messages_entity_status_created", table_name="edo_messages")
-    op.drop_index("ix_signature_requests_entity_status", table_name="signature_requests")
-    op.drop_index("ix_approval_instance_steps_lookup", table_name="approval_instance_steps")
-    op.drop_index("ix_approval_instances_entity", table_name="approval_instances")
 
     op.drop_table("edo_webhook_inbox")
     op.drop_table("edo_status_events")

@@ -80,22 +80,34 @@ export const DocumentPreview = ({ document, initialTab = "preview" }: DocumentPr
 
   const handleQuickApprove = async () => {
     if (!myTaskId) return;
-    await releaseApi.quickApprove(myTaskId, "mobile approve");
-    toast.success("Согласовано");
-    releaseApi.documentReleaseStatus(releaseTargetId).then(setRelease).catch(() => undefined);
+    try {
+      await releaseApi.quickApprove(myTaskId, "mobile approve");
+      toast.success("Согласовано");
+      releaseApi.documentReleaseStatus(releaseTargetId).then(setRelease).catch(() => undefined);
+    } catch {
+      toast.error("Не удалось согласовать");
+    }
   };
 
   const handleQuickReject = async () => {
     if (!myTaskId) return;
-    await releaseApi.quickReject(myTaskId, "mobile reject");
-    toast.success("Отклонено");
-    releaseApi.documentReleaseStatus(releaseTargetId).then(setRelease).catch(() => undefined);
+    try {
+      await releaseApi.quickReject(myTaskId, "mobile reject");
+      toast.success("Отклонено");
+      releaseApi.documentReleaseStatus(releaseTargetId).then(setRelease).catch(() => undefined);
+    } catch {
+      toast.error("Не удалось отклонить");
+    }
   };
 
   const handleQuickSign = async () => {
-    await releaseApi.quickSign(releaseTargetId);
-    toast.success("Подпись отправлена");
-    releaseApi.documentReleaseStatus(releaseTargetId).then(setRelease).catch(() => undefined);
+    try {
+      await releaseApi.quickSign(releaseTargetId);
+      toast.success("Подпись отправлена");
+      releaseApi.documentReleaseStatus(releaseTargetId).then(setRelease).catch(() => undefined);
+    } catch {
+      toast.error("Не удалось отправить подпись");
+    }
   };
 
   return (
@@ -201,8 +213,8 @@ export const DocumentPreview = ({ document, initialTab = "preview" }: DocumentPr
           <div><span className="text-muted-foreground">EDO:</span> <Badge variant="secondary">{release.edo}</Badge></div>
         </div>
         <div className="mb-4 flex flex-wrap gap-2">
-          <ActionButton permission={PERMISSIONS.DOCUMENT_SIGN} abilityResource={resource} variant="outline" onClick={handleQuickApprove}>Согласовать</ActionButton>
-          <ActionButton permission={PERMISSIONS.DOCUMENT_SIGN} abilityResource={resource} variant="outline" onClick={handleQuickReject}>Отклонить</ActionButton>
+          <ActionButton permission={PERMISSIONS.DOCUMENT_SIGN} abilityResource={resource} variant="outline" disabled={!myTaskId} title={myTaskId ? undefined : "Нет назначенной вам задачи согласования"} onClick={handleQuickApprove}>Согласовать</ActionButton>
+          <ActionButton permission={PERMISSIONS.DOCUMENT_SIGN} abilityResource={resource} variant="outline" disabled={!myTaskId} title={myTaskId ? undefined : "Нет назначенной вам задачи согласования"} onClick={handleQuickReject}>Отклонить</ActionButton>
           <ActionButton permission={PERMISSIONS.DOCUMENT_SIGN} abilityResource={resource} onClick={handleQuickSign}>Подписать</ActionButton>
         </div>
         {!can(PERMISSIONS.DOCUMENT_SIGN, resource) && (

@@ -46,23 +46,37 @@ async def test_prescription_crud_and_audit(
     assert list_response.status_code == 200
     assert any(item["id"] == prescription_id for item in list_response.json()["items"])
 
-    update_response = await async_client.patch(
-        f"/api/v1/prescriptions/{prescription_id}",
-        json={"status": PrescriptionStatus.COMPLETED.value},
+    # Status now moves only through /transition, following the FSM
+    # (OPEN -> IN_PROGRESS -> COMPLETED). A direct OPEN -> COMPLETED jump is no
+    # longer valid, and PATCH no longer accepts `status`.
+    move_in_progress = await async_client.post(
+        f"/api/v1/prescriptions/{prescription_id}/transition",
+        json={"to": PrescriptionStatus.IN_PROGRESS.value},
         headers=headers,
     )
-    assert update_response.status_code == 200
+    assert move_in_progress.status_code == 200, move_in_progress.text
+
+    update_response = await async_client.post(
+        f"/api/v1/prescriptions/{prescription_id}/transition",
+        json={"to": PrescriptionStatus.COMPLETED.value, "evidence": "corrective plan attached"},
+        headers=headers,
+    )
+    assert update_response.status_code == 200, update_response.text
     assert update_response.json()["status"] == PrescriptionStatus.COMPLETED.value
 
     async with sessionmaker() as session:
         logs = (
-            await session.execute(
-                select(AuditLog).where(
-                    AuditLog.object_type == "prescription",
-                    AuditLog.object_id == prescription_id,
+            (
+                await session.execute(
+                    select(AuditLog).where(
+                        AuditLog.object_type == "prescription",
+                        AuditLog.object_id == prescription_id,
+                    )
                 )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         assert logs
 
 
@@ -77,7 +91,9 @@ async def test_prescription_tenant_isolation(
         site = await data_factory.create_site(tenant=tenant, company=company, session=session)
         other_tenant = await data_factory.ensure_tenant(slug="acme", session=session)
         other_company = await data_factory.create_company(tenant=other_tenant, session=session)
-        other_site = await data_factory.create_site(tenant=other_tenant, company=other_company, session=session)
+        other_site = await data_factory.create_site(
+            tenant=other_tenant, company=other_company, session=session
+        )
         other_inspection = Inspection(
             tenant_id=other_tenant.id,
             company_id=other_company.id,

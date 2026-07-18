@@ -63,9 +63,18 @@ def _render_xml_part(content: bytes, data: dict[str, Any]) -> bytes:
     return ET.tostring(root, encoding="utf-8", xml_declaration=True)
 
 
-def render_docx(template_bytes: bytes, data: dict[str, Any], passport: dict[str, Any], *, visible_passport: bool = False) -> bytes:
+def render_docx(
+    template_bytes: bytes,
+    data: dict[str, Any],
+    passport: dict[str, Any],
+    *,
+    visible_passport: bool = False,
+) -> bytes:
     output = BytesIO()
-    with zipfile.ZipFile(BytesIO(template_bytes), "r") as zin, zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as zout:
+    with (
+        zipfile.ZipFile(BytesIO(template_bytes), "r") as zin,
+        zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as zout,
+    ):
         for item in zin.infolist():
             content = zin.read(item.filename)
             if item.filename.startswith("word/") and item.filename.endswith(".xml"):

@@ -4,8 +4,7 @@ import pytest
 from fastapi import status
 from sqlalchemy import select
 
-from app.models.models import Outbox, RoleEnum, Site
-from app.models.risk import RiskHazard
+from app.models.models import Outbox, OutboxStatus, RoleEnum, Site
 from tests.utils.factories import TestDataFactory
 
 
@@ -87,4 +86,7 @@ async def test_risk_assessment_emits_outbox(
         assert outbox_entry is not None
         assert outbox_entry.payload["risk_assessment_id"] == assessment_id
         assert outbox_entry.payload["hazard_code"] == "test-hazard"
-        assert outbox_entry.status == "pending"
+        # Emitted = PENDING (awaiting dispatch) or SENT (no webhook destination
+        # configured in the test -> the outbox marks it SENT immediately). Both
+        # confirm the RiskAssessed event was emitted; status string is uppercase.
+        assert outbox_entry.status in (OutboxStatus.PENDING, OutboxStatus.SENT)

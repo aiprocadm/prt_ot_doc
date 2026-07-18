@@ -196,9 +196,7 @@ async def test_health_service_cache_bypass(app_fixture) -> None:
     )
 
     # Second call with skip_cache=True should bypass cache
-    result2 = await service.run_all_checks(
-        tenant_id="test-tenant", skip_cache=True, skip_slow=True
-    )
+    result2 = await service.run_all_checks(tenant_id="test-tenant", skip_cache=True, skip_slow=True)
 
     # Results should have different timestamps (different executions)
     # Note: This is subtle - timestamps might be very close, but cache behavior
@@ -215,9 +213,7 @@ async def test_health_service_skip_slow_checks(app_fixture) -> None:
     service = HealthCheckService(settings)
 
     # With skip_slow=True, should only get critical checks
-    result = await service.run_all_checks(
-        tenant_id="test-tenant", skip_cache=True, skip_slow=True
-    )
+    result = await service.run_all_checks(tenant_id="test-tenant", skip_cache=True, skip_slow=True)
 
     # Critical checks
     critical_checks = {"postgres", "redis", "minio"}
@@ -233,9 +229,7 @@ async def test_health_service_overall_status_all_ok(app_fixture) -> None:
 
     settings = get_settings()
     service = HealthCheckService(settings)
-    result = await service.run_all_checks(
-        tenant_id="test-tenant", skip_cache=True, skip_slow=True
-    )
+    result = await service.run_all_checks(tenant_id="test-tenant", skip_cache=True, skip_slow=True)
 
     # With a working database, redis, and minio, status should be "ok"
     # (assuming they're all running in the test environment)
@@ -251,12 +245,8 @@ async def test_health_service_multiple_tenants_cached_separately(app_fixture) ->
     service = HealthCheckService(settings)
 
     # Run checks for two different tenants
-    result1 = await service.run_all_checks(
-        tenant_id="tenant-1", skip_cache=False, skip_slow=True
-    )
-    result2 = await service.run_all_checks(
-        tenant_id="tenant-2", skip_cache=False, skip_slow=True
-    )
+    result1 = await service.run_all_checks(tenant_id="tenant-1", skip_cache=False, skip_slow=True)
+    result2 = await service.run_all_checks(tenant_id="tenant-2", skip_cache=False, skip_slow=True)
 
     # Both should return results
     assert result1.tenant_id == "tenant-1"

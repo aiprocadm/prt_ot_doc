@@ -11,7 +11,9 @@ from tests.utils.factories import TestDataFactory
 
 
 @pytest.mark.asyncio
-async def test_inspection_flow(async_client, make_auth_headers, sessionmaker, data_factory: TestDataFactory):
+async def test_inspection_flow(
+    async_client, make_auth_headers, sessionmaker, data_factory: TestDataFactory
+):
     async with sessionmaker() as session:
         tenant = await data_factory.ensure_tenant(session=session)
         company = await data_factory.create_company(tenant=tenant, session=session)
@@ -32,7 +34,9 @@ async def test_inspection_flow(async_client, make_auth_headers, sessionmaker, da
     inspection = create_response.json()
     assert inspection["authority"] == "ГИТ"
 
-    list_response = await async_client.get(f"/api/v1/inspections?company_id={company.id}", headers=headers)
+    list_response = await async_client.get(
+        f"/api/v1/inspections?company_id={company.id}", headers=headers
+    )
     assert list_response.status_code == status.HTTP_200_OK
     assert list_response.json()["total"] >= 1
 
@@ -67,5 +71,9 @@ async def test_inspection_flow(async_client, make_auth_headers, sessionmaker, da
     assert len(results_list.json()) >= 1
 
     async with sessionmaker() as session:
-        outbox = (await session.execute(select(Outbox).where(Outbox.event_type == "InspectionCreated"))).scalars().all()
+        outbox = (
+            (await session.execute(select(Outbox).where(Outbox.event_type == "InspectionCreated")))
+            .scalars()
+            .all()
+        )
         assert any(item.payload.get("inspection_id") == inspection["id"] for item in outbox)

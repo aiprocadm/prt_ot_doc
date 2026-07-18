@@ -37,6 +37,12 @@ const INCIDENT_STATUS_LABELS: Record<string, string> = {
   investigating: "Расследуется",
   closed: "Закрыт"
 };
+const SEVERITY_LABELS: Record<string, string> = {
+  low: "Низкая",
+  medium: "Средняя",
+  high: "Высокая",
+  critical: "Критическая"
+};
 
 const IncidentsPage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -196,7 +202,7 @@ const IncidentsPage = () => {
                         onChange={(e) => setForm((prev) => ({ ...prev, severity: e.target.value }))}
                       >
                         {SEVERITY_LEVELS.map((s) => (
-                          <option key={s} value={s}>{s}</option>
+                          <option key={s} value={s}>{SEVERITY_LABELS[s] ?? s}</option>
                         ))}
                       </select>
                     </div>
@@ -292,6 +298,7 @@ const IncidentsPage = () => {
                   <TableHead>ID</TableHead>
                   <TableHead>Событие</TableHead>
                   <TableHead>Тип</TableHead>
+                  <TableHead>Тяжесть</TableHead>
                   <TableHead>Площадка</TableHead>
                   <TableHead>Дата</TableHead>
                   <TableHead>Статус</TableHead>
@@ -303,6 +310,7 @@ const IncidentsPage = () => {
                     <TableCell className="font-medium">{incident.id}</TableCell>
                     <TableCell>{incident.title}</TableCell>
                     <TableCell>{INCIDENT_TYPE_LABELS[incident.incident_type] ?? incident.incident_type}</TableCell>
+                    <TableCell>{incident.severity ? SEVERITY_LABELS[incident.severity] ?? incident.severity : "—"}</TableCell>
                     <TableCell>{incident.site_id}</TableCell>
                     <TableCell>{formatDate(incident.occurred_at)}</TableCell>
                     <TableCell>

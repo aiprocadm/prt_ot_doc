@@ -29,6 +29,7 @@ from app.models.models import (
     TemplateVersionStatus,
     Tenant,
 )
+from app.modules.files.models import FileRecord, FileStatus
 
 DOCX_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
@@ -39,7 +40,6 @@ def _minimal_docx_bytes() -> bytes:
     buf = BytesIO()
     doc.save(buf)
     return buf.getvalue()
-from app.modules.files.models import FileRecord, FileStatus
 
 
 async def _ensure_global_tenant(*, slug: str = "test", tenant_id: str | None = None) -> None:
@@ -51,7 +51,11 @@ async def _ensure_global_tenant(*, slug: str = "test", tenant_id: str | None = N
         ).scalar_one_or_none()
         if existing is not None:
             return
-        payload: dict[str, object] = {"slug": slug, "name": slug.title(), "contact_email": f"{slug}@example.com"}
+        payload: dict[str, object] = {
+            "slug": slug,
+            "name": slug.title(),
+            "contact_email": f"{slug}@example.com",
+        }
         if tenant_id is not None:
             payload["id"] = tenant_id
         session.add(Tenant(**payload))
@@ -290,7 +294,9 @@ async def test_documents_get_returns_404_for_other_tenant_document(
         tb = await data_factory.ensure_tenant(slug="docs-mx-b", session=session)
         user_b = await data_factory.create_user(tenant=tb, role=RoleEnum.ADMIN, session=session)
         company_a = await data_factory.create_company(tenant=ta, session=session)
-        document_a, _ = await data_factory.create_document(tenant=ta, company=company_a, session=session)
+        document_a, _ = await data_factory.create_document(
+            tenant=ta, company=company_a, session=session
+        )
         await session.commit()
         document_id = document_a.id
         user_b_id = user_b.id

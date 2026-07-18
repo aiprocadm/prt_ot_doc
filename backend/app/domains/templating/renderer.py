@@ -82,7 +82,9 @@ def build_jinja_env(*, strict: bool) -> Environment:
     # own rendering pass; enabling Jinja autoescape would double-escape entities
     # ('&' -> '&amp;' -> '&amp;amp;') and corrupt the generated documents. There
     # is no HTML/XSS attack surface on this code path.
-    env = Environment(undefined=StrictUndefined if strict else Undefined, autoescape=False)  # nosec B701
+    env = Environment(
+        undefined=StrictUndefined if strict else Undefined, autoescape=False
+    )  # nosec B701
     env.filters.update(_CUSTOM_FILTERS)
     return env
 
@@ -124,7 +126,9 @@ def _normalize_context(value: Any) -> Any:
     return value
 
 
-def _fallback_context(context: Mapping[str, Any], warnings: list[str], *, path: str = "") -> dict[str, Any]:
+def _fallback_context(
+    context: Mapping[str, Any], warnings: list[str], *, path: str = ""
+) -> dict[str, Any]:
     data = _coerce_mapping(context)
 
     class _FallbackDict(dict):
@@ -145,7 +149,9 @@ def _fallback_context(context: Mapping[str, Any], warnings: list[str], *, path: 
     return fallback
 
 
-def render_docx_with_metadata(template_bytes: bytes, context: Mapping[str, Any] | None) -> RenderedTemplate:
+def render_docx_with_metadata(
+    template_bytes: bytes, context: Mapping[str, Any] | None
+) -> RenderedTemplate:
     raw_context = _coerce_mapping(context)
     render_context = _normalize_context(raw_context)
     warnings: list[str] = []
@@ -164,7 +170,13 @@ def render_docx_with_metadata(template_bytes: bytes, context: Mapping[str, Any] 
         fallback = _fallback_context(render_context, warnings)
         tpl = DocxTemplate(BytesIO(template_bytes))
         tpl.render(fallback, jinja_env=build_jinja_env(strict=False))
-        missing_keys = sorted({warning.removeprefix("missing context key: ") for warning in warnings if warning.startswith("missing context key:")})
+        missing_keys = sorted(
+            {
+                warning.removeprefix("missing context key: ")
+                for warning in warnings
+                if warning.startswith("missing context key:")
+            }
+        )
         warnings.append("strict render failed; empty-string fallback applied")
     buffer = BytesIO()
     tpl.save(buffer)
