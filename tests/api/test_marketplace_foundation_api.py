@@ -6,7 +6,9 @@ from app.models.models import RoleEnum
 
 
 @pytest.mark.anyio
-async def test_marketplace_publish_and_install_package_preset(async_client, sessionmaker, data_factory, make_auth_headers):
+async def test_marketplace_publish_and_install_package_preset(
+    async_client, sessionmaker, data_factory, make_auth_headers
+):
     async with sessionmaker() as session:
         await data_factory.ensure_tenant(session=session)
         await session.commit()

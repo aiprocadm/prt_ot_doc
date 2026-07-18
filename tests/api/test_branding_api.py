@@ -14,11 +14,15 @@ from app.models.models import (
 from app.modules.headers.models import HeaderFooterPreset
 
 
-async def test_branding_profile_preview_and_update(async_client, sessionmaker, data_factory, make_auth_headers) -> None:
+async def test_branding_profile_preview_and_update(
+    async_client, sessionmaker, data_factory, make_auth_headers
+) -> None:
     headers = await make_auth_headers(RoleEnum.ADMIN)
     async with sessionmaker() as session:
         tenant = await data_factory.ensure_tenant(session=session)
-        company = await data_factory.create_company(tenant=tenant, session=session, name="АО СеверСтрой")
+        company = await data_factory.create_company(
+            tenant=tenant, session=session, name="АО СеверСтрой"
+        )
         site = await data_factory.create_site(
             tenant=tenant,
             company=company,
@@ -108,24 +112,43 @@ async def test_branding_profile_preview_and_update(async_client, sessionmaker, d
     )
     assert preview.status_code == 200, preview.text
     preview_payload = preview.json()
-    assert preview_payload["sections"]["header_odd"] == "СеверСтрой / Северный филиал / FOR-APPROVAL / OT-001"
+    assert (
+        preview_payload["sections"]["header_odd"]
+        == "СеверСтрой / Северный филиал / FOR-APPROVAL / OT-001"
+    )
     assert preview_payload["watermark"]["text"] == "FOR-APPROVAL"
-    assert preview_payload["profile"]["reproducibility"]["preferred_header_preset_code"] == "company_brand"
+    assert (
+        preview_payload["profile"]["reproducibility"]["preferred_header_preset_code"]
+        == "company_brand"
+    )
     assert preview_payload["profile"]["reproducibility"]["preset_id"]
     assert preview_payload["profile"]["reproducibility"]["rendered_sections_hash"]
     assert preview_payload["profile"]["reproducibility"]["header_context_hash"]
     assert preview_payload["profile"]["reproducibility"]["preset_content_hash"]
     assert preview_payload["apply_headers_payload"]["preset_code"] == "company_brand"
     assert preview_payload["apply_headers_payload"]["data"]["branch"]["name"] == "Северный филиал"
-    assert preview_payload["apply_headers_payload"]["data"]["reproducibility"]["preferred_header_preset_code"] == "company_brand"
+    assert (
+        preview_payload["apply_headers_payload"]["data"]["reproducibility"][
+            "preferred_header_preset_code"
+        ]
+        == "company_brand"
+    )
     assert preview_payload["wizard_defaults"]["site_id"] == site_id
     assert preview_payload["profile"]["resolution"]["scope_chain"] == ["tenant", "company", "site"]
-    assert preview_payload["profile"]["resolution"]["effective_preset_source"] == "site.branding.preferred_letterhead_preset"
-    assert preview_payload["profile"]["branding"]["header_details"] == ["СеверСтрой", "г. Москва, ул. Производственная, 1"]
+    assert (
+        preview_payload["profile"]["resolution"]["effective_preset_source"]
+        == "site.branding.preferred_letterhead_preset"
+    )
+    assert preview_payload["profile"]["branding"]["header_details"] == [
+        "СеверСтрой",
+        "г. Москва, ул. Производственная, 1",
+    ]
     assert "organization.short_name" not in preview_payload["unresolved_placeholders"]
 
     async with sessionmaker() as session:
-        company = (await session.execute(select(Company).where(Company.id == company_id))).scalar_one()
+        company = (
+            await session.execute(select(Company).where(Company.id == company_id))
+        ).scalar_one()
         site = (await session.execute(select(Site).where(Site.id == site_id))).scalar_one()
         assert company.preferred_header_preset_code == "company_brand"
         assert company.branding_payload["short_name"] == "СеверСтрой"
@@ -134,7 +157,9 @@ async def test_branding_profile_preview_and_update(async_client, sessionmaker, d
         assert site.branding_payload["watermark_text"] == "SITE-DRAFT"
 
 
-async def test_branding_patch_merges_existing_payload_and_validates_preset(async_client, sessionmaker, data_factory, make_auth_headers) -> None:
+async def test_branding_patch_merges_existing_payload_and_validates_preset(
+    async_client, sessionmaker, data_factory, make_auth_headers
+) -> None:
     headers = await make_auth_headers(RoleEnum.ADMIN)
     async with sessionmaker() as session:
         tenant = await data_factory.ensure_tenant(session=session)
@@ -187,15 +212,23 @@ async def test_branding_patch_merges_existing_payload_and_validates_preset(async
     assert payload["branding"]["metadata"]["source"] == "seed"
     assert payload["branding"]["metadata"]["updated_by"] == "test"
     assert payload["reproducibility"]["branding_payload_hash"]
-    assert payload["resolution"]["effective_preset_source"] == "company.preferred_header_preset_code"
+    assert (
+        payload["resolution"]["effective_preset_source"] == "company.preferred_header_preset_code"
+    )
 
 
-async def test_branding_generation_history_lists_recent_runs(async_client, sessionmaker, data_factory, make_auth_headers) -> None:
+async def test_branding_generation_history_lists_recent_runs(
+    async_client, sessionmaker, data_factory, make_auth_headers
+) -> None:
     headers = await make_auth_headers(RoleEnum.ADMIN)
     async with sessionmaker() as session:
         tenant = await data_factory.ensure_tenant(session=session)
-        company = await data_factory.create_company(tenant=tenant, session=session, name="АО История")
-        site = await data_factory.create_site(tenant=tenant, company=company, session=session, name="Филиал История")
+        company = await data_factory.create_company(
+            tenant=tenant, session=session, name="АО История"
+        )
+        site = await data_factory.create_site(
+            tenant=tenant, company=company, session=session, name="Филиал История"
+        )
         template = await data_factory.create_template(tenant=tenant, session=session, name="Приказ")
         version = TemplateVersion(
             tenant_id=tenant.id,

@@ -12,8 +12,8 @@ from typing import Callable, Iterable, Sequence
 
 from app.core.config import get_settings
 from app.core.metrics import PipelineStage, PipelineType, StageResult, get_metrics
-from app.domains.files import s3
-from app.domains.files.utils import build_dated_prefix
+from app.modules.files import s3
+from app.modules.files.utils import build_dated_prefix
 from app.services.file_storage import FileStorageService
 
 logger = logging.getLogger(__name__)
@@ -212,9 +212,7 @@ class PackageExportService:
             stage=PipelineStage.STORED_S3,
         )
         try:
-            self._storage.put(
-                storage_key, archive_bytes, content_type=self.ZIP_CONTENT_TYPE
-            )
+            self._storage.put(storage_key, archive_bytes, content_type=self.ZIP_CONTENT_TYPE)
         except Exception as exc:
             metrics.record_pipeline_stage_end(
                 pipeline=PipelineType.DOCUMENT,

@@ -77,9 +77,7 @@ class FileStorageService:
             try:
                 shutil.copy2(destination, backup_path)
             except OSError as exc:  # pragma: no cover - defensive branch
-                raise FileStorageError(
-                    f"Failed to create backup for {normalized_key}"
-                ) from exc
+                raise FileStorageError(f"Failed to create backup for {normalized_key}") from exc
 
         try:
             if hasattr(data, "seek"):

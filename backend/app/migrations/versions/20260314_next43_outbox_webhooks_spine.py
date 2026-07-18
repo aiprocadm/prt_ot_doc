@@ -30,8 +30,16 @@ def upgrade() -> None:
         batch.drop_constraint("uq_outbox_event_tenant_event", type_="unique")
         batch.create_unique_constraint("uq_outbox_event_event", ["event_id"])
         batch.drop_index("ix_outbox_events_status_next_attempt")
-        batch.create_index("ix_outbox_events_status_next_created", ["status", "next_attempt_at", "created_at"], unique=False)
-        batch.create_index("ix_outbox_events_aggregate", ["aggregate_type", "aggregate_id", "created_at"], unique=False)
+        batch.create_index(
+            "ix_outbox_events_status_next_created",
+            ["status", "next_attempt_at", "created_at"],
+            unique=False,
+        )
+        batch.create_index(
+            "ix_outbox_events_aggregate",
+            ["aggregate_type", "aggregate_id", "created_at"],
+            unique=False,
+        )
 
     op.create_table(
         "webhook_subscriptions",
@@ -55,7 +63,12 @@ def upgrade() -> None:
         batch.add_column(sa.Column("response_body", sa.Text(), nullable=True))
         batch.add_column(sa.Column("error", sa.Text(), nullable=True))
 
-    op.create_index("ix_webhook_deliveries_tenant_subscription_delivered", "webhook_deliveries", ["tenant_id", "subscription_id", "delivered_at"], unique=False)
+    op.create_index(
+        "ix_webhook_deliveries_tenant_subscription_delivered",
+        "webhook_deliveries",
+        ["tenant_id", "subscription_id", "delivered_at"],
+        unique=False,
+    )
 
     op.create_table(
         "inbound_webhook_dedup",
@@ -76,7 +89,9 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_table("inbound_webhook_dedup")
-    op.drop_index("ix_webhook_deliveries_tenant_subscription_delivered", table_name="webhook_deliveries")
+    op.drop_index(
+        "ix_webhook_deliveries_tenant_subscription_delivered", table_name="webhook_deliveries"
+    )
     with op.batch_alter_table("webhook_deliveries") as batch:
         batch.drop_column("error")
         batch.drop_column("response_body")
@@ -88,7 +103,9 @@ def downgrade() -> None:
     with op.batch_alter_table("outbox_events") as batch:
         batch.drop_index("ix_outbox_events_aggregate")
         batch.drop_index("ix_outbox_events_status_next_created")
-        batch.create_index("ix_outbox_events_status_next_attempt", ["status", "next_attempt_at"], unique=False)
+        batch.create_index(
+            "ix_outbox_events_status_next_attempt", ["status", "next_attempt_at"], unique=False
+        )
         batch.drop_constraint("uq_outbox_event_event", type_="unique")
         batch.create_unique_constraint("uq_outbox_event_tenant_event", ["tenant_id", "event_id"])
         batch.drop_column("sent_at")

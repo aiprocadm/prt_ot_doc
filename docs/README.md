@@ -1,11 +1,19 @@
 # Документация
 
+- **Промт для агентов (README-first, кратко, кандидаты на чистку):** [AI_AGENT_WORKFLOW.md](AI_AGENT_WORKFLOW.md)
+- Отчёт волны инженерного аудита/AI (итог, проверки, риски): [../AI_IMPLEMENTATION_REPORT.md](../AI_IMPLEMENTATION_REPORT.md)
+
 ## Главный документ (source of truth)
 - **Единое полное ТЗ:** [spec/TZ_FULL_UNIFIED.md](spec/TZ_FULL_UNIFIED.md)
 - **Главный repo README:** [../README.md](../README.md)
 
+## Релиз и готовность
+- Вердикт готовности, RC-критерии, порядок обновления: [../RELEASE_READINESS.md](../RELEASE_READINESS.md)
+- Канонический статус блокеров (SoT): [stabilization/RELEASE_BLOCKERS_STATUS.md](stabilization/RELEASE_BLOCKERS_STATUS.md)
+
 ## Аудит и соответствие
 - Матрица покрытия ТЗ: [audit/TZ_COVERAGE_MATRIX.md](audit/TZ_COVERAGE_MATRIX.md)
+- Проверка матрицы (machine-check): `python scripts/audit/check_tz_coverage_matrix.py`
 - Репозитарный аудит и canonical layout: [audit/REPOSITORY_AUDIT.md](audit/REPOSITORY_AUDIT.md)
 - Baseline verification (fail-first): [audit/BASELINE_VERIFICATION.md](audit/BASELINE_VERIFICATION.md)
 - Compliance (historical): [audit/TZ_COMPLIANCE.md](audit/TZ_COMPLIANCE.md)

@@ -1,12 +1,14 @@
 """Data access helpers for templates and document jobs."""
+
 from __future__ import annotations
+
+from uuid import UUID
 
 from fastapi import HTTPException, status
 from sqlalchemy import func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
-from uuid import UUID
 
 from app.core.rbac_abac import actor_from_claims, apply_abac_filters
 from app.core.tenant import get_current_tenant
@@ -53,17 +55,29 @@ async def _resolve_tenant_scope(
     tenant_identifier: str | None,
 ) -> tuple[str, str | None]:
     session_info = getattr(session, "info", None)
-    session_tenant_id = _normalize_tenant_id(session_info.get("tenant_id")) if isinstance(session_info, dict) else None
-    session_tenant_slug = _normalize_tenant_slug(
-        session_info.get("tenant_slug") or session_info.get("tenant")
-    ) if isinstance(session_info, dict) else None
+    session_tenant_id = (
+        _normalize_tenant_id(session_info.get("tenant_id"))
+        if isinstance(session_info, dict)
+        else None
+    )
+    session_tenant_slug = (
+        _normalize_tenant_slug(session_info.get("tenant_slug") or session_info.get("tenant"))
+        if isinstance(session_info, dict)
+        else None
+    )
 
     requested_tenant_id = _normalize_tenant_id(tenant_identifier)
-    requested_tenant_slug = None if requested_tenant_id else _normalize_tenant_slug(tenant_identifier)
+    requested_tenant_slug = (
+        None if requested_tenant_id else _normalize_tenant_slug(tenant_identifier)
+    )
 
     if requested_tenant_id and session_tenant_id and requested_tenant_id != session_tenant_id:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Tenant mismatch for repository operation")
-    if requested_tenant_slug and session_tenant_slug and requested_tenant_slug != session_tenant_slug:
+    if (
+        requested_tenant_slug
+        and session_tenant_slug
+        and requested_tenant_slug != session_tenant_slug
+    ):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Tenant mismatch for repository operation")
 
     if requested_tenant_id and session_tenant_id == requested_tenant_id:
@@ -73,14 +87,18 @@ async def _resolve_tenant_scope(
     if tenant_identifier is None and session_tenant_id:
         return session_tenant_id, session_tenant_slug
 
-    lookup = requested_tenant_id or requested_tenant_slug or session_tenant_id or session_tenant_slug or get_current_tenant().slug
+    lookup = (
+        requested_tenant_id
+        or requested_tenant_slug
+        or session_tenant_id
+        or session_tenant_slug
+        or get_current_tenant().slug
+    )
     filters = [Tenant.slug == lookup, Tenant.code == lookup]
     if _normalize_tenant_id(lookup):
         filters.append(Tenant.id == str(lookup))
     row = (
-        await session.execute(
-            select(Tenant.id, Tenant.slug).where(or_(*filters)).limit(1)
-        )
+        await session.execute(select(Tenant.id, Tenant.slug).where(or_(*filters)).limit(1))
     ).first()
     if row is None:
         if session_tenant_id:
@@ -111,9 +129,7 @@ async def list_tenants(
     return list(rows), int(total or 0)
 
 
-async def create_company(
-    session: AsyncSession, tenant_id: str, payload: CompanyCreate
-) -> Company:
+async def create_company(session: AsyncSession, tenant_id: str, payload: CompanyCreate) -> Company:
     """Insert a new company record for the provided tenant."""
 
     normalized_tenant, _tenant_slug = await _resolve_tenant_scope(session, tenant_id)
@@ -157,6 +173,8 @@ async def create_company(
         hazardous_factors=_clean_list(payload.hazardous_factors),
         is_hazardous_production_facility=bool(payload.is_hazardous_production_facility),
         has_dangerous_objects=bool(payload.has_dangerous_objects),
+        status=_clean(payload.status) or "active",
+        tags=_clean_list(payload.tags),
     )
     session.add(company)
     await session.flush()
@@ -249,9 +267,7 @@ async def get_template_by_name(
 
     tenant_id, resolved_slug = await _resolve_tenant_scope(session, tenant_slug)
     tenant_scope = _tenant_scope_values(tenant_id, resolved_slug)
-    stmt = select(Template).where(
-        Template.tenant_id.in_(tenant_scope), Template.name == name
-    )
+    stmt = select(Template).where(Template.tenant_id.in_(tenant_scope), Template.name == name)
     result = await session.execute(stmt)
     return result.scalars().first()
 
@@ -325,9 +341,13 @@ async def create_template(
             tenant_slug = tenant_identifier
 
     tenant_identifier = tenant_slug or tenant_identifier
-    canonical_tenant_id, canonical_tenant_slug = await _resolve_tenant_scope(session, tenant_identifier)
+    canonical_tenant_id, canonical_tenant_slug = await _resolve_tenant_scope(
+        session, tenant_identifier
+    )
 
-    existing = await get_active_template_with_version(session, effective_payload.name, canonical_tenant_id)
+    existing = await get_active_template_with_version(
+        session, effective_payload.name, canonical_tenant_id
+    )
     if existing:
         template, version = existing
         _ensure_idempotent_match(template, version, effective_payload, checksum=checksum)
@@ -387,7 +407,9 @@ async def create_template(
         return await _create()
     except IntegrityError:
         await session.rollback()
-        existing = await get_active_template_with_version(session, effective_payload.name, canonical_tenant_id)
+        existing = await get_active_template_with_version(
+            session, effective_payload.name, canonical_tenant_id
+        )
         if not existing:
             raise
         template, version = existing

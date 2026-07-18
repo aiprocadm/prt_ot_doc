@@ -56,7 +56,13 @@ const PERMISSION_ALIASES: Record<string, Permission> = {
   "audit.read": PERMISSIONS.AUDIT_VIEW,
   "admin.roles": PERMISSIONS.ADMIN_MANAGE_ROLES,
   "admin.tenants": PERMISSIONS.ADMIN_MANAGE_TENANTS,
-  "billing.read": PERMISSIONS.REPORTS_VIEW
+  "billing.read": PERMISSIONS.REPORTS_VIEW,
+  "data_quality.read": PERMISSIONS.DATA_QUALITY_VIEW,
+  "data_quality.view": PERMISSIONS.DATA_QUALITY_VIEW,
+  "employee_card.read": PERMISSIONS.EMPLOYEE_CARD_VIEW,
+  "employee_card.view": PERMISSIONS.EMPLOYEE_CARD_VIEW,
+  "calendar.read": PERMISSIONS.CALENDAR_VIEW,
+  "calendar.view": PERMISSIONS.CALENDAR_VIEW
 };
 
 const ROLE_ALIASES: Record<string, Role> = {
@@ -68,7 +74,8 @@ const ROLE_ALIASES: Record<string, Role> = {
   deloproizvoditel: "office_manager",
   slushatel: "student",
   auditor: "auditor_ro",
-  inspector_contractor: "contractor_inspector"
+  inspector_contractor: "contractor_inspector",
+  ot_pb_lead: "ot_pb_head"
 };
 
 const normalizeRole = (role: string): Role | null => {
@@ -84,7 +91,13 @@ const resolvePermissions = (user: UserDto | null): Set<Permission> => {
     const normalized = user.permissions
       .map((permission) => PERMISSION_ALIASES[permission] ?? permission)
       .filter((permission): permission is Permission => ALL_PERMISSIONS.includes(permission as Permission));
-    return new Set(normalized);
+    // Only treat the server permission list as authoritative when at least one entry
+    // is recognized; if every entry was filtered out (e.g. renamed/unknown perms with
+    // no alias), fall through to the role-based permissions instead of locking the
+    // user out of everything.
+    if (normalized.length) {
+      return new Set(normalized);
+    }
   }
   const permissions = new Set<Permission>();
   user.roles.forEach((role) => {

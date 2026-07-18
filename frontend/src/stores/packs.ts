@@ -22,6 +22,37 @@ interface PacksState extends PaginatedState<PackDto, PackFilters> {
   reset: () => void;
 }
 
+type LegacyPaginationMeta = {
+  page?: number;
+  per_page?: number;
+  total?: number;
+};
+
+type LegacyPackListResponse = {
+  data?: PackDto[];
+  meta?: LegacyPaginationMeta;
+};
+
+const toPackListPayload = (
+  payload: PaginatedResponse<PackDto> | LegacyPackListResponse | null | undefined
+): PaginatedResponse<PackDto> => {
+  if (payload && Array.isArray((payload as PaginatedResponse<PackDto>).items)) {
+    return payload as PaginatedResponse<PackDto>;
+  }
+
+  const legacy = (payload ?? {}) as LegacyPackListResponse;
+  const items = Array.isArray(legacy.data) ? legacy.data : [];
+  const meta = legacy.meta ?? {};
+  return {
+    items,
+    pagination: {
+      page: typeof meta.page === "number" ? meta.page : 1,
+      page_size: typeof meta.per_page === "number" ? meta.per_page : items.length || 20,
+      total: typeof meta.total === "number" ? meta.total : items.length
+    }
+  };
+};
+
 export const usePacksStore = create<PacksState>()(
   immer((set, get) => ({
     items: [],
@@ -63,10 +94,11 @@ export const usePacksStore = create<PacksState>()(
       });
       const query = { ...get().filters, ...params, page: get().pagination.page, page_size: get().pagination.page_size };
       try {
-        const { data } = await apiClient.get<PaginatedResponse<PackDto>>("/packs", { params: query });
+        const { data } = await apiClient.get<PaginatedResponse<PackDto> | LegacyPackListResponse>("/packs", { params: query });
+        const normalized = toPackListPayload(data);
         set((state) => {
-          state.items = data.items;
-          state.pagination = data.pagination;
+          state.items = normalized.items;
+          state.pagination = normalized.pagination;
         });
       } catch (error) {
         set((state) => {

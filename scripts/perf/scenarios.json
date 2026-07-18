@@ -1,0 +1,100 @@
+{
+  "dataset_assumptions": {
+    "tenant": "demo",
+    "seed": "demo tenant bootstrapped with stable templates and search corpus",
+    "notes": "Use a clean DB snapshot before each baseline run to keep list/search cardinality stable. The nightly_baseline profile is intentionally pure-GET only — FLOW scenarios (document_generate_apply_headers, files_upload_flow, jobs_status_transitions) were removed 2026-05-29 (RB-002 caveat resolution) because they reference literal entity IDs (e.g. company_id=demo-company, person_id=demo-person, document_version_id=demo-document-version-id, template_code=Greeting/TMP) that bootstrap_demo_tenant does not seed (it creates entities with auto-generated UUIDs). When re-introducing FLOW probes: either (a) extend bootstrap_demo_tenant to seed entities with literal IDs and a Template(code=Greeting) + TemplateVersion(version=1) + a stable DocumentVersion, or (b) parameterize scenarios.json to discover seeded entities at probe time."
+  },
+  "profiles": {
+    "pr_smoke": [
+      {
+        "name": "health",
+        "path": "/health",
+        "requests": 80,
+        "concurrency": 16,
+        "expect_status": 200,
+        "max_p95_ms": 250,
+        "max_p99_ms": 600,
+        "min_throughput": 30,
+        "max_error_rate": 0.02
+      },
+      {
+        "name": "dashboard",
+        "path": "/api/v1/dashboard/summary",
+        "requests": 60,
+        "concurrency": 12,
+        "expect_status": 200,
+        "max_p95_ms": 600,
+        "max_p99_ms": 1200,
+        "min_throughput": 15,
+        "max_error_rate": 0.02,
+        "tenant": "demo"
+      },
+      {
+        "name": "templates_list",
+        "path": "/api/v1/templates",
+        "requests": 60,
+        "concurrency": 12,
+        "expect_status": 200,
+        "max_p95_ms": 500,
+        "max_p99_ms": 1000,
+        "min_throughput": 18,
+        "max_error_rate": 0.02,
+        "tenant": "demo"
+      },
+      {
+        "name": "search_suggest",
+        "path": "/api/v1/search/suggest?q=doc",
+        "requests": 60,
+        "concurrency": 12,
+        "expect_status": 200,
+        "max_p95_ms": 450,
+        "max_p99_ms": 900,
+        "min_throughput": 18,
+        "max_error_rate": 0.02,
+        "tenant": "demo"
+      }
+    ],
+    "nightly_baseline": [
+      {
+        "name": "health",
+        "path": "/health",
+        "requests": 200,
+        "concurrency": 20,
+        "expect_status": 200,
+        "tenant": null
+      },
+      {
+        "name": "dashboard",
+        "path": "/api/v1/dashboard/summary",
+        "requests": 180,
+        "concurrency": 18,
+        "expect_status": 200,
+        "tenant": "demo"
+      },
+      {
+        "name": "templates_list",
+        "path": "/api/v1/templates",
+        "requests": 180,
+        "concurrency": 18,
+        "expect_status": 200,
+        "tenant": "demo"
+      },
+      {
+        "name": "search_suggest",
+        "path": "/api/v1/search/suggest?q=doc",
+        "requests": 180,
+        "concurrency": 18,
+        "expect_status": 200,
+        "tenant": "demo"
+      },
+      {
+        "name": "download_file",
+        "path": "/api/v1/files",
+        "requests": 120,
+        "concurrency": 12,
+        "expect_status": 200,
+        "tenant": "demo"
+      }
+    ]
+  }
+}

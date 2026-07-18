@@ -53,3 +53,23 @@ Preview preparation and apply-headers handoff are production-ready. Some generat
 - canonical upload/versioning/scope contract is documented in `docs/TEMPLATE_UPLOAD_AND_RENDERING.md`;
 - branch-specific template work uses backend `Site` as the concrete branch/facility entity;
 - template DTOs now surface `scope`, `template_type`, `current_version`, and `versions` to keep backend/frontend contracts aligned for operator workflows.
+
+## Unified orchestration state-model (2026-04-22)
+For all document generation entry points we now expose a single orchestration state payload in `PipelineRun.result_metadata.orchestration`.
+
+Canonical states:
+- `generated`
+- `headers_applied`
+- `pdf_ready`
+- `handoff_ready`
+- `failed`
+- `retrying`
+
+This model is consumed by:
+- backend task status endpoint: `GET /api/v1/documents/tasks/{task_id}`;
+- quick-generate UI timeline: `frontend/src/pages/documents/QuickGeneratePage.tsx`.
+
+Idempotency and retry semantics:
+- mutation transitions are append-only in orchestration timeline (duplicate consecutive states are deduplicated);
+- retry attempts move state to `retrying` until Celery max retries is reached;
+- terminal failure moves state to `failed` and stores a user-facing error message in `result_metadata.user_facing_error`.

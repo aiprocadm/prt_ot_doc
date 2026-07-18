@@ -62,20 +62,22 @@ async def test_stub_integrations_return_status(monkeypatch):
     frdo = get_frdo_integration()
     eisot = get_eisot_integration()
 
-    status_1c = await accounting.export_document({"demo": True})
-    status_edo = await edo.send_document(content=b"data", filename="file.pdf")
-    status_frdo = await frdo.submit_record({"user": "demo"})
-    status_eisot = await eisot.publish_report({"report": True})
+    status_1c = await accounting.export_document({"document_number": "DOC-001"})
+    status_frdo = await frdo.submit_record({"person_snils": "123-456-789 01"})
+    status_eisot = await eisot.publish_report({"report_period": "2024-01"})
+
+    # ЭДО без base_url не симулирует отправку: флаг включён, но провайдер
+    # не сконфигурирован => честный IntegrationDisabledError.
+    with pytest.raises(IntegrationDisabledError):
+        await edo.send_document(content=b"data", filename="file.pdf")
 
     assert settings.use_1c_integration is True
     assert status_1c.status in {"queued", "processed"}
-    assert status_edo.external_id.startswith("edo-")
     assert status_frdo.status == "submitted"
     assert status_eisot.status == "queued"
 
     statuses = await asyncio.gather(
         accounting.sync_status(status_1c.external_id),
-        edo.get_document_status(status_edo.external_id),
         frdo.get_record_status(status_frdo.external_id),
         eisot.get_publication_status(status_eisot.external_id),
     )

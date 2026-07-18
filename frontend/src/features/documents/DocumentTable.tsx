@@ -1,6 +1,6 @@
 import { type ColumnDef } from "@tanstack/react-table";
 import { Download } from "lucide-react";
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 
 import { RegistryTable } from "@/components/common/RegistryTable";
 import { FilterField } from "@/components/common/FilterField";
@@ -84,15 +84,21 @@ export const DocumentTable = ({ onSelect }: DocumentTableProps) => {
     [download, onSelect]
   );
 
-  const handleSearchChange = (value: string) => {
-    setFilters({ search: value || undefined });
-    list({ search: value || undefined });
-  };
+  const handleSearchChange = useCallback(
+    (value: string) => {
+      setFilters({ search: value || undefined });
+      list({ search: value || undefined });
+    },
+    [list, setFilters]
+  );
 
-  const handleStatusChange = (value: string) => {
-    setFilters({ status: (value || undefined) as DocumentStatus | undefined });
-    list({ status: (value || undefined) as DocumentStatus | undefined });
-  };
+  const handleStatusChange = useCallback(
+    (value: string) => {
+      setFilters({ status: (value || undefined) as DocumentStatus | undefined });
+      list({ status: (value || undefined) as DocumentStatus | undefined });
+    },
+    [list, setFilters]
+  );
 
   return (
     <RegistryTable

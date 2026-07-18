@@ -6,15 +6,12 @@ from io import BytesIO
 import pytest
 from docx import Document as DocxDocument
 from httpx import AsyncClient
-
-mock_aws = pytest.importorskip("moto").mock_aws
 from sqlalchemy import select
 
-import app.tasks as task_module
+import app.tasks._core as task_core
 from app.core.config import get_settings
 from app.core.security import issue_access_token
 from app.db.session import AsyncSessionLocal
-from app.domains.files import s3
 from app.models.document import (
     Document as DocumentModel,
 )
@@ -31,11 +28,19 @@ from app.models.models import (
     PipelineRun,
     PipelineRunStatus,
     RoleEnum,
+    Template,
     TemplateVersion,
+    TemplateVersionStatus,
     Tenant,
 )
+from app.modules.files import s3
 from app.tasks import celery_app
 from tests.utils.factories import TestDataFactory
+
+# moto is an optional test dependency; skip the whole module when it is absent.
+# Placed after imports (which only need always-present core deps) to keep the
+# import block at the top of the file.
+mock_aws = pytest.importorskip("moto").mock_aws
 
 DOCX_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
@@ -85,8 +90,9 @@ def override_task_session_scope(monkeypatch: pytest.MonkeyPatch, sessionmaker) -
                 await session.rollback()
                 raise
 
-    monkeypatch.setattr(task_module, "session_scope", _scope)
-    monkeypatch.setattr(task_module, "ensure_tenant_schema", lambda slug: None)
+    monkeypatch.setattr(task_core, "session_scope", _scope)
+    monkeypatch.setattr(task_core, "ensure_tenant_schema", lambda slug: None)
+
 
 def _build_template_bytes() -> bytes:
     doc = DocxDocument()
@@ -132,7 +138,9 @@ async def test_document_generation_flow(
         person_id = person.id
 
     tenant_id = str(tenant.id)
-    async with AsyncSessionLocal(tenant="public", include_public=False, create_schema=False) as public_session:
+    async with AsyncSessionLocal(
+        tenant="public", include_public=False, create_schema=False
+    ) as public_session:
         public_tenant = (
             await public_session.execute(select(Tenant.id).where(Tenant.slug == tenant.slug))
         ).scalar_one_or_none()
@@ -203,10 +211,10 @@ async def test_document_generation_flow(
         versions = (await session.execute(select(DocumentVersion))).scalars().all()
         runs = (await session.execute(select(PipelineRun))).scalars().all()
         outbox_events = (
-            await session.execute(
-                select(Outbox).where(Outbox.event_type == "DocumentGenerated")
-            )
-        ).scalars().all()
+            (await session.execute(select(Outbox).where(Outbox.event_type == "DocumentGenerated")))
+            .scalars()
+            .all()
+        )
 
     assert len(documents) == 1
     assert len(versions) == 1
@@ -304,7 +312,6 @@ async def test_document_generation_flow(
         headers=id_headers,
     )
     assert third.status_code == 202, third.text
-    third_body = third.json()
 
 
 @pytest.mark.asyncio()
@@ -334,14 +341,16 @@ async def test_document_batch_generation_csv(
         company_id = company.id
 
     tenant_id = str(tenant.id)
-    async with AsyncSessionLocal(tenant="public", include_public=False, create_schema=False) as public_session:
+    async with AsyncSessionLocal(
+        tenant="public", include_public=False, create_schema=False
+    ) as public_session:
         public_tenant = (
             await public_session.execute(select(Tenant.id).where(Tenant.slug == tenant.slug))
         ).scalar_one_or_none()
         if public_tenant is not None:
             tenant_id = str(public_tenant)
 
-    login = await async_client.post(
+    await async_client.post(
         "/api/v1/auth/login",
         json={"email": "batch@example.com", "password": "secret123"},
         headers={"x-tenant": str(tenant.id)},
@@ -412,3 +421,131 @@ async def test_document_batch_generation_csv(
         assert run.result_metadata.get("batch_id") == batch_id
         assert run.result_metadata.get("row_index") == item.row_index
         assert run.result_metadata.get("output_name") == item.output_name
+
+
+@pytest.mark.asyncio()
+async def test_documents_list_etag_returns_304_on_if_none_match(
+    async_client: AsyncClient,
+    sessionmaker,
+    data_factory: TestDataFactory,
+    make_auth_headers,
+) -> None:
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        company = await data_factory.create_company(tenant=tenant, session=session)
+        await data_factory.create_document(tenant=tenant, company=company, session=session)
+        await session.commit()
+
+    headers = await make_auth_headers(RoleEnum.ADMIN)
+    first = await async_client.get("/api/v1/documents", headers=headers)
+    assert first.status_code == 200
+    etag = first.headers.get("ETag")
+    assert etag
+
+    second = await async_client.get(
+        "/api/v1/documents",
+        headers={**headers, "If-None-Match": etag},
+    )
+    assert second.status_code == 304
+    assert second.headers.get("ETag") == etag
+
+
+@pytest.mark.asyncio()
+async def test_template_resolve_prefers_site_scope(
+    async_client: AsyncClient,
+    sessionmaker,
+    data_factory: TestDataFactory,
+    make_auth_headers,
+) -> None:
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        company = await data_factory.create_company(tenant=tenant, session=session)
+        site = await data_factory.create_site(tenant=tenant, company=company, session=session)
+
+        tenant_template = Template(
+            tenant_id=tenant.id,
+            name="Tenant Order",
+            code="order-template",
+            metadata_json={
+                "scope": {"level": "tenant"},
+                "case_types": ["employment"],
+                "template_type": "order",
+            },
+        )
+        company_template = Template(
+            tenant_id=tenant.id,
+            name="Company Order",
+            code="order-template-company",
+            metadata_json={
+                "scope": {"level": "company", "company_id": company.id},
+                "case_types": ["employment"],
+                "template_type": "order",
+            },
+        )
+        site_template = Template(
+            tenant_id=tenant.id,
+            name="Site Order",
+            code="order-template-site",
+            metadata_json={
+                "scope": {"level": "site", "company_id": company.id, "site_id": site.id},
+                "case_types": ["employment"],
+                "template_type": "order",
+            },
+        )
+        session.add_all([tenant_template, company_template, site_template])
+        await session.flush()
+
+        versions = [
+            TemplateVersion(
+                tenant_id=tenant.id,
+                template_id=tenant_template.id,
+                version=1,
+                checksum=b"tenant-v1",
+                sha256="tenant-v1",
+                status=TemplateVersionStatus.ACTIVE,
+                payload_key="templates/tenant-v1.docx",
+            ),
+            TemplateVersion(
+                tenant_id=tenant.id,
+                template_id=company_template.id,
+                version=2,
+                checksum=b"company-v2",
+                sha256="company-v2",
+                status=TemplateVersionStatus.ACTIVE,
+                payload_key="templates/company-v2.docx",
+            ),
+            TemplateVersion(
+                tenant_id=tenant.id,
+                template_id=site_template.id,
+                version=3,
+                checksum=b"site-v3",
+                sha256="site-v3",
+                status=TemplateVersionStatus.ACTIVE,
+                payload_key="templates/site-v3.docx",
+            ),
+        ]
+        session.add_all(versions)
+        await session.flush()
+        tenant_template.current_version_id = versions[0].id
+        company_template.current_version_id = versions[1].id
+        site_template.current_version_id = versions[2].id
+        await session.commit()
+
+    headers = await make_auth_headers(RoleEnum.ADMIN)
+    response = await async_client.post(
+        "/api/v1/documents/template:resolve",
+        json={
+            "case_type": "employment",
+            "document_type": "order",
+            "company_id": company.id,
+            "site_id": site.id,
+        },
+        headers=headers,
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["template_code"] == "order-template-site"
+    assert body["scope_level"] == "site"
+    assert body["template_version"] == 3
+    assert "site:exact" in body["resolution_chain"]
+    assert len(body["alternatives"]) >= 1

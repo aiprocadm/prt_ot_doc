@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import { apiClient } from "@/api/client";
+import { packsApi } from "@/api/packs";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingScreen } from "@/components/common/LoadingScreen";
@@ -28,10 +28,10 @@ const PackageProfilesPage = () => {
     setLoading(true);
     setError(null);
     try {
-      const response = await apiClient.get<Profile[]>("/package-profiles");
-      setItems(response.data);
+      const response = await packsApi.getProfiles<Profile>();
+      setItems(response);
     } catch (nextError) {
-      setError((nextError as ApiError) ?? { message: "Не удалось загрузить package profiles" });
+      setError((nextError as ApiError) ?? { message: "Не удалось загрузить профили пакетов" });
     } finally {
       setLoading(false);
     }
@@ -45,7 +45,7 @@ const PackageProfilesPage = () => {
     if (!code || !name) return;
     setError(null);
     try {
-      await apiClient.post("/package-profiles", {
+      await packsApi.createProfile({
         code,
         name,
         status: "active",
@@ -59,29 +59,29 @@ const PackageProfilesPage = () => {
       setName("");
       await load();
     } catch (nextError) {
-      setError((nextError as ApiError) ?? { message: "Не удалось создать package profile" });
+      setError((nextError as ApiError) ?? { message: "Не удалось создать профиль пакета" });
     }
   };
 
   return (
     <div className="space-y-4">
-      <Breadcrumb items={[{ label: "Главная", to: "/dashboard" }, { label: "Package profiles" }]} />
+      <Breadcrumb items={[{ label: "Главная", to: "/dashboard" }, { label: "Профили пакетов" }]} />
       <Card>
         <CardHeader>
-          <CardTitle>Package profiles</CardTitle>
+          <CardTitle>Профили пакетов</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           <ErrorState error={error ?? undefined} onRetry={() => void load()} />
-          {loading ? <LoadingScreen label="Загрузка package profiles" /> : null}
+          {loading ? <LoadingScreen label="Загрузка профилей пакетов" /> : null}
           {!loading ? (
             <div className="flex gap-2">
-              <Input value={code} onChange={(e) => setCode(e.target.value)} placeholder="code" />
-              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="name" />
-              <Button onClick={() => void createProfile()}>Create</Button>
+              <Input value={code} onChange={(e) => setCode(e.target.value)} placeholder="Код" />
+              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Название" />
+              <Button onClick={() => void createProfile()}>Создать</Button>
             </div>
           ) : null}
           {!loading && !error && items.length === 0 ? (
-            <EmptyState title="Package profiles отсутствуют" description="Создайте первый profile для работы с package presets." />
+            <EmptyState title="Профили пакетов отсутствуют" description="Создайте первый профиль для работы с пресетами пакетов." />
           ) : null}
           {!loading && items.length > 0 ? (
             <ul className="space-y-1 text-sm">

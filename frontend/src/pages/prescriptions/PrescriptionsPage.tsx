@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { opsApi, type PrescriptionDto } from "@/api/ops";
 import { EmptyState } from "@/components/common/EmptyState";
@@ -8,8 +8,12 @@ import { RegistryPageHeader } from "@/components/common/RegistryPageHeader";
 import { RegistryTable } from "@/components/common/RegistryTable";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ConflictInboxCard } from "@/components/pwa/ConflictInboxCard";
+import { MobileFieldModeCard } from "@/components/pwa/MobileFieldModeCard";
+import { SyncStatusChips } from "@/components/pwa/SyncStatusChips";
 import { useAsyncResource } from "@/hooks/useAsyncResource";
 import { useLocalRegistry } from "@/hooks/useLocalRegistry";
+import { emitSyncTelemetry, resolveSyncState } from "@/pwa/sync";
 import { formatDate } from "@/utils/datetime";
 
 const PrescriptionsPage = () => {
@@ -19,6 +23,27 @@ const PrescriptionsPage = () => {
     initialData: [],
     errorMessage: "Не удалось загрузить предписания"
   });
+  const [online, setOnline] = useState(() => (typeof navigator === "undefined" ? true : navigator.onLine));
+  const [hasConflict, setHasConflict] = useState(false);
+  const syncState = resolveSyncState({ online, loading, hasConflict, hasError: Boolean(error) });
+
+  useEffect(() => {
+    const onOnline = () => setOnline(true);
+    const onOffline = () => setOnline(false);
+    window.addEventListener("online", onOnline);
+    window.addEventListener("offline", onOffline);
+    return () => {
+      window.removeEventListener("online", onOnline);
+      window.removeEventListener("offline", onOffline);
+    };
+  }, []);
+
+  useEffect(() => {
+    emitSyncTelemetry({ type: "sync_state_changed", state: syncState, screen: "prescriptions" });
+    if (error?.message) {
+      emitSyncTelemetry({ type: "sync_error", screen: "prescriptions", message: error.message });
+    }
+  }, [error?.message, syncState]);
 
   const registry = useLocalRegistry({
     items,
@@ -34,8 +59,17 @@ const PrescriptionsPage = () => {
     <div className="space-y-4">
       <RegistryPageHeader
         title="Предписания"
-        description="Операционный реестр предписаний из backend `/prescriptions` с tenant-aware фильтрацией, поиском и постраничной навигацией."
+        description="Операционный реестр предписаний из backend `/prescriptions` с фильтрацией по тенанту, поиском и постраничной навигацией."
       />
+      <div className="grid gap-3 lg:grid-cols-3">
+        <Card>
+          <CardContent className="pt-4">
+            <SyncStatusChips state={syncState} />
+          </CardContent>
+        </Card>
+        <ConflictInboxCard onConflictStateChange={setHasConflict} />
+        <MobileFieldModeCard />
+      </div>
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Открытые и закрытые предписания</CardTitle>

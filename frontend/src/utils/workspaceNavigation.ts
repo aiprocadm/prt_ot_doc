@@ -93,6 +93,18 @@ const BLOCKER_LINKS: Record<string, string> = {
   contracts_expired: "/contracts",
 };
 
+/** Подпись ссылки «куда исправлять» — понятнее общего «Открыть рабочий экран». */
+const BLOCKER_ACTION_LABELS: Record<string, string> = {
+  employees_missing_contacts: "Открыть реестр сотрудников",
+  templates_not_ready: "Открыть шаблоны",
+  training_overdue: "Открыть задачи по обучению",
+  ppe_expired: "Открыть СИЗ",
+  contracts_expired: "Открыть договоры",
+};
+
 export const blockerActionPath = (blockerCode: string, entityType: string) => {
   return BLOCKER_LINKS[blockerCode] ?? entityContextPath(entityType) ?? "/";
 };
+
+export const blockerActionLabel = (blockerCode: string) =>
+  BLOCKER_ACTION_LABELS[blockerCode] ?? "Открыть рабочий экран";

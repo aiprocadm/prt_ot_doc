@@ -8,10 +8,9 @@ def test_risk_unprocessable_returns_structured_detail() -> None:
 
     assert isinstance(exc, HTTPException)
     assert exc.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
-    assert exc.detail == {
-        "code": "risk_validation_error",
-        "message": "invalid risk_level filter",
-    }
+    assert exc.detail["code"] == "RISK_VALIDATION_ERROR"
+    assert exc.detail["error_code"] == "RISK_VALIDATION_ERROR"
+    assert exc.detail["message"] == "invalid risk_level filter"
 
 
 def test_risk_bad_request_returns_structured_detail() -> None:
@@ -19,7 +18,6 @@ def test_risk_bad_request_returns_structured_detail() -> None:
 
     assert isinstance(exc, HTTPException)
     assert exc.status_code == status.HTTP_400_BAD_REQUEST
-    assert exc.detail == {
-        "code": "risk_bad_request",
-        "message": "hazard_code and before are required",
-    }
+    assert exc.detail["code"] == "RISK_BAD_REQUEST"
+    assert exc.detail["error_code"] == "RISK_BAD_REQUEST"
+    assert exc.detail["message"] == "hazard_code and before are required"

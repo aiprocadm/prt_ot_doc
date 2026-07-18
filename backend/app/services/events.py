@@ -29,6 +29,18 @@ class EventType(str, enum.Enum):
     INCIDENT_CREATED = "IncidentCreated"
     INSPECTION_CREATED = "InspectionCreated"
     PRESCRIPTION_OVERDUE = "PrescriptionOverdue"
+    MEDICAL_EXAM_RECORDED = "MedicalExamRecorded"
+    PERSON_SUSPENDED = "PersonSuspended"
+    PERSON_REINSTATED = "PersonReinstated"
+    CONTRACTOR_READINESS_BLOCKED = "contractor.readiness_blocked"
+    CONTRACTOR_READINESS_WARNING = "contractor.readiness_warning"
+    CONTRACTOR_DOCUMENT_EXPIRING = "contractor.document_expiring"
+    CONTRACTOR_DOCUMENT_EXPIRED = "contractor.document_expired"
+    PPE_WRITTEN_OFF = "PPEWrittenOff"
+    PPE_REPLACEMENT_DUE = "PPEReplacementDue"
+    PEP_SIGNED = "PEPSigned"
+    PEP_DECLINED = "PEPDeclined"
+    RULE_TRIGGERED = "rule.triggered"
 
 
 class BaseEventPayload(BaseModel):
@@ -116,6 +128,38 @@ class PPEReturnedPayload(BaseEventPayload):
     status: str
 
 
+class PPEWrittenOffPayload(BaseEventPayload):
+    ppe_issue_id: str
+    person_id: str
+    item_id: str | None
+    quantity: int
+    reason: str | None = None
+    status: str
+
+
+class PPEReplacementDuePayload(BaseEventPayload):
+    ppe_issue_id: str
+    person_id: str
+    item_id: str | None
+    item_name: str
+    expires_at: datetime
+    status: str
+
+
+class PEPSignedPayload(BaseEventPayload):
+    signature_request_id: str
+    object_type: str
+    object_id: str
+    purpose: str
+    signer_user_id: str | None = None
+    signer_person_id: str | None = None
+
+
+class PEPDeclinedPayload(BaseEventPayload):
+    signature_request_id: str
+    reason: str | None = None
+
+
 class TrainingAssignedPayload(BaseEventPayload):
     training_event_id: str
     plan_id: str
@@ -180,6 +224,34 @@ class TaskDuePayload(BaseEventPayload):
     overdue: bool = False
 
 
+class MedicalExamRecordedPayload(BaseEventPayload):
+    exam_id: str
+    person_id: str
+    exam_kind: str | None = None
+    fitness: str | None = None
+    valid_until: date | None = None
+
+
+class PersonSuspendedPayload(BaseEventPayload):
+    suspension_id: str
+    person_id: str
+    reason: str
+    source_exam_id: str | None = None
+
+
+class PersonReinstatedPayload(BaseEventPayload):
+    suspension_id: str
+    person_id: str
+
+
+class RuleTriggeredPayload(BaseEventPayload):
+    rule_id: str
+    rule_name: str
+    source_event_type: str
+    source_event_key: str
+    source_payload: Mapping[str, Any] = Field(default_factory=dict)
+
+
 _PAYLOADS: dict[EventType, type[BaseEventPayload]] = {
     EventType.DOCUMENT_CREATED: DocumentCreatedPayload,
     EventType.DOCUMENT_GENERATED: DocumentGeneratedPayload,
@@ -190,6 +262,10 @@ _PAYLOADS: dict[EventType, type[BaseEventPayload]] = {
     EventType.RISK_ASSESSED: RiskAssessedPayload,
     EventType.PPE_ISSUED: PPEIssuedPayload,
     EventType.PPE_RETURNED: PPEReturnedPayload,
+    EventType.PPE_WRITTEN_OFF: PPEWrittenOffPayload,
+    EventType.PPE_REPLACEMENT_DUE: PPEReplacementDuePayload,
+    EventType.PEP_SIGNED: PEPSignedPayload,
+    EventType.PEP_DECLINED: PEPDeclinedPayload,
     EventType.TRAINING_COMPLETED: TrainingCompletedPayload,
     EventType.TRAINING_ASSIGNED: TrainingAssignedPayload,
     EventType.TASK_DUE_SOON: TaskDuePayload,
@@ -202,6 +278,14 @@ _PAYLOADS: dict[EventType, type[BaseEventPayload]] = {
     EventType.INCIDENT_CREATED: IncidentCreatedPayload,
     EventType.INSPECTION_CREATED: InspectionCreatedPayload,
     EventType.PRESCRIPTION_OVERDUE: PrescriptionOverduePayload,
+    EventType.MEDICAL_EXAM_RECORDED: MedicalExamRecordedPayload,
+    EventType.PERSON_SUSPENDED: PersonSuspendedPayload,
+    EventType.PERSON_REINSTATED: PersonReinstatedPayload,
+    EventType.CONTRACTOR_READINESS_BLOCKED: InternalEventPayload,
+    EventType.CONTRACTOR_READINESS_WARNING: InternalEventPayload,
+    EventType.CONTRACTOR_DOCUMENT_EXPIRING: InternalEventPayload,
+    EventType.CONTRACTOR_DOCUMENT_EXPIRED: InternalEventPayload,
+    EventType.RULE_TRIGGERED: RuleTriggeredPayload,
 }
 
 
@@ -246,6 +330,14 @@ def dedupe_key_for(event_type: EventType, payload: BaseEventPayload) -> str:
         return payload.ppe_issue_id
     if isinstance(payload, PPEReturnedPayload):
         return f"{payload.ppe_issue_id}:returned"
+    if isinstance(payload, PPEWrittenOffPayload):
+        return f"{payload.ppe_issue_id}:written_off"
+    if isinstance(payload, PPEReplacementDuePayload):
+        return f"{payload.ppe_issue_id}:replacement_due"
+    if isinstance(payload, PEPSignedPayload):
+        return f"{payload.signature_request_id}:pep_signed"
+    if isinstance(payload, PEPDeclinedPayload):
+        return f"{payload.signature_request_id}:pep_declined"
     if isinstance(payload, TrainingCompletedPayload):
         return payload.training_event_id
     if isinstance(payload, TrainingAssignedPayload):
@@ -254,10 +346,16 @@ def dedupe_key_for(event_type: EventType, payload: BaseEventPayload) -> str:
         return payload.prescription_id
     if isinstance(payload, TaskDuePayload):
         return payload.task_id
+    if isinstance(payload, RuleTriggeredPayload):
+        return f"rule-triggered:{payload.rule_id}:{payload.source_event_key}"
     if isinstance(payload, InternalEventPayload):
         return payload.event_id or f"internal:{event_type.value}:{payload.occurred_at.isoformat()}"
     if isinstance(payload, IncidentCreatedPayload):
         return payload.incident_id
     if isinstance(payload, InspectionCreatedPayload):
         return payload.inspection_id
+    if isinstance(payload, MedicalExamRecordedPayload):
+        return payload.exam_id
+    if isinstance(payload, (PersonSuspendedPayload, PersonReinstatedPayload)):
+        return payload.suspension_id
     raise ValueError(f"Unsupported event payload for {event_type.value}")

@@ -9,6 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useAuditStore } from "@/stores/audit";
 import { AuditTable } from "@/features/audit/AuditTable";
+import { ROUTES } from "@/router/routes";
 
 const AuditPage = () => {
   const { setFilters, list, filters, items, loading, error } = useAuditStore();
@@ -25,7 +26,7 @@ const AuditPage = () => {
 
   return (
     <div className="space-y-6">
-      <Breadcrumb items={[{ label: "Главная", to: "/" }, { label: "Аудит" }]} />
+      <Breadcrumb items={[{ label: "Главная", to: ROUTES.DASHBOARD }, { label: "Аудит" }]} />
       <Card>
         <CardContent className="flex flex-wrap items-end gap-4 py-6">
           <div className="flex flex-col gap-2">

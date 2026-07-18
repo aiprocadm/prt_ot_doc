@@ -11,12 +11,9 @@ from tests.utils.factories import TestDataFactory
 
 
 @pytest.mark.asyncio
-async def test_outbox_enqueue_is_idempotent(
-    sessionmaker, data_factory: TestDataFactory
-) -> None:
+async def test_outbox_enqueue_is_idempotent(sessionmaker, data_factory: TestDataFactory) -> None:
     async with sessionmaker() as session:
         tenant = await data_factory.ensure_tenant(session=session)
-        tenant_id = str(tenant.id)
         outbox = OutboxService(session)
         payload = {
             "tenant_id": str(tenant.id),
@@ -47,13 +44,17 @@ async def test_outbox_enqueue_is_idempotent(
 
     async with sessionmaker() as session:
         entries = (
-            await session.execute(
-                select(Outbox).where(
-                    Outbox.tenant_id == str(tenant.id),
-                    Outbox.event_type == "DocumentCreated",
+            (
+                await session.execute(
+                    select(Outbox).where(
+                        Outbox.tenant_id == str(tenant.id),
+                        Outbox.event_type == "DocumentCreated",
+                    )
                 )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         assert len(entries) == 1
 
 

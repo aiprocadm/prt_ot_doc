@@ -79,15 +79,29 @@ def _extract_message_and_details(exc: StarletteHTTPException) -> tuple[str, Mapp
 
 
 def _resolve_error_code(status_code: int) -> str:
-    if status_code == status.HTTP_403_FORBIDDEN:
-        return "forbidden"
-    if status_code == status.HTTP_404_NOT_FOUND:
-        return "not_found"
-    if status_code == status.HTTP_422_UNPROCESSABLE_ENTITY:
-        return "validation_error"
-    if status.HTTP_400_BAD_REQUEST <= status_code < 500:
-        return f"http_{status_code}"
-    return "internal"
+    """Машинный код ошибки в стиле SCREAMING_SNAKE (единый контракт API)."""
+
+    if status.HTTP_500_INTERNAL_SERVER_ERROR <= status_code < 600:
+        return "INTERNAL_ERROR"
+    mapping: dict[int, str] = {
+        status.HTTP_400_BAD_REQUEST: "BAD_REQUEST",
+        status.HTTP_401_UNAUTHORIZED: "UNAUTHORIZED",
+        status.HTTP_402_PAYMENT_REQUIRED: "PAYMENT_REQUIRED",
+        status.HTTP_403_FORBIDDEN: "FORBIDDEN",
+        status.HTTP_404_NOT_FOUND: "NOT_FOUND",
+        status.HTTP_405_METHOD_NOT_ALLOWED: "METHOD_NOT_ALLOWED",
+        status.HTTP_408_REQUEST_TIMEOUT: "REQUEST_TIMEOUT",
+        status.HTTP_409_CONFLICT: "CONFLICT",
+        status.HTTP_410_GONE: "GONE",
+        status.HTTP_413_REQUEST_ENTITY_TOO_LARGE: "PAYLOAD_TOO_LARGE",
+        status.HTTP_415_UNSUPPORTED_MEDIA_TYPE: "UNSUPPORTED_MEDIA_TYPE",
+        status.HTTP_422_UNPROCESSABLE_ENTITY: "VALIDATION_ERROR",
+        status.HTTP_429_TOO_MANY_REQUESTS: "TOO_MANY_REQUESTS",
+        status.HTTP_502_BAD_GATEWAY: "BAD_GATEWAY",
+        status.HTTP_503_SERVICE_UNAVAILABLE: "SERVICE_UNAVAILABLE",
+        status.HTTP_504_GATEWAY_TIMEOUT: "GATEWAY_TIMEOUT",
+    }
+    return mapping.get(status_code, f"HTTP_{status_code}")
 
 
 def _resolve_error_type(status_code: int, details: Mapping[str, Any] | None = None) -> str:
@@ -124,6 +138,25 @@ def _extract_field_errors(errors: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return normalized
 
 
+def _json_safe(value: Any) -> Any:
+    """Recursively coerce *value* into JSON-serializable primitives.
+
+    Pydantic v2 embeds raw exception objects in ``exc.errors()`` — e.g. the
+    ``ValueError`` raised by a ``@model_validator`` lands under ``ctx["error"]``.
+    Such objects break :class:`JSONResponse` rendering with
+    ``TypeError: Object of type ValueError is not JSON serializable``, so any
+    non-primitive leaf is stringified before it reaches the encoder.
+    """
+
+    if value is None or isinstance(value, (str, bool, int, float)):
+        return value
+    if isinstance(value, Mapping):
+        return {str(key): _json_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [_json_safe(item) for item in value]
+    return str(value)
+
+
 def _is_json_payload_error(exc: RequestValidationError) -> bool:
     json_error_types = {"json_invalid", "type_error.jsondecode"}
     for error in exc.errors():
@@ -143,10 +176,14 @@ def _build_response(
     trace_header: str,
     headers: Mapping[str, str] | None = None,
     detail_payload: Any | None = None,
+    error_type: str | None = None,
 ) -> JSONResponse:
+    resolved_error_type = (
+        error_type if error_type is not None else _resolve_error_type(status_code, details)
+    )
     payload = ErrorPayload(
         code=code,
-        error_type=_resolve_error_type(status_code, details),
+        error_type=resolved_error_type,
         message=message,
         details=details,
         field_errors=field_errors or [],
@@ -195,7 +232,7 @@ async def _enforce_json_limit(
     details = {"limit": settings.json_max_bytes, "size": len(body)}
     return _build_response(
         status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-        code="payload_too_large",
+        code="PAYLOAD_TOO_LARGE",
         message=message,
         details=details,
         field_errors=[],
@@ -270,7 +307,7 @@ def register_exception_handlers(app: FastAPI) -> None:
                 message = "Rate limit exceeded"
             return _build_response(
                 status_code=exc.status_code,
-                code="rate_limit_exceeded",
+                code="RATE_LIMIT_EXCEEDED",
                 message=message,
                 details=details,
                 field_errors=[],
@@ -286,16 +323,16 @@ def _handle_validation_error(
     trace_id: str,
     trace_header: str,
 ) -> JSONResponse:
-    errors = exc.errors()
+    errors = _json_safe(exc.errors())
     details = {"errors": errors}
     field_errors = _extract_field_errors(errors)
     if _is_json_payload_error(exc):
         message = "Invalid JSON payload"
-        code = "invalid_json"
+        code = "INVALID_JSON"
         status_code = status.HTTP_400_BAD_REQUEST
     else:
         message = "Request validation failed"
-        code = "validation_error"
+        code = "VALIDATION_ERROR"
         status_code = status.HTTP_422_UNPROCESSABLE_ENTITY
 
     LOGGER.info(
@@ -315,7 +352,7 @@ def _handle_validation_error(
         field_errors=field_errors,
         trace_id=trace_id,
         trace_header=trace_header,
-        detail_payload=exc.errors(),
+        detail_payload=errors,
     )
 
 
@@ -329,12 +366,15 @@ def _handle_http_exception(
     custom_details: Mapping[str, Any] | None = details
     field_errors: list[dict[str, Any]] = []
     code_override: str | None = None
+    error_type_override: str | None = None
 
     if isinstance(details, Mapping):
         mutable = dict(details)
-        candidate = mutable.get("code")
+        candidate = mutable.get("code") or mutable.get("error_code")
         if isinstance(candidate, str) and candidate.strip():
-            code_override = mutable.pop("code", None)
+            code_override = candidate.strip()
+            mutable.pop("code", None)
+            mutable.pop("error_code", None)
         if mutable.get("message") == message:
             mutable.pop("message")
         if mutable.get("detail") == message:
@@ -342,6 +382,18 @@ def _handle_http_exception(
         raw_field_errors = mutable.pop("field_errors", [])
         if isinstance(raw_field_errors, list):
             field_errors = [item for item in raw_field_errors if isinstance(item, dict)]
+        legacy_field = mutable.pop("field", None)
+        if isinstance(legacy_field, str) and legacy_field.strip() and not field_errors:
+            field_errors = [
+                {
+                    "field": legacy_field.strip(),
+                    "message": message,
+                    "type": "validation_error",
+                }
+            ]
+        error_type_override = _resolve_error_type(exc.status_code, mutable)
+        for drop in ("correlation_id", "timestamp", "type"):
+            mutable.pop(drop, None)
         custom_details = mutable
 
     code = code_override or _resolve_error_code(exc.status_code)
@@ -377,6 +429,7 @@ def _handle_http_exception(
         trace_header=trace_header,
         headers=exc.headers,
         detail_payload=exc.detail,
+        error_type=error_type_override,
     )
 
 
@@ -396,8 +449,8 @@ def _handle_unexpected_exception(
     )
     return _build_response(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        code="internal",
-        message="Internal Server Error",
+        code="INTERNAL_ERROR",
+        message="Internal server error",
         details={},
         field_errors=[],
         trace_id=trace_id,
@@ -405,4 +458,29 @@ def _handle_unexpected_exception(
     )
 
 
-__all__ = ["register_exception_handlers", "TRACE_HEADER"]
+def json_error_response_for_request(
+    request: Request,
+    *,
+    status_code: int,
+    code: str,
+    message: str,
+    details: Mapping[str, Any] | None = None,
+    field_errors: list[dict[str, Any]] | None = None,
+) -> JSONResponse:
+    """Публичный JSON-ответ с телом контракта :mod:`app.api.error_handlers` (для middleware и утилит)."""
+
+    settings = getattr(request.app.state, "settings", None) or get_settings()
+    trace_header = settings.trace_header_name
+    trace_id = get_trace_id(request, trace_header)
+    return _build_response(
+        status_code=status_code,
+        code=code,
+        message=message,
+        details=dict(details) if details else {},
+        field_errors=field_errors or [],
+        trace_id=trace_id,
+        trace_header=trace_header,
+    )
+
+
+__all__ = ["register_exception_handlers", "TRACE_HEADER", "json_error_response_for_request"]

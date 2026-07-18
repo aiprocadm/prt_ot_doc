@@ -11,6 +11,7 @@ from typing import Sequence, Union
 
 import sqlalchemy as sa
 from alembic import op
+from sqlalchemy.dialects import postgresql
 
 revision: str = "20250601_tenant_quotas_and_counters"
 down_revision: Union[str, None] = "20250501_reliability_outbox_webhook_delivery"
@@ -18,10 +19,24 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
+# tenant kind ENUM is materialized via explicit .create() because op.add_column
+# does NOT auto-emit CREATE TYPE on Postgres (only op.create_table does).
+# Without this, `op.add_column("tenant", sa.Column("kind", sa.Enum(...)))` fails
+# with UndefinedObjectError: type "tenantkind" does not exist on alembic-postgres-upgrade.
+tenant_kind = postgresql.ENUM(
+    "customer",
+    "branch",
+    "contractor",
+    name="tenantkind",
+    create_type=False,
+)
+
+
 def upgrade() -> None:
+    tenant_kind.create(op.get_bind(), checkfirst=True)
     op.add_column("tenant", sa.Column("code", sa.String(length=64), nullable=True))
     op.add_column("tenant", sa.Column("parent_id", sa.String(length=36), nullable=True))
-    op.add_column("tenant", sa.Column("kind", sa.Enum("customer", "branch", "contractor", name="tenantkind"), nullable=True))
+    op.add_column("tenant", sa.Column("kind", tenant_kind, nullable=True))
     op.add_column("tenant", sa.Column("schema_name", sa.String(length=128), nullable=True))
     op.create_foreign_key("fk_tenant_parent", "tenant", "tenant", ["parent_id"], ["id"])
     op.create_unique_constraint("uq_tenants_code", "tenant", ["code"])
@@ -35,14 +50,19 @@ def upgrade() -> None:
 
     with op.batch_alter_table("tenant") as batch:
         batch.alter_column("code", existing_type=sa.String(length=64), nullable=False)
-        batch.alter_column("kind", existing_type=sa.Enum("customer", "branch", "contractor", name="tenantkind"), nullable=False)
+        batch.alter_column("kind", existing_type=tenant_kind, nullable=False)
         batch.alter_column("schema_name", existing_type=sa.String(length=128), nullable=False)
 
     op.create_table(
         "tenant_quotas",
         sa.Column("tenant_id", sa.String(length=36), nullable=False),
         sa.Column("max_parallel_jobs", sa.Integer(), nullable=False, server_default=sa.text("4")),
-        sa.Column("max_doc_generations_per_month", sa.Integer(), nullable=False, server_default=sa.text("5000")),
+        sa.Column(
+            "max_doc_generations_per_month",
+            sa.Integer(),
+            nullable=False,
+            server_default=sa.text("5000"),
+        ),
         sa.Column("max_storage_mb", sa.Integer(), nullable=False, server_default=sa.text("10240")),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),

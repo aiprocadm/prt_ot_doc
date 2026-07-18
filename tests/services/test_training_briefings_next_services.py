@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import uuid
 from datetime import date, datetime, timezone
 
 import pytest
@@ -145,6 +146,60 @@ async def test_offline_sync_rejects_completed_conflict(sessionmaker) -> None:
 
 
 @pytest.mark.anyio
+async def test_offline_sync_fails_when_briefing_entry_other_tenant(sessionmaker) -> None:
+    async with sessionmaker() as session:
+        tenant_a = await _tenant_id(session)
+        tenant_b = str(uuid.uuid4())
+        session.add(
+            Tenant(
+                id=tenant_b,
+                slug=f"sync-other-{tenant_b[:8]}",
+                name="Other tenant",
+                contact_email="other@example.com",
+            )
+        )
+        await session.flush()
+
+        journal = BriefingJournal(
+            tenant_id=tenant_a,
+            code="BJ-CROSS",
+            title="Cross journal",
+            journal_type="workplace",
+            status="active",
+        )
+        session.add(journal)
+        await session.flush()
+        entry = BriefingEntry(
+            tenant_id=tenant_a,
+            briefing_journal_id=journal.id,
+            briefing_template_id=None,
+            briefing_type="repeat",
+            briefing_date=datetime.now(tz=timezone.utc),
+            status="draft",
+        )
+        session.add(entry)
+        await session.flush()
+
+        batch = OfflineSyncBatch(
+            tenant_id=tenant_b,
+            user_id="user-1",
+            device_id="dev-cross",
+            entity_type="briefing_entry",
+            payload={"entity_type": "briefing_entry", "id": entry.id},
+            status="pending",
+        )
+        session.add(batch)
+        await session.flush()
+
+        result = await OfflineSyncService().apply_batch(session, batch)
+        assert result.status == "failed"
+        assert result.error_payload == {
+            "error": "tenant_scope_mismatch",
+            "entity": "briefing_entry",
+        }
+
+
+@pytest.mark.anyio
 async def test_registry_dispatch_updates_certificate_status(sessionmaker) -> None:
     async with sessionmaker() as session:
         tenant_id = await _tenant_id(session)
@@ -179,8 +234,60 @@ async def test_registry_dispatch_updates_certificate_status(sessionmaker) -> Non
         assert certificate.external_registry_payload is not None
 
         jobs = (
-            await session.execute(
-                select(ExternalRegistryJob).where(ExternalRegistryJob.tenant_id == tenant_id)
+            (
+                await session.execute(
+                    select(ExternalRegistryJob).where(ExternalRegistryJob.tenant_id == tenant_id)
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         assert len(jobs) == 1
+
+
+@pytest.mark.anyio
+async def test_registry_dispatch_does_not_update_certificate_other_tenant(sessionmaker) -> None:
+    async with sessionmaker() as session:
+        tenant_a = await _tenant_id(session)
+        tenant_b = str(uuid.uuid4())
+        session.add(
+            Tenant(
+                id=tenant_b,
+                slug=f"reg-other-{tenant_b[:8]}",
+                name="Registry other",
+                contact_email="reg-other@example.com",
+            )
+        )
+        await session.flush()
+
+        program = TrainingProgram(
+            tenant_id=tenant_a,
+            code="OT-REG-X",
+            title="OT Reg X",
+            category="ot",
+            kind="program",
+            status="active",
+        )
+        session.add(program)
+        await session.flush()
+
+        certificate = TrainingCertificate(
+            tenant_id=tenant_a,
+            code="CERT-REG-X",
+            training_program_id=program.id,
+            issued_at=date.today(),
+            status="active",
+            external_registry_status="pending",
+            external_registry_payload=None,
+        )
+        session.add(certificate)
+        await session.flush()
+        cert_id = certificate.id
+
+        service = ExternalRegistryDispatchService()
+        job = await service.enqueue(session, tenant_b, "certificate", cert_id, "frdo")
+        await service.dispatch(session, job)
+        await session.refresh(certificate)
+
+        assert certificate.external_registry_status == "pending"
+        assert certificate.external_registry_payload is None

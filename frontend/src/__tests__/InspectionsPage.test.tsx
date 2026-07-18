@@ -76,6 +76,8 @@ describe("InspectionsPage", () => {
     await waitFor(() => {
       expect(screen.getByText("Роструд")).toBeInTheDocument();
     });
+    expect(screen.getByText("Плановая")).toBeInTheDocument();
+    expect(screen.getAllByText("Запланирована").length).toBeGreaterThan(0);
     expect(listMock).toHaveBeenCalledOnce();
   });
 

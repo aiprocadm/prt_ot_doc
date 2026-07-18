@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 from typing import Annotated
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.audit_decorator import audit_operation
-from app.core.security import AccessContext, rbac
+from app.core.security import AccessContext, abac, rbac
 from app.core.tenant_validation import TenantContextValidator
 from app.models.models import Tenant
 from app.modules.notifications import (
@@ -27,8 +28,49 @@ SessionDep = Annotated[AsyncSession, Depends(get_session)]
 TenantDep = Annotated[Tenant, Depends(get_tenant_record)]
 AccessDep = Annotated[AccessContext, Depends(rbac())]
 
+# The per-user inbox / settings endpoints stay authn-only (`AccessDep`) — they are
+# scoped by `access.user.id`. Notification *templates* are tenant-wide config, so
+# they get least-privilege role gating mirroring 618614d9: read = MGMT_READ,
+# write = DOC_WRITE.
+_TEMPLATE_READ_ROLES = [
+    "admin",
+    "owner",
+    "hr",
+    "line_manager",
+    "manager",
+    "ot_pb_lead",
+    "ot_head",
+    "ot_specialist",
+    "pb_engineer",
+    "accountant",
+    "auditor_ro",
+]
+_TEMPLATE_WRITE_ROLES = ["admin", "owner", "ot_specialist"]
 
-def _service(session: AsyncSession, tenant: Tenant, access: AccessContext) -> NotificationApplicationService:
+
+def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> UUID | None:
+    return getattr(tenant, "id", None)
+
+
+TemplateReadAccess = Depends(
+    abac(
+        _tenant_resource_id,
+        required_roles=_TEMPLATE_READ_ROLES,
+        action="read notification templates",
+    )
+)
+TemplateWriteAccess = Depends(
+    abac(
+        _tenant_resource_id,
+        required_roles=_TEMPLATE_WRITE_ROLES,
+        action="manage notification templates",
+    )
+)
+
+
+def _service(
+    session: AsyncSession, tenant: Tenant, access: AccessContext
+) -> NotificationApplicationService:
     return NotificationApplicationService(session=session, tenant=tenant, user_id=access.user.id)
 
 
@@ -97,7 +139,7 @@ async def put_settings_alias(
 async def list_templates(
     session: SessionDep,
     tenant: TenantDep,
-    access: AccessDep,
+    access: AccessContext = TemplateReadAccess,
     channel: str | None = Query(default=None),
     type: str | None = Query(default=None),
 ) -> list[NotificationTemplateOut]:
@@ -115,7 +157,7 @@ async def upsert_template(
     payload: NotificationTemplateIn,
     session: SessionDep,
     tenant: TenantDep,
-    access: AccessDep,
+    access: AccessContext = TemplateWriteAccess,
 ) -> NotificationTemplateOut:
     TenantContextValidator.ensure_tenant_context(tenant)
 

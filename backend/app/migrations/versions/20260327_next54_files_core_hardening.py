@@ -19,17 +19,23 @@ def upgrade() -> None:
     op.execute("UPDATE files SET bucket = 'ptd' WHERE bucket IS NULL OR bucket = 'main'")
 
     with op.batch_alter_table("files") as batch_op:
-        batch_op.create_index("ix_files_tenant_object_key", ["tenant_id", "object_key"], unique=True)
+        batch_op.create_index(
+            "ix_files_tenant_object_key", ["tenant_id", "object_key"], unique=True
+        )
 
     with op.batch_alter_table("file_download_logs") as batch_op:
-        batch_op.add_column(sa.Column("action", sa.String(length=32), nullable=True, server_default="presigned_url_issued"))
+        batch_op.add_column(
+            sa.Column(
+                "action", sa.String(length=32), nullable=True, server_default="presigned_url_issued"
+            )
+        )
 
-    op.execute(
-        "UPDATE file_download_logs SET action = 'presigned_url_issued' WHERE action IS NULL"
-    )
+    op.execute("UPDATE file_download_logs SET action = 'presigned_url_issued' WHERE action IS NULL")
     with op.batch_alter_table("file_download_logs") as batch_op:
         batch_op.alter_column("action", existing_type=sa.String(length=32), nullable=False)
-        batch_op.create_index("ix_file_download_logs_tenant_created_at", ["tenant_id", "created_at"], unique=False)
+        batch_op.create_index(
+            "ix_file_download_logs_tenant_created_at", ["tenant_id", "created_at"], unique=False
+        )
 
 
 def downgrade() -> None:

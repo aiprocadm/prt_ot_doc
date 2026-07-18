@@ -27,7 +27,10 @@ def _docx_stub() -> bytes:
 
 
 def main() -> None:
-    tenant = SimpleNamespace(id="tenant-smoke", settings={"branding": {"watermark_text": "DRAFT", "watermark_enabled": True}})
+    tenant = SimpleNamespace(
+        id="tenant-smoke",
+        settings={"branding": {"watermark_text": "DRAFT", "watermark_enabled": True}},
+    )
     company = SimpleNamespace(
         id="company-smoke",
         name="АО Полигон",
@@ -57,7 +60,11 @@ def main() -> None:
         id="site-smoke",
         name="Филиал Север",
         address="г. Мурманск, ул. Ледовая, 1",
-        branding_payload={"branch_label": "Северный филиал", "watermark_text": "FOR-APPROVAL", "watermark_enabled": True},
+        branding_payload={
+            "branch_label": "Северный филиал",
+            "watermark_text": "FOR-APPROVAL",
+            "watermark_enabled": True,
+        },
         updated_at=None,
     )
     preset = SimpleNamespace(

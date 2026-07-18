@@ -12,18 +12,17 @@ from .interfaces import (
     BaseEDOIntegration,
     BaseEISOTIntegration,
     BaseFRDOIntegration,
+    IntegrationContractError,
     IntegrationDisabledError,
+    IntegrationErrorContract,
     IntegrationStatus,
 )
+from .pilot_adapters import PilotAccountingIntegration, PilotEISOTIntegration, PilotFRDOIntegration
 from .stubs import (
     DisabledAccountingIntegration,
     DisabledEDOIntegration,
     DisabledEISOTIntegration,
     DisabledFRDOIntegration,
-    StubAccountingIntegration,
-    StubEDOIntegration,
-    StubEISOTIntegration,
-    StubFRDOIntegration,
 )
 
 __all__ = [
@@ -31,16 +30,17 @@ __all__ = [
     "BaseEDOIntegration",
     "BaseEISOTIntegration",
     "BaseFRDOIntegration",
+    "IntegrationContractError",
     "IntegrationDisabledError",
+    "IntegrationErrorContract",
     "IntegrationStatus",
     "DisabledAccountingIntegration",
     "DisabledEDOIntegration",
     "DisabledEISOTIntegration",
     "DisabledFRDOIntegration",
-    "StubAccountingIntegration",
-    "StubEDOIntegration",
-    "StubEISOTIntegration",
-    "StubFRDOIntegration",
+    "PilotAccountingIntegration",
+    "PilotFRDOIntegration",
+    "PilotEISOTIntegration",
     "get_accounting_integration",
     "get_edo_integration",
     "get_eisot_integration",

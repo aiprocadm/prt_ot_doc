@@ -1,0 +1,214 @@
+# E2E smoke workflow:
+# 1) обязательный minimal smoke без внешних credentials;
+# 2) расширенный credential stage: локальный deterministic bootstrap + доп. secrets-маршрут.
+name: E2E smoke (Playwright)
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 5 * * 1"
+
+jobs:
+  playwright-smoke-minimal:
+    name: Minimal smoke (mandatory)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install Playwright browsers
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Run mandatory smoke subset (no creds)
+        working-directory: frontend
+        env:
+          E2E_START_SERVER: "1"
+        run: |
+          npm run e2e -- --grep "mandatory \(no external creds\)"
+
+  resolve-credential-matrix:
+    name: Resolve credential matrix
+    needs: playwright-smoke-minimal
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.gen.outputs.matrix }}
+    steps:
+      - id: gen
+        env:
+          E2E_USER_EMAIL: ${{ secrets.E2E_USER_EMAIL }}
+          E2E_USER_PASSWORD: ${{ secrets.E2E_USER_PASSWORD }}
+          E2E_LIMITED_USER_EMAIL: ${{ secrets.E2E_LIMITED_USER_EMAIL }}
+          E2E_LIMITED_USER_PASSWORD: ${{ secrets.E2E_LIMITED_USER_PASSWORD }}
+        run: |
+          if [ -n "$E2E_USER_EMAIL" ] && [ -n "$E2E_USER_PASSWORD" ] && [ -n "$E2E_LIMITED_USER_EMAIL" ] && [ -n "$E2E_LIMITED_USER_PASSWORD" ]; then
+            echo 'matrix=["bootstrap_local","repo_secrets"]' >> "$GITHUB_OUTPUT"
+          else
+            echo 'matrix=["bootstrap_local"]' >> "$GITHUB_OUTPUT"
+          fi
+
+  playwright-smoke-credential:
+    name: Credential smoke (${{ matrix.credential_source }})
+    needs: [playwright-smoke-minimal, resolve-credential-matrix]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        credential_source: ${{ fromJSON(needs.resolve-credential-matrix.outputs.matrix) }}
+    env:
+      DATABASE_URL: sqlite+aiosqlite:///./dev.db
+      E2E_TENANT: demo
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install backend dependencies
+        run: pip install -r requirements.txt
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install Playwright browsers
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Resolve credential matrix
+        run: |
+          if [ "${{ matrix.credential_source }}" = "repo_secrets" ]; then
+            echo "E2E_USER_EMAIL=${{ secrets.E2E_USER_EMAIL }}" >> "$GITHUB_ENV"
+            echo "E2E_USER_PASSWORD=${{ secrets.E2E_USER_PASSWORD }}" >> "$GITHUB_ENV"
+            echo "E2E_LIMITED_USER_EMAIL=${{ secrets.E2E_LIMITED_USER_EMAIL }}" >> "$GITHUB_ENV"
+            echo "E2E_LIMITED_USER_PASSWORD=${{ secrets.E2E_LIMITED_USER_PASSWORD }}" >> "$GITHUB_ENV"
+          else
+            # `.local` (RFC 6761 mDNS) is rejected by pydantic EmailStr on /auth/login — use RFC 2606 `.com`.
+            echo "E2E_USER_EMAIL=e2e.owner.demo@example.com" >> "$GITHUB_ENV"
+            echo "E2E_USER_PASSWORD=OwnerDemo123!" >> "$GITHUB_ENV"
+            echo "E2E_LIMITED_USER_EMAIL=e2e.student.demo@example.com" >> "$GITHUB_ENV"
+            echo "E2E_LIMITED_USER_PASSWORD=StudentDemo123!" >> "$GITHUB_ENV"
+          fi
+
+      - name: Start local backend
+        run: |
+          PYTHONPATH=backend python scripts/run_backend_lite.py > /tmp/e2e-backend.log 2>&1 &
+          echo $! > /tmp/e2e-backend.pid
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:8000/health >/dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Backend failed to start" >&2
+          tail -n 200 /tmp/e2e-backend.log || true
+          exit 1
+
+      - name: Bootstrap deterministic test users in CI DB
+        env:
+          PYTHONPATH: backend
+        run: |
+          python scripts/bootstrap_tenant.py \
+            --tenant "$E2E_TENANT" \
+            --name "Demo tenant" \
+            --owner-email "$E2E_USER_EMAIL" \
+            --owner-password "$E2E_USER_PASSWORD"
+
+          python - <<'PY'
+          import asyncio
+          import os
+          from sqlalchemy import func, select
+          from app.db.session import AsyncSessionLocal
+          from app.models.models import RoleEnum, Tenant, User, UserRole
+          from app.services.auth import hash_password
+
+          async def main() -> None:
+              tenant_slug = os.environ.get("E2E_TENANT", "demo")
+              email = os.environ["E2E_LIMITED_USER_EMAIL"].strip().lower()
+              password = os.environ["E2E_LIMITED_USER_PASSWORD"]
+              async with AsyncSessionLocal(tenant="public", include_public=False, create_schema=False) as session:
+                  tenant = (await session.execute(select(Tenant).where(Tenant.slug == tenant_slug))).scalar_one()
+                  user = (
+                      await session.execute(
+                          select(User).where(User.tenant_id == str(tenant.id), func.lower(User.email) == email)
+                      )
+                  ).scalar_one_or_none()
+
+                  if user is None:
+                      user = User(
+                          tenant_id=str(tenant.id),
+                          email=email,
+                          full_name="E2E Limited",
+                          role=RoleEnum.STUDENT,
+                          hashed_password=hash_password(password),
+                          is_active=True,
+                      )
+                      session.add(user)
+                      await session.flush()
+                  else:
+                      user.role = RoleEnum.STUDENT
+                      user.hashed_password = hash_password(password)
+                      user.is_active = True
+
+                  has_role = (
+                      await session.execute(
+                          select(UserRole).where(
+                              UserRole.tenant_id == str(tenant.id),
+                              UserRole.user_id == str(user.id),
+                              UserRole.role == RoleEnum.STUDENT,
+                          )
+                      )
+                  ).scalar_one_or_none()
+                  if has_role is None:
+                      session.add(UserRole(tenant_id=str(tenant.id), user_id=str(user.id), role=RoleEnum.STUDENT))
+
+                  await session.commit()
+
+          asyncio.run(main())
+          PY
+
+      - name: Run credential smoke subset
+        working-directory: frontend
+        env:
+          E2E_BASE_URL: http://127.0.0.1:4173
+          E2E_START_SERVER: "1"
+          E2E_USER_EMAIL: ${{ env.E2E_USER_EMAIL }}
+          E2E_USER_PASSWORD: ${{ env.E2E_USER_PASSWORD }}
+          E2E_LIMITED_USER_EMAIL: ${{ env.E2E_LIMITED_USER_EMAIL }}
+          E2E_LIMITED_USER_PASSWORD: ${{ env.E2E_LIMITED_USER_PASSWORD }}
+          E2E_TENANT: ${{ env.E2E_TENANT }}
+          VITE_API_PROXY_TARGET: http://127.0.0.1:8000
+        run: |
+          npm run e2e -- --grep "credential-based flows"
+
+      - name: Upload backend log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-backend-log-${{ matrix.credential_source }}
+          path: /tmp/e2e-backend.log
+
+      - name: Stop local backend
+        if: always()
+        run: |
+          if [ -f /tmp/e2e-backend.pid ]; then
+            kill "$(cat /tmp/e2e-backend.pid)" || true
+          fi

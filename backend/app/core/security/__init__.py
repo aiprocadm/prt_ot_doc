@@ -32,6 +32,7 @@ get_auth_ctx = _legacy_security.get_auth_ctx
 issue_access_token = _legacy_security.issue_access_token
 issue_refresh_token = _legacy_security.issue_refresh_token
 rbac = _legacy_security.rbac
+roles_from_jwt_claims = _legacy_security.roles_from_jwt_claims
 verify_token = _legacy_security.verify_token
 
 __all__ = [
@@ -41,6 +42,7 @@ __all__ = [
     "issue_refresh_token",
     "decode_token",
     "verify_token",
+    "roles_from_jwt_claims",
     "AccessContext",
     "AuthContext",
     "get_auth_ctx",

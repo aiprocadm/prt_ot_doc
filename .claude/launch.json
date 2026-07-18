@@ -1,0 +1,35 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "Full Stack (Backend + Frontend)",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["./scripts/dev_lite.py"],
+      "port": 8000
+    },
+    {
+      "name": "Full Stack (Force - Kill Busy Ports)",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["./scripts/dev_lite.py", "--auto-kill-ports"],
+      "port": 8000
+    },
+    {
+      "name": "Backend Only",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["scripts/run_backend_lite.py"],
+      "port": 8000
+    },
+    {
+      "name": "Frontend Dev Server",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "frontend", "run", "dev"],
+      "port": 5173
+    },
+    {
+      "name": "Frontend Build",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "frontend", "run", "build"],
+      "port": null
+    }
+  ]
+}

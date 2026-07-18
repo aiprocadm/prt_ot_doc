@@ -75,7 +75,7 @@ const AuditPrepPage = () => {
           <ErrorState error={error ?? undefined} onRetry={load} />
           {loading ? <LoadingScreen label="Сбор контуров подготовки к проверке" /> : null}
           {!loading && !error && packages.length === 0 ? (
-            <EmptyState title="Нет контуров проверки" description="Инспекции и связанные blockers ещё не зарегистрированы." />
+            <EmptyState title="Нет контуров проверки" description="Инспекции и связанные блокеры ещё не зарегистрированы." />
           ) : null}
           {!loading && !error && packages.length > 0 ? (
             <Table>

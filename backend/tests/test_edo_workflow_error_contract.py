@@ -9,10 +9,9 @@ def test_validate_approval_rules_raises_structured_unprocessable_for_empty_steps
         _validate_approval_rules({"steps": []})
 
     assert exc_info.value.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
-    assert exc_info.value.detail == {
-        "code": "edo_validation_error",
-        "message": "steps must not be empty",
-    }
+    assert exc_info.value.detail["code"] == "EDO_VALIDATION_ERROR"
+    assert exc_info.value.detail["error_code"] == "EDO_VALIDATION_ERROR"
+    assert exc_info.value.detail["message"] == "steps must not be empty"
 
 
 def test_validate_approval_rules_returns_parsed_rules_for_valid_sequence() -> None:

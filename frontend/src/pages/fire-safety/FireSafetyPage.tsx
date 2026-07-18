@@ -23,7 +23,7 @@ const FireSafetyPage = () => {
     <div className="space-y-4">
       <RegistryPageHeader
         title="Пожарная безопасность · объекты защиты"
-        description="Вместо статического списка отображаются реальные площадки tenant с их hazard class и связанными проверками."
+        description="Вместо статического списка отображаются реальные площадки тенанта с их классом опасности и связанными проверками."
         stats={[
           { label: "Площадок", value: data.sites.length },
           { label: "Проверок", value: data.inspections.length },
@@ -32,7 +32,7 @@ const FireSafetyPage = () => {
       />
       <ErrorState error={error ?? undefined} onRetry={() => void reload()} />
       {loading ? <LoadingScreen label="Загрузка объектов защиты" /> : null}
-      {!loading && !error && registry.total === 0 ? <EmptyState title="Площадки не найдены" description="Добавьте site records в tenant." /> : null}
+      {!loading && !error && registry.total === 0 ? <EmptyState title="Площадки не найдены" description="Добавьте записи площадок в тенант." /> : null}
       {!loading && !error && registry.total > 0 ? (
         <RegistryTable
           columns={[

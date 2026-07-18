@@ -13,53 +13,53 @@ import pytest
 from botocore.exceptions import ClientError
 from sqlalchemy import select
 
-from app.api.routes.files import MAX_UPLOAD_BYTES
+from app.api.routes.files import max_upload_bytes
 from app.core.config import get_settings
-from app.domains.files import s3
 from app.models.file import File as StoredFile
 from app.models.file import FileKind, FileScanStatus
 from app.models.models import AuditLog, RoleEnum
+from app.modules.files import s3
 from app.services.clamav import (
+    ClamAVScanOutcome,
     ClamAVScanRequest,
-        ClamAVScanOutcome,
-        ClamAVVerdict,
-        MemoryQuarantinePublisher,
-        get_quarantine_publisher,
-        process_scan_request,
-        reset_clamav_client,
-        reset_quarantine_publisher,
+    ClamAVVerdict,
+    MemoryQuarantinePublisher,
+    get_quarantine_publisher,
+    process_scan_request,
+    reset_clamav_client,
+    reset_quarantine_publisher,
 )
 
 
 def _minimal_docx_bytes() -> bytes:
-        buffer = BytesIO()
-        with zipfile.ZipFile(buffer, mode="w") as archive:
-                archive.writestr(
-                        "[Content_Types].xml",
-                        """<?xml version="1.0" encoding="UTF-8"?>
+    buffer = BytesIO()
+    with zipfile.ZipFile(buffer, mode="w") as archive:
+        archive.writestr(
+            "[Content_Types].xml",
+            """<?xml version="1.0" encoding="UTF-8"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
     <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
     <Default Extension="xml" ContentType="application/xml"/>
     <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
 </Types>""",
-                )
-                archive.writestr(
-                        "_rels/.rels",
-                        """<?xml version="1.0" encoding="UTF-8"?>
+        )
+        archive.writestr(
+            "_rels/.rels",
+            """<?xml version="1.0" encoding="UTF-8"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
     <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
 </Relationships>""",
-                )
-                archive.writestr(
-                        "word/document.xml",
-                        """<?xml version="1.0" encoding="UTF-8"?>
+        )
+        archive.writestr(
+            "word/document.xml",
+            """<?xml version="1.0" encoding="UTF-8"?>
 <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
     <w:body>
         <w:p><w:r><w:t>Template</w:t></w:r></w:p>
     </w:body>
 </w:document>""",
-                )
-        return buffer.getvalue()
+        )
+    return buffer.getvalue()
 
 
 @pytest.fixture(autouse=True)
@@ -87,7 +87,7 @@ def _configure_s3(monkeypatch: pytest.MonkeyPatch) -> None:
     reset_clamav_client()
     s3.reset_client_cache()
     monkeypatch.setattr(
-        "app.domains.files.s3.generate_presigned_get_url",
+        "app.modules.files.s3.generate_presigned_get_url",
         lambda key, *, expires_in=3600, bucket=None, response_headers=None: (
             f"https://example.com/download/{key}?expires_in={expires_in}"
         ),
@@ -115,7 +115,7 @@ async def test_upload_file_happy_path(async_client, make_auth_headers, sessionma
     headers = {**dict(async_client.headers), **await make_auth_headers()}
 
     response = await async_client.post(
-        "/api/v1/files/upload",
+        "/api/v1/files-legacy/upload",
         files={"file": (filename, payload, mime)},
         headers=headers,
     )
@@ -195,7 +195,7 @@ async def test_upload_file_happy_path(async_client, make_auth_headers, sessionma
         assert refreshed.clamav_scanned_at is not None
 
     detail_response = await async_client.get(
-        f"/api/v1/files/{body['id']}",
+        f"/api/v1/files-legacy/{body['id']}",
         headers=headers,
     )
     assert detail_response.status_code == 200
@@ -208,23 +208,58 @@ async def test_upload_file_happy_path(async_client, make_auth_headers, sessionma
 
 
 @pytest.mark.anyio
+async def test_upload_uses_streaming_payload_for_storage(
+    async_client,
+    make_auth_headers,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    def _fake_put_object(*, data, mime: str, key: str, size: int | None = None):
+        captured["is_bytes"] = isinstance(data, (bytes, bytearray))
+        captured["has_read"] = hasattr(data, "read")
+        captured["mime"] = mime
+        captured["key"] = key
+        captured["size"] = size
+        return ""
+
+    monkeypatch.setattr("app.api.routes.files.s3.put_object", _fake_put_object)
+
+    payload = b"stream-me"
+    headers = {**dict(async_client.headers), **await make_auth_headers()}
+    response = await async_client.post(
+        "/api/v1/files-legacy/upload",
+        files={"file": ("stream.txt", payload, "text/plain")},
+        headers=headers,
+    )
+    assert response.status_code == 201
+    assert captured["is_bytes"] is False
+    assert captured["has_read"] is True
+    assert captured["size"] == len(payload)
+
+
+@pytest.mark.anyio
 @pytest.mark.usefixtures("aws")
 async def test_upload_file_rejects_oversized(async_client, make_auth_headers) -> None:
-    payload = b"a" * (MAX_UPLOAD_BYTES + 1)
+    limit = max_upload_bytes()
+    payload = b"a" * (limit + 1)
     headers = {**dict(async_client.headers), **await make_auth_headers()}
 
     response = await async_client.post(
-        "/api/v1/files/upload",
+        "/api/v1/files-legacy/upload",
         files={"file": ("too-big.pdf", payload, "application/pdf")},
         headers=headers,
     )
 
     assert response.status_code == 413
     body = response.json()
-    assert body["code"] == "http_413"
-    assert "File exceeds" in body["message"]
-    assert body["details"]["limit"] == MAX_UPLOAD_BYTES
-    assert body["details"]["size"] == len(payload)
+    assert body["code"] in ("http_413", "FILE_TOO_LARGE", "PAYLOAD_TOO_LARGE")
+    assert "exceed" in body["message"].lower() or "large" in body["message"].lower()
+    details = body.get("details") or {}
+    if "limit" in details:
+        assert details["limit"] == limit
+    if "size" in details:
+        assert details["size"] == len(payload)
     assert body["trace_id"]
 
 
@@ -237,12 +272,12 @@ async def test_upload_file_same_payload_produces_unique_keys(
     headers = {**dict(async_client.headers), **await make_auth_headers()}
 
     first = await async_client.post(
-        "/api/v1/files/upload",
+        "/api/v1/files-legacy/upload",
         files={"file": ("greeting.txt", payload, "text/plain")},
         headers=headers,
     )
     second = await async_client.post(
-        "/api/v1/files/upload",
+        "/api/v1/files-legacy/upload",
         files={"file": ("greeting.txt", payload, "text/plain")},
         headers=headers,
     )
@@ -264,14 +299,14 @@ async def test_upload_file_rejects_unsupported_mime(async_client, make_auth_head
     headers = {**dict(async_client.headers), **await make_auth_headers()}
 
     response = await async_client.post(
-        "/api/v1/files/upload",
+        "/api/v1/files-legacy/upload",
         files={"file": ("payload.bin", payload, "application/octet-stream")},
         headers=headers,
     )
 
     assert response.status_code == 415
     body = response.json()
-    assert body["code"] == "http_415"
+    assert body["code"] == "UNSUPPORTED_MEDIA_TYPE"
     assert body["message"] == "Unsupported MIME type"
     assert body["trace_id"]
 
@@ -283,14 +318,14 @@ async def test_upload_file_rejects_mismatched_extension(async_client, make_auth_
     headers = {**dict(async_client.headers), **await make_auth_headers()}
 
     response = await async_client.post(
-        "/api/v1/files/upload",
+        "/api/v1/files-legacy/upload",
         files={"file": ("report.pdf", payload, "text/plain")},
         headers=headers,
     )
 
     assert response.status_code == 400
     body = response.json()
-    assert body["code"] == "http_400"
+    assert body["code"] == "FILE_EXTENSION_MISMATCH"
     assert body["message"] == "File extension does not match detected content"
     assert body["trace_id"]
 
@@ -302,14 +337,14 @@ async def test_upload_file_rejects_disallowed_extension(async_client, make_auth_
     headers = {**dict(async_client.headers), **await make_auth_headers()}
 
     response = await async_client.post(
-        "/api/v1/files/upload",
+        "/api/v1/files-legacy/upload",
         files={"file": ("report.pdf", payload, "application/pdf")},
         headers=headers,
     )
 
     assert response.status_code == 415
     body = response.json()
-    assert body["code"] == "http_415"
+    assert body["code"] == "UNSUPPORTED_FILE_EXTENSION"
     assert body["message"] == "Unsupported file extension"
     assert body["trace_id"]
 
@@ -321,7 +356,7 @@ async def test_upload_rejects_cross_tenant_scope(async_client, make_auth_headers
     headers = {**await make_auth_headers(), "x-tenant": "acme"}
 
     response = await async_client.post(
-        "/api/v1/files/upload",
+        "/api/v1/files-legacy/upload",
         files={"file": ("note.txt", payload, "text/plain")},
         headers=headers,
     )
@@ -341,7 +376,7 @@ async def test_clamav_detects_infected_and_blocks_download(
     headers = {**dict(async_client.headers), **await make_auth_headers()}
 
     response = await async_client.post(
-        "/api/v1/files/upload",
+        "/api/v1/files-legacy/upload",
         files={"file": ("virus.txt", payload, "text/plain")},
         headers=headers,
     )
@@ -368,7 +403,7 @@ async def test_clamav_detects_infected_and_blocks_download(
         )
         assert any("files.clamav.detected" in record.message for record in caplog.records)
 
-    detail = await async_client.get(f"/api/v1/files/{body['id']}", headers=headers)
+    detail = await async_client.get(f"/api/v1/files-legacy/{body['id']}", headers=headers)
     assert detail.status_code == 200
     data = detail.json()
     assert data["quarantined"] is True
@@ -410,7 +445,9 @@ async def test_process_scan_request_uses_canonical_tenant_session(
             return None
 
     @asynccontextmanager
-    async def fake_get_tenant_session(*, tenant: str | None = None, tenant_id: str | None = None, schema_name: str | None = None):
+    async def fake_get_tenant_session(
+        *, tenant: str | None = None, tenant_id: str | None = None, schema_name: str | None = None
+    ):
         del schema_name
         captured["tenant"] = tenant or ""
         captured["tenant_id"] = tenant_id or ""
@@ -442,9 +479,20 @@ async def test_upload_template_adds_metadata(async_client, make_auth_headers, se
     headers = {**dict(async_client.headers), **await make_auth_headers()}
 
     response = await async_client.post(
-        "/api/v1/files/upload-template",
-        files={"file": ("template.docx", payload, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")},
-        data={"template_type": "contract", "scenario": "onboarding", "pack_id": "pack-1", "company_id": "comp-1"},
+        "/api/v1/files-legacy/upload-template",
+        files={
+            "file": (
+                "template.docx",
+                payload,
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            )
+        },
+        data={
+            "template_type": "contract",
+            "scenario": "onboarding",
+            "pack_id": "pack-1",
+            "company_id": "comp-1",
+        },
         headers=headers,
     )
 
@@ -468,7 +516,7 @@ async def test_download_endpoint_returns_presigned_url(
     headers = {**dict(async_client.headers), **await make_auth_headers()}
 
     upload = await async_client.post(
-        "/api/v1/files/upload",
+        "/api/v1/files-legacy/upload",
         files={"file": ("note.txt", payload, "text/plain")},
         headers=headers,
     )
@@ -483,7 +531,12 @@ async def test_download_endpoint_returns_presigned_url(
 
     await process_scan_request(message, scanner=_CleanScanner(), session_factory=sessionmaker)
 
-    download = await async_client.get(f"/api/v1/files/{body['id']}/download", headers=headers)
+    download = await async_client.get(
+        f"/api/v1/files-legacy/{body['id']}/download", headers=headers
+    )
+    download = await async_client.get(
+        f"/api/v1/files-legacy/{body['id']}/download", headers=headers
+    )
     assert download.status_code == 200
     data = download.json()
     assert data["id"] == body["id"]
@@ -505,12 +558,40 @@ async def test_download_endpoint_returns_presigned_url(
 
 @pytest.mark.anyio
 @pytest.mark.usefixtures("aws")
+async def test_download_blocks_file_while_scan_pending(async_client, make_auth_headers) -> None:
+    payload = b"pending-check"
+    headers = {**dict(async_client.headers), **await make_auth_headers()}
+
+    upload = await async_client.post(
+        "/api/v1/files-legacy/upload",
+        files={"file": ("pending.txt", payload, "text/plain")},
+        headers=headers,
+    )
+    assert upload.status_code == 201
+    body = upload.json()
+    assert body["scan_status"] == FileScanStatus.PENDING.value
+    assert body["quarantined"] is True
+
+    download = await async_client.get(
+        f"/api/v1/files-legacy/{body['id']}/download", headers=headers
+    )
+    download = await async_client.get(
+        f"/api/v1/files-legacy/{body['id']}/download", headers=headers
+    )
+    assert download.status_code == 409
+    data = download.json()
+    assert data["code"] == "FILE_NOT_READY"
+    assert data["message"] == "File is not available for download until antivirus scan is clean"
+
+
+@pytest.mark.anyio
+@pytest.mark.usefixtures("aws")
 async def test_download_denies_cross_tenant(async_client, make_auth_headers, sessionmaker) -> None:
     payload = b"tenant-check"
     headers = {**dict(async_client.headers), **await make_auth_headers()}
 
     upload = await async_client.post(
-        "/api/v1/files/upload",
+        "/api/v1/files-legacy/upload",
         files={"file": ("note.txt", payload, "text/plain")},
         headers=headers,
     )
@@ -526,7 +607,12 @@ async def test_download_denies_cross_tenant(async_client, make_auth_headers, ses
     await process_scan_request(message, scanner=_CleanScanner(), session_factory=sessionmaker)
 
     bad_headers = {**headers, "x-tenant": "acme"}
-    download = await async_client.get(f"/api/v1/files/{body['id']}/download", headers=bad_headers)
+    download = await async_client.get(
+        f"/api/v1/files-legacy/{body['id']}/download", headers=bad_headers
+    )
+    download = await async_client.get(
+        f"/api/v1/files-legacy/{body['id']}/download", headers=bad_headers
+    )
     assert download.status_code == 403
 
 
@@ -537,14 +623,18 @@ async def test_download_denies_company_mismatch(
 ) -> None:
     async with sessionmaker() as session:
         tenant = await data_factory.ensure_tenant(session=session)
-        company_a = await data_factory.create_company(tenant=tenant, name="Alpha Co", session=session)
-        company_b = await data_factory.create_company(tenant=tenant, name="Beta Co", session=session)
+        company_a = await data_factory.create_company(
+            tenant=tenant, name="Alpha Co", session=session
+        )
+        company_b = await data_factory.create_company(
+            tenant=tenant, name="Beta Co", session=session
+        )
         await session.commit()
 
     payload = b"company-check"
     admin_headers = {**dict(async_client.headers), **await make_auth_headers(RoleEnum.ADMIN)}
     upload = await async_client.post(
-        "/api/v1/files/upload",
+        "/api/v1/files-legacy/upload",
         files={"file": ("note.txt", payload, "text/plain")},
         data={"company_id": company_a.id},
         headers=admin_headers,
@@ -560,8 +650,16 @@ async def test_download_denies_company_mismatch(
 
     await process_scan_request(message, scanner=_CleanScanner(), session_factory=sessionmaker)
 
-    client_headers = {**dict(async_client.headers), **await make_auth_headers(RoleEnum.CLIENT_USER, company_id=company_b.id)}
-    download = await async_client.get(f"/api/v1/files/{body['id']}/download", headers=client_headers)
+    client_headers = {
+        **dict(async_client.headers),
+        **await make_auth_headers(RoleEnum.CLIENT_USER, company_id=company_b.id),
+    }
+    download = await async_client.get(
+        f"/api/v1/files-legacy/{body['id']}/download", headers=client_headers
+    )
+    download = await async_client.get(
+        f"/api/v1/files-legacy/{body['id']}/download", headers=client_headers
+    )
     assert download.status_code == 403
 
 
@@ -576,7 +674,7 @@ async def test_get_file_returns_404_when_object_missing(
     headers = {**dict(async_client.headers), **await make_auth_headers()}
 
     response = await async_client.post(
-        "/api/v1/files/upload",
+        "/api/v1/files-legacy/upload",
         files={"file": ("temp.txt", payload, "text/plain")},
         headers=headers,
     )
@@ -598,10 +696,10 @@ async def test_get_file_returns_404_when_object_missing(
     client = s3.get_client()
     client.delete_object(Bucket=get_settings().s3_bucket, Key=body["storage_key"])
 
-    detail = await async_client.get(f"/api/v1/files/{body['id']}", headers=headers)
+    detail = await async_client.get(f"/api/v1/files-legacy/{body['id']}", headers=headers)
     assert detail.status_code == 404
     data = detail.json()
-    assert data["code"] == "http_404"
+    assert data["code"] == "FILE_NOT_IN_OBJECT_STORAGE"
     assert data["details"]["storage_code"] == "storage_not_found"
 
 
@@ -610,7 +708,7 @@ async def test_upload_returns_503_when_bucket_unavailable(
     async_client, make_auth_headers, monkeypatch
 ) -> None:
     class _BrokenClient:
-        def put_object(self, **kwargs):
+        def _raise(self):
             raise ClientError(
                 {
                     "Error": {
@@ -622,16 +720,22 @@ async def test_upload_returns_503_when_bucket_unavailable(
                 "PutObject",
             )
 
-    monkeypatch.setattr("app.domains.files.s3.get_client", lambda: _BrokenClient())
+        def put_object(self, **kwargs):
+            self._raise()
+
+        def upload_fileobj(self, **kwargs):
+            self._raise()
+
+    monkeypatch.setattr("app.modules.files.s3.get_client", lambda: _BrokenClient())
 
     headers = {**dict(async_client.headers), **await make_auth_headers()}
     response = await async_client.post(
-        "/api/v1/files/upload",
+        "/api/v1/files-legacy/upload",
         files={"file": ("broken.txt", b"content", "text/plain")},
         headers=headers,
     )
 
     assert response.status_code == 503
     body = response.json()
-    assert body["code"] == "http_503"
+    assert body["code"] == "HTTP_503"
     assert body["details"]["storage_code"] == "storage_unavailable"

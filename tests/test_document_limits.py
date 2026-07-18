@@ -42,7 +42,7 @@ async def test_document_batch_rejects_excess_rows(
 
     assert response.status_code == status.HTTP_413_REQUEST_ENTITY_TOO_LARGE
     body = response.json()
-    assert body["code"] == "http_413"
+    assert body["code"] == "DOCUMENT_BATCH_TOO_MANY_ROWS"
     assert body["message"] == "Batch cannot exceed 1 documents"
     assert body["trace_id"]
 
@@ -71,7 +71,7 @@ async def test_document_payload_rejects_large_payload(
 
     assert response.status_code == status.HTTP_413_REQUEST_ENTITY_TOO_LARGE
     body = response.json()
-    assert body["code"] == "http_413"
+    assert body["code"] == "DOCUMENT_PAYLOAD_TOO_LARGE"
     assert body["message"] == "data payload cannot exceed 50 bytes"
     assert body["trace_id"]
 

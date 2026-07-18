@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { toast } from "sonner";
 
 import { approvalsApi, type ApprovalTask } from "@/api/approvals";
 import { Button } from "@/components/ui/button";
@@ -19,6 +20,9 @@ const ApprovalTaskCard = ({ task, onChanged }: Props) => {
     try {
       await fn();
       await onChanged();
+      toast.success("Решение по задаче сохранено");
+    } catch {
+      toast.error("Не удалось сохранить решение по задаче");
     } finally {
       setBusy(false);
     }
@@ -30,23 +34,23 @@ const ApprovalTaskCard = ({ task, onChanged }: Props) => {
         <div className="font-medium">Задача {task.id.slice(0, 8)}</div>
         <div className="text-xs text-muted-foreground">due: {task.due_at ?? "—"}</div>
       </div>
-      <div className="text-sm text-muted-foreground">Процесс: {task.process_id}</div>
+      <div className="text-sm text-muted-foreground">Процесс: {task.instance_id ?? task.process_id ?? "—"}</div>
       <Input placeholder="Комментарий" value={comment} onChange={(e) => setComment(e.target.value)} />
       <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
-        <Button className="h-12" disabled={busy} onClick={() => run(() => approvalsApi.decide(task.id, "approve", { comment }))}>
+        <Button className="h-12" disabled={busy} onClick={() => run(() => approvalsApi.decideTask(task.id, "approve", comment))}>
           Согласовать
         </Button>
-        <Button className="h-12" variant="destructive" disabled={busy} onClick={() => run(() => approvalsApi.decide(task.id, "reject", { comment }))}>
+        <Button className="h-12" variant="destructive" disabled={busy} onClick={() => run(() => approvalsApi.decideTask(task.id, "reject", comment))}>
           Отклонить
         </Button>
       </div>
       <div className="flex gap-2">
-        <Input placeholder="Delegate user id" value={delegateTo} onChange={(e) => setDelegateTo(e.target.value)} />
+        <Input placeholder="ID пользователя для делегирования" value={delegateTo} onChange={(e) => setDelegateTo(e.target.value)} />
         <Button
           disabled={busy || !delegateTo.trim()}
-          onClick={() => run(() => approvalsApi.decide(task.id, "delegate", { delegate_to: delegateTo, comment }))}
+          onClick={() => run(() => approvalsApi.delegateTask(task.id, delegateTo.trim(), comment))}
         >
-          Delegate
+          Делегировать
         </Button>
       </div>
     </div>

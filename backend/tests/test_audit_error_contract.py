@@ -7,7 +7,6 @@ def test_audit_bad_request_has_structured_error_detail() -> None:
     exc = _audit_bad_request("object_id must not be blank")
 
     assert exc.status_code == 400
-    assert exc.detail == {
-        "code": "audit_validation_error",
-        "message": "object_id must not be blank",
-    }
+    assert exc.detail["code"] == "AUDIT_VALIDATION_ERROR"
+    assert exc.detail["error_code"] == "AUDIT_VALIDATION_ERROR"
+    assert exc.detail["message"] == "object_id must not be blank"

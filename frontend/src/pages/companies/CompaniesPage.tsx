@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { toast } from "sonner";
 
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
@@ -17,7 +18,7 @@ import { useCompaniesStore } from "@/stores/companies";
 import type { CompanyDto } from "@/types/dto/companies";
 
 const CompaniesPage = () => {
-  const { list, getById, items, loading, error } = useCompaniesStore();
+  const { list, getById, items, loading, error, item: storeCompanyDetail } = useCompaniesStore();
   const { setSidebar } = useSidebar();
   const [selectedCompany, setSelectedCompany] = useState<CompanyDto | null>(null);
 
@@ -29,6 +30,12 @@ const CompaniesPage = () => {
   useEffect(() => {
     void list().catch(() => undefined);
   }, [list]);
+
+  useEffect(() => {
+    if (!selectedCompany || !storeCompanyDetail) return;
+    if (selectedCompany.id !== storeCompanyDetail.id) return;
+    setSelectedCompany(storeCompanyDetail);
+  }, [selectedCompany, storeCompanyDetail]);
 
   const handleSelect = useCallback(
     async (company: CompanyDto) => {
@@ -44,20 +51,25 @@ const CompaniesPage = () => {
         <Breadcrumb items={[{ label: "Главная", to: "/dashboard" }, { label: "Компании" }]} />
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold">Компании</h1>
-          <CompanyFormDialog
-            trigger={
-              <Can
-                permission={PERMISSIONS.COMPANY_CREATE}
-                fallback={<Button disabled title="Недостаточно прав для создания компании">Новая компания</Button>}
-              >
-                <Button>Новая компания</Button>
-              </Can>
-            }
-            onSubmitted={(company) => {
-              setSelectedCompany(company);
-              list();
-            }}
-          />
+          <Can permission={PERMISSIONS.COMPANY_CREATE}>
+            {(allowed) => (
+              <CompanyFormDialog
+                trigger={
+                  <Button
+                    disabled={!allowed}
+                    title={!allowed ? "Недостаточно прав для создания компании" : undefined}
+                  >
+                    Новая компания
+                  </Button>
+                }
+                onSubmitted={(company) => {
+                  setSelectedCompany(company);
+                  list();
+                  toast.success(`Компания "${company.name}" создана и открыта в карточке`);
+                }}
+              />
+            )}
+          </Can>
         </div>
       </div>
       <Card>

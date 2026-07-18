@@ -11,21 +11,16 @@ from sqlalchemy.orm import selectinload
 
 from app.core.metrics import get_metrics
 from app.db.session import AsyncSessionLocal
-from app.domains.packs.context import enrich_context
-from app.domains.packs.seeder import ensure_default_packs
 from app.models.models import (
     Company,
     DocumentPack,
     DocumentPackItem,
-    MedicalExam,
     Person,
     PipelineRun,
-    PPEIssue,
-    PPEIssueStatus,
     Site,
-    Training,
-    TrainingStatus,
 )
+from app.modules.packs.context import enrich_context
+from app.modules.packs.seeder import ensure_default_packs
 from app.schemas.pack import PackGenerateRequest
 from app.services.audit import AuditService
 from app.services.celery_app import celery_app
@@ -38,9 +33,7 @@ from app.services.pipeline import PipelineService
 logger = logging.getLogger(__name__)
 
 
-def _pipeline_run_coroutine(
-    run_id: str, tenant_slug: str
-) -> Coroutine[None, None, str]:
+def _pipeline_run_coroutine(run_id: str, tenant_slug: str) -> Coroutine[None, None, str]:
     async def _run() -> str:
         async with AsyncSessionLocal(tenant=tenant_slug) as session:
             stmt = (
@@ -76,11 +69,7 @@ def _pipeline_run_coroutine(
 
 
 def _execute_pipeline_run(run_id: str, tenant_slug: str, *, task_name: str) -> str:
-    queue = (
-        celery_settings.celery.pdf_queue
-        or celery_app.conf.task_default_queue
-        or "default"
-    )
+    queue = celery_settings.celery.pdf_queue or celery_app.conf.task_default_queue or "default"
     metrics = get_metrics()
     metrics.record_celery_enqueue(queue=queue, task=task_name)
 
@@ -226,77 +215,9 @@ async def _load_persons(
 async def _enforce_person_invariants(
     session: AsyncSessionLocal, *, tenant_scope: tuple[str, ...], persons: list[Person]
 ) -> None:
-    if not persons:
-        return
+    from app.services.person_admission import enforce_person_admission
 
-    now = datetime.now(timezone.utc)
-    person_ids = [person.id for person in persons]
-
-    training_stmt = (
-        select(Training.person_id, Training.expires_at)
-        .where(
-            Training.person_id.in_(person_ids),
-            Training.tenant_id.in_(tenant_scope),
-            Training.status == TrainingStatus.COMPLETED,
-            Training.expires_at.is_not(None),
-        )
-        .order_by(Training.person_id)
-    )
-    medical_stmt = (
-        select(MedicalExam.person_id, MedicalExam.valid_until)
-        .where(
-            MedicalExam.person_id.in_(person_ids),
-            MedicalExam.tenant_id.in_(tenant_scope),
-            MedicalExam.deleted_at.is_(None),
-        )
-        .order_by(MedicalExam.person_id)
-    )
-    ppe_stmt = (
-        select(PPEIssue.person_id, PPEIssue.expires_at)
-        .where(
-            PPEIssue.person_id.in_(person_ids),
-            PPEIssue.tenant_id.in_(tenant_scope),
-            PPEIssue.status == PPEIssueStatus.ISSUED,
-            PPEIssue.expires_at.is_not(None),
-        )
-        .order_by(PPEIssue.person_id)
-    )
-
-    training_rows = (await session.execute(training_stmt)).all()
-    medical_rows = (await session.execute(medical_stmt)).all()
-    ppe_rows = (await session.execute(ppe_stmt)).all()
-
-    valid_training: set[str] = set()
-    for person_id, expires_at in training_rows:
-        expiry = _normalize_datetime(expires_at)
-        if expiry and expiry > now:
-            valid_training.add(person_id)
-
-    valid_medical: set[str] = set()
-    for person_id, valid_until in medical_rows:
-        if valid_until and valid_until >= now.date():
-            valid_medical.add(person_id)
-
-    valid_ppe: set[str] = set()
-    for person_id, expires_at in ppe_rows:
-        expires = _normalize_datetime(expires_at)
-        if expires and expires > now:
-            valid_ppe.add(person_id)
-
-    violations: list[dict[str, object]] = []
-    for person in persons:
-        missing: list[str] = []
-        if person.id not in valid_training:
-            missing.append("training")
-        if person.id not in valid_medical:
-            missing.append("medical_exam")
-        if person.id not in valid_ppe:
-            missing.append("ppe_issue")
-        if missing:
-            violations.append({"person_id": person.id, "violations": missing})
-
-    if violations:
-        raise ValueError({"code": "requirements_not_met", "details": violations})
+    await enforce_person_admission(session, tenant_scope=tenant_scope, persons=persons)
 
 
 async def _load_pack(
@@ -307,14 +228,18 @@ async def _load_pack(
     pack_code: str,
 ) -> DocumentPack:
     await ensure_default_packs(session, tenant_slug=tenant_slug)
-    stmt = select(DocumentPack).where(
-        DocumentPack.code == pack_code,
-        DocumentPack.tenant_id.in_(tenant_scope),
-        DocumentPack.is_active.is_(True),
-        DocumentPack.deleted_at.is_(None),
-    ).options(
-        selectinload(DocumentPack.items).selectinload(DocumentPackItem.template),
-        selectinload(DocumentPack.items).selectinload(DocumentPackItem.template_version),
+    stmt = (
+        select(DocumentPack)
+        .where(
+            DocumentPack.code == pack_code,
+            DocumentPack.tenant_id.in_(tenant_scope),
+            DocumentPack.is_active.is_(True),
+            DocumentPack.deleted_at.is_(None),
+        )
+        .options(
+            selectinload(DocumentPack.items).selectinload(DocumentPackItem.template),
+            selectinload(DocumentPack.items).selectinload(DocumentPackItem.template_version),
+        )
     )
     pack = (await session.execute(stmt)).scalar_one_or_none()
     if pack is None:
@@ -432,9 +357,7 @@ async def _generate_pack_coroutine(
             company=company,
             person_ids=request.person_ids,
         )
-        await _enforce_person_invariants(
-            session, tenant_scope=tenant_scope, persons=persons
-        )
+        await _enforce_person_invariants(session, tenant_scope=tenant_scope, persons=persons)
 
         pack = await _load_pack(
             session,
@@ -500,10 +423,7 @@ async def _generate_pack_coroutine(
             "documents": documents_payload,
             "data": request.data,
             "naming": {
-                **{
-                    k: (v.isoformat() if isinstance(v, date) else v)
-                    for k, v in naming.items()
-                },
+                **{k: (v.isoformat() if isinstance(v, date) else v) for k, v in naming.items()},
             },
         }
         outbox = OutboxService(session)
@@ -546,20 +466,14 @@ async def _generate_pack_coroutine(
 def _execute_pack_generation(
     *, tenant_slug: str, tenant_id: str | None, payload: dict[str, object], task_name: str
 ) -> dict[str, object]:
-    queue = (
-        celery_settings.celery.pdf_queue
-        or celery_app.conf.task_default_queue
-        or "default"
-    )
+    queue = celery_settings.celery.pdf_queue or celery_app.conf.task_default_queue or "default"
     metrics = get_metrics()
     metrics.record_celery_enqueue(queue=queue, task=task_name)
 
     started = perf_counter()
     try:
         result = asyncio.run(
-            _generate_pack_coroutine(
-                tenant_slug=tenant_slug, tenant_id=tenant_id, payload=payload
-            )
+            _generate_pack_coroutine(tenant_slug=tenant_slug, tenant_id=tenant_id, payload=payload)
         )
     except Exception as exc:  # noqa: BLE001 - propagate Celery failure
         duration = perf_counter() - started

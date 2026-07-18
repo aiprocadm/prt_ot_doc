@@ -17,8 +17,28 @@ class IntegrationStatus:
     raw: Any | None = None
 
 
+@dataclass(slots=True)
+class IntegrationErrorContract:
+    """Structured error payload for integration failures."""
+
+    provider: str
+    code: str
+    message: str
+    retryable: bool
+    http_status: int | None = None
+    details: dict[str, Any] = field(default_factory=dict)
+
+
 class IntegrationDisabledError(RuntimeError):
     """Raised when an integration is disabled via feature flag."""
+
+
+class IntegrationContractError(RuntimeError):
+    """Raised when an integration fails with a normalized error contract."""
+
+    def __init__(self, contract: IntegrationErrorContract) -> None:
+        self.contract = contract
+        super().__init__(contract.message)
 
 
 class BaseIntegration(Protocol):

@@ -1,5 +1,18 @@
 """Convenient re-exports for ORM models used across the service."""
 
+from app.models.calendar_views import SavedCalendarView
+from app.models.committees import (
+    Committee,
+    CommitteeAgendaItem,
+    CommitteeDecision,
+    CommitteeDecisionTask,
+    CommitteeKind,
+    CommitteeMeeting,
+    CommitteeMember,
+    CommitteeMemberRole,
+    DecisionTaskStatus,
+    MeetingStatus,
+)
 from app.models.document import (
     Document,
     DocumentBatchItem,
@@ -35,6 +48,7 @@ from app.models.models import (
     Attestation,
     AttestationStatus,
     AuditLog,
+    Branch,
     Company,
     DocumentPack,
     DocumentPackItem,
@@ -73,8 +87,6 @@ from app.models.models import (
     RiskMap,
     RiskMethodology,
     SecurityAuditLog,
-    Signature,
-    SignatureStatus,
     SignatureType,
     Site,
     Template,
@@ -90,7 +102,6 @@ from app.models.models import (
     TrainingStatus,
     User,
     UserRole,
-    WarehousePPE,
     WebhookEndpoint,
     WebhookSubscription,
 )
@@ -128,22 +139,23 @@ from app.models.safety_core import (
 from app.models.safety_core import (
     HazardBinding,
     HazardMeasure,
-    PPECatalog,
-    PPENormItem,
-    PPEPersonalCard,
-    PPEPersonalCardItem,
     RiskMapItem,
     RiskMapItemMeasure,
     RiskMeasure,
     SafetyRiskMap,
     SafetyRiskMethodology,
 )
-from app.models.safety_core import (
-    PPEIssue as SafetyPPEIssue,
+from app.models.sout import (
+    SoutCampaign,
+    SoutCampaignStatus,
+    SoutClass,
+    SoutClassHistory,
+    SoutFactor,
+    SoutGuarantee,
+    SoutGuaranteeKind,
+    SoutWorkplace,
 )
-from app.models.safety_core import (
-    PPENorm as SafetyPPENorm,
-)
+from app.models.work_permit import WorkPermit, WorkPermitEvent, WorkPermitMember
 
 __all__ = [
     "Document",
@@ -163,6 +175,7 @@ __all__ = [
     "Attestation",
     "AttestationStatus",
     "ApiKey",
+    "Branch",
     "Company",
     "Contract",
     "ContractStatus",
@@ -214,12 +227,6 @@ __all__ = [
     "SafetyHazard",
     "HazardBinding",
     "HazardMeasure",
-    "PPECatalog",
-    "SafetyPPEIssue",
-    "SafetyPPENorm",
-    "PPENormItem",
-    "PPEPersonalCard",
-    "PPEPersonalCardItem",
     "SafetyRiskMap",
     "RiskMapItem",
     "RiskMapItemMeasure",
@@ -248,7 +255,6 @@ __all__ = [
     "TrainingStatus",
     "User",
     "UserRole",
-    "WarehousePPE",
     "WebhookSubscription",
     "WebhookEndpoint",
     "ApprovalRoute",
@@ -256,8 +262,6 @@ __all__ = [
     "ApprovalDecision",
     "ApprovalRequestStatus",
     "ApprovalDecisionType",
-    "Signature",
-    "SignatureStatus",
     "SignatureType",
     "EdoMessage",
     "EdoReceipt",
@@ -273,4 +277,26 @@ __all__ = [
     "ReminderRule",
     "CalendarPlanTask",
     "CalendarPlanTaskStatus",
+    "SavedCalendarView",
+    "WorkPermit",
+    "WorkPermitMember",
+    "WorkPermitEvent",
+    "Committee",
+    "CommitteeAgendaItem",
+    "CommitteeDecision",
+    "CommitteeDecisionTask",
+    "CommitteeKind",
+    "CommitteeMeeting",
+    "CommitteeMember",
+    "CommitteeMemberRole",
+    "DecisionTaskStatus",
+    "MeetingStatus",
+    "SoutCampaign",
+    "SoutCampaignStatus",
+    "SoutClass",
+    "SoutClassHistory",
+    "SoutFactor",
+    "SoutGuarantee",
+    "SoutGuaranteeKind",
+    "SoutWorkplace",
 ]

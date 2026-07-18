@@ -1,9 +1,12 @@
 """
-Standardized error handling and response formatting.
+Стандартные коды ошибок и билдеры тел для HTTP.
 
-This module provides centralized error envelope format for all endpoints,
-ensuring consistency in error responses, correlation_id propagation, and error messaging.
+Канонический JSON-ответ API формируется в :mod:`app.api.error_handlers` (поля ``code``,
+``type``, ``message``, ``details``, ``field_errors``, ``trace_id`` / ``correlation_id``).
+Для ``HTTPException(detail=...)`` используйте :func:`api_problem_detail`.
 """
+
+from __future__ import annotations
 
 from datetime import datetime, timezone
 from typing import Any
@@ -12,6 +15,59 @@ from fastapi import status
 from pydantic import BaseModel
 
 from app.core.correlation_id import CorrelationIDManager
+
+
+def infer_error_type_from_code(code: str) -> str:
+    """Грубая карта кода ошибки → ``type`` в контракте error_handlers."""
+
+    if code.startswith("TENANT_"):
+        return "tenant"
+    if code in {"PERMISSION_DENIED", "AUTHENTICATION_REQUIRED", "UNAUTHORIZED", "FORBIDDEN"}:
+        return "security"
+    if code.endswith("_FORBIDDEN"):
+        return "security"
+    if code in {"NOT_FOUND", "TENANT_NOT_FOUND"}:
+        return "not_found"
+    if code == "INTERNAL_ERROR":
+        return "server"
+    return "business"
+
+
+def api_problem_detail(
+    *,
+    code: str,
+    message: str,
+    error_type: str | None = None,
+    details: dict[str, Any] | None = None,
+    field: str | None = None,
+    field_errors: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Словарь для ``HTTPException(..., detail=...)``; дальше обрабатывается ``error_handlers``."""
+
+    resolved_type = error_type or infer_error_type_from_code(code)
+    fe = list(field_errors or [])
+    if field and field.strip() and not fe:
+        fe.append(
+            {
+                "field": field.strip(),
+                "message": message,
+                "type": "validation_error",
+            }
+        )
+    payload: dict[str, Any] = {
+        "code": code,
+        "error_code": code,
+        "message": message,
+        "type": resolved_type,
+    }
+    if field:
+        payload["field"] = field
+    nested = dict(details or {})
+    if nested:
+        payload["details"] = nested
+    if fe:
+        payload["field_errors"] = fe
+    return payload
 
 
 class ErrorDetail(BaseModel):

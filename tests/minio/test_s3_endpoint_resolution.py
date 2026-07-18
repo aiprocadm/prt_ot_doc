@@ -9,7 +9,7 @@ APP_ROOT = Path(__file__).resolve().parents[2] / "backend" / "app"
 def _load_s3_module(settings: SimpleNamespace):
     spec = util.spec_from_file_location(
         "tests.minio.backend_s3",
-        APP_ROOT / "domains" / "files" / "s3.py",
+        APP_ROOT / "modules" / "files" / "s3.py",
     )
     assert spec and spec.loader
     module = util.module_from_spec(spec)

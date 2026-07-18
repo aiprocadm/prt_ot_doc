@@ -39,8 +39,8 @@ async def test_template_catalog_persists_scope_metadata(
                 "company_id": "company-1",
                 "site_id": "branch-77",
                 "label": "Филиал Север",
-                "applicability": "Использовать только для северного филиала"
-            }
+                "applicability": "Использовать только для северного филиала",
+            },
         },
         headers=headers,
     )

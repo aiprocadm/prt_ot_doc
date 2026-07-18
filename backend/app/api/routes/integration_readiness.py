@@ -63,10 +63,14 @@ async def get_integration_readiness(
     session: AsyncSession = Depends(get_session),
 ):
     configured_rows = (
-        await session.execute(
-            select(TenantIntegrationKey).where(TenantIntegrationKey.tenant_id == tenant.id)
+        (
+            await session.execute(
+                select(TenantIntegrationKey).where(TenantIntegrationKey.tenant_id == tenant.id)
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     configured_by_provider = {row.provider: row for row in configured_rows}
 
     webhook_summary = (
@@ -104,7 +108,9 @@ async def get_integration_readiness(
             }
         providers.append(info)
 
-    non_production_total = sum(1 for item in providers if item.get("provider_mode") == "non_production")
+    non_production_total = sum(
+        1 for item in providers if item.get("provider_mode") == "non_production"
+    )
     disabled_total = sum(1 for item in providers if item.get("health_status") == "disabled")
 
     return {
@@ -112,7 +118,9 @@ async def get_integration_readiness(
         "providers": providers,
         "summary": {
             "configured_total": sum(1 for item in providers if item.get("configured")),
-            "production_ready_total": sum(1 for item in providers if item.get("provider_production_ready") is True),
+            "production_ready_total": sum(
+                1 for item in providers if item.get("provider_production_ready") is True
+            ),
             "non_production_total": non_production_total,
             "disabled_total": disabled_total,
         },

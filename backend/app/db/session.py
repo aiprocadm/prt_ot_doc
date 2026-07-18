@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import threading
 from collections.abc import AsyncIterator, Callable, Iterable
 from contextlib import asynccontextmanager
@@ -20,6 +21,8 @@ from sqlalchemy.orm import DeclarativeBase
 from app.core.config import get_settings
 from app.core.tenant import get_current_tenant, tenant_schema
 from app.modules.tenancy.context import get_tenant_context
+
+_logger = logging.getLogger(__name__)
 
 _settings = get_settings()
 _DEFAULT_TENANT_SLUG = _settings.default_tenant_slug
@@ -102,10 +105,19 @@ def _resolve_session_tenant_identity(session) -> tuple[str | None, str | None, s
         return None, None, None
 
     tenant_id = _normalize_tenant_id(info.get("tenant_id"))
-    tenant_slug = str(info.get("tenant_slug") or info.get("tenant") or "").strip().lower() or None
+    raw_slug = str(info.get("tenant_slug") or info.get("tenant") or "").strip().lower() or None
     tenant_schema = str(info.get("tenant_schema") or "").strip() or None
+    # Celery tasks pass tenant UUIDs where a slug is expected
+    # (``session_scope(tenant=str(tenant.id))``); a "slug" that parses as a
+    # UUID is really a tenant id and must never be compared against
+    # ``tenant_id`` values by the before_flush guard — resolve the real slug
+    # from the Tenant row instead.
+    slug_as_id = _normalize_tenant_id(raw_slug)
+    tenant_slug = raw_slug if slug_as_id is None else None
+    if tenant_id is None:
+        tenant_id = slug_as_id
 
-    if tenant_id is not None:
+    if tenant_id is not None and slug_as_id is None:
         info["tenant_id"] = tenant_id
         if tenant_slug:
             info.setdefault("tenant_slug", tenant_slug)
@@ -113,31 +125,36 @@ def _resolve_session_tenant_identity(session) -> tuple[str | None, str | None, s
             info.setdefault("tenant_schema", tenant_schema)
         return tenant_id, tenant_slug, tenant_schema
 
-    if not tenant_slug:
-        legacy_identifier = _normalize_tenant_id(info.get("tenant"))
-        if legacy_identifier is not None:
-            info["tenant_id"] = legacy_identifier
-            return legacy_identifier, None, tenant_schema
+    if tenant_id is None and not tenant_slug:
         return None, None, tenant_schema
 
     try:
         from app.models.models import Tenant
     except Exception:
-        return None, tenant_slug, tenant_schema
+        return tenant_id, tenant_slug, tenant_schema
 
-    row = session.connection().execute(
-        select(Tenant.id, Tenant.slug, Tenant.schema_name).where(
-            or_(Tenant.slug == tenant_slug, Tenant.code == tenant_slug)
-        )
-    ).first()
+    conditions = []
+    if tenant_id is not None:
+        conditions.append(Tenant.id == tenant_id)
+    if tenant_slug:
+        conditions.extend((Tenant.slug == tenant_slug, Tenant.code == tenant_slug))
+
+    row = (
+        session.connection()
+        .execute(select(Tenant.id, Tenant.slug, Tenant.schema_name).where(or_(*conditions)))
+        .first()
+    )
     if row is None:
-        return None, tenant_slug, tenant_schema
+        if tenant_id is not None:
+            info["tenant_id"] = tenant_id
+        return tenant_id, tenant_slug, tenant_schema
 
     tenant_id = str(row.id)
     resolved_slug = str(row.slug).strip().lower()
     resolved_schema = str(row.schema_name or tenant_schema or "").strip() or None
     info["tenant_id"] = tenant_id
     info["tenant_slug"] = resolved_slug
+    info["tenant"] = resolved_slug
     if resolved_schema:
         info["tenant_schema"] = resolved_schema
     return tenant_id, resolved_slug, resolved_schema
@@ -158,8 +175,17 @@ async def _hydrate_async_session_tenant_identity(
     tenant_id = _normalize_tenant_id(info.get("tenant_id"))
     tenant_slug = str(info.get("tenant_slug") or info.get("tenant") or "").strip().lower() or None
     tenant_schema_name = str(info.get("tenant_schema") or "").strip() or None
+    # Celery tasks pass tenant UUIDs where a slug is expected
+    # (``tenant_context(tenant_id)`` + ``session_scope(tenant=tenant_id)``,
+    # see audit_export_job). The UUID then lands in ``tenant_slug`` and the
+    # schema/search_path derived from it are bogus — distrust them and
+    # resolve the real identity from the Tenant row by id.
+    slug_as_id = _normalize_tenant_id(tenant_slug)
+    stale_schema = tenant_schema(tenant_slug) if slug_as_id is not None else None
+    if stale_schema and tenant_schema_name == stale_schema:
+        tenant_schema_name = None
 
-    if tenant_id and tenant_slug and tenant_schema_name:
+    if tenant_id and tenant_slug and tenant_schema_name and slug_as_id is None:
         info["tenant_id"] = tenant_id
         info["tenant_slug"] = tenant_slug
         info["tenant_schema"] = tenant_schema_name
@@ -169,7 +195,9 @@ async def _hydrate_async_session_tenant_identity(
     filters = []
     if tenant_id:
         filters.append(Tenant.id == tenant_id)
-    if tenant_slug:
+    if slug_as_id is not None and slug_as_id != tenant_id:
+        filters.append(Tenant.id == slug_as_id)
+    if tenant_slug and slug_as_id is None:
         filters.extend((Tenant.slug == tenant_slug, Tenant.code == tenant_slug))
     if not filters:
         return tenant_id, tenant_slug, tenant_schema_name
@@ -181,6 +209,16 @@ async def _hydrate_async_session_tenant_identity(
             )
         ).first()
     except Exception:
+        # If the hydration query failed (e.g. minimal/restored DB lacks
+        # Tenant.schema_name column, or table is missing), we must roll back
+        # so the session's transaction is not left in an aborted state.
+        # Otherwise the very next statement (typically _apply_search_path's
+        # ``SET LOCAL search_path``) fails with InFailedSQLTransactionError
+        # and bubbles out of __aenter__, poisoning all downstream callers.
+        try:
+            await session.rollback()
+        except Exception:
+            pass
         return tenant_id, tenant_slug, tenant_schema_name
 
     if row is None:
@@ -188,11 +226,22 @@ async def _hydrate_async_session_tenant_identity(
 
     resolved_tenant_id = str(row.id)
     resolved_tenant_slug = str(row.slug).strip().lower()
-    resolved_tenant_schema = str(row.schema_name or tenant_schema_name or tenant_schema(resolved_tenant_slug)).strip()
+    resolved_tenant_schema = str(
+        row.schema_name or tenant_schema_name or tenant_schema(resolved_tenant_slug)
+    ).strip()
     info["tenant_id"] = resolved_tenant_id
     info["tenant_slug"] = resolved_tenant_slug
     info["tenant_schema"] = resolved_tenant_schema
     info["tenant"] = resolved_tenant_slug
+    if stale_schema:
+        # Replace the schema derived from the mislabelled slug before
+        # _apply_search_path (which runs after hydration in __aenter__)
+        # sends the bogus "tenant_<uuid>" entry to Postgres.
+        search_path = info.get("search_path")
+        if isinstance(search_path, list) and stale_schema in search_path:
+            info["search_path"] = [
+                resolved_tenant_schema if entry == stale_schema else entry for entry in search_path
+            ]
     return resolved_tenant_id, resolved_tenant_slug, resolved_tenant_schema
 
 
@@ -242,6 +291,71 @@ def _mirror_shared_tables_for_creation() -> list[Table]:
     return mirrored
 
 
+def register_cross_base_fk_resolution() -> None:
+    """Mirror shared tables into TenantBase.metadata for cross-base FK resolution.
+
+    String-form ForeignKeys on TenantBaseModel subclasses (e.g. ``Company``'s
+    ``tenant_id`` referring to ``ForeignKey("tenant.id")``) are resolved by
+    SQLAlchemy at flush time by looking up the target name in the *source*
+    mapper's MetaData under the unqualified key (the parent column's schema
+    is ``None`` for TenantBase models). For SQLite the existing
+    :func:`_mirror_shared_tables_for_creation` helper makes shared tables
+    visible (and is undone after create_all); on Postgres the mirror is
+    intentionally skipped — so the FK is unresolvable at flush time and ORM
+    operations against tenant-scoped models raise
+    ``sqlalchemy.exc.NoReferencedTableError``.
+
+    Re-add the mirror permanently (idempotent) with ``schema=None`` so the
+    mirrored copy is keyed by its bare table name (``"tenant"`` rather than
+    ``"public.tenant"``) — that is the key SQLAlchemy's FK string resolver
+    actually looks for. The original shared table keeps its real schema, so
+    DDL for the shared schema is unaffected. Each mirrored table is tagged
+    via ``info["cross_base_mirror"]`` so ``create_all`` against
+    ``TenantBase.metadata`` can skip it (the real table lives in
+    ``SharedBase.metadata``).
+
+    Safe to call multiple times. Also wired to SQLAlchemy's ``after_configured``
+    mapper event so it runs automatically before any flush, regardless of
+    which entry point (CLI, lifespan, tests) is used.
+    """
+
+    for table in SharedBase.metadata.tables.values():
+        if table.name in TenantBase.metadata.tables:
+            continue
+        mirrored = table.to_metadata(TenantBase.metadata, schema=None)
+        mirrored.info["cross_base_mirror"] = True
+
+
+def _tenant_tables_for_creation() -> list[Table]:
+    """Return TenantBase tables that should participate in create_all.
+
+    Excludes cross-base FK-resolution mirrors registered by
+    :func:`register_cross_base_fk_resolution` — those exist only to satisfy
+    SQLAlchemy's string FK resolver; the real shared tables are created via
+    ``SharedBase.metadata.create_all``.
+    """
+
+    return [
+        table
+        for table in TenantBase.metadata.tables.values()
+        if not table.info.get("cross_base_mirror")
+    ]
+
+
+# Run the registration automatically as soon as all SQLAlchemy mappers are
+# configured — that is the natural "post-import, pre-flush" point. The
+# explicit ``register_cross_base_fk_resolution()`` call kept in
+# ``app/api/app.py::lifespan`` remains as a belt-and-suspenders safeguard
+# for any flush that might happen before mapper auto-configure (e.g.
+# Alembic offline mode or test fixtures that touch sessions directly).
+from sqlalchemy.orm import Mapper as _Mapper  # noqa: E402  (intentional late import)
+
+
+@event.listens_for(_Mapper, "after_configured")
+def _auto_register_cross_base_fk_resolution() -> None:
+    register_cross_base_fk_resolution()
+
+
 async def _create_shared_schema() -> None:
     """Create database objects stored in the shared schema."""
 
@@ -251,7 +365,10 @@ async def _create_shared_schema() -> None:
 
         try:
             if not _SUPPORTS_SCHEMAS:
-                await conn.run_sync(TenantBase.metadata.create_all)
+                tables = _tenant_tables_for_creation()
+                await conn.run_sync(
+                    lambda sync_conn: TenantBase.metadata.create_all(sync_conn, tables=tables)
+                )
         finally:
             for table in mirrored:
                 TenantBase.metadata.remove(table)
@@ -264,13 +381,51 @@ async def _create_tenant_schema(schema: str) -> None:
         return
     async with engine.begin() as conn:
         await conn.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{schema}"'))
+        search_path_sql = f'SET LOCAL search_path TO "{schema}", "{_SHARED_SCHEMA}"'
         if _SEARCH_PATH_SUPPORTED:
-            await conn.execute(text(f'SET search_path TO "{schema}"'))
-        await conn.run_sync(TenantBase.metadata.create_all)
+            # iter-16f part 4 set this on the async conn, but FK to unqualified
+            # ``tenant`` still failed in CI — the async→sync greenlet bridge
+            # used by run_sync may not propagate session-scoped SET reliably.
+            # Apply SET LOCAL on both sides of the bridge and verify.
+            await conn.execute(text(search_path_sql))
+            applied_async = (await conn.execute(text("SHOW search_path"))).scalar_one()
+            _logger.info(
+                "tenant.schema.create.async.search_path",
+                extra={"schema": schema, "search_path": applied_async},
+            )
+        tables = _tenant_tables_for_creation()
+
+        def _create(sync_conn) -> None:
+            if _SEARCH_PATH_SUPPORTED:
+                sync_conn.execute(text(search_path_sql))
+                applied_sync = sync_conn.execute(text("SHOW search_path")).scalar_one()
+                _logger.info(
+                    "tenant.schema.create.sync.search_path",
+                    extra={"schema": schema, "search_path": applied_sync},
+                )
+            TenantBase.metadata.create_all(sync_conn, tables=tables)
+
+        await conn.run_sync(_create)
 
 
 def ensure_shared_schema(*, implicit: bool = False) -> None:
-    """Ensure shared tables are present during local development."""
+    """Ensure shared tables are present during local development.
+
+    This is the **sync wrapper**. It uses ``_run_in_thread`` + ``asyncio.run``
+    to bridge into an async context, which spawns a brand-new event loop and
+    initialises the global ``engine``'s connection pool with connections
+    bound to that worker loop. When the worker thread exits, those
+    connections remain in the pool but their asyncpg futures are tied to a
+    now-dead loop — and the next access from a *different* loop raises
+    ``RuntimeError: Future ... attached to a different loop``. The exact
+    failure surface that previously broke ``perf-smoke`` at
+    ``_create_tenant_schema`` (see iter-22 PR fixing this).
+
+    From an **async** context (FastAPI lifespan, async test fixtures), call
+    :func:`aensure_shared_schema` FIRST — once it sets
+    ``_shared_initialized = True`` the implicit sync call from
+    :func:`AsyncSessionLocal` short-circuits and never spawns a worker loop.
+    """
 
     global _shared_initialized
     if implicit and not _settings.runtime_schema_bootstrap:
@@ -290,6 +445,29 @@ def ensure_shared_schema(*, implicit: bool = False) -> None:
         _shared_initialized = True
 
 
+async def aensure_shared_schema(*, implicit: bool = False) -> None:
+    """Async-native :func:`ensure_shared_schema`.
+
+    Call this from the FastAPI lifespan (or any other async startup path)
+    BEFORE the first :func:`session_scope` / :func:`AsyncSessionLocal`. It
+    runs ``_create_shared_schema`` directly on the current loop, then sets
+    the same ``_shared_initialized`` flag the sync wrapper guards on — so
+    later implicit sync calls from ``AsyncSessionLocal`` short-circuit and
+    never spin up the worker-loop pattern that pollutes the engine pool
+    (see :func:`ensure_shared_schema` docstring).
+    """
+
+    global _shared_initialized
+    if implicit and not _settings.runtime_schema_bootstrap:
+        return
+    if _settings.app_env == "production":
+        return
+    if _shared_initialized:
+        return
+    await _create_shared_schema()
+    _shared_initialized = True
+
+
 def ensure_tenant_schema(
     slug: str,
     *,
@@ -301,6 +479,13 @@ def ensure_tenant_schema(
     if implicit and not _settings.runtime_schema_bootstrap:
         return
     if not _SUPPORTS_SCHEMAS:
+        return
+    if schema_name is None and _normalize_tenant_id(slug) is not None:
+        # ``slug`` is actually a tenant UUID (celery-task calling convention);
+        # deriving a schema from it would bootstrap a spurious empty
+        # "tenant_<uuid>" schema. Session hydration resolves the real schema
+        # from the Tenant row instead.
+        _logger.warning("tenant.schema.ensure.uuid_slug_skipped", extra={"slug": slug})
         return
     schema = str(schema_name or tenant_schema(slug)).strip()
     if not schema:
@@ -318,6 +503,48 @@ def ensure_tenant_schema(
 
         _run_in_thread(runner)
         _tenant_initialized.add(schema)
+
+
+async def aensure_tenant_schema(
+    slug: str,
+    *,
+    schema_name: str | None = None,
+    implicit: bool = False,
+) -> None:
+    """Async-native :func:`ensure_tenant_schema`.
+
+    The sync wrapper does the heavy lifting via ``_run_in_thread`` +
+    ``asyncio.run``, which spins up a brand-new event loop. The global
+    async engine's connection pool was created in the calling loop, so any
+    asyncpg connection it hands out has Futures bound to that loop —
+    touching them from the worker loop raises ``RuntimeError: Future ...
+    attached to a different loop`` and aborts ``CREATE TABLE`` mid-flight,
+    leaving the tenant schema empty (and the next ``SELECT`` failing with
+    ``UndefinedTableError``).
+
+    From an async context (e.g. FastAPI lifespan), call this helper
+    instead — it stays on the current loop, idempotent via the same
+    ``_tenant_initialized`` cache.
+    """
+
+    if implicit and not _settings.runtime_schema_bootstrap:
+        return
+    if not _SUPPORTS_SCHEMAS:
+        return
+    if schema_name is None and _normalize_tenant_id(slug) is not None:
+        # Same guard as ensure_tenant_schema: never derive a schema name
+        # from a tenant UUID mislabelled as slug.
+        _logger.warning("tenant.schema.ensure.uuid_slug_skipped", extra={"slug": slug})
+        return
+    schema = str(schema_name or tenant_schema(slug)).strip()
+    if not schema:
+        return
+    if _settings.app_env == "production":
+        return
+    if schema in _tenant_initialized:
+        return
+    await _create_tenant_schema(schema)
+    _tenant_initialized.add(schema)
 
 
 def resolve_tenant_schema(tenant_id: str) -> str:
@@ -353,7 +580,7 @@ async def _apply_search_path(session: AsyncSession) -> None:
     await session.execute(text(f"SET LOCAL search_path TO {formatted}"))
     ctx = get_tenant_context()
     if ctx and ctx.correlation_id:
-        safe = ctx.correlation_id.replace("\"", "")
+        safe = ctx.correlation_id.replace('"', "")
         await session.execute(text(f"SET LOCAL application_name TO 'api:{safe}'"))
 
 
@@ -402,16 +629,40 @@ def AsyncSessionLocal(
 
 
 @asynccontextmanager
-async def session_scope(*, tenant: str | None = None) -> AsyncIterator[AsyncSession]:
-    """Provide a transactional scope around operations executed per tenant."""
+async def transaction_scope(session: AsyncSession) -> AsyncIterator[AsyncSession]:
+    """Own the transaction for an existing session: commit on clean exit, roll back on error.
 
-    async with AsyncSessionLocal(tenant=tenant) as session:
-        try:
+    Single source of truth for the request-transaction contract. Both the API
+    dependency (``app.api.dependencies.get_session``) and the test double in
+    ``tests/conftest.py`` route through this, so the harness cannot drift into
+    being more forgiving than production — the divergence that let flush-only
+    handlers return 2xx while discarding their writes.
+    """
+
+    try:
+        yield session
+        await session.commit()
+    except Exception:
+        await session.rollback()
+        raise
+
+
+@asynccontextmanager
+async def session_scope(
+    *, tenant: str | None = None, schema_name: str | None = None
+) -> AsyncIterator[AsyncSession]:
+    """Provide a transactional scope around operations executed per tenant.
+
+    ``schema_name`` overrides the default-tenant → shared-schema short-circuit
+    in :func:`AsyncSessionLocal`. Pass it when the tenant slug equals
+    ``DEFAULT_TENANT_SLUG`` but the data actually lives in a tenant-specific
+    schema (e.g. ``bootstrap_demo_tenant`` after ``aensure_tenant_schema``
+    creates ``tenant_demo.*``).
+    """
+
+    async with AsyncSessionLocal(tenant=tenant, schema_name=schema_name) as session:
+        async with transaction_scope(session):
             yield session
-            await session.commit()
-        except Exception:
-            await session.rollback()
-            raise
 
 
 async def get_session() -> AsyncIterator[AsyncSession]:
@@ -422,7 +673,9 @@ async def get_session() -> AsyncIterator[AsyncSession]:
 
 
 @asynccontextmanager
-async def with_tenant_session(*, tenant_id: str, schema_name: str | None = None) -> AsyncIterator[AsyncSession]:
+async def with_tenant_session(
+    *, tenant_id: str, schema_name: str | None = None
+) -> AsyncIterator[AsyncSession]:
     """Compatibility helper that ensures tenant schema routing inside transaction scope."""
 
     schema = schema_name or resolve_tenant_schema(tenant_id)
@@ -439,23 +692,32 @@ async def get_tenant_session(
 ) -> AsyncIterator[AsyncSession]:
     """Return a tenant-bound session and enforce schema routing."""
 
-    async with AsyncSessionLocal(tenant=tenant, tenant_id=tenant_id, schema_name=schema_name) as session:
+    async with AsyncSessionLocal(
+        tenant=tenant, tenant_id=tenant_id, schema_name=schema_name
+    ) as session:
         if _SEARCH_PATH_SUPPORTED:
             schema = schema_name or tenant_schema(tenant or tenant_id or _DEFAULT_TENANT_SLUG)
             try:
-                await session.execute(text(f'SET LOCAL search_path TO "{schema}", "{_SHARED_SCHEMA}"'))
+                await session.execute(
+                    text(f'SET LOCAL search_path TO "{schema}", "{_SHARED_SCHEMA}"')
+                )
             except Exception:
                 await session.execute(text(f'SET search_path TO "{schema}", "{_SHARED_SCHEMA}"'))
             ctx = get_tenant_context()
             if ctx and ctx.correlation_id:
-                safe = ctx.correlation_id.replace("\"", "")
+                safe = ctx.correlation_id.replace('"', "")
                 await session.execute(text(f"SET LOCAL application_name TO 'api:{safe}'"))
-        yield session
+        try:
+            yield session
+        finally:
+            if _SEARCH_PATH_SUPPORTED:
+                try:
+                    await session.execute(text(f'SET search_path TO "{_SHARED_SCHEMA}"'))
+                except Exception:
+                    pass
 
 
-def configure_engine(
-    *, database_url: str | None = None, echo: bool | None = None
-) -> None:
+def configure_engine(*, database_url: str | None = None, echo: bool | None = None) -> None:
     """Reconfigure the global SQLAlchemy engine.
 
     Useful for tests that need to bind the ORM to an in-memory database.
@@ -513,6 +775,7 @@ __all__ = [
     "engine",
     "supports_schemas",
     "session_scope",
+    "transaction_scope",
     "get_session",
     "resolve_tenant_schema",
     "with_tenant_session",

@@ -1,8 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
+import { toast } from "sonner";
 
-import { EmptyState } from "@/components/common/EmptyState";
-import { ErrorState } from "@/components/common/ErrorState";
-import { LoadingScreen } from "@/components/common/LoadingScreen";
+import { ListStateGuard } from "@/components/common/ListStateGuard";
 import { Can } from "@/components/permissions/Can";
 import { RegistryPageHeader } from "@/components/common/RegistryPageHeader";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
@@ -12,67 +12,164 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PersonFormDialog } from "@/features/persons/PersonFormDialog";
 import { PersonTable } from "@/features/persons/PersonTable";
 import { PERMISSIONS } from "@/permissions/permissions";
+import { ROUTES } from "@/router/routes";
 import { usePersonsStore } from "@/stores/persons";
 import type { PersonDto } from "@/types/dto/persons";
 
 const PersonsPage = () => {
-  const { list, pagination, loading, error, items } = usePersonsStore();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { list, getById, item, pagination, loading, error, items } = usePersonsStore();
   const [selectedPerson, setSelectedPerson] = useState<PersonDto | null>(null);
+  const focusedPersonId = searchParams.get("person_id") ?? undefined;
+
+  const PERSON_STATUS_LABELS: Record<string, string> = useMemo(
+    () => ({
+      active: "Активен",
+      inactive: "Неактивен",
+      dismissed: "Уволен"
+    }),
+    []
+  );
 
   useEffect(() => {
     list();
   }, [list]);
 
+  useEffect(() => {
+    if (!focusedPersonId) return;
+    const focused = items.find((person) => person.id === focusedPersonId);
+    if (focused) {
+      setSelectedPerson(focused);
+      return;
+    }
+    void getById(focusedPersonId).then((loaded) => {
+      if (loaded) {
+        setSelectedPerson(loaded);
+      }
+    });
+  }, [focusedPersonId, getById, items]);
+
+  useEffect(() => {
+    if (focusedPersonId && item?.id === focusedPersonId) {
+      setSelectedPerson(item);
+    }
+  }, [focusedPersonId, item]);
+
   return (
     <div className="space-y-6">
-      <Breadcrumb items={[{ label: "Главная", to: "/" }, { label: "Сотрудники" }]} />
+      <Breadcrumb items={[{ label: "Главная", to: ROUTES.DASHBOARD }, { label: "Сотрудники" }]} />
       <RegistryPageHeader
         title="Сотрудники"
         description="Карточка сотрудника с вкладками по обучению, СИЗ, рискам и медосмотрам."
         stats={[{ label: "Сотрудников", value: pagination.total }]}
         actions={
-          <PersonFormDialog
-            trigger={
-              <Can
-                permission={PERMISSIONS.PERSON_CREATE}
-                fallback={<Button disabled title="Недостаточно прав для добавления сотрудника">Добавить</Button>}
-              >
-                <Button>Добавить</Button>
-              </Can>
-            }
-            onSubmitted={(person) => {
-              setSelectedPerson(person);
-              list();
-            }}
-          />
+          <Can permission={PERMISSIONS.PERSON_CREATE}>
+            {(allowed) => (
+              <PersonFormDialog
+                trigger={
+                  <Button
+                    disabled={!allowed}
+                    title={!allowed ? "Недостаточно прав для добавления сотрудника" : undefined}
+                  >
+                    Добавить
+                  </Button>
+                }
+                onSubmitted={(person) => {
+                  setSelectedPerson(person);
+                  const next = new URLSearchParams(searchParams);
+                  next.set("person_id", person.id);
+                  setSearchParams(next, { replace: true });
+                  toast.success(`Сотрудник "${person.full_name}" добавлен и открыт в карточке`);
+                  list();
+                }}
+              />
+            )}
+          </Can>
         }
       />
       <Card>
         <CardContent className="py-6">
-          <ErrorState error={error ?? undefined} onRetry={() => void list()} />
-          {loading ? <LoadingScreen label="Загрузка сотрудников" /> : null}
-          {!loading && !error && items.length === 0 ? (
-            <EmptyState title="Сотрудники не найдены" description="Добавьте первого сотрудника или измените фильтры поиска." />
-          ) : null}
-          {!loading && !error && items.length > 0 ? <PersonTable onSelect={setSelectedPerson} /> : null}
+          <ListStateGuard
+            error={error}
+            loading={loading}
+            itemsCount={items.length}
+            loadingLabel="Загрузка сотрудников"
+            emptyTitle="Сотрудники не найдены"
+            emptyDescription="Добавьте первого сотрудника или измените фильтры поиска."
+            onRetry={() => void list()}
+          >
+            <PersonTable
+              onSelect={(person) => {
+                setSelectedPerson(person);
+                const next = new URLSearchParams(searchParams);
+                next.set("person_id", person.id);
+                setSearchParams(next, { replace: true });
+              }}
+            />
+          </ListStateGuard>
         </CardContent>
       </Card>
       {selectedPerson && (
         <Card>
           <CardContent className="space-y-4 py-6">
             <h2 className="text-xl font-semibold">{selectedPerson.full_name}</h2>
+            <div className="flex flex-wrap gap-2">
+              <Can permission={PERMISSIONS.EMPLOYEE_CARD_VIEW}>
+                {(allowed) =>
+                  allowed ? (
+                    <Button size="sm" asChild>
+                      <Link to={`/employees/${encodeURIComponent(selectedPerson.id)}`}>
+                        Открыть карточку
+                      </Link>
+                    </Button>
+                  ) : null
+                }
+              </Can>
+              <Can permission={PERMISSIONS.PERSON_CREATE}>
+                {(allowed) =>
+                  allowed ? (
+                    <PersonFormDialog
+                      key={selectedPerson.id}
+                      initialData={selectedPerson}
+                      trigger={
+                        <Button size="sm" variant="outline">
+                          Изменить
+                        </Button>
+                      }
+                      onSubmitted={(person) => {
+                        setSelectedPerson(person);
+                        toast.success(`Сотрудник "${person.full_name}" обновлён`);
+                        void list();
+                      }}
+                    />
+                  ) : null
+                }
+              </Can>
+              {focusedPersonId ? (
+                <>
+                  <Button size="sm" variant="ghost" asChild>
+                    <Link to="/persons">Сбросить фокус</Link>
+                  </Button>
+                  <Button size="sm" variant="outline" asChild>
+                    <Link to={`/documents/quick-generate?person_id=${encodeURIComponent(selectedPerson.id)}&company_id=${encodeURIComponent(selectedPerson.company_id ?? "")}`}>
+                      Сформировать документы по случаю
+                    </Link>
+                  </Button>
+                </>
+              ) : null}
+            </div>
             <div className="grid gap-2 md:grid-cols-2">
               <Info label="Должность" value={selectedPerson.position} />
-              <Info label="Email" value={selectedPerson.email} />
+              <Info label="Электронная почта" value={selectedPerson.email} />
               <Info label="Телефон" value={selectedPerson.phone} />
-              <Info label="Статус" value={selectedPerson.status} />
+              <Info label="Статус" value={PERSON_STATUS_LABELS[selectedPerson.status] ?? selectedPerson.status} />
             </div>
             <Tabs defaultValue="training">
               <TabsList>
-                <TabsTrigger value="training">Training</TabsTrigger>
-                <TabsTrigger value="ppe">PPE</TabsTrigger>
-                <TabsTrigger value="risks">Risks</TabsTrigger>
-                <TabsTrigger value="medical">Medical</TabsTrigger>
+                <TabsTrigger value="training">Обучение</TabsTrigger>
+                <TabsTrigger value="ppe">СИЗ</TabsTrigger>
+                <TabsTrigger value="risks">Риски</TabsTrigger>
+                <TabsTrigger value="medical">Медосмотры</TabsTrigger>
               </TabsList>
               <TabsContent value="training">Назначения и удостоверения доступны в модуле обучения.</TabsContent>
               <TabsContent value="ppe">Нормы выдачи и история СИЗ отображаются в модуле СИЗ.</TabsContent>

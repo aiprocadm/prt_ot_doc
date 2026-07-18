@@ -1,5 +1,7 @@
 # Specification Compliance Report — Backend_TZ v2.1
 
+> **DEPRECATED (2026-05-04).** Файл, на который этот отчёт ссылается (`docs/Backend_TZ.md`), уже удалён в Wave 2 cleanup. Канонический источник статуса — `docs/audit/TZ_COVERAGE_MATRIX.md` (MVP) и `docs/spec/TZ_FULL_UNIFIED.md` (ТЗ). Не использовать для приёмки. Кандидат на удаление в Wave 4 (см. `docs/CLEANUP_CANDIDATES.md`).
+
 This report cross-checks the current `prt_ot_doc` codebase against the mandatory requirements captured in `docs/Backend_TZ.md`.
 Status legend: ✅ — implemented, ⚠️ — partially implemented, ❌ — missing.
 

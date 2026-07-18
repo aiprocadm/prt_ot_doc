@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import sqlalchemy as sa
 from alembic import op
+from sqlalchemy.dialects import postgresql
 
 revision = "20260418_next66_notifications_templates_foundation"
 down_revision = "20260410_next65"
@@ -17,8 +18,15 @@ depends_on = None
 
 
 def upgrade() -> None:
-    channel_enum = sa.Enum("email", "telegram", "inapp", "webhook", name="notificationtemplatechannel")
-    type_enum = sa.Enum(
+    channel_enum = postgresql.ENUM(
+        "email",
+        "telegram",
+        "inapp",
+        "webhook",
+        name="notificationtemplatechannel",
+        create_type=False,
+    )
+    type_enum = postgresql.ENUM(
         "JobStatusChanged",
         "DocumentGenerated",
         "DocumentExported",
@@ -46,6 +54,7 @@ def upgrade() -> None:
         "EdoStatusChanged",
         "BillingLimitWarning",
         name="notificationtemplatetype",
+        create_type=False,
     )
     bind = op.get_bind()
     channel_enum.create(bind, checkfirst=True)
@@ -69,10 +78,18 @@ def upgrade() -> None:
         sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True),
         sa.ForeignKeyConstraint(["tenant_id"], ["tenant.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("tenant_id", "code", "channel", "locale", name="uq_notification_templates_scope"),
+        sa.UniqueConstraint(
+            "tenant_id", "code", "channel", "locale", name="uq_notification_templates_scope"
+        ),
     )
-    op.create_index("ix_notification_templates_lookup", "notification_templates", ["tenant_id", "channel", "type", "is_active"])
-    op.create_index(op.f("ix_notification_templates_tenant_id"), "notification_templates", ["tenant_id"])
+    op.create_index(
+        "ix_notification_templates_lookup",
+        "notification_templates",
+        ["tenant_id", "channel", "type", "is_active"],
+    )
+    op.create_index(
+        op.f("ix_notification_templates_tenant_id"), "notification_templates", ["tenant_id"]
+    )
 
 
 def downgrade() -> None:

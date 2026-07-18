@@ -1,3 +1,4 @@
+/* eslint-disable no-restricted-imports -- axios-mock-adapter must wrap the same axios instance as the app */
 import axios from "axios";
 import MockAdapter from "axios-mock-adapter";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -130,6 +131,25 @@ describe("apiClient", () => {
 
     expect(response.data).toEqual({ ok: true });
     expect(tokenStorage.getAccessToken()).toBe(nextAccessToken);
+
+    apiMock.restore();
+    axiosMock.restore();
+  });
+
+  it("does not call refresh endpoint when 401 arrives without access token", async () => {
+    tenantStorage.setTenant({ slug: "demo" });
+
+    const refreshUrl = `${appConfig.apiBaseUrl}/auth/refresh`;
+    const apiMock = new MockAdapter(apiClient);
+    const axiosMock = new MockAdapter(axios);
+
+    apiMock.onGet("/documents").replyOnce(401);
+    axiosMock.onPost(refreshUrl).reply(200, { access_token: "should-not-be-used" });
+
+    await expect(apiClient.get("/documents")).rejects.toMatchObject({
+      status: 401
+    });
+    expect(axiosMock.history.post).toHaveLength(0);
 
     apiMock.restore();
     axiosMock.restore();

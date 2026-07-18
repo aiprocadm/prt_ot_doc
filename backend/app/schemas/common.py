@@ -25,8 +25,15 @@ class TemplateRead(BaseSchema):
     @computed_field(return_type=dict[str, Any])
     def scope(self) -> dict[str, Any]:
         if not isinstance(self.metadata, dict):
-            return {"level": "tenant", "company_id": None, "site_id": None, "label": None, "applicability": None}
-        scope = self.metadata.get("scope") if isinstance(self.metadata.get("scope"), dict) else {}
+            return {
+                "level": "tenant",
+                "company_id": None,
+                "site_id": None,
+                "label": None,
+                "applicability": None,
+            }
+        _raw_scope = self.metadata.get("scope")
+        scope: dict[str, Any] = _raw_scope if isinstance(_raw_scope, dict) else {}
         return {
             "level": str(scope.get("level") or "tenant"),
             "company_id": scope.get("company_id"),

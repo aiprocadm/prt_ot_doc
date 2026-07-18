@@ -82,4 +82,3 @@ class JournalEntryRead(BaseSchema):
 class JournalEntryPage(BaseSchema):
     items: list[JournalEntryRead]
     total: int
-

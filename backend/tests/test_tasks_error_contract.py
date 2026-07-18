@@ -7,7 +7,6 @@ def test_task_unprocessable_has_structured_error_detail() -> None:
     exc = _task_unprocessable("unsupported task status")
 
     assert exc.status_code == 422
-    assert exc.detail == {
-        "code": "task_validation_error",
-        "message": "unsupported task status",
-    }
+    assert exc.detail["code"] == "TASK_VALIDATION_ERROR"
+    assert exc.detail["error_code"] == "TASK_VALIDATION_ERROR"
+    assert exc.detail["message"] == "unsupported task status"

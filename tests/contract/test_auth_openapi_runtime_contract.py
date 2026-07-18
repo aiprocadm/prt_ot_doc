@@ -9,7 +9,6 @@ import yaml
 from app.api.app import create_app
 from app.core.config import Settings
 
-
 SPEC_PATH = Path("docs/openapi.yaml")
 AUTH_PATHS: dict[str, tuple[str, ...]] = {
     "/api/v1/auth/login": ("post",),
@@ -46,7 +45,9 @@ def _resolve_local_ref(spec: dict[str, Any], ref: str) -> dict[str, Any]:
     return node
 
 
-def _schema_for_response(spec: dict[str, Any], path: str, method: str, status_code: str) -> dict[str, Any]:
+def _schema_for_response(
+    spec: dict[str, Any], path: str, method: str, status_code: str
+) -> dict[str, Any]:
     payload = spec["paths"][path][method]["responses"][status_code]
     if isinstance(payload, dict) and isinstance(payload.get("$ref"), str):
         payload = _resolve_local_ref(spec, payload["$ref"])
@@ -101,19 +102,29 @@ def test_static_auth_openapi_matches_runtime_contract() -> None:
 
             static_request = _normalize_schema(_schema_for_request(static_spec, path, method))
             runtime_request = _normalize_schema(_schema_for_request(runtime_spec, path, method))
-            assert static_request == runtime_request, f"request schema drift for {method.upper()} {path}"
+            assert (
+                static_request == runtime_request
+            ), f"request schema drift for {method.upper()} {path}"
 
             static_statuses = set(static_operation["responses"].keys())
             runtime_statuses = set(runtime_operation["responses"].keys())
-            assert static_statuses == runtime_statuses, f"response status drift for {method.upper()} {path}"
+            assert (
+                static_statuses == runtime_statuses
+            ), f"response status drift for {method.upper()} {path}"
 
             for status_code in static_statuses:
-                static_response = _normalize_schema(_schema_for_response(static_spec, path, method, status_code))
-                runtime_response = _normalize_schema(_schema_for_response(runtime_spec, path, method, status_code))
+                static_response = _normalize_schema(
+                    _schema_for_response(static_spec, path, method, status_code)
+                )
+                runtime_response = _normalize_schema(
+                    _schema_for_response(runtime_spec, path, method, status_code)
+                )
                 if not static_response and not runtime_response:
                     continue
-                if not runtime_response and not (status_code.startswith("2") or status_code == "422"):
+                if not runtime_response and not (
+                    status_code.startswith("2") or status_code == "422"
+                ):
                     continue
-                assert static_response == runtime_response, (
-                    f"response schema drift for {method.upper()} {path} {status_code}"
-                )
+                assert (
+                    static_response == runtime_response
+                ), f"response schema drift for {method.upper()} {path} {status_code}"

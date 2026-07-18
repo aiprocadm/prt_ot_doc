@@ -1,0 +1,22 @@
+{
+  "_note": "Scoped coverage ratchet floors for core/domain/services (TZ-6.3-V11-01). Floors were BOOTSTRAPPED from the first canonical CI coverage run after W0 (CI re-enable): run 27508869071, branch chore/ci-workflow-dispatch, Py3.12.12, 3138 tests, artifacts/coverage.json. Each floor = floor(measured) minus a ~1pp jitter margin (whole-percent, ~1.0-1.9pp headroom) so the ratchet locks in the real gain without false-failing on run-to-run coverage jitter. Measured at bootstrap: core 82.83% line / 69.33% branch; domain 75.18% / 59.03%; services 79.63% / 65.92%. 85% line is the documented North-Star target (NOT an immediate hard gate); raise floors toward it as tests land (docs/stabilization/coverage_climb_plan.md). Enforced by scripts/ci/check_scoped_coverage.py, wired into the live .github/workflows/ci.yml (Scoped coverage climb gate step).",
+  "measured_at": "2026-06-14 (canonical CI run 27508869071, Py3.12.12, 3138 tests) — per-scope floors bootstrapped from real coverage.json",
+  "target_line_percent": 85.0,
+  "scopes": {
+    "core": {
+      "floor_line_percent": 81.0,
+      "floor_branch_percent": 68.0,
+      "patterns": ["backend/app/core/"]
+    },
+    "domain": {
+      "floor_line_percent": 74.0,
+      "floor_branch_percent": 58.0,
+      "patterns": ["backend/app/domains/"]
+    },
+    "services": {
+      "floor_line_percent": 78.0,
+      "floor_branch_percent": 64.0,
+      "patterns": ["backend/app/services/"]
+    }
+  }
+}

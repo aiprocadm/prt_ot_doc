@@ -2,12 +2,32 @@ import { toast } from "sonner";
 
 import type { ApiError } from "@/types/dto/common";
 import { tokenStorage } from "@/api/tokenStorage";
-import { setReturnTo } from "@/utils/returnTo";
+import { requestAuthRedirect } from "@/router/authRedirect";
 import { sessionStorageSetItem } from "@/utils/browserStorage";
 
 const AUTH_PATHS = ["/auth/login", "/auth/refresh", "/auth/logout"];
 
 const BILLING_ALERT_STORAGE_KEY = "billing:alert";
+
+const MAX_TOAST_BODY_LEN = 280;
+
+/** Собирает текст тоста: обрезка длинного message и хвост correlation_id в DEV. */
+export const buildToastText = (primary: string, error: ApiError): string => {
+  const trimmed = primary.trim();
+  const body =
+    trimmed.length > MAX_TOAST_BODY_LEN ? `${trimmed.slice(0, MAX_TOAST_BODY_LEN)}…` : trimmed;
+  if (import.meta.env.DEV && error.correlation_id) {
+    const id = error.correlation_id;
+    const ref = id.length > 12 ? `${id.slice(0, 8)}…` : id;
+    return `${body} (ref: ${ref})`;
+  }
+  return body;
+};
+
+const toastErrorPreferMessage = (error: ApiError, fallback: string) => {
+  const raw = error.message?.trim();
+  toast.error(raw ? buildToastText(raw, error) : fallback);
+};
 
 const rememberBillingAlert = (code: string) => {
   sessionStorageSetItem(BILLING_ALERT_STORAGE_KEY, JSON.stringify({ code, ts: Date.now() }));
@@ -18,15 +38,6 @@ export { BILLING_ALERT_STORAGE_KEY };
 const isAuthPath = (url?: string) => {
   if (!url) return false;
   return AUTH_PATHS.some((path) => url.includes(path));
-};
-
-const redirectToLogin = () => {
-  if (typeof window === "undefined") return;
-  const current = `${window.location.pathname}${window.location.search}`;
-  if (!window.location.pathname.startsWith("/auth")) {
-    setReturnTo(current);
-  }
-  window.location.assign("/auth/login");
 };
 
 export const handleApiError = (error: ApiError, requestUrl?: string) => {
@@ -56,31 +67,43 @@ export const handleApiError = (error: ApiError, requestUrl?: string) => {
 
   if (status === 401 && !isAuthPath(requestUrl)) {
     tokenStorage.clear();
-    redirectToLogin();
+    requestAuthRedirect("unauthorized");
+    return;
+  }
+
+  if (status === 400) {
+    toastErrorPreferMessage(error, "Некорректный запрос.");
     return;
   }
 
   if (status === 403) {
-    toast.error("Недостаточно прав для выполнения операции.");
+    toastErrorPreferMessage(error, "Недостаточно прав для выполнения операции.");
     return;
   }
 
   if (status === 404) {
-    toast.error("Запрошенный ресурс недоступен.");
+    toastErrorPreferMessage(error, "Запрошенный ресурс недоступен.");
     return;
   }
 
   if (status === 409) {
-    toast.error("Конфликт данных. Обновите страницу и попробуйте снова.");
+    toastErrorPreferMessage(error, "Конфликт данных. Обновите страницу и попробуйте снова.");
     return;
   }
 
   if (status === 422) {
-    toast.error("Проверьте введённые данные и повторите попытку.");
+    const fe = error.field_errors?.filter((f) => f.field && f.message) ?? [];
+    if (fe.length > 0) {
+      const joined = fe.map((f) => `${f.field}: ${f.message}`).join(". ");
+      toast.error(buildToastText(joined, error));
+      return;
+    }
+    toastErrorPreferMessage(error, "Проверьте введённые данные и повторите попытку.");
     return;
   }
 
+  // 5xx: не дублируем тост — на экранах с ErrorState сообщение уже в блоке; иначе шум.
   if (status >= 500) {
-    toast.error("Сервис временно недоступен. Попробуйте позже.");
+    return;
   }
 };

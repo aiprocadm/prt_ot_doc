@@ -105,7 +105,17 @@ async def test_retry_failed_only_keeps_successful_steps(sessionmaker, data_facto
             idempotency_key="idem-3",
             request_hash="hash-3",
         )
-        steps = (await session.execute(select(DocumentJobStep).where(DocumentJobStep.job_id == job.id).order_by(DocumentJobStep.order.asc()))).scalars().all()
+        steps = (
+            (
+                await session.execute(
+                    select(DocumentJobStep)
+                    .where(DocumentJobStep.job_id == job.id)
+                    .order_by(DocumentJobStep.order.asc())
+                )
+            )
+            .scalars()
+            .all()
+        )
         steps[0].status = JobStepStatus.SUCCESS.value
         steps[1].status = JobStepStatus.FAILED.value
         steps[2].status = JobStepStatus.QUEUED.value
@@ -171,7 +181,9 @@ async def test_orchestrator_dispatches_real_internal_handlers(sessionmaker, monk
     class FakeEDOProvider:
         name = "fake-edo"
 
-        async def send_document(self, *, content: bytes, filename: str, metadata: dict[str, str] | None = None):
+        async def send_document(
+            self, *, content: bytes, filename: str, metadata: dict[str, str] | None = None
+        ):
             class Status:
                 external_id = "edo-ext-1"
                 status = "sent"
@@ -197,7 +209,9 @@ async def test_orchestrator_dispatches_real_internal_handlers(sessionmaker, monk
                 "input_payload_json": {"employee": {"name": "Ada"}, "doc": "instruction"},
             },
         )()
-        step = type("Step", (), {"id": "step-1", "input": {"payload": {"query": "instruction ada"}}})()
+        step = type(
+            "Step", (), {"id": "step-1", "input": {"payload": {"query": "instruction ada"}}}
+        )()
 
         sign_result = await orchestrator._dispatch("sign")(job=job, step=step)
         assert sign_result["status"] == "verified"

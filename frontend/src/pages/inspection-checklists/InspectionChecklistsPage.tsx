@@ -41,13 +41,13 @@ const InspectionChecklistsPage = () => {
 
   return (
     <div className="space-y-4">
-      <RegistryPageHeader title="Чек-листы проверок" description="Экран больше не пустой: он показывает фактическое использование inspection types как foundation для чек-листового реестра." />
+      <RegistryPageHeader title="Чек-листы проверок" description="Экран больше не пустой: он показывает фактическое использование типов проверок как основу для чек-листового реестра." />
       <ErrorState error={error ?? undefined} onRetry={() => void reload()} />
       {loading ? <LoadingScreen label="Загрузка чек-листов" /> : null}
       {!loading && !error && hasChecklistGap ? (
         <Card className="border-orange-200 bg-orange-50/40">
           <CardHeader>
-            <CardTitle className="text-base">Blockers и next actions</CardTitle>
+            <CardTitle className="text-base">Блокеры и дальнейшие действия</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3 text-sm">
             <p>Открытых предписаний: {openPrescriptions}. Шаблонов документов для покрытия чек-листов: {data.templates.length}.</p>
@@ -59,7 +59,7 @@ const InspectionChecklistsPage = () => {
           </CardContent>
         </Card>
       ) : null}
-      {!loading && !error && registry.total === 0 ? <EmptyState title="Чек-листы не найдены" description="В tenant еще не было проверок." /> : null}
+      {!loading && !error && registry.total === 0 ? <EmptyState title="Чек-листы не найдены" description="В тенанте ещё не было проверок." /> : null}
       {!loading && !error && registry.total > 0 ? (
         <RegistryTable
           columns={[

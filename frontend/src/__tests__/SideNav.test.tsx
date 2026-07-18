@@ -1,10 +1,18 @@
-import { render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { NavMenuProvider } from "@/components/layout/NavMenuProvider";
+import { SideNav } from "@/components/layout/SideNav";
 import { PERMISSIONS } from "@/permissions/permissions";
 import { useAuthStore } from "@/stores/auth";
-import { SideNav } from "@/components/layout/SideNav";
+import { renderWithRouter } from "@/test-utils/renderWithRouter";
+
+const renderSideNav = () =>
+  renderWithRouter(
+    <NavMenuProvider>
+      <SideNav />
+    </NavMenuProvider>
+  );
 
 vi.mock("@/api/billing", () => ({
   getBillingSummary: vi.fn().mockResolvedValue({ features: {} })
@@ -30,17 +38,15 @@ describe("SideNav", () => {
     });
   });
 
-  it("hides generation link without document create permission", () => {
-    render(
-      <MemoryRouter>
-        <SideNav />
-      </MemoryRouter>
-    );
+  it("hides generation link without document create permission", async () => {
+    renderSideNav();
 
-    expect(screen.queryByRole("link", { name: "Генерация" })).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.queryByRole("link", { name: "Генерация" })).not.toBeInTheDocument();
+    });
   });
 
-  it("shows generation link with document create permission", () => {
+  it("shows generation link with document create permission", async () => {
     useAuthStore.setState((state) => ({
       ...state,
       user: state.user
@@ -51,12 +57,10 @@ describe("SideNav", () => {
         : null
     }));
 
-    render(
-      <MemoryRouter>
-        <SideNav />
-      </MemoryRouter>
-    );
+    renderSideNav();
 
-    expect(screen.getByRole("link", { name: "Генерация" })).toHaveAttribute("href", "/generation");
+    await waitFor(() => {
+      expect(screen.getByRole("link", { name: "Генерация" })).toHaveAttribute("href", "/generation");
+    });
   });
 });

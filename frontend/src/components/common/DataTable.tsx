@@ -44,9 +44,16 @@ export function DataTable<TData>({
   const [search, setSearch] = React.useState("");
   const debouncedSearch = useDebounce(search, 400);
 
+  /** Стабильная ссылка: иначе при нестабильном onSearchChange (новая функция каждый рендер) эффект срабатывает бесконечно и дергает list() в цикле. */
+  const onSearchChangeRef = React.useRef(onSearchChange);
+  React.useLayoutEffect(() => {
+    onSearchChangeRef.current = onSearchChange;
+  });
+
   React.useEffect(() => {
-    if (onSearchChange) onSearchChange(debouncedSearch);
-  }, [debouncedSearch, onSearchChange]);
+    const cb = onSearchChangeRef.current;
+    if (cb) cb(debouncedSearch);
+  }, [debouncedSearch]);
 
   const table = useReactTable({
     data,

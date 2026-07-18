@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 
 import { incidentsApi, type Incident } from "@/api/incidents";
 import { EmptyState } from "@/components/common/EmptyState";
@@ -22,13 +23,40 @@ import { useCompaniesStore } from "@/stores/companies";
 
 const INCIDENT_TYPES = ["near_miss", "micro_trauma", "injury", "fatal", "fire", "environmental", "other"];
 const SEVERITY_LEVELS = ["low", "medium", "high", "critical"];
+const INCIDENT_TYPE_LABELS: Record<string, string> = {
+  near_miss: "Почти-несчастный случай",
+  micro_trauma: "Микротравма",
+  injury: "Травма",
+  fatal: "Смертельный случай",
+  fire: "Пожар",
+  environmental: "Экологический инцидент",
+  other: "Прочее"
+};
+const INCIDENT_STATUS_LABELS: Record<string, string> = {
+  draft: "Черновик",
+  investigating: "Расследуется",
+  closed: "Закрыт"
+};
+const SEVERITY_LABELS: Record<string, string> = {
+  low: "Низкая",
+  medium: "Средняя",
+  high: "Высокая",
+  critical: "Критическая"
+};
 
 const IncidentsPage = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [items, setItems] = useState<Incident[]>([]);
-  const [statusFilter, setStatusFilter] = useState<string>("");
+  const [statusFilter, setStatusFilter] = useState<string>(searchParams.get("status") ?? "");
   const { items: companies, list: listCompanies } = useCompaniesStore();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
+  const focusedEntityType = searchParams.get("entity_type") ?? undefined;
+  const focusedEntityId = searchParams.get("entity_id") ?? undefined;
+  const focusedIncident =
+    focusedEntityType === "incident" && focusedEntityId
+      ? items.find((incident) => incident.id === focusedEntityId) ?? null
+      : null;
 
   // create dialog state
   const [createOpen, setCreateOpen] = useState(false);
@@ -43,7 +71,7 @@ const IncidentsPage = () => {
     severity: "medium"
   });
 
-  const load = async (status = statusFilter) => {
+  const load = useCallback(async (status = statusFilter) => {
     setLoading(true);
     setError(null);
     try {
@@ -57,12 +85,12 @@ const IncidentsPage = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [statusFilter]);
 
   useEffect(() => {
-    void load("");
+    void load(statusFilter);
     listCompanies({ page_size: 100 }).catch(() => undefined);
-  }, [listCompanies]);
+  }, [listCompanies, load, statusFilter]);
 
   const handleCreate = async () => {
     if (!form.title || !form.company_id) {
@@ -71,7 +99,7 @@ const IncidentsPage = () => {
     }
     setCreating(true);
     try {
-      await incidentsApi.create({
+      const created = await incidentsApi.create({
         title: form.title,
         description: form.description || undefined,
         incident_type: form.incident_type,
@@ -91,6 +119,10 @@ const IncidentsPage = () => {
         site_id: "",
         severity: "medium"
       });
+      const params = new URLSearchParams(searchParams);
+      params.set("entity_type", "incident");
+      params.set("entity_id", created.id);
+      setSearchParams(params, { replace: true });
       void load();
     } catch (err) {
       toast.error((err as ApiError)?.message ?? "Ошибка при создании инцидента");
@@ -109,15 +141,19 @@ const IncidentsPage = () => {
             onChange={(event) => {
               const next = event.target.value;
               setStatusFilter(next);
+              const params = new URLSearchParams(searchParams);
+              if (next) params.set("status", next);
+              else params.delete("status");
+              setSearchParams(params, { replace: true });
               void load(next);
             }}
             className="h-9 rounded-md border border-input bg-background px-2 text-sm"
             aria-label="Фильтр по статусу"
           >
             <option value="">Все статусы</option>
-            <option value="draft">draft</option>
-            <option value="investigating">investigating</option>
-            <option value="closed">closed</option>
+            <option value="draft">Черновик</option>
+            <option value="investigating">Расследуется</option>
+            <option value="closed">Закрыт</option>
           </select>
           <Button variant="outline" onClick={() => void load()}>Обновить</Button>
 
@@ -166,7 +202,7 @@ const IncidentsPage = () => {
                         onChange={(e) => setForm((prev) => ({ ...prev, severity: e.target.value }))}
                       >
                         {SEVERITY_LEVELS.map((s) => (
-                          <option key={s} value={s}>{s}</option>
+                          <option key={s} value={s}>{SEVERITY_LABELS[s] ?? s}</option>
                         ))}
                       </select>
                     </div>
@@ -229,6 +265,23 @@ const IncidentsPage = () => {
       </div>
 
       <ErrorState error={error ?? undefined} onRetry={() => void load()} />
+      {focusedEntityId && focusedEntityType === "incident" ? (
+        <Card>
+          <CardContent className="py-4" data-testid="incident-focus-card">
+            <div className="text-sm font-semibold">Фокус инцидента из рабочего пространства</div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {focusedIncident
+                ? `${focusedIncident.title} · ${INCIDENT_STATUS_LABELS[focusedIncident.status] ?? focusedIncident.status}`
+                : `Инцидент ${focusedEntityId.slice(0, 8)} загружается...`}
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Button size="sm" variant="ghost" asChild>
+                <Link to="/incidents">Сбросить фокус</Link>
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
       {loading ? <LoadingScreen label="Загрузка инцидентов" /> : null}
 
       <Card>
@@ -245,6 +298,7 @@ const IncidentsPage = () => {
                   <TableHead>ID</TableHead>
                   <TableHead>Событие</TableHead>
                   <TableHead>Тип</TableHead>
+                  <TableHead>Тяжесть</TableHead>
                   <TableHead>Площадка</TableHead>
                   <TableHead>Дата</TableHead>
                   <TableHead>Статус</TableHead>
@@ -255,11 +309,15 @@ const IncidentsPage = () => {
                   <TableRow key={incident.id}>
                     <TableCell className="font-medium">{incident.id}</TableCell>
                     <TableCell>{incident.title}</TableCell>
-                    <TableCell>{incident.incident_type}</TableCell>
+                    <TableCell>{INCIDENT_TYPE_LABELS[incident.incident_type] ?? incident.incident_type}</TableCell>
+                    <TableCell>{incident.severity ? SEVERITY_LABELS[incident.severity] ?? incident.severity : "—"}</TableCell>
                     <TableCell>{incident.site_id}</TableCell>
                     <TableCell>{formatDate(incident.occurred_at)}</TableCell>
                     <TableCell>
-                      <StatusBadge status={incident.status} />
+                      <div className="flex items-center gap-2">
+                        <StatusBadge status={incident.status} />
+                        <span className="text-xs text-muted-foreground">{INCIDENT_STATUS_LABELS[incident.status] ?? incident.status}</span>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
