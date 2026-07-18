@@ -16,7 +16,9 @@ async def _run(force: bool) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Bootstrap demo tenant data")
-    parser.add_argument("--force", action="store_true", help="Force-run demo bootstrap in non-demo env")
+    parser.add_argument(
+        "--force", action="store_true", help="Force-run demo bootstrap in non-demo env"
+    )
     args = parser.parse_args()
     asyncio.run(_run(force=args.force))
     print("demo bootstrap completed")

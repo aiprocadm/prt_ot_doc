@@ -27,7 +27,12 @@ def upgrade() -> None:
         sa.Column("text_content", sa.Text(), nullable=True),
         sa.Column("lang", sa.String(length=32), nullable=False, server_default="russian"),
         sa.Column("fts", postgresql.TSVECTOR(), nullable=True),
-        sa.Column("meta", postgresql.JSONB(astext_type=sa.Text()), nullable=False, server_default=sa.text("'{}'::jsonb")),
+        sa.Column(
+            "meta",
+            postgresql.JSONB(astext_type=sa.Text()),
+            nullable=False,
+            server_default=sa.text("'{}'::jsonb"),
+        ),
         sa.Column("source_file_id", sa.String(length=36), nullable=True),
         sa.Column("indexed_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
@@ -37,9 +42,24 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["source_file_id"], ["files.id"]),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index("ix_search_documents_tenant_entity", "search_documents", ["tenant_id", "entity_type", "entity_id"], unique=False)
-    op.create_index("ix_search_documents_tenant_updated", "search_documents", ["tenant_id", "updated_at"], unique=False)
-    op.create_index("ix_search_documents_source_file", "search_documents", ["tenant_id", "source_file_id"], unique=False)
+    op.create_index(
+        "ix_search_documents_tenant_entity",
+        "search_documents",
+        ["tenant_id", "entity_type", "entity_id"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_search_documents_tenant_updated",
+        "search_documents",
+        ["tenant_id", "updated_at"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_search_documents_source_file",
+        "search_documents",
+        ["tenant_id", "source_file_id"],
+        unique=False,
+    )
     op.execute("CREATE INDEX ix_search_documents_fts_gin ON search_documents USING GIN (fts)")
     op.execute("CREATE INDEX ix_search_documents_meta_gin ON search_documents USING GIN (meta)")
 

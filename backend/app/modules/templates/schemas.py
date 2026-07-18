@@ -3,12 +3,12 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 
 class TemplateScopeDTO(BaseModel):
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
-    type: str = "tenant"
+    level: str = Field(default="tenant", validation_alias=AliasChoices("level", "type"))
     tenant_id: str | None = None
     company_id: str | None = None
     site_id: str | None = None
@@ -91,6 +91,54 @@ class LintReportDTO(BaseModel):
     errors: list[str]
     warnings: list[str]
     summary: dict[str, int]
+    filters: list[dict[str, Any]] = Field(default_factory=list)
+    duplicates: list[dict[str, Any]] = Field(default_factory=list)
+    empty_placeholders: list[dict[str, Any]] = Field(default_factory=list)
+    undefined_variables: list[str] = Field(default_factory=list)
+    unused_variables: list[str] = Field(default_factory=list)
+
+
+class InspectorRequest(BaseModel):
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+    available_variables: dict[str, Any] | None = None
+    required_fields: list[str] | None = None
+
+
+class InspectorReportDTO(BaseModel):
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+    available: list[str]
+    used: list[str]
+    undefined: list[str]
+    unused: list[str]
+    required_missing: list[str]
+    filters: list[dict[str, Any]]
+    unknown_filters: list[str]
+    loops: list[dict[str, Any]]
+    conditions: list[dict[str, Any]]
+    summary: dict[str, int]
+
+
+class TemplateAuditItemDTO(BaseModel):
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+    template_id: str
+    template_code: str | None = None
+    template_name: str
+    tenant_id: str
+    version_id: str
+    version_number: int
+    status: str
+    file_key: str | None = None
+    errors: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    summary: dict[str, int] = Field(default_factory=dict)
+    load_error: str | None = None
+    severity: str
+
+
+class TemplateAuditReportDTO(BaseModel):
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+    summary: dict[str, int]
+    items: list[TemplateAuditItemDTO] = Field(default_factory=list)
 
 
 class PreviewRequest(BaseModel):

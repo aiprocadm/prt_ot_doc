@@ -131,12 +131,12 @@ async def _readiness_blockers(
         blockers.append(
             ReadinessBlocker(
                 code="employees_missing_contacts",
-                title="Employee profile gaps",
+                title="Неполные контакты сотрудников",
                 severity="high",
                 count=missing_employee_contacts,
-                reason="Employees missing email or phone break notification and assignment flows",
+                reason="Без email или телефона ломаются уведомления и назначения (обучение, задачи, СИЗ)",
                 entity_type="person",
-                action_hint="Complete employee contact fields",
+                action_hint="Заполните email и телефон в карточках сотрудников",
             )
         )
 
@@ -164,12 +164,12 @@ async def _readiness_blockers(
         blockers.append(
             ReadinessBlocker(
                 code="templates_not_ready",
-                title="No ready templates",
+                title="Нет готовых шаблонов",
                 severity="critical",
                 count=1,
-                reason="Document lifecycle cannot run without ready template versions",
+                reason="Без активной версии шаблона недоступен жизненный цикл документов",
                 entity_type="template_version",
-                action_hint="Upload/lint/activate at least one template version",
+                action_hint="Загрузите шаблон, проверьте линтером и активируйте версию",
             )
         )
 
@@ -193,12 +193,12 @@ async def _readiness_blockers(
         blockers.append(
             ReadinessBlocker(
                 code="training_overdue",
-                title="Overdue training assignments",
+                title="Просроченные назначения обучения",
                 severity="high",
                 count=overdue_training,
-                reason="Overdue training blocks readiness and increases compliance risk",
+                reason="Просрочка снижает готовность и повышает регуляторные риски",
                 entity_type="training_enrollment",
-                action_hint="Close overdue training enrollments or re-plan deadlines",
+                action_hint="Закройте просроченные назначения или перенесите сроки",
             )
         )
 
@@ -222,12 +222,12 @@ async def _readiness_blockers(
         blockers.append(
             ReadinessBlocker(
                 code="ppe_expired",
-                title="Expired issued PPE",
+                title="Просроченная выданная СИЗ",
                 severity="high",
                 count=expired_ppe,
-                reason="Expired issued PPE indicates unresolved replacement obligations",
+                reason="Истёкший срок СИЗ означает незакрытые обязанности по замене или возврату",
                 entity_type="ppe_issue",
-                action_hint="Issue replacement PPE or mark return/loss status",
+                action_hint="Выдайте замену или отметьте возврат/утрату",
             )
         )
 
@@ -251,12 +251,12 @@ async def _readiness_blockers(
         blockers.append(
             ReadinessBlocker(
                 code="contracts_expired",
-                title="Expired active contracts",
+                title="Истёкшие активные договоры",
                 severity="critical",
                 count=expired_active_contracts,
-                reason="Expired active contracts break contractor readiness and package flows",
+                reason="Просроченный договор ломает готовность контрагентов и сценарии пакетов",
                 entity_type="contract",
-                action_hint="Close expired contracts or extend validity",
+                action_hint="Закройте договор или продлите срок действия",
             )
         )
 
@@ -293,7 +293,11 @@ async def workspace_attention(
                     Task.status.in_(open_statuses),
                     Task.due_at.is_not(None),
                     Task.due_at < now,
-                    Task.assignee_id == access.user.id if _worker_like_role(access.user.role.value) else True,
+                    (
+                        Task.assignee_id == access.user.id
+                        if _worker_like_role(access.user.role.value)
+                        else True
+                    ),
                 )
             )
         ).scalar_one()
@@ -310,7 +314,11 @@ async def workspace_attention(
                     Task.due_at.is_not(None),
                     Task.due_at >= now,
                     Task.due_at <= soon_threshold,
-                    Task.assignee_id == access.user.id if _worker_like_role(access.user.role.value) else True,
+                    (
+                        Task.assignee_id == access.user.id
+                        if _worker_like_role(access.user.role.value)
+                        else True
+                    ),
                 )
             )
         ).scalar_one()
@@ -324,7 +332,10 @@ async def workspace_attention(
                 .select_from(ComplianceDeadline)
                 .where(
                     ComplianceDeadline.tenant_id == tenant.id,
-                    or_(ComplianceDeadline.status == "overdue", and_(ComplianceDeadline.status == "due", ComplianceDeadline.due_at < now)),
+                    or_(
+                        ComplianceDeadline.status == "overdue",
+                        and_(ComplianceDeadline.status == "due", ComplianceDeadline.due_at < now),
+                    ),
                 )
             )
         ).scalar_one()
@@ -361,10 +372,16 @@ async def workspace_attention(
     )
 
     candidate_tasks = (
-        await session.execute(
-            task_stmt.order_by(Task.due_at.asc().nulls_last(), Task.created_at.desc()).limit(limit)
+        (
+            await session.execute(
+                task_stmt.order_by(Task.due_at.asc().nulls_last(), Task.created_at.desc()).limit(
+                    limit
+                )
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
 
     blockers = await _readiness_blockers(session=session, tenant=tenant, now=now)
 
@@ -373,13 +390,13 @@ async def workspace_attention(
         due_at = task.due_at.astimezone(timezone.utc) if task.due_at else None
         if due_at and due_at < now:
             severity = "critical"
-            reason = "Task is overdue"
+            reason = "Задача просрочена"
         elif due_at and due_at <= soon_threshold:
             severity = "high"
-            reason = "Task is due soon"
+            reason = "Срок задачи скоро"
         else:
             severity = "medium"
-            reason = "Open task"
+            reason = "Открытая задача"
         items.append(
             AttentionItem(
                 item_type="task",
@@ -396,15 +413,15 @@ async def workspace_attention(
 
     recs: list[str] = []
     if overdue_task_total > 0:
-        recs.append("Resolve overdue tasks first")
+        recs.append("Сначала закройте просроченные задачи")
     if overdue_deadline_total > 0:
-        recs.append("Address overdue compliance deadlines")
+        recs.append("Разберите просроченные обязательства соответствия")
     if failed_sync > 0:
-        recs.append("Review failed offline sync batches before next field upload")
+        recs.append("Проверьте неудачные пакеты offline-синхронизации перед следующей выгрузкой")
     if blockers:
-        recs.append("Resolve readiness blockers before launching dependent scenarios")
+        recs.append("Устраните блокеры готовности перед запуском зависимых сценариев")
     if not recs:
-        recs.append("No critical blockers detected. Continue planned work queue")
+        recs.append("Критичных блокеров не обнаружено — продолжайте плановую работу")
 
     return WorkspaceAttentionResponse(
         generated_at=now,
@@ -438,14 +455,20 @@ async def workspace_task_inbox(
     if _worker_like_role(access.user.role.value):
         stmt = stmt.where(Task.assignee_id == access.user.id)
 
-    total = int((await session.execute(select(func.count()).select_from(stmt.subquery()))).scalar_one() or 0)
+    total = int(
+        (await session.execute(select(func.count()).select_from(stmt.subquery()))).scalar_one() or 0
+    )
     rows = (
-        await session.execute(
-            stmt.order_by(Task.due_at.asc().nulls_last(), Task.created_at.desc())
-            .offset(offset)
-            .limit(limit)
+        (
+            await session.execute(
+                stmt.order_by(Task.due_at.asc().nulls_last(), Task.created_at.desc())
+                .offset(offset)
+                .limit(limit)
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
 
     items: list[TaskInboxItem] = []
     for item in rows:
@@ -501,15 +524,23 @@ async def role_workspace_summary(
     role = access.user.role.value if hasattr(access.user.role, "value") else str(access.user.role)
     open_statuses_task = [TaskStatus.OPEN, TaskStatus.IN_PROGRESS]
 
-    task_stmt = select(func.count()).select_from(Task).where(
-        Task.tenant_id == tenant.id,
-        Task.status.in_(open_statuses_task),
+    task_stmt = (
+        select(func.count())
+        .select_from(Task)
+        .where(
+            Task.tenant_id == tenant.id,
+            Task.status.in_(open_statuses_task),
+        )
     )
-    overdue_task_stmt = select(func.count()).select_from(Task).where(
-        Task.tenant_id == tenant.id,
-        Task.status.in_(open_statuses_task),
-        Task.due_at.is_not(None),
-        Task.due_at < now,
+    overdue_task_stmt = (
+        select(func.count())
+        .select_from(Task)
+        .where(
+            Task.tenant_id == tenant.id,
+            Task.status.in_(open_statuses_task),
+            Task.due_at.is_not(None),
+            Task.due_at < now,
+        )
     )
     # Scope by role
     if role in _MANAGER_ROLES and role not in _SAFETY_ROLES and role not in _HR_ROLES:
@@ -525,13 +556,18 @@ async def role_workspace_summary(
         open_incidents = int(
             (
                 await session.execute(
-                    select(func.count()).select_from(Incident).where(
+                    select(func.count())
+                    .select_from(Incident)
+                    .where(
                         Incident.tenant_id == tenant.id,
                         Incident.deleted_at.is_(None),
-                        Incident.status.in_([IncidentStatus.REPORTED, IncidentStatus.INVESTIGATING]),
+                        Incident.status.in_(
+                            [IncidentStatus.REPORTED, IncidentStatus.INVESTIGATING]
+                        ),
                     )
                 )
-            ).scalar_one() or 0
+            ).scalar_one()
+            or 0
         )
 
     # Inspections (open/scheduled) — safety roles
@@ -540,13 +576,18 @@ async def role_workspace_summary(
         open_inspections = int(
             (
                 await session.execute(
-                    select(func.count()).select_from(Inspection).where(
+                    select(func.count())
+                    .select_from(Inspection)
+                    .where(
                         Inspection.tenant_id == tenant.id,
                         Inspection.deleted_at.is_(None),
-                        Inspection.status.in_([InspectionStatus.PLANNED, InspectionStatus.IN_PROGRESS]),
+                        Inspection.status.in_(
+                            [InspectionStatus.PLANNED, InspectionStatus.IN_PROGRESS]
+                        ),
                     )
                 )
-            ).scalar_one() or 0
+            ).scalar_one()
+            or 0
         )
 
     # Overdue training — HR roles
@@ -555,7 +596,9 @@ async def role_workspace_summary(
         overdue_training = int(
             (
                 await session.execute(
-                    select(func.count()).select_from(TrainingEnrollment).where(
+                    select(func.count())
+                    .select_from(TrainingEnrollment)
+                    .where(
                         TrainingEnrollment.tenant_id == tenant.id,
                         TrainingEnrollment.deleted_at.is_(None),
                         TrainingEnrollment.status.in_(["assigned", "in_progress"]),
@@ -563,7 +606,8 @@ async def role_workspace_summary(
                         TrainingEnrollment.due_at < now,
                     )
                 )
-            ).scalar_one() or 0
+            ).scalar_one()
+            or 0
         )
 
     # Expired issued PPE — safety / HR
@@ -572,7 +616,9 @@ async def role_workspace_summary(
         expired_ppe = int(
             (
                 await session.execute(
-                    select(func.count()).select_from(PPEIssue).where(
+                    select(func.count())
+                    .select_from(PPEIssue)
+                    .where(
                         PPEIssue.tenant_id == tenant.id,
                         PPEIssue.deleted_at.is_(None),
                         PPEIssue.status == PPEIssueStatus.ISSUED,
@@ -580,14 +626,17 @@ async def role_workspace_summary(
                         PPEIssue.expires_at < now,
                     )
                 )
-            ).scalar_one() or 0
+            ).scalar_one()
+            or 0
         )
 
     # Overdue compliance deadlines
     overdue_deadlines = int(
         (
             await session.execute(
-                select(func.count()).select_from(ComplianceDeadline).where(
+                select(func.count())
+                .select_from(ComplianceDeadline)
+                .where(
                     ComplianceDeadline.tenant_id == tenant.id,
                     or_(
                         ComplianceDeadline.status == "overdue",
@@ -595,7 +644,8 @@ async def role_workspace_summary(
                     ),
                 )
             )
-        ).scalar_one() or 0
+        ).scalar_one()
+        or 0
     )
 
     recs: list[str] = []
@@ -623,4 +673,203 @@ async def role_workspace_summary(
         expired_ppe=expired_ppe,
         overdue_deadlines=overdue_deadlines,
         recommendations=recs,
+    )
+
+
+# ---------------------------------------------------------------------------
+# PHASE 1.1: Role-Based Workspaces - User Workspace Config
+# ---------------------------------------------------------------------------
+
+
+class WorkspaceConfig(BaseModel):
+    """Role-specific workspace configuration for authenticated user."""
+
+    role: str
+    workspace_type: str
+    primary_modules: list[str] = Field(default_factory=list)
+    dashboard_route: str
+    kpis_enabled: list[str] = Field(default_factory=list)
+    quick_actions: list[dict[str, str]] = Field(default_factory=list)
+
+
+_ROLE_WORKSPACE_MAPPING: dict[str, dict[str, object]] = {
+    # OT/Safety roles
+    "owner": {
+        "workspace_type": "executive",
+        "dashboard_route": "/dashboard",
+        "primary_modules": [
+            "dashboard",
+            "risk",
+            "incidents",
+            "inspections",
+            "training",
+            "ppe",
+            "documents",
+        ],
+        "kpis_enabled": [
+            "overdue_tasks",
+            "critical_obligations",
+            "incidents_open",
+            "training_status",
+        ],
+        "quick_actions": [
+            {"label": "Create Document", "route": "/documents/wizard"},
+            {"label": "View Tasks", "route": "/tasks"},
+            {"label": "Run Master", "route": "/packs"},
+        ],
+    },
+    "admin": {
+        "workspace_type": "admin",
+        "dashboard_route": "/dashboard",
+        "primary_modules": [
+            "dashboard",
+            "admin",
+            "rbac_abac",
+            "tenancy",
+            "risk",
+            "incidents",
+            "documents",
+        ],
+        "kpis_enabled": [
+            "overdue_tasks",
+            "critical_obligations",
+            "incidents_open",
+            "readiness_blockers",
+        ],
+        "quick_actions": [
+            {"label": "Manage Users", "route": "/admin/users"},
+            {"label": "View Tasks", "route": "/tasks"},
+            {"label": "System Health", "route": "/admin"},
+        ],
+    },
+    "ot_pb_lead": {
+        "workspace_type": "safety_lead",
+        "dashboard_route": "/dashboard",
+        "primary_modules": [
+            "dashboard",
+            "risk",
+            "incidents",
+            "inspections",
+            "ppe",
+            "documents",
+            "tasks",
+        ],
+        "kpis_enabled": ["overdue_tasks", "open_incidents", "open_inspections", "expired_ppe"],
+        "quick_actions": [
+            {"label": "New Incident", "route": "/incidents"},
+            {"label": "Schedule Inspection", "route": "/inspections"},
+            {"label": "My Tasks", "route": "/tasks?assigned=me"},
+        ],
+    },
+    "ot_specialist": {
+        "workspace_type": "specialist",
+        "dashboard_route": "/dashboard",
+        "primary_modules": ["dashboard", "risk", "ppe", "incidents", "documents", "tasks"],
+        "kpis_enabled": ["overdue_tasks", "expired_ppe"],
+        "quick_actions": [
+            {"label": "Check PPE", "route": "/ppe"},
+            {"label": "My Tasks", "route": "/tasks?assigned=me"},
+            {"label": "View Risks", "route": "/risks"},
+        ],
+    },
+    "hr": {
+        "workspace_type": "hr",
+        "dashboard_route": "/dashboard",
+        "primary_modules": ["dashboard", "training", "medical", "persons", "documents", "tasks"],
+        "kpis_enabled": ["overdue_training", "overdue_tasks"],
+        "quick_actions": [
+            {"label": "Assign Training", "route": "/training"},
+            {"label": "Register Medical", "route": "/medical"},
+            {"label": "Manage Employees", "route": "/persons"},
+        ],
+    },
+    "teacher": {
+        "workspace_type": "trainer",
+        "dashboard_route": "/dashboard",
+        "primary_modules": ["dashboard", "training", "briefings", "documents"],
+        "kpis_enabled": ["overdue_training"],
+        "quick_actions": [
+            {"label": "My Assignments", "route": "/training?teacher=me"},
+            {"label": "Create Briefing", "route": "/briefings"},
+        ],
+    },
+    "student": {
+        "workspace_type": "learner",
+        "dashboard_route": "/dashboard",
+        "primary_modules": ["dashboard", "training", "documents"],
+        "kpis_enabled": [],
+        "quick_actions": [
+            {"label": "My Training", "route": "/training?student=me"},
+            {"label": "My Documents", "route": "/documents?owner=me"},
+        ],
+    },
+    "manager": {
+        "workspace_type": "manager",
+        "dashboard_route": "/dashboard",
+        "primary_modules": ["dashboard", "tasks", "team", "documents", "incidents"],
+        "kpis_enabled": ["overdue_tasks", "team_performance"],
+        "quick_actions": [
+            {"label": "Team Tasks", "route": "/tasks?team=me"},
+            {"label": "View Team", "route": "/team"},
+        ],
+    },
+    "worker": {
+        "workspace_type": "operator",
+        "dashboard_route": "/dashboard",
+        "primary_modules": ["dashboard", "tasks", "documents"],
+        "kpis_enabled": [],
+        "quick_actions": [
+            {"label": "My Tasks", "route": "/tasks?assigned=me"},
+            {"label": "My Documents", "route": "/documents?owner=me"},
+        ],
+    },
+    "auditor_ro": {
+        "workspace_type": "auditor",
+        "dashboard_route": "/dashboard",
+        "primary_modules": ["dashboard", "audit", "documents", "risks", "incidents"],
+        "kpis_enabled": ["open_incidents", "high_risks"],
+        "quick_actions": [
+            {"label": "View Audit Log", "route": "/audit"},
+            {"label": "Compliance Check", "route": "/compliance"},
+        ],
+    },
+}
+
+
+@router.get("/users/me/workspace", response_model=WorkspaceConfig)
+async def get_user_workspace_config(
+    tenant: TenantDep,
+    access: AccessDep,
+) -> WorkspaceConfig:
+    """Get role-specific workspace configuration for the authenticated user.
+
+    Returns workspace layout, primary modules, enabled KPIs, and quick actions
+    based on the user's role.
+    """
+    TenantContextValidator.ensure_tenant_context(tenant)
+
+    role = access.user.role.value if hasattr(access.user.role, "value") else str(access.user.role)
+
+    # Get role-specific configuration or use sensible defaults
+    config = _ROLE_WORKSPACE_MAPPING.get(role)
+    if config is None:
+        # Default fallback for unmapped roles
+        config = {
+            "workspace_type": "standard",
+            "dashboard_route": "/dashboard",
+            "primary_modules": ["dashboard", "documents", "tasks"],
+            "kpis_enabled": ["overdue_tasks"],
+            "quick_actions": [
+                {"label": "View Tasks", "route": "/tasks"},
+                {"label": "View Documents", "route": "/documents"},
+            ],
+        }
+
+    return WorkspaceConfig(
+        role=role,
+        workspace_type=str(config.get("workspace_type", "standard")),
+        primary_modules=list(config.get("primary_modules", [])),
+        dashboard_route=str(config.get("dashboard_route", "/dashboard")),
+        kpis_enabled=list(config.get("kpis_enabled", [])),
+        quick_actions=list(config.get("quick_actions", [])),
     )

@@ -13,9 +13,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
 from app.api.deps.tracing import get_trace_id
+from app.api.tenant_row_http import enforce_row_belongs_to_tenant
 from app.core.audit_decorator import audit_operation
+from app.core.errors import api_problem_detail
 from app.core.idempotency import compute_request_hash
 from app.core.security import rbac
+from app.db.tenant_row_guard import assert_tenant_row_matches_session
 from app.models.job_engine import (
     DocumentArtifact,
     DocumentJob,
@@ -34,10 +37,27 @@ from app.services.pipelines_orchestrator import DocumentPipelineOrchestrator
 
 router = APIRouter(prefix="/jobs", tags=["jobs"], dependencies=[Depends(rbac())])
 
+_DOCUMENT_JOB_NOT_FOUND = api_problem_detail(
+    code="DOCUMENT_JOB_NOT_FOUND",
+    message="Job not found",
+    error_type="jobs",
+)
+_DOCUMENT_JOB_STEP_NOT_FOUND = api_problem_detail(
+    code="DOCUMENT_JOB_STEP_NOT_FOUND",
+    message="Step not found",
+    error_type="jobs",
+)
+_PIPELINE_PROFILE_NOT_FOUND = api_problem_detail(
+    code="PIPELINE_PROFILE_NOT_FOUND",
+    message="Profile not found",
+    error_type="jobs",
+)
+
 _JobsReadDep = Depends(require_permission("document_jobs.read"))
 _JobsRunDep = Depends(require_permission("document_jobs.run_pipeline"))
 _JobsRetryDep = Depends(require_permission("document_jobs.retry_job"))
 _JobsCancelDep = Depends(require_permission("document_jobs.cancel_job"))
+
 
 class JobStepRead(BaseModel):
     code: str
@@ -53,12 +73,14 @@ class JobStepRead(BaseModel):
     error_code: str | None = None
     error_payload: dict[str, Any] | None = None
 
+
 class JobLogRead(BaseModel):
     timestamp: datetime
     level: str
     message: str
     step_name: str | None = None
     meta_json: dict[str, Any] | None = None
+
 
 class JobEnvelopeRead(BaseModel):
     id: str
@@ -72,11 +94,13 @@ class JobEnvelopeRead(BaseModel):
     profile_id: str | None = None
     created_by: str | None = None
 
+
 class JobRead(BaseModel):
     job: JobEnvelopeRead
     steps: list[JobStepRead]
     logs: list[JobLogRead] = []
     result: dict[str, Any] | None = None
+
 
 class JobCreateRequest(BaseModel):
     profile_code: str | None = None
@@ -86,14 +110,17 @@ class JobCreateRequest(BaseModel):
     inputs: dict[str, Any] = {}
     options: dict[str, Any] = {}
 
+
 class JobCreateResponse(BaseModel):
     job_id: str
     status: str
     correlation_id: str
     steps: list[JobStepRead]
 
+
 def _status_value(raw: Any) -> str:
     return raw.value if hasattr(raw, "value") else str(raw)
+
 
 @router.post("", response_model=JobCreateResponse, status_code=status.HTTP_202_ACCEPTED)
 @audit_operation("run_pipeline", "document_job")
@@ -119,8 +146,15 @@ async def create_job(
                 )
             )
         ).scalar_one_or_none()
-    if profile is None or str(profile.tenant_id) != str(tenant.id) or not profile.is_active:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "profile not found")
+    if profile is None or not profile.is_active:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail=_PIPELINE_PROFILE_NOT_FOUND)
+    enforce_row_belongs_to_tenant(
+        session,
+        profile,
+        tenant_id=str(tenant.id),
+        mismatch_event="api.jobs.create_job.profile_tenant_scope_mismatch",
+        detail=_PIPELINE_PROFILE_NOT_FOUND,
+    )
 
     request_hash = compute_request_hash(payload.model_dump())
     idem_service = IdempotencyService(
@@ -194,9 +228,11 @@ async def create_job(
     await session.commit()
     return response_model
 
+
 class JobListRead(BaseModel):
     items: list[JobEnvelopeRead]
     next_cursor: str | None = None
+
 
 @router.get("/{job_id}", response_model=JobRead)
 async def get_job(
@@ -206,8 +242,15 @@ async def get_job(
     __: Any = _JobsReadDep,
 ) -> JobRead:
     job = await session.get(DocumentJob, job_id)
-    if job is None or str(job.tenant_id) != str(tenant.id):
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Job not found")
+    if job is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail=_DOCUMENT_JOB_NOT_FOUND)
+    enforce_row_belongs_to_tenant(
+        session,
+        job,
+        tenant_id=str(tenant.id),
+        mismatch_event="api.jobs.get_job.tenant_scope_mismatch",
+        detail=_DOCUMENT_JOB_NOT_FOUND,
+    )
     steps = (
         (
             await session.execute(
@@ -300,13 +343,13 @@ async def get_job(
         ],
         logs=[
             JobLogRead(
-                timestamp=l.created_at,
-                level=l.level,
-                message=l.message,
-                step_name=l.step_code,
-                meta_json=l.meta_json,
+                timestamp=log.created_at,
+                level=log.level,
+                message=log.message,
+                step_name=log.step_code,
+                meta_json=log.meta_json,
             )
-            for l in logs
+            for log in logs
         ],
         result=(
             {
@@ -318,6 +361,7 @@ async def get_job(
             else None
         ),
     )
+
 
 @router.get("", response_model=JobListRead)
 async def list_jobs(
@@ -376,6 +420,7 @@ async def list_jobs(
         next_cursor=next_cursor,
     )
 
+
 @router.post("/{job_id}:cancel", response_model=JobRead)
 @router.post("/{job_id}/cancel", response_model=JobRead)
 @audit_operation("cancel", "document_job")
@@ -386,16 +431,25 @@ async def cancel_job(
     __: Any = _JobsCancelDep,
 ) -> JobRead:
     job = await session.get(DocumentJob, job_id)
-    if job is None or str(job.tenant_id) != str(tenant.id):
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Job not found")
+    if job is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail=_DOCUMENT_JOB_NOT_FOUND)
+    enforce_row_belongs_to_tenant(
+        session,
+        job,
+        tenant_id=str(tenant.id),
+        mismatch_event="api.jobs.cancel_job.tenant_scope_mismatch",
+        detail=_DOCUMENT_JOB_NOT_FOUND,
+    )
     await DocumentPipelineOrchestrator(session).cancel_job(job_id=job_id)
     await session.commit()
     return await get_job(job_id=job_id, session=session, tenant=tenant)
+
 
 class RetryJobRequest(BaseModel):
     step_key: str | None = None
     from_step_key: str | None = None
     retry_failed_only: bool = False
+
 
 @router.post("/{job_id}:retry", response_model=JobRead)
 @router.post("/{job_id}/retry", response_model=JobRead)
@@ -409,8 +463,15 @@ async def retry_job(
     __: Any = _JobsRetryDep,
 ) -> JobRead:
     job = await session.get(DocumentJob, job_id)
-    if job is None or str(job.tenant_id) != str(tenant.id):
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Job not found")
+    if job is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail=_DOCUMENT_JOB_NOT_FOUND)
+    enforce_row_belongs_to_tenant(
+        session,
+        job,
+        tenant_id=str(tenant.id),
+        mismatch_event="api.jobs.retry_job.tenant_scope_mismatch",
+        detail=_DOCUMENT_JOB_NOT_FOUND,
+    )
     if step_code:
         return await rerun_step(job_id=job_id, step=step_code, session=session, tenant=tenant)
     request = payload or RetryJobRequest(retry_failed_only=True)
@@ -421,9 +482,15 @@ async def retry_job(
             retry_failed_only=request.retry_failed_only,
         )
     except ValueError as exc:
-        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail=api_problem_detail(
+                code="JOB_OPERATION_CONFLICT", message=str(exc), error_type="jobs"
+            ),
+        ) from exc
     await session.commit()
     return await get_job(job_id=job_id, session=session, tenant=tenant)
+
 
 @router.post("/{job_id}/steps/{step}:rerun", response_model=JobRead)
 @audit_operation("rerun_step", "document_job")
@@ -435,16 +502,31 @@ async def rerun_step(
     __: Any = _JobsRetryDep,
 ) -> JobRead:
     job = await session.get(DocumentJob, job_id)
-    if job is None or str(job.tenant_id) != str(tenant.id):
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Job not found")
+    if job is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail=_DOCUMENT_JOB_NOT_FOUND)
+    enforce_row_belongs_to_tenant(
+        session,
+        job,
+        tenant_id=str(tenant.id),
+        mismatch_event="api.jobs.rerun_step.tenant_scope_mismatch",
+        detail=_DOCUMENT_JOB_NOT_FOUND,
+    )
     try:
         await DocumentPipelineOrchestrator(session).retry_step(job_id=job_id, step_code=step)
     except ValueError as exc:
         if str(exc) == "step_not_found":
-            raise HTTPException(status.HTTP_404_NOT_FOUND, "Step not found") from exc
-        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND, detail=_DOCUMENT_JOB_STEP_NOT_FOUND
+            ) from exc
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail=api_problem_detail(
+                code="JOB_OPERATION_CONFLICT", message=str(exc), error_type="jobs"
+            ),
+        ) from exc
     await session.commit()
     return await get_job(job_id=job_id, session=session, tenant=tenant)
+
 
 @router.post("/{job_id}/steps/{step_id}:retry", response_model=JobRead)
 @audit_operation("retry_step", "document_job")
@@ -456,12 +538,27 @@ async def retry_step_by_id(
     __: Any = _JobsRetryDep,
 ) -> JobRead:
     job = await session.get(DocumentJob, job_id)
-    if job is None or str(job.tenant_id) != str(tenant.id):
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Job not found")
+    if job is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail=_DOCUMENT_JOB_NOT_FOUND)
+    enforce_row_belongs_to_tenant(
+        session,
+        job,
+        tenant_id=str(tenant.id),
+        mismatch_event="api.jobs.retry_step_by_id.job_tenant_scope_mismatch",
+        detail=_DOCUMENT_JOB_NOT_FOUND,
+    )
     step = await session.get(DocumentJobStep, step_id)
     if step is None or step.job_id != job_id:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Step not found")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail=_DOCUMENT_JOB_STEP_NOT_FOUND)
+    enforce_row_belongs_to_tenant(
+        session,
+        step,
+        tenant_id=str(tenant.id),
+        mismatch_event="api.jobs.retry_step_by_id.step_tenant_scope_mismatch",
+        detail=_DOCUMENT_JOB_STEP_NOT_FOUND,
+    )
     return await rerun_step(job_id=job_id, step=step.step_code, session=session, tenant=tenant)
+
 
 @router.get("/{job_id}/steps/{step_id}/logs")
 async def get_step_logs(
@@ -473,11 +570,25 @@ async def get_step_logs(
     __: Any = _JobsReadDep,
 ) -> dict[str, Any]:
     job = await session.get(DocumentJob, job_id)
-    if job is None or str(job.tenant_id) != str(tenant.id):
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Job not found")
+    if job is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail=_DOCUMENT_JOB_NOT_FOUND)
+    enforce_row_belongs_to_tenant(
+        session,
+        job,
+        tenant_id=str(tenant.id),
+        mismatch_event="api.jobs.step_logs.job_tenant_scope_mismatch",
+        detail=_DOCUMENT_JOB_NOT_FOUND,
+    )
     step = await session.get(DocumentJobStep, step_id)
     if step is None or step.job_id != job_id:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Step not found")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail=_DOCUMENT_JOB_STEP_NOT_FOUND)
+    enforce_row_belongs_to_tenant(
+        session,
+        step,
+        tenant_id=str(tenant.id),
+        mismatch_event="api.jobs.step_logs.step_tenant_scope_mismatch",
+        detail=_DOCUMENT_JOB_STEP_NOT_FOUND,
+    )
     from app.services.file_storage import FileStorageService
 
     storage = FileStorageService.default()
@@ -486,7 +597,14 @@ async def get_step_logs(
     key: str | None = None
     if step.logs_file_id:
         file_record = await session.get(FileRecord, step.logs_file_id)
-        if file_record is not None and str(file_record.tenant_id) == str(tenant.id):
+        if file_record is not None:
+            enforce_row_belongs_to_tenant(
+                session,
+                file_record,
+                tenant_id=str(tenant.id),
+                mismatch_event="api.jobs.step_logs.logs_file_tenant_scope_mismatch",
+                detail=_DOCUMENT_JOB_STEP_NOT_FOUND,
+            )
             key = file_record.object_key
             logs_uri = f"s3://{key}"
 
@@ -500,6 +618,7 @@ async def get_step_logs(
     lines = storage.get(key).decode("utf-8").splitlines()[-tail:]
     return {"logs_uri": logs_uri, "lines": lines}
 
+
 @router.get("/{job_id}/steps", response_model=list[JobStepRead])
 async def get_job_steps(
     job_id: str,
@@ -508,8 +627,15 @@ async def get_job_steps(
     __: Any = _JobsReadDep,
 ) -> list[JobStepRead]:
     job = await session.get(DocumentJob, job_id)
-    if job is None or str(job.tenant_id) != str(tenant.id):
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Job not found")
+    if job is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail=_DOCUMENT_JOB_NOT_FOUND)
+    enforce_row_belongs_to_tenant(
+        session,
+        job,
+        tenant_id=str(tenant.id),
+        mismatch_event="api.jobs.get_job_steps.tenant_scope_mismatch",
+        detail=_DOCUMENT_JOB_NOT_FOUND,
+    )
     steps = (
         (
             await session.execute(
@@ -539,8 +665,10 @@ async def get_job_steps(
         for s in steps
     ]
 
+
 class RetryStepRequest(BaseModel):
     step_key: str
+
 
 @router.post("/{job_id}:retry-step", response_model=JobRead)
 @audit_operation("retry_step", "document_job")
@@ -553,6 +681,7 @@ async def retry_step_compat(
 ) -> JobRead:
     return await rerun_step(job_id=job_id, step=payload.step_key, session=session, tenant=tenant)
 
+
 @router.get("/ws/jobs/{job_id}")
 async def stream_jobs(
     job_id: str,
@@ -561,14 +690,31 @@ async def stream_jobs(
     __: Any = _JobsReadDep,
 ) -> StreamingResponse:
     job = await session.get(DocumentJob, job_id)
-    if job is None or str(job.tenant_id) != str(tenant.id):
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Job not found")
+    if job is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail=_DOCUMENT_JOB_NOT_FOUND)
+    enforce_row_belongs_to_tenant(
+        session,
+        job,
+        tenant_id=str(tenant.id),
+        mismatch_event="api.jobs.stream_jobs.initial_tenant_scope_mismatch",
+        detail=_DOCUMENT_JOB_NOT_FOUND,
+    )
 
     async def _stream() -> Any:
         previous_payload = None
         while True:
             run_obj = await session.get(DocumentJob, job_id)
-            if run_obj is None or str(run_obj.tenant_id) != str(tenant.id):
+            if run_obj is None:
+                break
+            try:
+                assert_tenant_row_matches_session(
+                    session,
+                    run_obj,
+                    mismatch_event="api.jobs.stream_jobs.poll_tenant_scope_mismatch",
+                    not_found_message="tenant_mismatch",
+                    expected_tenant_id=str(tenant.id),
+                )
+            except ValueError:
                 break
             steps = (
                 (
@@ -614,6 +760,7 @@ async def stream_jobs(
 # OPS-008: Queue / Job Diagnostics
 # ---------------------------------------------------------------------------
 
+
 class QueueSummaryResponse(BaseModel):
     generated_at: datetime
     queued: int
@@ -632,6 +779,7 @@ async def get_queue_summary(
 ) -> QueueSummaryResponse:
     """Return queue-level health summary for all document jobs of the current tenant."""
     from datetime import timedelta
+
     now = datetime.now(timezone.utc)
     since = now - timedelta(hours=24)
 
@@ -658,7 +806,8 @@ async def get_queue_summary(
                     DocumentJob.created_at >= since,
                 )
             )
-        ).scalar_one() or 0
+        ).scalar_one()
+        or 0
     )
     success_last24h = int(
         (
@@ -671,7 +820,8 @@ async def get_queue_summary(
                     DocumentJob.created_at >= since,
                 )
             )
-        ).scalar_one() or 0
+        ).scalar_one()
+        or 0
     )
 
     return QueueSummaryResponse(
@@ -719,20 +869,25 @@ async def list_failed_jobs(
                     DocumentJob.status == DocumentJobStatus.FAILED.value,
                 )
             )
-        ).scalar_one() or 0
+        ).scalar_one()
+        or 0
     )
     rows = (
-        await session.execute(
-            select(DocumentJob)
-            .where(
-                DocumentJob.tenant_id == str(tenant.id),
-                DocumentJob.status == DocumentJobStatus.FAILED.value,
+        (
+            await session.execute(
+                select(DocumentJob)
+                .where(
+                    DocumentJob.tenant_id == str(tenant.id),
+                    DocumentJob.status == DocumentJobStatus.FAILED.value,
+                )
+                .order_by(DocumentJob.ended_at.desc().nulls_last(), DocumentJob.created_at.desc())
+                .offset(offset)
+                .limit(limit)
             )
-            .order_by(DocumentJob.ended_at.desc().nulls_last(), DocumentJob.created_at.desc())
-            .offset(offset)
-            .limit(limit)
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     return FailedJobsResponse(
         total=total,
         items=[
@@ -783,20 +938,25 @@ async def list_poisoned_events(
                     OutboxEvent.status == OutboxEventStatus.POISONED.value,
                 )
             )
-        ).scalar_one() or 0
+        ).scalar_one()
+        or 0
     )
     rows = (
-        await session.execute(
-            select(OutboxEvent)
-            .where(
-                OutboxEvent.tenant_id == tenant.id,
-                OutboxEvent.status == OutboxEventStatus.POISONED.value,
+        (
+            await session.execute(
+                select(OutboxEvent)
+                .where(
+                    OutboxEvent.tenant_id == tenant.id,
+                    OutboxEvent.status == OutboxEventStatus.POISONED.value,
+                )
+                .order_by(OutboxEvent.created_at.desc())
+                .offset(offset)
+                .limit(limit)
             )
-            .order_by(OutboxEvent.created_at.desc())
-            .offset(offset)
-            .limit(limit)
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     return PoisonedEventsResponse(
         total=total,
         items=[

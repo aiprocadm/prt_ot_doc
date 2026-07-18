@@ -12,10 +12,9 @@ def test_require_document_object_id_raises_structured_unprocessable() -> None:
         _require_document_object_id(None, None)
 
     assert exc_info.value.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
-    assert exc_info.value.detail == {
-        "code": "approval_signing_validation_error",
-        "message": "document_version_id is required",
-    }
+    assert exc_info.value.detail["code"] == "APPROVAL_SIGNING_VALIDATION_ERROR"
+    assert exc_info.value.detail["error_code"] == "APPROVAL_SIGNING_VALIDATION_ERROR"
+    assert exc_info.value.detail["message"] == "document_version_id is required"
 
 
 def test_validate_certificate_period_raises_structured_unprocessable() -> None:
@@ -23,10 +22,9 @@ def test_validate_certificate_period_raises_structured_unprocessable() -> None:
         _validate_certificate_period({"valid_from": "2026-12-31", "valid_to": "2026-01-01"})
 
     assert exc_info.value.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
-    assert exc_info.value.detail == {
-        "code": "approval_signing_validation_error",
-        "message": "invalid certificate period",
-    }
+    assert exc_info.value.detail["code"] == "APPROVAL_SIGNING_VALIDATION_ERROR"
+    assert exc_info.value.detail["error_code"] == "APPROVAL_SIGNING_VALIDATION_ERROR"
+    assert exc_info.value.detail["message"] == "invalid certificate period"
 
 
 def test_require_document_object_id_prefers_explicit_object_id() -> None:

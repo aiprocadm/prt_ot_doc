@@ -46,7 +46,7 @@ describe("Inspection/fire next actions", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText(/blockers и next actions/i)).toBeInTheDocument();
+    expect(await screen.findByText(/блокеры и дальнейшие действия/i)).toBeInTheDocument();
   });
 
   it("shows overdue-training next actions on FireTrainingPage", async () => {
@@ -63,7 +63,7 @@ describe("Inspection/fire next actions", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText(/blockers и next actions/i)).toBeInTheDocument();
+    expect(await screen.findByText(/блокеры и дальнейшие действия/i)).toBeInTheDocument();
     expect(screen.getByText(/просроченных записей инструктажей/i)).toBeInTheDocument();
   });
 
@@ -82,7 +82,7 @@ describe("Inspection/fire next actions", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText(/blockers и next actions/i)).toBeInTheDocument();
-    expect(screen.getByText(/открытых blockers по предписаниям/i)).toBeInTheDocument();
+    expect(await screen.findByText(/блокеры и дальнейшие действия/i)).toBeInTheDocument();
+    expect(screen.getByText(/открытых ограничений по предписаниям/i)).toBeInTheDocument();
   });
 });

@@ -30,9 +30,7 @@ async def test_ready_reports_success(app_fixture) -> None:
 
 
 @pytest.mark.anyio
-async def test_ready_returns_service_unavailable_when_checks_fail(
-    app_fixture, monkeypatch
-) -> None:
+async def test_ready_returns_service_unavailable_when_checks_fail(app_fixture, monkeypatch) -> None:
     async def failing_postgres(_: FastAPI) -> None:
         raise RuntimeError("database offline")
 

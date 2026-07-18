@@ -27,11 +27,15 @@ cli = typer.Typer(help="ptd CLI utilities")
 
 
 def _emit(payload: dict[str, Any], *, as_json: bool = False) -> None:
+    """Emit payload as JSON or formatted text.
+
+    When as_json=True, output valid JSON; otherwise output key: value pairs.
+    """
     if as_json:
         typer.echo(json.dumps(payload, ensure_ascii=False))
-        return
-    for key, value in payload.items():
-        typer.echo(f"{key}: {value}")
+    else:
+        for key, value in payload.items():
+            typer.echo(f"{key}: {value}")
 
 
 def load_context(context_path: Path) -> dict[str, Any]:
@@ -39,21 +43,31 @@ def load_context(context_path: Path) -> dict[str, Any]:
         return json.load(fh)
 
 
-async def _resolve_template(session: AsyncSession, template_id: str) -> tuple[Template, TemplateVersion]:
+async def _resolve_template(
+    session: AsyncSession, template_id: str
+) -> tuple[Template, TemplateVersion]:
     template = await session.get(Template, template_id)
     if template is None:
         typer.echo(f"Template {template_id} not found", err=True)
         raise typer.Exit(code=EXIT_VALIDATION)
 
-    stmt = (
-        text("""
+    stmt = text(
+        """
         SELECT id FROM templateversion
         WHERE template_id = :template_id AND status = :status
         ORDER BY version DESC
         LIMIT 1
-        """)
+        """
     )
-    row = (await session.execute(stmt, {"template_id": template.id, "status": TemplateVersionStatus.ACTIVE.name})).mappings().first()
+    row = (
+        (
+            await session.execute(
+                stmt, {"template_id": template.id, "status": TemplateVersionStatus.ACTIVE.name}
+            )
+        )
+        .mappings()
+        .first()
+    )
     if row is None:
         typer.echo("Template has no active version", err=True)
         raise typer.Exit(code=EXIT_VALIDATION)
@@ -121,7 +135,9 @@ def render(
 
 
 @cli.command()
-def header(template_name: str, json_out: bool = typer.Option(False, "--json", help="Emit JSON output.")) -> None:
+def header(
+    template_name: str, json_out: bool = typer.Option(False, "--json", help="Emit JSON output.")
+) -> None:
     """Show header information about a stored template."""
 
     key = f"templates/{template_name}.docx"
@@ -129,7 +145,13 @@ def header(template_name: str, json_out: bool = typer.Option(False, "--json", he
 
 
 @cli.command()
-def replace(template_name: str, placeholder: str, value: str, output: Path, json_out: bool = typer.Option(False, "--json")) -> None:
+def replace(
+    template_name: str,
+    placeholder: str,
+    value: str,
+    output: Path,
+    json_out: bool = typer.Option(False, "--json"),
+) -> None:
     """Replace placeholder text in a local template document."""
 
     storage = FileStorageService.default()
@@ -191,28 +213,40 @@ def pipeline(
 
 
 @cli.command()
-def export(tenant: str = typer.Option(..., "--tenant"), json_out: bool = typer.Option(False, "--json")) -> None:
+def export(
+    tenant: str = typer.Option(..., "--tenant"), json_out: bool = typer.Option(False, "--json")
+) -> None:
     """Stub export orchestration command (admin/internal)."""
 
     _emit({"tenant": tenant, "operation": "export", "status": "scheduled"}, as_json=json_out)
 
 
 @cli.command()
-def backup(triggered_by: str = typer.Option("manual", "--triggered-by"), json_out: bool = typer.Option(False, "--json")) -> None:
+def backup(
+    triggered_by: str = typer.Option("manual", "--triggered-by"),
+    json_out: bool = typer.Option(False, "--json"),
+) -> None:
     """Register backup run execution."""
 
-    _emit({"operation": "backup", "triggered_by": triggered_by, "status": "queued"}, as_json=json_out)
+    _emit(
+        {"operation": "backup", "triggered_by": triggered_by, "status": "queued"}, as_json=json_out
+    )
 
 
 @cli.command()
-def restore(mode: str = typer.Option("test", "--mode"), json_out: bool = typer.Option(False, "--json")) -> None:
+def restore(
+    mode: str = typer.Option("test", "--mode"), json_out: bool = typer.Option(False, "--json")
+) -> None:
     """Run restore test flow."""
 
     _emit({"operation": "restore", "mode": mode, "status": "queued"}, as_json=json_out)
 
 
 @cli.command()
-def reindex(tenant: Optional[str] = typer.Option(None, "--tenant"), json_out: bool = typer.Option(False, "--json")) -> None:
+def reindex(
+    tenant: Optional[str] = typer.Option(None, "--tenant"),
+    json_out: bool = typer.Option(False, "--json"),
+) -> None:
     """Schedule search reindexing."""
 
     _emit({"operation": "reindex", "tenant": tenant, "status": "queued"}, as_json=json_out)
@@ -228,7 +262,9 @@ def projections_rebuild(
 ) -> None:
     """Rebuild read model projections."""
 
-    _emit({"operation": "projections.rebuild", "tenant": tenant, "status": "queued"}, as_json=json_out)
+    _emit(
+        {"operation": "projections.rebuild", "tenant": tenant, "status": "queued"}, as_json=json_out
+    )
 
 
 cli.add_typer(projections_app, name="projections")

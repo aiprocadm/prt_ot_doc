@@ -77,14 +77,14 @@ describe("IntegrationsPage", () => {
 
     render(<IntegrationsPage />);
 
-    fireEvent.click(await screen.findByRole("button", { name: /retry/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /повторить/i }));
 
     await waitFor(() => {
       expect(postMock).toHaveBeenCalledWith("/admin/outbox/delivery-1/retry");
     });
     await waitFor(() => {
       expect(toast.error).toHaveBeenCalledWith("retry failed");
-      expect(screen.getByRole("button", { name: /retry/i })).toBeEnabled();
+      expect(screen.getByRole("button", { name: /повторить/i })).toBeEnabled();
     });
   });
 
@@ -118,14 +118,14 @@ describe("IntegrationsPage", () => {
 
     render(<IntegrationsPage />);
 
-    fireEvent.click(await screen.findByRole("button", { name: /requeue/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /в очередь/i }));
 
     await waitFor(() => {
       expect(postMock).toHaveBeenCalledWith("/admin/outbox/events/event-1/requeue");
     });
     await waitFor(() => {
       expect(toast.error).toHaveBeenCalledWith("requeue failed");
-      expect(screen.getByRole("button", { name: /requeue/i })).toBeEnabled();
+      expect(screen.getByRole("button", { name: /в очередь/i })).toBeEnabled();
     });
   });
 });

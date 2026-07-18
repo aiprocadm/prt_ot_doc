@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { opsApi, type FindingDto } from "@/api/ops";
 import { EmptyState } from "@/components/common/EmptyState";
@@ -9,8 +9,12 @@ import { RegistryTable } from "@/components/common/RegistryTable";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ConflictInboxCard } from "@/components/pwa/ConflictInboxCard";
+import { MobileFieldModeCard } from "@/components/pwa/MobileFieldModeCard";
+import { SyncStatusChips } from "@/components/pwa/SyncStatusChips";
 import { useAsyncResource } from "@/hooks/useAsyncResource";
 import { useLocalRegistry } from "@/hooks/useLocalRegistry";
+import { emitSyncTelemetry, resolveSyncState } from "@/pwa/sync";
 import { formatDate } from "@/utils/datetime";
 
 const FindingsPage = () => {
@@ -18,8 +22,29 @@ const FindingsPage = () => {
   const { data: items, loading, error, reload } = useAsyncResource<FindingDto[]>({
     loader: loadFindings,
     initialData: [],
-    errorMessage: "Не удалось загрузить findings"
+    errorMessage: "Не удалось загрузить замечания"
   });
+  const [online, setOnline] = useState(() => (typeof navigator === "undefined" ? true : navigator.onLine));
+  const [hasConflict, setHasConflict] = useState(false);
+  const syncState = resolveSyncState({ online, loading, hasConflict, hasError: Boolean(error) });
+
+  useEffect(() => {
+    const onOnline = () => setOnline(true);
+    const onOffline = () => setOnline(false);
+    window.addEventListener("online", onOnline);
+    window.addEventListener("offline", onOffline);
+    return () => {
+      window.removeEventListener("online", onOnline);
+      window.removeEventListener("offline", onOffline);
+    };
+  }, []);
+
+  useEffect(() => {
+    emitSyncTelemetry({ type: "sync_state_changed", state: syncState, screen: "findings" });
+    if (error?.message) {
+      emitSyncTelemetry({ type: "sync_error", screen: "findings", message: error.message });
+    }
+  }, [error?.message, syncState]);
 
   const registry = useLocalRegistry({
     items,
@@ -34,18 +59,31 @@ const FindingsPage = () => {
   return (
     <div className="space-y-4">
       <RegistryPageHeader
-        title="Findings"
-        description="Tenant-aware operational registry backed by backend `/findings`, with real severity/status/source projections, unified registry UX and pagination."
+        title="Замечания и нарушения"
+        description="Операционный реестр по API `/findings`: серьёзность, статус, источник и единый интерфейс с поиском."
       />
+      <div className="grid gap-3 lg:grid-cols-3">
+        <Card className="lg:col-span-1">
+          <CardContent className="pt-4">
+            <SyncStatusChips state={syncState} />
+          </CardContent>
+        </Card>
+        <div className="lg:col-span-1">
+          <ConflictInboxCard onConflictStateChange={setHasConflict} />
+        </div>
+        <div className="lg:col-span-1">
+          <MobileFieldModeCard />
+        </div>
+      </div>
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Открытые, подтверждённые и закрытые findings</CardTitle>
+          <CardTitle className="text-base">Открытые, подтверждённые и закрытые замечания</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           <ErrorState error={error ?? undefined} onRetry={() => void reload()} />
-          {loading ? <LoadingScreen label="Загрузка findings" /> : null}
+          {loading ? <LoadingScreen label="Загрузка замечаний" /> : null}
           {!loading && !error && registry.total === 0 ? (
-            <EmptyState title="Findings не найдены" description={registry.query ? "Измените строку поиска." : "В текущем tenant пока нет findings."} />
+            <EmptyState title="Замечаний не найдено" description={registry.query ? "Измените строку поиска." : "В текущем тенанте пока нет записей."} />
           ) : null}
           {!loading && !error && registry.total > 0 ? (
             <RegistryTable

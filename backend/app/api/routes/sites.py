@@ -3,15 +3,21 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_correlation_id, get_session, get_tenant_record
+from app.api.helpers.etag import (
+    apply_etag_response_headers,
+    build_not_modified_headers,
+    compute_list_etag,
+)
 from app.core.audit_decorator import audit_operation
 from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
 from app.models.models import (
+    Branch,
     Company,
     Site,
     Tenant,
@@ -66,6 +72,22 @@ async def _get_company(session: AsyncSession, tenant: Tenant, company_id: str) -
     return company
 
 
+async def _ensure_branch_link(
+    session: AsyncSession, tenant: Tenant, branch_id: str, company_id: str
+) -> None:
+    """RC-014: site.branch_id — app-level ссылка (нет DB FK), целостность держит API."""
+    stmt = select(Branch).where(
+        Branch.id == branch_id,
+        Branch.tenant_id == tenant.id,
+        Branch.deleted_at.is_(None),
+    )
+    branch = (await session.execute(stmt)).scalar_one_or_none()
+    if branch is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Branch not found")
+    if branch.company_id != company_id:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Branch belongs to a different company")
+
+
 async def _get_site(session: AsyncSession, tenant: Tenant, site_id: str) -> Site:
     stmt = select(Site).where(
         Site.id == site_id,
@@ -90,9 +112,7 @@ async def _get_workplace(session: AsyncSession, tenant: Tenant, workplace_id: st
     return workplace
 
 
-async def _ensure_hazards(
-    session: AsyncSession, tenant_id: str, hazard_ids: list[str]
-) -> None:
+async def _ensure_hazards(session: AsyncSession, tenant_id: str, hazard_ids: list[str]) -> None:
     if not hazard_ids:
         return
     stmt = select(RiskHazard.id).where(
@@ -106,13 +126,15 @@ async def _ensure_hazards(
 
 @router.get("/sites", response_model=SitePage)
 async def list_sites(
+    request: Request,
+    response: Response,
     tenant: TenantDep,
     session: SessionDep,
     _: ManagerAccess,
     company_id: str | None = Query(default=None, min_length=1, max_length=36),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
-) -> SitePage:
+) -> SitePage | Response:
     TenantContextValidator.ensure_tenant_context(tenant)
 
     stmt = select(Site).where(Site.tenant_id == tenant.id, Site.deleted_at.is_(None))
@@ -122,6 +144,17 @@ async def list_sites(
     stmt = stmt.order_by(Site.created_at.desc()).offset(offset).limit(limit)
     items = list((await session.execute(stmt)).scalars().all())
     total = await session.scalar(total_stmt)
+    etag = compute_list_etag(
+        tenant_id=str(tenant.id),
+        items=items,
+        scalars=[("total", int(total or 0)), ("limit", limit), ("offset", offset)],
+    )
+    apply_etag_response_headers(response, etag)
+    if request.headers.get("if-none-match") == etag:
+        return Response(
+            status_code=status.HTTP_304_NOT_MODIFIED,
+            headers=build_not_modified_headers(etag),
+        )
     return SitePage(items=items, total=int(total or 0))
 
 
@@ -133,6 +166,8 @@ async def create_site(
     TenantContextValidator.ensure_tenant_context(tenant)
 
     await _get_company(session, tenant, payload.company_id)
+    if payload.branch_id:
+        await _ensure_branch_link(session, tenant, payload.branch_id, payload.company_id)
     site = Site(tenant_id=str(tenant.id), **payload.model_dump())
     session.add(site)
     await session.flush()
@@ -141,8 +176,13 @@ async def create_site(
 
 
 @router.get("/sites/{site_id}", response_model=SiteRead)
-async def get_site(site_id: str, tenant: TenantDep, session: SessionDep, _: ManagerAccess,
-    correlation_id: str = Depends(get_correlation_id)) -> SiteRead:
+async def get_site(
+    site_id: str,
+    tenant: TenantDep,
+    session: SessionDep,
+    _: ManagerAccess,
+    correlation_id: str = Depends(get_correlation_id),
+) -> SiteRead:
     TenantContextValidator.ensure_tenant_context(tenant)
 
     site = await _get_site(session, tenant, site_id)
@@ -166,6 +206,9 @@ async def update_site(
         return SiteRead.model_validate(site)
     if "company_id" in updates:
         await _get_company(session, tenant, str(updates["company_id"]))
+    if updates.get("branch_id"):
+        target_company = str(updates.get("company_id") or site.company_id)
+        await _ensure_branch_link(session, tenant, str(updates["branch_id"]), target_company)
     for key, value in updates.items():
         setattr(site, key, value)
     await session.commit()
@@ -173,9 +216,7 @@ async def update_site(
     return SiteRead.model_validate(site)
 
 
-@router.delete(
-    "/sites/{site_id}", response_model=None, status_code=status.HTTP_204_NO_CONTENT
-)
+@router.delete("/sites/{site_id}", response_model=None, status_code=status.HTTP_204_NO_CONTENT)
 @audit_operation("delete", "site")
 async def delete_site(
     site_id: str, tenant: TenantDep, session: SessionDep, _: EditorAccess
@@ -226,7 +267,10 @@ async def _replace_workplace_hazards(
         delete(WorkplaceHazardLink).where(WorkplaceHazardLink.workplace_id == workplace.id)
     )
     await _ensure_hazards(session, str(tenant.id), hazard_ids)
-    document_map = {hid: document_ids[idx] if idx < len(document_ids) else None for idx, hid in enumerate(hazard_ids)}
+    document_map = {
+        hid: document_ids[idx] if idx < len(document_ids) else None
+        for idx, hid in enumerate(hazard_ids)
+    }
     links = [
         WorkplaceHazardLink(
             tenant_id=workplace.tenant_id,
@@ -333,4 +377,3 @@ async def delete_workplace(
         delete(WorkplaceHazardLink).where(WorkplaceHazardLink.workplace_id == workplace.id)
     )
     await session.commit()
-

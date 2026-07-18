@@ -5,16 +5,21 @@ from __future__ import annotations
 from datetime import date, datetime, timezone
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_correlation_id, get_session, get_tenant_record
+from app.api.helpers.etag import (
+    apply_etag_response_headers,
+    build_not_modified_headers,
+    compute_list_etag,
+)
 from app.core.audit_decorator import audit_operation
 from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
-from app.domains.ppe import build_journal_export
 from app.models.models import Journal, JournalEntry, Person, Tenant
+from app.modules.ppe import build_journal_export
 from app.schemas.journal import (
     JournalEntryPage,
     JournalEntryRead,
@@ -28,6 +33,8 @@ router = APIRouter(prefix="/journals", tags=["journals"])
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 TenantDep = Annotated[Tenant, Depends(get_tenant_record)]
+
+
 def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> str | None:
     return getattr(tenant, "id", None)
 
@@ -87,24 +94,44 @@ def _entry_schema(item: JournalEntry) -> JournalEntryRead:
 
 @router.get("", response_model=JournalPage)
 async def list_journals(
+    request: Request,
+    response: Response,
     tenant: TenantDep,
     session: SessionDep,
     access: ManagerAccess,
     company_id: str | None = None,
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
-) -> JournalPage:
+) -> JournalPage | Response:
     TenantContextValidator.ensure_tenant_context(tenant)
 
     stmt = select(Journal).where(Journal.tenant_id == tenant.id, Journal.deleted_at.is_(None))
     if company_id:
         stmt = stmt.where(Journal.company_id == company_id)
     stmt = stmt.order_by(Journal.created_at.desc()).limit(limit).offset(offset)
-    items = (await session.execute(stmt)).scalars().all()
-    count_stmt = select(func.count()).where(Journal.tenant_id == tenant.id, Journal.deleted_at.is_(None))
+    items = list((await session.execute(stmt)).scalars().all())
+    count_stmt = select(func.count()).where(
+        Journal.tenant_id == tenant.id, Journal.deleted_at.is_(None)
+    )
     if company_id:
         count_stmt = count_stmt.where(Journal.company_id == company_id)
     total = (await session.execute(count_stmt)).scalar_one()
+    etag = compute_list_etag(
+        tenant_id=str(tenant.id),
+        items=items,
+        scalars=[
+            ("total", int(total or 0)),
+            ("limit", limit),
+            ("offset", offset),
+            ("company", company_id or ""),
+        ],
+    )
+    apply_etag_response_headers(response, etag)
+    if request.headers.get("if-none-match") == etag:
+        return Response(
+            status_code=status.HTTP_304_NOT_MODIFIED,
+            headers=build_not_modified_headers(etag),
+        )
     return JournalPage(items=[_journal_schema(item) for item in items], total=total)
 
 
@@ -134,8 +161,13 @@ async def create_journal(
 
 
 @router.get("/{journal_id}", response_model=JournalRead)
-async def get_journal(journal_id: str, tenant: TenantDep, session: SessionDep, access: ManagerAccess,
-    correlation_id: str = Depends(get_correlation_id)) -> JournalRead:
+async def get_journal(
+    journal_id: str,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: ManagerAccess,
+    correlation_id: str = Depends(get_correlation_id),
+) -> JournalRead:
     TenantContextValidator.ensure_tenant_context(tenant)
 
     journal = await _get_journal(session, tenant, journal_id)
@@ -208,7 +240,9 @@ async def list_entries(
     return JournalEntryPage(items=[_entry_schema(item) for item in items], total=total)
 
 
-@router.post("/{journal_id}/entries", response_model=JournalEntryRead, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/{journal_id}/entries", response_model=JournalEntryRead, status_code=status.HTTP_201_CREATED
+)
 @audit_operation("create", "journal_entry")
 async def create_entry(
     journal_id: str,
@@ -278,8 +312,13 @@ async def update_entry(
 
 @router.delete("/entries/{entry_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
 @audit_operation("delete", "journal_entry")
-async def delete_entry(entry_id: str, tenant: TenantDep, session: SessionDep, access: ManagerAccess,
-    correlation_id: str = Depends(get_correlation_id)) -> None:
+async def delete_entry(
+    entry_id: str,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: ManagerAccess,
+    correlation_id: str = Depends(get_correlation_id),
+) -> None:
     TenantContextValidator.ensure_tenant_context(tenant)
 
     entry = await _get_entry(session, tenant, entry_id)
@@ -305,4 +344,3 @@ async def export_journal(
         "journal": _journal_schema(journal),
         "entries": [_entry_schema(item) for item in entries],
     }
-

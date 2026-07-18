@@ -22,4 +22,6 @@ def build_search_path(schema_name: str) -> str:
 
 async def with_tenant_db(session: AsyncSession, tenant_schema: str) -> None:
     search_path = build_search_path(tenant_schema)
-    await session.execute(text("select set_config('search_path', :search_path, true)"), {"search_path": search_path})
+    await session.execute(
+        text("select set_config('search_path', :search_path, true)"), {"search_path": search_path}
+    )

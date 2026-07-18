@@ -12,7 +12,9 @@ from app.services.risk import RiskLevelError, RiskService
 
 
 @pytest.mark.anyio
-async def test_npa_endpoint_returns_acts_with_clauses(async_client, sessionmaker, make_auth_headers):
+async def test_npa_endpoint_returns_acts_with_clauses(
+    async_client, sessionmaker, make_auth_headers
+):
     async with sessionmaker() as session:
         act = NpaAct(
             code="TR-001",
@@ -63,9 +65,7 @@ async def test_risk_service_calculation_bounds() -> None:
 async def test_risk_endpoint_returns_report(async_client, sessionmaker, make_auth_headers):
     headers = await make_auth_headers()
     async with sessionmaker() as session:
-        tenant = (
-            await session.execute(select(Tenant).where(Tenant.slug == "test"))
-        ).scalar_one()
+        tenant = (await session.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()
 
         company = Company(tenant_id=tenant.id, name="Risky Corp")
         session.add(company)

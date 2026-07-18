@@ -56,15 +56,11 @@ class PdfConverter:
         self._timeout = self._settings.pdf_libreoffice_timeout_seconds
         self._max_attempts = max(1, self._settings.pdf_libreoffice_max_attempts)
         self._backoff = float(self._settings.pdf_libreoffice_retry_backoff_seconds)
-        self._backoff_max = float(
-            self._settings.pdf_libreoffice_retry_backoff_max_seconds
-        )
+        self._backoff_max = float(self._settings.pdf_libreoffice_retry_backoff_max_seconds)
         self._retryable_errors: Final[frozenset[str]] = frozenset(
             {"pdf_conversion_timeout", "pdf_conversion_failed"}
         )
-        self._metrics: Metrics | None = (
-            get_metrics() if self._settings.enable_metrics else None
-        )
+        self._metrics: Metrics | None = get_metrics() if self._settings.enable_metrics else None
 
     def convert(self, input_path: Path, output_dir: Path) -> PdfConversionResult:
         """Convert ``input_path`` into a PDF stored inside ``output_dir``.
@@ -186,9 +182,7 @@ class PdfConverter:
             raise PdfConversionError("pdf_converter_not_found") from exc
         except subprocess.TimeoutExpired as exc:
             duration = perf_counter() - started
-            logger.exception(
-                "LibreOffice conversion timed out", extra={"timeout": exc.timeout}
-            )
+            logger.exception("LibreOffice conversion timed out", extra={"timeout": exc.timeout})
             self._record_attempt(duration, "pdf_conversion_timeout")
             raise PdfConversionError("pdf_conversion_timeout") from exc
         except subprocess.CalledProcessError as exc:

@@ -34,12 +34,15 @@ export interface CompanyFiltersDto {
 
 export interface UpdateCompanyDto {
   name: string;
-  inn: string;
+  /** Необязательно: бэкенд принимает пустое значение */
+  inn?: string;
   kpp?: string;
   ogrn?: string;
   address?: string;
   email?: string;
   phone?: string;
+  /** API: список телефонов компании */
+  phone_numbers?: string[];
   website?: string;
   status?: CompanyStatus;
   logo_id?: string | null;

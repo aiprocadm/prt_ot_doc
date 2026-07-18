@@ -29,21 +29,29 @@ def test_split_csv_rejects_non_iterable() -> None:
 
 
 def test_binary_exists_with_paths(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    binary = tmp_path / "custom" / "bin"
-    binary.parent.mkdir()
-    binary.write_text("#!/bin/sh\n")
-    binary.chmod(0o755)
+    import sys
 
+    # Create subdirectory with binary
+    binary_dir = tmp_path / "custom"
+    binary_dir.mkdir()
+    bin_name_full = "bin.exe" if sys.platform == "win32" else "bin"
+    binary = binary_dir / bin_name_full
+    binary.write_text("#!/bin/sh\n")
+    if sys.platform != "win32":
+        binary.chmod(0o755)
+
+    # config.binary_exists checks if file exists (and is executable on non-Windows)
     assert config.binary_exists(str(binary))
     assert config.binary_exists(str(binary.parent)) is True  # directory exists
     assert config.binary_exists(str(tmp_path / "missing")) is False
 
     # Ensure PATH lookup is honoured when candidate has no path separators.
-    path_binary = tmp_path / "bin"
+    path_binary = tmp_path / bin_name_full
     path_binary.write_text("#!/bin/sh\n")
-    path_binary.chmod(0o755)
+    if sys.platform != "win32":
+        path_binary.chmod(0o755)
     monkeypatch.setenv("PATH", str(tmp_path))
-    assert config.binary_exists("bin") is True
+    assert config.binary_exists(bin_name_full) is True
 
 
 def test_settings_normalization_and_validators(tmp_path: Path) -> None:

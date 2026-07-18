@@ -17,6 +17,8 @@ export type ApprovalProcess = {
   current_step?: number;
 };
 
+export type ApprovalTimelineItem = { decision: string; comment?: string | null; step_no: number };
+
 export type ApprovalRoute = {
   id: string;
   code: string;
@@ -39,12 +41,16 @@ export type ApprovalRouteCreatePayload = {
 export const approvalsApi = {
   listMyTasks: async (status = "open") => {
     const { data } = await apiClient.get<{ items: ApprovalTask[] }>("/v1/approvals/tasks", {
-      params: { mine: true, status },
+      params: { mine: 1, status },
     });
     return data.items;
   },
   listProcesses: async (status?: string) => {
     const { data } = await apiClient.get<{ items: ApprovalProcess[] }>("/approvals", { params: { status } });
+    return data.items;
+  },
+  getTimeline: async (approvalId: string) => {
+    const { data } = await apiClient.get<{ items: ApprovalTimelineItem[] }>(`/approvals/${approvalId}/timeline`);
     return data.items;
   },
   startApproval: async (entity_type: "document" | "pack", entity_id: string, approval_route_id: string) => {

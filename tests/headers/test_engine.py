@@ -38,7 +38,11 @@ def test_apply_headers_adds_parts_relationships_and_page_fields() -> None:
     out, report = apply_headers_to_docx(
         docx_bytes=_docx_stub(),
         preset=preset,
-        context={"doc": {"title": "T1"}, "organization": {"short_name": "ACME"}, "branch": {"name": "North"}},
+        context={
+            "doc": {"title": "T1"},
+            "organization": {"short_name": "ACME"},
+            "branch": {"name": "North"},
+        },
     )
     with ZipFile(BytesIO(out), "r") as z:
         assert "word/header1.xml" in z.namelist()

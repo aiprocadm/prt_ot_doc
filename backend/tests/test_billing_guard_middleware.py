@@ -14,7 +14,7 @@ def test_resolve_billing_action_documents_generate() -> None:
 
 
 def test_resolve_billing_action_persons_create() -> None:
-    assert resolve_billing_action(_request("POST", "/api/v1/persons")) == "users.create"
+    assert resolve_billing_action(_request("POST", "/api/v1/persons")) == "persons.create"
 
 
 def test_resolve_billing_action_default_request() -> None:

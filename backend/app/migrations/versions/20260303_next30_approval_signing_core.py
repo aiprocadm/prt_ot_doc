@@ -4,10 +4,12 @@ Revision ID: 20260303_next30_approval_signing_core
 Revises: 20260302_next29_files_search_v1
 Create Date: 2026-03-03 00:00:00.000000
 """
+
 from __future__ import annotations
 
 import sqlalchemy as sa
 from alembic import op
+from sqlalchemy.dialects import postgresql
 
 revision = "20260303_next30_approval_signing_core"
 down_revision = "20260302_next29"
@@ -16,15 +18,57 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column("approval_routes", sa.Column("priority", sa.Integer(), nullable=False, server_default="0"))
-    op.add_column("approval_routes", sa.Column("conditions", sa.JSON(), nullable=False, server_default=sa.text("'{}'")))
-    op.add_column("approval_routes", sa.Column("steps", sa.JSON(), nullable=False, server_default=sa.text("'[]'")))
-    op.add_column("approval_routes", sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True))
+    op.add_column(
+        "approval_routes", sa.Column("priority", sa.Integer(), nullable=False, server_default="0")
+    )
+    op.add_column(
+        "approval_routes",
+        sa.Column("conditions", sa.JSON(), nullable=False, server_default=sa.text("'{}'")),
+    )
+    op.add_column(
+        "approval_routes",
+        sa.Column("steps", sa.JSON(), nullable=False, server_default=sa.text("'[]'")),
+    )
+    op.add_column(
+        "approval_routes", sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True)
+    )
 
-    process_status = sa.Enum("pending", "in_progress", "approved", "rejected", "canceled", "expired", name="approvalprocessstatus")
-    task_status = sa.Enum("open", "done", "canceled", "expired", name="approvaltaskstatus")
-    signature_request_status = sa.Enum("created", "requested", "signed", "failed", name="signaturerequeststatus")
-    edo_envelope_status = sa.Enum("queued", "sent", "delivered", "signed", "rejected", "failed", name="edoenvelopestatus")
+    process_status = postgresql.ENUM(
+        "pending",
+        "in_progress",
+        "approved",
+        "rejected",
+        "canceled",
+        "expired",
+        name="approvalprocessstatus",
+        create_type=False,
+    )
+    task_status = postgresql.ENUM(
+        "open",
+        "done",
+        "canceled",
+        "expired",
+        name="approvaltaskstatus",
+        create_type=False,
+    )
+    signature_request_status = postgresql.ENUM(
+        "created",
+        "requested",
+        "signed",
+        "failed",
+        name="signaturerequeststatus",
+        create_type=False,
+    )
+    edo_envelope_status = postgresql.ENUM(
+        "queued",
+        "sent",
+        "delivered",
+        "signed",
+        "rejected",
+        "failed",
+        name="edoenvelopestatus",
+        create_type=False,
+    )
     bind = op.get_bind()
     process_status.create(bind, checkfirst=True)
     task_status.create(bind, checkfirst=True)
@@ -50,7 +94,11 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index("ix_approval_processes_status", "approval_processes", ["tenant_id", "status"])
-    op.create_index("ix_approval_processes_object", "approval_processes", ["tenant_id", "object_type", "object_id"])
+    op.create_index(
+        "ix_approval_processes_object",
+        "approval_processes",
+        ["tenant_id", "object_type", "object_id"],
+    )
 
     op.create_table(
         "approval_tasks",
@@ -72,7 +120,11 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index("ix_approval_tasks_status", "approval_tasks", ["tenant_id", "status"])
-    op.create_index("ix_approval_tasks_assignee", "approval_tasks", ["tenant_id", "assignee_type", "assignee_id"])
+    op.create_index(
+        "ix_approval_tasks_assignee",
+        "approval_tasks",
+        ["tenant_id", "assignee_type", "assignee_id"],
+    )
 
     op.create_table(
         "approval_decision_logs",
@@ -108,7 +160,11 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index("ix_signature_requests_status", "signature_requests", ["tenant_id", "status"])
-    op.create_index("ix_signature_requests_object", "signature_requests", ["tenant_id", "object_type", "object_id"])
+    op.create_index(
+        "ix_signature_requests_object",
+        "signature_requests",
+        ["tenant_id", "object_type", "object_id"],
+    )
 
     op.create_table(
         "edo_envelopes",
@@ -125,7 +181,9 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index("ix_edo_envelopes_status", "edo_envelopes", ["tenant_id", "status"])
-    op.create_index("ix_edo_envelopes_object", "edo_envelopes", ["tenant_id", "object_type", "object_id"])
+    op.create_index(
+        "ix_edo_envelopes_object", "edo_envelopes", ["tenant_id", "object_type", "object_id"]
+    )
 
 
 def downgrade() -> None:

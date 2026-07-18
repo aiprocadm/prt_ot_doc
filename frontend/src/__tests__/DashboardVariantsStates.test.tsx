@@ -44,7 +44,7 @@ describe("Dashboard variants operational states", () => {
   });
 
   it("shows error state on ClientDeliveryDashboardPage when API fails", async () => {
-    getMock.mockRejectedValue({ status: 500, message: "dashboard load failed" });
+    getMock.mockRejectedValue({ status: 400, message: "dashboard load failed" });
 
     render(
       <MemoryRouter>

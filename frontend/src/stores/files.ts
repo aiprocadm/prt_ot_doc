@@ -3,8 +3,9 @@ import { immer } from "zustand/middleware/immer";
 import { apiClient } from "@/api/client";
 import { defaultPagination } from "@/stores/helpers";
 import type { PaginatedState } from "@/stores/types";
-import type { ApiError, PaginatedResponse } from "@/types/dto/common";
+import type { PaginatedResponse } from "@/types/dto/common";
 import type { FileDto } from "@/types/dto/files";
+import { normalizeError } from "@/utils/apiFormErrors";
 
 interface FileFilters {
   search?: string;
@@ -69,7 +70,7 @@ export const useFilesStore = create<FilesState>()(
         });
       } catch (error) {
         set((state) => {
-          state.error = error as ApiError;
+          state.error = normalizeError(error);
         });
       } finally {
         set((state) => {
@@ -82,21 +83,34 @@ export const useFilesStore = create<FilesState>()(
       formData.append("file", file);
       if (meta?.description) formData.append("description", meta.description);
       if (meta?.tags) meta.tags.forEach((tag) => formData.append("tags", tag));
-      const { data } = await apiClient.post<FileDto>("/files", formData, {
-        headers: { "Content-Type": "multipart/form-data" }
-      });
-      set((state) => {
-        state.items.unshift(data);
-        state.pagination.total += 1;
-      });
-      return data;
+      try {
+        // Не передаём Content-Type вручную: браузер выставит multipart/form-data с boundary
+        const { data } = await apiClient.post<FileDto>("/files", formData);
+        set((state) => {
+          state.items.unshift(data);
+          state.pagination.total += 1;
+        });
+        return data;
+      } catch (error) {
+        set((state) => {
+          state.error = normalizeError(error);
+        });
+        throw error;
+      }
     },
     remove: async (id) => {
-      await apiClient.delete(`/files/${id}`);
-      set((state) => {
-        state.items = state.items.filter((file) => file.id !== id);
-        state.pagination.total = Math.max(0, state.pagination.total - 1);
-      });
+      try {
+        await apiClient.delete(`/files/${id}`);
+        set((state) => {
+          state.items = state.items.filter((file) => file.id !== id);
+          state.pagination.total = Math.max(0, state.pagination.total - 1);
+        });
+      } catch (error) {
+        set((state) => {
+          state.error = normalizeError(error);
+        });
+        throw error;
+      }
     }
   }))
 );

@@ -7,7 +7,6 @@ def test_orders_unprocessable_has_structured_error_detail() -> None:
     exc = _order_unprocessable("unsupported order status")
 
     assert exc.status_code == 422
-    assert exc.detail == {
-        "code": "order_validation_error",
-        "message": "unsupported order status",
-    }
+    assert exc.detail["code"] == "ORDER_VALIDATION_ERROR"
+    assert exc.detail["error_code"] == "ORDER_VALIDATION_ERROR"
+    assert exc.detail["message"] == "unsupported order status"

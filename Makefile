@@ -1,4 +1,4 @@
-.PHONY: install install-pip lint format test contract run clean up down migrate tenant-migrate tenant-init seed smoke branded-smoke logs dev env frontend-install lint-frontend format-frontend test-frontend dev-lite test-lite dev-nodocker test-nodocker check-docker demo cs\:dev cs\:test cs\:reset final-acceptance tenant-bootstrap tenant-demo-bootstrap pilot-smoke pilot-readiness codex-audit
+.PHONY: install install-pip lint format test contract run clean up down migrate tenant-migrate tenant-init seed smoke branded-smoke logs dev env frontend-install lint-frontend format-frontend test-frontend dev-lite dev-lite-force dev-lite-win dev-lite-win-force test-lite dev-nodocker test-nodocker check-docker demo cs\:dev cs\:test cs\:reset final-acceptance tenant-bootstrap tenant-demo-bootstrap codex-audit gate gate-full check-boundaries
 
 LINT_PATHS=backend/app tests scripts
 VENV_BIN=.venv/bin
@@ -88,7 +88,16 @@ dev: env check-docker
 	docker compose up --build
 
 dev-lite:
-	@./scripts/dev_lite.sh
+	python ./scripts/dev_lite.py
+
+dev-lite-force:
+	python ./scripts/dev_lite.py --auto-kill-ports
+
+dev-lite-win:
+	powershell -ExecutionPolicy Bypass -File ./scripts/dev_lite.ps1
+
+dev-lite-win-force:
+	powershell -ExecutionPolicy Bypass -File ./scripts/dev_lite.ps1 -AutoKillPorts
 
 dev-nodocker: dev-lite
 
@@ -132,13 +141,6 @@ tenant-bootstrap:
 tenant-demo-bootstrap:
 	PYTHONPATH=backend $(PYTHON) scripts/bootstrap_demo_tenant.py --force
 
-pilot-smoke:
-	$(PYTEST) tests/e2e/pilot_smoke -q
-
-pilot-readiness:
-	PYTHONPATH=backend $(PYTHON) scripts/pilot_readiness.py
-
-
 codex-audit:
 	@./scripts/codex_audit.sh
 
@@ -155,3 +157,17 @@ ci-local:
 	$(MAKE) test-backend
 	$(MAKE) test-frontend
 	$(MAKE) test-smoke
+
+# REL-1: воспроизводимый локальный гейт качества (PG16 в Docker, Python 3.12).
+# Источник истины по PG-корректности без GitHub Actions.
+# Док: docs/stabilization/local-evidence-gate.md
+gate:
+	$(PYTHON) scripts/ci/local_gate.py --db-only
+
+gate-full:
+	$(PYTHON) scripts/ci/local_gate.py --full
+
+# ARCH-3: enforce bounded-context import boundaries (AST checker, stdlib-only).
+# Fails on a new cross-context import; current leaks are allowlisted.
+check-boundaries:
+	$(PYTHON) scripts/ci/check_context_boundaries.py

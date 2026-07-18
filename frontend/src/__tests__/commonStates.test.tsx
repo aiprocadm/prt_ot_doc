@@ -33,11 +33,30 @@ describe("common states", () => {
 
     expect(screen.getByRole("alert")).toBeInTheDocument();
     expect(screen.getByText("Validation failed")).toBeInTheDocument();
-    expect(screen.getByText(/Correlation ID: corr-123/)).toBeInTheDocument();
+    expect(screen.getByText(/ID корреляции: corr-123/)).toBeInTheDocument();
     expect(screen.getByText(/template_code:/)).toBeInTheDocument();
     expect(screen.getByText(/Required/)).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Повторить" }));
     expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows compact server copy and single support line for INTERNAL_ERROR", () => {
+    render(
+      <ErrorState
+        error={{
+          status: 500,
+          code: "INTERNAL_ERROR",
+          message: "Internal server error",
+          correlation_id: "ef0d63642f1547538ab5ee7f9f8ca4d5",
+          field_errors: []
+        }}
+      />
+    );
+
+    expect(screen.getByText(/Сервер временно не отвечает/)).toBeInTheDocument();
+    expect(
+      screen.getByText("INTERNAL_ERROR · ef0d63642f1547538ab5ee7f9f8ca4d5")
+    ).toBeInTheDocument();
   });
 });

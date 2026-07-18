@@ -15,8 +15,13 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column("document_job_steps", sa.Column("max_attempts", sa.Integer(), nullable=False, server_default="1"))
-    op.add_column("document_job_steps", sa.Column("inputs_hash", sa.String(length=64), nullable=True))
+    op.add_column(
+        "document_job_steps",
+        sa.Column("max_attempts", sa.Integer(), nullable=False, server_default="1"),
+    )
+    op.add_column(
+        "document_job_steps", sa.Column("inputs_hash", sa.String(length=64), nullable=True)
+    )
     op.create_index("ix_document_job_steps_status", "document_job_steps", ["status"])
     op.create_index("ix_document_job_steps_job_step", "document_job_steps", ["job_id", "step_code"])
 
@@ -36,9 +41,13 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["tenant_id"], ["tenant.id"]),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index("ix_job_logs_tenant_job_created", "job_logs", ["tenant_id", "job_id", "created_at"])
+    op.create_index(
+        "ix_job_logs_tenant_job_created", "job_logs", ["tenant_id", "job_id", "created_at"]
+    )
 
-    op.add_column("idempotency_keys", sa.Column("last_seen_at", sa.DateTime(timezone=True), nullable=True))
+    op.add_column(
+        "idempotency_keys", sa.Column("last_seen_at", sa.DateTime(timezone=True), nullable=True)
+    )
     op.create_index("ix_idempotency_keys_created_at", "idempotency_keys", ["created_at"])
 
 

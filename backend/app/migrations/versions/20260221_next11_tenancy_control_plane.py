@@ -47,8 +47,16 @@ def upgrade() -> None:
         """
     )
 
-    op.add_column("tenant_quotas", sa.Column("monthly_edo_outgoing", sa.Integer(), nullable=False, server_default=sa.text("0")))
-    op.add_column("tenant_quotas", sa.Column("enforce_billing_gate", sa.Boolean(), nullable=False, server_default=sa.false()))
+    op.add_column(
+        "tenant_quotas",
+        sa.Column(
+            "monthly_edo_outgoing", sa.Integer(), nullable=False, server_default=sa.text("0")
+        ),
+    )
+    op.add_column(
+        "tenant_quotas",
+        sa.Column("enforce_billing_gate", sa.Boolean(), nullable=False, server_default=sa.false()),
+    )
 
 
 def downgrade() -> None:

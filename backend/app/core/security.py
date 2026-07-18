@@ -30,6 +30,7 @@ __all__ = [
     "issue_refresh_token",
     "decode_token",
     "verify_token",
+    "roles_from_jwt_claims",
     "AccessContext",
     "AuthContext",
     "get_auth_ctx",
@@ -197,6 +198,23 @@ def verify_token(
     return payload
 
 
+def roles_from_jwt_claims(claims: Mapping[str, Any]) -> tuple[str, ...]:
+    """Нормализованные роли из JWT: список ``roles`` и при необходимости строка ``role``.
+
+    Одна точка правды для middleware и :meth:`AccessContext.to_auth_context` (только claims,
+    без ролей из БД пользователя).
+    """
+
+    roles: list[str] = []
+    claim_roles = claims.get("roles")
+    if isinstance(claim_roles, Iterable) and not isinstance(claim_roles, (str, bytes)):
+        roles.extend(str(role).lower() for role in claim_roles if role)
+    single_role = claims.get("role")
+    if isinstance(single_role, str) and single_role.strip():
+        roles.append(single_role.lower())
+    return tuple(dict.fromkeys(roles))
+
+
 @dataclass(frozen=True, slots=True)
 class AccessContext:
     """Authenticated user coupled with token claims for RBAC/ABAC checks."""
@@ -307,18 +325,30 @@ class AccessContext:
             raise policy_forbidden(f"Project scope mismatch for {action}")
 
         contractor_id = attributes.get("contractor_id")
-        if contractor_id and actor.contractor_ids and str(contractor_id) not in actor.contractor_ids:
+        if (
+            contractor_id
+            and actor.contractor_ids
+            and str(contractor_id) not in actor.contractor_ids
+        ):
             raise policy_forbidden(f"Contractor scope mismatch for {action}")
 
-        status_value = str(attributes.get("status") or attributes.get("document_status") or "").lower()
+        status_value = str(
+            attributes.get("status") or attributes.get("document_status") or ""
+        ).lower()
         role_set = {value.lower() for value in self.to_auth_context().roles}
-        if status_value in {"archived", "signed"} and "admin" not in role_set and "owner" not in role_set:
+        if (
+            status_value in {"archived", "signed"}
+            and "admin" not in role_set
+            and "owner" not in role_set
+        ):
             if "update" in action.lower() or "manage" in action.lower():
                 raise policy_forbidden(f"Status '{status_value}' is immutable for {action}")
 
         if str(attributes.get("risk_level") or "").lower() == "high":
             privileged = {"ot_head", "ot_pb_lead", "admin", "owner"}
-            if any(token in action.lower() for token in ("approve", "sign")) and not role_set.intersection(privileged):
+            if any(
+                token in action.lower() for token in ("approve", "sign")
+            ) and not role_set.intersection(privileged):
                 raise policy_forbidden(f"High risk action denied for {action}")
 
         self.ensure_site_access(
@@ -363,14 +393,7 @@ class AccessContext:
                 tenant_identifier = str(candidate)
                 break
 
-        roles: list[str] = []
-        claim_roles = self.claims.get("roles")
-        if isinstance(claim_roles, Iterable) and not isinstance(claim_roles, (str, bytes)):
-            roles.extend(str(role).lower() for role in claim_roles if role)
-
-        single_role = self.claims.get("role")
-        if isinstance(single_role, str) and single_role:
-            roles.append(single_role.lower())
+        roles = list(roles_from_jwt_claims(self.claims))
 
         normalized_role = str(self.role).lower()
         roles.append(normalized_role)
@@ -501,14 +524,18 @@ def rbac(required_roles: list[str] | None = None) -> Callable[..., Any]:
                     detail="Company assignment mismatch",
                 )
 
-        role_candidates: set[str] = {token_role} if token_role else set()
-        token_roles = payload.get("roles")
-        if isinstance(token_roles, Iterable) and not isinstance(token_roles, (str, bytes)):
-            role_candidates.update(str(role).lower() for role in token_roles if role)
-        role_candidates.add(user.role.value.lower())
-        role_candidates.update(
+        persisted_roles: set[str] = {user.role.value.lower()}
+        persisted_roles.update(
             str(role.role.value).lower() for role in getattr(user, "roles", []) if role
         )
+
+        role_candidates: set[str] = set(persisted_roles)
+        token_roles = payload.get("roles")
+        if isinstance(token_roles, Iterable) and not isinstance(token_roles, (str, bytes)):
+            declared_token_roles = {str(role).lower() for role in token_roles if role}
+            role_candidates.intersection_update(declared_token_roles | persisted_roles)
+        if token_role:
+            role_candidates.intersection_update({token_role} | persisted_roles)
 
         if normalized_roles and not role_candidates.intersection(normalized_roles):
             raise HTTPException(
@@ -526,7 +553,10 @@ def rbac(required_roles: list[str] | None = None) -> Callable[..., Any]:
             str(user.company_id) if getattr(user, "company_id", None) else None
         )
 
-        request.state.claims = dict(payload)
+        normalized_claims = dict(payload)
+        normalized_claims["role"] = user.role.value.lower()
+        normalized_claims["roles"] = sorted(role_candidates)
+        request.state.claims = normalized_claims
         request.state.current_user = user
         request.state.current_user_id = user.id
         request.state.current_user_company_id = session.info["current_user_company_id"]

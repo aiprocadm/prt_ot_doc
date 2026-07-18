@@ -8,7 +8,9 @@ from tests.utils.factories import TestDataFactory
 
 
 @pytest.mark.asyncio
-async def test_ppe_api_flow(async_client, make_auth_headers, sessionmaker, data_factory: TestDataFactory):
+async def test_ppe_api_flow(
+    async_client, make_auth_headers, sessionmaker, data_factory: TestDataFactory
+):
     async with sessionmaker() as session:
         tenant = await data_factory.ensure_tenant(session=session)
         company = await data_factory.create_company(tenant=tenant, session=session)
@@ -38,7 +40,9 @@ async def test_ppe_api_flow(async_client, make_auth_headers, sessionmaker, data_
         "quantity": 2,
         "wear_days": 30,
     }
-    issue_response = await async_client.post("/api/v1/ppe/issues", json=issue_payload, headers=headers)
+    issue_response = await async_client.post(
+        "/api/v1/ppe/issues", json=issue_payload, headers=headers
+    )
     assert issue_response.status_code == status.HTTP_201_CREATED
     issue = issue_response.json()
     assert issue["quantity"] == 2
@@ -57,4 +61,3 @@ async def test_ppe_api_flow(async_client, make_auth_headers, sessionmaker, data_
     )
     assert update_response.status_code == status.HTTP_200_OK
     assert update_response.json()["status"] == "returned"
-

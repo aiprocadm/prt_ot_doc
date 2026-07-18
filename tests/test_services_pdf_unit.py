@@ -73,7 +73,9 @@ def test_convert_success_creates_pdf(tmp_path: Path, monkeypatch: pytest.MonkeyP
     assert result.path.read_bytes().startswith(b"%PDF")
 
 
-def test_convert_falls_back_on_conversion_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_convert_falls_back_on_conversion_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     converter = _make_converter()
     input_path = tmp_path / "sample.docx"
     input_path.write_bytes(b"doc")
@@ -118,7 +120,9 @@ def test_convert_missing_output_raises_when_fallback_disabled(
 
 
 @pytest.mark.anyio()
-async def test_run_with_retries_retries_and_succeeds(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_run_with_retries_retries_and_succeeds(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     converter = _make_converter(pdf_libreoffice_max_attempts=3)
     input_path = tmp_path / "doc.docx"
     output_dir = tmp_path / "out"
@@ -140,7 +144,9 @@ async def test_run_with_retries_retries_and_succeeds(tmp_path: Path, monkeypatch
     assert call_counter.count == 2
 
 
-def test_run_with_retries_raises_last_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_run_with_retries_raises_last_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     converter = _make_converter(pdf_libreoffice_max_attempts=2)
     input_path = tmp_path / "doc.docx"
     output_dir = tmp_path / "out"

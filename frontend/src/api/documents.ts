@@ -1,4 +1,10 @@
 import { apiClient } from "@/api/client";
+import type {
+  DocumentDependencyMapDto,
+  DocumentReadinessDto,
+  DocumentVersionCompareDto
+} from "@/types/dto/documents";
+import type { QualityReport } from "@/types/dto/documentQuality";
 
 export type WizardPipelineStatus = "queued" | "running" | "success" | "failed" | "canceled" | "done" | "error";
 
@@ -28,7 +34,38 @@ export type GenerateDocumentRequest = {
   template_code: string;
   template_version: number;
   company_id: string;
+  person_id?: string;
   data: Record<string, unknown>;
+};
+
+export type TemplateResolveRequest = {
+  case_type?: string;
+  document_type?: string;
+  category?: string;
+  company_id?: string;
+  site_id?: string;
+  person_id?: string;
+};
+
+export type TemplateResolveCandidate = {
+  template_id: string;
+  template_code: string;
+  template_name: string;
+  template_version: number;
+  scope_level: string;
+  scope_match: string;
+  score: number;
+  rationale: string[];
+};
+
+export type TemplateResolveResponse = {
+  template_id: string;
+  template_code: string;
+  template_name: string;
+  template_version: number;
+  scope_level: string;
+  resolution_chain: string[];
+  alternatives: TemplateResolveCandidate[];
 };
 
 export type GenerationAcceptedResponse = {
@@ -69,6 +106,18 @@ export type ReplaceDryRunResponse = {
   preview_samples: ReplaceDiffItem[];
 };
 
+export type MappingValidationResponse = {
+  ok: boolean;
+  missing_required_fields: string[];
+  unmapped_source_fields: string[];
+  summary: {
+    source_total: number;
+    mapped_total: number;
+    missing_required_total: number;
+    unmapped_source_total: number;
+  };
+};
+
 export type ReplaceReportResponse = {
   summary: ReplaceDryRunResponse["summary"];
   rows: ReplaceDiffItem[];
@@ -82,8 +131,37 @@ export const generateDocument = async (payload: GenerateDocumentRequest, idempot
   return response.data;
 };
 
+export const resolveTemplateForQuickGenerate = async (payload: TemplateResolveRequest) => {
+  const response = await apiClient.post<TemplateResolveResponse>("/documents/template:resolve", payload);
+  return response.data;
+};
+
 export const getGenerationTaskStatus = async (taskId: string) => {
   const response = await apiClient.get<TaskStatusResponse>(`/documents/tasks/${taskId}`);
+  return response.data;
+};
+
+export const getDocumentReadiness = async (documentId: string) => {
+  const response = await apiClient.get<DocumentReadinessDto>(`/documents/${documentId}/readiness`);
+  return response.data;
+};
+
+export const compareDocumentVersions = async (
+  documentId: string,
+  leftVersionId: string,
+  rightVersionId: string
+) => {
+  const response = await apiClient.get<DocumentVersionCompareDto>(
+    `/documents/${documentId}/versions/compare`,
+    { params: { left_version_id: leftVersionId, right_version_id: rightVersionId } }
+  );
+  return response.data;
+};
+
+export const getDocumentDependencyMap = async (documentId: string) => {
+  const response = await apiClient.get<DocumentDependencyMapDto>(
+    `/documents/${documentId}/dependency-map`
+  );
   return response.data;
 };
 
@@ -132,5 +210,25 @@ export const replaceDryRun = async (payload: {
 
 export const getReplaceReport = async (reportId: string, params?: { offset?: number; limit?: number }) => {
   const response = await apiClient.get<ReplaceReportResponse>(`/replace/reports/${reportId}`, { params });
+  return response.data;
+};
+
+export const checkDocumentQuality = async (payload: {
+  data: Record<string, unknown>;
+  required_fields?: string[];
+  date_fields?: string[];
+  numeric_fields?: string[];
+  rendered_text?: string;
+}) => {
+  const response = await apiClient.post<QualityReport>("/documents/quality:check", payload);
+  return response.data;
+};
+
+export const validateDocumentMapping = async (payload: {
+  source_fields: string[];
+  mapping: Record<string, string>;
+  required_template_fields?: string[];
+}) => {
+  const response = await apiClient.post<MappingValidationResponse>("/documents/mapping:validate", payload);
   return response.data;
 };

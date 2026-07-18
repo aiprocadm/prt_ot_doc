@@ -1,14 +1,18 @@
-import { useMemo } from "react";
-import { Building, FileText, Users } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Building, FileText, Loader2, Users } from "lucide-react";
+import { Link } from "react-router-dom";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StatusBadge } from "@/components/common/StatusBadge";
+import { fetchPersonsForCompany } from "@/api/personsApi";
+import { usePersonsStore } from "@/stores/persons";
 import { formatDate } from "@/utils/datetime";
 import { usePacksStore } from "@/stores/packs";
 import type { CompanyDto } from "@/types/dto/companies";
+import type { PersonDto } from "@/types/dto/persons";
 import type { PackPreset } from "@/types/dto/packs";
 
 const packPresets: { label: string; value: PackPreset }[] = [
@@ -20,8 +24,30 @@ const packPresets: { label: string; value: PackPreset }[] = [
 
 export const CompanyDetails = ({ company }: { company: CompanyDto }) => {
   const { create } = usePacksStore();
+  const personsRegistryRevision = usePersonsStore((s) => s.personsRegistryRevision);
+  const [companyPeople, setCompanyPeople] = useState<PersonDto[]>(() => company.persons ?? []);
+  const [peopleLoading, setPeopleLoading] = useState(false);
 
   const tags = useMemo(() => company.tags ?? [], [company.tags]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setCompanyPeople([]);
+    setPeopleLoading(true);
+    void fetchPersonsForCompany(company.id)
+      .then((rows) => {
+        if (!cancelled) setCompanyPeople(rows);
+      })
+      .catch(() => {
+        if (!cancelled) setCompanyPeople(company.persons ?? []);
+      })
+      .finally(() => {
+        if (!cancelled) setPeopleLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [company.id, company.persons, personsRegistryRevision]);
 
   const handleGeneratePack = async (preset: PackPreset) => {
     await create({ company_id: company.id, preset, parameters: {} });
@@ -66,7 +92,7 @@ export const CompanyDetails = ({ company }: { company: CompanyDto }) => {
           <TabsContent value="details" className="space-y-4">
             <div className="grid gap-4 md:grid-cols-2">
               <InfoRow label="Адрес" value={company.address} />
-              <InfoRow label="Email" value={company.email} />
+              <InfoRow label="Электронная почта" value={company.email} />
               <InfoRow label="Телефон" value={company.phone} />
               <InfoRow label="Сайт" value={company.website} />
             </div>
@@ -81,17 +107,28 @@ export const CompanyDetails = ({ company }: { company: CompanyDto }) => {
             )}
           </TabsContent>
           <TabsContent value="people" className="space-y-4">
-            {company.persons?.length ? (
+            <p className="text-xs text-muted-foreground">
+              Список подгружается из реестра сотрудников по выбранной организации.{" "}
+              <Link to="/persons" className="underline underline-offset-2">
+                Открыть раздел «Сотрудники»
+              </Link>
+            </p>
+            {peopleLoading ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                Загрузка списка…
+              </div>
+            ) : companyPeople.length > 0 ? (
               <ul className="space-y-2">
-                {company.persons.map((person) => (
+                {companyPeople.map((person) => (
                   <li key={person.id} className="rounded-md border p-3">
                     <div className="font-medium">{person.full_name}</div>
-                    <div className="text-sm text-muted-foreground">{person.position}</div>
+                    <div className="text-sm text-muted-foreground">{person.position ?? "—"}</div>
                   </li>
                 ))}
               </ul>
             ) : (
-              <p className="text-sm text-muted-foreground">Сотрудники не привязаны.</p>
+              <p className="text-sm text-muted-foreground">В этой организации пока нет сотрудников в реестре.</p>
             )}
           </TabsContent>
           <TabsContent value="documents" className="space-y-4">

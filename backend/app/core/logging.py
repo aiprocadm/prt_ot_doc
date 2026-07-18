@@ -90,10 +90,7 @@ def _scrub_value(value: Any, *, key: str | None = None, depth: int = 0) -> Any:
         return sanitized
 
     if isinstance(value, Sequence) and not isinstance(value, (bytes, bytearray, str)):
-        return [
-            _scrub_value(item, key=key, depth=depth + 1)
-            for item in value
-        ]
+        return [_scrub_value(item, key=key, depth=depth + 1) for item in value]
 
     if key and key.lower() in _SENSITIVE_KEYS:
         return _REDACTED
@@ -114,7 +111,10 @@ class RequestContextFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:  # noqa: D401
         record.trace_id = get_trace_id()
         record.request_id = get_trace_id()
-        record.tenant_id = get_current_tenant().slug
+        try:
+            record.tenant_id = get_current_tenant().slug
+        except Exception:  # noqa: BLE001
+            record.tenant_id = None
         record.user_id = get_current_user_id()
         record.celery_task_id = get_task_id()
         return True

@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { Link, Outlet } from "react-router-dom";
+import { Link, Outlet, useLocation } from "react-router-dom";
 
 import { Toaster } from "sonner";
 
@@ -8,6 +8,7 @@ import { SectionErrorBoundary } from "@/components/common/SectionErrorBoundary";
 import { RightDrawer } from "@/components/layout/RightDrawer";
 import { SideNav } from "@/components/layout/SideNav";
 import { Sidebar } from "@/components/layout/Sidebar";
+import { NavMenuProvider } from "@/components/layout/NavMenuProvider";
 import { TopNav } from "@/components/layout/TopNav";
 import { TenantGate } from "@/components/tenant/TenantGate";
 import { BILLING_ALERT_STORAGE_KEY } from "@/api/errorHandling";
@@ -26,6 +27,7 @@ export const useSidebar = () => {
 };
 
 export const MainLayout = () => {
+  const location = useLocation();
   const [sidebarContent, setSidebarContent] = useState<ReactNode>(null);
   const [billingAlert, setBillingAlert] = useState<string | null>(null);
   const contextValue = useMemo(() => ({ setSidebar: setSidebarContent }), []);
@@ -49,6 +51,7 @@ export const MainLayout = () => {
   return (
     <SidebarContext.Provider value={contextValue}>
       <TenantGate>
+        <NavMenuProvider>
         <div className="min-h-screen bg-background text-foreground">
           <SectionErrorBoundary>
             <TopNav />
@@ -69,7 +72,7 @@ export const MainLayout = () => {
             <div className="flex-1">
               <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-4 px-4 py-6 lg:flex-row">
                 <Sidebar title="Фильтры">{sidebarContent}</Sidebar>
-                <SectionErrorBoundary>
+                <SectionErrorBoundary key={location.pathname}>
                   <main className="flex-1 pb-16">
                     <Outlet />
                   </main>
@@ -82,6 +85,7 @@ export const MainLayout = () => {
           </div>
           <Toaster richColors position="top-right" closeButton />
         </div>
+        </NavMenuProvider>
       </TenantGate>
     </SidebarContext.Provider>
   );

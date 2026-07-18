@@ -21,9 +21,7 @@ async def test_ppe_issue_emits_outbox(
     headers = await make_auth_headers(RoleEnum.ADMIN)
 
     item_payload = {"name": "Helmet", "code": "PPE-HELM", "category": "head"}
-    item_response = await async_client.post(
-        "/api/v1/ppe/items", json=item_payload, headers=headers
-    )
+    item_response = await async_client.post("/api/v1/ppe/items", json=item_payload, headers=headers)
     assert item_response.status_code == status.HTTP_201_CREATED
     item_id = item_response.json()["id"]
 
@@ -60,9 +58,7 @@ async def test_ppe_return_emits_outbox(
     headers = await make_auth_headers(RoleEnum.ADMIN)
 
     item_payload = {"name": "Boots", "code": "PPE-BOOT", "category": "feet"}
-    item_response = await async_client.post(
-        "/api/v1/ppe/items", json=item_payload, headers=headers
-    )
+    item_response = await async_client.post("/api/v1/ppe/items", json=item_payload, headers=headers)
     assert item_response.status_code == status.HTTP_201_CREATED
     item_id = item_response.json()["id"]
 

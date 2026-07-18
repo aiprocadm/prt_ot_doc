@@ -62,14 +62,36 @@ class MethodologyClone(BaseModel):
 
 
 @router.get("/methodologies")
-async def list_methodologies(tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session), __: Any = _MethodologiesReadDep):
-    rows = (await session.execute(select(SafetyRiskMethodology).where(SafetyRiskMethodology.tenant_id == tenant.id, SafetyRiskMethodology.deleted_at.is_(None)).order_by(SafetyRiskMethodology.code, SafetyRiskMethodology.version_no.desc()))).scalars().all()
+async def list_methodologies(
+    tenant: Tenant = Depends(get_tenant_record),
+    session: AsyncSession = Depends(get_session),
+    __: Any = _MethodologiesReadDep,
+):
+    rows = (
+        (
+            await session.execute(
+                select(SafetyRiskMethodology)
+                .where(
+                    SafetyRiskMethodology.tenant_id == tenant.id,
+                    SafetyRiskMethodology.deleted_at.is_(None),
+                )
+                .order_by(SafetyRiskMethodology.code, SafetyRiskMethodology.version_no.desc())
+            )
+        )
+        .scalars()
+        .all()
+    )
     return {"items": rows, "total": len(rows)}
 
 
 @router.post("/methodologies", status_code=status.HTTP_201_CREATED)
 @audit_operation("create", "risk_methodology")
-async def create_methodology(payload: MethodologyCreate, tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session), __: Any = _MethodologiesWriteDep):
+async def create_methodology(
+    payload: MethodologyCreate,
+    tenant: Tenant = Depends(get_tenant_record),
+    session: AsyncSession = Depends(get_session),
+    __: Any = _MethodologiesWriteDep,
+):
     item = SafetyRiskMethodology(tenant_id=tenant.id, **payload.model_dump())
     session.add(item)
     await session.commit()
@@ -79,7 +101,13 @@ async def create_methodology(payload: MethodologyCreate, tenant: Tenant = Depend
 
 @router.post("/methodologies/{item_id}/clone", status_code=status.HTTP_201_CREATED)
 @audit_operation("clone", "risk_methodology")
-async def clone_methodology(item_id: str, payload: MethodologyClone, tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session), __: Any = _MethodologiesWriteDep):
+async def clone_methodology(
+    item_id: str,
+    payload: MethodologyClone,
+    tenant: Tenant = Depends(get_tenant_record),
+    session: AsyncSession = Depends(get_session),
+    __: Any = _MethodologiesWriteDep,
+):
     source = await session.get(SafetyRiskMethodology, item_id)
     if not source or source.tenant_id != tenant.id or source.deleted_at is not None:
         raise HTTPException(404, "Methodology not found")
@@ -101,19 +129,28 @@ async def clone_methodology(item_id: str, payload: MethodologyClone, tenant: Ten
 
 @router.post("/methodologies/{item_id}/activate")
 @audit_operation("activate", "risk_methodology")
-async def activate_methodology(item_id: str, tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session), __: Any = _MethodologiesWriteDep):
+async def activate_methodology(
+    item_id: str,
+    tenant: Tenant = Depends(get_tenant_record),
+    session: AsyncSession = Depends(get_session),
+    __: Any = _MethodologiesWriteDep,
+):
     item = await session.get(SafetyRiskMethodology, item_id)
     if not item or item.tenant_id != tenant.id or item.deleted_at is not None:
         raise HTTPException(404, "Methodology not found")
     rows = (
-        await session.execute(
-            select(SafetyRiskMethodology).where(
-                SafetyRiskMethodology.tenant_id == tenant.id,
-                SafetyRiskMethodology.code == item.code,
-                SafetyRiskMethodology.deleted_at.is_(None),
+        (
+            await session.execute(
+                select(SafetyRiskMethodology).where(
+                    SafetyRiskMethodology.tenant_id == tenant.id,
+                    SafetyRiskMethodology.code == item.code,
+                    SafetyRiskMethodology.deleted_at.is_(None),
+                )
             )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     for row in rows:
         row.is_default = row.id == item.id
         row.status = "active" if row.id == item.id else "archived"
@@ -122,14 +159,33 @@ async def activate_methodology(item_id: str, tenant: Tenant = Depends(get_tenant
 
 
 @router.get("/maps")
-async def list_maps(tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session), __: Any = _MapsReadDep):
-    rows = (await session.execute(select(SafetyRiskMap).where(SafetyRiskMap.tenant_id == tenant.id, SafetyRiskMap.deleted_at.is_(None)).order_by(SafetyRiskMap.updated_at.desc()))).scalars().all()
+async def list_maps(
+    tenant: Tenant = Depends(get_tenant_record),
+    session: AsyncSession = Depends(get_session),
+    __: Any = _MapsReadDep,
+):
+    rows = (
+        (
+            await session.execute(
+                select(SafetyRiskMap)
+                .where(SafetyRiskMap.tenant_id == tenant.id, SafetyRiskMap.deleted_at.is_(None))
+                .order_by(SafetyRiskMap.updated_at.desc())
+            )
+        )
+        .scalars()
+        .all()
+    )
     return {"items": rows, "total": len(rows)}
 
 
 @router.post("/maps", status_code=status.HTTP_201_CREATED)
 @audit_operation("create", "risk_map")
-async def create_map(payload: RiskMapCreate, tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session), __: Any = _MapsWriteDep):
+async def create_map(
+    payload: RiskMapCreate,
+    tenant: Tenant = Depends(get_tenant_record),
+    session: AsyncSession = Depends(get_session),
+    __: Any = _MapsWriteDep,
+):
     item = SafetyRiskMap(tenant_id=tenant.id, status="draft", **payload.model_dump())
     session.add(item)
     await session.commit()
@@ -139,16 +195,37 @@ async def create_map(payload: RiskMapCreate, tenant: Tenant = Depends(get_tenant
 
 @router.post("/maps/{map_id}/items", status_code=status.HTTP_201_CREATED)
 @audit_operation("upsert_item", "risk_map")
-async def upsert_map_item(map_id: str, payload: MapItemUpsert, tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session), __: Any = _MapsWriteDep):
+async def upsert_map_item(
+    map_id: str,
+    payload: MapItemUpsert,
+    tenant: Tenant = Depends(get_tenant_record),
+    session: AsyncSession = Depends(get_session),
+    __: Any = _MapsWriteDep,
+):
     risk_map = await session.get(SafetyRiskMap, map_id)
     if not risk_map or risk_map.tenant_id != tenant.id:
         raise HTTPException(404, "Risk map not found")
     methodology = await session.get(SafetyRiskMethodology, risk_map.risk_methodology_id)
     if methodology is None:
         raise HTTPException(404, "Methodology not found")
-    item = (await session.execute(select(RiskMapItem).where(RiskMapItem.tenant_id == tenant.id, RiskMapItem.risk_map_id == map_id, RiskMapItem.hazard_id == payload.hazard_id, RiskMapItem.deleted_at.is_(None)))).scalar_one_or_none()
+    item = (
+        await session.execute(
+            select(RiskMapItem).where(
+                RiskMapItem.tenant_id == tenant.id,
+                RiskMapItem.risk_map_id == map_id,
+                RiskMapItem.hazard_id == payload.hazard_id,
+                RiskMapItem.deleted_at.is_(None),
+            )
+        )
+    ).scalar_one_or_none()
     calc = RiskCalculationService.calculate_item(
-        {"type": methodology.type.value if hasattr(methodology.type, "value") else methodology.type, "formula_json": methodology.formula_json, "scale_json": methodology.scale_json},
+        {
+            "type": (
+                methodology.type.value if hasattr(methodology.type, "value") else methodology.type
+            ),
+            "formula_json": methodology.formula_json,
+            "scale_json": methodology.scale_json,
+        },
         probability=payload.probability_value,
         severity=payload.severity_value,
         exposure=payload.exposure_value,
@@ -163,7 +240,15 @@ async def upsert_map_item(map_id: str, payload: MapItemUpsert, tenant: Tenant = 
     item.risk_level = calc.risk_level
     await session.flush()
     for measure_id in payload.measure_ids:
-        exists = (await session.execute(select(RiskMapItemMeasure).where(RiskMapItemMeasure.tenant_id == tenant.id, RiskMapItemMeasure.risk_map_item_id == item.id, RiskMapItemMeasure.measure_id == measure_id))).scalar_one_or_none()
+        exists = (
+            await session.execute(
+                select(RiskMapItemMeasure).where(
+                    RiskMapItemMeasure.tenant_id == tenant.id,
+                    RiskMapItemMeasure.risk_map_item_id == item.id,
+                    RiskMapItemMeasure.measure_id == measure_id,
+                )
+            )
+        ).scalar_one_or_none()
         if exists is None:
             session.add(
                 RiskMapItemMeasure(
@@ -183,26 +268,70 @@ async def upsert_map_item(map_id: str, payload: MapItemUpsert, tenant: Tenant = 
 
 @router.post("/maps/{map_id}/recalculate")
 @audit_operation("recalculate", "risk_map")
-async def recalculate_map(map_id: str, tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session), __: Any = _MapsWriteDep):
+async def recalculate_map(
+    map_id: str,
+    tenant: Tenant = Depends(get_tenant_record),
+    session: AsyncSession = Depends(get_session),
+    __: Any = _MapsWriteDep,
+):
     risk_map = await session.get(SafetyRiskMap, map_id)
     if not risk_map or risk_map.tenant_id != tenant.id:
         raise HTTPException(404, "Risk map not found")
     methodology = await session.get(SafetyRiskMethodology, risk_map.risk_methodology_id)
-    items = (await session.execute(select(RiskMapItem).where(RiskMapItem.tenant_id == tenant.id, RiskMapItem.risk_map_id == map_id, RiskMapItem.deleted_at.is_(None)))).scalars().all()
+    items = (
+        (
+            await session.execute(
+                select(RiskMapItem).where(
+                    RiskMapItem.tenant_id == tenant.id,
+                    RiskMapItem.risk_map_id == map_id,
+                    RiskMapItem.deleted_at.is_(None),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
     for item in items:
-        measure_links = (await session.execute(select(RiskMapItemMeasure, RiskMeasure).join(RiskMeasure, RiskMeasure.id == RiskMapItemMeasure.measure_id).where(RiskMapItemMeasure.tenant_id == tenant.id, RiskMapItemMeasure.risk_map_item_id == item.id))).all()
+        measure_links = (
+            await session.execute(
+                select(RiskMapItemMeasure, RiskMeasure)
+                .join(RiskMeasure, RiskMeasure.id == RiskMapItemMeasure.measure_id)
+                .where(
+                    RiskMapItemMeasure.tenant_id == tenant.id,
+                    RiskMapItemMeasure.risk_map_item_id == item.id,
+                )
+            )
+        ).all()
         effects = [float(measure.effectiveness_score or 0) for _, measure in measure_links]
         calc = RiskCalculationService.calculate_item(
-            {"type": methodology.type.value if hasattr(methodology.type, "value") else methodology.type, "formula_json": methodology.formula_json, "scale_json": methodology.scale_json},
+            {
+                "type": (
+                    methodology.type.value
+                    if hasattr(methodology.type, "value")
+                    else methodology.type
+                ),
+                "formula_json": methodology.formula_json,
+                "scale_json": methodology.scale_json,
+            },
             probability=float(item.probability_value or 0),
             severity=float(item.severity_value or 0),
             exposure=float(item.exposure_value) if item.exposure_value is not None else None,
         )
         item.raw_score = calc.raw_score
         item.risk_level = calc.risk_level
-        residual = RiskMeasureService.residual_from_measures(calc.raw_score, effects) if effects else calc.raw_score
+        residual = (
+            RiskMeasureService.residual_from_measures(calc.raw_score, effects)
+            if effects
+            else calc.raw_score
+        )
         item.residual_score = residual
-        item.residual_risk_level = RiskCalculationService._pick_level(residual, RiskCalculationService._normalize_rules((methodology.formula_json or {}).get("ranges", []) or (methodology.scale_json or {}).get("level_rules", [])))
+        item.residual_risk_level = RiskCalculationService._pick_level(
+            residual,
+            RiskCalculationService._normalize_rules(
+                (methodology.formula_json or {}).get("ranges", [])
+                or (methodology.scale_json or {}).get("level_rules", [])
+            ),
+        )
     risk_map.calculated_at = datetime.now(tz=timezone.utc)
     risk_map.status = "active"
     await session.commit()
@@ -210,18 +339,70 @@ async def recalculate_map(map_id: str, tenant: Tenant = Depends(get_tenant_recor
 
 
 @router.get("/maps/{map_id}/summary")
-async def risk_summary(map_id: str, tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session), __: Any = _MapsReadDep):
+async def risk_summary(
+    map_id: str,
+    tenant: Tenant = Depends(get_tenant_record),
+    session: AsyncSession = Depends(get_session),
+    __: Any = _MapsReadDep,
+):
     risk_map = await session.get(SafetyRiskMap, map_id)
     if not risk_map or risk_map.tenant_id != tenant.id:
         raise HTTPException(404, "Risk map not found")
-    overdue_measures = int((await session.execute(select(func.count()).select_from(RiskMapItemMeasure).where(RiskMapItemMeasure.tenant_id == tenant.id, RiskMapItemMeasure.due_date.is_not(None), RiskMapItemMeasure.due_date < date.today(), RiskMapItemMeasure.status != "done"))).scalar_one())
-    open_incidents = int((await session.execute(select(func.count()).select_from(IncidentCase).where(IncidentCase.tenant_id == tenant.id, IncidentCase.status != "closed"))).scalar_one())
-    open_actions = int((await session.execute(select(func.count()).select_from(CorrectiveAction).where(CorrectiveAction.tenant_id == tenant.id, CorrectiveAction.deleted_at.is_(None), CorrectiveAction.status != "done"))).scalar_one())
-    item_stats = (await session.execute(select(func.count(), func.avg(RiskMapItem.raw_score), func.avg(RiskMapItem.residual_score)).where(RiskMapItem.tenant_id == tenant.id, RiskMapItem.risk_map_id == map_id, RiskMapItem.deleted_at.is_(None)))).one()
+    overdue_measures = int(
+        (
+            await session.execute(
+                select(func.count())
+                .select_from(RiskMapItemMeasure)
+                .where(
+                    RiskMapItemMeasure.tenant_id == tenant.id,
+                    RiskMapItemMeasure.due_date.is_not(None),
+                    RiskMapItemMeasure.due_date < date.today(),
+                    RiskMapItemMeasure.status != "done",
+                )
+            )
+        ).scalar_one()
+    )
+    open_incidents = int(
+        (
+            await session.execute(
+                select(func.count())
+                .select_from(IncidentCase)
+                .where(IncidentCase.tenant_id == tenant.id, IncidentCase.status != "closed")
+            )
+        ).scalar_one()
+    )
+    open_actions = int(
+        (
+            await session.execute(
+                select(func.count())
+                .select_from(CorrectiveAction)
+                .where(
+                    CorrectiveAction.tenant_id == tenant.id,
+                    CorrectiveAction.deleted_at.is_(None),
+                    CorrectiveAction.status != "done",
+                )
+            )
+        ).scalar_one()
+    )
+    item_stats = (
+        await session.execute(
+            select(
+                func.count(), func.avg(RiskMapItem.raw_score), func.avg(RiskMapItem.residual_score)
+            ).where(
+                RiskMapItem.tenant_id == tenant.id,
+                RiskMapItem.risk_map_id == map_id,
+                RiskMapItem.deleted_at.is_(None),
+            )
+        )
+    ).one()
     zone_rows = (
         await session.execute(
             select(RiskMapItem.residual_risk_level, func.count())
-            .where(RiskMapItem.tenant_id == tenant.id, RiskMapItem.risk_map_id == map_id, RiskMapItem.deleted_at.is_(None))
+            .where(
+                RiskMapItem.tenant_id == tenant.id,
+                RiskMapItem.risk_map_id == map_id,
+                RiskMapItem.deleted_at.is_(None),
+            )
             .group_by(RiskMapItem.residual_risk_level)
         )
     ).all()
@@ -233,5 +414,8 @@ async def risk_summary(map_id: str, tenant: Tenant = Depends(get_tenant_record),
         "overdue_measures": overdue_measures,
         "incident_pressure": open_incidents,
         "corrective_actions_open": open_actions,
-        "risk_zones": {str(level.value if hasattr(level, "value") else level or "unrated"): int(count) for level, count in zone_rows},
+        "risk_zones": {
+            str(level.value if hasattr(level, "value") else level or "unrated"): int(count)
+            for level, count in zone_rows
+        },
     }

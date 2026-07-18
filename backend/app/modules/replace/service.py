@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import time
 from dataclasses import dataclass
 from uuid import uuid4
 
@@ -10,8 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.document import DocumentVersion
 from app.models.file import File, FileKind, FileScanStatus
-from app.modules.replace.engine_docx import replace_docx
-from app.modules.replace.engine_xml import replace_xml_parts
+from app.modules.replace.engine import ReplaceOptions, replace_docx_bytes
 from app.modules.replace.report import build_report
 from app.services.file_storage import FileStorageService
 
@@ -54,7 +54,9 @@ def _make_file_record(
 
 
 async def _next_version_number(session: AsyncSession, *, document_id: str) -> int:
-    query = select(func.max(DocumentVersion.version_number)).where(DocumentVersion.document_id == document_id)
+    query = select(func.max(DocumentVersion.version_number)).where(
+        DocumentVersion.document_id == document_id
+    )
     max_version = (await session.execute(query)).scalar_one()
     return int(max_version or 0) + 1
 
@@ -67,13 +69,35 @@ async def execute_replace(
     rules: list[dict],
     case_sensitive: bool,
     whole_word: bool,
+    regex_enabled: bool = False,
+    scope: list[str] | None = None,
     storage: FileStorageService,
     run_id: str,
 ) -> ReplaceExecutionResult:
+    started = time.perf_counter()
     source = storage.get(source_version.file_key)
-    replaced, hits_docx = replace_docx(source, rules, case_sensitive=case_sensitive, whole_word=whole_word)
-    replaced, hits_xml = replace_xml_parts(replaced, rules, case_sensitive=case_sensitive, whole_word=whole_word)
-    hits = [h.__dict__ for h in hits_docx] + hits_xml
+    mapping = {
+        str(rule.get("from", "")): str(rule.get("to", ""))
+        for rule in rules
+        if str(rule.get("from", "")).strip()
+    }
+    options = ReplaceOptions(
+        case_sensitive=case_sensitive,
+        whole_word=whole_word,
+        regex=regex_enabled,
+    )
+    result = replace_docx_bytes(source, mapping, options, apply_changes=True)
+    replaced = result.docx_bytes
+    hits = [h.__dict__ for h in result.hits]
+    if scope:
+        allowed_parts = set(scope)
+        hits = [
+            hit
+            for hit in hits
+            if str(hit.get("part")) in allowed_parts
+            or str(hit.get("part")) == "body"
+            and "body" in allowed_parts
+        ]
     report = build_report(hits, rules)
     examples = [
         {
@@ -83,7 +107,15 @@ async def execute_replace(
         }
         for h in hits[:20]
     ]
-    report_payload = {"hits_count": len(hits), "examples": examples, "report": report}
+    report_payload = {
+        "hits_count": len(hits),
+        "examples": examples,
+        "report": report,
+        "metrics": {
+            "duration_ms": int((time.perf_counter() - started) * 1000),
+            "rules_count": len(mapping),
+        },
+    }
     report_bytes = json.dumps(report_payload, ensure_ascii=False).encode("utf-8")
     report_key = f"documents/{source_version.document_id}/replace_report_{run_id}.json"
     storage.put(report_key, report_bytes, content_type=JSON_CONTENT_TYPE)

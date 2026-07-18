@@ -64,8 +64,14 @@ def upgrade() -> None:
     op.create_index("ix_files_tenant_sha256", "files", ["tenant_id", "sha256"])
     op.create_index("ix_files_tenant_created_at", "files", ["tenant_id", "created_at"])
     op.create_index("ix_files_tenant_status", "files", ["tenant_id", "status"])
-    op.create_index("ix_file_links_tenant_entity", "file_links", ["tenant_id", "entity_type", "entity_id"])
-    op.create_index("ix_file_download_logs_tenant_file_created", "file_download_logs", ["tenant_id", "file_id", "created_at"])
+    op.create_index(
+        "ix_file_links_tenant_entity", "file_links", ["tenant_id", "entity_type", "entity_id"]
+    )
+    op.create_index(
+        "ix_file_download_logs_tenant_file_created",
+        "file_download_logs",
+        ["tenant_id", "file_id", "created_at"],
+    )
 
 
 def downgrade() -> None:

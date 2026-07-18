@@ -208,12 +208,12 @@ class ObservabilityMiddleware:
     @staticmethod
     def _error_code_for_status(status_code: int) -> str:
         if status_code == status.HTTP_413_REQUEST_ENTITY_TOO_LARGE:
-            return "payload_too_large"
+            return "PAYLOAD_TOO_LARGE"
         if status_code == status.HTTP_504_GATEWAY_TIMEOUT:
-            return "request_timeout"
+            return "GATEWAY_TIMEOUT"
         if status.HTTP_400_BAD_REQUEST <= status_code < status.HTTP_500_INTERNAL_SERVER_ERROR:
-            return f"http_{status_code}"
-        return "internal"
+            return f"HTTP_{status_code}"
+        return "INTERNAL_ERROR"
 
     @staticmethod
     def _store_trace_in_scope(scope: Scope, trace_id: str) -> None:

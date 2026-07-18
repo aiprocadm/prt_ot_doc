@@ -9,8 +9,9 @@
   --foreground: 222.2 84% 4.9%;
   --card: 0 0% 100%;
   --card-foreground: 222.2 84% 4.9%;
-  --popover: 0 0% 100%;
-  --popover-foreground: 222.2 84% 4.9%;
+  /* Слой меню/выпадашек: чуть теплее и светлее «чистого» чёрного в тексте — лучше читается */
+  --popover: 210 40% 99%;
+  --popover-foreground: 222 32% 12%;
   --primary: 222.2 47.4% 11.2%;
   --primary-foreground: 210 40% 98%;
   --secondary: 210 40% 96.1%;
@@ -32,16 +33,17 @@
   --foreground: 213 31% 91%;
   --card: 224 71% 4%;
   --card-foreground: 213 31% 91%;
-  --popover: 224 71% 4%;
-  --popover-foreground: 213 31% 91%;
+  /* Меню/выпадашки: фон светлее, чем страница — иначе тёмно-серый + «чёрный» текст плохо читается */
+  --popover: 220 28% 18%;
+  --popover-foreground: 220 20% 98%;
   --primary: 210 40% 98%;
   --primary-foreground: 222.2 47.4% 11.2%;
   --secondary: 222.2 47.4% 11.2%;
   --secondary-foreground: 210 40% 98%;
   --muted: 223 47% 11%;
   --muted-foreground: 215 20.2% 65.1%;
-  --accent: 216 34% 17%;
-  --accent-foreground: 210 40% 98%;
+  --accent: 220 24% 24%;
+  --accent-foreground: 0 0% 99%;
   --destructive: 0 63% 31%;
   --destructive-foreground: 210 40% 98%;
   --border: 216 34% 17%;
@@ -55,6 +57,22 @@
 
 body {
   @apply bg-background text-foreground;
+}
+
+@layer base {
+  /* Нативные select: согласовать с палитрой и не оставлять «чисто чёрный» от браузера */
+  select {
+    @apply bg-background text-foreground;
+  }
+  select option {
+    @apply bg-popover text-popover-foreground;
+  }
+  select option:checked {
+    @apply bg-accent text-accent-foreground;
+  }
+  select option:hover {
+    @apply bg-accent text-accent-foreground;
+  }
 }
 
 .scrollbar-thin {

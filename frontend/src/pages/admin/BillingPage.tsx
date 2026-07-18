@@ -91,7 +91,7 @@ const BillingPage = () => {
       <ErrorState error={(actionError ?? error) ?? undefined} onRetry={() => void reload()} />
       {loading ? <LoadingScreen label="Загрузка биллинга" /> : null}
       {!loading && !error && !data.summary ? (
-        <EmptyState title="Биллинг временно недоступен" description="Данные тарифа и счетов появятся после инициализации billing context." />
+        <EmptyState title="Биллинг временно недоступен" description="Данные тарифа и счетов появятся после инициализации контекста биллинга." />
       ) : null}
 
       {alerts.length > 0 && <Card className="border-red-500/50"><CardHeader><CardTitle>Предупреждения</CardTitle></CardHeader><CardContent className="text-sm text-red-600 space-y-1">{alerts.map((item) => <div key={item}>• {item}</div>)}</CardContent></Card>}
@@ -113,12 +113,12 @@ const BillingPage = () => {
       </Card>
 
       <Card>
-        <CardHeader><CardTitle>Usage</CardTitle></CardHeader>
+        <CardHeader><CardTitle>Использование</CardTitle></CardHeader>
         <CardContent className="space-y-3">
           {data && <>
             <Meter label="Генерации / мес" used={Number(data.summary?.usage.docs_generated ?? 0)} limit={Number(data.summary?.limits.max_generations_per_month ?? 0)} />
             <Meter label="ЭДО исходящие / мес" used={Number(data.summary?.usage.edo_outgoing ?? 0)} limit={Number(data.summary?.limits.edo_outgoing_per_month ?? 0)} />
-            <Meter label="S3 bytes" used={Number(data.summary?.usage.s3_bytes_used ?? 0)} limit={Number(data.summary?.limits.max_s3_bytes ?? 0)} />
+            <Meter label="Объём S3" used={Number(data.summary?.usage.s3_bytes_used ?? 0)} limit={Number(data.summary?.limits.max_s3_bytes ?? 0)} />
             <Meter label="Интеграции" used={0} limit={Number(data.summary?.limits.max_integrations ?? 0)} />
           </>}
         </CardContent>

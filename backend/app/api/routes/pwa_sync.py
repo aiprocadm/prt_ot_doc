@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 from collections.abc import Iterable
 from datetime import date, datetime, timezone
 from decimal import Decimal
@@ -13,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.audit_decorator import audit_operation
+from app.core.errors import api_problem_detail
 from app.core.rbac_abac import ROLE_PERMISSIONS
 from app.core.security import AccessContext, rbac
 from app.models.models import (
@@ -21,12 +23,14 @@ from app.models.models import (
     ComplianceDeadline,
     OfflineMediaQueue,
     OfflineSyncBatch,
+    Person,
     Tenant,
     TrainingEnrollment,
 )
 from app.modules.pwa_sync.services import OfflineSyncService
 
 router = APIRouter(prefix="/pwa", tags=["pwa"])
+logger = logging.getLogger(__name__)
 
 PWA_ROUTE_PERMISSION_MAP: dict[str, tuple[str, ...]] = {
     "dashboard": ("dashboard.read",),
@@ -315,23 +319,42 @@ def _serialize_date(value: date | datetime | None) -> str | None:
     return value.isoformat()
 
 
-def _validate_payload_required_fields(payload: dict[str, Any], required_fields: tuple[str, ...]) -> None:
+def _validate_payload_required_fields(
+    payload: dict[str, Any], required_fields: tuple[str, ...]
+) -> None:
     missing = [field for field in required_fields if payload.get(field) in (None, "")]
     if missing:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail={
-                "code": "pwa_sync_validation_error",
-                "message": f"missing required fields: {', '.join(missing)}",
-            },
+            detail=api_problem_detail(
+                code="PWA_SYNC_VALIDATION_ERROR",
+                message=f"missing required fields: {', '.join(missing)}",
+                error_type="pwa",
+            ),
         )
 
 
-def _sanitize_client_payload(payload: dict[str, Any], blocked_fields: tuple[str, ...]) -> dict[str, Any]:
+def _sanitize_client_payload(
+    payload: dict[str, Any], blocked_fields: tuple[str, ...]
+) -> dict[str, Any]:
     sanitized = dict(payload)
     for field in blocked_fields:
         sanitized.pop(field, None)
     return sanitized
+
+
+def _sanitize_offline_entity_payload(payload: Any) -> Any:
+    blocked = {"tenant_id", "tenant_slug", "user_id", "company_id"}
+    if isinstance(payload, dict):
+        result: dict[str, Any] = {}
+        for key, value in payload.items():
+            if key in blocked:
+                continue
+            result[key] = _sanitize_offline_entity_payload(value)
+        return result
+    if isinstance(payload, list):
+        return [_sanitize_offline_entity_payload(value) for value in payload]
+    return payload
 
 
 def _ensure_owner_or_admin(*, access: AccessContext, owner_user_id: str) -> None:
@@ -340,7 +363,11 @@ def _ensure_owner_or_admin(*, access: AccessContext, owner_user_id: str) -> None
     if owner_user_id != current_user_id and "admin" not in roles:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail={"code": "pwa_sync_forbidden", "message": "batch is not available for current user"},
+            detail=api_problem_detail(
+                code="PWA_SYNC_FORBIDDEN",
+                message="batch is not available for current user",
+                error_type="pwa",
+            ),
         )
 
 
@@ -354,7 +381,10 @@ async def create_batch(
 ):
     incoming = dict(payload or {})
     _validate_payload_required_fields(incoming, ("device_id", "entity_type", "payload"))
-    sanitized = _sanitize_client_payload(incoming, ("tenant_id", "user_id", "status", "error_payload"))
+    sanitized = _sanitize_client_payload(
+        incoming, ("tenant_id", "user_id", "status", "error_payload")
+    )
+    sanitized["payload"] = _sanitize_offline_entity_payload(sanitized.get("payload") or {})
     batch = OfflineSyncBatch(
         tenant_id=tenant.id,
         user_id=str(access.user.id),
@@ -363,7 +393,19 @@ async def create_batch(
     )
     session.add(batch)
     await session.flush()
-    return await OfflineSyncService().apply_batch(session, batch)
+    updated = await OfflineSyncService().apply_batch(session, batch)
+    logger.info(
+        "pwa.sync.batch_processed",
+        extra={
+            "tenant_id": str(tenant.id),
+            "user_id": str(access.user.id),
+            "batch_id": str(updated.id),
+            "entity_type": updated.entity_type,
+            "status": updated.status,
+            "conflict": updated.status == "failed",
+        },
+    )
+    return updated
 
 
 @router.get("/sync/status/{batch_id}")
@@ -373,8 +415,8 @@ async def sync_status(
     session: AsyncSession = Depends(get_session),
     access: AccessContext = Depends(rbac()),
 ):
-    batch = await OfflineSyncService().get_status(session, batch_id)
-    if not batch or batch.tenant_id != tenant.id:
+    batch = await OfflineSyncService().get_status(session, batch_id, tenant_id=str(tenant.id))
+    if not batch:
         raise HTTPException(404, "Batch not found")
     _ensure_owner_or_admin(access=access, owner_user_id=str(batch.user_id))
     return batch
@@ -390,7 +432,9 @@ async def commit_media(
 ):
     incoming = dict(payload or {})
     _validate_payload_required_fields(incoming, ("device_id", "local_ref"))
-    sanitized = _sanitize_client_payload(incoming, ("tenant_id", "user_id", "upload_status", "file_id"))
+    sanitized = _sanitize_client_payload(
+        incoming, ("tenant_id", "user_id", "upload_status", "file_id")
+    )
     media = OfflineMediaQueue(
         tenant_id=tenant.id,
         user_id=str(access.user.id),
@@ -399,7 +443,95 @@ async def commit_media(
     )
     session.add(media)
     await session.flush()
-    return await OfflineSyncService().commit_media(session, media)
+    updated = await OfflineSyncService().commit_media(session, media)
+    logger.info(
+        "pwa.sync.media_processed",
+        extra={
+            "tenant_id": str(tenant.id),
+            "user_id": str(access.user.id),
+            "media_id": str(updated.id),
+            "status": updated.upload_status,
+        },
+    )
+    return updated
+
+
+@router.post("/sync/conflicts/{batch_id}/resolve")
+async def resolve_conflict(
+    batch_id: str,
+    payload: dict[str, Any],
+    tenant: Tenant = Depends(get_tenant_record),
+    session: AsyncSession = Depends(get_session),
+    access: AccessContext = Depends(rbac()),
+):
+    strategy = str((payload or {}).get("strategy") or "").strip()
+    if strategy not in {"server_wins", "client_retry"}:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=api_problem_detail(
+                code="PWA_SYNC_CONFLICT_STRATEGY_INVALID",
+                message="strategy must be one of: server_wins, client_retry",
+                error_type="pwa",
+            ),
+        )
+    batch = await OfflineSyncService().get_status(session, batch_id, tenant_id=str(tenant.id))
+    if not batch:
+        raise HTTPException(404, "Batch not found")
+    _ensure_owner_or_admin(access=access, owner_user_id=str(batch.user_id))
+    payload_patch = (payload or {}).get("payload_patch")
+    if payload_patch is not None and not isinstance(payload_patch, dict):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=api_problem_detail(
+                code="PWA_SYNC_CONFLICT_PAYLOAD_PATCH_INVALID",
+                message="payload_patch must be an object",
+                error_type="pwa",
+            ),
+        )
+    resolved = await OfflineSyncService().resolve_conflict(
+        session,
+        batch=batch,
+        strategy=strategy,
+        payload_patch=_sanitize_offline_entity_payload(payload_patch or {}),
+    )
+    logger.info(
+        "pwa.sync.conflict_resolved",
+        extra={
+            "tenant_id": str(tenant.id),
+            "user_id": str(access.user.id),
+            "batch_id": str(resolved.id),
+            "strategy": strategy,
+            "new_status": resolved.status,
+        },
+    )
+    return resolved
+
+
+async def _resolve_person_id(session: AsyncSession, tenant_id: Any, user_email: Any) -> str | None:
+    """Resolve the Person record linked to the authenticated user, or None.
+
+    The bootstrap is the caller's *own* offline dataset, so per-person projections
+    (training assignments, compliance deadlines) are scoped to this person. The
+    Person↔User link is resolved by case-insensitive email match — the same
+    convention already used to surface a person's login account in
+    ``EmployeeCardService`` (``backend/app/services/employee_card.py``). A user with
+    no matching Person (e.g. an admin without a personnel record) legitimately has
+    no personal assignments — callers must NOT fall back to the tenant-wide list,
+    which would over-expose every person's data.
+    """
+    if not user_email:
+        return None
+    return (
+        await session.execute(
+            select(Person.id)
+            .where(
+                Person.tenant_id == tenant_id,
+                func.lower(Person.email) == str(user_email).lower(),
+                Person.deleted_at.is_(None),
+            )
+            .limit(1)
+        )
+    ).scalar_one_or_none()
 
 
 @router.get("/bootstrap", response_model=PwaBootstrapResponse)
@@ -409,6 +541,7 @@ async def bootstrap(
     access: AccessContext = Depends(rbac()),
 ):
     permissions = _normalize_permissions(access)
+    person_id = await _resolve_person_id(session, tenant.id, getattr(access.user, "email", None))
     templates = (
         (
             await session.execute(
@@ -435,31 +568,38 @@ async def bootstrap(
         .scalars()
         .all()
     )
-    enrollments = (
-        (
-            await session.execute(
-                select(TrainingEnrollment).where(
-                    TrainingEnrollment.tenant_id == tenant.id,
-                    TrainingEnrollment.deleted_at.is_(None),
-                    TrainingEnrollment.status.in_(["assigned", "in_progress"]),
+    # Per-person projections are scoped to the caller's own personnel record. With no
+    # linked Person the caller has no personal assignments (never the tenant-wide list).
+    enrollments: list[TrainingEnrollment] = []
+    deadlines: list[ComplianceDeadline] = []
+    if person_id is not None:
+        enrollments = list(
+            (
+                await session.execute(
+                    select(TrainingEnrollment).where(
+                        TrainingEnrollment.tenant_id == tenant.id,
+                        TrainingEnrollment.person_id == person_id,
+                        TrainingEnrollment.deleted_at.is_(None),
+                        TrainingEnrollment.status.in_(["assigned", "in_progress"]),
+                    )
                 )
             )
+            .scalars()
+            .all()
         )
-        .scalars()
-        .all()
-    )
-    deadlines = (
-        (
-            await session.execute(
-                select(ComplianceDeadline).where(
-                    ComplianceDeadline.tenant_id == tenant.id,
-                    ComplianceDeadline.status.in_(["upcoming", "due", "overdue"]),
+        deadlines = list(
+            (
+                await session.execute(
+                    select(ComplianceDeadline).where(
+                        ComplianceDeadline.tenant_id == tenant.id,
+                        ComplianceDeadline.person_id == person_id,
+                        ComplianceDeadline.status.in_(["upcoming", "due", "overdue"]),
+                    )
                 )
             )
+            .scalars()
+            .all()
         )
-        .scalars()
-        .all()
-    )
     pending_batches = int(
         (
             await session.execute(
@@ -556,10 +696,20 @@ async def bootstrap(
         },
         offline_queue={
             "capabilities": _build_offline_capabilities(permissions),
-            "failed_conflicts": [_serialize_conflict(item).model_dump(mode="json") for item in failed_conflicts[:10]],
+            "failed_conflicts": [
+                _serialize_conflict(item).model_dump(mode="json") for item in failed_conflicts[:10]
+            ],
             "conflict_count": len(failed_conflicts),
-            "draft_entity_types": ["briefing_entry", "incident", "inspection_checklist", "task_comment", "training_ack"],
-            "draft_policy": _build_draft_policy(pending_batches=pending_batches, failed_batches=failed_batches),
+            "draft_entity_types": [
+                "briefing_entry",
+                "incident",
+                "inspection_checklist",
+                "task_comment",
+                "training_ack",
+            ],
+            "draft_policy": _build_draft_policy(
+                pending_batches=pending_batches, failed_batches=failed_batches
+            ),
             "conflict_resolution": _build_conflict_resolution_contract(len(failed_conflicts)),
         },
         dictionaries=_build_dictionaries(),

@@ -9,7 +9,7 @@ def test_vite_config_enables_real_pwa_plugin() -> None:
     vite_config = (REPO_ROOT / "frontend/vite.config.ts").read_text(encoding="utf-8")
 
     assert "VitePWA(" in vite_config
-    assert "registerType: \"autoUpdate\"" in vite_config
+    assert 'registerType: "autoUpdate"' in vite_config
     assert "manifest:" in vite_config
     assert "runtimeCaching:" in vite_config
 

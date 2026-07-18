@@ -1,18 +1,25 @@
 """Task endpoints for pipeline status and obligations."""
+
 from __future__ import annotations
 
 from datetime import datetime, timezone
 from uuid import UUID
 
 from celery.result import AsyncResult
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.api.helpers.etag import (
+    apply_etag_response_headers,
+    build_not_modified_headers,
+    compute_list_etag,
+)
+from app.core.errors import api_problem_detail
 from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
-from app.models.models import PipelineRun, Tenant
+from app.models.models import PipelineRun, Tenant, User
 from app.models.obligations import Task, TaskPriority, TaskStatus
 from app.schemas.task import (
     TaskCreate,
@@ -36,9 +43,7 @@ def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> UUID | N
     return getattr(tenant, "id", None)
 
 
-TaskAccess = Depends(
-    abac(_tenant_resource_id, required_roles=["admin"], action="inspect tasks")
-)
+TaskAccess = Depends(abac(_tenant_resource_id, required_roles=["admin"], action="inspect tasks"))
 
 _TASK_READ_ROLES = ["admin", "owner", "line_manager", "hr", "worker"]
 _TASK_WRITE_ROLES = ["admin", "owner", "line_manager", "hr"]
@@ -55,8 +60,32 @@ TaskWriteAccess = Depends(
 def _task_unprocessable(message: str) -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-        detail={"code": "task_validation_error", "message": message},
+        detail=api_problem_detail(
+            code="TASK_VALIDATION_ERROR", message=message, error_type="tasks"
+        ),
     )
+
+
+def _task_not_found(
+    *, code: str = "TASK_NOT_FOUND", message: str = "Task not found"
+) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail=api_problem_detail(code=code, message=message, error_type="tasks"),
+    )
+
+
+async def _ensure_assignee_in_tenant(
+    session: AsyncSession, tenant_id: UUID | str, assignee_id: str
+) -> None:
+    """user.id глобален — без проверки тенанта чужой UUID утёк бы через joined Task.assignee."""
+    stmt = select(User.id).where(
+        User.id == assignee_id,
+        User.tenant_id == tenant_id,
+        User.deleted_at.is_(None),
+    )
+    if (await session.execute(stmt)).scalar_one_or_none() is None:
+        raise _task_unprocessable("assignee_id must reference a user of the current tenant")
 
 
 def _normalize_meta_value(value):
@@ -65,20 +94,25 @@ def _normalize_meta_value(value):
     return str(value)
 
 
-@router.get("/{task_id}", response_model=TaskStatusResponse)
-async def get_task_status(
-    task_id: str,
+@router.get("/pipeline-runs/{run_id}", response_model=TaskStatusResponse)
+async def get_pipeline_run_status(
+    run_id: str,
     session: AsyncSession = SessionDep,
     tenant: Tenant = TenantDep,
-    access: AccessContext = TaskAccess,
+    _: AccessContext = TaskAccess,
 ) -> TaskStatusResponse:
+    """Статус фонового прогона (PipelineRun / Celery). Не путать с obligation Task."""
+
     TenantContextValidator.ensure_tenant_context(tenant)
 
     stmt = select(PipelineRun).where(
-        PipelineRun.id == task_id,
+        PipelineRun.id == run_id,
         PipelineRun.tenant_id == tenant.id,
     )
     run = (await session.execute(stmt)).scalar_one_or_none()
+    if run is None:
+        # Do not leak Celery task existence across tenants.
+        raise _task_not_found(code="PIPELINE_RUN_NOT_FOUND")
     metadata: dict[str, object] = {}
     document_id: str | None = None
     result_payload: dict[str, object] | None = None
@@ -90,18 +124,17 @@ async def get_task_status(
         outputs = dict(run.outputs or {})
         if outputs:
             metadata.setdefault("outputs", outputs)
-        pipeline_status = (
-            run.status.value if hasattr(run.status, "value") else str(run.status)
-        )
+        pipeline_status = run.status.value if hasattr(run.status, "value") else str(run.status)
         metadata.setdefault("pipeline_status", pipeline_status)
-        document_id = metadata.get("document_id") or outputs.get("document_id")
+        raw_document_id = metadata.get("document_id") or outputs.get("document_id")
+        document_id = raw_document_id if isinstance(raw_document_id, str) else None
         status_value = pipeline_status
         error_value = run.error
 
     celery_state: str | None = None
     if celery_app is not None:
         try:
-            async_result = AsyncResult(task_id, app=celery_app)
+            async_result = AsyncResult(run_id, app=celery_app)
             celery_state = (async_result.state or "PENDING").upper()
             celery_ready = async_result.ready()
             celery_info = getattr(async_result, "result", None)
@@ -116,22 +149,28 @@ async def get_task_status(
                 metadata["celery_info"] = normalized_info
             if celery_state == "SUCCESS" and isinstance(celery_info, dict):
                 result_payload = celery_info
-                status_value = result_payload.get("status") or celery_state
+                raw_status = result_payload.get("status")
+                if isinstance(raw_status, str) and raw_status:
+                    status_value = raw_status
+                else:
+                    status_value = celery_state
             elif status_value is None:
                 status_value = celery_state
             if celery_state == "FAILURE" and celery_info is not None:
                 error_value = str(celery_info)
 
     if result_payload is not None:
-        task_tenant = result_payload.get("tenant") if isinstance(result_payload, dict) else None
-        if task_tenant and task_tenant != tenant.slug:
-            raise HTTPException(status.HTTP_404_NOT_FOUND, "Task not found")
+        task_tenant = result_payload.get("tenant")
+        if task_tenant is not None and (
+            not isinstance(task_tenant, str) or task_tenant != tenant.slug
+        ):
+            raise _task_not_found(code="PIPELINE_RUN_NOT_FOUND")
 
     if status_value is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Task not found")
+        raise _task_not_found(code="PIPELINE_RUN_NOT_FOUND")
 
     return TaskStatusResponse(
-        task_id=task_id,
+        task_id=run_id,
         status=status_value,
         document_id=document_id,
         error=error_value,
@@ -186,6 +225,8 @@ def _task_read(task: Task, now: datetime) -> TaskRead:
 
 @router.get("", response_model=TaskListResponse)
 async def list_tasks(
+    request: Request,
+    response: Response,
     tenant: Tenant = TenantDep,
     session: AsyncSession = SessionDep,
     access: AccessContext = TaskReadAccess,
@@ -196,7 +237,7 @@ async def list_tasks(
     task_type: str | None = Query(default=None, alias="type"),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
-) -> TaskListResponse:
+) -> TaskListResponse | Response:
     TenantContextValidator.ensure_tenant_context(tenant)
 
     stmt = select(Task).where(Task.tenant_id == tenant.id)
@@ -230,6 +271,17 @@ async def list_tasks(
     tasks = list((await session.execute(stmt)).scalars().all())
     total = await session.scalar(total_stmt)
     items = [_task_read(task, now) for task in tasks]
+    etag = compute_list_etag(
+        tenant_id=str(tenant.id),
+        items=items,
+        scalars=[("page", page), ("page_size", page_size), ("total", int(total or 0))],
+    )
+    apply_etag_response_headers(response, etag)
+    if request.headers.get("if-none-match") == etag:
+        return Response(
+            status_code=status.HTTP_304_NOT_MODIFIED,
+            headers=build_not_modified_headers(etag),
+        )
     return TaskListResponse(
         items=items,
         pagination=TaskPagination(page=page, page_size=page_size, total=int(total or 0)),
@@ -247,6 +299,8 @@ async def create_task(
     TenantContextValidator.ensure_tenant_context(tenant)
 
     priority = _normalize_task_priority(payload.priority) or TaskPriority.MEDIUM
+    if payload.assignee_id is not None:
+        await _ensure_assignee_in_tenant(session, tenant.id, payload.assignee_id)
     task = Task(
         tenant_id=str(tenant.id),
         title=payload.title,
@@ -260,6 +314,7 @@ async def create_task(
     )
     task.next_remind_at = await next_task_reminder(session, due_at=task.due_at)
     session.add(task)
+    await session.flush()
     audit = AuditService(session)
     ip = request.client.host if request.client else "unknown"
     await audit.log_event(
@@ -278,6 +333,28 @@ async def create_task(
     return _task_read(task, datetime.now(timezone.utc))
 
 
+@router.get("/{task_id}", response_model=TaskRead)
+async def get_obligation_task(
+    task_id: str,
+    tenant: Tenant = TenantDep,
+    session: AsyncSession = SessionDep,
+    access: AccessContext = TaskReadAccess,
+) -> TaskRead:
+    """Задача обязательств (obligations). Статус пайплайна — `GET /tasks/pipeline-runs/{run_id}`."""
+
+    TenantContextValidator.ensure_tenant_context(tenant)
+
+    stmt = select(Task).where(Task.id == task_id, Task.tenant_id == tenant.id)
+    task = (await session.execute(stmt)).scalar_one_or_none()
+    if task is None:
+        raise _task_not_found(code="OBLIGATION_TASK_NOT_FOUND")
+
+    if access.user.role.value == "worker" and task.assignee_id != access.user.id:
+        raise _task_not_found(code="OBLIGATION_TASK_NOT_FOUND")
+
+    return _task_read(task, datetime.now(timezone.utc))
+
+
 @router.patch("/{task_id}", response_model=TaskRead)
 async def update_task(
     request: Request,
@@ -285,16 +362,28 @@ async def update_task(
     payload: TaskUpdate,
     tenant: Tenant = TenantDep,
     session: AsyncSession = SessionDep,
-    access: AccessContext = TaskWriteAccess,
+    access: AccessContext = TaskReadAccess,
 ) -> TaskRead:
     TenantContextValidator.ensure_tenant_context(tenant)
 
     stmt = select(Task).where(Task.id == task_id, Task.tenant_id == tenant.id)
     task = (await session.execute(stmt)).scalar_one_or_none()
     if task is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Task not found")
+        raise _task_not_found(code="OBLIGATION_TASK_NOT_FOUND")
+
+    if access.user.role.value == "worker":
+        if task.assignee_id != access.user.id:
+            raise _task_not_found(code="OBLIGATION_TASK_NOT_FOUND")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=api_problem_detail(
+                code="FORBIDDEN", message="Workers cannot modify tasks", error_type="tasks"
+            ),
+        )
 
     updates = payload.model_dump(exclude_unset=True)
+    if updates.get("assignee_id") is not None:
+        await _ensure_assignee_in_tenant(session, tenant.id, updates["assignee_id"])
     status_value = _normalize_task_status(updates.pop("status", None))
     if status_value is not None:
         task.status = status_value

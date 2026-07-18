@@ -116,19 +116,19 @@ describe("ApprovalsOutboxPage", () => {
 
     expect(await screen.findByText(/доставки согласований/i)).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /retry/i }));
+    fireEvent.click(screen.getByRole("button", { name: /повторить/i }));
     await waitFor(() => {
       expect(postMock).toHaveBeenCalledWith("/admin/outbox/delivery-1/retry");
     });
 
-    fireEvent.click(screen.getByRole("button", { name: /requeue/i }));
+    fireEvent.click(screen.getByRole("button", { name: /в очередь/i }));
     await waitFor(() => {
       expect(postMock).toHaveBeenCalledWith("/admin/outbox/events/event-1/requeue");
     });
   });
 
   it("shows error state when load fails", async () => {
-    getMock.mockRejectedValue({ status: 500, message: "outbox load failed" });
+    getMock.mockRejectedValue({ status: 400, message: "outbox load failed" });
 
     render(
       <MemoryRouter>

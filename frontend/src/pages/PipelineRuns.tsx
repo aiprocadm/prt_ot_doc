@@ -41,11 +41,11 @@ const PipelineRuns = () => {
       <ErrorState error={error ?? undefined} onRetry={() => void reload()} />
       {loading ? <LoadingScreen label="Загрузка истории пайплайнов" /> : null}
       {!loading && !error && runs.length === 0 ? (
-        <EmptyState title="Пайплайны не найдены" description="После первых запусков pipeline здесь появится история задач." />
+        <EmptyState title="Пайплайны не найдены" description="После первых запусков пайплайна здесь появится история задач." />
       ) : null}
       <div className="flex items-center gap-2 text-sm">
-        <button className="rounded border px-3 py-1" onClick={() => doBulk("retry").catch(() => undefined)} disabled={!selectedIds.length}>Retry selected</button>
-        <button className="rounded border px-3 py-1" onClick={() => doBulk("cancel").catch(() => undefined)} disabled={!selectedIds.length}>Cancel selected</button>
+        <button className="rounded border px-3 py-1" onClick={() => doBulk("retry").catch(() => undefined)} disabled={!selectedIds.length}>Повторить выбранные</button>
+        <button className="rounded border px-3 py-1" onClick={() => doBulk("cancel").catch(() => undefined)} disabled={!selectedIds.length}>Отменить выбранные</button>
       </div>
       <div className="rounded border">
         <label className="flex items-center gap-2 border-b p-3 text-xs text-muted-foreground">

@@ -2,9 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
 import { Breadcrumb } from "@/components/ui/breadcrumb";
-import { EmptyState } from "@/components/common/EmptyState";
-import { ErrorState } from "@/components/common/ErrorState";
-import { LoadingScreen } from "@/components/common/LoadingScreen";
+import { ListStateGuard } from "@/components/common/ListStateGuard";
 import { RegistryPageHeader } from "@/components/common/RegistryPageHeader";
 import { SectionErrorBoundary } from "@/components/common/SectionErrorBoundary";
 import { Card, CardContent } from "@/components/ui/card";
@@ -18,7 +16,10 @@ import { PermissionGate } from "@/components/permissions/PermissionGate";
 import { useAbility } from "@/permissions/useAbility";
 import { useDocumentsStore } from "@/stores/documents";
 import type { DocumentDto } from "@/types/dto/documents";
+import { ROUTES } from "@/router/routes";
 import { entityCardLink } from "@/utils/workspaceNavigation";
+
+const EMPTY_DOCUMENTS: DocumentDto[] = [];
 
 const DocumentsPage = () => {
   const { list, items, pagination, loading, error, getById } = useDocumentsStore();
@@ -29,7 +30,7 @@ const DocumentsPage = () => {
   const focusedEntityType = searchParams.get("entity_type") ?? undefined;
   const focusedEntityId = searchParams.get("entity_id") ?? undefined;
   const focusedView = searchParams.get("view") === "timeline" ? "timeline" : "summary";
-  const safeItems = Array.isArray(items) ? items : [];
+  const safeItems = useMemo(() => (Array.isArray(items) ? items : EMPTY_DOCUMENTS), [items]);
   const safePagination = pagination ?? { page: 1, page_size: 10, total: safeItems.length };
 
   const statusCounts = safeItems.reduce(
@@ -55,11 +56,17 @@ const DocumentsPage = () => {
 
     const existing = safeItems.find((doc) => doc.id === focusedEntityId);
     if (existing) {
-      setSelectedDocument(existing);
+      setSelectedDocument((prev) =>
+        prev?.id === existing.id && prev.updated_at === existing.updated_at ? prev : existing
+      );
       return;
     }
     void getById(focusedEntityId).then((doc) => {
-      if (doc) setSelectedDocument(doc);
+      if (doc) {
+        setSelectedDocument((prev) =>
+          prev?.id === doc.id && prev.updated_at === doc.updated_at ? prev : doc
+        );
+      }
     });
   }, [canView, focusedEntityId, focusedEntityType, getById, safeItems]);
 
@@ -78,14 +85,26 @@ const DocumentsPage = () => {
 
   return (
     <div className="space-y-6">
-      <Breadcrumb items={[{ label: "Главная", to: "/dashboard" }, { label: "Документы" }]} />
+      <Breadcrumb items={[{ label: "Главная", to: ROUTES.DASHBOARD }, { label: "Документы" }]} />
       <RegistryPageHeader
         title="Документы"
         description="Все корпоративные документы, шаблоны и версии с контролем статуса и компании."
         actions={
-          <span className="text-sm text-muted-foreground">
-            {loading ? "Обновление списка…" : "Данные актуальны"}
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">
+              {loading ? "Обновление списка…" : "Данные актуальны"}
+            </span>
+            <PermissionGate permission={PERMISSIONS.DOCUMENT_CREATE}>
+              <div className="flex items-center gap-2">
+                <Button asChild variant="outline">
+                  <Link to="/documents/quick-generate">Быстрая генерация</Link>
+                </Button>
+                <Button asChild>
+                  <Link to="/documents/wizard">Создать документ</Link>
+                </Button>
+              </div>
+            </PermissionGate>
+          </div>
         }
         stats={[
           { label: "Всего документов", value: safePagination.total },
@@ -109,12 +128,12 @@ const DocumentsPage = () => {
             <div className="mt-3 flex flex-wrap gap-2">
               {focusSummaryLink ? (
                 <Button size="sm" variant={focusedView === "summary" ? "default" : "outline"} asChild>
-                  <Link to={focusSummaryLink}>Summary</Link>
+                  <Link to={focusSummaryLink}>Сводка</Link>
                 </Button>
               ) : null}
               {focusTimelineLink ? (
                 <Button size="sm" variant={focusedView === "timeline" ? "default" : "outline"} asChild>
-                  <Link to={focusTimelineLink}>Timeline</Link>
+                  <Link to={focusTimelineLink}>Хронология</Link>
                 </Button>
               ) : null}
               <Button size="sm" variant="ghost" asChild>
@@ -127,10 +146,17 @@ const DocumentsPage = () => {
       <SectionErrorBoundary>
         <Card>
           <CardContent className="py-6">
-            <ErrorState error={error ?? undefined} onRetry={() => void list()} />
-            {loading && safeItems.length === 0 ? <LoadingScreen label="Загрузка документов" /> : null}
-            {!loading && !error && safeItems.length === 0 ? <EmptyState title="Документы не найдены" description="Создайте первый документ или измените фильтры." /> : null}
-            <DocumentTable onSelect={setSelectedDocument} />
+            <ListStateGuard
+              error={error}
+              loading={loading}
+              itemsCount={safeItems.length}
+              loadingLabel="Загрузка документов"
+              emptyTitle="Документы не найдены"
+              emptyDescription="Создайте первый документ или измените фильтры."
+              onRetry={() => void list()}
+            >
+              <DocumentTable onSelect={setSelectedDocument} />
+            </ListStateGuard>
           </CardContent>
         </Card>
       </SectionErrorBoundary>

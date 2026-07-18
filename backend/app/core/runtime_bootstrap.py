@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import sys
 import threading
 import types
@@ -20,14 +21,21 @@ def prepare_runtime(settings: Settings) -> Settings:
         _prepare_sqlite_metadata()
         _run_coro_sync(_initialize_sqlite(settings.database_url))
 
-        # Dockerless SQLite startup should remain deterministic and skip heavy demo seeding.
+        # Dockerless SQLite: skip demo seeding by default, but honor DEMO_BOOTSTRAP=1 (README / run_backend_lite).
         if settings.app_run_mode == "dockerless":
-            settings.demo_bootstrap = False
+            env_on = os.environ.get("DEMO_BOOTSTRAP", "").strip().lower() in {"1", "true", "yes"}
+            if not env_on:
+                settings.demo_bootstrap = False
 
     return settings
 
 
 def _run_coro_sync(coro) -> None:
+    """Синхронный запуск async: только для prepare_runtime / SQLite init (не hot path).
+
+    Параллельный bridge для Celery см. :func:`app.tasks._core._run_coroutine` (daemon thread + ``asyncio.run``).
+    """
+
     try:
         asyncio.get_running_loop()
     except RuntimeError:
@@ -52,6 +60,10 @@ def _run_coro_sync(coro) -> None:
 def _prepare_sqlite_metadata() -> None:
     from app.db import Base, SharedBase
     from app.models.models import Tenant
+
+    # Register module models used outside app.models.models so sqlite create_all
+    # includes contractor registry tables in dockerless mode.
+    from app.modules.contractors import models as _contractors_models  # noqa: F401
 
     SharedBase.metadata.schema = None
     for table in SharedBase.metadata.tables.values():

@@ -1,21 +1,27 @@
 import { AlertTriangle, FileText, ListChecks, PlayCircle, Users } from "lucide-react";
+import { Link } from "react-router-dom";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { PERMISSIONS } from "@/permissions/permissions";
+import { PERMISSIONS, type Permission } from "@/permissions/permissions";
 import { useAbility } from "@/permissions/useAbility";
 
-const quickActions = [
-  { label: "Создать документ", icon: FileText, permission: PERMISSIONS.DOCUMENT_CREATE },
-  { label: "Запустить мастер", icon: PlayCircle, permission: PERMISSIONS.TEMPLATE_CREATE },
-  { label: "Назначить обучение", icon: ListChecks, permission: PERMISSIONS.TRAINING_ASSIGN },
-  { label: "Выдать СИЗ", icon: Users, permission: PERMISSIONS.PPE_ISSUE }
+const quickActions: Array<{
+  label: string;
+  icon: typeof FileText;
+  permission: Permission;
+  to: string;
+}> = [
+  { label: "Создать документ", icon: FileText, permission: PERMISSIONS.DOCUMENT_CREATE, to: "/documents/wizard" },
+  { label: "Запустить мастер", icon: PlayCircle, permission: PERMISSIONS.PACK_VIEW, to: "/packs" },
+  { label: "Назначить обучение", icon: ListChecks, permission: PERMISSIONS.TRAINING_ASSIGN, to: "/training" },
+  { label: "Выдать СИЗ", icon: Users, permission: PERMISSIONS.PPE_ISSUE, to: "/ppe" }
 ];
 
 const statusItems = [
-  { label: "Согласования сегодня", value: "18", tone: "default" },
-  { label: "Просрочки обучений", value: "7", tone: "destructive" },
-  { label: "Предписания к закрытию", value: "4", tone: "secondary" }
+  { label: "Согласования сегодня", value: "18", tone: "default", to: "/approvals/inbox" },
+  { label: "Просрочки обучений", value: "7", tone: "destructive", to: "/training" },
+  { label: "Предписания к закрытию", value: "4", tone: "secondary", to: "/prescriptions" }
 ];
 
 export const RightDrawer = () => {
@@ -29,9 +35,11 @@ export const RightDrawer = () => {
           <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Быстрые действия</h2>
           <div className="mt-3 space-y-2">
             {visibleActions.map((action) => (
-              <Button key={action.label} variant="outline" className="w-full justify-start gap-2">
-                <action.icon className="h-4 w-4" />
-                {action.label}
+              <Button key={action.label} variant="outline" className="w-full justify-start gap-2" asChild>
+                <Link to={action.to}>
+                  <action.icon className="h-4 w-4" />
+                  {action.label}
+                </Link>
               </Button>
             ))}
           </div>
@@ -41,10 +49,14 @@ export const RightDrawer = () => {
         <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Сводка дня</h2>
         <div className="mt-3 space-y-2 text-sm">
           {statusItems.map((item) => (
-            <div key={item.label} className="flex items-center justify-between rounded-md border bg-background px-3 py-2">
+            <Link
+              key={item.label}
+              to={item.to}
+              className="flex items-center justify-between rounded-md border bg-background px-3 py-2 transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
               <span>{item.label}</span>
               <Badge variant={item.tone as "default" | "secondary" | "destructive"}>{item.value}</Badge>
-            </div>
+            </Link>
           ))}
         </div>
       </div>

@@ -1,4 +1,8 @@
-# PLATFORM DESIGN (Source of Truth)
+# PLATFORM DESIGN
+
+> **Назначение:** целевая архитектура платформы (modular monolith, bounded contexts, contracts).
+>
+> **Не источник истины ТЗ.** Канонический ТЗ — [`TZ_FULL_UNIFIED.md`](./TZ_FULL_UNIFIED.md). Полный продуктовый каталог архитектурных требований — [`PLATFORM_VNEXT_UPGRADE_SPEC.md`](./PLATFORM_VNEXT_UPGRADE_SPEC.md) §28 (backend), §29 (frontend), §30 (API), §31 (надёжность), §32 (безопасность). Этот файл удерживает **рабочее описание** архитектуры MVP-уровня и направления эволюции; при расхождениях побеждает канон + vNext-spec.
 
 ## Оглавление
 1. [Vision и архитектурный стиль](#vision-и-архитектурный-стиль)

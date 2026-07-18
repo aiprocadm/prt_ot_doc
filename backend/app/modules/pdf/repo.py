@@ -6,10 +6,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.modules.pdf.models import PdfConversionRun
 
 
-async def find_run_by_input(session: AsyncSession, *, tenant_id: str, input_file_id: str) -> PdfConversionRun | None:
+async def find_run_by_input(
+    session: AsyncSession, *, tenant_id: str, input_file_id: str
+) -> PdfConversionRun | None:
     stmt = (
         select(PdfConversionRun)
-        .where(PdfConversionRun.tenant_id == tenant_id, PdfConversionRun.input_file_id == input_file_id)
+        .where(
+            PdfConversionRun.tenant_id == tenant_id, PdfConversionRun.input_file_id == input_file_id
+        )
         .order_by(PdfConversionRun.created_at.desc())
         .limit(1)
     )

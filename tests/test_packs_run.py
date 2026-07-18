@@ -420,7 +420,7 @@ async def test_pack_run_start_plan_limits_active_tasks(
     assert response.status_code == status.HTTP_429_TOO_MANY_REQUESTS
     assert response.headers.get("Retry-After") == "30"
     payload = response.json()
-    assert payload["code"] == "http_429"
+    assert payload["code"] == "TOO_MANY_REQUESTS"
     assert payload["message"] == "A generation task is already running for this tenant"
 
 

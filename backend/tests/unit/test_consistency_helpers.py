@@ -115,8 +115,8 @@ class TestPermissionChecker:
         assert exc.status_code == status.HTTP_403_FORBIDDEN
         detail = exc.detail
         assert detail["error_code"] == "PERMISSION_DENIED"
+        assert detail["code"] == "PERMISSION_DENIED"
         assert "delete" in detail["message"].lower()
-        assert detail["correlation_id"] == "corr-456"
 
     def test_check_any_any_permitted(self):
         """Test check_any passes if any permission granted."""
@@ -219,7 +219,7 @@ class TestTenantContextValidator:
         )
 
         assert error["error_code"] == "TENANT_REQUIRED"
-        assert error["correlation_id"] == "corr-789"
+        assert error["code"] == "TENANT_REQUIRED"
         assert error["details"]["hint"] == "Set X-Tenant header"
 
 
@@ -339,7 +339,7 @@ class TestConsistencyIntegration:
     """Integration tests for consistency helpers."""
 
     def test_permission_denied_with_error_builder(self):
-        """Test PermissionChecker integrates with ErrorBuilder."""
+        """Test PermissionChecker uses api_problem_detail-shaped HTTPException detail."""
         with pytest.raises(HTTPException) as exc_info:
             PermissionChecker.check(
                 False,
@@ -350,17 +350,17 @@ class TestConsistencyIntegration:
 
         exc = exc_info.value
         assert exc.status_code == 403
-        # Detail should include all error fields
-        assert "error_code" in exc.detail
-        assert "correlation_id" in exc.detail
+        assert exc.detail["error_code"] == "PERMISSION_DENIED"
+        assert exc.detail["code"] == "PERMISSION_DENIED"
+        assert "write" in exc.detail["message"]
 
     def test_tenant_validation_with_correlation_id(self):
-        """Test TenantContextValidator with correlation_id."""
+        """Test TenantContextValidator build_tenant_error (correlation_id not embedded in detail)."""
         error = TenantContextValidator.build_tenant_error(
             "TENANT_INACTIVE",
             correlation_id="tenant-test-123",
         )
 
         assert error["error_code"] == "TENANT_INACTIVE"
-        assert error["correlation_id"] == "tenant-test-123"
+        assert error["code"] == "TENANT_INACTIVE"
         assert "inactive" in error["message"].lower()

@@ -29,14 +29,34 @@ ROLE_CODES = [
 ]
 
 
-async def seed_authz_catalog(session: AsyncSession) -> None:
+async def seed_authz_catalog(session: AsyncSession, *, tenant_id: str) -> None:
+    """Seed authz catalog (roles, permissions, mappings) for a given tenant.
+
+    ``tenant_id`` is required because ``AuthzRole``/``AuthzPermission``/
+    ``AuthzRolePermission`` all extend :class:`AuthzBaseModel` whose
+    ``tenant_id`` column is ``NOT NULL``. The legacy ``__tenant_model__``
+    auto-fill hook does NOT cover these models, so the caller must pass the
+    target tenant explicitly. Role uniqueness is scoped per tenant
+    (``uq_authz_roles_tenant_code``); permissions use a global ``code``
+    unique constraint, so they are reused across tenants once created.
+    """
+
     role_records: dict[str, AuthzRole] = {}
     for role_code in ROLE_CODES:
         existing = (
-            await session.execute(select(AuthzRole).where(AuthzRole.code == role_code))
+            await session.execute(
+                select(AuthzRole).where(
+                    AuthzRole.tenant_id == tenant_id,
+                    AuthzRole.code == role_code,
+                )
+            )
         ).scalar_one_or_none()
         if existing is None:
-            existing = AuthzRole(code=role_code, name=role_code.replace("_", " ").title())
+            existing = AuthzRole(
+                code=role_code,
+                name=role_code.replace("_", " ").title(),
+                tenant_id=tenant_id,
+            )
             session.add(existing)
             await session.flush()
         role_records[role_code] = existing
@@ -49,7 +69,12 @@ async def seed_authz_catalog(session: AsyncSession) -> None:
                 await session.execute(select(AuthzPermission).where(AuthzPermission.code == code))
             ).scalar_one_or_none()
             if existing is None:
-                existing = AuthzPermission(resource=resource, action=action, code=code)
+                existing = AuthzPermission(
+                    resource=resource,
+                    action=action,
+                    code=code,
+                    tenant_id=tenant_id,
+                )
                 session.add(existing)
                 await session.flush()
             permission_records[code] = existing
@@ -65,12 +90,20 @@ async def seed_authz_catalog(session: AsyncSession) -> None:
             exists = (
                 await session.execute(
                     select(AuthzRolePermission).where(
+                        AuthzRolePermission.tenant_id == tenant_id,
                         AuthzRolePermission.role_id == role.id,
-                        AuthzRolePermission.permission_id == permission.id,
+                        AuthzRolePermission.permission_code == permission_code,
                     )
                 )
             ).scalar_one_or_none()
             if exists is None:
-                session.add(AuthzRolePermission(role_id=role.id, permission_id=permission.id))
+                session.add(
+                    AuthzRolePermission(
+                        role_id=role.id,
+                        permission_id=permission.id,
+                        permission_code=permission_code,
+                        tenant_id=tenant_id,
+                    )
+                )
 
     await session.flush()
