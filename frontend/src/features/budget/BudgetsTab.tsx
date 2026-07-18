@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { BudgetFormDialog } from "@/features/budget/BudgetFormDialog";
-import { BUDGET_DOMAIN_LABELS } from "@/pages/budget/budgetVocab";
+import { BUDGET_DOMAIN_LABELS, formatRub } from "@/pages/budget/budgetVocab";
 import { PERMISSIONS } from "@/permissions/permissions";
 import type { ApiError } from "@/types/dto/common";
 import type {
@@ -21,14 +21,7 @@ import type {
 
 const BUDGET_DOMAINS: BudgetDomain[] = ["training", "medical", "events"];
 
-const currencyFormatter = new Intl.NumberFormat("ru-RU", {
-  style: "currency",
-  currency: "RUB",
-  maximumFractionDigits: 0
-});
-const formatAmount = (value: number) => currencyFormatter.format(value);
-
-const toApiError = (err: unknown, fallback: string): ApiError =>
+const toApiError =(err: unknown, fallback: string): ApiError =>
   err && typeof err === "object" && "message" in err ? (err as ApiError) : { status: 0, message: fallback };
 
 interface Props {
@@ -54,6 +47,9 @@ export const BudgetsTab = ({ budgets, onChanged }: Props) => {
   // не «слетал» после создания/изменения/удаления бюджета.
   const fetchList = useCallback(() => {
     if (!domainFilter) {
+      // Инвалидируем незавершённый отфильтрованный запрос: без bump'а его .then() прошёл бы
+      // проверку seq и перезаписал только что выставленный полный список.
+      requestSeq.current += 1;
       setItems(budgets.items);
       setListError(null);
       setListLoading(false);
@@ -161,7 +157,7 @@ export const BudgetsTab = ({ budgets, onChanged }: Props) => {
                   <td className="py-2 pr-4">
                     {budget.period_start} – {budget.period_end}
                   </td>
-                  <td className="py-2 pr-4">{formatAmount(budget.planned_amount)}</td>
+                  <td className="py-2 pr-4">{formatRub(budget.planned_amount)}</td>
                   <td className="py-2">
                     <div className="flex flex-wrap gap-1">
                       <Button size="sm" variant="outline" onClick={() => openBudget(budget.id)}>
@@ -202,15 +198,15 @@ export const BudgetsTab = ({ budgets, onChanged }: Props) => {
               <div className="space-y-3">
                 <div className="grid gap-2 text-sm md:grid-cols-4">
                   <div>
-                    <span className="text-muted-foreground">План:</span> {formatAmount(detail.planned_amount)}
+                    <span className="text-muted-foreground">План:</span> {formatRub(detail.planned_amount)}
                   </div>
                   <div>
-                    <span className="text-muted-foreground">Факт:</span> {formatAmount(detail.actual_total)}
+                    <span className="text-muted-foreground">Факт:</span> {formatRub(detail.actual_total)}
                   </div>
                   <div>
                     <span className="text-muted-foreground">Остаток:</span>{" "}
                     <span className={detail.remaining < 0 ? "font-semibold text-destructive" : ""}>
-                      {formatAmount(detail.remaining)}
+                      {formatRub(detail.remaining)}
                     </span>
                   </div>
                   <div data-testid="budget-detail-expense-count">
@@ -232,7 +228,7 @@ export const BudgetsTab = ({ budgets, onChanged }: Props) => {
                         {detail.by_article.map((row) => (
                           <tr key={row.article_id ?? "none"} className="border-b last:border-0">
                             <td className="py-2 pr-4">{row.article_name}</td>
-                            <td className="py-2">{formatAmount(row.amount)}</td>
+                            <td className="py-2">{formatRub(row.amount)}</td>
                           </tr>
                         ))}
                       </tbody>

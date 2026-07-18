@@ -190,6 +190,37 @@ describe("BudgetPage", () => {
     );
   });
 
+  it("keeps the applied period across a reload triggered by a mutation", async () => {
+    renderPage();
+    await screen.findByText("Обучение");
+
+    fireEvent.change(screen.getByLabelText("С"), { target: { value: "2026-03-01" } });
+    fireEvent.change(screen.getByLabelText("По"), { target: { value: "2026-03-31" } });
+    fireEvent.click(screen.getByRole("button", { name: "Применить" }));
+
+    const applied = { date_from: "2026-03-01", date_to: "2026-03-31" };
+    await waitFor(() => expect(budgetApi.getOverview).toHaveBeenLastCalledWith(applied));
+
+    // Мутация на вкладке «Бюджеты» дёргает reload() всей страницы — окно должно пережить его,
+    // а не откатиться к дефолтному календарному году.
+    await openBudgetsTab();
+    (budgetApi.deleteBudget as any).mockResolvedValue(undefined);
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    fireEvent.click(screen.getByRole("button", { name: "Удалить" }));
+
+    await waitFor(() => expect(budgetApi.deleteBudget).toHaveBeenCalledWith("bt1"));
+    await waitFor(() => expect(budgetApi.getOverview).toHaveBeenLastCalledWith(applied));
+  });
+
+  it("disables «Применить» while either date bound is empty", async () => {
+    renderPage();
+    await screen.findByText("Обучение");
+
+    expect(screen.getByRole("button", { name: "Применить" })).toBeEnabled();
+    fireEvent.change(screen.getByLabelText("С"), { target: { value: "" } });
+    expect(screen.getByRole("button", { name: "Применить" })).toBeDisabled();
+  });
+
   it("renders the budgets list and opens a budget detail panel", async () => {
     renderPage();
     await openBudgetsTab();
@@ -236,6 +267,28 @@ describe("BudgetPage", () => {
       planned_amount: 12345,
       notes: "заметка"
     });
+    // Дожидаемся, пока onSubmitted -> reload() досчитается: иначе состояние допишется уже
+    // после конца теста и полный прогон (Task 11) засыпет консоль act()-варнингами.
+    await waitFor(() => expect(budgetApi.getOverview).toHaveBeenCalledTimes(2));
+  });
+
+  it("sends only the changed fields when editing a budget", async () => {
+    (budgetApi.updateBudget as any).mockResolvedValue({ ...BUDGETS_PAGE.items[0], planned_amount: 999 });
+    renderPage();
+    await openBudgetsTab();
+
+    fireEvent.click(screen.getByRole("button", { name: "Изменить" }));
+    const dialog = await screen.findByRole("dialog");
+
+    // Домен иммутабелен на бэкенде — селект должен быть заблокирован в режиме правки.
+    expect(within(dialog).getByLabelText("Домен")).toBeDisabled();
+
+    fireEvent.change(within(dialog).getByLabelText("Плановая сумма"), { target: { value: "999" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Сохранить" }));
+
+    await waitFor(() => expect(budgetApi.updateBudget).toHaveBeenCalled());
+    expect(budgetApi.updateBudget).toHaveBeenCalledWith("bt1", { planned_amount: 999 });
+    await waitFor(() => expect(budgetApi.getOverview).toHaveBeenCalledTimes(2));
   });
 
   it("shows the feature-off empty state when the API answers feature-disabled 404", async () => {

@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 
 import { budgetApi, isFeatureDisabledError } from "@/api/budget";
 import { EmptyState } from "@/components/common/EmptyState";
@@ -33,32 +33,27 @@ const INITIAL_DATA: BudgetPageData = {
 };
 
 const BudgetPage = () => {
+  // Окно дат живёт на уровне страницы, а не внутри вкладки: иначе любой reload()
+  // (создание/правка/удаление бюджета, в дальнейшем — расходы и статьи) молча сбрасывал бы
+  // выбранный пользователем период обратно к дефолтному календарному году.
+  // Имя не `window` — глобальный window нужен вкладкам (window.confirm) и затенять его опасно.
+  const [dateWindow, setDateWindow] = useState<{ date_from: string; date_to: string } | null>(null);
+
   const loader = useCallback(async (): Promise<BudgetPageData> => {
     const [overview, budgets, articles, expenses] = await Promise.all([
-      budgetApi.getOverview(),
+      budgetApi.getOverview(dateWindow ?? undefined),
       budgetApi.listBudgets(),
       budgetApi.listArticles(),
       budgetApi.listExpenses()
     ]);
     return { overview, budgets, articles, expenses };
-  }, []);
+  }, [dateWindow]);
 
   const budgetRes = useAsyncResource<BudgetPageData>({
     loader,
     initialData: INITIAL_DATA,
     errorMessage: "Не удалось загрузить данные бюджета безопасности"
   });
-
-  // Смена периода на вкладке «Сводка» перегружает только overview (остальные разделы страницы
-  // от окна дат не зависят) — патчим срез через setData вместо отдельного состояния.
-  const onWindowChange = async (range: { date_from: string; date_to: string }) => {
-    try {
-      const overview = await budgetApi.getOverview(range);
-      budgetRes.setData((prev) => ({ ...prev, overview }));
-    } catch {
-      // Ошибку уже показал глобальный обработчик API.
-    }
-  };
 
   if (budgetRes.error && isFeatureDisabledError(budgetRes.error)) {
     return (
@@ -85,7 +80,7 @@ const BudgetPage = () => {
             <TabsTrigger value="articles">Статьи</TabsTrigger>
           </TabsList>
           <TabsContent value="overview" data-testid="budget-tab-overview">
-            <OverviewTab overview={budgetRes.data.overview} onWindowChange={(range) => void onWindowChange(range)} />
+            <OverviewTab overview={budgetRes.data.overview} onWindowChange={setDateWindow} />
           </TabsContent>
           <TabsContent value="budgets" data-testid="budget-tab-budgets">
             <BudgetsTab
