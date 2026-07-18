@@ -95,6 +95,9 @@ async def get_operational_dashboard(
         return JSONResponse(status_code=code, content=dashboard.model_dump(mode="json"))
     except Exception as e:
         logger.exception("operational_dashboard.get_dashboard_failed")
+        # Handler returns normally, so the session dependency commits on teardown;
+        # an aborted transaction must be rolled back or that commit raises.
+        await db.rollback()
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content={"error": "dashboard retrieval failed", "detail": str(e)[:100]},
