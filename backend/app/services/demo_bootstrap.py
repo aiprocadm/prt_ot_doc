@@ -1004,6 +1004,187 @@ async def _seed_rules_engine_demo(session, tenant_db_id: str) -> None:
     )
 
 
+async def _seed_budget_demo(session, tenant_db_id: str) -> None:
+    """Seed the default-off ``budget`` flag (enabled for the demo tenant) + default
+    expense articles + 3 domain budgets + 5 demo expenses (P10-12/§12.4 срез-1).
+
+    Idempotent: flag keyed on Feature.code, articles keyed on (tenant, code) via
+    ``BudgetService.seed_default_articles``, budgets keyed on (tenant, name),
+    expenses keyed on (tenant, title). Master-data links (company/branch/site/CAPA)
+    are resolved best-effort from whatever the wider demo bootstrap already
+    created — a fresh tenant with no Company yet still gets the budgets/articles
+    and the two expenses that carry no such link.
+    """
+    from app.models.budget import BudgetExpense, BudgetExpenseArticle, SafetyBudget
+    from app.models.feature import Feature, FeatureEnablement
+    from app.models.master_data import Branch
+    from app.models.safety_ops import CorrectiveAction
+    from app.modules.budget.service import BudgetService
+
+    feature = (
+        await session.execute(select(Feature).where(Feature.code == "budget"))
+    ).scalar_one_or_none()
+    if feature is None:
+        feature = Feature(code="budget", title="Бюджет безопасности")
+        session.add(feature)
+        await session.flush()
+    enablement = (
+        await session.execute(
+            select(FeatureEnablement).where(
+                FeatureEnablement.tenant_id == tenant_db_id,
+                FeatureEnablement.feature_id == feature.id,
+            )
+        )
+    ).scalar_one_or_none()
+    if enablement is None:
+        session.add(FeatureEnablement(tenant_id=tenant_db_id, feature_id=feature.id, on=True))
+
+    # Default expense-article catalog (idempotent by code — see BudgetService).
+    await BudgetService(session, tenant_db_id).seed_default_articles()
+
+    period_start = date(2026, 1, 1)
+    period_end = date(2026, 12, 31)
+    budget_specs = [
+        ("Бюджет обучения 2026", "training", 500000),
+        ("Бюджет медосмотров 2026", "medical", 350000),
+        ("Бюджет мероприятий 2026", "events", 250000),
+    ]
+    for name, domain, planned_amount in budget_specs:
+        exists = await session.scalar(
+            select(SafetyBudget).where(
+                SafetyBudget.tenant_id == tenant_db_id,
+                SafetyBudget.name == name,
+                SafetyBudget.deleted_at.is_(None),
+            )
+        )
+        if exists is None:
+            session.add(
+                SafetyBudget(
+                    tenant_id=tenant_db_id,
+                    name=name,
+                    domain=domain,
+                    period_start=period_start,
+                    period_end=period_end,
+                    planned_amount=planned_amount,
+                )
+            )
+    await session.flush()
+
+    # Resolve demo master-data for the expense links below (best-effort — a fresh
+    # tenant with no Company yet simply gets NULL refs on the expenses that need one).
+    company = (
+        await session.execute(
+            select(Company)
+            .where(Company.tenant_id == tenant_db_id, Company.deleted_at.is_(None))
+            .order_by(Company.created_at, Company.id)
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+
+    site = None
+    if company is not None:
+        site = (
+            await session.execute(
+                select(Site)
+                .where(Site.tenant_id == tenant_db_id, Site.deleted_at.is_(None))
+                .order_by(Site.created_at, Site.id)
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+
+    branch = (
+        await session.execute(
+            select(Branch)
+            .where(Branch.tenant_id == tenant_db_id, Branch.deleted_at.is_(None))
+            .order_by(Branch.created_at, Branch.id)
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if branch is None and company is not None:
+        branch = Branch(tenant_id=tenant_db_id, company_id=company.id, name="Головной филиал")
+        session.add(branch)
+        await session.flush()
+
+    capa = (
+        await session.execute(
+            select(CorrectiveAction)
+            .where(
+                CorrectiveAction.tenant_id == tenant_db_id, CorrectiveAction.deleted_at.is_(None)
+            )
+            .order_by(CorrectiveAction.created_at, CorrectiveAction.id)
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+
+    articles_by_code = {
+        row.code: row.id
+        for row in (
+            await session.execute(
+                select(BudgetExpenseArticle).where(BudgetExpenseArticle.tenant_id == tenant_db_id)
+            )
+        )
+        .scalars()
+        .all()
+    }
+
+    expense_specs: list[dict] = [
+        {
+            "title": "Обучение по охране труда (группа 1)",
+            "domain": "training",
+            "article_id": articles_by_code.get("training_external"),
+            "occurred_on": date(2026, 2, 10),
+            "amount": 120000,
+        },
+        {
+            "title": "Внутренний семинар по ОТ",
+            "domain": "training",
+            "article_id": None,
+            "occurred_on": date(2026, 3, 5),
+            "amount": 15000,
+        },
+        {
+            "title": "Периодический медосмотр цеха №1",
+            "domain": "medical",
+            "article_id": articles_by_code.get("medical_periodic"),
+            "occurred_on": date(2026, 4, 15),
+            "amount": 90000,
+            "company_id": company.id if company is not None else None,
+        },
+        {
+            "title": "Ремонт вентиляции сварочного поста",
+            "domain": "events",
+            "article_id": articles_by_code.get("events_capa"),
+            "occurred_on": date(2026, 5, 20),
+            "amount": 180000,
+            "company_id": company.id if company is not None else None,
+            "branch_id": branch.id if branch is not None else None,
+            "site_id": site.id if site is not None else None,
+            "entity_type": "corrective_action" if capa is not None else None,
+            "entity_id": capa.id if capa is not None else None,
+        },
+        {
+            "title": "Закупка знаков безопасности",
+            "domain": "events",
+            "article_id": None,
+            "occurred_on": date(2026, 6, 1),
+            "amount": 22000,
+            "branch_id": branch.id if branch is not None else None,
+        },
+    ]
+    for spec in expense_specs:
+        title = spec["title"]
+        exists = await session.scalar(
+            select(BudgetExpense).where(
+                BudgetExpense.tenant_id == tenant_db_id,
+                BudgetExpense.title == title,
+                BudgetExpense.deleted_at.is_(None),
+            )
+        )
+        if exists is None:
+            session.add(BudgetExpense(tenant_id=tenant_db_id, **spec))
+    await session.flush()
+
+
 async def _seed_sout_demo(session, tenant_db_id: str, position_id: str | None = None) -> None:
     """Seed a minimal СОУТ demo (P10-04 срез-1).
 
@@ -1350,6 +1531,7 @@ async def bootstrap_demo_tenant(settings: Settings) -> None:
         )
         await _seed_report_builder_demo(session, tenant_db_id)
         await _seed_rules_engine_demo(session, tenant_db_id)
+        await _seed_budget_demo(session, tenant_db_id)
         logger.info(
             "demo.bootstrap.done",
             extra={"tenant": tenant_slug, "company": company_name, "site": site_name},
