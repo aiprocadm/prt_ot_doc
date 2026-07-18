@@ -43,6 +43,8 @@ export const CommandBar = () => {
     if (!q) return DEFAULT_COMMANDS;
     return DEFAULT_COMMANDS.filter(
       (item) => item.title.toLowerCase().includes(q) || item.keywords.includes(q),
+      (item) =>
+        item.title.toLowerCase().includes(q) || item.keywords.toLowerCase().includes(q),
     );
   }, [query]);
 

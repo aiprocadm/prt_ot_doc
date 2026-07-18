@@ -9,6 +9,8 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from datetime import date, datetime, timedelta, timezone
+
 from app.models.document import Document, DocumentStatus, DocumentVersion
 from app.models.models import (
     EmploymentStatus,
@@ -538,6 +540,7 @@ class TestDocumentPersonCompanyMismatchRule:
 
 
 @pytest.mark.anyio
+class TestDocumentReadinessRule:
 class TestDocumentReadinessRuleRequiredFields:
     """Draft documents: stale without template version, or missing required wizard fields."""
 
