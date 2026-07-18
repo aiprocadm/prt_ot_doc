@@ -466,6 +466,7 @@ class PipelineService:
                 template_id=template.id, status=PipelineRunStatus.RUNNING.value
             )
             if (
+                previous_status is PipelineRunStatus.ERROR
                 previous_status == PipelineRunStatus.ERROR
                 and self._stage_completed(outputs, "store")
                 and outputs.get("docx_storage_key")

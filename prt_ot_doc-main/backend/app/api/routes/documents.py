@@ -200,6 +200,11 @@ class DocGenerateRequest(BaseModel):
 def _map_document_status(document: Document) -> str:
     if document.job and document.job.status in {DocumentJobStatus.QUEUED, DocumentJobStatus.PROCESSING}:
         return "generating"
+    if document.job and document.job.status is DocumentJobStatus.FAILED:
+        return "error"
+    if document.status in {DocumentStatus.GENERATED, DocumentStatus.APPROVED, DocumentStatus.SIGNED, DocumentStatus.ARCHIVED}:
+        return "ready"
+    if document.status is DocumentStatus.REVOKED:
     if document.job and document.job.status == DocumentJobStatus.FAILED:
         return "error"
     if document.status in {DocumentStatus.GENERATED, DocumentStatus.APPROVED, DocumentStatus.SIGNED, DocumentStatus.ARCHIVED}:
@@ -676,6 +681,7 @@ async def _resolve_run(
             raise HTTPException(status.HTTP_409_CONFLICT, "Idempotency key already used")
         if existing.context != context:
             raise HTTPException(status.HTTP_409_CONFLICT, "Idempotency key already used")
+        if existing.status is PipelineRunStatus.ERROR:
         if existing.status == PipelineRunStatus.ERROR:
             raise HTTPException(
                 status.HTTP_409_CONFLICT,
