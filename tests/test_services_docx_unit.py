@@ -60,8 +60,12 @@ def test_set_headers_footers_handles_multiple_sections() -> None:
         footer_texts=["Bottom", "Tail"],
     )
     updated = Document(BytesIO(result))
-    headers = [paragraph.text for section in updated.sections for paragraph in section.header.paragraphs]
-    footers = [paragraph.text for section in updated.sections for paragraph in section.footer.paragraphs]
+    headers = [
+        paragraph.text for section in updated.sections for paragraph in section.header.paragraphs
+    ]
+    footers = [
+        paragraph.text for section in updated.sections for paragraph in section.footer.paragraphs
+    ]
     assert headers == ["Top", "Top"]
     assert footers == ["Bottom", "Tail"]
 

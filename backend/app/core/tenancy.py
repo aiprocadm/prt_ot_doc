@@ -12,7 +12,9 @@ PUBLIC_PATH_PREFIXES = ("/healthz", "/readyz", "/api/v1/auth")
 
 
 def is_public_path(path: str) -> bool:
-    return path in {"/healthz", "/readyz"} or any(path.startswith(prefix) for prefix in PUBLIC_PATH_PREFIXES)
+    return path in {"/healthz", "/readyz"} or any(
+        path.startswith(prefix) for prefix in PUBLIC_PATH_PREFIXES
+    )
 
 
 def require_tenant(request: Request) -> str:
@@ -43,4 +45,3 @@ def require_tenant(request: Request) -> str:
     except ValueError:
         request.state.tenant_slug = raw_value.lower()
     return raw_value
-

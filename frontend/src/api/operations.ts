@@ -1,4 +1,5 @@
 import { apiClient } from "@/api/client";
+import { downloadBlob } from "@/utils/download";
 import { briefingsApi, type BriefingEntryDto, type BriefingJournalDto, type BriefingTemplateDto } from "@/api/briefings";
 import { opsApi, type CorrectiveActionDto, type InspectionDto, type PrescriptionDto, type PpeItemDto } from "@/api/ops";
 import type { PersonDto } from "@/types/dto/persons";
@@ -36,42 +37,6 @@ export type ContractDto = {
 
 
 
-export type ContractorRegistryDto = {
-  id: string;
-  name: string;
-  status: string;
-  company_id?: string | null;
-  contact_person?: string | null;
-  contact_phone?: string | null;
-};
-
-export type ContractorEmployeeDto = {
-  id: string;
-  contractor_id: string;
-  full_name: string;
-  position?: string | null;
-  access_status: string;
-  training_status: string;
-  medical_status: string;
-};
-
-export type ContractorIncidentDto = {
-  id: string;
-  contractor_id: string;
-  employee_id?: string | null;
-  incident_type: string;
-  severity: string;
-  status: string;
-  occurred_at: string;
-};
-
-export type ContractorComplianceSummaryDto = {
-  contractor_id?: string | null;
-  employees_total: number;
-  admission: Record<string, number>;
-  training: Record<string, number>;
-  medical: Record<string, number>;
-};
 export type TrainingProgramDto = {
   id: string;
   title?: string;
@@ -119,6 +84,53 @@ export type MedicalExamDto = {
   valid_until: string;
   created_at: string;
   updated_at: string;
+};
+
+export type ContingentRegisterRowDto = {
+  position_id: string;
+  position_name: string;
+  factors: { code: string; name: string }[];
+  headcount: number;
+  exam_kinds: string[];
+  periodicity_months?: number | null;
+};
+
+export type NamedListRowDto = {
+  person_id: string;
+  full_name: string;
+  position_name?: string | null;
+  department?: string | null;
+  factors: { code: string; name: string }[];
+  required_kinds: string[];
+  last_exam_date?: string | null;
+  next_due_date?: string | null;
+  status: string;
+};
+
+export type MedicalReferralDto = {
+  id: string;
+  person_id: string;
+  exam_kind: string;
+  due_at?: string | null;
+  status: "issued" | "scheduled" | "completed" | "cancelled";
+  medical_org_name?: string | null;
+  result_exam_id?: string | null;
+  is_overdue: boolean;
+};
+
+export type MedicalSuspensionDto = {
+  id: string;
+  person_id: string;
+  reason: "unfit" | "contraindication";
+  status: "active" | "lifted";
+  source_exam_id?: string | null;
+};
+
+export type MedicalSummaryDto = {
+  by_status: Record<string, number>;
+  total: number;
+  overdue_count: number;
+  suspended_count: number;
 };
 
 export type OutboxDto = { id: string; status: string; event_type: string; destination: string; attempts: number; created_at: string };
@@ -230,27 +242,6 @@ export type RoleWorkspaceSummaryDto = {
 };
 
 export const operationsApi = {
-  getContractorSnapshot: async () => {
-    const [registryResponse, employeesResponse, incidentsResponse, summaryResponse, companiesResponse] = await Promise.all([
-      apiClient.get<{ items: ContractorRegistryDto[]; total: number }>("/contractors/registry", { params: { limit: 100, offset: 0 } }),
-      apiClient.get<{ items: ContractorEmployeeDto[]; total: number }>("/contractors/employees"),
-      apiClient.get<{ items: ContractorIncidentDto[]; total: number }>("/contractors/incidents"),
-      apiClient.get<ContractorComplianceSummaryDto>("/contractors/compliance-summary"),
-      apiClient
-        .get<{ items: CompanyDto[]; total?: number }>("/companies", { params: { limit: 200, offset: 0 } })
-        .catch(() => ({ data: { items: [] as CompanyDto[] } }))
-    ]);
-    return {
-      companies: registryResponse.data.items ?? [],
-      hostCompanies: companiesResponse.data.items ?? [],
-      sites: [],
-      contracts: [],
-      employees: employeesResponse.data.items ?? [],
-      incidents: incidentsResponse.data.items ?? [],
-      complianceSummary: summaryResponse.data
-    };
-  },
-
   getReferenceSnapshot: async () => {
     const [npaResponse, ppeResponse, programsResponse, templatesResponse, briefingTemplates] = await Promise.all([
       apiClient.get<{ items: Array<{ id: string; code: string; title: string }> }>("/npa"),
@@ -303,6 +294,93 @@ export const operationsApi = {
       persons: personsResponse.data.items ?? [],
       tasks: tasksResponse.data.items ?? []
     };
+  },
+
+  getPsychiatricSnapshot: async () => {
+    const [typesResponse, contingentResponse] = await Promise.all([
+      apiClient.get<{ items: { id: string; code: string; name: string; interval_days: number }[]; total: number }>(
+        "/medical/psychiatric/activity-types",
+        { params: { limit: 200, offset: 0 } }
+      ),
+      apiClient.get<{ items: { person_id: string; exam_kind: string; status: string; due_at: string | null }[]; total: number }>(
+        "/medical/contingent",
+        { params: {} }
+      ),
+    ]);
+    return {
+      activityTypes: typesResponse.data.items ?? [],
+      contingent: (contingentResponse.data.items ?? []).filter((i) => i.exam_kind === "psychiatric"),
+    };
+  },
+
+  seedPsychiatricDefaults: async () => {
+    const response = await apiClient.post<{ count: number }>(
+      "/medical/psychiatric/activity-types/seed-defaults"
+    );
+    return response.data;
+  },
+
+  getMedicalOversightSnapshot: async () => {
+    const [summaryResponse, registerResponse, namedListResponse] = await Promise.all([
+      apiClient.get<MedicalSummaryDto>("/medical/summary"),
+      apiClient.get<{ items: ContingentRegisterRowDto[]; total: number }>("/medical/contingent/register"),
+      apiClient.get<{ items: NamedListRowDto[]; total: number }>("/medical/named-list")
+    ]);
+    return {
+      summary: summaryResponse.data,
+      register: registerResponse.data.items ?? [],
+      namedList: namedListResponse.data.items ?? []
+    };
+  },
+
+  downloadContingentRegisterPrint: async (fmt: "docx" | "pdf") => {
+    const { data } = await apiClient.get<Blob>("/medical/contingent/register/print", {
+      params: { format: fmt },
+      responseType: "blob"
+    });
+    downloadBlob(data, `contingent-register.${fmt}`);
+  },
+
+  downloadNamedListPrint: async (fmt: "docx" | "pdf") => {
+    const { data } = await apiClient.get<Blob>("/medical/named-list/print", {
+      params: { format: fmt },
+      responseType: "blob"
+    });
+    downloadBlob(data, `named-list.${fmt}`);
+  },
+
+  listMedicalReferrals: async (params?: { status?: string }) => {
+    const response = await apiClient.get<{ items: MedicalReferralDto[]; total: number }>("/medical/referrals", {
+      params: { limit: 100, offset: 0, ...(params?.status ? { status: params.status } : {}) }
+    });
+    return response.data.items ?? [];
+  },
+
+  createMedicalReferral: async (payload: { person_id: string; exam_kind: string; due_at?: string; medical_org_name?: string }) => {
+    const response = await apiClient.post<MedicalReferralDto>("/medical/referrals", payload);
+    return response.data;
+  },
+
+  transitionMedicalReferral: async (referralId: string, payload: { to: MedicalReferralDto["status"]; result_exam_id?: string }) => {
+    const response = await apiClient.post<MedicalReferralDto>(`/medical/referrals/${referralId}/transition`, payload);
+    return response.data;
+  },
+
+  generateMedicalReferrals: async () => {
+    const response = await apiClient.post<{ count: number }>("/medical/contingent/generate-referrals");
+    return response.data;
+  },
+
+  listMedicalSuspensions: async (params?: { status?: "active" }) => {
+    const response = await apiClient.get<{ items: MedicalSuspensionDto[]; total: number }>("/medical/suspensions", {
+      params: params?.status ? { status: params.status } : {}
+    });
+    return response.data.items ?? [];
+  },
+
+  liftMedicalSuspension: async (suspensionId: string) => {
+    const response = await apiClient.post<MedicalSuspensionDto>(`/medical/suspensions/${suspensionId}/lift`);
+    return response.data;
   },
 
   getFireSafetySnapshot: async () => {
@@ -409,7 +487,6 @@ export type InspectionWorkspaceSnapshot = Awaited<ReturnType<typeof operationsAp
 export type AdminSnapshot = Awaited<ReturnType<typeof operationsApi.getAdminSnapshot>>;
 export type MedicalSnapshot = Awaited<ReturnType<typeof operationsApi.getMedicalSnapshot>>;
 export type SettingsSnapshot = Awaited<ReturnType<typeof operationsApi.getSettingsSnapshot>>;
-export type ContractorSnapshot = Awaited<ReturnType<typeof operationsApi.getContractorSnapshot>>;
 export type ReferenceSnapshot = Awaited<ReturnType<typeof operationsApi.getReferenceSnapshot>>;
 export type ActivitiesSnapshot = Awaited<ReturnType<typeof operationsApi.getActivitiesSnapshot>>;
 export type FireSafetySnapshot = Awaited<ReturnType<typeof operationsApi.getFireSafetySnapshot>>;

@@ -39,6 +39,13 @@ describe("buildProtectedRouteGroups", () => {
   it("keeps a single guarded route entry per permission cluster", () => {
     const groups = buildProtectedRouteGroups();
 
-    expect(groups).toHaveLength(31);
+    // Each group is rendered with key={permission}; one guarded entry per
+    // permission cluster means those keys must be unique (no duplicated guard
+    // for the same permission). Asserting uniqueness is faithful to that intent
+    // and does not break when new distinct clusters are added.
+    const keys = groups.map((group) => group.key);
+
+    expect(keys).not.toContain(null);
+    expect(new Set(keys).size).toBe(keys.length);
   });
 });

@@ -425,15 +425,16 @@ class PipelineOrchestrator:
         if isinstance(session_info, dict):
             session_tenant_id = str(session_info.get("tenant_id") or "").strip() or None
             session_tenant_slug = (
-                str(session_info.get("tenant_slug") or session_info.get("tenant") or "").strip().lower() or None
+                str(session_info.get("tenant_slug") or session_info.get("tenant") or "")
+                .strip()
+                .lower()
+                or None
             )
             if session_tenant_id == tenant_id and session_tenant_slug:
                 return session_tenant_slug
 
         tenant_slug = (
-            await self.session.execute(
-                select(Tenant.slug).where(Tenant.id == tenant_id).limit(1)
-            )
+            await self.session.execute(select(Tenant.slug).where(Tenant.id == tenant_id).limit(1))
         ).scalar_one_or_none()
         if tenant_slug:
             return str(tenant_slug).strip().lower()
@@ -525,7 +526,9 @@ class PipelineOrchestrator:
         try:
             quota = (
                 await self.session.execute(
-                    select(TenantQuota.max_parallel_jobs).where(TenantQuota.tenant_id == job.tenant_id)
+                    select(TenantQuota.max_parallel_jobs).where(
+                        TenantQuota.tenant_id == job.tenant_id
+                    )
                 )
             ).scalar_one_or_none()
         except SQLAlchemyError:
@@ -690,7 +693,9 @@ class PipelineOrchestrator:
         if step_key == "quality_gate":
             return quality_gate_step_handler
         if step_key in {"sign", "verify_signature"}:
-            return lambda *, job, step: signature_step_handler(job=job, step=step, step_key=step_key)
+            return lambda *, job, step: signature_step_handler(
+                job=job, step=step, step_key=step_key
+            )
         if step_key == "index_file_content":
             return index_projection_step_handler
         if step_key in INTERNAL_PROJECTION_STEPS:

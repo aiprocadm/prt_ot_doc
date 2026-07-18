@@ -220,7 +220,9 @@ async def test_tenant_middleware_requires_header_for_non_docs_openapi_suffix_pat
 
 
 @pytest.mark.asyncio
-async def test_tenant_middleware_jwt_roles_ignore_spoofed_x_roles(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_tenant_middleware_jwt_roles_ignore_spoofed_x_roles(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """При Bearer-токене роли в TenantContext берутся только из JWT, не из x-roles."""
     middleware = TenantMiddleware(_dummy_app)
     captured: dict[str, tuple[str, ...]] = {}

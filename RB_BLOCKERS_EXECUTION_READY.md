@@ -176,8 +176,8 @@ Tests that run with deterministic bootstrap users:
 - ✅ Backend access matrix enforcement (7 security rules)
 
 Bootstrap credentials (generated in CI):
-- Owner: `e2e.owner.demo@example.local` / `OwnerDemo123!`
-- Limited: `e2e.student.demo@example.local` / `StudentDemo123!`
+- Owner: `e2e.owner.demo@example.com` / `OwnerDemo123!`
+- Limited: `e2e.student.demo@example.com` / `StudentDemo123!`
 
 Run pattern: `npm run e2e -- --grep "credential-based flows"`
 

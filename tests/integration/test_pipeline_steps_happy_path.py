@@ -17,7 +17,9 @@ async def test_pipeline_run_happy_path_and_actions(async_client, make_auth_heade
         "is_active": True,
     }
     tenant_headers = {**dict(async_client.headers), **await make_auth_headers()}
-    created = await async_client.post("/api/v1/pipelines/profiles", json=profile_payload, headers=tenant_headers)
+    created = await async_client.post(
+        "/api/v1/pipelines/profiles", json=profile_payload, headers=tenant_headers
+    )
     assert created.status_code == 201
 
     run = await async_client.post(
@@ -33,6 +35,8 @@ async def test_pipeline_run_happy_path_and_actions(async_client, make_auth_heade
     assert details.json()["run_id"] == run_id
     assert isinstance(details.json()["step_runs"], list)
 
-    canceled = await async_client.post(f"/api/v1/pipelines/runs/{run_id}:cancel", headers=tenant_headers)
+    canceled = await async_client.post(
+        f"/api/v1/pipelines/runs/{run_id}:cancel", headers=tenant_headers
+    )
     assert canceled.status_code == 200
     assert canceled.json()["status"] == "canceled"

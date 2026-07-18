@@ -288,9 +288,7 @@ class Settings(BaseSettings):
     shared_schema: str = Field("public", alias="SHARED_SCHEMA")
     runtime_schema_bootstrap: bool = Field(False, alias="RUNTIME_SCHEMA_BOOTSTRAP")
 
-    storage_backend: Literal["local", "s3", "memory"] = Field(
-        "memory", alias="STORAGE_BACKEND"
-    )
+    storage_backend: Literal["local", "s3", "memory"] = Field("memory", alias="STORAGE_BACKEND")
     storage_root: str = Field("./.local_storage", alias="STORAGE_ROOT")
     s3_backend: Literal["memory", "minio", "local"] = Field("memory", alias="S3_BACKEND")
     s3_endpoint: str = Field("http://minio:9000", alias="S3_ENDPOINT")
@@ -312,6 +310,21 @@ class Settings(BaseSettings):
     admin_email: str = Field("admin@example.com", alias="ADMIN_EMAIL")
     admin_password: str = Field("", alias="ADMIN_PASSWORD")
     admin_tenant: str = Field("public", alias="ADMIN_TENANT")
+    webhook_notification_url: str | None = Field(None, alias="WEBHOOK_NOTIFICATION_URL")
+    # RC-011 notification delivery (feature-flagged; default OFF -> no external send).
+    notifications_delivery_enabled: bool = Field(
+        False, alias="NOTIFICATIONS_DELIVERY_ENABLED"
+    )
+    notifications_max_delivery_attempts: int = Field(
+        3, alias="NOTIFICATIONS_MAX_DELIVERY_ATTEMPTS"
+    )
+    smtp_host: str = Field("", alias="SMTP_HOST")
+    smtp_port: int = Field(587, alias="SMTP_PORT")
+    smtp_username: str = Field("", alias="SMTP_USERNAME")
+    smtp_password: str = Field("", alias="SMTP_PASSWORD")
+    smtp_from: str = Field("", alias="SMTP_FROM")
+    smtp_use_tls: bool = Field(True, alias="SMTP_USE_TLS")
+    telegram_bot_token: str = Field("", alias="TELEGRAM_BOT_TOKEN")
     demo_bootstrap: bool = Field(False, alias="DEMO_BOOTSTRAP")
     demo_tenant_id: str = Field("demo", alias="DEMO_TENANT_ID")
     demo_company_name: str = Field("ООО Демо Строй", alias="DEMO_COMPANY_NAME")
@@ -338,9 +351,8 @@ class Settings(BaseSettings):
     pdf_worker_concurrency: int = Field(2, alias="PDF_WORKER_CONCURRENCY")
     doc_pipeline_enable_qr: bool = Field(False, alias="DOC_PIPELINE_ENABLE_QR")
     doc_pipeline_enable_watermark: bool = Field(False, alias="DOC_PIPELINE_ENABLE_WATERMARK")
-    doc_pipeline_watermark_text: str = Field(
-        "CONFIDENTIAL", alias="DOC_PIPELINE_WATERMARK_TEXT"
-    )
+    doc_pipeline_letterhead_auto: bool = Field(False, alias="DOC_PIPELINE_LETTERHEAD_AUTO")
+    doc_pipeline_watermark_text: str = Field("CONFIDENTIAL", alias="DOC_PIPELINE_WATERMARK_TEXT")
 
     redis_url: str = Field("redis://localhost:6379/0", alias="REDIS_URL")
     redis_result_url_env: str | None = Field(None, alias="REDIS_RESULT_URL")
@@ -368,15 +380,11 @@ class Settings(BaseSettings):
     webhook_document_signed_urls: CsvUrlList = Field(
         default_factory=list, alias="WEBHOOK_URLS_DOCUMENT_SIGNED"
     )
-    webhook_signed_urls: CsvUrlList = Field(
-        default_factory=list, alias="WEBHOOK_URLS_SIGNED"
-    )
+    webhook_signed_urls: CsvUrlList = Field(default_factory=list, alias="WEBHOOK_URLS_SIGNED")
     webhook_document_exported_urls: CsvUrlList = Field(
         default_factory=list, alias="WEBHOOK_URLS_DOCUMENT_EXPORTED"
     )
-    webhook_exported_urls: CsvUrlList = Field(
-        default_factory=list, alias="WEBHOOK_URLS_EXPORTED"
-    )
+    webhook_exported_urls: CsvUrlList = Field(default_factory=list, alias="WEBHOOK_URLS_EXPORTED")
     webhook_risk_assessed_urls: CsvUrlList = Field(
         default_factory=list, alias="WEBHOOK_URLS_RISK_ASSESSED"
     )
@@ -409,9 +417,7 @@ class Settings(BaseSettings):
     rate_limit_storage_uri: str = Field("memory://", alias="RATE_LIMIT_STORAGE_URI")
     rate_limit_login_per_identity: str = Field("5/minute", alias="RATE_LIMIT_LOGIN_PER_IDENTITY")
     rate_limit_upload_per_tenant: str = Field("10/minute", alias="RATE_LIMIT_UPLOAD_PER_TENANT")
-    rate_limit_generate_per_tenant: str = Field(
-        "20/minute", alias="RATE_LIMIT_GENERATE_PER_TENANT"
-    )
+    rate_limit_generate_per_tenant: str = Field("20/minute", alias="RATE_LIMIT_GENERATE_PER_TENANT")
 
     use_1c_integration: bool = Field(False, alias="USE_1C_INTEGRATION")
     use_edo_integration: bool = Field(False, alias="USE_EDO_INTEGRATION")
@@ -448,9 +454,7 @@ class Settings(BaseSettings):
     )
 
     clamav_queue_url: str = Field("memory://", alias="CLAMAV_QUEUE_URL")
-    clamav_quarantine_queue: str = Field(
-        "clamav.quarantine", alias="CLAMAV_QUARANTINE_QUEUE"
-    )
+    clamav_quarantine_queue: str = Field("clamav.quarantine", alias="CLAMAV_QUARANTINE_QUEUE")
     clamav_scan_queue: str = Field("clamav.scan", alias="CLAMAV_SCAN_QUEUE")
     clamav_host: str = Field("clamav", alias="CLAMAV_HOST")
     clamav_port: int = Field(3310, alias="CLAMAV_PORT")
@@ -464,9 +468,7 @@ class Settings(BaseSettings):
     health_check_comprehensive_enabled: bool = Field(
         False, alias="HEALTH_CHECK_COMPREHENSIVE_ENABLED"
     )
-    health_check_cache_ttl_seconds: int = Field(
-        60, alias="HEALTH_CHECK_CACHE_TTL_SECONDS"
-    )
+    health_check_cache_ttl_seconds: int = Field(60, alias="HEALTH_CHECK_CACHE_TTL_SECONDS")
     health_check_timeout_per_check_seconds: float = Field(
         5.0, alias="HEALTH_CHECK_TIMEOUT_PER_CHECK_SECONDS"
     )
@@ -855,8 +857,7 @@ def bootstrap(role: Literal["api", "worker"]) -> Settings:
     missing = [name for name, value in required_values.items() if not str(value).strip()]
     if missing:
         raise SettingsError(
-            "Missing required environment variables for "
-            f"{role}: {', '.join(sorted(missing))}"
+            "Missing required environment variables for " f"{role}: {', '.join(sorted(missing))}"
         )
     configure_runtime_locale(
         locale_name=settings.application.default_locale,

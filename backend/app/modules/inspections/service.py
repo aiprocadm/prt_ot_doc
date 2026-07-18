@@ -22,7 +22,9 @@ class InspectionService:
         ]
 
     @staticmethod
-    def can_close(*, has_blocking_open_items: bool, policy_requires_resolution: bool = True) -> bool:
+    def can_close(
+        *, has_blocking_open_items: bool, policy_requires_resolution: bool = True
+    ) -> bool:
         if not policy_requires_resolution:
             return True
         return not has_blocking_open_items

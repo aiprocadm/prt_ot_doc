@@ -159,6 +159,9 @@ RESOURCE_PERMISSIONS: dict[str, set[str]] = {
     "contractors": {"read", "list", "create", "update", "delete"},
     "reports": {"read", "list", "export", "download"},
     "admin": {"read", "list", "create", "update", "delete"},
+    "data_quality": {"read"},
+    "employee_card": {"read"},
+    "calendar": {"read"},
 }
 
 _ROLE_FULL = {
@@ -306,6 +309,7 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "risk_maps:list",
         "incidents:read",
         "incidents:list",
+        "calendar:read",
     },
     "hr": {
         "documents:read",
@@ -314,6 +318,9 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "trainings:list",
         "trainings:create",
         "trainings:update",
+        "data_quality:read",
+        "employee_card:read",
+        "calendar:read",
     },
     "accountant": {"reports:read", "reports:list", "reports:export"},
     "line_manager": {
@@ -323,6 +330,9 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "incidents:read",
         "inspections:read",
         "inspections:list",
+        "data_quality:read",
+        "employee_card:read",
+        "calendar:read",
     },
     "client": {
         "documents:read",
@@ -433,6 +443,18 @@ class PolicyEngine:
         normalized_action = self._ACTION_ALIASES.get(action.lower(), action.lower())
         normalized_resource = resource.lower()
         permission_code = f"{normalized_resource}:{normalized_action}"
+        ctx = ctx or {}
+
+        # Cross-tenant isolation: a tenant-scoped ctx must match the actor's
+        # tenant — even for owner/admin. Defense-in-depth alongside the request
+        # middleware, so a forged/mismatched tenant scope can never be granted.
+        ctx_tenant = ctx.get("tenant_id")
+        if ctx_tenant and actor.tenant_id and str(ctx_tenant) != str(actor.tenant_id):
+            return Decision(
+                False,
+                "cross_tenant_denied",
+                audit_meta={"actor_tenant": str(actor.tenant_id), "ctx_tenant": str(ctx_tenant)},
+            )
 
         # Check module-level access first
         module = self._RESOURCE_TO_MODULE.get(normalized_resource)
@@ -442,8 +464,21 @@ class PolicyEngine:
                 allowed_modules.update(MODULE_PERMISSIONS.get(role, set()))
             if module not in allowed_modules:
                 return Decision(
-                    False, "module_access_denied", audit_meta={"module": module, "resource": normalized_resource}
+                    False,
+                    "module_access_denied",
+                    audit_meta={"module": module, "resource": normalized_resource},
                 )
+
+        # Owner/admin are super-users: once module + tenant checks pass they
+        # bypass the resource-permission table (which may be intentionally
+        # incomplete). Must precede the matched_roles gate so a missing
+        # ROLE_PERMISSIONS entry never denies an owner/admin.
+        if {"owner", "admin"}.intersection(actor.roles):
+            return Decision(
+                True,
+                "explicit_allow",
+                matched_rules=("rbac", "admin_bypass"),
+            )
 
         matched_roles = tuple(
             role for role in actor.roles if permission_code in ROLE_PERMISSIONS.get(role, set())
@@ -454,15 +489,7 @@ class PolicyEngine:
         if "auditor_ro" in actor.roles and normalized_action not in {"read", "list"}:
             return Decision(False, "auditor_read_only", matched_roles=matched_roles)
 
-        if {"owner", "admin"}.intersection(actor.roles):
-            return Decision(
-                True,
-                "explicit_allow",
-                matched_roles=matched_roles,
-                matched_rules=("rbac", "admin_bypass"),
-            )
-
-        if not self._scope_check(actor=actor, obj=obj, ctx=ctx or {}):
+        if not self._scope_check(actor=actor, obj=obj, ctx=ctx):
             return Decision(
                 False, "scope_mismatch", matched_roles=matched_roles, matched_rules=("scope_check",)
             )

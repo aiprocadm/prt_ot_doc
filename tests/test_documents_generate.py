@@ -6,15 +6,12 @@ from io import BytesIO
 import pytest
 from docx import Document as DocxDocument
 from httpx import AsyncClient
-
-mock_aws = pytest.importorskip("moto").mock_aws
 from sqlalchemy import select
 
 import app.tasks._core as task_core
 from app.core.config import get_settings
 from app.core.security import issue_access_token
 from app.db.session import AsyncSessionLocal
-from app.domains.files import s3
 from app.models.document import (
     Document as DocumentModel,
 )
@@ -36,8 +33,14 @@ from app.models.models import (
     TemplateVersionStatus,
     Tenant,
 )
+from app.modules.files import s3
 from app.tasks import celery_app
 from tests.utils.factories import TestDataFactory
+
+# moto is an optional test dependency; skip the whole module when it is absent.
+# Placed after imports (which only need always-present core deps) to keep the
+# import block at the top of the file.
+mock_aws = pytest.importorskip("moto").mock_aws
 
 DOCX_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
@@ -90,6 +93,7 @@ def override_task_session_scope(monkeypatch: pytest.MonkeyPatch, sessionmaker) -
     monkeypatch.setattr(task_core, "session_scope", _scope)
     monkeypatch.setattr(task_core, "ensure_tenant_schema", lambda slug: None)
 
+
 def _build_template_bytes() -> bytes:
     doc = DocxDocument()
     doc.add_paragraph("Hello {{ name }}!")
@@ -134,7 +138,9 @@ async def test_document_generation_flow(
         person_id = person.id
 
     tenant_id = str(tenant.id)
-    async with AsyncSessionLocal(tenant="public", include_public=False, create_schema=False) as public_session:
+    async with AsyncSessionLocal(
+        tenant="public", include_public=False, create_schema=False
+    ) as public_session:
         public_tenant = (
             await public_session.execute(select(Tenant.id).where(Tenant.slug == tenant.slug))
         ).scalar_one_or_none()
@@ -205,10 +211,10 @@ async def test_document_generation_flow(
         versions = (await session.execute(select(DocumentVersion))).scalars().all()
         runs = (await session.execute(select(PipelineRun))).scalars().all()
         outbox_events = (
-            await session.execute(
-                select(Outbox).where(Outbox.event_type == "DocumentGenerated")
-            )
-        ).scalars().all()
+            (await session.execute(select(Outbox).where(Outbox.event_type == "DocumentGenerated")))
+            .scalars()
+            .all()
+        )
 
     assert len(documents) == 1
     assert len(versions) == 1
@@ -306,7 +312,6 @@ async def test_document_generation_flow(
         headers=id_headers,
     )
     assert third.status_code == 202, third.text
-    third_body = third.json()
 
 
 @pytest.mark.asyncio()
@@ -336,14 +341,16 @@ async def test_document_batch_generation_csv(
         company_id = company.id
 
     tenant_id = str(tenant.id)
-    async with AsyncSessionLocal(tenant="public", include_public=False, create_schema=False) as public_session:
+    async with AsyncSessionLocal(
+        tenant="public", include_public=False, create_schema=False
+    ) as public_session:
         public_tenant = (
             await public_session.execute(select(Tenant.id).where(Tenant.slug == tenant.slug))
         ).scalar_one_or_none()
         if public_tenant is not None:
             tenant_id = str(public_tenant)
 
-    login = await async_client.post(
+    await async_client.post(
         "/api/v1/auth/login",
         json={"email": "batch@example.com", "password": "secret123"},
         headers={"x-tenant": str(tenant.id)},
@@ -459,19 +466,31 @@ async def test_template_resolve_prefers_site_scope(
             tenant_id=tenant.id,
             name="Tenant Order",
             code="order-template",
-            metadata_json={"scope": {"level": "tenant"}, "case_types": ["employment"], "template_type": "order"},
+            metadata_json={
+                "scope": {"level": "tenant"},
+                "case_types": ["employment"],
+                "template_type": "order",
+            },
         )
         company_template = Template(
             tenant_id=tenant.id,
             name="Company Order",
             code="order-template-company",
-            metadata_json={"scope": {"level": "company", "company_id": company.id}, "case_types": ["employment"], "template_type": "order"},
+            metadata_json={
+                "scope": {"level": "company", "company_id": company.id},
+                "case_types": ["employment"],
+                "template_type": "order",
+            },
         )
         site_template = Template(
             tenant_id=tenant.id,
             name="Site Order",
             code="order-template-site",
-            metadata_json={"scope": {"level": "site", "company_id": company.id, "site_id": site.id}, "case_types": ["employment"], "template_type": "order"},
+            metadata_json={
+                "scope": {"level": "site", "company_id": company.id, "site_id": site.id},
+                "case_types": ["employment"],
+                "template_type": "order",
+            },
         )
         session.add_all([tenant_template, company_template, site_template])
         await session.flush()

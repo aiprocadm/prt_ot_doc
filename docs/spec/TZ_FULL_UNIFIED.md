@@ -503,6 +503,9 @@
 - vNext Phase 2 (Operational dashboard / Health checks) — backend `done`, frontend `pending`.
 - vNext Phase 3 (Data Quality + Unified Employee Card) — DQ backend MVP `done` (10 правил движка), DQ Dashboard frontend и Employee Card aggregate — `pending`.
 - vNext Phases 4–10 — `planned` (см. §D).
+- vNext Phase 3 (Data Quality + Unified Employee Card) — DQ backend MVP `done` (10 правил), DQ Dashboard frontend `done`, Employee Card backend aggregate + UI + Documents/Briefings/Deadlines секции `done` (Sessions 19/20/21 — `GET /api/v1/employees/{id}` + `EmployeeCardPage.tsx` 11 табов).
+- vNext Phase 4 (Calendar & Search) — **COMPLETE.** Smart Calendar Task 4.1 `done` (Sessions 22-30 — backend aggregator + UI day/week/month/year/list + ICS export RFC 5545 + plan/fact comparison + SLA tracking + resource load heatmap + saved per-user views); Universal Search Task 4.2 `done` (Sessions 31-35 — pre-existing backend FTS index + CMD+K palette с entity results grouped by 24 types + 7 type-to-execute commands + ARIA listbox keyboard nav ↑↓/Enter/Home/End + saved searches в палитре с lazy session-cache (S34) + client-side recent-entities tracking с 30-day TTL + dedup (S35) + backend `SearchService` index accuracy tests 35 cases / 6 classes (S33)). Optional polish (non-acceptance): score-based unified ranking, per-tenant relevance tuning, i18n executable commands.
+- vNext Phases 5–10 — `planned` (см. §D).
 
 ---
 
@@ -515,13 +518,13 @@
 | Phase 0 — Release Blockers | P0 | TZ-1.1 baseline re-verification, RC-001..006 | 🔴 deferred |
 | Phase 1 — Architectural Foundation | P1 | Role-based workspaces / RBAC module / Tenant isolation audit | ✅ complete |
 | Phase 2 — Operational Dashboard | P1 | Command Center / Health Check Engine | 🟡 backend done, frontend pending |
-| Phase 3 — Data Quality & Master Data | P1 | DQ Layer / Unified Employee Card / Site Card | 🟡 DQ backend done; frontend и employee card pending |
-| Phase 4 — Calendar & Search | P2 | Smart Calendar / Universal Search / Command Bar | 📋 planned |
-| Phase 5 — Document Factory Hardening | P2 | Template lint / Compare / Header-footer / Replace edge cases | 📋 planned |
-| Phase 6 — Integration & Webhooks | P2 | Webhook delivery / Public API hardening / Импорт | 📋 planned |
-| Phase 7 — Mobile & Field-Ready | P2 | PWA hardening / Offline sync / Field workflows / Kiosk | 📋 planned |
-| Phase 8 — Analytics & Reporting | P3 | Operational + Management dashboards / Report builder / Product analytics | 📋 planned |
-| Phase 9 — Performance & Scale | P3 | Query optimization / Partitioning / Caching | 📋 planned |
+| Phase 3 — Data Quality & Master Data | P1 | DQ Layer / Unified Employee Card / Site Card | 🟢 DQ + Employee Card (backend + UI + Documents/Briefings/Deadlines) done; Site Card pending |
+| Phase 4 — Calendar & Search | P2 | Smart Calendar / Universal Search / Command Bar | ✅ COMPLETE — 4.1 Smart Calendar 100% done (Sessions 22-30); 4.2 Universal Search 100% done (Sessions 31-35, CMD+K palette + keyboard nav + saved-searches + recent-entities + backend test coverage); optional polish (non-acceptance): score-based ranking, per-tenant relevance tuning, i18n executable commands |
+| Phase 5 — Document Factory Hardening | P2 | Template lint / Compare / Header-footer / Replace edge cases | ✅ COMPLETE (Sessions 36-40: linter + inspector + audit + preview parity; 50 replace + 33 header/footer tests) |
+| Phase 6 — Integration & Webhooks | P2 | Webhook delivery / Public API hardening / Импорт | ✅ COMPLETE (Session 41 — webhook CRUD pin + 28 tests; Session 42 — public API pin + 24 tests) |
+| Phase 7 — Mobile & Field-Ready | P2 | PWA hardening / Offline sync / Field workflows / Kiosk | 🟡 7.1 PWA sync pinned Session 43 — 28 tests; 7.2 field UX frontend-only deferred |
+| Phase 8 — Analytics & Reporting | P3 | Operational + Management dashboards / Report builder / Product analytics | ✅ COMPLETE (Session 44 — 34 analytics tests; Session 45 — 26 audit-API tests) |
+| Phase 9 — Performance & Scale | P3 | Query optimization / Partitioning / Caching | 🟡 9.1 query benchmarks pinned Session 46 (24 cases); 9.2 HTTP cache (ETag) — Sessions 47-49 closed 7/7 main list endpoints (55 tests); S50 shared `compute_list_etag` helper + 17 unit tests; S51 added ppe/items, ppe/issues, prescriptions (16); S52 added briefings/{templates,journals,entries} + training/courses (15); S53 added medical/exams + departments (13) — **16 list endpoints carry ETag, 116 contract tests total**; remaining list endpoints + service-level Redis cache + Cache-Control uniformity audit + slow-query identification + date partitioning remain follow-ups |
 | Phase 10 — Enterprise Features | P3 | SSO/SAML / White-label / I18n / CRM / AI Copilot / Verticals (ПБ/ПромБез/Экология/ГО-ЧС/Видеоналитика) | 📋 planned |
 
 **Правило выбора задачи:** если открыт MVP-пункт со статусом `partial`/`missing` — он первичен; иначе — следующий пункт текущей фазы плана; в любом случае — соблюдение §E.

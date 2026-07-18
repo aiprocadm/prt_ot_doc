@@ -151,8 +151,10 @@ def compute_document_readiness(document: Document) -> DocumentReadinessSnapshot:
 
     uniq_actions = list(dict.fromkeys(actions))
 
-    template_ok = bool(document.template_version_id) and tv is not None and (
-        tv.status not in _UNUSABLE_TEMPLATE_STATUSES
+    template_ok = (
+        bool(document.template_version_id)
+        and tv is not None
+        and (tv.status not in _UNUSABLE_TEMPLATE_STATUSES)
     )
     pdf_hint = False
     if latest and latest.file_key:

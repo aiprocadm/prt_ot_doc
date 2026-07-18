@@ -27,8 +27,8 @@ const ClientPortalDocumentsPage = () => {
           <CardHeader><CardTitle>Пакеты</CardTitle></CardHeader>
           <CardContent className="space-y-2">
             {!loading && !error ? items.map((item) => (
-              <button key={item.id} className="w-full rounded-lg border p-3 text-left text-sm hover:bg-muted" onClick={() => void selectRun(item.id)}>
-                <div className="font-medium">{item.id}</div>
+              <button key={item.id} className="w-full rounded-lg border p-3 text-left text-sm hover:bg-muted" onClick={() => void selectRun(item.package_id ?? item.id)}>
+                <div className="font-medium">{item.package_id ?? item.id}</div>
                 <div className="text-muted-foreground">{item.started_at ? formatDate(item.started_at) : "Дата запуска недоступна"}</div>
               </button>
             )) : null}

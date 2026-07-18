@@ -18,11 +18,11 @@ from app.models.obligations import Task, TaskPriority, TaskStatus
 
 
 @pytest.mark.anyio
-async def test_task_status_endpoint(async_client: AsyncClient, sessionmaker, make_auth_headers) -> None:
+async def test_task_status_endpoint(
+    async_client: AsyncClient, sessionmaker, make_auth_headers
+) -> None:
     async with sessionmaker() as session:
-        tenant = (
-            await session.execute(select(Tenant).where(Tenant.slug == "test"))
-        ).scalar_one()
+        tenant = (await session.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()
         session.info["tenant"] = tenant.slug
 
         template = Template(
@@ -72,7 +72,9 @@ async def test_task_status_endpoint(async_client: AsyncClient, sessionmaker, mak
 
 
 @pytest.mark.anyio
-async def test_obligation_task_get_by_id_roundtrip(async_client: AsyncClient, make_auth_headers) -> None:
+async def test_obligation_task_get_by_id_roundtrip(
+    async_client: AsyncClient, make_auth_headers
+) -> None:
     headers = await make_auth_headers()
     created = await async_client.post(
         "/api/v1/tasks",
@@ -89,7 +91,9 @@ async def test_obligation_task_get_by_id_roundtrip(async_client: AsyncClient, ma
 
 
 @pytest.mark.anyio
-async def test_obligation_task_get_unknown_returns_code(async_client: AsyncClient, make_auth_headers) -> None:
+async def test_obligation_task_get_unknown_returns_code(
+    async_client: AsyncClient, make_auth_headers
+) -> None:
     headers = await make_auth_headers()
     response = await async_client.get(f"/api/v1/tasks/{uuid.uuid4()}", headers=headers)
     assert response.status_code == 404

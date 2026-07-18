@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 
 import { opsApi, type PpeIssueDto, type PpeItemDto } from "@/api/ops";
@@ -18,6 +18,7 @@ import { formatDate } from "@/utils/datetime";
 
 const PpePage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
   const [issues, setIssues] = useState<PpeIssueDto[]>([]);
@@ -133,6 +134,11 @@ const PpePage = () => {
             <option value="ready">Актуальные</option>
             <option value="draft">Без активных выдач</option>
           </select>
+          <Can permission={PERMISSIONS.PPE_ISSUE}>
+            <Button variant="outline" onClick={() => navigate("/ppe/issue")}>
+              Мобильная выдача
+            </Button>
+          </Can>
           <Can
             permission={PERMISSIONS.PPE_ISSUE}
             fallback={<Button disabled title="Недостаточно прав для выдачи СИЗ">Быстрая выдача</Button>}

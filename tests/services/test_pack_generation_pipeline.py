@@ -4,11 +4,6 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.domains.packs.definitions import (
-    PACK_CODE_INCIDENT,
-    PACK_CODE_INSPECTION_PREP,
-    PACK_CODE_SITE_ACCESS,
-)
 from app.models.models import (
     Company,
     DocumentPack,
@@ -18,6 +13,11 @@ from app.models.models import (
     Person,
     TemplateVersion,
     TemplateVersionStatus,
+)
+from app.modules.packs.definitions import (
+    PACK_CODE_INCIDENT,
+    PACK_CODE_INSPECTION_PREP,
+    PACK_CODE_SITE_ACCESS,
 )
 from app.services.package_pipeline import PackGenerationPipeline
 from tests.utils.factories import TestDataFactory
@@ -50,7 +50,9 @@ async def test_pack_pipeline_plans_and_renders(
     async with sessionmaker() as session:
         tenant = await data_factory.ensure_tenant(session=session)
         company: Company = await data_factory.create_company(tenant=tenant, session=session)
-        person: Person = await data_factory.create_person(tenant=tenant, company=company, session=session)
+        person: Person = await data_factory.create_person(
+            tenant=tenant, company=company, session=session
+        )
         template = await data_factory.create_template(tenant=tenant, session=session)
         version = TemplateVersion(
             tenant_id=tenant.id,

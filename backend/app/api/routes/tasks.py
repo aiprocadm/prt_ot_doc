@@ -1,7 +1,7 @@
 """Task endpoints for pipeline status and obligations."""
+
 from __future__ import annotations
 
-import hashlib
 from datetime import datetime, timezone
 from uuid import UUID
 
@@ -11,10 +11,15 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.api.helpers.etag import (
+    apply_etag_response_headers,
+    build_not_modified_headers,
+    compute_list_etag,
+)
 from app.core.errors import api_problem_detail
 from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
-from app.models.models import PipelineRun, Tenant
+from app.models.models import PipelineRun, Tenant, User
 from app.models.obligations import Task, TaskPriority, TaskStatus
 from app.schemas.task import (
     TaskCreate,
@@ -38,9 +43,7 @@ def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> UUID | N
     return getattr(tenant, "id", None)
 
 
-TaskAccess = Depends(
-    abac(_tenant_resource_id, required_roles=["admin"], action="inspect tasks")
-)
+TaskAccess = Depends(abac(_tenant_resource_id, required_roles=["admin"], action="inspect tasks"))
 
 _TASK_READ_ROLES = ["admin", "owner", "line_manager", "hr", "worker"]
 _TASK_WRITE_ROLES = ["admin", "owner", "line_manager", "hr"]
@@ -57,15 +60,32 @@ TaskWriteAccess = Depends(
 def _task_unprocessable(message: str) -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-        detail=api_problem_detail(code="TASK_VALIDATION_ERROR", message=message, error_type="tasks"),
+        detail=api_problem_detail(
+            code="TASK_VALIDATION_ERROR", message=message, error_type="tasks"
+        ),
     )
 
 
-def _task_not_found(*, code: str = "TASK_NOT_FOUND", message: str = "Task not found") -> HTTPException:
+def _task_not_found(
+    *, code: str = "TASK_NOT_FOUND", message: str = "Task not found"
+) -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_404_NOT_FOUND,
         detail=api_problem_detail(code=code, message=message, error_type="tasks"),
     )
+
+
+async def _ensure_assignee_in_tenant(
+    session: AsyncSession, tenant_id: UUID | str, assignee_id: str
+) -> None:
+    """user.id глобален — без проверки тенанта чужой UUID утёк бы через joined Task.assignee."""
+    stmt = select(User.id).where(
+        User.id == assignee_id,
+        User.tenant_id == tenant_id,
+        User.deleted_at.is_(None),
+    )
+    if (await session.execute(stmt)).scalar_one_or_none() is None:
+        raise _task_unprocessable("assignee_id must reference a user of the current tenant")
 
 
 def _normalize_meta_value(value):
@@ -104,9 +124,7 @@ async def get_pipeline_run_status(
         outputs = dict(run.outputs or {})
         if outputs:
             metadata.setdefault("outputs", outputs)
-        pipeline_status = (
-            run.status.value if hasattr(run.status, "value") else str(run.status)
-        )
+        pipeline_status = run.status.value if hasattr(run.status, "value") else str(run.status)
         metadata.setdefault("pipeline_status", pipeline_status)
         raw_document_id = metadata.get("document_id") or outputs.get("document_id")
         document_id = raw_document_id if isinstance(raw_document_id, str) else None
@@ -143,7 +161,9 @@ async def get_pipeline_run_status(
 
     if result_payload is not None:
         task_tenant = result_payload.get("tenant")
-        if task_tenant is not None and (not isinstance(task_tenant, str) or task_tenant != tenant.slug):
+        if task_tenant is not None and (
+            not isinstance(task_tenant, str) or task_tenant != tenant.slug
+        ):
             raise _task_not_found(code="PIPELINE_RUN_NOT_FOUND")
 
     if status_value is None:
@@ -203,25 +223,6 @@ def _task_read(task: Task, now: datetime) -> TaskRead:
     )
 
 
-def _tasks_etag(
-    *,
-    tenant_id: str,
-    page: int,
-    page_size: int,
-    total: int,
-    items: list[TaskRead],
-) -> str:
-    payload = [
-        f"tenant:{tenant_id}",
-        f"page:{page}",
-        f"page_size:{page_size}",
-        f"total:{total}",
-        "|".join(f"{item.id}:{item.updated_at.isoformat()}" for item in items),
-    ]
-    digest = hashlib.sha256("::".join(payload).encode("utf-8")).hexdigest()
-    return f'"{digest}"'
-
-
 @router.get("", response_model=TaskListResponse)
 async def list_tasks(
     request: Request,
@@ -270,16 +271,17 @@ async def list_tasks(
     tasks = list((await session.execute(stmt)).scalars().all())
     total = await session.scalar(total_stmt)
     items = [_task_read(task, now) for task in tasks]
-    etag = _tasks_etag(
+    etag = compute_list_etag(
         tenant_id=str(tenant.id),
-        page=page,
-        page_size=page_size,
-        total=int(total or 0),
         items=items,
+        scalars=[("page", page), ("page_size", page_size), ("total", int(total or 0))],
     )
-    response.headers["ETag"] = etag
+    apply_etag_response_headers(response, etag)
     if request.headers.get("if-none-match") == etag:
-        return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers={"ETag": etag})
+        return Response(
+            status_code=status.HTTP_304_NOT_MODIFIED,
+            headers=build_not_modified_headers(etag),
+        )
     return TaskListResponse(
         items=items,
         pagination=TaskPagination(page=page, page_size=page_size, total=int(total or 0)),
@@ -297,6 +299,8 @@ async def create_task(
     TenantContextValidator.ensure_tenant_context(tenant)
 
     priority = _normalize_task_priority(payload.priority) or TaskPriority.MEDIUM
+    if payload.assignee_id is not None:
+        await _ensure_assignee_in_tenant(session, tenant.id, payload.assignee_id)
     task = Task(
         tenant_id=str(tenant.id),
         title=payload.title,
@@ -378,6 +382,8 @@ async def update_task(
         )
 
     updates = payload.model_dump(exclude_unset=True)
+    if updates.get("assignee_id") is not None:
+        await _ensure_assignee_in_tenant(session, tenant.id, updates["assignee_id"])
     status_value = _normalize_task_status(updates.pop("status", None))
     if status_value is not None:
         task.status = status_value

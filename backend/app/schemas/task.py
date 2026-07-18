@@ -1,4 +1,5 @@
 """Pydantic schemas describing asynchronous task state."""
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -35,9 +36,7 @@ class TaskStatusResponse(BaseSchema):
     document_version_id: str | None = Field(
         default=None, description="Document version identifier when available"
     )
-    error: str | None = Field(
-        default=None, description="Short error code if the task failed"
-    )
+    error: str | None = Field(default=None, description="Short error code if the task failed")
     metadata: dict[str, Any] | None = Field(
         default=None, description="Additional metadata about the task execution"
     )

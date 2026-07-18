@@ -23,7 +23,7 @@ jobs:
           --health-timeout=5s
           --health-retries=10
       minio:
-        image: bitnami/minio:2026
+        image: bitnamilegacy/minio:latest
         env:
           MINIO_ROOT_USER: minioadmin
           MINIO_ROOT_PASSWORD: minioadmin
@@ -60,8 +60,8 @@ jobs:
       - name: Install dependencies
         run: python -m pip install --upgrade pip && python -m pip install -r requirements.txt -r requirements-dev.txt
 
-      - name: Install PostgreSQL client
-        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - name: Install PostgreSQL client and LibreOffice
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client libreoffice-core
 
       - name: Prepare restore database
         run: |

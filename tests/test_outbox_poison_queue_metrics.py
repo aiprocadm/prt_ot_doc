@@ -11,12 +11,10 @@ Tests cover:
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import func, select
 
-from app.core.config import get_settings
 from app.models.models import Outbox, OutboxStatus, Tenant, WebhookDelivery
 
 
@@ -63,9 +61,7 @@ class MetricsRecorder:
         self.outbox_failed.append({"event_type": event_type, "error_code": error_code})
 
     def record_outbox_poison_queue(self, event_type: str, max_attempts: int) -> None:
-        self.outbox_poison_queue.append(
-            {"event_type": event_type, "max_attempts": max_attempts}
-        )
+        self.outbox_poison_queue.append({"event_type": event_type, "max_attempts": max_attempts})
 
     def record_outbox_retry_attempt(self, event_type: str, attempt_number: int) -> None:
         self.outbox_retry_attempts.append(
@@ -91,7 +87,7 @@ async def test_outbox_poison_queue_after_max_retries(
             status=OutboxStatus.PENDING,
             next_attempt_at=datetime.now(tz=timezone.utc),
             attempts=3,  # Already at max retries
-            last_error="Connection refused",
+            last_error={"message": "Connection refused"},
         )
         session.add(entry)
         await session.commit()
@@ -102,14 +98,14 @@ async def test_outbox_poison_queue_after_max_retries(
         from app.services.outbox import OutboxProcessor
 
         processor = OutboxProcessor(session, dispatcher=dispatcher)
-        processed = await processor.process_once()
+        await processor.process_once()
 
     # Entry should be moved to poison queue after final failure
     async with sessionmaker() as session:
         refreshed = await session.get(Outbox, entry_id)
         assert refreshed is not None
         # Status should be POISON_QUEUE or similar
-        assert refreshed.status in (OutboxStatus.POISON_QUEUE, OutboxStatus.FAILED)
+        assert refreshed.status in (OutboxStatus.DEAD, OutboxStatus.FAILED)
         assert refreshed.attempts >= 3
 
 
@@ -142,7 +138,7 @@ async def test_outbox_metrics_on_successful_delivery(sessionmaker) -> None:
         from app.services.outbox import OutboxProcessor
 
         processor = OutboxProcessor(session, dispatcher=dispatcher)
-        processed = await processor.process_once()
+        await processor.process_once()
 
     # Verify metrics
     assert len(metrics.outbox_dispatched) == 1
@@ -238,16 +234,16 @@ async def test_outbox_deduplication_same_idempotency_key(sessionmaker) -> None:
     # Verify that deduplication works (either via DB constraint or business logic)
     async with sessionmaker() as session:
         count = await session.scalar(
-            select(len(select(Outbox).where(Outbox.idempotency_key == "key-dedup-1").subquery()))
+            select(func.count()).select_from(
+                select(Outbox).where(Outbox.idempotency_key == "key-dedup-1").subquery()
+            )
         )
         # Should have only 1 or handle gracefully
         assert isinstance(count, int)
 
 
 @pytest.mark.anyio
-async def test_outbox_backoff_exponential(
-    sessionmaker, monkeypatch: pytest.MonkeyPatch
-) -> None:
+async def test_outbox_backoff_exponential(sessionmaker, monkeypatch: pytest.MonkeyPatch) -> None:
     """Retry backoff should increase with each attempt."""
     monkeypatch.setenv("OUTBOX_RETRY_BACKOFF_SECONDS", "2")
 
@@ -280,7 +276,12 @@ async def test_outbox_backoff_exponential(
     # Check that next_attempt_at was moved forward
     async with sessionmaker() as session:
         entry = await session.get(Outbox, entry_id)
-        assert entry.next_attempt_at > datetime.now(tz=timezone.utc)
+        # SQLite drops tzinfo on read-back for DateTime(timezone=True); normalize
+        # the round-tripped value to UTC-aware before comparing (PG keeps it aware).
+        next_attempt = entry.next_attempt_at
+        if next_attempt.tzinfo is None:
+            next_attempt = next_attempt.replace(tzinfo=timezone.utc)
+        assert next_attempt > datetime.now(tz=timezone.utc)
         # Backoff should increase with attempts; for now, just verify it's set
         assert entry.attempts >= 1
 
@@ -304,23 +305,28 @@ async def test_outbox_webhook_delivery_tracking(sessionmaker) -> None:
         await session.flush()
 
         delivery = WebhookDelivery(
-            outbox_id=outbox.id,
-            destination=outbox.destination,
+            tenant_id=tenant.id,
+            endpoint_id="endpoint-compliance",
+            event_id=outbox.id,
             status="success",
-            response_status=200,
-            response_body='{"status": "ok"}',
-            sent_at=outbox.sent_at,
+            attempts=1,
+            last_status_code=200,
+            last_response_body='{"status": "ok"}',
+            delivered_at=outbox.sent_at,
         )
         session.add(delivery)
         await session.commit()
+        tracked_event_id = outbox.id
 
     # Verify delivery record exists
     async with sessionmaker() as session:
         count = await session.scalar(
-            select(len(select(WebhookDelivery).filter_by(destination="https://compliance-api.example.com/webhooks").subquery()))
+            select(func.count())
+            .select_from(WebhookDelivery)
+            .where(WebhookDelivery.event_id == tracked_event_id)
         )
         assert isinstance(count, int)
-        assert count >= 0
+        assert count >= 1
 
 
 @pytest.mark.anyio
@@ -346,9 +352,7 @@ async def test_outbox_tenant_isolation_in_queue(sessionmaker) -> None:
 
     # Query events for test tenant
     async with sessionmaker() as session:
-        events = await session.execute(
-            select(Outbox).where(Outbox.tenant_id == test_tenant.id)
-        )
+        events = await session.execute(select(Outbox).where(Outbox.tenant_id == test_tenant.id))
         records = events.scalars().all()
         assert len(records) >= 1
         for record in records:

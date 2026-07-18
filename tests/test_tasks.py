@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 import app.tasks as tasks
 import app.tasks._core as tasks_core
+import app.tasks.document_jobs as tasks_document_jobs
 from app.db import Base, SharedBase
 from app.models.job_engine import OutboxEvent, OutboxEventStatus
 from app.models.models import Template, TemplateVersion, Tenant, WebhookDelivery, WebhookEndpoint
@@ -50,7 +51,9 @@ def test_register_template_task(monkeypatch) -> None:
                 await session.rollback()
                 raise
 
-    monkeypatch.setattr(tasks_core, "session_scope", override_scope)
+    # register_template_task lives in app.tasks.document_jobs (ARCH-4 slice 2);
+    # patch session_scope where the task looks it up.
+    monkeypatch.setattr(tasks_document_jobs, "session_scope", override_scope)
 
     version_id = tasks.register_template_task(
         tenant.slug,
@@ -61,7 +64,11 @@ def test_register_template_task(monkeypatch) -> None:
         metadata={"category": "demo"},
         version_metadata={
             "document_type": "instruction",
-            "required_fields_schema": {"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]},
+            "required_fields_schema": {
+                "type": "object",
+                "properties": {"name": {"type": "string"}},
+                "required": ["name"],
+            },
             "applicability_rules": {},
             "output_types": ["docx"],
             "profile": {},
@@ -162,7 +169,9 @@ def test_dispatch_outbox_events_resolves_webhook_endpoints_by_tenant_id(monkeypa
 
     async def fetch():
         async with TestSession() as session:
-            event = (await session.execute(select(OutboxEvent).where(OutboxEvent.event_id == "evt-1"))).scalar_one()
+            event = (
+                await session.execute(select(OutboxEvent).where(OutboxEvent.event_id == "evt-1"))
+            ).scalar_one()
             deliveries = (await session.execute(select(WebhookDelivery))).scalars().all()
             return event, deliveries
 

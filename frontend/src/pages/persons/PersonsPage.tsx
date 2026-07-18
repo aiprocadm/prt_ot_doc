@@ -113,18 +113,51 @@ const PersonsPage = () => {
         <Card>
           <CardContent className="space-y-4 py-6">
             <h2 className="text-xl font-semibold">{selectedPerson.full_name}</h2>
-            {focusedPersonId ? (
-              <div className="flex flex-wrap gap-2">
-                <Button size="sm" variant="ghost" asChild>
-                  <Link to="/persons">Сбросить фокус</Link>
-                </Button>
-                <Button size="sm" variant="outline" asChild>
-                  <Link to={`/documents/quick-generate?person_id=${encodeURIComponent(selectedPerson.id)}&company_id=${encodeURIComponent(selectedPerson.company_id ?? "")}`}>
-                    Сформировать документы по случаю
-                  </Link>
-                </Button>
-              </div>
-            ) : null}
+            <div className="flex flex-wrap gap-2">
+              <Can permission={PERMISSIONS.EMPLOYEE_CARD_VIEW}>
+                {(allowed) =>
+                  allowed ? (
+                    <Button size="sm" asChild>
+                      <Link to={`/employees/${encodeURIComponent(selectedPerson.id)}`}>
+                        Открыть карточку
+                      </Link>
+                    </Button>
+                  ) : null
+                }
+              </Can>
+              <Can permission={PERMISSIONS.PERSON_CREATE}>
+                {(allowed) =>
+                  allowed ? (
+                    <PersonFormDialog
+                      key={selectedPerson.id}
+                      initialData={selectedPerson}
+                      trigger={
+                        <Button size="sm" variant="outline">
+                          Изменить
+                        </Button>
+                      }
+                      onSubmitted={(person) => {
+                        setSelectedPerson(person);
+                        toast.success(`Сотрудник "${person.full_name}" обновлён`);
+                        void list();
+                      }}
+                    />
+                  ) : null
+                }
+              </Can>
+              {focusedPersonId ? (
+                <>
+                  <Button size="sm" variant="ghost" asChild>
+                    <Link to="/persons">Сбросить фокус</Link>
+                  </Button>
+                  <Button size="sm" variant="outline" asChild>
+                    <Link to={`/documents/quick-generate?person_id=${encodeURIComponent(selectedPerson.id)}&company_id=${encodeURIComponent(selectedPerson.company_id ?? "")}`}>
+                      Сформировать документы по случаю
+                    </Link>
+                  </Button>
+                </>
+              ) : null}
+            </div>
             <div className="grid gap-2 md:grid-cols-2">
               <Info label="Должность" value={selectedPerson.position} />
               <Info label="Электронная почта" value={selectedPerson.email} />

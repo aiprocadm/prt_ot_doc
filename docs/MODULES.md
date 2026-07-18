@@ -47,6 +47,7 @@
 | Модуль | Назначение | Канон / vNext |
 |--------|-----------|---------------|
 | `org_structure` | tenant → company → site → department → person | vNext §5.1 |
+| `org_structure` | tenant → company → branch (RC-014) → site → department → person | vNext §5.1 |
 | `data_quality` | rules engine (10 правил), DQ report API | vNext §5.4, Phase 3.1 backend done |
 | `operational_dashboard` | command-center backend (alerts aggregator) | vNext §4.3, Phase 2.1 backend done |
 | `calendar` | smart calendar aggregator | vNext §4.4 |
@@ -80,9 +81,22 @@
 
 ## Legacy domains (`backend/app/domains/*`)
 
-Постепенно поглощаются модулями. Не плодить новых файлов; миграция — в `modules/*`.
+Статус после **ARCH-1** (2026-07-02, 8 срезов): все контексты, дублировавшиеся с
+`modules/*`, свёрнуты в `modules/*`; их каталоги в `domains/*` — **deprecated
+compat-shim'ы** (чистый реэкспорт, удаляются в POST-1 в следующем мажоре):
 
-`audit`, `billing`, `files`, `incidents`, `layout`, `npa`, `packs`, `ppe`, `replace`, `risk`, `sign`, `templating`, `training`.
+`audit`, `contractors`, `files`, `incidents`, `packs`, `ppe`, `replace`, `risk`, `sign`, `training`.
+
+Не дублированные контексты (пары в `modules/` нет) — живут в `domains/*` до
+отдельного решения; новых файлов не плодить, новое развитие — в `modules/*`:
+
+`billing`, `committees`, `layout`, `medical`, `npa`, `permits`, `prescriptions`,
+`signing`, `sout`, `templating`, `work_permits` + shared-kernel `domains/shared.py`
+(`ContingentItemStatus` / `classify` — его миграция помечена как будущий срез в
+`scripts/ci/check_context_boundaries.py`).
+
+Границы enforced: `scripts/ci/check_context_boundaries.py` (ARCH-3) — новые
+`modules↔domains` импорты падают; намеренные исключения — в его `ALLOWLIST`.
 
 ## Frontend counterparts
 

@@ -96,7 +96,13 @@ const PackagePresetsPage = () => {
             <div className="flex gap-2">
               <Input value={code} onChange={(e) => setCode(e.target.value)} placeholder="Код" />
               <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Название" />
-              <Button onClick={() => void createPreset()}>Создать</Button>
+              <Button
+                onClick={() => void createPreset()}
+                disabled={!profiles.length || !code.trim() || !name.trim()}
+                title={!profiles.length ? "Сначала нужен профиль пакета" : undefined}
+              >
+                Создать
+              </Button>
             </div>
           ) : null}
           {!loading && !error && items.length === 0 ? (

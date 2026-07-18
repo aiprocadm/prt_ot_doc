@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Protocol
 
@@ -17,26 +16,24 @@ class SignatureProvider(Protocol):
     async def verify_signature(self, request: SignatureRequest) -> dict: ...
 
 
-@dataclass
-class MockSignatureProvider:
-    async def create_signature_request(self, request: SignatureRequest) -> dict:
-        return {"external_request_id": f"mock-{request.id}", "status": "pending"}
-
-    async def cancel_signature_request(self, request: SignatureRequest) -> dict:
-        return {"status": "canceled"}
-
-    async def get_signature_status(self, request: SignatureRequest) -> dict:
-        return {"status": "signed", "certificate_thumbprint": "MOCK-THUMBPRINT", "signer_name": "Mock Signer"}
-
-    async def verify_signature(self, request: SignatureRequest) -> dict:
-        return {"verified": True, "certificate": {"subject": "Mock Signer"}}
+# Мок-провайдер удалён (Срез-1 чистка симуляции).
+# Реальные провайдеры KEP/UNEP появятся при продуктовой интеграции.
+# ПЭП-подписание живёт в services/pep_signing.py.
 
 
 class SignatureRequestService:
-    def __init__(self, session: AsyncSession, tenant_id: str, provider: SignatureProvider | None = None) -> None:
+    """Сервис создания запросов подписи через внешнего провайдера.
+
+    provider=None означает «провайдер не сконфигурирован» — запросы
+    отклоняются с 409 до момента реальной интеграции.
+    """
+
+    def __init__(
+        self, session: AsyncSession, tenant_id: str, provider: SignatureProvider | None = None
+    ) -> None:
         self.session = session
         self.tenant_id = tenant_id
-        self.provider = provider or MockSignatureProvider()
+        self.provider = provider
 
     async def create(self, request: SignatureRequest) -> SignatureRequest:
         if request.approval_instance_id:
@@ -47,6 +44,8 @@ class SignatureRequestService:
                 or approval.status != ApprovalInstanceStatus.APPROVED
             ):
                 raise HTTPException(status.HTTP_409_CONFLICT, "Approval instance must be approved")
+        if self.provider is None:
+            raise HTTPException(status.HTTP_409_CONFLICT, "signature provider is not configured")
         meta = await self.provider.create_signature_request(request)
         request.external_request_id = meta.get("external_request_id")
         request.status = meta.get("status", "pending")
@@ -56,12 +55,21 @@ class SignatureRequestService:
 
 
 class SignatureVerificationService:
-    def __init__(self, session: AsyncSession, tenant_id: str, provider: SignatureProvider | None = None) -> None:
+    """Сервис проверки/обновления статуса подписи через внешнего провайдера.
+
+    provider=None означает «провайдер не сконфигурирован» — отклоняется с 409.
+    """
+
+    def __init__(
+        self, session: AsyncSession, tenant_id: str, provider: SignatureProvider | None = None
+    ) -> None:
         self.session = session
         self.tenant_id = tenant_id
-        self.provider = provider or MockSignatureProvider()
+        self.provider = provider
 
     async def refresh(self, request: SignatureRequest) -> SignatureRequest:
+        if self.provider is None:
+            raise HTTPException(status.HTTP_409_CONFLICT, "signature provider is not configured")
         data = await self.provider.get_signature_status(request)
         request.status = data.get("status", request.status)
         request.certificate_thumbprint = data.get("certificate_thumbprint")
@@ -72,6 +80,8 @@ class SignatureVerificationService:
         return request
 
     async def verify(self, request: SignatureRequest) -> SignatureRequest:
+        if self.provider is None:
+            raise HTTPException(status.HTTP_409_CONFLICT, "signature provider is not configured")
         request.status = "verifying"
         await self.session.flush()
         result = await self.provider.verify_signature(request)

@@ -4,11 +4,16 @@ from datetime import datetime, timezone
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.api.helpers.etag import (
+    apply_etag_response_headers,
+    build_not_modified_headers,
+    compute_list_etag,
+)
 from app.core.audit_decorator import audit_operation
 from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
@@ -32,14 +37,16 @@ OwnerAdminAccess = Annotated[
 
 @router.get("", response_model=list[ApiTokenRead])
 async def list_api_tokens(
+    request: Request,
+    response: Response,
     session: SessionDep,
     access: OwnerAdminAccess,
     tenant: Tenant = Depends(get_tenant_record),
-) -> list[ApiTokenRead]:
+) -> list[ApiTokenRead] | Response:
     TenantContextValidator.ensure_tenant_context(tenant)
 
     _ = access
-    rows = (
+    rows = list(
         (
             await session.execute(
                 select(ApiToken)
@@ -50,6 +57,17 @@ async def list_api_tokens(
         .scalars()
         .all()
     )
+    etag = compute_list_etag(
+        tenant_id=str(tenant.id),
+        items=rows,
+        scalars=[("total", len(rows)), ("kind", "api_tokens")],
+    )
+    apply_etag_response_headers(response, etag)
+    if request.headers.get("if-none-match") == etag:
+        return Response(
+            status_code=status.HTTP_304_NOT_MODIFIED,
+            headers=build_not_modified_headers(etag),
+        )
     return [
         ApiTokenRead(
             id=item.id,

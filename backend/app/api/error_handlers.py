@@ -138,6 +138,25 @@ def _extract_field_errors(errors: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return normalized
 
 
+def _json_safe(value: Any) -> Any:
+    """Recursively coerce *value* into JSON-serializable primitives.
+
+    Pydantic v2 embeds raw exception objects in ``exc.errors()`` — e.g. the
+    ``ValueError`` raised by a ``@model_validator`` lands under ``ctx["error"]``.
+    Such objects break :class:`JSONResponse` rendering with
+    ``TypeError: Object of type ValueError is not JSON serializable``, so any
+    non-primitive leaf is stringified before it reaches the encoder.
+    """
+
+    if value is None or isinstance(value, (str, bool, int, float)):
+        return value
+    if isinstance(value, Mapping):
+        return {str(key): _json_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [_json_safe(item) for item in value]
+    return str(value)
+
+
 def _is_json_payload_error(exc: RequestValidationError) -> bool:
     json_error_types = {"json_invalid", "type_error.jsondecode"}
     for error in exc.errors():
@@ -304,7 +323,7 @@ def _handle_validation_error(
     trace_id: str,
     trace_header: str,
 ) -> JSONResponse:
-    errors = exc.errors()
+    errors = _json_safe(exc.errors())
     details = {"errors": errors}
     field_errors = _extract_field_errors(errors)
     if _is_json_payload_error(exc):
@@ -333,7 +352,7 @@ def _handle_validation_error(
         field_errors=field_errors,
         trace_id=trace_id,
         trace_header=trace_header,
-        detail_payload=exc.errors(),
+        detail_payload=errors,
     )
 
 

@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Link } from "react-router-dom";
@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useCompaniesStore } from "@/stores/companies";
 import { usePersonsStore } from "@/stores/persons";
+import { mergeElectricalGroupQuals } from "@/api/personsApi";
 import type { PersonDto } from "@/types/dto/persons";
 import { personSchema, type PersonFormValues } from "@/types/forms/persons";
 import { applyApiFieldErrorsToForm, isApiError } from "@/utils/apiFormErrors";
@@ -22,7 +23,9 @@ const emptyPersonForm: PersonFormValues = {
   position: "",
   email: "",
   phone: "",
-  status: "active"
+  status: "active",
+  electrical_group: "",
+  electrical_group_valid_until: ""
 };
 
 interface PersonFormDialogProps {
@@ -45,6 +48,12 @@ export const PersonFormDialog = ({ trigger, initialData, onSubmitted }: PersonFo
   const [open, setOpen] = useState(false);
   const { list: listCompanies, items: companies } = useCompaniesStore();
 
+  /**
+   * Хранит квалификации персоны (кроме electrical_safety_group) — нужны для merge-safe патча.
+   * При загрузке заполняется из initialData.qualifications.
+   */
+  const otherQualsRef = useRef<Array<Record<string, unknown>>>([]);
+
   const form = useForm<PersonFormValues>({
     resolver: zodResolver(personSchema),
     defaultValues: {
@@ -55,7 +64,9 @@ export const PersonFormDialog = ({ trigger, initialData, onSubmitted }: PersonFo
       position: initialData?.position ?? "",
       email: initialData?.email ?? "",
       phone: initialData?.phone ?? "",
-      status: initialData?.status ?? "active"
+      status: initialData?.status ?? "active",
+      electrical_group: "",
+      electrical_group_valid_until: ""
     }
   });
 
@@ -68,6 +79,18 @@ export const PersonFormDialog = ({ trigger, initialData, onSubmitted }: PersonFo
   useEffect(() => {
     if (!open) return;
     if (initialData) {
+      const quals: Array<Record<string, unknown>> = Array.isArray(initialData.qualifications)
+        ? (initialData.qualifications as Array<Record<string, unknown>>)
+        : [];
+
+      // Находим запись electrical_safety_group
+      const elecEntry = quals.find((q) => q.kind === "electrical_safety_group") as
+        | Record<string, unknown>
+        | undefined;
+
+      // Остальные квалификации сохраняем для merge
+      otherQualsRef.current = quals.filter((q) => q.kind !== "electrical_safety_group");
+
       form.reset({
         company_id: initialData.company_id ?? "",
         first_name: initialData.first_name,
@@ -76,16 +99,26 @@ export const PersonFormDialog = ({ trigger, initialData, onSubmitted }: PersonFo
         position: initialData.position ?? "",
         email: initialData.email ?? "",
         phone: initialData.phone ?? "",
-        status: initialData.status
+        status: initialData.status,
+        electrical_group: elecEntry
+          ? (String(elecEntry.level ?? "") as PersonFormValues["electrical_group"])
+          : "",
+        electrical_group_valid_until: elecEntry ? String(elecEntry.valid_until ?? "") : ""
       });
     } else {
+      otherQualsRef.current = [];
       form.reset(emptyPersonForm);
     }
   }, [open, initialData, form]);
 
   const onSubmit = async (values: PersonFormValues) => {
     try {
-      const result = initialData ? await update(initialData.id, values) : await create(values);
+      // Merge-safe: берём все прочие квалификации + новую/обновлённую electrical_safety_group
+      const qualifications = mergeElectricalGroupQuals(otherQualsRef.current, values);
+
+      const payload: PersonFormValues = { ...values, qualifications };
+
+      const result = initialData ? await update(initialData.id, payload) : await create(payload);
       onSubmitted?.(result);
       const cid = result.company_id ?? values.company_id;
       if (cid) {
@@ -189,6 +222,37 @@ export const PersonFormDialog = ({ trigger, initialData, onSubmitted }: PersonFo
               </select>
             </div>
           </div>
+
+          {/* Группа по электробезопасности */}
+          <div className="space-y-2 border-t pt-4">
+            <Label className="text-sm font-medium">Группа по электробезопасности</Label>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-1">
+                <Label htmlFor="electrical_group">Группа по электробезопасности</Label>
+                <select
+                  id="electrical_group"
+                  className="h-10 w-full rounded-md border px-3"
+                  {...form.register("electrical_group")}
+                >
+                  <option value="">— Не установлена —</option>
+                  <option value="I">I</option>
+                  <option value="II">II</option>
+                  <option value="III">III</option>
+                  <option value="IV">IV</option>
+                  <option value="V">V</option>
+                </select>
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="electrical_group_valid_until">Действует до</Label>
+                <Input
+                  id="electrical_group_valid_until"
+                  type="date"
+                  {...form.register("electrical_group_valid_until")}
+                />
+              </div>
+            </div>
+          </div>
+
           <DialogFooter>
             <Button type="submit" disabled={form.formState.isSubmitting}>
               {form.formState.isSubmitting ? "Сохранение..." : "Сохранить"}

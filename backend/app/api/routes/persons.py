@@ -5,12 +5,17 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_correlation_id, get_session, get_tenant_record
+from app.api.helpers.etag import (
+    apply_etag_response_headers,
+    build_not_modified_headers,
+    compute_list_etag,
+)
 from app.core.audit_decorator import audit_operation
 from app.core.errors import api_problem_detail
 from app.core.security import AccessContext, abac
@@ -46,14 +51,18 @@ EditorAccess = Annotated[
 def _person_bad_request(message: str) -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,
-        detail=api_problem_detail(code="PERSON_VALIDATION_ERROR", message=message, error_type="persons"),
+        detail=api_problem_detail(
+            code="PERSON_VALIDATION_ERROR", message=message, error_type="persons"
+        ),
     )
 
 
 def _person_unprocessable(message: str) -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-        detail=api_problem_detail(code="PERSON_VALIDATION_ERROR", message=message, error_type="persons"),
+        detail=api_problem_detail(
+            code="PERSON_VALIDATION_ERROR", message=message, error_type="persons"
+        ),
     )
 
 
@@ -81,9 +90,7 @@ async def _get_position(session: AsyncSession, tenant: Tenant, position_id: str)
     return position
 
 
-async def _get_workplace(
-    session: AsyncSession, tenant: Tenant, workplace_id: str
-) -> Workplace:
+async def _get_workplace(session: AsyncSession, tenant: Tenant, workplace_id: str) -> Workplace:
     stmt = select(Workplace).where(
         Workplace.id == workplace_id,
         Workplace.tenant_id == tenant.id,
@@ -135,16 +142,29 @@ def _clean_list(values: list[str] | None) -> list[str]:
 
 @router.get("", response_model=PersonPage)
 async def list_persons_endpoint(
+    request: Request,
+    response: Response,
     tenant: TenantDep,
     session: SessionDep,
     access: ManagerAccess,
     correlation_id: str = Depends(get_correlation_id),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
-) -> PersonPage:
+) -> PersonPage | Response:
     TenantContextValidator.ensure_tenant_context(tenant)
 
     persons, total = await list_persons(session, tenant.id, limit=limit, offset=offset)
+    etag = compute_list_etag(
+        tenant_id=str(tenant.id),
+        items=persons,
+        scalars=[("total", total), ("limit", limit), ("offset", offset)],
+    )
+    apply_etag_response_headers(response, etag)
+    if request.headers.get("if-none-match") == etag:
+        return Response(
+            status_code=status.HTTP_304_NOT_MODIFIED,
+            headers=build_not_modified_headers(etag),
+        )
     return PersonPage(items=persons, total=total)
 
 
@@ -183,6 +203,7 @@ async def create_person_endpoint(
         first_name=_clean_string(payload.first_name) or payload.first_name,
         last_name=_clean_string(payload.last_name) or payload.last_name,
         middle_name=_clean_string(payload.middle_name),
+        position_title=_clean_string(payload.position_title),
         birth_date=payload.birth_date,
         personnel_number=_clean_string(payload.personnel_number),
         hired_at=payload.hired_at,
@@ -271,6 +292,7 @@ async def update_person_endpoint(
         "first_name": (True, person.first_name),
         "last_name": (True, person.last_name),
         "middle_name": (False, person.middle_name),
+        "position_title": (False, person.position_title),
         "personnel_number": (False, person.personnel_number),
         "snils": (False, person.snils),
         "passport": (False, person.passport),

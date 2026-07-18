@@ -12,6 +12,10 @@ export function filterNavGroupsByAccess(
       ...group,
       items: group.items.filter((item) => {
         if (item.to === "/edo" && featureFlags.edo === false) return false;
+        if (item.to === "/committees" && featureFlags.committees === false) return false;
+        if (item.to === "/sout" && featureFlags.sout === false) return false;
+        if (item.to === "/rules" && featureFlags.rules_engine === false) return false;
+        if (item.to === "/budget" && featureFlags.budget === false) return false;
         return can(item.permission);
       })
     }))

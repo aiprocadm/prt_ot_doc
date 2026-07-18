@@ -31,6 +31,8 @@ def test_celery_autoretry_covers_infra_exception_families() -> None:
         (400, OutboxStatus.DEAD),
     ],
 )
-def test_outbox_http_classification_matches_doc(status_code: int | None, expected: OutboxStatus) -> None:
+def test_outbox_http_classification_matches_doc(
+    status_code: int | None, expected: OutboxStatus
+) -> None:
     proc = OutboxProcessor.__new__(OutboxProcessor)  # type: ignore[misc]
     assert proc._classify_http_error(status_code) == expected

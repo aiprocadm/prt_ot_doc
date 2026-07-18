@@ -36,9 +36,11 @@ class GlobalErrorHandlerMiddleware(BaseHTTPMiddleware):
         """Catch exceptions and return standardized error responses."""
         try:
             # Extract correlation_id from headers and set in context
-            correlation_id = request.headers.get(
-                "x-correlation-id"
-            ) or request.headers.get("x-request-id") or getattr(request.state, "correlation_id", None)
+            correlation_id = (
+                request.headers.get("x-correlation-id")
+                or request.headers.get("x-request-id")
+                or getattr(request.state, "correlation_id", None)
+            )
             if correlation_id:
                 CorrelationIDManager.set(correlation_id)
 
@@ -59,7 +61,9 @@ class GlobalErrorHandlerMiddleware(BaseHTTPMiddleware):
         """Handle ValueError (validation, tenant context, etc.)."""
         internal_message = str(exc)
         status_code, error_code = self._classify_value_error(exc)
-        client_message = _CLIENT_SAFE_MESSAGES.get(error_code, _CLIENT_SAFE_MESSAGES["VALIDATION_ERROR"])
+        client_message = _CLIENT_SAFE_MESSAGES.get(
+            error_code, _CLIENT_SAFE_MESSAGES["VALIDATION_ERROR"]
+        )
 
         logger.warning(
             "Validation error: %s",

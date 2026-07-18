@@ -26,10 +26,16 @@ async def get_tenancy_context(
         await session.execute(select(TenantQuota).where(TenantQuota.tenant_id == tenant.id))
     ).scalar_one_or_none()
     usage = (
-        await session.execute(
-            select(TenantCounter).where(TenantCounter.tenant_id == tenant.id).order_by(TenantCounter.yyyymm.desc())
+        (
+            await session.execute(
+                select(TenantCounter)
+                .where(TenantCounter.tenant_id == tenant.id)
+                .order_by(TenantCounter.yyyymm.desc())
+            )
         )
-    ).scalars().first()
+        .scalars()
+        .first()
+    )
     return {
         "tenant": {
             "id": str(tenant.id),

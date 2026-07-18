@@ -17,6 +17,9 @@ from app.models.models import (
     Company,
     EmploymentStatus,
     MedicalExam,
+    MedicalFitness,
+    MedicalSuspension,
+    MedicalSuspensionStatus,
     Permit,
     PermitStatus,
     Person,
@@ -37,6 +40,8 @@ DOCUMENT_READINESS_STALE_DRAFT_DAYS = 7
 from .schemas import DataQualityIssue, IssueSeverity, IssueType
 
 logger = logging.getLogger("app.modules.data_quality")
+
+DOCUMENT_READINESS_STALE_DRAFT_DAYS = 7
 
 
 def _is_blank(value: str | None) -> bool:
@@ -354,7 +359,7 @@ class ExpiredPermitsRule(DataQualityRule):
         try:
             stmt = select(Permit).where(
                 Permit.tenant_id == self.tenant_id,
-                Permit.status == PermitStatus.ACTIVE,
+                Permit.status == PermitStatus.ACTIVE.value,
                 Permit.valid_until.is_not(None),
                 Permit.valid_until < today,
             )
@@ -362,9 +367,7 @@ class ExpiredPermitsRule(DataQualityRule):
             self.total_checked = len(permits)
 
             for permit in permits:
-                valid_until_iso = (
-                    permit.valid_until.isoformat() if permit.valid_until else ""
-                )
+                valid_until_iso = permit.valid_until.isoformat() if permit.valid_until else ""
                 self.issues.append(
                     DataQualityIssue(
                         id=f"{self.rule_name}:permit:{permit.id}",
@@ -414,18 +417,13 @@ class ExpiredPPEIssuesRule(DataQualityRule):
             self.total_checked = len(issuances)
 
             for issuance in issuances:
-                expires_iso = (
-                    issuance.expires_at.isoformat() if issuance.expires_at else ""
-                )
+                expires_iso = issuance.expires_at.isoformat() if issuance.expires_at else ""
                 self.issues.append(
                     DataQualityIssue(
                         id=f"{self.rule_name}:ppe_issue:{issuance.id}",
                         issue_type=IssueType.EXPIRED_RECORD,
                         severity=IssueSeverity.MEDIUM,
-                        title=(
-                            f"PPE issuance {issuance.id} expired "
-                            f"({issuance.item_name})"
-                        ),
+                        title=(f"PPE issuance {issuance.id} expired " f"({issuance.item_name})"),
                         description=(
                             "PPE expires_at is in the past but the issuance is still "
                             "ISSUED; reissue, return, or write off to fix."
@@ -618,8 +616,7 @@ class CompanyRequisitesRule(DataQualityRule):
                 self.issues.append(
                     DataQualityIssue(
                         id=(
-                            f"{self.rule_name}:company:{company.id}:"
-                            f"{'-'.join(sorted(missing))}"
+                            f"{self.rule_name}:company:{company.id}:" f"{'-'.join(sorted(missing))}"
                         ),
                         issue_type=IssueType.MISSING_FIELD,
                         severity=severity,
@@ -641,6 +638,7 @@ class CompanyRequisitesRule(DataQualityRule):
 
 class DocumentReadinessRule(DataQualityRule):
     """Draft documents that are stuck (no template version) or miss required wizard data."""
+    """Draft documents that are stuck (template/file missing) or miss required wizard data."""
 
     @property
     def rule_name(self) -> str:
@@ -651,6 +649,8 @@ class DocumentReadinessRule(DataQualityRule):
         return (
             "Draft documents stale without a pinned template version, or missing "
             "fields required by the template JSON schema"
+            "Draft documents stale without a pinned template version or generated file, "
+            "or missing fields required by the template JSON schema"
         )
 
     async def check(self) -> None:
@@ -684,6 +684,38 @@ class DocumentReadinessRule(DataQualityRule):
                         description=(
                             f"This draft was created more than {DOCUMENT_READINESS_STALE_DRAFT_DAYS} days ago "
                             "but still has no pinned template_version_id. Pin a version or delete the abandoned draft."
+                missing_reasons: list[str] = []
+                if not doc.template_version_id:
+                    missing_reasons.append("missing_template_version")
+
+                has_doc_file = bool(doc.storage_key) or bool(doc.file_id)
+                has_version_file = any(
+                    bool(getattr(v, "file_key", None)) or bool(getattr(v, "file_id", None))
+                    for v in (doc.versions or [])
+                )
+                if not has_doc_file and not has_version_file:
+                    missing_reasons.append("missing_generated_file")
+
+                if not missing_reasons:
+                    continue
+
+                age_days = max(0, (now - doc.created_at).days) if doc.created_at else 0
+                if "missing_template_version" in missing_reasons:
+                    primary_reason = "stale_draft_missing_template_version"
+                else:
+                    primary_reason = "stale_draft_missing_generated_file"
+                self.issues.append(
+                    DataQualityIssue(
+                        id=(
+                            f"{self.rule_name}:document:{doc.id}:"
+                            f"{'-'.join(sorted(missing_reasons))}"
+                        ),
+                        issue_type=IssueType.MISSING_FIELD,
+                        severity=IssueSeverity.MEDIUM,
+                        title=f"Draft document {doc.id} stuck in DRAFT for {age_days} days",
+                        description=(
+                            "DRAFT document is past readiness threshold and lacks a "
+                            "bound template version and/or generated file."
                         ),
                         affected_entity_type="document",
                         affected_entity_id=str(doc.id),
@@ -693,6 +725,12 @@ class DocumentReadinessRule(DataQualityRule):
                             if doc.created_at
                             else None,
                             "threshold_days": DOCUMENT_READINESS_STALE_DRAFT_DAYS,
+                            "reason": primary_reason,
+                            "missing": missing_reasons,
+                            "missing_fields": missing_reasons,
+                            "age_days": age_days,
+                            "draft_age_threshold_days": DOCUMENT_READINESS_STALE_DRAFT_DAYS,
+                            "created_at": doc.created_at.isoformat() if doc.created_at else None,
                         },
                     )
                 )
@@ -725,6 +763,14 @@ class DocumentReadinessRule(DataQualityRule):
                         select(TemplateVersion).where(TemplateVersion.id.in_(tv_ids))
                     )
                 ).scalars().all()
+                    (
+                        await self.db.execute(
+                            select(TemplateVersion).where(TemplateVersion.id.in_(tv_ids))
+                        )
+                    )
+                    .scalars()
+                    .all()
+                )
                 tv_map = {tv.id: tv for tv in tv_rows}
 
             for doc in tv_docs:
@@ -744,6 +790,11 @@ class DocumentReadinessRule(DataQualityRule):
 
                 data_json = latest_payload.get(doc.id, {})
                 missing = [k for k in required if _wizard_required_value_blank(_lookup_wizard_field(data_json, k))]
+                missing = [
+                    k
+                    for k in required
+                    if _wizard_required_value_blank(_lookup_wizard_field(data_json, k))
+                ]
                 if not missing:
                     continue
 
@@ -883,6 +934,105 @@ class DuplicateRecordsRule(DataQualityRule):
             logger.exception("potential_duplicates rule failed: %s", e)
 
 
+class UnfitWithoutSuspensionRule(DataQualityRule):
+    """Persons whose LATEST MedicalExam verdict is UNFIT but have no active MedicalSuspension.
+
+    A person declared unfit must have a MedicalSuspension in ACTIVE state.
+    If the suspension is absent or was lifted, the risk pipeline is silently
+    broken — the person may continue working despite a medical prohibition.
+    """
+
+    @property
+    def rule_name(self) -> str:
+        return "unfit_without_suspension"
+
+    @property
+    def rule_description(self) -> str:
+        return (
+            "Persons whose latest medical exam verdict is UNFIT "
+            "but who have no active MedicalSuspension"
+        )
+
+    async def check(self) -> None:
+        self.issues = []
+        try:
+            # Subquery: for each person, find the date of their LATEST exam
+            # (across ALL fitness verdicts — we need to know what the most recent
+            # exam says, not just the most recent UNFIT one).
+            latest_date_subq = (
+                select(
+                    MedicalExam.person_id,
+                    func.max(MedicalExam.exam_date).label("max_exam_date"),
+                )
+                .where(
+                    MedicalExam.tenant_id == self.tenant_id,
+                    MedicalExam.deleted_at.is_(None),
+                )
+                .group_by(MedicalExam.person_id)
+                .subquery()
+            )
+
+            # Join back to get persons whose latest exam is UNFIT
+            unfit_stmt = (
+                select(MedicalExam.person_id, MedicalExam.id)
+                .join(
+                    latest_date_subq,
+                    (MedicalExam.person_id == latest_date_subq.c.person_id)
+                    & (MedicalExam.exam_date == latest_date_subq.c.max_exam_date),
+                )
+                .where(
+                    MedicalExam.tenant_id == self.tenant_id,
+                    MedicalExam.deleted_at.is_(None),
+                    MedicalExam.fitness == MedicalFitness.UNFIT,
+                )
+            )
+            unfit_rows = (await self.db.execute(unfit_stmt)).all()
+            self.total_checked = len(unfit_rows)
+
+            if not unfit_rows:
+                return
+
+            unfit_person_ids = [str(row.person_id) for row in unfit_rows]
+            unfit_exam_by_person = {str(row.person_id): str(row.id) for row in unfit_rows}
+
+            # Find which of those persons DO have an active suspension
+            active_susp_stmt = select(MedicalSuspension.person_id).where(
+                MedicalSuspension.tenant_id == self.tenant_id,
+                MedicalSuspension.deleted_at.is_(None),
+                MedicalSuspension.status == MedicalSuspensionStatus.ACTIVE,
+                MedicalSuspension.person_id.in_(unfit_person_ids),
+            )
+            suspended_ids = set(
+                str(r) for r in (await self.db.execute(active_susp_stmt)).scalars().all()
+            )
+
+            for person_id in unfit_person_ids:
+                if person_id in suspended_ids:
+                    continue
+                exam_id = unfit_exam_by_person.get(person_id, "unknown")
+                self.issues.append(
+                    DataQualityIssue(
+                        id=f"{self.rule_name}:person:{person_id}",
+                        issue_type=IssueType.DATA_MISMATCH,
+                        severity=IssueSeverity.HIGH,
+                        title=f"person {person_id}: UNFIT verdict without active suspension",
+                        description=(
+                            "The person's latest medical exam is marked UNFIT but "
+                            "there is no active MedicalSuspension record. "
+                            "Issue a suspension order to restore compliance."
+                        ),
+                        affected_entity_type="person",
+                        affected_entity_id=str(person_id),
+                        additional_info={
+                            "latest_exam_id": exam_id,
+                            "fitness": MedicalFitness.UNFIT.value,
+                        },
+                    )
+                )
+        except Exception as e:
+            logger.exception("unfit_without_suspension rule failed: %s", e)
+
+
 class DataQualityRuleEngine:
     """Engine for running data quality checks."""
 
@@ -900,6 +1050,7 @@ class DataQualityRuleEngine:
             DocumentReadinessRule,
             DocumentPersonCompanyMismatchRule,
             DuplicateRecordsRule,
+            UnfitWithoutSuspensionRule,
         ]
 
     async def run_all_checks(self) -> tuple[list[DataQualityIssue], list[dict[str, Any]]]:

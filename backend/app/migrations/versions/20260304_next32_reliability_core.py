@@ -38,7 +38,12 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["tenant_id"], ["tenant.id"]),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index("ix_webhook_endpoint_tenant_enabled", "webhook_endpoints", ["tenant_id", "is_enabled"], unique=False)
+    op.create_index(
+        "ix_webhook_endpoint_tenant_enabled",
+        "webhook_endpoints",
+        ["tenant_id", "is_enabled"],
+        unique=False,
+    )
 
     if op.get_bind().dialect.has_table(op.get_bind(), "webhook_delivery"):
         op.rename_table("webhook_delivery", "webhook_deliveries")
@@ -54,7 +59,9 @@ def upgrade() -> None:
             pass
         batch.add_column(sa.Column("next_attempt_at", sa.DateTime(timezone=True), nullable=True))
         batch.add_column(sa.Column("last_response_body", sa.Text(), nullable=True))
-        batch.create_unique_constraint("uq_webhook_delivery_endpoint_event", ["endpoint_id", "event_id"])
+        batch.create_unique_constraint(
+            "uq_webhook_delivery_endpoint_event", ["endpoint_id", "event_id"]
+        )
 
 
 def downgrade() -> None:

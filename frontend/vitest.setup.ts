@@ -6,6 +6,11 @@ afterEach(() => {
   cleanup();
 });
 
+if (!URL.createObjectURL) {
+  URL.createObjectURL = vi.fn(() => "blob:mock");
+  URL.revokeObjectURL = vi.fn();
+}
+
 if (!window.matchMedia) {
   Object.defineProperty(window, "matchMedia", {
     writable: true,
@@ -20,4 +25,13 @@ if (!window.matchMedia) {
       dispatchEvent: vi.fn()
     }))
   });
+}
+
+if (!window.ResizeObserver) {
+  class ResizeObserverStub {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  }
+  window.ResizeObserver = ResizeObserverStub as unknown as typeof ResizeObserver;
 }

@@ -53,19 +53,34 @@ export type CrmFinanceSnapshot = {
   billing: BillingSummary | null;
 };
 
+// Тоталы/статусы CRM считаются по ВСЕМ строкам — поэтому листаем до конца, а не берём
+// первые 100 (иначе суммы и статусы оплат молча врут на тенантах с >100 записей).
+async function fetchAllItems<T>(url: string, pageSize = 200, maxPages = 50): Promise<T[]> {
+  const out: T[] = [];
+  for (let page = 0; page < maxPages; page += 1) {
+    const { data } = await apiClient.get<{ items: T[] }>(url, {
+      params: { limit: pageSize, offset: page * pageSize }
+    });
+    const items = data.items ?? [];
+    out.push(...items);
+    if (items.length < pageSize) break;
+  }
+  return out;
+}
+
 export const crmFinanceApi = {
   async getSnapshot(): Promise<CrmFinanceSnapshot> {
-    const [contractsResponse, ordersResponse, invoicesResponse, billingResponse] = await Promise.all([
-      apiClient.get<{ items: CrmFinanceContract[] }>("/contracts", { params: { limit: 100, offset: 0 } }),
-      apiClient.get<{ items: CrmFinanceOrder[] }>("/orders", { params: { limit: 100, offset: 0 } }),
-      apiClient.get<{ items: CrmFinanceInvoice[] }>("/invoices", { params: { limit: 100, offset: 0 } }),
+    const [contracts, orders, invoices, billingResponse] = await Promise.all([
+      fetchAllItems<CrmFinanceContract>("/contracts"),
+      fetchAllItems<CrmFinanceOrder>("/orders"),
+      fetchAllItems<CrmFinanceInvoice>("/invoices"),
       apiClient.get<BillingSummary>("/billing/plan").catch(() => ({ data: null }))
     ]);
 
     return {
-      contracts: contractsResponse.data.items ?? [],
-      orders: ordersResponse.data.items ?? [],
-      invoices: invoicesResponse.data.items ?? [],
+      contracts,
+      orders,
+      invoices,
       billing: billingResponse.data
     };
   }

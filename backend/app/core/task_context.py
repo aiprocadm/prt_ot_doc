@@ -44,4 +44,3 @@ def reset_task_id(token: contextvars.Token[Optional[str]]) -> None:
     """Restore a previously active Celery task identifier."""
 
     _TASK_ID.reset(token)
-

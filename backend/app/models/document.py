@@ -8,10 +8,11 @@ from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import DateTime, Enum, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.ext.mutable import MutableDict
 from sqlalchemy.orm import Mapped, mapped_column, relationship, synonym, validates
 from sqlalchemy.types import JSON
 
-from app.models.base import TenantBaseModel
+from app.models.base import TenantBaseModel, native_enum
 from app.models.file import File
 from app.models.finance import Contract, Department, Invoice, Order
 from app.models.models import Company, DocumentPack, Person, Template, TemplateVersion, User
@@ -62,7 +63,7 @@ class Document(TenantBaseModel):
         String(36), ForeignKey("templateversion.id", ondelete="RESTRICT"), nullable=True
     )
     status: Mapped[DocumentStatus] = mapped_column(
-        Enum(DocumentStatus, name="documentstatus"),
+        native_enum(DocumentStatus, name="documentstatus"),
         nullable=False,
         default=DocumentStatus.DRAFT,
     )
@@ -150,7 +151,9 @@ class DocumentVersion(TenantBaseModel):
         String(36), ForeignKey("document_snapshot.id", ondelete="SET NULL"), nullable=True
     )
     template_version: Mapped[str] = mapped_column(Text, nullable=False)
-    data_json: Mapped[dict] = mapped_column(JSONBType, nullable=False, default=dict)
+    data_json: Mapped[dict] = mapped_column(
+        MutableDict.as_mutable(JSONBType), nullable=False, default=dict
+    )
     file_key: Mapped[str] = mapped_column(Text, nullable=False)
     file_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("file.id", ondelete="SET NULL"), nullable=True
@@ -160,7 +163,16 @@ class DocumentVersion(TenantBaseModel):
     )
     version_number: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     status: Mapped[DocumentVersionStatus] = mapped_column(
-        Enum(DocumentVersionStatus, name="documentversionstatus"),
+        Enum(
+            DocumentVersionStatus,
+            name="documentversionstatus",
+            # iter-19 RB-002g cohort closure: PG type `documentversionstatus`
+            # was created lowercase by migration 8d2c1a6c5e24:55-58. Member
+            # names are uppercase, so default SQLAlchemy binding sends "DRAFT"
+            # → asyncpg rejects. Force `.value` (lowercase) via callable.
+            # Pinned by `backend/tests/test_documentversion_status_enum_values.py`.
+            values_callable=lambda enum_cls: [member.value for member in enum_cls],
+        ),
         nullable=False,
         default=DocumentVersionStatus.DRAFT,
     )
@@ -215,10 +227,18 @@ class DocumentSnapshot(TenantBaseModel):
     )
     template_code: Mapped[str] = mapped_column(String(255), nullable=False)
     template_version: Mapped[int | None] = mapped_column(Integer)
-    company_snapshot: Mapped[dict[str, Any]] = mapped_column(JSONBType, nullable=False, default=dict)
-    source_refs: Mapped[dict[str, Any]] = mapped_column(JSONBType, nullable=False, default=dict)
-    compliance_refs: Mapped[dict[str, Any]] = mapped_column(JSONBType, nullable=False, default=dict)
-    render_log: Mapped[dict[str, Any]] = mapped_column(JSONBType, nullable=False, default=dict)
+    company_snapshot: Mapped[dict[str, Any]] = mapped_column(
+        MutableDict.as_mutable(JSONBType), nullable=False, default=dict
+    )
+    source_refs: Mapped[dict[str, Any]] = mapped_column(
+        MutableDict.as_mutable(JSONBType), nullable=False, default=dict
+    )
+    compliance_refs: Mapped[dict[str, Any]] = mapped_column(
+        MutableDict.as_mutable(JSONBType), nullable=False, default=dict
+    )
+    render_log: Mapped[dict[str, Any]] = mapped_column(
+        MutableDict.as_mutable(JSONBType), nullable=False, default=dict
+    )
     integrity_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     generated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -270,7 +290,9 @@ class DocumentGenerationJob(TenantBaseModel):
         String(36), ForeignKey("person.id", ondelete="SET NULL"), nullable=True
     )
     payload_hash: Mapped[str] = mapped_column(String(64), nullable=False)
-    payload: Mapped[dict[str, Any]] = mapped_column(JSONBType, nullable=False, default=dict)
+    payload: Mapped[dict[str, Any]] = mapped_column(
+        MutableDict.as_mutable(JSONBType), nullable=False, default=dict
+    )
     pack_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("document_pack.id", ondelete="SET NULL"), nullable=True
     )
@@ -352,7 +374,7 @@ class DocumentBatchRun(TenantBaseModel):
     )
     naming_pattern: Mapped[str | None] = mapped_column(String(255))
     status: Mapped[DocumentBatchStatus] = mapped_column(
-        Enum(DocumentBatchStatus, name="documentbatchstatus"),
+        native_enum(DocumentBatchStatus, name="documentbatchstatus"),
         nullable=False,
         default=DocumentBatchStatus.PENDING,
     )
@@ -360,7 +382,9 @@ class DocumentBatchRun(TenantBaseModel):
     processed: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     succeeded: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     failed: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    error_report: Mapped[dict[str, Any]] = mapped_column(JSONBType, nullable=False, default=dict)
+    error_report: Mapped[dict[str, Any]] = mapped_column(
+        MutableDict.as_mutable(JSONBType), nullable=False, default=dict
+    )
     created_by: Mapped[str] = mapped_column(
         String(36), ForeignKey("user.id", ondelete="RESTRICT"), nullable=False
     )
@@ -383,9 +407,7 @@ class DocumentBatchRun(TenantBaseModel):
         lazy="selectin",
     )
 
-    __table_args__ = (
-        Index("ix_document_batch_run_tenant_created", "tenant_id", "created_at"),
-    )
+    __table_args__ = (Index("ix_document_batch_run_tenant_created", "tenant_id", "created_at"),)
 
 
 class DocumentBatchItem(TenantBaseModel):
@@ -397,14 +419,16 @@ class DocumentBatchItem(TenantBaseModel):
         String(36), ForeignKey("document_batch_run.id", ondelete="CASCADE"), nullable=False
     )
     row_index: Mapped[int] = mapped_column(Integer, nullable=False)
-    payload: Mapped[dict[str, Any]] = mapped_column(JSONBType, nullable=False, default=dict)
+    payload: Mapped[dict[str, Any]] = mapped_column(
+        MutableDict.as_mutable(JSONBType), nullable=False, default=dict
+    )
     person_id: Mapped[str | None] = mapped_column(String(36))
     output_name: Mapped[str | None] = mapped_column(String(255))
     pipeline_run_id: Mapped[str | None] = mapped_column(String(36))
     document_id: Mapped[str | None] = mapped_column(String(36))
     document_version_id: Mapped[str | None] = mapped_column(String(36))
     status: Mapped[DocumentBatchItemStatus] = mapped_column(
-        Enum(DocumentBatchItemStatus, name="documentbatchitemstatus"),
+        native_enum(DocumentBatchItemStatus, name="documentbatchitemstatus"),
         nullable=False,
         default=DocumentBatchItemStatus.PENDING,
     )

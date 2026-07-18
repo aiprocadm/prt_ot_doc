@@ -30,6 +30,11 @@ ARCHITECTURE_RULES: tuple[str, ...] = (
     "Additive DB migrations; сохранять tenant isolation.",
     "Не смешивать bounded contexts напрямую; тяжёлые операции — в async workers.",
 )
+# Enforcement (ARCH-3): правило «не смешивать bounded contexts напрямую» проверяется
+# AST-чекером ``scripts/ci/check_context_boundaries.py`` — запускается через
+# ``make check-boundaries`` или внутри ``make gate`` (scripts/ci/local_gate.py).
+# Новый cross-context импорт (app.modules.* <-> app.domains.*) валит проверку;
+# текущие протечки — временный allowlist, вычищаемый ARCH-1 (domains/ → modules/).
 
 # Разд. 36.2
 ENGINEERING_RULES: tuple[str, ...] = (

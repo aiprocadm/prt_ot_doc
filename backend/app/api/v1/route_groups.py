@@ -15,9 +15,12 @@ from app.api.routes import (
     audit,
     auth,
     billing,
+    branches,
     briefings,
     calendar,
+    calendar_views,
     client_portal,
+    committees,
     companies,
     compliance,
     contractors,
@@ -27,6 +30,7 @@ from app.api.routes import (
     departments,
     documents,
     edo_workflow,
+    employees,
     external_registry,
     incidents,
     inspections,
@@ -42,6 +46,8 @@ from app.api.routes import (
     orders,
     outbox_admin,
     packs,
+    pep_signing,
+    permits,
     persons,
     ppe,
     prescriptions,
@@ -52,18 +58,21 @@ from app.api.routes import (
     risk_enterprise,
     safety_ops,
     sites,
+    sout,
     tasks,
     tenancy,
     tenants,
     training,
     training_next,
     webhooks,
+    work_permits,
     workspace,
 )
 from app.api.routes.files import router as legacy_files_router
 from app.core.config import get_settings
 from app.modules.analytics.api import router as analytics_router
 from app.modules.branding.api import router as branding_router
+from app.modules.budget.api import router as budget_router
 from app.modules.client_portal.api import internal_router as portal_requests_router
 from app.modules.client_portal.api import router as client_portal_v1_router
 from app.modules.export_center.api import router as export_center_router
@@ -73,6 +82,8 @@ from app.modules.packs import api as packs_v2_api
 from app.modules.pdf import api as pdf_api
 from app.modules.pipelines import api as pipelines_api
 from app.modules.replace import api as replace_api
+from app.modules.report_builder.api import router as report_builder_router
+from app.modules.rules_engine.api import router as rules_engine_router
 from app.modules.search.api import router as search_router
 from app.modules.workflow.api import router as workflow_router
 
@@ -105,17 +116,24 @@ COMPLIANCE_AND_ADMIN_ROUTER_REGISTRATIONS: tuple[RouterRegistration, ...] = (
     (invoices.router, {"tags": ["invoices"]}),
     (npa.router, {"tags": ["npa"]}),
     (ppe.router, {"tags": ["ppe"]}),
+    (permits.router, {"tags": ["permits"]}),
+    (work_permits.router, {"tags": ["work-permits"]}),
     (medical.router, {"tags": ["medical"]}),
     (journals.router, {"tags": ["journals"]}),
     (risk.router, {"tags": ["risks"]}),
     (risk_enterprise.router, {}),
     (sites.router, {"tags": ["sites"]}),
+    (branches.router, {"tags": ["branches"]}),
     (companies.router, {}),
     (persons.router, {}),
+    (employees.router, {}),
     (training.router, {"tags": ["training"]}),
     (training_next.router, {}),
     (briefings.router, {}),
     (calendar.router, {}),
+    (calendar_views.router, {}),
+    (committees.router, {"tags": ["committees"]}),
+    (sout.router, {"tags": ["sout"]}),
     (compliance.router, {}),
     (billing.router, {}),
 )
@@ -130,7 +148,6 @@ OPERATIONS_ROUTER_REGISTRATIONS: tuple[RouterRegistration, ...] = (
     (prescriptions.router, {"tags": ["prescriptions"]}),
     (safety_ops.router, {"tags": ["safety-ops"]}),
     (obligations.router, {"tags": ["obligations"]}),
-    (operational_dashboard.router, {"prefix": "", "tags": ["operational"]}),
     (jobs.router, {}),
     (tasks.router, {"prefix": "/tasks", "tags": ["tasks"]}),
     (operational_dashboard.router, {"tags": ["operational"]}),
@@ -157,6 +174,7 @@ DOCUMENT_CORE_ROUTER_REGISTRATIONS: tuple[RouterRegistration, ...] = (
     (edo_workflow.router, {"tags": ["edo-workflow"]}),
     (approval_signing_v1.router, {"prefix": "/v1", "tags": ["approval-signing-v1"]}),
     (approval_orchestration.router, {"tags": ["approval-orchestration"]}),
+    (pep_signing.router, {"tags": ["pep-signing"]}),
     (replace_api.router, {}),
     (headers_api.router, {"tags": ["layout-presets"]}),
     (branding_router, {}),
@@ -167,6 +185,9 @@ DOCUMENT_CORE_ROUTER_REGISTRATIONS: tuple[RouterRegistration, ...] = (
     (search_router, {"tags": ["search"]}),
     (analytics_router, {"tags": ["analytics"]}),
     (export_center_router, {"tags": ["exports"]}),
+    (report_builder_router, {"tags": ["report-builder"]}),
+    (rules_engine_router, {"tags": ["rules-engine"]}),
+    (budget_router, {"tags": ["budget"]}),
 )
 
 PLATFORM_EXTENSION_ROUTER_REGISTRATIONS: tuple[RouterRegistration, ...] = (

@@ -96,7 +96,9 @@ async def test_outbox_processor_dispatches_entries(sessionmaker) -> None:
 
 
 @pytest.mark.anyio
-async def test_outbox_processor_retries_failed_entries(sessionmaker, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_outbox_processor_retries_failed_entries(
+    sessionmaker, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setenv("OUTBOX_RETRY_BACKOFF_SECONDS", "1")
     monkeypatch.setenv("OUTBOX_RETRY_BACKOFF_MAX_SECONDS", "5")
     get_settings.cache_clear()  # type: ignore[attr-defined]
@@ -309,7 +311,9 @@ async def test_backoff_is_bounded(sessionmaker, monkeypatch: pytest.MonkeyPatch)
 
     async with sessionmaker() as session:
         processor = OutboxProcessor(session)
-        delta = (processor._compute_next_attempt(10) - datetime.now(tz=timezone.utc)).total_seconds()
+        delta = (
+            processor._compute_next_attempt(10) - datetime.now(tz=timezone.utc)
+        ).total_seconds()
         assert delta <= 2.1
         assert delta >= 0.9
 

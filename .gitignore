@@ -6,6 +6,7 @@ __pycache__/
 
 # Python tooling
 .venv/
+.venv314/
 .mypy_cache/
 .pytest_cache/
 .hypothesis/
@@ -44,6 +45,9 @@ runtime-dev.db
 .idea/
 !.vscode/
 !.vscode/settings.json
+
+# Claude Code — персональные настройки машины (общий settings.json остаётся в git)
+.claude/settings.local.json
 
 # Logs and artifacts
 *.log

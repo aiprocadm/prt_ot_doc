@@ -30,7 +30,7 @@ const extractArtifacts = (output: unknown): Array<{ key: string; value: string }
 };
 
 export const JobTimeline = ({ steps }: { steps: PipelineStepRun[] }) => (
-  <div className="space-y-2">
+  <div className="space-y-2" role="presentation">
     {steps.map((step, idx) => (
       <div key={step.step_run_id} className="space-y-2 rounded border p-3 text-sm">
         <div className="flex items-center justify-between">

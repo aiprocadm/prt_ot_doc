@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { describe, it, expect } from "vitest";
 
 import { JobTimeline } from "@/components/JobTimeline";
@@ -131,8 +131,9 @@ describe("JobTimeline", () => {
 
     render(<JobTimeline steps={steps} />);
 
-    expect(screen.getByText("pending")).toBeInTheDocument();
-    expect(screen.getByText(/—/)).toBeInTheDocument(); // Duration should be —
+    // "pending" appears twice — as step_code and as status badge.
+    expect(screen.getAllByText("pending").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText(/—/).length).toBeGreaterThanOrEqual(1); // Duration should be —
   });
 
   it("renders step with artifacts in output", () => {
@@ -157,9 +158,14 @@ describe("JobTimeline", () => {
 
     render(<JobTimeline steps={steps} />);
 
-    expect(screen.getByText("Артефакты")).toBeInTheDocument();
-    expect(screen.getByText("document_url")).toBeInTheDocument();
-    expect(screen.getByText("receipt_url")).toBeInTheDocument();
+    const artifactsHeading = screen.getByText("Артефакты");
+    expect(artifactsHeading).toBeInTheDocument();
+    // The component also renders the raw output JSON in a sibling <pre>, which contains
+    // the same key names. Scope the lookup to the artifacts panel so /document_url/
+    // matches only the artifact label, not the JSON dump.
+    const artifactsPanel = artifactsHeading.parentElement as HTMLElement;
+    expect(within(artifactsPanel).getByText(/document_url/)).toBeInTheDocument();
+    expect(within(artifactsPanel).getByText(/receipt_url/)).toBeInTheDocument();
   });
 
   it("renders cancelled status badge", () => {

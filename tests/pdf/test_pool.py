@@ -19,7 +19,9 @@ def test_pool_runs_soffice(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> N
     monkeypatch.setattr(subprocess, "run", _run)
     source = tmp_path / "source.docx"
     source.write_bytes(b"docx")
-    out = LibreOfficePool(workers=1, soffice_bin="soffice").convert(source=source, output_dir=tmp_path, timeout_s=45)
+    out = LibreOfficePool(workers=1, soffice_bin="soffice").convert(
+        source=source, output_dir=tmp_path, timeout_s=45
+    )
     assert out.name == "source.pdf"
     assert called["timeout"] == 45
 

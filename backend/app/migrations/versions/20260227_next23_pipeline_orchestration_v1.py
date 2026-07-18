@@ -32,22 +32,38 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("tenant_id", "code", name="uq_pipeline_profile_tenant_code"),
     )
-    op.create_index("ix_pipeline_profiles_tenant_active", "pipeline_profiles", ["tenant_id", "is_active"])
+    op.create_index(
+        "ix_pipeline_profiles_tenant_active", "pipeline_profiles", ["tenant_id", "is_active"]
+    )
 
     op.add_column("document_jobs", sa.Column("profile_id", sa.String(length=36), nullable=True))
-    op.add_column("document_jobs", sa.Column("idempotency_key_id", sa.String(length=36), nullable=True))
-    op.add_column("document_jobs", sa.Column("attempts", sa.Integer(), nullable=False, server_default="0"))
+    op.add_column(
+        "document_jobs", sa.Column("idempotency_key_id", sa.String(length=36), nullable=True)
+    )
+    op.add_column(
+        "document_jobs", sa.Column("attempts", sa.Integer(), nullable=False, server_default="0")
+    )
     op.add_column("document_jobs", sa.Column("input", sa.JSON(), nullable=True))
     op.add_column("document_jobs", sa.Column("output", sa.JSON(), nullable=True))
-    op.add_column("document_jobs", sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True))
+    op.add_column(
+        "document_jobs", sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True)
+    )
     op.create_index("ix_document_jobs_tenant_created", "document_jobs", ["tenant_id", "created_at"])
 
-    op.add_column("document_job_steps", sa.Column("order", sa.Integer(), nullable=False, server_default="0"))
+    op.add_column(
+        "document_job_steps", sa.Column("order", sa.Integer(), nullable=False, server_default="0")
+    )
     op.add_column("document_job_steps", sa.Column("input", sa.JSON(), nullable=True))
     op.add_column("document_job_steps", sa.Column("output", sa.JSON(), nullable=True))
-    op.add_column("document_job_steps", sa.Column("logs_file_id", sa.String(length=36), nullable=True))
-    op.add_column("document_job_steps", sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True))
-    op.create_index("ix_job_steps_tenant_job_order", "document_job_steps", ["tenant_id", "job_id", "order"])
+    op.add_column(
+        "document_job_steps", sa.Column("logs_file_id", sa.String(length=36), nullable=True)
+    )
+    op.add_column(
+        "document_job_steps", sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True)
+    )
+    op.create_index(
+        "ix_job_steps_tenant_job_order", "document_job_steps", ["tenant_id", "job_id", "order"]
+    )
 
 
 def downgrade() -> None:

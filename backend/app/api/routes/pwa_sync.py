@@ -23,6 +23,7 @@ from app.models.models import (
     ComplianceDeadline,
     OfflineMediaQueue,
     OfflineSyncBatch,
+    Person,
     Tenant,
     TrainingEnrollment,
 )
@@ -318,7 +319,9 @@ def _serialize_date(value: date | datetime | None) -> str | None:
     return value.isoformat()
 
 
-def _validate_payload_required_fields(payload: dict[str, Any], required_fields: tuple[str, ...]) -> None:
+def _validate_payload_required_fields(
+    payload: dict[str, Any], required_fields: tuple[str, ...]
+) -> None:
     missing = [field for field in required_fields if payload.get(field) in (None, "")]
     if missing:
         raise HTTPException(
@@ -331,7 +334,9 @@ def _validate_payload_required_fields(payload: dict[str, Any], required_fields: 
         )
 
 
-def _sanitize_client_payload(payload: dict[str, Any], blocked_fields: tuple[str, ...]) -> dict[str, Any]:
+def _sanitize_client_payload(
+    payload: dict[str, Any], blocked_fields: tuple[str, ...]
+) -> dict[str, Any]:
     sanitized = dict(payload)
     for field in blocked_fields:
         sanitized.pop(field, None)
@@ -376,7 +381,9 @@ async def create_batch(
 ):
     incoming = dict(payload or {})
     _validate_payload_required_fields(incoming, ("device_id", "entity_type", "payload"))
-    sanitized = _sanitize_client_payload(incoming, ("tenant_id", "user_id", "status", "error_payload"))
+    sanitized = _sanitize_client_payload(
+        incoming, ("tenant_id", "user_id", "status", "error_payload")
+    )
     sanitized["payload"] = _sanitize_offline_entity_payload(sanitized.get("payload") or {})
     batch = OfflineSyncBatch(
         tenant_id=tenant.id,
@@ -425,7 +432,9 @@ async def commit_media(
 ):
     incoming = dict(payload or {})
     _validate_payload_required_fields(incoming, ("device_id", "local_ref"))
-    sanitized = _sanitize_client_payload(incoming, ("tenant_id", "user_id", "upload_status", "file_id"))
+    sanitized = _sanitize_client_payload(
+        incoming, ("tenant_id", "user_id", "upload_status", "file_id")
+    )
     media = OfflineMediaQueue(
         tenant_id=tenant.id,
         user_id=str(access.user.id),
@@ -498,6 +507,33 @@ async def resolve_conflict(
     return resolved
 
 
+async def _resolve_person_id(session: AsyncSession, tenant_id: Any, user_email: Any) -> str | None:
+    """Resolve the Person record linked to the authenticated user, or None.
+
+    The bootstrap is the caller's *own* offline dataset, so per-person projections
+    (training assignments, compliance deadlines) are scoped to this person. The
+    Person↔User link is resolved by case-insensitive email match — the same
+    convention already used to surface a person's login account in
+    ``EmployeeCardService`` (``backend/app/services/employee_card.py``). A user with
+    no matching Person (e.g. an admin without a personnel record) legitimately has
+    no personal assignments — callers must NOT fall back to the tenant-wide list,
+    which would over-expose every person's data.
+    """
+    if not user_email:
+        return None
+    return (
+        await session.execute(
+            select(Person.id)
+            .where(
+                Person.tenant_id == tenant_id,
+                func.lower(Person.email) == str(user_email).lower(),
+                Person.deleted_at.is_(None),
+            )
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+
+
 @router.get("/bootstrap", response_model=PwaBootstrapResponse)
 async def bootstrap(
     tenant: Tenant = Depends(get_tenant_record),
@@ -505,6 +541,7 @@ async def bootstrap(
     access: AccessContext = Depends(rbac()),
 ):
     permissions = _normalize_permissions(access)
+    person_id = await _resolve_person_id(session, tenant.id, getattr(access.user, "email", None))
     templates = (
         (
             await session.execute(
@@ -531,31 +568,38 @@ async def bootstrap(
         .scalars()
         .all()
     )
-    enrollments = (
-        (
-            await session.execute(
-                select(TrainingEnrollment).where(
-                    TrainingEnrollment.tenant_id == tenant.id,
-                    TrainingEnrollment.deleted_at.is_(None),
-                    TrainingEnrollment.status.in_(["assigned", "in_progress"]),
+    # Per-person projections are scoped to the caller's own personnel record. With no
+    # linked Person the caller has no personal assignments (never the tenant-wide list).
+    enrollments: list[TrainingEnrollment] = []
+    deadlines: list[ComplianceDeadline] = []
+    if person_id is not None:
+        enrollments = list(
+            (
+                await session.execute(
+                    select(TrainingEnrollment).where(
+                        TrainingEnrollment.tenant_id == tenant.id,
+                        TrainingEnrollment.person_id == person_id,
+                        TrainingEnrollment.deleted_at.is_(None),
+                        TrainingEnrollment.status.in_(["assigned", "in_progress"]),
+                    )
                 )
             )
+            .scalars()
+            .all()
         )
-        .scalars()
-        .all()
-    )
-    deadlines = (
-        (
-            await session.execute(
-                select(ComplianceDeadline).where(
-                    ComplianceDeadline.tenant_id == tenant.id,
-                    ComplianceDeadline.status.in_(["upcoming", "due", "overdue"]),
+        deadlines = list(
+            (
+                await session.execute(
+                    select(ComplianceDeadline).where(
+                        ComplianceDeadline.tenant_id == tenant.id,
+                        ComplianceDeadline.person_id == person_id,
+                        ComplianceDeadline.status.in_(["upcoming", "due", "overdue"]),
+                    )
                 )
             )
+            .scalars()
+            .all()
         )
-        .scalars()
-        .all()
-    )
     pending_batches = int(
         (
             await session.execute(
@@ -652,10 +696,20 @@ async def bootstrap(
         },
         offline_queue={
             "capabilities": _build_offline_capabilities(permissions),
-            "failed_conflicts": [_serialize_conflict(item).model_dump(mode="json") for item in failed_conflicts[:10]],
+            "failed_conflicts": [
+                _serialize_conflict(item).model_dump(mode="json") for item in failed_conflicts[:10]
+            ],
             "conflict_count": len(failed_conflicts),
-            "draft_entity_types": ["briefing_entry", "incident", "inspection_checklist", "task_comment", "training_ack"],
-            "draft_policy": _build_draft_policy(pending_batches=pending_batches, failed_batches=failed_batches),
+            "draft_entity_types": [
+                "briefing_entry",
+                "incident",
+                "inspection_checklist",
+                "task_comment",
+                "training_ack",
+            ],
+            "draft_policy": _build_draft_policy(
+                pending_batches=pending_batches, failed_batches=failed_batches
+            ),
             "conflict_resolution": _build_conflict_resolution_contract(len(failed_conflicts)),
         },
         dictionaries=_build_dictionaries(),

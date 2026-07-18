@@ -36,15 +36,34 @@ jobs:
         run: |
           npm run e2e -- --grep "mandatory \(no external creds\)"
 
+  resolve-credential-matrix:
+    name: Resolve credential matrix
+    needs: playwright-smoke-minimal
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.gen.outputs.matrix }}
+    steps:
+      - id: gen
+        env:
+          E2E_USER_EMAIL: ${{ secrets.E2E_USER_EMAIL }}
+          E2E_USER_PASSWORD: ${{ secrets.E2E_USER_PASSWORD }}
+          E2E_LIMITED_USER_EMAIL: ${{ secrets.E2E_LIMITED_USER_EMAIL }}
+          E2E_LIMITED_USER_PASSWORD: ${{ secrets.E2E_LIMITED_USER_PASSWORD }}
+        run: |
+          if [ -n "$E2E_USER_EMAIL" ] && [ -n "$E2E_USER_PASSWORD" ] && [ -n "$E2E_LIMITED_USER_EMAIL" ] && [ -n "$E2E_LIMITED_USER_PASSWORD" ]; then
+            echo 'matrix=["bootstrap_local","repo_secrets"]' >> "$GITHUB_OUTPUT"
+          else
+            echo 'matrix=["bootstrap_local"]' >> "$GITHUB_OUTPUT"
+          fi
+
   playwright-smoke-credential:
     name: Credential smoke (${{ matrix.credential_source }})
-    needs: playwright-smoke-minimal
+    needs: [playwright-smoke-minimal, resolve-credential-matrix]
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        credential_source: [bootstrap_local, repo_secrets]
-    if: ${{ matrix.credential_source != 'repo_secrets' || (secrets.E2E_USER_EMAIL != '' && secrets.E2E_USER_PASSWORD != '' && secrets.E2E_LIMITED_USER_EMAIL != '' && secrets.E2E_LIMITED_USER_PASSWORD != '') }}
+        credential_source: ${{ fromJSON(needs.resolve-credential-matrix.outputs.matrix) }}
     env:
       DATABASE_URL: sqlite+aiosqlite:///./dev.db
       E2E_TENANT: demo
@@ -82,9 +101,10 @@ jobs:
             echo "E2E_LIMITED_USER_EMAIL=${{ secrets.E2E_LIMITED_USER_EMAIL }}" >> "$GITHUB_ENV"
             echo "E2E_LIMITED_USER_PASSWORD=${{ secrets.E2E_LIMITED_USER_PASSWORD }}" >> "$GITHUB_ENV"
           else
-            echo "E2E_USER_EMAIL=e2e.owner.demo@example.local" >> "$GITHUB_ENV"
+            # `.local` (RFC 6761 mDNS) is rejected by pydantic EmailStr on /auth/login — use RFC 2606 `.com`.
+            echo "E2E_USER_EMAIL=e2e.owner.demo@example.com" >> "$GITHUB_ENV"
             echo "E2E_USER_PASSWORD=OwnerDemo123!" >> "$GITHUB_ENV"
-            echo "E2E_LIMITED_USER_EMAIL=e2e.student.demo@example.local" >> "$GITHUB_ENV"
+            echo "E2E_LIMITED_USER_EMAIL=e2e.student.demo@example.com" >> "$GITHUB_ENV"
             echo "E2E_LIMITED_USER_PASSWORD=StudentDemo123!" >> "$GITHUB_ENV"
           fi
 

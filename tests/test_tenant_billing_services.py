@@ -21,7 +21,13 @@ from app.services.tenant_billing import (
 
 
 class _Session:
-    def __init__(self, tenant: Tenant, plan: BillingPlan, sub: BillingSubscription, usage: BillingUsageCounter):
+    def __init__(
+        self,
+        tenant: Tenant,
+        plan: BillingPlan,
+        sub: BillingSubscription,
+        usage: BillingUsageCounter,
+    ):
         self.tenant = tenant
         self.plan = plan
         self.sub = sub
@@ -71,7 +77,9 @@ class _Session:
 
     def add(self, obj):  # noqa: ANN001
         if obj.__class__.__name__ == "BillingEvent":
-            self._events.add((obj.tenant_id, str(obj.type), str(obj.ref_type or ""), str(obj.ref_id or "")))
+            self._events.add(
+                (obj.tenant_id, str(obj.type), str(obj.ref_type or ""), str(obj.ref_id or ""))
+            )
         elif obj.__class__.__name__ == "BillingUsageCounter":
             self.usage = obj
         return None
@@ -82,7 +90,15 @@ class _Session:
 
 @pytest.fixture
 def fixture() -> tuple[BillingService, Tenant]:
-    tenant = Tenant(id="tenant-1", slug="t1", name="Tenant", contact_email="t@a.b", kind="customer", is_active=True, settings={})
+    tenant = Tenant(
+        id="tenant-1",
+        slug="t1",
+        name="Tenant",
+        contact_email="t@a.b",
+        kind="customer",
+        is_active=True,
+        settings={},
+    )
     plan = BillingPlan(code="free", name="Free", limits={"max_templates": 1}, features={}, price={})
     sub = BillingSubscription(
         tenant_id=tenant.id,
@@ -93,7 +109,9 @@ def fixture() -> tuple[BillingService, Tenant]:
         grace_until=datetime.now(tz=timezone.utc) - timedelta(days=1),
         auto_renew=True,
     )
-    usage = BillingUsageCounter(tenant_id=tenant.id, period_yyyymm=202603, docs_generated=0, edo_outgoing=0)
+    usage = BillingUsageCounter(
+        tenant_id=tenant.id, period_yyyymm=202603, docs_generated=0, edo_outgoing=0
+    )
     return BillingService(_Session(tenant, plan, sub, usage)), tenant
 
 

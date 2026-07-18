@@ -58,6 +58,7 @@ _JobsRunDep = Depends(require_permission("document_jobs.run_pipeline"))
 _JobsRetryDep = Depends(require_permission("document_jobs.retry_job"))
 _JobsCancelDep = Depends(require_permission("document_jobs.cancel_job"))
 
+
 class JobStepRead(BaseModel):
     code: str
     step_name: str
@@ -72,12 +73,14 @@ class JobStepRead(BaseModel):
     error_code: str | None = None
     error_payload: dict[str, Any] | None = None
 
+
 class JobLogRead(BaseModel):
     timestamp: datetime
     level: str
     message: str
     step_name: str | None = None
     meta_json: dict[str, Any] | None = None
+
 
 class JobEnvelopeRead(BaseModel):
     id: str
@@ -91,11 +94,13 @@ class JobEnvelopeRead(BaseModel):
     profile_id: str | None = None
     created_by: str | None = None
 
+
 class JobRead(BaseModel):
     job: JobEnvelopeRead
     steps: list[JobStepRead]
     logs: list[JobLogRead] = []
     result: dict[str, Any] | None = None
+
 
 class JobCreateRequest(BaseModel):
     profile_code: str | None = None
@@ -105,14 +110,17 @@ class JobCreateRequest(BaseModel):
     inputs: dict[str, Any] = {}
     options: dict[str, Any] = {}
 
+
 class JobCreateResponse(BaseModel):
     job_id: str
     status: str
     correlation_id: str
     steps: list[JobStepRead]
 
+
 def _status_value(raw: Any) -> str:
     return raw.value if hasattr(raw, "value") else str(raw)
+
 
 @router.post("", response_model=JobCreateResponse, status_code=status.HTTP_202_ACCEPTED)
 @audit_operation("run_pipeline", "document_job")
@@ -220,9 +228,11 @@ async def create_job(
     await session.commit()
     return response_model
 
+
 class JobListRead(BaseModel):
     items: list[JobEnvelopeRead]
     next_cursor: str | None = None
+
 
 @router.get("/{job_id}", response_model=JobRead)
 async def get_job(
@@ -352,6 +362,7 @@ async def get_job(
         ),
     )
 
+
 @router.get("", response_model=JobListRead)
 async def list_jobs(
     status_filter: str | None = Query(default=None, alias="status"),
@@ -409,6 +420,7 @@ async def list_jobs(
         next_cursor=next_cursor,
     )
 
+
 @router.post("/{job_id}:cancel", response_model=JobRead)
 @router.post("/{job_id}/cancel", response_model=JobRead)
 @audit_operation("cancel", "document_job")
@@ -432,10 +444,12 @@ async def cancel_job(
     await session.commit()
     return await get_job(job_id=job_id, session=session, tenant=tenant)
 
+
 class RetryJobRequest(BaseModel):
     step_key: str | None = None
     from_step_key: str | None = None
     retry_failed_only: bool = False
+
 
 @router.post("/{job_id}:retry", response_model=JobRead)
 @router.post("/{job_id}/retry", response_model=JobRead)
@@ -470,10 +484,13 @@ async def retry_job(
     except ValueError as exc:
         raise HTTPException(
             status.HTTP_409_CONFLICT,
-            detail=api_problem_detail(code="JOB_OPERATION_CONFLICT", message=str(exc), error_type="jobs"),
+            detail=api_problem_detail(
+                code="JOB_OPERATION_CONFLICT", message=str(exc), error_type="jobs"
+            ),
         ) from exc
     await session.commit()
     return await get_job(job_id=job_id, session=session, tenant=tenant)
+
 
 @router.post("/{job_id}/steps/{step}:rerun", response_model=JobRead)
 @audit_operation("rerun_step", "document_job")
@@ -498,13 +515,18 @@ async def rerun_step(
         await DocumentPipelineOrchestrator(session).retry_step(job_id=job_id, step_code=step)
     except ValueError as exc:
         if str(exc) == "step_not_found":
-            raise HTTPException(status.HTTP_404_NOT_FOUND, detail=_DOCUMENT_JOB_STEP_NOT_FOUND) from exc
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND, detail=_DOCUMENT_JOB_STEP_NOT_FOUND
+            ) from exc
         raise HTTPException(
             status.HTTP_409_CONFLICT,
-            detail=api_problem_detail(code="JOB_OPERATION_CONFLICT", message=str(exc), error_type="jobs"),
+            detail=api_problem_detail(
+                code="JOB_OPERATION_CONFLICT", message=str(exc), error_type="jobs"
+            ),
         ) from exc
     await session.commit()
     return await get_job(job_id=job_id, session=session, tenant=tenant)
+
 
 @router.post("/{job_id}/steps/{step_id}:retry", response_model=JobRead)
 @audit_operation("retry_step", "document_job")
@@ -536,6 +558,7 @@ async def retry_step_by_id(
         detail=_DOCUMENT_JOB_STEP_NOT_FOUND,
     )
     return await rerun_step(job_id=job_id, step=step.step_code, session=session, tenant=tenant)
+
 
 @router.get("/{job_id}/steps/{step_id}/logs")
 async def get_step_logs(
@@ -595,6 +618,7 @@ async def get_step_logs(
     lines = storage.get(key).decode("utf-8").splitlines()[-tail:]
     return {"logs_uri": logs_uri, "lines": lines}
 
+
 @router.get("/{job_id}/steps", response_model=list[JobStepRead])
 async def get_job_steps(
     job_id: str,
@@ -641,8 +665,10 @@ async def get_job_steps(
         for s in steps
     ]
 
+
 class RetryStepRequest(BaseModel):
     step_key: str
+
 
 @router.post("/{job_id}:retry-step", response_model=JobRead)
 @audit_operation("retry_step", "document_job")
@@ -654,6 +680,7 @@ async def retry_step_compat(
     __: Any = _JobsRetryDep,
 ) -> JobRead:
     return await rerun_step(job_id=job_id, step=payload.step_key, session=session, tenant=tenant)
+
 
 @router.get("/ws/jobs/{job_id}")
 async def stream_jobs(
@@ -733,6 +760,7 @@ async def stream_jobs(
 # OPS-008: Queue / Job Diagnostics
 # ---------------------------------------------------------------------------
 
+
 class QueueSummaryResponse(BaseModel):
     generated_at: datetime
     queued: int
@@ -751,6 +779,7 @@ async def get_queue_summary(
 ) -> QueueSummaryResponse:
     """Return queue-level health summary for all document jobs of the current tenant."""
     from datetime import timedelta
+
     now = datetime.now(timezone.utc)
     since = now - timedelta(hours=24)
 
@@ -777,7 +806,8 @@ async def get_queue_summary(
                     DocumentJob.created_at >= since,
                 )
             )
-        ).scalar_one() or 0
+        ).scalar_one()
+        or 0
     )
     success_last24h = int(
         (
@@ -790,7 +820,8 @@ async def get_queue_summary(
                     DocumentJob.created_at >= since,
                 )
             )
-        ).scalar_one() or 0
+        ).scalar_one()
+        or 0
     )
 
     return QueueSummaryResponse(
@@ -838,20 +869,25 @@ async def list_failed_jobs(
                     DocumentJob.status == DocumentJobStatus.FAILED.value,
                 )
             )
-        ).scalar_one() or 0
+        ).scalar_one()
+        or 0
     )
     rows = (
-        await session.execute(
-            select(DocumentJob)
-            .where(
-                DocumentJob.tenant_id == str(tenant.id),
-                DocumentJob.status == DocumentJobStatus.FAILED.value,
+        (
+            await session.execute(
+                select(DocumentJob)
+                .where(
+                    DocumentJob.tenant_id == str(tenant.id),
+                    DocumentJob.status == DocumentJobStatus.FAILED.value,
+                )
+                .order_by(DocumentJob.ended_at.desc().nulls_last(), DocumentJob.created_at.desc())
+                .offset(offset)
+                .limit(limit)
             )
-            .order_by(DocumentJob.ended_at.desc().nulls_last(), DocumentJob.created_at.desc())
-            .offset(offset)
-            .limit(limit)
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     return FailedJobsResponse(
         total=total,
         items=[
@@ -902,20 +938,25 @@ async def list_poisoned_events(
                     OutboxEvent.status == OutboxEventStatus.POISONED.value,
                 )
             )
-        ).scalar_one() or 0
+        ).scalar_one()
+        or 0
     )
     rows = (
-        await session.execute(
-            select(OutboxEvent)
-            .where(
-                OutboxEvent.tenant_id == tenant.id,
-                OutboxEvent.status == OutboxEventStatus.POISONED.value,
+        (
+            await session.execute(
+                select(OutboxEvent)
+                .where(
+                    OutboxEvent.tenant_id == tenant.id,
+                    OutboxEvent.status == OutboxEventStatus.POISONED.value,
+                )
+                .order_by(OutboxEvent.created_at.desc())
+                .offset(offset)
+                .limit(limit)
             )
-            .order_by(OutboxEvent.created_at.desc())
-            .offset(offset)
-            .limit(limit)
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     return PoisonedEventsResponse(
         total=total,
         items=[

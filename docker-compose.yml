@@ -106,6 +106,10 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    environment:
+      # RB-002e: only `api` runs `alembic upgrade heads`; worker/beat must skip to avoid
+      # the CREATE TYPE race on PG enums in migration 8d2c1a6c5e24.
+      RUN_MIGRATIONS: "false"
     depends_on:
       postgres:
         condition: service_healthy
@@ -133,6 +137,8 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    environment:
+      RUN_MIGRATIONS: "false"  # RB-002e — see worker comment
     depends_on:
       postgres:
         condition: service_healthy

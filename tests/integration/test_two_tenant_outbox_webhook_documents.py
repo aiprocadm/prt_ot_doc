@@ -30,7 +30,11 @@ async def _ensure_global_tenant(*, slug: str = "test", tenant_id: str | None = N
         ).scalar_one_or_none()
         if existing is not None:
             return
-        payload: dict[str, object] = {"slug": slug, "name": slug.title(), "contact_email": f"{slug}@example.com"}
+        payload: dict[str, object] = {
+            "slug": slug,
+            "name": slug.title(),
+            "contact_email": f"{slug}@example.com",
+        }
         if tenant_id is not None:
             payload["id"] = tenant_id
         session.add(Tenant(**payload))

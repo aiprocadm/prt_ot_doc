@@ -13,9 +13,7 @@ from app.services.domain_hooks import on_document_signed_create_followup_task
 from app.services.events import EventType
 from app.services.outbox import OutboxService
 
-_ALLOWED_STATUS_TRANSITIONS: Mapping[
-    DocumentStatus, frozenset[DocumentStatus]
-] = {
+_ALLOWED_STATUS_TRANSITIONS: Mapping[DocumentStatus, frozenset[DocumentStatus]] = {
     DocumentStatus.DRAFT: frozenset({DocumentStatus.GENERATED, DocumentStatus.REVOKED}),
     DocumentStatus.GENERATED: frozenset({DocumentStatus.REVIEW, DocumentStatus.REVOKED}),
     DocumentStatus.REVIEW: frozenset({DocumentStatus.APPROVED, DocumentStatus.REVOKED}),
@@ -26,16 +24,12 @@ _ALLOWED_STATUS_TRANSITIONS: Mapping[
 }
 
 
-def validate_transition(
-    current_status: DocumentStatus, target_status: DocumentStatus
-) -> bool:
+def validate_transition(current_status: DocumentStatus, target_status: DocumentStatus) -> bool:
     """Return ``True`` when a status transition is permitted."""
 
     if current_status == target_status:
         return True
-    allowed_targets = _ALLOWED_STATUS_TRANSITIONS.get(
-        current_status, frozenset()
-    )
+    allowed_targets = _ALLOWED_STATUS_TRANSITIONS.get(current_status, frozenset())
     return target_status in allowed_targets
 
 
@@ -91,9 +85,9 @@ class DocumentWorkflowService:
 
     session: AsyncSession
 
-    _ALLOWED_TRANSITIONS: ClassVar[
-        Mapping[DocumentStatus, frozenset[DocumentStatus]]
-    ] = _ALLOWED_STATUS_TRANSITIONS
+    _ALLOWED_TRANSITIONS: ClassVar[Mapping[DocumentStatus, frozenset[DocumentStatus]]] = (
+        _ALLOWED_STATUS_TRANSITIONS
+    )
 
     @classmethod
     def validate_transition(
@@ -246,9 +240,7 @@ class DocumentWorkflowService:
         )
         version_id = (await self.session.execute(stmt)).scalar_one_or_none()
         if version_id is None:
-            raise DocumentWorkflowError(
-                f"Document version missing for document '{document_id}'"
-            )
+            raise DocumentWorkflowError(f"Document version missing for document '{document_id}'")
         return str(version_id)
 
 
