@@ -77,9 +77,7 @@ def upgrade() -> None:
         sa.Column("entity_id", sa.String(length=36), nullable=True),
         sa.Column("notes", sa.String(length=1000), nullable=True),
         sa.ForeignKeyConstraint(["tenant_id"], ["tenant.id"]),
-        sa.ForeignKeyConstraint(
-            ["article_id"], ["budget_expense_article.id"], ondelete="SET NULL"
-        ),
+        sa.ForeignKeyConstraint(["article_id"], ["budget_expense_article.id"], ondelete="SET NULL"),
         sa.ForeignKeyConstraint(["company_id"], ["company.id"], ondelete="SET NULL"),
         sa.ForeignKeyConstraint(["branch_id"], ["branch.id"], ondelete="SET NULL"),
         sa.ForeignKeyConstraint(["site_id"], ["site.id"], ondelete="SET NULL"),

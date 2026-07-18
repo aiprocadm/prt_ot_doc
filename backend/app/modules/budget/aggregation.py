@@ -139,9 +139,7 @@ async def _domain_fact(
     total = Decimal("0")
     expense_count = 0
     by_article: list[ArticleActual] = []
-    for article_id, article_name, amount_sum, row_count in (
-        await session.execute(stmt)
-    ).all():
+    for article_id, article_name, amount_sum, row_count in (await session.execute(stmt)).all():
         amount = _as_decimal(amount_sum)
         total += amount
         expense_count += int(row_count or 0)
@@ -152,9 +150,7 @@ async def _domain_fact(
             # fallback keeps the money visible if it ever happens anyway.
             display_name = article_name if article_name is not None else str(article_id)
         by_article.append(
-            ArticleActual(
-                article_id=article_id, article_name=display_name, amount=float(amount)
-            )
+            ArticleActual(article_id=article_id, article_name=display_name, amount=float(amount))
         )
     by_article.sort(key=lambda row: (-row.amount, row.article_name))
     return total, by_article, expense_count
@@ -208,9 +204,7 @@ async def compute_overview(
             .all()
         )
         planned = sum((_as_decimal(b.planned_amount) for b in budgets), Decimal("0"))
-        window_total, _, _ = await _domain_fact(
-            session, tenant_id, domain, date_from, date_to
-        )
+        window_total, _, _ = await _domain_fact(session, tenant_id, domain, date_from, date_to)
         rows: list[BudgetOverviewBudgetRow] = []
         for budget in budgets:
             own_total, _, _ = await _domain_fact(
@@ -345,9 +339,7 @@ async def compute_breakdown(
                 if amount > 0:
                     entries.append((NO_BUCKET_ID, NO_ARTICLE_NAME, amount))
             else:
-                entries.append(
-                    (article_id, name if name is not None else str(article_id), amount)
-                )
+                entries.append((article_id, name if name is not None else str(article_id), amount))
     elif dimension == "domain":
         stmt = (
             select(BudgetExpense.domain, func.sum(BudgetExpense.amount))

@@ -133,28 +133,48 @@ async def test_domain_actual_window_grouping_and_filters(
 
         # in window: boundary dates ON start and ON end are included
         await _expense(
-            session, tenant.id, domain="training", amount=100.50,
-            occurred_on=WIN_FROM, article_id=art_a.id,
+            session,
+            tenant.id,
+            domain="training",
+            amount=100.50,
+            occurred_on=WIN_FROM,
+            article_id=art_a.id,
         )
         await _expense(
-            session, tenant.id, domain="training", amount=200.25,
-            occurred_on=WIN_TO, article_id=art_a.id,
+            session,
+            tenant.id,
+            domain="training",
+            amount=200.25,
+            occurred_on=WIN_TO,
+            article_id=art_a.id,
         )
         await _expense(
-            session, tenant.id, domain="training", amount=50,
-            occurred_on=date(2026, 1, 15), article_id=art_b.id,
+            session,
+            tenant.id,
+            domain="training",
+            amount=50,
+            occurred_on=date(2026, 1, 15),
+            article_id=art_b.id,
         )
         await _expense(
             session, tenant.id, domain="training", amount=10, occurred_on=date(2026, 1, 10)
         )  # article-less -> «— без статьи»
         # out of window (both sides)
         await _expense(
-            session, tenant.id, domain="training", amount=999,
-            occurred_on=date(2025, 12, 31), article_id=art_a.id,
+            session,
+            tenant.id,
+            domain="training",
+            amount=999,
+            occurred_on=date(2025, 12, 31),
+            article_id=art_a.id,
         )
         await _expense(
-            session, tenant.id, domain="training", amount=999,
-            occurred_on=date(2026, 2, 1), article_id=art_a.id,
+            session,
+            tenant.id,
+            domain="training",
+            amount=999,
+            occurred_on=date(2026, 2, 1),
+            article_id=art_a.id,
         )
         # other domain
         await _expense(
@@ -162,8 +182,12 @@ async def test_domain_actual_window_grouping_and_filters(
         )
         # soft-deleted
         await _expense(
-            session, tenant.id, domain="training", amount=555,
-            occurred_on=date(2026, 1, 15), deleted_at=datetime.now(timezone.utc),
+            session,
+            tenant.id,
+            domain="training",
+            amount=555,
+            occurred_on=date(2026, 1, 15),
+            deleted_at=datetime.now(timezone.utc),
         )
 
         fact = await compute_domain_actual(session, tenant.id, "training", WIN_FROM, WIN_TO)
@@ -191,16 +215,31 @@ async def test_overview_planned_overlap_and_own_period_actual(
         win_from, win_to = date(2026, 2, 1), date(2026, 2, 28)
 
         inside = await _budget(
-            session, tenant.id, domain="training",
-            start=date(2026, 2, 5), end=date(2026, 2, 20), planned=1000, name="Внутри окна",
+            session,
+            tenant.id,
+            domain="training",
+            start=date(2026, 2, 5),
+            end=date(2026, 2, 20),
+            planned=1000,
+            name="Внутри окна",
         )
         straddle = await _budget(
-            session, tenant.id, domain="training",
-            start=date(2026, 1, 15), end=date(2026, 2, 10), planned=500, name="Через край",
+            session,
+            tenant.id,
+            domain="training",
+            start=date(2026, 1, 15),
+            end=date(2026, 2, 10),
+            planned=500,
+            name="Через край",
         )
         await _budget(
-            session, tenant.id, domain="training",
-            start=date(2026, 3, 1), end=date(2026, 3, 31), planned=9999, name="Вне окна",
+            session,
+            tenant.id,
+            domain="training",
+            start=date(2026, 3, 1),
+            end=date(2026, 3, 31),
+            planned=9999,
+            name="Вне окна",
         )
 
         # inside straddle's own period but OUTSIDE the overview window
@@ -323,12 +362,20 @@ async def test_breakdown_by_article_with_none_bucket(
         art_b = await _article(session, tenant.id, code="b", name="Б-статья")
 
         await _expense(
-            session, tenant.id, domain="training", amount=300,
-            occurred_on=date(2026, 1, 5), article_id=art_a.id,
+            session,
+            tenant.id,
+            domain="training",
+            amount=300,
+            occurred_on=date(2026, 1, 5),
+            article_id=art_a.id,
         )
         await _expense(
-            session, tenant.id, domain="medical", amount=200,
-            occurred_on=date(2026, 1, 10), article_id=art_b.id,
+            session,
+            tenant.id,
+            domain="medical",
+            amount=200,
+            occurred_on=date(2026, 1, 10),
+            article_id=art_b.id,
         )
         await _expense(
             session, tenant.id, domain="events", amount=100, occurred_on=date(2026, 1, 15)
@@ -393,13 +440,23 @@ async def test_breakdown_company_branch_site_with_tenant_isolation(
         session.add(foreign_site)
         await session.flush()
         await _expense(
-            session, t2.id, domain="training", amount=999,
-            occurred_on=date(2026, 1, 10), site_id=foreign_site.id,
+            session,
+            t2.id,
+            domain="training",
+            amount=999,
+            occurred_on=date(2026, 1, 10),
+            site_id=foreign_site.id,
         )
 
         await _expense(
-            session, t1.id, domain="training", amount=500, occurred_on=date(2026, 1, 10),
-            company_id=company.id, branch_id=branch.id, site_id=site.id,
+            session,
+            t1.id,
+            domain="training",
+            amount=500,
+            occurred_on=date(2026, 1, 10),
+            company_id=company.id,
+            branch_id=branch.id,
+            site_id=site.id,
         )
         await _expense(
             session, t1.id, domain="training", amount=120, occurred_on=date(2026, 1, 12)
@@ -428,7 +485,9 @@ async def test_breakdown_validation_codes(sessionmaker, data_factory: TestDataFa
         assert exc_info.value.code == "breakdown_dimension_unknown"
 
         with pytest.raises(BudgetValidationError) as exc_info:
-            await compute_breakdown(session, tenant.id, "article", date(2026, 2, 1), date(2026, 1, 1))
+            await compute_breakdown(
+                session, tenant.id, "article", date(2026, 2, 1), date(2026, 1, 1)
+            )
         assert exc_info.value.code == "window_invalid"
 
 
@@ -442,8 +501,12 @@ async def test_breakdown_excludes_ppe_stock_ledger(
         item = await _ppe_item(session, tenant.id, name="Каска")
         batch = await _ppe_batch(session, tenant.id, item.id, unit_cost=100)
         await _ppe_receipt(
-            session, tenant.id, item.id, batch.id,
-            delta=3, when=datetime(2026, 1, 15, tzinfo=timezone.utc),
+            session,
+            tenant.id,
+            item.id,
+            batch.id,
+            delta=3,
+            when=datetime(2026, 1, 15, tzinfo=timezone.utc),
         )
         await _expense(
             session, tenant.id, domain="training", amount=100, occurred_on=date(2026, 1, 10)
@@ -484,8 +547,12 @@ async def test_breakdown_cap_truncation(
         art_c = await _article(session, tenant.id, code="c", name="В-статья")
         for article, amount in ((art_a, 300), (art_b, 200), (art_c, 100)):
             await _expense(
-                session, tenant.id, domain="training", amount=amount,
-                occurred_on=date(2026, 1, 5), article_id=article.id,
+                session,
+                tenant.id,
+                domain="training",
+                amount=amount,
+                occurred_on=date(2026, 1, 5),
+                article_id=article.id,
             )
 
         result = await compute_breakdown(session, tenant.id, "article", WIN_FROM, WIN_TO)

@@ -123,7 +123,9 @@ async def test_expense_create_list_filters_and_join(
         assert {row[0].id for row in items} == {e1.id, e2.id}
 
         # date window inclusive on both bounds
-        items, total = await svc.list_expenses(date_from=date(2026, 1, 5), date_to=date(2026, 1, 10))
+        items, total = await svc.list_expenses(
+            date_from=date(2026, 1, 5), date_to=date(2026, 1, 10)
+        )
         assert total == 2
         assert {row[0].id for row in items} == {e1.id, e2.id}
 
@@ -146,9 +148,7 @@ async def test_expense_create_list_filters_and_join(
 
 
 @pytest.mark.asyncio
-async def test_expense_update_and_soft_delete(
-    sessionmaker, data_factory: TestDataFactory
-) -> None:
+async def test_expense_update_and_soft_delete(sessionmaker, data_factory: TestDataFactory) -> None:
     async with sessionmaker() as session:
         tenant = await data_factory.ensure_tenant(session=session)
         svc = BudgetService(session, tenant.id)
@@ -475,9 +475,7 @@ async def test_expense_update_validates_touched_ref(
         )
 
         with pytest.raises(BudgetValidationError) as exc_info:
-            await svc1.update_expense(
-                expense.id, BudgetExpenseUpdate(site_id=foreign_site.id)
-            )
+            await svc1.update_expense(expense.id, BudgetExpenseUpdate(site_id=foreign_site.id))
         assert exc_info.value.code == "unknown_site"
 
 
@@ -553,9 +551,7 @@ async def test_expense_update_merged_entity_pairing(
 
 
 @pytest.mark.asyncio
-async def test_expense_explicit_null_rejected(
-    sessionmaker, data_factory: TestDataFactory
-) -> None:
+async def test_expense_explicit_null_rejected(sessionmaker, data_factory: TestDataFactory) -> None:
     async with sessionmaker() as session:
         tenant = await data_factory.ensure_tenant(session=session)
         svc = BudgetService(session, tenant.id)

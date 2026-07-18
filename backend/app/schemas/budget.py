@@ -59,13 +59,13 @@ class SafetyBudgetPage(BaseSchema):
 
 class BudgetArticleActualRead(BaseSchema):
     article_id: str | None
-    article_name: str          # "— без статьи" для NULL
+    article_name: str  # "— без статьи" для NULL
     amount: float
 
 
 class SafetyBudgetDetail(SafetyBudgetRead):
     actual_total: float
-    remaining: float           # planned - actual; отрицательный = перерасход
+    remaining: float  # planned - actual; отрицательный = перерасход
     expense_count: int
     by_article: list[BudgetArticleActualRead]
 
@@ -73,7 +73,7 @@ class SafetyBudgetDetail(SafetyBudgetRead):
 class BudgetArticleCreate(BaseSchema):
     code: str = Field(min_length=1, max_length=64)
     name: str = Field(min_length=1, max_length=255)
-    domain: str | None = None      # NULL = универсальная
+    domain: str | None = None  # NULL = универсальная
     is_active: bool = True
 
     @model_validator(mode="after")
@@ -156,7 +156,7 @@ class BudgetExpenseRead(BaseSchema):
     id: str
     domain: str
     article_id: str | None
-    article_name: str | None       # outerjoin в сервисе
+    article_name: str | None  # outerjoin в сервисе
     title: str
     occurred_on: date
     amount: float
@@ -186,12 +186,12 @@ class BudgetOverviewBudgetRow(BaseSchema):
 
 
 class BudgetOverviewDomain(BaseSchema):
-    domain: str                    # training|medical|events|ppe
-    read_only: bool                # True только для ppe
+    domain: str  # training|medical|events|ppe
+    read_only: bool  # True только для ppe
     planned: float
     actual: float
     remaining: float
-    warning_unpriced_receipts: int | None = None   # только ppe
+    warning_unpriced_receipts: int | None = None  # только ppe
     budgets: list[BudgetOverviewBudgetRow]
 
 
@@ -203,7 +203,7 @@ class BudgetOverviewResponse(BaseSchema):
 
 
 class BudgetBreakdownItem(BaseSchema):
-    id: str                        # "" = None-bucket «— без привязки»/«— без статьи»
+    id: str  # "" = None-bucket «— без привязки»/«— без статьи»
     name: str
     amount: float
 
@@ -212,5 +212,5 @@ class BudgetBreakdownResponse(BaseSchema):
     dimension: str
     date_from: date
     date_to: date
-    total: int                     # строк ДО cap 200
+    total: int  # строк ДО cap 200
     items: list[BudgetBreakdownItem]

@@ -11,11 +11,11 @@ import pytest
 
 from app.models.budget import SafetyBudget
 from app.modules.budget.service import (
+    DEFAULT_ARTICLES,
     ArticleCodeConflict,
     BudgetNotFound,
     BudgetService,
     BudgetValidationError,
-    DEFAULT_ARTICLES,
 )
 from app.schemas.budget import (
     BudgetArticleCreate,
@@ -24,7 +24,6 @@ from app.schemas.budget import (
     SafetyBudgetUpdate,
 )
 from tests.utils.factories import TestDataFactory
-
 
 # ---------------------------------------------------------------------------
 # Budgets
@@ -211,9 +210,7 @@ async def test_article_create_list_and_code_conflict(
         t2 = await data_factory.ensure_tenant(session=session, slug="other")
         svc1 = BudgetService(session, t1.id)
 
-        await svc1.create_article(
-            BudgetArticleCreate(code="training_external", name="Обучение")
-        )
+        await svc1.create_article(BudgetArticleCreate(code="training_external", name="Обучение"))
         await svc1.create_article(BudgetArticleCreate(code="sout", name="СОУТ"))
 
         items, total = await svc1.list_articles()
@@ -249,9 +246,7 @@ async def test_article_update(sessionmaker, data_factory: TestDataFactory) -> No
     async with sessionmaker() as session:
         tenant = await data_factory.ensure_tenant(session=session)
         svc = BudgetService(session, tenant.id)
-        art = await svc.create_article(
-            BudgetArticleCreate(code="ppe_purchase", name="Закупка СИЗ")
-        )
+        art = await svc.create_article(BudgetArticleCreate(code="ppe_purchase", name="Закупка СИЗ"))
 
         updated = await svc.update_article(
             art.id, BudgetArticleUpdate(name="Закупка СИЗ (обновлено)", is_active=False)
@@ -283,9 +278,7 @@ async def test_article_update_explicit_null_rejected(
 
 
 @pytest.mark.asyncio
-async def test_list_articles_includes_inactive(
-    sessionmaker, data_factory: TestDataFactory
-) -> None:
+async def test_list_articles_includes_inactive(sessionmaker, data_factory: TestDataFactory) -> None:
     async with sessionmaker() as session:
         tenant = await data_factory.ensure_tenant(session=session)
         svc = BudgetService(session, tenant.id)

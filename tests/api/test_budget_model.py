@@ -46,9 +46,7 @@ async def test_budget_roundtrip(sessionmaker, data_factory: TestDataFactory) -> 
 
 
 @pytest.mark.asyncio
-async def test_article_unique_code_per_tenant(
-    sessionmaker, data_factory: TestDataFactory
-) -> None:
+async def test_article_unique_code_per_tenant(sessionmaker, data_factory: TestDataFactory) -> None:
     from app.models.budget import BudgetExpenseArticle
 
     async with sessionmaker() as session:
