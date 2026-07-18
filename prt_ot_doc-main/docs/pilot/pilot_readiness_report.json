@@ -1,0 +1,12 @@
+{
+  "generated_at": "2026-03-26T19:18:31.233070+00:00",
+  "status": "ready",
+  "checks": {
+    "platform_config": true,
+    "db_redis_s3_celery_health": true,
+    "templates_presets_starter_data": true,
+    "admin_diagnostics": true,
+    "tenant_bootstrap_test": true,
+    "pilot_smoke_subset": true
+  }
+}

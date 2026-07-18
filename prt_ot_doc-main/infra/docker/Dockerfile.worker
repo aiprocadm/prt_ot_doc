@@ -1,0 +1,33 @@
+FROM python:3.12.6-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    POETRY_HOME="/opt/poetry" \
+    POETRY_NO_INTERACTION=1 \
+    POETRY_VIRTUALENVS_IN_PROJECT=true \
+    POETRY_CACHE_DIR="/opt/poetry/cache" \
+    PIP_CACHE_DIR="/opt/pip/cache"
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends bash curl build-essential libmagic1 libmagic-dev pkg-config \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN pip install --no-cache-dir "poetry==2.1.4"
+COPY pyproject.toml poetry.lock* ./
+RUN poetry config virtualenvs.create false && poetry install --with dev --no-root
+COPY backend/app ./backend/app
+COPY sitecustomize.py ./sitecustomize.py
+
+RUN useradd --create-home --shell /bin/bash appuser \
+    && chown -R appuser:appuser /srv/app "$POETRY_HOME" "$POETRY_CACHE_DIR" "$PIP_CACHE_DIR"
+
+USER appuser
+
+ENV PATH="/srv/app/.venv/bin:$POETRY_HOME/bin:$PATH" \
+    PYTHONPATH=/srv/app/backend
+
+CMD ["celery", "-A", "app.services.celery_app.celery_app", "worker", "--loglevel=info"]

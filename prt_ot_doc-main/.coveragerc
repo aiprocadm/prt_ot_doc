@@ -1,0 +1,29 @@
+[run]
+source = app
+omit =
+    app/api/routes/*
+    app/api/v1/router.py
+    app/domains/packs/context.py
+    app/domains/packs/seeder.py
+    app/services/package_export.py
+    app/services/tasks.py
+    app/services/documents.py
+    app/services/api_keys.py
+    app/services/outbox.py
+    app/services/storage.py
+    app/services/clamav.py
+    app/core/logging.py
+    app/core/logging_config.py
+    app/core/security.py
+    app/core/idempotency.py
+    app/core/task_context.py
+    app/core/config.py
+    app/db/base.py
+    app/main.py
+    app/worker.py
+    app/models/checks.py
+    app/models/feature.py
+[report]
+exclude_lines =
+    pragma: no cover
+    if TYPE_CHECKING:

@@ -1,0 +1,81 @@
+import { useEffect, useState } from "react";
+
+import { EmptyState } from "@/components/common/EmptyState";
+import { ErrorState } from "@/components/common/ErrorState";
+import { LoadingScreen } from "@/components/common/LoadingScreen";
+import { Breadcrumb } from "@/components/ui/breadcrumb";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { TemplateDetails } from "@/features/templates/TemplateDetails";
+import { TemplateFormDialog } from "@/features/templates/TemplateFormDialog";
+import { TemplateTable } from "@/features/templates/TemplateTable";
+import { AccessDeniedPage } from "@/pages/access/AccessDeniedPage";
+import { PERMISSIONS } from "@/permissions/permissions";
+import { useAbility } from "@/permissions/useAbility";
+import { useTemplatesStore } from "@/stores/templates";
+import type { TemplateDto } from "@/types/dto/templates";
+
+const TemplatesPage = () => {
+  const { list, getById, items, loading, error } = useTemplatesStore();
+  const [selectedTemplate, setSelectedTemplate] = useState<TemplateDto | null>(null);
+  const { can } = useAbility();
+  const canView = can(PERMISSIONS.TEMPLATE_VIEW);
+  const canCreate = can(PERMISSIONS.TEMPLATE_CREATE);
+  const canEdit = can(PERMISSIONS.TEMPLATE_EDIT);
+  const readOnly = !canCreate && !canEdit;
+
+  useEffect(() => {
+    if (canView) {
+      list();
+    }
+  }, [canView, list]);
+
+  if (!canView) {
+    return <AccessDeniedPage />;
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col gap-2">
+        <Breadcrumb items={[{ label: "Главная", to: "/" }, { label: "Шаблоны" }]} />
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-bold">Шаблоны</h1>
+          <div className="flex items-center gap-2">
+            {readOnly && (
+              <span className="rounded-full border border-dashed px-3 py-1 text-xs text-muted-foreground">Только просмотр</span>
+            )}
+            {canCreate && (
+              <TemplateFormDialog
+                trigger={<Button>Добавить</Button>}
+                onSubmitted={(template) => {
+                  setSelectedTemplate(template);
+                  list();
+                }}
+              />
+            )}
+          </div>
+        </div>
+      </div>
+      <Card>
+        <CardContent className="py-6">
+          <ErrorState error={error ?? undefined} onRetry={() => void list()} />
+          {loading && items.length === 0 ? <LoadingScreen label="Загрузка шаблонов" /> : null}
+          {!loading && !error && items.length === 0 ? (
+            <EmptyState
+              title="Шаблоны не найдены"
+              description="Загрузите первый шаблон, чтобы запустить document lifecycle без ручных обходных сценариев."
+            />
+          ) : null}
+          {items.length > 0 ? (
+            <TemplateTable onSelect={(template) => {
+              getById(template.id).then((loaded) => setSelectedTemplate(loaded ?? template));
+            }} />
+          ) : null}
+        </CardContent>
+      </Card>
+      {selectedTemplate && <TemplateDetails template={selectedTemplate} />}
+    </div>
+  );
+};
+
+export default TemplatesPage;
