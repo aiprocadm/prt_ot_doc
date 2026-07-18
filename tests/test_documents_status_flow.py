@@ -109,21 +109,22 @@ async def test_document_status_transition_success(
 
     async with sessionmaker() as session:
         stored_document = (
-            await session.execute(
-                select(Document).where(Document.id == seeded["document_id"])
-            )
+            await session.execute(select(Document).where(Document.id == seeded["document_id"]))
         ).scalar_one()
         assert stored_document.status is DocumentStatus.GENERATED
 
         audit_entries = (
-            await session.execute(
-                select(AuditLog)
-                .where(
-                    AuditLog.action == "document.status_change",
-                    AuditLog.object_id == seeded["document_id"],
+            (
+                await session.execute(
+                    select(AuditLog).where(
+                        AuditLog.action == "document.status_change",
+                        AuditLog.object_id == seeded["document_id"],
+                    )
                 )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         assert len(audit_entries) == 1
         entry = audit_entries[0]
         assert entry.user_id == seeded["user_id"]
@@ -172,14 +173,12 @@ async def test_document_status_transition_invalid_is_rejected(
 
     assert response.status_code == 409
     payload = response.json()
-    assert payload["code"] == "http_409"
+    assert payload["code"] == "DOCUMENT_INVALID_STATUS_TRANSITION"
     assert "Cannot transition document" in payload["message"]
 
     async with sessionmaker() as session:
         stored_document = (
-            await session.execute(
-                select(Document).where(Document.id == seeded["document_id"])
-            )
+            await session.execute(select(Document).where(Document.id == seeded["document_id"]))
         ).scalar_one()
         assert stored_document.status is DocumentStatus.DRAFT
 
@@ -274,23 +273,25 @@ async def test_document_status_sequential_flow(
 
     async with sessionmaker() as session:
         document = (
-            await session.execute(
-                select(Document).where(Document.id == seeded["document_id"])
-            )
+            await session.execute(select(Document).where(Document.id == seeded["document_id"]))
         ).scalar_one()
         assert document.status is DocumentStatus.ARCHIVED
 
         entries = (
-            await session.execute(
-                select(AuditLog)
-                .where(
-                    AuditLog.object_type == "document",
-                    AuditLog.object_id == seeded["document_id"],
-                    AuditLog.action == "document.status_change",
+            (
+                await session.execute(
+                    select(AuditLog)
+                    .where(
+                        AuditLog.object_type == "document",
+                        AuditLog.object_id == seeded["document_id"],
+                        AuditLog.action == "document.status_change",
+                    )
+                    .order_by(AuditLog.when)
                 )
-                .order_by(AuditLog.when)
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
 
         assert [entry.details["to"] for entry in entries] == [
             DocumentStatus.GENERATED.value,
@@ -385,6 +386,8 @@ async def test_document_detail_and_status_return_current_version(
     assert detail_payload["id"] == seeded["document_id"]
     assert detail_payload["current_version_id"]
     assert detail_payload["status"] == "draft"
-    assert detail_payload["storage"]["url"].endswith(f"/api/v1/documents/{seeded['document_id']}/download")
+    assert detail_payload["storage"]["url"].endswith(
+        f"/api/v1/documents/{seeded['document_id']}/download"
+    )
     assert status_payload["id"] == detail_payload["id"]
     assert status_payload["current_version_id"] == detail_payload["current_version_id"]

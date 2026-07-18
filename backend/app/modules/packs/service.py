@@ -14,6 +14,7 @@ from openpyxl import load_workbook
 from sqlalchemy import Select, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.errors import api_problem_detail
 from app.core.idempotency import compute_request_hash
 from app.models.file import File
 from app.models.models import (
@@ -31,6 +32,12 @@ from app.models.models import (
 )
 from app.modules.packs.schemas import PackagePresetItemCreate, PackRunCreate
 
+_PACKAGE_SOURCE_FILE_NOT_FOUND = api_problem_detail(
+    code="PACKAGE_SOURCE_FILE_NOT_FOUND",
+    message="Source file not found",
+    error_type="packs",
+)
+
 
 class NamingRuleEngine:
     TOKEN_RE = re.compile(r"<([a-zA-Z0-9_]+)>")
@@ -38,7 +45,17 @@ class NamingRuleEngine:
     TOKEN_ALIASES: dict[str, str] = {
         "yyyymmdd": "date",
     }
-    ALLOWED_TOKENS: set[str] = {"org", "unit", "project", "client", "doc", "topic", "version", "date", "flags"}
+    ALLOWED_TOKENS: set[str] = {
+        "org",
+        "unit",
+        "project",
+        "client",
+        "doc",
+        "topic",
+        "version",
+        "date",
+        "flags",
+    }
 
     def _resolve_token_value(self, key: str, payload: dict[str, Any]) -> str:
         normalized = key.strip().lower()
@@ -119,7 +136,9 @@ class SourceImportService:
                 row_payload = {columns[index]: values[index] for index in range(len(columns))}
                 rows.append(self._normalize_row(row_payload))
             return columns, rows
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "source type is not supported in this build")
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, "source type is not supported in this build"
+        )
 
     def _norm_col(self, column: str | None) -> str:
         return (column or "").strip().lower()
@@ -148,12 +167,21 @@ class MappingValidationService:
         known = set(columns)
         for target, source in mapping.items():
             if isinstance(source, str) and source.strip().lower() not in known:
-                raise HTTPException(status.HTTP_400_BAD_REQUEST, f"missing source column for mapping {target}")
+                raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST, f"missing source column for mapping {target}"
+                )
             if isinstance(source, dict):
-                if source.get("type") == "column" and str(source.get("value", "")).strip().lower() not in known:
-                    raise HTTPException(status.HTTP_400_BAD_REQUEST, f"missing source column for mapping {target}")
+                if (
+                    source.get("type") == "column"
+                    and str(source.get("value", "")).strip().lower() not in known
+                ):
+                    raise HTTPException(
+                        status.HTTP_400_BAD_REQUEST, f"missing source column for mapping {target}"
+                    )
                 if source.get("type") not in {"column", "literal"}:
-                    raise HTTPException(status.HTTP_400_BAD_REQUEST, "invalid computed mapping type")
+                    raise HTTPException(
+                        status.HTTP_400_BAD_REQUEST, "invalid computed mapping type"
+                    )
 
     def apply(self, mapping: dict[str, Any], row: dict[str, Any]) -> dict[str, Any]:
         result: dict[str, Any] = {}
@@ -213,12 +241,19 @@ class PackageService:
         )
         return list((await self.session.execute(stmt)).scalars().all())
 
-    async def add_item(self, tenant_id: str, preset: PackagePresetConfig, payload: PackagePresetItemCreate) -> PackagePresetItem:
+    async def add_item(
+        self, tenant_id: str, preset: PackagePresetConfig, payload: PackagePresetItemCreate
+    ) -> PackagePresetItem:
         tv = await self.session.get(TemplateVersion, payload.template_version_id)
-        if tv is None or tv.tenant_id != tenant_id:
+        if tv is None or str(tv.tenant_id) != str(tenant_id):
             raise HTTPException(status.HTTP_404_NOT_FOUND, "template version not found")
-        if tv.deleted_at is not None or tv.status in {TemplateVersionStatus.ARCHIVED, TemplateVersionStatus.DEPRECATED}:
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, "template version is invalid for package")
+        if tv.deleted_at is not None or tv.status in {
+            TemplateVersionStatus.ARCHIVED,
+            TemplateVersionStatus.DEPRECATED,
+        }:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST, "template version is invalid for package"
+            )
         replace_mode = payload.replace_mode
         if replace_mode == "dry-run":
             replace_mode = "preview"
@@ -248,7 +283,9 @@ class PackageService:
         await self.session.flush()
         return item
 
-    async def get_item(self, tenant_id: str, preset_id: str, item_id: str) -> PackagePresetItem | None:
+    async def get_item(
+        self, tenant_id: str, preset_id: str, item_id: str
+    ) -> PackagePresetItem | None:
         stmt = select(PackagePresetItem).where(
             PackagePresetItem.tenant_id == tenant_id,
             PackagePresetItem.package_preset_id == preset_id,
@@ -273,7 +310,11 @@ class PackRunService:
         rows: list[dict[str, Any]],
     ) -> PackRun:
         preset = await self.session.get(PackagePresetConfig, payload.package_preset_id)
-        if preset is None or preset.tenant_id != tenant_id or preset.deleted_at is not None:
+        if (
+            preset is None
+            or str(preset.tenant_id) != str(tenant_id)
+            or preset.deleted_at is not None
+        ):
             raise HTTPException(status.HTTP_404_NOT_FOUND, "package preset not found")
         if preset.status != PackageEntityStatus.ACTIVE and preset.status != "active":
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "package preset must be active")
@@ -301,6 +342,9 @@ class PackRunService:
             return existing
 
         self.mapping.validate(preset.mapping_json or {}, list(rows[0].keys()) if rows else [])
+        # Drop out-of-range selections BEFORE computing counts, else stats_json reports
+        # more "success" documents than PackRunItem rows actually produced.
+        valid_selected = [row_no for row_no in selected_rows if 1 <= row_no <= len(rows)]
         run = PackRun(
             tenant_id=tenant_id,
             package_preset_id=preset.id,
@@ -308,9 +352,13 @@ class PackRunService:
             source_file_id=payload.source_file_id,
             source_type=preset.source_type,
             source_rows_count=len(rows),
-            selected_rows_count=len(selected_rows),
+            selected_rows_count=len(valid_selected),
             status=PackRunLifecycleStatus.SUCCESS,
-            stats_json={"queued": len(selected_rows), "success": len(selected_rows), "failed": 0},
+            stats_json={
+                "queued": len(valid_selected),
+                "success": len(valid_selected),
+                "failed": 0,
+            },
             started_at=datetime.now(timezone.utc),
             ended_at=datetime.now(timezone.utc),
             idempotency_key=idempotency_key,
@@ -319,9 +367,7 @@ class PackRunService:
         self.session.add(run)
         await self.session.flush()
         used_filenames: set[str] = set()
-        for row_no in selected_rows:
-            if row_no < 1 or row_no > len(rows):
-                continue
+        for row_no in valid_selected:
             mapped = self.mapping.apply(preset.mapping_json or {}, rows[row_no - 1])
             filename = self.naming.render(preset.naming_rule, mapped, ext="docx")
             filename = self.naming.ensure_unique(filename, used_filenames)
@@ -330,7 +376,10 @@ class PackRunService:
                     tenant_id=tenant_id,
                     pack_run_id=run.id,
                     row_no=row_no,
-                    source_record_hash=hashlib.sha1(json.dumps(rows[row_no - 1], sort_keys=True).encode("utf-8")).hexdigest(),
+                    source_record_hash=hashlib.sha1(  # nosec B324 - content-addressing hash, not security; FIPS-safe via usedforsecurity=False
+                        json.dumps(rows[row_no - 1], sort_keys=True).encode("utf-8"),
+                        usedforsecurity=False,
+                    ).hexdigest(),
                     status=PackRunItemStatus.SUCCESS,
                     filename=filename,
                 )
@@ -338,7 +387,9 @@ class PackRunService:
         return run
 
 
-async def ensure_template_version_deletable(session: AsyncSession, tenant_id: str, template_version_id: str) -> None:
+async def ensure_template_version_deletable(
+    session: AsyncSession, tenant_id: str, template_version_id: str
+) -> None:
     usage = (
         await session.execute(
             select(TemplateUsage).where(
@@ -349,10 +400,23 @@ async def ensure_template_version_deletable(session: AsyncSession, tenant_id: st
         )
     ).scalar_one_or_none()
     if usage:
-        raise HTTPException(status.HTTP_409_CONFLICT, "template version is used by package preset")
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail=api_problem_detail(
+                code="TEMPLATE_VERSION_USED_BY_PACKAGE_PRESET",
+                message="Template version is used by a package preset",
+                error_type="packs",
+            ),
+        )
 
 
-async def load_source_rows(session: AsyncSession, source_file_id: str | None, inline_rows: list[dict[str, Any]]) -> tuple[str, list[str], list[dict[str, Any]]]:
+async def load_source_rows(
+    session: AsyncSession,
+    source_file_id: str | None,
+    inline_rows: list[dict[str, Any]],
+    *,
+    tenant_id: str | None = None,
+) -> tuple[str, list[str], list[dict[str, Any]]]:
     if inline_rows:
         cols = sorted({k.strip().lower() for row in inline_rows for k in row.keys()})
         normalized = [{k.strip().lower(): v for k, v in row.items()} for row in inline_rows]
@@ -361,7 +425,9 @@ async def load_source_rows(session: AsyncSession, source_file_id: str | None, in
         return "json", [], []
     file = await session.get(File, source_file_id)
     if file is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "source file not found")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail=_PACKAGE_SOURCE_FILE_NOT_FOUND)
+    if tenant_id is not None and str(file.tenant_id) != str(tenant_id):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail=_PACKAGE_SOURCE_FILE_NOT_FOUND)
     meta = file.meta_json or {}
     raw = meta.get("inline_content")
     raw_b64 = meta.get("inline_content_b64")
@@ -370,7 +436,14 @@ async def load_source_rows(session: AsyncSession, source_file_id: str | None, in
     elif raw:
         content = str(raw).encode("utf-8")
     else:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "source file has no inline content for preview")
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail=api_problem_detail(
+                code="PACKAGE_SOURCE_FILE_NO_INLINE_CONTENT",
+                message="Source file has no inline content for preview",
+                error_type="packs",
+            ),
+        )
     source_type = meta.get("source_type", "csv")
     columns, rows = SourceImportService().parse(source_type=source_type, content=content)
     return source_type, columns, rows

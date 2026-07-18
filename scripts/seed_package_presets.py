@@ -48,7 +48,9 @@ async def main() -> None:
             for payload in PRESETS:
                 exists = (
                     await session.execute(
-                        select(ClientPackagePreset).where(ClientPackagePreset.code == payload["code"])
+                        select(ClientPackagePreset).where(
+                            ClientPackagePreset.code == payload["code"]
+                        )
                     )
                 ).scalar_one_or_none()
                 if exists:

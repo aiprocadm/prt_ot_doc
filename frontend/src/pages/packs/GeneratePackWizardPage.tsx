@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { CheckCircle, ChevronRight, ClipboardList, Play, Settings2, Upload } from "lucide-react";
 import { toast } from "sonner";
 
-import { apiClient } from "@/api/client";
+import { packsApi } from "@/api/packs";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
@@ -42,7 +42,11 @@ const GeneratePackWizardPage = () => {
   const [presetsError, setPresetsError] = useState<ApiError | null>(null);
   const [selectedPresetId, setSelectedPresetId] = useState(presetIdParam);
   const [rowsJson, setRowsJson] = useState(DEFAULT_ROWS_JSON);
+  const rowsJsonRef = useRef(DEFAULT_ROWS_JSON);
+  const [rowsEditorKey, setRowsEditorKey] = useState(0);
+  const [rowsDirty, setRowsDirty] = useState(false);
   const [rowsError, setRowsError] = useState<string | null>(null);
+  const [rowsCount, setRowsCount] = useState<number | null>(null);
   const [idempotencyKey, setIdempotencyKey] = useState(initialIdempotencyKey);
   const [dryRun, setDryRun] = useState(false);
   const [running, setRunning] = useState(false);
@@ -51,7 +55,6 @@ const GeneratePackWizardPage = () => {
   const [draftOrigin, setDraftOrigin] = useState(() => ({
     step: presetIdParam ? 2 : 1,
     selectedPresetId: presetIdParam,
-    rowsJson: DEFAULT_ROWS_JSON,
     idempotencyKey: initialIdempotencyKey,
     dryRun: false,
   }));
@@ -60,7 +63,7 @@ const GeneratePackWizardPage = () => {
     setPresetsLoading(true);
     setPresetsError(null);
     try {
-      const { data } = await apiClient.get<Preset[]>("/package-presets");
+      const data = await packsApi.getPresets<Preset>();
       setPresets(data);
     } catch (err) {
       setPresetsError((err as ApiError) ?? { message: "Не удалось загрузить пресеты" });
@@ -69,16 +72,6 @@ const GeneratePackWizardPage = () => {
     }
   };
 
-  const rowsCount = useMemo(() => {
-    try {
-      const parsed = JSON.parse(rowsJson) as unknown;
-      if (!Array.isArray(parsed)) return null;
-      return parsed.length;
-    } catch {
-      return null;
-    }
-  }, [rowsJson]);
-
   const hasUnsavedChanges = useMemo(() => {
     if (packRunId) {
       return false;
@@ -86,11 +79,11 @@ const GeneratePackWizardPage = () => {
     return (
       step !== draftOrigin.step ||
       selectedPresetId !== draftOrigin.selectedPresetId ||
-      rowsJson !== draftOrigin.rowsJson ||
+      rowsDirty ||
       idempotencyKey !== draftOrigin.idempotencyKey ||
       dryRun !== draftOrigin.dryRun
     );
-  }, [draftOrigin, dryRun, idempotencyKey, packRunId, rowsJson, selectedPresetId, step]);
+  }, [draftOrigin, dryRun, idempotencyKey, packRunId, rowsDirty, selectedPresetId, step]);
 
   useUnsavedChanges(hasUnsavedChanges);
 
@@ -100,12 +93,16 @@ const GeneratePackWizardPage = () => {
   }, [presetIdParam]);
 
   const validateRows = (): Array<Record<string, unknown>> | null => {
+    const source = rowsJsonRef.current;
     try {
-      const parsed = JSON.parse(rowsJson) as unknown;
+      const parsed = JSON.parse(source) as unknown;
       if (!Array.isArray(parsed)) {
         setRowsError("Данные должны быть массивом JSON");
         return null;
       }
+      setRowsJson(source);
+      setRowsDirty(false);
+      setRowsCount(parsed.length);
       setRowsError(null);
       return parsed as Array<Record<string, unknown>>;
     } catch {
@@ -120,17 +117,8 @@ const GeneratePackWizardPage = () => {
     setRunning(true);
     setRunError(null);
     try {
-      const response = await apiClient.post<{ pack_run_id: string }>(
-        "/pack-runs",
-        {
-          package_preset_id: selectedPresetId,
-          rows,
-          selected_rows: rows.map((_, index) => index + 1),
-          dry_run: dryRun
-        },
-        { headers: { "Idempotency-Key": idempotencyKey } }
-      );
-      setPackRunId(response.data.pack_run_id);
+      const response = await packsApi.createRun(selectedPresetId, rows, dryRun, idempotencyKey);
+      setPackRunId(response.pack_run_id);
       toast.success(dryRun ? "Dry-run запущен" : "Пакет поставлен в очередь");
       setStep(5);
     } catch (err) {
@@ -227,10 +215,16 @@ const GeneratePackWizardPage = () => {
             <div className="space-y-2">
               <Label htmlFor="rows-json">Массив строк в формате JSON</Label>
               <textarea
+                key={rowsEditorKey}
                 id="rows-json"
                 className="min-h-48 w-full rounded-md border border-input bg-background p-3 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                value={rowsJson}
-                onChange={(e) => setRowsJson(e.target.value)}
+                defaultValue={rowsJson}
+                onChange={(e) => {
+                  rowsJsonRef.current = e.target.value;
+                  if (!rowsDirty) {
+                    setRowsDirty(true);
+                  }
+                }}
                 placeholder='[{"doc": "Инструкция", "employee": "Иванов И.И."}]'
               />
               {rowsError && <p className="text-sm text-destructive">{rowsError}</p>}
@@ -269,7 +263,7 @@ const GeneratePackWizardPage = () => {
                 id="idempotency-key"
                 value={idempotencyKey}
                 onChange={(e) => setIdempotencyKey(e.target.value)}
-                placeholder="wizard-timestamp"
+                placeholder="метка-времени мастера"
               />
               <p className="text-xs text-muted-foreground">
                 Повторный запрос с тем же ключом вернёт результат первого запуска.
@@ -368,13 +362,16 @@ const GeneratePackWizardPage = () => {
                   setDraftOrigin({
                     step: nextStep,
                     selectedPresetId: presetIdParam,
-                    rowsJson: DEFAULT_ROWS_JSON,
                     idempotencyKey: nextIdempotencyKey,
                     dryRun: false,
                   });
                   setStep(presetIdParam ? 2 : 1);
                   setSelectedPresetId(presetIdParam);
                   setRowsJson(DEFAULT_ROWS_JSON);
+                  rowsJsonRef.current = DEFAULT_ROWS_JSON;
+                  setRowsEditorKey((current) => current + 1);
+                  setRowsDirty(false);
+                  setRowsCount(null);
                   setRowsError(null);
                   setPackRunId(null);
                   setRunError(null);

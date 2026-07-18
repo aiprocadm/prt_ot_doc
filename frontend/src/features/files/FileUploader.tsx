@@ -2,8 +2,7 @@ import { useCallback, useMemo, useState } from "react";
 import { useDropzone, type FileRejection } from "react-dropzone";
 import { toast } from "sonner";
 
-import { apiClient } from "@/api/client";
-import { createUploadSession, finalizeUpload, getFile } from "@/api/files";
+import { createUploadSession, finalizeUpload, getFile, uploadToSignedUrl } from "@/api/files";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -68,9 +67,7 @@ export const FileUploader = ({ pollAttempts = 20, pollIntervalMs = 500 }: FileUp
         });
 
         updateUpload(localId, { progress: 45 });
-        await apiClient.put(session.signed_put_url, file, {
-          headers: { "Content-Type": file.type || "application/octet-stream" }
-        });
+        await uploadToSignedUrl(session.signed_put_url, file);
 
         updateUpload(localId, { progress: 70, status: "processing" });
         await finalizeUpload(session.file_id);

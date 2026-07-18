@@ -1,8 +1,28 @@
-"""next21 pdf conversion runs and file versions
+"""next21 pdf conversion runs (iter-15e: file_versions removed — stale duplicate)
 
 Revision ID: 20260222_next21
 Revises: 20260223_next15
 Create Date: 2026-02-22
+
+History:
+* Originally created both ``file_versions`` AND ``pdf_conversion_runs``.
+* iter-15e (CI run 26316247156): the ``file_versions`` block here conflicted
+  with the canonical ``file_versions`` schema created by
+  ``20260302_next29_files_search_v1`` on a sibling DAG branch. Both branches
+  are reachable from ``20260416_next69_merge_heads``, so at upgrade-head
+  Postgres saw two ``create_table("file_versions", ...)`` calls with
+  incompatible columns. SQLite tolerated this via
+  ``__table_args__ = {"extend_existing": True}`` in the dead-code
+  ``backend/app/modules/pdf/models.py:FileVersion``, masking the bug.
+* Investigation confirmed: schema B (next29) is canonical. The live
+  application (``files/api.py``, ``files/service.py``, ``next35`` trgm
+  index on ``filename``) targets next29's columns. Schema A
+  (object_key/app_version/FK->file.id) is referenced by ZERO code paths.
+* Fix: remove ``file_versions`` create_table + its indexes from this
+  revision's upgrade and from downgrade. ``pdf_conversion_runs`` (used
+  by ``modules/pdf/api.py``, ``modules/pdf/repo.py``, ``tasks/_core.py``)
+  stays. Dead-code ``modules/pdf/models.py:FileVersion`` and its
+  registration in ``db/base.py`` are removed in the same commit.
 """
 
 import sqlalchemy as sa
@@ -15,24 +35,6 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.create_table(
-        "file_versions",
-        sa.Column("id", sa.String(length=36), nullable=False),
-        sa.Column("tenant_id", sa.String(length=36), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
-        sa.Column("object_key", sa.String(length=512), nullable=False),
-        sa.Column("sha256", sa.String(length=64), nullable=False),
-        sa.Column("size", sa.Integer(), nullable=False),
-        sa.Column("mime", sa.String(length=128), nullable=False),
-        sa.Column("file_id", sa.String(length=36), nullable=True),
-        sa.Column("app_version", sa.Integer(), nullable=False, server_default="1"),
-        sa.PrimaryKeyConstraint("id"),
-        sa.ForeignKeyConstraint(["file_id"], ["file.id"], ondelete="SET NULL"),
-    )
-    op.create_index("ix_file_versions_tenant_sha256", "file_versions", ["tenant_id", "sha256"])
-    op.create_index("ix_file_versions_tenant_updated", "file_versions", ["tenant_id", "updated_at"])
-
     op.create_table(
         "pdf_conversion_runs",
         sa.Column("id", sa.String(length=36), nullable=False),
@@ -63,6 +65,6 @@ def downgrade() -> None:
     op.drop_index("ix_pdf_runs_input", table_name="pdf_conversion_runs")
     op.drop_index("ix_pdf_runs_tenant_status", table_name="pdf_conversion_runs")
     op.drop_table("pdf_conversion_runs")
-    op.drop_index("ix_file_versions_tenant_updated", table_name="file_versions")
-    op.drop_index("ix_file_versions_tenant_sha256", table_name="file_versions")
-    op.drop_table("file_versions")
+    # iter-15e: file_versions block removed from upgrade — no corresponding
+    # drop here. next29 (sibling branch) is the sole creator now and owns
+    # the canonical downgrade for that table.

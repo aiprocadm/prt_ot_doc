@@ -6,9 +6,7 @@ import contextvars
 from dataclasses import dataclass
 from typing import Optional
 
-_TRACE_ID: contextvars.ContextVar[str] = contextvars.ContextVar(
-    "trace_id", default="unknown"
-)
+_TRACE_ID: contextvars.ContextVar[str] = contextvars.ContextVar("trace_id", default="unknown")
 
 
 @dataclass(frozen=True, slots=True)

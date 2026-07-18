@@ -160,9 +160,7 @@ async def test_disabled_destination_is_ignored(sessionmaker) -> None:
                 session=session,
             )
 
-    assert [str(request.url) for request in requests] == [
-        "https://example.test/hooks/enabled"
-    ]
+    assert [str(request.url) for request in requests] == ["https://example.test/hooks/enabled"]
 
 
 @pytest.mark.anyio

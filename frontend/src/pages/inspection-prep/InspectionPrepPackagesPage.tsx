@@ -33,16 +33,16 @@ const InspectionPrepPackagesPage = () => {
 
   return (
     <div className="space-y-4">
-      <RegistryPageHeader title="Пакеты подготовки к проверке" description="Foundation-level but real projection из inspections, prescriptions, tasks и template coverage вместо статического текста." />
+      <RegistryPageHeader title="Пакеты подготовки к проверке" description="Реальная сводка по проверкам, предписаниям, задачам и покрытию шаблонами вместо статического текста." />
       <ErrorState error={error ?? undefined} onRetry={() => void reload()} />
       {loading ? <LoadingScreen label="Загрузка пакетов подготовки" /> : null}
       {!loading && !error && (totalBlockers > 0 || totalOpenTasks > 0) ? (
         <Card className="border-orange-200 bg-orange-50/40">
           <CardHeader>
-            <CardTitle className="text-base">Blockers и next actions</CardTitle>
+            <CardTitle className="text-base">Блокеры и дальнейшие действия</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3 text-sm">
-            <p>Открытых blockers по предписаниям: {totalBlockers}. Открытых задач подготовки: {totalOpenTasks}.</p>
+            <p>Открытых ограничений по предписаниям: {totalBlockers}. Открытых задач подготовки: {totalOpenTasks}.</p>
             <div className="flex flex-wrap gap-2">
               <Button asChild size="sm" variant="outline"><Link to="/prescriptions">Предписания</Link></Button>
               <Button asChild size="sm" variant="outline"><Link to="/tasks?type=inspection">Задачи подготовки</Link></Button>
@@ -51,15 +51,15 @@ const InspectionPrepPackagesPage = () => {
           </CardContent>
         </Card>
       ) : null}
-      {!loading && !error && registry.total === 0 ? <EmptyState title="Пакеты подготовки не сформированы" description="Нет inspections для подготовки." /> : null}
+      {!loading && !error && registry.total === 0 ? <EmptyState title="Пакеты подготовки не сформированы" description="Нет проверок для подготовки." /> : null}
       {!loading && !error && registry.total > 0 ? (
         <RegistryTable
           columns={[
             { accessorKey: "authority", header: "Орган" },
             { accessorKey: "status", header: "Статус проверки" },
-            { accessorKey: "blockers", header: "Blockers" },
+            { accessorKey: "blockers", header: "Ограничения" },
             { accessorKey: "openTasks", header: "Открытые задачи" },
-            { accessorKey: "templateCoverage", header: "Template coverage" }
+            { accessorKey: "templateCoverage", header: "Покрытие шаблонами" }
           ]}
           data={registry.pagedItems}
           pageIndex={registry.pageIndex}
@@ -69,7 +69,7 @@ const InspectionPrepPackagesPage = () => {
           onPageSizeChange={registry.onPageSizeChange}
           onSearchChange={registry.onSearchChange}
           searchPlaceholder="Поиск по органу и статусу"
-          caption="Inspection prep packages"
+          caption="Пакеты подготовки к проверкам"
         />
       ) : null}
     </div>

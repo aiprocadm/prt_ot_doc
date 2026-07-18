@@ -5,6 +5,7 @@ import { toast } from "sonner";
 
 import { DataTable } from "@/components/common/DataTable";
 import { Button } from "@/components/ui/button";
+import { CompanyFormDialog } from "@/features/companies/CompanyFormDialog";
 import { useCompaniesStore } from "@/stores/companies";
 import type { CompanyDto } from "@/types/dto/companies";
 import { formatDate } from "@/utils/datetime";
@@ -46,9 +47,15 @@ export const CompanyTable = ({ onSelect }: CompanyTableProps) => {
             <Button variant="ghost" size="icon" onClick={() => onSelect(row.original)} aria-label="Открыть">
               <Eye className="h-4 w-4" />
             </Button>
-            <Button variant="ghost" size="icon" onClick={() => onSelect(row.original)} aria-label="Редактировать">
-              <Pencil className="h-4 w-4" />
-            </Button>
+            <CompanyFormDialog
+              trigger={
+                <Button variant="ghost" size="icon" aria-label="Редактировать">
+                  <Pencil className="h-4 w-4" />
+                </Button>
+              }
+              initialData={row.original}
+              onSubmitted={(updated) => onSelect(updated)}
+            />
             <Button
               variant="ghost"
               size="icon"

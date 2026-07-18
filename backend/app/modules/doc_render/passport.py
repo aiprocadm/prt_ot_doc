@@ -52,18 +52,16 @@ def _passport_rows(passport: dict[str, Any]) -> str:
 
 def _visible_block(passport: dict[str, Any]) -> str:
     return (
-        '<w:p><w:r><w:t>Document passport</w:t></w:r></w:p>'
+        "<w:p><w:r><w:t>Document passport</w:t></w:r></w:p>"
         '<w:tbl><w:tblPr><w:tblW w:w="0" w:type="auto"/></w:tblPr>'
         f"{_passport_rows(passport)}"
-        '</w:tbl>'
+        "</w:tbl>"
     )
 
 
 def _hidden_paragraph(passport: dict[str, Any]) -> str:
     payload_json = json.dumps(passport, ensure_ascii=False, sort_keys=True)
-    return (
-        f'<w:p><w:r><w:rPr><w:vanish/></w:rPr><w:t>{escape(f"PTD-PASSPORT:{payload_json}")}</w:t></w:r></w:p>'
-    )
+    return f'<w:p><w:r><w:rPr><w:vanish/></w:rPr><w:t>{escape(f"PTD-PASSPORT:{payload_json}")}</w:t></w:r></w:p>'
 
 
 def embed_passport_docx(
@@ -77,7 +75,10 @@ def embed_passport_docx(
         passport = {**passport, "qr_url": qr_url}
     in_bytes = BytesIO(open(docx_path, "rb").read())
     out = BytesIO()
-    with zipfile.ZipFile(in_bytes, "r") as zin, zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as zout:
+    with (
+        zipfile.ZipFile(in_bytes, "r") as zin,
+        zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as zout,
+    ):
         content_types_xml: str | None = None
         for item in zin.infolist():
             data = zin.read(item.filename)
@@ -98,14 +99,20 @@ def embed_passport_docx(
             zout.writestr(item, data)
 
         passport_json = escape(json.dumps(passport, ensure_ascii=False, sort_keys=True))
-        custom_xml = f'''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+        custom_xml = f"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Properties xmlns="{CP_NS}" xmlns:vt="{VT_NS}">
   <property fmtid="{FMTID}" pid="2" name="passport_json"><vt:lpwstr>{passport_json}</vt:lpwstr></property>
-</Properties>'''.encode("utf-8")
+</Properties>""".encode(
+            "utf-8"
+        )
         zout.writestr("docProps/custom.xml", custom_xml)
 
         marker_payload = f"PTD-PASSPORT:{passport_json} w:vanish".encode("utf-8")
-        zout.writestr(zipfile.ZipInfo("docProps/passport.txt"), marker_payload, compress_type=zipfile.ZIP_STORED)
+        zout.writestr(
+            zipfile.ZipInfo("docProps/passport.txt"),
+            marker_payload,
+            compress_type=zipfile.ZIP_STORED,
+        )
 
         if content_types_xml is not None:
             if "docProps/custom.xml" not in content_types_xml:

@@ -7,7 +7,9 @@ import { TemplateDetails } from "@/features/templates/TemplateDetails";
 import type { TemplateDto } from "@/types/dto/templates";
 
 const activateVersionMock = vi.fn();
-const postMock = vi.fn();
+const uploadVersionMock = vi.fn();
+const lintVersionMock = vi.fn();
+const previewVersionMock = vi.fn();
 
 vi.mock("@/stores/templates", () => ({
   useTemplatesStore: () => ({
@@ -21,9 +23,11 @@ vi.mock("@/permissions/useAbility", () => ({
   })
 }));
 
-vi.mock("@/api/client", () => ({
-  apiClient: {
-    post: (...args: unknown[]) => postMock(...args)
+vi.mock("@/api/templates", () => ({
+  templatesApi: {
+    uploadVersion: (...args: unknown[]) => uploadVersionMock(...args),
+    lintVersion: (...args: unknown[]) => lintVersionMock(...args),
+    previewVersion: (...args: unknown[]) => previewVersionMock(...args)
   }
 }));
 
@@ -76,7 +80,9 @@ describe("TemplateDetails", () => {
 
   beforeEach(() => {
     activateVersionMock.mockReset();
-    postMock.mockReset();
+    uploadVersionMock.mockReset();
+    lintVersionMock.mockReset();
+    previewVersionMock.mockReset();
     vi.mocked(toast.success).mockReset();
     vi.mocked(toast.error).mockReset();
   });
@@ -111,12 +117,12 @@ describe("TemplateDetails", () => {
 
     await user.click(screen.getByRole("tab", { name: "Upload/Lint/Preview" }));
     fireEvent.change(await screen.findByRole("textbox"), { target: { value: "{" } });
-    fireEvent.click(screen.getByRole("button", { name: "Preview" }));
+    fireEvent.click(screen.getByRole("button", { name: "Предпросмотр" }));
 
     await waitFor(() => {
       expect(toast.error).toHaveBeenCalled();
     });
-    expect(postMock).not.toHaveBeenCalledWith("/templates/tpl-1/versions/ver-1:preview", expect.anything());
+    expect(previewVersionMock).not.toHaveBeenCalled();
   });
 
   it("shows toast when activation fails", async () => {

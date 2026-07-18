@@ -10,7 +10,9 @@ def test_incident_status_transitions() -> None:
     assert IncidentCaseService.validate_transition("draft", "registered")
     assert not IncidentCaseService.validate_transition("closed", "investigating")
     assert IncidentCaseService.next_status_on_register("draft") == "registered"
-    assert IncidentCaseService.close_status(has_open_actions=False, manual_override=False) == "closed"
+    assert (
+        IncidentCaseService.close_status(has_open_actions=False, manual_override=False) == "closed"
+    )
 
 
 def test_checklist_snapshot_semantics() -> None:
@@ -21,10 +23,12 @@ def test_checklist_snapshot_semantics() -> None:
 
 
 def test_findings_from_failed_items() -> None:
-    findings = InspectionService.findings_from_failed_items([
-        {"title": "PPE", "result": "fail", "severity_if_failed": "high"},
-        {"title": "Training", "result": "pass"},
-    ])
+    findings = InspectionService.findings_from_failed_items(
+        [
+            {"title": "PPE", "result": "fail", "severity_if_failed": "high"},
+            {"title": "Training", "result": "pass"},
+        ]
+    )
     assert len(findings) == 1
     assert findings[0]["severity"] == "high"
 
@@ -35,12 +39,18 @@ def test_prescription_aggregate_status_rules() -> None:
 
 
 def test_corrective_action_overdue_logic() -> None:
-    assert CorrectiveActionService.is_overdue("open", date.today() - timedelta(days=1), date.today())
-    assert not CorrectiveActionService.is_overdue("verified", date.today() - timedelta(days=1), date.today())
+    assert CorrectiveActionService.is_overdue(
+        "open", date.today() - timedelta(days=1), date.today()
+    )
+    assert not CorrectiveActionService.is_overdue(
+        "verified", date.today() - timedelta(days=1), date.today()
+    )
 
 
 def test_gap_detection_logic() -> None:
-    gaps = GapAnalysisService.detect_gaps(missing_documents=1, overdue_actions=1, open_prescriptions=0)
+    gaps = GapAnalysisService.detect_gaps(
+        missing_documents=1, overdue_actions=1, open_prescriptions=0
+    )
     assert len(gaps) == 2
 
 

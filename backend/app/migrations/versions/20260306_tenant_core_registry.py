@@ -29,9 +29,13 @@ def upgrade() -> None:
         sa.Column("id", sa.String(length=36), nullable=False),
         sa.ForeignKeyConstraint(["tenant_id"], ["tenant.id"]),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("tenant_id", "provider", name="uq_tenant_integrations_keys_tenant_provider"),
+        sa.UniqueConstraint(
+            "tenant_id", "provider", name="uq_tenant_integrations_keys_tenant_provider"
+        ),
     )
-    op.create_index("ix_tenant_integrations_keys_tenant_id", "tenant_integrations_keys", ["tenant_id"])
+    op.create_index(
+        "ix_tenant_integrations_keys_tenant_id", "tenant_integrations_keys", ["tenant_id"]
+    )
 
     op.create_table(
         "tenant_quotas_counters",

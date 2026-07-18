@@ -49,8 +49,8 @@ const LoginPage = () => {
       </div>
       <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)}>
         <div className="space-y-2">
-          <Label htmlFor="tenant">Tenant</Label>
-          <Input id="tenant" list="tenant-options" {...form.register("tenant")} autoComplete="organization" placeholder="demo" />
+          <Label htmlFor="tenant">Тенант</Label>
+          <Input id="tenant" list="tenant-options" {...form.register("tenant")} autoComplete="organization" placeholder="демо" />
           <datalist id="tenant-options">
             {TENANT_OPTIONS.map((tenant) => (
               <option key={tenant.slug} value={tenant.slug}>

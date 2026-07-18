@@ -66,7 +66,7 @@ const ApprovalRoutesPage = () => {
         <Input placeholder="Код маршрута" value={form.code} onChange={(e) => setForm((prev) => ({ ...prev, code: e.target.value }))} />
         <Input placeholder="Название" value={form.name} onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))} />
         <Input
-          placeholder="Область применения: document | pack | both"
+          placeholder="Область: документ / пакет / оба (document, pack, both)"
           value={form.applies_to}
           onChange={(e) => setForm((prev) => ({ ...prev, applies_to: e.target.value }))}
         />

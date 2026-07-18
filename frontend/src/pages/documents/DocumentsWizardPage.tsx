@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import { Breadcrumb } from "@/components/ui/breadcrumb";
@@ -13,8 +13,12 @@ import { useDocumentsWizardBootstrap } from "./wizard/useDocumentsWizardBootstra
 import { getArchiveStatusSummary } from "./wizard/utils";
 import { WizardStepper } from "@/components/wizard/WizardStepper";
 
+const clampStep = (value: number) => Math.min(Math.max(value, 1), wizardSteps.length);
+
 const DocumentsWizardPage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
+  const queryStep = searchParams.get("step");
+  const didInitFromQueryRef = useRef(false);
   const {
     tenant,
     companies,
@@ -34,6 +38,8 @@ const DocumentsWizardPage = () => {
     siteId,
     headerPreset,
     replaceDryRun: replaceDryRunResult,
+    mappingValidation,
+    qualityReport,
     batch,
     pipelineRun,
     brandingPreview,
@@ -43,6 +49,7 @@ const DocumentsWizardPage = () => {
     pushBrandingPreview,
     setPartial
   } = useDocumentsWizardStore();
+  const normalizedStep = clampStep(step);
 
   const [sourceFile, setSourceFile] = useState<File | null>(null);
   const [replaceMapFile, setReplaceMapFile] = useState<File | null>(null);
@@ -50,22 +57,32 @@ const DocumentsWizardPage = () => {
   const [batchErrors, setBatchErrors] = useState("");
 
   useEffect(() => {
-    const stepFromQuery = Number(searchParams.get("step") ?? step);
-    if (Number.isFinite(stepFromQuery) && stepFromQuery >= 1 && stepFromQuery <= 10 && stepFromQuery !== step) {
-      setPartial({ step: stepFromQuery });
+    if (step !== normalizedStep) {
+      setPartial({ step: normalizedStep });
     }
-  }, [searchParams, setPartial, step]);
+  }, [normalizedStep, setPartial, step]);
 
   useEffect(() => {
-    const current = Number(searchParams.get("step") ?? 0);
-    if (current !== step) {
+    if (didInitFromQueryRef.current) return;
+    didInitFromQueryRef.current = true;
+    if (queryStep === null) return;
+    const stepFromQuery = Number(queryStep ?? "");
+    if (!Number.isFinite(stepFromQuery)) return;
+    const clamped = clampStep(stepFromQuery);
+    if (clamped !== normalizedStep) {
+      setPartial({ step: clamped });
+    }
+  }, [normalizedStep, queryStep, setPartial]);
+
+  useEffect(() => {
+    if (queryStep !== String(normalizedStep)) {
       setSearchParams((prev) => {
         const next = new URLSearchParams(prev);
-        next.set("step", String(step));
+        next.set("step", String(normalizedStep));
         return next;
-      });
+      }, { replace: true });
     }
-  }, [searchParams, setSearchParams, step]);
+  }, [normalizedStep, queryStep, setSearchParams]);
 
   const filteredBatchItems = useMemo(() => {
     if (!batch) return [];
@@ -75,10 +92,29 @@ const DocumentsWizardPage = () => {
 
   useUnsavedChanges(Boolean(sourceFile || replaceMapFile || docxFile));
 
-  const archiveStatus = getArchiveStatusSummary({
-    batchStatus: batch?.status,
-    pipelineStatus: pipelineRun?.status
-  });
+  const archiveStatus = useMemo(
+    () =>
+      getArchiveStatusSummary({
+        batchStatus: batch?.status,
+        pipelineStatus: pipelineRun?.status
+      }),
+    [batch?.status, pipelineRun?.status]
+  );
+
+  const handleStepClick = useCallback((s: number) => {
+    const nextStep = clampStep(s);
+    if (nextStep !== normalizedStep) {
+      setPartial({ step: nextStep });
+    }
+  }, [normalizedStep, setPartial]);
+
+  const goPrevStep = useCallback(() => {
+    setPartial({ step: clampStep(normalizedStep - 1) });
+  }, [normalizedStep, setPartial]);
+
+  const goNextStep = useCallback(() => {
+    setPartial({ step: clampStep(normalizedStep + 1) });
+  }, [normalizedStep, setPartial]);
 
   const canCallApi = Boolean(tenant);
 
@@ -88,13 +124,17 @@ const DocumentsWizardPage = () => {
       {!tenant ? (
         <Card><CardContent className="pt-6 text-sm text-destructive">Выберите tenant перед запуском мастера. Без X-Tenant запросы заблокированы.</CardContent></Card>
       ) : null}
-      <WizardStepper steps={wizardSteps.map((item) => ({ ...item }))} currentStep={step} onStepClick={(s) => setPartial({ step: s })} />
+      <WizardStepper
+        steps={wizardSteps}
+        currentStep={normalizedStep}
+        onStepClick={handleStepClick}
+      />
 
       <Card>
-        <CardHeader><CardTitle>Шаг {step}: {wizardSteps[step - 1].title}</CardTitle></CardHeader>
+        <CardHeader><CardTitle>Шаг {normalizedStep}: {wizardSteps[normalizedStep - 1].title}</CardTitle></CardHeader>
         <CardContent className="space-y-4">
           <WizardStepContent
-            step={step}
+            step={normalizedStep}
             canCallApi={canCallApi}
             sourceColumns={sourceColumns}
             mapping={mapping}
@@ -108,6 +148,8 @@ const DocumentsWizardPage = () => {
             rowStatusFilter={rowStatusFilter}
             filteredBatchItems={filteredBatchItems}
             replaceDryRunResult={replaceDryRunResult}
+            mappingValidation={mappingValidation}
+            qualityReport={qualityReport}
             batch={batch}
             pipelineRun={pipelineRun}
             brandingPreview={brandingPreview}
@@ -130,8 +172,8 @@ const DocumentsWizardPage = () => {
           />
 
           <div className="flex justify-between border-t pt-3">
-            <Button variant="outline" onClick={() => setPartial({ step: Math.max(step - 1, 1) })} disabled={step === 1}>Назад</Button>
-            <Button onClick={() => setPartial({ step: Math.min(step + 1, 10) })} disabled={step === 10}>Далее</Button>
+            <Button variant="outline" onClick={goPrevStep} disabled={normalizedStep === 1}>Назад</Button>
+            <Button onClick={goNextStep} disabled={normalizedStep === wizardSteps.length}>Далее</Button>
           </div>
         </CardContent>
       </Card>

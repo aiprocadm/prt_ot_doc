@@ -8,18 +8,13 @@ import { toast } from "sonner";
 const createUploadSessionMock = vi.fn();
 const finalizeUploadMock = vi.fn();
 const getFileMock = vi.fn();
-const putMock = vi.fn();
+const uploadToSignedUrlMock = vi.fn();
 
 vi.mock("@/api/files", () => ({
   createUploadSession: (...args: unknown[]) => createUploadSessionMock(...args),
   finalizeUpload: (...args: unknown[]) => finalizeUploadMock(...args),
-  getFile: (...args: unknown[]) => getFileMock(...args)
-}));
-
-vi.mock("@/api/client", () => ({
-  apiClient: {
-    put: (...args: unknown[]) => putMock(...args)
-  }
+  getFile: (...args: unknown[]) => getFileMock(...args),
+  uploadToSignedUrl: (...args: unknown[]) => uploadToSignedUrlMock(...args)
 }));
 
 vi.mock("sonner", () => ({
@@ -35,12 +30,12 @@ describe("FileUploader", () => {
     createUploadSessionMock.mockReset();
     finalizeUploadMock.mockReset();
     getFileMock.mockReset();
-    putMock.mockReset();
+    uploadToSignedUrlMock.mockReset();
   });
 
   it("uploads file and shows ready progress", async () => {
     createUploadSessionMock.mockResolvedValue({ file_id: "f-1", signed_put_url: "https://upload" });
-    putMock.mockResolvedValue({});
+    uploadToSignedUrlMock.mockResolvedValue({});
     finalizeUploadMock.mockResolvedValue({});
     getFileMock.mockResolvedValue({ status: "ready" });
 
@@ -68,7 +63,7 @@ describe("FileUploader", () => {
           uploadResolver = () => resolve({ file_id: "f-3", signed_put_url: "https://upload" });
         })
     );
-    putMock.mockResolvedValue({});
+    uploadToSignedUrlMock.mockResolvedValue({});
     finalizeUploadMock.mockResolvedValue({});
     getFileMock.mockResolvedValue({ status: "ready" });
 
@@ -90,7 +85,7 @@ describe("FileUploader", () => {
 
   it("shows file processing error", async () => {
     createUploadSessionMock.mockResolvedValue({ file_id: "f-2", signed_put_url: "https://upload" });
-    putMock.mockResolvedValue({});
+    uploadToSignedUrlMock.mockResolvedValue({});
     finalizeUploadMock.mockResolvedValue({});
     getFileMock.mockResolvedValue({ status: "infected" });
 

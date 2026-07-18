@@ -2,7 +2,32 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from pydantic import BaseModel, ConfigDict, Field
+
+from app.models.models import RoleEnum
+
+
+class UserListItem(BaseModel):
+    """Public-safe user record for admin list views (no secrets)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    email: str
+    full_name: str
+    role: RoleEnum
+    is_active: bool
+    last_login_at: datetime | None = None
+    company_id: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class UserListPage(BaseModel):
+    items: list[UserListItem]
+    total: int
 
 
 class UserRolesRequest(BaseModel):

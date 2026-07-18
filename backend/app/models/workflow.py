@@ -21,9 +21,7 @@ from app.models.models import (
     EdoStatusEvent,
     EdoStatusHistory,
     EdoWebhookInbox,
-    Signature,
     SignatureRequest,
-    SignatureStatus,
     SignatureType,
 )
 
@@ -43,8 +41,6 @@ __all__ = [
     "EdoStatusEvent",
     "EdoStatusHistory",
     "EdoWebhookInbox",
-    "Signature",
     "SignatureRequest",
-    "SignatureStatus",
     "SignatureType",
 ]

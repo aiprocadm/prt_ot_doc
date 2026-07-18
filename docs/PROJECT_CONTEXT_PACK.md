@@ -31,7 +31,7 @@
 - Часть enterprise-уровня (полный DR/backup automation, полнофункциональный offline/PWA sync, production-grade AV/DLP policy) реализована частично и требует hardening.
 
 ## 9) Точки входа для запуска/проверки
-- `make cs:dev`, `make cs:test`, `make codex-audit`, `make final-acceptance`, `scripts/pilot_readiness.py`.
+- `make cs:dev`, `make cs:test`, `make codex-audit`, `make final-acceptance`.
 
 ## 10) Опасные неизвестные/техдолг
 - Много SQLAlchemy warnings по overlaps в risk models.

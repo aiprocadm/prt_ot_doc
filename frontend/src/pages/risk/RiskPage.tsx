@@ -47,7 +47,7 @@ const RiskPage = () => {
           {!loading && !error && hazards.length === 0 ? (
             <EmptyState
               title="Опасности пока не заведены"
-              description="Добавьте hazards в tenant, чтобы начать полноценную оценку рисков и не работать вслепую."
+              description="Добавьте опасности в тенант, чтобы начать полноценную оценку рисков и не работать вслепую."
             />
           ) : null}
           {hazards.length > 0 ? (

@@ -9,11 +9,6 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.domains.packs.definitions import (
-    PACK_CODE_INCIDENT,
-    PACK_CODE_NEW_COMPANY,
-    PACK_CODE_SITE_ACCESS,
-)
 from app.models.models import (
     Company,
     DocumentPack,
@@ -23,6 +18,11 @@ from app.models.models import (
     Template,
     TemplateVersion,
     TemplateVersionStatus,
+)
+from app.modules.packs.definitions import (
+    PACK_CODE_INCIDENT,
+    PACK_CODE_NEW_COMPANY,
+    PACK_CODE_SITE_ACCESS,
 )
 from app.services.package_export import ExportDocument, PackageExportResult, PackageExportService
 from app.services.pipeline import PipelineService
@@ -114,6 +114,8 @@ class PackGenerationPipeline:
                     version = await session.get(TemplateVersion, item.template_version_id)
                 if version is None:
                     raise ValueError("Pack item references missing template version")
+                if str(version.tenant_id) != str(pack.tenant_id):
+                    raise ValueError("Pack item template version tenant mismatch")
                 if version.template_id != template.id:
                     raise ValueError("Pack item template version mismatch")
                 person_id = person.id if person else None
@@ -201,7 +203,7 @@ class PackGenerationPipeline:
             project=str(naming["project"]),
             client=str(naming["client"]),
             topic=str(naming["topic"]),
-            version=int(naming["version"]),
+            version=int(str(naming.get("version") or 0)),
             reference_date=naming["reference_date"],
             flags=naming.get("flags", ()),
             documents=documents,

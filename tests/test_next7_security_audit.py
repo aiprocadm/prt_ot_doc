@@ -78,7 +78,7 @@ async def test_abac_company_scope_get_forbidden(
     resp = await async_client.get(f"/api/v1/companies/{denied.id}", headers=headers)
     assert resp.status_code == 403
     body = resp.json()
-    assert body["code"] == "forbidden"
+    assert body["code"] == "FORBIDDEN"
     assert body["detail"]["type"] == "policy"
 
 
@@ -106,12 +106,16 @@ async def test_audit_written_on_update_with_field_diff(
 
     async with sessionmaker() as session:
         rows = (
-            await session.execute(
-                select(AuditLog)
-                .where(AuditLog.object_type == "Company", AuditLog.object_id == company_id)
-                .order_by(AuditLog.when.desc())
+            (
+                await session.execute(
+                    select(AuditLog)
+                    .where(AuditLog.object_type == "Company", AuditLog.object_id == company_id)
+                    .order_by(AuditLog.when.desc())
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         assert rows
         assert rows[0].changed_fields["changed"]["name"]["from"] == "Audit Co"
         assert rows[0].changed_fields["changed"]["name"]["to"] == "Audit Co Updated"
@@ -176,7 +180,15 @@ async def test_access_deny_is_written_to_audit_log(
 
     async with sessionmaker() as session:
         rows = (
-            await session.execute(select(AuditLog).where(AuditLog.action == "access_deny").order_by(AuditLog.when.desc()))
-        ).scalars().all()
+            (
+                await session.execute(
+                    select(AuditLog)
+                    .where(AuditLog.action == "access_deny")
+                    .order_by(AuditLog.when.desc())
+                )
+            )
+            .scalars()
+            .all()
+        )
         assert rows
         assert rows[0].object_type == "companies"

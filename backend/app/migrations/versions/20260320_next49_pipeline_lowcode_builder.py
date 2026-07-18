@@ -15,9 +15,17 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column("pipeline_profiles", sa.Column("description", sa.String(length=2048), nullable=True))
-    op.add_column("pipeline_profiles", sa.Column("graph", sa.JSON(), nullable=False, server_default=sa.text("'{}'")))
-    op.add_column("pipeline_profiles", sa.Column("profile_version", sa.Integer(), nullable=False, server_default="1"))
+    op.add_column(
+        "pipeline_profiles", sa.Column("description", sa.String(length=2048), nullable=True)
+    )
+    op.add_column(
+        "pipeline_profiles",
+        sa.Column("graph", sa.JSON(), nullable=False, server_default=sa.text("'{}'")),
+    )
+    op.add_column(
+        "pipeline_profiles",
+        sa.Column("profile_version", sa.Integer(), nullable=False, server_default="1"),
+    )
 
 
 def downgrade() -> None:

@@ -33,6 +33,14 @@ vi.mock("@/api/approvals", () => ({
   }
 }));
 
+vi.mock("@/api/documents", () => ({
+  getDocumentReadiness: vi.fn().mockResolvedValue({
+    score: 82,
+    blockers: [],
+    recommended_actions: ["Завершите согласование по маршруту"]
+  })
+}));
+
 vi.mock("@/utils/download", () => ({
   downloadBlob: vi.fn()
 }));
@@ -56,7 +64,8 @@ describe("DocumentPreview", () => {
     );
 
     await waitFor(() => expect(screen.getByText("approved")).toBeInTheDocument());
-    expect(screen.getByRole("tab", { name: "Timeline" })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId("document-readiness-panel")).toHaveTextContent("82%"));
+    expect(screen.getByRole("tab", { name: "Хронология" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Подписать" })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Подписать" }));

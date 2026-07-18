@@ -32,10 +32,16 @@ class PipelineProfileRepo:
         return model
 
     async def list(self, *, tenant_id: str, active: bool | None = None) -> list[PipelineProfile]:
-        stmt = select(PipelineProfile).where(PipelineProfile.tenant_id == tenant_id, PipelineProfile.deleted_at.is_(None))
+        stmt = select(PipelineProfile).where(
+            PipelineProfile.tenant_id == tenant_id, PipelineProfile.deleted_at.is_(None)
+        )
         if active is not None:
             stmt = stmt.where(PipelineProfile.is_active.is_(active))
-        return (await self.session.execute(stmt.order_by(PipelineProfile.updated_at.desc()))).scalars().all()
+        return (
+            (await self.session.execute(stmt.order_by(PipelineProfile.updated_at.desc())))
+            .scalars()
+            .all()
+        )
 
     async def get(self, *, tenant_id: str, profile_id: str) -> PipelineProfile | None:
         return (
@@ -59,7 +65,9 @@ class PipelineProfileRepo:
             )
         ).scalar_one_or_none()
 
-    async def patch(self, *, model: PipelineProfile, payload: PipelineProfilePatch) -> PipelineProfile:
+    async def patch(
+        self, *, model: PipelineProfile, payload: PipelineProfilePatch
+    ) -> PipelineProfile:
         data = payload.model_dump(exclude_none=True)
         graph_changed = False
         if "steps" in data:

@@ -1,4 +1,5 @@
 import { defineConfig, type UserConfig } from "vite";
+import { configDefaults } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
 import tsconfigPaths from "vite-tsconfig-paths";
@@ -34,11 +35,15 @@ const manualChunks: NonNullable<UserConfig["build"]>["rollupOptions"] extends {
   return "vendor-misc";
 };
 
-export default defineConfig(({ mode }) => ({
-  plugins: [
-    react(),
-    tsconfigPaths(),
-    VitePWA({
+export default defineConfig(({ mode }) => {
+  const isTest = mode === "test";
+
+  return {
+    plugins: [
+      react(),
+      tsconfigPaths(),
+      !isTest &&
+        VitePWA({
       registerType: "autoUpdate",
       includeAssets: ["pwa-icon.svg", "mask-icon.svg", "apple-touch-icon.svg"],
       manifest: {
@@ -69,16 +74,6 @@ export default defineConfig(({ mode }) => ({
             options: { cacheName: "app-shell" }
           },
           {
-            urlPattern: ({ url }) => url.pathname.startsWith("/api/") && !url.pathname.startsWith("/api/pwa/sync"),
-            handler: "NetworkFirst",
-            options: {
-              cacheName: "api-read-models",
-              networkTimeoutSeconds: 5,
-              expiration: { maxEntries: 80, maxAgeSeconds: 60 * 10 },
-              cacheableResponse: { statuses: [0, 200] }
-            }
-          },
-          {
             urlPattern: ({ request }) => ["style", "script", "worker"].includes(request.destination),
             handler: "StaleWhileRevalidate",
             options: { cacheName: "static-assets" }
@@ -90,31 +85,34 @@ export default defineConfig(({ mode }) => ({
         navigateFallback: "index.html"
       }
     })
-  ],
-  server: {
-    host: true,
-    port: 5173,
-    proxy: {
-      "/api": {
-        target: process.env.VITE_API_PROXY_TARGET ?? "http://localhost:8000",
-        changeOrigin: true,
+    ].filter(Boolean),
+    server: {
+      host: true,
+      port: 5173,
+      proxy: {
+        "/api": {
+          target: process.env.VITE_API_PROXY_TARGET ?? "http://localhost:8000",
+          changeOrigin: true,
+        },
       },
     },
-  },
-  build: {
-    outDir: "dist",
-    sourcemap: mode === "development",
-    chunkSizeWarningLimit: 700,
-    rollupOptions: {
-      output: {
-        manualChunks,
+    build: {
+      outDir: "dist",
+      sourcemap: mode === "development",
+      chunkSizeWarningLimit: 700,
+      rollupOptions: {
+        output: {
+          manualChunks,
+        },
       },
     },
-  },
-  test: {
-    environment: "jsdom",
-    globals: true,
-    setupFiles: "./vitest.setup.ts",
-    css: true,
-  },
-}));
+    test: {
+      environment: "jsdom",
+      globals: true,
+      setupFiles: "./vitest.setup.ts",
+      css: true,
+      api: false,
+      exclude: [...configDefaults.exclude, "**/e2e/**"],
+    },
+  };
+});

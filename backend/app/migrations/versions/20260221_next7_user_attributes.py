@@ -34,7 +34,9 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("tenant_id", "user_id", name="uq_user_attribute"),
     )
-    op.create_index("ix_user_attribute_user", "user_attribute", ["tenant_id", "user_id"], unique=False)
+    op.create_index(
+        "ix_user_attribute_user", "user_attribute", ["tenant_id", "user_id"], unique=False
+    )
 
 
 def downgrade() -> None:

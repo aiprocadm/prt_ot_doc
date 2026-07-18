@@ -4,13 +4,13 @@ from datetime import date, timedelta
 
 import pytest
 
-from app.domains.training import (
+from app.models.models import TrainingCourse
+from app.modules.training import (
     assign_training_plan,
     issue_certificate,
     register_training_session,
     upcoming_certificate_expirations,
 )
-from app.models.models import TrainingCourse
 from tests.utils.factories import TestDataFactory
 
 

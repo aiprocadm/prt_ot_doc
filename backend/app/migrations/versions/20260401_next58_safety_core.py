@@ -4,6 +4,7 @@ Revision ID: 20260401_next58
 Revises: 20260330_next57_approval_sign_edo_orchestration
 Create Date: 2026-04-01
 """
+
 import sqlalchemy as sa
 from alembic import op
 
@@ -110,7 +111,9 @@ def upgrade() -> None:
         sa.Column("effective_to", sa.Date(), nullable=True),
         sa.Column("is_default", sa.Boolean(), nullable=False, server_default=sa.text("false")),
         *_audit_cols(),
-        sa.UniqueConstraint("tenant_id", "code", "version_no", name="uq_risk_methodologies_code_version"),
+        sa.UniqueConstraint(
+            "tenant_id", "code", "version_no", name="uq_risk_methodologies_code_version"
+        ),
     )
     op.create_table(
         "hazards",
@@ -164,7 +167,12 @@ def upgrade() -> None:
         sa.Column("code", sa.String(64), nullable=True),
         sa.Column("entity_type", sa.String(32), nullable=False),
         sa.Column("entity_id", sa.String(36), nullable=False),
-        sa.Column("risk_methodology_id", sa.String(36), sa.ForeignKey("risk_methodologies.id"), nullable=False),
+        sa.Column(
+            "risk_methodology_id",
+            sa.String(36),
+            sa.ForeignKey("risk_methodologies.id"),
+            nullable=False,
+        ),
         sa.Column("status", sa.String(16), nullable=False),
         sa.Column("calculated_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("approved_at", sa.DateTime(timezone=True), nullable=True),
@@ -192,7 +200,9 @@ def upgrade() -> None:
         "risk_map_item_measures",
         sa.Column("id", sa.String(36), primary_key=True),
         sa.Column("tenant_id", sa.String(36), sa.ForeignKey("tenant.id"), nullable=False),
-        sa.Column("risk_map_item_id", sa.String(36), sa.ForeignKey("risk_map_items.id"), nullable=False),
+        sa.Column(
+            "risk_map_item_id", sa.String(36), sa.ForeignKey("risk_map_items.id"), nullable=False
+        ),
         sa.Column("measure_id", sa.String(36), sa.ForeignKey("risk_measures.id"), nullable=False),
         sa.Column("measure_order", sa.Integer(), nullable=False, server_default="1"),
         sa.Column("status", sa.String(32), nullable=False),
@@ -258,7 +268,9 @@ def upgrade() -> None:
         sa.Column("issued_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("due_return_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("basis_text", sa.Text(), nullable=True),
-        sa.Column("related_norm_item_id", sa.String(36), sa.ForeignKey("ppe_norm_items.id"), nullable=True),
+        sa.Column(
+            "related_norm_item_id", sa.String(36), sa.ForeignKey("ppe_norm_items.id"), nullable=True
+        ),
         sa.Column("issued_by", sa.String(36), nullable=True),
         *_audit_cols(),
     )
@@ -275,7 +287,12 @@ def upgrade() -> None:
         "ppe_personal_card_items",
         sa.Column("id", sa.String(36), primary_key=True),
         sa.Column("tenant_id", sa.String(36), sa.ForeignKey("tenant.id"), nullable=False),
-        sa.Column("personal_card_id", sa.String(36), sa.ForeignKey("ppe_personal_cards.id"), nullable=False),
+        sa.Column(
+            "personal_card_id",
+            sa.String(36),
+            sa.ForeignKey("ppe_personal_cards.id"),
+            nullable=False,
+        ),
         sa.Column("ppe_catalog_id", sa.String(36), sa.ForeignKey("ppe_catalog.id"), nullable=False),
         sa.Column("last_issue_id", sa.String(36), sa.ForeignKey("ppe_issues.id"), nullable=True),
         sa.Column("current_quantity", sa.Numeric(10, 2), nullable=False, server_default="0"),
@@ -285,13 +302,33 @@ def upgrade() -> None:
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
     )
 
-    op.create_index("ix_persons_filter", "persons", ["tenant_id", "company_id", "site_id", "position_id", "employment_status"])
+    op.create_index(
+        "ix_persons_filter",
+        "persons",
+        ["tenant_id", "company_id", "site_id", "position_id", "employment_status"],
+    )
     op.create_index("ix_workplaces_filter", "workplaces", ["tenant_id", "site_id", "department_id"])
-    op.create_index("ix_risk_maps_filter", "risk_maps", ["tenant_id", "entity_type", "entity_id", "status", "updated_at"])
+    op.create_index(
+        "ix_risk_maps_filter",
+        "risk_maps",
+        ["tenant_id", "entity_type", "entity_id", "status", "updated_at"],
+    )
     op.create_index("ix_risk_map_items_level", "risk_map_items", ["risk_map_id", "risk_level"])
-    op.create_index("ix_ppe_norm_items_filter", "ppe_norm_items", ["ppe_norm_id", "applies_to_type", "applies_to_id"])
-    op.create_index("ix_ppe_issues_filter", "ppe_issues", ["tenant_id", "person_id", "ppe_catalog_id", "issued_at"])
-    op.create_index("ix_ppe_personal_card_items_filter", "ppe_personal_card_items", ["personal_card_id", "ppe_catalog_id"])
+    op.create_index(
+        "ix_ppe_norm_items_filter",
+        "ppe_norm_items",
+        ["ppe_norm_id", "applies_to_type", "applies_to_id"],
+    )
+    op.create_index(
+        "ix_ppe_issues_filter",
+        "ppe_issues",
+        ["tenant_id", "person_id", "ppe_catalog_id", "issued_at"],
+    )
+    op.create_index(
+        "ix_ppe_personal_card_items_filter",
+        "ppe_personal_card_items",
+        ["personal_card_id", "ppe_catalog_id"],
+    )
 
 
 def downgrade() -> None:

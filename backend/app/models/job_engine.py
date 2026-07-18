@@ -7,6 +7,7 @@ from datetime import datetime
 
 from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.ext.mutable import MutableDict
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import JSON
 
@@ -59,10 +60,14 @@ class DocumentJob(TenantBaseModel):
     correlation_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     created_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
     attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    input: Mapped[dict | None] = mapped_column(JSONBType, nullable=True)
-    output: Mapped[dict | None] = mapped_column(JSONBType, nullable=True)
-    input_payload_json: Mapped[dict | None] = mapped_column(JSONBType, nullable=True)
-    output_payload_json: Mapped[dict | None] = mapped_column(JSONBType, nullable=True)
+    input: Mapped[dict | None] = mapped_column(MutableDict.as_mutable(JSONBType), nullable=True)
+    output: Mapped[dict | None] = mapped_column(MutableDict.as_mutable(JSONBType), nullable=True)
+    input_payload_json: Mapped[dict | None] = mapped_column(
+        MutableDict.as_mutable(JSONBType), nullable=True
+    )
+    output_payload_json: Mapped[dict | None] = mapped_column(
+        MutableDict.as_mutable(JSONBType), nullable=True
+    )
     current_step_index: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -71,7 +76,9 @@ class DocumentJob(TenantBaseModel):
         DateTime(timezone=True), nullable=True
     )
     error_code: Mapped[str | None] = mapped_column(String(128), nullable=True)
-    error_payload: Mapped[dict | None] = mapped_column(JSONBType, nullable=True)
+    error_payload: Mapped[dict | None] = mapped_column(
+        MutableDict.as_mutable(JSONBType), nullable=True
+    )
     queued_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
@@ -111,15 +118,19 @@ class DocumentJobStep(TenantBaseModel):
     attempt: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     max_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     inputs_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    input_ref: Mapped[dict | None] = mapped_column(JSONBType, nullable=True)
-    output_ref: Mapped[dict | None] = mapped_column(JSONBType, nullable=True)
-    input: Mapped[dict | None] = mapped_column(JSONBType, nullable=True)
-    output: Mapped[dict | None] = mapped_column(JSONBType, nullable=True)
+    input_ref: Mapped[dict | None] = mapped_column(MutableDict.as_mutable(JSONBType), nullable=True)
+    output_ref: Mapped[dict | None] = mapped_column(
+        MutableDict.as_mutable(JSONBType), nullable=True
+    )
+    input: Mapped[dict | None] = mapped_column(MutableDict.as_mutable(JSONBType), nullable=True)
+    output: Mapped[dict | None] = mapped_column(MutableDict.as_mutable(JSONBType), nullable=True)
     logs_file_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     logs_uri: Mapped[str | None] = mapped_column(String(512), nullable=True)
     logs_ref: Mapped[str | None] = mapped_column(String(512), nullable=True)
     error_code: Mapped[str | None] = mapped_column(String(128), nullable=True)
-    error_payload: Mapped[dict | None] = mapped_column(JSONBType, nullable=True)
+    error_payload: Mapped[dict | None] = mapped_column(
+        MutableDict.as_mutable(JSONBType), nullable=True
+    )
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     job: Mapped[DocumentJob] = relationship("DocumentJob", back_populates="steps")
@@ -143,7 +154,9 @@ class DocumentArtifact(TenantBaseModel):
     kind: Mapped[str] = mapped_column(String(32), nullable=False)
     file_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    meta: Mapped[dict] = mapped_column(JSONBType, nullable=False, default=dict)
+    meta: Mapped[dict] = mapped_column(
+        MutableDict.as_mutable(JSONBType), nullable=False, default=dict
+    )
 
     job: Mapped[DocumentJob] = relationship("DocumentJob", back_populates="artifacts")
 
@@ -161,7 +174,7 @@ class DocumentJobLog(TenantBaseModel):
     step_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
     level: Mapped[str] = mapped_column(String(16), nullable=False, default="info")
     message: Mapped[str] = mapped_column(String(1024), nullable=False)
-    meta_json: Mapped[dict | None] = mapped_column(JSONBType, nullable=True)
+    meta_json: Mapped[dict | None] = mapped_column(MutableDict.as_mutable(JSONBType), nullable=True)
 
     __table_args__ = (Index("ix_job_logs_tenant_job_created", "tenant_id", "job_id", "created_at"),)
 
@@ -173,8 +186,10 @@ class OutboxEvent(TenantBaseModel):
     aggregate_type: Mapped[str] = mapped_column(String(64), nullable=False, default="unknown")
     aggregate_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     event_id: Mapped[str] = mapped_column(String(36), nullable=False)
-    payload: Mapped[dict] = mapped_column(JSONBType, nullable=False, default=dict)
-    headers: Mapped[dict | None] = mapped_column(JSONBType, nullable=True)
+    payload: Mapped[dict] = mapped_column(
+        MutableDict.as_mutable(JSONBType), nullable=False, default=dict
+    )
+    headers: Mapped[dict | None] = mapped_column(MutableDict.as_mutable(JSONBType), nullable=True)
     status: Mapped[OutboxEventStatus] = mapped_column(
         String(16), nullable=False, default=OutboxEventStatus.PENDING.value
     )

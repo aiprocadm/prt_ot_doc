@@ -1,0 +1,283 @@
+import { apiClient } from "@/api/client";
+import { downloadBlob } from "@/utils/download";
+
+// ── Types ──────────────────────────────────────────────────────────────────
+
+export interface SoutCampaign {
+  id: string;
+  name: string;
+  expert_org_name?: string | null;
+  report_number?: string | null;
+  report_date?: string | null;
+  status: string;
+  planned_date?: string | null;
+  completed_date?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SoutCampaignPage {
+  items: SoutCampaign[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface SoutWorkplace {
+  id: string;
+  campaign_id: string;
+  workplace_code: string;
+  position_name: string;
+  person_id?: string | null;
+  assessed_class?: string | null;
+  assessment_date?: string | null;
+  next_assessment_date?: string | null;
+  is_reassessment_due: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface SoutWorkplacePage {
+  items: SoutWorkplace[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface SoutFactor {
+  id: string;
+  workplace_id: string;
+  code?: string | null;
+  name: string;
+  measured_class?: string | null;
+  note?: string | null;
+}
+
+export interface SoutGuarantee {
+  id: string;
+  workplace_id: string;
+  kind: string;
+  detail?: string | null;
+}
+
+export interface SoutWorkplaceReport {
+  workplace: SoutWorkplace;
+  factors: SoutFactor[];
+  guarantees: SoutGuarantee[];
+}
+
+export interface SoutCampaignReport {
+  campaign: SoutCampaign;
+  workplaces: SoutWorkplaceReport[];
+}
+
+export interface SoutClassHistoryEntry {
+  id: string;
+  workplace_id: string;
+  old_class?: string | null;
+  new_class?: string | null;
+  changed_at: string;
+  note?: string | null;
+  is_worsening: boolean;
+}
+
+export interface PpeNormSuggestion {
+  position_id: string;
+  hazard_id: string;
+  hazard_title: string;
+  factor_name: string;
+  factor_code: string | null;
+  measured_class: string | null;
+  reason: string;
+}
+
+export interface MedicalExamSuggestion {
+  position_id: string;
+  exam_kind: string;
+  periodicity_months: number;
+  factor_codes: string[];
+  reason: string;
+}
+
+export interface NormSuggestions {
+  ppe: PpeNormSuggestion[];
+  medical: MedicalExamSuggestion[];
+}
+
+export interface CascadeMedicalAction {
+  exam_kind: string;
+  op: "create" | "reclass" | "conflict";
+  periodicity_months: number;
+  interval_days: number;
+  target_class: string;
+  current_class: string | null;
+  factor_codes: string[];
+  reason: string;
+}
+
+export interface CascadePreview {
+  assessed_class: string | null;
+  can_apply: boolean;
+  medical: CascadeMedicalAction[];
+  ppe_advisory: PpeNormSuggestion[];
+}
+
+export interface CascadeResult {
+  created: number;
+  reclassified: number;
+  conflicts: number;
+  ppe_advisory_count: number;
+}
+
+export interface SoutDeclarationRow {
+  workplace_code: string;
+  position_name: string;
+  assessed_class: string | null;
+  headcount: string;
+  report_ref: string | null;
+  eligible: boolean;
+  ineligible_reason: string | null;
+}
+
+export interface SoutDeclarationPreview {
+  campaign_id: string;
+  campaign_name: string;
+  eligible: SoutDeclarationRow[];
+  ineligible: SoutDeclarationRow[];
+  eligible_count: number;
+  ineligible_count: number;
+}
+
+export interface SoutImportFactorRow {
+  code: string | null;
+  name: string;
+  parsed_class: string | null;
+  class_unparsed: string | null;
+}
+
+export interface SoutImportWorkplaceRow {
+  row_index: number;
+  workplace_code: string;
+  position_name: string;
+  parsed_class: string | null;
+  current_class: string | null;
+  change: "new" | "changed" | "unchanged" | "removed";
+  factors: SoutImportFactorRow[];
+  errors: string[];
+  warnings: string[];
+}
+
+export interface SoutImportPreview {
+  campaign_id: string;
+  rows: SoutImportWorkplaceRow[];
+  new_count: number;
+  changed_count: number;
+  unchanged_count: number;
+  removed_count: number;
+  error_count: number;
+  can_apply: boolean;
+}
+
+export interface SoutImportResult {
+  campaign_id: string;
+  created: number;
+  updated: number;
+  skipped: number;
+  removed_detected: number;
+  errors: string[];
+}
+
+// ── API ────────────────────────────────────────────────────────────────────
+
+const base = "/sout";
+
+export const soutApi = {
+  async list(params: { limit?: number; offset?: number } = {}): Promise<SoutCampaignPage> {
+    const r = await apiClient.get<SoutCampaignPage>(base, {
+      params: { limit: 100, offset: 0, ...params },
+    });
+    return r.data;
+  },
+
+  async get(id: string): Promise<SoutCampaign> {
+    return (await apiClient.get<SoutCampaign>(`${base}/${id}`)).data;
+  },
+
+  async listWorkplaces(
+    campaignId: string,
+    params: { limit?: number; offset?: number } = {},
+  ): Promise<SoutWorkplacePage> {
+    const r = await apiClient.get<SoutWorkplacePage>(`${base}/${campaignId}/workplaces`, {
+      params: { limit: 100, offset: 0, ...params },
+    });
+    return r.data;
+  },
+
+  async getReport(campaignId: string): Promise<SoutCampaignReport> {
+    return (await apiClient.get<SoutCampaignReport>(`${base}/${campaignId}/report`)).data;
+  },
+
+  async listClassHistory(workplaceId: string): Promise<SoutClassHistoryEntry[]> {
+    return (await apiClient.get<SoutClassHistoryEntry[]>(`${base}/workplaces/${workplaceId}/class-history`)).data;
+  },
+
+  async getNormSuggestions(workplaceId: string): Promise<NormSuggestions> {
+    return (await apiClient.get<NormSuggestions>(`${base}/workplaces/${workplaceId}/norm-suggestions`)).data;
+  },
+
+  async previewCascade(workplaceId: string): Promise<CascadePreview> {
+    return (await apiClient.get<CascadePreview>(`${base}/workplaces/${workplaceId}/cascade/preview`)).data;
+  },
+
+  async applyCascade(workplaceId: string): Promise<CascadeResult> {
+    return (await apiClient.post<CascadeResult>(`${base}/workplaces/${workplaceId}/cascade/apply`)).data;
+  },
+
+  async linkWorkplacePosition(workplaceId: string, positionId: string): Promise<void> {
+    await apiClient.patch(`${base}/workplaces/${workplaceId}`, { position_id: positionId });
+  },
+
+  async linkFactorHazard(factorId: string, hazardId: string): Promise<void> {
+    await apiClient.patch(`${base}/factors/${factorId}`, { hazard_id: hazardId });
+  },
+
+  async downloadCard(workplaceId: string, fmt: "docx" | "pdf", nameHint?: string): Promise<void> {
+    const { data } = await apiClient.get<Blob>(`${base}/workplaces/${workplaceId}/card/print`, {
+      params: { format: fmt },
+      responseType: "blob",
+    });
+    downloadBlob(data, `sout-card-${nameHint ?? workplaceId}.${fmt}`);
+  },
+
+  async downloadSummary(campaignId: string, fmt: "docx" | "pdf", nameHint?: string): Promise<void> {
+    const { data } = await apiClient.get<Blob>(`${base}/${campaignId}/summary/print`, {
+      params: { format: fmt },
+      responseType: "blob",
+    });
+    downloadBlob(data, `sout-summary-${nameHint ?? campaignId}.${fmt}`);
+  },
+
+  async getDeclaration(campaignId: string): Promise<SoutDeclarationPreview> {
+    return (await apiClient.get<SoutDeclarationPreview>(`${base}/${campaignId}/declaration`)).data;
+  },
+
+  async downloadDeclaration(campaignId: string, fmt: "docx" | "pdf", nameHint?: string): Promise<void> {
+    const { data } = await apiClient.get<Blob>(`${base}/${campaignId}/declaration/print`, {
+      params: { format: fmt },
+      responseType: "blob",
+    });
+    downloadBlob(data, `sout-declaration-${nameHint ?? campaignId}.${fmt}`);
+  },
+
+  async previewImport(campaignId: string, file: File): Promise<SoutImportPreview> {
+    const form = new FormData();
+    form.append("file", file);
+    return (await apiClient.post<SoutImportPreview>(`${base}/${campaignId}/import/preview`, form)).data;
+  },
+
+  async applyImport(campaignId: string, file: File): Promise<SoutImportResult> {
+    const form = new FormData();
+    form.append("file", file);
+    return (await apiClient.post<SoutImportResult>(`${base}/${campaignId}/import/apply`, form)).data;
+  },
+};

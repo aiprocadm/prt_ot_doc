@@ -10,12 +10,23 @@ from app.models.models import Tenant, TenantQuota
 
 
 async def main(slug: str, name: str, email: str) -> None:
-    async with AsyncSessionLocal(tenant="public", include_public=False, create_schema=False) as session:
-        existing = (await session.execute(select(Tenant).where(Tenant.slug == slug))).scalar_one_or_none()
+    async with AsyncSessionLocal(
+        tenant="public", include_public=False, create_schema=False
+    ) as session:
+        existing = (
+            await session.execute(select(Tenant).where(Tenant.slug == slug))
+        ).scalar_one_or_none()
         if existing:
             print(f"Tenant {slug} already exists")
             return
-        tenant = Tenant(slug=slug, code=slug, name=name, contact_email=email, kind="customer", schema_name=f"tenant_{slug}")
+        tenant = Tenant(
+            slug=slug,
+            code=slug,
+            name=name,
+            contact_email=email,
+            kind="customer",
+            schema_name=f"tenant_{slug}",
+        )
         session.add(tenant)
         session.add(TenantQuota(tenant_id=tenant.id))
         await session.commit()

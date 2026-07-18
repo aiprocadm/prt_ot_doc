@@ -6,7 +6,10 @@ from zipfile import ZIP_DEFLATED, ZipFile
 
 from lxml import etree
 
-W = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main", "v": "urn:schemas-microsoft-com:vml"}
+W = {
+    "w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main",
+    "v": "urn:schemas-microsoft-com:vml",
+}
 
 
 def _compile(source: str, *, case_sensitive: bool, whole_word: bool) -> re.Pattern[str]:
@@ -16,7 +19,9 @@ def _compile(source: str, *, case_sensitive: bool, whole_word: bool) -> re.Patte
     return re.compile(escaped, 0 if case_sensitive else re.IGNORECASE)
 
 
-def replace_xml_parts(docx_bytes: bytes, rules: list[dict], *, case_sensitive: bool, whole_word: bool) -> tuple[bytes, list[dict]]:
+def replace_xml_parts(
+    docx_bytes: bytes, rules: list[dict], *, case_sensitive: bool, whole_word: bool
+) -> tuple[bytes, list[dict]]:
     zin = ZipFile(BytesIO(docx_bytes))
     out_io = BytesIO()
     reports: list[dict] = []
@@ -36,12 +41,22 @@ def replace_xml_parts(docx_bytes: bytes, rules: list[dict], *, case_sensitive: b
                     dst = str(rule.get("to", ""))
                     if not src:
                         continue
-                    text = _compile(src, case_sensitive=case_sensitive, whole_word=whole_word).sub(dst, text)
+                    text = _compile(src, case_sensitive=case_sensitive, whole_word=whole_word).sub(
+                        dst, text
+                    )
                 if text != before:
                     changed = True
-                    reports.append({"location": name, "before_snippet": before[:200], "after_snippet": text[:200]})
+                    reports.append(
+                        {
+                            "location": name,
+                            "before_snippet": before[:200],
+                            "after_snippet": text[:200],
+                        }
+                    )
                     node.text = text
             if changed:
-                content = etree.tostring(root, xml_declaration=True, encoding="UTF-8", standalone="yes")
+                content = etree.tostring(
+                    root, xml_declaration=True, encoding="UTF-8", standalone="yes"
+                )
             zout.writestr(name, content)
     return out_io.getvalue(), reports

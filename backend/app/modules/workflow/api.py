@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Annotated, Any
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, Query, Response, status
 from pydantic import BaseModel, ConfigDict, Field
@@ -8,7 +9,7 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
-from app.core.security import AccessContext, rbac
+from app.core.security import AccessContext, abac, rbac
 from app.models.models import Tenant
 from app.modules.workflow.models import (
     WorkflowInstanceStatus,
@@ -19,6 +20,43 @@ router = APIRouter(prefix="/workflow", tags=["workflow"])
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 TenantDep = Annotated[Tenant, Depends(get_tenant_record)]
 AccessDep = Annotated[AccessContext, Depends(rbac())]
+
+# Reads, `POST /definitions/validate` (pure graph validation, no write), self-scoped
+# `GET /tasks`, and the task actions (complete/reassign/delegate/escalate — already
+# guarded in-service against the task's `assignee_role_code`) stay on the authn-only
+# `AccessDep`. Authoring/publishing workflow definitions and starting instances are
+# tenant-wide engine config with NO in-service role check, so they get least-privilege
+# gating mirroring 618614d9: DOC_WRITE (admin/owner/ot_specialist).
+_WF_WRITE_ROLES = ["admin", "owner", "ot_specialist"]
+
+
+def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> UUID | None:
+    return getattr(tenant, "id", None)
+
+
+WorkflowDefinitionWriteAccess = Depends(
+    abac(_tenant_resource_id, required_roles=_WF_WRITE_ROLES, action="manage workflow definition")
+)
+WorkflowInstanceWriteAccess = Depends(
+    abac(_tenant_resource_id, required_roles=_WF_WRITE_ROLES, action="start workflow instance")
+)
+
+
+def _extract_role_codes(access: AccessContext) -> list[str]:
+    """Return string role codes for the authenticated user.
+
+    `access.user.roles` is a relationship of :class:`UserRole` ORM rows (NOT
+    the :class:`RoleEnum` directly). The actual enum lives at ``role.role``
+    and its ``.value`` is the lowercase string that
+    :attr:`WorkflowTask.assignee_role_code` stores. Matches the existing
+    extraction in ``auth.py``/``policy_engine.py``/``security.py`` (see iter-28
+    RB-005 — five sites in this module previously called ``role.code`` which
+    raised ``AttributeError`` and surfaced as HTTP 500 from /api/v1/workflow/tasks
+    on every authenticated page load via ``frontend/src/api/navigation.ts``).
+    """
+
+    roles = getattr(access.user, "roles", None) or []
+    return [role.role.value for role in roles]
 
 
 class WorkflowDefinitionIn(BaseModel):
@@ -87,7 +125,6 @@ class WorkflowTimelineRead(BaseModel):
     created_at: str
 
 
-
 class WorkflowInstanceListItem(BaseModel):
     id: str
     definition_id: str
@@ -120,29 +157,69 @@ def _service(session: AsyncSession, tenant: Tenant) -> WorkflowService:
 
 
 def _serialize_version(item) -> WorkflowVersionRead:
-    return WorkflowVersionRead(id=item.id, definition_id=item.definition_id, version_no=item.version_no, status=item.status.value if hasattr(item.status, 'value') else str(item.status), graph_json=item.graph_json or {}, variables_schema=item.variables_schema or {})
+    return WorkflowVersionRead(
+        id=item.id,
+        definition_id=item.definition_id,
+        version_no=item.version_no,
+        status=item.status.value if hasattr(item.status, "value") else str(item.status),
+        graph_json=item.graph_json or {},
+        variables_schema=item.variables_schema or {},
+    )
 
 
 def _serialize_task(item) -> WorkflowTaskRead:
-    return WorkflowTaskRead(id=item.id, instance_id=item.instance_id, node_id=item.node_id, title=item.title, assignee_user_id=item.assignee_user_id, assignee_role_code=item.assignee_role_code, status=item.status.value if hasattr(item.status, 'value') else str(item.status), due_at=item.due_at.isoformat() if item.due_at else None, completed_at=item.completed_at.isoformat() if item.completed_at else None, task_payload=item.task_payload or {})
+    return WorkflowTaskRead(
+        id=item.id,
+        instance_id=item.instance_id,
+        node_id=item.node_id,
+        title=item.title,
+        assignee_user_id=item.assignee_user_id,
+        assignee_role_code=item.assignee_role_code,
+        status=item.status.value if hasattr(item.status, "value") else str(item.status),
+        due_at=item.due_at.isoformat() if item.due_at else None,
+        completed_at=item.completed_at.isoformat() if item.completed_at else None,
+        task_payload=item.task_payload or {},
+    )
 
 
-@router.post("/definitions", response_model=WorkflowVersionRead, status_code=status.HTTP_201_CREATED)
-async def create_definition(payload: WorkflowDefinitionIn, session: SessionDep, tenant: TenantDep, access: AccessDep) -> WorkflowVersionRead:
-    version = await _service(session, tenant).create_definition(code=payload.code, name=payload.name, description=payload.description, entity_type=payload.entity_type, graph=payload.graph, variables_schema=payload.variables_schema, actor_user_id=access.user.id)
+@router.post(
+    "/definitions", response_model=WorkflowVersionRead, status_code=status.HTTP_201_CREATED
+)
+async def create_definition(
+    payload: WorkflowDefinitionIn,
+    session: SessionDep,
+    tenant: TenantDep,
+    access: AccessContext = WorkflowDefinitionWriteAccess,
+) -> WorkflowVersionRead:
+    version = await _service(session, tenant).create_definition(
+        code=payload.code,
+        name=payload.name,
+        description=payload.description,
+        entity_type=payload.entity_type,
+        graph=payload.graph,
+        variables_schema=payload.variables_schema,
+        actor_user_id=access.user.id,
+    )
     await session.commit()
     return _serialize_version(version)
 
 
 @router.post("/definitions/validate")
-async def validate_definition(payload: WorkflowDefinitionIn, session: SessionDep, tenant: TenantDep, access: AccessDep) -> dict[str, Any]:
+async def validate_definition(
+    payload: WorkflowDefinitionIn, session: SessionDep, tenant: TenantDep, access: AccessDep
+) -> dict[str, Any]:
     _ = access
     _service(session, tenant).validate_graph(payload.graph)
-    return {"valid": True, "node_types": sorted({str(node.get('type')) for node in payload.graph.get('nodes') or []})}
+    return {
+        "valid": True,
+        "node_types": sorted({str(node.get("type")) for node in payload.graph.get("nodes") or []}),
+    }
 
 
 @router.get("/definitions", response_model=list[WorkflowDefinitionRead])
-async def list_definitions(session: SessionDep, tenant: TenantDep, access: AccessDep) -> list[WorkflowDefinitionRead]:
+async def list_definitions(
+    session: SessionDep, tenant: TenantDep, access: AccessDep
+) -> list[WorkflowDefinitionRead]:
     _ = access
     service = _service(session, tenant)
     try:
@@ -157,31 +234,90 @@ async def list_definitions(session: SessionDep, tenant: TenantDep, access: Acces
         except OperationalError:
             await session.rollback()
             versions = []
-        result.append(WorkflowDefinitionRead(id=item.id, code=item.code, name=item.name, description=item.description, entity_type=item.entity_type, current_version_id=item.current_version_id, versions=[_serialize_version(v) for v in versions]))
+        result.append(
+            WorkflowDefinitionRead(
+                id=item.id,
+                code=item.code,
+                name=item.name,
+                description=item.description,
+                entity_type=item.entity_type,
+                current_version_id=item.current_version_id,
+                versions=[_serialize_version(v) for v in versions],
+            )
+        )
     return result
 
 
 @router.post("/versions/{version_id}/publish", response_model=WorkflowVersionRead)
-async def publish_version(version_id: str, session: SessionDep, tenant: TenantDep, access: AccessDep) -> WorkflowVersionRead:
+async def publish_version(
+    version_id: str,
+    session: SessionDep,
+    tenant: TenantDep,
+    access: AccessContext = WorkflowDefinitionWriteAccess,
+) -> WorkflowVersionRead:
     version = await _service(session, tenant).publish_version(version_id, access.user.id)
     await session.commit()
     return _serialize_version(version)
 
 
 @router.post("/versions/{version_id}/archive", response_model=WorkflowVersionRead)
-async def archive_version(version_id: str, session: SessionDep, tenant: TenantDep, access: AccessDep) -> WorkflowVersionRead:
+async def archive_version(
+    version_id: str,
+    session: SessionDep,
+    tenant: TenantDep,
+    access: AccessContext = WorkflowDefinitionWriteAccess,
+) -> WorkflowVersionRead:
     version = await _service(session, tenant).archive_version(version_id, access.user.id)
     await session.commit()
     return _serialize_version(version)
 
 
 @router.post("/instances", response_model=WorkflowInstanceRead, status_code=status.HTTP_201_CREATED)
-async def start_instance(payload: WorkflowStartIn, response: Response, x_correlation_id: str | None = Header(default=None, alias="X-Correlation-ID"), session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record), access: AccessContext = Depends(rbac())) -> WorkflowInstanceRead:
-    instance = await _service(session, tenant).start_instance(definition_code=payload.definition_code, version_id=payload.version_id, entity_type=payload.entity_type, entity_id=payload.entity_id, context=payload.context, actor_user_id=access.user.id, correlation_id=x_correlation_id)
+async def start_instance(
+    payload: WorkflowStartIn,
+    response: Response,
+    x_correlation_id: str | None = Header(default=None, alias="X-Correlation-ID"),
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+    access: AccessContext = WorkflowInstanceWriteAccess,
+) -> WorkflowInstanceRead:
+    instance = await _service(session, tenant).start_instance(
+        definition_code=payload.definition_code,
+        version_id=payload.version_id,
+        entity_type=payload.entity_type,
+        entity_id=payload.entity_id,
+        context=payload.context,
+        actor_user_id=access.user.id,
+        correlation_id=x_correlation_id,
+    )
     await session.commit()
     _, timeline, tasks = await _service(session, tenant).get_instance_history(instance.id)
-    response.headers["X-Correlation-ID"] = x_correlation_id or instance.correlation_id or instance.id
-    return WorkflowInstanceRead(id=instance.id, definition_id=instance.definition_id, definition_version_id=instance.definition_version_id, entity_type=instance.entity_type, entity_id=instance.entity_id, status=instance.status.value if hasattr(instance.status, 'value') else str(instance.status), current_node_id=instance.current_node_id, context_json=instance.context_json or {}, correlation_id=instance.correlation_id, timeline=[WorkflowTimelineRead(id=e.id, node_id=e.node_id, event_type=e.event_type, actor_user_id=e.actor_user_id, payload=e.payload or {}, created_at=e.created_at.isoformat()) for e in timeline], tasks=[_serialize_task(t) for t in tasks])
+    response.headers["X-Correlation-ID"] = (
+        x_correlation_id or instance.correlation_id or instance.id
+    )
+    return WorkflowInstanceRead(
+        id=instance.id,
+        definition_id=instance.definition_id,
+        definition_version_id=instance.definition_version_id,
+        entity_type=instance.entity_type,
+        entity_id=instance.entity_id,
+        status=instance.status.value if hasattr(instance.status, "value") else str(instance.status),
+        current_node_id=instance.current_node_id,
+        context_json=instance.context_json or {},
+        correlation_id=instance.correlation_id,
+        timeline=[
+            WorkflowTimelineRead(
+                id=e.id,
+                node_id=e.node_id,
+                event_type=e.event_type,
+                actor_user_id=e.actor_user_id,
+                payload=e.payload or {},
+                created_at=e.created_at.isoformat(),
+            )
+            for e in timeline
+        ],
+        tasks=[_serialize_task(t) for t in tasks],
+    )
 
 
 @router.get("/instances", response_model=list[WorkflowInstanceListItem])
@@ -194,7 +330,9 @@ async def list_instances(
 ) -> list[WorkflowInstanceListItem]:
     _ = access
     try:
-        items = await _service(session, tenant).list_instances(status_filter=status_filter, entity_type=entity_type)
+        items = await _service(session, tenant).list_instances(
+            status_filter=status_filter, entity_type=entity_type
+        )
     except OperationalError:
         await session.rollback()
         return []
@@ -205,7 +343,9 @@ async def list_instances(
             definition_version_id=item[0].definition_version_id,
             entity_type=item[0].entity_type,
             entity_id=item[0].entity_id,
-            status=item[0].status.value if hasattr(item[0].status, "value") else str(item[0].status),
+            status=(
+                item[0].status.value if hasattr(item[0].status, "value") else str(item[0].status)
+            ),
             current_node_id=item[0].current_node_id,
             correlation_id=item[0].correlation_id,
             open_tasks=item[1],
@@ -216,17 +356,48 @@ async def list_instances(
 
 
 @router.get("/instances/{instance_id}", response_model=WorkflowInstanceRead)
-async def get_instance(instance_id: str, session: SessionDep, tenant: TenantDep, access: AccessDep) -> WorkflowInstanceRead:
+async def get_instance(
+    instance_id: str, session: SessionDep, tenant: TenantDep, access: AccessDep
+) -> WorkflowInstanceRead:
     _ = access
     instance, timeline, tasks = await _service(session, tenant).get_instance_history(instance_id)
-    return WorkflowInstanceRead(id=instance.id, definition_id=instance.definition_id, definition_version_id=instance.definition_version_id, entity_type=instance.entity_type, entity_id=instance.entity_id, status=instance.status.value if hasattr(instance.status, 'value') else str(instance.status), current_node_id=instance.current_node_id, context_json=instance.context_json or {}, correlation_id=instance.correlation_id, timeline=[WorkflowTimelineRead(id=e.id, node_id=e.node_id, event_type=e.event_type, actor_user_id=e.actor_user_id, payload=e.payload or {}, created_at=e.created_at.isoformat()) for e in timeline], tasks=[_serialize_task(t) for t in tasks])
+    return WorkflowInstanceRead(
+        id=instance.id,
+        definition_id=instance.definition_id,
+        definition_version_id=instance.definition_version_id,
+        entity_type=instance.entity_type,
+        entity_id=instance.entity_id,
+        status=instance.status.value if hasattr(instance.status, "value") else str(instance.status),
+        current_node_id=instance.current_node_id,
+        context_json=instance.context_json or {},
+        correlation_id=instance.correlation_id,
+        timeline=[
+            WorkflowTimelineRead(
+                id=e.id,
+                node_id=e.node_id,
+                event_type=e.event_type,
+                actor_user_id=e.actor_user_id,
+                payload=e.payload or {},
+                created_at=e.created_at.isoformat(),
+            )
+            for e in timeline
+        ],
+        tasks=[_serialize_task(t) for t in tasks],
+    )
 
 
 @router.get("/tasks", response_model=list[WorkflowTaskRead])
-async def list_tasks(session: SessionDep, tenant: TenantDep, access: AccessDep, assignee: str | None = Query(default="me")) -> list[WorkflowTaskRead]:
-    role_codes = [role.code for role in getattr(access.user, 'roles', [])] if getattr(access.user, 'roles', None) else []
+async def list_tasks(
+    session: SessionDep,
+    tenant: TenantDep,
+    access: AccessDep,
+    assignee: str | None = Query(default="me"),
+) -> list[WorkflowTaskRead]:
+    role_codes = _extract_role_codes(access)
     try:
-        tasks = await _service(session, tenant).list_tasks(user_id=access.user.id if assignee == 'me' else None, role_codes=role_codes)
+        tasks = await _service(session, tenant).list_tasks(
+            user_id=access.user.id if assignee == "me" else None, role_codes=role_codes
+        )
     except OperationalError:
         await session.rollback()
         return []
@@ -234,41 +405,103 @@ async def list_tasks(session: SessionDep, tenant: TenantDep, access: AccessDep, 
 
 
 @router.post("/tasks/{task_id}/complete", response_model=WorkflowTaskRead)
-async def complete_task(task_id: str, payload: WorkflowTaskActionIn, session: SessionDep, tenant: TenantDep, access: AccessDep) -> WorkflowTaskRead:
-    task = await _service(session, tenant).complete_task(task_id=task_id, actor_user_id=access.user.id, actor_role_codes=[role.code for role in getattr(access.user, 'roles', [])] if getattr(access.user, 'roles', None) else [], decision=payload.decision, payload=payload.payload)
+async def complete_task(
+    task_id: str,
+    payload: WorkflowTaskActionIn,
+    session: SessionDep,
+    tenant: TenantDep,
+    access: AccessDep,
+) -> WorkflowTaskRead:
+    task = await _service(session, tenant).complete_task(
+        task_id=task_id,
+        actor_user_id=access.user.id,
+        actor_role_codes=_extract_role_codes(access),
+        decision=payload.decision,
+        payload=payload.payload,
+    )
     await session.commit()
     return _serialize_task(task)
 
 
 @router.post("/tasks/{task_id}/reassign", response_model=WorkflowTaskRead)
-async def reassign_task(task_id: str, payload: WorkflowTaskActionIn, session: SessionDep, tenant: TenantDep, access: AccessDep) -> WorkflowTaskRead:
-    task = await _service(session, tenant).reassign_task(task_id=task_id, actor_user_id=access.user.id, actor_role_codes=[role.code for role in getattr(access.user, 'roles', [])] if getattr(access.user, 'roles', None) else [], assignee_user_id=payload.assignee_user_id, assignee_role_code=payload.assignee_role_code, mode="reassigned")
+async def reassign_task(
+    task_id: str,
+    payload: WorkflowTaskActionIn,
+    session: SessionDep,
+    tenant: TenantDep,
+    access: AccessDep,
+) -> WorkflowTaskRead:
+    task = await _service(session, tenant).reassign_task(
+        task_id=task_id,
+        actor_user_id=access.user.id,
+        actor_role_codes=_extract_role_codes(access),
+        assignee_user_id=payload.assignee_user_id,
+        assignee_role_code=payload.assignee_role_code,
+        mode="reassigned",
+    )
     await session.commit()
     return _serialize_task(task)
 
 
 @router.post("/tasks/{task_id}/delegate", response_model=WorkflowTaskRead)
-async def delegate_task(task_id: str, payload: WorkflowTaskActionIn, session: SessionDep, tenant: TenantDep, access: AccessDep) -> WorkflowTaskRead:
-    task = await _service(session, tenant).reassign_task(task_id=task_id, actor_user_id=access.user.id, actor_role_codes=[role.code for role in getattr(access.user, 'roles', [])] if getattr(access.user, 'roles', None) else [], assignee_user_id=payload.assignee_user_id, assignee_role_code=payload.assignee_role_code, mode="delegated")
+async def delegate_task(
+    task_id: str,
+    payload: WorkflowTaskActionIn,
+    session: SessionDep,
+    tenant: TenantDep,
+    access: AccessDep,
+) -> WorkflowTaskRead:
+    task = await _service(session, tenant).reassign_task(
+        task_id=task_id,
+        actor_user_id=access.user.id,
+        actor_role_codes=_extract_role_codes(access),
+        assignee_user_id=payload.assignee_user_id,
+        assignee_role_code=payload.assignee_role_code,
+        mode="delegated",
+    )
     await session.commit()
     return _serialize_task(task)
 
 
 @router.post("/tasks/{task_id}/escalate", response_model=WorkflowTaskRead)
-async def escalate_task(task_id: str, payload: WorkflowTaskActionIn, session: SessionDep, tenant: TenantDep, access: AccessDep) -> WorkflowTaskRead:
-    task = await _service(session, tenant).reassign_task(task_id=task_id, actor_user_id=access.user.id, actor_role_codes=[role.code for role in getattr(access.user, 'roles', [])] if getattr(access.user, 'roles', None) else [], assignee_user_id=payload.assignee_user_id, assignee_role_code=payload.assignee_role_code, mode="escalated")
+async def escalate_task(
+    task_id: str,
+    payload: WorkflowTaskActionIn,
+    session: SessionDep,
+    tenant: TenantDep,
+    access: AccessDep,
+) -> WorkflowTaskRead:
+    task = await _service(session, tenant).reassign_task(
+        task_id=task_id,
+        actor_user_id=access.user.id,
+        actor_role_codes=_extract_role_codes(access),
+        assignee_user_id=payload.assignee_user_id,
+        assignee_role_code=payload.assignee_role_code,
+        mode="escalated",
+    )
     await session.commit()
     return _serialize_task(task)
 
 
 @router.get("/definitions/{definition_id}", response_model=WorkflowDefinitionRead)
-async def get_definition(definition_id: str, session: SessionDep, tenant: TenantDep, access: AccessDep) -> WorkflowDefinitionRead:
+async def get_definition(
+    definition_id: str, session: SessionDep, tenant: TenantDep, access: AccessDep
+) -> WorkflowDefinitionRead:
     _ = access
     service = _service(session, tenant)
     definitions = await service.list_definitions()
     item = next((definition for definition in definitions if definition.id == definition_id), None)
     if item is None:
         from fastapi import HTTPException
+
         raise HTTPException(status_code=404, detail="workflow definition not found")
     versions = await service.get_versions(item.id)
-    return WorkflowDefinitionRead(id=item.id, code=item.code, name=item.name, description=item.description, entity_type=item.entity_type, current_version_id=item.current_version_id, versions=[_serialize_version(v) for v in versions])
+    return WorkflowDefinitionRead(
+        id=item.id,
+        code=item.code,
+        name=item.name,
+        description=item.description,
+        entity_type=item.entity_type,
+        current_version_id=item.current_version_id,
+        versions=[_serialize_version(v) for v in versions],
+    )

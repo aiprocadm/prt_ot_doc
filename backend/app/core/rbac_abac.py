@@ -10,6 +10,7 @@ from sqlalchemy import and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import Select
 
+from app.core.errors import api_problem_detail
 from app.services.audit import AuditService
 
 
@@ -110,6 +111,21 @@ def actor_from_claims(claims: dict[str, Any] | Any, roles: list[str]) -> ActorCo
     )
 
 
+MODULE_NAMES: tuple[str, ...] = (
+    "documents",
+    "templates",
+    "risk",
+    "ppe",
+    "training",
+    "incidents",
+    "inspections",
+    "contractors",
+    "reports",
+    "admin",
+    "briefings",
+    "audit",
+)
+
 RESOURCE_PERMISSIONS: dict[str, set[str]] = {
     "templates": {"read", "list", "create", "update", "delete", "approve"},
     "template_versions": {"read", "list", "create", "update", "delete", "approve"},
@@ -140,14 +156,42 @@ RESOURCE_PERMISSIONS: dict[str, set[str]] = {
     "briefings": {"read", "list", "create", "update", "delete"},
     "incidents": {"read", "list", "create", "update", "delete", "approve", "export"},
     "inspections": {"read", "list", "create", "update", "delete", "approve", "export"},
+    "contractors": {"read", "list", "create", "update", "delete"},
     "reports": {"read", "list", "export", "download"},
     "admin": {"read", "list", "create", "update", "delete"},
+    "data_quality": {"read"},
+    "employee_card": {"read"},
+    "calendar": {"read"},
 }
 
 _ROLE_FULL = {
     f"{resource}:{action}"
     for resource, actions in RESOURCE_PERMISSIONS.items()
     for action in actions
+}
+
+MODULE_PERMISSIONS: dict[str, set[str]] = {
+    "owner": set(MODULE_NAMES),
+    "admin": set(MODULE_NAMES),
+    "methodist": {"documents", "templates"},
+    "lawyer": {"documents", "templates"},
+    "project_manager": {"documents", "reports"},
+    "executor": {"documents"},
+    "clerk": {"documents"},
+    "instructor": {"training", "briefings"},
+    "student": {"training"},
+    "hse_head": {"documents", "risk", "ppe", "inspections", "incidents", "contractors"},
+    "hse_specialist": {"documents", "risk", "ppe", "inspections", "incidents"},
+    "fire_engineer": {"inspections", "incidents"},
+    "ecologist": {"documents", "risk", "incidents"},
+    "hr": {"documents", "training"},
+    "accountant": {"reports"},
+    "line_manager": {"documents", "incidents", "inspections"},
+    "client": {"documents", "reports", "contractors"},
+    "auditor_ro": {"documents", "risk", "ppe", "inspections", "incidents", "reports"},
+    "inspector_contractor": {"inspections", "incidents", "contractors"},
+    "client_admin": {"contractors"},
+    "client_user": {"contractors"},
 }
 
 ROLE_PERMISSIONS: dict[str, set[str]] = {
@@ -225,6 +269,10 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "incidents:list",
         "incidents:create",
         "incidents:update",
+        "contractors:read",
+        "contractors:list",
+        "contractors:create",
+        "contractors:update",
     },
     "hse_specialist": {
         "documents:read",
@@ -243,6 +291,8 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "inspections:list",
         "incidents:read",
         "incidents:list",
+        "contractors:read",
+        "contractors:list",
     },
     "fire_engineer": {
         "documents:read",
@@ -259,6 +309,7 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "risk_maps:list",
         "incidents:read",
         "incidents:list",
+        "calendar:read",
     },
     "hr": {
         "documents:read",
@@ -267,6 +318,9 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "trainings:list",
         "trainings:create",
         "trainings:update",
+        "data_quality:read",
+        "employee_card:read",
+        "calendar:read",
     },
     "accountant": {"reports:read", "reports:list", "reports:export"},
     "line_manager": {
@@ -276,6 +330,9 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "incidents:read",
         "inspections:read",
         "inspections:list",
+        "data_quality:read",
+        "employee_card:read",
+        "calendar:read",
     },
     "client": {
         "documents:read",
@@ -283,6 +340,8 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "documents:download",
         "reports:read",
         "reports:list",
+        "contractors:read",
+        "contractors:list",
     },
     "auditor_ro": {
         "documents:read",
@@ -303,7 +362,11 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "inspections:list",
         "incidents:read",
         "incidents:list",
+        "contractors:read",
+        "contractors:list",
     },
+    "client_admin": {"contractors:read", "contractors:list"},
+    "client_user": {"contractors:read", "contractors:list"},
 }
 
 SCOPED_RESOURCES = {
@@ -322,6 +385,7 @@ SCOPED_RESOURCES = {
     "briefings",
     "incidents",
     "inspections",
+    "contractors",
     "reports",
 }
 
@@ -331,6 +395,29 @@ class PolicyEngine:
         "generate": "run_pipeline",
         "run": "run_pipeline",
         "cancel": "cancel_job",
+    }
+
+    _RESOURCE_TO_MODULE: dict[str, str] = {
+        "templates": "templates",
+        "template_versions": "templates",
+        "documents": "documents",
+        "document_versions": "documents",
+        "document_jobs": "documents",
+        "files": "documents",
+        "package_presets": "documents",
+        "package_profiles": "documents",
+        "risk_maps": "risk",
+        "risk_methodologies": "risk",
+        "ppe_norms": "ppe",
+        "ppe_issues": "ppe",
+        "warehouse_stock": "ppe",
+        "trainings": "training",
+        "briefings": "briefings",
+        "incidents": "incidents",
+        "inspections": "inspections",
+        "contractors": "contractors",
+        "reports": "reports",
+        "admin": "admin",
     }
 
     def enforce(
@@ -356,6 +443,42 @@ class PolicyEngine:
         normalized_action = self._ACTION_ALIASES.get(action.lower(), action.lower())
         normalized_resource = resource.lower()
         permission_code = f"{normalized_resource}:{normalized_action}"
+        ctx = ctx or {}
+
+        # Cross-tenant isolation: a tenant-scoped ctx must match the actor's
+        # tenant — even for owner/admin. Defense-in-depth alongside the request
+        # middleware, so a forged/mismatched tenant scope can never be granted.
+        ctx_tenant = ctx.get("tenant_id")
+        if ctx_tenant and actor.tenant_id and str(ctx_tenant) != str(actor.tenant_id):
+            return Decision(
+                False,
+                "cross_tenant_denied",
+                audit_meta={"actor_tenant": str(actor.tenant_id), "ctx_tenant": str(ctx_tenant)},
+            )
+
+        # Check module-level access first
+        module = self._RESOURCE_TO_MODULE.get(normalized_resource)
+        if module:
+            allowed_modules = set()
+            for role in actor.roles:
+                allowed_modules.update(MODULE_PERMISSIONS.get(role, set()))
+            if module not in allowed_modules:
+                return Decision(
+                    False,
+                    "module_access_denied",
+                    audit_meta={"module": module, "resource": normalized_resource},
+                )
+
+        # Owner/admin are super-users: once module + tenant checks pass they
+        # bypass the resource-permission table (which may be intentionally
+        # incomplete). Must precede the matched_roles gate so a missing
+        # ROLE_PERMISSIONS entry never denies an owner/admin.
+        if {"owner", "admin"}.intersection(actor.roles):
+            return Decision(
+                True,
+                "explicit_allow",
+                matched_rules=("rbac", "admin_bypass"),
+            )
 
         matched_roles = tuple(
             role for role in actor.roles if permission_code in ROLE_PERMISSIONS.get(role, set())
@@ -366,15 +489,7 @@ class PolicyEngine:
         if "auditor_ro" in actor.roles and normalized_action not in {"read", "list"}:
             return Decision(False, "auditor_read_only", matched_roles=matched_roles)
 
-        if {"owner", "admin"}.intersection(actor.roles):
-            return Decision(
-                True,
-                "explicit_allow",
-                matched_roles=matched_roles,
-                matched_rules=("rbac", "admin_bypass"),
-            )
-
-        if not self._scope_check(actor=actor, obj=obj, ctx=ctx or {}):
+        if not self._scope_check(actor=actor, obj=obj, ctx=ctx):
             return Decision(
                 False, "scope_mismatch", matched_roles=matched_roles, matched_rules=("scope_check",)
             )
@@ -443,15 +558,15 @@ policy_engine = PolicyEngine()
 
 
 def policy_forbidden(reason: str, *, correlation_id: str | None = None) -> HTTPException:
+    _ = correlation_id
     return HTTPException(
         status_code=status.HTTP_403_FORBIDDEN,
-        detail={
-            "code": "forbidden",
-            "type": "policy",
-            "message": "forbidden",
-            "reason_code": reason,
-            "correlation-id": correlation_id,
-        },
+        detail=api_problem_detail(
+            code="FORBIDDEN",
+            message="Forbidden",
+            error_type="policy",
+            details={"reason_code": reason},
+        ),
     )
 
 

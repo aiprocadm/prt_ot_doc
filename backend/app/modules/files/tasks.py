@@ -30,14 +30,18 @@ def purge_temp_files(hours: int = 24) -> int:
     async def _run() -> int:
         async with session_scope(tenant="test") as session:
             rows = (
-                await session.execute(
-                    select(FileRecord).where(
-                        FileRecord.object_key.like("tmp/%"),
-                        FileRecord.created_at < cutoff,
-                        FileRecord.status != FileStatus.clean.value,
+                (
+                    await session.execute(
+                        select(FileRecord).where(
+                            FileRecord.object_key.like("tmp/%"),
+                            FileRecord.created_at < cutoff,
+                            FileRecord.status != FileStatus.clean.value,
+                        )
                     )
                 )
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
             for row in rows:
                 row.status = FileStatus.deleted.value
                 row.deleted_at = datetime.now(timezone.utc)

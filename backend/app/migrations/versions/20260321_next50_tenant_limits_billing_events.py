@@ -14,7 +14,7 @@ down_revision = "20260320_next49"
 branch_labels = None
 depends_on = None
 
-billing_event_type = sa.Enum(
+billing_event_type = postgresql.ENUM(
     "generation_completed",
     "edo_sent",
     "file_uploaded",
@@ -23,13 +23,21 @@ billing_event_type = sa.Enum(
     "payment_failed",
     "payment_succeeded",
     name="billingeventtype",
+    create_type=False,
 )
 
 
 def upgrade() -> None:
     billing_event_type.create(op.get_bind(), checkfirst=True)
-    op.add_column("subscriptions", sa.Column("cancel_at_period_end", sa.Boolean(), nullable=False, server_default=sa.text("false")))
-    op.add_column("subscriptions", sa.Column("external_customer_id", sa.String(length=128), nullable=True))
+    op.add_column(
+        "subscriptions",
+        sa.Column(
+            "cancel_at_period_end", sa.Boolean(), nullable=False, server_default=sa.text("false")
+        ),
+    )
+    op.add_column(
+        "subscriptions", sa.Column("external_customer_id", sa.String(length=128), nullable=True)
+    )
     op.create_table(
         "tenant_rate_limits",
         sa.Column("id", sa.String(length=36), nullable=False),
@@ -37,7 +45,12 @@ def upgrade() -> None:
         sa.Column("concurrency_limit", sa.Integer(), nullable=False, server_default="1"),
         sa.Column("burst", sa.Integer(), nullable=False, server_default="5"),
         sa.Column("rps", sa.Integer(), nullable=False, server_default="2"),
-        sa.Column("queues", postgresql.JSONB(astext_type=sa.Text()), nullable=False, server_default=sa.text("'{}'::jsonb")),
+        sa.Column(
+            "queues",
+            postgresql.JSONB(astext_type=sa.Text()),
+            nullable=False,
+            server_default=sa.text("'{}'::jsonb"),
+        ),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("version", sa.Integer(), nullable=False, server_default="1"),
@@ -53,16 +66,28 @@ def upgrade() -> None:
         sa.Column("ref_type", sa.String(length=64), nullable=True),
         sa.Column("ref_id", sa.String(length=128), nullable=True),
         sa.Column("amount", sa.Numeric(14, 2), nullable=True),
-        sa.Column("payload", postgresql.JSONB(astext_type=sa.Text()), nullable=False, server_default=sa.text("'{}'::jsonb")),
+        sa.Column(
+            "payload",
+            postgresql.JSONB(astext_type=sa.Text()),
+            nullable=False,
+            server_default=sa.text("'{}'::jsonb"),
+        ),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("version", sa.Integer(), nullable=False, server_default="1"),
         sa.Column("delivered_at", sa.DateTime(timezone=True), nullable=True),
         sa.ForeignKeyConstraint(["tenant_id"], ["tenant.id"]),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("tenant_id", "type", "ref_type", "ref_id", name="uq_billing_event_dedup"),
+        sa.UniqueConstraint(
+            "tenant_id", "type", "ref_type", "ref_id", name="uq_billing_event_dedup"
+        ),
     )
-    op.create_index("ix_billing_events_tenant_created", "billing_events", ["tenant_id", "created_at"], unique=False)
+    op.create_index(
+        "ix_billing_events_tenant_created",
+        "billing_events",
+        ["tenant_id", "created_at"],
+        unique=False,
+    )
     op.create_index("ix_billing_events_type", "billing_events", ["type"], unique=False)
 
 

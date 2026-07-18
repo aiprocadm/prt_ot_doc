@@ -31,7 +31,7 @@ def _normalize_scopes(scopes: Sequence[str] | str | None) -> str:
     if isinstance(scopes, str):
         tokens = scopes.replace(",", " ").split()
     else:
-        tokens: list[str] = []
+        tokens = []  # list[str]
         for scope in scopes:
             tokens.extend(str(scope).replace(",", " ").split())
     unique = []
@@ -67,9 +67,7 @@ def _parse_key(value: str) -> tuple[str, str] | None:
 async def _generate_unique_prefix(session: AsyncSession) -> str:
     for _ in range(20):
         candidate = secrets.token_urlsafe(6)
-        result = await session.execute(
-            select(ApiKey).where(ApiKey.key_prefix == candidate)
-        )
+        result = await session.execute(select(ApiKey).where(ApiKey.key_prefix == candidate))
         if result.scalar_one_or_none() is None:
             return candidate
     raise RuntimeError("Failed to generate a unique API key prefix")

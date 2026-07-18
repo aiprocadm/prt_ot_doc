@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { apiClient } from "@/api/client";
@@ -59,6 +59,7 @@ const mapPresetToForm = (preset?: LayoutPresetDto | null): FormState => {
 };
 
 export const LayoutPresetEditor = () => {
+  const didPickDefaultSelectionRef = useRef(false);
   const [presets, setPresets] = useState<LayoutPresetDto[]>([]);
   const [selectedId, setSelectedId] = useState<string>("");
   const [form, setForm] = useState<FormState>(emptyForm);
@@ -72,18 +73,31 @@ export const LayoutPresetEditor = () => {
     [presets, selectedId]
   );
 
-  const loadPresets = async () => {
+  const loadPresets = useCallback(async (selectCode?: string) => {
     const items = await listLayoutPresets();
     setPresets(items);
-    if (!selectedId && items[0]) {
-      setSelectedId(items[0].id);
-      setForm(mapPresetToForm(items[0]));
+    if (selectCode) {
+      const match = items.find((p) => p.code === selectCode);
+      if (match) {
+        setSelectedId(match.id);
+      }
+      return;
     }
-  };
+    setSelectedId((prev) => {
+      if (prev !== "") {
+        return prev;
+      }
+      if (!didPickDefaultSelectionRef.current && items[0]) {
+        didPickDefaultSelectionRef.current = true;
+        return items[0].id;
+      }
+      return prev;
+    });
+  }, []);
 
   useEffect(() => {
     loadPresets().catch(() => toast.error("Не удалось загрузить список пресетов"));
-  }, []);
+  }, [loadPresets]);
 
   useEffect(() => {
     setForm(mapPresetToForm(selectedPreset));
@@ -115,11 +129,12 @@ export const LayoutPresetEditor = () => {
       if (selectedPreset) {
         await apiClient.patch(`/layout-presets/${selectedPreset.id}`, payload);
         toast.success("Пресет обновлён");
+        await loadPresets();
       } else {
         await apiClient.post("/layout-presets", payload);
         toast.success("Пресет создан");
+        await loadPresets(payload.code);
       }
-      await loadPresets();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Не удалось сохранить пресет");
     }
@@ -172,27 +187,27 @@ export const LayoutPresetEditor = () => {
 
       <div className="grid gap-3 md:grid-cols-2">
         <div>
-          <Label>Header first</Label>
+          <Label>Шапка (первая)</Label>
           <Textarea value={form.header_first_xml} onChange={(e) => setForm((s) => ({ ...s, header_first_xml: e.target.value }))} rows={4} />
         </div>
         <div>
-          <Label>Footer first</Label>
+          <Label>Подвал (первая)</Label>
           <Textarea value={form.footer_first_xml} onChange={(e) => setForm((s) => ({ ...s, footer_first_xml: e.target.value }))} rows={4} />
         </div>
         <div>
-          <Label>Header odd/default</Label>
+          <Label>Шапка (нечётная/по умолчанию)</Label>
           <Textarea value={form.header_odd_xml} onChange={(e) => setForm((s) => ({ ...s, header_odd_xml: e.target.value }))} rows={5} />
         </div>
         <div>
-          <Label>Footer odd/default</Label>
+          <Label>Подвал (нечётная/по умолчанию)</Label>
           <Textarea value={form.footer_odd_xml} onChange={(e) => setForm((s) => ({ ...s, footer_odd_xml: e.target.value }))} rows={5} />
         </div>
         <div>
-          <Label>Header even</Label>
+          <Label>Шапка (чётная)</Label>
           <Textarea value={form.header_even_xml} onChange={(e) => setForm((s) => ({ ...s, header_even_xml: e.target.value }))} rows={4} />
         </div>
         <div>
-          <Label>Footer even</Label>
+          <Label>Подвал (чётная)</Label>
           <Textarea value={form.footer_even_xml} onChange={(e) => setForm((s) => ({ ...s, footer_even_xml: e.target.value }))} rows={4} />
         </div>
       </div>
@@ -210,7 +225,7 @@ export const LayoutPresetEditor = () => {
           <input type="checkbox" checked={form.watermark_enabled} onChange={(e) => setForm((s) => ({ ...s, watermark_enabled: e.target.checked }))} />
           watermark enabled
         </label>
-        <Input value={form.watermark_text} onChange={(e) => setForm((s) => ({ ...s, watermark_text: e.target.value }))} placeholder="DRAFT" />
+        <Input value={form.watermark_text} onChange={(e) => setForm((s) => ({ ...s, watermark_text: e.target.value }))} placeholder="ЧЕРНОВИК" />
       </div>
 
       <TokenHelp />

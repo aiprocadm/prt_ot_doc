@@ -7,7 +7,9 @@ from typing import Any
 
 def make_request_hash(path: str, tenant_id: str, user_id: str, body: dict[str, Any]) -> str:
     return hashlib.sha256(
-        json.dumps({"path": path, "tenant_id": tenant_id, "user_id": user_id, "body": body}, sort_keys=True).encode()
+        json.dumps(
+            {"path": path, "tenant_id": tenant_id, "user_id": user_id, "body": body}, sort_keys=True
+        ).encode()
     ).hexdigest()
 
 

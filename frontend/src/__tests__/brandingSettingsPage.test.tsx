@@ -172,11 +172,11 @@ describe("BrandingSettingsPage", () => {
 
     expect((await screen.findAllByDisplayValue("АО Тест")).length).toBeGreaterThan(0);
     await act(async () => {
-      await user.click(screen.getByRole("button", { name: /тестовая генерация branded preview/i }));
+      await user.click(screen.getByRole("button", { name: /тестовая генерация превью с брендингом/i }));
     });
 
     expect((await screen.findAllByText(/АО Тест \/ Main site/i)).length).toBeGreaterThan(0);
-    expect(screen.getByText(/все placeholders разрешены/i)).toBeInTheDocument();
+    expect(screen.getByText(/все плейсхолдеры разрешены/i)).toBeInTheDocument();
     expect(screen.getAllByText(/2026-03-26T01:00:00Z/i).length).toBeGreaterThan(0);
     expect(brandingApiMock.previewBranding).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -200,7 +200,7 @@ describe("BrandingSettingsPage", () => {
 
     expect((await screen.findAllByDisplayValue("АО Тест")).length).toBeGreaterThan(0);
 
-    const metadataTextarea = getLabeledTextarea("Metadata JSON");
+    const metadataTextarea = getLabeledTextarea("Метаданные (JSON)");
     await act(async () => {
       fireEvent.change(metadataTextarea, { target: { value: "{" } });
     });
@@ -209,7 +209,7 @@ describe("BrandingSettingsPage", () => {
     });
 
     await waitFor(() => {
-      expect(toast.error).toHaveBeenCalledWith("Некорректный JSON в metadata/signatories");
+      expect(toast.error).toHaveBeenCalledWith("Некорректный JSON в метаданных или подписантах");
     });
     expect(brandingApiMock.updateBrandingProfile).not.toHaveBeenCalled();
   });

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from sqlalchemy import false
 from sqlalchemy.sql import Select
 
@@ -8,9 +10,14 @@ from app.core.rbac_abac import ActorContext, scoped_query
 from .types import Subject
 
 
-def apply_abac_filters(query: Select, subject: Subject, model: type) -> Select:
-    scoped_model = any(hasattr(model, field) for field in ("company_id", "site_id", "project_id", "contractor_id")) or model.__tablename__ in {"company", "site", "project", "contractor"}
-    if scoped_model and not any((subject.company_ids, subject.site_ids, subject.project_ids, subject.contractor_ids)):
+def apply_abac_filters(query: Select, subject: Subject, model: type[Any]) -> Select:
+    table_name = str(getattr(model, "__tablename__", ""))
+    scoped_model = any(
+        hasattr(model, field) for field in ("company_id", "site_id", "project_id", "contractor_id")
+    ) or table_name in {"company", "site", "project", "contractor"}
+    if scoped_model and not any(
+        (subject.company_ids, subject.site_ids, subject.project_ids, subject.contractor_ids)
+    ):
         return query.where(false())
 
     actor = ActorContext(
@@ -22,4 +29,4 @@ def apply_abac_filters(query: Select, subject: Subject, model: type) -> Select:
         project_ids=subject.project_ids,
         contractor_ids=subject.contractor_ids,
     )
-    return scoped_query(query, model=model, actor=actor, resource=model.__tablename__)
+    return scoped_query(query, model=model, actor=actor, resource=table_name)

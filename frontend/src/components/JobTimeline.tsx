@@ -30,7 +30,7 @@ const extractArtifacts = (output: unknown): Array<{ key: string; value: string }
 };
 
 export const JobTimeline = ({ steps }: { steps: PipelineStepRun[] }) => (
-  <div className="space-y-2">
+  <div className="space-y-2" role="presentation">
     {steps.map((step, idx) => (
       <div key={step.step_run_id} className="space-y-2 rounded border p-3 text-sm">
         <div className="flex items-center justify-between">
@@ -56,7 +56,7 @@ export const JobTimeline = ({ steps }: { steps: PipelineStepRun[] }) => (
         {(step as { output?: unknown }).output ? <pre className="overflow-auto rounded bg-muted/40 p-2 text-[11px]">{stringify((step as { output?: unknown }).output)}</pre> : null}
         {extractArtifacts((step as { output?: unknown }).output).length ? (
           <div className="space-y-1 text-xs">
-            <div className="font-medium">Artifacts</div>
+            <div className="font-medium">Артефакты</div>
             {extractArtifacts((step as { output?: unknown }).output).map((artifact) => (
               <div key={`${step.step_run_id}-${artifact.key}`} className="text-muted-foreground">
                 {artifact.key}: <a className="text-blue-600 underline" href={artifact.value} target="_blank" rel="noreferrer">{artifact.value}</a>

@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.api.tenant_row_http import enforce_row_belongs_to_tenant
 from app.core.audit_decorator import audit_operation
 from app.core.security import AccessContext, rbac
 from app.models.job_engine import OutboxEvent, OutboxEventStatus
@@ -97,9 +98,7 @@ async def list_outbox(
             destination=entry.destination,
             status=entry.status,
             attempts=entry.attempts,
-            next_attempt_at=entry.next_attempt_at.isoformat()
-            if entry.next_attempt_at
-            else None,
+            next_attempt_at=entry.next_attempt_at.isoformat() if entry.next_attempt_at else None,
             sent_at=entry.sent_at.isoformat() if entry.sent_at else None,
             created_at=entry.created_at.isoformat(),
             updated_at=entry.updated_at.isoformat(),
@@ -108,69 +107,6 @@ async def list_outbox(
         for entry in rows
     ]
     return OutboxListResponse(total=len(items), items=items)
-
-
-@router.get("/{outbox_id}", response_model=OutboxEntry)
-async def get_outbox_entry(
-    outbox_id: str,
-    *,
-    tenant: TenantDep,
-    access: AdminAccess,
-    session: SessionDep,
-) -> OutboxEntry:
-    _ = access
-    entry = await session.get(Outbox, outbox_id)
-    if entry is None or entry.tenant_id != tenant.id:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Outbox entry not found")
-
-    return OutboxEntry(
-        id=entry.id,
-        tenant_id=entry.tenant_id,
-        event_type=entry.event_type,
-        destination=entry.destination,
-        status=entry.status,
-        attempts=entry.attempts,
-        next_attempt_at=entry.next_attempt_at.isoformat() if entry.next_attempt_at else None,
-        sent_at=entry.sent_at.isoformat() if entry.sent_at else None,
-        created_at=entry.created_at.isoformat(),
-        updated_at=entry.updated_at.isoformat(),
-        last_error=entry.last_error,
-    )
-
-
-@router.post("/{outbox_id}/retry", response_model=RetryResponse)
-@audit_operation("retry", "outbox_entry")
-async def retry_outbox_entry(
-    outbox_id: str,
-    *,
-    tenant: TenantDep,
-    access: AdminAccess,
-    session: SessionDep,
-) -> RetryResponse:
-    _ = access
-    entry = await session.get(Outbox, outbox_id)
-    if entry is None or entry.tenant_id != tenant.id:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Outbox entry not found")
-
-    if entry.status not in {OutboxStatus.DEAD, OutboxStatus.FAILED}:
-        raise HTTPException(
-            status.HTTP_409_CONFLICT,
-            "Only FAILED or DEAD outbox entries can be retried",
-        )
-
-    entry.status = OutboxStatus.PENDING
-    entry.attempts = 0
-    entry.next_attempt_at = datetime.now(tz=timezone.utc)
-    entry.last_error = None
-
-    await session.commit()
-
-    return RetryResponse(
-        outbox_id=entry.id,
-        status=entry.status,
-        attempts=entry.attempts,
-        next_attempt_at=entry.next_attempt_at.isoformat() if entry.next_attempt_at else None,
-    )
 
 
 @router.get("/events", response_model=OutboxEventListResponse)
@@ -217,8 +153,15 @@ async def requeue_outbox_event(
 ) -> OutboxEventEntry:
     _ = access
     event = await session.get(OutboxEvent, event_id)
-    if event is None or event.tenant_id != tenant.id:
+    if event is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Outbox event not found")
+    enforce_row_belongs_to_tenant(
+        session,
+        event,
+        tenant_id=str(tenant.id),
+        mismatch_event="api.outbox_admin.requeue_event.tenant_scope_mismatch",
+        detail="Outbox event not found",
+    )
 
     if event.status not in {OutboxEventStatus.POISONED.value, OutboxEventStatus.FAILED.value}:
         raise HTTPException(status.HTTP_409_CONFLICT, "Only FAILED or DEAD events can be requeued")
@@ -239,4 +182,81 @@ async def requeue_outbox_event(
         next_attempt_at=event.next_attempt_at.isoformat() if event.next_attempt_at else None,
         created_at=event.created_at.isoformat(),
         last_error=event.last_error,
+    )
+
+
+@router.get("/{outbox_id}", response_model=OutboxEntry)
+async def get_outbox_entry(
+    outbox_id: str,
+    *,
+    tenant: TenantDep,
+    access: AdminAccess,
+    session: SessionDep,
+) -> OutboxEntry:
+    _ = access
+    entry = await session.get(Outbox, outbox_id)
+    if entry is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Outbox entry not found")
+    enforce_row_belongs_to_tenant(
+        session,
+        entry,
+        tenant_id=str(tenant.id),
+        mismatch_event="api.outbox_admin.get_entry.tenant_scope_mismatch",
+        detail="Outbox entry not found",
+    )
+
+    return OutboxEntry(
+        id=entry.id,
+        tenant_id=entry.tenant_id,
+        event_type=entry.event_type,
+        destination=entry.destination,
+        status=entry.status,
+        attempts=entry.attempts,
+        next_attempt_at=entry.next_attempt_at.isoformat() if entry.next_attempt_at else None,
+        sent_at=entry.sent_at.isoformat() if entry.sent_at else None,
+        created_at=entry.created_at.isoformat(),
+        updated_at=entry.updated_at.isoformat(),
+        last_error=entry.last_error,
+    )
+
+
+@router.post("/{outbox_id}/retry", response_model=RetryResponse)
+@audit_operation("retry", "outbox_entry")
+async def retry_outbox_entry(
+    outbox_id: str,
+    *,
+    tenant: TenantDep,
+    access: AdminAccess,
+    session: SessionDep,
+) -> RetryResponse:
+    _ = access
+    entry = await session.get(Outbox, outbox_id)
+    if entry is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Outbox entry not found")
+    enforce_row_belongs_to_tenant(
+        session,
+        entry,
+        tenant_id=str(tenant.id),
+        mismatch_event="api.outbox_admin.retry_entry.tenant_scope_mismatch",
+        detail="Outbox entry not found",
+    )
+
+    if entry.status not in {OutboxStatus.DEAD, OutboxStatus.FAILED}:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Only FAILED or DEAD outbox entries can be retried",
+        )
+
+    entry.status = OutboxStatus.PENDING
+    entry.attempts = 0
+    entry.next_attempt_at = datetime.now(tz=timezone.utc)
+    entry.last_error = None
+
+    await session.commit()
+
+    return RetryResponse(
+        outbox_id=entry.id,
+        status=entry.status,
+        attempts=entry.attempts,
+        next_attempt_at=entry.next_attempt_at.isoformat() if entry.next_attempt_at else None,
     )

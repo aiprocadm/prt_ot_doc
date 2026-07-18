@@ -72,9 +72,7 @@ async def session() -> AsyncSession:
 async def _prepare_template(
     session: AsyncSession, tenant: Tenant
 ) -> tuple[Template, TemplateVersion]:
-    template = Template(
-        tenant_id=tenant.id, name="pipeline", description=None, metadata_json={}
-    )
+    template = Template(tenant_id=tenant.id, name="pipeline", description=None, metadata_json={})
     session.add(template)
     await session.flush()
 
@@ -118,9 +116,7 @@ async def test_pipeline_logs_start_and_success(
     session: AsyncSession, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _patch_docx(monkeypatch)
-    tenant = (
-        await session.execute(select(Tenant).where(Tenant.slug == "acme"))
-    ).scalar_one()
+    tenant = (await session.execute(select(Tenant).where(Tenant.slug == "acme"))).scalar_one()
     template, version = await _prepare_template(session, tenant)
     service = PipelineService(pdf_converter=_FakePdfConverter())
 
@@ -157,9 +153,7 @@ async def test_pipeline_skips_qr_and_watermark_when_disabled(
     session: AsyncSession, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _patch_docx(monkeypatch)
-    tenant = (
-        await session.execute(select(Tenant).where(Tenant.slug == "acme"))
-    ).scalar_one()
+    tenant = (await session.execute(select(Tenant).where(Tenant.slug == "acme"))).scalar_one()
     template, version = await _prepare_template(session, tenant)
     service = PipelineService(pdf_converter=_FakePdfConverter())
     service._settings.doc_pipeline_enable_qr = False
@@ -179,9 +173,11 @@ async def test_pipeline_skips_qr_and_watermark_when_disabled(
             output_basename="report",
         )
 
-    stages = run.outputs.get("stages", {})
-    assert stages.get("qr_code", {"status": "skipped"})["status"] == "skipped"
-    assert stages.get("watermark", {"status": "skipped"})["status"] == "skipped"
+    stages = run.outputs["stages"]
+    assert stages["qr_code"]["status"] == "skipped"
+    assert stages["qr_code"]["details"]["reason"] == "disabled"
+    assert stages["watermark"]["status"] == "skipped"
+    assert stages["watermark"]["details"]["reason"] == "disabled"
 
 
 @pytest.mark.asyncio()
@@ -189,9 +185,7 @@ async def test_pipeline_qr_watermark_failure_fallback(
     session: AsyncSession, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _patch_docx(monkeypatch)
-    tenant = (
-        await session.execute(select(Tenant).where(Tenant.slug == "beta"))
-    ).scalar_one()
+    tenant = (await session.execute(select(Tenant).where(Tenant.slug == "beta"))).scalar_one()
     template, version = await _prepare_template(session, tenant)
     service = PipelineService(pdf_converter=_FakePdfConverter())
     service._settings.doc_pipeline_enable_qr = True
@@ -223,9 +217,88 @@ async def test_pipeline_qr_watermark_failure_fallback(
         )
 
     assert run.status == PipelineRunStatus.DONE
-    stages = run.outputs.get("stages", {})
-    assert stages.get("qr_code", {"status": "success"})["status"] == "success"
-    assert stages.get("watermark", {"status": "error"})["status"] == "error"
+    stages = run.outputs["stages"]
+    assert stages["qr_code"]["status"] == "success"
+    assert stages["watermark"]["status"] == "error"
+
+
+@pytest.mark.asyncio()
+async def test_pipeline_persists_stage_telemetry_after_completion(
+    session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A completed run must persist its stage history, not collapse to ``{}``.
+
+    ``run.outputs`` is a plain ``JSON`` column with no ``MutableDict`` wrapper, so
+    in-place mutation of the same dict object was not change-tracked and the stage
+    timeline was lost on ``session.refresh``. These assertions index the persisted
+    stages directly (no matching ``.get`` default) so they cannot pass vacuously.
+    """
+    _patch_docx(monkeypatch)
+    tenant = (await session.execute(select(Tenant).where(Tenant.slug == "delta"))).scalar_one()
+    template, version = await _prepare_template(session, tenant)
+    service = PipelineService(pdf_converter=_FakePdfConverter())
+
+    with tenant_context("delta"):
+        run = await service.run(
+            session,
+            tenant_id=tenant.id,
+            template=template,
+            template_version=version,
+            context={"name": "Pavel"},
+            replacements=None,
+            header_text=None,
+            footer_text=None,
+            idempotency_key="job-telemetry-persist",
+            output_basename="report",
+        )
+
+    assert run.status == PipelineRunStatus.DONE
+    stages = run.outputs["stages"]
+    # Core stages must survive the post-commit refresh with their recorded status.
+    assert stages["export"]["status"] in {"success", "fallback"}
+    assert stages["store"]["status"] == "success"
+    assert stages["audit"]["status"] == "success"
+
+
+@pytest.mark.asyncio()
+async def test_pipeline_default_stamping_backend_reports_unavailable_not_success(
+    session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Enabling QR/watermark without a real stamping backend must NOT claim success.
+
+    The default placeholder cannot stamp the PDF; the pipeline has to surface the
+    request as an honest, observable "not applied" instead of recording a no-op as
+    a successful stage (which previously misled callers into trusting an unstamped
+    document).
+    """
+    _patch_docx(monkeypatch)
+    tenant = (await session.execute(select(Tenant).where(Tenant.slug == "gamma"))).scalar_one()
+    template, version = await _prepare_template(session, tenant)
+    service = PipelineService(pdf_converter=_FakePdfConverter())
+    service._settings.doc_pipeline_enable_qr = True
+    service._settings.doc_pipeline_enable_watermark = True
+    # Intentionally do NOT monkeypatch _apply_*: exercise the real default backend.
+
+    with tenant_context("gamma"):
+        run = await service.run(
+            session,
+            tenant_id=tenant.id,
+            template=template,
+            template_version=version,
+            context={"name": "Pavel"},
+            replacements=None,
+            header_text=None,
+            footer_text=None,
+            idempotency_key="job-stamping-unavailable",
+            output_basename="report",
+        )
+
+    assert run.status == PipelineRunStatus.DONE
+    stages = run.outputs["stages"]
+    assert stages["qr_code"]["status"] == "skipped"
+    assert stages["qr_code"]["details"]["reason"] == "stamping_backend_unavailable"
+    assert stages["watermark"]["status"] == "skipped"
+    assert stages["watermark"]["details"]["reason"] == "stamping_backend_unavailable"
 
 
 @pytest.mark.asyncio()
@@ -233,9 +306,7 @@ async def test_pipeline_logs_pdf_timeout_fallback(
     session: AsyncSession, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _patch_docx(monkeypatch)
-    tenant = (
-        await session.execute(select(Tenant).where(Tenant.slug == "beta"))
-    ).scalar_one()
+    tenant = (await session.execute(select(Tenant).where(Tenant.slug == "beta"))).scalar_one()
     template, version = await _prepare_template(session, tenant)
     service = PipelineService(pdf_converter=_FakePdfConverter(should_fail=True))
 
@@ -254,7 +325,9 @@ async def test_pipeline_logs_pdf_timeout_fallback(
                 output_basename="report",
             )
 
-    warning_record = next(r for r in caplog.records if r.message == "PDF conversion failed; using fallback PDF")
+    warning_record = next(
+        r for r in caplog.records if r.message == "PDF conversion failed; using fallback PDF"
+    )
     assert warning_record.error_code == "pdf_conversion_timeout"
     assert warning_record.tenant == "beta"
 
@@ -274,9 +347,7 @@ async def test_pipeline_idempotent_run_is_reused(
     session: AsyncSession, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _patch_docx(monkeypatch)
-    tenant = (
-        await session.execute(select(Tenant).where(Tenant.slug == "gamma"))
-    ).scalar_one()
+    tenant = (await session.execute(select(Tenant).where(Tenant.slug == "gamma"))).scalar_one()
     template, version = await _prepare_template(session, tenant)
     service = PipelineService(pdf_converter=_FakePdfConverter())
 
@@ -320,9 +391,7 @@ async def test_pipeline_idempotency_conflict_different_payload(
     session: AsyncSession, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _patch_docx(monkeypatch)
-    tenant = (
-        await session.execute(select(Tenant).where(Tenant.slug == "delta"))
-    ).scalar_one()
+    tenant = (await session.execute(select(Tenant).where(Tenant.slug == "delta"))).scalar_one()
     template, version = await _prepare_template(session, tenant)
     service = PipelineService(pdf_converter=_FakePdfConverter())
 
@@ -360,9 +429,7 @@ async def test_pipeline_idempotency_conflict_different_template(
     session: AsyncSession, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _patch_docx(monkeypatch)
-    tenant = (
-        await session.execute(select(Tenant).where(Tenant.slug == "zeta"))
-    ).scalar_one()
+    tenant = (await session.execute(select(Tenant).where(Tenant.slug == "zeta"))).scalar_one()
     template, version = await _prepare_template(session, tenant)
     service = PipelineService(pdf_converter=_FakePdfConverter())
 
@@ -417,9 +484,7 @@ async def test_pipeline_run_idempotency_key_unique_constraint(
     session: AsyncSession, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _patch_docx(monkeypatch)
-    tenant = (
-        await session.execute(select(Tenant).where(Tenant.slug == "epsilon"))
-    ).scalar_one()
+    tenant = (await session.execute(select(Tenant).where(Tenant.slug == "epsilon"))).scalar_one()
     template, version = await _prepare_template(session, tenant)
     service = PipelineService(pdf_converter=_FakePdfConverter())
 
@@ -458,9 +523,7 @@ async def test_pipeline_rejects_slug_passed_as_tenant_id(
     session: AsyncSession, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _patch_docx(monkeypatch)
-    tenant = (
-        await session.execute(select(Tenant).where(Tenant.slug == "acme"))
-    ).scalar_one()
+    tenant = (await session.execute(select(Tenant).where(Tenant.slug == "acme"))).scalar_one()
     template, version = await _prepare_template(session, tenant)
     service = PipelineService(pdf_converter=_FakePdfConverter())
 
@@ -485,9 +548,7 @@ async def test_pipeline_rejects_partial_session_tenant_contract(
     session: AsyncSession, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _patch_docx(monkeypatch)
-    tenant = (
-        await session.execute(select(Tenant).where(Tenant.slug == "beta"))
-    ).scalar_one()
+    tenant = (await session.execute(select(Tenant).where(Tenant.slug == "beta"))).scalar_one()
     template, version = await _prepare_template(session, tenant)
     service = PipelineService(pdf_converter=_FakePdfConverter())
     session.info["tenant_slug"] = tenant.slug
@@ -514,9 +575,7 @@ async def test_pipeline_rejects_session_tenant_mismatch(
     session: AsyncSession, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _patch_docx(monkeypatch)
-    tenant = (
-        await session.execute(select(Tenant).where(Tenant.slug == "gamma"))
-    ).scalar_one()
+    tenant = (await session.execute(select(Tenant).where(Tenant.slug == "gamma"))).scalar_one()
     other_tenant = (
         await session.execute(select(Tenant).where(Tenant.slug == "delta"))
     ).scalar_one()
@@ -540,3 +599,38 @@ async def test_pipeline_rejects_session_tenant_mismatch(
                 idempotency_key="mismatch-session-contract",
                 output_basename="report",
             )
+
+
+@pytest.mark.asyncio()
+async def test_pipeline_run_json_columns_track_top_level_inplace_mutation(
+    session: AsyncSession,
+) -> None:
+    """`PipelineRun.outputs`/`result_metadata` are MutableDict-wrapped, so a
+    TOP-LEVEL in-place edit is persisted even WITHOUT reassigning a fresh object.
+
+    Before the wrapper this lost the update (plain JSON column tracks only by
+    object identity). Nested edits still require fresh reassignment.
+    """
+    tenant = (await session.execute(select(Tenant).where(Tenant.slug == "acme"))).scalar_one()
+    template, version = await _prepare_template(session, tenant)
+    run = PipelineRun(
+        tenant_id=tenant.id,
+        template_id=template.id,
+        template_version_id=version.id,
+        status=PipelineRunStatus.QUEUED,
+        context={},
+        outputs={"docx": "a"},
+        result_metadata={"pdf_fallback": False},
+        idempotency_key="mutable-tracking",
+    )
+    session.add(run)
+    await session.commit()
+
+    # In-place top-level mutation, NO reassignment of run.outputs / result_metadata.
+    run.outputs["pdf"] = "b"
+    run.result_metadata["pdf_fallback"] = True
+    await session.commit()
+    await session.refresh(run)
+
+    assert run.outputs == {"docx": "a", "pdf": "b"}
+    assert run.result_metadata == {"pdf_fallback": True}

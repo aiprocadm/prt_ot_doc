@@ -56,8 +56,8 @@ describe("operational hardening states", () => {
 
     render(<IntegrationsPage />);
 
-    expect(await screen.findByText("Provider readiness")).toBeInTheDocument();
-    expect(screen.getByText("Outbound delivery history")).toBeInTheDocument();
+    expect(await screen.findByText("Готовность провайдеров")).toBeInTheDocument();
+    expect(screen.getByText("История исходящих доставок")).toBeInTheDocument();
   });
 
   it("renders billing page gracefully when summary is unavailable", async () => {

@@ -5,10 +5,23 @@ import { defaultPagination } from "@/stores/helpers";
 import type { PaginatedState } from "@/stores/types";
 import type { ApiError, PaginatedResponse } from "@/types/dto/common";
 import type { TaskDto, TaskFiltersDto } from "@/types/dto/tasks";
+import { normalizeError } from "@/utils/apiFormErrors";
 
 interface TasksState extends PaginatedState<TaskDto, TaskFiltersDto> {
+  /** Ошибка загрузки фокусной задачи по `task_id` в query (не заливаем в `error` списка). */
+  taskFocusLoadError: ApiError | null;
+  clearTaskFocusState: () => void;
   list: (params?: Partial<TaskFiltersDto>) => Promise<void>;
   getById: (id: string) => Promise<TaskDto | null>;
+  createTask: (payload: {
+    title: string;
+    description?: string | null;
+    entity_type?: string | null;
+    entity_id?: string | null;
+    due_at?: string | null;
+    assignee_id?: string | null;
+    priority?: TaskDto["priority"];
+  }) => Promise<TaskDto | null>;
   setFilters: (filters: Partial<TaskFiltersDto>) => void;
   setPage: (page: number) => void;
   setPageSize: (size: number) => void;
@@ -21,10 +34,17 @@ export const useTasksStore = create<TasksState>()(
   immer((set, get) => ({
     items: [],
     item: null,
+    taskFocusLoadError: null,
     filters: {},
     pagination: defaultPagination(),
     loading: false,
     error: null,
+    clearTaskFocusState: () => {
+      set((state) => {
+        state.item = null;
+        state.taskFocusLoadError = null;
+      });
+    },
     setFilters: (filters) => {
       set((state) => {
         state.filters = { ...state.filters, ...filters };
@@ -45,6 +65,7 @@ export const useTasksStore = create<TasksState>()(
       set(() => ({
         items: [],
         item: null,
+        taskFocusLoadError: null,
         filters: {},
         pagination: defaultPagination(),
         loading: false,
@@ -65,7 +86,7 @@ export const useTasksStore = create<TasksState>()(
         });
       } catch (error) {
         set((state) => {
-          state.error = error as ApiError;
+          state.error = normalizeError(error);
         });
       } finally {
         set((state) => {
@@ -74,17 +95,37 @@ export const useTasksStore = create<TasksState>()(
       }
     },
     getById: async (id) => {
+      set((state) => {
+        state.taskFocusLoadError = null;
+      });
       try {
         const { data } = await apiClient.get<TaskDto>(`/tasks/${id}`);
         set((state) => {
           state.item = data;
+          state.taskFocusLoadError = null;
           const index = state.items.findIndex((task) => task.id === id);
           if (index >= 0) state.items[index] = data;
         });
         return data;
       } catch (error) {
         set((state) => {
-          state.error = error as ApiError;
+          state.taskFocusLoadError = normalizeError(error);
+        });
+        return null;
+      }
+    },
+    createTask: async (payload) => {
+      try {
+        const { data } = await apiClient.post<TaskDto>("/tasks", payload);
+        get().updateTask(data);
+        set((state) => {
+          state.pagination.total += 1;
+          state.error = null;
+        });
+        return data;
+      } catch (error) {
+        set((state) => {
+          state.error = normalizeError(error);
         });
         return null;
       }
@@ -96,7 +137,7 @@ export const useTasksStore = create<TasksState>()(
         return data;
       } catch (error) {
         set((state) => {
-          state.error = error as ApiError;
+          state.error = normalizeError(error);
         });
         return null;
       }

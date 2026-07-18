@@ -76,9 +76,19 @@ def upgrade() -> None:
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index("ix_file_versions_tenant_status_updated", "file_versions", ["tenant_id", "status", "updated_at"])
-    op.create_index("ix_file_objects_owner", "file_objects", ["tenant_id", "owner_entity_type", "owner_entity_id"])
-    op.execute("CREATE INDEX ix_file_text_index_content_tsv ON file_text_index USING GIN (content_tsv)")
+    op.create_index(
+        "ix_file_versions_tenant_status_updated",
+        "file_versions",
+        ["tenant_id", "status", "updated_at"],
+    )
+    op.create_index(
+        "ix_file_objects_owner",
+        "file_objects",
+        ["tenant_id", "owner_entity_type", "owner_entity_id"],
+    )
+    op.execute(
+        "CREATE INDEX ix_file_text_index_content_tsv ON file_text_index USING GIN (content_tsv)"
+    )
 
 
 def downgrade() -> None:

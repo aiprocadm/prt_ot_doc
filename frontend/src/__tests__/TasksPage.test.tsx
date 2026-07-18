@@ -10,6 +10,7 @@ import { useAuthStore } from "@/stores/auth";
 const listMock = vi.fn();
 const setFiltersMock = vi.fn();
 const patchTaskMock = vi.fn();
+const createTaskMock = vi.fn();
 
 const userWithTaskUpdate = {
   id: "task-manager",
@@ -26,8 +27,11 @@ vi.mock("@/stores/tasks", () => ({
   useTasksStore: () => ({
     list: listMock,
     loading: false,
+    error: null,
     filters: {},
     setFilters: setFiltersMock,
+    taskFocusLoadError: null,
+    clearTaskFocusState: vi.fn(),
     items: [
       {
         id: "task-focus-1",
@@ -41,6 +45,7 @@ vi.mock("@/stores/tasks", () => ({
     ],
     item: null,
     getById: vi.fn(),
+    createTask: createTaskMock,
     pagination: { page: 1, page_size: 10, total: 0 },
     setPage: vi.fn(),
     setPageSize: vi.fn(),
@@ -99,6 +104,8 @@ describe("TasksPage", () => {
   });
 
   it("applies filters for type and due date", async () => {
+    listMock.mockReset();
+    setFiltersMock.mockReset();
     render(
       <MemoryRouter>
         <TasksPage />
@@ -110,12 +117,28 @@ describe("TasksPage", () => {
     const user = userEvent.setup();
     await user.selectOptions(screen.getByLabelText("Тип"), "training_plan");
 
-    expect(setFiltersMock).toHaveBeenCalledWith({ type: "training_plan" });
-    expect(listMock).toHaveBeenCalledWith({ type: "training_plan" });
+    expect(setFiltersMock).toHaveBeenCalledWith({
+      type: "training_plan",
+      overdue: undefined,
+      priority: undefined
+    });
+    expect(listMock).toHaveBeenCalledWith({
+      type: "training_plan",
+      overdue: undefined,
+      priority: undefined
+    });
 
     await user.selectOptions(screen.getByLabelText("Срок"), "overdue");
-    expect(setFiltersMock).toHaveBeenCalledWith({ overdue: true });
-    expect(listMock).toHaveBeenCalledWith({ overdue: true });
+    expect(setFiltersMock).toHaveBeenCalledWith({
+      type: "training_plan",
+      overdue: true,
+      priority: undefined
+    });
+    expect(listMock).toHaveBeenCalledWith({
+      type: "training_plan",
+      overdue: true,
+      priority: undefined
+    });
   });
 
   it("shows focus card for task context from workspace link", () => {

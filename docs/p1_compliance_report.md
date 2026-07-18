@@ -1,5 +1,7 @@
 # P1 Compliance Report
 
+> **DEPRECATED (2026-05-04).** Замкнутый отчёт прошлой волны. Текущий статус P0/P1 — в `docs/audit/TZ_COVERAGE_MATRIX.md` и `AI_IMPLEMENTATION_REPORT.md`. Кандидат на удаление в Wave 4 (см. `docs/CLEANUP_CANDIDATES.md`).
+
 ## Summary
 This report documents the P1 compliance work for RBAC/ABAC, roles, core entities, obligations/tasks, and WS scope.
 

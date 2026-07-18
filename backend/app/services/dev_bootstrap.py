@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 
 from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
 from app.db import ensure_tenant_schema, session_scope
@@ -14,13 +15,45 @@ from app.services.auth import hash_password
 logger = logging.getLogger(__name__)
 
 
+async def create_test_user(
+    *,
+    session: AsyncSession,
+    tenant_id: str,
+    email: str,
+    role: RoleEnum,
+    full_name: str | None = None,
+    password: str = "test-password",
+    is_active: bool = True,
+) -> User:
+    """Test-only helper: create a User with the given role in the given tenant.
+
+    Used by integration tests under ``tests/`` to seed role-fixtures. Not
+    intended for production code paths — callers are expected to commit
+    the session themselves so multiple fixtures can be batched.
+    """
+
+    user = User(
+        tenant_id=tenant_id,
+        email=email.lower(),
+        full_name=full_name or f"Test user {email}",
+        role=role,
+        hashed_password=hash_password(password),
+        is_active=is_active,
+    )
+    session.add(user)
+    await session.flush()
+    return user
+
+
 async def bootstrap_admin_user(settings: Settings) -> None:
     """Create admin user for local/dev environments based on env variables."""
 
     if not settings.admin_bootstrap:
         return
     if settings.app_env not in {"development", "test"}:
-        logger.warning("admin.bootstrap.skipped", extra={"reason": "not-dev", "env": settings.app_env})
+        logger.warning(
+            "admin.bootstrap.skipped", extra={"reason": "not-dev", "env": settings.app_env}
+        )
         return
     if not settings.admin_password.strip():
         logger.warning("admin.bootstrap.skipped", extra={"reason": "empty-password"})
@@ -31,10 +64,13 @@ async def bootstrap_admin_user(settings: Settings) -> None:
     tenant_id: str
     tenant_schema_name: str
     async with session_scope(tenant="public") as session:
-        tenant = (await session.execute(select(Tenant).where(Tenant.slug == tenant_slug))).scalar_one_or_none()
+        tenant = (
+            await session.execute(select(Tenant).where(Tenant.slug == tenant_slug))
+        ).scalar_one_or_none()
         if tenant is None:
             tenant = Tenant(
                 slug=tenant_slug,
+                code=tenant_slug,  # RB-002g: tenant.code is NOT NULL in PG migration
                 name=f"{tenant_slug.title()} tenant",
                 contact_email=settings.admin_email,
                 schema_name=f"tenant_{tenant_slug}",

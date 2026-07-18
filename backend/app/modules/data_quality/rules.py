@@ -1,0 +1,1066 @@
+"""Data quality rules and rule engine."""
+
+from __future__ import annotations
+
+import asyncio
+import logging
+import time
+from abc import ABC, abstractmethod
+from datetime import date, datetime, timedelta, timezone
+from typing import Any
+
+from sqlalchemy import func, or_, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.document import Document, DocumentStatus, DocumentVersion
+from app.models.models import (
+    Company,
+    EmploymentStatus,
+    MedicalExam,
+    MedicalFitness,
+    MedicalSuspension,
+    MedicalSuspensionStatus,
+    Permit,
+    PermitStatus,
+    Person,
+    Position,
+    PPEIssue,
+    PPEIssueStatus,
+    Site,
+    TemplateVersion,
+    Training,
+    TrainingStatus,
+    Workplace,
+)
+
+from .schemas import DataQualityIssue, IssueSeverity, IssueType
+
+logger = logging.getLogger("app.modules.data_quality")
+
+DOCUMENT_READINESS_STALE_DRAFT_DAYS = 7
+
+
+def _is_blank(value: str | None) -> bool:
+    return value is None or not str(value).strip()
+
+
+def _json_schema_required_fields(schema: dict[str, Any] | None) -> list[str]:
+    if not schema or not isinstance(schema, dict):
+        return []
+    req = schema.get("required")
+    if not isinstance(req, list):
+        return []
+    return [str(k) for k in req if isinstance(k, str) and k]
+
+
+def _lookup_wizard_field(data_json: dict[str, Any], key: str) -> Any:
+    if key in data_json:
+        return data_json[key]
+    for nested_key in ("values", "payload", "fields", "data"):
+        nested = data_json.get(nested_key)
+        if isinstance(nested, dict) and key in nested:
+            return nested[key]
+    return None
+
+
+def _wizard_required_value_blank(value: Any) -> bool:
+    if value is None:
+        return True
+    if isinstance(value, str):
+        return _is_blank(value)
+    if isinstance(value, bool):
+        return False
+    if isinstance(value, (int, float)):
+        return False
+    if isinstance(value, (list, dict, tuple)):
+        return len(value) == 0
+    return False
+
+
+class DataQualityRule(ABC):
+    """Base class for data quality rules."""
+
+    def __init__(self, tenant_id: str, db: AsyncSession):
+        self.tenant_id = tenant_id
+        self.db = db
+        self.issues: list[DataQualityIssue] = []
+        self.total_checked = 0
+
+    @property
+    @abstractmethod
+    def rule_name(self) -> str:
+        """Rule name."""
+        raise NotImplementedError
+
+    @property
+    @abstractmethod
+    def rule_description(self) -> str:
+        """Human-readable rule description."""
+        raise NotImplementedError
+
+    @abstractmethod
+    async def check(self) -> None:
+        """Run the rule check. Must populate self.issues and self.total_checked."""
+        raise NotImplementedError
+
+
+class MissingMandatoryFieldsRule(DataQualityRule):
+    """Check for missing mandatory fields in critical entities (Person, Site)."""
+
+    @property
+    def rule_name(self) -> str:
+        return "missing_mandatory_fields"
+
+    @property
+    def rule_description(self) -> str:
+        return "Check for missing mandatory fields in employees (person), and sites"
+
+    async def check(self) -> None:
+        self.issues = []
+        try:
+            stmt = select(Person).where(
+                Person.tenant_id == self.tenant_id,
+                Person.deleted_at.is_(None),
+            )
+            rows = (await self.db.execute(stmt)).scalars().all()
+            self.total_checked = len(rows)
+
+            for person in rows:
+                missing_fields: list[str] = []
+
+                if _is_blank(person.first_name):
+                    missing_fields.append("first_name")
+                if _is_blank(person.last_name):
+                    missing_fields.append("last_name")
+
+                if person.employment_status == EmploymentStatus.ACTIVE and _is_blank(
+                    getattr(person, "email", None)
+                ):
+                    missing_fields.append("email")
+
+                if person.employment_status == EmploymentStatus.ACTIVE and not getattr(
+                    person, "position_id", None
+                ):
+                    missing_fields.append("position_id")
+
+                if not missing_fields:
+                    continue
+
+                severity = IssueSeverity.MEDIUM
+                critical_names = {"first_name", "last_name", "email"}
+                if critical_names.intersection(set(missing_fields)):
+                    severity = IssueSeverity.HIGH
+
+                display = (
+                    " ".join(
+                        p for p in (person.first_name or "", person.last_name or "") if p.strip()
+                    ).strip()
+                    or "(unnamed)"
+                )
+
+                self.issues.append(
+                    DataQualityIssue(
+                        id=f"{self.rule_name}:person:{person.id}:{'-'.join(sorted(missing_fields))}",
+                        issue_type=IssueType.MISSING_FIELD,
+                        severity=severity,
+                        title=f"person {person.id}: missing {', '.join(missing_fields)}",
+                        description="Mandatory or recommended HR/OT master fields are empty.",
+                        affected_entity_type="person",
+                        affected_entity_id=str(person.id),
+                        affected_entity_name=display[:255],
+                        additional_info={"missing_fields": missing_fields},
+                    )
+                )
+
+            site_stmt = select(Site).where(
+                Site.tenant_id == self.tenant_id,
+                Site.deleted_at.is_(None),
+            )
+            sites = (await self.db.execute(site_stmt)).scalars().all()
+            self.total_checked += len(sites)
+
+            for site in sites:
+                if not _is_blank(site.name):
+                    continue
+                self.issues.append(
+                    DataQualityIssue(
+                        id=f"{self.rule_name}:site:{site.id}:missing_name",
+                        issue_type=IssueType.MISSING_FIELD,
+                        severity=IssueSeverity.CRITICAL,
+                        title=f"site {site.id}: missing name",
+                        description="Site records must include a readable name.",
+                        affected_entity_type="site",
+                        affected_entity_id=str(site.id),
+                        affected_entity_name=None,
+                        additional_info={"missing_fields": ["name"]},
+                    )
+                )
+        except Exception as e:
+            logger.exception("missing_mandatory_fields rule failed: %s", e)
+
+
+class BrokenRelationshipsRule(DataQualityRule):
+    """Check for broken references (documents → person, workplaces → site)."""
+
+    @property
+    def rule_name(self) -> str:
+        return "broken_relationships"
+
+    @property
+    def rule_description(self) -> str:
+        return "Detect documents linked to removed persons and workplaces linked to missing sites"
+
+    async def check(self) -> None:
+        self.issues = []
+        try:
+            doc_stmt = (
+                select(Document.id, Document.person_id)
+                .outerjoin(Person, Document.person_id == Person.id)
+                .where(
+                    Document.tenant_id == self.tenant_id,
+                    Document.person_id.is_not(None),
+                    or_(Person.id.is_(None), Person.deleted_at.is_not(None)),
+                )
+            )
+            doc_rows = (await self.db.execute(doc_stmt)).all()
+            self.total_checked += len(doc_rows)
+
+            for doc_id, person_id in doc_rows:
+                self.issues.append(
+                    DataQualityIssue(
+                        id=f"{self.rule_name}:document:{doc_id}:person:{person_id}",
+                        issue_type=IssueType.BROKEN_RELATIONSHIP,
+                        severity=IssueSeverity.HIGH,
+                        title=f"document {doc_id} references invalid person",
+                        description="Document.person_id points to a deleted or missing person.",
+                        affected_entity_type="document",
+                        affected_entity_id=str(doc_id),
+                        additional_info={"person_id": str(person_id)},
+                    )
+                )
+
+            wp_stmt = (
+                select(Workplace.id, Workplace.site_id)
+                .outerjoin(Site, Workplace.site_id == Site.id)
+                .where(
+                    Workplace.tenant_id == self.tenant_id,
+                    Workplace.deleted_at.is_(None),
+                    Workplace.site_id.is_not(None),
+                    or_(Site.id.is_(None), Site.deleted_at.is_not(None)),
+                )
+            )
+            wp_rows = (await self.db.execute(wp_stmt)).all()
+            self.total_checked += len(wp_rows)
+
+            for wp_id, site_id in wp_rows:
+                self.issues.append(
+                    DataQualityIssue(
+                        id=f"{self.rule_name}:workplace:{wp_id}:site:{site_id}",
+                        issue_type=IssueType.BROKEN_RELATIONSHIP,
+                        severity=IssueSeverity.MEDIUM,
+                        title=f"workplace {wp_id} references invalid site",
+                        description="Workplace.site_id points to a missing or deleted site.",
+                        affected_entity_type="workplace",
+                        affected_entity_id=str(wp_id),
+                        additional_info={"site_id": str(site_id)},
+                    )
+                )
+        except Exception as e:
+            logger.exception("broken_relationships rule failed: %s", e)
+
+
+class ExpiredRecordsRule(DataQualityRule):
+    """Expired medical exams and trainings (by valid_until / expires_at)."""
+
+    @property
+    def rule_name(self) -> str:
+        return "expired_records"
+
+    @property
+    def rule_description(self) -> str:
+        return "Medical exams past valid_until and trainings past expires_at"
+
+    async def check(self) -> None:
+        self.issues = []
+        today = date.today()
+        now = datetime.now(tz=timezone.utc)
+        try:
+            mex_stmt = select(MedicalExam).where(
+                MedicalExam.tenant_id == self.tenant_id,
+                MedicalExam.deleted_at.is_(None),
+                MedicalExam.valid_until < today,
+            )
+            exams = (await self.db.execute(mex_stmt)).scalars().all()
+            self.total_checked += len(exams)
+
+            for exam in exams:
+                self.issues.append(
+                    DataQualityIssue(
+                        id=f"{self.rule_name}:medical_exam:{exam.id}",
+                        issue_type=IssueType.EXPIRED_RECORD,
+                        severity=IssueSeverity.HIGH,
+                        title=f"medical exam {exam.id} expired",
+                        description=f"Valid until was {exam.valid_until.isoformat()}",
+                        affected_entity_type="medical_exam",
+                        affected_entity_id=str(exam.id),
+                        additional_info={
+                            "person_id": str(exam.person_id),
+                            "valid_until": exam.valid_until.isoformat(),
+                        },
+                    )
+                )
+
+            tr_stmt = select(Training).where(
+                Training.tenant_id == self.tenant_id,
+                Training.expires_at.is_not(None),
+                Training.expires_at < now,
+                Training.status == TrainingStatus.COMPLETED,
+            )
+            trainings = (await self.db.execute(tr_stmt)).scalars().all()
+            self.total_checked += len(trainings)
+
+            for tr in trainings:
+                exp = tr.expires_at
+                exp_s = exp.isoformat() if exp else ""
+                self.issues.append(
+                    DataQualityIssue(
+                        id=f"{self.rule_name}:training:{tr.id}",
+                        issue_type=IssueType.EXPIRED_RECORD,
+                        severity=IssueSeverity.MEDIUM,
+                        title=f"training {tr.id} certificate expired",
+                        description=f"expires_at was {exp_s}",
+                        affected_entity_type="training",
+                        affected_entity_id=str(tr.id),
+                        additional_info={"person_id": str(tr.person_id), "expires_at": exp_s},
+                    )
+                )
+        except Exception as e:
+            logger.exception("expired_records rule failed: %s", e)
+
+
+class ExpiredPermitsRule(DataQualityRule):
+    """Permits past valid_until that are still flagged ACTIVE."""
+
+    @property
+    def rule_name(self) -> str:
+        return "expired_permits"
+
+    @property
+    def rule_description(self) -> str:
+        return "Permits with valid_until in the past while still marked active"
+
+    async def check(self) -> None:
+        self.issues = []
+        today = date.today()
+        try:
+            stmt = select(Permit).where(
+                Permit.tenant_id == self.tenant_id,
+                Permit.status == PermitStatus.ACTIVE.value,
+                Permit.valid_until.is_not(None),
+                Permit.valid_until < today,
+            )
+            permits = (await self.db.execute(stmt)).scalars().all()
+            self.total_checked = len(permits)
+
+            for permit in permits:
+                valid_until_iso = permit.valid_until.isoformat() if permit.valid_until else ""
+                self.issues.append(
+                    DataQualityIssue(
+                        id=f"{self.rule_name}:permit:{permit.id}",
+                        issue_type=IssueType.EXPIRED_RECORD,
+                        severity=IssueSeverity.HIGH,
+                        title=f"permit {permit.id} expired ({permit.permit_type})",
+                        description=(
+                            "Permit is past valid_until but status is still ACTIVE; "
+                            "renew or revoke to restore data integrity."
+                        ),
+                        affected_entity_type="permit",
+                        affected_entity_id=str(permit.id),
+                        additional_info={
+                            "person_id": str(permit.person_id),
+                            "permit_type": permit.permit_type,
+                            "valid_until": valid_until_iso,
+                        },
+                    )
+                )
+        except Exception as e:
+            logger.exception("expired_permits rule failed: %s", e)
+
+
+class ExpiredPPEIssuesRule(DataQualityRule):
+    """PPE issuances with expires_at in the past while still ISSUED."""
+
+    @property
+    def rule_name(self) -> str:
+        return "expired_ppe_issues"
+
+    @property
+    def rule_description(self) -> str:
+        return "PPE issuances past expires_at while still marked ISSUED"
+
+    async def check(self) -> None:
+        self.issues = []
+        now = datetime.now(tz=timezone.utc)
+        try:
+            stmt = select(PPEIssue).where(
+                PPEIssue.tenant_id == self.tenant_id,
+                PPEIssue.deleted_at.is_(None),
+                PPEIssue.status == PPEIssueStatus.ISSUED,
+                PPEIssue.expires_at.is_not(None),
+                PPEIssue.expires_at < now,
+            )
+            issuances = (await self.db.execute(stmt)).scalars().all()
+            self.total_checked = len(issuances)
+
+            for issuance in issuances:
+                expires_iso = issuance.expires_at.isoformat() if issuance.expires_at else ""
+                self.issues.append(
+                    DataQualityIssue(
+                        id=f"{self.rule_name}:ppe_issue:{issuance.id}",
+                        issue_type=IssueType.EXPIRED_RECORD,
+                        severity=IssueSeverity.MEDIUM,
+                        title=(f"PPE issuance {issuance.id} expired " f"({issuance.item_name})"),
+                        description=(
+                            "PPE expires_at is in the past but the issuance is still "
+                            "ISSUED; reissue, return, or write off to fix."
+                        ),
+                        affected_entity_type="ppe_issue",
+                        affected_entity_id=str(issuance.id),
+                        additional_info={
+                            "person_id": str(issuance.person_id),
+                            "item_name": issuance.item_name,
+                            "expires_at": expires_iso,
+                        },
+                    )
+                )
+        except Exception as e:
+            logger.exception("expired_ppe_issues rule failed: %s", e)
+
+
+class OrphanedAssignmentsRule(DataQualityRule):
+    """Active persons whose position_id or workplace_id points to a soft-deleted record.
+
+    Distinct from ``BrokenRelationshipsRule`` (documents/workplaces) — focuses on the
+    HR side: an ACTIVE employee assigned to a position that was retired, or to a
+    workplace that was decommissioned, is a silent data error that breaks
+    risk/PPE/training pipelines.
+    """
+
+    @property
+    def rule_name(self) -> str:
+        return "orphaned_assignments"
+
+    @property
+    def rule_description(self) -> str:
+        return (
+            "Active persons referencing soft-deleted positions or workplaces "
+            "(breaks risk/PPE/training pipelines)"
+        )
+
+    async def check(self) -> None:
+        self.issues = []
+        try:
+            pos_stmt = (
+                select(Person.id, Person.first_name, Person.last_name, Person.position_id)
+                .join(Position, Person.position_id == Position.id)
+                .where(
+                    Person.tenant_id == self.tenant_id,
+                    Person.deleted_at.is_(None),
+                    Person.employment_status == EmploymentStatus.ACTIVE,
+                    Person.position_id.is_not(None),
+                    Position.deleted_at.is_not(None),
+                )
+            )
+            pos_rows = (await self.db.execute(pos_stmt)).all()
+            self.total_checked += len(pos_rows)
+
+            for person_id, first, last, position_id in pos_rows:
+                display = (
+                    " ".join(p for p in (first or "", last or "") if str(p).strip()).strip()
+                    or "(unnamed)"
+                )
+                self.issues.append(
+                    DataQualityIssue(
+                        id=f"{self.rule_name}:person:{person_id}:position:{position_id}",
+                        issue_type=IssueType.BROKEN_RELATIONSHIP,
+                        severity=IssueSeverity.HIGH,
+                        title=f"person {person_id} assigned to deleted position",
+                        description=(
+                            "Active employee references a soft-deleted Position. "
+                            "Reassign to an existing position to restore HR/OT pipelines."
+                        ),
+                        affected_entity_type="person",
+                        affected_entity_id=str(person_id),
+                        affected_entity_name=display[:255],
+                        additional_info={
+                            "position_id": str(position_id),
+                            "reason": "position_soft_deleted",
+                        },
+                    )
+                )
+
+            wp_stmt = (
+                select(Person.id, Person.first_name, Person.last_name, Person.workplace_id)
+                .join(Workplace, Person.workplace_id == Workplace.id)
+                .where(
+                    Person.tenant_id == self.tenant_id,
+                    Person.deleted_at.is_(None),
+                    Person.employment_status == EmploymentStatus.ACTIVE,
+                    Person.workplace_id.is_not(None),
+                    Workplace.deleted_at.is_not(None),
+                )
+            )
+            wp_rows = (await self.db.execute(wp_stmt)).all()
+            self.total_checked += len(wp_rows)
+
+            for person_id, first, last, workplace_id in wp_rows:
+                display = (
+                    " ".join(p for p in (first or "", last or "") if str(p).strip()).strip()
+                    or "(unnamed)"
+                )
+                self.issues.append(
+                    DataQualityIssue(
+                        id=f"{self.rule_name}:person:{person_id}:workplace:{workplace_id}",
+                        issue_type=IssueType.BROKEN_RELATIONSHIP,
+                        severity=IssueSeverity.MEDIUM,
+                        title=f"person {person_id} assigned to deleted workplace",
+                        description=(
+                            "Active employee references a soft-deleted Workplace. "
+                            "Reassign to an existing workplace; risk/SOUT context may be stale."
+                        ),
+                        affected_entity_type="person",
+                        affected_entity_id=str(person_id),
+                        affected_entity_name=display[:255],
+                        additional_info={
+                            "workplace_id": str(workplace_id),
+                            "reason": "workplace_soft_deleted",
+                        },
+                    )
+                )
+        except Exception as e:
+            logger.exception("orphaned_assignments rule failed: %s", e)
+
+
+class CompanyRequisitesRule(DataQualityRule):
+    """Active companies missing legal requisites needed for branded documents.
+
+    For RU jurisdiction, INN (tax id) is the minimum required identifier on legal
+    paperwork. OGRN/legal_address are strongly recommended; their absence is
+    flagged at LOW severity so admins can complete profiles before mass
+    document generation.
+    """
+
+    @property
+    def rule_name(self) -> str:
+        return "company_requisites"
+
+    @property
+    def rule_description(self) -> str:
+        return (
+            "Companies missing requisites required for legal documents "
+            "(INN critical, OGRN/legal_address recommended)"
+        )
+
+    async def check(self) -> None:
+        self.issues = []
+        try:
+            stmt = select(Company).where(
+                Company.tenant_id == self.tenant_id,
+                Company.deleted_at.is_(None),
+            )
+            companies = (await self.db.execute(stmt)).scalars().all()
+            self.total_checked = len(companies)
+
+            for company in companies:
+                missing_critical: list[str] = []
+                missing_recommended: list[str] = []
+
+                if _is_blank(company.inn):
+                    missing_critical.append("inn")
+                if _is_blank(company.ogrn):
+                    missing_recommended.append("ogrn")
+                if _is_blank(company.legal_address):
+                    missing_recommended.append("legal_address")
+
+                if not missing_critical and not missing_recommended:
+                    continue
+
+                if missing_critical:
+                    severity = IssueSeverity.HIGH
+                    missing = missing_critical + missing_recommended
+                    title = (
+                        f'company "{company.name}" missing INN'
+                        if missing_critical == ["inn"] and not missing_recommended
+                        else f'company "{company.name}" missing {", ".join(missing)}'
+                    )
+                    description = (
+                        "Company is missing INN — branded legal documents "
+                        "(orders, contracts, briefing journals) cannot be generated."
+                    )
+                else:
+                    severity = IssueSeverity.LOW
+                    missing = missing_recommended
+                    title = (
+                        f'company "{company.name}" missing recommended requisites '
+                        f'({", ".join(missing)})'
+                    )
+                    description = (
+                        "Company has INN but is missing recommended requisites; "
+                        "complete the profile before bulk document generation."
+                    )
+
+                self.issues.append(
+                    DataQualityIssue(
+                        id=(
+                            f"{self.rule_name}:company:{company.id}:" f"{'-'.join(sorted(missing))}"
+                        ),
+                        issue_type=IssueType.MISSING_FIELD,
+                        severity=severity,
+                        title=title[:255],
+                        description=description,
+                        affected_entity_type="company",
+                        affected_entity_id=str(company.id),
+                        affected_entity_name=company.name[:255] if company.name else None,
+                        additional_info={
+                            "missing_fields": missing,
+                            "missing_critical": missing_critical,
+                            "missing_recommended": missing_recommended,
+                        },
+                    )
+                )
+        except Exception as e:
+            logger.exception("company_requisites rule failed: %s", e)
+
+
+class DocumentReadinessRule(DataQualityRule):
+    """Draft documents that are stuck (template/file missing) or miss required wizard data."""
+
+    @property
+    def rule_name(self) -> str:
+        return "document_readiness"
+
+    @property
+    def rule_description(self) -> str:
+        return (
+            "Draft documents stale without a pinned template version or generated file, "
+            "or missing fields required by the template JSON schema"
+        )
+
+    async def check(self) -> None:
+        self.issues = []
+        try:
+            now = datetime.now(tz=timezone.utc)
+            stale_cutoff = now - timedelta(days=DOCUMENT_READINESS_STALE_DRAFT_DAYS)
+
+            draft_stmt = select(Document).where(
+                Document.tenant_id == self.tenant_id,
+                Document.status == DocumentStatus.DRAFT,
+            )
+            drafts = (await self.db.execute(draft_stmt)).scalars().all()
+            self.total_checked = len(drafts)
+
+            stale_stmt = select(Document).where(
+                Document.tenant_id == self.tenant_id,
+                Document.status == DocumentStatus.DRAFT,
+                Document.created_at < stale_cutoff,
+            )
+            stale_docs = (await self.db.execute(stale_stmt)).scalars().all()
+
+            for doc in stale_docs:
+                missing_reasons: list[str] = []
+                if not doc.template_version_id:
+                    missing_reasons.append("missing_template_version")
+
+                has_doc_file = bool(doc.storage_key) or bool(doc.file_id)
+                has_version_file = any(
+                    bool(getattr(v, "file_key", None)) or bool(getattr(v, "file_id", None))
+                    for v in (doc.versions or [])
+                )
+                if not has_doc_file and not has_version_file:
+                    missing_reasons.append("missing_generated_file")
+
+                if not missing_reasons:
+                    continue
+
+                age_days = max(0, (now - doc.created_at).days) if doc.created_at else 0
+                if "missing_template_version" in missing_reasons:
+                    primary_reason = "stale_draft_missing_template_version"
+                else:
+                    primary_reason = "stale_draft_missing_generated_file"
+                self.issues.append(
+                    DataQualityIssue(
+                        id=(
+                            f"{self.rule_name}:document:{doc.id}:"
+                            f"{'-'.join(sorted(missing_reasons))}"
+                        ),
+                        issue_type=IssueType.MISSING_FIELD,
+                        severity=IssueSeverity.MEDIUM,
+                        title=f"Draft document {doc.id} stuck in DRAFT for {age_days} days",
+                        description=(
+                            "DRAFT document is past readiness threshold and lacks a "
+                            "bound template version and/or generated file."
+                        ),
+                        affected_entity_type="document",
+                        affected_entity_id=str(doc.id),
+                        additional_info={
+                            "reason": primary_reason,
+                            "missing": missing_reasons,
+                            "missing_fields": missing_reasons,
+                            "age_days": age_days,
+                            "draft_age_threshold_days": DOCUMENT_READINESS_STALE_DRAFT_DAYS,
+                            "created_at": doc.created_at.isoformat() if doc.created_at else None,
+                        },
+                    )
+                )
+
+            tv_docs = [d for d in drafts if d.template_version_id is not None]
+            if not tv_docs:
+                return
+
+            doc_ids = [d.id for d in tv_docs]
+            vers_stmt = select(
+                DocumentVersion.document_id,
+                DocumentVersion.data_json,
+                DocumentVersion.version_number,
+            ).where(DocumentVersion.document_id.in_(doc_ids))
+            rows = (await self.db.execute(vers_stmt)).all()
+
+            latest_payload: dict[str, dict[str, Any]] = {}
+            best_vn: dict[str, int] = {}
+            for doc_id, data_json, vn in rows:
+                prev = best_vn.get(doc_id)
+                if prev is None or vn > prev:
+                    best_vn[doc_id] = vn
+                    latest_payload[doc_id] = data_json if isinstance(data_json, dict) else {}
+
+            tv_ids = {d.template_version_id for d in tv_docs if d.template_version_id}
+            tv_map: dict[str, TemplateVersion] = {}
+            if tv_ids:
+                tv_rows = (
+                    (
+                        await self.db.execute(
+                            select(TemplateVersion).where(TemplateVersion.id.in_(tv_ids))
+                        )
+                    )
+                    .scalars()
+                    .all()
+                )
+                tv_map = {tv.id: tv for tv in tv_rows}
+
+            for doc in tv_docs:
+                tv_id = doc.template_version_id
+                if not tv_id:
+                    continue
+                tv = tv_map.get(str(tv_id))
+                if tv is None:
+                    continue
+                required = _json_schema_required_fields(
+                    tv.required_fields_schema
+                    if isinstance(tv.required_fields_schema, dict)
+                    else None
+                )
+                if not required:
+                    continue
+
+                data_json = latest_payload.get(doc.id, {})
+                missing = [
+                    k
+                    for k in required
+                    if _wizard_required_value_blank(_lookup_wizard_field(data_json, k))
+                ]
+                if not missing:
+                    continue
+
+                self.issues.append(
+                    DataQualityIssue(
+                        id=f"{self.rule_name}:document:{doc.id}:missing_required",
+                        issue_type=IssueType.MISSING_FIELD,
+                        severity=IssueSeverity.MEDIUM,
+                        title=f"Draft document {doc.id} missing required fields",
+                        description=(
+                            "Draft is missing one or more fields listed as required in the "
+                            "template version JSON schema. Complete the wizard before generation."
+                        ),
+                        affected_entity_type="document",
+                        affected_entity_id=str(doc.id),
+                        additional_info={
+                            "reason": "missing_required_wizard_fields",
+                            "template_version_id": str(tv_id),
+                            "missing_fields": missing,
+                        },
+                    )
+                )
+        except Exception as e:
+            logger.exception("document_readiness rule failed: %s", e)
+
+
+class DocumentPersonCompanyMismatchRule(DataQualityRule):
+    """Documents where Document.company_id != Person.company_id (integration mismatch)."""
+
+    @property
+    def rule_name(self) -> str:
+        return "document_person_company_mismatch"
+
+    @property
+    def rule_description(self) -> str:
+        return (
+            "Documents whose company differs from the linked person's employer "
+            "(catches misfiled paperwork between parent/contractor companies)"
+        )
+
+    async def check(self) -> None:
+        self.issues = []
+        try:
+            stmt = (
+                select(
+                    Document.id,
+                    Document.company_id,
+                    Document.person_id,
+                    Person.company_id.label("person_company_id"),
+                )
+                .join(Person, Document.person_id == Person.id)
+                .where(
+                    Document.tenant_id == self.tenant_id,
+                    Document.person_id.is_not(None),
+                    Person.deleted_at.is_(None),
+                    Person.company_id.is_not(None),
+                    Document.company_id != Person.company_id,
+                )
+            )
+            rows = (await self.db.execute(stmt)).all()
+            self.total_checked = len(rows)
+
+            for doc_id, doc_company_id, person_id, person_company_id in rows:
+                self.issues.append(
+                    DataQualityIssue(
+                        id=f"{self.rule_name}:document:{doc_id}",
+                        issue_type=IssueType.DATA_MISMATCH,
+                        severity=IssueSeverity.HIGH,
+                        title=(
+                            f"document {doc_id} filed under wrong company "
+                            f"(person belongs to {person_company_id})"
+                        ),
+                        description=(
+                            "Document.company_id and the linked Person.company_id "
+                            "disagree; verify the document was filed against the "
+                            "person's actual employer/contractor."
+                        ),
+                        affected_entity_type="document",
+                        affected_entity_id=str(doc_id),
+                        additional_info={
+                            "person_id": str(person_id),
+                            "document_company_id": str(doc_company_id),
+                            "person_company_id": str(person_company_id),
+                        },
+                    )
+                )
+        except Exception as e:
+            logger.exception("document_person_company_mismatch rule failed: %s", e)
+
+
+class DuplicateRecordsRule(DataQualityRule):
+    """Duplicate person emails within a tenant (case-insensitive)."""
+
+    @property
+    def rule_name(self) -> str:
+        return "potential_duplicates"
+
+    @property
+    def rule_description(self) -> str:
+        return "Duplicate person emails sharing the same normalised address"
+
+    async def check(self) -> None:
+        self.issues = []
+        try:
+            norm = func.lower(func.trim(Person.email))
+            stmt = (
+                select(norm.label("norm_email"), func.count(Person.id))
+                .where(
+                    Person.tenant_id == self.tenant_id,
+                    Person.deleted_at.is_(None),
+                    Person.email.is_not(None),
+                    func.trim(Person.email) != "",
+                )
+                .group_by(norm)
+                .having(func.count(Person.id) > 1)
+            )
+            rows = (await self.db.execute(stmt)).all()
+            self.total_checked += len(rows)
+
+            for norm_email, _cnt in rows:
+                if norm_email is None:
+                    continue
+                email_display = str(norm_email)
+                self.issues.append(
+                    DataQualityIssue(
+                        id=f"{self.rule_name}:person:email:{email_display}",
+                        issue_type=IssueType.DUPLICATE,
+                        severity=IssueSeverity.MEDIUM,
+                        title=f'Duplicate email "{email_display}"',
+                        description="Multiple persons share the same normalised email address.",
+                        affected_entity_type="person",
+                        affected_entity_id=email_display[:128],
+                        additional_info={"duplicate_email": email_display},
+                    )
+                )
+        except Exception as e:
+            logger.exception("potential_duplicates rule failed: %s", e)
+
+
+class UnfitWithoutSuspensionRule(DataQualityRule):
+    """Persons whose LATEST MedicalExam verdict is UNFIT but have no active MedicalSuspension.
+
+    A person declared unfit must have a MedicalSuspension in ACTIVE state.
+    If the suspension is absent or was lifted, the risk pipeline is silently
+    broken — the person may continue working despite a medical prohibition.
+    """
+
+    @property
+    def rule_name(self) -> str:
+        return "unfit_without_suspension"
+
+    @property
+    def rule_description(self) -> str:
+        return (
+            "Persons whose latest medical exam verdict is UNFIT "
+            "but who have no active MedicalSuspension"
+        )
+
+    async def check(self) -> None:
+        self.issues = []
+        try:
+            # Subquery: for each person, find the date of their LATEST exam
+            # (across ALL fitness verdicts — we need to know what the most recent
+            # exam says, not just the most recent UNFIT one).
+            latest_date_subq = (
+                select(
+                    MedicalExam.person_id,
+                    func.max(MedicalExam.exam_date).label("max_exam_date"),
+                )
+                .where(
+                    MedicalExam.tenant_id == self.tenant_id,
+                    MedicalExam.deleted_at.is_(None),
+                )
+                .group_by(MedicalExam.person_id)
+                .subquery()
+            )
+
+            # Join back to get persons whose latest exam is UNFIT
+            unfit_stmt = (
+                select(MedicalExam.person_id, MedicalExam.id)
+                .join(
+                    latest_date_subq,
+                    (MedicalExam.person_id == latest_date_subq.c.person_id)
+                    & (MedicalExam.exam_date == latest_date_subq.c.max_exam_date),
+                )
+                .where(
+                    MedicalExam.tenant_id == self.tenant_id,
+                    MedicalExam.deleted_at.is_(None),
+                    MedicalExam.fitness == MedicalFitness.UNFIT,
+                )
+            )
+            unfit_rows = (await self.db.execute(unfit_stmt)).all()
+            self.total_checked = len(unfit_rows)
+
+            if not unfit_rows:
+                return
+
+            unfit_person_ids = [str(row.person_id) for row in unfit_rows]
+            unfit_exam_by_person = {str(row.person_id): str(row.id) for row in unfit_rows}
+
+            # Find which of those persons DO have an active suspension
+            active_susp_stmt = select(MedicalSuspension.person_id).where(
+                MedicalSuspension.tenant_id == self.tenant_id,
+                MedicalSuspension.deleted_at.is_(None),
+                MedicalSuspension.status == MedicalSuspensionStatus.ACTIVE,
+                MedicalSuspension.person_id.in_(unfit_person_ids),
+            )
+            suspended_ids = set(
+                str(r) for r in (await self.db.execute(active_susp_stmt)).scalars().all()
+            )
+
+            for person_id in unfit_person_ids:
+                if person_id in suspended_ids:
+                    continue
+                exam_id = unfit_exam_by_person.get(person_id, "unknown")
+                self.issues.append(
+                    DataQualityIssue(
+                        id=f"{self.rule_name}:person:{person_id}",
+                        issue_type=IssueType.DATA_MISMATCH,
+                        severity=IssueSeverity.HIGH,
+                        title=f"person {person_id}: UNFIT verdict without active suspension",
+                        description=(
+                            "The person's latest medical exam is marked UNFIT but "
+                            "there is no active MedicalSuspension record. "
+                            "Issue a suspension order to restore compliance."
+                        ),
+                        affected_entity_type="person",
+                        affected_entity_id=str(person_id),
+                        additional_info={
+                            "latest_exam_id": exam_id,
+                            "fitness": MedicalFitness.UNFIT.value,
+                        },
+                    )
+                )
+        except Exception as e:
+            logger.exception("unfit_without_suspension rule failed: %s", e)
+
+
+class DataQualityRuleEngine:
+    """Engine for running data quality checks."""
+
+    def __init__(self, tenant_id: str, db: AsyncSession):
+        self.tenant_id = tenant_id
+        self.db = db
+        self.rules: list[type[DataQualityRule]] = [
+            MissingMandatoryFieldsRule,
+            BrokenRelationshipsRule,
+            ExpiredRecordsRule,
+            ExpiredPermitsRule,
+            ExpiredPPEIssuesRule,
+            OrphanedAssignmentsRule,
+            CompanyRequisitesRule,
+            DocumentReadinessRule,
+            DocumentPersonCompanyMismatchRule,
+            DuplicateRecordsRule,
+            UnfitWithoutSuspensionRule,
+        ]
+
+    async def run_all_checks(self) -> tuple[list[DataQualityIssue], list[dict[str, Any]]]:
+        """Run all rules and return issues + check results."""
+        all_issues: list[DataQualityIssue] = []
+        check_results: list[dict[str, Any]] = []
+
+        tasks = []
+        for rule_class in self.rules:
+            rule = rule_class(self.tenant_id, self.db)
+            tasks.append(self._run_rule(rule))
+
+        results = await asyncio.gather(*tasks)
+        for rule, issues, result in results:
+            all_issues.extend(issues)
+            check_results.append(result)
+
+        return all_issues, check_results
+
+    async def _run_rule(
+        self, rule: DataQualityRule
+    ) -> tuple[DataQualityRule, list[DataQualityIssue], dict[str, Any]]:
+        """Run a single rule and return results."""
+        start = time.perf_counter()
+        try:
+            await rule.check()
+        except Exception as e:
+            logger.error("Error running rule %s: %s", rule.rule_name, e, exc_info=True)
+
+        duration_ms = (time.perf_counter() - start) * 1000
+
+        result = {
+            "rule_name": rule.rule_name,
+            "rule_description": rule.rule_description,
+            "total_checked": rule.total_checked,
+            "issues_found": len(rule.issues),
+            "execution_time_ms": duration_ms,
+        }
+
+        return rule, rule.issues, result

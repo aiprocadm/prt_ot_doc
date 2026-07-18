@@ -12,6 +12,7 @@ Production-minded modular monolith for B2B охрана труда / промы�
 - **Vite config:** `frontend/vite.config.ts`
 - **Alembic config:** `backend/app/migrations/alembic.ini`
 - **CLI wrapper:** `./ptd`
+- **No nested project copy:** не распаковывайте архив второй раз внутрь репозитория — каталог `prt_ot_doc-main/` в корне игнорируется и не является частью сборки (см. `.gitignore`).
 
 ## Structural audit summary
 This wave re-audited the repository and confirmed the following canonical paths:
@@ -23,16 +24,74 @@ This wave re-audited the repository and confirmed the following canonical paths:
 ## Quick start
 
 ### Local dockerless / Codespaces
-```bash
-make dev-lite
+
+**Recommended order (verified path):**
+
+1. **Preflight** — confirm Python ≥ 3.12, Node ≥ 18.18, npm ≥ 9 are on PATH:
+   ```bash
+   python scripts/dev_lite.py --preflight-only
+   ```
+2. **Start** — one command brings up both servers; `--auto-kill-ports` frees any
+   stale process holding `8000`/`5173` from a previous run:
+   ```bash
+   make dev-lite                                 # or:
+   python scripts/dev_lite.py --auto-kill-ports
+   ```
+3. Wait for `Application startup complete` (backend) and `VITE ... ready`
+   (frontend), then open:
+   - Frontend: `http://localhost:5173`
+   - Backend health: `http://localhost:8000/health` → `{"status":"ok"}`
+
+Platform-specific wrappers (equivalent to step 2):
+```powershell
+./scripts/dev_lite.ps1                # Windows PowerShell (add -AutoKillPorts to free ports)
 ```
+```bash
+./scripts/dev_lite.sh                 # Unix shell
+python scripts/dev_lite.py            # cross-platform, no port auto-free
+```
+
+Note for WSL: dependencies must be installed inside the selected Linux distro as well (`python`, `node`, `npm` in WSL PATH).
 
 This is the recommended local start path in this workspace. It prepares dockerless env defaults, initializes the SQLite schema, starts backend on `http://localhost:8000`, and starts frontend on `http://localhost:5173`.
 
-Default local login:
-- tenant: `demo`
-- email: `admin@example.com`
-- password: `admin123`
+> **Database note — let the launcher reset `dev.db`.** Dockerless mode bootstraps
+> the SQLite schema via SQLAlchemy `metadata.create_all`, which only issues
+> `CREATE TABLE IF NOT EXISTS` — it never runs `ALTER TABLE ADD COLUMN`. A
+> `dev.db` left over from an older revision therefore keeps its **stale schema**,
+> and startup crashes with errors like `no such column: company_1.status`.
+> `dev_lite.py` deletes `dev.db` on every run by default to avoid this; only pass
+> `--keep-db` when you are sure the on-disk schema matches the current ORM. If you
+> hit a `no such column` crash, delete `dev.db` and restart.
+
+#### Test login without secrets
+
+Default test credentials for local development (never use in production):
+- **Tenant:** `demo`
+- **Email:** `admin@example.com`
+- **Password:** `admin123`
+
+When calling the API directly (curl / scripts), the tenant is resolved from the
+`x-tenant-slug` header — **not** `X-Tenant-ID` (that header expects a UUID). Smoke
+test:
+```bash
+TOKEN=$(curl -s -X POST http://localhost:8000/api/v1/auth/login \
+  -H 'Content-Type: application/json' -H 'x-tenant-slug: demo' \
+  -d '{"email":"admin@example.com","password":"admin123"}' \
+  | python -c 'import sys,json;print(json.load(sys.stdin)["access_token"])')
+curl -s http://localhost:8000/api/v1/auth/me \
+  -H 'x-tenant-slug: demo' -H "Authorization: Bearer $TOKEN"
+```
+
+These credentials are **non-production defaults only** and are populated by `dev_bootstrap.py` / `demo_bootstrap.py` scripts during `make dev-lite`. To customize test credentials, edit `backend/app/services/dev_bootstrap.py` before running `make dev-lite` for the first time.
+
+For Codespaces or CI environments with env-based bootstrap, set:
+- `ADMIN_BOOTSTRAP=1` — enable admin bootstrap from environment
+- `ADMIN_EMAIL` — test admin email
+- `ADMIN_PASSWORD` — test admin password
+- `ADMIN_TENANT` — tenant slug
+
+See `docs/OWNER_ADMIN_ACCESS.md` for bootstrap details.
 
 ### Manual backend start
 ```bash
@@ -42,6 +101,8 @@ pip install -r requirements.txt -r requirements-dev.txt
 python scripts/run_backend_lite.py
 ```
 
+Windows note: dependency pins in `requirements.txt` are split by Python version for `asyncpg`, so Python 3.12 and 3.13 install paths remain deterministic.
+
 ### Manual frontend start
 ```bash
 npm --prefix frontend ci
@@ -49,8 +110,16 @@ npm --prefix frontend run dev
 ```
 
 ### Workers
+Из корня репозитория задайте `PYTHONPATH=backend` (как в Docker-образе и `pyproject.toml`). Приложение Celery экспортируется из `app.services.celery_app`, а не из `backend.app.worker` (там только bootstrap `run()`).
+
 ```bash
-celery -A backend.app.worker worker --loglevel=info
+# Windows PowerShell
+$env:PYTHONPATH="backend"
+celery -A app.services.celery_app:celery_app worker --loglevel=info -Q default,pdf
+
+# Unix
+export PYTHONPATH=backend
+celery -A app.services.celery_app:celery_app worker --loglevel=info -Q default,pdf
 ```
 
 ### CLI
@@ -59,6 +128,8 @@ celery -A backend.app.worker worker --loglevel=info
 ```
 
 ## Verification commands
+Canonical testing strategy, CI mapping, and merge gates: `docs/TESTING.md`.
+
 ```bash
 # backend
 pytest -q tests/test_entrypoints.py
@@ -114,9 +185,23 @@ B2B multi-tenant SaaS платформа для ОТ / ПБ / ПромБез / �
 6. Continue via header/footer, replace, PDF, approvals, signatures, archive.
 
 ## Canonical documentation
+
+> **«По ТЗ» / «продолжай по ТЗ» = одна точка входа:** [`docs/spec/TZ_FULL_UNIFIED.md`](docs/spec/TZ_FULL_UNIFIED.md). Раздел A — MVP, раздел B — полный объём (vNext), раздел C — где смотреть статус, раздел D — фазы, раздел E — правила доработки (разд. 36 vNext), раздел G — карта канонических документов и запрет на дубли. Подробнее: [`AGENTS.md`](AGENTS.md) и [`docs/spec/README.md`](docs/spec/README.md).
+
+- **[docs/spec/TZ_FULL_UNIFIED.md](docs/spec/TZ_FULL_UNIFIED.md) — канонический и единственный источник истины ТЗ** (MVP-объём, полный vNext-объём, статус, фазы, правила доработки).
+- [docs/spec/PLATFORM_VNEXT_UPGRADE_SPEC.md](docs/spec/PLATFORM_VNEXT_UPGRADE_SPEC.md) — полный текст продуктового upgrade-spec vNext (разд. 0–37). Подключается по ссылкам из раздела B канона; в ежедневной работе целиком не открывается.
+- [docs/roadmap/PLATFORM_VNEXT_IMPLEMENTATION_PLAN.md](docs/roadmap/PLATFORM_VNEXT_IMPLEMENTATION_PLAN.md) — фазированный план реализации (Phase 0..10).
+- [docs/spec/README.md](docs/spec/README.md) — хаб ТЗ + правила «по ТЗ».
+- [docs/spec/TZ_OVERVIEW.md](docs/spec/TZ_OVERVIEW.md) — карта файлов «одним взглядом».
+- [docs/audit/TZ_COVERAGE_MATRIX.md](docs/audit/TZ_COVERAGE_MATRIX.md) — машинно-проверяемая матрица покрытия MVP-требований.
+- [AI_IMPLEMENTATION_REPORT.md](AI_IMPLEMENTATION_REPORT.md) — журнал волн / handoff / «Следующий точный шаг».
+- [RELEASE_READINESS.md](RELEASE_READINESS.md) — **готовность к релизу** (вердикт, RC-критерии; каноника блокеров: [`docs/stabilization/RELEASE_BLOCKERS_STATUS.md`](docs/stabilization/RELEASE_BLOCKERS_STATUS.md); **порядок обновления вердикта** — раздел *How to update the release verdict* в `RELEASE_READINESS.md`, ссылки в README при смене вердикта не требуют правок)
+- [AGENTS.md](AGENTS.md) — короткая подсказка для AI/агентов (точка входа «по ТЗ»).
+- `docs/AI_AGENT_WORKFLOW.md` — компактный цикл для AI/агентов (сначала README → `docs/spec/TZ_FULL_UNIFIED.md` → `AI_IMPLEMENTATION_REPORT.md` → код).
 - `docs/ARCHITECTURE.md`
 - `docs/PROJECT_STRUCTURE.md`
 - `docs/SETUP.md`
+- `docs/troubleshooting.md` — решение типичных проблем при разработке (Python setup, pytest, npm, database, PDF, multi-tenancy)
 - `docs/BACKEND.md`
 - `docs/FRONTEND.md`
 - `docs/MODULES.md`
@@ -134,10 +219,11 @@ B2B multi-tenant SaaS платформа для ОТ / ПБ / ПромБез / �
 - `docs/SECURITY.md`
 - `docs/OBSERVABILITY.md`
 - `docs/TESTING.md`
-- `docs/audit/TZ_COVERAGE_MATRIX.md`
+- `docs/troubleshooting.md` — quick reference for common issues and how to fix them
+- `docs/audit/TZ_COVERAGE_MATRIX.md` — матрица покрытия требований ТЗ с tracking статуса реализации
+- `docs/audit/BASELINE_VERIFICATION.md` — **критично для RC tag** (инструкции для baseline проверки в чистой среде; скрипты: `scripts/baseline_verification.sh` / `.ps1`)
 - `ACCEPTANCE_TEST_MATRIX.md`
 - `GAP_REPORT.md`
-- `RELEASE_READINESS.md`
 - `KNOWN_LIMITATIONS.md`
 - `CHANGELOG.md`
 - `CHANGED_MODULES_AND_DECISIONS.md`

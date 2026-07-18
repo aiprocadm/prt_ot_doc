@@ -6,7 +6,9 @@ from app.services.file_storage import FileStorageService
 
 
 @pytest.mark.anyio
-async def test_pack_download_stream(async_client: AsyncClient, make_auth_headers, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_pack_download_stream(
+    async_client: AsyncClient, make_auth_headers, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setenv("S3_BACKEND", "local")
     get_settings.cache_clear()  # type: ignore[attr-defined]
     storage = FileStorageService.default()
@@ -54,7 +56,7 @@ async def test_pack_download_presigned_redirect(
         return "https://example.com/presigned"
 
     monkeypatch.setattr(
-        "app.domains.files.s3.generate_presigned_get_url",
+        "app.modules.files.s3.generate_presigned_get_url",
         fake_presign,
     )
 

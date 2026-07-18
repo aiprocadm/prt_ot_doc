@@ -9,7 +9,10 @@ from app.services.pipeline_step_handlers import edo_step_handler
 
 
 @pytest.mark.asyncio
-async def test_edo_step_handler_uses_internal_fallback_when_provider_disabled(monkeypatch) -> None:
+async def test_edo_step_handler_fails_honestly_when_provider_disabled(monkeypatch) -> None:
+    """Провайдер выключен/не сконфигурирован => ошибка наружу (шаг честно фейлится),
+    а не имитация успеха через internal-fallback."""
+
     class DisabledProvider:
         name = "disabled-edo"
 
@@ -30,20 +33,14 @@ async def test_edo_step_handler_uses_internal_fallback_when_provider_disabled(mo
     )
     step = SimpleNamespace(id="step-1")
 
-    payload = await edo_step_handler(job=job, step=step)
-
-    assert payload["status"] == "completed"
-    assert payload["deferred"] is False
-    assert payload["provider"] == "disabled-edo"
-    assert payload["reason"] == "edo_integration_disabled"
-    assert payload["provider_mode"] == "non_production"
-    assert payload["bridge_mode"] == "internal-fallback"
+    with pytest.raises(IntegrationDisabledError):
+        await edo_step_handler(job=job, step=step)
 
 
 @pytest.mark.asyncio
 async def test_edo_step_handler_returns_provider_status_when_enabled(monkeypatch) -> None:
     class EnabledProvider:
-        name = "stub-edo"
+        name = "http-edo"
 
         async def send_document(self, *, content: bytes, filename: str, metadata: dict):
             return IntegrationStatus(
@@ -70,6 +67,6 @@ async def test_edo_step_handler_returns_provider_status_when_enabled(monkeypatch
 
     assert payload["status"] == "sent"
     assert payload["deferred"] is False
-    assert payload["provider"] == "stub-edo"
+    assert payload["provider"] == "http-edo"
     assert payload["external_id"] == "edo-123"
     assert payload["details"] == {"ok": True}

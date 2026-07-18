@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 
-import { apiClient } from "@/api/client";
+import { packsApi } from "@/api/packs";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingScreen } from "@/components/common/LoadingScreen";
@@ -24,16 +24,16 @@ const PackRunDetailsPage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<ApiError | null>(null);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const [itemResp, timelineResp] = await Promise.all([
-        apiClient.get<RunItem[]>(`/pack-runs/${id}/items`),
-        apiClient.get<Array<{ id: string; level: string; message: string }>>(`/pack-runs/${id}/timeline`)
+        packsApi.getRunItems<RunItem>(id),
+        packsApi.getRunTimeline<{ id: string; level: string; message: string }>(id)
       ]);
-      setItems(itemResp.data);
-      setTimeline(timelineResp.data);
+      setItems(itemResp);
+      setTimeline(timelineResp);
     } catch (loadError) {
       setItems([]);
       setTimeline([]);
@@ -41,16 +41,16 @@ const PackRunDetailsPage = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [id]);
 
   useEffect(() => {
     void load();
-  }, [id]);
+  }, [load]);
 
   const retryFailed = async () => {
     try {
       setError(null);
-      await apiClient.post(`/pack-runs/${id}:retry-failed`);
+      await packsApi.retryFailedRunItems(id);
       await load();
     } catch (retryError) {
       setError(retryError as ApiError);
@@ -58,7 +58,7 @@ const PackRunDetailsPage = () => {
   };
 
   if (loading) {
-    return <LoadingScreen label="Загрузка pack run" />;
+    return <LoadingScreen label="Загрузка запуска пакета" />;
   }
 
   return (
@@ -66,14 +66,14 @@ const PackRunDetailsPage = () => {
       <ErrorState error={error ?? undefined} onRetry={() => void load()} />
       <Card>
         <CardHeader>
-          <CardTitle>Pack run items</CardTitle>
+          <CardTitle>Строки запуска пакета</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2 text-sm">
-          <Button variant="outline" onClick={() => void retryFailed()}>Retry failed</Button>
+          <Button variant="outline" onClick={() => void retryFailed()}>Повторить сбойные</Button>
           {items.length === 0 ? (
             <EmptyState
-              title="Элементы pack run отсутствуют"
-              description="Для этого запуска ещё нет строк или они недоступны в текущем tenant scope."
+              title="Строк запуска пакета нет"
+              description="Для этого запуска ещё нет строк или они недоступны в текущей области тенанта."
             />
           ) : (
             items.map((item) => (
@@ -84,12 +84,12 @@ const PackRunDetailsPage = () => {
       </Card>
       <Card>
         <CardHeader>
-          <CardTitle>Timeline</CardTitle>
+          <CardTitle>Хронология</CardTitle>
         </CardHeader>
         <CardContent className="space-y-1 text-sm">
           {timeline.length === 0 ? (
             <EmptyState
-              title="Timeline пуст"
+              title="Хронология пуста"
               description="События выполнения появятся после старта или повторного запуска обработки."
             />
           ) : (

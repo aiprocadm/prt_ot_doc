@@ -40,8 +40,8 @@ async def test_forbidden_access_returns_structured_error(
 
     assert response.status_code == status.HTTP_403_FORBIDDEN
     body = response.json()
-    assert body["code"] == "forbidden"
-    assert body["error_code"] == "forbidden"
+    assert body["code"] == "FORBIDDEN"
+    assert body["error_code"] == "FORBIDDEN"
     assert body["message"] == "Forbidden"
     assert body["trace_id"]
     assert body["request_id"] == body["trace_id"]

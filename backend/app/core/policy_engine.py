@@ -42,9 +42,25 @@ class PolicyEngine:
         normalized_action = action.split(":", 1)[0].lower()
         if normalized_action == "write":
             normalized_action = "update"
-        elif normalized_action not in {"read", "list", "create", "update", "delete", "approve", "sign", "export", "download", "run_pipeline", "retry_job", "cancel_job", "send_edo"}:
+        elif normalized_action not in {
+            "read",
+            "list",
+            "create",
+            "update",
+            "delete",
+            "approve",
+            "sign",
+            "export",
+            "download",
+            "run_pipeline",
+            "retry_job",
+            "cancel_job",
+            "send_edo",
+        }:
             normalized_action = action.split(":", 1)[-1].lower()
-        decision = rbac_abac_engine.authorize(actor, action=normalized_action, resource=resource, ctx=attrs)
+        decision = rbac_abac_engine.authorize(
+            actor, action=normalized_action, resource=resource, ctx=attrs
+        )
         return PolicyDecision(
             allowed=decision.allowed,
             conditions=decision.matched_rules,

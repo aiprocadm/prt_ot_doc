@@ -2,30 +2,26 @@
 Global error handling middleware.
 
 Catches all exceptions and returns standardized error responses
-with correlation_id and structured format.
+aligned with :mod:`app.api.error_handlers`.
 """
 
-from datetime import datetime, timezone
-
 from fastapi import Request, status
-from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
+from app.api.error_handlers import json_error_response_for_request
 from app.core.correlation_id import CorrelationIDManager, get_logger
-from app.core.errors import ErrorBuilder
 
 logger = get_logger(__name__)
+
+_CLIENT_SAFE_MESSAGES: dict[str, str] = {
+    "TENANT_INVALID": "Некорректный контекст организации.",
+    "PERMISSION_DENIED": "Недостаточно прав для выполнения операции.",
+    "VALIDATION_ERROR": "Запрос не может быть обработан.",
+}
 
 
 class GlobalErrorHandlerMiddleware(BaseHTTPMiddleware):
     """Global middleware for standardized error handling."""
-
-    @staticmethod
-    def _resolve_correlation_id(request: Request) -> str | None:
-        state_value = getattr(request.state, "correlation_id", None)
-        if isinstance(state_value, str) and state_value.strip():
-            return state_value.strip()
-        return CorrelationIDManager.get()
 
     @staticmethod
     def _classify_value_error(exc: ValueError) -> tuple[int, str]:
@@ -40,9 +36,11 @@ class GlobalErrorHandlerMiddleware(BaseHTTPMiddleware):
         """Catch exceptions and return standardized error responses."""
         try:
             # Extract correlation_id from headers and set in context
-            correlation_id = request.headers.get(
-                "x-correlation-id"
-            ) or request.headers.get("x-request-id") or getattr(request.state, "correlation_id", None)
+            correlation_id = (
+                request.headers.get("x-correlation-id")
+                or request.headers.get("x-request-id")
+                or getattr(request.state, "correlation_id", None)
+            )
             if correlation_id:
                 CorrelationIDManager.set(correlation_id)
 
@@ -59,68 +57,56 @@ class GlobalErrorHandlerMiddleware(BaseHTTPMiddleware):
             # Handle unexpected errors
             return self._handle_unexpected_error(exc, request)
 
-    def _handle_value_error(self, exc: ValueError, request: Request) -> JSONResponse:
+    def _handle_value_error(self, exc: ValueError, request: Request):
         """Handle ValueError (validation, tenant context, etc.)."""
-        correlation_id = self._resolve_correlation_id(request)
-
-        error_message = str(exc)
+        internal_message = str(exc)
         status_code, error_code = self._classify_value_error(exc)
+        client_message = _CLIENT_SAFE_MESSAGES.get(
+            error_code, _CLIENT_SAFE_MESSAGES["VALIDATION_ERROR"]
+        )
 
         logger.warning(
-            f"Validation error: {error_message}",
+            "Validation error: %s",
+            internal_message,
             extra={
                 "error_code": error_code,
                 "request_path": request.url.path,
                 "method": request.method,
+                "internal_message": internal_message,
             },
         )
 
-        error = (
-            ErrorBuilder()
-            .with_code(error_code)
-            .with_message(error_message)
-            .with_correlation_id(correlation_id)
-            .with_timestamp(datetime.now(timezone.utc).isoformat())
-            .build()
-        )
-
-        return JSONResponse(
+        return json_error_response_for_request(
+            request,
             status_code=status_code,
-            content=error.model_dump(),
-            headers={"X-Correlation-Id": correlation_id or "unknown"},
+            code=error_code,
+            message=client_message,
+            details={"source": "ValueError"},
         )
 
-    def _handle_permission_error(self, exc: PermissionError, request: Request) -> JSONResponse:
+    def _handle_permission_error(self, exc: PermissionError, request: Request):
         """Handle PermissionError."""
-        correlation_id = self._resolve_correlation_id(request)
-
+        internal_message = str(exc)
         logger.warning(
-            f"Permission denied: {str(exc)}",
+            "Permission denied: %s",
+            internal_message,
             extra={
                 "request_path": request.url.path,
                 "method": request.method,
+                "internal_message": internal_message,
             },
         )
 
-        error = (
-            ErrorBuilder()
-            .with_code("PERMISSION_DENIED")
-            .with_message(str(exc))
-            .with_correlation_id(correlation_id)
-            .with_timestamp(datetime.now(timezone.utc).isoformat())
-            .build()
-        )
-
-        return JSONResponse(
+        return json_error_response_for_request(
+            request,
             status_code=status.HTTP_403_FORBIDDEN,
-            content=error.model_dump(),
-            headers={"X-Correlation-Id": correlation_id or "unknown"},
+            code="PERMISSION_DENIED",
+            message=_CLIENT_SAFE_MESSAGES["PERMISSION_DENIED"],
+            details={"source": "PermissionError"},
         )
 
-    def _handle_unexpected_error(self, exc: Exception, request: Request) -> JSONResponse:
+    def _handle_unexpected_error(self, exc: Exception, request: Request):
         """Handle unexpected exceptions."""
-        correlation_id = self._resolve_correlation_id(request)
-
         logger.error(
             f"Unexpected error: {str(exc)}",
             exc_info=exc,
@@ -131,18 +117,10 @@ class GlobalErrorHandlerMiddleware(BaseHTTPMiddleware):
             },
         )
 
-        error = (
-            ErrorBuilder()
-            .with_code("INTERNAL_ERROR")
-            .with_message("Internal server error")
-            .with_details({"correlation_id": correlation_id, "error_type": type(exc).__name__})
-            .with_correlation_id(correlation_id)
-            .with_timestamp(datetime.now(timezone.utc).isoformat())
-            .build()
-        )
-
-        return JSONResponse(
+        return json_error_response_for_request(
+            request,
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            content=error.model_dump(),
-            headers={"X-Correlation-Id": correlation_id or "unknown"},
+            code="INTERNAL_ERROR",
+            message="Internal server error",
+            details={},
         )

@@ -1,3 +1,5 @@
+import { memo } from "react";
+
 import type { PipelineStepRun } from "@/api/pipelines";
 
 const statusClassMap: Record<string, string> = {
@@ -17,7 +19,7 @@ const durationText = (started?: string | null, ended?: string | null) => {
   return `${Math.max(0, Math.floor(ms / 1000))} c`;
 };
 
-export const WizardJobTimeline = ({ steps }: { steps: PipelineStepRun[] }) => (
+export const WizardJobTimeline = memo(({ steps }: { steps: PipelineStepRun[] }) => (
   <div className="space-y-2">
     {steps.map((step) => (
       <div key={step.step_run_id} className="flex items-center justify-between rounded border p-3 text-sm">
@@ -33,4 +35,6 @@ export const WizardJobTimeline = ({ steps }: { steps: PipelineStepRun[] }) => (
       </div>
     ))}
   </div>
-);
+));
+
+WizardJobTimeline.displayName = "WizardJobTimeline";

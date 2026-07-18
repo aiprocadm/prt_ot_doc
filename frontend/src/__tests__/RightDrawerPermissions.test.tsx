@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { describe, it, beforeEach, expect } from "vitest";
 
 import { RightDrawer } from "@/components/layout/RightDrawer";
@@ -27,7 +28,11 @@ describe("RightDrawer permission visibility", () => {
   });
 
   it("скрывает создание документа без прав", () => {
-    render(<RightDrawer />);
+    render(
+      <MemoryRouter>
+        <RightDrawer />
+      </MemoryRouter>
+    );
     expect(screen.queryByText("Создать документ")).not.toBeInTheDocument();
   });
 
@@ -37,7 +42,11 @@ describe("RightDrawer permission visibility", () => {
       isAuthenticated: true,
       initialized: true
     });
-    render(<RightDrawer />);
-    expect(screen.getByText("Создать документ")).toBeInTheDocument();
+    render(
+      <MemoryRouter>
+        <RightDrawer />
+      </MemoryRouter>
+    );
+    expect(screen.getByRole("link", { name: /создать документ/i })).toHaveAttribute("href", "/documents/wizard");
   });
 });

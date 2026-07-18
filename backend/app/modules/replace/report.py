@@ -38,14 +38,18 @@ def build_report(hits: list[dict], rules: list[dict]) -> dict:
 def to_csv(report: dict) -> str:
     buffer = StringIO()
     writer = csv.writer(buffer)
-    writer.writerow(["rule_from", "rule_to", "location", "count", "before_snippet", "after_snippet"])
+    writer.writerow(
+        ["rule_from", "rule_to", "location", "count", "before_snippet", "after_snippet"]
+    )
     for item in report.get("sample_diffs", []):
-        writer.writerow([
-            "",
-            "",
-            item.get("location", ""),
-            1,
-            item.get("before_snippet", ""),
-            item.get("after_snippet", ""),
-        ])
+        writer.writerow(
+            [
+                "",
+                "",
+                item.get("location", ""),
+                1,
+                item.get("before_snippet", ""),
+                item.get("after_snippet", ""),
+            ]
+        )
     return buffer.getvalue()

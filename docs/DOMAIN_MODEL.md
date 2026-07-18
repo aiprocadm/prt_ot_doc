@@ -32,11 +32,40 @@
 | Техполя TenantBaseModel + `deleted_at` | — | — | |
 | `email` | varchar(320) | NO | Индекс `ix_user_email` вместе с `tenant_id` (уникальность). |
 | `full_name` | varchar(255) | NO | — |
-| `role` | enum(`admin`,`employee`,`client_admin`,`client_user`) | NO | Роль доступа. |
+| `role` | enum — см. ниже | NO | Роль доступа. Полный список — `RoleEnum` в `backend/app/models/models.py`. |
 | `hashed_password` | varchar(255) | NO | Хэш. |
 | `is_active` | bool | NO, default `true` | — |
 | `last_login_at` | timestamptz | YES | Последний логин. |
 | `company_id` | UUID FK→company | YES | Работодатель (SET NULL). |
+
+**Роли (`RoleEnum`):**
+
+| Значение | Описание |
+| --- | --- |
+| `owner` | Владелец арендатора |
+| `admin` | Администратор |
+| `ot_pb_lead` | Руководитель ОТиПБ |
+| `ot_head` | Начальник отдела ОТ |
+| `ot_specialist` | Специалист ОТ |
+| `pb_engineer` | Инженер ПБ |
+| `ecologist` | Эколог |
+| `hr` | HR |
+| `lawyer` | Юрист |
+| `accountant` | Бухгалтер |
+| `line_manager` | Линейный руководитель |
+| `manager` | Менеджер |
+| `executor` | Исполнитель |
+| `worker` | Рабочий / сотрудник |
+| `employee` | Сотрудник (синоним `worker`) |
+| `clerk` | Делопроизводитель |
+| `teacher` | Преподаватель |
+| `student` | Обучающийся |
+| `contractor_inspector` | Проверяющий-подрядчик |
+| `inspector_contractor` | Псевдоним `contractor_inspector` |
+| `auditor_ro` | Аудитор (только чтение) |
+| `client_admin` | Администратор клиентского портала |
+| `client_user` | Пользователь клиентского портала |
+| `client` | Внешний клиент |
 
 **Связи:** `User` → `Company` (многие-к-одному), создаёт `Document`, `DocumentGenerationJob`.
 
@@ -419,18 +448,18 @@ Shared-like tenant таблица (см. `backend/app/models/risk.py`): `code`, 
 ### Outbox (`outbox`)
 | `event_type`, `payload` (json), `processed_at`. Используется для паттерна transactional outbox.
 
-## Известные расхождения моделей и Pydantic-схем
-1. **Person** — модель содержит `phone`, `email`, `birth_date`, `employment_status`,
-   `current_ppe`, однако `backend/app/schemas/person.py::PersonRead` публикует только
-   базовые паспортные поля. *TODO: расширить `PersonRead` минимум `phone`,
-   `email`, `employment_status`, чтобы API отражало фактические данные.*
-2. **Document** — ORM хранит `site_id`, `template_version_id`, `file_id`,
-   `signed_file_id`, `content_sha256`, `job_id`, но `DocumentRead`
-   (в `backend/app/schemas/document.py`) возвращает лишь `company_id`, `template_id`,
-   `person_id`, `status`, `storage_key`. *TODO: дополнить схему, иначе API теряет
-   важные ссылки (подписанный файл, площадка, шаблонная версия).* 
-3. **DocumentPack** — в API (`PackListItem`) отсутствуют поля `module` и
-   `scenario_type`, хотя они обязательны в таблице `document_pack`. *TODO:
-   добавить эти атрибуты в выдачу пакетов, чтобы клиенты понимали контекст.*
+## Согласование моделей и Pydantic-схем (актуально)
+Следующие расхождения, ранее отмеченные здесь, **закрыты в коде**:
+- **Person** — `PersonRead` / `PersonCreate` / `PersonUpdate` включают `employment_status`
+  (и по-прежнему `phone`, `email`, и др.). Создание/обновление персоны в
+  `backend/app/api/routes/persons.py` записывает `employment_status` в ORM.
+- **Document** — `DocumentRead` дополнен полями `site_id`, `template_version_id`,
+  `file_id`, `signed_file_id`, `content_sha256`, `job_id` (см. `schemas/document.py`).
+- **DocumentPack** — `PackListItem` и `_pack_to_list_item` отдают `module` и
+  `scenario_type` в строковом виде (значения enum).
+
+Оставшийся технический долг по выдаче (например расширение `DocumentRead` полями
+`department_id` / `contract_id` без явного запроса в API) фиксируется отдельно
+по мере появления клиентских контрактов.
 
 Обновляя модели/миграции, обязательно синхронизируйте этот документ.

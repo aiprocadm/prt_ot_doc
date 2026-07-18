@@ -1,27 +1,34 @@
+import { memo, useMemo } from "react";
+
 import type { ReplaceDiffItem } from "@/api/documents";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
-export const ReplaceDiffViewer = ({
+export const ReplaceDiffViewer = memo(({
   items,
   summary
 }: {
   items: ReplaceDiffItem[];
   summary?: { matches?: number; pairs?: Record<string, number> };
 }) => {
+  const matches = useMemo(
+    () => summary?.matches ?? items.reduce((acc, item) => acc + item.match_count, 0),
+    [items, summary?.matches]
+  );
+
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">Diff preview replace</CardTitle>
+        <CardTitle className="text-base">Предпросмотр замен</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="text-sm text-muted-foreground">Совпадений: {summary?.matches ?? items.reduce((acc, item) => acc + item.match_count, 0)}</div>
+        <div className="text-sm text-muted-foreground">Совпадений: {matches}</div>
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>from</TableHead>
-              <TableHead>to</TableHead>
-              <TableHead>hits</TableHead>
+              <TableHead>из</TableHead>
+              <TableHead>в</TableHead>
+              <TableHead>совпадений</TableHead>
               <TableHead>до</TableHead>
               <TableHead>после</TableHead>
             </TableRow>
@@ -41,4 +48,6 @@ export const ReplaceDiffViewer = ({
       </CardContent>
     </Card>
   );
-};
+});
+
+ReplaceDiffViewer.displayName = "ReplaceDiffViewer";

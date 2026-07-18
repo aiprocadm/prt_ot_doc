@@ -21,7 +21,7 @@ const FireTrainingPage = () => {
     <div className="space-y-4">
       <RegistryPageHeader
         title="Пожарная безопасность · инструктажи и учения"
-        description="Раздел связан с реальными журналами, шаблонами инструктажей и просроченными briefing entries."
+        description="Раздел связан с реальными журналами, шаблонами инструктажей и просроченными записями инструктажей."
         actions={<Button asChild variant="outline"><Link to="/briefings">Открыть инструктажи</Link></Button>}
         stats={[
           { label: "Шаблоны", value: data.templates.length },
@@ -35,7 +35,7 @@ const FireTrainingPage = () => {
       {!loading && !error && data.overdueEntries.length > 0 ? (
         <Card className="border-orange-200 bg-orange-50/40">
           <CardHeader>
-            <CardTitle className="text-base">Blockers и next actions</CardTitle>
+            <CardTitle className="text-base">Блокеры и дальнейшие действия</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3 text-sm">
             <p>Найдено просроченных записей инструктажей: {data.overdueEntries.length}. Требуется закрыть задолженность до следующей волны проверок.</p>

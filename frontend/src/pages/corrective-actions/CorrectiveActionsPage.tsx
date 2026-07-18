@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { opsApi, type CorrectiveActionDto } from "@/api/ops";
 import { EmptyState } from "@/components/common/EmptyState";
@@ -8,8 +8,12 @@ import { RegistryPageHeader } from "@/components/common/RegistryPageHeader";
 import { RegistryTable } from "@/components/common/RegistryTable";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ConflictInboxCard } from "@/components/pwa/ConflictInboxCard";
+import { MobileFieldModeCard } from "@/components/pwa/MobileFieldModeCard";
+import { SyncStatusChips } from "@/components/pwa/SyncStatusChips";
 import { useAsyncResource } from "@/hooks/useAsyncResource";
 import { useLocalRegistry } from "@/hooks/useLocalRegistry";
+import { emitSyncTelemetry, resolveSyncState } from "@/pwa/sync";
 import { formatDate } from "@/utils/datetime";
 
 const CorrectiveActionsPage = () => {
@@ -19,6 +23,27 @@ const CorrectiveActionsPage = () => {
     initialData: [],
     errorMessage: "Не удалось загрузить CAPA"
   });
+  const [online, setOnline] = useState(() => (typeof navigator === "undefined" ? true : navigator.onLine));
+  const [hasConflict, setHasConflict] = useState(false);
+  const syncState = resolveSyncState({ online, loading, hasConflict, hasError: Boolean(error) });
+
+  useEffect(() => {
+    const onOnline = () => setOnline(true);
+    const onOffline = () => setOnline(false);
+    window.addEventListener("online", onOnline);
+    window.addEventListener("offline", onOffline);
+    return () => {
+      window.removeEventListener("online", onOnline);
+      window.removeEventListener("offline", onOffline);
+    };
+  }, []);
+
+  useEffect(() => {
+    emitSyncTelemetry({ type: "sync_state_changed", state: syncState, screen: "corrective_actions" });
+    if (error?.message) {
+      emitSyncTelemetry({ type: "sync_error", screen: "corrective_actions", message: error.message });
+    }
+  }, [error?.message, syncState]);
 
   const registry = useLocalRegistry({
     items,
@@ -34,17 +59,26 @@ const CorrectiveActionsPage = () => {
     <div className="space-y-4">
       <RegistryPageHeader
         title="Корректирующие действия"
-        description="Операционный CAPA-реестр на основе backend `/corrective-actions` с реальными due/status/effectiveness полями, единым UX и пагинацией."
+        description="Операционный реестр CAPA на основе backend `/corrective-actions` с реальными полями сроков, статусов и эффективности, единым интерфейсом и пагинацией."
       />
+      <div className="grid gap-3 lg:grid-cols-3">
+        <Card>
+          <CardContent className="pt-4">
+            <SyncStatusChips state={syncState} />
+          </CardContent>
+        </Card>
+        <ConflictInboxCard onConflictStateChange={setHasConflict} />
+        <MobileFieldModeCard />
+      </div>
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Корректирующие и предупреждающие действия</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           <ErrorState error={error ?? undefined} onRetry={() => void reload()} />
-          {loading ? <LoadingScreen label="Загрузка CAPA" /> : null}
+          {loading ? <LoadingScreen label="Загрузка реестра CAPA" /> : null}
           {!loading && !error && registry.total === 0 ? (
-            <EmptyState title="Действия не найдены" description={registry.query ? "Попробуйте другой запрос." : "В текущем tenant пока нет корректирующих действий."} />
+            <EmptyState title="Действия не найдены" description={registry.query ? "Попробуйте другой запрос." : "В текущем тенанте пока нет корректирующих действий."} />
           ) : null}
           {!loading && !error && registry.total > 0 ? (
             <RegistryTable

@@ -12,8 +12,8 @@ from app.core.rate_limit import (
     login_per_identity,
     upload_per_tenant,
 )
-from app.domains.files import s3
 from app.models.models import RoleEnum, Tenant, User
+from app.modules.files import s3
 from app.services.auth import hash_password
 
 
@@ -74,14 +74,19 @@ async def test_login_rate_limit(
         await session.commit()
 
     payload = {"email": "ratelimit@example.com", "password": "secret"}
-    for _ in range(2):
-        response = await async_client.post("/api/v1/auth/login", json=payload)
-        assert response.status_code == 200
+    login_headers = {"x-tenant": tenant.slug}
 
-    limited = await async_client.post("/api/v1/auth/login", json=payload)
+    # Two successful requests (within limit of 2/minute)
+    response = await async_client.post("/api/v1/auth/login", json=payload, headers=login_headers)
+    assert response.status_code == 200
+    response = await async_client.post("/api/v1/auth/login", json=payload, headers=login_headers)
+    assert response.status_code == 200
+
+    # Third request should be rate limited
+    limited = await async_client.post("/api/v1/auth/login", json=payload, headers=login_headers)
     assert limited.status_code == 429
     body = limited.json()
-    assert body["code"] == "rate_limit_exceeded"
+    assert body["code"] == "RATE_LIMIT_EXCEEDED"
     expected_message = login_per_identity().replace("/", " per 1 ")
     assert body["message"] == expected_message
     assert isinstance(body.get("details"), dict)
@@ -92,30 +97,31 @@ async def test_login_rate_limit(
 
 @pytest.mark.anyio("asyncio")
 @pytest.mark.usefixtures("aws", "configure_storage")
-async def test_upload_rate_limit(
-    async_client: AsyncClient, make_auth_headers
-) -> None:
+async def test_upload_rate_limit(async_client: AsyncClient, make_auth_headers) -> None:
     payload = b"throttle"
-    headers = {**dict(async_client.headers), **await make_auth_headers(email="uploader@example.com")}
+    headers = {
+        **dict(async_client.headers),
+        **await make_auth_headers(email="uploader@example.com"),
+    }
 
     assert upload_per_tenant() == "2/minute"
 
     for _ in range(2):
         response = await async_client.post(
-            "/api/v1/files/upload",
+            "/api/v1/files-legacy/upload",
             files={"file": ("sample.txt", payload, "text/plain")},
             headers=headers,
         )
         assert response.status_code == 201
 
     limited = await async_client.post(
-        "/api/v1/files/upload",
+        "/api/v1/files-legacy/upload",
         files={"file": ("sample.txt", payload, "text/plain")},
         headers=headers,
     )
     assert limited.status_code == 429
     body = limited.json()
-    assert body["code"] == "rate_limit_exceeded"
+    assert body["code"] == "RATE_LIMIT_EXCEEDED"
     expected_message = upload_per_tenant().replace("/", " per 1 ")
     assert body["message"] == expected_message
     assert isinstance(body.get("details"), dict)

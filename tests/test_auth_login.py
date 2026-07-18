@@ -71,7 +71,7 @@ async def test_login_rejects_invalid_password(
     )
     assert response.status_code == 401
     body = response.json()
-    assert body["code"] == "http_401"
+    assert body["code"] == "UNAUTHORIZED"
     assert body["message"] == "Invalid email or password"
     assert body["trace_id"]
 
@@ -85,7 +85,7 @@ async def test_login_rejects_unknown_email(async_client: AsyncClient) -> None:
     )
     assert response.status_code == 401
     body = response.json()
-    assert body["code"] == "http_401"
+    assert body["code"] == "UNAUTHORIZED"
     assert body["message"] == "Invalid email or password"
     assert body["trace_id"]
 
@@ -134,10 +134,14 @@ async def test_refresh_issues_new_token_pair(
     new_tokens = refresh_response.json()
     assert new_tokens.keys() == {"access_token"}
     assert new_tokens["access_token"] != tokens["access_token"]
-    assert refresh_response.cookies["prt_refresh_token"] != login_response.cookies["prt_refresh_token"]
+    assert (
+        refresh_response.cookies["prt_refresh_token"] != login_response.cookies["prt_refresh_token"]
+    )
 
     access_claims = verify_token(new_tokens["access_token"], expected_type="access")
-    refresh_claims = verify_token(refresh_response.cookies["prt_refresh_token"], expected_type="refresh")
+    refresh_claims = verify_token(
+        refresh_response.cookies["prt_refresh_token"], expected_type="refresh"
+    )
     assert access_claims["tenant"] == "test"
     assert refresh_claims["tenant"] == "test"
 
@@ -253,7 +257,7 @@ async def test_company_creation_requires_admin_role(
     )
     assert blocked.status_code == 403
     blocked_body = blocked.json()
-    assert blocked_body["code"] == "forbidden"
+    assert blocked_body["code"] == "FORBIDDEN"
     assert blocked_body["message"] == "Insufficient role"
     assert blocked_body["trace_id"]
 

@@ -1,0 +1,85 @@
+name: Restore Drill
+
+on:
+  schedule:
+    - cron: '30 3 * * 1'
+  workflow_dispatch:
+
+jobs:
+  restore-drill:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: restore_drill_source
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+      minio:
+        image: bitnamilegacy/minio:latest
+        env:
+          MINIO_ROOT_USER: minioadmin
+          MINIO_ROOT_PASSWORD: minioadmin
+        ports:
+          - 9000:9000
+        options: >-
+          --health-cmd="curl -f http://localhost:9000/minio/health/live || exit 1"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=20
+    env:
+      APP_ENV: test
+      REDIS_URL: memory://
+      REDIS_RESULT_URL: memory://
+      RATE_LIMIT_STORAGE_URI: memory://
+      RESTORE_DRILL_POSTGRES_SOURCE_DSN: postgresql://postgres:postgres@localhost:5432/restore_drill_source
+      RESTORE_DRILL_POSTGRES_RESTORE_DSN: postgresql://postgres:postgres@localhost:5432/restore_drill_restore
+      RESTORE_DRILL_MINIO_ENDPOINT: localhost:9000
+      RESTORE_DRILL_MINIO_ACCESS_KEY: minioadmin
+      RESTORE_DRILL_MINIO_SECRET_KEY: minioadmin
+      RESTORE_DRILL_MINIO_SOURCE_BUCKET: restore-drill-source
+      RESTORE_DRILL_MINIO_RESTORE_BUCKET: restore-drill-restored
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+
+      - name: Install dependencies
+        run: python -m pip install --upgrade pip && python -m pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Install PostgreSQL client and LibreOffice
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client libreoffice-core
+
+      - name: Prepare restore database
+        run: |
+          psql "$RESTORE_DRILL_POSTGRES_SOURCE_DSN" -c "DROP DATABASE IF EXISTS restore_drill_restore;"
+          psql "$RESTORE_DRILL_POSTGRES_SOURCE_DSN" -c "CREATE DATABASE restore_drill_restore;"
+
+      - name: Run restore drill (sqlite)
+        run: python scripts/restore_drill.py --mode sqlite --output-dir artifacts/restore-drill
+
+      - name: Run restore drill (postgres-minio)
+        run: python scripts/restore_drill.py --mode postgres-minio --output-dir artifacts/restore-drill
+
+      - name: Upload restore drill evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: restore-drill-evidence
+          path: |
+            artifacts/restore-drill/
+          if-no-files-found: warn
+          retention-days: 30

@@ -3,6 +3,7 @@ version: "3.9"
 services:
   postgres:
     image: postgres:16
+    restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-ptd}
       POSTGRES_USER: ${POSTGRES_USER:-ptd}
@@ -19,6 +20,7 @@ services:
 
   redis:
     image: redis:7
+    restart: unless-stopped
     ports:
       - "6379:6379"
     volumes:
@@ -29,8 +31,10 @@ services:
       timeout: 5s
       retries: 5
 
+  # Зафиксированные теги: предсказуемые обновления и воспроизводимый smoke. mc отдельным тегом (S3-совместимость).
   minio:
-    image: minio/minio:latest
+    image: minio/minio:RELEASE.2024-12-18T13-15-44Z
+    restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: ${S3_ACCESS_KEY}
@@ -47,7 +51,7 @@ services:
       retries: 10
 
   minio-mc:
-    image: minio/mc:latest
+    image: minio/mc:RELEASE.2024-11-21T17-21-54Z
     depends_on:
       minio:
         condition: service_healthy
@@ -61,6 +65,7 @@ services:
 
   clamav:
     image: clamav/clamav:latest
+    restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "clamdscan --version >/dev/null 2>&1 || exit 1"]
       interval: 30s
@@ -70,6 +75,7 @@ services:
   lo:
     build:
       context: ./config/libreoffice
+    restart: unless-stopped
     expose:
       - "2002"
 
@@ -77,6 +83,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    restart: unless-stopped
     env_file:
       - .env
     depends_on:
@@ -96,8 +103,13 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    restart: unless-stopped
     env_file:
       - .env
+    environment:
+      # RB-002e: only `api` runs `alembic upgrade heads`; worker/beat must skip to avoid
+      # the CREATE TYPE race on PG enums in migration 8d2c1a6c5e24.
+      RUN_MIGRATIONS: "false"
     depends_on:
       postgres:
         condition: service_healthy
@@ -105,14 +117,28 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
-    command: ["celery", "-A", "app.services.celery_app.celery_app", "worker", "-Q", "default", "-l", "info"]
+    # Consume default + pdf; per-tenant queues (tenant.*) require registering Queue + -Q or routing fallback.
+    command:
+      [
+        "celery",
+        "-A",
+        "app.services.celery_app.celery_app",
+        "worker",
+        "-Q",
+        "default,pdf",
+        "-l",
+        "info",
+      ]
 
   beat:
     build:
       context: .
       dockerfile: Dockerfile
+    restart: unless-stopped
     env_file:
       - .env
+    environment:
+      RUN_MIGRATIONS: "false"  # RB-002e — see worker comment
     depends_on:
       postgres:
         condition: service_healthy

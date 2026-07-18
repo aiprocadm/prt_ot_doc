@@ -6,21 +6,23 @@ from functools import lru_cache
 
 from app.core.config import get_settings
 
+from .http_edo import HttpEDOIntegration
 from .interfaces import (
     BaseAccountingIntegration,
     BaseEDOIntegration,
     BaseEISOTIntegration,
     BaseFRDOIntegration,
 )
+from .pilot_adapters import (
+    PilotAccountingIntegration,
+    PilotEISOTIntegration,
+    PilotFRDOIntegration,
+)
 from .stubs import (
     DisabledAccountingIntegration,
     DisabledEDOIntegration,
     DisabledEISOTIntegration,
     DisabledFRDOIntegration,
-    StubAccountingIntegration,
-    StubEDOIntegration,
-    StubEISOTIntegration,
-    StubFRDOIntegration,
 )
 
 
@@ -28,15 +30,26 @@ from .stubs import (
 def get_accounting_integration() -> BaseAccountingIntegration:
     settings = get_settings()
     if settings.use_1c_integration:
-        return StubAccountingIntegration()
+        return PilotAccountingIntegration()
     return DisabledAccountingIntegration()
 
 
 @lru_cache()
 def get_edo_integration() -> BaseEDOIntegration:
     settings = get_settings()
-    if settings.use_edo_integration:
-        return StubEDOIntegration()
+    if not settings.use_edo_integration:
+        return DisabledEDOIntegration()
+    base = (settings.edo_integration_base_url or "").strip()
+    if base:
+        return HttpEDOIntegration(
+            base_url=base,
+            api_token=settings.edo_integration_api_token,
+            timeout_seconds=settings.edo_integration_timeout_seconds,
+            outbound_path=settings.edo_integration_outbound_path,
+            app_env=settings.app_env,
+        )
+    # Флаг включён, но base_url не задан: провайдер не сконфигурирован.
+    # Честно сообщаем о недоступности (IntegrationDisabledError), не имитируем отправку.
     return DisabledEDOIntegration()
 
 
@@ -44,7 +57,7 @@ def get_edo_integration() -> BaseEDOIntegration:
 def get_frdo_integration() -> BaseFRDOIntegration:
     settings = get_settings()
     if settings.use_frdo_integration:
-        return StubFRDOIntegration()
+        return PilotFRDOIntegration()
     return DisabledFRDOIntegration()
 
 
@@ -52,7 +65,7 @@ def get_frdo_integration() -> BaseFRDOIntegration:
 def get_eisot_integration() -> BaseEISOTIntegration:
     settings = get_settings()
     if settings.use_eisot_integration:
-        return StubEISOTIntegration()
+        return PilotEISOTIntegration()
     return DisabledEISOTIntegration()
 
 

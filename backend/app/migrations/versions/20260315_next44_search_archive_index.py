@@ -39,8 +39,15 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("file_id", name="uq_file_content_index_file_id"),
     )
-    op.create_index("ix_file_content_index_status_updated", "file_content_index", ["status", "updated_at"], unique=False)
-    op.execute("CREATE INDEX ix_file_content_index_content_text_gin ON file_content_index USING GIN (content_text)")
+    op.create_index(
+        "ix_file_content_index_status_updated",
+        "file_content_index",
+        ["status", "updated_at"],
+        unique=False,
+    )
+    op.execute(
+        "CREATE INDEX ix_file_content_index_content_text_gin ON file_content_index USING GIN (content_text)"
+    )
 
 
 def downgrade() -> None:

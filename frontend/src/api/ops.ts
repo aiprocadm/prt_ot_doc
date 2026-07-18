@@ -57,6 +57,15 @@ export type PpeOverviewSnapshot = {
   persons: PersonDto[];
 };
 
+export type CreatePpeIssuePayload = {
+  person_id: string;
+  item_id: string;
+  quantity: number;
+  wear_days?: number;
+  expires_at?: string;
+  issued_at?: string;
+};
+
 export type FindingDto = {
   id: string;
   title: string;
@@ -107,6 +116,11 @@ export const opsApi = {
       expiring: expiringResponse.data.items ?? [],
       persons: personsResponse.data.items ?? []
     };
+  },
+
+  async createPpeIssue(payload: CreatePpeIssuePayload): Promise<PpeIssueDto> {
+    const response = await apiClient.post<PpeIssueDto>("/ppe/issues", payload);
+    return response.data;
   },
 
   async getPrescriptions(): Promise<PrescriptionDto[]> {

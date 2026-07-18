@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
+import { normalizeCompanyRead } from "@/api/companiesApi";
 import { apiClient } from "@/api/client";
 import { defaultPagination } from "@/stores/helpers";
 import type { PaginatedState, PaginationParams } from "@/stores/types";
@@ -110,12 +111,15 @@ export const useCompaniesStore = create<CompaniesState>()(
         state.loading = true;
         state.error = null;
       });
-      const query = { ...get().filters, ...params, page: get().pagination.page, page_size: get().pagination.page_size };
+      const { page, page_size: pageSize } = get().pagination;
+      const limit = pageSize;
+      const offset = (page - 1) * pageSize;
+      const query = { ...get().filters, ...params, limit, offset };
       try {
         const { data } = await apiClient.get<PaginatedResponse<CompanyDto> | LegacyCompaniesResponse>("/companies", { params: query });
         const normalized = normalizeCompaniesResponse(data, get().pagination);
         set((state) => {
-          state.items = normalized.items;
+          state.items = normalized.items.map((row) => normalizeCompanyRead(row));
           state.pagination = normalized.pagination;
         });
       } catch (error) {
@@ -131,11 +135,12 @@ export const useCompaniesStore = create<CompaniesState>()(
     },
     getById: async (id: string) => {
       try {
-        const { data } = await apiClient.get<CompanyDto>(`/companies/${id}`);
+        const { data } = await apiClient.get<unknown>(`/companies/${id}`);
+        const row = normalizeCompanyRead(data);
         set((state) => {
-          state.item = data;
+          state.item = row;
         });
-        return data;
+        return row;
       } catch (error) {
         set((state) => {
           state.error = error as ApiError;
@@ -144,22 +149,24 @@ export const useCompaniesStore = create<CompaniesState>()(
       }
     },
     create: async (payload) => {
-      const { data } = await apiClient.post<CompanyDto>("/companies", payload);
+      const { data } = await apiClient.post<unknown>("/companies", payload);
+      const row = normalizeCompanyRead(data);
       set((state) => {
-        state.items.unshift(data);
+        state.items.unshift(row);
         state.pagination.total += 1;
       });
-      return data;
+      return row;
     },
     update: async (id, payload) => {
-      const { data } = await apiClient.patch<CompanyDto>(`/companies/${id}`, payload);
+      const { data } = await apiClient.patch<unknown>(`/companies/${id}`, payload);
+      const row = normalizeCompanyRead(data);
       set((state) => {
-        state.items = state.items.map((company) => (company.id === id ? data : company));
+        state.items = state.items.map((company) => (company.id === id ? row : company));
         if (state.item?.id === id) {
-          state.item = data;
+          state.item = row;
         }
       });
-      return data;
+      return row;
     },
     remove: async (id) => {
       await apiClient.delete(`/companies/${id}`);

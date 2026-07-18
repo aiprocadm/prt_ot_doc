@@ -33,8 +33,11 @@ _ROLE_VALUES = [
 def upgrade() -> None:
     bind = op.get_bind()
     if bind.dialect.name == "postgresql":
-        for value in _ROLE_VALUES:
-            op.execute(f"ALTER TYPE roleenum ADD VALUE IF NOT EXISTS '{value}'")
+        # POST-2: enum extension commits outside the migration tx (PG forbids
+        # using a new value in the tx that added it); IF NOT EXISTS = retry-safe.
+        with op.get_context().autocommit_block():
+            for value in _ROLE_VALUES:
+                op.execute(f"ALTER TYPE roleenum ADD VALUE IF NOT EXISTS '{value}'")
 
     op.create_table(
         "user_role",
@@ -69,7 +72,9 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("tenant_id", "company_id", "name", name="uq_department_company_name"),
     )
-    op.create_index("ix_department_company", "department", ["tenant_id", "company_id"], unique=False)
+    op.create_index(
+        "ix_department_company", "department", ["tenant_id", "company_id"], unique=False
+    )
 
     op.create_table(
         "contract",
@@ -201,7 +206,12 @@ def upgrade() -> None:
     op.add_column("document", sa.Column("order_id", sa.String(length=36), nullable=True))
     op.add_column("document", sa.Column("invoice_id", sa.String(length=36), nullable=True))
     op.create_foreign_key(
-        "fk_document_department", "document", "department", ["department_id"], ["id"], ondelete="SET NULL"
+        "fk_document_department",
+        "document",
+        "department",
+        ["department_id"],
+        ["id"],
+        ondelete="SET NULL",
     )
     op.create_foreign_key(
         "fk_document_contract", "document", "contract", ["contract_id"], ["id"], ondelete="SET NULL"

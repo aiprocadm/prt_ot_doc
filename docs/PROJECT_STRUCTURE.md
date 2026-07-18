@@ -32,7 +32,7 @@
 - `scripts/repo_audit.py` — reproducible repository inventory for roots/manifests/configs/docs/legacy-path flags, writing both `docs/audit/REPOSITORY_AUDIT.md` and `docs/audit/REPOSITORY_AUDIT.json`.
 - `Makefile` target `branded-smoke` — canonical shell entry for the same smoke check.
 - `scripts/smoke.sh` — broader repo smoke covering migrations/readiness/basic API probes.
-- `backend/.env.example` and `.env.example` — mirrored baseline environment templates; keep them aligned with `docs/SETUP.md` and `docs/ENV_REFERENCE.md`.
+- `backend/.env.example` and `.env.example` — mirrored baseline environment templates; keep them aligned with `docs/SETUP.md`.
 
 ## Structural audit conclusions
 - `frontend/package.json` is the **only** active frontend manifest.
