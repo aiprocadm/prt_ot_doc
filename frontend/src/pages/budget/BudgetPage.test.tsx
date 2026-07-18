@@ -4,8 +4,11 @@ import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { budgetApi } from "@/api/budget";
+import { formatRub } from "@/pages/budget/budgetVocab";
 import type {
+  BudgetArticlePageDto,
   BudgetBreakdownDto,
+  BudgetExpensePageDto,
   BudgetOverviewDto,
   SafetyBudgetDetailDto,
   SafetyBudgetPageDto
@@ -33,10 +36,22 @@ vi.mock("@/api/budget", async (importOriginal) => {
       listExpenses: vi.fn(),
       createExpense: vi.fn(),
       updateExpense: vi.fn(),
-      deleteExpense: vi.fn()
+      deleteExpense: vi.fn(),
+      listBranchesLite: vi.fn()
     }
   };
 });
+
+// ExpenseFormDialog's optional company/site pickers reuse analyticsApi's directory lookups
+// (same pattern as ManagementDashboardPage) — mocked here so opening the dialog never hits
+// the network in tests.
+const analyticsMock = vi.hoisted(() => ({
+  getCompanies: vi.fn(),
+  getSites: vi.fn(),
+  getContractors: vi.fn()
+}));
+
+vi.mock("@/api/analyticsApi", () => ({ analyticsApi: analyticsMock }));
 
 vi.mock("@/components/permissions/Can", () => ({
   Can: ({ children }: { children: unknown }) =>
@@ -130,6 +145,56 @@ const BUDGET_DETAIL: SafetyBudgetDetailDto = {
   by_article: [{ article_id: "art1", article_name: "Обучение по ОТ", amount: 40000 }]
 };
 
+const ARTICLES_PAGE: BudgetArticlePageDto = {
+  items: [
+    { id: "art1", code: "TRN-001", name: "Обучение по ОТ", domain: "training", is_active: true },
+    { id: "art2", code: "EVT-001", name: "Мероприятия по ОТ", domain: "events", is_active: true },
+    { id: "art3", code: "UNI-001", name: "Универсальная статья", domain: null, is_active: true },
+    { id: "art4", code: "MED-001", name: "Медосмотр (неактивна)", domain: "medical", is_active: false }
+  ],
+  total: 4,
+  limit: 200,
+  offset: 0
+};
+
+const EXPENSES_PAGE: BudgetExpensePageDto = {
+  items: [
+    {
+      id: "exp1",
+      domain: "training",
+      article_id: "art1",
+      article_name: "Обучение по ОТ",
+      title: "Курс по ОТ",
+      occurred_on: "2026-03-05",
+      amount: 15000,
+      company_id: null,
+      branch_id: null,
+      site_id: null,
+      entity_type: null,
+      entity_id: null,
+      notes: null
+    },
+    {
+      id: "exp2",
+      domain: "events",
+      article_id: null,
+      article_name: null,
+      title: "Инструктаж",
+      occurred_on: "2026-04-10",
+      amount: 3000,
+      company_id: null,
+      branch_id: null,
+      site_id: null,
+      entity_type: null,
+      entity_id: null,
+      notes: null
+    }
+  ],
+  total: 2,
+  limit: 100,
+  offset: 0
+};
+
 const FEATURE_OFF_ERROR = { status: 404, message: "Budget feature is not enabled for this tenant" };
 
 beforeEach(() => {
@@ -142,6 +207,10 @@ beforeEach(() => {
   (budgetApi.getBudget as any).mockResolvedValue(BUDGET_DETAIL);
   (budgetApi.listArticles as any).mockResolvedValue(EMPTY_PAGE);
   (budgetApi.listExpenses as any).mockResolvedValue(EMPTY_PAGE);
+  (budgetApi.listBranchesLite as any).mockResolvedValue({ items: [] });
+  analyticsMock.getCompanies.mockResolvedValue({ items: [] });
+  analyticsMock.getSites.mockResolvedValue({ items: [] });
+  analyticsMock.getContractors.mockResolvedValue({ items: [] });
 });
 
 const renderPage = () =>
@@ -151,11 +220,29 @@ const renderPage = () =>
     </MemoryRouter>
   );
 
+// getByText's default normalizer collapses whitespace (incl. NBSP) in the DOM text it scans,
+// but does NOT run the same normalization over a plain-string matcher — so a matcher built
+// from formatRub() (which groups digits with  ) never equals the collapsed DOM text
+// unless we pre-normalize it the same way here.
+const rub = (value: number) => formatRub(value).replace(/ /g, " ");
+
 const openBudgetsTab = async () => {
   const user = userEvent.setup();
   const tab = await screen.findByRole("tab", { name: "Бюджеты" });
   await user.click(tab);
   await screen.findByText("Обучение 2026", { selector: "td" });
+};
+
+const openExpensesTab = async () => {
+  const user = userEvent.setup();
+  const tab = await screen.findByRole("tab", { name: "Расходы" });
+  await user.click(tab);
+};
+
+const openArticlesTab = async () => {
+  const user = userEvent.setup();
+  const tab = await screen.findByRole("tab", { name: "Статьи" });
+  await user.click(tab);
 };
 
 describe("BudgetPage", () => {
@@ -299,5 +386,154 @@ describe("BudgetPage", () => {
     renderPage();
 
     expect(await screen.findByText("Функция недоступна")).toBeInTheDocument();
+  });
+
+  it("renders the expenses list; the domain filter refetches without empty date bounds", async () => {
+    (budgetApi.listArticles as any).mockResolvedValue(ARTICLES_PAGE);
+    (budgetApi.listExpenses as any).mockResolvedValue(EXPENSES_PAGE);
+    renderPage();
+    await openExpensesTab();
+
+    expect(await screen.findByText("Курс по ОТ")).toBeInTheDocument();
+    expect(screen.getByText(rub(15000))).toBeInTheDocument();
+    expect(screen.getByText("Инструктаж")).toBeInTheDocument();
+    expect(screen.getByText("— без статьи")).toBeInTheDocument();
+
+    (budgetApi.listExpenses as any).mockClear();
+    (budgetApi.listExpenses as any).mockResolvedValue(EXPENSES_PAGE);
+
+    fireEvent.change(screen.getByLabelText("Домен"), { target: { value: "training" } });
+
+    await waitFor(() => expect(budgetApi.listExpenses).toHaveBeenCalled());
+    const params = (budgetApi.listExpenses as any).mock.calls.at(-1)[0];
+    expect(params).toEqual({ domain: "training" });
+  });
+
+  it("creates an expense with domain-filtered article options and no entity link when unchecked", async () => {
+    (budgetApi.listArticles as any).mockResolvedValue(ARTICLES_PAGE);
+    (budgetApi.listExpenses as any).mockResolvedValue(EXPENSES_PAGE);
+    (budgetApi.createExpense as any).mockResolvedValue({ ...EXPENSES_PAGE.items[0], id: "exp3" });
+    renderPage();
+    await openExpensesTab();
+    await screen.findByText("Курс по ОТ");
+
+    fireEvent.click(screen.getByRole("button", { name: "Новый расход" }));
+    const dialog = await screen.findByRole("dialog");
+
+    fireEvent.change(within(dialog).getByLabelText("Домен"), { target: { value: "events" } });
+
+    // Домен events -> статья либо events, либо универсальная; training/неактивная medical скрыты.
+    expect(within(dialog).getByText("Мероприятия по ОТ")).toBeInTheDocument();
+    expect(within(dialog).getByText("Универсальная статья")).toBeInTheDocument();
+    expect(within(dialog).queryByText("Обучение по ОТ")).not.toBeInTheDocument();
+    expect(within(dialog).queryByText("Медосмотр (неактивна)")).not.toBeInTheDocument();
+
+    fireEvent.change(within(dialog).getByLabelText("Название"), {
+      target: { value: "Инструктаж по электробезопасности" }
+    });
+    fireEvent.change(within(dialog).getByLabelText("Дата"), { target: { value: "2026-05-01" } });
+    fireEvent.change(within(dialog).getByLabelText("Сумма"), { target: { value: "2500" } });
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Сохранить" }));
+
+    await waitFor(() => expect(budgetApi.createExpense).toHaveBeenCalled());
+    expect(budgetApi.createExpense).toHaveBeenCalledWith({
+      domain: "events",
+      title: "Инструктаж по электробезопасности",
+      occurred_on: "2026-05-01",
+      amount: 2500,
+      article_id: null,
+      company_id: null,
+      branch_id: null,
+      site_id: null,
+      notes: null
+    });
+    await waitFor(() => expect(budgetApi.getOverview).toHaveBeenCalledTimes(2));
+  });
+
+  it("sends entity_type derived from the domain when the entity link checkbox is checked", async () => {
+    (budgetApi.listArticles as any).mockResolvedValue(ARTICLES_PAGE);
+    (budgetApi.listExpenses as any).mockResolvedValue(EXPENSES_PAGE);
+    (budgetApi.createExpense as any).mockResolvedValue({ ...EXPENSES_PAGE.items[0], id: "exp4" });
+    renderPage();
+    await openExpensesTab();
+    await screen.findByText("Курс по ОТ");
+
+    fireEvent.click(screen.getByRole("button", { name: "Новый расход" }));
+    const dialog = await screen.findByRole("dialog");
+
+    fireEvent.change(within(dialog).getByLabelText("Домен"), { target: { value: "events" } });
+    fireEvent.change(within(dialog).getByLabelText("Название"), { target: { value: "КП по итогам проверки" } });
+    fireEvent.change(within(dialog).getByLabelText("Дата"), { target: { value: "2026-05-02" } });
+    fireEvent.change(within(dialog).getByLabelText("Сумма"), { target: { value: "1000" } });
+
+    fireEvent.click(within(dialog).getByLabelText("Связать с записью"));
+    // entity_type read-only и выводится из выбранного домена (events -> corrective_action).
+    expect(within(dialog).getByLabelText("Тип записи")).toHaveValue("corrective_action");
+    fireEvent.change(within(dialog).getByLabelText("ID записи"), { target: { value: "ca-42" } });
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Сохранить" }));
+
+    await waitFor(() => expect(budgetApi.createExpense).toHaveBeenCalled());
+    expect(budgetApi.createExpense).toHaveBeenCalledWith({
+      domain: "events",
+      title: "КП по итогам проверки",
+      occurred_on: "2026-05-02",
+      amount: 1000,
+      article_id: null,
+      company_id: null,
+      branch_id: null,
+      site_id: null,
+      notes: null,
+      entity_type: "corrective_action",
+      entity_id: "ca-42"
+    });
+  });
+
+  it("deletes an expense after confirm and reloads", async () => {
+    (budgetApi.listArticles as any).mockResolvedValue(ARTICLES_PAGE);
+    (budgetApi.listExpenses as any).mockResolvedValue(EXPENSES_PAGE);
+    (budgetApi.deleteExpense as any).mockResolvedValue(undefined);
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    renderPage();
+    await openExpensesTab();
+    await screen.findByText("Курс по ОТ");
+
+    const row = screen.getByText("Курс по ОТ").closest("tr");
+    expect(row).not.toBeNull();
+    fireEvent.click(within(row as HTMLElement).getByRole("button", { name: "Удалить" }));
+
+    await waitFor(() => expect(budgetApi.deleteExpense).toHaveBeenCalledWith("exp1"));
+    await waitFor(() => expect(budgetApi.getOverview).toHaveBeenCalledTimes(2));
+  });
+
+  it("renders the articles list and seeds default articles then reloads", async () => {
+    (budgetApi.listArticles as any).mockResolvedValue(ARTICLES_PAGE);
+    (budgetApi.seedDefaultArticles as any).mockResolvedValue({ created: 5, skipped: 2 });
+    renderPage();
+    await openArticlesTab();
+
+    expect(await screen.findByText("Универсальная статья")).toBeInTheDocument();
+    expect(screen.getByText("Универсальная")).toBeInTheDocument();
+    expect(screen.getByText("Отключена")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Заполнить стандартными" }));
+
+    await waitFor(() => expect(budgetApi.seedDefaultArticles).toHaveBeenCalled());
+    await waitFor(() => expect(budgetApi.getOverview).toHaveBeenCalledTimes(2));
+  });
+
+  it("disables the code field when editing an article", async () => {
+    (budgetApi.listArticles as any).mockResolvedValue(ARTICLES_PAGE);
+    renderPage();
+    await openArticlesTab();
+    await screen.findByText("Универсальная статья");
+
+    const row = screen.getByText("Универсальная статья").closest("tr");
+    expect(row).not.toBeNull();
+    fireEvent.click(within(row as HTMLElement).getByRole("button", { name: "Изменить" }));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByLabelText("Код")).toBeDisabled();
   });
 });

@@ -1,5 +1,6 @@
 import { apiClient } from "@/api/client";
 import type { ApiError } from "@/types/dto/common";
+import type { DirectoryItemDto } from "@/types/dto/analytics";
 import type {
   BreakdownDimension,
   BudgetArticleCreateInput,
@@ -103,5 +104,17 @@ export const budgetApi = {
   },
   async deleteExpense(id: string): Promise<void> {
     await apiClient.delete(`${BASE}/expenses/${id}`);
+  },
+  /**
+   * Лёгкий справочник филиалов для опционального пикера в ExpenseFormDialog.
+   * Компании/объекты уже есть в analyticsApi (getCompanies/getSites — тот же паттерн,
+   * что и у ManagementDashboardPage); для филиалов типизированного справочника не было,
+   * поэтому добавлен здесь поверх существующего GET /branches (без нового бэкенд-эндпоинта).
+   */
+  async listBranchesLite(): Promise<{ items?: DirectoryItemDto[] }> {
+    const { data } = await apiClient.get<{ items?: DirectoryItemDto[] }>("/branches", {
+      params: { limit: 200 }
+    });
+    return data;
   }
 };

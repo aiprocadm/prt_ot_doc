@@ -6,7 +6,9 @@ import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingScreen } from "@/components/common/LoadingScreen";
 import { RegistryPageHeader } from "@/components/common/RegistryPageHeader";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ArticlesTab } from "@/features/budget/ArticlesTab";
 import { BudgetsTab } from "@/features/budget/BudgetsTab";
+import { ExpensesTab } from "@/features/budget/ExpensesTab";
 import { OverviewTab } from "@/features/budget/OverviewTab";
 import { useAsyncResource } from "@/hooks/useAsyncResource";
 import type {
@@ -61,6 +63,10 @@ const BudgetPage = () => {
     );
   }
 
+  // Общий guarded reload передаётся всем вкладкам-мутаторам (Бюджеты/Расходы/Статьи):
+  // после любой мутации перезагружает весь набор данных страницы, сохраняя dateWindow.
+  const reloadAll = () => void budgetRes.reload().catch(() => undefined);
+
   return (
     <div className="space-y-4">
       <RegistryPageHeader
@@ -83,16 +89,17 @@ const BudgetPage = () => {
             <OverviewTab overview={budgetRes.data.overview} onWindowChange={setDateWindow} />
           </TabsContent>
           <TabsContent value="budgets" data-testid="budget-tab-budgets">
-            <BudgetsTab
-              budgets={budgetRes.data.budgets}
-              onChanged={() => void budgetRes.reload().catch(() => undefined)}
+            <BudgetsTab budgets={budgetRes.data.budgets} onChanged={reloadAll} />
+          </TabsContent>
+          <TabsContent value="expenses" data-testid="budget-tab-expenses">
+            <ExpensesTab
+              expenses={budgetRes.data.expenses}
+              articles={budgetRes.data.articles}
+              onChanged={reloadAll}
             />
           </TabsContent>
-          <TabsContent value="expenses">
-            <div data-testid="budget-tab-expenses" />
-          </TabsContent>
-          <TabsContent value="articles">
-            <div data-testid="budget-tab-articles" />
+          <TabsContent value="articles" data-testid="budget-tab-articles">
+            <ArticlesTab articles={budgetRes.data.articles} onChanged={reloadAll} />
           </TabsContent>
         </Tabs>
       ) : null}
