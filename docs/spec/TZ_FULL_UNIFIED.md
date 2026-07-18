@@ -323,7 +323,7 @@
 - Базовые сущности (`vNext §5.1`): группы компаний, компании, филиалы, объекты, площадки, подразделения, рабочие места, должности, профессии, сотрудники, назначения, подрядчики, посетители, оборудование, договоры, проекты.
 - Единая карточка сотрудника (360°) — `vNext §5.2`. Phase 3.2 backend, frontend deferred.
 - Единая карточка объекта — `vNext §5.3`.
-- Data Quality Layer + Data Quality Dashboard — `vNext §5.4`. Backend MVP сделан (Phase 3.1, 7 правил), Dashboard UI `[v1.1]`.
+- Data Quality Layer + Data Quality Dashboard — `vNext §5.4`. Backend MVP сделан (Phase 3.1, 10 правил движка), Dashboard UI `[v1.1]`.
 
 ### B.5 Документная фабрика и ЭДО-контур `[full]`
 - Сквозная трассировка: template → version → layout → replace map → pipeline profile → instance → version → approvals → signatures → archive → external delivery (`vNext §6.1`).
@@ -502,6 +502,7 @@
 - vNext Phase 1 (Architectural foundation) — `complete` (Workspaces / RBAC module / Tenant isolation audit).
 - vNext Phase 2 (Operational dashboard / Health checks) — backend `done`, frontend `pending`.
 - vNext Phase 3 (Data Quality + Unified Employee Card) — DQ backend MVP `done` (10 правил), DQ Dashboard frontend `done`, Employee Card backend aggregate + UI + Documents/Briefings/Deadlines секции `done` (Sessions 19/20/21 — `GET /api/v1/employees/{id}` + `EmployeeCardPage.tsx` 11 табов).
+- vNext Phase 4 (Calendar & Search) — `done`. Smart Calendar backend aggregator (Session 22) + UI (Session 23 — `CalendarPage.tsx` с day/week/month/year/list, фильтры по source_types/person_id/site_id, drill-down, overdue highlighting, split-permission `CALENDAR_VIEW`); ICS export (Session 24 — `/calendar/events.ics`); plan/fact comparison (Sessions 25–26); SLA tracking backend + UI (Sessions 27–28); resource load heatmap, saved views CRUD, CMD+K palette с entity grouping (Sessions 29–32); backend `SearchService.search()` accuracy tests (`tests/test_search_service_accuracy.py`, 8 кейсов); saved-search shortcuts и recent clicked entities в CMD+K palette (`CommandBar.tsx` секции «Сохранённые запросы» + «Недавно открытые» с persistent `ux.commandbar.recentEntities.v1` + ↑↓/Enter keyboard nav).
 - vNext Phase 4 (Calendar & Search) — **COMPLETE.** Smart Calendar Task 4.1 `done` (Sessions 22-30 — backend aggregator + UI day/week/month/year/list + ICS export RFC 5545 + plan/fact comparison + SLA tracking + resource load heatmap + saved per-user views); Universal Search Task 4.2 `done` (Sessions 31-35 — pre-existing backend FTS index + CMD+K palette с entity results grouped by 24 types + 7 type-to-execute commands + ARIA listbox keyboard nav ↑↓/Enter/Home/End + saved searches в палитре с lazy session-cache (S34) + client-side recent-entities tracking с 30-day TTL + dedup (S35) + backend `SearchService` index accuracy tests 35 cases / 6 classes (S33)). Optional polish (non-acceptance): score-based unified ranking, per-tenant relevance tuning, i18n executable commands.
 - vNext Phases 5–10 — `planned` (см. §D).
 
@@ -517,6 +518,12 @@
 | Phase 1 — Architectural Foundation | P1 | Role-based workspaces / RBAC module / Tenant isolation audit | ✅ complete |
 | Phase 2 — Operational Dashboard | P1 | Command Center / Health Check Engine | 🟡 backend done, frontend pending |
 | Phase 3 — Data Quality & Master Data | P1 | DQ Layer / Unified Employee Card / Site Card | 🟢 DQ + Employee Card (backend + UI + Documents/Briefings/Deadlines) done; Site Card pending |
+| Phase 4 — Calendar & Search | P2 | Smart Calendar / Universal Search / Command Bar | ✅ complete (Sessions 22–32 + Phase 4.2 tail: SearchService accuracy tests + saved-search shortcuts + recent clicked entities in CMD+K palette) |
+| Phase 5 — Document Factory Hardening | P2 | Template lint / Compare / Header-footer / Replace edge cases | 🟡 Phase 5.1 — template lint extended (else/elif + unbalanced delim + available_fields), Variable Inspector (`GET /templates/{tid}/versions/{vid}/variables` + `inspect_template_variables()`), render edge-case suite (42 cases — null/0/False/empty/Cyrillic/XML-chars/filters/if-elif-else/loops/header.xml/sandbox) done; preview accuracy and migration of existing templates pending; Task 5.2 (Header/Footer + Replace) not started |
+| Phase 6 — Integration & Webhooks | P2 | Webhook delivery / Public API hardening / Импорт | 📋 planned |
+| Phase 7 — Mobile & Field-Ready | P2 | PWA hardening / Offline sync / Field workflows / Kiosk | 📋 planned |
+| Phase 8 — Analytics & Reporting | P3 | Operational + Management dashboards / Report builder / Product analytics | 📋 planned |
+| Phase 9 — Performance & Scale | P3 | Query optimization / Partitioning / Caching | 📋 planned |
 | Phase 4 — Calendar & Search | P2 | Smart Calendar / Universal Search / Command Bar | ✅ COMPLETE — 4.1 Smart Calendar 100% done (Sessions 22-30); 4.2 Universal Search 100% done (Sessions 31-35, CMD+K palette + keyboard nav + saved-searches + recent-entities + backend test coverage); optional polish (non-acceptance): score-based ranking, per-tenant relevance tuning, i18n executable commands |
 | Phase 5 — Document Factory Hardening | P2 | Template lint / Compare / Header-footer / Replace edge cases | ✅ COMPLETE (Sessions 36-40: linter + inspector + audit + preview parity; 50 replace + 33 header/footer tests) |
 | Phase 6 — Integration & Webhooks | P2 | Webhook delivery / Public API hardening / Импорт | ✅ COMPLETE (Session 41 — webhook CRUD pin + 28 tests; Session 42 — public API pin + 24 tests) |
@@ -733,7 +740,7 @@
 | Analytics | `backend/app/modules/{analytics,export_center,projections}/*`, `backend/app/api/routes/{reports,exports,dashboard}.py` | partial (`[v1.1]`) |
 | AI Copilot | — | `[v2.0]` |
 | **Cross-cutting:** Operational dashboard | `backend/app/modules/operational_dashboard/*` | backend done (Phase 2.1), frontend `[v1.1]` |
-| **Cross-cutting:** Data Quality | `backend/app/modules/data_quality/*` | backend MVP done (7 правил, Phase 3.1), Dashboard UI `[v1.1]` |
+| **Cross-cutting:** Data Quality | `backend/app/modules/data_quality/*` | backend MVP done (10 правил, Phase 3.1), Dashboard UI `[v1.1]` |
 | **Cross-cutting:** Health checks | `backend/app/modules/health_checks/*` | done (Phase 2.2) |
 | **Cross-cutting:** Audit | `backend/app/modules/audit/*`, `backend/app/domains/audit/*` | MVP done |
 | **Cross-cutting:** EDO | `backend/app/modules/edo/*`, `backend/app/api/routes/edo_workflow.py` | partial (vNext §6.9) |
