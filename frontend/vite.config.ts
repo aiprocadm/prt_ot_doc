@@ -13,26 +13,20 @@ const manualChunks: NonNullable<UserConfig["build"]>["rollupOptions"] extends {
     return undefined;
   }
 
-  if (id.includes("react") || id.includes("scheduler")) {
-    return "vendor-react";
-  }
-  if (id.includes("@tanstack") || id.includes("zustand") || id.includes("immer")) {
-    return "vendor-state";
-  }
-  if (id.includes("@radix-ui") || id.includes("lucide-react") || id.includes("sonner")) {
-    return "vendor-ui";
-  }
-  if (id.includes("react-hook-form") || id.includes("@hookform") || id.includes("zod")) {
-    return "vendor-forms";
-  }
-  if (id.includes("i18next") || id.includes("react-i18next") || id.includes("date-fns")) {
-    return "vendor-i18n";
-  }
-  if (id.includes("axios")) {
-    return "vendor-network";
-  }
-
-  return "vendor-misc";
+  // Все зависимости — одним куском.
+  //
+  // Прежняя разбивка на vendor-react / vendor-ui / vendor-state / ... была
+  // сделана по подстроке в пути, из-за чего react-hook-form, react-i18next,
+  // lucide-react и @radix-ui/react-* попадали в vendor-react (правило
+  // id.includes("react") стояло первым и перехватывало их). Между кусками
+  // возникали встречные зависимости, и в собранном приложении React
+  // оказывался undefined — белый экран с "Cannot read properties of
+  // undefined (reading 'useState' / 'createContext')". В dev-режиме этого
+  // не видно: там модули не склеиваются.
+  //
+  // Один общий кусок исключает такие циклы по построению. Точечная разбивка
+  // возможна, но требует учёта реального графа зависимостей, а не подстрок.
+  return "vendor";
 };
 
 export default defineConfig(({ mode }) => {
