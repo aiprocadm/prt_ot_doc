@@ -10,6 +10,8 @@ import type {
   BudgetBreakdownDto,
   BudgetExpensePageDto,
   BudgetOverviewDto,
+  BudgetReimbursementDetailDto,
+  BudgetReimbursementPageDto,
   SafetyBudgetDetailDto,
   SafetyBudgetPageDto
 } from "@/types/dto/budget";
@@ -37,6 +39,14 @@ vi.mock("@/api/budget", async (importOriginal) => {
       createExpense: vi.fn(),
       updateExpense: vi.fn(),
       deleteExpense: vi.fn(),
+      listReimbursements: vi.fn(),
+      getReimbursement: vi.fn(),
+      createReimbursement: vi.fn(),
+      updateReimbursement: vi.fn(),
+      deleteReimbursement: vi.fn(),
+      addReimbursementItem: vi.fn(),
+      removeReimbursementItem: vi.fn(),
+      reimbursementAction: vi.fn(),
       listBranchesLite: vi.fn()
     }
   };
@@ -57,6 +67,12 @@ vi.mock("@/components/permissions/Can", () => ({
   Can: ({ children }: { children: unknown }) =>
     typeof children === "function" ? (children as (allowed: boolean) => unknown)(true) : children
 }));
+
+// ReimbursementsTab валидирует решение (сумма/причина) ДО запроса и сообщает об этом тостом —
+// без мока проверить «в сеть не ушло, пользователь предупреждён» нечем.
+const toastMock = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
+
+vi.mock("sonner", () => ({ toast: toastMock, Toaster: () => null }));
 
 const EMPTY_PAGE = { items: [], total: 0, limit: 0, offset: 0 };
 
@@ -219,12 +235,80 @@ const LINKED_EXPENSES_PAGE: BudgetExpensePageDto = {
   offset: 0
 };
 
+const REIMBURSEMENT_BASE = {
+  reference: null,
+  company_id: null,
+  decision_reason: null,
+  submitted_at: null,
+  decided_at: null,
+  paid_at: null,
+  notes: null
+};
+
+/** Три заявки в разных состояниях FSM — набор действий в строке зависит от статуса. */
+const REIMBURSEMENTS_PAGE: BudgetReimbursementPageDto = {
+  items: [
+    {
+      ...REIMBURSEMENT_BASE,
+      id: "rb1",
+      title: "Возмещение (черновик)",
+      status: "draft",
+      period_start: "2026-01-01",
+      period_end: "2026-06-30",
+      requested_amount: 50000,
+      approved_amount: null,
+      item_count: 1,
+      items_amount: 15000
+    },
+    {
+      ...REIMBURSEMENT_BASE,
+      id: "rb2",
+      title: "Возмещение (подана)",
+      status: "submitted",
+      period_start: "2026-01-01",
+      period_end: "2026-06-30",
+      requested_amount: 90000,
+      approved_amount: null,
+      submitted_at: "2026-07-01T00:00:00Z",
+      item_count: 2,
+      items_amount: 90000
+    },
+    {
+      ...REIMBURSEMENT_BASE,
+      id: "rb3",
+      title: "Возмещение (одобрена)",
+      status: "approved",
+      period_start: "2026-01-01",
+      period_end: "2026-12-31",
+      requested_amount: 202000,
+      approved_amount: 180000,
+      submitted_at: "2026-06-01T00:00:00Z",
+      decided_at: "2026-06-20T00:00:00Z",
+      item_count: 2,
+      items_amount: 202000
+    }
+  ],
+  total: 3,
+  limit: 100,
+  offset: 0
+};
+
+const REIMBURSEMENT_DETAIL: BudgetReimbursementDetailDto = {
+  ...REIMBURSEMENTS_PAGE.items[0],
+  items: [
+    { expense_id: "exp1", title: "Курс по ОТ", domain: "training", occurred_on: "2026-03-05", amount: 15000 }
+  ]
+};
+
 const FEATURE_OFF_ERROR = { status: 404, message: "Budget feature is not enabled for this tenant" };
 
 beforeEach(() => {
   // restoreAllMocks (не clearAllMocks): иначе vi.spyOn(window, "confirm") из delete-тестов
   // остаётся навешанным и протекает в последующие тесты файла.
   vi.restoreAllMocks();
+  // toastMock — обычные vi.fn(), restoreAllMocks их не трогает: чистим вызовы вручную.
+  toastMock.success.mockClear();
+  toastMock.error.mockClear();
   (budgetApi.getOverview as any).mockResolvedValue(OVERVIEW);
   (budgetApi.getBreakdown as any).mockImplementation(({ dimension }: { dimension: string }) =>
     Promise.resolve(BREAKDOWN_BY_DIMENSION[dimension])
@@ -233,6 +317,7 @@ beforeEach(() => {
   (budgetApi.getBudget as any).mockResolvedValue(BUDGET_DETAIL);
   (budgetApi.listArticles as any).mockResolvedValue(EMPTY_PAGE);
   (budgetApi.listExpenses as any).mockResolvedValue(EMPTY_PAGE);
+  (budgetApi.listReimbursements as any).mockResolvedValue(EMPTY_PAGE);
   (budgetApi.listBranchesLite as any).mockResolvedValue({ items: [] });
   analyticsMock.getCompanies.mockResolvedValue({ items: [] });
   analyticsMock.getSites.mockResolvedValue({ items: [] });
@@ -271,6 +356,15 @@ const openArticlesTab = async () => {
   const tab = await screen.findByRole("tab", { name: "Статьи" });
   await user.click(tab);
 };
+
+const openReimbursementsTab = async () => {
+  const user = userEvent.setup();
+  const tab = await screen.findByRole("tab", { name: "Возмещения СФР" });
+  await user.click(tab);
+};
+
+/** Строка заявки в таблице — действия зависят от статуса, поэтому ищем их внутри строки. */
+const reimbursementRow = (title: string) => screen.getByText(title).closest("tr") as HTMLElement;
 
 describe("BudgetPage", () => {
   it("renders overview with 4 domain cards, ppe warehouse badge and unpriced warning", async () => {
@@ -410,6 +504,7 @@ describe("BudgetPage", () => {
     (budgetApi.listBudgets as any).mockRejectedValue(FEATURE_OFF_ERROR);
     (budgetApi.listArticles as any).mockRejectedValue(FEATURE_OFF_ERROR);
     (budgetApi.listExpenses as any).mockRejectedValue(FEATURE_OFF_ERROR);
+    (budgetApi.listReimbursements as any).mockRejectedValue(FEATURE_OFF_ERROR);
     renderPage();
 
     expect(await screen.findByText("Функция недоступна")).toBeInTheDocument();
@@ -631,6 +726,174 @@ describe("BudgetPage", () => {
       domain: "training",
       article_id: null
     });
+  });
+
+  it("renders reimbursements with status-dependent actions", async () => {
+    (budgetApi.listReimbursements as any).mockResolvedValue(REIMBURSEMENTS_PAGE);
+    renderPage();
+    await openReimbursementsTab();
+
+    expect(await screen.findByText("Возмещение (черновик)")).toBeInTheDocument();
+    expect(screen.getByText(rub(180000))).toBeInTheDocument();
+
+    // draft: правка/удаление/подача разрешены.
+    const draft = within(reimbursementRow("Возмещение (черновик)"));
+    expect(draft.getByRole("button", { name: "Подать" })).toBeInTheDocument();
+    expect(draft.getByRole("button", { name: "Изменить" })).toBeInTheDocument();
+    expect(draft.getByRole("button", { name: "Удалить" })).toBeInTheDocument();
+    expect(draft.getByText("—")).toBeInTheDocument(); // одобренной суммы ещё нет
+
+    // submitted: бэкенд отдаст 409 на правку — кнопок правки/удаления быть не должно.
+    const submitted = within(reimbursementRow("Возмещение (подана)"));
+    expect(submitted.getByRole("button", { name: "Одобрить" })).toBeInTheDocument();
+    expect(submitted.getByRole("button", { name: "Отклонить" })).toBeInTheDocument();
+    expect(submitted.queryByRole("button", { name: "Изменить" })).not.toBeInTheDocument();
+    expect(submitted.queryByRole("button", { name: "Удалить" })).not.toBeInTheDocument();
+
+    const approved = within(reimbursementRow("Возмещение (одобрена)"));
+    expect(approved.getByRole("button", { name: "Выплатить" })).toBeInTheDocument();
+    expect(approved.queryByRole("button", { name: "Одобрить" })).not.toBeInTheDocument();
+  });
+
+  it("filters reimbursements by status through a dedicated request", async () => {
+    (budgetApi.listReimbursements as any).mockResolvedValue(REIMBURSEMENTS_PAGE);
+    renderPage();
+    await openReimbursementsTab();
+    await screen.findByText("Возмещение (черновик)");
+
+    (budgetApi.listReimbursements as any).mockResolvedValue({ ...EMPTY_PAGE, limit: 100 });
+    fireEvent.change(screen.getByLabelText("Статус"), { target: { value: "paid" } });
+
+    await waitFor(() => expect(budgetApi.listReimbursements).toHaveBeenLastCalledWith({ status: "paid" }));
+    // Пустой результат ПОД фильтром — отдельная подсказка, а не «заявок нет вообще».
+    expect(await screen.findByText("Ничего не найдено по фильтру")).toBeInTheDocument();
+  });
+
+  it("runs a no-input FSM action directly and reloads", async () => {
+    (budgetApi.listReimbursements as any).mockResolvedValue(REIMBURSEMENTS_PAGE);
+    (budgetApi.reimbursementAction as any).mockResolvedValue(REIMBURSEMENTS_PAGE.items[1]);
+    renderPage();
+    await openReimbursementsTab();
+    await screen.findByText("Возмещение (черновик)");
+
+    fireEvent.click(within(reimbursementRow("Возмещение (черновик)")).getByRole("button", { name: "Подать" }));
+
+    await waitFor(() => expect(budgetApi.reimbursementAction).toHaveBeenCalledWith("rb1", "submit"));
+    await waitFor(() => expect(budgetApi.getOverview).toHaveBeenCalledTimes(2));
+  });
+
+  it("prefills the approve dialog and refuses an amount above the requested one", async () => {
+    (budgetApi.listReimbursements as any).mockResolvedValue(REIMBURSEMENTS_PAGE);
+    (budgetApi.reimbursementAction as any).mockResolvedValue(REIMBURSEMENTS_PAGE.items[2]);
+    renderPage();
+    await openReimbursementsTab();
+    await screen.findByText("Возмещение (подана)");
+
+    fireEvent.click(within(reimbursementRow("Возмещение (подана)")).getByRole("button", { name: "Одобрить" }));
+    const dialog = await screen.findByRole("dialog");
+    const amount = within(dialog).getByLabelText("Одобренная сумма");
+    expect(amount).toHaveValue(90000); // по умолчанию — запрошенная сумма
+
+    fireEvent.change(amount, { target: { value: "999999" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Подтвердить" }));
+
+    // Бэкенд ответил бы 422 approved_amount_invalid — форма не должна доводить до запроса.
+    await waitFor(() => expect(toastMock.error).toHaveBeenCalled());
+    expect(budgetApi.reimbursementAction).not.toHaveBeenCalled();
+
+    fireEvent.change(amount, { target: { value: "70000" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Подтвердить" }));
+
+    await waitFor(() =>
+      expect(budgetApi.reimbursementAction).toHaveBeenCalledWith("rb2", "approve", { approved_amount: 70000 })
+    );
+  });
+
+  it("requires a reason before rejecting", async () => {
+    (budgetApi.listReimbursements as any).mockResolvedValue(REIMBURSEMENTS_PAGE);
+    (budgetApi.reimbursementAction as any).mockResolvedValue({
+      ...REIMBURSEMENTS_PAGE.items[1],
+      status: "rejected"
+    });
+    renderPage();
+    await openReimbursementsTab();
+    await screen.findByText("Возмещение (подана)");
+
+    fireEvent.click(within(reimbursementRow("Возмещение (подана)")).getByRole("button", { name: "Отклонить" }));
+    const dialog = await screen.findByRole("dialog");
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Подтвердить" }));
+    await waitFor(() => expect(toastMock.error).toHaveBeenCalled());
+    expect(budgetApi.reimbursementAction).not.toHaveBeenCalled();
+
+    fireEvent.change(within(dialog).getByLabelText("Причина отклонения"), {
+      target: { value: "  Нет документов  " }
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Подтвердить" }));
+
+    await waitFor(() =>
+      expect(budgetApi.reimbursementAction).toHaveBeenCalledWith("rb2", "reject", {
+        decision_reason: "Нет документов"
+      })
+    );
+  });
+
+  it("opens a claim, attaches an expense and hides already-linked ones from the picker", async () => {
+    (budgetApi.listReimbursements as any).mockResolvedValue(REIMBURSEMENTS_PAGE);
+    (budgetApi.listExpenses as any).mockResolvedValue(EXPENSES_PAGE);
+    (budgetApi.getReimbursement as any).mockResolvedValue(REIMBURSEMENT_DETAIL);
+    (budgetApi.addReimbursementItem as any).mockResolvedValue(REIMBURSEMENT_DETAIL.items[0]);
+    renderPage();
+    await openReimbursementsTab();
+    await screen.findByText("Возмещение (черновик)");
+
+    fireEvent.click(within(reimbursementRow("Возмещение (черновик)")).getByRole("button", { name: "Открыть" }));
+
+    await waitFor(() => expect(budgetApi.getReimbursement).toHaveBeenCalledWith("rb1"));
+    expect(await screen.findByText("Детали заявки")).toBeInTheDocument();
+    expect(screen.getByTestId("reimbursement-detail-item-count")).toHaveTextContent("Записей расходов: 1");
+
+    // exp1 уже в заявке — в пикере остаётся только exp2.
+    const picker = screen.getByLabelText("Добавить расход");
+    expect(within(picker).queryByText(/Курс по ОТ/)).not.toBeInTheDocument();
+    expect(within(picker).getByText(/Инструктаж/)).toBeInTheDocument();
+
+    fireEvent.change(picker, { target: { value: "exp2" } });
+    fireEvent.click(screen.getByRole("button", { name: "Добавить" }));
+
+    await waitFor(() => expect(budgetApi.addReimbursementItem).toHaveBeenCalledWith("rb1", "exp2"));
+    await waitFor(() => expect(budgetApi.getOverview).toHaveBeenCalledTimes(2));
+  });
+
+  it("detaches an expense from an open draft claim", async () => {
+    (budgetApi.listReimbursements as any).mockResolvedValue(REIMBURSEMENTS_PAGE);
+    (budgetApi.listExpenses as any).mockResolvedValue(EXPENSES_PAGE);
+    (budgetApi.getReimbursement as any).mockResolvedValue(REIMBURSEMENT_DETAIL);
+    (budgetApi.removeReimbursementItem as any).mockResolvedValue(undefined);
+    renderPage();
+    await openReimbursementsTab();
+    await screen.findByText("Возмещение (черновик)");
+
+    fireEvent.click(within(reimbursementRow("Возмещение (черновик)")).getByRole("button", { name: "Открыть" }));
+    await screen.findByText("Детали заявки");
+
+    fireEvent.click(screen.getByRole("button", { name: "Убрать" }));
+
+    await waitFor(() => expect(budgetApi.removeReimbursementItem).toHaveBeenCalledWith("rb1", "exp1"));
+  });
+
+  it("deletes a draft claim after confirm", async () => {
+    (budgetApi.listReimbursements as any).mockResolvedValue(REIMBURSEMENTS_PAGE);
+    (budgetApi.deleteReimbursement as any).mockResolvedValue(undefined);
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    renderPage();
+    await openReimbursementsTab();
+    await screen.findByText("Возмещение (черновик)");
+
+    fireEvent.click(within(reimbursementRow("Возмещение (черновик)")).getByRole("button", { name: "Удалить" }));
+
+    await waitFor(() => expect(budgetApi.deleteReimbursement).toHaveBeenCalledWith("rb1"));
+    await waitFor(() => expect(budgetApi.getOverview).toHaveBeenCalledTimes(2));
   });
 
   it("disables the code field when editing an article", async () => {
