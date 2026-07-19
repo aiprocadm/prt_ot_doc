@@ -14,7 +14,12 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from app.api.deps.tracing import TRACE_HEADER_ALIASES
 from app.core.config import Settings
 from app.core.metrics import get_metrics
-from app.core.request_context import reset_current_user_id, set_current_user_id
+from app.core.request_context import (
+    reset_current_user_id,
+    reset_request_scope,
+    set_current_user_id,
+    set_request_scope,
+)
 from app.core.tracing import reset_trace_id, set_trace_id
 
 
@@ -42,6 +47,9 @@ class ObservabilityMiddleware:
         trace_id = self._select_trace_id(headers)
         trace_token = set_trace_id(trace_id)
         user_token = set_current_user_id(None)
+        # Publish the scope so @audit_operation can attribute events on handlers
+        # that do not declare a ``request`` parameter.
+        scope_token = set_request_scope(scope)
         self._store_trace_in_scope(scope, trace_id)
         method = scope.get("method", "GET").upper()
         path = scope.get("path", "/")
@@ -118,6 +126,7 @@ class ObservabilityMiddleware:
                 )
             reset_trace_id(trace_token)
             reset_current_user_id(user_token)
+            reset_request_scope(scope_token)
 
     def _should_reject_by_header(self, headers: Headers) -> bool:
         content_length = headers.get("content-length")

@@ -5,6 +5,61 @@
 - **`tests/test_data_quality.py`** — класс `TestDocumentReadinessRule` (4 кейса), `expected_rules` в `TestDataQualityService` дополнен `document_readiness`.
 - **Frontend:** без изменений (`document` + `missing_field` уже в `WorkspaceDataQualityPage.tsx`).
 - **Validation:** локальный прогон `pytest tests/test_data_quality.py` в этой сессии не выполнен (Python runtime недоступен в agent shell); ожидается CI / локально: `python -m pytest tests/test_data_quality.py -p no:schemathesis`.
+## 2026-07-19 (fix/audit-decorator-silent-noop — контур `/ppe/*` «2xx без записи»: обе половины закрыты)
+
+### Fixed
+- **Сессия запроса не владела транзакцией** (`f3b4042e`, ранее без записи в CHANGELOG). В
+  `backend/app/api/dependencies.py` функция `get_session` отдавала `AsyncSession` и никогда не
+  коммитила, тогда как одноимённая `app.db.session.get_session` — коммитила. Роуты импортируют
+  первую, поэтому обработчик, который только делал `flush`, возвращал 2xx и терял запись при
+  закрытии сессии. Затронуто **12 route-модулей** без явного commit в цепочке вызовов (остальные 44
+  коммитят сами). Введён `transaction_scope(session)` в `backend/app/db/session.py` — единственное
+  определение контракта транзакции запроса (commit при чистом выходе, rollback при ошибке);
+  используется в `dependencies.get_session`, `session_scope` **и в дубле из `tests/conftest.py`**,
+  чтобы тестовый стенд больше не мог быть мягче прода. Плюс `rollback` перед 500 в
+  `data_quality` / `operational_dashboard` (они глушат ошибки БД и возвращаются штатно — иначе
+  commit на teardown падал бы с `PendingRollbackError`).
+- **`@audit_operation` писал в пустоту на 193 из 249 помеченных обработчиков.** Декоратор брал
+  запрос из `kwargs["request"]` и делал ранний `return`, если его нет. FastAPI передаёт обработчику
+  только объявленные им параметры, поэтому обработчик без `request` был «помечен, но нем».
+  `ObservabilityMiddleware` теперь публикует ASGI-scope в `ContextVar`
+  (`backend/app/core/request_context.py::get_current_request`), а декоратор пересобирает из него
+  `Request`, когда параметра нет: `request.state` лежит в `scope["state"]`, поэтому выставленный
+  аутентификацией `current_user_id` виден, а тело запроса не читается — канал `receive` не тронут.
+  `session` остаётся обязательным (запись должна лечь в транзакцию самого обработчика) и это
+  запинено AST-тестом по всем декорированным функциям.
+- **Падение записи аудита больше не роняет бизнес-операцию.** Аудит пишется внутри транзакции
+  обработчика, поэтому отклонённая строка оставляла транзакцию в aborted-состоянии, и commit в
+  `transaction_scope` затем падал — успешная запись превращалась в 500 с потерей данных. Вставка
+  обёрнута в SAVEPOINT (`begin_nested`), что и обещал внешний `except`. Запинено регрессионным
+  тестом.
+- **Нет молчаливых пропусков:** когда `session`, `request` или тенант не резолвятся, пишется
+  предупреждение (`audit_decorator.no_session` / `.no_request` / `.unresolved_tenant`) вместо
+  беззвучного выхода.
+
+### Tests
+- **`tests/test_audit_decorator_emits.py`** (новый) — AST-скан всех `@audit_operation`-обработчиков
+  на наличие `session`; сквозной тест на обработчике **без** параметра `request`
+  (`POST /api/v1/ppe/suppliers`) с чтением `AuditLog` через **отдельную** сессию; регрессия
+  «упавший аудит не откатывает бизнес-строку».
+- **Почему прежние тесты этого не ловили:** `tests/test_audit_log_immutability.py` пинил
+  неизменяемость записи, `tests/test_audit_chain_and_diff.py` — цепочку хэшей; ни один не проверял
+  **факт создания** записи. Каждый гейт защищал строку и ни один — её существование.
+
+### Validation
+- Полный бэкенд (`pytest -q -p no:randomly -n 6 --timeout=600`): собрано **4253** → **4222 passed +
+  31 skipped, 0 failed, EXIT=0**; ошибок сбора нет (сумма по `--collect-only` совпадает с прогоном,
+  т.е. тесты не потерялись). Выборки: новые тесты 3/3, `audit|observability|request_context|trace`
+  250/250, `ppe` 396/396. `ruff check --no-fix` и `ruff format --check` — clean. Локально Py3.12.3
+  при каноне 3.12.12 (mismatch отмечен, CI — источник истины). Фронт не затрагивался.
+
+### Known limitations
+- Пути с нерезолвимым тенантом (выход из системы, создание тенанта, публичные вебхуки, тикеты
+  портала) по-прежнему не пишут запись: `AuditLog.tenant_id` — FK, и плейсхолдер `"-"` был бы
+  отклонён БД. Теперь они предупреждают в лог. Атрибуция этих путей — отдельная задача.
+- Счёт тестов не бьётся с заявленным в `f3b4042e` («2439 tests, 7 pre-existing failures»). Пропажа
+  падений правдоподобно объясняется PR #762, разница в счёте — нет. Бейзлайн снимать заново.
+
 ## 2026-07-18 (claude/tz-continuation-d43adc — §12.4 Бюджет безопасности срез-1: кросс-доменное ядро)
 
 ### Added

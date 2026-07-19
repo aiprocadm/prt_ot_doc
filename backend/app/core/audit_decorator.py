@@ -21,6 +21,13 @@ Extracted automatically from kwargs/request.state:
 - ``user_id``     – from ``request.state.current_user_id``
 - ``ip``          – from ``request.client.host``
 - ``object_id``   – from the return value (attribute ``id_attr``), or ``"-"``
+
+Declaring ``request`` is optional. FastAPI only passes parameters a handler
+declares, so requiring it meant a handler that omitted it was audited into the
+void -- the decorator looked applied and wrote nothing. The request is now read
+from the ASGI scope published by ``ObservabilityMiddleware`` when the parameter
+is absent. Only ``session`` still has to be a parameter, because the entry must
+be written in the handler's own transaction.
 """
 
 from __future__ import annotations
@@ -33,6 +40,8 @@ from typing import Any, get_type_hints
 
 from fastapi import Request
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.request_context import get_current_request
 
 logger = logging.getLogger(__name__)
 
@@ -131,13 +140,36 @@ def audit_operation(
 
             # After successful completion, emit audit event.
             try:
-                request: Request | None = kwargs.get("request")
                 session: AsyncSession | None = kwargs.get("session")
+                if session is None:
+                    logger.warning(
+                        "audit_decorator.no_session",
+                        extra={"action": action, "entity_type": entity_type},
+                    )
+                    return result
 
-                if request is None or session is None:
+                # Fall back to the in-flight scope: most handlers never declare
+                # ``request``, and demanding it silently voided their auditing.
+                request: Request | None = kwargs.get("request") or get_current_request()
+                if request is None:
+                    logger.warning(
+                        "audit_decorator.no_request",
+                        extra={"action": action, "entity_type": entity_type},
+                    )
                     return result
 
                 tenant_id = _extract_tenant_id(kwargs)
+                if tenant_id == "-":
+                    # No tenant in scope (logout, tenant creation, public
+                    # webhooks, portal tickets). ``AuditLog.tenant_id`` is a FK,
+                    # so writing the placeholder would just be rejected by the
+                    # database; say so plainly instead of burying it in a
+                    # constraint error. Attributing these is follow-up work.
+                    logger.warning(
+                        "audit_decorator.unresolved_tenant",
+                        extra={"action": action, "entity_type": entity_type},
+                    )
+                    return result
                 user_id_raw = getattr(request.state, "current_user_id", None)
                 user_id = str(user_id_raw) if user_id_raw is not None else None
                 ip = request.client.host if request.client else "unknown"
@@ -154,15 +186,22 @@ def audit_operation(
                 # Import here to avoid circular imports at module load time.
                 from app.services.audit import AuditService  # noqa: PLC0415
 
-                await AuditService(session).log_event(
-                    tenant_id=tenant_id,
-                    action=action,
-                    object_type=entity_type,
-                    object_id=object_id,
-                    user_id=user_id,
-                    ip=ip,
-                    details=extra or None,
-                )
+                # SAVEPOINT: a rejected audit row (unresolved tenant, actor that
+                # is not a user row) would otherwise poison the request
+                # transaction, and the commit in ``transaction_scope`` would then
+                # fail -- turning a successful write into a 500. Nesting confines
+                # the damage to the audit insert, which is what the outer
+                # ``except`` already promises.
+                async with session.begin_nested():
+                    await AuditService(session).log_event(
+                        tenant_id=tenant_id,
+                        action=action,
+                        object_type=entity_type,
+                        object_id=object_id,
+                        user_id=user_id,
+                        ip=ip,
+                        details=extra or None,
+                    )
             except Exception:  # noqa: BLE001
                 # Audit failure must never break the request.
                 logger.exception(
