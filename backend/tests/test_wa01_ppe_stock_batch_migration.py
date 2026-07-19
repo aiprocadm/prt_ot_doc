@@ -42,8 +42,11 @@ def test_ppe_stock_batch_model_table_and_columns() -> None:
         "certificate_expires_at",
         "location",
     } <= cols
-    uniques = {c.name for c in PPEStockBatch.__table__.constraints if c.name}
-    assert "uq_ppe_stock_batch_item_no" in uniques
+    # wa07 (20260704) replaced the plain UniqueConstraint on
+    # (tenant, item, batch_no) with a partial unique *index* that also spans
+    # location — so the live model carries an index, not a constraint.
+    unique_indexes = {ix.name for ix in PPEStockBatch.__table__.indexes if ix.unique}
+    assert "uq_ppe_stock_batch_item_no_loc" in unique_indexes
 
 
 def test_ppe_stock_batch_reexported_from_registry() -> None:

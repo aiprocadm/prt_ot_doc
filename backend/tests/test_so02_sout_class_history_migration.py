@@ -1,6 +1,7 @@
 """Pin: so02 СОУТ class-history migration shape (P10-04 срез-2)."""
 from __future__ import annotations
 
+import ast
 import importlib.util
 from pathlib import Path
 
@@ -30,11 +31,25 @@ def test_upgrade_downgrade_callable() -> None:
     assert callable(mod.downgrade)
 
 
+def _count_op_calls(text: str, attr: str) -> int:
+    """Count real ``op.<attr>(...)`` calls. Counting raw substrings instead
+    would also match mentions inside comments and docstrings."""
+    return sum(
+        1
+        for node in ast.walk(ast.parse(text))
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == attr
+        and isinstance(node.func.value, ast.Name)
+        and node.func.value.id == "op"
+    )
+
+
 def test_creates_single_table_reusing_existing_enum() -> None:
     text = _MIGRATION.read_text(encoding="utf-8")
     assert '"sout_class_history"' in text
-    assert text.count("op.create_table") == 1
-    assert text.count("op.drop_table") == 1
+    assert _count_op_calls(text, "create_table") == 1
+    assert _count_op_calls(text, "drop_table") == 1
     # soutclass owned by so01 → referenced, never re-created here
     assert "create_type=False" in text
     assert 'enum_type.create' not in text

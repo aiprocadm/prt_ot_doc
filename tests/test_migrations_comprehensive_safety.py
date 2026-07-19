@@ -638,6 +638,21 @@ def _a1_has_create_type_false(call: ast.Call) -> bool:
     return False
 
 
+def _a1_is_non_native(call: ast.Call) -> bool:
+    """True for ``native_enum=False`` declarations — they render as VARCHAR +
+    CHECK and never emit ``CREATE TYPE``, so they cannot double-create. Mirrors
+    the same skip in ``test_migrations_enum_create_type_safety.py``.
+    """
+    for kw in call.keywords:
+        if (
+            kw.arg == "native_enum"
+            and isinstance(kw.value, ast.Constant)
+            and kw.value.value is False
+        ):
+            return True
+    return False
+
+
 def _a1_audit_one(path: Path) -> list[str]:
     src = path.read_text(encoding="utf-8")
     try:
@@ -657,7 +672,7 @@ def _a1_audit_one(path: Path) -> list[str]:
         call_str, enum_name = match
         if downgrade_range is not None and downgrade_range[0] <= node.lineno <= downgrade_range[1]:
             continue
-        if _a1_has_create_type_false(node):
+        if _a1_has_create_type_false(node) or _a1_is_non_native(node):
             continue
         out.append(
             f"{_safe_rel(path)}:{node.lineno}  "

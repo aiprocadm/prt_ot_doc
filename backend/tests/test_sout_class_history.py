@@ -10,7 +10,7 @@ import pytest
 from app.api.routes import sout as routes
 from app.domains.sout.lifecycle import CLASS_SEVERITY, is_class_worsening
 from app.domains.sout.service import build_class_history_row, history_to_read
-from app.models.sout import SoutClass, SoutClassHistory
+from app.models.sout import SoutCampaignStatus, SoutClass, SoutClassHistory
 from app.schemas.sout import WorkplaceUpdate
 
 
@@ -113,11 +113,23 @@ def _workplace(assessed_class=SoutClass.ACCEPTABLE):
     )
 
 
+def _open_campaign():
+    """PATCH goes through ``_ensure_workplace_editable`` — the roster is only
+    mutable while the campaign is still open."""
+    now = datetime(2026, 6, 26, tzinfo=timezone.utc)
+    return SimpleNamespace(
+        id="c1", tenant_id="tenant-1", name="СОУТ 2026",
+        status=SoutCampaignStatus.IN_PROGRESS, planned_date=None, completed_date=None,
+        created_at=now, updated_at=now, deleted_at=None,
+    )
+
+
 @pytest.mark.asyncio
 async def test_update_workplace_records_history_on_class_change(monkeypatch):
     wp = _workplace(SoutClass.ACCEPTABLE)
     monkeypatch.setattr(routes, "_require_sout_enabled", AsyncMock())
     monkeypatch.setattr(routes, "_get_workplace", AsyncMock(return_value=wp))
+    monkeypatch.setattr(routes, "_get_campaign", AsyncMock(return_value=_open_campaign()))
 
     added: list = []
     session = AsyncMock()
@@ -141,6 +153,7 @@ async def test_update_workplace_no_history_when_class_untouched(monkeypatch):
     wp = _workplace(SoutClass.ACCEPTABLE)
     monkeypatch.setattr(routes, "_require_sout_enabled", AsyncMock())
     monkeypatch.setattr(routes, "_get_workplace", AsyncMock(return_value=wp))
+    monkeypatch.setattr(routes, "_get_campaign", AsyncMock(return_value=_open_campaign()))
 
     added: list = []
     session = AsyncMock()
@@ -162,6 +175,7 @@ async def test_update_workplace_no_history_when_same_class(monkeypatch):
     wp = _workplace(SoutClass.HARMFUL_3_1)
     monkeypatch.setattr(routes, "_require_sout_enabled", AsyncMock())
     monkeypatch.setattr(routes, "_get_workplace", AsyncMock(return_value=wp))
+    monkeypatch.setattr(routes, "_get_campaign", AsyncMock(return_value=_open_campaign()))
 
     added: list = []
     session = AsyncMock()
