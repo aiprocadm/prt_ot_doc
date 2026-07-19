@@ -10,11 +10,13 @@ import { ArticlesTab } from "@/features/budget/ArticlesTab";
 import { BudgetsTab } from "@/features/budget/BudgetsTab";
 import { ExpensesTab } from "@/features/budget/ExpensesTab";
 import { OverviewTab } from "@/features/budget/OverviewTab";
+import { ReimbursementsTab } from "@/features/budget/ReimbursementsTab";
 import { useAsyncResource } from "@/hooks/useAsyncResource";
 import type {
   BudgetArticlePageDto,
   BudgetExpensePageDto,
   BudgetOverviewDto,
+  BudgetReimbursementPageDto,
   SafetyBudgetPageDto
 } from "@/types/dto/budget";
 
@@ -23,6 +25,7 @@ interface BudgetPageData {
   budgets: SafetyBudgetPageDto;
   articles: BudgetArticlePageDto;
   expenses: BudgetExpensePageDto;
+  reimbursements: BudgetReimbursementPageDto;
 }
 
 const EMPTY_PAGE = { items: [], total: 0, limit: 0, offset: 0 };
@@ -31,7 +34,8 @@ const INITIAL_DATA: BudgetPageData = {
   overview: { generated_at: "", date_from: "", date_to: "", domains: [] },
   budgets: EMPTY_PAGE,
   articles: EMPTY_PAGE,
-  expenses: EMPTY_PAGE
+  expenses: EMPTY_PAGE,
+  reimbursements: EMPTY_PAGE
 };
 
 const BudgetPage = () => {
@@ -45,13 +49,14 @@ const BudgetPage = () => {
   const [activeTab, setActiveTab] = useState("overview");
 
   const loader = useCallback(async (): Promise<BudgetPageData> => {
-    const [overview, budgets, articles, expenses] = await Promise.all([
+    const [overview, budgets, articles, expenses, reimbursements] = await Promise.all([
       budgetApi.getOverview(dateWindow ?? undefined),
       budgetApi.listBudgets(),
       budgetApi.listArticles(),
-      budgetApi.listExpenses()
+      budgetApi.listExpenses(),
+      budgetApi.listReimbursements()
     ]);
-    return { overview, budgets, articles, expenses };
+    return { overview, budgets, articles, expenses, reimbursements };
   }, [dateWindow]);
 
   const budgetRes = useAsyncResource<BudgetPageData>({
@@ -84,7 +89,7 @@ const BudgetPage = () => {
     <div className="space-y-4">
       <RegistryPageHeader
         title="Бюджет безопасности"
-        description="Плановые бюджеты, статьи и журнал расходов по доменам обучения, медосмотров и мероприятий."
+        description="Плановые бюджеты, статьи, журнал расходов и заявки на возмещение СФР по доменам обучения, медосмотров и мероприятий."
       />
 
       <ErrorState error={budgetRes.error ?? undefined} onRetry={() => void budgetRes.reload().catch(() => undefined)} />
@@ -102,6 +107,7 @@ const BudgetPage = () => {
             <TabsTrigger value="budgets">Бюджеты</TabsTrigger>
             <TabsTrigger value="expenses">Расходы</TabsTrigger>
             <TabsTrigger value="articles">Статьи</TabsTrigger>
+            <TabsTrigger value="reimbursements">Возмещения СФР</TabsTrigger>
           </TabsList>
           <TabsContent value="overview" data-testid="budget-tab-overview">
             <OverviewTab overview={budgetRes.data.overview} onWindowChange={setDateWindow} />
@@ -118,6 +124,13 @@ const BudgetPage = () => {
           </TabsContent>
           <TabsContent value="articles" data-testid="budget-tab-articles">
             <ArticlesTab articles={budgetRes.data.articles} onChanged={reloadAll} />
+          </TabsContent>
+          <TabsContent value="reimbursements" data-testid="budget-tab-reimbursements">
+            <ReimbursementsTab
+              reimbursements={budgetRes.data.reimbursements}
+              expenses={budgetRes.data.expenses}
+              onChanged={reloadAll}
+            />
           </TabsContent>
         </Tabs>
       ) : null}

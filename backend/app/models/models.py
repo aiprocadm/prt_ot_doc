@@ -241,10 +241,12 @@ from app.models.rules_engine import (  # noqa: E402
     RuleTriggerStatus,
 )
 
-# §12.4 bg01: re-export budget models from app.models.budget.
+# §12.4 bg01/bg02: re-export budget models from app.models.budget.
 from app.models.budget import (  # noqa: E402
     BudgetExpense,
     BudgetExpenseArticle,
+    BudgetReimbursement,
+    BudgetReimbursementItem,
     SafetyBudget,
 )
 
@@ -632,4 +634,10 @@ __all__ += ["ReportDefinition"]
 
 __all__ += ["AutomationRule", "AutomationRuleTrigger", "RuleTriggerStatus"]
 
-__all__ += ["SafetyBudget", "BudgetExpenseArticle", "BudgetExpense"]
+__all__ += [
+    "SafetyBudget",
+    "BudgetExpenseArticle",
+    "BudgetExpense",
+    "BudgetReimbursement",
+    "BudgetReimbursementItem",
+]

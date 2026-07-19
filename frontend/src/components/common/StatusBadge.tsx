@@ -26,7 +26,11 @@ const statusColors: Record<string, "default" | "secondary" | "destructive"> = {
   due_soon: "secondary",
   scheduled: "secondary",
   completed: "default",
-  lifted: "secondary"
+  lifted: "secondary",
+  submitted: "secondary",
+  approved: "default",
+  rejected: "destructive",
+  paid: "default"
 };
 
 /** Подписи для типичных статусов API; неизвестные значения показываем как есть. */
@@ -61,7 +65,12 @@ const statusLabelsRu: Record<string, string> = {
   missing: "Отсутствует",
   scheduled: "Запланировано",
   completed: "Завершено",
-  lifted: "Снято"
+  lifted: "Снято",
+  // Заявки на возмещение СФР (§12.4 срез-2); draft уже выше — «Черновик».
+  submitted: "Подана",
+  approved: "Одобрена",
+  rejected: "Отклонена",
+  paid: "Выплачена"
 };
 
 export const StatusBadge = ({ status }: { status?: string | null }) => {
