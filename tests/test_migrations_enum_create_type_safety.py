@@ -121,6 +121,22 @@ def _has_create_type_false(call: ast.Call) -> bool:
     return False
 
 
+def _is_non_native(call: ast.Call) -> bool:
+    """True for ``native_enum=False`` declarations — these render as VARCHAR +
+    CHECK and never emit ``CREATE TYPE``, so they cannot double-create. They are
+    the SQLite side of a ``dialect == "postgresql"`` fork, where the Postgres
+    side already carries ``create_type=False``.
+    """
+    for kw in call.keywords:
+        if (
+            kw.arg == "native_enum"
+            and isinstance(kw.value, ast.Constant)
+            and kw.value.value is False
+        ):
+            return True
+    return False
+
+
 def _uses_create_checkfirst(tree: ast.Module) -> bool:
     """True if the module contains any ``<expr>.create(..., checkfirst=True)`` call."""
     for node in ast.walk(tree):
@@ -165,7 +181,7 @@ def _audit_one(path: Path) -> list[Violation]:
         call_str, enum_name = match
         if downgrade_range is not None and downgrade_range[0] <= node.lineno <= downgrade_range[1]:
             continue
-        if _has_create_type_false(node):
+        if _has_create_type_false(node) or _is_non_native(node):
             continue
         violations.append(
             Violation(

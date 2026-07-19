@@ -52,9 +52,6 @@ from app.models.document_core import (
     TemplateVersionStatus,
 )
 from app.models.tenanting import Tenant
-from app.modules.templates import (
-    build_passport,
-    inspect_template_variables,
 from app.modules.files.utils import build_dated_prefix
 from app.modules.templates import (
     audit_template_versions,
@@ -77,7 +74,6 @@ from app.modules.templates.schemas import (
     TemplateCreateRequest,
     TemplateDTO,
     TemplatePatchRequest,
-    TemplateVariableInspectorDTO,
     TemplateVersionDTO,
 )
 from app.modules.tenancy.helpers import tenant_s3_key
@@ -932,18 +928,6 @@ async def lint_template_version(
     return LintReportDTO.model_validate(report)
 
 
-@router.get(
-    "/templates/{template_id}/versions/{version_id}/variables",
-    response_model=TemplateVariableInspectorDTO,
-    summary="Variable inspector: used vs declared variables for a template version",
-)
-async def inspect_template_version_variables(
-    template_id: str,
-    version_id: str,
-    session: SessionDep,
-    tenant: TenantDep,
-    access: EditorAccess,
-) -> TemplateVariableInspectorDTO:
 @router.post(
     "/templates/{template_id}/versions/{version_id}:inspect",
     response_model=InspectorReportDTO,
@@ -964,14 +948,6 @@ async def inspect_template_version(
         or version.deleted_at is not None
     ):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Template version not found")
-    report = inspect_template_variables(
-        placeholder_index=version.placeholder_index,
-        required_fields_schema=version.required_fields_schema,
-    )
-    return TemplateVariableInspectorDTO.model_validate(report)
-
-
-@router.post("/templates/{template_id}/versions/{version_id}:preview", response_model=PreviewResponse)
     storage = FileStorageService.default()
     source = storage.get(version.file_id or version.payload_key)
     report = inspect_docx_template(

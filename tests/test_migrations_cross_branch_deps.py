@@ -302,6 +302,15 @@ def _column_names_from_create_table(
             tfunc = target_call.func
             if isinstance(tfunc, ast.Name) and tfunc.id in helpers:
                 cols.extend(helpers[tfunc.id])
+            # Columns handed *into* the helper are created too — the repo's
+            # ``_common(*extra)`` idiom returns its base columns plus whatever
+            # the caller passed. Without this, every column declared inline at
+            # the call site reads as "never created".
+            for sub in ast.walk(target_call):
+                if isinstance(sub, ast.Call) and _is_sa_column(sub) and sub.args:
+                    name = _str_const(sub.args[0])
+                    if name:
+                        cols.append(name)
             continue
         # Form 1: sa.Column("name", ...) / Column(...)
         if isinstance(arg, ast.Call) and _is_sa_column(arg) and arg.args:

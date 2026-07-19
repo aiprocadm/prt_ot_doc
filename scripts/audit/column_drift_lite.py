@@ -188,6 +188,26 @@ def _column_name(call: ast.Call) -> str | None:
     return None
 
 
+def _column_var_bindings(fn: ast.FunctionDef) -> dict[str, str]:
+    """Map ``col = sa.Column("name", ...)`` locals → the column name.
+
+    Some migrations bind the Column to a variable and pass the variable to
+    ``op.add_column`` (see wa05 ppeitem.min_stock). Without resolving the
+    binding the column reads as never-added and shows up as false drift.
+    """
+    out: dict[str, str] = {}
+    for node in ast.walk(fn):
+        if not isinstance(node, ast.Assign) or not isinstance(node.value, ast.Call):
+            continue
+        name = _column_name(node.value)
+        if name is None:
+            continue
+        for target in node.targets:
+            if isinstance(target, ast.Name):
+                out[target.id] = name
+    return out
+
+
 # ---------------------------------------------------------------------------
 # Model-side: extract Mapped[...] columns from each versioned class.
 # ---------------------------------------------------------------------------
@@ -468,6 +488,7 @@ def collect_migration_columns(verbose: bool = False) -> dict[str, set[str]]:
         helper_cols_map = {h: _helper_injected_columns(functions, h) for h in helpers}
         module_constants = _module_string_seqs(tree)
         parents = _parent_map(upgrade_fn)
+        col_vars = _column_var_bindings(upgrade_fn)
 
         for node in ast.walk(upgrade_fn):
             if not isinstance(node, ast.Call):
@@ -504,8 +525,12 @@ def collect_migration_columns(verbose: bool = False) -> dict[str, set[str]]:
             )
             if is_add and len(node.args) >= 2:
                 col_arg = node.args[1]
-                if isinstance(col_arg, ast.Call):
-                    col = _column_name(col_arg)
+                if isinstance(col_arg, (ast.Call, ast.Name)):
+                    col = (
+                        _column_name(col_arg)
+                        if isinstance(col_arg, ast.Call)
+                        else col_vars.get(col_arg.id)
+                    )
                     if col is not None:
                         tname_arg = node.args[0]
                         candidates: list[str] = []

@@ -22,8 +22,12 @@ def test_so03_chains_from_so02_and_is_single_head() -> None:
     rev = sd.get_revision(_REVISION)
     assert rev.down_revision == _DOWN
     heads = sd.get_heads()
-    assert _REVISION in heads
     assert len(heads) == 1, f"expected single head, got {heads}"
+    # so03 was the head when this pin was written; later slices chain after it.
+    # What must stay true is that it is still on the single chain — i.e. an
+    # ancestor of whatever the current head is, not a stranded branch.
+    ancestry = {r.revision for r in sd.iterate_revisions(heads[0], "base")}
+    assert _REVISION in ancestry, f"{_REVISION} is not an ancestor of head {heads[0]}"
 
 
 def test_so03_module_defines_both_bridge_columns() -> None:

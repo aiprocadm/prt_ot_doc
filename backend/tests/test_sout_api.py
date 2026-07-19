@@ -132,6 +132,9 @@ async def test_update_workplace_sets_position_id(monkeypatch):
     session = AsyncMock()
     monkeypatch.setattr(routes, "_require_sout_enabled", AsyncMock())
     monkeypatch.setattr(routes, "_get_workplace", AsyncMock(return_value=_workplace()))
+    monkeypatch.setattr(
+        routes, "_get_campaign", AsyncMock(return_value=_campaign(SoutCampaignStatus.IN_PROGRESS))
+    )
     monkeypatch.setattr(routes, "_validate_position", AsyncMock(return_value="pos-1"))
 
     out = await routes.update_workplace(
@@ -150,6 +153,9 @@ async def test_update_workplace_invalid_position_404(monkeypatch):
     session = AsyncMock()
     monkeypatch.setattr(routes, "_require_sout_enabled", AsyncMock())
     monkeypatch.setattr(routes, "_get_workplace", AsyncMock(return_value=_workplace()))
+    monkeypatch.setattr(
+        routes, "_get_campaign", AsyncMock(return_value=_campaign(SoutCampaignStatus.IN_PROGRESS))
+    )
     monkeypatch.setattr(
         routes,
         "_validate_position",
@@ -172,6 +178,10 @@ async def test_update_factor_sets_hazard_id(monkeypatch):
     session = AsyncMock()
     monkeypatch.setattr(routes, "_require_sout_enabled", AsyncMock())
     monkeypatch.setattr(routes, "_get_factor", AsyncMock(return_value=_factor()))
+    monkeypatch.setattr(routes, "_get_workplace", AsyncMock(return_value=_workplace()))
+    monkeypatch.setattr(
+        routes, "_get_campaign", AsyncMock(return_value=_campaign(SoutCampaignStatus.IN_PROGRESS))
+    )
     monkeypatch.setattr(routes, "_validate_hazard", AsyncMock(return_value="haz-1"))
 
     out = await routes.update_factor(
