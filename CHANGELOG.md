@@ -1,5 +1,55 @@
 # CHANGELOG
 
+## 2026-07-19 (feat/budget-srez2-reimbursements — §12.4 срез-2: заявки на возмещение СФР)
+
+Закрывает единственный пункт, вынесенный срезом-1 в «Явно ВНЕ объёма».
+Спека: `docs/superpowers/specs/2026-07-19-budget-reimbursements-srez2-design.md`.
+
+### Added
+- **Миграция `bg02`** (`20260719_bg02_budget_reimbursement`, от `bg01`, аддитивная, без backfill и
+  PG-enum): `budget_reimbursement` (статус `VARCHAR(32)` + whitelist в коде, период, запрошенная и
+  одобренная суммы, номер в СФР, причина решения, таймстемпы подачи/решения/выплаты,
+  `company_id ON DELETE SET NULL`) и `budget_reimbursement_item`
+  (`UNIQUE (reimbursement_id, expense_id)`, обе FK `ON DELETE CASCADE`).
+- **Модели** `BudgetReimbursement` / `BudgetReimbursementItem` (`backend/app/models/budget.py`).
+  **Сумма состава не денормализуется** — всегда join к `budget_expense` (инвариант среза-1: план
+  персистентен, факт вычисляется). `requested_amount` вводится вручную и намеренно может не
+  совпадать с суммой состава: это то, что организация просит у фонда.
+- **Чистый FSM** `backend/app/modules/budget/reimbursement_lifecycle.py` (без I/O и SQLAlchemy —
+  зеркало `domains/work_permits/lifecycle.py`): `draft→submitted→approved|rejected→paid`.
+  `rejected` и `paid` **терминальны** — пересдача отклонённой заявки это новая заявка, история
+  решений неизменна. Правка реквизитов, состава и удаление — только в `draft`.
+- **`reimbursement_service.py`** — сервис не коммитит (транзакцией владеет роутер). Tenant-валидация
+  всех client-supplied FK; чужой тенант отдаёт 422 `unknown_*`, а не 404, иначе ответ различал бы
+  «нет такого» и «есть, но не ваш». Explicit-null guard; период на PATCH перепроверяется на слитых
+  значениях. Typed-коды 422: `unknown_company`, `unknown_status`, `unknown_expense`,
+  `expense_not_linked`, `unknown_action`, `invalid_field_null`, `period_invalid`,
+  `reimbursement_empty`, `approved_amount_invalid`, `decision_reason_required`.
+- **9 роутов `/api/v1/budget/reimbursements/*`** за тем же флагом `budget` (default-off) и RBAC
+  admin/owner/accountant/ot_pb_lead. `/items` объявлены **до** `/{id}/{action}` — иначе
+  `POST .../items` ушёл бы в FSM с `action="items"` (запинено тестом). ETag списка включает скаляр
+  состава: без него привязка расхода не меняла бы `(id, updated_at)` заявки и список отдавал бы 304
+  с устаревшим составом. Аудит пишется до commit, в одной транзакции с мутацией.
+- **Вкладка «Возмещения СФР»** на `/budget`: действия по статусам (зеркало серверного FSM), диалог
+  решения с преф-заполнением одобренной суммы, привязка/отвязка расхода в черновике, фильтр по
+  статусу отдельным запросом с seq-guard от гонок.
+- **Демо-сид** `_seed_budget_reimbursements_demo()` — 3 заявки (draft/submitted/approved) + 5 строк
+  состава. Статусы и таймстемпы пишутся напрямую, минуя FSM: сид не пользовательская сессия, а
+  `run_action` не дал бы back-date `decided_at`. Идемпотентность по `(tenant, title)`.
+
+### Fixed
+- `fix(frontend)`: убран цикл между vendor-чанками, ломавший prod-сборку (cherry-pick, чтобы сборка
+  фронта работала на этой ветке). Живёт отдельной веткой `fix/vite-vendor-chunk-cycle`, **PR #765** —
+  к возмещениям отношения не имеет, вливается независимо; после его мержа дубль коммита схлопнется.
+
+### Tests
+- **Backend по фиче — 37:** `tests/api/test_budget_reimbursement_api.py` (13 HTTP: флаг, RBAC,
+  CRUD+состав, FSM, 409-конфликты, матрица 422, ETag/304 с инвалидацией при привязке, порядок
+  роутов), `test_budget_reimbursement_service.py` (20), `test_budget_reimbursement_lifecycle.py` (4).
+- **Frontend — 8 тестов вкладки** в `BudgetPage.test.tsx`; `test_demo_bootstrap_budget.py` расширен
+  на заявки (идемпотентность 3 заявки / 5 строк).
+- OpenAPI baseline: **888 операций / 751 схема** (+8 операций, только добавления).
+
 ## 2026-05-05 (Session 17 — Phase 3.1d: DocumentReadinessRule)
 - **`backend/app/modules/data_quality/rules.py`** — добавлено правило **`DocumentReadinessRule`** (`document_readiness`): DRAFT-документы старше **7** суток без `template_version_id` (MEDIUM, `missing_field`); DRAFT с привязанной `TemplateVersion`, у которой в `required_fields_schema` задан массив **`required`**, — проверка последней ревизии `DocumentVersion.data_json` на пустые обязательные поля (учёт вложенных корней `values` / `payload` / `fields` / `data`). Движок: **10 правил**.
 - **`tests/test_data_quality.py`** — класс `TestDocumentReadinessRule` (4 кейса), `expected_rules` в `TestDataQualityService` дополнен `document_readiness`.
