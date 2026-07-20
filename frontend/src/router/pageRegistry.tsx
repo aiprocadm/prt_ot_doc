@@ -37,6 +37,7 @@ export const AdminPage = lazy(() => import("@/pages/admin/AdminPage"));
 export const OutboxPage = lazy(() => import("@/pages/admin/OutboxPage"));
 export const HealthStatusPage = lazy(() => import("@/pages/admin/HealthStatusPage"));
 export const BillingPage = lazy(() => import("@/pages/admin/BillingPage"));
+export const TenantsPage = lazy(() => import("@/pages/admin/TenantsPage"));
 export const AdminLayoutPresetsPage = lazy(() => import("@/pages/AdminLayoutPresets/AdminLayoutPresetsPage"));
 export const NpaPage = lazy(() => import("@/pages/npa/NpaPage"));
 export const AuditPage = lazy(() => import("@/pages/audit/AuditPage"));

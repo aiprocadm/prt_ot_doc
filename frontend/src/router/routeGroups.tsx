@@ -68,6 +68,7 @@ import {
   SyncConflictHelpPage,
   TasksPage,
   TemplatesPage,
+  TenantsPage,
   TrainingDashboardPage,
   TrainingPage,
   TrendsPage,
@@ -204,6 +205,10 @@ export const buildProtectedRouteGroups = (): ReactElement[] => {
         <Route key="/admin/billing" path="/admin/billing" element={<BillingPage />} />,
         <Route key="/admin/layout-presets" path="/admin/layout-presets" element={<AdminLayoutPresetsPage />} />
       ]
+    },
+    {
+      permission: PERMISSIONS.ADMIN_MANAGE_TENANTS,
+      routes: [<Route key="/admin/tenants" path="/admin/tenants" element={<TenantsPage />} />]
     },
     { permission: PERMISSIONS.NPA_VIEW, routes: [<Route key="/npa" path="/npa" element={<NpaPage />} />] },
     { permission: PERMISSIONS.AUDIT_VIEW, routes: [<Route key="/audit" path="/audit" element={<AuditPage />} />] },
