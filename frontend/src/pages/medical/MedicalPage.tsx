@@ -184,6 +184,22 @@ const MedicalPage = () => {
     [referrals]
   );
 
+  const [printingReferralId, setPrintingReferralId] = useState<string | null>(null);
+  const onPrintReferral = useCallback(
+    async (referralId: string, fmt: "docx" | "pdf") => {
+      setPrintingReferralId(referralId);
+      setReferralError(null);
+      try {
+        await operationsApi.downloadReferralPrint(referralId, fmt);
+      } catch (err) {
+        setReferralError(mutationErrorText(err, "Не удалось сформировать направление"));
+      } finally {
+        setPrintingReferralId(null);
+      }
+    },
+    []
+  );
+
   const [suspensionsActiveOnly, setSuspensionsActiveOnly] = useState(true);
   const suspensions = useAsyncResource({
     loader: useCallback(
@@ -507,6 +523,15 @@ const MedicalPage = () => {
                           Отменить
                         </button>
                       ) : null}
+                      <button
+                        type="button"
+                        className="rounded-md border border-border px-2 py-1 text-xs"
+                        onClick={() => void onPrintReferral(referral.id, "docx")}
+                        disabled={printingReferralId === referral.id}
+                        title="Скачать направление на медосмотр (DOCX)"
+                      >
+                        Печать
+                      </button>
                     </div>
                     {completingId === referral.id ? (
                       (() => {

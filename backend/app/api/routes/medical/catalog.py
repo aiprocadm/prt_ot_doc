@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from typing import Literal
 
 from fastapi import HTTPException, Query, Request, Response, status
 from sqlalchemy import func, select
@@ -22,6 +23,7 @@ from app.api.routes.medical._common import (
     _get_factor,
     _get_norm,
     _get_referral,
+    _render_to_response,
     _to_referral_read,
     router,
 )
@@ -51,6 +53,7 @@ from app.schemas.medical import (
     MedicalReferralTransition,
 )
 from app.services.audit import AuditService
+from app.services.medical_print import render_referral
 
 
 @router.get("/medical/norms", response_model=MedicalNormPage, dependencies=[MedicalFeatureGate])
@@ -334,6 +337,20 @@ async def get_medical_referral(
     _ = access
     record = await _get_referral(session, str(tenant.id), referral_id)
     return _to_referral_read(record, today=datetime.now(timezone.utc).date())
+
+
+@router.get("/medical/referrals/{referral_id}/print", dependencies=[MedicalFeatureGate])
+async def print_medical_referral(
+    referral_id: str,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: MedicalReadAccess,
+    fmt: Literal["docx", "pdf"] = Query("docx", alias="format"),
+) -> Response:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    _ = access
+    record = await _get_referral(session, str(tenant.id), referral_id)
+    return await _render_to_response(render_referral(session, tenant=tenant, referral=record, fmt=fmt))
 
 
 @router.post(

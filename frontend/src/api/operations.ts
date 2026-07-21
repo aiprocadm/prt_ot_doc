@@ -349,6 +349,14 @@ export const operationsApi = {
     downloadBlob(data, `named-list.${fmt}`);
   },
 
+  downloadReferralPrint: async (referralId: string, fmt: "docx" | "pdf") => {
+    const { data } = await apiClient.get<Blob>(`/medical/referrals/${referralId}/print`, {
+      params: { format: fmt },
+      responseType: "blob"
+    });
+    downloadBlob(data, `referral-${referralId}.${fmt}`);
+  },
+
   listMedicalReferrals: async (params?: { status?: string }) => {
     const response = await apiClient.get<{ items: MedicalReferralDto[]; total: number }>("/medical/referrals", {
       params: { limit: 100, offset: 0, ...(params?.status ? { status: params.status } : {}) }

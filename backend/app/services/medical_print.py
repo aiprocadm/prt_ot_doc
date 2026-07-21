@@ -12,10 +12,15 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
+from app.domains.medical import lifecycle as lc
 from app.domains.medical import print_form as pf
 from app.domains.medical import service as medsvc
+from app.models.master_data import Person, Position
+from app.models.medical import MedicalReferral
 from app.models.models import Tenant
 
 logger = logging.getLogger(__name__)
@@ -114,6 +119,67 @@ async def render_named_list(
     )
     docx_bytes = pf.build_named_list_docx(data)
     base_name = "medical-named-list"
+    if fmt == "pdf":
+        return await _to_pdf(docx_bytes, base_name=base_name)
+    return RenderedDoc(content=docx_bytes, filename=f"{base_name}.docx", media_type=_DOCX_MEDIA)
+
+
+async def render_referral(
+    session: AsyncSession, *, tenant: Tenant, referral: MedicalReferral, fmt: str = "docx"
+) -> RenderedDoc:
+    """Печать направления на медосмотр: работник + вредные факторы 29н его должности → DOCX/PDF."""
+    today = datetime.now(timezone.utc).date()
+    person = (
+        await session.execute(
+            select(Person)
+            .where(Person.id == referral.person_id, Person.tenant_id == str(tenant.id))
+            .options(
+                selectinload(Person.position).selectinload(Position.hazards),
+                selectinload(Person.workplace),
+            )
+        )
+    ).scalar_one_or_none()
+
+    full_name = "—"
+    position_name: str | None = None
+    department: str | None = None
+    birth_date: str | None = None
+    snils: str | None = None
+    factors: list[tuple[str, str]] = []
+    if person is not None:
+        full_name = " ".join(
+            part for part in (person.last_name, person.first_name, person.middle_name) if part
+        ).strip() or "—"
+        position_name = person.position.name if person.position else person.position_title
+        department = person.workplace.name if person.workplace else None
+        birth_date = _iso(person.birth_date)
+        snils = person.snils
+        if person.position is not None:
+            catalog = await medsvc._load_factor_catalog(session, tenant_id=str(tenant.id))
+            codes = {
+                h.medical_factor_code for h in person.position.hazards if h.medical_factor_code
+            }
+            factors = sorted(
+                ((f[0], f[1]) for f in lc.factors_for_hazards(codes, catalog)),
+                key=lambda x: x[0],
+            )
+
+    kind = referral.exam_kind
+    data = pf.ReferralPrintData(
+        org_header=tenant.name or tenant.slug,
+        generated_at=today.isoformat(),
+        full_name=full_name,
+        birth_date=birth_date,
+        position_name=position_name,
+        department=department,
+        exam_kind=kind.value if hasattr(kind, "value") else str(kind),
+        medical_org_name=referral.medical_org_name,
+        due_date=_iso(referral.due_at),
+        snils=snils,
+        factors=factors,
+    )
+    docx_bytes = pf.build_referral_docx(data)
+    base_name = f"medical-referral-{referral.id}"
     if fmt == "pdf":
         return await _to_pdf(docx_bytes, base_name=base_name)
     return RenderedDoc(content=docx_bytes, filename=f"{base_name}.docx", media_type=_DOCX_MEDIA)
