@@ -75,12 +75,43 @@ class TenantStatusPatch(BaseSchema):
     is_active: bool
 
 
+class TenantFeatureRead(BaseSchema):
+    code: str
+    title: str
+    on: bool
+
+
 class TenantFleetItem(BaseSchema):
     tenant: TenantRead
     quotas: TenantQuotaRead | None = None
+    # ``plan`` is derived from the enabled feature set: a known tier code, or ``None``
+    # for a hand-tweaked ("custom") tenant / one that never had a plan applied.
+    plan: str | None = None
+    features: list[TenantFeatureRead] = Field(default_factory=list)
 
 
 class TenantFleetPage(BaseSchema):
     items: list[TenantFleetItem]
     total: int
     managing_tenant_slug: str
+
+
+class FeatureCatalogEntry(BaseSchema):
+    code: str
+    title: str
+
+
+class SubscriptionPlanRead(BaseSchema):
+    code: str
+    title: str
+    feature_codes: list[str]
+    quotas: dict[str, int] = Field(default_factory=dict)
+
+
+class PlanCatalog(BaseSchema):
+    plans: list[SubscriptionPlanRead]
+    features: list[FeatureCatalogEntry]
+
+
+class TenantPlanPatch(BaseSchema):
+    plan: str

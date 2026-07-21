@@ -25,10 +25,10 @@ describe("TenantGate", () => {
 
     const user = userEvent.setup();
     await act(async () => {
-      await user.click(screen.getByRole("button", { name: /северстрой/i }));
+      await user.click(screen.getByRole("button", { name: /demo tenant/i }));
     });
 
     expect(screen.getByText("Контент")).toBeInTheDocument();
-    expect(tenantStorage.getTenant()?.slug).toBe("severstroy");
+    expect(tenantStorage.getTenant()?.slug).toBe("demo");
   });
 });

@@ -21,15 +21,41 @@ export interface TenantQuotaDto {
   enforce_billing_gate: boolean;
 }
 
+export interface TenantFeatureDto {
+  code: string;
+  title: string;
+  on: boolean;
+}
+
 export interface TenantFleetItem {
   tenant: TenantDto;
   quotas?: TenantQuotaDto | null;
+  /** Derived tier code ("free" | "pro" | "enterprise"), or null for a custom set. */
+  plan?: string | null;
+  features: TenantFeatureDto[];
 }
 
 export interface TenantFleetPage {
   items: TenantFleetItem[];
   total: number;
   managing_tenant_slug: string;
+}
+
+export interface FeatureCatalogEntry {
+  code: string;
+  title: string;
+}
+
+export interface SubscriptionPlanDto {
+  code: string;
+  title: string;
+  feature_codes: string[];
+  quotas: Record<string, number>;
+}
+
+export interface PlanCatalog {
+  plans: SubscriptionPlanDto[];
+  features: FeatureCatalogEntry[];
 }
 
 export interface TenantProvisionRequest {

@@ -13,10 +13,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { TenantFormDialog } from "@/features/tenants/TenantFormDialog";
+import { TenantPlanDialog } from "@/features/tenants/TenantPlanDialog";
 import { useAsyncResource } from "@/hooks/useAsyncResource";
 import { useLocalRegistry } from "@/hooks/useLocalRegistry";
 import { PERMISSIONS } from "@/permissions/permissions";
-import type { TenantFleetItem, TenantFleetPage } from "@/types/dto/tenants";
+import type { PlanCatalog, TenantFleetItem, TenantFleetPage } from "@/types/dto/tenants";
 
 const KIND_LABELS: Record<string, string> = {
   customer: "Заказчик",
@@ -25,6 +26,7 @@ const KIND_LABELS: Record<string, string> = {
 };
 
 const emptyFleet: TenantFleetPage = { items: [], total: 0, managing_tenant_slug: "" };
+const emptyPlans: PlanCatalog = { plans: [], features: [] };
 
 const TenantsPage = () => {
   const loader = useCallback(() => tenantsApi.list(), []);
@@ -34,7 +36,22 @@ const TenantsPage = () => {
     errorMessage: "Не удалось загрузить список тенантов"
   });
 
-  const reload = () => void res.reload().catch(() => undefined);
+  const plansLoader = useCallback(() => tenantsApi.plans(), []);
+  const plansRes = useAsyncResource<PlanCatalog>({
+    loader: plansLoader,
+    initialData: emptyPlans,
+    // A 403 here is the same "not the managing tenant" case the list handles below;
+    // swallow it so it never surfaces as a page error.
+    errorMessage: ""
+  });
+  const plans = plansRes.data.plans;
+  const planTitle = (code?: string | null) =>
+    plans.find((plan) => plan.code === code)?.title ?? "Свой набор";
+
+  const reload = () => {
+    void res.reload().catch(() => undefined);
+    void plansRes.reload().catch(() => undefined);
+  };
 
   const registry = useLocalRegistry<TenantFleetItem>({
     items: res.data.items,
@@ -98,6 +115,30 @@ const TenantsPage = () => {
           <span className="text-xs">
             {quotas.max_doc_generations_per_month} док/мес · {quotas.max_storage_mb} МБ
           </span>
+        );
+      }
+    },
+    {
+      id: "plan",
+      header: "Тариф",
+      cell: ({ row }) => {
+        const item = row.original;
+        return (
+          <div className="flex items-center gap-2">
+            <Badge variant={item.plan ? "default" : "secondary"}>{planTitle(item.plan)}</Badge>
+            <Can permission={PERMISSIONS.ADMIN_MANAGE_TENANTS}>
+              <TenantPlanDialog
+                item={item}
+                plans={plans}
+                onSubmitted={reload}
+                trigger={
+                  <Button variant="ghost" size="sm">
+                    Изменить
+                  </Button>
+                }
+              />
+            </Can>
+          </div>
         );
       }
     },

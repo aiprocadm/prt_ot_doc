@@ -17,8 +17,10 @@ describe("tenant store", () => {
     setTenant(TENANT_OPTIONS[0]);
     expect(tenantStorage.getTenant()?.slug).toBe(TENANT_OPTIONS[0].slug);
 
-    setTenant(TENANT_OPTIONS[1]);
-    expect(tenantStorage.getTenant()?.slug).toBe(TENANT_OPTIONS[1].slug);
+    // A slug outside the hardcoded hints — the normal case now that real tenants are
+    // typed in, not picked from a fixed list.
+    setTenant({ slug: "acme", name: "ООО «Акме»", site: null });
+    expect(tenantStorage.getTenant()?.slug).toBe("acme");
   });
 
   it("resets documents wizard state when tenant changes", () => {

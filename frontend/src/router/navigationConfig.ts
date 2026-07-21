@@ -130,7 +130,7 @@ export const MAIN_NAV_GROUPS: NavGroup[] = [
     title: "Администрирование",
     items: [
       { label: "Тенанты и роли", to: "/admin", icon: Wrench, permission: PERMISSIONS.ADMIN_MANAGE_ROLES },
-      { label: "Управление тенантами", to: "/admin/tenants", icon: Building2, permission: PERMISSIONS.ADMIN_MANAGE_TENANTS },
+      { label: "Клиенты и подписки", to: "/admin/tenants", icon: Building2, permission: PERMISSIONS.ADMIN_MANAGE_TENANTS },
       { label: "Биллинг", to: "/admin/billing", icon: Briefcase, permission: PERMISSIONS.ADMIN_MANAGE_ROLES },
       { label: "Исходящая очередь", to: "/admin/outbox", icon: Archive, permission: PERMISSIONS.ADMIN_MANAGE_ROLES },
       { label: "Правила автоматизации", to: "/rules", icon: Zap, permission: PERMISSIONS.RULES_VIEW },
