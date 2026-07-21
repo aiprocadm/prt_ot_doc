@@ -1,4 +1,4 @@
-// DTO mirrors of backend/app/schemas/budget.py (§12.4 срез-1, budget feature flag).
+// DTO mirrors of backend/app/schemas/budget.py (§12.4 срез-1/срез-2, budget feature flag).
 
 export type BudgetDomain = "training" | "medical" | "events";
 
@@ -186,4 +186,71 @@ export interface BudgetBreakdownDto {
   /** строк ДО cap 200 */
   total: number;
   items: BudgetBreakdownItemDto[];
+}
+
+/** FSM: draft -> submitted -> approved -> paid; submitted -> rejected. rejected/paid терминальны. */
+export type BudgetReimbursementStatus = "draft" | "submitted" | "approved" | "rejected" | "paid";
+
+export interface BudgetReimbursementDto {
+  id: string;
+  title: string;
+  status: BudgetReimbursementStatus;
+  period_start: string;
+  period_end: string;
+  requested_amount: number;
+  /** заполняется на approve; по умолчанию = requested_amount */
+  approved_amount: number | null;
+  /** внешний номер заявки в СФР */
+  reference: string | null;
+  company_id: string | null;
+  /** обязательна при reject */
+  decision_reason: string | null;
+  submitted_at: string | null;
+  decided_at: string | null;
+  paid_at: string | null;
+  notes: string | null;
+  item_count: number;
+  /** сумма связанных расходов (может расходиться с requested_amount) */
+  items_amount: number;
+}
+
+export interface BudgetReimbursementItemDto {
+  expense_id: string;
+  title: string;
+  domain: BudgetDomain;
+  occurred_on: string;
+  amount: number;
+}
+
+export interface BudgetReimbursementDetailDto extends BudgetReimbursementDto {
+  items: BudgetReimbursementItemDto[];
+}
+
+export interface BudgetReimbursementPageDto {
+  items: BudgetReimbursementDto[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface BudgetReimbursementCreateInput {
+  title: string;
+  period_start: string;
+  period_end: string;
+  requested_amount: number;
+  reference?: string | null;
+  company_id?: string | null;
+  notes?: string | null;
+  // status не передаётся: заявка всегда создаётся в draft
+}
+
+export interface BudgetReimbursementUpdateInput {
+  title?: string;
+  period_start?: string;
+  period_end?: string;
+  requested_amount?: number;
+  reference?: string | null;
+  company_id?: string | null;
+  notes?: string | null;
+  // редактировать можно только draft (иначе 409); статус меняется только через действия FSM
 }

@@ -214,3 +214,85 @@ class BudgetBreakdownResponse(BaseSchema):
     date_to: date
     total: int  # строк ДО cap 200
     items: list[BudgetBreakdownItem]
+
+
+# ----------------------------------------------------------------------
+# срез-2: заявки на возмещение СФР
+# ----------------------------------------------------------------------
+
+
+class ReimbursementCreate(BaseSchema):
+    title: str = Field(min_length=1, max_length=255)
+    period_start: date
+    period_end: date
+    requested_amount: float = Field(gt=0)
+    reference: str | None = Field(default=None, max_length=64)
+    company_id: str | None = None
+    notes: str | None = Field(default=None, max_length=1000)
+
+    @model_validator(mode="after")
+    def _validate(self):
+        return _check_period(self)
+
+    # status намеренно НЕ принимается: заявка всегда создаётся черновиком,
+    # смена статуса — только через POST /{id}/{action} (FSM).
+
+
+class ReimbursementUpdate(BaseSchema):
+    title: str | None = Field(default=None, min_length=1, max_length=255)
+    period_start: date | None = None
+    period_end: date | None = None
+    requested_amount: float | None = Field(default=None, gt=0)
+    reference: str | None = Field(default=None, max_length=64)
+    company_id: str | None = None
+    notes: str | None = Field(default=None, max_length=1000)
+    # status/approved_amount/decision_reason иммутабельны через PATCH — только FSM-переходы
+
+
+class ReimbursementDecision(BaseSchema):
+    """Тело POST /{id}/{action}; поля опциональны и осмысленны не для всех действий."""
+
+    approved_amount: float | None = Field(default=None, gt=0)  # approve; по умолчанию = requested
+    decision_reason: str | None = Field(default=None, min_length=1, max_length=1000)  # reject
+
+
+class ReimbursementRead(BaseSchema):
+    id: str
+    title: str
+    status: str
+    period_start: date
+    period_end: date
+    requested_amount: float
+    approved_amount: float | None
+    reference: str | None
+    company_id: str | None
+    decision_reason: str | None
+    submitted_at: datetime | None
+    decided_at: datetime | None
+    paid_at: datetime | None
+    notes: str | None
+    item_count: int
+    items_amount: float  # сумма привязанных расходов (может отличаться от requested_amount)
+
+
+class ReimbursementPage(BaseSchema):
+    items: list[ReimbursementRead]
+    total: int
+    limit: int
+    offset: int
+
+
+class ReimbursementItemCreate(BaseSchema):
+    expense_id: str = Field(min_length=1, max_length=36)
+
+
+class ReimbursementItemRead(BaseSchema):
+    expense_id: str
+    title: str
+    domain: str
+    occurred_on: date
+    amount: float
+
+
+class ReimbursementDetail(ReimbursementRead):
+    items: list[ReimbursementItemRead]

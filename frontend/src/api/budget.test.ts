@@ -7,6 +7,8 @@ import type {
   BudgetArticleUpdateInput,
   BudgetExpenseCreateInput,
   BudgetExpenseUpdateInput,
+  BudgetReimbursementCreateInput,
+  BudgetReimbursementUpdateInput,
   SafetyBudgetCreateInput,
   SafetyBudgetUpdateInput
 } from "@/types/dto/budget";
@@ -148,6 +150,77 @@ describe("budgetApi", () => {
   it("deletes an expense", async () => {
     await budgetApi.deleteExpense("e1");
     expect(apiClient.delete).toHaveBeenCalledWith("/budget/expenses/e1");
+  });
+
+  it("lists reimbursements with default paging", async () => {
+    await budgetApi.listReimbursements();
+    expect(apiClient.get).toHaveBeenCalledWith("/budget/reimbursements", {
+      params: { limit: 100, offset: 0 }
+    });
+  });
+
+  it("merges the status filter and paging overrides into listReimbursements()", async () => {
+    await budgetApi.listReimbursements({ status: "submitted", limit: 10, offset: 20 });
+    expect(apiClient.get).toHaveBeenCalledWith("/budget/reimbursements", {
+      params: { status: "submitted", limit: 10, offset: 20 }
+    });
+  });
+
+  it("gets a reimbursement detail by id", async () => {
+    await budgetApi.getReimbursement("r1");
+    expect(apiClient.get).toHaveBeenCalledWith("/budget/reimbursements/r1");
+  });
+
+  it("creates a reimbursement", async () => {
+    const payload: BudgetReimbursementCreateInput = {
+      title: "Возмещение за I квартал",
+      period_start: "2026-01-01",
+      period_end: "2026-03-31",
+      requested_amount: 90000
+    };
+    await budgetApi.createReimbursement(payload);
+    expect(apiClient.post).toHaveBeenCalledWith("/budget/reimbursements", payload);
+  });
+
+  it("updates a reimbursement via PATCH", async () => {
+    const payload: BudgetReimbursementUpdateInput = { requested_amount: 120000 };
+    await budgetApi.updateReimbursement("r1", payload);
+    expect(apiClient.patch).toHaveBeenCalledWith("/budget/reimbursements/r1", payload);
+  });
+
+  it("deletes a reimbursement", async () => {
+    await budgetApi.deleteReimbursement("r1");
+    expect(apiClient.delete).toHaveBeenCalledWith("/budget/reimbursements/r1");
+  });
+
+  it("attaches an expense to a reimbursement", async () => {
+    await budgetApi.addReimbursementItem("r1", "e1");
+    expect(apiClient.post).toHaveBeenCalledWith("/budget/reimbursements/r1/items", { expense_id: "e1" });
+  });
+
+  it("detaches an expense from a reimbursement", async () => {
+    await budgetApi.removeReimbursementItem("r1", "e1");
+    expect(apiClient.delete).toHaveBeenCalledWith("/budget/reimbursements/r1/items/e1");
+  });
+
+  it("posts an FSM action with an empty body by default", async () => {
+    await budgetApi.reimbursementAction("r1", "submit");
+    expect(apiClient.post).toHaveBeenCalledWith("/budget/reimbursements/r1/submit", {});
+  });
+
+  it("posts approved_amount on approve and decision_reason on reject", async () => {
+    await budgetApi.reimbursementAction("r1", "approve", { approved_amount: 5000 });
+    expect(apiClient.post).toHaveBeenCalledWith("/budget/reimbursements/r1/approve", {
+      approved_amount: 5000
+    });
+
+    await budgetApi.reimbursementAction("r1", "reject", { decision_reason: "нет подтверждающих" });
+    expect(apiClient.post).toHaveBeenCalledWith("/budget/reimbursements/r1/reject", {
+      decision_reason: "нет подтверждающих"
+    });
+
+    await budgetApi.reimbursementAction("r1", "pay");
+    expect(apiClient.post).toHaveBeenCalledWith("/budget/reimbursements/r1/pay", {});
   });
 
   it("detects the feature-disabled 404", () => {

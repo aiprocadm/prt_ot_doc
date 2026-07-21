@@ -14,6 +14,12 @@ import type {
   BudgetExpensePageDto,
   BudgetExpenseUpdateInput,
   BudgetOverviewDto,
+  BudgetReimbursementCreateInput,
+  BudgetReimbursementDetailDto,
+  BudgetReimbursementDto,
+  BudgetReimbursementPageDto,
+  BudgetReimbursementStatus,
+  BudgetReimbursementUpdateInput,
   BudgetSeedResultDto,
   SafetyBudgetCreateInput,
   SafetyBudgetDetailDto,
@@ -104,6 +110,46 @@ export const budgetApi = {
   },
   async deleteExpense(id: string): Promise<void> {
     await apiClient.delete(`${BASE}/expenses/${id}`);
+  },
+  async listReimbursements(
+    params: { status?: BudgetReimbursementStatus; limit?: number; offset?: number } = {}
+  ): Promise<BudgetReimbursementPageDto> {
+    const { data } = await apiClient.get<BudgetReimbursementPageDto>(`${BASE}/reimbursements`, {
+      params: { limit: 100, offset: 0, ...params }
+    });
+    return data;
+  },
+  async getReimbursement(id: string): Promise<BudgetReimbursementDetailDto> {
+    return (await apiClient.get<BudgetReimbursementDetailDto>(`${BASE}/reimbursements/${id}`)).data;
+  },
+  async createReimbursement(payload: BudgetReimbursementCreateInput): Promise<BudgetReimbursementDto> {
+    return (await apiClient.post<BudgetReimbursementDto>(`${BASE}/reimbursements`, payload)).data;
+  },
+  async updateReimbursement(
+    id: string,
+    payload: BudgetReimbursementUpdateInput
+  ): Promise<BudgetReimbursementDto> {
+    return (await apiClient.patch<BudgetReimbursementDto>(`${BASE}/reimbursements/${id}`, payload)).data;
+  },
+  async deleteReimbursement(id: string): Promise<void> {
+    await apiClient.delete(`${BASE}/reimbursements/${id}`);
+  },
+  async addReimbursementItem(id: string, expenseId: string): Promise<void> {
+    await apiClient.post(`${BASE}/reimbursements/${id}/items`, { expense_id: expenseId });
+  },
+  async removeReimbursementItem(id: string, expenseId: string): Promise<void> {
+    await apiClient.delete(`${BASE}/reimbursements/${id}/items/${expenseId}`);
+  },
+  /**
+   * Переходы FSM одной ручкой (тот же паттерн, что workPermitsApi.action):
+   * submit/approve/reject/pay различаются только именем в URL и опциональным телом.
+   */
+  async reimbursementAction(
+    id: string,
+    name: "submit" | "approve" | "reject" | "pay",
+    body: { approved_amount?: number; decision_reason?: string } = {}
+  ): Promise<BudgetReimbursementDto> {
+    return (await apiClient.post<BudgetReimbursementDto>(`${BASE}/reimbursements/${id}/${name}`, body)).data;
   },
   /**
    * Лёгкий справочник филиалов для опционального пикера в ExpenseFormDialog.
