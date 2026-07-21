@@ -56,6 +56,26 @@ Status vocabulary is strict and machine-checkable:
 | TZ-F3-MVP-01 | [MVP] F3 UX components (diff/timeline/filter/guards) | backend/app/modules/search, backend/app/modules/pipelines | - | - | - | frontend/src/features/documents, frontend/src/permissions, frontend/src/pages/search | frontend/src/__tests__/{JobTimeline,WizardJobTimeline,ApprovalTimeline}.test.tsx (29 cases, 574 lines), frontend/src/__tests__/Can.test.tsx, frontend/src/__tests__/DataTable.test.tsx | done | p1 | Timeline components: JobTimeline (9), WizardJobTimeline (12), ApprovalTimeline (8). Guards: Can (3). Filters/bulk: DataTable (3). Total: 35+ component test cases with edge-case coverage. |
 | TZ-F4-MVP-01 | [MVP] F4 frontend smoke tests | - | - | - | - | frontend/src/App.tsx, frontend/src/router/AppRouter.tsx | frontend/e2e/smoke.spec.ts, frontend/vitest.critical.config.ts | done | p1 | Keep smoke suite in CI PR path |
 | TZ-B17-V11-01 | [v1.1] B.17 Комитеты / комиссии / заседания | backend/app/models/committees.py, backend/app/domains/committees/lifecycle.py, backend/app/domains/committees/service.py, backend/app/api/routes/committees.py (15 endpoints, ETag+tenant-iso) | backend/app/migrations/versions/cmt01 | - | - | frontend/src/pages/committees/CommitteesPage.tsx | - | partial | p2 | committees срез-1: models+migration cmt01+API (15 endpoints)+default-off committees flag+thin UI. Деферред в срез-2: голосование/кворум, приглашения, KPI-дашборд, журнал/нумерация протоколов, проекция задач в Command Center |
+| BIZ-49 | [vNext-BIZ] Managed Clients + единое окно аутсорсера | - | - | - | - | - | - | missing | p2 | Phase 11 [vNext-BIZ] · Доп.№1 разд.49 |
+| BIZ-50 | [vNext-BIZ] Quick Pack Wizard (разовые комплекты) | partial(packs) | - | - | - | partial | - | partial | p2 | Phase 11 [vNext-BIZ] · Доп.№1 разд.50 |
+| BIZ-51 | [vNext-BIZ] Client Change Feed + Compliance Baseline | - | - | - | - | - | - | missing | p2 | Phase 12 [vNext-BIZ] · Доп.№1 разд.51 |
+| BIZ-52 | [vNext-BIZ] Reseller-иерархия + white-label | partial(branding) | - | - | - | - | - | partial | p2 | Phase 13 [vNext-BIZ] · Доп.№1 разд.52 |
+| BIZ-53 | [vNext-BIZ] Self-service аренда + бесшовные переходы | partial(subscription) | - | - | - | - | - | partial | p2 | Phase 14 [vNext-BIZ] · Доп.№1 разд.53 |
+| BIZ-54-57 | [vNext-BIZ] Дисциплины ПБ/ПромБез/Экология/ГО-ЧС/БДД | partial(fire-safety) | - | - | - | partial | - | partial | p2 | Phase 15 [vNext-BIZ] · Доп.№1 разд.54-57 |
+| BIZ-59 | [vNext-BIZ] UX-бюджет экрана (числовые лимиты) | - | - | - | - | missing | - | missing | p2 | Phase 11 [vNext-BIZ] · Доп.№2 разд.59; UX_BUDGET в product_spec.py |
+| BIZ-60 | [vNext-BIZ] Чек-лист приёмки экрана (UX DoD) | - | - | - | - | missing | - | missing | p2 | Phase 11 [vNext-BIZ] · Доп.№2 разд.60 |
+| BIZ-61 | [vNext-BIZ] Module Registry + entitlements (default-OFF) | partial(feature_flags) | - | - | - | missing | - | partial | p2 | Phase 11 [vNext-BIZ] · Доп.№2 разд.61 |
+| SEC-63 | [vNext-SEC] Модель угроз: иерархия/impersonation/entitlements | - | - | - | - | - | - | missing | p1 | Phase 16 [vNext-SEC] · Доп.№3 разд.63 |
+| SEC-64 | [vNext-SEC] AppSec OWASP + безопасный парсинг (XXE) + SSRF | partial(xml_security) | - | - | - | - | tests/test_xml_security.py | partial | p1 | Phase 16 [vNext-SEC] · Доп.№3 разд.64 — XXE закрыт (xml_security.py) |
+| SEC-65 | [vNext-SEC] RLS как второй рубеж изоляции арендаторов | - | - | - | - | - | - | missing | p1 | Phase 16 [vNext-SEC] · Доп.№3 разд.65 (миграция — по подтверждению) |
+| SEC-66 | [vNext-SEC] ПДн/152-ФЗ: локализация/права субъекта/DPA | partial(audit+export) | - | - | - | - | - | partial | p1 | Phase 16 [vNext-SEC] · Доп.№3 разд.66 |
+| SEC-67 | [vNext-SEC] Единая политика секретов (шифрование/ротация) | partial(token-hash+tenant-key-enc) | - | - | - | - | - | partial | p1 | Phase 16 [vNext-SEC] · Доп.№3 разд.67 |
+| SEC-68 | [vNext-SEC] Внешний контур: magic links + anti-abuse | partial(external-tokens) | - | - | - | - | - | partial | p1 | Phase 16 [vNext-SEC] · Доп.№3 разд.68 |
+| SEC-69 | [vNext-SEC] Security-gate в CI (SAST/DAST) + пентест | partial(bandit+trivy+gitleaks) | - | - | - | - | .github/workflows/ci.yml | partial | p1 | Phase 16 [vNext-SEC] · Доп.№3 разд.69 — semgrep в observe-mode |
+| OPS-71 | [vNext-OPS] Импорт-фреймворк + миграция источников (Excel/1С) | partial(sout_import) | - | - | - | - | - | partial | p2 | Phase 17 [vNext-OPS] · Доп.№4 разд.71 |
+| OPS-72 | [vNext-OPS] Офбординг: экспорт/удаление данных + retention | - | - | - | - | - | - | missing | p2 | Phase 18 [vNext-OPS] · Доп.№4 разд.72 |
+| OPS-73 | [vNext-OPS] Версионирование API + deprecation policy | partial(/api/v1) | - | - | - | - | - | partial | p2 | Phase 19 [vNext-OPS] · Доп.№4 разд.73 |
+| OPS-74 | [vNext-OPS] Zero-downtime деплой + expand-contract миграции | partial(rollback-docs) | - | - | - | - | - | partial | p2 | Phase 20 [vNext-OPS] · Доп.№4 разд.74 |
 
 ## Machine validation
 
