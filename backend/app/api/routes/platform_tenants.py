@@ -23,9 +23,19 @@ from app.core.config import get_settings
 from app.core.security import verify_token
 from app.db.session import AsyncSessionLocal
 from app.models.models import RoleEnum, Tenant, TenantQuota
+from app.modules.subscription import (
+    FEATURE_CATALOG,
+    PLANS,
+    plan_code_for_features,
+)
 from app.schemas.tenant import (
+    FeatureCatalogEntry,
+    PlanCatalog,
+    SubscriptionPlanRead,
+    TenantFeatureRead,
     TenantFleetItem,
     TenantFleetPage,
+    TenantPlanPatch,
     TenantProvisionRequest,
     TenantProvisionResult,
     TenantQuotaPatch,
@@ -34,12 +44,17 @@ from app.schemas.tenant import (
     TenantStatusPatch,
 )
 from app.services.tenants.bootstrap import BootstrapTenantService
+from app.services.tenants.subscription import apply_plan, read_enabled_feature_codes
 
 router = APIRouter(prefix="/platform/tenants", tags=["platform-tenants"])
 _optional_bearer = HTTPBearer(auto_error=False)
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
-_MANAGEMENT_ROLES = frozenset({RoleEnum.ADMIN.value, RoleEnum.CLIENT_ADMIN.value})
+# The managing tenant's owner also administers the fleet: the frontend grants owner
+# every permission (incl. manage-tenants), so the backend must not silently 403 them.
+_MANAGEMENT_ROLES = frozenset(
+    {RoleEnum.ADMIN.value, RoleEnum.CLIENT_ADMIN.value, RoleEnum.OWNER.value}
+)
 
 
 def _require_managing_admin(
@@ -75,6 +90,23 @@ async def _load_quota(session: AsyncSession, tenant_id: str) -> TenantQuota | No
     ).scalar_one_or_none()
 
 
+async def _build_fleet_item(session: AsyncSession, record: Tenant) -> TenantFleetItem:
+    """Assemble one fleet row: quota, per-feature on/off, and the derived plan code."""
+
+    quota = await _load_quota(session, record.id)
+    enabled = await read_enabled_feature_codes(record)
+    features = [
+        TenantFeatureRead(code=code, title=title, on=code in enabled)
+        for code, title in FEATURE_CATALOG.items()
+    ]
+    return TenantFleetItem(
+        tenant=TenantRead.model_validate(record),
+        quotas=TenantQuotaRead.model_validate(quota) if quota else None,
+        plan=plan_code_for_features(enabled),
+        features=features,
+    )
+
+
 @router.get("", response_model=TenantFleetPage)
 async def list_tenant_fleet_endpoint(
     session: SessionDep,
@@ -92,19 +124,35 @@ async def list_tenant_fleet_endpoint(
         )
     ).scalars()
 
-    items = []
-    for record in rows:
-        quota = await _load_quota(session, record.id)
-        items.append(
-            TenantFleetItem(
-                tenant=TenantRead.model_validate(record),
-                quotas=TenantQuotaRead.model_validate(quota) if quota else None,
-            )
-        )
+    items = [await _build_fleet_item(session, record) for record in rows]
     return TenantFleetPage(
         items=items,
         total=int(total or 0),
         managing_tenant_slug=get_settings().managing_tenant_slug,
+    )
+
+
+@router.get("/plans", response_model=PlanCatalog)
+async def list_plans_endpoint(
+    tenant: Tenant = Depends(get_tenant_record),
+    credentials: HTTPAuthorizationCredentials | None = Depends(_optional_bearer),
+) -> PlanCatalog:
+    """The subscription tier catalogue the fleet UI renders its plan picker from."""
+
+    _require_managing_admin(credentials, tenant)
+    return PlanCatalog(
+        plans=[
+            SubscriptionPlanRead(
+                code=plan.code,
+                title=plan.title,
+                feature_codes=sorted(plan.features),
+                quotas=plan.quotas,
+            )
+            for plan in PLANS.values()
+        ],
+        features=[
+            FeatureCatalogEntry(code=code, title=title) for code, title in FEATURE_CATALOG.items()
+        ],
     )
 
 
@@ -217,3 +265,31 @@ async def patch_fleet_quotas_endpoint(
     await session.commit()
     await session.refresh(quota)
     return TenantQuotaRead.model_validate(quota)
+
+
+@router.patch("/{tenant_id}/plan", response_model=TenantFleetItem)
+@audit_operation("update_plan", "tenant")
+async def patch_tenant_plan_endpoint(
+    tenant_id: str,
+    payload: TenantPlanPatch,
+    session: SessionDep,
+    tenant: Tenant = Depends(get_tenant_record),
+    credentials: HTTPAuthorizationCredentials | None = Depends(_optional_bearer),
+) -> TenantFleetItem:
+    """Move a tenant onto a subscription tier: unlock its features and set its quotas."""
+
+    _require_managing_admin(credentials, tenant)
+    plan = PLANS.get(payload.plan.strip().lower())
+    if plan is None:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            f"Unknown plan '{payload.plan}'",
+        )
+    target = await session.get(Tenant, tenant_id)
+    if target is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Tenant not found")
+
+    await apply_plan(session, target, plan)
+    await session.commit()
+    await session.refresh(target)
+    return await _build_fleet_item(session, target)

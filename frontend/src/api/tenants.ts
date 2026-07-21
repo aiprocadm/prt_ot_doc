@@ -1,7 +1,9 @@
 import { apiClient } from "@/api/client";
 import type { ApiError } from "@/types/dto/common";
 import type {
+  PlanCatalog,
   TenantDto,
+  TenantFleetItem,
   TenantFleetPage,
   TenantProvisionRequest,
   TenantProvisionResult,
@@ -32,5 +34,11 @@ export const tenantsApi = {
   },
   async updateQuotas(id: string, payload: TenantQuotaPatch): Promise<TenantQuotaDto> {
     return (await apiClient.patch<TenantQuotaDto>(`${BASE}/${id}/quotas`, payload)).data;
+  },
+  async plans(): Promise<PlanCatalog> {
+    return (await apiClient.get<PlanCatalog>(`${BASE}/plans`)).data;
+  },
+  async setPlan(id: string, plan: string): Promise<TenantFleetItem> {
+    return (await apiClient.patch<TenantFleetItem>(`${BASE}/${id}/plan`, { plan })).data;
   }
 };
