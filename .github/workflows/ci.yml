@@ -172,6 +172,9 @@ jobs:
     needs: security-exceptions
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Полная история нужна semgrep --baseline-commit (ratchet-диф ниже).
+          fetch-depth: 0
 
       - uses: actions/setup-python@v5
         with:
@@ -190,17 +193,32 @@ jobs:
           bandit -r backend/app -lll -iii -f json -o artifacts/security/bandit-high.json
 
       # Дополнение №3 к ТЗ, разд. 69: semgrep ловит паттерны (XXE/injection),
-      # которые Trivy (зависимости) и bandit-High могут пропустить. Введён в
-      # observe-mode (continue-on-error) — не заваливает сборку на пре-существующих
-      # находках; перевод в blocking-gate запланирован в Phase 16 после триажа
-      # базлайна (конвенция ратчет-гейтов репозитория, ср. coverage-climb).
-      - name: Semgrep pattern SAST (Доп. №3 разд. 69 — observe-mode)
-        continue-on-error: true
+      # которые Trivy (зависимости) и bandit-High могут пропустить.
+      # BLOCKING как ratchet-гейт: через --baseline-commit блокируем ТОЛЬКО НОВЫЕ
+      # ERROR-находки относительно базы (PR-base / previous-push / HEAD~1);
+      # пред-существующие находки сборку не валят — по конвенции ратчет-гейтов
+      # репозитория (ср. coverage-climb). Базлайн локально не измерялся (semgrep
+      # не идёт нативно на Windows, Docker недоступен) — поэтому diff-режим,
+      # безопасный по построению вне зависимости от объёма старых находок.
+      - name: Semgrep pattern SAST (Доп. №3 разд. 69 — ratchet-gate на новые ERROR)
         run: |
           mkdir -p artifacts/security
           python -m pip install --quiet semgrep
-          semgrep scan --config p/python --config p/owasp-top-ten backend/app \
-            --json --output artifacts/security/semgrep.json
+          BASE="${{ github.event.pull_request.base.sha }}"
+          [ -z "$BASE" ] && BASE="${{ github.event.before }}"
+          if [ -z "$BASE" ] || ! git cat-file -e "${BASE}^{commit}" 2>/dev/null; then
+            BASE="$(git rev-parse --verify --quiet HEAD~1 || true)"
+          fi
+          if [ -n "$BASE" ] && git cat-file -e "${BASE}^{commit}" 2>/dev/null; then
+            echo "Semgrep ratchet: база=$BASE — блокируем только НОВЫЕ ERROR-находки"
+            semgrep scan --config p/python --config p/owasp-top-ten \
+              --severity ERROR --baseline-commit "$BASE" --error \
+              --json --output artifacts/security/semgrep.json backend/app
+          else
+            echo "База не определена (первый коммит / dispatch) — observe-скан без блокировки"
+            semgrep scan --config p/python --config p/owasp-top-ten \
+              --severity ERROR --json --output artifacts/security/semgrep.json backend/app || true
+          fi
 
       - name: Upload Semgrep report
         if: always()

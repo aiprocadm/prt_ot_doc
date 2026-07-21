@@ -80,6 +80,7 @@ def secure_lxml_parser() -> etree.XMLParser:
 def lxml_fromstring(content: bytes | str) -> etree._Element:
     """Безопасная замена ``lxml.etree.fromstring`` для XML из загруженных файлов."""
     _guard_doctype(content)
+    # nosemgrep: намеренный хардненный парс — гард по DOCTYPE + secure_lxml_parser().
     return etree.fromstring(content, parser=secure_lxml_parser())
 
 
@@ -91,4 +92,5 @@ def stdlib_fromstring(content: bytes | str) -> ET.Element:
     закрывает и это, не требуя стороннего ``defusedxml``.
     """
     _guard_doctype(content)
+    # nosemgrep: намеренный парс после гарда по DOCTYPE — XXE/billion-laughs закрыты.
     return ET.fromstring(content)
