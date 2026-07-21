@@ -4,6 +4,7 @@ import re
 from io import BytesIO
 from zipfile import ZIP_DEFLATED, ZipFile
 
+from app.core.xml_security import lxml_fromstring
 from lxml import etree
 
 W = {
@@ -31,7 +32,8 @@ def replace_xml_parts(
             if not (name.startswith("word/") and name.endswith(".xml")):
                 zout.writestr(name, content)
                 continue
-            root = etree.fromstring(content)
+            # Разд. 64.2: жёсткий парсер вместо etree.fromstring (XXE/billion-laughs)
+            root = lxml_fromstring(content)
             changed = False
             for node in root.xpath("//w:txbxContent//w:t | //v:textbox//w:t", namespaces=W):
                 text = node.text or ""

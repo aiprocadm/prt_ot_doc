@@ -6,7 +6,8 @@ from collections import Counter
 from collections.abc import Iterable
 from io import BytesIO
 from typing import Any
-from xml.etree import ElementTree as ET
+
+from app.core.xml_security import stdlib_fromstring
 
 PLACEHOLDER_RE = re.compile(r"{{\s*(.*?)\s*}}", re.DOTALL)
 TAG_RE = re.compile(r"{%\s*(.*?)\s*%}", re.DOTALL)
@@ -58,7 +59,7 @@ def _iter_docx_xml(docx_bytes: bytes) -> Iterable[tuple[str, str]]:
 
 
 def _extract_text(xml_text: str) -> str:
-    root = ET.fromstring(xml_text)
+    root = stdlib_fromstring(xml_text)  # разд. 64.2: защита от XXE/billion-laughs
     paragraphs: list[str] = []
     for p in root.iter():
         if not p.tag.endswith("}p"):
@@ -313,9 +314,7 @@ def lint_template(
         used_roots = {path.split(".")[0] for path in legacy_field_paths}
         unknown_roots = (used_roots - declared_roots) - loop_vars
         for name in sorted(unknown_roots):
-            warnings.append(
-                f"Field is used but not declared in available_fields: {name}"
-            )
+            warnings.append(f"Field is used but not declared in available_fields: {name}")
     undefined_variables: list[str] = []
     unused_variables: list[str] = []
     if sample_schema is not None:

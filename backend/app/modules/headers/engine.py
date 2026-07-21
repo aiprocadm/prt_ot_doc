@@ -4,10 +4,10 @@ import re
 from io import BytesIO
 from zipfile import ZIP_DEFLATED, ZipFile
 
-from lxml import etree
-
+from app.core.xml_security import lxml_fromstring
 from app.modules.headers.placeholders import render_placeholders
 from app.modules.headers.report import ApplyHeadersReport
+from lxml import etree
 
 W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 R_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
@@ -72,7 +72,7 @@ def _ensure_settings_flag(files: dict[str, bytes], tag: str) -> None:
     settings_xml = files.get("word/settings.xml")
     if not settings_xml:
         return
-    settings_root = etree.fromstring(settings_xml)
+    settings_root = lxml_fromstring(settings_xml)  # разд. 64.2: защита от XXE
     if settings_root.find(f"w:{tag}", namespaces=NS) is None:
         etree.SubElement(settings_root, _w(tag))
     files["word/settings.xml"] = etree.tostring(
@@ -86,7 +86,7 @@ def _ensure_settings_flag(files: dict[str, bytes], tag: str) -> None:
 def _ensure_document_relationships(files: dict[str, bytes]) -> etree._Element:
     rels_path = "word/_rels/document.xml.rels"
     if rels_path in files:
-        return etree.fromstring(files[rels_path])
+        return lxml_fromstring(files[rels_path])  # разд. 64.2: защита от XXE
     root = etree.Element(_rel("Relationships"), nsmap={None: REL_NS})
     files[rels_path] = etree.tostring(
         root, xml_declaration=True, encoding="UTF-8", standalone="yes"
@@ -116,7 +116,7 @@ def _ensure_content_type_override(
         )
         etree.SubElement(root, _ct("Default"), Extension="xml", ContentType="application/xml")
     else:
-        root = etree.fromstring(files["[Content_Types].xml"])
+        root = lxml_fromstring(files["[Content_Types].xml"])  # разд. 64.2: защита от XXE
     existing = root.xpath(f"/ct:Types/ct:Override[@PartName='/{part_name}']", namespaces=NS)
     if not existing:
         etree.SubElement(root, _ct("Override"), PartName=f"/{part_name}", ContentType=content_type)
@@ -180,7 +180,7 @@ def apply_headers_to_docx(
 
     with ZipFile(in_buf, "r") as zin, ZipFile(out_buf, "w", ZIP_DEFLATED) as zout:
         files = {name: zin.read(name) for name in zin.namelist()}
-        document = etree.fromstring(files["word/document.xml"])
+        document = lxml_fromstring(files["word/document.xml"])  # разд. 64.2: защита от XXE
         sect = document.xpath("//w:sectPr", namespaces=NS)
         if not sect:
             raise ValueError("DOCX does not contain sectPr")
