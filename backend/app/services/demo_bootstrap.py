@@ -1184,6 +1184,116 @@ async def _seed_budget_demo(session, tenant_db_id: str) -> None:
             session.add(BudgetExpense(tenant_id=tenant_db_id, **spec))
     await session.flush()
 
+    await _seed_budget_reimbursements_demo(session, tenant_db_id, company)
+
+
+async def _seed_budget_reimbursements_demo(session, tenant_db_id: str, company) -> None:
+    """Seed 3 СФР reimbursement claims in different FSM states (§12.4 срез-2).
+
+    Statuses/timestamps are written directly rather than driven through
+    ``ReimbursementService.run_action`` — a seed is not a user session, and the
+    FSM would reject back-dating ``decided_at``. Idempotent: keyed on
+    (tenant, title), same natural key as the expenses above. Claims are composed
+    of the demo expenses seeded just above, resolved by title; a claim whose
+    expenses are missing is still created, just with an empty composition.
+    """
+    from app.models.budget import BudgetExpense, BudgetReimbursement, BudgetReimbursementItem
+
+    now = datetime.now(timezone.utc)
+    company_id = company.id if company is not None else None
+
+    # title -> id для состава заявок (расходы уже во flush'е выше).
+    expense_ids = {
+        row.title: row.id
+        for row in (
+            await session.execute(
+                select(BudgetExpense).where(
+                    BudgetExpense.tenant_id == tenant_db_id,
+                    BudgetExpense.deleted_at.is_(None),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    }
+
+    claim_specs: list[dict] = [
+        {
+            "fields": {
+                "title": "Возмещение СФР — I полугодие 2026 (черновик)",
+                "status": "draft",
+                "period_start": date(2026, 1, 1),
+                "period_end": date(2026, 6, 30),
+                "requested_amount": 135000,
+                "company_id": company_id,
+                "notes": "Обучение по ОТ — комплект документов собирается.",
+            },
+            "expenses": [
+                "Обучение по охране труда (группа 1)",
+                "Внутренний семинар по ОТ",
+            ],
+        },
+        {
+            "fields": {
+                "title": "Возмещение СФР — медосмотры 2026 (подана)",
+                "status": "submitted",
+                "period_start": date(2026, 1, 1),
+                "period_end": date(2026, 6, 30),
+                "requested_amount": 90000,
+                "reference": "СФР-2026-0417",
+                "company_id": company_id,
+                "submitted_at": now - timedelta(days=21),
+            },
+            "expenses": ["Периодический медосмотр цеха №1"],
+        },
+        {
+            "fields": {
+                "title": "Возмещение СФР — мероприятия 2026 (одобрена)",
+                "status": "approved",
+                "period_start": date(2026, 1, 1),
+                "period_end": date(2026, 12, 31),
+                "requested_amount": 202000,
+                "approved_amount": 180000,
+                "reference": "СФР-2026-0388",
+                "company_id": company_id,
+                "decision_reason": "Знаки безопасности не приняты к возмещению.",
+                "submitted_at": now - timedelta(days=45),
+                "decided_at": now - timedelta(days=14),
+            },
+            "expenses": [
+                "Ремонт вентиляции сварочного поста",
+                "Закупка знаков безопасности",
+            ],
+        },
+    ]
+
+    for spec in claim_specs:
+        fields = spec["fields"]
+        exists = await session.scalar(
+            select(BudgetReimbursement).where(
+                BudgetReimbursement.tenant_id == tenant_db_id,
+                BudgetReimbursement.title == fields["title"],
+                BudgetReimbursement.deleted_at.is_(None),
+            )
+        )
+        if exists is not None:
+            continue
+        claim = BudgetReimbursement(tenant_id=tenant_db_id, **fields)
+        session.add(claim)
+        await session.flush()
+        for expense_title in spec["expenses"]:
+            expense_id = expense_ids.get(expense_title)
+            if expense_id is None:
+                continue
+            session.add(
+                BudgetReimbursementItem(
+                    tenant_id=tenant_db_id,
+                    reimbursement_id=claim.id,
+                    expense_id=expense_id,
+                )
+            )
+    await session.flush()
+
 
 async def _seed_sout_demo(session, tenant_db_id: str, position_id: str | None = None) -> None:
     """Seed a minimal СОУТ demo (P10-04 срез-1).

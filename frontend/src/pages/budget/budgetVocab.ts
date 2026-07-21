@@ -1,4 +1,9 @@
-import type { BreakdownDimension, BudgetDomain, BudgetOverviewDomainCode } from "@/types/dto/budget";
+import type {
+  BreakdownDimension,
+  BudgetDomain,
+  BudgetOverviewDomainCode,
+  BudgetReimbursementStatus
+} from "@/types/dto/budget";
 import type { ApiError } from "@/types/dto/common";
 
 export const BUDGET_DOMAIN_LABELS: Record<BudgetOverviewDomainCode, string> = {
@@ -32,5 +37,25 @@ const rubFormatter = new Intl.NumberFormat("ru-RU", {
   maximumFractionDigits: 0
 });
 
-/** Единый формат денег для всех вкладок бюджета (Сводка / Бюджеты / Расходы). */
+/** Единый формат денег для всех вкладок бюджета (Сводка / Бюджеты / Расходы / Возмещения). */
 export const formatRub = (value: number): string => rubFormatter.format(value);
+
+/**
+ * Статусы заявок на возмещение СФР — для фильтра вкладки «Возмещения СФР».
+ * Подписи бейджей живут в общем StatusBadge (те же ключи), здесь — только порядок FSM.
+ */
+export const REIMBURSEMENT_STATUSES: BudgetReimbursementStatus[] = [
+  "draft",
+  "submitted",
+  "approved",
+  "rejected",
+  "paid"
+];
+
+export const REIMBURSEMENT_STATUS_LABELS: Record<BudgetReimbursementStatus, string> = {
+  draft: "Черновик",
+  submitted: "Подана",
+  approved: "Одобрена",
+  rejected: "Отклонена",
+  paid: "Выплачена"
+};
