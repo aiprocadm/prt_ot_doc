@@ -1,5 +1,16 @@
 # AI Implementation Report
 
+## Last Agent Handoff (2026-07-22, ВЛИТЫ ДОПОЛНЕНИЯ №1–№4 (разд. 49–74) В КАНОН + ЗАКРЫТ XXE — ветка claude/review-docs-update-code-d9fa9f)
+
+- **Дата:** 2026-07-22. Задача пользователя: изучить 4 дополнения к ТЗ (+ инструкцию по внедрению) и «добавить в код». Согласно инструкции — это **вливание требований в канон** (быстро, additive) **плюс один реальный код-фикс** (XXE); реализация доменов разд. 49–74 — **отдельными фазами 11–20, не сейчас**.
+- **ЗАКРЫТ РЕАЛЬНЫЙ XXE / billion-laughs (Доп. №3 разд. 64.2, приоритет №1):** введён общий хардненный парсер `backend/app/core/xml_security.py` (`lxml_fromstring` / `stdlib_fromstring` / `secure_lxml_parser`): единый гард отвергает DOCTYPE/DTD (легитимный OOXML их не содержит) — это закрывает и XXE, и billion-laughs; для lxml дополнительно `resolve_entities=False, no_network=True, load_dtd=False, huge_tree=False`. Провязан во **все 5 мест парсинга XML из загруженных файлов**: `modules/replace/engine_xml.py`, `modules/headers/engine.py` (4 вызова), `modules/templates/render.py`, `modules/templates/linter.py`, `domains/sout/import_report.py` (закрыт его же TODO про defusedxml). Тест `tests/test_xml_security.py` (9 кейсов: гард + parser-layer + интеграция replace_xml_parts + benign-регрессия). **Верификация:** изолированный прогон против реальных исходников (lxml 6.1.1) — 8/8 checks PASS (вредоносный DOCX не читает файл сервера, benign парсится).
+- **ВЛИТЫ ТРЕБОВАНИЯ В КАНОН (additive, разд. 36 vNext):** `product_spec.py` — 8 констант (`BIZ_DOMAINS`, `UX_BUDGET`, `ACCESS_CHECK_ORDER`, `SECURITY_DOMAINS`, `SECURITY_QUESTION`, `LIFECYCLE_DOMAINS`, `API_BREAKING_CHANGES`, `MIGRATION_RULE`) + `__all__` (импорт-чек EXIT=0); `TZ_FULL_UNIFIED.md` — раздел **B-NEXT.1–8** + строка в оглавление; `AGENTS.md` — секция «Расширение объёма» (теги vNext-BIZ/SEC/OPS); `TZ_COVERAGE_MATRIX.md` — 20 строк `BIZ-49..61 / SEC-63..69 / OPS-71..74` (валидатор `check_tz_coverage_matrix.py` EXIT=0, 67 строк); `PLATFORM_VNEXT_IMPLEMENTATION_PLAN.md` — фазы 11–20; `ci.yml` — semgrep-шаг в existing `sast-static-analysis` (observe-mode; bandit уже был).
+- **НЕ РЕАЛИЗОВАНО (осознанно, отдельными фазами):** домены разд. 49–74. Порядок: **Phase 16 (security hardening, приоритет выше бизнеса) → Phase 11 (Managed Clients + UX-бюджет + entitlements) → Phase 17 (import framework) → далее по плану**. RLS (разд. 65) — миграция только по подтверждённому плану и списку таблиц (не вслепую).
+- **Источники дополнений:** извлечённый текст — в scratchpad; сами docx — по решению пользователя (публичный репозиторий, см. ниже).
+- **Next (точный шаг):** реализовать **Phase 16** (RLS + impersonation-контроль + перевод semgrep в blocking после триажа), затем Phase 11. Каждую фазу — фразой «продолжай по ТЗ, Phase N».
+
+---
+
 ## Last Agent Handoff (2026-07-19..20, §12.4 СРЕЗ-2 — ЗАЯВКИ НА ВОЗМЕЩЕНИЕ СФР — ветка feat/budget-srez2-reimbursements, НЕ влита)
 
 - **Дата:** 2026-07-19..20. Взят **приоритетный кандидат из предыдущего handoff'а** — §12.4 срез-2, единственный пункт, вынесенный срезом-1 в «Явно ВНЕ объёма». Ветка от **main@`4c31546f`** (merge PR #764). Спека написана **по факту реализации** (ретро-спека): `docs/superpowers/specs/2026-07-19-budget-reimbursements-srez2-design.md`; отдельного plan-дока нет — срез-1 описывал возмещения двумя строками.

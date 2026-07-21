@@ -189,6 +189,28 @@ jobs:
           mkdir -p artifacts/security
           bandit -r backend/app -lll -iii -f json -o artifacts/security/bandit-high.json
 
+      # Дополнение №3 к ТЗ, разд. 69: semgrep ловит паттерны (XXE/injection),
+      # которые Trivy (зависимости) и bandit-High могут пропустить. Введён в
+      # observe-mode (continue-on-error) — не заваливает сборку на пре-существующих
+      # находках; перевод в blocking-gate запланирован в Phase 16 после триажа
+      # базлайна (конвенция ратчет-гейтов репозитория, ср. coverage-climb).
+      - name: Semgrep pattern SAST (Доп. №3 разд. 69 — observe-mode)
+        continue-on-error: true
+        run: |
+          mkdir -p artifacts/security
+          python -m pip install --quiet semgrep
+          semgrep scan --config p/python --config p/owasp-top-ten backend/app \
+            --json --output artifacts/security/semgrep.json
+
+      - name: Upload Semgrep report
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: sast-semgrep-report
+          path: artifacts/security/semgrep.json
+          if-no-files-found: ignore
+
       - name: Upload SAST report
         if: always()
         uses: actions/upload-artifact@v4
