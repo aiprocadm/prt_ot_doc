@@ -310,6 +310,9 @@ class Settings(BaseSettings):
     admin_email: str = Field("admin@example.com", alias="ADMIN_EMAIL")
     admin_password: str = Field("", alias="ADMIN_PASSWORD")
     admin_tenant: str = Field("public", alias="ADMIN_TENANT")
+    # Managing ("platform") tenant: the only tenant whose admins may provision, suspend
+    # and re-quota other tenants. Empty -> falls back to ``admin_tenant``.
+    platform_tenant_slug: str = Field("", alias="PLATFORM_TENANT_SLUG")
     webhook_notification_url: str | None = Field(None, alias="WEBHOOK_NOTIFICATION_URL")
     # RC-011 notification delivery (feature-flagged; default OFF -> no external send).
     notifications_delivery_enabled: bool = Field(
@@ -696,6 +699,12 @@ class Settings(BaseSettings):
             self.enable_openapi_docs = False
             self.enable_files_legacy_routes = False
         return self
+
+    @property
+    def managing_tenant_slug(self) -> str:
+        """Slug of the tenant allowed to manage the tenant fleet."""
+
+        return (self.platform_tenant_slug or self.admin_tenant).strip().lower()
 
     @property
     def application(self) -> ApplicationConfig:

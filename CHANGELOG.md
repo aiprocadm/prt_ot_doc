@@ -50,6 +50,52 @@
   на заявки (идемпотентность 3 заявки / 5 строк).
 - OpenAPI baseline: **888 операций / 751 схема** (+8 операций, только добавления).
 
+## 2026-07-19 (feat/tenant-management — управляющий тенант и UI создания тенантов)
+
+### Added
+- **Управляющий («платформенный») тенант.** Новая настройка `PLATFORM_TENANT_SLUG`
+  (`backend/app/core/config.py`, свойство `Settings.managing_tenant_slug`; пусто → `ADMIN_TENANT`).
+  Ровно один тенант получает право заводить, приостанавливать и переквотировать остальные —
+  задел под работу по подписке.
+- **`backend/app/api/routes/platform_tenants.py`** — новый роутер `/api/v1/platform/tenants`
+  (4 операции): `GET` — список **всех** тенантов с квотами; `POST` — провижининг;
+  `PATCH /{id}/status` — включить/приостановить доступ; `PATCH /{id}/quotas` — лимиты подписки.
+  Авторизация — `_require_managing_admin`: валидный access-токен + роль `admin`/`client_admin` +
+  запрос идёт под слагом управляющего тенанта (иначе 403). Управляющий тенант нельзя
+  приостановить самому себе (409) — иначе управление флотом заблокировалось бы навсегда.
+- **`POST /platform/tenants` создаёт сразу рабочий тенант**, а не пустую запись: переиспользован
+  `BootstrapTenantService` (схема БД, `TenantSettings`, квоты, authz-каталог, профиль компании,
+  стартовый набор, **учётная запись владельца**). До этого HTTP-путь создания владельца не заводил,
+  и войти в новый тенант было некому — оставался только `scripts/bootstrap_tenant.py`.
+  Бутстрап идёт на shared-схемной сессии (`AsyncSessionLocal(tenant="public", …)`) — так же, как в
+  скрипте: сессия запроса привязана к схеме управляющего тенанта и писать в неё чужие строки нельзя.
+- **`TENANT_SLUG_PATTERN`** (`backend/app/schemas/tenant.py`, зеркало в
+  `frontend/src/types/forms/tenants.ts`): слаг становится именем схемы Postgres, поэтому алфавит
+  ограничен `^[a-z][a-z0-9_-]{1,30}$`. Старый `TenantCreate` валидации не имел.
+- **Фронтенд:** страница `/admin/tenants` (`frontend/src/pages/admin/TenantsPage.tsx`) — реестр
+  тенантов, переключатель доступа, лимиты; диалог создания
+  (`frontend/src/features/tenants/TenantFormDialog.tsx`); API-модуль `frontend/src/api/tenants.ts`.
+  Пункт меню «Управление тенантами» и маршрут гейтятся по `PERMISSIONS.ADMIN_MANAGE_TENANTS` —
+  право было объявлено в коде давно, но нигде не использовалось. 403 от бэкенда трактуется не как
+  ошибка, а как «этот тенант не управляющий», с объясняющим пустым состоянием.
+
+### Tests
+- **`tests/api/test_platform_tenants_api.py`** — 17 HTTP-тестов: 401 без токена, 403 для не-админа,
+  403 для админа **не**управляющего тенанта, видимость чужих тенантов только управляющему,
+  409 на дубль слага, 422 на 6 небезопасных слагов и короткий пароль, приостановка/восстановление,
+  409 на самоприостановку, 404 на неизвестный тенант, правка квот. Ключевой тест —
+  `test_provision_creates_usable_tenant_with_owner_login`: после создания владелец **реально
+  логинится**, то есть тенант пригоден к работе.
+- **`frontend/src/__tests__/TenantsPage.test.tsx`** — 6 тестов (список, метка управляющего, лимиты,
+  приостановка, заблокированный тумблер у самого управляющего, состояние «не управляющий тенант»).
+- OpenAPI baseline переснят: `docs/stabilization/openapi_routes_baseline.json` → **884 операции /
+  748 схем** (+4 операции, +5 схем, только добавления).
+
+### Известные ограничения
+- Список тенантов на форме входа (`frontend/src/config/tenants.ts`) по-прежнему статичен: слаг
+  нового тенанта в подсказках не появится, его нужно ввести вручную (поле — свободный ввод).
+  Динамический список требует публичного эндпоинта и был бы перечислением тенантов наружу.
+
 ## 2026-05-05 (Session 17 — Phase 3.1d: DocumentReadinessRule)
 - **`backend/app/modules/data_quality/rules.py`** — добавлено правило **`DocumentReadinessRule`** (`document_readiness`): DRAFT-документы старше **7** суток без `template_version_id` (MEDIUM, `missing_field`); DRAFT с привязанной `TemplateVersion`, у которой в `required_fields_schema` задан массив **`required`**, — проверка последней ревизии `DocumentVersion.data_json` на пустые обязательные поля (учёт вложенных корней `values` / `payload` / `fields` / `data`). Движок: **10 правил**.
 - **`tests/test_data_quality.py`** — класс `TestDocumentReadinessRule` (4 кейса), `expected_rules` в `TestDataQualityService` дополнен `document_readiness`.
