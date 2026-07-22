@@ -1,5 +1,23 @@
 # CHANGELOG
 
+## 2026-07-22 (feat/sec65-rls-ppe — RLS: расширение на домен СИЗ, Phase 16)
+
+SEC-65 (TZ B-NEXT.7), продолжение RLS. Тот же механизм (уже в main), применён к
+домену СИЗ. Только PostgreSQL — на SQLite миграция no-op.
+
+### Added
+- **RLS-миграция** `20260722_sec65_rls_ppe` (Postgres-only, down_rev
+  `20260722_sec65_rls_medical`): `ENABLE` + `FORCE ROW LEVEL SECURITY` + политика
+  `tenant_isolation` на 9 таблицах СИЗ: `ppenorm`, `ppeitem`, `ppeissue` (три легаси
+  без подчёркивания), `ppe_supplier`, `ppe_safety_budget`, `ppe_stock_batch`,
+  `ppe_stock_movement`, `ppe_inventory_count`, `ppe_inventory_count_line`. Имена взяты
+  из живых метаданных SQLAlchemy (не из имён классов). Демо-сид СИЗ уже идёт в
+  bypass-сессии.
+
+### Tests
+- `backend/tests/test_rls_ppe.py` (маркер `db`): миграция armed все 9 таблиц. Семантику
+  политики покрывает generic-тест `test_rls_committees.py`.
+
 ## 2026-07-22 (feat/sec65-rls-medical — RLS: расширение на домен медосмотров, Phase 16)
 
 SEC-65 (TZ B-NEXT.7), продолжение пилота комитетов. Тот же механизм (GUC
