@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings, get_settings
 from app.core.metrics import Metrics, get_metrics
+from app.core.ssrf_guard import UnsafeWebhookURLError, assert_safe_webhook_url
 from app.core.tracing import get_trace_id
 from app.models.models import WebhookEndpoint, WebhookSubscription
 
@@ -368,6 +369,23 @@ class WebhookDispatcher:
                         dest.secret.encode("utf-8"), sign_payload, sha256
                     ).hexdigest()
                     merged_headers["X-Signature"] = f"v1={signature}"
+                if self.settings.webhook_ssrf_guard_enabled:
+                    try:
+                        await assert_safe_webhook_url(dest.url, app_env=self.settings.app_env)
+                    except UnsafeWebhookURLError as exc:
+                        # SEC-64 §64.3: block SSRF targets before any network call.
+                        # Sentinel status 0 = "blocked pre-flight" (distinct from HTTP codes).
+                        failures.append((dest.url, 0))
+                        logger.warning(
+                            "webhook.blocked_ssrf",
+                            extra={
+                                "event_type": event_type,
+                                "tenant_id": tenant_id,
+                                "url": dest.url,
+                                "reason": str(exc),
+                            },
+                        )
+                        continue
                 response = await client.post(
                     dest.url,
                     content=body,

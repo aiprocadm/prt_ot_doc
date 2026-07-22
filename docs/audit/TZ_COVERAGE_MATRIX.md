@@ -66,7 +66,7 @@ Status vocabulary is strict and machine-checkable:
 | BIZ-60 | [vNext-BIZ] Чек-лист приёмки экрана (UX DoD) | - | - | - | - | missing | - | missing | p2 | Phase 11 [vNext-BIZ] · Доп.№2 разд.60 |
 | BIZ-61 | [vNext-BIZ] Module Registry + entitlements (default-OFF) | partial(feature_flags) | - | - | - | missing | - | partial | p2 | Phase 11 [vNext-BIZ] · Доп.№2 разд.61 |
 | SEC-63 | [vNext-SEC] Модель угроз: иерархия/impersonation/entitlements | - | - | - | - | - | - | missing | p1 | Phase 16 [vNext-SEC] · Доп.№3 разд.63 |
-| SEC-64 | [vNext-SEC] AppSec OWASP + безопасный парсинг (XXE) + SSRF | partial(xml_security) | - | - | - | - | tests/test_xml_security.py | partial | p1 | Phase 16 [vNext-SEC] · Доп.№3 разд.64 — XXE закрыт (xml_security.py) |
+| SEC-64 | [vNext-SEC] AppSec OWASP + безопасный парсинг (XXE) + SSRF | partial(xml_security+webhook_ssrf) | - | - | - | - | tests/test_xml_security.py, tests/test_ssrf_guard.py, tests/test_webhooks_ssrf.py | partial | p1 | Phase 16 [vNext-SEC] · Доп.№3 разд.64 — XXE закрыт (xml_security.py); SSRF исходящих вебхуков закрыт (core/ssrf_guard.py §64.3) |
 | SEC-65 | [vNext-SEC] RLS как второй рубеж изоляции арендаторов | - | - | - | - | - | - | missing | p1 | Phase 16 [vNext-SEC] · Доп.№3 разд.65 (миграция — по подтверждению) |
 | SEC-66 | [vNext-SEC] ПДн/152-ФЗ: локализация/права субъекта/DPA | partial(audit+export) | - | - | - | - | - | partial | p1 | Phase 16 [vNext-SEC] · Доп.№3 разд.66 |
 | SEC-67 | [vNext-SEC] Единая политика секретов (шифрование/ротация) | partial(token-hash+tenant-key-enc) | - | - | - | - | - | partial | p1 | Phase 16 [vNext-SEC] · Доп.№3 разд.67 |
