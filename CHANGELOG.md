@@ -1,5 +1,27 @@
 # CHANGELOG
 
+## 2026-07-22 (feat/sec65-rls-coverage-guard — RLS coverage ratchet-гард, Phase 16)
+
+SEC-65 (TZ B-NEXT.7). CI-гард, который фиксирует текущее RLS-покрытие и не даёт
+добавить новую tenant-таблицу без осознанного решения (RLS или явное исключение).
+
+### Added
+- **Реестр** `backend/app/core/rls_policy.py`: два frozenset — `RLS_ENABLED_TABLES`
+  (35 таблиц с RLS) и `RLS_EXEMPT_TABLES` (229 tenant-таблиц пока без RLS, снимок-ratchet).
+  Среди exempt намеренно осторожные (`authz_*`, `api_tokens` — читаются на горячем пути
+  проверки прав, нужен отдельный анализ до RLS).
+- **Гард** `scripts/audit/check_rls_coverage.py`: каждая tenant-таблица (с колонкой
+  `tenant_id`, из метаданных SQLAlchemy) обязана быть ровно в одном из наборов; новая
+  таблица ни в одном → гард падает. Ловит и противоречия (в обоих), и устаревшие имена
+  (переименовано/удалено). Полнота импорта — через `create_app` (иначе часть таблиц
+  вроде `header_footer_presets` не видна).
+- **CI**: шаг «RLS coverage ratchet (SEC-65)» в `ci.yml` (static-gates job).
+
+### Tests
+- `tests/test_rls_coverage.py`: (1) чистый ratchet (SQLite, без БД) — реестр консистентен;
+  (2) `-m db` кросс-чек — множество RLS-таблиц в живом Postgres == `RLS_ENABLED_TABLES`
+  (реестр не может разойтись с тем, что делают миграции).
+
 ## 2026-07-22 (feat/sec65-rls-documents — RLS: расширение на домен документов, Phase 16)
 
 SEC-65 (TZ B-NEXT.7), продолжение RLS. Документы — самые чувствительные данные

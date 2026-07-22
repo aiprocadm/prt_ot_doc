@@ -1,6 +1,16 @@
 # AI Implementation Report
 
-## Last Agent Handoff (2026-07-22, SEC-65 — RLS РАСШИРЕНИЕ НА ДОКУМЕНТЫ (Phase 16) — ветка feat/sec65-rls-documents, НЕ влита)
+## Last Agent Handoff (2026-07-22, SEC-65 — RLS COVERAGE RATCHET-ГАРД (Phase 16) — ветка feat/sec65-rls-coverage-guard, НЕ влита)
+
+- **Дата:** 2026-07-22. «продолжай по ТЗ». Пользователь через AskUserQuestion выбрал **CI-линтер RLS-покрытия** (ratchet) вместо очередного домена. Ветка от `main` после #778 (документы). Цель: зафиксировать текущее покрытие (35 табл) и не дать добавлять tenant-таблицы без RLS.
+- **ФАЙЛЫ:** реестр `backend/app/core/rls_policy.py` (`RLS_ENABLED_TABLES` 35 / `RLS_EXEMPT_TABLES` 229); гард `scripts/audit/check_rls_coverage.py` (каждая tenant-таблица ∈ ровно один набор; иначе fail — ловит новые/противоречия/устаревшие имена); CI-шаг «RLS coverage ratchet (SEC-65)» в `ci.yml` (`PYTHONPATH=backend`, в static-gates job рядом с TZ-матрицей); тесты `tests/test_rls_coverage.py` (чистый ratchet + `-m db` кросс-чек реестр↔Postgres).
+- **ГРАБЛЯ ПОЛНОТЫ ИМПОРТА (важно):** `import app.db.base` подтягивает НЕ все модели — `header_footer_presets` и др. регистрируются только при импорте их роутера. Гард и снимок строятся через `create_app()` (полный router→model граф, как видит pytest-conftest). Иначе тест `test_rls_coverage_registry_consistent` падает под pytest (видит больше таблиц, чем standalone). Всего tenant-таблиц (union): **264**.
+- **ВЕРИФИКАЦИЯ:** гард напрямую EXIT=0 (35/229/264). `tests/test_rls_coverage.py` — **2 passed** (чистый + db кросс-чек: RLS-таблицы в Postgres == реестр). `ruff` clean, `ci.yml` YAML валиден. Весь `-m db` набор — [ЗАПОЛНИТЬ; ожид. 11 passed]. Полный SQLite-suite — [ЗАПОЛНИТЬ; +1 тест ratchet].
+- **⚠️ ОСТАЛОСЬ ДО PR:** дождаться `-m db` + SQLite-suite; OpenAPI (нет роутов).
+- **КАК РАСШИРЯТЬ RLS ДАЛЬШЕ:** добавить домен → миграция `20260722_sec65_rls_*` → перенести таблицы из `RLS_EXEMPT_TABLES` в `RLS_ENABLED_TABLES` (иначе `-m db` кросс-чек упадёт — реестр разойдётся с Postgres). Гард сам подскажет несоответствие.
+- **Next:** дождаться гейтов → PR (base=main, только по решению пользователя). Дальше: RLS на след. домен (СОУТ/риски/contractors/budget — теперь с гардом-страховкой), либо секреты SEC-67 / 152-ФЗ SEC-66.
+
+## Last Agent Handoff (2026-07-22, SEC-65 — RLS РАСШИРЕНИЕ НА ДОКУМЕНТЫ (Phase 16) — ветка feat/sec65-rls-documents, ВЛИТА PR #778)
 
 - **Дата:** 2026-07-22. «продолжай по ТЗ». RLS на домен **документов** (после мержа PR #777 СИЗ). Ветка от `main` после #777. Механизм в main; срез = миграция + тест.
 - **ФАЙЛЫ:** миграция `20260722_sec65_rls_documents.py` (Postgres-only, down_rev `20260722_sec65_rls_ppe`) на **11 core-таблицах**: `document`, `documentversion`, `document_snapshot`, `document_artifacts`, `document_batch_run`, `document_batch_item`, `document_jobs`, `document_job_steps`, `document_pack`, `document_pack_item`, `documentgenerationjob` (имена из метаданных; легаси `documentversion`/`documentgenerationjob` без подчёркивания). Политика дословно как у комитетов.
