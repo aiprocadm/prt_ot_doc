@@ -1,5 +1,32 @@
 # CHANGELOG
 
+## 2026-07-22 (feat/sec64-webhook-ssrf-guard — SSRF-защита исходящих вебхуков, Phase 16)
+
+SEC-64 §64.3 (TZ B-NEXT.7 «Сквозная безопасность»). Спека:
+`docs/superpowers/specs/2026-07-22-sec64-webhook-ssrf-guard-design.md`.
+Новых таблиц/миграций/роутов НЕТ — только серверная защита.
+
+### Added
+- **SSRF-guard** (`backend/app/core/ssrf_guard.py`): `assert_safe_webhook_url` отвергает
+  исходящие вебхуки, нацеленные на внутренние адреса (cloud-metadata `169.254.169.254`,
+  loopback, приватные подсети, multicast/reserved/unspecified; разворачивает IPv4-mapped IPv6).
+  Тщательный режим: имена **резолвятся** и проверяются все полученные адреса. Строгость зависит
+  от окружения — строго + fail-closed в production/staging, мягко в development/test (тестовые
+  вебхуки шлют на не-резолвящиеся фейк-хосты и не должны бить по сети). Известный лимит:
+  соединение не пиннится к проверенному IP (остаточный DNS-rebinding TOCTOU) — пиннинг вынесен
+  в follow-up.
+- **Settings-флаг** `WEBHOOK_SSRF_GUARD_ENABLED` (дефолт **on**) — оперативный kill-switch.
+- **Врезка guard** в обе реальные точки отправки: диспетчер `services/webhooks.py`
+  (покрывает и `outbox.py`, который делегирует диспетчеру; заблокированный адрес → sentinel-статус
+  `0`, лог `webhook.blocked_ssrf`, терминальная классификация — без повторов) и провайдер
+  уведомлений `modules/notifications/providers/webhook.py` (→ `DeliveryResult.fail`).
+
+### Tests
+- `tests/test_ssrf_guard.py` — 25 unit-кейсов (схемы, литеральные блок-IP, IPv4-mapped, prod
+  резолв→приватный/публичный/пусто/ошибка, dev-permissive, staging строгий).
+- `tests/test_webhooks_ssrf.py` — 4 интеграционных: диспетчер блокирует приватный IP и metadata
+  ДО отправки (0 запросов), пропускает безопасный хост, kill-switch отключает guard.
+
 ## 2026-07-22 (feat/p10-01-committees-srez3-kpi-command-center — KPI-дашборд комитетов + проекция задач в Command Center)
 
 Срез-3 P10-01 «Комитеты» (TZ B.17 «KPI исполнения»). Спека:

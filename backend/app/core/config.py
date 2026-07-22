@@ -404,6 +404,10 @@ class Settings(BaseSettings):
         default_factory=list, alias="WEBHOOK_URLS_TRAINING_ASSIGNED"
     )
     webhook_timeout_seconds: float = Field(10.0, alias="WEBHOOK_TIMEOUT_SECONDS")
+    # SEC-64 §64.3: guard outbound webhooks against SSRF (internal/private targets).
+    # Default on; operator kill-switch. Enforcement is environment-aware (strict in
+    # production/staging, permissive in development/test) — see core/ssrf_guard.py.
+    webhook_ssrf_guard_enabled: bool = Field(True, alias="WEBHOOK_SSRF_GUARD_ENABLED")
     inbound_webhook_hmac_secret: str = Field("", alias="INBOUND_WEBHOOK_HMAC_SECRET")
     log_level: str = Field("INFO", alias="LOG_LEVEL")
     log_json: bool = Field(True, alias="LOG_JSON")

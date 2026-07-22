@@ -32,6 +32,18 @@ class WebhookProvider:
         if not getattr(s, "notifications_delivery_enabled", False) or not url:
             return DeliveryResult.skip("webhook delivery disabled or URL not configured")
 
+        # SEC-64 §64.3: block SSRF targets before the outbound call.
+        if getattr(s, "webhook_ssrf_guard_enabled", True):
+            from app.core.ssrf_guard import (
+                UnsafeWebhookURLError,
+                assert_safe_webhook_url,
+            )
+
+            try:
+                await assert_safe_webhook_url(url, app_env=getattr(s, "app_env", "production"))
+            except UnsafeWebhookURLError as exc:
+                return DeliveryResult.fail(f"webhook blocked (ssrf): {exc}")
+
         import httpx
 
         body = json.dumps(
