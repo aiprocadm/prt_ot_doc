@@ -7,10 +7,10 @@ RU-метки классов берём из соседнего print_form.py (�
 from __future__ import annotations
 
 import csv
-import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from io import BytesIO, StringIO
 
+from app.core.xml_security import stdlib_fromstring
 from app.domains.sout.print_form import HARMFUL_CLASSES
 
 
@@ -182,10 +182,9 @@ def parse_fgis_xml(content: bytes) -> list[ParsedWorkplace]:
     </workplace></sout>
 
     TODO: сверить с реальной выгрузкой ФГИС СОУТ (образца в репо нет)."""
-    # TODO (hardening, deferred): xml.etree не защищён от entity-expansion (billion laughs);
-    # при появлении defusedxml в зависимостях перейти на defusedxml.ElementTree.fromstring.
-    # Сейчас риск ограничен: эндпоинт admin-only + size-guard; stdlib-парсинг — репо-конвенция.
-    root = ET.fromstring(content)
+    # Разд. 64.2 (Доп. №3): парсинг через общий гард xml_security — DOCTYPE/DTD
+    # отвергается, что закрывает XXE и billion-laughs без стороннего defusedxml.
+    root = stdlib_fromstring(content)
     out: list[ParsedWorkplace] = []
     for wp_el in root.iter("workplace"):
         code = (wp_el.get("code") or wp_el.findtext("code") or "").strip()

@@ -1560,3 +1560,66 @@ This plan ensures the platform evolves **incrementally and safely**:
 
 **Outcome:** Platform goes from "advanced MVP" → "enterprise-grade SaaS" in 6 months, with zero downtime and zero data loss.
 
+---
+
+## Phases 11–20 — Расширение объёма (Дополнения №1–№4 к ТЗ, разд. 49–74)
+
+> Добавлено вливанием Дополнений №1–№4 в канон. Карта требований — раздел
+> **B-NEXT** в `TZ_FULL_UNIFIED.md`; REQ-ID и статусы — `TZ_COVERAGE_MATRIX.md`
+> (`BIZ-*` / `SEC-*` / `OPS-*`); программные константы — `product_spec.py`.
+> **Порядок приоритета: сначала Phase 16 (безопасность — фундамент), затем 11
+> (ценность), 17 (импорт), далее по списку.** Реализовывать по одной фазе, не
+> всё сразу. XXE-уязвимость из разд. 64.2 уже закрыта
+> (`backend/app/core/xml_security.py` + `tests/test_xml_security.py`).
+
+### Phase 16 — Security hardening [vNext-SEC] · приоритет ВЫШЕ бизнес-фаз
+`SEC-63..69`. XXE-fix **done**; далее RLS как второй рубеж изоляции (разд. 65 —
+additive expand-contract миграция, применять **только по подтверждённому плану и
+списку таблиц**), impersonation-контроль (разд. 63.2), SSRF-защита вебхуков
+(разд. 64.3), ПДн/152-ФЗ (разд. 66), единая политика секретов (разд. 67),
+перевод semgrep-SAST в blocking-режим после триажа базлайна (разд. 69). Опора:
+`tenant_row_guard`, тесты изоляции, `ci.yml` (bandit/trivy/gitleaks).
+
+### Phase 11 — Аутсорсинговый контур + UX-бюджет + entitlements [vNext-BIZ]
+`BIZ-49, BIZ-50, BIZ-59, BIZ-60, BIZ-61`. Managed Clients + Client Cockpit +
+Quick Pack Wizard + измеримый UX-бюджет + Module Registry/entitlements
+(default-OFF). Опора: `packs`, `contractors`, `client_portal`, `feature_flags`.
+Наибольшая ценность для бизнеса аутсорсера.
+
+### Phase 12 — Change Feed + Compliance Baseline [vNext-BIZ]
+`BIZ-51`. Client Change Feed + периодический авто-аудит соответствия +
+отчёт клиенту. Опора: `rules_engine`, `data_quality`, `calendar`.
+
+### Phase 13 — White-label + reseller-иерархия [vNext-BIZ]
+`BIZ-52`. Platform Owner → Reseller → Client, white-label всего приложения,
+тиражирование настроек (starter-packs), двухуровневый суб-биллинг. Опора:
+`branding`, `subscription`, `platform_tenants`.
+
+### Phase 14 — Self-service аренда + переходы [vNext-BIZ]
+`BIZ-53`. Редакции под размер заказчика, self-service онбординг, бесшовный
+переход Managed → Аренда без потери данных. Опора: `onboarding`, `subscription`.
+
+### Phase 15 — Дисциплины ПБ→ПромБез→Экология→ГО-ЧС→БДД [vNext-BIZ]
+`BIZ-54-57`. Каждая дисциплина — отдельный инкремент надстройки над общим ядром.
+Опора: `fire-safety`, `work-permits`, transport safety.
+
+### Phase 17 — Import framework [vNext-OPS]
+`OPS-71`. Единый импорт-фреймворк (XLSX/CSV/JSON, визуальный маппинг, dry-run,
+откат партии по batch id, идемпотентность, прогресс) поверх `sout_import`.
+Множитель ёмкости аутсорсера.
+
+### Phase 18 — Client offboarding [vNext-OPS]
+`OPS-72`. Полный экспорт данных арендатора (не только отчётов) + grace-период +
+управляемое удаление/обезличивание + каскад по reseller. Антидот к vendor
+lock-in и требование 152-ФЗ.
+
+### Phase 19 — API governance [vNext-OPS]
+`OPS-73`. Политика версий (semver контрактов), deprecation (`Deprecation`/`Sunset`
+заголовки, мониторинг использования), contract-тесты как gate. Опора: `/api/v1`,
+`test_openapi_contract.py`.
+
+### Phase 20 — Zero-downtime ops [vNext-OPS]
+`OPS-74`. Rolling/blue-green деплой, canary, health-gated rollout,
+expand-contract миграции по всем схемам арендаторов, SLA отката. Опора:
+rollback-доки, health checks, `test_migrations_comprehensive_safety.py`.
+

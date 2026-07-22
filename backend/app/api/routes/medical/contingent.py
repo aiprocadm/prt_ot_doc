@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from typing import Literal
-from urllib.parse import quote
 
 from fastapi import HTTPException, Query, Request, Response, status
 from sqlalchemy import select
@@ -17,6 +16,7 @@ from app.api.routes.medical._common import (
     TenantDep,
     _error,
     _get_hazard,
+    _render_to_response,
     router,
 )
 from app.core.tenant_validation import TenantContextValidator
@@ -39,7 +39,6 @@ from app.schemas.medical import (
 )
 from app.services.audit import AuditService
 from app.services.medical_print import (
-    PdfRendererUnavailable,
     render_contingent_register,
     render_named_list,
 )
@@ -183,23 +182,6 @@ async def get_named_list(
     today = datetime.now(timezone.utc).date()
     rows = await medsvc.build_named_list(session, tenant_id=str(tenant.id), today=today)
     return NamedListPage(items=[NamedListRow(**r) for r in rows], total=len(rows))
-
-
-async def _render_to_response(coro) -> Response:
-    """Awaits a medical render coroutine → file Response (503 если PDF недоступен)."""
-    try:
-        rendered = await coro
-    except PdfRendererUnavailable as exc:
-        raise HTTPException(
-            status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=_error("pdf_renderer_unavailable", "PDF converter is unavailable"),
-        ) from exc
-    encoded_name = quote(rendered.filename, safe="")
-    return Response(
-        content=rendered.content,
-        media_type=rendered.media_type,
-        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{encoded_name}"},
-    )
 
 
 @router.get("/medical/contingent/register/print", dependencies=[MedicalFeatureGate])

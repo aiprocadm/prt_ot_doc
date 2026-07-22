@@ -7,9 +7,10 @@ and the shared error/getter helpers used by the exams, catalog and contingent mo
 from __future__ import annotations
 
 from typing import Annotated
+from urllib.parse import quote
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -69,6 +70,27 @@ MedicalFeatureGate = Depends(require_medical_feature)
 
 def _error(code: str, message: str) -> dict[str, str]:
     return {"code": code, "message": message}
+
+
+async def _render_to_response(coro) -> Response:
+    """Awaits a medical render coroutine → file Response (503 если PDF недоступен)."""
+    # Локальный импорт: medical_print тянет domains/pdf — держим _common лёгким и
+    # избегаем ранней загрузки на импорте пакета роутов.
+    from app.services.medical_print import PdfRendererUnavailable
+
+    try:
+        rendered = await coro
+    except PdfRendererUnavailable as exc:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=_error("pdf_renderer_unavailable", "PDF converter is unavailable"),
+        ) from exc
+    encoded_name = quote(rendered.filename, safe="")
+    return Response(
+        content=rendered.content,
+        media_type=rendered.media_type,
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{encoded_name}"},
+    )
 
 
 def _to_referral_read(record: MedicalReferral, *, today) -> MedicalReferralRead:

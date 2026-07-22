@@ -6,6 +6,7 @@ from io import BytesIO
 from typing import Any
 from xml.etree import ElementTree as ET
 
+from app.core.xml_security import stdlib_fromstring
 from jinja2 import StrictUndefined
 from jinja2.sandbox import SandboxedEnvironment
 
@@ -48,7 +49,7 @@ def _render_jinja(text: str, data: dict[str, Any]) -> str:
 
 
 def _render_xml_part(content: bytes, data: dict[str, Any]) -> bytes:
-    root = ET.fromstring(content)
+    root = stdlib_fromstring(content)  # разд. 64.2: защита от XXE/billion-laughs
     for paragraph in root.findall(".//w:p", NS):
         text_nodes = paragraph.findall(".//w:t", NS)
         if not text_nodes:
