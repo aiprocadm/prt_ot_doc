@@ -29,7 +29,8 @@ const CATEGORY_LABELS_RU: Record<AlertCategory, string> = {
   high_risk: "Высокий риск",
   health_warning: "Предупреждения системы",
   unassigned_task: "Неназначенные задачи",
-  data_quality: "Качество данных"
+  data_quality: "Качество данных",
+  committee_task: "Задачи комитетов"
 };
 
 /** Canonical fallback order for categories with equal worst-severity. */
@@ -40,7 +41,8 @@ const CATEGORY_ORDER: AlertCategory[] = [
   "high_risk",
   "health_warning",
   "unassigned_task",
-  "data_quality"
+  "data_quality",
+  "committee_task"
 ];
 
 const SEVERITY_RANK: Record<AlertSeverity, number> = {

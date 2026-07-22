@@ -234,3 +234,27 @@ class ProtocolDecision(BaseSchema):
 class ProtocolRead(BaseSchema):
     meeting: MeetingRead
     decisions: list[ProtocolDecision]
+
+
+# --- KPI dashboard (срез-3) ---
+class CommitteeKpiDto(BaseSchema):
+    """Flat committee execution KPIs (TZ B.17 «KPI исполнения»).
+
+    Computed from срез-1/срез-2 tables — no new storage. ``avg_attendance_pct``
+    and ``quorum_rate_pct`` are 0..100 floats over ``held_meetings`` (0.0 when
+    there are no held meetings, so no division by zero).
+    """
+
+    committees_total: int = 0
+    committees_active: int = 0
+    meetings_planned: int = 0
+    meetings_held: int = 0
+    meetings_cancelled: int = 0
+    decisions_total: int = 0
+    tasks_total: int = 0
+    tasks_open: int = 0
+    tasks_overdue: int = 0
+    tasks_done: int = 0
+    held_meetings: int = 0
+    avg_attendance_pct: float = 0.0
+    quorum_rate_pct: float = 0.0

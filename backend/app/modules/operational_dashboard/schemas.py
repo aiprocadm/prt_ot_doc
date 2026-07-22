@@ -27,6 +27,7 @@ class AlertCategory(str, Enum):
     HEALTH_WARNING = "health_warning"
     UNASSIGNED_TASK = "unassigned_task"
     DATA_QUALITY = "data_quality"
+    COMMITTEE_TASK = "committee_task"
 
 
 class AlertItem(BaseModel):

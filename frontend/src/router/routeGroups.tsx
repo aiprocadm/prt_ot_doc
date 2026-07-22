@@ -7,6 +7,7 @@ import { documentCreateRoutes, documentReadRoutes } from "@/router/features/docu
 import { searchAndFilesRoutes } from "@/router/features/searchAndFilesRoutes";
 import {
   ActivitiesPage,
+  CommitteeKpiPage,
   CommitteesPage,
   SoutPage,
   AdminLayoutPresetsPage,
@@ -231,7 +232,13 @@ export const buildProtectedRouteGroups = (): ReactElement[] => {
     },
     {
       permission: PERMISSIONS.ANALYTICS_VIEW,
-      routes: [<Route key="/analytics" path="/analytics" element={<ManagementDashboardPage />} />]
+      routes: [
+        <Route key="/analytics" path="/analytics" element={<ManagementDashboardPage />} />,
+        // Срез-3: KPI комитетов — под management-правом ANALYTICS_VIEW, а не COMMITTEE_VIEW.
+        // React Router v6 ранжирует по специфичности, поэтому /committees/kpi не конфликтует
+        // с /committees из группы COMMITTEE_VIEW.
+        <Route key="/committees/kpi" path="/committees/kpi" element={<CommitteeKpiPage />} />
+      ]
     },
     {
       permission: PERMISSIONS.CLIENT_PORTAL_VIEW,

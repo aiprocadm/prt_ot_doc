@@ -9,7 +9,8 @@ export type AlertCategory =
   | "high_risk"
   | "health_warning"
   | "unassigned_task"
-  | "data_quality";
+  | "data_quality"
+  | "committee_task";
 
 /** One alert bucket from GET /api/v1/operational/dashboard (backend: AlertItem). */
 export type AlertItem = {
