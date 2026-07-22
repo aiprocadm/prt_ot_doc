@@ -1,5 +1,26 @@
 # CHANGELOG
 
+## 2026-07-22 (feat/sec65-rls-medical — RLS: расширение на домен медосмотров, Phase 16)
+
+SEC-65 (TZ B-NEXT.7), продолжение пилота комитетов. Тот же механизм (GUC
+`app.current_tenant`/`app.bypass_rls`, обвязка `db/session.py` — уже в main),
+применён к домену медосмотров. Только PostgreSQL — на SQLite миграция no-op.
+
+### Added
+- **RLS-миграция** `20260722_sec65_rls_medical` (Postgres-only, down_rev
+  `20260722_sec65_rls_committees`): `ENABLE` + `FORCE ROW LEVEL SECURITY` + политика
+  `tenant_isolation` (`bypass='on' OR tenant_id = current_setting('app.current_tenant', true)`)
+  на 7 таблицах медосмотров: `medical_exam`, `medical_norm`, `medical_factor`,
+  `medical_referral`, `medical_suspension`, `psychiatric_activity_type`,
+  `psychiatric_position_activity`. Медданные — чувствительные ПДн, изоляция на уровне БД
+  особенно уместна. Демо-сид медданных уже идёт в bypass-сессии (введена в пилоте).
+
+### Tests
+- `backend/tests/test_rls_medical.py` (маркер `db`): миграция реально включила
+  RLS+FORCE+политику на всех 7 таблицах (интроспекция). Семантику политики
+  (isolation/fail-closed/bypass/WITH CHECK) покрывает generic-тест из `test_rls_committees.py`
+  (предикат идентичен).
+
 ## 2026-07-22 (feat/sec65-rls-committees-pilot — RLS как второй рубеж изоляции, пилот на комитетах, Phase 16)
 
 SEC-65 (TZ B-NEXT.7). Спека:
