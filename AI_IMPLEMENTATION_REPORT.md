@@ -1,6 +1,17 @@
 # AI Implementation Report
 
-## Last Agent Handoff (2026-07-22, SEC-65 — RLS РАСШИРЕНИЕ НА СИЗ (Phase 16) — ветка feat/sec65-rls-ppe, НЕ влита)
+## Last Agent Handoff (2026-07-22, SEC-65 — RLS РАСШИРЕНИЕ НА ДОКУМЕНТЫ (Phase 16) — ветка feat/sec65-rls-documents, НЕ влита)
+
+- **Дата:** 2026-07-22. «продолжай по ТЗ». RLS на домен **документов** (после мержа PR #777 СИЗ). Ветка от `main` после #777. Механизм в main; срез = миграция + тест.
+- **ФАЙЛЫ:** миграция `20260722_sec65_rls_documents.py` (Postgres-only, down_rev `20260722_sec65_rls_ppe`) на **11 core-таблицах**: `document`, `documentversion`, `document_snapshot`, `document_artifacts`, `document_batch_run`, `document_batch_item`, `document_jobs`, `document_job_steps`, `document_pack`, `document_pack_item`, `documentgenerationjob` (имена из метаданных; легаси `documentversion`/`documentgenerationjob` без подчёркивания). Политика дословно как у комитетов.
+- **АНАЛИЗ РИСКА (важно для документов):** проверил пути записи — все тенант-контекстные: API-хендлеры + celery через `session_scope(tenant=tenant_slug)`/`AsyncSessionLocal(tenant=tenant_id)` (`tasks/document_jobs.py`, `celery/tasks/*`). **Глобального (tenant=None) опроса очереди задач НЕТ** (grep пуст) → FORCE RLS не заблокирует выборку задач воркером генерации. Демо-сид документов в per-tenant bypass-сессии.
+- **ГРАНИЦЫ СРЕЗА (вне объёма, отдельными срезами):** `contractor_document_requirement`/`contractor_documents` (домен contractors), `search_documents` (кросс-сущностный поисковый индекс — reindex-all путь надо проверять отдельно).
+- **ВЕРИФИКАЦИЯ:** `backend/tests/test_rls_documents.py` (маркер `db`): миграция armed все 11 таблиц. Семантику покрывает `test_rls_committees.py`. Весь `-m db` набор — [ЗАПОЛНИТЬ; ожид. 10 passed]. `ruff` clean. Полный SQLite-suite — [ЗАПОЛНИТЬ].
+- **⚠️ ОСТАЛОСЬ ДО PR:** дождаться `-m db` + SQLite-suite; OpenAPI snapshot.
+- **RLS-прогресс:** комитеты(8, #775) + медосмотры(7, #776) + СИЗ(9, #777) + документы(11, эта ветка) = **35 таблиц**. Осталось ~170. Далее: search_documents, contractors, СОУТ, риски, budget.
+- **Next:** дождаться гейтов → PR (base=main, только по решению пользователя). Дальше: RLS на след. домен, либо секреты SEC-67 / 152-ФЗ SEC-66.
+
+## Last Agent Handoff (2026-07-22, SEC-65 — RLS РАСШИРЕНИЕ НА СИЗ (Phase 16) — ветка feat/sec65-rls-ppe, ВЛИТА PR #777)
 
 - **Дата:** 2026-07-22. «продолжай по ТЗ». Продолжение RLS (после мержа PR #776 медосмотров) — домен **СИЗ**. Механизм уже в main; срез = миграция + тест по образцу. Ветка от `main` после #776.
 - **ФАЙЛЫ:** миграция `20260722_sec65_rls_ppe.py` (Postgres-only, down_rev `20260722_sec65_rls_medical`) на **9 таблицах СИЗ**: `ppenorm`, `ppeitem`, `ppeissue` (**три легаси-таблицы без подчёркивания** — grep по классам их не находит, имена взяты из **живых метаданных SQLAlchemy**), `ppe_supplier`, `ppe_safety_budget`, `ppe_stock_batch`, `ppe_stock_movement`, `ppe_inventory_count`, `ppe_inventory_count_line` (все с `tenant_id`). Политика/предикат дословно как у комитетов. Правок сида не требовалось — `_seed_ppe_demo` (demo_bootstrap:1632) в той же per-tenant bypass-сессии.
