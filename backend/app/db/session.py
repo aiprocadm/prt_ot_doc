@@ -36,6 +36,7 @@ class TenantAsyncSession(AsyncSession):
         await super().__aenter__()
         await _hydrate_async_session_tenant_identity(self)
         await _apply_search_path(self)
+        await _apply_tenant_rls(self)
         return self
 
 
@@ -584,6 +585,30 @@ async def _apply_search_path(session: AsyncSession) -> None:
         await session.execute(text(f"SET LOCAL application_name TO 'api:{safe}'"))
 
 
+async def _apply_tenant_rls(session: AsyncSession) -> None:
+    """Set the SEC-65 row-level-security GUCs so Postgres policies enforce tenant
+    isolation as a second line of defense (independent of app-level filtering).
+
+    No-op on non-Postgres (SQLite tests have no RLS). ``set_config(name, value,
+    is_local=True)`` is transaction-scoped and parameter-safe, so nothing leaks
+    across pooled connections. A trusted session (``rls_bypass=True``) flips
+    ``app.bypass_rls`` on; otherwise ``app.current_tenant`` is pinned to the
+    session tenant (empty when absent → policies deny → fail-closed).
+    """
+
+    if not _SUPPORTS_SCHEMAS:
+        return
+    info = session.info if isinstance(session.info, dict) else {}
+    if info.get("rls_bypass"):
+        await session.execute(text("SELECT set_config('app.bypass_rls', 'on', true)"))
+        return
+    tenant_id = str(info.get("tenant_id") or "").strip()
+    await session.execute(
+        text("SELECT set_config('app.current_tenant', :tid, true)"),
+        {"tid": tenant_id},
+    )
+
+
 def AsyncSessionLocal(
     *,
     tenant: str | None = None,
@@ -591,8 +616,15 @@ def AsyncSessionLocal(
     schema_name: str | None = None,
     include_public: bool = True,
     create_schema: bool = True,
+    rls_bypass: bool = False,
 ) -> AsyncSession:
-    """Build a tenant-aware session optionally creating schemas on demand."""
+    """Build a tenant-aware session optionally creating schemas on demand.
+
+    ``rls_bypass=True`` marks the session as a trusted system/cross-tenant scope
+    (SEC-65): it sets ``app.bypass_rls='on'`` so Postgres row-level policies let
+    all rows through. Use only for seeders / background jobs that legitimately
+    operate outside a single tenant; leave ``False`` for tenant-scoped work.
+    """
 
     ensure_shared_schema(implicit=True)
     slug = tenant or get_current_tenant().slug
@@ -618,6 +650,7 @@ def AsyncSessionLocal(
     session.info["tenant"] = slug
     session.info["tenant_slug"] = slug
     session.info["tenant_schema"] = schema_name or schema
+    session.info["rls_bypass"] = rls_bypass
     normalized_tenant_id = _normalize_tenant_id(tenant_id)
     if normalized_tenant_id is not None:
         session.info["tenant_id"] = normalized_tenant_id
@@ -649,7 +682,7 @@ async def transaction_scope(session: AsyncSession) -> AsyncIterator[AsyncSession
 
 @asynccontextmanager
 async def session_scope(
-    *, tenant: str | None = None, schema_name: str | None = None
+    *, tenant: str | None = None, schema_name: str | None = None, rls_bypass: bool = False
 ) -> AsyncIterator[AsyncSession]:
     """Provide a transactional scope around operations executed per tenant.
 
@@ -660,7 +693,9 @@ async def session_scope(
     creates ``tenant_demo.*``).
     """
 
-    async with AsyncSessionLocal(tenant=tenant, schema_name=schema_name) as session:
+    async with AsyncSessionLocal(
+        tenant=tenant, schema_name=schema_name, rls_bypass=rls_bypass
+    ) as session:
         async with transaction_scope(session):
             yield session
 
