@@ -107,4 +107,28 @@ describe("CommandCenterPanel", () => {
     renderPanel({ data: null, loading: true });
     expect(screen.getByText(/Загрузка командного центра/)).toBeInTheDocument();
   });
+
+  it("renders committee_task alerts under the 'Задачи комитетов' label (срез-3)", () => {
+    const withCommittee: OperationalDashboardDto = {
+      ...data,
+      alerts: [
+        {
+          id: "committee_tasks_overdue",
+          category: "committee_task",
+          severity: "high",
+          title: "2 overdue committee task(s)",
+          description: null,
+          count: 2,
+          action_url: "/committees",
+          affected_entity_type: "committee_decision_task",
+          affected_entity_id: null,
+          created_at: "2026-06-15T00:00:00Z",
+          expires_at: null
+        }
+      ]
+    };
+    renderPanel({ data: withCommittee });
+    expect(screen.getByText("Задачи комитетов")).toBeInTheDocument();
+    expect(screen.getByTestId("cc-category-committee_task")).toBeInTheDocument();
+  });
 });

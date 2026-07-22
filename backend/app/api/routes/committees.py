@@ -20,6 +20,7 @@ from app.core.errors import api_problem_detail
 from app.core.feature_flags import is_feature_enabled
 from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
+from app.domains.committees.kpi import CommitteeKpiService
 from app.domains.committees.lifecycle import (
     MeetingTransitionError,
     ensure_can_vote,
@@ -48,6 +49,7 @@ from app.schemas.committees import (
     AttendanceBulkUpdate,
     AttendanceRead,
     CommitteeCreate,
+    CommitteeKpiDto,
     CommitteePage,
     CommitteeRead,
     CommitteeUpdate,
@@ -83,6 +85,12 @@ def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> str | No
 
 _ROLES = ["admin"]
 Access = Annotated[AccessContext, Depends(abac(_tenant_resource_id, required_roles=_ROLES))]
+
+# KPI dashboard audience = management (mirrors analytics ``_ANALYTICS_READ_ROLES``),
+# deliberately broader than the admin-only committee CRUD guard above so heads /
+# managers can read execution KPIs without the committees-write role.
+_KPI_ROLES = ["admin", "owner", "hr", "ot_pb_lead", "line_manager", "ot_specialist", "manager"]
+KpiAccess = Annotated[AccessContext, Depends(abac(_tenant_resource_id, required_roles=_KPI_ROLES))]
 
 
 _FEATURE_CODE = "committees"
@@ -372,6 +380,33 @@ async def list_protocols(
             status_code=status.HTTP_304_NOT_MODIFIED, headers=build_not_modified_headers(etag)
         )
     return ProtocolJournalPage(items=items, total=int(total or 0), limit=limit, offset=offset)
+
+
+# NOTE: /kpi (like /protocols) MUST be declared before GET /{cid}, otherwise
+# FastAPI binds cid="kpi". Audience is management (KpiAccess), not admin-only.
+@router.get("/kpi", response_model=CommitteeKpiDto)
+async def committee_kpi(
+    request: Request,
+    response: Response,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: KpiAccess,
+    committee_id: str | None = Query(None),
+) -> CommitteeKpiDto | Response:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    await _require_committees_enabled(session, tenant)
+    kpi = await CommitteeKpiService(session, str(tenant.id)).compute(committee_id=committee_id)
+    etag = compute_list_etag(
+        tenant_id=str(tenant.id),
+        items=[],
+        scalars=[("cid", committee_id or ""), *kpi.model_dump().items()],
+    )
+    apply_etag_response_headers(response, etag)
+    if request.headers.get("if-none-match") == etag:
+        return Response(
+            status_code=status.HTTP_304_NOT_MODIFIED, headers=build_not_modified_headers(etag)
+        )
+    return kpi
 
 
 @router.post("", response_model=CommitteeRead, status_code=status.HTTP_201_CREATED)

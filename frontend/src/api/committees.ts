@@ -128,6 +128,24 @@ export interface ProtocolJournalPage {
   offset: number;
 }
 
+// ── Срез-3: KPI dashboard ──────────────────────────────────────────────────
+
+export interface CommitteeKpi {
+  committees_total: number;
+  committees_active: number;
+  meetings_planned: number;
+  meetings_held: number;
+  meetings_cancelled: number;
+  decisions_total: number;
+  tasks_total: number;
+  tasks_open: number;
+  tasks_overdue: number;
+  tasks_done: number;
+  held_meetings: number;
+  avg_attendance_pct: number;
+  quorum_rate_pct: number;
+}
+
 // ── API ────────────────────────────────────────────────────────────────────
 
 const base = "/committees";
@@ -254,6 +272,11 @@ export const committeesApi = {
     const r = await apiClient.get<ProtocolJournalPage>(`${base}/protocols`, {
       params: { limit: 100, offset: 0, ...params },
     });
+    return r.data;
+  },
+
+  async getKpi(params: { committee_id?: string } = {}): Promise<CommitteeKpi> {
+    const r = await apiClient.get<CommitteeKpi>(`${base}/kpi`, { params });
     return r.data;
   },
 };

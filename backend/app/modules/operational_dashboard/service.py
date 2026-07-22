@@ -51,6 +51,7 @@ class OperationalDashboardService:
         alerts.extend(await self._get_integration_error_alerts(tenant_id, db))
         alerts.extend(await self._get_high_risk_alerts(tenant_id, db))
         alerts.extend(await self._get_unassigned_task_alerts(tenant_id, db))
+        alerts.extend(await self._get_committee_task_alerts(tenant_id, db))
 
         alert_count = self._count_alerts_by_severity(alerts)
         overall_status = self._determine_overall_status(alert_count)
@@ -269,6 +270,85 @@ class OperationalDashboardService:
                 )
         except Exception:
             logger.debug("unassigned obligations aggregate failed", exc_info=True)
+
+        return alerts
+
+    async def _get_committee_task_alerts(self, tenant_id: str, db: AsyncSession) -> list[AlertItem]:
+        """Committee decision tasks (P10-01 срез-3): overdue + unassigned.
+
+        ``CommitteeDecisionTask`` has no soft-delete column — do NOT filter
+        ``deleted_at`` here (unlike the overdue models above).
+        """
+        alerts: list[AlertItem] = []
+
+        try:
+            from sqlalchemy import func, select
+
+            from app.models.committees import CommitteeDecisionTask, DecisionTaskStatus
+        except ImportError:
+            return alerts
+
+        today = date.today()
+
+        try:
+            overdue = int(
+                (
+                    await db.execute(
+                        select(func.count())
+                        .select_from(CommitteeDecisionTask)
+                        .where(
+                            CommitteeDecisionTask.tenant_id == tenant_id,
+                            CommitteeDecisionTask.status != DecisionTaskStatus.DONE,
+                            CommitteeDecisionTask.due_date.is_not(None),
+                            CommitteeDecisionTask.due_date < today,
+                        )
+                    )
+                ).scalar_one_or_none()
+                or 0
+            )
+            if overdue > 0:
+                alerts.append(
+                    AlertItem(
+                        id="committee_tasks_overdue",
+                        category=AlertCategory.COMMITTEE_TASK,
+                        severity=AlertSeverity.HIGH,
+                        title=f"{overdue} overdue committee task(s)",
+                        description=f"{overdue} committee decision task(s) past due date and not done",
+                        count=overdue,
+                        affected_entity_type="committee_decision_task",
+                        action_url="/committees",
+                    )
+                )
+
+            unassigned = int(
+                (
+                    await db.execute(
+                        select(func.count())
+                        .select_from(CommitteeDecisionTask)
+                        .where(
+                            CommitteeDecisionTask.tenant_id == tenant_id,
+                            CommitteeDecisionTask.assignee_person_id.is_(None),
+                            CommitteeDecisionTask.status != DecisionTaskStatus.DONE,
+                        )
+                    )
+                ).scalar_one_or_none()
+                or 0
+            )
+            if unassigned > 0:
+                alerts.append(
+                    AlertItem(
+                        id="committee_tasks_unassigned",
+                        category=AlertCategory.COMMITTEE_TASK,
+                        severity=AlertSeverity.MEDIUM,
+                        title=f"{unassigned} unassigned committee task(s)",
+                        description=f"{unassigned} open committee decision task(s) without an assignee",
+                        count=unassigned,
+                        affected_entity_type="committee_decision_task",
+                        action_url="/committees",
+                    )
+                )
+        except Exception:
+            logger.debug("committee task aggregate failed", exc_info=True)
 
         return alerts
 

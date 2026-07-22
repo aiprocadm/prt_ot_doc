@@ -1,5 +1,43 @@
 # CHANGELOG
 
+## 2026-07-22 (feat/p10-01-committees-srez3-kpi-command-center — KPI-дашборд комитетов + проекция задач в Command Center)
+
+Срез-3 P10-01 «Комитеты» (TZ B.17 «KPI исполнения»). Спека:
+`docs/superpowers/specs/2026-07-22-p10-01-committees-srez3-kpi-command-center-design.md`.
+Новых таблиц/миграций НЕТ — все метрики считаются из таблиц срез-1/срез-2.
+
+### Added
+- **KPI-сервис комитетов** (`backend/app/domains/committees/kpi.py`): `CommitteeKpiService.compute`
+  — плоские агрегаты по существующим таблицам (комитеты/заседания/решения/задачи), средняя
+  явка и доля кворума считаются в Python из денормализованных снапшот-колонок заседания
+  (DB-agnostic для SQLite-тестов). Опциональный фильтр `committee_id`. Гард деления на ноль:
+  нет проведённых заседаний → ставки `0.0`.
+- **Роут** `GET /api/v1/committees/kpi` (`api/routes/committees.py`) — объявлен ДО `GET /{cid}`
+  (иначе FastAPI связал бы `cid="kpi"`). Аудитория — управленческая (`_KPI_ROLES` = копия
+  analytics-ролей), а не только admin; тот же флаг-гейт (404 при выключенном модуле) и ETag/304.
+  Схема ответа — `CommitteeKpiDto` (`schemas/committees.py`).
+- **Проекция задач комитетов в Command Center** (`modules/operational_dashboard/`): новая
+  категория алертов `committee_task` + источник `_get_committee_task_alerts` (просроченные → HIGH,
+  неназначенные открытые → MEDIUM). У `CommitteeDecisionTask` нет soft-delete — фильтр `deleted_at`
+  НЕ применяется.
+- **Frontend**: страница `pages/committees/CommitteeKpiPage.tsx` (карточки метрик с русскими
+  метками, группы Комитеты/Заседания/Решения/Задачи/Явка-кворум, 404-флаг-off → понятный
+  EmptyState); метод `committeesApi.getKpi` + тип `CommitteeKpi`; роут `/committees/kpi` под правом
+  `ANALYTICS_VIEW` (не `COMMITTEE_VIEW` — «кто видит дашборды» = «кто видит KPI»); пункт nav
+  «KPI комитетов» + скрытие при выключенном флаге `committees`; RU-метка «Задачи комитетов» и
+  порядок категории в `CommandCenterPanel`.
+
+### Tests
+- Backend: `tests/test_committees_srez3_kpi.py` (сервис на in-memory сессии: счётчики, фильтр,
+  FSM задач, явка/кворум, tenant-iso; роут: флаг-off 404, ETag/304; e2e RBAC management-200/worker-403),
+  `tests/test_committees_srez3_operational.py` (источник Command Center). OpenAPI baseline пере-снят
+  (+1 операция, +1 схема).
+- Frontend: `committeesApi.srez3.test.ts`, `CommitteeKpiPage.test.tsx`, расширен `CommandCenterPanel.test.tsx`.
+
+### Отложено в срез-4
+Приглашения на заседание, настраиваемый порог кворума, печатная форма протокола DOCX/PDF,
+серверный person-typeahead.
+
 ## 2026-07-21 (feat/tenant-subscription-plans — тарифные планы и доступ к функциям)
 
 Продолжение `feat/tenant-management`: превращает управление тенантами в инструмент
