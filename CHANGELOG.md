@@ -1,5 +1,25 @@
 # CHANGELOG
 
+## 2026-07-22 (feat/sec65-rls-documents — RLS: расширение на домен документов, Phase 16)
+
+SEC-65 (TZ B-NEXT.7), продолжение RLS. Документы — самые чувствительные данные
+арендатора, изоляция на уровне БД особенно важна. Только PostgreSQL.
+
+### Added
+- **RLS-миграция** `20260722_sec65_rls_documents` (Postgres-only, down_rev
+  `20260722_sec65_rls_ppe`): `ENABLE` + `FORCE ROW LEVEL SECURITY` + политика
+  `tenant_isolation` на 11 core-таблицах документов: `document`, `documentversion`,
+  `document_snapshot`, `document_artifacts`, `document_batch_run`, `document_batch_item`,
+  `document_jobs`, `document_job_steps`, `document_pack`, `document_pack_item`,
+  `documentgenerationjob`. Все пути записи тенант-контекстные (API + celery
+  `session_scope(tenant=…)`); глобального кросс-тенант опроса очереди задач нет, так что
+  FORCE RLS не морит воркер генерации. **Вне среза** (отдельно): `contractor_document*`
+  (домен contractors), `search_documents` (кросс-сущностный поисковый индекс).
+
+### Tests
+- `backend/tests/test_rls_documents.py` (маркер `db`): миграция armed все 11 таблиц.
+  Семантику покрывает generic-тест `test_rls_committees.py`.
+
 ## 2026-07-22 (feat/sec65-rls-ppe — RLS: расширение на домен СИЗ, Phase 16)
 
 SEC-65 (TZ B-NEXT.7), продолжение RLS. Тот же механизм (уже в main), применён к
