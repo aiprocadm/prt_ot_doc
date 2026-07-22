@@ -13,10 +13,12 @@ from docx import Document
 from app.domains.medical.print_form import (
     NamedListPrintData,
     NamedListPrintRow,
+    ReferralPrintData,
     RegisterPrintData,
     RegisterPrintRow,
     build_contingent_register_docx,
     build_named_list_docx,
+    build_referral_docx,
     contingent_status_label,
     exam_kind_label,
 )
@@ -122,3 +124,54 @@ class TestNamedListDocx:
     def test_empty_rows_does_not_crash(self):
         text = _docx_text(build_named_list_docx(self._data(rows=[])))
         assert "поименный список" in text.lower()
+
+
+class TestReferralDocx:
+    def _data(self, **kw) -> ReferralPrintData:
+        defaults = dict(
+            org_header="ООО Тест",
+            generated_at="2026-06-24",
+            full_name="Иванов Иван Иванович",
+            birth_date="1990-05-01",
+            position_name="Сварщик",
+            department="Цех №1",
+            exam_kind="periodic",
+            medical_org_name="Клиника №5",
+            due_date="2026-07-01",
+            snils="123-456-789 00",
+            factors=[("4.4", "Шум")],
+        )
+        defaults.update(kw)
+        return ReferralPrintData(**defaults)
+
+    def test_heading_mentions_referral(self):
+        text = _docx_text(build_referral_docx(self._data()))
+        assert "направление" in text.lower()
+
+    def test_person_and_details_present_with_labels(self):
+        text = _docx_text(build_referral_docx(self._data()))
+        assert "Иванов Иван Иванович" in text
+        assert "Сварщик" in text
+        assert "Цех №1" in text
+        assert "Клиника №5" in text
+        assert "123-456-789 00" in text
+        assert "4.4" in text and "Шум" in text
+        assert "Периодический" in text  # exam_kind label, not raw "periodic"
+        assert "periodic" not in text
+
+    def test_missing_optionals_render_dash_and_do_not_crash(self):
+        text = _docx_text(
+            build_referral_docx(
+                self._data(
+                    birth_date=None,
+                    position_name=None,
+                    department=None,
+                    medical_org_name=None,
+                    due_date=None,
+                    snils=None,
+                    factors=[],
+                )
+            )
+        )
+        assert "направление" in text.lower()
+        assert "Иванов Иван Иванович" in text

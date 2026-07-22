@@ -1,5 +1,33 @@
 # CHANGELOG
 
+## 2026-07-21 (feat/medical-referral-print — печатная форма направления на медосмотр)
+
+Phase 10 v1.1 (P10-03 медосмотры): закрывает пробел «печать направления на
+медицинский осмотр» — зеркалит инфраструктуру печати нарядов-допусков и уже
+существующие 29н-формы (контингент / поименный список). Миграции БД не требуются.
+
+### Added
+- **Чистый сборщик `build_referral_docx`** (`backend/app/domains/medical/print_form.py`):
+  python-docx без I/O и без ORM (как остальные 29н-сборщики). Новый `ReferralPrintData`.
+  Пустые поля → «—», вид осмотра рендерится меткой (`exam_kind_label`), а не сырым кодом.
+- **Рендер `render_referral`** (`backend/app/services/medical_print.py`): грузит работника
+  (Ф.И.О./дата рождения/СНИЛС/должность/подразделение) + вредные факторы 29н его
+  должности → DOCX; опц. PDF через LibreOffice (503, если конвертер недоступен).
+- **Роут** `GET /api/v1/medical/referrals/{referral_id}/print?format=docx|pdf`
+  (`catalog.py`, гейт по фиче `medical`, роль read). OpenAPI baseline пересобран.
+- **Фронтенд**: кнопка «Печать» в строке направления (`MedicalPage.tsx`) +
+  `downloadReferralPrint` (`operations.ts`) — скачивает файл.
+
+### Changed
+- Общий хелпер `_render_to_response` вынесен в `medical/_common.py` (был локально в
+  `contingent.py`) — переиспользуется всеми печатными роутами медосмотров без изменения
+  порядка регистрации маршрутов.
+
+### Tests
+- `backend/tests/test_medical_print_form.py`: +3 теста сборщика направления (метки,
+  наличие данных, пустые опциональные поля не роняют рендер). Медицинские тесты бэкенда:
+  61 passed. Фронтенд: typecheck + 589 тестов + build — зелёные.
+
 ## 2026-07-21 (feat/tenant-subscription-plans — тарифные планы и доступ к функциям)
 
 Продолжение `feat/tenant-management`: превращает управление тенантами в инструмент

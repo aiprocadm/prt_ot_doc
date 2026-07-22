@@ -119,6 +119,42 @@ def build_contingent_register_docx(data: RegisterPrintData) -> bytes:
     return buf.getvalue()
 
 
+@dataclass
+class ReferralPrintData:
+    org_header: str
+    generated_at: str | None
+    full_name: str
+    birth_date: str | None
+    position_name: str | None
+    department: str | None
+    exam_kind: str  # raw kind code; метку ставит сборщик
+    medical_org_name: str | None
+    due_date: str | None
+    snils: str | None
+    factors: list[tuple[str, str]] = field(default_factory=list)  # (code, name)
+
+
+def build_referral_docx(data: ReferralPrintData) -> bytes:
+    doc = Document()
+    doc.add_heading("Направление на медицинский осмотр (приказ № 29н)", level=0)
+    _kv(doc, "Организация", data.org_header)
+    _kv(doc, "Дата формирования", data.generated_at)
+    doc.add_paragraph("")
+    _kv(doc, "Ф.И.О.", data.full_name)
+    _kv(doc, "Дата рождения", data.birth_date)
+    _kv(doc, "СНИЛС", data.snils)
+    _kv(doc, "Должность", data.position_name)
+    _kv(doc, "Подразделение", data.department)
+    _kv(doc, "Вид осмотра", exam_kind_label(data.exam_kind))
+    _kv(doc, "Медицинская организация", data.medical_org_name)
+    _kv(doc, "Срок прохождения", data.due_date)
+    _kv(doc, "Вредные факторы (29н)", _factors_text(data.factors))
+
+    buf = BytesIO()
+    doc.save(buf)
+    return buf.getvalue()
+
+
 def build_named_list_docx(data: NamedListPrintData) -> bytes:
     doc = Document()
     doc.add_heading(
