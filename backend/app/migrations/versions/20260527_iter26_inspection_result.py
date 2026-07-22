@@ -66,9 +66,6 @@ def upgrade() -> None:
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("version", sa.Integer(), nullable=False),
         sa.PrimaryKeyConstraint("id"),
-        sa.ForeignKeyConstraint(
-            ["tenant_id"], ["tenant.id"], name="fk_inspection_result_tenant"
-        ),
         sa.ForeignKeyConstraint(["tenant_id"], ["tenant.id"], name="fk_inspection_result_tenant"),
         sa.ForeignKeyConstraint(
             ["inspection_id"],
@@ -112,9 +109,6 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.drop_index("ix_inspection_result_issued_at", table_name="inspection_result")
     op.drop_index("ix_inspection_result_inspection", table_name="inspection_result")
-    op.drop_index(
-        "ix_inspection_result_inspection_id", table_name="inspection_result"
-    )
     op.drop_index("ix_inspection_result_inspection_id", table_name="inspection_result")
     op.drop_index("ix_inspection_result_tenant_id", table_name="inspection_result")
     op.drop_table("inspection_result")
