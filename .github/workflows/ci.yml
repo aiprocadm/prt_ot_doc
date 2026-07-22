@@ -95,6 +95,9 @@ jobs:
       - name: TZ coverage matrix validator
         run: python scripts/audit/check_tz_coverage_matrix.py
 
+      - name: RLS coverage ratchet (SEC-65)
+        run: PYTHONPATH=backend python scripts/audit/check_rls_coverage.py
+
       - name: Ruff undefined names + staged mypy (tenant guard)
         run: bash scripts/ci/static_gates.sh
 
