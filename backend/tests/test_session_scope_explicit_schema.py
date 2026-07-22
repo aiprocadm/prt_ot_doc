@@ -50,7 +50,7 @@ def test_session_scope_forwards_schema_name(monkeypatch: pytest.MonkeyPatch) -> 
 
     asyncio.run(run())
 
-    assert captured == {"tenant": "demo", "schema_name": "tenant_demo"}
+    assert captured == {"tenant": "demo", "schema_name": "tenant_demo", "rls_bypass": False}
 
 
 def test_session_scope_defaults_schema_name_to_none(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -68,4 +68,4 @@ def test_session_scope_defaults_schema_name_to_none(monkeypatch: pytest.MonkeyPa
 
     asyncio.run(run())
 
-    assert captured == {"tenant": "public", "schema_name": None}
+    assert captured == {"tenant": "public", "schema_name": None, "rls_bypass": False}

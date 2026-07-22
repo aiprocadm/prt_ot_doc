@@ -1457,7 +1457,12 @@ async def bootstrap_demo_tenant(settings: Settings) -> None:
     # Pass schema_name explicitly: when DEFAULT_TENANT_SLUG=demo (CI default),
     # session_scope(tenant="demo") would otherwise short-circuit to the shared
     # schema and read training_course from public instead of tenant_demo.
-    async with session_scope(tenant=tenant_slug, schema_name=tenant_schema_name) as session:
+    # rls_bypass: this is a trusted system seeder provisioning data for the tenant
+    # (SEC-65). RLS guards runtime request paths, not provisioning; bypass keeps
+    # seeding of the pilot committees tables working under FORCE ROW LEVEL SECURITY.
+    async with session_scope(
+        tenant=tenant_slug, schema_name=tenant_schema_name, rls_bypass=True
+    ) as session:
         company = (
             await session.execute(select(Company).where(Company.name == company_name))
         ).scalar_one_or_none()

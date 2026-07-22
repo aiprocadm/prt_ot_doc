@@ -1,5 +1,34 @@
 # CHANGELOG
 
+## 2026-07-22 (feat/sec65-rls-committees-pilot — RLS как второй рубеж изоляции, пилот на комитетах, Phase 16)
+
+SEC-65 (TZ B-NEXT.7). Спека:
+`docs/superpowers/specs/2026-07-22-sec65-rls-committees-pilot-design.md`.
+Только PostgreSQL — на SQLite миграция и обвязка no-op (основной тест-набор не затронут).
+
+### Added
+- **RLS-миграция** `20260722_sec65_rls_committees` (Postgres-only, гард по диалекту): на 8
+  таблицах семейства комитетов (`committee`, `committee_member`, `committee_meeting`,
+  `committee_agenda_item`, `committee_decision`, `committee_decision_task`,
+  `committee_meeting_attendance`, `committee_decision_vote`) включены `ENABLE` + **`FORCE ROW
+  LEVEL SECURITY`** и политика `tenant_isolation` (`USING`/`WITH CHECK`):
+  `current_setting('app.bypass_rls', true) = 'on' OR tenant_id = current_setting('app.current_tenant', true)`.
+  Нет тенанта и нет bypass → deny (fail-closed). FORCE — чтобы правило действовало даже когда
+  приложение ходит владельцем таблиц.
+- **Обвязка сессии** (`db/session.py::_apply_tenant_rls`, вызов в `TenantAsyncSession.__aenter__`):
+  на Postgres ставит `app.current_tenant` из `session.info["tenant_id"]` (transaction-local
+  `set_config`, параметр-безопасно), либо `app.bypass_rls='on'` при `rls_bypass=True`. Параметр
+  `rls_bypass` добавлен в `AsyncSessionLocal`/`session_scope`. На SQLite — ранний return.
+- **Демо-сид** переведён на `rls_bypass=True` для сессии, сидирующей комитеты (доверенный
+  системный провижининг под FORCE RLS).
+
+### Tests
+- `backend/tests/test_rls_committees.py` (маркер `db`, Postgres): (1) миграция реально включила
+  RLS+FORCE+политику на всех 8 таблицах (интроспекция `pg_class`/`pg_policy`); (2) политика
+  изолирует — свой тенант виден, чужой нет, без контекста 0 строк (fail-closed), bypass видит
+  всё, `WITH CHECK` блокирует кросс-тенант INSERT (проверка под `SET ROLE` на не-суперпользователя,
+  т.к. суперюзер обходит RLS).
+
 ## 2026-07-22 (feat/sec64-webhook-ssrf-guard — SSRF-защита исходящих вебхуков, Phase 16)
 
 SEC-64 §64.3 (TZ B-NEXT.7 «Сквозная безопасность»). Спека:
