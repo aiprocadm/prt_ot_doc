@@ -1,6 +1,16 @@
 # AI Implementation Report
 
-## Last Agent Handoff (2026-07-22, SEC-65 — RLS РАСШИРЕНИЕ НА МЕДОСМОТРЫ (Phase 16) — ветка feat/sec65-rls-medical, НЕ влита)
+## Last Agent Handoff (2026-07-22, SEC-65 — RLS РАСШИРЕНИЕ НА СИЗ (Phase 16) — ветка feat/sec65-rls-ppe, НЕ влита)
+
+- **Дата:** 2026-07-22. «продолжай по ТЗ». Продолжение RLS (после мержа PR #776 медосмотров) — домен **СИЗ**. Механизм уже в main; срез = миграция + тест по образцу. Ветка от `main` после #776.
+- **ФАЙЛЫ:** миграция `20260722_sec65_rls_ppe.py` (Postgres-only, down_rev `20260722_sec65_rls_medical`) на **9 таблицах СИЗ**: `ppenorm`, `ppeitem`, `ppeissue` (**три легаси-таблицы без подчёркивания** — grep по классам их не находит, имена взяты из **живых метаданных SQLAlchemy**), `ppe_supplier`, `ppe_safety_budget`, `ppe_stock_batch`, `ppe_stock_movement`, `ppe_inventory_count`, `ppe_inventory_count_line` (все с `tenant_id`). Политика/предикат дословно как у комитетов. Правок сида не требовалось — `_seed_ppe_demo` (demo_bootstrap:1632) в той же per-tenant bypass-сессии.
+- **ГРАБЛЯ:** имена таблиц СИЗ размазаны между `ppe.py` (новые `ppe_*`) и `models.py` (легаси `ppenorm`/`ppeitem`/`ppeissue` — БЕЗ подчёркивания). Всегда сверять имена по метаданным (`SharedBase/TenantBase.metadata.tables`), не по grep класса.
+- **ВЕРИФИКАЦИЯ:** `backend/tests/test_rls_ppe.py` (маркер `db`): интроспекция — миграция armed все 9 таблиц. Семантику покрывает generic-тест `test_rls_committees.py`. Весь `-m db` набор — [ЗАПОЛНИТЬ; ожид. 9 passed]. `ruff` clean. Полный SQLite-suite — [ЗАПОЛНИТЬ; изменения только Postgres-only миграция + db-тест].
+- **⚠️ ОСТАЛОСЬ ДО PR:** дождаться `-m db` набора + полного SQLite-suite; OpenAPI snapshot (роутов нет).
+- **RLS-прогресс:** комитеты (8, PR #775 влит) + медосмотры (7, PR #776 влит) + СИЗ (9, эта ветка) = 24 таблицы. Осталось ~180. Домены-кандидаты далее: СОУТ, документы (в models.py), риски, contractors, budget.
+- **Next (точный шаг):** дождаться гейтов, затем PR (base=main; **только по решению пользователя**). Дальше: RLS на след. домен, либо секреты SEC-67 / 152-ФЗ SEC-66, либо `[v1.1]`.
+
+## Last Agent Handoff (2026-07-22, SEC-65 — RLS РАСШИРЕНИЕ НА МЕДОСМОТРЫ (Phase 16) — ветка feat/sec65-rls-medical, ВЛИТА PR #776)
 
 - **Дата:** 2026-07-22. «продолжай». Пользователь через AskUserQuestion выбрал **расширить RLS на домен медосмотров**. Ветка от `main` после мержа PR #775 (RLS-пилот комитетов). Механизм RLS (обвязка `db/session.py::_apply_tenant_rls`, GUC, `rls_bypass`, bypass демо-сида) **уже в main** — этот срез только применяет тот же паттерн к новым таблицам. Спека пилота: `docs/superpowers/specs/2026-07-22-sec65-rls-committees-pilot-design.md` (отдельного дока для медицины нет — идентичный образец).
 - **ФАЙЛЫ:** миграция `20260722_sec65_rls_medical.py` (Postgres-only, down_rev `20260722_sec65_rls_committees`, гард по диалекту, upgrade ENABLE+FORCE+POLICY×7, downgrade зеркально) на 7 таблицах: `medical_exam`, `medical_norm`, `medical_factor`, `medical_referral`, `medical_suspension`, `psychiatric_activity_type`, `psychiatric_position_activity` (все наследуют `TenantBaseModel` → есть `tenant_id`). Политика/предикат дословно как у комитетов. **Правок кода/сида НЕ требовалось** — медсидеры (`_seed_medical_factor_demo`, `_seed_psychiatric_activities_demo`, строки ~1633-1634) идут в той же per-tenant сессии `demo_bootstrap.py:1463`, которой в пилоте уже проставлен `rls_bypass=True`.
