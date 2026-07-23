@@ -49,21 +49,48 @@
 - `docs/roadmap/PLATFORM_VNEXT_IMPLEMENTATION_PLAN.md` — фазированный план реализации (Phase 0..10).
 - `backend/app/core/product_spec.py` — программный путь к vNext-spec и краткие правила разд. 36 (`ARCHITECTURE_RULES`, `ENGINEERING_RULES`, `PRODUCT_UX_RULES`, `SIX_QUESTIONS`).
 
-### 0.2 Алгоритм для агента «продолжай по ТЗ»
+### 0.2 Алгоритм для агента «продолжай по ТЗ» (сверка → выбор → код)
+
+> **Принцип:** статусы в `AI_IMPLEMENTATION_REPORT.md`, `TZ_COVERAGE_MATRIX.md` и разделах C/D — это **заявления прошлых волн, а не факты**. «Продолжай по ТЗ» всегда начинается со **сверки** заявленного с реальным кодом и тестами; только после сверки выбирается следующий шаг.
 
 ```text
 1. Прочитать README.md → ссылки на ТЗ.
-2. Прочитать docs/spec/TZ_FULL_UNIFIED.md (этот файл) — раздел A (MVP) и B (полный объём).
-3. Прочитать AI_IMPLEMENTATION_REPORT.md — что было в прошлой волне и какой "Следующий точный шаг".
-4. Свериться с docs/audit/TZ_COVERAGE_MATRIX.md (для MVP-задач) или
-   docs/roadmap/PLATFORM_VNEXT_IMPLEMENTATION_PLAN.md (для vNext-фазы).
-5. Выбрать минимально достаточное изменение:
-   • если есть открытый MVP-пункт со статусом partial/missing → его в первую очередь;
-   • иначе — следующий пункт текущей фазы плана (Phase N).
-6. Соблюдать §E этого документа (разд. 36 vNext): не ломать существующее,
+2. Прочитать docs/spec/TZ_FULL_UNIFIED.md (этот файл) — раздел A (MVP) и B/B-NEXT (полный объём).
+3. Прочитать AI_IMPLEMENTATION_REPORT.md — последний handoff. «Следующий точный шаг» —
+   это гипотеза прошлой волны, а не приказ: он перепроверяется на шаге 4 и мог устареть.
+4. СВЕРКА С ТЗ (обязательная; до выбора работы и до правок кода):
+   4.1. Хвост прошлой волны: всё, что последний handoff оставил как «[ЗАПОЛНИТЬ]»,
+        «НЕ ПРОГНАНО», «⚠️ ОСТАЛОСЬ» — прогнать/закрыть сейчас либо явно перенести
+        в план с причиной. Молча пропускать нельзя.
+   4.2. Целевой контур (строки REQ-ID матрицы / пункт фазы, где планируется работа):
+        открыть evidence-пути из строки TZ_COVERAGE_MATRIX.md (столбцы
+        backend/db/jobs/events/frontend/tests), убедиться, что файлы существуют и
+        реализуют требование раздела A/B, прогнать тесты из строки
+        (или их разумное подмножество).
+   4.3. Spot-check: 2–3 смежные строки со статусом done проверить так же (выборочно).
+   4.4. Каждой проверенной строке — вердикт:
+        • сделано     — код и тесты подтверждают требование;
+        • не сделано  — статус есть, а кода/тестов нет или они не покрывают требование;
+        • переделать  — реализовано, но противоречит текущему ТЗ, сломано
+                        или отстало от изменившегося требования.
+5. Расхождения фиксируются ДО новой работы:
+   • статус в TZ_COVERAGE_MATRIX.md понизить (done → partial/missing) с причиной
+     в столбце plan; затем python scripts/audit/check_tz_coverage_matrix.py;
+   • устаревшие/противоречивые строки разделов C/D этого файла актуализировать
+     (исправлять на месте, не добавляя дублирующих строк);
+   • всё занести в handoff.
+6. Выбрать минимально достаточное изменение (приоритет сверху вниз):
+   1) подтверждённое сверкой «переделать» / «не сделано» уровня P0–P1;
+   2) открытый MVP-пункт со статусом partial/missing;
+   3) следующий пункт текущей фазы плана (Phase N).
+7. Соблюдать §E этого документа (разд. 36 vNext): не ломать существующее,
    feature flags, additive миграции, tenant isolation, типизация, тесты.
-7. Закрыть итерацию: обновить AI_IMPLEMENTATION_REPORT.md (handoff),
-   при необходимости — TZ_COVERAGE_MATRIX.md и CHANGELOG.md.
+8. Закрыть итерацию: обновить AI_IMPLEMENTATION_REPORT.md — handoff обязан содержать
+   блок «Сверка» (что проверялось, вердикты, какие статусы изменены); при
+   необходимости — TZ_COVERAGE_MATRIX.md и CHANGELOG.md. Ставить/возвращать done
+   можно только с evidence: пути к коду/тестам + результат их прогона в этой волне.
+9. Ответ в чате начинается с блока «Сверка с ТЗ» (что проверено → сделано /
+   не сделано / переделать), затем выбранный шаг и его обоснование.
 ```
 
 ### 0.3 Конфликты и приоритет
@@ -553,48 +580,47 @@
 - **Открытые блокеры:** `GAP_REPORT.md`.
 - **Известные ограничения:** `KNOWN_LIMITATIONS.md`.
 
-Краткий снимок (для ориентировки, актуальное состояние — в файлах выше):
+Краткий снимок (для ориентировки; статусы сверены с кодом/тестами и handoff'ами 2026-07-23, полная сверка ТЗ↔код — `docs/audit/SPEC_CODE_SYNC_2026-07-04.md`; актуальное состояние — в файлах выше):
 
 - Все P0 (`A.2.1–A.2.10`) — `done`, кроме точек, явно отмеченных в матрице.
 - P1 домены (`A.3.1 / A.3.2 / A.3.3 / A.3.4 / A.3.5`) — `done` для MVP-объёма; склад / предписания — `partial` `[v1.1–v1.2]`.
 - F1..F4 — `done`; полная инвентаризация экранов есть.
-- vNext Phase 0 (Baseline re-verification) — инфраструктура готова, пере-прогон в чистом окружении — `pending` (RB-001, RC-001).
+- vNext Phase 0 (Baseline re-verification) — закрыта: вердикт **READY** (2026-05-29), RC-001..006 `done`; local-evidence политика REL-1(c) — постоянная (см. `RELEASE_READINESS.md`).
 - vNext Phase 1 (Architectural foundation) — `complete` (Workspaces / RBAC module / Tenant isolation audit).
-- vNext Phase 2 (Operational dashboard / Health checks) — backend `done`, frontend `pending`.
-- vNext Phase 3 (Data Quality + Unified Employee Card) — DQ backend MVP `done` (10 правил движка), DQ Dashboard frontend и Employee Card aggregate — `pending`.
-- vNext Phases 4–10 — `planned` (см. §D).
-- vNext Phase 3 (Data Quality + Unified Employee Card) — DQ backend MVP `done` (10 правил), DQ Dashboard frontend `done`, Employee Card backend aggregate + UI + Documents/Briefings/Deadlines секции `done` (Sessions 19/20/21 — `GET /api/v1/employees/{id}` + `EmployeeCardPage.tsx` 11 табов).
-- vNext Phase 4 (Calendar & Search) — `done`. Smart Calendar backend aggregator (Session 22) + UI (Session 23 — `CalendarPage.tsx` с day/week/month/year/list, фильтры по source_types/person_id/site_id, drill-down, overdue highlighting, split-permission `CALENDAR_VIEW`); ICS export (Session 24 — `/calendar/events.ics`); plan/fact comparison (Sessions 25–26); SLA tracking backend + UI (Sessions 27–28); resource load heatmap, saved views CRUD, CMD+K palette с entity grouping (Sessions 29–32); backend `SearchService.search()` accuracy tests (`tests/test_search_service_accuracy.py`, 8 кейсов); saved-search shortcuts и recent clicked entities в CMD+K palette (`CommandBar.tsx` секции «Сохранённые запросы» + «Недавно открытые» с persistent `ux.commandbar.recentEntities.v1` + ↑↓/Enter keyboard nav).
-- vNext Phase 4 (Calendar & Search) — **COMPLETE.** Smart Calendar Task 4.1 `done` (Sessions 22-30 — backend aggregator + UI day/week/month/year/list + ICS export RFC 5545 + plan/fact comparison + SLA tracking + resource load heatmap + saved per-user views); Universal Search Task 4.2 `done` (Sessions 31-35 — pre-existing backend FTS index + CMD+K palette с entity results grouped by 24 types + 7 type-to-execute commands + ARIA listbox keyboard nav ↑↓/Enter/Home/End + saved searches в палитре с lazy session-cache (S34) + client-side recent-entities tracking с 30-day TTL + dedup (S35) + backend `SearchService` index accuracy tests 35 cases / 6 classes (S33)). Optional polish (non-acceptance): score-based unified ranking, per-tenant relevance tuning, i18n executable commands.
-- vNext Phases 5–10 — `planned` (см. §D).
+- vNext Phase 2 (Operational dashboard / Health checks) — `done`: Command Center backend + фронт (`CommandCenterPage`, PR #658), Health Check Engine backend + `HealthStatusPage`; вне закрытого объёма остались real-time refresh и перф-бюджет (<2s).
+- vNext Phase 3 (Data Quality + Unified Employee Card) — DQ backend (10 правил) + DQ Dashboard фронт `done`; Employee Card 360° `done` (Sessions 19–21: `GET /api/v1/employees/{id}` + `EmployeeCardPage.tsx`, 11 табов); Site Card 360° — `pending`.
+- vNext Phase 4 (Calendar & Search) — `complete`: 4.1 Smart Calendar (Sessions 22–30 — aggregator + `CalendarPage.tsx` day/week/month/year/list + ICS export + plan/fact + SLA + resource heatmap + saved views), 4.2 Universal Search + CMD+K палитра (Sessions 31–35; тесты точности поиска — `tests/test_search_service_relevance.py`). Optional polish вне acceptance: score-based unified ranking, per-tenant relevance tuning, i18n executable commands.
+- vNext Phase 5 (Document Factory Hardening) — `complete` (Sessions 36–40: линтер + variable inspector + audit существующих шаблонов + preview-parity; 50 replace- + 33 header/footer-тестов); за рамками acceptance — image-logo и QR в колонтитулах.
+- vNext Phase 6 (Integration & Webhooks) — `complete` (Sessions 41–42: webhook CRUD pin 28 тестов + public API pin 24 теста).
+- vNext Phase 7 (Mobile & Field-Ready) — 7.1 offline-sync backend `done` (Session 43, `backend/tests/test_pwa_sync_*`); 7.2 field-UX (мобильные чек-листы / фото / подпись) — `pending`.
+- vNext Phase 8 (Analytics & Reporting) — `complete` (Sessions 44–45: 34 analytics- + 26 audit-API-тестов); поверх достроены управленческие дашборды и report-builder MVP (см. P10-07).
+- vNext Phase 9 (Performance & Scale) — HTTP-кэширование закрыто целиком (Sessions 46–61: ETag + Cache-Control + Vary на 25 list-эндпоинтах, 189 контракт-тестов; бенчмарки 9.1 запинены `tests/test_query_performance_benchmarks.py`); отложено (PG-only): slow-query analysis, партиционирование.
+- vNext Phase 10 (Enterprise / разд. B) — `in progress`: merged P10-04 СОУТ / P10-05 подрядчики / P10-08 наряды-допуски; partial P10-01/02/03/06/07/09/10/12/14; not started P10-11/13/15. Живой статус — reconciliation-таблица в `docs/roadmap/PLATFORM_VNEXT_IMPLEMENTATION_PLAN.md`.
+- vNext Phases 11–20 (Дополнения №1–№4, разд. 49–74) — добавлены в план 2026-07-22; Phase 16 (security) в активной работе: влиты SEC-64 SSRF (PR #774), SEC-65 RLS (PR #775–779), SEC-67 шифрование секретов (PR #780), SEC-66 срез-1 (PR #781), SEC-69 semgrep blocking.
 
 ---
 
 ## D. Дорожная карта реализации (фазы)
 
-> Полное содержание — `docs/roadmap/PLATFORM_VNEXT_IMPLEMENTATION_PLAN.md`. Здесь — короткая навигация. Не плодить альтернативные roadmap-файлы.
+> Полное содержание — `docs/roadmap/PLATFORM_VNEXT_IMPLEMENTATION_PLAN.md`. Здесь — короткая навигация. Не плодить альтернативные roadmap-файлы. Статусы сверены с кодом/тестами и handoff'ами `AI_IMPLEMENTATION_REPORT.md` 2026-07-23 (протокол §0.2: одна строка на фазу, правки на месте — без дублирующих строк).
 
 | Фаза | Приоритет | Фокус | Status |
 |------|-----------|-------|--------|
-| Phase 0 — Release Blockers | P0 | TZ-1.1 baseline re-verification, RC-001..006 | 🔴 deferred |
+| Phase 0 — Release Blockers | P0 | TZ-1.1 baseline re-verification, RC-001..006 | ✅ закрыта — вердикт **READY** (2026-05-29), 6/6 RC-блокеров `done` (часть по постоянной local-evidence политике REL-1(c)); канон — `docs/stabilization/RELEASE_BLOCKERS_STATUS.md` |
 | Phase 1 — Architectural Foundation | P1 | Role-based workspaces / RBAC module / Tenant isolation audit | ✅ complete |
-| Phase 2 — Operational Dashboard | P1 | Command Center / Health Check Engine | 🟡 backend done, frontend pending |
-| Phase 3 — Data Quality & Master Data | P1 | DQ Layer / Unified Employee Card / Site Card | 🟢 DQ + Employee Card (backend + UI + Documents/Briefings/Deadlines) done; Site Card pending |
-| Phase 4 — Calendar & Search | P2 | Smart Calendar / Universal Search / Command Bar | ✅ complete (Sessions 22–32 + Phase 4.2 tail: SearchService accuracy tests + saved-search shortcuts + recent clicked entities in CMD+K palette) |
-| Phase 5 — Document Factory Hardening | P2 | Template lint / Compare / Header-footer / Replace edge cases | 🟡 Phase 5.1 — template lint extended (else/elif + unbalanced delim + available_fields), Variable Inspector (`GET /templates/{tid}/versions/{vid}/variables` + `inspect_template_variables()`), render edge-case suite (42 cases — null/0/False/empty/Cyrillic/XML-chars/filters/if-elif-else/loops/header.xml/sandbox) done; preview accuracy and migration of existing templates pending; Task 5.2 (Header/Footer + Replace) not started |
-| Phase 6 — Integration & Webhooks | P2 | Webhook delivery / Public API hardening / Импорт | 📋 planned |
-| Phase 7 — Mobile & Field-Ready | P2 | PWA hardening / Offline sync / Field workflows / Kiosk | 📋 planned |
-| Phase 8 — Analytics & Reporting | P3 | Operational + Management dashboards / Report builder / Product analytics | 📋 planned |
-| Phase 9 — Performance & Scale | P3 | Query optimization / Partitioning / Caching | 📋 planned |
-| Phase 4 — Calendar & Search | P2 | Smart Calendar / Universal Search / Command Bar | ✅ COMPLETE — 4.1 Smart Calendar 100% done (Sessions 22-30); 4.2 Universal Search 100% done (Sessions 31-35, CMD+K palette + keyboard nav + saved-searches + recent-entities + backend test coverage); optional polish (non-acceptance): score-based ranking, per-tenant relevance tuning, i18n executable commands |
-| Phase 5 — Document Factory Hardening | P2 | Template lint / Compare / Header-footer / Replace edge cases | ✅ COMPLETE (Sessions 36-40: linter + inspector + audit + preview parity; 50 replace + 33 header/footer tests) |
-| Phase 6 — Integration & Webhooks | P2 | Webhook delivery / Public API hardening / Импорт | ✅ COMPLETE (Session 41 — webhook CRUD pin + 28 tests; Session 42 — public API pin + 24 tests) |
-| Phase 7 — Mobile & Field-Ready | P2 | PWA hardening / Offline sync / Field workflows / Kiosk | 🟡 7.1 PWA sync pinned Session 43 — 28 tests; 7.2 field UX frontend-only deferred |
-| Phase 8 — Analytics & Reporting | P3 | Operational + Management dashboards / Report builder / Product analytics | ✅ COMPLETE (Session 44 — 34 analytics tests; Session 45 — 26 audit-API tests) |
-| Phase 9 — Performance & Scale | P3 | Query optimization / Partitioning / Caching | 🟡 9.1 query benchmarks pinned Session 46 (24 cases); 9.2 HTTP cache (ETag) — Sessions 47-49 closed 7/7 main list endpoints (55 tests); S50 shared `compute_list_etag` helper + 17 unit tests; S51 added ppe/items, ppe/issues, prescriptions (16); S52 added briefings/{templates,journals,entries} + training/courses (15); S53 added medical/exams + departments (13) — **16 list endpoints carry ETag, 116 contract tests total**; remaining list endpoints + service-level Redis cache + Cache-Control uniformity audit + slow-query identification + date partitioning remain follow-ups |
-| Phase 10 — Enterprise Features | P3 | SSO/SAML / White-label / I18n / CRM / AI Copilot / Verticals (ПБ/ПромБез/Экология/ГО-ЧС/Видеоналитика) | 📋 planned |
+| Phase 2 — Operational Dashboard | P1 | Command Center / Health Check Engine | ✅ done — Command Center backend + фронт (`CommandCenterPage`, PR #658), health-checks backend + `HealthStatusPage`; вне закрытого объёма: real-time refresh, перф-бюджет |
+| Phase 3 — Data Quality & Master Data | P1 | DQ Layer / Unified Employee Card / Site Card | 🟡 DQ (backend + dashboard) и Employee Card 360° (backend + UI, Sessions 19–21) done; Site Card 360° — pending |
+| Phase 4 — Calendar & Search | P2 | Smart Calendar / Universal Search / Command Bar | ✅ complete — 4.1 Smart Calendar (Sessions 22–30), 4.2 Universal Search + CMD+K (Sessions 31–35); optional polish вне acceptance: score-based ranking, per-tenant relevance tuning, i18n команд |
+| Phase 5 — Document Factory Hardening | P2 | Template lint / Compare / Header-footer / Replace edge cases | ✅ complete — Sessions 36–40 (линтер + variable inspector + audit шаблонов + preview-parity; 50 replace- + 33 header/footer-тестов); за рамками acceptance: image-logo/QR |
+| Phase 6 — Integration & Webhooks | P2 | Webhook delivery / Public API hardening / Импорт | ✅ complete — Sessions 41–42 (webhook CRUD pin 28 тестов; public API pin 24 теста) |
+| Phase 7 — Mobile & Field-Ready | P2 | PWA hardening / Offline sync / Field workflows / Kiosk | 🟡 7.1 offline-sync backend done (Session 43, `backend/tests/test_pwa_sync_*`); 7.2 field-UX (мобильные чек-листы/фото/подпись) — pending |
+| Phase 8 — Analytics & Reporting | P3 | Operational + Management dashboards / Report builder / Product analytics | ✅ complete — Sessions 44–45 (34 analytics- + 26 audit-API-тестов); поверх достроены управленческие дашборды + report-builder MVP (P10-07) |
+| Phase 9 — Performance & Scale | P3 | Query optimization / Partitioning / Caching | 🟢 done — HTTP-кэширование закрыто целиком (Sessions 46–61: ETag + Cache-Control + Vary на 25 list-эндпоинтах, 189 контракт-тестов; бенчмарки 9.1 запинены); отложено (PG-only): slow-query analysis, партиционирование |
+| Phase 10 — Enterprise Features | P3 | SSO/SAML / White-label / I18n / CRM / AI Copilot / Verticals (ПБ/ПромБез/Экология/ГО-ЧС/Видеоналитика) | 🟡 in progress — merged: P10-04 СОУТ, P10-05 подрядчики, P10-08 наряды-допуски; partial: P10-01/02/03/06/07/09/10/12/14; not started: P10-11/13/15; живой статус — reconciliation-таблица в плане |
 
-**Правило выбора задачи:** если открыт MVP-пункт со статусом `partial`/`missing` — он первичен; иначе — следующий пункт текущей фазы плана; в любом случае — соблюдение §E.
+> Фазы 11–20 (Дополнения №1–№4 к ТЗ, разд. 49–74) добавлены в `PLATFORM_VNEXT_IMPLEMENTATION_PLAN.md` 2026-07-22. Phase 16 (security, приоритет выше бизнес-фаз) — в активной работе: влиты SEC-64 SSRF (PR #774), SEC-65 RLS (PR #775–779), SEC-67 (PR #780), SEC-66 срез-1 (PR #781), SEC-69 semgrep blocking.
+
+**Правило выбора задачи (совпадает с §0.2 шаг 6):** подтверждённые сверкой «переделать»/«не сделано» уровня P0–P1 — первичны; иначе, если открыт MVP-пункт со статусом `partial`/`missing` — он; иначе — следующий пункт текущей фазы плана; в любом случае — соблюдение §E.
 
 ---
 
@@ -738,6 +764,7 @@
 
 В PR, закрывающем итерацию «по ТЗ», дать:
 
+- **Сверка с ТЗ (§0.2 шаг 4):** какие строки матрицы / пункты фазы проверялись по факту (код + тесты), вердикты (сделано / не сделано / переделать), какие статусы понижены/подтверждены.
 - Краткое резюме: сколько требований `[MVP]` `done` / `partial` / `missing` (взять из `TZ_COVERAGE_MATRIX.md`).
 - Какие пункты `A.2`/`A.3` или фаза `D.PhaseN` затронуты и что закрыто.
 - Список изменённых файлов и почему (в т.ч. backend/frontend/tests/migrations/docs).
