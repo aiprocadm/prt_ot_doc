@@ -56,6 +56,7 @@ RLS_ENABLED_TABLES: frozenset[str] = frozenset(
         "medical_norm",
         "medical_referral",
         "medical_suspension",
+        "pdn_access_log",
         "position_hazard",
         "ppe_inventory_count",
         "ppe_inventory_count_line",

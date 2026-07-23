@@ -1,11 +1,12 @@
 """SEC-65: RLS second-line tenant isolation — СОУТ, risks, contractors, budget.
 
 Revision ID: 20260723_sec65_rls_sout_risk_contractors_budget
-Revises: 20260722_sec65_rls_documents
+Revises: 20260723_sec66_pdn_access_log
 Create Date: 2026-07-23
 
-Applies the proven RLS shape to 37 more tenant tables across four domains, taking
-coverage from 35 to 72 of 264 tenant tables:
+Applies the proven RLS shape to 37 more tenant tables across four domains. With the
+SEC-66 ``pdn_access_log`` table (merged just before this slice) also armed, the
+registry ends at 73 enabled / 192 exempt / 265 tenant tables:
 
   * СОУТ (5) — assessment campaigns, workplaces, factors, guarantees, class history.
   * Risks (21) — risk register, assessments, cards, controls, matrices, maps, the
@@ -43,7 +44,7 @@ from collections.abc import Sequence
 from alembic import op
 
 revision: str = "20260723_sec65_rls_sout_risk_contractors_budget"
-down_revision: str | Sequence[str] | None = "20260722_sec65_rls_documents"
+down_revision: str | Sequence[str] | None = "20260723_sec66_pdn_access_log"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
