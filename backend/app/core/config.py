@@ -404,6 +404,10 @@ class Settings(BaseSettings):
         default_factory=list, alias="WEBHOOK_URLS_TRAINING_ASSIGNED"
     )
     webhook_timeout_seconds: float = Field(10.0, alias="WEBHOOK_TIMEOUT_SECONDS")
+    # SEC-67: master key (base64/hex, 32 bytes) for encrypting webhook HMAC secrets at
+    # rest (AES-256-GCM, core/secret_cipher.py). Required in production/staging; in
+    # development/test a deterministic key is derived from SECRET_KEY.
+    secret_encryption_key: str = Field("", alias="APP_SECRET_ENCRYPTION_KEY")
     # SEC-64 §64.3: guard outbound webhooks against SSRF (internal/private targets).
     # Default on; operator kill-switch. Enforcement is environment-aware (strict in
     # production/staging, permissive in development/test) — see core/ssrf_guard.py.

@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings, get_settings
 from app.core.metrics import Metrics, get_metrics
+from app.core.secret_cipher import decrypt_secret
 from app.core.ssrf_guard import UnsafeWebhookURLError, assert_safe_webhook_url
 from app.core.tracing import get_trace_id
 from app.models.models import WebhookEndpoint, WebhookSubscription
@@ -169,7 +170,7 @@ class WebhookDispatcher:
                         headers={
                             str(key): str(value) for key, value in (sub.headers or {}).items()
                         },
-                        secret=sub.secret,
+                        secret=decrypt_secret(sub.secret),  # SEC-67: decrypt at use
                     )
                 )
             return destinations
@@ -199,7 +200,7 @@ class WebhookDispatcher:
                         headers={
                             str(key): str(value) for key, value in (sub.headers or {}).items()
                         },
-                        secret=sub.secret,
+                        secret=decrypt_secret(sub.secret),  # SEC-67: decrypt at use
                     )
                 )
             return destinations
@@ -272,7 +273,7 @@ class WebhookDispatcher:
                     url=row.url,
                     headers={str(key): str(value) for key, value in (row.headers or {}).items()},
                     endpoint_id=row.id,
-                    secret=row.secret,
+                    secret=decrypt_secret(row.secret),  # SEC-67: decrypt at use
                     timeout_ms=row.timeout_ms,
                 )
             )

@@ -23,6 +23,7 @@ from app.core.audit_decorator import audit_operation
 from app.core.config import get_settings
 from app.core.errors import api_problem_detail
 from app.core.inbound_webhook_auth import verify_inbound_webhook_body_hmac
+from app.core.secret_cipher import encrypt_secret
 from app.core.security import AccessContext, rbac
 from app.core.tenant_validation import TenantContextValidator
 from app.models.job_engine import InboundWebhookDedup
@@ -168,7 +169,7 @@ async def create_webhook(
         tenant_id=tenant.id,
         name=payload.name,
         url=payload.url,
-        secret=generated_secret,
+        secret=encrypt_secret(generated_secret),  # SEC-67: at-rest encryption
         is_enabled=payload.enabled,
         subscribed_events=payload.subscribed_events,
         timeout_ms=payload.timeout_ms,
@@ -204,8 +205,8 @@ async def update_webhook(
     )
     row.name = payload.name
     row.url = payload.url
-    # Сохраняем существующий секрет, если новый не передан
-    row.secret = payload.secret or row.secret
+    # Сохраняем существующий секрет, если новый не передан (SEC-67: шифруем новый)
+    row.secret = encrypt_secret(payload.secret) if payload.secret else row.secret
     row.is_enabled = payload.enabled
     row.subscribed_events = payload.subscribed_events
     row.timeout_ms = payload.timeout_ms
@@ -264,7 +265,7 @@ async def rotate_webhook_secret(
         detail="webhook_not_found",
     )
     new_secret = secrets.token_urlsafe(32)
-    row.secret = new_secret
+    row.secret = encrypt_secret(new_secret)  # SEC-67: at-rest encryption
     row.updated_at = datetime.now(timezone.utc)
     await session.commit()
     await session.refresh(row)
