@@ -1,5 +1,51 @@
 # CHANGELOG
 
+## 2026-07-23 (feat/sec65-rls-sout-risk-contractors-budget — RLS на СОУТ/риски/подрядчиков/бюджет, Phase 16)
+
+SEC-65 (TZ B-NEXT.7). Продолжение раскатки RLS как второго рубежа изоляции арендаторов.
+Тот же отлаженный механизм (`app.current_tenant`/`app.bypass_rls` GUC + FORCE ROW LEVEL
+SECURITY), новый срез — ещё 37 tenant-таблиц четырёх доменов. Покрытие: **35 → 72** из 264.
+Только PostgreSQL (на SQLite миграция — no-op).
+
+### Added
+- **Миграция** `20260723_sec65_rls_sout_risk_contractors_budget.py` (down_rev
+  `20260722_sec65_rls_documents`, head) — ENABLE+FORCE+POLICY `tenant_isolation` на 37 табл:
+  - СОУТ (5): `sout_campaign`, `sout_workplace`, `sout_factor`, `sout_guarantee`,
+    `sout_class_history`.
+  - Риски (21): `risk`, `risk_assessments`, `risk_assessment_items`, `risk_cards`,
+    `risk_controls`, `risk_hazards`, `risk_matrix`, `risk_measures`, `risk_methodologies`,
+    `risk_maps`, `risk_map_items`, `risk_map_item_measures`, легаси `riskmap`/`riskmethodology`
+    (без подчёркивания), `hazards`, `hazard_measures`, `hazard_bindings`, `workplace_hazard`,
+    `position_hazard`, `action_plans`, `action_plan_items`.
+  - Подрядчики (6): `contractor_registry`, `contractor_employees`, `contractor_documents`,
+    `contractor_document_requirement`, `contractor_incidents`, `contractor_readiness_read_models`.
+  - Бюджет (5): `safety_budget`, `budget_expense_article`, `budget_expense`,
+    `budget_reimbursement`, `budget_reimbursement_item`.
+- **Реестр** `core/rls_policy.py`: 37 таблиц перенесены из `RLS_EXEMPT_TABLES` в
+  `RLS_ENABLED_TABLES` (72 enabled / 192 exempt / 264 всего). Ratchet-гард остаётся зелёным.
+
+### Анализ рисков (до FORCE RLS)
+- Все пути записи в эти таблицы — тенант-контекстные: API-хендлеры через
+  `api/dependencies.py::get_session` (передаётся `tenant_id=str(tenant.id)` → GUC
+  `app.current_tenant` всегда выставлен); тики подрядчиков (`tasks/domain_ticks.py`) и
+  проекции (`celery/tasks/projections_jobs.py` — единственный писатель
+  `contractor_readiness_read_models`) идут по одному арендатору через `session_scope(tenant=…)`.
+- Глобального (tenant=None) опроса очереди или raw-engine записи по этим таблицам НЕТ.
+  Демо-сид уже под `rls_bypass=True`. → FORCE RLS ничего не морит голодом.
+- Вне среза (отдельными срезами): `workplace`/`position` и остальной орг-реестр (общий
+  каркас нескольких доменов), `search_documents` (кросс-сущностный индекс).
+
+### Tests
+- `backend/tests/test_rls_sout_risk_contractors_budget.py` (маркер `db`) — интроспекция:
+  миграция armed все 37 таблиц (RLS+FORCE+политика с предикатом). Семантику политики
+  (isolation/fail-closed/bypass/WITH CHECK) не дублирует — покрыта generic-тестом
+  `test_rls_committees.py`.
+- `-m db` кросс-чек `test_rls_enabled_matches_postgres` (реестр ↔ живой Postgres) —
+  подтвердил armed-таблицы. Прогнано на живом Postgres: EXIT 0.
+
+_Примечание: сразу перед вливанием влился SEC-66 (`pdn_access_log`, тоже под RLS),
+поэтому после слияния итог реестра — 73 enabled / 192 exempt / 265 tenant-таблиц._
+
 ## 2026-07-23 (feat/sec66-pdn-subject-rights — права субъекта ПДн, срез-1, Phase 16)
 
 SEC-66 (TZ B-NEXT.7, Доп.№3 разд. 66.2). Закрыты два права субъекта ПДн из четырёх:
