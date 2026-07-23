@@ -141,18 +141,6 @@ class TemplateAuditReportDTO(BaseModel):
     items: list[TemplateAuditItemDTO] = Field(default_factory=list)
 
 
-class TemplateVariableInspectorDTO(BaseModel):
-    """Variable Inspector projection: used vs declared variables for a template version."""
-
-    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
-    used: list[dict[str, Any]]
-    loops: list[dict[str, Any]]
-    conditions: list[dict[str, Any]]
-    declared_required: list[str]
-    declared_available: list[str]
-    coverage: dict[str, Any]
-
-
 class PreviewRequest(BaseModel):
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
     data: dict[str, Any]
