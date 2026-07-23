@@ -83,6 +83,7 @@ from app.modules.headers import api as headers_api
 from app.modules.packs import api as packs_v2_api
 from app.modules.pdf import api as pdf_api
 from app.modules.pipelines import api as pipelines_api
+from app.modules.privacy.api import router as privacy_router
 from app.modules.replace import api as replace_api
 from app.modules.report_builder.api import router as report_builder_router
 from app.modules.rules_engine.api import router as rules_engine_router
@@ -192,6 +193,7 @@ DOCUMENT_CORE_ROUTER_REGISTRATIONS: tuple[RouterRegistration, ...] = (
     (rules_engine_router, {"tags": ["rules-engine"]}),
     (budget_router, {"tags": ["budget"]}),
     (budget_reimbursement_router, {"tags": ["budget"]}),
+    (privacy_router, {"tags": ["privacy"]}),
 )
 
 PLATFORM_EXTENSION_ROUTER_REGISTRATIONS: tuple[RouterRegistration, ...] = (
