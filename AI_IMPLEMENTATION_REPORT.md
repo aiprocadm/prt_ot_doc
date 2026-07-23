@@ -1,6 +1,17 @@
 # AI Implementation Report
 
-## Last Agent Handoff (2026-07-24, SEC-65 — RLS НА ОРГ-РЕЕСТР (базовый каркас, Phase 16) — ветка feat/sec65-rls-org-registry, PR открыт, ВЛИВАЕТСЯ)
+## Last Agent Handoff (2026-07-24, SEC-65 — RLS НА ОБУЧЕНИЕ/ИНЦИДЕНТЫ/ИНСПЕКЦИИ (Phase 16) — ветка feat/sec65-rls-training-incidents-inspections, НЕ влита)
+
+- **Дата:** 2026-07-24. «продолжай по ТЗ». Следующий «безопасный по образцу» срез RLS после орг-реестра (PR #787). Ветка от `main` после #787.
+- **ФАЙЛЫ:** миграция `20260724_sec65_rls_training_incidents_inspections.py` (down_rev `20260724_sec65_rls_org_registry`, **head**) — ENABLE+FORCE+POLICY `tenant_isolation` на **35 таблицах**: обучение/LMS 15 / инциденты 7 / инспекции 13. Реестр `core/rls_policy.py`: 35 табл EXEMPT→ENABLED (**117 enabled / 148 exempt / 265**). db-тест `backend/tests/test_rls_training_incidents_inspections.py`.
+- **СВЕРКА СПИСКА:** список таблиц миграции программно сверен с живыми метаданными (`^(training|incident|inspection)` = ровно 35, все были exempt) — легаси-имён без подчёркивания в этих доменах нет.
+- **АНАЛИЗ РИСКА:** все писатели тенант-контекстные. API-хендлеры через `get_session` (tenant_id). Доменные писатели `modules/incidents/operations.py` (Incident/Inspection/InspectionResult) и training-API своей сессии НЕ открывают → тенант-сессия вызывающего. Фоновые `tasks/notification_jobs.py`/`tasks/_core.py` — паттерн «дефолт-сессия только перечисляет арендаторов (читает Tenant) → работа в `session_scope(tenant=…)`» (как domain_ticks). Демо-сид сеет `training_course` под `rls_bypass=True` (сессия 1463 в demo_bootstrap). `dev_bootstrap` эти таблицы не пишет (grep=0). Глобального (tenant=None) писателя НЕТ.
+- **ВЕРИФИКАЦИЯ (Py3.12.3 vs канон 3.12.12):** живой Postgres `-m db`: мой тест armed все 35 + кросс-чек `test_rls_enabled_matches_postgres` (117 armed) — **2 passed**. Ratchet-гард EXIT 0 (117/148/265). `ruff --no-fix`+format clean. Полный SQLite-suite — [ИДЁТ; runtime-код НЕ менял → регрессий не жду]. OpenAPI — роутов нет.
+- **ВНЕ СРЕЗА:** `ops_inspections`/`ops_prescriptions`/`regulatory_inspection` (ops-домен инспекций — отдельным срезом).
+- **RLS-прогресс:** 82 (орг-реестр) + обучение 15 + инциденты 7 + инспекции 13 = **117 таблиц**. Осталось 148 (в т.ч. рискованные `authz_*`/`api_tokens` — горячий путь прав, нужен отдельный анализ; contractors read-models, packages, workflow, files, npa и пр.).
+- **Next (точный шаг):** дождаться SQLite-suite → PR (base=main; **только по решению пользователя**). Дальше по Phase 16: ещё RLS-домены по образцу (packages/workflow/files/npa), либо `authz_*`/`api_tokens` (тщательно), либо SEC-66 срез-2 (обезличивание/удаление субъекта + согласия).
+
+## Last Agent Handoff (2026-07-24, SEC-65 — RLS НА ОРГ-РЕЕСТР (базовый каркас, Phase 16) — ветка feat/sec65-rls-org-registry, ВЛИТА PR #787)
 
 - **Дата:** 2026-07-24. «продолжай по ТЗ». Пользователь через AskUserQuestion выбрал **RLS на орг-реестр** (базовый каркас). Ветка от `main` после мержа PR #784. Механизм в main.
 - **ФАЙЛЫ:** миграция `20260724_sec65_rls_org_registry.py` (down_rev `20260723_sec65_rls_sout_risk_contractors_budget`, **head**) — ENABLE+FORCE+POLICY `tenant_isolation` на **9 таблицах**: `company`, `branch`, `site`, `department`, `position`, `person`, `asset`, `equipment`, `workplace`. Реестр `core/rls_policy.py`: 9 табл EXEMPT→ENABLED (**82 enabled / 183 exempt / 265**). db-тест `backend/tests/test_rls_org_registry.py`.
