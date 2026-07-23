@@ -1,5 +1,42 @@
 # CHANGELOG
 
+## 2026-07-24 (feat/sec65-rls-org-registry — RLS на орг-реестр (базовый каркас), Phase 16)
+
+SEC-65 (TZ B-NEXT.7). Продолжение раскатки RLS. Срез — **9 таблиц общего орг-каркаса**,
+на который завязаны многие домены. Покрытие: **73 → 82** из 265. Только PostgreSQL.
+
+### Added
+- **Миграция** `20260724_sec65_rls_org_registry.py` (down_rev
+  `20260723_sec65_rls_sout_risk_contractors_budget`, head) — ENABLE+FORCE+POLICY
+  `tenant_isolation` на: `company`, `branch`, `site`, `department`, `position`,
+  `person`, `asset`, `equipment`, `workplace`.
+- **Реестр** `core/rls_policy.py`: 9 табл `RLS_EXEMPT_TABLES` → `RLS_ENABLED_TABLES`
+  (82 enabled / 183 exempt / 265).
+
+### Fixed (обязательно перед FORCE RLS на базовых таблицах)
+- **Кросс-тенантный провижининг** пишет `company` нового арендатора на tenant-less
+  сессии `tenant="public"` (`app.current_tenant` пуст) — под FORCE RLS вставка бы
+  отклонилась. Добавлен `rls_bypass=True` в обе провижининг-сессии:
+  `api/routes/platform_tenants.py` (создание тенанта через API) и
+  `scripts/bootstrap_tenant.py` (CLI). Это легитимный доверенный кросс-тенантный путь —
+  тот же механизм, что уже используется в демо-сиде.
+
+### Анализ рисков (базовые таблицы — писателей много)
+- Request-хендлеры (companies/branches/sites/persons/departments/workplaces API,
+  `repository.create_company`) — сессия из `get_session` с `tenant_id` → GUC выставлен,
+  `tenant_id` строки == арендатор → WITH CHECK проходит.
+- Доменные писатели `person`/`workplace` (`services/sout_import.py`,
+  `modules/incidents/operations.py`) своей сессии не открывают — получают тенант-сессию
+  вызывающего.
+- Демо-сид уже под `rls_bypass=True` (его `_seed_committees_demo` создаёт `person`;
+  комитеты уже RLS-armed и сидируются нормально → доказательство, что сессия с bypass).
+
+### Tests
+- `backend/tests/test_rls_org_registry.py` (маркер `db`) — интроспекция: миграция armed
+  все 9 таблиц. Семантику покрывает generic `test_rls_committees.py`.
+- Живой Postgres, `-m db`: мой тест + кросс-чек `test_rls_enabled_matches_postgres`
+  (реестр↔Postgres, 82 armed) — **2 passed**. Ratchet-гард — EXIT 0 (82/183/265).
+
 ## 2026-07-23 (feat/sec65-rls-sout-risk-contractors-budget — RLS на СОУТ/риски/подрядчиков/бюджет, Phase 16)
 
 SEC-65 (TZ B-NEXT.7). Продолжение раскатки RLS как второго рубежа изоляции арендаторов.

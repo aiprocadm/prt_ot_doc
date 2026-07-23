@@ -39,8 +39,11 @@ def _offline_dry_run_summary(args: argparse.Namespace) -> dict:
 
 
 async def _run(args: argparse.Namespace) -> dict:
+    # rls_bypass: cross-tenant provisioning on a tenant-less shared session — it inserts
+    # the new tenant's ``company`` etc., which SEC-65 FORCE RLS would otherwise reject
+    # (row tenant_id != empty app.current_tenant). Mirrors the API provisioning path.
     async with AsyncSessionLocal(
-        tenant="public", include_public=False, create_schema=False
+        tenant="public", include_public=False, create_schema=False, rls_bypass=True
     ) as session:
         service = BootstrapTenantService(session)
         summary = await service.run(

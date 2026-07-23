@@ -1,6 +1,20 @@
 # AI Implementation Report
 
-## Last Agent Handoff (2026-07-24, ВОССТАНОВЛЕНИЕ 4 STASH-ТЕСТОВ ИЗ afc649f6 (Phase 5.1) — ветка test/restore-phase5-stash-tests, PR #786, НЕ влита)
+## Last Agent Handoff (2026-07-24, SEC-65 — RLS НА ОРГ-РЕЕСТР (базовый каркас, Phase 16) — ветка feat/sec65-rls-org-registry, PR открыт, ВЛИВАЕТСЯ)
+
+- **Дата:** 2026-07-24. «продолжай по ТЗ». Пользователь через AskUserQuestion выбрал **RLS на орг-реестр** (базовый каркас). Ветка от `main` после мержа PR #784. Механизм в main.
+- **ФАЙЛЫ:** миграция `20260724_sec65_rls_org_registry.py` (down_rev `20260723_sec65_rls_sout_risk_contractors_budget`, **head**) — ENABLE+FORCE+POLICY `tenant_isolation` на **9 таблицах**: `company`, `branch`, `site`, `department`, `position`, `person`, `asset`, `equipment`, `workplace`. Реестр `core/rls_policy.py`: 9 табл EXEMPT→ENABLED (**82 enabled / 183 exempt / 265**). db-тест `backend/tests/test_rls_org_registry.py`.
+- **⚠️ КРИТИЧНЫЙ ФИКС (без него FORCE RLS ломает создание тенанта):** провижининг арендатора пишет `company` нового тенанта на tenant-less сессии `tenant="public"` (GUC `app.current_tenant` пуст → предикат `tenant_id=''` → INSERT reject). Добавлен `rls_bypass=True` в ОБЕ провижининг-сессии: `api/routes/platform_tenants.py:182` (API создания тенанта) + `scripts/bootstrap_tenant.py:42` (CLI). Легитимный доверенный кросс-тенантный путь (как демо-сид).
+- **АНАЛИЗ РИСКА (базовые таблицы — писателей много, проверял тщательно):** (1) API-роуты (sites/persons/branches/departments/companies, `repository.create_company`) — сессия из `get_session` с `tenant_id`, строка своего арендатора → OK. (2) Доменные писатели `person`/`workplace` (`services/sout_import.py`, `modules/incidents/operations.py`) СВОЕЙ сессии не открывают (grep `AsyncSessionLocal|session_scope` в них пуст) → тенант-сессия вызывающего. (3) Демо-сид уже под `rls_bypass=True` — доказательство: `_seed_committees_demo` создаёт `person`, а комитеты RLS-armed с PR #775 и сидируются нормально → значит эта сессия с bypass. (4) `dev_bootstrap` org-таблицы не пишет (только Tenant+User). Глобального (tenant=None) писателя org-таблиц, кроме провижининга (пофикшен), НЕТ.
+- **ВЕРИФИКАЦИЯ (Py3.12.3 vs канон 3.12.12):** живой Postgres `-m db`: мой тест armed все 9 + кросс-чек `test_rls_enabled_matches_postgres` (82 armed) — **2 passed**. Ratchet-гард EXIT 0 (82/183/265). `ruff --no-fix`+format clean. Провижининг/bootstrap-тесты (SQLite) EXIT 0. Полный SQLite-suite — [ИДЁТ; проверяет, что фикс сигнатуры сессии ничего не сломал]. OpenAPI — роутов нет.
+- **RLS-прогресс:** 73 (прошлый срез) + орг-реестр 9 = **82 таблицы**. Осталось 183 (в т.ч. рискованные `authz_*`/`api_tokens` — горячий путь прав, нужен отдельный анализ; обучение, инциденты, инспекции — по образцу).
+- **Next (точный шаг):** дождаться SQLite-suite → PR (base=main; **только по решению пользователя**). Дальше по Phase 16: RLS на обучение/инциденты/инспекции (безопасно, по образцу), либо `authz_*`/`api_tokens` (тщательно), либо SEC-66 срез-2 (обезличивание/удаление субъекта + согласия).
+
+## Last Agent Handoff (2026-07-23, SEC-65 — RLS РАСШИРЕНИЕ НА СОУТ/РИСКИ/ПОДРЯДЧИКОВ/БЮДЖЕТ (Phase 16) — ветка feat/sec65-rls-sout-risk-contractors-budget, ВЛИТА PR #784)
+
+<!-- ниже — запись из PR #786 (влита в main), сохранена при слиянии -->
+
+## Last Agent Handoff (2026-07-24, ВОССТАНОВЛЕНИЕ 4 STASH-ТЕСТОВ ИЗ afc649f6 (Phase 5.1) — ветка test/restore-phase5-stash-tests, PR #786, ВЛИТА)
 
 - **Дата:** 2026-07-24. Задача: в локальном stash-коммите `afc649f6` («untracked files on main», эпоха PR #538) лежали 4 никогда не коммиченных тест-файла (`test_templates_linter_phase5.py`, `test_templates_render_edge_cases.py`, `test_templates_variable_inspector.py`, `test_search_service_accuracy.py`). Извлечь (`git show afc649f6:tests/<file>`) и по каждому решить судьбу против ТЕКУЩЕГО кода.
 - **ВЕРДИКТ ПО КАЖДОМУ (2 восстановлено, 2 списано):**
@@ -12,8 +26,6 @@
 - **⚠️ REBASE НА #784/#785 (важно):** ветка бралась от `origin/main`=31a15291 (=merge #783), но пока шла работа влились **PR #784** (RLS СОУТ/риски) и **PR #785** (`docs/plan-task51-42-dedup` — дедуп acceptance-критериев Task 5.1/4.2, ровно тот follow-up, что я собирался предложить). При rebase конфликтовал только roadmap. **#785 успел записать факт-ошибки:** его строки Task 5.1 утверждали, что `test_templates_linter_phase5.py` и `test_templates_render_edge_cases.py` «never landed in the repo … remain uncovered». Мой #786 их ЛАНДИТ → эти два утверждения перечёркнуты на «restored in PR #786 (20 / 40 кейсов)». Ссылку на инспектор и дубль про search-accuracy #785 уже починил сам — мои прежние правки этих строк снялись как избыточные.
 - **ВЕРИФИКАЦИЯ:** батч из 4 файлов (`linter_phase5` + `render_edge_cases` + существующие `inspector` + `next18`) — **78 passed, EXIT=0** (sibling-venv Py3.12.10 из worktree, `-p magic_stub` — иначе `import magic` виснет на этой Windows-машине). `import app.modules.templates.schemas` — OK, DTO отсутствует. `ruff check --no-fix` + `black --check` на 3 изменённых .py — clean. НЕ прогнан: полный SQLite-suite и OpenAPI-снапшот (роутов/схем-в-контракте не добавлял, DTO не в контракте → не должны меняться); CI прогонит канонику.
 - **Next:** после мержа — продолжение по ТЗ (Phase 16 остаток / Phase 11). Дедуп Phase 5.1 в плане уже закрыт PR #785.
-
-## Last Agent Handoff (2026-07-23, SEC-65 — RLS РАСШИРЕНИЕ НА СОУТ/РИСКИ/ПОДРЯДЧИКОВ/БЮДЖЕТ (Phase 16) — ветка feat/sec65-rls-sout-risk-contractors-budget, PR #784, ВЛИВАЕТСЯ)
 
 - **Дата:** 2026-07-23. «продолжай по ТЗ». Пользователь через AskUserQuestion выбрал **RLS на новые домены** (SEC-65). Ветка от `main` после мержа PR #780 (SEC-67 секреты). Механизм RLS уже в main — срез = миграция + реестр + db-тест по отлаженному образцу.
 - **ФАЙЛЫ:** миграция `20260723_sec65_rls_sout_risk_contractors_budget.py` — ENABLE+FORCE+POLICY `tenant_isolation` на **37 таблицах**: СОУТ 5 / риски 21 / подрядчики 6 / бюджет 5. Реестр `core/rls_policy.py`: 37 табл перенесены EXEMPT→ENABLED. db-тест `backend/tests/test_rls_sout_risk_contractors_budget.py` (интроспекция armed-таблиц).
