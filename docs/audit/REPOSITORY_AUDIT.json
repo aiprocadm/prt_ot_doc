@@ -365,7 +365,6 @@
       ".devcontainer",
       ".github",
       ".hypothesis",
-      ".local_storage",
       ".ruff_cache",
       ".vscode",
       "app",
@@ -439,7 +438,7 @@
       "canonical": "docs/TESTING.md",
       "canonical_exists": true,
       "legacy": "docs/testing.md",
-      "legacy_exists": true,
+      "legacy_exists": false,
       "guidance": "Prefer `docs/TESTING.md` for new references and keep lowercase `docs/testing.md` as a compatibility pointer."
     },
     {
@@ -469,7 +468,7 @@
       "canonical": "docs/TESTING.md",
       "canonical_exists": true,
       "legacy": "docs/testing.md",
-      "legacy_exists": true,
+      "legacy_exists": false,
       "guidance": "Prefer `docs/TESTING.md` for new references and keep lowercase `docs/testing.md` as a compatibility pointer."
     },
     {

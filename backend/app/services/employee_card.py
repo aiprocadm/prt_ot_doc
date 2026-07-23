@@ -91,9 +91,18 @@ def _today() -> date:
 class EmployeeCardService:
     """Build a tenant-scoped `EmployeeCard` for a single person."""
 
-    def __init__(self, *, tenant_id: str, db: AsyncSession) -> None:
+    def __init__(
+        self,
+        *,
+        tenant_id: str,
+        db: AsyncSession,
+        max_items_per_section: int = MAX_ITEMS_PER_SECTION,
+    ) -> None:
         self.tenant_id = str(tenant_id)
         self.db = db
+        # UI-карточке хватает 50 строк на секцию; выгрузка ПДн по запросу субъекта
+        # (SEC-66, разд. 66.2) поднимает предел — см. app/modules/privacy/service.py.
+        self.max_items_per_section = int(max_items_per_section)
 
     async def build(self, person_id: str) -> EmployeeCard | None:
         person = await self._load_person(person_id)
@@ -270,7 +279,7 @@ class EmployeeCardService:
             .order_by(
                 desc(TrainingSessionModel.completed_at), desc(TrainingSessionModel.created_at)
             )
-            .limit(MAX_ITEMS_PER_SECTION)
+            .limit(self.max_items_per_section)
         )
         rows = (await self.db.execute(sessions_stmt)).all()
         sessions: list[EmployeeTrainingItem] = []
@@ -295,7 +304,7 @@ class EmployeeCardService:
                 Training.person_id == person.id,
             )
             .order_by(desc(Training.completed_at), desc(Training.created_at))
-            .limit(MAX_ITEMS_PER_SECTION)
+            .limit(self.max_items_per_section)
         )
         legacy_rows = (await self.db.execute(legacy_stmt)).scalars().all()
         for legacy in legacy_rows:
@@ -311,7 +320,7 @@ class EmployeeCardService:
                     score=None,
                 )
             )
-        sessions = sessions[:MAX_ITEMS_PER_SECTION]
+        sessions = sessions[: self.max_items_per_section]
 
         sessions_total = await self._count(
             select(func.count())
@@ -341,7 +350,7 @@ class EmployeeCardService:
                 TrainingCertificate.deleted_at.is_(None),
             )
             .order_by(desc(TrainingCertificate.issued_at))
-            .limit(MAX_ITEMS_PER_SECTION)
+            .limit(self.max_items_per_section)
         )
         cert_rows = (await self.db.execute(cert_stmt)).all()
         certificates = [
@@ -383,7 +392,7 @@ class EmployeeCardService:
                 MedicalExam.deleted_at.is_(None),
             )
             .order_by(desc(MedicalExam.exam_date))
-            .limit(MAX_ITEMS_PER_SECTION)
+            .limit(self.max_items_per_section)
         )
         rows = (await self.db.execute(stmt)).scalars().all()
         items = [
@@ -428,7 +437,7 @@ class EmployeeCardService:
                 PPEIssue.deleted_at.is_(None),
             )
             .order_by(desc(PPEIssue.issued_at))
-            .limit(MAX_ITEMS_PER_SECTION)
+            .limit(self.max_items_per_section)
         )
         rows = (await self.db.execute(stmt)).scalars().all()
         items = [
@@ -493,7 +502,7 @@ class EmployeeCardService:
                 Permit.person_id == person.id,
             )
             .order_by(desc(Permit.issued_at))
-            .limit(MAX_ITEMS_PER_SECTION)
+            .limit(self.max_items_per_section)
         )
         rows = (await self.db.execute(stmt)).scalars().all()
         items = [
@@ -555,7 +564,7 @@ class EmployeeCardService:
                 Incident.deleted_at.is_(None),
             )
             .order_by(desc(Incident.occurred_at))
-            .limit(MAX_ITEMS_PER_SECTION)
+            .limit(self.max_items_per_section)
         )
         rows = (await self.db.execute(stmt)).all()
         items = [
@@ -593,7 +602,7 @@ class EmployeeCardService:
                 Document.person_id == person.id,
             )
             .order_by(desc(Document.created_at))
-            .limit(MAX_ITEMS_PER_SECTION)
+            .limit(self.max_items_per_section)
         )
         rows = (await self.db.execute(stmt)).all()
         items = [
@@ -640,7 +649,7 @@ class EmployeeCardService:
                 BriefingEntry.deleted_at.is_(None),
             )
             .order_by(desc(BriefingEntry.briefing_date))
-            .limit(MAX_ITEMS_PER_SECTION)
+            .limit(self.max_items_per_section)
         )
         rows = (await self.db.execute(stmt)).all()
         items = [
@@ -691,7 +700,7 @@ class EmployeeCardService:
                 ComplianceDeadline.person_id == person.id,
             )
             .order_by(ComplianceDeadline.due_at.asc())
-            .limit(MAX_ITEMS_PER_SECTION)
+            .limit(self.max_items_per_section)
         )
         rows = (await self.db.execute(stmt)).scalars().all()
         items = [
@@ -739,7 +748,7 @@ class EmployeeCardService:
                 AuditLog.object_id == str(person.id),
             )
             .order_by(desc(AuditLog.when))
-            .limit(MAX_ITEMS_PER_SECTION)
+            .limit(self.max_items_per_section)
         )
         rows = (await self.db.execute(stmt)).scalars().all()
         items = [
