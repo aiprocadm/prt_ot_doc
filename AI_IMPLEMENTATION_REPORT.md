@@ -1,6 +1,6 @@
 # AI Implementation Report
 
-## Last Agent Handoff (2026-07-24, SEC-65 — RLS НА ОРГ-РЕЕСТР (базовый каркас, Phase 16) — ветка feat/sec65-rls-org-registry, НЕ влита)
+## Last Agent Handoff (2026-07-24, SEC-65 — RLS НА ОРГ-РЕЕСТР (базовый каркас, Phase 16) — ветка feat/sec65-rls-org-registry, PR открыт, ВЛИВАЕТСЯ)
 
 - **Дата:** 2026-07-24. «продолжай по ТЗ». Пользователь через AskUserQuestion выбрал **RLS на орг-реестр** (базовый каркас). Ветка от `main` после мержа PR #784. Механизм в main.
 - **ФАЙЛЫ:** миграция `20260724_sec65_rls_org_registry.py` (down_rev `20260723_sec65_rls_sout_risk_contractors_budget`, **head**) — ENABLE+FORCE+POLICY `tenant_isolation` на **9 таблицах**: `company`, `branch`, `site`, `department`, `position`, `person`, `asset`, `equipment`, `workplace`. Реестр `core/rls_policy.py`: 9 табл EXEMPT→ENABLED (**82 enabled / 183 exempt / 265**). db-тест `backend/tests/test_rls_org_registry.py`.
@@ -11,6 +11,21 @@
 - **Next (точный шаг):** дождаться SQLite-suite → PR (base=main; **только по решению пользователя**). Дальше по Phase 16: RLS на обучение/инциденты/инспекции (безопасно, по образцу), либо `authz_*`/`api_tokens` (тщательно), либо SEC-66 срез-2 (обезличивание/удаление субъекта + согласия).
 
 ## Last Agent Handoff (2026-07-23, SEC-65 — RLS РАСШИРЕНИЕ НА СОУТ/РИСКИ/ПОДРЯДЧИКОВ/БЮДЖЕТ (Phase 16) — ветка feat/sec65-rls-sout-risk-contractors-budget, ВЛИТА PR #784)
+
+<!-- ниже — запись из PR #786 (влита в main), сохранена при слиянии -->
+
+## Last Agent Handoff (2026-07-24, ВОССТАНОВЛЕНИЕ 4 STASH-ТЕСТОВ ИЗ afc649f6 (Phase 5.1) — ветка test/restore-phase5-stash-tests, PR #786, ВЛИТА)
+
+- **Дата:** 2026-07-24. Задача: в локальном stash-коммите `afc649f6` («untracked files on main», эпоха PR #538) лежали 4 никогда не коммиченных тест-файла (`test_templates_linter_phase5.py`, `test_templates_render_edge_cases.py`, `test_templates_variable_inspector.py`, `test_search_service_accuracy.py`). Извлечь (`git show afc649f6:tests/<file>`) и по каждому решить судьбу против ТЕКУЩЕГО кода.
+- **ВЕРДИКТ ПО КАЖДОМУ (2 восстановлено, 2 списано):**
+  1. **`test_templates_linter_phase5.py` — ВОССТАНОВЛЕН as-is (20 кейсов).** Самый ценный: линтер `backend/app/modules/templates/linter.py` уже содержит `{% else %}`/`{% elif %}` placement-check, unbalanced `{{…}}`/`{%…%}` delimiter detection и `available_fields=` warnings — все три БЕЗ покрытия (grep «Unbalanced|Unexpected elif|available_fields» по `tests/` = ноль вне этого файла). Импорты (`lint_template`, `parse_docx_placeholders`) резолвятся против текущего API без адаптации.
+  2. **`test_templates_render_edge_cases.py` — ВОССТАНОВЛЕН, минус 2 кейса (40 из 42).** Тестирует ЛЕГАСИ-рендерер `app.modules.templates.render` (raw-XML + `SandboxedEnvironment`). Прод давно ушёл на `app.domains.templating.renderer` (docxtpl), но легаси-модуль **всё ещё шипается**, `renderer.py` держит его `_env()` каноном для кастомных фильтров, и это **единственный sandboxed путь**. Убраны `test_split_runs_render_correctly` и `test_passport_marker_present_in_output` — уже покрыты `tests/test_templates_next18_unit.py`.
+  3. **`test_templates_variable_inspector.py` — СПИСАН.** Целил НЕсуществующий API: `from app.modules.templates import inspect_template_variables` (нет функции) + `GET …/versions/{vid}/variables` (нет). Реальный инспектор — `inspect_template_context()` / `POST …:inspect` → `InspectorReportDTO`, уже покрыт `tests/test_templates_inspector.py` (15 кейсов).
+  4. **`test_search_service_accuracy.py` — СПИСАН.** Все 8 кейсов — строгое поведенческое подмножество `tests/test_search_service_relevance.py` (35 кейсов).
+- **МЁРТВЫЙ КОД УДАЛЁН:** `TemplateVariableInspectorDTO` (`backend/app/modules/templates/schemas.py`) — единственная ссылка была само определение (grep = ноль импортов/экспортов). Остаток несостоявшегося `GET …/variables`; реальный роут отдаёт `InspectorReportDTO`. OpenAPI-контракт НЕ затронут.
+- **⚠️ REBASE НА #784/#785 (важно):** ветка бралась от `origin/main`=31a15291 (=merge #783), но пока шла работа влились **PR #784** (RLS СОУТ/риски) и **PR #785** (`docs/plan-task51-42-dedup` — дедуп acceptance-критериев Task 5.1/4.2, ровно тот follow-up, что я собирался предложить). При rebase конфликтовал только roadmap. **#785 успел записать факт-ошибки:** его строки Task 5.1 утверждали, что `test_templates_linter_phase5.py` и `test_templates_render_edge_cases.py` «never landed in the repo … remain uncovered». Мой #786 их ЛАНДИТ → эти два утверждения перечёркнуты на «restored in PR #786 (20 / 40 кейсов)». Ссылку на инспектор и дубль про search-accuracy #785 уже починил сам — мои прежние правки этих строк снялись как избыточные.
+- **ВЕРИФИКАЦИЯ:** батч из 4 файлов (`linter_phase5` + `render_edge_cases` + существующие `inspector` + `next18`) — **78 passed, EXIT=0** (sibling-venv Py3.12.10 из worktree, `-p magic_stub` — иначе `import magic` виснет на этой Windows-машине). `import app.modules.templates.schemas` — OK, DTO отсутствует. `ruff check --no-fix` + `black --check` на 3 изменённых .py — clean. НЕ прогнан: полный SQLite-suite и OpenAPI-снапшот (роутов/схем-в-контракте не добавлял, DTO не в контракте → не должны меняться); CI прогонит канонику.
+- **Next:** после мержа — продолжение по ТЗ (Phase 16 остаток / Phase 11). Дедуп Phase 5.1 в плане уже закрыт PR #785.
 
 - **Дата:** 2026-07-23. «продолжай по ТЗ». Пользователь через AskUserQuestion выбрал **RLS на новые домены** (SEC-65). Ветка от `main` после мержа PR #780 (SEC-67 секреты). Механизм RLS уже в main — срез = миграция + реестр + db-тест по отлаженному образцу.
 - **ФАЙЛЫ:** миграция `20260723_sec65_rls_sout_risk_contractors_budget.py` — ENABLE+FORCE+POLICY `tenant_isolation` на **37 таблицах**: СОУТ 5 / риски 21 / подрядчики 6 / бюджет 5. Реестр `core/rls_policy.py`: 37 табл перенесены EXEMPT→ENABLED. db-тест `backend/tests/test_rls_sout_risk_contractors_budget.py` (интроспекция armed-таблиц).
