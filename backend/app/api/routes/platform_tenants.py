@@ -179,8 +179,11 @@ async def provision_tenant_endpoint(
     # The request session is bound to the managing tenant's schema; bootstrapping writes
     # rows for a *different* tenant, so it runs on a shared-schema session exactly like
     # ``scripts/bootstrap_tenant.py`` does.
+    # rls_bypass: provisioning legitimately inserts rows (e.g. the tenant's ``company``)
+    # for another tenant on a tenant-less shared session, so the SEC-65 RLS predicate
+    # (tenant_id == app.current_tenant) would otherwise reject the INSERT under FORCE RLS.
     async with AsyncSessionLocal(
-        tenant="public", include_public=False, create_schema=False
+        tenant="public", include_public=False, create_schema=False, rls_bypass=True
     ) as provisioning_session:
         existing = (
             await provisioning_session.execute(select(Tenant).where(Tenant.slug == slug))
