@@ -30,6 +30,7 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
 
+from app.core.secret_cipher import decrypt_secret
 from app.models.models import (
     Outbox,
     OutboxStatus,
@@ -247,7 +248,9 @@ async def test_patch_webhook_replaces_secret_when_provided(
     async with sessionmaker() as session:
         refreshed = await session.get(WebhookEndpoint, endpoint_id)
         assert refreshed is not None
-        assert refreshed.secret == "new-secret"
+        # SEC-67: stored encrypted at rest; decrypts back to the supplied value.
+        assert refreshed.secret != "new-secret"
+        assert decrypt_secret(refreshed.secret) == "new-secret"
 
 
 @pytest.mark.anyio
@@ -355,10 +358,11 @@ async def test_rotate_secret_returns_new_value(
     assert new_secret
     assert new_secret != "rotate-old"
 
-    # In-DB value matches the response.
+    # In-DB value is encrypted at rest (SEC-67) but decrypts to the response value.
     async with sessionmaker() as session:
         refreshed = await session.get(WebhookEndpoint, endpoint_id)
-        assert refreshed.secret == new_secret
+        assert refreshed.secret != new_secret
+        assert decrypt_secret(refreshed.secret) == new_secret
 
 
 @pytest.mark.anyio

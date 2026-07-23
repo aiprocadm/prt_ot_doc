@@ -1,6 +1,16 @@
 # AI Implementation Report
 
-## Last Agent Handoff (2026-07-22, SEC-65 — RLS COVERAGE RATCHET-ГАРД (Phase 16) — ветка feat/sec65-rls-coverage-guard, НЕ влита)
+## Last Agent Handoff (2026-07-22, SEC-67 — ШИФРОВАНИЕ HMAC-СЕКРЕТОВ ВЕБХУКОВ (Phase 16) — ветка feat/sec67-secrets-encryption, НЕ влита)
+
+- **Дата:** 2026-07-22. «продолжай по ТЗ». Пользователь через AskUserQuestion выбрал **секреты SEC-67**. Ветка от `main` после #779. Спека: `docs/superpowers/specs/2026-07-22-sec67-secret-encryption-design.md`.
+- **ДЫРА:** HMAC-секреты вебхуков (`webhook_endpoints.secret`, `webhook_subscription.secret`) лежали в БД открытым текстом (нужны обратимо для подписи → хеш не подходит). Пароли/токены уже хешируются — не трогал. Симметричной крипты в проекте не было (только RSA для JWT).
+- **ФАЙЛЫ:** `backend/app/core/secret_cipher.py` (AES-256-GCM, `encrypt_secret`/`decrypt_secret`/`is_encrypted`; формат `enc:v1:`; легаси-passthrough → без бэкфилла; мастер-ключ `APP_SECRET_ENCRYPTION_KEY` обяз. в prod/staging, dev-ключ из `SECRET_KEY`). Settings-поле. Врезка encrypt-on-write (`api/routes/webhooks.py` create/update/rotate) + decrypt-on-read (`services/webhooks.py` при сборке `WebhookDestination`). API отдаёт открытый секрет один раз.
+- **ВЕРИФИКАЦИЯ (частичная — прогон прерван пользователем перед финалом):** `tests/test_secret_cipher.py` (9 кейсов) — крипто прошло в предыдущем батче (был «2 failed, 48 passed», где 2 failed = crud-пины на открытый секрет, теперь **починены** на `decrypt_secret`). `ruff --no-fix`+format мои файлы clean (`config.py` не трогал — пред-дрейф в notifications). **НЕ прогнаны заново после фикса пинов:** полный `-m db`/SQLite-suite и OpenAPI-снапшот (роутов не добавлял → не должен меняться). **CI (ci.yml) прогонит.**
+- **⚠️ ОСТАЛОСЬ (на CI/ревью):** пере-прогнать crud-пины + полный suite + OpenAPI. Фикс пинов логически верен (`decrypt(encrypt(x))==x` доказан unit-тестами).
+- **ОСОЗНАННО ВНЕ ОБЪЁМА:** ротация мастер-ключа (формат `v1` заложен), бэкфилл существующих открытых секретов, KMS/HSM, `TenantIntegrationKey.encrypted_secret` (не используется), env-секреты SMTP/Telegram.
+- **Next:** после мержа — след. пункт Phase 16 (152-ФЗ SEC-66 / semgrep SEC-69 / RLS на новые домены) либо переход к Phase 11 (бизнес).
+
+## Last Agent Handoff (2026-07-22, SEC-65 — RLS COVERAGE RATCHET-ГАРД (Phase 16) — ветка feat/sec65-rls-coverage-guard, ВЛИТА PR #779)
 
 - **Дата:** 2026-07-22. «продолжай по ТЗ». Пользователь через AskUserQuestion выбрал **CI-линтер RLS-покрытия** (ratchet) вместо очередного домена. Ветка от `main` после #778 (документы). Цель: зафиксировать текущее покрытие (35 табл) и не дать добавлять tenant-таблицы без RLS.
 - **ФАЙЛЫ:** реестр `backend/app/core/rls_policy.py` (`RLS_ENABLED_TABLES` 35 / `RLS_EXEMPT_TABLES` 229); гард `scripts/audit/check_rls_coverage.py` (каждая tenant-таблица ∈ ровно один набор; иначе fail — ловит новые/противоречия/устаревшие имена); CI-шаг «RLS coverage ratchet (SEC-65)» в `ci.yml` (`PYTHONPATH=backend`, в static-gates job рядом с TZ-матрицей); тесты `tests/test_rls_coverage.py` (чистый ratchet + `-m db` кросс-чек реестр↔Postgres).

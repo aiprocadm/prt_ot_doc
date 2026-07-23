@@ -1,5 +1,29 @@
 # CHANGELOG
 
+## 2026-07-22 (feat/sec67-secrets-encryption — шифрование HMAC-секретов вебхуков at rest, Phase 16)
+
+SEC-67 (TZ B-NEXT.7). Спека:
+`docs/superpowers/specs/2026-07-22-sec67-secret-encryption-design.md`.
+Без миграции — формат хранения обратно-совместим (старый открытый текст читается).
+
+### Added
+- **Крипто-модуль** `backend/app/core/secret_cipher.py`: `encrypt_secret`/`decrypt_secret`/
+  `is_encrypted` на AES-256-GCM. Формат `enc:v1:<b64(nonce+ct+tag)>`; при чтении значение
+  без префикса возвращается как есть (легаси-passthrough → бэкфилл не нужен, шифрование
+  лениво при создании/ротации). Мастер-ключ `APP_SECRET_ENCRYPTION_KEY` (base64/hex 32б),
+  **обязателен в production/staging** (иначе encrypt кидает — fail-closed); в dev/test —
+  детерминированный ключ из `SECRET_KEY`.
+- **Врезка:** запись вебхук-секрета шифруется (`api/routes/webhooks.py` — создание/
+  обновление/ротация); чтение для HMAC-подписи расшифровывается (`services/webhooks.py`).
+  API по-прежнему отдаёт открытый секрет один раз при создании/ротации; в БД — шифротекст.
+- **Settings** `APP_SECRET_ENCRYPTION_KEY`.
+
+### Tests
+- `tests/test_secret_cipher.py` — round-trip, легаси-passthrough, None, рандом-nonce,
+  порча→ошибка, неверный ключ→ошибка, prod без ключа→fail-closed, dev-ключ работает.
+- Обновлены пины `test_webhooks_crud_endpoints` (в БД теперь шифротекст, сверка через
+  `decrypt_secret`).
+
 ## 2026-07-22 (feat/sec65-rls-coverage-guard — RLS coverage ratchet-гард, Phase 16)
 
 SEC-65 (TZ B-NEXT.7). CI-гард, который фиксирует текущее RLS-покрытие и не даёт
