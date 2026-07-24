@@ -1,6 +1,15 @@
 # AI Implementation Report
 
-## Last Agent Handoff (2026-07-24, SEC-65 — RLS НА ОБУЧЕНИЕ/ИНЦИДЕНТЫ/ИНСПЕКЦИИ (Phase 16) — ветка feat/sec65-rls-training-incidents-inspections, НЕ влита)
+## Last Agent Handoff (2026-07-24, SEC-65 — RLS НА ДОК-ПАЙПЛАЙН файлы/пакеты/шаблоны/workflow (Phase 16) — ветка feat/sec65-rls-doc-pipeline, НЕ влита)
+
+- **Дата:** 2026-07-24. «продолжай по ТЗ». Пользователь через AskUserQuestion выбрал **RLS на док-пайплайн**. Ветка от `main` после мержа PR #788.
+- **ФАЙЛЫ:** миграция `20260724_sec65_rls_doc_pipeline.py` (down_rev `20260724_sec65_rls_training_incidents_inspections`, **head**) — ENABLE+FORCE+POLICY на **34 таблицах**: файлы 9 / пакеты 14 (вкл. легаси `packagepreset`/`packageprofile`) / pipeline 3 / шаблоны 3 / workflow 5. Реестр `core/rls_policy.py`: 34 табл EXEMPT→ENABLED (**151 enabled / 114 exempt / 265**). db-тест `backend/tests/test_rls_doc_pipeline.py`. Список сверен с метаданными программно.
+- **АНАЛИЗ РИСКА (домен активно фоновый — проверял особенно тщательно):** все celery-задачи над этими таблицами открывают `session_scope(tenant=…)`/`AsyncSessionLocal(tenant=…)` (`celery/tasks/pipeline_run.py`, `tasks/file_jobs.py`, `tasks/document_jobs.py`, `report_export_job.py`, `document_jobs_required.py`). `pipeline_step_locks` пишется `pipelines_orchestrator` с `tenant_id=job.tenant_id` в тенант-сессии. Тики `tasks/_core.py`/`domain_ticks.py` на дефолт-сессии читают ТОЛЬКО `Tenant`, работа в per-tenant сессиях — **глобального (tenant=None) опроса очереди по этим таблицам НЕТ**. Единственный провижининг-писатель (`BootstrapTenantService._seed_package_presets` → `PackageProfile`) уже под `rls_bypass=True` (пофикшено в PR #787). demo/dev эти таблицы не сеют. → **правок кода НЕ потребовалось.**
+- **ВЕРИФИКАЦИЯ (Py3.12.3 vs канон 3.12.12):** живой Postgres `-m db`: мой тест armed все 34 + кросс-чек `test_rls_enabled_matches_postgres` (151 armed) — **2 passed**. Ratchet-гард EXIT 0 (151/114/265). `ruff --no-fix`+format clean. Полный SQLite-suite — [ИДЁТ; runtime-код НЕ менял]. OpenAPI — роутов нет.
+- **RLS-прогресс:** 117 + док-пайплайн 34 = **151 таблица (>половины из 265)**. Осталось 114 (в т.ч. рискованные `authz_*`/`api_tokens` — горячий путь; contractors read-models, npa, calendar, notifications, edo, tenant_*, briefing, approvals и пр.).
+- **Next (точный шаг):** дождаться SQLite-suite → PR (base=main; **только по решению пользователя**). Дальше по Phase 16: ещё RLS-домены по образцу, либо `authz_*`/`api_tokens` (тщательно), либо SEC-66 срез-2.
+
+## Last Agent Handoff (2026-07-24, SEC-65 — RLS НА ОБУЧЕНИЕ/ИНЦИДЕНТЫ/ИНСПЕКЦИИ (Phase 16) — ветка feat/sec65-rls-training-incidents-inspections, ВЛИТА PR #788)
 
 - **Дата:** 2026-07-24. «продолжай по ТЗ». Следующий «безопасный по образцу» срез RLS после орг-реестра (PR #787). Ветка от `main` после #787.
 - **ФАЙЛЫ:** миграция `20260724_sec65_rls_training_incidents_inspections.py` (down_rev `20260724_sec65_rls_org_registry`, **head**) — ENABLE+FORCE+POLICY `tenant_isolation` на **35 таблицах**: обучение/LMS 15 / инциденты 7 / инспекции 13. Реестр `core/rls_policy.py`: 35 табл EXEMPT→ENABLED (**117 enabled / 148 exempt / 265**). db-тест `backend/tests/test_rls_training_incidents_inspections.py`.
