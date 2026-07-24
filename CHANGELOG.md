@@ -1,5 +1,44 @@
 # CHANGELOG
 
+## 2026-07-24 (feat/sec65-rls-training-incidents-inspections — RLS на обучение/инциденты/инспекции, Phase 16)
+
+SEC-65 (TZ B-NEXT.7). Продолжение раскатки RLS по образцу. Срез — **35 таблиц** трёх
+доменов. Покрытие: **82 → 117** из 265. Только PostgreSQL.
+
+### Added
+- **Миграция** `20260724_sec65_rls_training_incidents_inspections.py` (down_rev
+  `20260724_sec65_rls_org_registry`, head) — ENABLE+FORCE+POLICY `tenant_isolation` на:
+  - Обучение/LMS (15): `training`, `training_course`, `training_programs`,
+    `training_modules`, `training_lessons`, `training_tests`, `training_test_questions`,
+    `training_attempts`, `training_enrollments`, `training_groups`, `training_session`,
+    `training_plan`, `training_protocols`, `training_protocol_items`,
+    `training_certificates`.
+  - Инциденты (7): `incident`, `incident_cases`, `incident_investigations`,
+    `incident_log`, `incident_attachments`, `incident_person`, `incident_persons`.
+  - Инспекции (13): `inspection`, `inspection_runs`, `inspection_run_items`,
+    `inspection_result`, `inspection_checklists`, `inspection_checklist_items`,
+    `inspection_plans`, `inspection_plan_items`, `inspection_prep_packages`,
+    `inspection_prep_items`, `inspection_prep_gaps`, `inspection_prescription`,
+    `inspection_attachments`.
+- **Реестр** `core/rls_policy.py`: 35 табл `RLS_EXEMPT_TABLES` → `RLS_ENABLED_TABLES`
+  (117 enabled / 148 exempt / 265). Список миграции сверен с живыми метаданными.
+
+### Анализ рисков
+- Все писатели тенант-контекстные: API-хендлеры через `get_session` с `tenant_id`;
+  доменные писатели `modules/incidents/operations.py` (Incident/Inspection/InspectionResult)
+  и training-API своей сессии не открывают → тенант-сессия вызывающего.
+- Фоновые задачи (`tasks/notification_jobs.py`, `tasks/_core.py`) — паттерн
+  «дефолт-сессия только перечисляет арендаторов → работа в `session_scope(tenant=…)`».
+- Демо-сид сеет `training_course` под `rls_bypass=True`; `dev_bootstrap` эти таблицы не
+  пишет. Глобального (tenant=None) писателя нет.
+- Вне среза: `ops_inspections`/`ops_prescriptions`/`regulatory_inspection` (ops-домен).
+
+### Tests
+- `backend/tests/test_rls_training_incidents_inspections.py` (маркер `db`) — интроспекция:
+  миграция armed все 35 таблиц. Семантику покрывает generic `test_rls_committees.py`.
+- Живой Postgres, `-m db`: мой тест + кросс-чек `test_rls_enabled_matches_postgres`
+  (117 armed) — **2 passed**. Ratchet-гард — EXIT 0 (117/148/265).
+
 ## 2026-07-24 (feat/sec65-rls-org-registry — RLS на орг-реестр (базовый каркас), Phase 16)
 
 SEC-65 (TZ B-NEXT.7). Продолжение раскатки RLS. Срез — **9 таблиц общего орг-каркаса**,
