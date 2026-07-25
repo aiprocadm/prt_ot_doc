@@ -1,5 +1,44 @@
 # CHANGELOG
 
+## 2026-07-24 (feat/sec65-rls-doc-pipeline — RLS на док-пайплайн (файлы/пакеты/шаблоны/workflow), Phase 16)
+
+SEC-65 (TZ B-NEXT.7). Продолжение раскатки RLS по образцу. Срез — **34 таблицы**
+документного пайплайна. Покрытие: **117 → 151** из 265 (уже >половины). Только PostgreSQL.
+
+### Added
+- **Миграция** `20260724_sec65_rls_doc_pipeline.py` (down_rev
+  `20260724_sec65_rls_training_incidents_inspections`, head) — ENABLE+FORCE+POLICY
+  `tenant_isolation` на 34 табл:
+  - Файлы (9): `file`, `files`, `file_objects`, `file_versions`, `file_links`,
+    `file_download_logs`, `file_scan_results`, `file_content_index`, `file_text_index`.
+  - Пакеты (14): `pack_runs`/`pack_run_items`/`pack_run_logs`, `package_runs`/`_events`/
+    `_requirements`, `package_presets`/`_preset_items`/`_presets_v2`, `package_profiles`/
+    `_profiles_v2`, `package_read_models`, легаси `packagepreset`/`packageprofile`.
+  - Pipeline (3): `pipeline_profiles`, `pipeline_runs`, `pipeline_step_locks`.
+  - Шаблоны (3): `template`, `templateversion`, `templateusage`.
+  - Workflow (5): `workflow_definitions`/`_definition_versions`, `workflow_instances`,
+    `workflow_tasks`, `workflow_timeline_events`.
+- **Реестр** `core/rls_policy.py`: 34 табл `RLS_EXEMPT_TABLES` → `RLS_ENABLED_TABLES`
+  (151 enabled / 114 exempt / 265). Список сверен с живыми метаданными.
+
+### Анализ рисков (домен активно обрабатывается в фоне — проверял особенно тщательно)
+- Все celery-задачи над этими таблицами открывают `session_scope(tenant=…)` /
+  `AsyncSessionLocal(tenant=…)` (`celery/tasks/pipeline_run.py`, `tasks/file_jobs.py`,
+  `tasks/document_jobs.py`, `report_export_job.py`, `document_jobs_required.py`).
+- `pipeline_step_locks` пишется `pipelines_orchestrator` с `tenant_id=job.tenant_id` в
+  тенант-сессии задачи.
+- Тики/ремайндеры (`tasks/_core.py`) на дефолт-сессии читают только `Tenant`, работа —
+  в per-tenant сессиях. Глобального (tenant=None) опроса очереди по этим таблицам нет.
+- Единственный провижининг-писатель (`BootstrapTenantService._seed_package_presets` →
+  `PackageProfile`) уже под `rls_bypass=True` (пофикшено в срезе орг-реестра, PR #787).
+  demo/dev-сид эти таблицы напрямую не пишет. → **правок кода не потребовалось.**
+
+### Tests
+- `backend/tests/test_rls_doc_pipeline.py` (маркер `db`) — интроспекция: миграция armed
+  все 34 таблицы. Семантику покрывает generic `test_rls_committees.py`.
+- Живой Postgres, `-m db`: мой тест + кросс-чек `test_rls_enabled_matches_postgres`
+  (151 armed) — **2 passed**. Ratchet-гард — EXIT 0 (151/114/265).
+
 ## 2026-07-24 (feat/sec65-rls-training-incidents-inspections — RLS на обучение/инциденты/инспекции, Phase 16)
 
 SEC-65 (TZ B-NEXT.7). Продолжение раскатки RLS по образцу. Срез — **35 таблиц** трёх
