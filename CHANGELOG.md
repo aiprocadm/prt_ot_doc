@@ -1,5 +1,51 @@
 # CHANGELOG
 
+## 2026-07-25 (feat/sec65-rls-ot-ops — RLS на операционный контур ОТ (инструктажи/журналы/наряды/предписания), Phase 16)
+
+SEC-65 (TZ B-NEXT.7). Продолжение раскатки RLS по образцу. Срез — **26 таблиц**
+операционного контура охраны труда. Покрытие: **151 → 177** из 265. Только PostgreSQL.
+
+### Added
+- **Миграция** `20260725_sec65_rls_ot_ops.py` (down_rev `20260724_sec65_rls_doc_pipeline`,
+  head) — ENABLE+FORCE+POLICY `tenant_isolation` на 26 табл:
+  - Инструктажи (4): `briefing_templates`, `briefing_journals`, `briefing_entries`,
+    `briefing_signatures`.
+  - Журналы (3): `journal`, `journalentry`, легаси `plantask`.
+  - Наряды-допуски (6): `permit`, `work_permit`, `work_permit_member`,
+    `work_permit_event`, `work_permit_briefing`, `work_permit_daily_admission`.
+  - Надзор/предписания (7): `ops_inspections`, `ops_prescriptions`, `prescription_items`,
+    `regulatory_inspection`, `findings`, `attestation`, `checklist`.
+  - Корр. действия и задачи (6): `corrective_actions`, `corrective_action_attachments`,
+    легаси `correctiveaction`, `violation`, `task`, `plan_tasks`.
+- **Реестр** `core/rls_policy.py`: 26 табл `RLS_EXEMPT_TABLES` → `RLS_ENABLED_TABLES`
+  (177 enabled / 88 exempt / 265). Список сверен с живыми метаданными.
+
+### Fixed
+- `modules/operational_dashboard/service.py::get_dashboard` — запасной путь `db is None`
+  открывал `SessionLocal()` без тенанта (контекствар → чужой/дефолтный тенант; под FORCE
+  RLS запросы по `task` и др. тихо вернули бы 0 строк). Теперь `SessionLocal(tenant_id=…)`.
+  Путь латентный (единственный вызов из роута всегда передаёт request-сессию) — починено
+  превентивно.
+
+### Анализ рисков
+- Все писатели — либо request-scoped (`get_session`: briefings/journals/safety_ops/tasks/
+  attestations/permits/work-permits), либо per-tenant beat-задачи (`reminders.scan` →
+  `plan_tasks`, `process_task_reminders` → `task`, `permits.expiry.tick` → `permit`) —
+  все внутри `session_scope(tenant=…)` после перечисления Tenant на дефолт-сессии.
+- Демо-сид (briefings/work permits/corrective actions) уже под `rls_bypass=True`.
+- 7 таблиц (`checklist`, `violation`, `correctiveaction`, `ops_inspections`,
+  `prescription_items`, `corrective_action_attachments`, `regulatory_inspection`) —
+  schema-only (кода-писателя нет), RLS на них ничем не грозит.
+- `permits/service.py::expire_due(tenant_id=None)` строит кросс-тенантный UPDATE, но
+  единственный вызов (`domain_ticks.py` `permits.expiry.tick`) всегда передаёт tenant_id
+  в тенант-сессии — безопасно.
+
+### Tests
+- `backend/tests/test_rls_ot_ops.py` (маркер `db`) — интроспекция: миграция armed все
+  26 таблиц. Семантику покрывает generic `test_rls_committees.py`.
+- Живой Postgres, `-m db`: мой тест + кросс-чек `test_rls_enabled_matches_postgres`
+  (177 armed) — **2 passed**. Ratchet-гард — EXIT 0 (177/88/265).
+
 ## 2026-07-24 (feat/sec65-rls-doc-pipeline — RLS на док-пайплайн (файлы/пакеты/шаблоны/workflow), Phase 16)
 
 SEC-65 (TZ B-NEXT.7). Продолжение раскатки RLS по образцу. Срез — **34 таблицы**

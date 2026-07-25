@@ -1,6 +1,16 @@
 # AI Implementation Report
 
-## Last Agent Handoff (2026-07-24, SEC-65 — RLS НА ДОК-ПАЙПЛАЙН файлы/пакеты/шаблоны/workflow (Phase 16) — ветка feat/sec65-rls-doc-pipeline, НЕ влита)
+## Last Agent Handoff (2026-07-25, SEC-65 — RLS НА ОПЕРАЦИОННЫЙ КОНТУР ОТ инструктажи/журналы/наряды/предписания (Phase 16) — ветка feat/sec65-rls-ot-ops)
+
+- **Дата:** 2026-07-25. «продолжай по ТЗ». Срез — операционка ОТ по отлаженному образцу. Ветка от `main` после мержа PR #789.
+- **ФАЙЛЫ:** миграция `20260725_sec65_rls_ot_ops.py` (down_rev `20260724_sec65_rls_doc_pipeline`, **head**) — ENABLE+FORCE+POLICY на **26 таблицах**: инструктажи 4 / журналы 3 (вкл. легаси `plantask`) / наряды-допуски 6 / надзор-предписания 7 / корр.действия+задачи 6 (вкл. легаси `correctiveaction`). Реестр `core/rls_policy.py`: 26 табл EXEMPT→ENABLED (**177 enabled / 88 exempt / 265**). db-тест `backend/tests/test_rls_ot_ops.py`. Список сверен с метаданными программно.
+- **АНАЛИЗ РИСКА:** все писатели request-scoped (`get_session`) либо per-tenant beat-задачи (`reminders.scan`→`plan_tasks`, `process_task_reminders`→`task`, `permits.expiry.tick`→`permit` — все в `session_scope(tenant=…)` после Tenant-only перечисления). Демо-сид (briefings/work permits/corrective actions) уже под `rls_bypass=True`. 7 таблиц schema-only (писателей нет). **Одна латентная мина починена:** `operational_dashboard/service.py::get_dashboard` fallback `db is None` открывал `SessionLocal()` без тенанта → теперь `SessionLocal(tenant_id=…)` (продовый вызов всегда передаёт request-сессию, но под FORCE RLS fallback тихо вернул бы нули).
+- **ГРАБЛЯ WORKTREE:** `.env` не под git → в свежем worktree ratchet-гард ложно падает (13 биллинговых таблиц видятся как `public.*` — схема-квалификация зависит от настроек). Лечение: `cp <repo>/.env <worktree>/.env`.
+- **ВЕРИФИКАЦИЯ:** живой Postgres `-m db`: мой тест armed все 26 + кросс-чек `test_rls_enabled_matches_postgres` (177 armed) — **2 passed**. Ratchet-гард EXIT 0 (177/88/265). `ruff --no-fix` clean. Полный SQLite-suite — зелёный (см. CHANGELOG). OpenAPI — роутов нет.
+- **RLS-прогресс:** 151 + операционка ОТ 26 = **177 из 265 (2/3)**. Осталось 88: approvals 11, edo 5, search 4, tenant_* 7, notifications 3, npa 2, calendar/portal/webhooks/read-models и пр.; рискованные `authz_*` 5 + `api_key`/`api_tokens`/`refresh_session`/`user`* — горячий путь авторизации, отдельный анализ.
+- **Next (точный шаг):** PR → merge по решению пользователя. Дальше по Phase 16: approvals/edo/search/npa по образцу, либо `authz_*` (тщательно), либо SEC-66 срез-2 (обезличивание/удаление субъекта + согласия).
+
+## Last Agent Handoff (2026-07-24, SEC-65 — RLS НА ДОК-ПАЙПЛАЙН файлы/пакеты/шаблоны/workflow (Phase 16) — ветка feat/sec65-rls-doc-pipeline, ВЛИТА PR #789)
 
 - **Дата:** 2026-07-24. «продолжай по ТЗ». Пользователь через AskUserQuestion выбрал **RLS на док-пайплайн**. Ветка от `main` после мержа PR #788.
 - **ФАЙЛЫ:** миграция `20260724_sec65_rls_doc_pipeline.py` (down_rev `20260724_sec65_rls_training_incidents_inspections`, **head**) — ENABLE+FORCE+POLICY на **34 таблицах**: файлы 9 / пакеты 14 (вкл. легаси `packagepreset`/`packageprofile`) / pipeline 3 / шаблоны 3 / workflow 5. Реестр `core/rls_policy.py`: 34 табл EXEMPT→ENABLED (**151 enabled / 114 exempt / 265**). db-тест `backend/tests/test_rls_doc_pipeline.py`. Список сверен с метаданными программно.
