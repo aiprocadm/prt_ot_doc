@@ -41,7 +41,9 @@ class OperationalDashboardService:
             OperationalDashboardResponse with aggregated alerts
         """
         if db is None:
-            async with SessionLocal() as db:
+            # SEC-65: pin the session to the requested tenant, otherwise FORCE RLS
+            # filters every tenant-scoped query below down to zero rows.
+            async with SessionLocal(tenant_id=tenant_id) as db:
                 return await self.get_dashboard(tenant_id, db)
 
         alerts: list[AlertItem] = []
