@@ -100,8 +100,10 @@ async def create_api_token(
         expires_at=payload.expires_at,
     )
     session.add(token)
-    await session.commit()
-    await session.refresh(token)
+    # flush, not commit: a commit here drops the transaction-local RLS GUCs (SEC-65)
+    # and the refresh would read back nothing — leaving an orphan token whose
+    # plaintext value is already lost. transaction_scope commits at request end.
+    await session.flush()
     return ApiTokenCreateResponse(
         id=token.id,
         name=token.name,

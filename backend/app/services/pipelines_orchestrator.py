@@ -12,6 +12,7 @@ from sqlalchemy import select, update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.db.session import rearm_session_tenant_context
 from app.db.tenant_row_guard import assert_tenant_row_matches_session
 from app.models.job_engine import (
     DocumentArtifact,
@@ -407,6 +408,9 @@ class PipelineOrchestrator:
 
         if celery_app.conf.task_always_eager:
             await self.session.commit()
+            # commit() drops the transaction-local RLS GUCs — re-arm before the tenant
+            # lookup below and whatever the caller does next on this session (SEC-65)
+            await rearm_session_tenant_context(self.session)
 
         tenant_slug = await self._resolve_job_tenant_slug(str(job.tenant_id))
 

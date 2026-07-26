@@ -103,8 +103,6 @@ async def create_api_key(
     session.add(record)
     await session.flush()
     key_value = _format_key(prefix, secret)
-    await session.commit()
-    await session.refresh(record)
     return ApiKeySecret(record=record, value=key_value)
 
 
@@ -146,8 +144,12 @@ async def authenticate_api_key(session: AsyncSession, token: str) -> ApiKey | No
     record.last_used_at = datetime.now(timezone.utc)
     record.usage_count = int(record.usage_count or 0) + 1
     session.add(record)
-    await session.commit()
-    await session.refresh(record)
+    # flush, not commit: this runs inside ``api_key_auth`` — a dependency sharing the
+    # request session. Committing here ends the request transaction, which drops the
+    # transaction-local RLS GUCs (SEC-65) before the handler body even starts, so every
+    # subsequent read of an armed table would come back empty. ``transaction_scope``
+    # (db/session.py) commits the usage bump at the end of the request.
+    await session.flush()
     return record
 
 

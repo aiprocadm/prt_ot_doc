@@ -409,6 +409,9 @@ async def generate_document(
             )
         except Exception as exc:  # pragma: no cover - defensive logging
             logger.exception("documents.generate.dispatch_failed", exc_info=exc)
+            # the handler committed above; re-arm so the idempotency lookup and the
+            # failure write below still see a tenant context (SEC-65)
+            await rearm_session_tenant_context(session)
             stored = await idempotency.get(key=normalized_key)
             if stored is not None:
                 await idempotency.store_failure(

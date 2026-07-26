@@ -182,8 +182,11 @@ async def login(
 
     tenant_slug = tenant.slug
 
+    # No commit here: it would end the transaction and drop the transaction-local RLS
+    # GUCs (SEC-65), so the refresh-session INSERT below — which only lands on the
+    # commit at the end of this handler — would be evaluated without a tenant context.
+    # ``last_login_at`` rides along on that same final commit.
     user.last_login_at = datetime.now(timezone.utc)
-    await session.commit()
 
     role_values = _collect_user_roles(user)
     additional_claims: dict[str, Any] = {"tenant_id": user.tenant_id, "roles": role_values}

@@ -1,5 +1,81 @@
 # CHANGELOG
 
+## 2026-07-26 (feat/sec65-pre-final-fixes — транзакционный контракт сессии + два легаси-констрейнта, Phase 16)
+
+SEC-65, подготовка финального среза (authz/user/токены/очереди). Арминга здесь **нет** —
+только исправления, без которых включение RLS на последних 16 таблицах положило бы
+авторизацию, и **три живых дефекта**, найденных при трассировке путей записи.
+
+### Fixed — живые дефекты (воспроизводятся сегодня, до всякого арминга)
+- **`services/api_keys.py::authenticate_api_key` коммитил внутри зависимости.**
+  `api_key_auth` (core/security.py) — FastAPI-зависимость на той же кэшированной
+  request-сессии, поэтому её `commit()` завершал транзакцию **до тела хендлера** и гасил
+  транзакционно-локальные GUC. Итог на живом Postgres: девять списочных ручек
+  `/api/v1/public/*` по УЖЕ армированным таблицам (person/document/export_jobs/…)
+  отдавали `200` с пустым `items` и `total=0`, а `POST /public/integrations/webhooks/subscriptions`
+  писал в армированный `webhook_endpoints` без контекста → `42501`. Теперь `flush()`;
+  транзакцией владеет `transaction_scope`, счётчик обращений уезжает финальным commit.
+- **`services/api_keys.py::create_api_key` терял новый ключ при ротации.** Коммитил обе
+  половины (отзыв старого + вставка нового) и падал на следующем `refresh()` → клиент
+  получал 500, старый ключ уже отозван, plaintext нового потерян безвозвратно. `commit()`
+  и `refresh()` убраны (перед ними уже есть `flush()`).
+- **Забытый глобальный `UNIQUE (code)` на `authz_roles`** (создан
+  `20260221_next9_authz_tables.py:29`, никогда не дропался; корректный
+  `uq_authz_roles_tenant_code` лишь добавлен в `20260313_next42`). `seed_authz_catalog`
+  ищет роль с фильтром по `tenant_id`, поэтому для **второго** тенанта всегда шёл INSERT
+  → duplicate key, а `platform_tenants.py` показывал это как 409 «Tenant already exists».
+
+### Fixed — подготовка к армингу (GUC живут только внутри транзакции)
+- `api/routes/auth.py::login` — убран промежуточный `commit()`: `create_refresh_session`
+  делает лишь `session.add`, поэтому INSERT в `refresh_session` уезжал финальным commit
+  уже без `app.current_tenant` → после арминга был бы `42501` на **каждом** логине.
+- `commit()+refresh()` → `flush()` в пяти админ-ручках: `admin_users.py` (роли,
+  атрибуты), `admin_authz.py` (роль, политика), `api_tokens.py` (создание токена —
+  иначе токен-сирота с потерянным plaintext).
+- Ре-арм контекста после `rollback()` при проигранной гонке — `services/idempotency.py::acquire`
+  и `services/pipeline/_runs.py`. Сам откат оставлен намеренно: он завершает транзакцию,
+  и только поэтому перечитывание видит строку, закоммиченную победителем гонки (SAVEPOINT
+  транзакцию сохраняет, и на SQLite строка осталась бы невидимой — это подтвердил прогон
+  `test_get_or_create_pending_run_handles_integrity_race`). Восстанавливается ровно
+  потерянное — тенант-контекст.
+- Ре-арм контекста после промежуточных `commit()` там, где дальше идёт работа с
+  `idempotency_keys`: `risk/assessments.py`, `pipeline/service.py` (3 точки),
+  `pipelines_orchestrator.py` (eager-режим), `documents/generate.py`,
+  `packs/management.py`.
+
+### Changed — схема
+- **Миграция** `20260726_sec65_pre_final_constraints.py` (down_rev
+  `20260726_sec65_rls_audit_export_logs`, head), PostgreSQL-only:
+  - `DROP CONSTRAINT IF EXISTS authz_roles_code_key`;
+  - `outbox_events`: бэкфилл легаси-строк со slug/code в `tenant_id` → `tenant.id`,
+    затем недостающий FK `tenant_id → tenant.id` (таблица была создана без него, поэтому
+    slug физически мог попасть в колонку; под RLS такие строки навсегда невидимы и
+    остаются PENDING без ошибок и метрик). Если строка ссылается на несуществующего
+    арендатора — миграция падает с явным сообщением, а не молча;
+  - `outbox_events`: уникальность `event_id` возвращена к `(tenant_id, event_id)`
+    (`20260314_next43` заменила её на глобальную). Уникальные индексы проверяются **поверх**
+    row security, поэтому глобальная уникальность — кросс-тенантный оракул и отказ вставки
+    для внешнего `event_id`, уже занятого другим арендатором. Модель
+    `models/job_engine.py` синхронизирована.
+
+### Tests
+- `backend/tests/test_sec65_pre_final_constraints.py` (маркер `db`) — констрейнты после
+  миграции; два тенанта могут держать одинаковый код роли; бэкфилл `outbox_events`
+  (slug/code → id) + возможность одинакового `event_id` у разных арендаторов.
+- `tests/test_session_transaction_contract.py` — AST-гард: `create_api_key`,
+  `authenticate_api_key`, `rotate_api_key` не вызывают `commit()`; `login` коммитит
+  **после** `create_refresh_session`. Ловит возврат исходного дефекта.
+
+### Замечание для приёмки SEC-65 (не входит в этот PR)
+В эталонном деплое роль БД — суперпользователь (`docker-compose.yml`:
+`POSTGRES_USER=${POSTGRES_USER:-ptd}`, образ postgres делает её суперюзером), а
+суперпользователь игнорирует row security **даже при FORCE**. Значит все 249 уже
+включённых политик в таком рантайме ничего не ограничивают (это же прямо отмечено в
+`backend/tests/test_rls_committees.py`, который ради проверки семантики создаёт отдельную
+`NOSUPERUSER`-роль). Закрывать SEC-65 можно только после перевода приложения/Celery на
+роль `NOSUPERUSER NOBYPASSRLS` — и **после** этого PR, потому что до него понижение роли
+одновременно вскрыло бы все перечисленные выше дефекты.
+
 ## 2026-07-26 (feat/sec65-rls-audit-export-logs — RLS на аудит/выгрузки/логи/пресеты, Phase 16)
 
 SEC-65 (TZ B-NEXT.7). Продолжение раскатки RLS. Срез — **17 таблиц** аудита/

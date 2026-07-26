@@ -15,6 +15,7 @@ from app.core.metrics import (
     StageResult,
     sanitize_label,
 )
+from app.db.session import rearm_session_tenant_context
 from app.models.models import PipelineRun, PipelineRunStatus, Template, TemplateVersion
 
 
@@ -165,7 +166,11 @@ class RunLifecycleMixin:
         try:
             await session.flush()
         except IntegrityError:
+            # Deliberate full rollback: it ends the transaction so the winning request's
+            # committed run becomes visible to the re-read below. It also clears the
+            # transaction-local RLS GUCs (SEC-65) — re-arm before querying again.
             await session.rollback()
+            await rearm_session_tenant_context(session)
             run = (await session.execute(stmt)).scalar_one()
             self._validate_idempotent_run(
                 run,
