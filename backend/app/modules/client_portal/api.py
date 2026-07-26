@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependencies import get_session, get_tenant_record
 from app.api.helpers.upload import reject_oversize_upload
 from app.core.security import AccessContext, abac
+from app.db.session import rearm_session_tenant_context
 from app.models.models import Tenant
 from app.modules.client_portal.services import ClientPortalService
 from app.modules.projections.models import (
@@ -227,6 +228,8 @@ async def create_request(
     )
     session.add(req)
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before refresh (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(req)
     return req
 
@@ -289,6 +292,8 @@ async def create_request_message(
     )
     session.add(msg)
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before refresh (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(msg)
     return msg
 

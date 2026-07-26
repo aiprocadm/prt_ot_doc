@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.errors import api_problem_detail
 from app.core.security import abac
+from app.db.session import rearm_session_tenant_context
 from app.models.models import Tenant
 from app.modules.analytics.breakdown import BREAKDOWN_DIMENSIONS, compute_breakdown
 from app.modules.analytics.services import (
@@ -92,6 +93,9 @@ async def executive_dashboard(
         snapshot = await ProjectionOrchestrator(session, str(tenant.id)).rebuild_dashboard_snapshot(
             today
         )
+        # rebuild committed — the transaction-local RLS GUCs are gone, re-arm
+        # before the KPI reads below (SEC-65)
+        await rearm_session_tenant_context(session)
     payload = await KpiDashboardService(session, str(tenant.id)).executive(filters)
     return {"snapshot_date": today, "widgets": snapshot.payload, "dashboard": payload}
 

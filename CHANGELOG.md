@@ -1,5 +1,66 @@
 # CHANGELOG
 
+## 2026-07-26 (feat/sec65-rls-notifications-calendar-portal — RLS на уведомления/календарь/клиентский портал/НПА, Phase 16)
+
+SEC-65 (TZ B-NEXT.7). Продолжение раскатки RLS по образцу. Срез — **14 таблиц**
+уведомлений/календаря/клиентского портала/НПА. Покрытие: **196 → 210** из 265.
+Только PostgreSQL.
+
+### Added
+- **Миграция** `20260726_sec65_rls_notifications_calendar_portal.py` (down_rev
+  `20260726_sec65_rls_approvals_edo_search`, head) — ENABLE+FORCE+POLICY
+  `tenant_isolation` на 14 табл:
+  - Уведомления (4): `notifications`, `notification_templates`,
+    `notification_channel_settings`, `reminder_rules`.
+  - Календарь (3): `calendar_events`, `compliance_deadlines`, `saved_calendar_views`.
+  - Клиентский портал (5): `client_portal_tokens`, `client_request_tickets`,
+    `client_portal_read_models`, `portal_requests`, `portal_request_messages`.
+  - НПА (2): легаси-тенантные `npa`, `npabinding` (глобальный справочник — shared
+    `npa_act`/`npa_revision`/`npa_clause`, вне объёма).
+- **Реестр** `core/rls_policy.py`: 14 табл `RLS_EXEMPT_TABLES` → `RLS_ENABLED_TABLES`
+  (210 enabled / 55 exempt / 265). Список сверен с живыми метаданными. Бэкфилл не
+  нужен: двойного скоупа/легаси-слагов по этим таблицам нет (в отличие от
+  `edo_messages`).
+
+### Fixed
+Грабля «`commit()` сбрасывает транзакционно-локальные RLS GUC» (та же, что в
+`GET /search` срезом ранее) — во всех хендлерах паттерна `commit()` → `refresh()`
+добавлен `rearm_session_tenant_context(session)` перед `refresh`:
+- По таблицам среза: `api/routes/calendar_views.py` (create/update saved view —
+  `saved_calendar_views`), `api/routes/client_portal.py::portal_create_ticket`
+  (`client_request_tickets`), `modules/client_portal/api.py::create_request` /
+  `create_request_message` (`portal_requests`/`portal_request_messages`).
+- Предсуществующие на УЖЕ заармленных таблицах (латентные 500-ки под RLS):
+  `client_portal.py::create_preset`/`patch_preset` (`package_presets`),
+  `client_portal.py::create_run` (`package_runs`), `modules/analytics/api.py`
+  executive-дашборд — после `rebuild_dashboard_snapshot()` (коммитит внутри)
+  KPI-чтения шли без GUC → тихие нули; теперь ре-арм после rebuild.
+
+### Поведенческая правка
+- `_portal_auth` ищет `client_portal_tokens` без tenant-фильтра → после арминга
+  токен с чужим/неверным `X-Tenant` даёт **401 Invalid portal token** вместо
+  прежнего 404 (отсекался позже на заармленной `package_runs`). Отказ тот же,
+  раньше и чище; данных не раскрывает.
+
+### Анализ рисков
+- Писатели: request-scoped роуты (портал/уведомления/календарь/дедлайны) либо
+  тенант-пиннутые задачи: beat `notifications.dispatch_pending` (per-tenant
+  `session_scope(tenant=…)`), `reminders.scan` (читает `reminder_rules` per-tenant),
+  outbox-диспетчер (резолвит UUID через `_resolve_task_tenant_scope`), проекции
+  портала (`AsyncSessionLocal(tenant=…)`).
+- Портальные роуты public в middleware, но каждый хендлер резолвит тенанта из
+  `X-Tenant` через `get_tenant_record` ДО записи; фронт всегда шлёт `X-Tenant`.
+- `npa`/`npabinding`/`reminder_rules`/`calendar_events` — писателей в проде нет
+  (read/schema-only); `CalendarProjectionService.project_deadline` — мёртвый код.
+- Демо-сид/провижининг эти таблицы не сеют.
+
+### Tests
+- `backend/tests/test_rls_notifications_calendar_portal.py` (маркер `db`) —
+  интроспекция: миграция armed все 14 таблиц.
+- Живой Postgres, `-m db`: полный гейт зелёный (кросс-чек
+  `test_rls_enabled_matches_postgres` — 210 armed). Ratchet-гард — EXIT 0
+  (210/55/265). Полный SQLite-suite — зелёный.
+
 ## 2026-07-26 (feat/sec65-rls-approvals-edo-search — RLS на согласования/ЭДО/поиск/подписи, Phase 16)
 
 SEC-65 (TZ B-NEXT.7). Продолжение раскатки RLS по образцу. Срез — **19 таблиц**

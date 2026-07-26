@@ -18,6 +18,7 @@ from app.api.dependencies import get_session, get_tenant_record
 from app.core.audit_decorator import audit_operation
 from app.core.config import get_settings
 from app.core.security import AccessContext, abac
+from app.db.session import rearm_session_tenant_context
 from app.models.models import (
     ClientPackagePreset,
     ClientPackageRun,
@@ -317,6 +318,8 @@ async def create_preset(
     record = ClientPackagePreset(tenant_id=tenant.id, **payload.model_dump())
     session.add(record)
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before refresh (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(record)
     return record
 
@@ -336,6 +339,8 @@ async def patch_preset(
     for key, value in payload.model_dump(exclude_none=True).items():
         setattr(record, key, value)
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before refresh (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(record)
     return record
 
@@ -448,6 +453,8 @@ async def create_run(
     run.status = PackageRunStatus.SUCCESS
     run.finished_at = _utcnow()
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before refresh (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(run)
     return _serialize_package_run(run)
 
@@ -665,6 +672,8 @@ async def portal_create_ticket(
         )
     )
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before refresh (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(ticket)
     return ticket
 
