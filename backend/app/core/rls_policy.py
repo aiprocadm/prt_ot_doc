@@ -206,13 +206,18 @@ RLS_ENABLED_TABLES: frozenset[str] = frozenset(
         "sout_factor",
         "sout_guarantee",
         "sout_workplace",
+        "subscriptions",
         "task",
         "template",
-        "tenant_counters",
-        "tenant_quotas_counters",
-        "tenant_rate_limits",
         "templateusage",
         "templateversion",
+        "tenant_counters",
+        "tenant_integrations_keys",
+        "tenant_limits_override",
+        "tenant_quotas",
+        "tenant_quotas_counters",
+        "tenant_rate_limits",
+        "tenant_settings",
         "training",
         "training_attempts",
         "training_certificates",
@@ -228,6 +233,7 @@ RLS_ENABLED_TABLES: frozenset[str] = frozenset(
         "training_session",
         "training_test_questions",
         "training_tests",
+        "usage_counters",
         "violation",
         "webhook_deliveries",
         "webhook_endpoints",
@@ -251,13 +257,6 @@ RLS_ENABLED_TABLES: frozenset[str] = frozenset(
 # are deliberately cautious:
 #   * authz_*/api_key/api_tokens/refresh_session/user* — read on the hot auth/permission
 #     path, need dedicated analysis before RLS.
-#   * usage_counters/subscriptions/tenant_limits_override/tenant_integrations_keys — read
-#     (and the usage row auto-created) by BillingGuardMiddleware on a tenant-less
-#     AsyncSessionLocal(tenant="public") BEFORE tenant resolution; arming them would 500
-#     every request or silently fail-open the billing gate. Rework the guard first.
-#   * tenant_quotas/tenant_settings — written cross-tenant by the platform fleet
-#     endpoints (api/routes/platform_tenants.py, api/routes/tenants.py) on the caller's
-#     session; needs bypass/target-session rework first.
 #   * webhook_subscription — legitimately stores global rows with tenant_id IS NULL,
 #     which the id-equality predicate would hide.
 #   * outbox/outbox_events/idempotency_keys/inbound_webhook_dedup — cross-tenant infra
@@ -295,12 +294,6 @@ RLS_EXEMPT_TABLES: frozenset[str] = frozenset(
         "replace_run",
         "report_definition",
         "securityauditlog",
-        "subscriptions",
-        "tenant_integrations_keys",
-        "tenant_limits_override",
-        "tenant_quotas",
-        "tenant_settings",
-        "usage_counters",
         "user",
         "user_attribute",
         "user_role",

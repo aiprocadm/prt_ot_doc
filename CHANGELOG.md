@@ -1,5 +1,44 @@
 # CHANGELOG
 
+## 2026-07-26 (feat/sec65-rls-billing-guard-tenant-admin — RLS на биллинг-гейт и тенант-админку + переделка сессий, Phase 16)
+
+SEC-65 (TZ B-NEXT.7). Разблокирующий срез: **6 таблиц**, отложенных прошлым срезом
+из-за tenant-less сессий на горячем пути. Покрытие: **226 → 232** из 265.
+Только PostgreSQL.
+
+### Added
+- **Миграция** `20260726_sec65_rls_billing_tenant_admin.py` (down_rev
+  `20260726_sec65_rls_finance_webhooks_kpi`, head) — ENABLE+FORCE+POLICY на:
+  - Биллинг-гейт (4): `usage_counters`, `subscriptions`, `tenant_limits_override`,
+    `tenant_integrations_keys`.
+  - Тенант-админка (2): `tenant_quotas`, `tenant_settings`.
+- **Реестр**: 6 табл EXEMPT→ENABLED (232 enabled / 33 exempt / 265). Бэкфилл не
+  нужен — все писатели всегда штамповали UUID (проверено исчерпывающе).
+
+### Changed (переделка, которая это разблокировала)
+- **`BillingGuardMiddleware`** — сессия на каждый запрос теперь пиннится к
+  тенанту запроса (`AsyncSessionLocal(tenant=slug)`, slug→UUID при входе) вместо
+  безликой `tenant="public"`. Чтения подписки/оверрайдов/usage и flush
+  usage-строки совпадают с RLS-предикатом. Без bypass на горячем пути
+  (least-privilege). До переделки арминг дал бы 500 на каждый запрос
+  (INSERT usage-строки) либо тихий fail-open гейта (подписка «не видна»).
+- **`TenantMiddleware`** — лукап `tenant_settings`/`tenant_quotas` после резолва
+  тенанта теперь на тенант-пиннутой сессии (иначе под RLS настройки тихо читались
+  бы как None → фолбэк на неверную схему/S3-префикс при их расхождении).
+- **Fleet-ручки `platform_tenants.py`** — кросс-тенантные чтения/записи квот
+  (список флота, PATCH quotas, PATCH plan) переведены на доверенную
+  `rls_bypass`-сессию `_fleet_session()` (авторизация — `_require_managing_admin`
+  до любого обращения). `apply_plan` получает эту сессию для квотной половины.
+- **`tenants.py::create_tenant_endpoint`** — провижининг настроек/квот нового
+  тенанта шёл на request-сессии вызывающего (под RLS — reject) → теперь
+  `rls_bypass`-провижининг-сессия, как у остальных трёх путей провижининга.
+
+### Tests
+- `backend/tests/test_rls_billing_tenant_admin.py` (маркер `db`) — интроспекция 6 табл.
+- Точечно: биллинг/квоты/middleware — 16 passed; fleet-ручки — 24 passed.
+- Живой Postgres `-m db` — полный гейт зелёный (кросс-чек 232 armed). Ratchet-гард
+  EXIT 0 (232/33/265). Полный SQLite-suite — зелёный.
+
 ## 2026-07-26 (feat/sec65-rls-tenant-billing-webhooks — RLS на финансы/вебхуки/KPI/автоматизацию, Phase 16)
 
 SEC-65 (TZ B-NEXT.7). Продолжение раскатки RLS. Срез — **16 таблиц** финансов/
