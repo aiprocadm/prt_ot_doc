@@ -10,8 +10,10 @@ from app.models.models import Tenant, TenantQuota
 
 
 async def main(slug: str, name: str, email: str) -> None:
+    # rls_bypass: provisioning writes rows for the tenant being created, which a
+    # tenant-less session would be denied under FORCE RLS (SEC-65)
     async with AsyncSessionLocal(
-        tenant="public", include_public=False, create_schema=False
+        tenant="public", include_public=False, create_schema=False, rls_bypass=True
     ) as session:
         existing = (
             await session.execute(select(Tenant).where(Tenant.slug == slug))

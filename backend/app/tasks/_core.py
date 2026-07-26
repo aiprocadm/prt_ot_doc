@@ -394,7 +394,10 @@ async def _dispatch_outbox_events(
                 success = not bool((event.payload or {}).get("force_fail"))
                 for ep in matching:
                     delivered = WebhookDelivery(
-                        tenant_id=event.tenant_id,
+                        # the resolved tenant UUID, not event.tenant_id — legacy
+                        # outbox rows may carry the tenant slug, which the RLS
+                        # WITH CHECK would reject (SEC-65)
+                        tenant_id=tenant_id,
                         endpoint_id=ep.id,
                         event_id=event.event_id,
                         status="processing",

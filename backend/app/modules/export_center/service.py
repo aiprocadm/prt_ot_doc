@@ -6,6 +6,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.db.session import rearm_session_tenant_context
 from app.modules.projections.models import ExportJob, ExportSchedule, KpiDefinition
 
 
@@ -57,6 +58,8 @@ class ExportCenterService:
         )
         self.session.add(job)
         await self.session.commit()
+        # commit() drops the transaction-local RLS GUCs — re-arm before refresh (SEC-65)
+        await rearm_session_tenant_context(self.session)
         await self.session.refresh(job)
         return job
 
@@ -70,6 +73,8 @@ class ExportCenterService:
         job.delivery_history_json = history
         job.progress_percent = 100 if status == "delivered" else job.progress_percent
         await self.session.commit()
+        # commit() drops the transaction-local RLS GUCs — re-arm before refresh (SEC-65)
+        await rearm_session_tenant_context(self.session)
         await self.session.refresh(job)
         return job
 
@@ -120,6 +125,8 @@ class ExportCenterService:
         )
         self.session.add(item)
         await self.session.commit()
+        # commit() drops the transaction-local RLS GUCs — re-arm before refresh (SEC-65)
+        await rearm_session_tenant_context(self.session)
         await self.session.refresh(item)
         return item
 
@@ -144,6 +151,8 @@ class ExportCenterService:
         )
         self.session.add(item)
         await self.session.commit()
+        # commit() drops the transaction-local RLS GUCs — re-arm before refresh (SEC-65)
+        await rearm_session_tenant_context(self.session)
         await self.session.refresh(item)
         return item
 

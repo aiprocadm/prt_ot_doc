@@ -26,6 +26,7 @@ from app.core.inbound_webhook_auth import verify_inbound_webhook_body_hmac
 from app.core.secret_cipher import encrypt_secret
 from app.core.security import AccessContext, rbac
 from app.core.tenant_validation import TenantContextValidator
+from app.db.session import rearm_session_tenant_context
 from app.models.job_engine import InboundWebhookDedup
 from app.models.models import Outbox, OutboxStatus, Tenant, WebhookDelivery, WebhookEndpoint
 from app.services.inbound_dedup import compute_inbound_dedup_key
@@ -177,6 +178,8 @@ async def create_webhook(
     )
     session.add(row)
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before refresh (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(row)
     return WebhookEndpointCreateOut(**_to_endpoint_out(row).model_dump(), secret=generated_secret)
 
@@ -212,6 +215,8 @@ async def update_webhook(
     row.timeout_ms = payload.timeout_ms
     row.headers = payload.headers
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before refresh (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(row)
     return _to_endpoint_out(row)
 
@@ -268,6 +273,8 @@ async def rotate_webhook_secret(
     row.secret = encrypt_secret(new_secret)  # SEC-67: at-rest encryption
     row.updated_at = datetime.now(timezone.utc)
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before refresh (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(row)
     return WebhookEndpointCreateOut(**_to_endpoint_out(row).model_dump(), secret=new_secret)
 
@@ -295,6 +302,8 @@ async def disable_webhook(
     )
     row.is_enabled = False
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before refresh (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(row)
     return _to_endpoint_out(row)
 
@@ -322,6 +331,8 @@ async def enable_webhook(
     )
     row.is_enabled = True
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before refresh (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(row)
     return _to_endpoint_out(row)
 

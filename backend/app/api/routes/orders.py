@@ -12,6 +12,7 @@ from app.core.audit_decorator import audit_operation
 from app.core.errors import api_problem_detail
 from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
+from app.db.session import rearm_session_tenant_context
 from app.models.finance import Contract, Order, OrderStatus
 from app.models.models import Tenant
 from app.schemas.order import OrderCreate, OrderPage, OrderRead, OrderUpdate
@@ -128,6 +129,8 @@ async def create_order(
     )
     session.add(order)
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before refresh (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(order)
     return OrderRead.model_validate(order)
 
@@ -171,6 +174,8 @@ async def update_order(
     for key, value in updates.items():
         setattr(order, key, value)
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before refresh (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(order)
     return OrderRead.model_validate(order)
 

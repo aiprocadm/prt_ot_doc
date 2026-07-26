@@ -30,6 +30,9 @@ RLS_ENABLED_TABLES: frozenset[str] = frozenset(
         "approval_tasks",
         "asset",
         "attestation",
+        "automation_rule",
+        "automation_rule_trigger",
+        "billing_events",
         "branch",
         "briefing_entries",
         "briefing_journals",
@@ -54,6 +57,7 @@ RLS_ENABLED_TABLES: frozenset[str] = frozenset(
         "committee_member",
         "company",
         "compliance_deadlines",
+        "contract",
         "contractor_document_requirement",
         "contractor_documents",
         "contractor_employees",
@@ -63,6 +67,7 @@ RLS_ENABLED_TABLES: frozenset[str] = frozenset(
         "corrective_action_attachments",
         "corrective_actions",
         "correctiveaction",
+        "dashboard_kpi_snapshots",
         "department",
         "document",
         "document_artifacts",
@@ -114,8 +119,11 @@ RLS_ENABLED_TABLES: frozenset[str] = frozenset(
         "inspection_result",
         "inspection_run_items",
         "inspection_runs",
+        "invoice",
+        "invoices",
         "journal",
         "journalentry",
+        "kpi_definitions",
         "medical_exam",
         "medical_factor",
         "medical_norm",
@@ -128,6 +136,7 @@ RLS_ENABLED_TABLES: frozenset[str] = frozenset(
         "npabinding",
         "ops_inspections",
         "ops_prescriptions",
+        "order",
         "pack_run_items",
         "pack_run_logs",
         "pack_runs",
@@ -145,6 +154,7 @@ RLS_ENABLED_TABLES: frozenset[str] = frozenset(
         "pdn_access_log",
         "permit",
         "person",
+        "person_compliance_read_models",
         "pipeline_profiles",
         "pipeline_runs",
         "pipeline_step_locks",
@@ -190,6 +200,7 @@ RLS_ENABLED_TABLES: frozenset[str] = frozenset(
         "search_saved_queries",
         "signature_requests",
         "site",
+        "site_safety_read_models",
         "sout_campaign",
         "sout_class_history",
         "sout_factor",
@@ -197,6 +208,9 @@ RLS_ENABLED_TABLES: frozenset[str] = frozenset(
         "sout_workplace",
         "task",
         "template",
+        "tenant_counters",
+        "tenant_quotas_counters",
+        "tenant_rate_limits",
         "templateusage",
         "templateversion",
         "training",
@@ -215,6 +229,8 @@ RLS_ENABLED_TABLES: frozenset[str] = frozenset(
         "training_test_questions",
         "training_tests",
         "violation",
+        "webhook_deliveries",
+        "webhook_endpoints",
         "work_permit",
         "work_permit_briefing",
         "work_permit_daily_admission",
@@ -232,9 +248,22 @@ RLS_ENABLED_TABLES: frozenset[str] = frozenset(
 
 # Tenant-scoped tables that do NOT yet have RLS. Ratchet snapshot, not a permanent
 # exemption: shrink it (move names to RLS_ENABLED_TABLES) as coverage grows. Some entries
-# are deliberately cautious — e.g. authz_*/api_tokens are read on the hot permission path
-# and need dedicated analysis before RLS. A NEW tenant table must be added here (or to
-# RLS_ENABLED_TABLES) or the coverage guard fails.
+# are deliberately cautious:
+#   * authz_*/api_key/api_tokens/refresh_session/user* — read on the hot auth/permission
+#     path, need dedicated analysis before RLS.
+#   * usage_counters/subscriptions/tenant_limits_override/tenant_integrations_keys — read
+#     (and the usage row auto-created) by BillingGuardMiddleware on a tenant-less
+#     AsyncSessionLocal(tenant="public") BEFORE tenant resolution; arming them would 500
+#     every request or silently fail-open the billing gate. Rework the guard first.
+#   * tenant_quotas/tenant_settings — written cross-tenant by the platform fleet
+#     endpoints (api/routes/platform_tenants.py, api/routes/tenants.py) on the caller's
+#     session; needs bypass/target-session rework first.
+#   * webhook_subscription — legitimately stores global rows with tenant_id IS NULL,
+#     which the id-equality predicate would hide.
+#   * outbox/outbox_events/idempotency_keys/inbound_webhook_dedup — cross-tenant infra
+#     queues with their own consumers; separate analysis.
+# A NEW tenant table must be added here (or to RLS_ENABLED_TABLES) or the coverage
+# guard fails.
 RLS_EXEMPT_TABLES: frozenset[str] = frozenset(
     {
         "api_key",
@@ -246,11 +275,6 @@ RLS_EXEMPT_TABLES: frozenset[str] = frozenset(
         "authz_role_permissions",
         "authz_roles",
         "authz_user_roles",
-        "automation_rule",
-        "automation_rule_trigger",
-        "billing_events",
-        "contract",
-        "dashboard_kpi_snapshots",
         "download_logs",
         "export_jobs",
         "export_schedules",
@@ -259,38 +283,27 @@ RLS_EXEMPT_TABLES: frozenset[str] = frozenset(
         "header_footer_presets",
         "idempotency_keys",
         "inbound_webhook_dedup",
-        "invoice",
-        "invoices",
         "job_logs",
-        "kpi_definitions",
         "marketplace_catalog_items",
         "offline_media_queue",
         "offline_sync_batches",
-        "order",
         "outbox",
         "outbox_events",
         "pdf_conversion_runs",
-        "person_compliance_read_models",
         "refresh_session",
         "replace_map",
         "replace_run",
         "report_definition",
         "securityauditlog",
-        "site_safety_read_models",
         "subscriptions",
-        "tenant_counters",
         "tenant_integrations_keys",
         "tenant_limits_override",
         "tenant_quotas",
-        "tenant_quotas_counters",
-        "tenant_rate_limits",
         "tenant_settings",
         "usage_counters",
         "user",
         "user_attribute",
         "user_role",
-        "webhook_deliveries",
-        "webhook_endpoints",
         "webhook_subscription",
     }
 )

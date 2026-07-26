@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.audit_decorator import audit_operation
 from app.core.security import abac, api_key_auth
+from app.db.session import rearm_session_tenant_context
 from app.models.document import Document
 from app.models.models import (
     ApiKey,
@@ -151,6 +152,8 @@ async def issue_machine_key(
     )
     secret.record.rate_limit_per_minute = payload.rate_limit_per_minute
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before refresh (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(secret.record)
     return {
         "id": secret.record.id,
@@ -191,6 +194,8 @@ async def rotate_machine_key(
     rotated.record.rate_limit_per_minute = record.rate_limit_per_minute
     rotated.record.last_rotated_at = datetime.now(tz=timezone.utc)
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before refresh (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(rotated.record)
     return {
         "id": rotated.record.id,
@@ -530,6 +535,8 @@ async def create_public_webhook_subscription(
     )
     session.add(row)
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before refresh (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(row)
     return {
         "id": row.id,
@@ -574,6 +581,8 @@ async def publish_marketplace_item(
     item = MarketplaceCatalogItem(tenant_id=tenant.id, status="published", **payload.model_dump())
     session.add(item)
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before refresh (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(item)
     return item
 

@@ -1,5 +1,61 @@
 # CHANGELOG
 
+## 2026-07-26 (feat/sec65-rls-tenant-billing-webhooks — RLS на финансы/вебхуки/KPI/автоматизацию, Phase 16)
+
+SEC-65 (TZ B-NEXT.7). Продолжение раскатки RLS. Срез — **16 таблиц** финансов/
+биллинг-телеметрии/вебхуков/read-моделей/автоматизации. Покрытие: **210 → 226**
+из 265. Только PostgreSQL.
+
+### Added
+- **Миграция** `20260726_sec65_rls_finance_webhooks_kpi.py` (down_rev
+  `20260726_sec65_rls_notifications_calendar_portal`, head) — ENABLE+FORCE+POLICY
+  `tenant_isolation` на 16 табл:
+  - Финансы (4): `contract`, `order`, `invoice`, `invoices` (последняя в коде
+    только читается).
+  - Биллинг-телеметрия (4): `billing_events`, `tenant_counters`,
+    `tenant_quotas_counters`, `tenant_rate_limits` (мёртвая таблица — писателей нет).
+  - Read-модели/KPI (4): `dashboard_kpi_snapshots`, `kpi_definitions`,
+    `person_compliance_read_models`, `site_safety_read_models`.
+  - Вебхуки (2): `webhook_endpoints`, `webhook_deliveries` — бэкфилл НЕ нужен:
+    у обеих в базе настоящий FK `tenant_id → tenant.id` (проверено интроспекцией),
+    строки со слагом невозможны (в отличие от `edo_messages`).
+  - Автоматизация (2): `automation_rule`, `automation_rule_trigger`.
+- **Реестр** `core/rls_policy.py`: 16 табл EXEMPT→ENABLED (226 enabled / 39 exempt
+  / 265); комментарий EXEMPT переписан — по каждой отложенной группе зафиксирована
+  причина.
+
+### Осознанно отложено (в EXEMPT, причины в реестре)
+- `usage_counters`/`subscriptions`/`tenant_limits_override`/`tenant_integrations_keys` —
+  их читает (и создаёт usage-строку) `BillingGuardMiddleware` на tenant-less
+  сессии ДО резолва тенанта: арминг дал бы 500 на каждый запрос либо тихий
+  fail-open биллинг-гейта. Сначала — переделка гейта.
+- `tenant_quotas`/`tenant_settings` — платформенные fleet-ручки пишут их
+  кросс-тенантно на сессии вызывающего (`platform_tenants.py`, `tenants.py`).
+- `webhook_subscription` — легальные глобальные строки `tenant_id IS NULL`.
+- `outbox`/`outbox_events`/`idempotency_keys`/`inbound_webhook_dedup` —
+  кросс-тенантные инфра-очереди, отдельный анализ.
+
+### Fixed
+- **`services/outbox.py::process_once`** — `commit()` посреди цикла сбрасывал GUC:
+  дедуп доставок (`_already_delivered`) всегда видел пусто (дубли), а INSERT
+  `webhook_deliveries` был бы отклонён. Теперь после commit — ре-арм контекста.
+- **`tasks/_core.py::_dispatch_outbox_events`** — `WebhookDelivery.tenant_id`
+  брался из `event.tenant_id`; у `outbox_events` FK на tenant НЕТ, легаси-события
+  могли нести slug — это и сегодня валило бы вставку доставки по FK, а под RLS
+  ещё и WITH CHECK. Теперь — резолвнутый UUID тенанта.
+- **`scripts/create_tenant.py`** — третий провижининг-путь без `rls_bypass=True`
+  (INSERT `tenant_quotas` был бы отклонён); приведён к конвенции двух других.
+- Грабля `commit()`+`refresh()` — ре-арм добавлен в 15 точках:
+  `contracts.py` (2), `orders.py` (2), `invoices.py` (2), `webhooks.py` (5),
+  `public_api.py` (4, вкл. ключи API — превентивно), `export_center/service.py`
+  (4: export-джобы и `kpi_definitions`).
+
+### Tests
+- `backend/tests/test_rls_finance_webhooks_kpi.py` (маркер `db`) — интроспекция
+  16 таблиц.
+- Живой Postgres `-m db` — полный гейт зелёный (кросс-чек 226 armed). Ratchet-гард
+  EXIT 0 (226/39/265). Полный SQLite-suite — зелёный.
+
 ## 2026-07-26 (feat/sec65-rls-notifications-calendar-portal — RLS на уведомления/календарь/клиентский портал/НПА, Phase 16)
 
 SEC-65 (TZ B-NEXT.7). Продолжение раскатки RLS по образцу. Срез — **14 таблиц**
