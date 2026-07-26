@@ -1,5 +1,82 @@
 # CHANGELOG
 
+## 2026-07-26 (feat/sec65-rls-audit-export-logs — RLS на аудит/выгрузки/логи/пресеты, Phase 16)
+
+SEC-65 (TZ B-NEXT.7). Продолжение раскатки RLS. Срез — **17 таблиц** аудита/
+экспорт-центра/логов/офлайн-синка/replace/пресетов. Покрытие: **232 → 249**
+из 265 (база 232 — после влитого PR #794). Только PostgreSQL.
+
+### Added
+- **Миграция** `20260726_sec65_rls_audit_export_logs.py` (down_rev
+  `20260726_sec65_rls_billing_tenant_admin`, head) — ENABLE+FORCE+POLICY
+  `tenant_isolation` на 17 табл:
+  - Аудит (3): `auditlog`, `securityauditlog` (продовых писателей нет),
+    `audit_export_job`.
+  - Экспорт-центр (2): `export_jobs`, `export_schedules` (beat-тика по
+    расписаниям НЕ существует — cron-поля пишутся API и никем не опрашиваются,
+    вектора тихой поломки нет).
+  - Логи/прогоны (3): `download_logs`, `job_logs` (писателей нет вообще),
+    `pdf_conversion_runs`.
+  - Field ops/офлайн (3): `external_registry_jobs`, `offline_media_queue`,
+    `offline_sync_batches` (tenant-less опроса очередей нет — проверено по
+    beat_schedule).
+  - Replace (2): `replace_map`, `replace_run`.
+  - Определения/пресеты (4): `report_definition`, `featureenablement`,
+    `header_footer_presets`, `marketplace_catalog_items`.
+  - Бэкфилл НЕ нужен: у всех 17 настоящий NOT NULL FK `tenant_id → tenant.id`,
+    строки со слагом невозможны.
+- **Реестр** `core/rls_policy.py`: 17 табл EXEMPT→ENABLED (243 enabled /
+  22 exempt / 265).
+
+### Changed
+- **Hash-цепочка `auditlog` теперь явно per-tenant** (`services/audit.py`):
+  `_prev_hash` фильтрует по `tenant_id`, advisory-lock берётся по паре
+  (ключ, hashtext(tenant)) — тенанты больше не сериализуют друг друга, а
+  семантика цепочки одинакова на SQLite (без RLS) и Postgres (под RLS видимость
+  и так per-tenant). `verify_audit_chain` проверяет цепочку каждого тенанта
+  независимо. Исторические строки, писавшиеся в глобальную цепочку, при
+  верификации старых диапазонов могут дать расхождение — вызывателей у
+  `verify_audit_chain` в проде нет.
+
+### Fixed
+- **`core/audit_decorator.py`** (закрывает ~76 задекорированных ручек) —
+  `@audit_operation` пишет audit-строку ПОСЛЕ хендлера; если хендлер завершил
+  транзакцию `commit()`, GUC слетали → под FORCE RLS вставка аудита тихо
+  отвергалась бы (и `_prev_hash` возвращал None — форк цепочки), а `except`
+  декоратора это проглатывал. Теперь декоратор переармирует контекст до записи.
+- **Прямые пост-commit записи аудита** — ре-арм добавлен:
+  `api/routes/documents/generate.py::generate_document` (audit `render_start`
+  после commit) и `api/routes/files.py::_persist_and_audit` (audit `upload`
+  после commit).
+- **`celery/tasks/report_export_job.py`** (except-ветка) — после `rollback()`
+  GUC слетали → `session.get(ExportJob)` вернул бы None и упавшая джоба
+  зависла бы в `queued` навсегда без `error_payload` (ровно то, от чего эта
+  ветка защищает). Теперь — ре-арм после rollback.
+- Грабля `commit()`+`refresh()` — ре-арм добавлен в 7 точках:
+  `modules/replace/api.py` (3: create/patch карты, запуск run),
+  `modules/report_builder/api.py` (2: create/update определения),
+  `modules/headers/api.py` (2: create/patch пресета).
+- **`api/routes/platform_tenants.py`** (латентная мина) — `refresh()` после
+  `commit()` на bypass-сессии провижининга: bypass-GUC тоже транзакционно-
+  локален. Сегодня безвредно (`tenant` — shared), ре-арм добавлен превентивно.
+
+### Tests
+- `backend/tests/test_rls_audit_export_logs.py` (маркер `db`) — интроспекция
+  17 таблиц.
+- Живой Postgres `-m db` — полный гейт зелёный, 21 тест (вкл. кросс-чек 243
+  armed). Ratchet-гард EXIT 0 (243/22/265). Матрица — валидатор зелёный.
+  Целевые SQLite-тесты (audit chain/decorator/log-api/immutability, replace,
+  report_builder seed, headers, documents generate, files upload,
+  export center, tenant isolation audit) — EXIT 0. Полный SQLite-suite —
+  зелёный (см. handoff).
+
+### Координация с PR #794 — разрешена
+- PR #794 (биллинг-гейт/тенант-админка) влит первым, поэтому здесь выполнен
+  `merge origin/main`: `down_revision` перенаправлен на его миграцию
+  `20260726_sec65_rls_billing_tenant_admin` (иначе две alembic-головы), реестр
+  `rls_policy.py` объединён — его 6 биллинг/тенант + наши 17 аудит/логи
+  (наборы не пересекались), `RLS_EXEMPT_TABLES` сжат до 16.
+
 ## 2026-07-26 (feat/sec65-rls-billing-guard-tenant-admin — RLS на биллинг-гейт и тенант-админку + переделка сессий, Phase 16)
 
 SEC-65 (TZ B-NEXT.7). Разблокирующий срез: **6 таблиц**, отложенных прошлым срезом

@@ -24,6 +24,7 @@ from app.core.errors import api_problem_detail
 from app.core.feature_flags import is_feature_enabled
 from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
+from app.db.session import rearm_session_tenant_context
 from app.models.file import File
 from app.models.models import Tenant
 from app.modules.projections.models import ExportJob
@@ -222,6 +223,8 @@ async def create_definition(
         ) from exc
     await _audit(session, request, access, str(tenant.id), action="create", object_id=record.id)
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before refresh (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(record)
     return ReportDefinitionRead.model_validate(record)
 
@@ -284,6 +287,8 @@ async def update_definition(
         ) from exc
     await _audit(session, request, access, str(tenant.id), action="update", object_id=record.id)
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before refresh (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(record)
     return ReportDefinitionRead.model_validate(record)
 

@@ -58,6 +58,7 @@ from app.core.payload_constraints import PayloadConstraintError, enforce_mapping
 from app.core.rate_limit import generate_per_tenant, ip_tenant_key, limiter
 from app.core.security import AccessContext
 from app.core.tracing import get_trace_id
+from app.db.session import rearm_session_tenant_context
 from app.models.document import (
     DocumentBatchItem,
     DocumentBatchItemStatus,
@@ -327,6 +328,9 @@ async def generate_document(
             run.result_metadata = metadata
 
         if created_run:
+            # commit() above dropped the transaction-local RLS GUCs — re-arm
+            # before the audit insert (SEC-65)
+            await rearm_session_tenant_context(session)
             audit_service = AuditService(session)
             ip = request.client.host if request.client else "unknown"
             user_agent = request.headers.get("user-agent")

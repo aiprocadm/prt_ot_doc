@@ -184,7 +184,13 @@ def audit_operation(
                         pass
 
                 # Import here to avoid circular imports at module load time.
+                from app.db.session import rearm_session_tenant_context  # noqa: PLC0415
                 from app.services.audit import AuditService  # noqa: PLC0415
+
+                # The handler may have ended its transaction with commit(), which
+                # drops the transaction-local RLS GUCs — re-arm before the audit
+                # insert or FORCE RLS silently rejects it (SEC-65).
+                await rearm_session_tenant_context(session)
 
                 # SAVEPOINT: a rejected audit row (unresolved tenant, actor that
                 # is not a user row) would otherwise poison the request

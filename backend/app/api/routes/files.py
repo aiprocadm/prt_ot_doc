@@ -40,6 +40,7 @@ from app.core.metrics import get_metrics
 from app.core.rate_limit import ip_tenant_key, limiter, upload_per_tenant
 from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
+from app.db.session import rearm_session_tenant_context
 from app.models.file import File as StoredFile
 from app.models.file import FileKind, FileScanStatus
 from app.models.models import Tenant
@@ -475,6 +476,9 @@ async def _persist_and_audit(
         )
     )
 
+    # commit() above dropped the transaction-local RLS GUCs — re-arm before the
+    # audit insert (SEC-65)
+    await rearm_session_tenant_context(session)
     audit = AuditService(session)
     ip = request.client.host if request.client else "unknown"
     await audit.log_event(

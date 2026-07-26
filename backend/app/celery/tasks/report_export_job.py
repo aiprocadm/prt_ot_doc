@@ -17,7 +17,7 @@ from typing import Any
 from sqlalchemy import select
 
 from app.core.tenant import tenant_context
-from app.db.session import ensure_tenant_schema, session_scope
+from app.db.session import ensure_tenant_schema, rearm_session_tenant_context, session_scope
 from app.db.tenant_row_guard import assert_tenant_row_matches_session
 from app.models.file import File, FileKind, FileScanStatus
 from app.models.report_builder import ReportDefinition
@@ -165,6 +165,9 @@ def report_export_job(*, job_id: str, tenant_id: str) -> dict[str, str]:
                     # transaction back, the status="running" write would revert, and the
                     # job would poll as "queued" forever with error_payload=None.
                     await session.rollback()  # a DB error may have aborted the transaction
+                    # rollback() drops the transaction-local RLS GUCs — re-arm or the
+                    # session.get below silently returns None under FORCE RLS (SEC-65)
+                    await rearm_session_tenant_context(session)
                     job2 = await session.get(ExportJob, job_id)
                     if job2 is not None:
                         job2.status = "failed"
