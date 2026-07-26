@@ -23,6 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
+from app.db.session import rearm_session_tenant_context
 from app.models.calendar_views import SavedCalendarView
 from app.models.models import Tenant
 from app.schemas.calendar_views import (
@@ -140,6 +141,8 @@ async def create_saved_view(
     except SavedCalendarViewNameConflictError as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before refresh (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(created)
     return _to_dto(created)
 
@@ -170,6 +173,8 @@ async def update_saved_view(
     except SavedCalendarViewNameConflictError as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before refresh (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(updated)
     return _to_dto(updated)
 
