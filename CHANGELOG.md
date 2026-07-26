@@ -1,5 +1,65 @@
 # CHANGELOG
 
+## 2026-07-26 (feat/sec65-rls-approvals-edo-search — RLS на согласования/ЭДО/поиск/подписи, Phase 16)
+
+SEC-65 (TZ B-NEXT.7). Продолжение раскатки RLS по образцу. Срез — **19 таблиц**
+контура согласований/ЭДО/поиска. Покрытие: **177 → 196** из 265. Только PostgreSQL.
+
+### Added
+- **Миграция** `20260726_sec65_rls_approvals_edo_search.py` (down_rev
+  `20260725_sec65_rls_ot_ops`, head) — ENABLE+FORCE+POLICY `tenant_isolation` на 19 табл:
+  - Согласования (9): `approval_routes`, `approval_route_steps`, `approval_requests`,
+    `approval_decisions`, `approval_decision_logs`, `approval_processes`,
+    `approval_tasks`, `approval_instances`, `approval_instance_steps`.
+  - ЭДО (5): `edo_messages`, `edo_receipts`, `edo_status_events`, `edo_status_history`,
+    `edo_webhook_inbox`.
+  - Поиск (4): `search_documents`, `search_index_entries`, `search_recent_queries`,
+    `search_saved_queries`.
+  - Подписи (1): `signature_requests`.
+- **Бэкфилл в миграции**: `edo_messages` создана без FK на `tenant`, а консьюмер
+  (`tasks/_core.py::process_inbound_webhook`) двойным скоупом терпит легаси-строки,
+  где в `tenant_id` лежит slug/code арендатора. Предикат политики сравнивает с
+  tenant **id** — такие строки стали бы невидимыми. Перед ENABLE миграция переписывает
+  их на `tenant.id` (UPDATE … FROM tenant по slug/code).
+- **Реестр** `core/rls_policy.py`: 19 табл `RLS_EXEMPT_TABLES` → `RLS_ENABLED_TABLES`
+  (196 enabled / 69 exempt / 265). Список сверен с живыми метаданными.
+- `db/session.py::rearm_session_tenant_context()` — публичный помощник: повторно
+  ставит транзакционно-локальный тенант-контекст (`SET LOCAL search_path` + RLS GUC)
+  на уже открытую сессию после явного commit/rollback.
+
+### Fixed
+- `modules/search/api.py` (GET `/search`) — degraded-путь (`OperationalError` →
+  `rollback()`) сбрасывал транзакционно-локальные GUC, после чего трекинг запроса
+  INSERT'ил в `search_recent_queries` уже без тенант-контекста: под FORCE RLS это
+  `ProgrammingError` (не ловится `except (OperationalError, MissingGreenlet)`) → 500
+  вместо деградации. Теперь перед трекингом контекст переармируется
+  (`rearm_session_tenant_context`); на обычном пути вызов идемпотентен.
+
+### Анализ рисков
+- Все писатели — либо request-scoped (`get_session`: approval_orchestration,
+  approval_signing_v1, edo_workflow, pep_signing, search, files-upload индексация),
+  либо тенант-пиннутые celery-задачи (`process_inbound_webhook` →
+  `session_scope(tenant=slug)` пишет `edo_status_history`; `reindex_search_entity_job` →
+  `AsyncSessionLocal(tenant=id)` пишет `search_index_entries`; `files.index_content` →
+  `session_scope(tenant=slug)` пишет `search_documents`).
+- Входящие вебхуки ЭДО резолвят тенанта ДО любой записи: `/api/v1/webhooks/edo/{op}` —
+  обычный путь с обязательным `X-Tenant`; `/api/v1/edo/webhooks/{provider}` — public,
+  но middleware преднагружает тенанта (`_preload_webhook_tenant`), без него 404.
+  `edo_webhook_inbox` пишется только под тенант-сессией.
+- Провижининг тенанта эти таблицы не сеет (starter-pack живёт в `tenant.settings`
+  JSON); beat-задачи эскалаций/ретраев ЭДО — заглушки без БД; `edo_receipts` —
+  schema-only (писателей нет).
+
+### Tests
+- `backend/tests/test_rls_approvals_edo_search.py` (маркер `db`) — интроспекция:
+  миграция armed все 19 таблиц; + тест бэкфилла (строки `edo_messages` со slug/code
+  в `tenant_id` после миграции указывают на `tenant.id`, строка с корректным id
+  не тронута). Семантику покрывает generic `test_rls_committees.py`.
+- Живой Postgres, `-m db`: полный гейт зелёный (мои 2 + кросс-чек
+  `test_rls_enabled_matches_postgres` — 196 armed). Ratchet-гард — EXIT 0 (196/69/265).
+- SQLite: `tests/test_next62_analytics_search_export_center.py` +
+  `tests/test_workflow_api.py` — 20 passed (правка search/api.py).
+
 ## 2026-07-25 (feat/sec65-rls-ot-ops — RLS на операционный контур ОТ (инструктажи/журналы/наряды/предписания), Phase 16)
 
 SEC-65 (TZ B-NEXT.7). Продолжение раскатки RLS по образцу. Срез — **26 таблиц**
