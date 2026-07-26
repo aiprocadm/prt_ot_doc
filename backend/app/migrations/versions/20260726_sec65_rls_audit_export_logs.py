@@ -52,7 +52,7 @@ from collections.abc import Sequence
 from alembic import op
 
 revision: str = "20260726_sec65_rls_audit_export_logs"
-down_revision: str | Sequence[str] | None = "20260726_sec65_rls_finance_webhooks_kpi"
+down_revision: str | Sequence[str] | None = "20260726_sec65_rls_billing_tenant_admin"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

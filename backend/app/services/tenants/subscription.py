@@ -8,8 +8,10 @@ The managing tenant drives this. Two stores are touched:
   catalogued feature — ``True`` if the plan includes it, ``False`` otherwise. Writing
   ``on=False`` matters: several flags are default-on, so a lower tier must actively
   switch them off to take the function away.
-* **Quotas** — ``TenantQuota`` is a SharedModel (public schema), so it is updated on the
-  managing tenant's request session, just like ``patch_fleet_quotas_endpoint`` does.
+* **Quotas** — ``TenantQuota`` is a SharedModel (public schema) and is SEC-65-armed, so
+  it is updated on the caller-provided session — the fleet endpoints pass a trusted
+  ``rls_bypass`` shared-schema session (``platform_tenants._fleet_session``), since the
+  managing tenant's request session cannot see another tenant's quota under FORCE RLS.
 """
 
 from __future__ import annotations
@@ -66,8 +68,9 @@ async def apply_plan(session: AsyncSession, target: Tenant, plan: SubscriptionPl
     """Switch ``target`` onto ``plan``: rewrite its feature flags and its quota preset.
 
     Feature writes commit on the target-schema session immediately; quota changes are
-    staged on the caller's ``session`` and committed by the endpoint (together with its
-    audit row). Re-applying the same plan is a no-op, so this is safe to retry.
+    staged on the caller's ``session`` (a trusted ``rls_bypass`` fleet session, see the
+    module docstring) and committed by the endpoint. Re-applying the same plan is a
+    no-op, so this is safe to retry.
     """
 
     async with _target_session(target) as target_session:

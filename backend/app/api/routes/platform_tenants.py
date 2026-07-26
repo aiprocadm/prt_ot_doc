@@ -84,6 +84,20 @@ def _require_managing_admin(
     return payload
 
 
+def _fleet_session() -> AsyncSession:
+    """Shared-schema session for cross-tenant fleet reads/writes (quotas, plans).
+
+    ``rls_bypass``: the fleet endpoints legitimately touch OTHER tenants'
+    ``tenant_quotas`` (SEC-65-armed), which the managing tenant's request session
+    cannot see under FORCE RLS. Authorisation is enforced by
+    ``_require_managing_admin`` before any of this runs.
+    """
+
+    return AsyncSessionLocal(
+        tenant="public", include_public=False, create_schema=False, rls_bypass=True
+    )
+
+
 async def _load_quota(session: AsyncSession, tenant_id: str) -> TenantQuota | None:
     return (
         await session.execute(select(TenantQuota).where(TenantQuota.tenant_id == tenant_id))
@@ -124,7 +138,8 @@ async def list_tenant_fleet_endpoint(
         )
     ).scalars()
 
-    items = [await _build_fleet_item(session, record) for record in rows]
+    async with _fleet_session() as fleet_session:
+        items = [await _build_fleet_item(fleet_session, record) for record in rows]
     return TenantFleetPage(
         items=items,
         total=int(total or 0),
@@ -263,15 +278,16 @@ async def patch_fleet_quotas_endpoint(
     _require_managing_admin(credentials, tenant)
     if await session.get(Tenant, tenant_id) is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Tenant not found")
-    quota = await _load_quota(session, tenant_id)
-    if quota is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Tenant quota not found")
+    async with _fleet_session() as fleet_session:
+        quota = await _load_quota(fleet_session, tenant_id)
+        if quota is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Tenant quota not found")
 
-    for key, value in payload.model_dump(exclude_unset=True).items():
-        setattr(quota, key, value)
-    await session.commit()
-    await session.refresh(quota)
-    return TenantQuotaRead.model_validate(quota)
+        for key, value in payload.model_dump(exclude_unset=True).items():
+            setattr(quota, key, value)
+        await fleet_session.commit()
+        result = TenantQuotaRead.model_validate(quota)
+    return result
 
 
 @router.patch("/{tenant_id}/plan", response_model=TenantFleetItem)
@@ -296,7 +312,8 @@ async def patch_tenant_plan_endpoint(
     if target is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Tenant not found")
 
-    await apply_plan(session, target, plan)
-    await session.commit()
-    await session.refresh(target)
-    return await _build_fleet_item(session, target)
+    async with _fleet_session() as fleet_session:
+        await apply_plan(fleet_session, target, plan)
+        await fleet_session.commit()
+        item = await _build_fleet_item(fleet_session, target)
+    return item
