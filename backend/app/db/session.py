@@ -609,6 +609,22 @@ async def _apply_tenant_rls(session: AsyncSession) -> None:
     )
 
 
+async def rearm_session_tenant_context(session: AsyncSession) -> None:
+    """Re-apply the transaction-local tenant context to an already-open session.
+
+    ``SET LOCAL search_path`` and the SEC-65 RLS GUCs (``_apply_tenant_rls``)
+    only live until the next commit/rollback; ``TenantAsyncSession.__aenter__``
+    applies them once, so a handler that explicitly ends a transaction and keeps
+    using the session continues on a context-less transaction — under FORCE RLS
+    its reads turn empty and writes are rejected. Call this after such a
+    commit/rollback to re-pin the context. Safe to call mid-transaction (the
+    ``SET LOCAL``/``set_config`` calls are idempotent).
+    """
+
+    await _apply_search_path(session)
+    await _apply_tenant_rls(session)
+
+
 def AsyncSessionLocal(
     *,
     tenant: str | None = None,

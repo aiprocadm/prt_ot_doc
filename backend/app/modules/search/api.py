@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.rbac_abac import ROLE_PERMISSIONS
 from app.core.security import AccessContext, rbac
+from app.db.session import rearm_session_tenant_context
 from app.models.models import Tenant
 from app.modules.projections.models import SearchIndexEntry
 from app.modules.projections.services import ProjectionOrchestrator
@@ -154,6 +155,9 @@ async def global_search(
             "next_cursor": None,
         }
     try:
+        # The degraded path above rolled back, which drops the transaction-local
+        # tenant GUCs — without re-arming, this INSERT would violate RLS (SEC-65).
+        await rearm_session_tenant_context(session)
         await service.track_recent_query(
             user_id=access.user.id, q=q, entity_types=requested_types, filters=filters
         )
