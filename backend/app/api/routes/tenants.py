@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.audit_decorator import audit_operation
 from app.core.security import AccessContext, abac, rbac, verify_token
-from app.db.session import _create_tenant_schema, resolve_tenant_schema
+from app.db.session import AsyncSessionLocal, _create_tenant_schema, resolve_tenant_schema
 from app.models.models import RoleEnum, Tenant, TenantQuota, TenantSettings
 from app.repository import list_tenants
 from app.schemas.tenant import (
@@ -89,46 +89,55 @@ async def create_tenant_endpoint(
 ) -> TenantRead:
     _require_admin(credentials)
     schema_name = resolve_tenant_schema(payload.slug)
-    tenant = Tenant(
-        slug=payload.slug,
-        code=(payload.code or payload.slug),
-        name=payload.name,
-        contact_email=payload.contact_email,
-        parent_id=payload.parent_id,
-        kind=payload.kind,
-        schema_name=schema_name,
-        s3_prefix="",
-        is_active=True,
-    )
-    session.add(tenant)
-    await session.flush()
-    tenant.s3_prefix = tenant.id
-    session.add(
-        TenantSettings(
-            tenant_id=tenant.id,
+    # Provisioning writes tenant_settings/tenant_quotas rows for the NEW tenant;
+    # the caller's request session is pinned to the caller's tenant, so under
+    # FORCE RLS (SEC-65) those inserts would be rejected. Use a trusted
+    # shared-schema provisioning session like platform_tenants/bootstrap do.
+    async with AsyncSessionLocal(
+        tenant="public", include_public=False, create_schema=False, rls_bypass=True
+    ) as provisioning_session:
+        tenant = Tenant(
+            slug=payload.slug,
+            code=(payload.code or payload.slug),
+            name=payload.name,
+            contact_email=payload.contact_email,
+            parent_id=payload.parent_id,
+            kind=payload.kind,
             schema_name=schema_name,
-            s3_prefix=tenant.id,
+            s3_prefix="",
+            is_active=True,
         )
-    )
-    session.add(
-        TenantQuota(
-            tenant_id=tenant.id,
-            max_parallel_jobs=4,
-            max_doc_generations_per_month=5000,
-            max_storage_mb=10240,
-            monthly_edo_outgoing=0,
-            enforce_billing_gate=False,
+        provisioning_session.add(tenant)
+        await provisioning_session.flush()
+        tenant.s3_prefix = tenant.id
+        provisioning_session.add(
+            TenantSettings(
+                tenant_id=tenant.id,
+                schema_name=schema_name,
+                s3_prefix=tenant.id,
+            )
         )
-    )
-    try:
-        await session.commit()
-    except IntegrityError as exc:
-        await session.rollback()
-        raise HTTPException(status.HTTP_409_CONFLICT, "Tenant already exists") from exc
+        provisioning_session.add(
+            TenantQuota(
+                tenant_id=tenant.id,
+                max_parallel_jobs=4,
+                max_doc_generations_per_month=5000,
+                max_storage_mb=10240,
+                monthly_edo_outgoing=0,
+                enforce_billing_gate=False,
+            )
+        )
+        try:
+            await provisioning_session.commit()
+        except IntegrityError as exc:
+            await provisioning_session.rollback()
+            raise HTTPException(status.HTTP_409_CONFLICT, "Tenant already exists") from exc
+
+        await provisioning_session.refresh(tenant)
+        result = TenantRead.model_validate(tenant)
 
     await _create_tenant_schema(schema_name)
-    await session.refresh(tenant)
-    return TenantRead.model_validate(tenant)
+    return result
 
 
 @admin_router.post("", response_model=TenantRead, status_code=status.HTTP_201_CREATED)

@@ -210,8 +210,14 @@ class TenantMiddleware(BaseHTTPMiddleware):
             )
         request.state.tenant_id = str(tenant.id)
         request.state.tenant_slug = tenant.slug
+        # tenant_id pins the SEC-65 RLS GUC so the tenant_settings/tenant_quotas
+        # reads below stay visible under FORCE RLS (a tenant-less session would
+        # silently return None → wrong schema/S3-prefix fallbacks).
         async with AsyncSessionLocal(
-            tenant="public", include_public=False, create_schema=False
+            tenant=tenant.slug,
+            tenant_id=str(tenant.id),
+            include_public=False,
+            create_schema=False,
         ) as session:
             settings = (
                 await session.execute(

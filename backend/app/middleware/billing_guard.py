@@ -51,8 +51,12 @@ class BillingGuardMiddleware(BaseHTTPMiddleware):
 
         action = resolve_billing_action(request)
 
+        # Session pinned to the request tenant (slug → UUID resolved on enter), so
+        # the SEC-65 RLS GUC matches the subscriptions/usage/override rows the
+        # billing gate reads and the usage row it flushes. A tenant-less session
+        # would see nothing under FORCE RLS (fail-open gate / rejected INSERT).
         async with AsyncSessionLocal(
-            tenant="public", include_public=False, create_schema=False
+            tenant=tenant_slug, include_public=False, create_schema=False
         ) as session:
             from sqlalchemy import select
 
