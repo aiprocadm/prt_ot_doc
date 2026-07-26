@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import get_settings
 from app.core.metrics import PipelineStage, PipelineType, StageResult, get_metrics
 from app.core.tracing import get_trace_id
+from app.db.session import rearm_session_tenant_context
 from app.models.job_engine import OutboxEvent, OutboxEventStatus
 from app.models.models import Outbox, OutboxStatus, WebhookDelivery
 from app.services.events import EventType, dedupe_key_for, normalize_payload, resolve_event_type
@@ -379,6 +380,9 @@ class OutboxProcessor:
             entry.attempts += 1
 
         await self.session.commit()
+        # commit() drops the transaction-local RLS GUCs — re-arm before the
+        # delivery bookkeeping below (webhook_deliveries reads/writes, SEC-65)
+        await rearm_session_tenant_context(self.session)
 
         processed = 0
         for entry in entries:

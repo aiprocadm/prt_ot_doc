@@ -12,6 +12,7 @@ from app.core.audit_decorator import audit_operation
 from app.core.errors import api_problem_detail
 from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
+from app.db.session import rearm_session_tenant_context
 from app.models.finance import Contract, ContractStatus, Department
 from app.models.models import Company, Site, Tenant
 from app.schemas.contract import ContractCreate, ContractPage, ContractRead, ContractUpdate
@@ -181,6 +182,8 @@ async def create_contract(
     )
     session.add(contract)
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before refresh (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(contract)
     return ContractRead.model_validate(contract)
 
@@ -230,6 +233,8 @@ async def update_contract(
     for key, value in updates.items():
         setattr(contract, key, value)
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before refresh (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(contract)
     return ContractRead.model_validate(contract)
 

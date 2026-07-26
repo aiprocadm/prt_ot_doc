@@ -12,6 +12,7 @@ from app.core.audit_decorator import audit_operation
 from app.core.errors import api_problem_detail
 from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
+from app.db.session import rearm_session_tenant_context
 from app.models.finance import Contract, Invoice, InvoiceStatus, Order
 from app.models.models import Tenant
 from app.schemas.invoice import InvoiceCreate, InvoicePage, InvoiceRead, InvoiceUpdate
@@ -162,6 +163,8 @@ async def create_invoice(
     )
     session.add(invoice)
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before refresh (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(invoice)
     return InvoiceRead.model_validate(invoice)
 
@@ -220,6 +223,8 @@ async def update_invoice(
     for key, value in updates.items():
         setattr(invoice, key, value)
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before refresh (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(invoice)
     return InvoiceRead.model_validate(invoice)
 
