@@ -209,8 +209,16 @@ class AuditService:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
 
-    async def _prev_hash(self) -> str | None:
-        stmt = select(AuditLog.hash).order_by(AuditLog.when.desc()).limit(1)
+    async def _prev_hash(self, tenant_id: str) -> str | None:
+        # The hash chain is per-tenant (SEC-65): under FORCE RLS a tenant session
+        # only sees its own rows anyway, so the explicit filter keeps SQLite (no
+        # RLS) and bypass sessions on the same chain semantics.
+        stmt = (
+            select(AuditLog.hash)
+            .where(AuditLog.tenant_id == tenant_id)
+            .order_by(AuditLog.when.desc())
+            .limit(1)
+        )
         return (await self.session.execute(stmt)).scalar_one_or_none()
 
     def _is_postgres(self) -> bool:
@@ -220,16 +228,17 @@ class AuditService:
         except Exception:  # pragma: no cover - defensive: any detection failure -> skip
             return False
 
-    async def _lock_chain(self) -> None:
+    async def _lock_chain(self, tenant_id: str) -> None:
         """Serialize audit appends on PostgreSQL via a transaction-scoped advisory lock
-        so two concurrent writers can't read the same ``prev_hash`` and fork the global
-        hash chain. Released automatically at transaction commit/rollback. No-op on
-        other backends (SQLite serializes writes already). The throughput tradeoff —
-        audit appends are globally serialized — is intentional."""
+        so two concurrent writers can't read the same ``prev_hash`` and fork the hash
+        chain. The chain (and therefore the lock) is per-tenant: the two-key form keys
+        on the tenant, so tenants don't serialize each other. Released automatically at
+        transaction commit/rollback. No-op on other backends (SQLite serializes writes
+        already)."""
         if self._is_postgres():
             await self.session.execute(
-                text("SELECT pg_advisory_xact_lock(:key)"),
-                {"key": _AUDIT_CHAIN_LOCK_KEY},
+                text("SELECT pg_advisory_xact_lock(:key, hashtext(:tenant))"),
+                {"key": _AUDIT_CHAIN_LOCK_KEY, "tenant": tenant_id},
             )
 
     @staticmethod
@@ -281,8 +290,8 @@ class AuditService:
         correlation_id = request_id or get_trace_id(default="unknown")
         # Serialize concurrent appends (PG advisory lock) before reading the previous
         # hash, so two writers can't chain onto the same prev_hash and fork the chain.
-        await self._lock_chain()
-        prev_hash = await self._prev_hash()
+        await self._lock_chain(tenant_id)
+        prev_hash = await self._prev_hash(tenant_id)
         hash_payload = {
             "tenant_id": tenant_id,
             "actor_type": actor_type,
@@ -357,9 +366,12 @@ class AuditService:
         if to_ts:
             stmt = stmt.where(AuditLog.when <= to_ts)
         rows = (await self.session.execute(stmt)).scalars().all()
-        prev: str | None = rows[0].prev_hash if rows else None
+        # The chain is per-tenant (see _prev_hash); verify each tenant's chain
+        # independently, preserving the global when-ordering inside each.
         broken: list[str] = []
+        prev_by_tenant: dict[str, str | None] = {}
         for row in rows:
+            prev = prev_by_tenant.get(row.tenant_id, row.prev_hash)
             check_payload = {
                 "tenant_id": row.tenant_id,
                 "actor_type": row.actor_type,
@@ -375,7 +387,7 @@ class AuditService:
             expected = self._canonical_hash_payload(check_payload, prev)
             if row.prev_hash != prev or row.hash != expected:
                 broken.append(row.id)
-            prev = row.hash
+            prev_by_tenant[row.tenant_id] = row.hash
         return {"ok": not broken, "checked": len(rows), "broken_ids": broken}
 
     async def audit_create(

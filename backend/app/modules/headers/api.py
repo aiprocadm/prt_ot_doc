@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.security import AccessContext, abac
+from app.db.session import rearm_session_tenant_context
 from app.models.document import DocumentVersion
 from app.models.job_engine import DocumentJob, DocumentJobStatus, DocumentJobStep, JobStepStatus
 from app.models.models import Tenant
@@ -71,6 +72,8 @@ async def create_layout_preset(
     record = HeaderFooterPreset(tenant_id=str(tenant.id), **payload.model_dump())
     session.add(record)
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before refresh (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(record)
     return HeaderFooterPresetRead.model_validate(record)
 
@@ -122,6 +125,8 @@ async def patch_layout_preset(
     for key, value in payload.model_dump(exclude_unset=True).items():
         setattr(row, key, value)
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before refresh (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(row)
     return HeaderFooterPresetRead.model_validate(row)
 

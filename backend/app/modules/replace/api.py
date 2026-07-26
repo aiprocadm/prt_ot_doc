@@ -24,6 +24,7 @@ from app.api.dependencies import get_session, get_tenant_record
 from app.api.helpers.upload import reject_oversize_upload
 from app.core.idempotency import compute_request_hash
 from app.core.security import AccessContext, abac
+from app.db.session import rearm_session_tenant_context
 from app.models.document import DocumentVersion
 from app.models.models import Tenant
 from app.modules.replace.csv_parser import parse_replace_csv
@@ -103,6 +104,8 @@ async def create_replace_map(
     row = ReplaceMap(tenant_id=str(tenant.id), **data.model_dump())
     session.add(row)
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before refresh (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(row)
     return ReplaceMapRead.model_validate(row)
 
@@ -148,6 +151,8 @@ async def patch_map(
     for key, value in payload.model_dump(exclude_unset=True).items():
         setattr(row, key, value)
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before refresh (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(row)
     return ReplaceMapRead.model_validate(row)
 
@@ -286,6 +291,8 @@ async def _launch(
 
     await idem.store_success(record, status_code=status.HTTP_200_OK, body=response.model_dump())
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before refresh (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(run)
     return response
 

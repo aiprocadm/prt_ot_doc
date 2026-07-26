@@ -21,7 +21,7 @@ from app.api.dependencies import get_session, get_tenant_record
 from app.core.audit_decorator import audit_operation
 from app.core.config import get_settings
 from app.core.security import verify_token
-from app.db.session import AsyncSessionLocal
+from app.db.session import AsyncSessionLocal, rearm_session_tenant_context
 from app.models.models import RoleEnum, Tenant, TenantQuota
 from app.modules.subscription import (
     FEATURE_CATALOG,
@@ -209,6 +209,10 @@ async def provision_tenant_endpoint(
         except IntegrityError as exc:
             await provisioning_session.rollback()
             raise HTTPException(status.HTTP_409_CONFLICT, "Tenant already exists") from exc
+        # commit() drops the transaction-local GUCs — the bypass flag included.
+        # Harmless today (Tenant is shared), but re-arm so the pattern is safe
+        # once any table this session touches gets RLS (SEC-65).
+        await rearm_session_tenant_context(provisioning_session)
         await provisioning_session.refresh(created)
         result = TenantRead.model_validate(created)
 
