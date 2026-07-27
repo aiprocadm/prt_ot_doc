@@ -338,6 +338,12 @@ class TenantRateLimit(SharedModel):
 class ApiToken(SharedModel, SoftDeleteMixin):
     __tablename__ = "api_tokens"
 
+    # Lives in the shared schema but is tenant-scoped: opt into the before_flush guard
+    # (``db/session.py::_apply_default_tenant``) so tenant_id is auto-stamped from the
+    # session and a slug in that column raises instead of silently becoming invisible
+    # under the SEC-65 policy, which compares against the tenant UUID.
+    __tenant_model__ = True
+
     tenant_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("tenant.id"), nullable=False, index=True
     )
