@@ -12,7 +12,7 @@
 |---|---|---|
 | Витрина | статика `frontend/dist`, отдаёт nginx напрямую | Пересобирать после каждого изменения фронтенда |
 | Двигатель | служба `ptd-doc-web` → `127.0.0.1:8000` | uvicorn `app.main:app`, `User=aiproc`, `Restart=always` |
-| Адрес | `doc.ptsfera.online` | basic-auth, логин `demo`, файл `/etc/nginx/.htpasswd-lk` |
+| Адрес | `doc.ptsfera.online` | basic-auth, логин `demo`, файл `/etc/nginx/.htpasswd-stand` |
 | Вход в приложение | `admin@example.com` / `admin123`, тенант `demo` | Без заголовка `X-Tenant` любой роут отдаёт 400 `TENANT_REQUIRED` |
 
 Образцы файлов: [`infra/stand/`](../infra/stand/) — юнит systemd, конфиг nginx, скрипт пересборки.
@@ -32,7 +32,7 @@ STAND_SKIP_BUILD=1 infra/stand/rebuild-stand.sh   # только перезап�
 
 Если сборка витрины падает, скрипт возвращает предыдущую рабочую `dist` и не трогает службу.
 
-**Известный риск.** Стенд и разработка делят одну папку. В `lk_otsfera` это уже приводило к аварии: `npm run dev` соседней сессии затёр сборку, служба падала в цикле **шесть суток**. Там вылечено переездом стенда в отдельную копию репозитория с автообновлением до `main` (см. `lk_otsfera`: `scripts/stand/`, `docs/runbook-test-stand.md`). Здесь тот же переезд ещё не сделан.
+**Известный риск.** Стенд и разработка делят одну папку. Отладочный запуск или смена ветки соседней сессией может оставить стенд без собранной витрины, и служба уйдёт в бесконечный цикл падений. Это не теория: на этом сервере такое уже приводило к простою стенда длиной в несколько суток, причём внешне выглядело как сетевая проблема. Радикальное лечение — отдельная копия репозитория под стенд, чтобы разработка физически не могла его задеть; здесь оно ещё не сделано.
 
 ---
 
@@ -56,7 +56,7 @@ sudo systemctl enable --now ptd-doc-web
 sudo chmod o+x /home/aiproc          # чтобы nginx (www-data) дошёл до frontend/dist
 sudo cp infra/stand/nginx/doc.ptsfera.online.conf /etc/nginx/sites-available/
 sudo ln -sf /etc/nginx/sites-available/doc.ptsfera.online.conf /etc/nginx/sites-enabled/
-sudo htpasswd /etc/nginx/.htpasswd-lk demo     # пароль — из менеджера секретов
+sudo htpasswd /etc/nginx/.htpasswd-stand demo     # пароль — из менеджера секретов
 sudo nginx -t && sudo systemctl reload nginx
 sudo certbot --nginx -d doc.ptsfera.online
 ```
