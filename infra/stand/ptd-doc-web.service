@@ -1,0 +1,35 @@
+# Тестовый стенд doc.ptsfera.online — двигатель (FastAPI).
+# Ставится в /etc/systemd/system/ptd-doc-web.service. См. docs/RUNBOOK_TEST_STAND.md.
+#
+# Витрину этот юнит не поднимает: собранная статика frontend/dist отдаётся
+# самим nginx (см. infra/stand/nginx/doc.ptsfera.online.conf).
+#
+# User=aiproc принципиален: благодаря ему стенд можно перезапускать без sudo —
+# сигналом своему же процессу, а Restart=always вернёт службу через 5 секунд.
+
+[Unit]
+Description=prt_ot_doc — веб (FastAPI) для doc.ptsfera.online
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=aiproc
+Group=aiproc
+WorkingDirectory=/home/aiproc/projects/prt_ot_doc
+
+# Боевые переменные. Перекрывают .env, который остаётся для разработки.
+# В git файл не хранится — только в менеджере секретов владельца.
+EnvironmentFile=/home/aiproc/projects/prt_ot_doc/.env.production
+# Без этого не работает "import app.*" — требование репозитория (см. CLAUDE.md).
+Environment=PYTHONPATH=backend
+
+ExecStart=/home/aiproc/projects/prt_ot_doc/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
+
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
