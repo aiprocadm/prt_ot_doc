@@ -31,6 +31,7 @@ from app.api.routes.risk._common import (
 from app.core.idempotency import compute_request_hash
 from app.core.metrics import get_metrics
 from app.core.security import AuthContext, get_auth_ctx
+from app.db.session import rearm_session_tenant_context
 from app.models.models import (
     Company,
     DocumentPack,
@@ -443,6 +444,9 @@ async def assess(
     metrics.action_plan_items_created_total.inc(len(plan_items))
 
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before the
+    # idempotency bookkeeping below touches idempotency_keys again (SEC-65)
+    await rearm_session_tenant_context(session)
 
     response_payload = RiskAssessmentResponse(
         assessment_id=assessment.id,

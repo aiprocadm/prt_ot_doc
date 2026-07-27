@@ -196,8 +196,10 @@ async def assign_user_roles(
         reason="role-change",
     )
 
-    await session.commit()
-    await session.refresh(user)
+    # flush, not commit: transaction_scope owns the request transaction, and a commit
+    # here drops the transaction-local RLS GUCs (SEC-65) — the refresh below would
+    # then read no rows. expire_on_commit=False keeps loaded attributes usable.
+    await session.flush()
     return UserRolesResponse(user_id=user.id, roles=_collect_role_values(user))
 
 
@@ -239,8 +241,8 @@ async def assign_user_attributes(
     attrs.site_ids = payload.site_ids
     attrs.project_ids = payload.project_ids
     attrs.contractor_ids = payload.contractor_ids
-    await session.commit()
-    await session.refresh(attrs)
+    # see the roles handler above: commit would drop the RLS GUCs before the read
+    await session.flush()
     return UserAttributesResponse(
         user_id=user_id,
         company_ids=attrs.company_ids,

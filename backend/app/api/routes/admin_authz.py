@@ -78,8 +78,9 @@ async def create_role(
         tenant_id=str(tenant.id), code=payload.code, name=payload.name, is_system=payload.is_system
     )
     session.add(row)
-    await session.commit()
-    await session.refresh(row)
+    # flush, not commit: transaction_scope owns the transaction; committing here
+    # would drop the transaction-local RLS GUCs (SEC-65) before the read back.
+    await session.flush()
     return row
 
 
@@ -122,8 +123,8 @@ async def create_policy(
 ):
     row = AuthzPolicy(tenant_id=str(tenant.id), **payload.model_dump())
     session.add(row)
-    await session.commit()
-    await session.refresh(row)
+    # flush, not commit — same reason as create_role above (SEC-65 GUC lifetime).
+    await session.flush()
     return row
 
 

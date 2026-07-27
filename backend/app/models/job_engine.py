@@ -199,7 +199,10 @@ class OutboxEvent(TenantBaseModel):
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     __table_args__ = (
-        UniqueConstraint("event_id", name="uq_outbox_event_event"),
+        # Per-tenant, not global: unique indexes are enforced above row security, so a
+        # global UNIQUE(event_id) would leak cross-tenant existence and reject externally
+        # supplied ids already used by another tenant (SEC-65).
+        UniqueConstraint("tenant_id", "event_id", name="uq_outbox_event_tenant_event"),
         Index("ix_outbox_events_status_next_created", "status", "next_attempt_at", "created_at"),
         Index("ix_outbox_events_aggregate", "aggregate_type", "aggregate_id", "created_at"),
         Index("ix_outbox_events_tenant_created", "tenant_id", "created_at"),

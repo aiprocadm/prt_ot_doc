@@ -40,6 +40,7 @@ from app.core.query import (
 from app.core.response import list_response
 from app.core.tenant_validation import TenantContextValidator
 from app.core.tracing import get_trace_id
+from app.db.session import rearm_session_tenant_context
 from app.models.models import (
     DocumentPack,
 )
@@ -266,6 +267,9 @@ async def generate_pack_documents(
             headers={"trace_id": correlation_id, "tenant": tenant.slug},
         )
     except Exception as exc:  # pragma: no cover - defensive logging
+        # the handler committed above; re-arm so the idempotency lookup and the
+        # failure write below still see a tenant context (SEC-65)
+        await rearm_session_tenant_context(session)
         stored = await idempotency.get(key=normalized_key)
         if stored is not None:
             await idempotency.store_failure(

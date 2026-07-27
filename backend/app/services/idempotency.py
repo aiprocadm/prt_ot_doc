@@ -13,6 +13,7 @@ from sqlalchemy import Select, delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.db.session import rearm_session_tenant_context
 from app.models.models import IdempotencyKey, IdempotencyStatus
 
 TModel = TypeVar("TModel", bound=BaseModel)
@@ -116,7 +117,13 @@ class IdempotencyService:
         try:
             await self.session.flush()
         except IntegrityError:
+            # A concurrent request won the race. The rollback is deliberate — it ends the
+            # transaction so the winner's committed row becomes visible to the lookup
+            # below (a SAVEPOINT would keep this transaction, and on SQLite the row would
+            # stay invisible). Rolling back also clears the transaction-local RLS GUCs
+            # (SEC-65), so re-arm them before touching any tenant table again.
             await self.session.rollback()
+            await rearm_session_tenant_context(self.session)
             recovered = await self.get(key=key)
             if recovered is None:  # pragma: no cover - defensive branch
                 raise

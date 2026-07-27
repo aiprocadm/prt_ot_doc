@@ -25,6 +25,7 @@ from app.core.metrics import (
     sanitize_label,
 )
 from app.core.tenant import get_current_tenant
+from app.db.session import rearm_session_tenant_context
 from app.models.models import PipelineRun, PipelineRunStatus, Template, TemplateVersion
 from app.modules.files.utils import build_dated_prefix
 from app.services.docx import DocxService
@@ -224,6 +225,8 @@ class PipelineService(PreparationMixin, StampingMixin, StagingMixin, RunLifecycl
                 )
                 run.outputs = outputs
                 await session.commit()
+                # commit() drops the transaction-local RLS GUCs (SEC-65)
+                await rearm_session_tenant_context(session)
                 await session.refresh(run)
                 self.metrics.observe_pipeline_run(
                     template_id=template.id, status=PipelineRunStatus.DONE.value
@@ -742,6 +745,8 @@ class PipelineService(PreparationMixin, StampingMixin, StagingMixin, RunLifecycl
             )
             run.outputs = outputs
             await session.commit()
+            # commit() drops the transaction-local RLS GUCs (SEC-65)
+            await rearm_session_tenant_context(session)
             await session.refresh(run)
             self.metrics.observe_pipeline_run(
                 template_id=template.id, status=PipelineRunStatus.DONE.value
@@ -795,6 +800,8 @@ class PipelineService(PreparationMixin, StampingMixin, StagingMixin, RunLifecycl
             }
             run.finished_at = datetime.now(tz=timezone.utc)
             await session.commit()
+            # commit() drops the transaction-local RLS GUCs (SEC-65)
+            await rearm_session_tenant_context(session)
             await session.refresh(run)
             self.metrics.observe_pipeline_run(
                 template_id=template.id, status=PipelineRunStatus.ERROR.value
