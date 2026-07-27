@@ -19,6 +19,8 @@ RLS_ENABLED_TABLES: frozenset[str] = frozenset(
     {
         "action_plan_items",
         "action_plans",
+        "api_key",
+        "api_tokens",
         "approval_decision_logs",
         "approval_decisions",
         "approval_instance_steps",
@@ -32,6 +34,10 @@ RLS_ENABLED_TABLES: frozenset[str] = frozenset(
         "attestation",
         "audit_export_job",
         "auditlog",
+        "authz_policies",
+        "authz_role_permissions",
+        "authz_roles",
+        "authz_user_roles",
         "automation_rule",
         "automation_rule_trigger",
         "billing_events",
@@ -107,6 +113,8 @@ RLS_ENABLED_TABLES: frozenset[str] = frozenset(
         "hazard_measures",
         "hazards",
         "header_footer_presets",
+        "idempotency_keys",
+        "inbound_webhook_dedup",
         "incident",
         "incident_attachments",
         "incident_cases",
@@ -149,6 +157,8 @@ RLS_ENABLED_TABLES: frozenset[str] = frozenset(
         "ops_inspections",
         "ops_prescriptions",
         "order",
+        "outbox",
+        "outbox_events",
         "pack_run_items",
         "pack_run_logs",
         "pack_runs",
@@ -189,6 +199,7 @@ RLS_ENABLED_TABLES: frozenset[str] = frozenset(
         "prescription_items",
         "psychiatric_activity_type",
         "psychiatric_position_activity",
+        "refresh_session",
         "regulatory_inspection",
         "reminder_rules",
         "replace_map",
@@ -251,9 +262,13 @@ RLS_ENABLED_TABLES: frozenset[str] = frozenset(
         "training_test_questions",
         "training_tests",
         "usage_counters",
+        "user",
+        "user_attribute",
+        "user_role",
         "violation",
         "webhook_deliveries",
         "webhook_endpoints",
+        "webhook_subscription",
         "work_permit",
         "work_permit_briefing",
         "work_permit_daily_admission",
@@ -269,34 +284,34 @@ RLS_ENABLED_TABLES: frozenset[str] = frozenset(
     }
 )
 
-# Tenant-scoped tables that do NOT yet have RLS. Ratchet snapshot, not a permanent
-# exemption: shrink it (move names to RLS_ENABLED_TABLES) as coverage grows. Some entries
-# are deliberately cautious:
-#   * authz_*/api_key/api_tokens/refresh_session/user* — read on the hot auth/permission
-#     path, need dedicated analysis before RLS.
-#   * webhook_subscription — legitimately stores global rows with tenant_id IS NULL,
-#     which the id-equality predicate would hide.
-#   * outbox/outbox_events/idempotency_keys/inbound_webhook_dedup — cross-tenant infra
-#     queues with their own consumers; separate analysis.
-# A NEW tenant table must be added here (or to RLS_ENABLED_TABLES) or the coverage
-# guard fails.
+# Tenant-scoped tables deliberately left without RLS. The rollout is complete, so this
+# is no longer a ratchet snapshot — it is a single, argued exception. A NEW tenant table
+# must still be added here (or to RLS_ENABLED_TABLES) or the coverage guard fails.
+#
+#   * authz_permissions — a platform-wide permission dictionary, not tenant data. Rows are
+#     derived from the static RESOURCE_PERMISSIONS map in code and are deliberately shared:
+#     ``services/authz_seed.py`` looks a permission up by ``code`` ALONE and reuses whatever
+#     row exists, so every catalogue row is physically owned by whichever tenant seeded
+#     first. Its global UNIQUE(code) and uq_authz_permission_resource_action are enforced
+#     ABOVE row security, so an id-equality predicate would hide the catalogue from every
+#     other tenant while the unique index still rejected their INSERT — seeding a second
+#     tenant would die on duplicate key. No tenant path reads it: the auth gate builds its
+#     subject from JWT claims plus the static ROLE_PERMISSIONS dict, and
+#     ``authz_role_permissions.permission_code`` is self-sufficient, so no join reaches
+#     this table. Leaving it readable also keeps the
+#     ``authz_role_permissions.permission_id`` FK valid, since it points at rows owned by
+#     whichever tenant seeded first. Arming it would require making the catalogue
+#     per-tenant (drop both global uniques, add UNIQUE(tenant_id, code) and
+#     UNIQUE(tenant_id, resource, action), duplicate rows per tenant, recompute
+#     permission_id) — a data-model change, out of SEC-65 scope. Leak risk is nil: the rows
+#     are resource:action pairs identical for every tenant and fully derivable from code.
+#
+# Rejected alternative, for the record: extending the policy predicate with
+# "OR tenant_id IS NULL" for this or any other table. A symmetric WITH CHECK would then let
+# any tenant session create a globally-visible row — e.g. a webhook subscription that
+# intercepts every tenant's events. All 264 policies keep the identical predicate.
 RLS_EXEMPT_TABLES: frozenset[str] = frozenset(
     {
-        "api_key",
-        "api_tokens",
         "authz_permissions",
-        "authz_policies",
-        "authz_role_permissions",
-        "authz_roles",
-        "authz_user_roles",
-        "idempotency_keys",
-        "inbound_webhook_dedup",
-        "outbox",
-        "outbox_events",
-        "refresh_session",
-        "user",
-        "user_attribute",
-        "user_role",
-        "webhook_subscription",
     }
 )

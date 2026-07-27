@@ -175,6 +175,11 @@ class WebhookDispatcher:
                 )
             return destinations
 
+        # Legacy fallback to cross-tenant subscriptions. Unreachable on PostgreSQL since
+        # SEC-65 armed webhook_subscription: tenant_id IS NULL never satisfies the
+        # tenant_isolation predicate, so such rows are invisible — and the migration
+        # refuses to run while any exist. Kept for SQLite/dev parity; the only writer of
+        # global rows in the repository is tests/test_webhook_routing.py.
         global_subs = (
             (
                 await session.execute(

@@ -141,10 +141,18 @@ async def store_idempotent_response(request: Request, response: Response) -> Non
         return None
 
     tenant = get_current_tenant()
-    tenant_id = getattr(getattr(request, "state", None), "tenant_id", None) or tenant.slug
+    state = getattr(request, "state", None)
+    tenant_id = getattr(state, "tenant_id", None) or tenant.slug
+    # Take the tenant from request.state, not from the contextvar: this middleware is the
+    # OUTERMOST one, and TenantMiddleware sets the contextvar inside a child task, so out
+    # here it is still the default ("public"). request.state lives in the shared ASGI scope
+    # and does hold the resolved tenant. Since idempotency_keys is SEC-65-armed, a session
+    # opened for "public" would pin an empty app.current_tenant and this lookup would find
+    # nothing — silently disabling replay storage (the except below swallows it).
+    tenant_slug = getattr(state, "tenant_slug", None) or tenant.slug
     try:
-        async with AsyncSessionLocal(tenant=tenant.slug) as session:
-            session.info["tenant"] = tenant.slug
+        async with AsyncSessionLocal(tenant=tenant_slug, tenant_id=str(tenant_id)) as session:
+            session.info["tenant"] = tenant_slug
             stmt = (
                 select(IdempotencyKey)
                 .where(
