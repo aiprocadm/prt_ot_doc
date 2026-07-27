@@ -4,6 +4,14 @@
 # Витрину этот юнит не поднимает: собранная статика frontend/dist отдаётся
 # самим nginx (см. infra/stand/nginx/doc.ptsfera.online.conf).
 #
+# WorkingDirectory — ОТДЕЛЬНАЯ копия репозитория, а не папка разработки: иначе
+# соседняя сессия своей обычной работой оставляет стенд без витрины. На этом
+# сервере такое уже приводило к простою в несколько суток. Свежую main копия
+# подтягивает сама: infra/stand/update-stand.sh раз в 10 минут.
+#
+# У копии СВОЯ база (SQLite dev.db внутри неё, путь задан абсолютным
+# DATABASE_URL в .env.production) — сброс базы разработчиком стенда не касается.
+#
 # User=aiproc принципиален: благодаря ему стенд можно перезапускать без sudo —
 # сигналом своему же процессу, а Restart=always вернёт службу через 5 секунд.
 
@@ -16,15 +24,15 @@ Wants=network-online.target
 Type=simple
 User=aiproc
 Group=aiproc
-WorkingDirectory=/home/aiproc/projects/prt_ot_doc
+WorkingDirectory=/home/aiproc/stands/prt_ot_doc
 
 # Боевые переменные. Перекрывают .env, который остаётся для разработки.
 # В git файл не хранится — только в менеджере секретов владельца.
-EnvironmentFile=/home/aiproc/projects/prt_ot_doc/.env.production
+EnvironmentFile=/home/aiproc/stands/prt_ot_doc/.env.production
 # Без этого не работает "import app.*" — требование репозитория (см. CLAUDE.md).
 Environment=PYTHONPATH=backend
 
-ExecStart=/home/aiproc/projects/prt_ot_doc/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
+ExecStart=/home/aiproc/stands/prt_ot_doc/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
 
 Restart=always
 RestartSec=5
