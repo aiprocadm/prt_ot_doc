@@ -16,6 +16,7 @@ from app.models import (
     npa,  # noqa: F401
     privacy,  # noqa: F401  # SEC-66: журнал доступа к ПДн
     privacy_consents,  # noqa: F401  # SEC-66: согласия + запись об обезличивании
+    privacy_registry,  # noqa: F401  # SEC-66: реестр обработки + договоры поручения
     risk,  # noqa: F401
     safety_ops,  # noqa: F401
 )

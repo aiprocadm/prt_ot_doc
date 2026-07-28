@@ -179,6 +179,8 @@ RLS_ENABLED_TABLES: frozenset[str] = frozenset(
         "pdn_access_log",
         "pdn_consent",
         "pdn_erasure_record",
+        "pdn_processing_activity",
+        "pdn_processing_agreement",
         "permit",
         "person",
         "person_compliance_read_models",
