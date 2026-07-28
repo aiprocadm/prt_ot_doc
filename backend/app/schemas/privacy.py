@@ -12,7 +12,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 
 from pydantic import Field
 
@@ -30,6 +30,12 @@ __all__ = [
     "PdnConsentWithdraw",
     "PdnErasureRequest",
     "PdnErasureResult",
+    "PdnProcessingActivityEntry",
+    "PdnProcessingActivityPage",
+    "PdnProcessingActivityUpsert",
+    "PdnAgreementEntry",
+    "PdnAgreementPage",
+    "PdnAgreementCreate",
 ]
 
 
@@ -142,3 +148,92 @@ class PdnErasureResult(BaseSchema):
     performed_by_email: str | None = None
     # True, если субъект уже был обезличен и повторный вызов ничего не менял
     already_anonymized: bool = False
+
+
+class PdnProcessingActivityEntry(BaseSchema):
+    """Строка реестра обработки ПДн (SEC-66 срез-3, разд. 66.1)."""
+
+    id: str
+    code: str
+    name: str
+    purpose: str
+    purpose_description: str | None = None
+    legal_basis: str
+    data_categories: list[str] = Field(default_factory=list)
+    subject_categories: list[str] = Field(default_factory=list)
+    retention_months: int | None = None
+    retention_basis: str | None = None
+    access_roles: list[str] = Field(default_factory=list)
+    recipients: list[str] = Field(default_factory=list)
+    storage_location: str = "RU"
+    cross_border_transfer: bool = False
+    is_active: bool = True
+    review_at: date | None = None
+    notes: str | None = None
+
+
+class PdnProcessingActivityPage(BaseSchema):
+    items: list[PdnProcessingActivityEntry] = Field(default_factory=list)
+    total: int
+    # Признак «спец. категории обрабатываются» — повышенные требования 152-ФЗ.
+    has_special_categories: bool = False
+
+
+class PdnProcessingActivityUpsert(BaseSchema):
+    code: str = Field(min_length=1, max_length=64)
+    name: str = Field(min_length=1, max_length=255)
+    purpose: str = Field(max_length=64)
+    legal_basis: str = "consent"
+    data_categories: list[str] = Field(default_factory=lambda: ["regular"])
+    subject_categories: list[str] = Field(default_factory=lambda: ["employees"])
+    retention_months: int | None = Field(default=None, ge=0)
+    retention_basis: str | None = Field(default=None, max_length=255)
+    access_roles: list[str] = Field(default_factory=list)
+    recipients: list[str] = Field(default_factory=list)
+    storage_location: str = Field(default="RU", max_length=64)
+    cross_border_transfer: bool = False
+    review_at: date | None = None
+    notes: str | None = None
+
+
+class PdnAgreementEntry(BaseSchema):
+    """Договор поручения обработки / роль по 152-ФЗ (разд. 66.3)."""
+
+    id: str
+    kind: str
+    party_role: str
+    counterparty_name: str
+    counterparty_inn: str | None = None
+    counterparty_tenant_slug: str | None = None
+    document_ref: str | None = None
+    signed_at: date | None = None
+    valid_until: date | None = None
+    status: str
+    subprocessing_allowed: bool = False
+    breach_notification_hours: int | None = None
+    covered_activity_codes: list[str] = Field(default_factory=list)
+    notes: str | None = None
+
+
+class PdnAgreementPage(BaseSchema):
+    items: list[PdnAgreementEntry] = Field(default_factory=list)
+    total: int
+    # Активные процессы реестра, не покрытые ни одним действующим договором:
+    # прямой ответ на «кто за что отвечает» (разд. 66.3).
+    uncovered_activity_codes: list[str] = Field(default_factory=list)
+
+
+class PdnAgreementCreate(BaseSchema):
+    kind: str
+    party_role: str
+    counterparty_name: str = Field(min_length=1, max_length=255)
+    counterparty_inn: str | None = Field(default=None, max_length=32)
+    counterparty_tenant_slug: str | None = Field(default=None, max_length=64)
+    document_ref: str | None = Field(default=None, max_length=255)
+    signed_at: date | None = None
+    valid_until: date | None = None
+    status: str = "draft"
+    subprocessing_allowed: bool = False
+    breach_notification_hours: int | None = Field(default=None, ge=0)
+    covered_activity_codes: list[str] = Field(default_factory=list)
+    notes: str | None = None

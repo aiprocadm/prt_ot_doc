@@ -34,6 +34,11 @@ from app.modules.privacy.consents import (
     UnknownLegalBasisError,
     UnknownPurposeError,
 )
+from app.modules.privacy.registry import (
+    InvalidRegistryValueError,
+    PdnAgreementService,
+    PdnProcessingRegistryService,
+)
 from app.modules.privacy.service import (
     PDN_FEATURE_CODE,
     PdnAccessJournal,
@@ -43,12 +48,18 @@ from app.modules.privacy.service import (
 )
 from app.schemas.privacy import (
     PdnAccessLogPage,
+    PdnAgreementCreate,
+    PdnAgreementEntry,
+    PdnAgreementPage,
     PdnConsentEntry,
     PdnConsentGrant,
     PdnConsentPage,
     PdnConsentWithdraw,
     PdnErasureRequest,
     PdnErasureResult,
+    PdnProcessingActivityEntry,
+    PdnProcessingActivityPage,
+    PdnProcessingActivityUpsert,
     PdnSubjectExport,
 )
 from app.services.audit import AuditService
@@ -420,3 +431,233 @@ async def anonymize_subject(
         request_id=request.headers.get("x-request-id"),
     )
     return _to_erasure_result(outcome.record, already=outcome.already_anonymized)
+
+
+def _to_activity_entry(row) -> PdnProcessingActivityEntry:  # noqa: ANN001 - ORM row
+    return PdnProcessingActivityEntry(
+        id=str(row.id),
+        code=row.code,
+        name=row.name,
+        purpose=row.purpose,
+        purpose_description=row.purpose_description,
+        legal_basis=row.legal_basis,
+        data_categories=list(row.data_categories or []),
+        subject_categories=list(row.subject_categories or []),
+        retention_months=row.retention_months,
+        retention_basis=row.retention_basis,
+        access_roles=list(row.access_roles or []),
+        recipients=list(row.recipients or []),
+        storage_location=row.storage_location,
+        cross_border_transfer=row.cross_border_transfer,
+        is_active=row.is_active,
+        review_at=row.review_at,
+        notes=row.notes,
+    )
+
+
+def _to_agreement_entry(row) -> PdnAgreementEntry:  # noqa: ANN001 - ORM row
+    return PdnAgreementEntry(
+        id=str(row.id),
+        kind=row.kind,
+        party_role=row.party_role,
+        counterparty_name=row.counterparty_name,
+        counterparty_inn=row.counterparty_inn,
+        counterparty_tenant_slug=row.counterparty_tenant_slug,
+        document_ref=row.document_ref,
+        signed_at=row.signed_at,
+        valid_until=row.valid_until,
+        status=row.status,
+        subprocessing_allowed=row.subprocessing_allowed,
+        breach_notification_hours=row.breach_notification_hours,
+        covered_activity_codes=list(row.covered_activity_codes or []),
+        notes=row.notes,
+    )
+
+
+def _activity_page(rows) -> PdnProcessingActivityPage:  # noqa: ANN001 - ORM rows
+    items = [_to_activity_entry(row) for row in rows]
+    return PdnProcessingActivityPage(
+        items=items,
+        total=len(items),
+        has_special_categories=any(
+            category != "regular"
+            for item in items
+            if item.is_active
+            for category in item.data_categories
+        ),
+    )
+
+
+@router.get(
+    "/processing-activities",
+    response_model=PdnProcessingActivityPage,
+    dependencies=[FeatureGate],
+    summary="Реестр обработки персональных данных (152-ФЗ разд. 66.1)",
+)
+async def list_processing_activities(
+    tenant: TenantDep,
+    session: SessionDep,
+    access: PdnAccess,
+    active_only: Annotated[bool, Query(description="Только действующие процессы")] = False,
+) -> PdnProcessingActivityPage:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    _ = access
+
+    service = PdnProcessingRegistryService(session, tenant_id=str(tenant.id))
+    return _activity_page(await service.list_activities(active_only=active_only))
+
+
+@router.put(
+    "/processing-activities",
+    response_model=PdnProcessingActivityEntry,
+    dependencies=[FeatureGate],
+    summary="Создать или обновить процесс обработки ПДн (по коду)",
+)
+@audit_operation("pdn.activity_upsert", "pdn_processing_activity")
+async def upsert_processing_activity(
+    payload: PdnProcessingActivityUpsert,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: PdnAccess,
+) -> PdnProcessingActivityEntry:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    _ = access
+
+    service = PdnProcessingRegistryService(session, tenant_id=str(tenant.id))
+    try:
+        activity = await service.upsert(**payload.model_dump())
+    except InvalidRegistryValueError as exc:
+        raise _bad_vocabulary("PDN_INVALID_REGISTRY_VALUE", exc.field_name, exc.value) from exc
+    return _to_activity_entry(activity)
+
+
+@router.post(
+    "/processing-activities/seed-defaults",
+    response_model=PdnProcessingActivityPage,
+    dependencies=[FeatureGate],
+    summary="Досеять типовой реестр обработки (не перезаписывает существующее)",
+)
+@audit_operation("pdn.activity_seed_defaults", "pdn_processing_activity")
+async def seed_default_processing_activities(
+    tenant: TenantDep,
+    session: SessionDep,
+    access: PdnAccess,
+) -> PdnProcessingActivityPage:
+    """Пустая форма на 12 полей не заполняется никем — и в проверку арендатор
+    приходит с пустым реестром. Типовой набор выведен из того, что платформа
+    реально делает с ПДн; дальше арендатор правит его под себя."""
+
+    TenantContextValidator.ensure_tenant_context(tenant)
+    _ = access
+
+    service = PdnProcessingRegistryService(session, tenant_id=str(tenant.id))
+    await service.seed_defaults()
+    return _activity_page(await service.list_activities())
+
+
+@router.delete(
+    "/processing-activities/{code}",
+    response_model=PdnProcessingActivityEntry,
+    dependencies=[FeatureGate],
+    summary="Прекратить процесс обработки (без удаления из реестра)",
+)
+@audit_operation("pdn.activity_deactivate", "pdn_processing_activity")
+async def deactivate_processing_activity(
+    code: str,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: PdnAccess,
+) -> PdnProcessingActivityEntry:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    _ = access
+
+    service = PdnProcessingRegistryService(session, tenant_id=str(tenant.id))
+    activity = await service.deactivate(code)
+    if activity is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            detail=api_problem_detail(
+                code="PDN_ACTIVITY_NOT_FOUND",
+                message="Processing activity not found",
+                error_type="privacy",
+            ),
+        )
+    return _to_activity_entry(activity)
+
+
+@router.get(
+    "/agreements",
+    response_model=PdnAgreementPage,
+    dependencies=[FeatureGate],
+    summary="Договоры поручения обработки и роли Оператор/Обработчик (152-ФЗ разд. 66.3)",
+)
+async def list_pdn_agreements(
+    tenant: TenantDep,
+    session: SessionDep,
+    access: PdnAccess,
+) -> PdnAgreementPage:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    _ = access
+
+    service = PdnAgreementService(session, tenant_id=str(tenant.id))
+    rows = await service.list_agreements()
+    return PdnAgreementPage(
+        items=[_to_agreement_entry(row) for row in rows],
+        total=len(rows),
+        uncovered_activity_codes=await service.uncovered_activity_codes(),
+    )
+
+
+@router.post(
+    "/agreements",
+    response_model=PdnAgreementEntry,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[FeatureGate],
+    summary="Зафиксировать договор поручения обработки ПДн",
+)
+@audit_operation("pdn.agreement_create", "pdn_processing_agreement")
+async def create_pdn_agreement(
+    payload: PdnAgreementCreate,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: PdnAccess,
+) -> PdnAgreementEntry:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    _ = access
+
+    service = PdnAgreementService(session, tenant_id=str(tenant.id))
+    try:
+        agreement = await service.create(**payload.model_dump())
+    except InvalidRegistryValueError as exc:
+        raise _bad_vocabulary("PDN_INVALID_REGISTRY_VALUE", exc.field_name, exc.value) from exc
+    return _to_agreement_entry(agreement)
+
+
+@router.post(
+    "/agreements/{agreement_id}/terminate",
+    response_model=PdnAgreementEntry,
+    dependencies=[FeatureGate],
+    summary="Расторгнуть договор поручения (статус, без удаления)",
+)
+@audit_operation("pdn.agreement_terminate", "pdn_processing_agreement")
+async def terminate_pdn_agreement(
+    agreement_id: str,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: PdnAccess,
+) -> PdnAgreementEntry:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    _ = access
+
+    service = PdnAgreementService(session, tenant_id=str(tenant.id))
+    agreement = await service.terminate(agreement_id)
+    if agreement is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            detail=api_problem_detail(
+                code="PDN_AGREEMENT_NOT_FOUND",
+                message="Processing agreement not found",
+                error_type="privacy",
+            ),
+        )
+    return _to_agreement_entry(agreement)
