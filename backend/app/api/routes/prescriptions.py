@@ -18,6 +18,7 @@ from app.api.helpers.etag import (
 )
 from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
+from app.db.session import rearm_session_tenant_context
 from app.domains.prescriptions.lifecycle import (
     VERIFY_ROLES,
     InvalidTransition,
@@ -355,6 +356,9 @@ async def create_prescription(
         details={"inspection_id": record.inspection_id},
     )
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before
+    # further session work (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(record)
     return _to_read(record, today=datetime.now(timezone.utc).date())
 
@@ -413,6 +417,9 @@ async def remind_overdue_prescriptions(
         details={"count": len(overdue)},
     )
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before
+    # further session work (SEC-65)
+    await rearm_session_tenant_context(session)
     return {
         "count": len(overdue),
         "items": [_to_read(p, today=today) for p in overdue],
@@ -471,6 +478,9 @@ async def update_prescription(
         details={"status": record.status.value},
     )
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before
+    # further session work (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(record)
     return _to_read(record, today=datetime.now(timezone.utc).date())
 
@@ -568,6 +578,9 @@ async def transition_prescription(
         },
     )
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before
+    # further session work (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(record)
     return await _to_read_with_files(
         session, record, tenant_id=str(tenant.id), today=datetime.now(timezone.utc).date()

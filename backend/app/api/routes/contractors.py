@@ -16,6 +16,7 @@ from app.api.helpers.etag import (
 )
 from app.core.feature_flags import is_feature_enabled
 from app.core.security import AccessContext, abac
+from app.db.session import rearm_session_tenant_context
 from app.domains.shared import ContingentItemStatus
 from app.models.models import Tenant
 from app.modules.contractors.documents import document_expiry_status
@@ -231,6 +232,9 @@ async def create_contractor_registry(
     record = ContractorRegistry(tenant_id=str(tenant.id), **payload.model_dump())
     session.add(record)
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before
+    # further session work (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(record)
     return record
 
@@ -277,6 +281,9 @@ async def patch_contractor_registry(
     for key, value in payload.model_dump(exclude_unset=True).items():
         setattr(row, key, value)
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before
+    # further session work (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(row)
     return row
 
@@ -336,6 +343,9 @@ async def create_contractor_employee(
     row = ContractorEmployee(tenant_id=str(tenant.id), **payload.model_dump())
     session.add(row)
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before
+    # further session work (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(row)
     return row
 
@@ -363,6 +373,9 @@ async def patch_contractor_employee(
     for key, value in payload.model_dump(exclude_unset=True).items():
         setattr(row, key, value)
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before
+    # further session work (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(row)
     return row
 
@@ -401,6 +414,9 @@ async def create_contractor_incident(
     row = ContractorIncident(tenant_id=str(tenant.id), **payload.model_dump())
     session.add(row)
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before
+    # further session work (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(row)
     return row
 
@@ -676,6 +692,9 @@ async def create_contractor_document(
     row = ContractorDocument(tenant_id=str(tenant.id), **payload.model_dump())
     session.add(row)
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before
+    # further session work (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(row)
     return _document_body(row)
 
@@ -735,6 +754,9 @@ async def patch_contractor_document(
     for key, value in payload.model_dump(exclude_unset=True).items():
         setattr(row, key, value)
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before
+    # further session work (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(row)
     return _document_body(row)
 
@@ -822,6 +844,9 @@ async def create_document_requirement(
     row = ContractorDocumentRequirement(tenant_id=str(tenant.id), **payload.model_dump())
     session.add(row)
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before
+    # further session work (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(row)
     return _requirement_body(row)
 

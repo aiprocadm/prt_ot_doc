@@ -20,6 +20,7 @@ from app.core.audit_decorator import audit_operation
 from app.core.errors import api_problem_detail
 from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
+from app.db.session import rearm_session_tenant_context
 from app.models.models import Company, Person, Position, Tenant, Workplace
 from app.repository import list_persons
 from app.schemas.person import PersonCreate, PersonPage, PersonRead, PersonUpdate
@@ -224,6 +225,9 @@ async def create_person_endpoint(
         await session.rollback()
         raise HTTPException(status.HTTP_409_CONFLICT, "Person already exists") from exc
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before
+    # further session work (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(person)
     return PersonRead.model_validate(person)
 

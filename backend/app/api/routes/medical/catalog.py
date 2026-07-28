@@ -28,6 +28,7 @@ from app.api.routes.medical._common import (
     router,
 )
 from app.core.tenant_validation import TenantContextValidator
+from app.db.session import rearm_session_tenant_context
 from app.domains.medical import lifecycle as lc
 from app.domains.medical import service as medsvc
 from app.models.models import (
@@ -128,6 +129,9 @@ async def create_medical_norm(
         user_agent=request.headers.get("user-agent"),
     )
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before
+    # further session work (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(record)
     return MedicalNormRead.model_validate(record)
 
@@ -175,6 +179,9 @@ async def update_medical_norm(
         user_agent=request.headers.get("user-agent"),
     )
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before
+    # further session work (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(record)
     return MedicalNormRead.model_validate(record)
 
@@ -318,6 +325,9 @@ async def create_medical_referral(
         user_agent=request.headers.get("user-agent"),
     )
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before
+    # further session work (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(ref)
     return _to_referral_read(ref, today=today)
 
@@ -425,6 +435,9 @@ async def transition_referral(
         details={"from": current.value, "to": target.value},
     )
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before
+    # further session work (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(record)
     return _to_referral_read(record, today=datetime.now(timezone.utc).date())
 
@@ -505,6 +518,9 @@ async def create_medical_factor(
         user_agent=request.headers.get("user-agent"),
     )
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before
+    # further session work (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(record)
     return MedicalFactorRead.model_validate(record)
 
@@ -558,6 +574,9 @@ async def update_medical_factor(
         user_agent=request.headers.get("user-agent"),
     )
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before
+    # further session work (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(record)
     return MedicalFactorRead.model_validate(record)
 

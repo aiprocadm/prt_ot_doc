@@ -23,6 +23,7 @@ from app.api.routes.medical._common import (
 )
 from app.core.audit_decorator import audit_operation
 from app.core.tenant_validation import TenantContextValidator
+from app.db.session import rearm_session_tenant_context
 from app.domains.medical import lifecycle as lc
 from app.domains.medical import service as medsvc
 from app.models.models import (
@@ -140,6 +141,9 @@ async def create_medical_requirement(
         due_date=payload.due_date,
     )
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before
+    # further session work (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(task)
     return TaskRead.model_validate(task)
 
@@ -179,6 +183,9 @@ async def create_medical_exam(
     except ValueError as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail=str(exc))
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before
+    # further session work (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(exam)
     return MedicalExamRead.model_validate(exam)
 
@@ -234,6 +241,9 @@ async def update_medical_exam(
     except ValueError as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail=str(exc))
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before
+    # further session work (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(exam)
     return MedicalExamRead.model_validate(exam)
 
@@ -351,6 +361,9 @@ async def lift_suspension(
             details={"person_id": record.person_id},
         )
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before
+    # further session work (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(record)
     return MedicalSuspensionRead.model_validate(record)
 

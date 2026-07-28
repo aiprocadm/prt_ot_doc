@@ -16,6 +16,7 @@ from app.api.helpers.etag import (
 from app.core.errors import api_problem_detail
 from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
+from app.db.session import rearm_session_tenant_context
 from app.models.models import (
     Inspection,
     InspectionResult,
@@ -254,6 +255,9 @@ async def create_inspection(
         },
     )
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before
+    # further session work (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(inspection)
 
     return _serialize_inspection(inspection)
@@ -323,6 +327,9 @@ async def patch_inspection(
         details={"status": updated.status.value},
     )
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before
+    # further session work (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(updated)
     return _serialize_inspection(updated)
 
@@ -370,6 +377,9 @@ async def add_inspection_result_entry(
         details={"inspection_id": inspection.id},
     )
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before
+    # further session work (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(result)
     return InspectionResultRead.model_validate(result)
 

@@ -16,6 +16,7 @@ from app.api.helpers.etag import (
 from app.core.audit_decorator import audit_operation
 from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
+from app.db.session import rearm_session_tenant_context
 from app.models.models import (
     Branch,
     Company,
@@ -212,6 +213,9 @@ async def update_site(
     for key, value in updates.items():
         setattr(site, key, value)
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before
+    # further session work (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(site)
     return SiteRead.model_validate(site)
 
@@ -310,6 +314,9 @@ async def create_workplace(
     if hazard_ids:
         await _replace_workplace_hazards(session, tenant, workplace, hazard_ids, document_ids)
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before
+    # further session work (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(workplace)
     return WorkplaceRead.model_validate(workplace)
 
@@ -354,6 +361,9 @@ async def update_workplace(
     if hazard_ids is not None:
         await _replace_workplace_hazards(session, tenant, workplace, hazard_ids, document_ids)
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before
+    # further session work (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(workplace)
     return WorkplaceRead.model_validate(workplace)
 
@@ -373,6 +383,9 @@ async def delete_workplace(
     if workplace.deleted_at is None:
         workplace.deleted_at = datetime.now(timezone.utc)
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before
+    # further session work (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.execute(
         delete(WorkplaceHazardLink).where(WorkplaceHazardLink.workplace_id == workplace.id)
     )

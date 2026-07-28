@@ -25,7 +25,10 @@ target_metadata = TARGET_METADATA
 
 async def run_migrations_online() -> None:
     connectable: AsyncEngine = create_async_engine(
-        settings.database_url,
+        # SEC-65: the owner role, not the runtime one — ENABLE/FORCE ROW LEVEL
+        # SECURITY is owner-only DDL. Falls back to DATABASE_URL when
+        # MIGRATION_DATABASE_URL is unset (single-role setups, SQLite).
+        settings.migration_database_url,
         poolclass=pool.NullPool,
         future=True,
     )

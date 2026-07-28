@@ -1,5 +1,75 @@
 # CHANGELOG
 
+## 2026-07-27 (feat/sec65-nosuperuser-role — SEC-65 ЗАКРЫТ: непривилегированная роль БД, Phase 16)
+
+SEC-65 (TZ B-NEXT.7). Раскатка политик была закончена предыдущим PR (264/265), но
+**блокер приёмки оставался открытым**: в эталонном деплое приложение ходило в БД
+ролью-суперпользователем (`docker-compose.yml`: `POSTGRES_USER`), а PostgreSQL
+**игнорирует row security для `SUPERUSER` и `BYPASSRLS` — даже при `FORCE ROW LEVEL
+SECURITY`**. Все 264 политики в таком рантайме были декоративны. Этот PR закрывает
+разрыв: роль приложения понижена, разделение с ролью миграций сделано явным, а
+несоответствие теперь ловится на старте и в CI, а не на приёмке.
+
+### Added
+- `backend/app/db/rls_runtime.py` — проверка привилегий роли соединения:
+  `inspect_current_role` (SQL по `pg_roles` для `current_user`),
+  `assert_role_enforces_rls`, `verify_runtime_role`, `verify_runtime_role_for_url`.
+  Атрибуты роли в PostgreSQL **не наследуются** через членство — решение принимается
+  по собственной строке `current_user`; членство в привилегированной роли (доступен
+  `SET ROLE`) логируется отдельным WARN, но не роняет старт.
+- **Проверка на старте API** (`api/app.py`, lifespan) и **воркера Celery**
+  (`services/celery_app.py`, сигнал `worker_ready`). В staging/production —
+  отказ старта (`UnsafeDatabaseRoleError`), в development/test — громкий WARN.
+  Переопределение: `RLS_REQUIRE_UNPRIVILEGED_DB_ROLE`.
+- `scripts/provision_app_role.py` — идемпотентное заведение роли
+  `NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE` + гранты (DML на таблицы,
+  USAGE/SELECT на последовательности, `ALTER DEFAULT PRIVILEGES` для будущих
+  объектов владельца, `CONNECT`+`CREATE` на БД — последнее нужно рантайм-провижинингу
+  схем `tenant_*` и к RLS отношения не имеет). На asyncpg: psycopg в зависимостях нет.
+- `infra/postgres/initdb/10-app-role.sh` — то же самое на пустом кластере (хук
+  образа postgres), подключён томом в `docker-compose.yml`; без `APP_DB_PASSWORD`
+  скрипт не создаёт роль и пишет, почему это опасно.
+- `scripts/ci/check_rls_runtime_role.py` + шаг «RLS runtime role guard (SEC-65)» в
+  `ci.yml`: SQLite/пустой `DATABASE_URL` → skip, привилегированная роль на
+  PostgreSQL → exit 1 с командой лечения. `--allow-privileged` — для лейнов, которые
+  осознанно идут владельцем (миграции, db-маркерные тесты).
+- Тесты: `backend/tests/test_rls_runtime_role_guard.py` (21, без БД — логика решения,
+  дефолты по окружению, redaction DSN) и `backend/tests/test_rls_runtime_role_db.py`
+  (6, маркер `db`, живой PostgreSQL — провижининг роли, идемпотентность, **починка
+  роли, которой руками выдали `BYPASSRLS`**, отказ под суперюзером, N/A на SQLite).
+
+### Changed
+- **Разделение ролей**: `MIGRATION_DATABASE_URL` (владелец, только Alembic) и
+  `DATABASE_URL` (рантайм, непривилегированная роль). `ENABLE`/`FORCE ROW LEVEL
+  SECURITY` — DDL только владельца, поэтому свести их к одной роли нельзя.
+  **Грабля:** `migrations/env.py` в online-режиме брал `settings.database_url`, а не
+  `alembic_database_url` (тот шёл только в offline/`sqlalchemy.url`) — без правки
+  env.py новая переменная не влияла бы ни на что. Добавлено
+  `Settings.migration_database_url`; `alembic_database_url` теперь его синхронная форма.
+- `Settings.redacted()` маскирует `database_url_env` и `migration_database_url_env` —
+  DSN содержит пароль БД, а payload уходит в структурный лог на старте.
+- `.env.example`: `MIGRATION_DATABASE_URL`, `APP_DB_USER`, `APP_DB_PASSWORD`,
+  `RLS_REQUIRE_UNPRIVILEGED_DB_ROLE`; `DATABASE_URL` переведён на роль `ptd_app`.
+
+### Fixed
+- **Переармирование контекста после `commit()` — 68 точек в 24 файлах.** `commit()`
+  сбрасывает транзакционные GUC (`app.current_tenant`), после чего следующая работа с
+  сессией по армированной таблице под непривилегированной ролью видит пустоту, а
+  запись отбивается. До понижения роли дефект был латентным: суперюзер проходил мимо
+  политик, а весь функциональный набор тестов идёт на SQLite, где хуки RLS — no-op,
+  поэтому **этот класс дефектов не ловится существующими тестами в принципе**.
+  Лечение — уже принятый в репо `rearm_session_tenant_context` (как в `orders.py`).
+  Предыдущий хендофф оценивал объём в 5 файлов / 14 точек — фактически затронуты
+  `contractors` 8, `v1/router` 7, `medical/*` 13, `budget/*` 9, `sites` 4,
+  `risk_enterprise` 4, `prescriptions` 4, `inspections` 3, и ещё 16 файлов.
+  Проверено вживую: до правки `POST /api/v1/departments` и `POST /api/v1/tasks` под
+  непривилегированной ролью отдавали **500**, после — **201**.
+
+### Docs
+- `docs/security/RLS_RUNTIME_ROLE.md` — как раскатить роль на существующем кластере,
+  как проверить, что политики реально применяются, и что делать при отказе старта.
+- `docs/audit/TZ_COVERAGE_MATRIX.md`: SEC-65 `partial` → **`done`**.
+
 ## 2026-07-27 (feat/sec65-rls-final-auth-queues — ФИНАЛ раскатки RLS: авторизация, токены, очереди, Phase 16)
 
 SEC-65 (TZ B-NEXT.7). **Последний срез** — 15 таблиц горячего пути авторизации,

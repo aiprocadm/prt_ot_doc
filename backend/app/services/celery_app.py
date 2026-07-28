@@ -213,3 +213,31 @@ def _on_task_postrun(
         CorrelationIDManager.reset(correlation_token)
     except LookupError:  # pragma: no cover - defensive cleanup
         logger.debug("celery.context.reset_correlation_id_missing", extra={"task_id": task_id})
+
+
+@signals.worker_ready.connect
+def _verify_rls_runtime_role(**_kwargs) -> None:
+    """SEC-65: refuse to process tasks under a role that bypasses row security.
+
+    Celery workers hold the same tenant-isolation obligations as the API: a
+    ``SUPERUSER``/``BYPASSRLS`` role makes all 264 policies inert. Mirrors the
+    check in the API lifespan (``app.api.app``).
+    """
+
+    import asyncio
+
+    from app.db.rls_runtime import UnsafeDatabaseRoleError, verify_runtime_role_for_url
+
+    try:
+        asyncio.run(
+            verify_runtime_role_for_url(
+                settings.database_url,
+                enforce=settings.rls_enforce_unprivileged_db_role,
+                component="celery-worker",
+            )
+        )
+    except UnsafeDatabaseRoleError:
+        logger.exception("celery.startup.unsafe-db-role")
+        raise
+    except Exception:  # pragma: no cover - probe must never mask worker startup
+        logger.warning("celery.startup.db-role-probe-failed", exc_info=True)

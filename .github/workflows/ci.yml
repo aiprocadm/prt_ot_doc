@@ -98,6 +98,11 @@ jobs:
       - name: RLS coverage ratchet (SEC-65)
         run: PYTHONPATH=backend python scripts/audit/check_rls_coverage.py
 
+      # Skips on SQLite/unset DATABASE_URL; fails when a Postgres deployment would
+      # connect as SUPERUSER/BYPASSRLS, which makes every RLS policy inert.
+      - name: RLS runtime role guard (SEC-65)
+        run: PYTHONPATH=backend python scripts/ci/check_rls_runtime_role.py
+
       - name: Ruff undefined names + staged mypy (tenant guard)
         run: bash scripts/ci/static_gates.sh
 

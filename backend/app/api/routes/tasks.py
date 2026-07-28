@@ -19,6 +19,7 @@ from app.api.helpers.etag import (
 from app.core.errors import api_problem_detail
 from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
+from app.db.session import rearm_session_tenant_context
 from app.models.models import PipelineRun, Tenant, User
 from app.models.obligations import Task, TaskPriority, TaskStatus
 from app.schemas.task import (
@@ -329,6 +330,9 @@ async def create_task(
         details={"entity_type": task.entity_type, "entity_id": task.entity_id},
     )
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before
+    # further session work (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(task)
     return _task_read(task, datetime.now(timezone.utc))
 
@@ -413,5 +417,8 @@ async def update_task(
         details={"status": task.status.value, "priority": task.priority.value},
     )
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before
+    # further session work (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(task)
     return _task_read(task, datetime.now(timezone.utc))

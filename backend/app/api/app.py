@@ -24,6 +24,7 @@ from app.core.rate_limit import (
     configure_rate_limiter,
     limiter,
 )
+from app.db.rls_runtime import UnsafeDatabaseRoleError, verify_runtime_role
 from app.db.session import aensure_shared_schema, dispose_engine
 from app.middleware.billing_guard import BillingGuardMiddleware
 from app.middleware.global_error_handler import GlobalErrorHandlerMiddleware
@@ -107,6 +108,25 @@ def _create_lifespan(settings: Settings) -> Callable[[FastAPI], AsyncIterator[No
                 "settings": settings.redacted(),
             },
         )
+        # SEC-65: row-level policies are inert for a SUPERUSER/BYPASSRLS role, so
+        # refuse to serve on a misprovisioned deployment (staging/production) and
+        # warn loudly everywhere else. Own block: a failure here is a security
+        # misconfiguration, not an infrastructure hiccup.
+        from app.db.session import engine as _engine
+
+        try:
+            async with _engine.connect() as conn:
+                await verify_runtime_role(
+                    conn,
+                    enforce=settings.rls_enforce_unprivileged_db_role,
+                    component="api",
+                )
+        except UnsafeDatabaseRoleError:
+            logger.exception("app.startup.unsafe-db-role")
+            raise
+        except Exception:  # pragma: no cover - probe must never mask a real startup
+            logger.warning("app.startup.db-role-probe-failed", exc_info=True)
+
         try:
             # Register cross-base FK resolution so that string-form
             # ForeignKey("tenant.id") on TenantBaseModel subclasses can resolve

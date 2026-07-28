@@ -6,12 +6,19 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-ptd}
+      # Owner/bootstrap role: superuser, used ONLY by Alembic (MIGRATION_DATABASE_URL).
       POSTGRES_USER: ${POSTGRES_USER:-ptd}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ptd}
+      # SEC-65: unprivileged runtime role — RLS is ignored for SUPERUSER/BYPASSRLS,
+      # so api/worker/beat connect as this one instead (see initdb/10-app-role.sh).
+      APP_DB_USER: ${APP_DB_USER:-ptd_app}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:-}
     ports:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+      # Runs once, on an empty data dir. Existing clusters: scripts/provision_app_role.py
+      - ./infra/postgres/initdb:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ptd} -d ${POSTGRES_DB:-ptd}"]
       interval: 10s

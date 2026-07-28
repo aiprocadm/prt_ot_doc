@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
+from app.db.session import rearm_session_tenant_context
 from app.models.models import Attestation, AttestationStatus, Person, Position, Tenant, User
 from app.schemas.attestations import (
     AttestationCreate,
@@ -177,6 +178,9 @@ async def create_attestation(
         details={"person_id": record.person_id, "expires_at": record.expires_at},
     )
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before
+    # further session work (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(record)
     return AttestationRead.model_validate(record)
 
@@ -237,5 +241,8 @@ async def update_attestation(
         details={"status": record.status.value},
     )
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before
+    # further session work (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(record)
     return AttestationRead.model_validate(record)
