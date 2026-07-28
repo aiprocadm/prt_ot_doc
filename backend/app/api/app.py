@@ -29,6 +29,7 @@ from app.db.session import aensure_shared_schema, dispose_engine
 from app.middleware.billing_guard import BillingGuardMiddleware
 from app.middleware.global_error_handler import GlobalErrorHandlerMiddleware
 from app.middleware.observability import ObservabilityMiddleware
+from app.middleware.security_headers import DEFAULT_API_CSP, SecurityHeadersMiddleware
 from app.middleware.tenant import TenantMiddleware
 from app.modules.files import s3
 from app.services.demo_bootstrap import bootstrap_demo_tenant
@@ -66,6 +67,17 @@ _CORS_ALLOW_HEADERS = (
 def _normalize_patterns(values: Iterable[str]) -> list[str]:
     patterns = [value for value in (value.strip() for value in values) if value]
     return ["*"] if "*" in patterns else patterns
+
+
+def _docs_path_prefixes(settings: Settings) -> tuple[str, ...]:
+    """Пути документации, исключённые из CSP: Swagger UI тянет ассеты с CDN.
+
+    В production документация отключена (`_disable_openapi_in_production`), поэтому
+    исключение не расширяет поверхность атаки.
+    """
+
+    prefix = settings.api_prefix.rstrip("/")
+    return (f"{prefix}/docs", f"{prefix}/redoc")
 
 
 def _configure_middlewares(app: FastAPI, settings: Settings) -> None:
@@ -237,5 +249,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(v1_router, prefix=settings.api_v1_prefix)
 
     register_exception_handlers(app)
+
+    # SEC-64 (разд. 64.1). Регистрируется САМЫМ ПОСЛЕДНИМ — после обработчиков
+    # ошибок и idempotency-слоя: добавленный позже оборачивает добавленных раньше.
+    # Это не косметика: ответы «X-Tenant header required» и прочие ошибки собирает
+    # внешний обработчик ошибок, и слой, стоящий внутри него, таких ответов не
+    # видит вовсе — заголовки на них не попадали. Поймано тестом на ответах,
+    # сформированных не обработчиком маршрута.
+    if settings.security_headers_enabled:
+        app.add_middleware(
+            SecurityHeadersMiddleware,
+            csp=settings.security_csp or DEFAULT_API_CSP,
+            hsts_max_age=(
+                settings.security_hsts_max_age
+                if settings.app_env in ("production", "staging")
+                else 0
+            ),
+            exempt_path_prefixes=_docs_path_prefixes(settings),
+        )
+
 
     return app

@@ -464,6 +464,13 @@ class Settings(BaseSettings):
     )
     archive_max_entry_bytes: int = Field(104_857_600, alias="ARCHIVE_MAX_ENTRY_BYTES")
     archive_max_compression_ratio: float = Field(500.0, alias="ARCHIVE_MAX_COMPRESSION_RATIO")
+    # SEC-64 (разд. 64.1): заголовки безопасности на уровне приложения.
+    # CSP пустой = строгая политика по умолчанию (default-src 'none' для JSON-API).
+    security_headers_enabled: bool = Field(True, alias="SECURITY_HEADERS_ENABLED")
+    security_csp: str = Field("", alias="SECURITY_CSP")
+    # HSTS шлём только в production/staging: за TLS-терминирующим прокси приложение
+    # видит http, и заголовок из dev-запуска закрепил бы https-редирект на localhost.
+    security_hsts_max_age: int = Field(31_536_000, alias="SECURITY_HSTS_MAX_AGE")
 
     use_1c_integration: bool = Field(False, alias="USE_1C_INTEGRATION")
     use_edo_integration: bool = Field(False, alias="USE_EDO_INTEGRATION")
