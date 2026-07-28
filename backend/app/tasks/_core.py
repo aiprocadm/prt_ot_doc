@@ -16,6 +16,7 @@ from sqlalchemy import select
 
 from app.core.config import get_settings
 from app.core.metrics import get_metrics
+from app.core.secret_cipher import decrypt_secret
 from app.core.tenant import tenant_context
 from app.db import AsyncSessionLocal, ensure_tenant_schema, session_scope
 from app.models.job_engine import (
@@ -495,8 +496,14 @@ async def _dispatch_outbox_events(
                     )
                     session.add(delivered)
                     ts = str(int(datetime.now(tz=timezone.utc).timestamp()))
+                    # SEC-67: секрет лежит зашифрованным (enc:…); подписывать надо
+                    # ПЛЕЙНТЕКСТОМ, иначе подписчик, проверяющий выданным ему
+                    # секретом, получает несходящуюся подпись у КАЖДОЙ доставки.
+                    # services/webhooks.py делает decrypt_secret с самого начала —
+                    # здесь расхождение осталось незамеченным, потому что до
+                    # outbox.dispatch_all эту ветку никто не вызывал.
                     signature = hmac.new(
-                        (ep.secret or "").encode("utf-8"),
+                        (decrypt_secret(ep.secret) or "").encode("utf-8"),
                         f"{ts}.".encode("utf-8") + raw_body,
                         hashlib.sha256,
                     ).hexdigest()

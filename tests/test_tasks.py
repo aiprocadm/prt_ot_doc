@@ -185,3 +185,110 @@ def test_dispatch_outbox_events_resolves_webhook_endpoints_by_tenant_id(monkeypa
     assert deliveries[0].tenant_id == tenant.id
 
     asyncio.run(engine.dispose())
+
+
+def test_dispatch_outbox_events_signs_with_the_decrypted_secret(monkeypatch) -> None:
+    """SEC-67: секрет вебхука лежит зашифрованным — подписывать надо плейнтекстом.
+
+    Диспетчер подписывал `ep.secret` как есть, то есть строкой ``enc:…``. Подписчик,
+    проверяющий выданным ему секретом, получал несходящуюся подпись у КАЖДОЙ
+    доставки. Дефект оставался незамеченным, потому что до появления
+    ``outbox.dispatch_all`` эту ветку никто не вызывал, а ``services/webhooks.py``
+    (другой путь доставки) расшифровывает с самого начала.
+    """
+
+    import hashlib
+    import hmac
+
+    from app.core.secret_cipher import encrypt_secret
+
+    plaintext_secret = "webhook-plaintext-secret"
+
+    async def setup():
+        _prepare_sqlite_metadata()
+        engine = create_async_engine("sqlite+aiosqlite:///:memory:", future=True)
+        async with engine.begin() as conn:
+            await conn.run_sync(SharedBase.metadata.create_all)
+            await conn.run_sync(Base.metadata.create_all)
+        session_factory = async_sessionmaker(bind=engine, expire_on_commit=False)
+        async with session_factory() as session:
+            tenant = Tenant(slug="demo-sign", name="Demo", contact_email="sign@example.com")
+            session.add(tenant)
+            await session.flush()
+            session.add_all(
+                [
+                    WebhookEndpoint(
+                        tenant_id=tenant.id,
+                        name="Signed webhook",
+                        url="https://example.test/webhooks/signed",
+                        secret=encrypt_secret(plaintext_secret),
+                        is_enabled=True,
+                        subscribed_events=[],
+                        timeout_ms=1000,
+                    ),
+                    OutboxEvent(
+                        tenant_id=tenant.id,
+                        event_type="CustomEvent",
+                        aggregate_type="document",
+                        aggregate_id="doc-2",
+                        event_id="evt-sign",
+                        payload={"document_id": "doc-2"},
+                        status=OutboxEventStatus.PENDING.value,
+                        attempts=0,
+                    ),
+                ]
+            )
+            await session.commit()
+            await session.refresh(tenant)
+        return engine, session_factory, tenant
+
+    engine, TestSession, tenant = asyncio.run(setup())
+
+    @asynccontextmanager
+    async def override_scope(*, tenant: str | None = None):
+        async with TestSession() as session:
+            session.info["tenant_id"] = tenant_obj.id
+            session.info["tenant_slug"] = tenant_obj.slug
+            session.info["tenant"] = tenant_obj.slug
+            try:
+                yield session
+                await session.commit()
+            except Exception:
+                await session.rollback()
+                raise
+
+    tenant_obj = tenant
+    monkeypatch.setattr(tasks_core, "session_scope", override_scope)
+
+    calls: list[dict[str, object]] = []
+
+    class _FakeAsyncClient:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        async def post(self, url, *, content, headers, timeout):
+            calls.append({"content": content, "headers": headers})
+            return SimpleNamespace(status_code=204, text="")
+
+    monkeypatch.setitem(sys.modules, "httpx", SimpleNamespace(AsyncClient=_FakeAsyncClient))
+
+    asyncio.run(tasks._dispatch_outbox_events(max_attempts=3, tenant_slug=tenant.slug))
+
+    assert len(calls) == 1
+    headers = calls[0]["headers"]
+    signature = headers["X-Signature"].removeprefix("v1=")
+    timestamp = headers["X-Signature-Ts"]
+    expected = hmac.new(
+        plaintext_secret.encode("utf-8"),
+        f"{timestamp}.".encode("utf-8") + calls[0]["content"],
+        hashlib.sha256,
+    ).hexdigest()
+    assert signature == expected, "подпись обязана считаться расшифрованным секретом"
+
+    asyncio.run(engine.dispose())
