@@ -40,6 +40,7 @@ from app.core.payload_constraints import (
 )
 from app.core.security import AccessContext, abac
 from app.core.tracing import get_trace_id
+from app.db.session import rearm_session_tenant_context
 from app.models.document import Document
 from app.models.document_core import (
     DocumentPackItem,
@@ -686,6 +687,9 @@ async def create_template_catalog(
         changed_fields={"after": {"code": template.code, "name": template.name}},
     )
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before
+    # further session work (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(template, ["versions"])
     return _build_template_dto(template, include_versions=True)
 
@@ -795,6 +799,9 @@ async def patch_template(
         ),
     )
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before
+    # further session work (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(template)
     return _build_template_dto(template, include_versions=True)
 
@@ -891,6 +898,9 @@ async def upload_template_version(
             body=dto.model_dump(mode="json", by_alias=True),
         )
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before
+    # further session work (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(version)
     return TemplateVersionDTO.model_validate(version)
 
@@ -1158,6 +1168,9 @@ async def create_template(
         storage.delete(key)
 
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before
+    # further session work (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(version)
 
     if created_new:
@@ -1215,6 +1228,9 @@ async def create_template_version(
     )
     session.add(version)
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before
+    # further session work (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(version)
     return {"id": version.id, "template_id": template.id, "version": str(version.version)}
 
@@ -1316,6 +1332,9 @@ async def patch_template_version(
         },
     )
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before
+    # further session work (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(version)
     return TemplateVersionDTO.model_validate(version)
 
@@ -1639,6 +1658,9 @@ async def run_pipeline(
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
 
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before
+    # further session work (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(run)
 
     if run.status == PipelineRunStatus.QUEUED:

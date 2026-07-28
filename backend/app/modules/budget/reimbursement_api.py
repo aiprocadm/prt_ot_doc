@@ -23,6 +23,7 @@ from app.core.errors import api_problem_detail
 from app.core.feature_flags import is_feature_enabled
 from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
+from app.db.session import rearm_session_tenant_context
 from app.models.budget import BudgetReimbursement
 from app.models.models import Tenant
 from app.modules.budget.reimbursement_lifecycle import ReimbursementTransitionError
@@ -203,6 +204,9 @@ async def create_reimbursement(
         raise _validation_error(exc) from exc
     await _audit(session, request, access, str(tenant.id), action="create", object_id=record.id)
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before
+    # further session work (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(record)
     return await _read_one(service, record)
 
@@ -321,6 +325,9 @@ async def update_reimbursement(
         raise _validation_error(exc) from exc
     await _audit(session, request, access, str(tenant.id), action="update", object_id=record.id)
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before
+    # further session work (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(record)
     return await _read_one(service, record)
 
@@ -472,5 +479,8 @@ async def run_reimbursement_action(
         details={"status": record.status},
     )
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before
+    # further session work (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(record)
     return await _read_one(service, record)

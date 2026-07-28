@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.security import AccessContext, abac
+from app.db.session import rearm_session_tenant_context
 from app.models.models import Tenant
 
 from .schemas import (
@@ -89,6 +90,9 @@ async def update_branding_profile(
         company.preferred_header_preset_code = payload.preferred_header_preset_code
         site = None
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before
+    # further session work (SEC-65)
+    await rearm_session_tenant_context(session)
     if site is not None:
         await session.refresh(site)
     await session.refresh(company)

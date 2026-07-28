@@ -26,6 +26,7 @@ from app.core.errors import api_problem_detail
 from app.core.feature_flags import is_feature_enabled
 from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
+from app.db.session import rearm_session_tenant_context
 from app.models.budget import BudgetExpense, BudgetExpenseArticle
 from app.models.models import Tenant
 from app.modules.budget.aggregation import (
@@ -276,6 +277,9 @@ async def create_article(
         object_id=record.id,
     )
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before
+    # further session work (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(record)
     return BudgetArticleRead.model_validate(record)
 
@@ -365,6 +369,9 @@ async def update_article(
         object_id=record.id,
     )
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before
+    # further session work (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(record)
     return BudgetArticleRead.model_validate(record)
 
@@ -427,6 +434,9 @@ async def create_expense(
         object_id=record.id,
     )
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before
+    # further session work (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(record)
     article_name = await _resolve_article_name(session, str(tenant.id), record.article_id)
     return _expense_read(record, article_name)
@@ -523,6 +533,9 @@ async def update_expense(
         object_id=record.id,
     )
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before
+    # further session work (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(record)
     article_name = await _resolve_article_name(session, str(tenant.id), record.article_id)
     return _expense_read(record, article_name)
@@ -583,6 +596,9 @@ async def create_budget(
         object_id=record.id,
     )
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before
+    # further session work (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(record)
     return SafetyBudgetRead.model_validate(record)
 
@@ -692,6 +708,9 @@ async def update_budget(
         object_id=record.id,
     )
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before
+    # further session work (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(record)
     return SafetyBudgetRead.model_validate(record)
 

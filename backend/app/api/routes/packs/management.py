@@ -100,6 +100,9 @@ async def create_pack_from_scenario(
         pack.description = payload.description
     pack.is_active = payload.is_active
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before
+    # further session work (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(pack)
     return _pack_to_list_item(pack)
 

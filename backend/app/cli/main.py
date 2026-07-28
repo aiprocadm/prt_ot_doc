@@ -11,7 +11,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.tracing import get_trace_id
-from app.db.session import AsyncSessionLocal
+from app.db.session import AsyncSessionLocal, rearm_session_tenant_context
 from app.models.models import Template, TemplateVersion, TemplateVersionStatus
 from app.services.file_storage import FileStorageService
 from app.services.pipeline import PipelineService
@@ -199,6 +199,9 @@ def pipeline(
                 tenant_id=tenant or template.tenant_id,
             )
             await session.commit()
+            # commit() drops the transaction-local RLS GUCs — re-arm before
+            # further session work (SEC-65)
+            await rearm_session_tenant_context(session)
             await session.refresh(run)
             return run.id, run.tenant_id
 

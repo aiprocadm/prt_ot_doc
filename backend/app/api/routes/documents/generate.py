@@ -726,5 +726,8 @@ async def update_document_status(
         raise _documents_conflict(str(exc), code="DOCUMENT_INVALID_STATUS_TRANSITION")
 
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before
+    # further session work (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(document)
     return DocumentRead.model_validate(document)

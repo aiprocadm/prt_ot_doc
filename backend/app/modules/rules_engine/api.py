@@ -21,6 +21,7 @@ from app.core.errors import api_problem_detail
 from app.core.feature_flags import is_feature_enabled
 from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
+from app.db.session import rearm_session_tenant_context
 from app.models.models import Tenant
 from app.modules.rules_engine.actions import ActionsError
 from app.modules.rules_engine.catalog import event_catalog
@@ -245,6 +246,9 @@ async def create_rule(
         ) from exc
     await _audit(session, request, access, str(tenant.id), action="create", object_id=record.id)
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before
+    # further session work (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(record)
     return AutomationRuleRead.model_validate(record)
 
@@ -289,6 +293,9 @@ async def update_rule(
         ) from exc
     await _audit(session, request, access, str(tenant.id), action="update", object_id=record.id)
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before
+    # further session work (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(record)
     return AutomationRuleRead.model_validate(record)
 

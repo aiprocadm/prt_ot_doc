@@ -278,6 +278,13 @@ class Settings(BaseSettings):
     cors_allow_credentials: bool = Field(True, alias="APP_CORS_ALLOW_CREDENTIALS")
 
     database_url_env: str | None = Field(default=None, alias="DATABASE_URL")
+    # SEC-65: Alembic needs the owner role (ENABLE/FORCE ROW LEVEL SECURITY is an
+    # owner-only DDL), while the runtime must connect as a NOSUPERUSER
+    # NOBYPASSRLS role or the policies are inert. Keep them separable.
+    migration_database_url_env: str | None = Field(default=None, alias="MIGRATION_DATABASE_URL")
+    rls_require_unprivileged_db_role_env: bool | None = Field(
+        default=None, alias="RLS_REQUIRE_UNPRIVILEGED_DB_ROLE"
+    )
     postgres_host: str = Field("postgres", alias="POSTGRES_HOST")
     postgres_port: int = Field(5432, alias="POSTGRES_PORT")
     postgres_db: str = Field("documents", alias="POSTGRES_DB")
@@ -488,6 +495,17 @@ class Settings(BaseSettings):
     trace_header_name: str = Field("X-Correlation-Id", alias="TRACE_HEADER_NAME")
     default_locale: str = Field("ru-RU", alias="DEFAULT_LOCALE")
     default_timezone: str = Field("Europe/Moscow", alias="DEFAULT_TIMEZONE")
+
+    @field_validator(
+        "migration_database_url_env", "rls_require_unprivileged_db_role_env", mode="before"
+    )
+    @classmethod
+    def _blank_to_none(cls, value: object) -> object:
+        """Treat an empty env var as "unset" (``.env.example`` ships both keys blank)."""
+
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
 
     @field_validator("allowed_hosts", "allowed_origins", "worker_queues", mode="before")
     @classmethod
@@ -799,10 +817,35 @@ class Settings(BaseSettings):
         )
 
     @property
-    def alembic_database_url(self) -> str:
-        """Database URL used for Alembic migrations."""
+    def rls_enforce_unprivileged_db_role(self) -> bool:
+        """Whether startup must fail when the runtime role bypasses RLS (SEC-65).
 
-        url = self.database_url
+        Staging/production enforce by default; development and tests only warn so
+        a local bootstrap superuser keeps working. ``RLS_REQUIRE_UNPRIVILEGED_DB_ROLE``
+        overrides either way.
+        """
+
+        if self.rls_require_unprivileged_db_role_env is not None:
+            return self.rls_require_unprivileged_db_role_env
+        return self.app_env in ("production", "staging")
+
+    @property
+    def migration_database_url(self) -> str:
+        """Async DSN Alembic connects with.
+
+        ``MIGRATION_DATABASE_URL`` lets migrations run as the table owner while the
+        runtime connects as the unprivileged, RLS-enforced role (SEC-65):
+        ``ENABLE``/``FORCE ROW LEVEL SECURITY`` is owner-only DDL, and the owner is
+        exactly the role RLS must not apply to. Falls back to ``DATABASE_URL``.
+        """
+
+        return self.migration_database_url_env or self.database_url
+
+    @property
+    def alembic_database_url(self) -> str:
+        """Synchronous form of :attr:`migration_database_url` (offline mode)."""
+
+        url = self.migration_database_url
         if url.startswith("sqlite+aiosqlite"):
             return url.replace("+aiosqlite", "")
         if url.startswith("postgresql+asyncpg"):
@@ -842,6 +885,9 @@ class Settings(BaseSettings):
             "jwt_private_key_pem",
             "portal_token_salt",
             "inbound_webhook_hmac_secret",
+            # DSNs carry the database password inline.
+            "database_url_env",
+            "migration_database_url_env",
         ):
             if key in payload and payload[key]:
                 payload[key] = "***"

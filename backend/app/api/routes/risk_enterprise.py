@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.audit_decorator import audit_operation
+from app.db.session import rearm_session_tenant_context
 from app.models.models import Tenant
 from app.models.safety_core import (
     RiskMapItem,
@@ -95,6 +96,9 @@ async def create_methodology(
     item = SafetyRiskMethodology(tenant_id=tenant.id, **payload.model_dump())
     session.add(item)
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before
+    # further session work (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(item)
     return item
 
@@ -123,6 +127,9 @@ async def clone_methodology(
     )
     session.add(clone)
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before
+    # further session work (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(clone)
     return clone
 
@@ -189,6 +196,9 @@ async def create_map(
     item = SafetyRiskMap(tenant_id=tenant.id, status="draft", **payload.model_dump())
     session.add(item)
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before
+    # further session work (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(item)
     return item
 
@@ -262,6 +272,9 @@ async def upsert_map_item(
                 )
             )
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before
+    # further session work (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(item)
     return item
 

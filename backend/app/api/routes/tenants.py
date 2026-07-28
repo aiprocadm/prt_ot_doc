@@ -13,7 +13,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.audit_decorator import audit_operation
 from app.core.security import AccessContext, abac, rbac, verify_token
-from app.db.session import AsyncSessionLocal, _create_tenant_schema, resolve_tenant_schema
+from app.db.session import (
+    AsyncSessionLocal,
+    _create_tenant_schema,
+    rearm_session_tenant_context,
+    resolve_tenant_schema,
+)
 from app.models.models import RoleEnum, Tenant, TenantQuota, TenantSettings
 from app.repository import list_tenants
 from app.schemas.tenant import (
@@ -187,6 +192,9 @@ async def patch_tenant_quotas_endpoint(
     for key, value in changes.items():
         setattr(quota, key, value)
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before
+    # further session work (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(quota)
     return TenantQuotaRead.model_validate(quota)
 

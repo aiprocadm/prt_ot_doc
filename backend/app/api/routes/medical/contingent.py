@@ -20,6 +20,7 @@ from app.api.routes.medical._common import (
     router,
 )
 from app.core.tenant_validation import TenantContextValidator
+from app.db.session import rearm_session_tenant_context
 from app.domains.medical import service as medsvc
 from app.models.models import (
     MedicalFactor,
@@ -147,6 +148,9 @@ async def set_hazard_factor(
         user_agent=request.headers.get("user-agent"),
     )
     await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before
+    # further session work (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(hazard)
     return _mapping_read(hazard, factor_name)
 
