@@ -57,7 +57,11 @@ def _tenant_tables() -> set[str]:
 
 
 def check() -> list[str]:
-    from app.core.rls_policy import RLS_ENABLED_TABLES, RLS_EXEMPT_TABLES
+    from app.core.rls_policy import (
+        RLS_ENABLED_TABLES,
+        RLS_EXEMPT_TABLES,
+        RLS_MODEL_LESS_TABLES,
+    )
 
     tenant = _tenant_tables()
     errors: list[str] = []
@@ -66,7 +70,17 @@ def check() -> list[str]:
     if overlap:
         errors.append(f"tables in BOTH enabled and exempt: {sorted(overlap)}")
 
-    stale = (RLS_ENABLED_TABLES | RLS_EXEMPT_TABLES) - tenant
+    unarmed_model_less = RLS_MODEL_LESS_TABLES - RLS_ENABLED_TABLES
+    if unarmed_model_less:
+        errors.append(
+            "RLS_MODEL_LESS_TABLES documents ARMED model-less tables, but these are not "
+            f"in RLS_ENABLED_TABLES: {sorted(unarmed_model_less)}"
+        )
+
+    # Model-less tables are absent from SQLAlchemy metadata by definition, so they would
+    # otherwise trip the staleness check. They are pinned instead by the live-schema
+    # audit (scripts/audit/check_rls_live_schema.py) and by the -m db cross-check.
+    stale = (RLS_ENABLED_TABLES | RLS_EXEMPT_TABLES) - tenant - RLS_MODEL_LESS_TABLES
     if stale:
         errors.append(
             f"registry lists names that are not tenant tables (renamed/dropped?): {sorted(stale)}"

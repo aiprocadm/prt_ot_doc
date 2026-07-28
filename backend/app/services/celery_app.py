@@ -86,6 +86,17 @@ celery_app.conf.beat_schedule = {
     },
 }
 
+if settings.outbox_dispatch_schedule_enabled:
+    # SEC-65 fan-out. Opt-in (OUTBOX_DISPATCH_SCHEDULE_ENABLED): nothing scheduled an
+    # outbox drain before, so an existing deployment may hold a backlog that the first
+    # tick would flush to subscriber endpoints all at once. Enable deliberately, after
+    # checking the pending counts.
+    _outbox_every = max(int(settings.outbox_dispatch_schedule_minutes), 1)
+    celery_app.conf.beat_schedule["outbox-dispatch-all"] = {
+        "task": "outbox.dispatch_all",
+        "schedule": crontab(minute=f"*/{_outbox_every}") if _outbox_every < 60 else crontab(minute=0),
+    }
+
 celery_app.conf.task_queues = (
     Queue(default_queue, routing_key=default_queue),
     Queue(pdf_queue, routing_key=pdf_queue),
