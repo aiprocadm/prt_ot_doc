@@ -26,7 +26,16 @@ __all__ = ["PdnAccessLog", "PDN_ACCESS_ACTIONS"]
 
 # Способы обращения к ПДн, которые журналируются. Расширяется по мере того, как
 # новые поверхности начинают отдавать ПДн субъекта наружу.
-PDN_ACCESS_ACTIONS: tuple[str, ...] = ("view_card", "export")
+PDN_ACCESS_ACTIONS: tuple[str, ...] = (
+    "view_card",
+    "export",
+    # SEC-66 срез-2: изменения ПДн и работа с основаниями обработки тоже подлежат
+    # учёту — «кто обращался к ПДн» включает того, кто их правил и стирал.
+    "rectify",
+    "consent_grant",
+    "consent_withdraw",
+    "anonymize",
+)
 
 
 class PdnAccessLog(TenantBaseModel):

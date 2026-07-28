@@ -24,6 +24,12 @@ __all__ = [
     "PdnAccessLogPage",
     "PdnSubjectExport",
     "PdnExportSubject",
+    "PdnConsentEntry",
+    "PdnConsentPage",
+    "PdnConsentGrant",
+    "PdnConsentWithdraw",
+    "PdnErasureRequest",
+    "PdnErasureResult",
 ]
 
 
@@ -76,3 +82,63 @@ class PdnSubjectExport(BaseSchema):
     max_items_per_section: int
     data: EmployeeCard
     access_log: list[PdnAccessLogEntry] = Field(default_factory=list)
+
+
+class PdnConsentEntry(BaseSchema):
+    """Одна версия согласия субъекта (SEC-66 срез-2, разд. 66.1)."""
+
+    id: str
+    subject_person_id: str
+    purpose: str
+    legal_basis: str
+    version: int
+    status: str
+    document_ref: str | None = None
+    text_sha256: str | None = None
+    expires_at: datetime | None = None
+    granted_at: datetime
+    withdrawn_at: datetime | None = None
+    withdrawal_reason: str | None = None
+    recorded_by_email: str | None = None
+
+
+class PdnConsentPage(BaseSchema):
+    items: list[PdnConsentEntry] = Field(default_factory=list)
+    total: int
+    # Основания, по которым обработка остаётся правомерной. Пусто → обрабатывать
+    # субъекта больше не на чем и обезличивание становится обязанностью.
+    remaining_legal_bases: list[str] = Field(default_factory=list)
+
+
+class PdnConsentGrant(BaseSchema):
+    purpose: str
+    legal_basis: str = "consent"
+    document_ref: str | None = Field(default=None, max_length=255)
+    text_sha256: str | None = Field(default=None, max_length=64)
+    expires_at: datetime | None = None
+
+
+class PdnConsentWithdraw(BaseSchema):
+    purpose: str
+    reason: str | None = None
+
+
+class PdnErasureRequest(BaseSchema):
+    reason: str | None = None
+
+
+class PdnErasureResult(BaseSchema):
+    """Доказательство обезличивания: что вычистили и что сохранили."""
+
+    id: str
+    subject_person_id: str
+    pseudonym: str
+    reason: str | None = None
+    # поле → было ли в нём значение до вычистки
+    scrubbed_fields: dict[str, bool] = Field(default_factory=dict)
+    # раздел → сколько записей сохранено обезличенными (требование сроков хранения)
+    retained_sections: dict[str, int] = Field(default_factory=dict)
+    performed_at: datetime
+    performed_by_email: str | None = None
+    # True, если субъект уже был обезличен и повторный вызов ничего не менял
+    already_anonymized: bool = False

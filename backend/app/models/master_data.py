@@ -10,13 +10,14 @@ only in ``Mapped[...]`` annotations are resolved by SQLAlchemy's class registry
 from __future__ import annotations
 
 import enum
-from datetime import date
+from datetime import date, datetime
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import (
     JSON,
     Boolean,
     Date,
+    DateTime,
     Enum,
     ForeignKey,
     String,
@@ -189,6 +190,13 @@ class Person(TenantBaseModel, SoftDeleteMixin):
         ),
         nullable=False,
         default=EmploymentStatus.ACTIVE,
+    )
+    # SEC-66 (разд. 66.2): момент обезличивания. Не NULL — прямые идентификаторы
+    # необратимо вычищены, а связанные записи (обучение, медосмотры, СИЗ) намеренно
+    # сохранены обезличенными: их удаления требует субъект, а хранения — закон.
+    # Подробности того, что вычищено, лежат в ``pdn_erasure_record``.
+    anonymized_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )
 
     company: Mapped[Company] = relationship(backref="people")
