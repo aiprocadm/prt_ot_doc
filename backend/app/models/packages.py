@@ -523,6 +523,12 @@ class ClientPortalToken(TenantBaseModel):
     )
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # SEC-68 (разд. 68.1 «одноразовость где возможно»): NULL = без ограничения,
+    # 1 = строго одноразовая ссылка. Счётчик растёт при каждой успешной проверке,
+    # поэтому пересланная третьему лицу ссылка исчерпывается вместе с оригиналом.
+    max_uses: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    uses_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     __table_args__ = (
         Index("ix_client_portal_tokens_expires_hash", "tenant_id", "expires_at", "token_hash"),
