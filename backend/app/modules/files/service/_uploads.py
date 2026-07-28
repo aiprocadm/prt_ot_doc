@@ -392,6 +392,11 @@ class UploadMixin:
         if verdict.status == "infected":
             record.status = FileStatus.infected.value
             record.av_result_json = {"status": "infected", "signature": verdict.signature}
+        elif verdict.status == "error":
+            # SEC-64 fail-closed: сбой сканера — не «чисто». Файл уходит в карантин,
+            # а не становится доступным на скачивание непроверенным.
+            record.status = FileStatus.quarantined.value
+            record.av_result_json = {"status": "error"}
         else:
             record.status = FileStatus.clean.value
             record.av_result_json = {"status": "clean"}
@@ -402,7 +407,7 @@ class UploadMixin:
                 tenant_id=self.tenant_id,
                 file_id=record.id,
                 engine="clamav",
-                status="infected" if verdict.status == "infected" else "clean",
+                status=verdict.status,
                 signature=verdict.signature,
                 scanned_at=datetime.now(timezone.utc),
                 raw={"status": verdict.status},

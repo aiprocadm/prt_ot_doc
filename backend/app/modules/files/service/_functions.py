@@ -113,6 +113,12 @@ async def complete_upload(
     if verdict.status == "infected":
         version.av_status = AVStatus.infected.value
         version.status = FileVersionStatus.quarantined.value
+    elif verdict.status == "error":
+        # SEC-64: непроверенный файл НЕ считается безопасным. Раньше любая ошибка
+        # сканера (недоступный clamd, таймаут) попадала в ветку else и объявляла
+        # файл чистым — fail-open ровно там, где нужен fail-closed.
+        version.av_status = AVStatus.error.value
+        version.status = FileVersionStatus.quarantined.value
     else:
         version.av_status = AVStatus.clean.value
         version.status = FileVersionStatus.ready.value
