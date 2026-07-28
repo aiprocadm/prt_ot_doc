@@ -14,6 +14,8 @@ from app.models import (
     models,  # noqa: F401
     notifications,  # noqa: F401
     npa,  # noqa: F401
+    privacy,  # noqa: F401  # SEC-66: журнал доступа к ПДн
+    privacy_consents,  # noqa: F401  # SEC-66: согласия + запись об обезличивании
     risk,  # noqa: F401
     safety_ops,  # noqa: F401
 )

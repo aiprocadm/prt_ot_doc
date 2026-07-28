@@ -177,6 +177,8 @@ RLS_ENABLED_TABLES: frozenset[str] = frozenset(
         "packageprofile",
         "pdf_conversion_runs",
         "pdn_access_log",
+        "pdn_consent",
+        "pdn_erasure_record",
         "permit",
         "person",
         "person_compliance_read_models",

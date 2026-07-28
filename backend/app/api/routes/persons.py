@@ -22,6 +22,7 @@ from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
 from app.db.session import rearm_session_tenant_context
 from app.models.models import Company, Person, Position, Tenant, Workplace
+from app.modules.privacy.service import PdnAccessJournal
 from app.repository import list_persons
 from app.schemas.person import PersonCreate, PersonPage, PersonRead, PersonUpdate
 from app.services.billing import BillingService
@@ -113,6 +114,27 @@ async def _get_person(session: AsyncSession, tenant: Tenant, person_id: str) -> 
     if person is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Person not found")
     return person
+
+
+# Поля Person, которые считаются персональными данными субъекта (SEC-66).
+# Их изменение попадает в журнал доступа к ПДн, а у обезличенного субъекта
+# запрещено. Держим рядом с обработчиком: список читается вместе с валидацией.
+PDN_PII_FIELDS: frozenset[str] = frozenset(
+    {
+        "first_name",
+        "last_name",
+        "middle_name",
+        "birth_date",
+        "email",
+        "phone",
+        "personnel_number",
+        "snils",
+        "passport",
+        "hired_at",
+        "qualifications",
+        "current_ppe",
+    }
+)
 
 
 def _clean_string(value: str | None) -> str | None:
@@ -261,6 +283,20 @@ async def update_person_endpoint(
     person = await _get_person(session, tenant, person_id)
     data = payload.model_dump(exclude_unset=True)
 
+    # SEC-66 (разд. 66.2): обезличивание необратимо. Правка ПДн обезличенного
+    # субъекта вернула бы идентификаторы обратно, обесценив «право на удаление».
+    touched_pii = sorted(set(data) & set(PDN_PII_FIELDS))
+    if person.anonymized_at is not None and touched_pii:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail=api_problem_detail(
+                code="PDN_SUBJECT_ANONYMIZED",
+                message="Personal data of an anonymized subject cannot be restored",
+                error_type="privacy",
+            ),
+        )
+    pii_before = {field: getattr(person, field, None) for field in touched_pii}
+
     target_company = None
     if "company_id" in data:
         if data["company_id"] is None:
@@ -326,11 +362,30 @@ async def update_person_endpoint(
     if "employment_status" in data:
         person.employment_status = data["employment_status"]
 
+    # SEC-66 (разд. 66.2 «уточнение/исправление»): журнал ведётся по СУБЪЕКТУ, а
+    # общий audit_log — по объекту действия, поэтому одного его мало. Пишем только
+    # при фактическом изменении: запись «правил, но ничего не изменил» зашумила бы
+    # выдачу субъекту.
+    changed = [f for f in touched_pii if getattr(person, f, None) != pii_before[f]]
+    if changed:
+        await PdnAccessJournal(session).record(
+            tenant_id=str(tenant.id),
+            subject_person_id=str(person.id),
+            action="rectify",
+            actor_user_id=str(access.user.id) if access.user else None,
+            actor_email=getattr(access.user, "email", None),
+            purpose=f"changed: {', '.join(changed)}",
+            request_id=correlation_id,
+        )
+
     try:
         await session.commit()
     except IntegrityError as exc:
         await session.rollback()
         raise HTTPException(status.HTTP_409_CONFLICT, "Person already exists") from exc
+    # commit() drops the transaction-local RLS GUCs — re-arm before
+    # further session work (SEC-65)
+    await rearm_session_tenant_context(session)
     await session.refresh(person)
     return PersonRead.model_validate(person)
 
