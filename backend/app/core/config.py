@@ -422,6 +422,10 @@ class Settings(BaseSettings):
     # rest (AES-256-GCM, core/secret_cipher.py). Required in production/staging; in
     # development/test a deterministic key is derived from SECRET_KEY.
     secret_encryption_key: str = Field("", alias="APP_SECRET_ENCRYPTION_KEY")
+    # SEC-67: связка ключей для ротации без простоя — пары ``kid:key`` через запятую.
+    # Старый одиночный APP_SECRET_ENCRYPTION_KEY продолжает работать под kid "v1".
+    secret_encryption_keys: str = Field("", alias="APP_SECRET_ENCRYPTION_KEYS")
+    secret_encryption_active_kid: str = Field("", alias="APP_SECRET_ENCRYPTION_ACTIVE_KID")
     # SEC-64 §64.3: guard outbound webhooks against SSRF (internal/private targets).
     # Default on; operator kill-switch. Enforcement is environment-aware (strict in
     # production/staging, permissive in development/test) — see core/ssrf_guard.py.
@@ -895,6 +899,8 @@ class Settings(BaseSettings):
             # DSNs carry the database password inline.
             "database_url_env",
             "migration_database_url_env",
+            "secret_encryption_key",
+            "secret_encryption_keys",
         ):
             if key in payload and payload[key]:
                 payload[key] = "***"
