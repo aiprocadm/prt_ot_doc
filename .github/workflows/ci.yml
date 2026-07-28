@@ -109,6 +109,21 @@ jobs:
       - name: RLS live-schema audit (SEC-65)
         run: PYTHONPATH=backend python scripts/audit/check_rls_live_schema.py
 
+      # Разд. 64.2: антивирус — обязательный gate, а не опция. На CI APP_ENV не
+      # production, поэтому шаг проверяет саму логику гарда на продовом наборе
+      # переменных: конфигурация без AV_ENABLED должна отвергаться.
+      - name: AV gate is mandatory in prod-like config (SEC-64)
+        run: |
+          set -e
+          PYTHONPATH=backend python scripts/ci/check_av_gate.py
+          APP_ENV=production AV_ENABLED=true CLAMAV_HOST=clamav \
+            PYTHONPATH=backend python scripts/ci/check_av_gate.py
+          if APP_ENV=production AV_ENABLED=false \
+              PYTHONPATH=backend python scripts/ci/check_av_gate.py; then
+            echo "check_av_gate.py не отверг конфигурацию с выключенным антивирусом" >&2
+            exit 1
+          fi
+
       - name: Ruff undefined names + staged mypy (tenant guard)
         run: bash scripts/ci/static_gates.sh
 
@@ -144,6 +159,47 @@ jobs:
           trivyignores: .trivyignore.generated
           format: table
           exit-code: 1
+
+      # Разд. 64.1 «Vulnerable Components: Trivy + pip-audit + npm audit в CI».
+      # Trivy смотрит на дерево зависимостей по файлам-манифестам, pip-audit — по
+      # базе PyPI advisories; они пересекаются не полностью, поэтому ТЗ называет оба.
+      #
+      # OBSERVE-MODE (continue-on-error), как semgrep: на момент включения
+      # pip-audit даёт 18 находок (starlette 0.41.3, python-multipart, ecdsa,
+      # pytest, python-dotenv), npm audit — 31 (21 high, 2 critical). Сделать их
+      # блокирующими сразу значит покрасить CI на всех PR, не относящихся к
+      # обновлению зависимостей. Порядок перевода в блокирующие —
+      # docs/security/DEPENDENCY_AUDIT.md.
+      - name: pip-audit (Python advisories, observe-mode)
+        continue-on-error: true
+        run: |
+          python -m pip install --quiet pip-audit
+          pip-audit --requirement requirements.txt --requirement requirements-dev.txt \
+            | tee pip-audit.txt || true
+          {
+            echo "### pip-audit (observe-mode)"
+            echo '```'
+            tail -40 pip-audit.txt || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: npm audit (frontend advisories, observe-mode)
+        continue-on-error: true
+        working-directory: frontend
+        run: |
+          npm audit --audit-level=high | tee ../npm-audit.txt || true
+          {
+            echo "### npm audit (observe-mode)"
+            echo '```'
+            tail -30 ../npm-audit.txt || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
   secret-scan:
     runs-on: ubuntu-latest

@@ -509,6 +509,10 @@ class Settings(BaseSettings):
     clamav_queue_url: str = Field("memory://", alias="CLAMAV_QUEUE_URL")
     clamav_quarantine_queue: str = Field("clamav.quarantine", alias="CLAMAV_QUARANTINE_QUEUE")
     clamav_scan_queue: str = Field("clamav.scan", alias="CLAMAV_SCAN_QUEUE")
+    # SEC-64 (разд. 64.2): «ClamAV в upload pipeline — обязательный gate, а не опция».
+    # false = сканирование симулируется по имени файла (только dev/test); в
+    # production/staging выключенный антивирус ловит scripts/ci/check_av_gate.py.
+    av_enabled: bool = Field(False, alias="AV_ENABLED")
     clamav_host: str = Field("clamav", alias="CLAMAV_HOST")
     clamav_port: int = Field(3310, alias="CLAMAV_PORT")
     clamav_timeout: float = Field(30.0, alias="CLAMAV_TIMEOUT")
