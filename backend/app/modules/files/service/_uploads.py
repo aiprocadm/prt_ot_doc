@@ -11,6 +11,7 @@ from uuid import uuid4
 from fastapi import HTTPException
 from sqlalchemy import func, select
 
+from app.core.archive_safety import ArchiveSafetyError, assert_safe_office_archive
 from app.core.config import get_settings
 from app.modules.files import av, s3, storage
 from app.modules.files.models import (
@@ -107,6 +108,9 @@ class UploadMixin:
             },
         )
         lower_name = filename.lower()
+        # Расширение — лишь первый, обходимый фильтр (переименовать .docm в .docx
+        # ничего не стоит). Настоящая проверка на макросы идёт по СОДЕРЖИМОМУ
+        # архива при финализации — см. assert_safe_office_archive (SEC-64, 64.2).
         if lower_name.endswith((".docm", ".xlsm")):
             raise HTTPException(status_code=400, detail="macro_enabled_documents_are_forbidden")
         declared_sha = (
@@ -293,6 +297,25 @@ class UploadMixin:
             raise HTTPException(status_code=409, detail="object_not_found")
         with s3.stream_object(key=record.object_key) as body:
             data = body.read()
+        # SEC-64 (разд. 64.2): вскрываем архив по оглавлению ДО того, как файл
+        # уйдёт в пайплайн — zip-бомба, path traversal и макросы отсекаются здесь,
+        # в единой точке входа, а не в каждом парсере по отдельности.
+        try:
+            assert_safe_office_archive(data)
+        except ArchiveSafetyError as exc:
+            record.status = "rejected"
+            await self.session.flush()
+            await self._audit_file_action(
+                action="file.finalize.rejected",
+                object_id=record.id,
+                user_id=actor_id,
+                ip=ip,
+                user_agent=user_agent,
+                request_id=request_id,
+                details={"reason": exc.code},
+            )
+            raise HTTPException(status_code=400, detail=exc.code) from exc
+
         record.size_bytes = int(metadata.get("size") or len(data))
         record.content_type = str(metadata.get("content_type") or record.content_type)
         record.sha256 = _sha256_bytes(data)
