@@ -63,6 +63,7 @@ RLS_ENABLED_TABLES: frozenset[str] = frozenset(
         "committee_meeting",
         "committee_meeting_attendance",
         "committee_member",
+        "companies",
         "company",
         "compliance_deadlines",
         "contract",
@@ -77,6 +78,7 @@ RLS_ENABLED_TABLES: frozenset[str] = frozenset(
         "correctiveaction",
         "dashboard_kpi_snapshots",
         "department",
+        "departments",
         "document",
         "document_artifacts",
         "document_batch_item",
@@ -178,6 +180,7 @@ RLS_ENABLED_TABLES: frozenset[str] = frozenset(
         "permit",
         "person",
         "person_compliance_read_models",
+        "persons",
         "pipeline_profiles",
         "pipeline_runs",
         "pipeline_step_locks",
@@ -187,6 +190,7 @@ RLS_ENABLED_TABLES: frozenset[str] = frozenset(
         "portal_requests",
         "position",
         "position_hazard",
+        "positions",
         "ppe_inventory_count",
         "ppe_inventory_count_line",
         "ppe_safety_budget",
@@ -229,6 +233,7 @@ RLS_ENABLED_TABLES: frozenset[str] = frozenset(
         "signature_requests",
         "site",
         "site_safety_read_models",
+        "sites",
         "sout_campaign",
         "sout_class_history",
         "sout_factor",
@@ -255,6 +260,8 @@ RLS_ENABLED_TABLES: frozenset[str] = frozenset(
         "training_lessons",
         "training_modules",
         "training_plan",
+        "training_plan_items",
+        "training_plans",
         "training_programs",
         "training_protocol_items",
         "training_protocols",
@@ -281,6 +288,7 @@ RLS_ENABLED_TABLES: frozenset[str] = frozenset(
         "workflow_timeline_events",
         "workplace",
         "workplace_hazard",
+        "workplaces",
     }
 )
 
@@ -313,5 +321,31 @@ RLS_ENABLED_TABLES: frozenset[str] = frozenset(
 RLS_EXEMPT_TABLES: frozenset[str] = frozenset(
     {
         "authz_permissions",
+    }
+)
+
+# Armed tables that have NO ORM model, so SQLAlchemy metadata cannot see them.
+#
+# ``check_rls_coverage.py`` builds its denominator from the ORM, which means a table with
+# a ``tenant_id`` column but no model is invisible to it — it never enters the count and
+# can stay unarmed forever (this is how ``webhook_subscriptions`` hid). The live-schema
+# audit ``scripts/audit/check_rls_live_schema.py`` reads ``pg_attribute`` instead and
+# found these eight; ``20260728_sec65_rls_model_less_tables`` arms them.
+#
+# They are PLURAL duplicates of armed singular tables, created by migrations that were
+# never matched with models: ``20260401_next58_safety_core`` (org registry) and
+# ``20260317_next46_training_briefings_offline`` (training plans). Listing them here is
+# what lets the metadata guard treat them as legitimate registry entries instead of stale
+# names. Whether the duplicates should exist at all is a data-model cleanup of its own.
+RLS_MODEL_LESS_TABLES: frozenset[str] = frozenset(
+    {
+        "companies",
+        "departments",
+        "persons",
+        "positions",
+        "sites",
+        "training_plan_items",
+        "training_plans",
+        "workplaces",
     }
 )

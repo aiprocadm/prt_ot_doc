@@ -76,6 +76,44 @@ PYTHONPATH=backend TEST_PG_ADMIN_URL="postgresql://<superuser>@localhost:5432/po
   рабочей.
 * Переопределение в обе стороны: `RLS_REQUIRE_UNPRIVILEGED_DB_ROLE=true|false`.
 
+## Предполётная проверка перед понижением роли
+
+Сторож покрытия `check_rls_coverage.py` строит список tenant-таблиц из
+**метаданных SQLAlchemy**, поэтому не видит две вещи: таблицы с колонкой
+`tenant_id`, но без ORM-модели, и копии таблиц в схемах `tenant_<slug>`
+(миграции `sec65_rls_*` армируют только `public`). Обе слепые зоны закрывает
+аудит по живой базе — **обязательно прогоните его на проде перед переключением
+`DATABASE_URL` на непривилегированную роль**:
+
+```bash
+PYTHONPATH=backend python scripts/audit/check_rls_live_schema.py
+```
+
+Он читает `pg_attribute` и падает, если найдёт неармированную tenant-таблицу.
+Именно так были найдены 8 таблиц-дубликатов без моделей (`companies`, `sites`,
+`departments`, `persons`, `positions`, `workplaces`, `training_plans`,
+`training_plan_items`) — их армирует миграция
+`20260728_sec65_rls_model_less_tables`. Такие таблицы перечислены в
+`RLS_MODEL_LESS_TABLES` (`backend/app/core/rls_policy.py`).
+
+## Фоновая разгрузка outbox
+
+Обе задачи-диспетчера очереди tenant-скоупные: предиката `tenant_id` в запросах
+нет, отбор делает контекст сессии и политики RLS. Фанаут по всем активным
+арендаторам — задача `outbox.dispatch_all`.
+
+Расписание **по умолчанию выключено** (`OUTBOX_DISPATCH_SCHEDULE_ENABLED=false`):
+раньше разгрузку не запускал никто, поэтому в существующем деплое может лежать
+накопленный backlog, и первый же тик отправил бы его подписчикам целиком.
+Включайте осознанно, предварительно посмотрев количество необработанных записей:
+
+```sql
+SELECT status, count(*) FROM outbox GROUP BY status;
+SELECT status, count(*) FROM outbox_events GROUP BY status;
+```
+
+Период — `OUTBOX_DISPATCH_SCHEDULE_MINUTES` (по умолчанию 5 минут).
+
 ## Частые ошибки
 
 **«Старт упал, а роль вроде непривилегированная».** Проверьте, что приложение

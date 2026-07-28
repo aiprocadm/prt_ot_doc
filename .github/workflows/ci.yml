@@ -103,6 +103,12 @@ jobs:
       - name: RLS runtime role guard (SEC-65)
         run: PYTHONPATH=backend python scripts/ci/check_rls_runtime_role.py
 
+      # Enumerates tenant tables from pg_attribute, so it also sees tables that have
+      # no ORM model (invisible to the metadata ratchet above) and per-tenant schema
+      # copies. Skips on SQLite/unset DATABASE_URL.
+      - name: RLS live-schema audit (SEC-65)
+        run: PYTHONPATH=backend python scripts/audit/check_rls_live_schema.py
+
       - name: Ruff undefined names + staged mypy (tenant guard)
         run: bash scripts/ci/static_gates.sh
 

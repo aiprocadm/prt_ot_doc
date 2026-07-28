@@ -381,6 +381,13 @@ class Settings(BaseSettings):
     outbox_max_attempts: int = Field(10, alias="OUTBOX_MAX_ATTEMPTS")
     outbox_retry_backoff_seconds: float = Field(5.0, alias="OUTBOX_RETRY_BACKOFF_SECONDS")
     outbox_retry_backoff_max_seconds: float = Field(600.0, alias="OUTBOX_RETRY_BACKOFF_MAX_SECONDS")
+    # Default OFF on purpose: until now nothing scheduled an outbox drain, so an
+    # existing deployment may hold a large backlog. Enabling the beat entry would
+    # flush all of it to subscriber endpoints on the first tick.
+    outbox_dispatch_schedule_enabled: bool = Field(
+        False, alias="OUTBOX_DISPATCH_SCHEDULE_ENABLED"
+    )
+    outbox_dispatch_schedule_minutes: int = Field(5, alias="OUTBOX_DISPATCH_SCHEDULE_MINUTES")
     webhook_document_created_urls: CsvUrlList = Field(
         default_factory=list, alias="WEBHOOK_URLS_DOCUMENT_CREATED"
     )

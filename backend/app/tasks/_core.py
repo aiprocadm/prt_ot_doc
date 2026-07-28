@@ -272,10 +272,99 @@ def cleanup_idempotency_keys_task() -> int:
 
 
 @celery_app.task(name="dispatch_outbox_events")
-def dispatch_outbox_events(max_attempts: int | None = None, tenant_slug: str = "test") -> int:
+def dispatch_outbox_events(tenant_slug: str, max_attempts: int | None = None) -> int:
+    """Dispatch `outbox_events` for ONE tenant.
+
+    ``tenant_slug`` is required on purpose (SEC-65): it used to default to
+    ``"test"``, so an unqualified call silently worked on whatever tenant owns
+    that slug — and under row-level security it now sees nothing at all. Use
+    :func:`dispatch_outbox_all` to cover every tenant.
+    """
+
     return _run_coroutine(
         _dispatch_outbox_events(max_attempts=max_attempts, tenant_slug=tenant_slug)
     )
+
+
+async def _active_tenant_slugs() -> list[str]:
+    """Slugs of every active tenant, read outside any single tenant's scope.
+
+    ``tenant`` itself is not a tenant-scoped table (no ``tenant_id`` column), so
+    the shared session sees the whole fleet even under FORCE row-level security.
+    """
+
+    async with AsyncSessionLocal(tenant=settings.default_tenant_slug) as session:
+        tenants = (
+            (await session.execute(select(Tenant).where(Tenant.is_active.is_(True))))
+            .scalars()
+            .all()
+        )
+    return [tenant.slug for tenant in tenants]
+
+
+@celery_app.task(
+    name="outbox.dispatch_all",
+    autoretry_for=RETRYABLE_EXCEPTIONS,
+    retry_backoff=settings.celery.retry_backoff_seconds,
+    retry_backoff_max=settings.celery.retry_backoff_max_seconds,
+    retry_jitter=True,
+    retry_kwargs={"max_retries": settings.celery.task_max_retries},
+)
+def dispatch_outbox_all(max_attempts: int | None = None) -> dict[str, int]:
+    """Drain both outbox tables for EVERY active tenant (SEC-65 fan-out).
+
+    Both dispatchers are tenant-scoped: they rely on the session's tenant context
+    (and, on PostgreSQL, on the row-level policies) rather than on an explicit
+    ``tenant_id`` predicate. Before this task nothing enqueued them for more than
+    one tenant, so a fleet-wide drain had no entry point at all.
+
+    A failure for one tenant must not strand the rest, so each tenant is isolated:
+    the error is logged and counted, and the loop continues.
+    """
+
+    async def _run() -> dict[str, int]:
+        totals = {"tenants": 0, "outbox": 0, "outbox_events": 0, "failed_tenants": 0}
+        for slug in await _active_tenant_slugs():
+            totals["tenants"] += 1
+            try:
+                with tenant_context(slug):
+                    ensure_tenant_schema(slug)
+                    async with session_scope(tenant=slug) as session:
+                        totals["outbox"] += await OutboxProcessor(session).process_once()
+                totals["outbox_events"] += await _dispatch_outbox_events(
+                    max_attempts=max_attempts, tenant_slug=slug
+                )
+            except Exception:  # noqa: BLE001 - one tenant must not block the fleet
+                totals["failed_tenants"] += 1
+                logger.exception("outbox.dispatch_all.tenant_failed", extra={"tenant": slug})
+        logger.info("outbox.dispatch_all.done", extra=totals)
+        return totals
+
+    metrics = get_metrics()
+    queue = celery_app.conf.task_default_queue or "default"
+    task_name = "outbox.dispatch_all"
+    metrics.record_celery_enqueue(queue=queue, task=task_name)
+    started = perf_counter()
+    try:
+        result = _run_coroutine(_run())
+    except Exception as exc:  # pragma: no cover - surfaced by Celery in production
+        metrics.record_celery_execution(
+            queue=queue,
+            task=task_name,
+            status="failed",
+            seconds=perf_counter() - started,
+            error_code=str(exc) or exc.__class__.__name__,
+        )
+        logger.exception("dispatch_outbox_all failed", exc_info=exc)
+        raise
+
+    metrics.record_celery_execution(
+        queue=queue,
+        task=task_name,
+        status="succeeded",
+        seconds=perf_counter() - started,
+    )
+    return result
 
 
 def _compute_outbox_backoff(attempts: int) -> timedelta:

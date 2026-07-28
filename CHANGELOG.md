@@ -1,5 +1,51 @@
 # CHANGELOG
 
+## 2026-07-28 (feat/sec65-queue-fanout — SEC-65 хвосты: фанаут очереди + аудит по живой базе, Phase 16)
+
+Три пункта, отложенных предыдущим PR: (в) кросс-тенантные потребители очередей,
+(г) pre-flight для схем `tenant_*`, (д) ратчет-гард поверх `pg_attribute`.
+
+### Added
+- **`outbox.dispatch_all`** (`backend/app/tasks/_core.py`) — фанаут разгрузки обеих
+  outbox-таблиц по всем активным арендаторам. Оба диспетчера tenant-скоупные (предиката
+  `tenant_id` в запросах нет, отбирает контекст сессии и политики RLS), а точки запуска
+  для флота не было вовсе: `outbox.dispatch` требует слаг и никем не вызывался,
+  `dispatch_outbox_events` имел дефолт `tenant_slug="test"`, `OutboxProcessor.run()` —
+  бесконечный цикл без входа. Ошибка одного арендатора не останавливает остальных
+  (логируется и считается в `failed_tenants`).
+- **beat-расписание `outbox-dispatch-all`** — **по умолчанию ВЫКЛЮЧЕНО**
+  (`OUTBOX_DISPATCH_SCHEDULE_ENABLED`, период `OUTBOX_DISPATCH_SCHEDULE_MINUTES=5`).
+  Разгрузку раньше не запускал никто, поэтому в существующем деплое может лежать
+  накопленный backlog, и первый тик отправил бы его подписчикам целиком — включение
+  должно быть осознанным решением, а не побочным эффектом обновления.
+- **`scripts/audit/check_rls_live_schema.py`** — аудит по живой базе: перечисляет
+  tenant-таблицы из `pg_attribute`, а не из метаданных SQLAlchemy. Закрывает две слепые
+  зоны ратчет-гарда: таблицы без ORM-модели и копии в схемах `tenant_*` (миграции
+  `sec65_rls_*` армируют только `public`). Skip на SQLite/пустом `DATABASE_URL`;
+  добавлен шагом в `ci.yml`.
+- **Миграция `20260728_sec65_rls_model_less_tables`** — арминг **8 tenant-таблиц,
+  которые аудит нашёл сразу**: `companies`, `sites`, `departments`, `persons`,
+  `positions`, `workplaces` (созданы `20260401_next58_safety_core`) и `training_plans`,
+  `training_plan_items` (`20260317_next46`). Это дубликаты во множественном числе:
+  ORM-модели — singular (`company`/`site`/…), уже армированные. У всех
+  `tenant_id NOT NULL` + FK на `tenant.id`, бэкфилл не нужен.
+- **`RLS_MODEL_LESS_TABLES`** в `core/rls_policy.py` — реестр армированных таблиц без
+  ORM-модели; `check_rls_coverage.py` перестаёт считать их «протухшими записями» и
+  дополнительно проверяет, что каждая из них есть в `RLS_ENABLED_TABLES`.
+  Покрытие: **272 enabled / 1 exempt**.
+- Тесты `backend/tests/test_outbox_tenant_fanout.py` (4): обход всех арендаторов, отказ
+  одного не роняет флот, отсутствие дефолта у `tenant_slug`, beat-расписание opt-in.
+
+### Changed
+- `dispatch_outbox_events(tenant_slug, max_attempts=None)` — `tenant_slug` стал
+  обязательным позиционным параметром вместо дефолта `"test"`.
+
+### Why arm and not drop
+`webhook_subscriptions` в прошлом срезе дропнули, потому что она была доказуемо пустой
+и недостижимой из кода. Эти восемь — не доказуемо пустые: миграции создают их в каждом
+деплое, а импорт или ручной запрос мог их наполнить. Арминг закрывает экспозицию в любом
+случае; нужны ли дубликаты вообще — отдельная чистка модели данных.
+
 ## 2026-07-27 (feat/sec65-nosuperuser-role — SEC-65 ЗАКРЫТ: непривилегированная роль БД, Phase 16)
 
 SEC-65 (TZ B-NEXT.7). Раскатка политик была закончена предыдущим PR (264/265), но
