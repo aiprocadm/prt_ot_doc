@@ -455,6 +455,15 @@ class Settings(BaseSettings):
     # Срок жизни magic link. Потолок не даёт выдать «вечную» ссылку (разд. 68.1).
     portal_token_ttl_hours: int = Field(24, alias="PORTAL_TOKEN_TTL_HOURS")
     portal_token_max_ttl_hours: int = Field(168, alias="PORTAL_TOKEN_MAX_TTL_HOURS")
+    # SEC-64 (разд. 64.2): пороги безопасного вскрытия загруженных офисных архивов.
+    # Абсолютные лимиты — основной рубеж против zip-бомб; отношение сжатия
+    # намеренно высокое, XML легитимно сжимается в десятки раз.
+    archive_max_entries: int = Field(2000, alias="ARCHIVE_MAX_ENTRIES")
+    archive_max_uncompressed_bytes: int = Field(
+        209_715_200, alias="ARCHIVE_MAX_UNCOMPRESSED_BYTES"
+    )
+    archive_max_entry_bytes: int = Field(104_857_600, alias="ARCHIVE_MAX_ENTRY_BYTES")
+    archive_max_compression_ratio: float = Field(500.0, alias="ARCHIVE_MAX_COMPRESSION_RATIO")
 
     use_1c_integration: bool = Field(False, alias="USE_1C_INTEGRATION")
     use_edo_integration: bool = Field(False, alias="USE_EDO_INTEGRATION")

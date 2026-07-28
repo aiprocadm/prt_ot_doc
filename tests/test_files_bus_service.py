@@ -612,3 +612,66 @@ async def test_client_roles_company_scope_deny_on_finalize_and_link(
 
     assert "file.finalize.denied" in audits
     assert "file.link.denied" in audits
+
+
+@pytest.mark.asyncio
+async def test_finalize_rejects_malicious_archive(monkeypatch: pytest.MonkeyPatch) -> None:
+    """SEC-64 (разд. 64.2): вредоносный архив отбивается на финализации.
+
+    Путь отказа обязан иметь сквозной тест: без него ошибка в самом обработчике
+    отказа (неверный вызов аудита) прошла бы весь набор незамеченной — что и
+    случилось при первой реализации, поймал только mypy-гейт.
+    """
+
+    import zipfile
+    from io import BytesIO
+
+    from fastapi import HTTPException
+
+    buffer = BytesIO()
+    with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        # Переименованный .docm: расширение чистое, макрос внутри.
+        archive.writestr("[Content_Types].xml", b"<Types/>")
+        archive.writestr("word/vbaProject.bin", b"\x00macro")
+    malicious = buffer.getvalue()
+
+    rec = FileRecord(
+        id="f-archive",
+        tenant_id="t1",
+        bucket="main",
+        object_key="tenant/t1/uploads/report.docx",
+        content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        size_bytes=len(malicious),
+        sha256="2" * 64,
+        status=FileStatus.uploaded.value,
+        av_result_json={},
+        metadata_json={},
+    )
+    session = DummySession(rec)
+    svc = FileService(session=session, tenant_id="t1")
+
+    class _Body:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self):
+            return malicious
+
+    monkeypatch.setattr(
+        "app.modules.files.service.s3.head_object",
+        lambda *, key: {"size": len(malicious), "content_type": rec.content_type},
+    )
+    monkeypatch.setattr("app.modules.files.service.s3.stream_object", lambda *, key: _Body())
+    monkeypatch.setattr("app.modules.files.service.av_scan_file_job.delay", lambda *_args: None)
+
+    with pytest.raises(HTTPException) as excinfo:
+        await svc.finalize_upload(file_id="f-archive")
+
+    assert excinfo.value.status_code == 400
+    assert excinfo.value.detail == "archive_macro_enabled"
+    # Файл помечен отвергнутым, а не оставлен в «uploaded»: иначе он выглядел бы
+    # как обычный незавершённый аплоад.
+    assert rec.status == "rejected"
