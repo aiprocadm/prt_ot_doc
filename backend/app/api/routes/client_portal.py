@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Annotated, Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
 from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -17,6 +17,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.audit_decorator import audit_operation
 from app.core.config import get_settings
+from app.core.external_perimeter import (
+    assert_not_locked_out,
+    enforce_portal_traffic,
+    record_auth_failure,
+)
 from app.core.security import AccessContext, abac
 from app.db.session import rearm_session_tenant_context
 from app.models.models import (
@@ -249,10 +254,17 @@ def _serialize_package_run(run: ClientPackageRun) -> dict[str, Any]:
 
 
 async def _portal_auth(
+    request: Request,
     session: Annotated[AsyncSession, Depends(get_session)],
     x_portal_token: Annotated[str | None, Header(alias="X-Portal-Token")] = None,
     token: Annotated[str | None, Query()] = None,
 ) -> PortalAuth:
+    # SEC-68 (разд. 68.2): внешний контур ограничивается жёстче внутреннего, и
+    # проверка идёт ДО обращения к базе — перебор не должен стоить нам запроса
+    # в БД на каждую попытку.
+    enforce_portal_traffic(request)
+    assert_not_locked_out(request)
+
     raw = x_portal_token or token
     if not raw:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Portal token is required")
@@ -260,12 +272,23 @@ async def _portal_auth(
     stmt = select(ClientPortalToken).where(ClientPortalToken.token_hash == token_hash)
     record = (await session.execute(stmt)).scalar_one_or_none()
     if record is None:
+        record_auth_failure(request)
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid portal token")
     expires_at = _as_utc(record.expires_at)
     if record.revoked_at is not None or expires_at <= _utcnow():
+        # Протухший/отозванный токен НЕ считаем попыткой перебора: это обычная
+        # ситуация у легитимного клиента со старой ссылкой в почте.
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Portal token expired or revoked")
     if not hmac.compare_digest(_hash_token(raw), record.token_hash):
+        record_auth_failure(request)
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid portal token")
+
+    # SEC-68 (разд. 68.1 «одноразовость где возможно»): лимит использований.
+    if record.max_uses is not None and (record.uses_count or 0) >= record.max_uses:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Portal token usage limit reached")
+    record.uses_count = (record.uses_count or 0) + 1
+    record.last_used_at = _utcnow()
+
     scope = record.scope_json or {}
     package_ids = set(scope.get("package_run_ids") or [record.package_run_id])
     return PortalAuth(
@@ -498,17 +521,26 @@ async def create_portal_link(
     run_id: str,
     session: Annotated[AsyncSession, Depends(get_session)],
     tenant: Annotated[Tenant, Depends(get_tenant_record)],
+    max_uses: Annotated[
+        int | None,
+        Query(ge=1, description="Лимит использований ссылки; не задан — без ограничения"),
+    ] = None,
     _: AccessContext = StaffWriteAccess,
 ):
     run = await _get_run_for_tenant(session, run_id=run_id, tenant_id=str(tenant.id))
+    # 24 байта = 192 бита энтропии (разд. 68.1 требует >= 128).
     plain = secrets.token_urlsafe(24)
-    expires_at = _utcnow() + timedelta(hours=24)
+    settings = get_settings()
+    # Потолок TTL не даёт выдать «вечную» ссылку даже опечаткой в конфиге.
+    ttl_hours = max(1, min(settings.portal_token_ttl_hours, settings.portal_token_max_ttl_hours))
+    expires_at = _utcnow() + timedelta(hours=ttl_hours)
     session.add(
         ClientPortalToken(
             tenant_id=tenant.id,
             token_hash=_hash_token(plain),
             package_run_id=run.id,
             expires_at=expires_at,
+            max_uses=max_uses,
             scope_json={
                 "package_run_ids": [run.id],
                 "download": True,

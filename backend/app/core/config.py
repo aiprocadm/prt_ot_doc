@@ -447,6 +447,14 @@ class Settings(BaseSettings):
     rate_limit_login_per_identity: str = Field("5/minute", alias="RATE_LIMIT_LOGIN_PER_IDENTITY")
     rate_limit_upload_per_tenant: str = Field("10/minute", alias="RATE_LIMIT_UPLOAD_PER_TENANT")
     rate_limit_generate_per_tenant: str = Field("20/minute", alias="RATE_LIMIT_GENERATE_PER_TENANT")
+    # SEC-68: внешний контур жёстче внутреннего (разд. 68.2). Счётчик неудачных
+    # попыток отдельный и гораздо строже: успешные запросы его не тратят, поэтому
+    # низкий порог ловит перебор, не мешая легитимному клиенту.
+    portal_rate_limit_per_ip: str = Field("60/minute", alias="PORTAL_RATE_LIMIT_PER_IP")
+    portal_auth_failures_per_ip: str = Field("10/hour", alias="PORTAL_AUTH_FAILURES_PER_IP")
+    # Срок жизни magic link. Потолок не даёт выдать «вечную» ссылку (разд. 68.1).
+    portal_token_ttl_hours: int = Field(24, alias="PORTAL_TOKEN_TTL_HOURS")
+    portal_token_max_ttl_hours: int = Field(168, alias="PORTAL_TOKEN_MAX_TTL_HOURS")
 
     use_1c_integration: bool = Field(False, alias="USE_1C_INTEGRATION")
     use_edo_integration: bool = Field(False, alias="USE_EDO_INTEGRATION")
