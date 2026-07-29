@@ -109,6 +109,13 @@ jobs:
       - name: RLS live-schema audit (SEC-65)
         run: PYTHONPATH=backend python scripts/audit/check_rls_live_schema.py
 
+      # Разд. 63.3: выключенный модуль не должен оставаться доступным по прямому
+      # вызову API. Гард требует backend-гейт у каждого модуля каталога и падает,
+      # если между модулями появились зависимости (риск «эскалация через
+      # зависимости» надо обработать осознанно, а не унаследовать молчанием).
+      - name: Module entitlements guard (SEC-63)
+        run: PYTHONPATH=backend python scripts/ci/check_module_gates.py
+
       # Разд. 64.2: антивирус — обязательный gate, а не опция. На CI APP_ENV не
       # production, поэтому шаг проверяет саму логику гарда на продовом наборе
       # переменных: конфигурация без AV_ENABLED должна отвергаться.
