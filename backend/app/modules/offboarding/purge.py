@@ -35,6 +35,7 @@ from typing import Any
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.modules.offboarding.file_keys import collect_file_keys
 from app.modules.offboarding.lifecycle import (
     OffboardingStateError,
     TenantOffboardingService,
@@ -45,7 +46,6 @@ __all__ = [
     "TenantPurgeService",
     "PurgeAct",
     "ANONYMIZED_COLUMNS",
-    "FILE_KEY_COLUMN_SUFFIXES",
     "PURGE_SURVIVING_TABLES",
 ]
 
@@ -89,12 +89,6 @@ ANONYMIZED_COLUMNS: dict[str, dict[str, str]] = {
     # (внешний человек), и тогда идентификатор лежит именно здесь.
     "incident_persons": {"fio_text": "NULL"},
 }
-
-# По каким колонкам искать файлы арендатора в хранилище. Не список таблиц:
-# новая таблица с вложением появится раньше, чем кто-нибудь вспомнит про этот
-# список, и её файлы молча останутся жить после «полного удаления».
-FILE_KEY_COLUMN_SUFFIXES: tuple[str, ...] = ("storage_key", "file_key")
-
 
 @dataclass
 class PurgeAct:
@@ -269,39 +263,14 @@ class TenantPurgeService:
         return int(result.rowcount or 0)
 
     async def _collect_file_keys(self, tables: list[str]) -> list[str]:
-        """Ключи файлов арендатора — собираются ДО удаления строк."""
+        """Ключи файлов арендатора — собираются ДО удаления строк.
 
-        connection = await self.session.connection()
+        Тот же сборщик, что и у выгрузки архивом (``file_keys.py``): архив и
+        удаление обязаны видеть один и тот же набор файлов, иначе клиент
+        получит меньше, чем у него стёрли.
+        """
 
-        def _columns(sync_conn) -> dict[str, list[str]]:  # noqa: ANN001 - sync bridge
-            from sqlalchemy import inspect as sa_inspect
-
-            inspector = sa_inspect(sync_conn)
-            found: dict[str, list[str]] = {}
-            for table in tables:
-                names = [
-                    column["name"]
-                    for column in inspector.get_columns(table)
-                    if column["name"].endswith(FILE_KEY_COLUMN_SUFFIXES)
-                ]
-                if names:
-                    found[table] = names
-            return found
-
-        columns_by_table = await connection.run_sync(_columns)
-
-        keys: list[str] = []
-        for table, columns in sorted(columns_by_table.items()):
-            for column in columns:
-                rows = await self.session.execute(
-                    text(
-                        f'SELECT DISTINCT "{column}" FROM "{table}" '
-                        f'WHERE tenant_id = :tenant AND "{column}" IS NOT NULL'
-                    ),
-                    {"tenant": self.tenant_id},
-                )
-                keys.extend(str(value) for (value,) in rows.all() if value)
-        return sorted(set(keys))
+        return await collect_file_keys(self.session, tables, tenant_id=self.tenant_id)
 
     def _delete_files(self, keys: list[str]) -> tuple[int, list[str]]:
         """Удалить файлы. Неудача по ключу не отменяет удаление базы: она

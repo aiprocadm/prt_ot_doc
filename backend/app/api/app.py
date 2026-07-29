@@ -29,6 +29,7 @@ from app.db.session import aensure_shared_schema, dispose_engine
 from app.middleware.billing_guard import BillingGuardMiddleware
 from app.middleware.global_error_handler import GlobalErrorHandlerMiddleware
 from app.middleware.observability import ObservabilityMiddleware
+from app.middleware.offboarding_readonly import OffboardingReadOnlyMiddleware
 from app.middleware.security_headers import DEFAULT_API_CSP, SecurityHeadersMiddleware
 from app.middleware.tenant import TenantMiddleware
 from app.modules.files import s3
@@ -97,6 +98,12 @@ def _configure_middlewares(app: FastAPI, settings: Settings) -> None:
     )
     app.add_middleware(TenantMiddleware, metrics_enabled=settings.enable_metrics)
     app.add_middleware(BillingGuardMiddleware)
+    # OPS-72: grace-период офбординга — данные только на чтение. Starlette
+    # выполняет middleware в ОБРАТНОМ порядке добавления, поэтому строка ниже
+    # ставит проверку ПЕРЕД биллинг-гейтом сознательно: расторгающемуся
+    # арендатору честнее ответить «идёт расторжение, данные только на чтение»,
+    # чем «оплатите подписку» — платить он как раз и не собирается.
+    app.add_middleware(OffboardingReadOnlyMiddleware)
     app.add_middleware(SlowAPIMiddleware)
     app.add_middleware(ObservabilityMiddleware, settings=settings)
 
