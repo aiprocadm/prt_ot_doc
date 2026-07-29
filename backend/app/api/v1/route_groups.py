@@ -80,6 +80,7 @@ from app.modules.client_portal.api import router as client_portal_v1_router
 from app.modules.export_center.api import router as export_center_router
 from app.modules.files.api import router as files_v1_router
 from app.modules.headers import api as headers_api
+from app.modules.offboarding.api import router as offboarding_router
 from app.modules.packs import api as packs_v2_api
 from app.modules.pdf import api as pdf_api
 from app.modules.pipelines import api as pipelines_api
@@ -190,6 +191,7 @@ DOCUMENT_CORE_ROUTER_REGISTRATIONS: tuple[RouterRegistration, ...] = (
     (analytics_router, {"tags": ["analytics"]}),
     (export_center_router, {"tags": ["exports"]}),
     (report_builder_router, {"tags": ["report-builder"]}),
+    (offboarding_router, {"tags": ["offboarding"]}),
     (rules_engine_router, {"tags": ["rules-engine"]}),
     (budget_router, {"tags": ["budget"]}),
     (budget_reimbursement_router, {"tags": ["budget"]}),
