@@ -369,6 +369,15 @@ class Settings(BaseSettings):
     worker_queues: list[str] = Field(default_factory=lambda: ["default"], alias="WORKER_QUEUES")
     celery_task_soft_time_limit: int = Field(300, alias="CELERY_TASK_SOFT_TIME_LIMIT")
     celery_task_time_limit: int = Field(600, alias="CELERY_TASK_TIME_LIMIT")
+    # SEC-64 (разд. 64.2 «изоляция обработки ... с ограничением ресурсов»):
+    # предел по времени уже был, предела по ПАМЯТИ не было. Патологический документ
+    # или конвертация LibreOffice раздувают RSS в пределах отведённых 300 секунд и
+    # роняют хост по OOM — вместе с соседними контейнерами. Celery перезапускает
+    # дочерний процесс, превысивший порог, ПОСЛЕ завершения текущей задачи.
+    celery_worker_max_memory_mb: int = Field(1024, alias="CELERY_WORKER_MAX_MEMORY_MB")
+    celery_worker_max_tasks_per_child: int = Field(
+        100, alias="CELERY_WORKER_MAX_TASKS_PER_CHILD"
+    )
     celery_task_max_retries: int = Field(5, alias="CELERY_TASK_MAX_RETRIES")
     celery_retry_backoff_seconds: int = Field(5, alias="CELERY_RETRY_BACKOFF_SECONDS")
     celery_retry_backoff_max_seconds: int = Field(300, alias="CELERY_RETRY_BACKOFF_MAX_SECONDS")

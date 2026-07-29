@@ -35,7 +35,15 @@ celery_app.conf.update(
     result_serializer="json",
     accept_content=["json"],
     task_acks_late=True,
-    worker_max_tasks_per_child=100,
+    worker_max_tasks_per_child=settings.celery_worker_max_tasks_per_child,
+    # SEC-64: порог в КИЛОБАЙТАХ (так его понимает Celery), настройка — в мегабайтах.
+    # 0 = без ограничения, поэтому отрицательные/нулевые значения не превращаем в
+    # «перезапускать после каждой задачи».
+    worker_max_memory_per_child=(
+        settings.celery_worker_max_memory_mb * 1024
+        if settings.celery_worker_max_memory_mb > 0
+        else 0
+    ),
     task_always_eager=settings.celery_eager,
     task_eager_propagates=settings.celery_eager,
     broker_transport_options={"visibility_timeout": max(settings.celery.task_time_limit * 2, 600)},
