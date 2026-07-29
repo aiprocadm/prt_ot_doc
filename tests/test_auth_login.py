@@ -205,10 +205,16 @@ async def test_refresh_reuse_after_rotation_is_rejected(
     assert first_refresh.status_code == 200
     next_refresh = first_refresh.cookies["prt_refresh_token"]
 
+    # SEC-64: у cookie-аутентификации проверяется Origin, и она срабатывает РАНЬШЕ
+    # проверки повторного использования. Без заголовка тест получал бы 403 и
+    # переставал проверять то, ради чего написан, — отклонение повтора.
+    # Браузер этот заголовок шлёт сам; здесь его подставляем явно.
+    browser = {"X-Tenant": "test", "Origin": "http://localhost:5173"}
+
     async_client.cookies.set("prt_refresh_token", old_refresh)
     replay = await async_client.post(
         "/api/v1/auth/refresh",
-        headers={"X-Tenant": "test"},
+        headers=browser,
         json={"refresh_token": old_refresh},
     )
     assert replay.status_code == 401
@@ -216,7 +222,7 @@ async def test_refresh_reuse_after_rotation_is_rejected(
     async_client.cookies.set("prt_refresh_token", next_refresh)
     family_revoked = await async_client.post(
         "/api/v1/auth/refresh",
-        headers={"X-Tenant": "test"},
+        headers=browser,
         json={"refresh_token": next_refresh},
     )
     assert family_revoked.status_code == 401

@@ -16,6 +16,7 @@ from sqlalchemy.orm import selectinload
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.audit_decorator import audit_operation
 from app.core.config import get_settings
+from app.core.csrf import CsrfOriginError, assert_trusted_origin
 from app.core.rate_limit import ip_subject_key, limiter, login_per_identity
 from app.core.rbac_abac import ROLE_PERMISSIONS
 from app.core.security import (
@@ -127,6 +128,12 @@ def _clear_refresh_cookie(response: Response) -> None:
 def _extract_refresh_token(request: Request, payload: RefreshRequest | None) -> str | None:
     cookie_token = request.cookies.get(REFRESH_COOKIE_NAME)
     if cookie_token:
+        # SEC-64 (разд. 64.1, CSRF): это единственная мутация, которую браузер может
+        # выполнить, не имея доступа к токену, — cookie он подставит сам. SameSite
+        # выставляет сервер, а СОБЛЮДАЕТ клиент; Origin проверяет сервер, поэтому
+        # это независимый второй рубеж. Проверка только для cookie-пути: у
+        # Bearer-запросов подделка невозможна, а серверные клиенты Origin не шлют.
+        assert_trusted_origin(request)
         return cookie_token
     if payload and payload.refresh_token:
         return payload.refresh_token
@@ -311,6 +318,10 @@ async def refresh_tokens(
         if not provided_token:
             raise _invalid_refresh_token()
         claims = verify_token(provided_token, expected_type="refresh")
+    except CsrfOriginError:
+        # Отказ по Origin НЕ схлопываем в 401: иначе попытку CSRF не отличить от
+        # обычной истёкшей сессии ни в ответе, ни в логах.
+        raise
     except HTTPException as exc:
         raise _invalid_refresh_token() from exc
 
