@@ -251,6 +251,7 @@ RLS_ENABLED_TABLES: frozenset[str] = frozenset(
         "tenant_counters",
         "tenant_integrations_keys",
         "tenant_limits_override",
+        "tenant_offboarding",
         "tenant_quotas",
         "tenant_quotas_counters",
         "tenant_rate_limits",

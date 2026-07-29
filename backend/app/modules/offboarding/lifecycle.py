@@ -1,0 +1,279 @@
+"""OPS-72 (разд. 72.3): офбординг — grace-период и план удаления.
+
+ТЗ требует четырёх вещей, и все четыре здесь разные:
+
+* **grace-период** — после расторжения данные хранятся N дней «на случай возврата
+  или споров»;
+* **юридические исключения** — «что закон требует хранить дольше, не удалять
+  слепо». Сроки не изобретаются заново: они уже лежат данными в
+  ``pdn_processing_activity.retention_months`` (SEC-66 срез-3), где у каждого
+  процесса обработки указан срок ВМЕСТЕ со ссылкой на норму;
+* **обезличивание вместо удаления** — там, где нужно сохранить статистику без ПДн;
+* **акт** — подтверждение, что именно удалено.
+
+**Объём этого среза — план и акт, без самого уничтожения данных.** Это не
+сокращение работы, а следствие проверки схемы: SQLAlchemy не может упорядочить
+таблицы для каскадного удаления — в схеме есть циклы внешних ключей
+(``document`` ↔ ``documentgenerationjob``, ``medical_exam`` ↔ ``medical_referral``,
+``template`` ↔ ``templateversion``). Удаление в «обратном порядке зависимостей»
+на них падает. Необратимая операция, написанная в обход этого факта, стирала бы
+данные частично и молча; правильный порядок — сперва план, который человек
+утверждает, потом отдельный срез с исполнением, разбирающимся с циклами.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
+from typing import Any
+
+from sqlalchemy import inspect as sa_inspect
+from sqlalchemy import select, text
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.offboarding import TenantOffboarding
+from app.models.privacy_registry import PdnProcessingActivity
+
+__all__ = [
+    "TenantOffboardingService",
+    "PurgePlan",
+    "TablePlan",
+    "ACTIVITY_TABLES",
+    "DEFAULT_GRACE_DAYS",
+    "OffboardingStateError",
+]
+
+DEFAULT_GRACE_DAYS = 30
+
+
+class OffboardingStateError(RuntimeError):
+    """Недопустимый переход состояния офбординга."""
+
+
+# Какие таблицы покрывает каждый процесс реестра обработки (SEC-66 срез-3).
+# Карта намеренно ЯВНАЯ и короткая: срок хранения — юридическое решение, и оно
+# должно быть читаемым при ревью, а не выводиться эвристикой по имени таблицы.
+# Таблица, не попавшая ни в один процесс, планируется к удалению: у неё нет
+# основания храниться дольше.
+ACTIVITY_TABLES: dict[str, tuple[str, ...]] = {
+    "hr_records": ("person", "person_compliance_read_models"),
+    "medical_exams": (
+        "medical_exam",
+        "medical_referral",
+        "medical_suspension",
+        "medical_factor",
+    ),
+    "occupational_safety": (
+        "briefing_entries",
+        "briefing_signatures",
+        "ppeissue",
+        "risk_assessments",
+    ),
+    "training": ("training_session", "training_certificates", "training_protocols"),
+    "incidents": ("incident", "incident_investigations", "incident_persons"),
+}
+
+
+@dataclass
+class TablePlan:
+    table: str
+    rows: int
+    action: str  # delete | anonymize
+    reason: str
+
+
+@dataclass
+class PurgePlan:
+    tenant_id: str
+    tenant_slug: str
+    generated_at: datetime
+    grace_until: datetime
+    grace_expired: bool
+    tables: list[TablePlan]
+
+    @property
+    def rows_to_delete(self) -> int:
+        return sum(item.rows for item in self.tables if item.action == "delete")
+
+    @property
+    def rows_to_anonymize(self) -> int:
+        return sum(item.rows for item in self.tables if item.action == "anonymize")
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "tenant_id": self.tenant_id,
+            "tenant_slug": self.tenant_slug,
+            "generated_at": self.generated_at.isoformat(),
+            "grace_until": self.grace_until.isoformat(),
+            "grace_expired": self.grace_expired,
+            "rows_to_delete": self.rows_to_delete,
+            "rows_to_anonymize": self.rows_to_anonymize,
+            "tables": [
+                {
+                    "table": item.table,
+                    "rows": item.rows,
+                    "action": item.action,
+                    "reason": item.reason,
+                }
+                for item in self.tables
+            ],
+        }
+
+
+def _utcnow() -> datetime:
+    return datetime.now(tz=timezone.utc)
+
+
+def _as_utc(value: datetime) -> datetime:
+    return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+
+
+class TenantOffboardingService:
+    """Заявка, отмена и план удаления (разд. 72.3)."""
+
+    def __init__(self, session: AsyncSession, *, tenant_id: str, tenant_slug: str) -> None:
+        self.session = session
+        self.tenant_id = str(tenant_id)
+        self.tenant_slug = tenant_slug
+
+    async def current(self) -> TenantOffboarding | None:
+        """Актуальная заявка: незакрытая, иначе последняя по времени."""
+
+        rows = (
+            (
+                await self.session.execute(
+                    select(TenantOffboarding)
+                    .where(TenantOffboarding.tenant_id == self.tenant_id)
+                    .order_by(TenantOffboarding.requested_at.desc())
+                )
+            )
+            .scalars()
+            .all()
+        )
+        for row in rows:
+            if row.status == "grace":
+                return row
+        return rows[0] if rows else None
+
+    async def request(
+        self,
+        *,
+        reason: str | None = None,
+        grace_days: int = DEFAULT_GRACE_DAYS,
+        actor_user_id: str | None = None,
+        actor_email: str | None = None,
+    ) -> TenantOffboarding:
+        """Подать заявку. Повторная заявка при активном grace — не ошибка, а та же
+        заявка: клиент, нажавший кнопку дважды, не должен обнулять себе срок."""
+
+        existing = await self.current()
+        if existing is not None and existing.status == "grace":
+            return existing
+
+        now = _utcnow()
+        record = TenantOffboarding(
+            tenant_id=self.tenant_id,
+            status="grace",
+            reason=reason,
+            requested_at=now,
+            grace_days=max(0, int(grace_days)),
+            grace_until=now + timedelta(days=max(0, int(grace_days))),
+            requested_by_user_id=str(actor_user_id) if actor_user_id else None,
+            requested_by_email=actor_email,
+        )
+        self.session.add(record)
+        await self.session.flush()
+        return record
+
+    async def cancel(self, *, reason: str | None = None) -> TenantOffboarding | None:
+        """Клиент вернулся. Запись не удаляется: история расторжений — часть
+        ответа на «что происходило с нашими данными»."""
+
+        record = await self.current()
+        if record is None or record.status != "grace":
+            return None
+        record.status = "cancelled"
+        record.cancelled_at = _utcnow()
+        if reason:
+            record.reason = f"{record.reason or ''}\nОтмена: {reason}".strip()
+        await self.session.flush()
+        return record
+
+    async def _retained_tables(self) -> dict[str, str]:
+        """Таблицы под действующим сроком хранения → обоснование.
+
+        Источник — реестр обработки (SEC-66 срез-3): у каждого процесса указан
+        срок В МЕСЯЦАХ вместе со ссылкой на норму. Заводить отдельный справочник
+        сроков значит завести второй источник правды, который разъедется с первым.
+        """
+
+        activities = (
+            (
+                await self.session.execute(
+                    select(PdnProcessingActivity).where(
+                        PdnProcessingActivity.tenant_id == self.tenant_id,
+                        PdnProcessingActivity.is_active.is_(True),
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        retained: dict[str, str] = {}
+        for activity in activities:
+            months = activity.retention_months
+            if not months:
+                continue
+            basis = activity.retention_basis or "срок хранения задан без ссылки на норму"
+            for table in ACTIVITY_TABLES.get(activity.code, ()):
+                retained[table] = f"{activity.name}: {months} мес. — {basis}"
+        return retained
+
+    async def _existing_tables(self) -> set[str]:
+        connection = await self.session.connection()
+
+        def _names(sync_conn) -> set[str]:  # noqa: ANN001 - sync bridge
+            return set(sa_inspect(sync_conn).get_table_names())
+
+        return await connection.run_sync(_names)
+
+    async def build_purge_plan(self) -> PurgePlan:
+        """Что будет удалено, что обезличено и на каком основании."""
+
+        from app.core.rls_policy import RLS_ENABLED_TABLES
+
+        record = await self.current()
+        grace_until = record.grace_until if record else _utcnow()
+        retained = await self._retained_tables()
+        available = await self._existing_tables()
+
+        plans: list[TablePlan] = []
+        for table in sorted(RLS_ENABLED_TABLES):
+            if table not in available:
+                continue
+            rows = (
+                await self.session.execute(
+                    text(f'SELECT count(*) FROM "{table}" WHERE tenant_id = :tenant'),
+                    {"tenant": self.tenant_id},
+                )
+            ).scalar_one()
+            if not rows:
+                continue
+            basis = retained.get(table)
+            plans.append(
+                TablePlan(
+                    table=table,
+                    rows=int(rows),
+                    action="anonymize" if basis else "delete",
+                    reason=basis or "нет действующего срока хранения — данные удаляются",
+                )
+            )
+
+        return PurgePlan(
+            tenant_id=self.tenant_id,
+            tenant_slug=self.tenant_slug,
+            generated_at=_utcnow(),
+            grace_until=_as_utc(grace_until),
+            grace_expired=_as_utc(grace_until) <= _utcnow(),
+            tables=plans,
+        )
