@@ -11,14 +11,14 @@
 * **обезличивание вместо удаления** — там, где нужно сохранить статистику без ПДн;
 * **акт** — подтверждение, что именно удалено.
 
-**Объём этого среза — план и акт, без самого уничтожения данных.** Это не
-сокращение работы, а следствие проверки схемы: SQLAlchemy не может упорядочить
-таблицы для каскадного удаления — в схеме есть циклы внешних ключей
-(``document`` ↔ ``documentgenerationjob``, ``medical_exam`` ↔ ``medical_referral``,
-``template`` ↔ ``templateversion``). Удаление в «обратном порядке зависимостей»
-на них падает. Необратимая операция, написанная в обход этого факта, стирала бы
-данные частично и молча; правильный порядок — сперва план, который человек
-утверждает, потом отдельный срез с исполнением, разбирающимся с циклами.
+Здесь — **план**, который утверждает человек; исполнение живёт отдельно
+(``purge.py``), и это разделение намеренное: необратимую операцию запускают по
+утверждённому плану, а не «посмотрим, что получится».
+
+**План обязан совпадать с исполнением.** Поэтому срок хранения «протекает» вверх
+по внешним ключам уже в плане: если удерживается ``medical_exam``, удалить
+``person``, на которого он ссылается, невозможно — значит человек должен видеть
+``person`` в строке «обезличить», а не узнать об этом из отчёта постфактум.
 """
 
 from __future__ import annotations
@@ -27,12 +27,12 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from sqlalchemy import inspect as sa_inspect
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.offboarding import TenantOffboarding
 from app.models.privacy_registry import PdnProcessingActivity
+from app.modules.offboarding.schema_graph import SchemaGraph, reflect_schema_graph
 
 __all__ = [
     "TenantOffboardingService",
@@ -229,28 +229,44 @@ class TenantOffboardingService:
                 retained[table] = f"{activity.name}: {months} мес. — {basis}"
         return retained
 
-    async def _existing_tables(self) -> set[str]:
-        connection = await self.session.connection()
+    async def schema_graph(self) -> SchemaGraph:
+        """Живая схема арендатора: какие tenant-таблицы есть и как связаны."""
 
-        def _names(sync_conn) -> set[str]:  # noqa: ANN001 - sync bridge
-            return set(sa_inspect(sync_conn).get_table_names())
+        from app.core.rls_policy import RLS_ENABLED_TABLES
 
-        return await connection.run_sync(_names)
+        return await reflect_schema_graph(self.session, RLS_ENABLED_TABLES)
+
+    async def retained_tables(self) -> dict[str, str]:
+        """Таблицы, которые НЕ удаляются, с обоснованием у каждой.
+
+        Два источника, и оба обязательны:
+
+        1. прямой срок хранения из реестра обработки (SEC-66 срез-3);
+        2. **протекание срока вверх по ссылкам**: родителя удерживаемой записи
+           удалить нельзя — внешний ключ не даст, а если бы дал, остались бы
+           сироты. Это должно быть видно в плане, а не всплыть при исполнении.
+        """
+
+        direct = await self._retained_tables()
+        graph = await self.schema_graph()
+        retained = {table: reason for table, reason in direct.items() if table in graph.tables}
+        for parent, child in graph.retention_closure(retained).items():
+            retained.setdefault(
+                parent,
+                f"хранится вместе с «{child}»: удалить родителя удерживаемой записи нельзя",
+            )
+        return retained
 
     async def build_purge_plan(self) -> PurgePlan:
         """Что будет удалено, что обезличено и на каком основании."""
 
-        from app.core.rls_policy import RLS_ENABLED_TABLES
-
         record = await self.current()
         grace_until = record.grace_until if record else _utcnow()
-        retained = await self._retained_tables()
-        available = await self._existing_tables()
+        retained = await self.retained_tables()
+        graph = await self.schema_graph()
 
         plans: list[TablePlan] = []
-        for table in sorted(RLS_ENABLED_TABLES):
-            if table not in available:
-                continue
+        for table in graph.tables:
             rows = (
                 await self.session.execute(
                     text(f'SELECT count(*) FROM "{table}" WHERE tenant_id = :tenant'),
