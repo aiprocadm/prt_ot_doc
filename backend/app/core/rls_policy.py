@@ -116,6 +116,8 @@ RLS_ENABLED_TABLES: frozenset[str] = frozenset(
         "hazards",
         "header_footer_presets",
         "idempotency_keys",
+        "import_batch",
+        "import_row",
         "inbound_webhook_dedup",
         "incident",
         "incident_attachments",
