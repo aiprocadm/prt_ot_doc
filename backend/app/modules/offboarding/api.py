@@ -28,7 +28,13 @@ from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
 from app.models.models import Tenant
 from app.modules.offboarding.export import DEFAULT_ROWS_PER_TABLE, TenantExportService
-from app.modules.offboarding.lifecycle import DEFAULT_GRACE_DAYS, TenantOffboardingService
+from app.modules.offboarding.lifecycle import (
+    DEFAULT_GRACE_DAYS,
+    OffboardingStateError,
+    TenantOffboardingService,
+)
+from app.modules.offboarding.purge import TenantPurgeService
+from app.modules.offboarding.schema_graph import UnbreakableCycleError
 
 
 class OffboardingRequest(BaseModel):
@@ -38,6 +44,16 @@ class OffboardingRequest(BaseModel):
 
 class OffboardingCancel(BaseModel):
     reason: str | None = None
+
+
+class OffboardingPurge(BaseModel):
+    """Подтверждение удаления.
+
+    Slug арендатора набирается руками намеренно: удаление необратимо, и «нажал
+    не на той вкладке» — сценарий, который обязан не сработать.
+    """
+
+    confirm_slug: str = Field(min_length=1, max_length=128)
 
 
 router = APIRouter(prefix="/offboarding", tags=["offboarding"])
@@ -60,6 +76,21 @@ ExportAccess = Annotated[
             _tenant_resource_id,
             required_roles=_EXPORT_ROLES,
             action="export all tenant data",
+        )
+    ),
+]
+
+# Уничтожение необратимо, поэтому круг уже, чем у экспорта: администратору
+# разумно доверить выгрузку данных, но не решение «этого арендатора больше нет».
+_PURGE_ROLES = ["owner"]
+
+PurgeAccess = Annotated[
+    AccessContext,
+    Depends(
+        abac(
+            _tenant_resource_id,
+            required_roles=_PURGE_ROLES,
+            action="purge all tenant data",
         )
     ),
 ]
@@ -227,3 +258,67 @@ async def purge_plan(
         session, tenant_id=str(tenant.id), tenant_slug=tenant.slug
     )
     return (await service.build_purge_plan()).to_dict()
+
+
+@router.post(
+    "/purge",
+    summary="Окончательное удаление данных арендатора с актом (необратимо)",
+)
+async def purge_tenant_data(
+    payload: OffboardingPurge,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: PurgeAccess,
+) -> dict:
+    """Исполнить утверждённый план удаления.
+
+    Только ``owner``: экспорт данных — операция, которую разумно доверить и
+    администратору, а необратимое уничтожение — нет.
+
+    Ручка НЕ пишет запись в аудит, и это не упущение: журнал аудита — такие же
+    данные арендатора, он удаляется этой же операцией. Запись «удалено» ушла бы
+    в таблицу, которой через мгновение не станет, а ссылка на удалённого
+    пользователя ещё и уронила бы запрос по внешнему ключу. Роль журнала здесь
+    играет акт в ``tenant_offboarding``: он специально переживает удаление.
+    """
+
+    TenantContextValidator.ensure_tenant_context(tenant)
+    _ = access
+
+    if payload.confirm_slug != tenant.slug:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail=api_problem_detail(
+                code="OFFBOARDING_CONFIRMATION_MISMATCH",
+                message="Confirmation does not match the tenant slug",
+                error_type="offboarding",
+            ),
+        )
+
+    service = TenantPurgeService(
+        session, tenant_id=str(tenant.id), tenant_slug=tenant.slug
+    )
+    try:
+        act = await service.execute()
+    except OffboardingStateError as error:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail=api_problem_detail(
+                code="OFFBOARDING_NOT_PURGEABLE",
+                message=str(error),
+                error_type="offboarding",
+            ),
+        ) from error
+    except UnbreakableCycleError as error:
+        # Отказ вместо частичного удаления: схема изменилась так, что цикл
+        # внешних ключей нечем разорвать. Наполовину удалённый арендатор хуже
+        # неудалённого — по нему нельзя ни работать, ни отчитаться.
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail=api_problem_detail(
+                code="OFFBOARDING_SCHEMA_CYCLE",
+                message=str(error),
+                error_type="offboarding",
+            ),
+        ) from error
+    return act.to_dict()
