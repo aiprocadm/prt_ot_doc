@@ -15,9 +15,11 @@
 
 from __future__ import annotations
 
+from io import BytesIO
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -28,6 +30,7 @@ from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
 from app.models.models import Tenant
 from app.modules.offboarding.export import DEFAULT_ROWS_PER_TABLE, TenantExportService
+from app.modules.offboarding.files_archive import TenantFilesArchiveService
 from app.modules.offboarding.lifecycle import (
     DEFAULT_GRACE_DAYS,
     OffboardingStateError,
@@ -150,6 +153,44 @@ async def export_tenant_data(
     )
     manifest = await service.build(include_rows=True)
     return manifest.to_dict(include_rows=True)
+
+
+@router.get(
+    "/export/files",
+    summary="Файлы арендатора архивом (разд. 72.2)",
+    response_class=StreamingResponse,
+)
+@audit_operation("offboarding.export_files", "tenant")
+async def export_tenant_files(
+    tenant: TenantDep,
+    session: SessionDep,
+    access: ExportAccess,
+) -> StreamingResponse:
+    """ZIP со всеми файлами арендатора.
+
+    Состав берётся из тех же колонок, что и удаление, — иначе клиент получил бы
+    в архиве меньше, чем у него стёрли. Потолки по числу файлов и объёму
+    обязательны, а факт усечения виден в ``MANIFEST.json`` внутри архива: молча
+    обрезанный архив хуже отказа, потому что выглядит как успех.
+    """
+
+    TenantContextValidator.ensure_tenant_context(tenant)
+    _ = access
+
+    service = TenantFilesArchiveService(
+        session, tenant_id=str(tenant.id), tenant_slug=tenant.slug
+    )
+    payload, report = await service.build()
+    headers = {
+        "Content-Disposition": (
+            f'attachment; filename="tenant-{tenant.slug}-files.zip"'
+        ),
+        # Усечение видно и снаружи архива: клиент, скачивающий скриптом, не
+        # обязан разбирать ZIP, чтобы понять, что получил не всё.
+        "X-Export-Truncated": "true" if report.truncated else "false",
+        "X-Export-Files": str(len(report.included)),
+    }
+    return StreamingResponse(BytesIO(payload), media_type="application/zip", headers=headers)
 
 
 def _serialize_offboarding(record) -> dict:  # noqa: ANN001 - ORM row
