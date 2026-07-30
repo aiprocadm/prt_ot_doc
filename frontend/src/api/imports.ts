@@ -23,9 +23,18 @@ export const isFeatureDisabledError = (error: unknown): boolean => {
   return Boolean(e && e.status === 404 && /not enabled/i.test(e.message ?? ""));
 };
 
-const withFile = (file: File, mapping?: Record<string, string>): FormData => {
+const withFile = (
+  file: File,
+  mapping?: Record<string, string>,
+  createMissing?: string[]
+): FormData => {
   const form = new FormData();
   form.append("file", file);
+  // Список справочников, а не флаг «создавать недостающее»: последнее звучит
+  // безобидно ровно до того момента, когда импорт заводит юрлицо из опечатки.
+  if (createMissing && createMissing.length > 0) {
+    form.append("create_missing", createMissing.join(","));
+  }
   // Схема маппинга едет ОДНИМ полем-JSON: multipart не умеет вложенные объекты,
   // а разбирать `mapping[last_name]=Фамилия` на бэкенде значит писать свой парсер.
   if (mapping && Object.keys(mapping).length > 0) {
@@ -59,11 +68,22 @@ export const importsApi = {
   async apply(
     targetCode: string,
     file: File,
-    mapping?: Record<string, string>
+    mapping?: Record<string, string>,
+    createMissing?: string[]
   ): Promise<ImportApplyDto> {
     return (
-      await apiClient.post<ImportApplyDto>(`${BASE}/${targetCode}/apply`, withFile(file, mapping))
+      await apiClient.post<ImportApplyDto>(
+        `${BASE}/${targetCode}/apply`,
+        withFile(file, mapping, createMissing)
+      )
     ).data;
+  },
+
+  async downloadReport(batchId: string): Promise<void> {
+    const { data } = await apiClient.get<Blob>(`${BASE}/batches/${batchId}/report`, {
+      responseType: "blob"
+    });
+    downloadBlob(data, `import_report_${batchId}.csv`);
   },
 
   async dryRunAsync(

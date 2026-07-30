@@ -11,6 +11,8 @@ export interface ImportColumnDto {
   aliases: string[];
   enum_values: string[];
   lookup: string | null;
+  /** Можно ли дозавести недостающую запись этого справочника прямо из импорта. */
+  lookup_creatable: boolean;
 }
 
 export interface ImportTargetDto {

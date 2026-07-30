@@ -59,6 +59,14 @@ export const BatchesPanel = ({ batches, onChanged }: BatchesPanelProps) => {
     }
   };
 
+  const downloadReport = async (batchId: string) => {
+    try {
+      await importsApi.downloadReport(batchId);
+    } catch {
+      // Причину уже показал глобальный обработчик API.
+    }
+  };
+
   const rollback = async (batch: ImportBatchDto) => {
     if (!window.confirm(`Откатить загрузку «${batch.source_filename}»? Созданные записи будут удалены.`)) {
       return;
@@ -113,6 +121,13 @@ export const BatchesPanel = ({ batches, onChanged }: BatchesPanelProps) => {
               ) : null}
             </div>
             <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void downloadReport(batch.id)}
+              >
+                Отчёт
+              </Button>
               {batch.failed_count > 0 ? (
                 <Button variant="outline" size="sm" onClick={() => void toggleRows(batch)}>
                   {openBatchId === batch.id ? "Скрыть ошибки" : "Показать ошибки"}
