@@ -57,12 +57,17 @@ export interface ImportBatchDto {
   mapping: Record<string, string>;
   notes: Record<string, unknown>;
   total_rows: number;
+  /** Сколько строк уже обработано фоновой загрузкой (срез-2 бэкенда). */
+  processed_rows: number;
   created_count: number;
   updated_count: number;
   skipped_count: number;
   failed_count: number;
   applied_at: string;
   applied_by: string | null;
+  finished_at: string | null;
+  /** Причина обрыва фоновой загрузки: «failed» без причины отправляет читать логи. */
+  error_message: string | null;
   rolled_back_at: string | null;
   rolled_back_by: string | null;
 }

@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 
-import { importsApi, isFeatureDisabledError } from "@/api/imports";
+import { importsApi, isFeatureDisabledError, isTooManyRowsError } from "@/api/imports";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingScreen } from "@/components/common/LoadingScreen";
@@ -34,6 +34,9 @@ const ImportsPage = () => {
   const [preview, setPreview] = useState<ImportPreviewDto | null>(null);
   const [overrides, setOverrides] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
+  // Файл не влез в синхронную проверку. Держим это отдельным состоянием, а не
+  // выводим из размера файла: предел считается в СТРОКАХ, и байты о нём не говорят.
+  const [oversized, setOversized] = useState(false);
 
   const loader = useCallback(async (): Promise<ImportsPageData> => {
     const [targets, batches] = await Promise.all([
@@ -59,6 +62,7 @@ const ImportsPage = () => {
   const resetPreview = () => {
     setPreview(null);
     setOverrides({});
+    setOversized(false);
   };
 
   const effectiveMapping = (): Record<string, string> => {
@@ -76,6 +80,34 @@ const ImportsPage = () => {
     try {
       const result = await importsApi.dryRun(target.code, file, preview ? effectiveMapping() : undefined);
       setPreview(result);
+      setOversized(false);
+    } catch (error) {
+      // Слишком большой файл — не ошибка пользователя, а развилка: у такого файла
+      // есть фоновый путь, и предложить его здесь честнее, чем оставить с текстом
+      // «слишком много строк» и без единого действия.
+      if (isTooManyRowsError(error)) setOversized(true);
+      // Остальные причины уже показал глобальный обработчик API.
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const runApplyAsync = async () => {
+    if (!target || !file) return;
+    if (
+      !window.confirm(
+        "Загрузить файл в фоне? Предварительная проверка для такого объёма недоступна, " +
+          "но загрузку целиком можно будет откатить в истории."
+      )
+    ) {
+      return;
+    }
+    setBusy(true);
+    try {
+      await importsApi.applyAsync(target.code, file);
+      toast.success("Файл принят: следите за прогрессом в истории загрузок");
+      setOversized(false);
+      await resource.reload();
     } catch {
       // Причину уже показал глобальный обработчик API.
     } finally {
@@ -192,6 +224,20 @@ const ImportsPage = () => {
           Сухой прогон ничего не записывает: он показывает, что будет создано, обновлено и
           отвергнуто.
         </p>
+
+        {oversized ? (
+          <div className="space-y-2 rounded-md border border-amber-300 bg-amber-50 p-3">
+            <p className="text-sm font-medium">Файл слишком большой для предварительной проверки</p>
+            <p className="text-sm text-muted-foreground">
+              Такой объём загружается в фоне: файл принимается сразу, а ход работы виден в истории
+              загрузок ниже. Проверить его заранее не получится — страховкой служит откат всей
+              загрузки целиком.
+            </p>
+            <Button variant="outline" disabled={busy} onClick={() => void runApplyAsync()}>
+              Загрузить в фоне
+            </Button>
+          </div>
+        ) : null}
       </section>
 
       {preview && target ? (

@@ -16,6 +16,8 @@ vi.mock("@/api/imports", async (importOriginal) => {
       downloadTemplate: vi.fn(),
       dryRun: vi.fn(),
       apply: vi.fn(),
+      applyAsync: vi.fn(),
+      batch: vi.fn(),
       batches: vi.fn(),
       batchRows: vi.fn(),
       rollback: vi.fn()
@@ -92,12 +94,15 @@ const BATCH: ImportBatchDto = {
   mapping: {},
   notes: {},
   total_rows: 4,
+  processed_rows: 4,
   created_count: 2,
   updated_count: 1,
   skipped_count: 0,
   failed_count: 1,
   applied_at: "2026-07-30T10:00:00Z",
   applied_by: null,
+  finished_at: "2026-07-30T10:00:05Z",
+  error_message: null,
   rolled_back_at: null,
   rolled_back_by: null
 };
@@ -229,5 +234,86 @@ describe("ImportsPage", () => {
     // План, посчитанный для другого файла, — это приглашение применить не то.
     expect(screen.queryByText("Создать: 2")).toBeNull();
     expect(screen.queryByRole("button", { name: "Применить импорт" })).toBeNull();
+  });
+  it("на слишком большом файле предлагает фоновую загрузку вместо тупика", async () => {
+    mocked.dryRun.mockRejectedValueOnce({
+      status: 422,
+      code: "IMPORT_FILE_TOO_MANY_ROWS",
+      message: "File has 6000 data rows, the limit is 5000."
+    });
+    renderPage();
+    await selectTargetAndFile();
+
+    fireEvent.click(screen.getByRole("button", { name: "Проверить без записи" }));
+
+    await waitFor(() =>
+      expect(screen.getByText(/слишком большой для предварительной проверки/i)).toBeInTheDocument()
+    );
+    expect(screen.getByRole("button", { name: "Загрузить в фоне" })).toBeInTheDocument();
+  });
+
+  it("фоновая загрузка спрашивает подтверждение и называет откат страховкой", async () => {
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    mocked.dryRun.mockRejectedValueOnce({
+      status: 422,
+      code: "IMPORT_FILE_TOO_MANY_ROWS",
+      message: "too many rows"
+    });
+    mocked.applyAsync.mockResolvedValue({ ...BATCH, status: "pending", processed_rows: 0 });
+
+    renderPage();
+    await selectTargetAndFile();
+    fireEvent.click(screen.getByRole("button", { name: "Проверить без записи" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Загрузить в фоне" })).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole("button", { name: "Загрузить в фоне" }));
+
+    await waitFor(() => expect(mocked.applyAsync).toHaveBeenCalledTimes(1));
+    // Пользователю прямо сказано, что предпросмотра не будет, а страховка — откат.
+    expect(confirmSpy.mock.calls[0][0]).toMatch(/откатить/i);
+    confirmSpy.mockRestore();
+  });
+
+  it("прочая ошибка проверки не превращается в предложение фоновой загрузки", async () => {
+    mocked.dryRun.mockRejectedValueOnce({ status: 422, code: "IMPORT_REQUIRED_COLUMNS_MISSING", message: "нет колонки" });
+    renderPage();
+    await selectTargetAndFile();
+
+    fireEvent.click(screen.getByRole("button", { name: "Проверить без записи" }));
+
+    await waitFor(() => expect(mocked.dryRun).toHaveBeenCalled());
+    expect(screen.queryByRole("button", { name: "Загрузить в фоне" })).toBeNull();
+  });
+
+  it("показывает прогресс незавершённой партии вместо счётчиков", async () => {
+    mocked.batches.mockResolvedValue([
+      { ...BATCH, status: "running", processed_rows: 3, total_rows: 10, failed_count: 0 }
+    ]);
+    mocked.batch.mockResolvedValue({
+      ...BATCH,
+      status: "running",
+      processed_rows: 3,
+      total_rows: 10,
+      failed_count: 0
+    });
+
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText(/обработано 3 из 10/)).toBeInTheDocument());
+    expect(screen.getByText(/30%/)).toBeInTheDocument();
+    // У незавершённой партии откатывать нечего — кнопки нет.
+    expect(screen.queryByRole("button", { name: "Откатить" })).toBeNull();
+  });
+
+  it("причина обрыва видна прямо в истории", async () => {
+    mocked.batches.mockResolvedValue([
+      { ...BATCH, status: "failed", error_message: "import_source_unavailable: нет файла" }
+    ]);
+
+    renderPage();
+
+    await waitFor(() =>
+      expect(screen.getByText(/import_source_unavailable/)).toBeInTheDocument()
+    );
   });
 });
