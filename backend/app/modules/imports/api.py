@@ -44,6 +44,7 @@ from app.modules.imports.parsers import (
     ImportFileError,
 )
 from app.modules.imports.planner import template_headers
+from app.modules.imports.quality import run_quality_check_for_batch
 from app.modules.imports.registry import (
     CREATABLE_LOOKUPS,
     ImportTarget,
@@ -682,6 +683,35 @@ async def download_batch_report(
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="import_report_{batch.id}.csv"'},
     )
+
+
+@router.post("/batches/{batch_id}/quality-check", response_model=ImportBatchOut)
+async def check_batch_quality(
+    batch_id: str, session: SessionDep, tenant: TenantDep, _access: ImportAccess
+) -> ImportBatchOut:
+    """Прогнать проверки Data Quality по записям партии (разд. 71.3).
+
+    Фоновый импорт делает это сам; ручка нужна синхронному пути. Гонять
+    тенант-широкий движок правил ВНУТРИ запроса на применение нельзя: на большом
+    арендаторе это секунды сверху к операции, которая и так пишет данные, —
+    поэтому проверка вынесена отдельным шагом, а не вшита в `apply`.
+    """
+
+    await _require_enabled(session, tenant)
+    service = ImportService(session, tenant)
+    batch = await service.get_batch(batch_id)
+    if batch is None:
+        raise _problem(status.HTTP_404_NOT_FOUND, "IMPORT_BATCH_NOT_FOUND", "Batch not found")
+    if batch.mode == "preview":
+        raise _problem(
+            status.HTTP_409_CONFLICT,
+            "IMPORT_BATCH_IS_PREVIEW",
+            "This batch is a dry run: no data was written, so there is nothing to check",
+        )
+
+    await run_quality_check_for_batch(session, batch)
+    await session.commit()
+    return _batch_out(batch)
 
 
 @router.post("/batches/{batch_id}/rollback", response_model=ImportBatchOut)

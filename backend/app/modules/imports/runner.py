@@ -28,6 +28,7 @@ from app.models.imports import ImportBatch, ImportRow
 from app.models.tenanting import Tenant
 from app.modules.files import s3
 from app.modules.imports.parsers import MAX_ASYNC_IMPORT_ROWS, ImportFileError
+from app.modules.imports.quality import run_quality_check_for_batch
 from app.modules.imports.registry import get_target
 from app.modules.imports.service import ImportMappingError, ImportService
 
@@ -154,6 +155,13 @@ async def execute_import_batch(
     batch.status = "applied"
     batch.finished_at = _now()
     await session.commit()
+
+    # Разд. 71.3: загруженное сразу проходит проверки качества. Фоновый путь —
+    # естественное место для этого: пользователь никого не ждёт, а результат
+    # ложится в ту же партию. Провал проверки импорт не отменяет.
+    await run_quality_check_for_batch(session, batch)
+    await session.commit()
+
     discard_source(batch.source_key)
     return batch
 

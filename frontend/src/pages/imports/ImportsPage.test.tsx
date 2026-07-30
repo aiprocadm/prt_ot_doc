@@ -22,6 +22,7 @@ vi.mock("@/api/imports", async (importOriginal) => {
       batches: vi.fn(),
       batchRows: vi.fn(),
       downloadReport: vi.fn(),
+      qualityCheck: vi.fn(),
       rollback: vi.fn()
     }
   };
@@ -430,5 +431,46 @@ describe("ImportsPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Отчёт" }));
 
     await waitFor(() => expect(mocked.downloadReport).toHaveBeenCalledWith("batch-1"));
+  });
+  it("показывает итог проверки качества по загрузке", async () => {
+    mocked.batches.mockResolvedValue([
+      { ...BATCH, notes: { data_quality: { issues_total: 3, by_severity: { high: 3 } } } }
+    ]);
+
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText(/Проверка качества: замечаний 3/)).toBeInTheDocument());
+  });
+
+  it("чистую загрузку помечает отдельно, а не молчанием", async () => {
+    mocked.batches.mockResolvedValue([
+      { ...BATCH, notes: { data_quality: { issues_total: 0, by_severity: {} } } }
+    ]);
+
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText(/замечаний нет/)).toBeInTheDocument());
+  });
+
+  it("несработавшую проверку показывает причиной, а не тишиной", async () => {
+    mocked.batches.mockResolvedValue([
+      { ...BATCH, notes: { data_quality: { error: "rule engine exploded" } } }
+    ]);
+
+    renderPage();
+
+    await waitFor(() =>
+      expect(screen.getByText(/Проверка качества не выполнилась/)).toBeInTheDocument()
+    );
+  });
+
+  it("проверку качества можно запустить из истории", async () => {
+    mocked.qualityCheck.mockResolvedValue(BATCH);
+    renderPage();
+    await screen.findByText("staff.csv");
+
+    fireEvent.click(screen.getByRole("button", { name: "Проверить качество" }));
+
+    await waitFor(() => expect(mocked.qualityCheck).toHaveBeenCalledWith("batch-1"));
   });
 });
