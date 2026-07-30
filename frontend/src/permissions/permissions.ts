@@ -68,6 +68,7 @@ export const PERMISSIONS = {
   RULES_MANAGE: "rules.manage",
   BUDGET_VIEW: "budget.view",
   BUDGET_MANAGE: "budget.manage",
+  IMPORTS_MANAGE: "imports.manage",
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
