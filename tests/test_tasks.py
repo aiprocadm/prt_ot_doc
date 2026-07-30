@@ -291,4 +291,19 @@ def test_dispatch_outbox_events_signs_with_the_decrypted_secret(monkeypatch) -> 
     ).hexdigest()
     assert signature == expected, "подпись обязана считаться расшифрованным секретом"
 
+    # OPS-73 (разд. 73.3): версия схемы в теле и заголовке — рантайм-проверка
+    # второго конвейера доставки (контракт стережёт tests/contract).
+    import json as _json
+
+    from app.core.webhook_contract import (
+        OUTBOX_TASK_BODY_KEYS,
+        WEBHOOK_SCHEMA_VERSION,
+        WEBHOOK_SCHEMA_VERSION_HEADER,
+    )
+
+    body = _json.loads(calls[0]["content"])
+    assert body["schema_version"] == WEBHOOK_SCHEMA_VERSION
+    assert headers[WEBHOOK_SCHEMA_VERSION_HEADER] == WEBHOOK_SCHEMA_VERSION
+    assert set(body) == set(OUTBOX_TASK_BODY_KEYS)
+
     asyncio.run(engine.dispose())

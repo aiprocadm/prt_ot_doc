@@ -20,6 +20,7 @@ from app.core.metrics import Metrics, get_metrics
 from app.core.secret_cipher import decrypt_secret
 from app.core.ssrf_guard import UnsafeWebhookURLError, assert_safe_webhook_url
 from app.core.tracing import get_trace_id
+from app.core.webhook_contract import WEBHOOK_SCHEMA_VERSION, WEBHOOK_SCHEMA_VERSION_HEADER
 from app.models.models import WebhookEndpoint, WebhookSubscription
 
 logger = logging.getLogger(__name__)
@@ -341,6 +342,10 @@ class WebhookDispatcher:
             "occurred_at": datetime.now(tz=timezone.utc).isoformat(),
             "correlation_id": trace_id,
             "payload": payload,
+            # OPS-73 (разд. 73.3): событие тоже контракт. Версия поднимается
+            # только на ломающем изменении схемы; состав конверта стережёт
+            # контрактный тест через core/webhook_contract.py.
+            "schema_version": WEBHOOK_SCHEMA_VERSION,
         }
         timestamp_ms = str(int(time() * 1000))
         request_headers: dict[str, str] = {
@@ -348,6 +353,7 @@ class WebhookDispatcher:
             "X-Event-Type": event_type,
             "X-Tenant": tenant_id,
             "X-Timestamp": timestamp_ms,
+            WEBHOOK_SCHEMA_VERSION_HEADER: WEBHOOK_SCHEMA_VERSION,
         }
         if headers:
             for key, value in headers.items():
