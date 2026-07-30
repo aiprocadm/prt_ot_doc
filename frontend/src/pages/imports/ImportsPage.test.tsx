@@ -21,6 +21,7 @@ vi.mock("@/api/imports", async (importOriginal) => {
       batch: vi.fn(),
       batches: vi.fn(),
       batchRows: vi.fn(),
+      downloadReport: vi.fn(),
       rollback: vi.fn()
     }
   };
@@ -43,7 +44,8 @@ const TARGET: ImportTargetDto = {
       required: true,
       aliases: [],
       enum_values: [],
-      lookup: "company"
+      lookup: "company",
+      lookup_creatable: false
     },
     {
       field: "last_name",
@@ -52,7 +54,8 @@ const TARGET: ImportTargetDto = {
       required: true,
       aliases: [],
       enum_values: [],
-      lookup: null
+      lookup: null,
+      lookup_creatable: false
     },
     {
       field: "personnel_number",
@@ -61,7 +64,18 @@ const TARGET: ImportTargetDto = {
       required: false,
       aliases: [],
       enum_values: [],
-      lookup: null
+      lookup: null,
+      lookup_creatable: false
+    },
+    {
+      field: "position_id",
+      title: "Должность",
+      kind: "str" as const,
+      required: false,
+      aliases: [],
+      enum_values: [],
+      lookup: "position",
+      lookup_creatable: true
     }
   ]
 };
@@ -135,6 +149,7 @@ describe("ImportsPage", () => {
     mocked.apply.mockResolvedValue({ batch: BATCH, preview: PREVIEW });
     mocked.batchRows.mockResolvedValue([]);
     mocked.rollback.mockResolvedValue({ ...BATCH, status: "rolled_back" });
+    mocked.downloadReport.mockResolvedValue(undefined);
   });
 
   it("не даёт применить импорт до сухого прогона", async () => {
@@ -377,5 +392,43 @@ describe("ImportsPage", () => {
     renderPage();
 
     await waitFor(() => expect(screen.getByText(/будет создано 7/)).toBeInTheDocument());
+  });
+  it("предлагает дозавести только те справочники, которым это разрешено", async () => {
+    mocked.dryRun.mockResolvedValue({
+      ...PREVIEW,
+      unknown_references: { position: ["Слесарь"], company: ["НЕТ ТАКОЙ"] }
+    });
+    renderPage();
+    await selectTargetAndFile();
+    fireEvent.click(screen.getByRole("button", { name: "Проверить без записи" }));
+
+    await waitFor(() => expect(screen.getByText(/Создать недостающие значения: должности/)).toBeInTheDocument());
+    // Организация несёт реквизиты — её из импорта заводить нельзя.
+    expect(screen.queryByText(/Создать недостающие значения: организации/)).toBeNull();
+  });
+
+  it("отмеченный справочник уходит в применение", async () => {
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    mocked.dryRun.mockResolvedValue({ ...PREVIEW, unknown_references: { position: ["Слесарь"] } });
+    renderPage();
+    await selectTargetAndFile();
+    fireEvent.click(screen.getByRole("button", { name: "Проверить без записи" }));
+    await waitFor(() => expect(screen.getByRole("checkbox")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole("checkbox"));
+    fireEvent.click(screen.getByRole("button", { name: "Применить импорт" }));
+
+    await waitFor(() => expect(mocked.apply).toHaveBeenCalledTimes(1));
+    expect(mocked.apply.mock.calls[0][3]).toEqual(["position"]);
+    confirmSpy.mockRestore();
+  });
+
+  it("отчёт по партии скачивается из истории", async () => {
+    renderPage();
+    await screen.findByText("staff.csv");
+
+    fireEvent.click(screen.getByRole("button", { name: "Отчёт" }));
+
+    await waitFor(() => expect(mocked.downloadReport).toHaveBeenCalledWith("batch-1"));
   });
 });

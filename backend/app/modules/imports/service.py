@@ -37,9 +37,10 @@ from app.modules.imports.planner import (
     normalize_header,
     resolve_rows,
 )
-from app.modules.imports.registry import ImportTarget, get_target
+from app.modules.imports.registry import CREATABLE_LOOKUPS, ImportTarget, get_target
 
 __all__ = [
+    "ImportLookupNotCreatableError",
     "ImportMappingError",
     "ImportRollbackError",
     "ImportService",
@@ -64,12 +65,25 @@ class ImportMappingError(Exception):
         super().__init__("Missing required columns: " + ", ".join(missing))
 
 
+class ImportLookupNotCreatableError(Exception):
+    """Просили дозаводить справочник, которому это запрещено реестром."""
+
+    def __init__(self, lookups: list[str]):
+        self.lookups = lookups
+        super().__init__("Lookups are not auto-creatable: " + ", ".join(lookups))
+
+
 class ImportRollbackError(Exception):
     """Откат невозможен целиком — не делаем его частично."""
 
     def __init__(self, code: str, message: str):
         self.code = code
         super().__init__(message)
+
+
+# Модель под каждым справочником: нужна и чтобы дозавести запись, и чтобы откат
+# знал, что удалять — строка партии хранит имя таблицы, а не класс.
+LOOKUP_MODELS: dict[str, Any] = {"company": Company, "position": Position}
 
 
 def _now() -> datetime:
@@ -102,6 +116,10 @@ class ImportService:
     def __init__(self, session: AsyncSession, tenant: Tenant):
         self.session = session
         self.tenant = tenant
+        # Записи справочников, дозаведённые последним ``build()``. Их обязана
+        # забрать партия: справочная строка, созданная импортом и пережившая его
+        # откат, — это мусор, который никто уже не свяжет с загрузкой.
+        self._created_references: list[tuple[str, str, str]] = []
 
     # --- справочники -------------------------------------------------------
 
@@ -191,6 +209,77 @@ class ImportService:
                         found[key] = snapshot
         return found
 
+    async def _create_missing_references(
+        self,
+        target: ImportTarget,
+        resolved: list,
+        unknown: dict[str, list[str]],
+        requested: frozenset[str],
+    ) -> list[tuple[str, str, str]]:
+        """Дозавести недостающие записи справочников. Возвращает (справочник, id, имя).
+
+        Область действия узкая намеренно: создаётся только то, что реестр пометил
+        как ``lookup_creatable`` И что явно попросили. Организацию завести нельзя —
+        она несёт реквизиты, и автосоздание юрлица из опечатки засорило бы справочник.
+        """
+
+        forbidden = sorted(requested - CREATABLE_LOOKUPS)
+        if forbidden:
+            raise ImportLookupNotCreatableError(forbidden)
+
+        created: list[tuple[str, str, str]] = []
+        for lookup, values in unknown.items():
+            if lookup not in requested or lookup not in CREATABLE_LOOKUPS:
+                continue
+            column = next(
+                (c for c in target.columns if c.lookup == lookup and c.lookup_creatable), None
+            )
+            if column is None:
+                continue
+            model = LOOKUP_MODELS.get(lookup)
+            if model is None:  # pragma: no cover — реестр и карта расходятся
+                continue
+
+            for raw_value in values:
+                scope_value = self._scope_for_value(target, column, resolved, raw_value)
+                if column.lookup_scope_field and scope_value is None:
+                    # Область не определилась (например, не разобралась организация) —
+                    # создавать должность «в никуда» нельзя.
+                    continue
+                payload: dict[str, Any] = {"tenant_id": self.tenant.id, "name": raw_value}
+                if column.lookup_scope_field:
+                    payload[column.lookup_scope_field] = scope_value
+                entity = model(**payload)
+                try:
+                    async with self.session.begin_nested():
+                        self.session.add(entity)
+                        await self.session.flush()
+                except IntegrityError:
+                    # Мягко удалённый тёзка занимает уникальный ключ: молча
+                    # «создать» не выйдет, и строка честно останется ошибочной.
+                    continue
+                created.append((lookup, entity.id, raw_value))
+        return created
+
+    @staticmethod
+    def _scope_for_value(
+        target: ImportTarget, column, resolved: list, raw_value: str
+    ) -> str | None:
+        """Область (например, организация) той строки, где встретилось значение."""
+
+        if not column.lookup_scope_field:
+            return None
+        header_value = normalize_header(raw_value)
+        for row in resolved:
+            for error in row.errors:
+                if error.code == "unknown_reference" and error.field == column.field:
+                    scope = row.values.get(column.lookup_scope_field)
+                    # Сообщение содержит исходное значение — сверяем нормализованно,
+                    # чтобы регистр и лишние пробелы не помешали.
+                    if scope is not None and header_value in normalize_header(error.message):
+                        return str(scope)
+        return None
+
     # --- построение плана --------------------------------------------------
 
     async def build(
@@ -201,6 +290,7 @@ class ImportService:
         overrides: dict[str, str] | None = None,
         *,
         max_rows: int = MAX_IMPORT_ROWS,
+        create_missing: frozenset[str] | None = None,
     ) -> tuple[ImportPlan, MappingResult, ParsedFile]:
         parsed = parse_import_file(filename, content, max_rows=max_rows)
         mapping = build_mapping(target, parsed.headers, overrides)
@@ -209,6 +299,20 @@ class ImportService:
 
         lookups = await self.load_lookups(target)
         resolved, unknown = resolve_rows(target, parsed, mapping.mapping, lookups)
+
+        if create_missing and unknown:
+            # Разд. 71.3: незнакомое значение справочника — «предложить создать или
+            # сопоставить», а не молча пропустить. Создаём ТОЛЬКО то, что разрешено
+            # реестром и о чём попросили явно, и сразу пересобираем план: строки,
+            # падавшие на unknown_reference, теперь должны пройти.
+            created_refs = await self._create_missing_references(
+                target, resolved, unknown, create_missing
+            )
+            if created_refs:
+                lookups = await self.load_lookups(target)
+                resolved, unknown = resolve_rows(target, parsed, mapping.mapping, lookups)
+                self._created_references = created_refs
+
         existing = await self._load_existing(target, [r.values for r in resolved if r.ok])
         plan = build_plan(
             target,
@@ -278,6 +382,7 @@ class ImportService:
         overrides: dict[str, str] | None = None,
         actor_id: str | None = None,
         max_rows: int = MAX_IMPORT_ROWS,
+        create_missing: frozenset[str] | None = None,
         batch: ImportBatch | None = None,
         on_progress: ProgressHook | None = None,
         chunk_size: int = 200,
@@ -290,7 +395,9 @@ class ImportService:
         строк — прогресс, видимый только в конце, это не прогресс.
         """
 
-        plan, mapping, _ = await self.build(target, filename, content, overrides, max_rows=max_rows)
+        plan, mapping, _ = await self.build(
+            target, filename, content, overrides, max_rows=max_rows, create_missing=create_missing
+        )
 
         if batch is None:
             batch = self.new_batch(target, filename, status="applied", actor_id=actor_id)
@@ -305,6 +412,33 @@ class ImportService:
 
         table = target.model.__tablename__
         counts = {"created": 0, "updated": 0, "skipped": 0, "failed": 0}
+
+        # Дозаведённые записи справочников попадают в партию ПЕРВЫМИ строками с
+        # отрицательными номерами: они не строки файла, но откат обязан их снять,
+        # иначе справочник останется засорённым записями отменённой загрузки.
+        for index, (lookup, entity_id, value) in enumerate(self._created_references, start=1):
+            model = LOOKUP_MODELS.get(lookup)
+            counts["created"] += 1
+            self.session.add(
+                ImportRow(
+                    tenant_id=self.tenant.id,
+                    batch_id=batch.id,
+                    row_number=-index,
+                    action="created",
+                    natural_key=f"{lookup}: {value}",
+                    entity_table=model.__tablename__ if model is not None else lookup,
+                    entity_id=entity_id,
+                    message=f"Создана запись справочника «{lookup}»: {value}",
+                )
+            )
+        if self._created_references:
+            batch.notes = {
+                **(batch.notes or {}),
+                "created_references": [
+                    {"lookup": lookup, "value": value}
+                    for lookup, _entity_id, value in self._created_references
+                ],
+            }
 
         async def _tick(processed: int) -> None:
             batch.processed_rows = processed
@@ -483,22 +617,34 @@ class ImportService:
 
         rows = await self.list_rows(batch.id)
 
+        # Модель берётся ПО ИМЕНИ ТАБЛИЦЫ строки: партия может содержать не только
+        # записи цели, но и дозаведённые записи справочников — у них другая модель.
+        models_by_table: dict[str, Any] = {target.model.__tablename__: target.model}
+        for model in LOOKUP_MODELS.values():
+            models_by_table[model.__tablename__] = model
+
+        def _model_for(row: ImportRow):
+            return models_by_table.get(row.entity_table or "", target.model)
+
         # Сначала откатываем обновления, потом удаляем созданное: обновлённая
         # запись может ссылаться на созданную, и обратный порядок упёрся бы в
         # собственный внешний ключ партии.
         for row in rows:
             if row.action != "updated" or not row.entity_id:
                 continue
-            entity = await self.session.get(target.model, row.entity_id)
+            entity = await self.session.get(_model_for(row), row.entity_id)
             if entity is None:
                 continue
             for field_name, value in (row.before_values or {}).items():
                 setattr(entity, field_name, self._coerce_for_model(target, field_name, value))
 
-        for row in rows:
+        # Строки файла удаляются раньше дозаведённых справочников: сотрудник
+        # ссылается на созданную должность, и обратный порядок упёрся бы в этот
+        # внешний ключ. Отрицательные номера (справочники) уходят в конец.
+        for row in sorted(rows, key=lambda r: r.row_number >= 0, reverse=True):
             if row.action != "created" or not row.entity_id:
                 continue
-            entity = await self.session.get(target.model, row.entity_id)
+            entity = await self.session.get(_model_for(row), row.entity_id)
             if entity is None:
                 continue
             await self.session.delete(entity)

@@ -19,6 +19,7 @@ from typing import Any
 from app.models.master_data import Person, Position
 
 __all__ = [
+    "CREATABLE_LOOKUPS",
     "IMPORT_TARGETS",
     "ImportColumn",
     "ImportTarget",
@@ -49,6 +50,12 @@ class ImportColumn:
     # Поле, значение которого входит в ключ справочника. Должность уникальна внутри
     # компании, поэтому одноимённые должности разных компаний не должны склеиться.
     lookup_scope_field: str | None = None
+    # Можно ли заводить недостающую запись справочника прямо из импорта (разд. 71.3
+    # «предложить создать или сопоставить»). Решается ПОЛЕМ, а не общим флагом:
+    # должность — это по сути её название, а организация несёт реквизиты, и
+    # автосоздание юрлица из опечатки в файле на 10 000 строк засорило бы справочник
+    # так, что чистить пришлось бы руками.
+    lookup_creatable: bool = False
     # Дополнительно положить СЫРОЙ текст колонки в это поле. Карточка сотрудника
     # показывает свободнотекстовую должность, и терять её при сопоставлении со
     # справочником нельзя: пользователь увидит пустую строку там, где он что-то ввёл.
@@ -183,6 +190,7 @@ PERSONS_TARGET = ImportTarget(
             aliases=("должность", "position", "job title"),
             lookup="position",
             lookup_scope_field="company_id",
+            lookup_creatable=True,
             also_set_raw="position_title",
         ),
         ImportColumn(
@@ -246,6 +254,16 @@ IMPORT_TARGETS: dict[str, ImportTarget] = {
     POSITIONS_TARGET.code: POSITIONS_TARGET,
     PERSONS_TARGET.code: PERSONS_TARGET,
 }
+
+
+# Какие справочники вообще разрешено дозаводить из импорта — собирается из
+# описаний колонок, чтобы список не пришлось поддерживать во втором месте.
+CREATABLE_LOOKUPS: frozenset[str] = frozenset(
+    column.lookup
+    for target in IMPORT_TARGETS.values()
+    for column in target.columns
+    if column.lookup and column.lookup_creatable
+)
 
 
 def get_target(code: str) -> ImportTarget | None:

@@ -44,9 +44,15 @@ from app.modules.imports.parsers import (
     ImportFileError,
 )
 from app.modules.imports.planner import template_headers
-from app.modules.imports.registry import ImportTarget, get_target, list_targets
+from app.modules.imports.registry import (
+    CREATABLE_LOOKUPS,
+    ImportTarget,
+    get_target,
+    list_targets,
+)
 from app.modules.imports.runner import build_source_key, discard_source, store_source
 from app.modules.imports.service import (
+    ImportLookupNotCreatableError,
     ImportMappingError,
     ImportRollbackError,
     ImportService,
@@ -128,6 +134,37 @@ def _parse_overrides(raw: str | None) -> dict[str, str]:
     return data
 
 
+def _parse_create_missing(raw: str | None) -> frozenset[str]:
+    """``create_missing`` — список справочников, которые разрешено дозавести.
+
+    Список, а не булев флаг: «создавать недостающее» звучит безобидно ровно до
+    того момента, когда импорт заводит юрлицо из опечатки. Пользователь называет
+    справочники поимённо, а реестр решает, какие из них вообще на это годятся.
+    """
+
+    if not raw:
+        return frozenset()
+    items = [part.strip() for part in raw.split(",") if part.strip()]
+    unknown = sorted(set(items) - CREATABLE_LOOKUPS)
+    if unknown:
+        raise _problem(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "IMPORT_LOOKUP_NOT_CREATABLE",
+            "These lookups cannot be created from an import: " + ", ".join(unknown),
+            creatable_lookups=sorted(CREATABLE_LOOKUPS),
+        )
+    return frozenset(items)
+
+
+def _lookup_not_creatable(exc: ImportLookupNotCreatableError) -> HTTPException:
+    return _problem(
+        status.HTTP_422_UNPROCESSABLE_ENTITY,
+        "IMPORT_LOOKUP_NOT_CREATABLE",
+        "These lookups cannot be created from an import: " + ", ".join(exc.lookups),
+        creatable_lookups=sorted(CREATABLE_LOOKUPS),
+    )
+
+
 # --- схемы ответов --------------------------------------------------------
 
 
@@ -139,6 +176,7 @@ class ImportColumnOut(BaseModel):
     aliases: list[str]
     enum_values: list[str] = Field(default_factory=list)
     lookup: str | None = None
+    lookup_creatable: bool = False
 
 
 class ImportTargetOut(BaseModel):
@@ -224,6 +262,7 @@ def _target_out(target: ImportTarget) -> ImportTargetOut:
                 aliases=list(c.aliases),
                 enum_values=list(c.enum_values),
                 lookup=c.lookup,
+                lookup_creatable=c.lookup_creatable,
             )
             for c in target.columns
         ],
@@ -358,7 +397,11 @@ async def dry_run_import(
     file: Annotated[UploadFile, File()],
     mapping: Annotated[str | None, Form()] = None,
 ) -> ImportPreviewOut:
-    """Показать, что будет создано / обновлено / пропущено — БЕЗ записи в БД."""
+    """Показать, что будет создано / обновлено / пропущено — БЕЗ записи в БД.
+
+    Дозаведение справочников здесь не предлагается сознательно: сухой прогон не
+    пишет в БД, а создание записи справочника — это запись.
+    """
 
     await _require_enabled(session, tenant)
     target = _require_target(target_code)
@@ -384,8 +427,15 @@ async def apply_import(
     access: ImportAccess,
     file: Annotated[UploadFile, File()],
     mapping: Annotated[str | None, Form()] = None,
+    create_missing: Annotated[str | None, Form()] = None,
 ) -> ImportApplyOut:
-    """Применить импорт: корректные строки записываются, ошибочные откладываются."""
+    """Применить импорт: корректные строки записываются, ошибочные откладываются.
+
+    ``create_missing`` — список справочников через запятую, которые разрешено
+    дозавести (разд. 71.3). Созданные записи попадают в ту же партию и снимаются
+    её откатом: справочная строка, пережившая отмену загрузки, — это мусор,
+    который потом никто с этой загрузкой не свяжет.
+    """
 
     await _require_enabled(session, tenant)
     target = _require_target(target_code)
@@ -398,11 +448,14 @@ async def apply_import(
             content,
             overrides=_parse_overrides(mapping),
             actor_id=getattr(access, "user_id", None),
+            create_missing=_parse_create_missing(create_missing),
         )
     except ImportFileError as exc:
         raise _file_error(exc) from exc
     except ImportMappingError as exc:
         raise _mapping_error(exc) from exc
+    except ImportLookupNotCreatableError as exc:
+        raise _lookup_not_creatable(exc) from exc
     await session.commit()
     return ImportApplyOut(batch=_batch_out(batch), preview=_preview_out(target.code, plan))
 
@@ -588,6 +641,47 @@ async def get_batch_rows(
         )
         for r in rows
     ]
+
+
+@router.get("/batches/{batch_id}/report")
+async def download_batch_report(
+    batch_id: str, session: SessionDep, tenant: TenantDep, _access: ImportAccess
+) -> Response:
+    """Отчёт по партии файлом (разд. 71.3: «отчёт … скачиваемый, с привязкой к batch id»).
+
+    CSV, а не XLSX: его открывает и Excel, и всё остальное, а отчёт нужен ровно
+    для того, чтобы разослать его тем, кто будет править исходные данные.
+    """
+
+    await _require_enabled(session, tenant)
+    service = ImportService(session, tenant)
+    batch = await service.get_batch(batch_id)
+    if batch is None:
+        raise _problem(status.HTTP_404_NOT_FOUND, "IMPORT_BATCH_NOT_FOUND", "Batch not found")
+
+    rows = await service.list_rows(batch_id)
+    buffer = StringIO()
+    writer = csv.writer(buffer, delimiter=";")
+    writer.writerow(["Строка", "Действие", "Ключ", "ID записи", "Сообщение"])
+    for row in rows:
+        writer.writerow(
+            [
+                # Отрицательные номера — не строки файла, а дозаведённые записи
+                # справочников: показываем это словом, а не минусом в отчёте.
+                row.row_number if row.row_number > 0 else "справочник",
+                row.action,
+                row.natural_key or "",
+                row.entity_id or "",
+                (row.message or "").replace("\n", " "),
+            ]
+        )
+
+    body = "\ufeff" + buffer.getvalue()  # BOM: иначе Excel ломает кириллицу
+    return Response(
+        content=body.encode("utf-8"),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="import_report_{batch.id}.csv"'},
+    )
 
 
 @router.post("/batches/{batch_id}/rollback", response_model=ImportBatchOut)

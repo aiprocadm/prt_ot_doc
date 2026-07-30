@@ -21,6 +21,11 @@ interface ImportsPageData {
 
 const INITIAL: ImportsPageData = { targets: [], batches: [] };
 
+const LOOKUP_LABELS: Record<string, string> = {
+  position: "должности",
+  company: "организации"
+};
+
 /**
  * Мастер импорта (ТЗ разд. 71.1): шаблон → файл → сухой прогон → маппинг → применение.
  *
@@ -37,6 +42,9 @@ const ImportsPage = () => {
   // Файл не влез в синхронную проверку. Держим это отдельным состоянием, а не
   // выводим из размера файла: предел считается в СТРОКАХ, и байты о нём не говорят.
   const [oversized, setOversized] = useState(false);
+  // Справочники, которые пользователь разрешил дозавести. Выбор поимённый:
+  // «создавать недостающее» одной галкой означало бы и организации тоже.
+  const [createMissing, setCreateMissing] = useState<string[]>([]);
 
   const loader = useCallback(async (): Promise<ImportsPageData> => {
     const [targets, batches] = await Promise.all([
@@ -57,12 +65,21 @@ const ImportsPage = () => {
     [resource.data.targets, targetCode]
   );
 
+  const creatableLookups = useMemo(() => {
+    const found = new Set<string>();
+    for (const column of target?.columns ?? []) {
+      if (column.lookup && column.lookup_creatable) found.add(column.lookup);
+    }
+    return [...found];
+  }, [target]);
+
   // Смена цели или файла обесценивает предпросмотр: показывать план, посчитанный
   // для другого файла, — это приглашение применить не то.
   const resetPreview = () => {
     setPreview(null);
     setOverrides({});
     setOversized(false);
+    setCreateMissing([]);
   };
 
   const effectiveMapping = (): Record<string, string> => {
@@ -140,7 +157,12 @@ const ImportsPage = () => {
 
     setBusy(true);
     try {
-      const result = await importsApi.apply(target.code, file, effectiveMapping());
+      const result = await importsApi.apply(
+        target.code,
+        file,
+        effectiveMapping(),
+        createMissing
+      );
       toast.success(
         `Импорт применён: создано ${result.batch.created_count}, обновлено ${result.batch.updated_count}`
       );
@@ -277,6 +299,31 @@ const ImportsPage = () => {
           <section className="space-y-3 rounded-md border p-4">
             <h2 className="text-lg font-medium">4. Результат проверки</h2>
             <PreviewPanel preview={preview} />
+            {creatableLookups.length > 0 && Object.keys(preview.unknown_references).length > 0 ? (
+              <div className="space-y-2 rounded-md border p-3">
+                <p className="text-sm font-medium">Недостающие записи справочников</p>
+                {creatableLookups.map((lookup) => (
+                  <label key={lookup} className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={createMissing.includes(lookup)}
+                      onChange={(event) =>
+                        setCreateMissing((prev) =>
+                          event.target.checked
+                            ? [...prev, lookup]
+                            : prev.filter((item) => item !== lookup)
+                        )
+                      }
+                    />
+                    Создать недостающие значения: {LOOKUP_LABELS[lookup] ?? lookup}
+                  </label>
+                ))}
+                <p className="text-sm text-muted-foreground">
+                  Созданные записи войдут в эту же загрузку и будут удалены, если вы её откатите.
+                </p>
+              </div>
+            ) : null}
+
             <Button disabled={busy} onClick={() => void runApply()}>
               Применить импорт
             </Button>
