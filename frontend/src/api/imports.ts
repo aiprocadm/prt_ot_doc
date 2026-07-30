@@ -11,6 +11,12 @@ import { downloadBlob } from "@/utils/download";
 
 const BASE = "/imports";
 
+/** Файл не влезает в синхронную ручку — предлагаем фоновую загрузку. */
+export const isTooManyRowsError = (error: unknown): boolean => {
+  const e = error as Partial<ApiError> | null;
+  return Boolean(e && e.status === 422 && e.code === "IMPORT_FILE_TOO_MANY_ROWS");
+};
+
 /** Модуль импорта — default-OFF, и выключенный он отвечает 404. */
 export const isFeatureDisabledError = (error: unknown): boolean => {
   const e = error as Partial<ApiError> | null;
@@ -58,6 +64,23 @@ export const importsApi = {
     return (
       await apiClient.post<ImportApplyDto>(`${BASE}/${targetCode}/apply`, withFile(file, mapping))
     ).data;
+  },
+
+  async applyAsync(
+    targetCode: string,
+    file: File,
+    mapping?: Record<string, string>
+  ): Promise<ImportBatchDto> {
+    return (
+      await apiClient.post<ImportBatchDto>(
+        `${BASE}/${targetCode}/apply-async`,
+        withFile(file, mapping)
+      )
+    ).data;
+  },
+
+  async batch(batchId: string): Promise<ImportBatchDto> {
+    return (await apiClient.get<ImportBatchDto>(`${BASE}/batches/${batchId}`)).data;
   },
 
   async batches(params: { target?: string; limit?: number } = {}): Promise<ImportBatchDto[]> {

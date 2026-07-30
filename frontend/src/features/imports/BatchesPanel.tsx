@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { importsApi } from "@/api/imports";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useBatchProgress } from "@/features/imports/useBatchProgress";
 import type { ImportBatchDto, ImportBatchRowDto, ImportBatchStatus } from "@/types/dto/imports";
 
 const STATUS_LABELS: Record<ImportBatchStatus, string> = {
@@ -37,6 +38,9 @@ export const BatchesPanel = ({ batches, onChanged }: BatchesPanelProps) => {
   const [openBatchId, setOpenBatchId] = useState<string | null>(null);
   const [rows, setRows] = useState<ImportBatchRowDto[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
+  // Фоновые партии опрашиваются, пока не завершатся: прогресс, который надо
+  // обновлять кнопкой «перезагрузить», прогрессом не выглядит.
+  const liveBatches = useBatchProgress(batches, { onSettled: onChanged });
 
   const toggleRows = async (batch: ImportBatchDto) => {
     if (openBatchId === batch.id) {
@@ -69,13 +73,13 @@ export const BatchesPanel = ({ batches, onChanged }: BatchesPanelProps) => {
     }
   };
 
-  if (batches.length === 0) {
+  if (liveBatches.length === 0) {
     return <p className="text-sm text-muted-foreground">Загрузок пока не было.</p>;
   }
 
   return (
     <div className="space-y-2">
-      {batches.map((batch) => (
+      {liveBatches.map((batch) => (
         <div key={batch.id} className="rounded-md border p-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="space-y-1">
@@ -83,10 +87,23 @@ export const BatchesPanel = ({ batches, onChanged }: BatchesPanelProps) => {
                 <span className="font-medium">{batch.source_filename}</span>
                 <Badge variant={STATUS_VARIANT[batch.status]}>{STATUS_LABELS[batch.status]}</Badge>
               </div>
-              <p className="text-sm text-muted-foreground">
-                создано {batch.created_count} · обновлено {batch.updated_count} · без изменений{" "}
-                {batch.skipped_count} · ошибок {batch.failed_count}
-              </p>
+              {batch.status === "pending" || batch.status === "running" ? (
+                <p className="text-sm text-muted-foreground" role="status">
+                  обработано {batch.processed_rows}
+                  {batch.total_rows > 0 ? ` из ${batch.total_rows}` : ""}
+                  {batch.total_rows > 0
+                    ? ` (${Math.floor((batch.processed_rows / batch.total_rows) * 100)}%)`
+                    : ""}
+                </p>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  создано {batch.created_count} · обновлено {batch.updated_count} · без изменений{" "}
+                  {batch.skipped_count} · ошибок {batch.failed_count}
+                </p>
+              )}
+              {batch.error_message ? (
+                <p className="text-sm text-destructive">{batch.error_message}</p>
+              ) : null}
             </div>
             <div className="flex gap-2">
               {batch.failed_count > 0 ? (
