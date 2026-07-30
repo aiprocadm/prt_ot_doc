@@ -404,3 +404,76 @@ async def test_retired_key_fails_closed_not_unsigned(sessionmaker, monkeypatch) 
     # нельзя. Запись НЕ помечена sent — уйдёт в ретрай.
     assert entry.status != OutboxStatus.SENT
     assert len(requests) == 0
+
+
+@pytest.mark.anyio
+async def test_db_error_in_secret_resolution_does_not_poison_the_batch(
+    sessionmaker, monkeypatch
+) -> None:
+    """Ошибка БД в резолве секрета не должна ронять весь батч (savepoint-изоляция).
+
+    Найдено ревью и воспроизведено на живом PG для версии без savepoint: ошибка
+    session.execute в резолве отравляла транзакцию процессора, и следующие
+    _mark_sent/_record_delivery падали вне try — батч рушился, записи висели
+    IN_PROGRESS и доставлялись повторно. С savepoint ошибка резолва изолирована:
+    её запись уходит в FAILED, соседняя доставляется, транзакция цела.
+    """
+
+    from sqlalchemy.exc import OperationalError
+
+    from app.services import webhooks as webhooks_module
+
+    requests: list[httpx.Request] = []
+    async with sessionmaker() as session:
+        tenant = (await session.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()
+        session.add_all(
+            [
+                WebhookSubscription(
+                    tenant_id=tenant.id,
+                    event_type="DocumentExported",
+                    url="https://example.test/hooks/batch",
+                    secret=encrypt_secret(PLAINTEXT),
+                    enabled=True,
+                ),
+                WebhookSubscription(
+                    tenant_id=tenant.id,
+                    event_type="DocumentExported",
+                    url="https://example.test/hooks/healthy",
+                    secret=encrypt_secret(PLAINTEXT),
+                    enabled=True,
+                ),
+            ]
+        )
+        await session.flush()
+        broken = await _make_entry(session, tenant.id, url="https://example.test/hooks/batch")
+        healthy = await _make_entry(session, tenant.id, url="https://example.test/hooks/healthy")
+
+        dispatcher = _recording_dispatcher(requests)
+        original = WebhookDispatcher._resolve_secret_for_destination
+
+        async def _flaky(self, **kwargs):
+            if kwargs.get("url") == "https://example.test/hooks/batch":
+                # Реальная БД-ошибка внутри savepoint — он обязан её изолировать
+                # так, чтобы внешняя транзакция процессора осталась живой.
+                try:
+                    async with kwargs["session"].begin_nested():
+                        from sqlalchemy import text
+
+                        await kwargs["session"].execute(text("SELECT * FROM does_not_exist"))
+                except Exception as exc:  # noqa: BLE001
+                    raise OperationalError("stmt", {}, Exception("db")) from exc
+            return await original(self, **kwargs)
+
+        monkeypatch.setattr(WebhookDispatcher, "_resolve_secret_for_destination", _flaky)
+
+        processor = OutboxProcessor(session, dispatcher=dispatcher)
+        await processor.process_once()
+
+        await session.refresh(broken)
+        await session.refresh(healthy)
+
+    # Соседняя запись доставлена и подписана — батч не рухнул, транзакция цела.
+    assert healthy.status == OutboxStatus.SENT
+    assert any(_verify_signature(r) for r in requests)
+    # Битая запись не помечена sent — уйдёт в ретрай, а не потеряется.
+    assert broken.status != OutboxStatus.SENT

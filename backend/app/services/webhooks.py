@@ -353,50 +353,57 @@ class WebhookDispatcher:
             or None
         )
 
-        if endpoint_id:
-            sub = await session.get(WebhookSubscription, endpoint_id)
-            if (
-                sub is not None
-                and sub.enabled
-                and sub.event_type in variants
-                and self._tenant_ok(sub.tenant_id, tenant_id)
-                and sub.secret
-            ):
-                return endpoint_id, decrypt_secret(sub.secret)
-            legacy = await session.get(WebhookEndpoint, endpoint_id)
-            if (
-                legacy is not None
-                and legacy.is_enabled
-                and legacy.tenant_id == tenant_id  # у легаси-модели tenant_id NOT NULL
-                and legacy.secret
-            ):
-                return endpoint_id, decrypt_secret(legacy.secret)
+        # Все запросы резолва — в SAVEPOINT (найдено ревью: без него ошибка БД
+        # здесь на общей сессии процессора отравляла бы транзакцию, и следующие
+        # _mark_sent/_record_delivery падали бы уже ВНЕ try, роняя весь батч и
+        # оставляя записи в IN_PROGRESS → повторная доставка). Savepoint откатит
+        # только чтение резолва; ошибка всё равно поднимется наверх — доставку
+        # пометят FAILED и уведут в ретрай.
+        async with session.begin_nested():
+            if endpoint_id:
+                sub = await session.get(WebhookSubscription, endpoint_id)
+                if (
+                    sub is not None
+                    and sub.enabled
+                    and sub.event_type in variants
+                    and self._tenant_ok(sub.tenant_id, tenant_id)
+                    and sub.secret
+                ):
+                    return endpoint_id, decrypt_secret(sub.secret)
+                legacy = await session.get(WebhookEndpoint, endpoint_id)
+                if (
+                    legacy is not None
+                    and legacy.is_enabled
+                    and legacy.tenant_id == tenant_id  # у легаси-модели tenant_id NOT NULL
+                    and legacy.secret
+                ):
+                    return endpoint_id, decrypt_secret(legacy.secret)
 
-        rows = (
-            (
-                await session.execute(
-                    select(WebhookSubscription)
-                    .where(
-                        WebhookSubscription.url == url,
-                        WebhookSubscription.event_type.in_(variants),
-                        WebhookSubscription.enabled.is_(True),
-                        or_(
-                            WebhookSubscription.tenant_id == tenant_id,
+            rows = (
+                (
+                    await session.execute(
+                        select(WebhookSubscription)
+                        .where(
+                            WebhookSubscription.url == url,
+                            WebhookSubscription.event_type.in_(variants),
+                            WebhookSubscription.enabled.is_(True),
+                            or_(
+                                WebhookSubscription.tenant_id == tenant_id,
+                                WebhookSubscription.tenant_id.is_(None),
+                            ),
+                        )
+                        .order_by(
                             WebhookSubscription.tenant_id.is_(None),
-                        ),
-                    )
-                    .order_by(
-                        WebhookSubscription.tenant_id.is_(None),
-                        WebhookSubscription.created_at.asc(),
+                            WebhookSubscription.created_at.asc(),
+                        )
                     )
                 )
+                .scalars()
+                .all()
             )
-            .scalars()
-            .all()
-        )
-        for sub in rows:
-            if sub.secret:
-                return sub.id, decrypt_secret(sub.secret)
+            for sub in rows:
+                if sub.secret:
+                    return sub.id, decrypt_secret(sub.secret)
         return endpoint_id, None
 
     async def dispatch(
