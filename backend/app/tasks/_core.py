@@ -18,6 +18,7 @@ from app.core.config import get_settings
 from app.core.metrics import get_metrics
 from app.core.secret_cipher import decrypt_secret
 from app.core.tenant import tenant_context
+from app.core.webhook_contract import WEBHOOK_SCHEMA_VERSION, WEBHOOK_SCHEMA_VERSION_HEADER
 from app.db import AsyncSessionLocal, ensure_tenant_schema, session_scope
 from app.models.job_engine import (
     OutboxEvent,
@@ -476,6 +477,9 @@ async def _dispatch_outbox_events(
                     "payload": event.payload,
                     "headers": event.headers or {},
                     "correlation_id": correlation_id,
+                    # OPS-73 (разд. 73.3): версия схемы — подписчик выбирает
+                    # парсер по ней, а контрактный тест стережёт состав тела.
+                    "schema_version": WEBHOOK_SCHEMA_VERSION,
                 }
                 raw_body = json.dumps(body, separators=(",", ":"), ensure_ascii=False).encode(
                     "utf-8"
@@ -519,6 +523,7 @@ async def _dispatch_outbox_events(
                         "X-Correlation-Id": correlation_id,
                         "X-Signature": f"v1={signature}",
                         "X-Signature-Ts": ts,
+                        WEBHOOK_SCHEMA_VERSION_HEADER: WEBHOOK_SCHEMA_VERSION,
                     }
                     try:
                         resp = await client.post(
