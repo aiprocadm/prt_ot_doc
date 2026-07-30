@@ -17,6 +17,7 @@ import {
   BillingPage,
   BriefingsPage,
   BudgetPage,
+  ImportsPage,
   CalendarPage,
   ClientDeliveryDashboardPage,
   ClientPortalDashboardPage,
@@ -255,7 +256,8 @@ export const buildProtectedRouteGroups = (): ReactElement[] => {
     { permission: PERMISSIONS.COMMITTEE_VIEW, routes: [<Route key="/committees" path="/committees" element={<CommitteesPage />} />] },
     { permission: PERMISSIONS.SOUT_VIEW, routes: [<Route key="/sout" path="/sout" element={<SoutPage />} />] },
     { permission: PERMISSIONS.RULES_VIEW, routes: [<Route key="/rules" path="/rules" element={<RulesPage />} />] },
-    { permission: PERMISSIONS.BUDGET_VIEW, routes: [<Route key="/budget" path="/budget" element={<BudgetPage />} />] }
+    { permission: PERMISSIONS.BUDGET_VIEW, routes: [<Route key="/budget" path="/budget" element={<BudgetPage />} />] },
+    { permission: PERMISSIONS.IMPORTS_MANAGE, routes: [<Route key="/imports" path="/imports" element={<ImportsPage />} />] }
   ];
 
   return groups.map(renderGuardedGroup);

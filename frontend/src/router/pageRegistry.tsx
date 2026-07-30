@@ -74,5 +74,6 @@ export const CommitteeKpiPage = lazy(() => import("@/pages/committees/CommitteeK
 export const SoutPage = lazy(() => import("@/pages/sout/SoutPage"));
 export const RulesPage = lazy(() => import("@/pages/rules/RulesPage"));
 export const BudgetPage = lazy(() => import("@/pages/budget/BudgetPage"));
+export const ImportsPage = lazy(() => import("@/pages/imports/ImportsPage"));
 export * from "@/router/pageRegistry/documents";
 export * from "@/router/pageRegistry/search";
