@@ -10,6 +10,7 @@ import csv
 from dataclasses import dataclass, field
 from io import BytesIO, StringIO
 
+from app.core.archive_safety import assert_safe_office_archive
 from app.core.xml_security import stdlib_fromstring
 from app.domains.sout.print_form import HARMFUL_CLASSES
 
@@ -158,6 +159,12 @@ def parse_csv(content: bytes) -> list[ParsedWorkplace]:
 
 
 def parse_xlsx(content: bytes) -> list[ParsedWorkplace]:
+    # XLSX — это ZIP, и распаковывает его наш процесс. Гард разд. 64.2 (SEC-64)
+    # стоял ТОЛЬКО на финализации загрузки в модуле files, а этот путь туда не
+    # заходит: zip-бомба и макрос-контейнер приезжали в openpyxl мимо всей защиты.
+    # Найдено в волне OPS-71 (общий импорт-фреймворк зовёт тот же гард).
+    assert_safe_office_archive(content)
+
     from openpyxl import load_workbook  # ленивый импорт (тяжёлый), как в documents.py
 
     wb = load_workbook(BytesIO(content), read_only=True)

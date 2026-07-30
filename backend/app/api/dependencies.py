@@ -104,8 +104,26 @@ async def _fetch_tenant_by_identifier(identifier: str) -> Tenant:
         filters = [Tenant.slug == identifier, Tenant.code == identifier]
         if len(identifier) == 36:
             filters.append(Tenant.id == identifier)
-        result = await session.execute(select(Tenant).where(or_(*filters)))
-        tenant = result.scalar_one_or_none()
+        candidates = list((await session.execute(select(Tenant).where(or_(*filters)))).scalars())
+        # Идентификатор может совпасть С РАЗНЫМИ арендаторами: код одного бывает
+        # равен slug'у другого, а в тестовых данных встречается арендатор, чей slug
+        # равен UUID соседа. Прежний ``scalar_one_or_none()`` на такой неоднозначности
+        # бросал MultipleResultsFound → 500 «внутренняя ошибка» вместо работы.
+        # Порядок предпочтения явный (id → slug → код): id уникален по определению,
+        # slug — основной публичный идентификатор, код — вспомогательный.
+        tenant = next(
+            (
+                match
+                for predicate in (
+                    lambda t: t.id == identifier,
+                    lambda t: t.slug == identifier,
+                    lambda t: t.code == identifier,
+                )
+                for match in candidates
+                if predicate(match)
+            ),
+            None,
+        )
     if tenant is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Tenant not found")
     if not tenant.is_active:

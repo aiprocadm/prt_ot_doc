@@ -26,6 +26,7 @@ from app.api.helpers.etag import (
     compute_list_etag,
 )
 from app.api.helpers.upload import reject_oversize_upload
+from app.core.archive_safety import ArchiveSafetyError
 from app.core.errors import api_problem_detail
 from app.core.feature_flags import is_feature_enabled
 from app.core.security import AccessContext, abac
@@ -877,6 +878,21 @@ def _unsupported_format(exc: UnsupportedImportFormat) -> HTTPException:
     )
 
 
+def _unsafe_archive(exc: ArchiveSafetyError) -> HTTPException:
+    """Небезопасный XLSX (zip-бомба, макросы, пути наружу) — 422, а не 500.
+
+    Код причины отдаётся как есть: «файл отклонён» без причины порождает
+    обращение в поддержку по каждому легитимному отказу.
+    """
+
+    return HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        detail=api_problem_detail(
+            code=exc.code.upper(), message=str(exc.args[-1] if exc.args else exc), error_type="sout"
+        ),
+    )
+
+
 def _import_invalid(exc: ImportValidationError) -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -902,6 +918,8 @@ async def import_preview(
         )
     except UnsupportedImportFormat as exc:
         raise _unsupported_format(exc)
+    except ArchiveSafetyError as exc:
+        raise _unsafe_archive(exc)
     if outcome is None:
         raise _not_found("Campaign")
     return outcome
@@ -930,6 +948,8 @@ async def import_apply(
         )
     except UnsupportedImportFormat as exc:
         raise _unsupported_format(exc)
+    except ArchiveSafetyError as exc:
+        raise _unsafe_archive(exc)
     except ImportValidationError as exc:
         raise _import_invalid(exc)
     if result is None:
