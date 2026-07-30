@@ -16,6 +16,7 @@ const batch = (over: Partial<ImportBatchDto> = {}): ImportBatchDto => ({
   id: "b1",
   target: "persons",
   status: "running",
+  mode: "apply",
   source_filename: "staff.csv",
   source_format: "csv",
   mapping: {},

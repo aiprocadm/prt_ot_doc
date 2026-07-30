@@ -17,6 +17,7 @@ vi.mock("@/api/imports", async (importOriginal) => {
       dryRun: vi.fn(),
       apply: vi.fn(),
       applyAsync: vi.fn(),
+      dryRunAsync: vi.fn(),
       batch: vi.fn(),
       batches: vi.fn(),
       batchRows: vi.fn(),
@@ -89,6 +90,7 @@ const BATCH: ImportBatchDto = {
   id: "batch-1",
   target: "persons",
   status: "applied",
+  mode: "apply",
   source_filename: "staff.csv",
   source_format: "csv",
   mapping: {},
@@ -315,5 +317,65 @@ describe("ImportsPage", () => {
     await waitFor(() =>
       expect(screen.getByText(/import_source_unavailable/)).toBeInTheDocument()
     );
+  });
+  it("для большого файла предлагает сперва проверку, а не только загрузку", async () => {
+    mocked.dryRun.mockRejectedValueOnce({
+      status: 422,
+      code: "IMPORT_FILE_TOO_MANY_ROWS",
+      message: "too many rows"
+    });
+    renderPage();
+    await selectTargetAndFile();
+
+    fireEvent.click(screen.getByRole("button", { name: "Проверить без записи" }));
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Проверить в фоне" })).toBeInTheDocument()
+    );
+    expect(screen.getByRole("button", { name: "Загрузить в фоне" })).toBeInTheDocument();
+  });
+
+  it("фоновая проверка не спрашивает подтверждения — она ничего не пишет", async () => {
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    mocked.dryRun.mockRejectedValueOnce({
+      status: 422,
+      code: "IMPORT_FILE_TOO_MANY_ROWS",
+      message: "too many rows"
+    });
+    mocked.dryRunAsync.mockResolvedValue({ ...BATCH, mode: "preview", status: "pending" });
+
+    renderPage();
+    await selectTargetAndFile();
+    fireEvent.click(screen.getByRole("button", { name: "Проверить без записи" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Проверить в фоне" })).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole("button", { name: "Проверить в фоне" }));
+
+    await waitFor(() => expect(mocked.dryRunAsync).toHaveBeenCalledTimes(1));
+    expect(confirmSpy).not.toHaveBeenCalled();
+    confirmSpy.mockRestore();
+  });
+
+  it("партию-проверку помечает и не даёт откатить", async () => {
+    mocked.batches.mockResolvedValue([
+      { ...BATCH, mode: "preview", status: "previewed", failed_count: 0 }
+    ]);
+
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText("проверка без записи")).toBeInTheDocument());
+    expect(screen.getByText("Проверена")).toBeInTheDocument();
+    // Откатывать нечего: в целевые таблицы ничего не писали.
+    expect(screen.queryByRole("button", { name: "Откатить" })).toBeNull();
+  });
+
+  it("счётчики проверки читаются как «будет создано»", async () => {
+    mocked.batches.mockResolvedValue([
+      { ...BATCH, mode: "preview", status: "previewed", created_count: 7, failed_count: 0 }
+    ]);
+
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText(/будет создано 7/)).toBeInTheDocument());
   });
 });

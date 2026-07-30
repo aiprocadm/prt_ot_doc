@@ -66,6 +66,19 @@ export const importsApi = {
     ).data;
   },
 
+  async dryRunAsync(
+    targetCode: string,
+    file: File,
+    mapping?: Record<string, string>
+  ): Promise<ImportBatchDto> {
+    return (
+      await apiClient.post<ImportBatchDto>(
+        `${BASE}/${targetCode}/dry-run-async`,
+        withFile(file, mapping)
+      )
+    ).data;
+  },
+
   async applyAsync(
     targetCode: string,
     file: File,

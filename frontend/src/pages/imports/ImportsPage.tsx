@@ -92,12 +92,26 @@ const ImportsPage = () => {
     }
   };
 
+  const runDryRunAsync = async () => {
+    if (!target || !file) return;
+    setBusy(true);
+    try {
+      await importsApi.dryRunAsync(target.code, file);
+      toast.success("Проверка запущена: результат появится в истории загрузок");
+      await resource.reload();
+    } catch {
+      // Причину уже показал глобальный обработчик API.
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const runApplyAsync = async () => {
     if (!target || !file) return;
     if (
       !window.confirm(
-        "Загрузить файл в фоне? Предварительная проверка для такого объёма недоступна, " +
-          "но загрузку целиком можно будет откатить в истории."
+        "Загрузить файл в фоне? Если проверку не запускали, результат станет известен только " +
+          "по итогу — загрузку целиком можно будет откатить в истории."
       )
     ) {
       return;
@@ -229,13 +243,18 @@ const ImportsPage = () => {
           <div className="space-y-2 rounded-md border border-amber-300 bg-amber-50 p-3">
             <p className="text-sm font-medium">Файл слишком большой для предварительной проверки</p>
             <p className="text-sm text-muted-foreground">
-              Такой объём загружается в фоне: файл принимается сразу, а ход работы виден в истории
-              загрузок ниже. Проверить его заранее не получится — страховкой служит откат всей
-              загрузки целиком.
+              Такой объём обрабатывается в фоне: файл принимается сразу, а ход работы виден в
+              истории загрузок ниже. Сначала имеет смысл прогнать проверку — она ничего не
+              записывает и покажет, что получится.
             </p>
-            <Button variant="outline" disabled={busy} onClick={() => void runApplyAsync()}>
-              Загрузить в фоне
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button disabled={busy} onClick={() => void runDryRunAsync()}>
+                Проверить в фоне
+              </Button>
+              <Button variant="outline" disabled={busy} onClick={() => void runApplyAsync()}>
+                Загрузить в фоне
+              </Button>
+            </div>
           </div>
         ) : null}
       </section>

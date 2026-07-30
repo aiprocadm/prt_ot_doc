@@ -46,12 +46,22 @@ export interface ImportPreviewDto {
   rows: ImportPlannedRowDto[];
 }
 
-export type ImportBatchStatus = "pending" | "running" | "applied" | "failed" | "rolled_back";
+export type ImportBatchStatus =
+  | "pending"
+  | "running"
+  | "applied"
+  | "previewed"
+  | "failed"
+  | "rolled_back";
+
+/** `preview` — фоновый сухой прогон: план посчитан, в целевые таблицы не писали. */
+export type ImportBatchMode = "apply" | "preview";
 
 export interface ImportBatchDto {
   id: string;
   target: string;
   status: ImportBatchStatus;
+  mode: ImportBatchMode;
   source_filename: string;
   source_format: string;
   mapping: Record<string, string>;

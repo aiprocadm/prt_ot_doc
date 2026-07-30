@@ -24,7 +24,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.imports import ImportBatch
+from app.models.imports import ImportBatch, ImportRow
 from app.models.tenanting import Tenant
 from app.modules.files import s3
 from app.modules.imports.parsers import MAX_ASYNC_IMPORT_ROWS, ImportFileError
@@ -43,6 +43,12 @@ __all__ = [
 logger = logging.getLogger(__name__)
 
 IMPORT_SOURCE_PREFIX = "imports"
+
+# Сколько ошибочных строк сохранять по итогам ФОНОВОГО сухого прогона.
+# Потолок обязателен: файл на 100 000 строк, где сломана каждая, иначе положил бы
+# в отчёт 100 000 записей — их всё равно никто не читает, а таблица распухнет.
+# Усечение видно в отчёте (``notes.errors_truncated``), молча оно не происходит.
+MAX_PREVIEW_ERROR_ROWS = 500
 
 
 def build_source_key(*, tenant_id: str, batch_id: str, filename: str) -> str:
@@ -111,6 +117,9 @@ async def execute_import_batch(
     batch.status = "running"
     await session.commit()
 
+    if batch.mode == "preview":
+        return await _run_preview(session, tenant, batch, target, content)
+
     async def _on_progress(current: ImportBatch) -> None:
         # Порция зафиксирована: и прогресс, и уже применённые строки становятся
         # видимы снаружи. Без commit'а опрос статуса возвращал бы ноль до конца.
@@ -143,6 +152,85 @@ async def execute_import_batch(
         return await _fail(session, batch, "import_failed", str(exc)[:500])
 
     batch.status = "applied"
+    batch.finished_at = _now()
+    await session.commit()
+    discard_source(batch.source_key)
+    return batch
+
+
+async def _run_preview(
+    session: AsyncSession,
+    tenant: Tenant,
+    batch: ImportBatch,
+    target,
+    content: bytes | None,
+) -> ImportBatch:
+    """Фоновый сухой прогон: план считается, в целевые таблицы НЕ пишем.
+
+    Синхронный dry-run ограничен потолком 5000 строк, поэтому у большого файла
+    предпросмотра не было вовсе — оставалось «применить и посмотреть, что вышло».
+    Здесь тот же план строится фоном, а его итог живёт в партии.
+    """
+
+    try:
+        payload = content if content is not None else load_source(batch.source_key or "")
+    except Exception as exc:  # noqa: BLE001 — хранилище отдаёт разнородные ошибки
+        return await _fail(session, batch, "import_source_unavailable", str(exc)[:500])
+
+    try:
+        plan, mapping, _ = await ImportService(session, tenant).build(
+            target,
+            batch.source_filename,
+            payload,
+            dict(batch.mapping or {}) or None,
+            max_rows=MAX_ASYNC_IMPORT_ROWS,
+        )
+    except (ImportFileError, ImportMappingError) as exc:
+        code = getattr(exc, "code", "import_rejected")
+        return await _fail(session, batch, code, str(exc)[:500])
+    except Exception as exc:  # noqa: BLE001 — воркер обязан оставить причину, а не молчать
+        logger.exception("imports.preview_failed", extra={"batch_id": batch.id})
+        await session.rollback()
+        return await _fail(session, batch, "import_failed", str(exc)[:500])
+
+    counts = plan.counts()
+    batch.mapping = dict(plan.mapping)
+    batch.total_rows = counts["total"]
+    batch.processed_rows = counts["total"]
+    # Те же счётчики читаются как «сколько БЫЛО БЫ»: режим партии говорит, что
+    # ничего не применялось, а второй набор колонок неизбежно разъехался бы с первым.
+    batch.created_count = counts["create"]
+    batch.updated_count = counts["update"]
+    batch.skipped_count = counts["skip"]
+    batch.failed_count = counts["error"]
+
+    error_rows = [row for row in plan.rows if row.action == "error"]
+    stored = error_rows[:MAX_PREVIEW_ERROR_ROWS]
+    for planned in stored:
+        session.add(
+            ImportRow(
+                tenant_id=tenant.id,
+                batch_id=batch.id,
+                row_number=planned.row_number,
+                action="failed",
+                natural_key=planned.natural_key or None,
+                errors=[
+                    {"code": e.code, "field": e.field, "message": e.message} for e in planned.errors
+                ],
+                message="; ".join(e.message for e in planned.errors)[:2000],
+            )
+        )
+
+    batch.notes = {
+        "unmapped_headers": list(plan.unmapped_headers),
+        "unknown_references": {k: list(v) for k, v in plan.unknown_references.items()},
+        "ambiguous_headers": list(mapping.ambiguous_headers),
+        "errors_total": len(error_rows),
+        # Усечение обязано быть видно: «показано 500» без пометки читается как
+        # «ошибок ровно 500», и остаток обнаружится уже при применении.
+        "errors_truncated": len(error_rows) > len(stored),
+    }
+    batch.status = "previewed"
     batch.finished_at = _now()
     await session.commit()
     discard_source(batch.source_key)

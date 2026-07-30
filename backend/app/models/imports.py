@@ -28,6 +28,7 @@ from sqlalchemy.types import JSON
 from app.models.base import TenantBaseModel
 
 __all__ = [
+    "IMPORT_BATCH_MODES",
     "IMPORT_BATCH_STATUSES",
     "IMPORT_ROW_ACTIONS",
     "IMPORT_TERMINAL_STATUSES",
@@ -42,6 +43,10 @@ IMPORT_BATCH_STATUSES: tuple[str, ...] = (
     "running",
     # Партия применена: часть строк создана/обновлена, ошибочные отложены.
     "applied",
+    # Фоновый сухой прогон закончен: план посчитан, в целевые таблицы НЕ писали.
+    # Отдельный статус, а не "applied": «применена» у партии, которая ничего не
+    # применяла, — это ложь в интерфейсе и в отчётах.
+    "previewed",
     # Обработка оборвалась целиком (нечитаемый файл, упавший воркер).
     # Строки, применённые до обрыва, остаются и откатываются штатным откатом —
     # именно поэтому статус отдельный, а не «как будто ничего не было».
@@ -51,7 +56,15 @@ IMPORT_BATCH_STATUSES: tuple[str, ...] = (
 )
 
 # Статусы, из которых партия уже не сдвинется сама.
-IMPORT_TERMINAL_STATUSES: frozenset[str] = frozenset({"applied", "failed", "rolled_back"})
+IMPORT_TERMINAL_STATUSES: frozenset[str] = frozenset(
+    {"applied", "previewed", "failed", "rolled_back"}
+)
+
+# Режим партии. ``preview`` — фоновый сухой прогон: план считается и сохраняется,
+# но ни одной записи в целевые таблицы не делается. Режим нужен ИМЕННО как поле,
+# а не как вывод из статуса: воркер должен знать, что делать, когда партия ещё
+# ``pending``, то есть до появления терминального статуса.
+IMPORT_BATCH_MODES: tuple[str, ...] = ("apply", "preview")
 
 IMPORT_ROW_ACTIONS: tuple[str, ...] = ("created", "updated", "skipped", "failed")
 
@@ -67,6 +80,7 @@ class ImportBatch(TenantBaseModel):
 
     target: Mapped[str] = mapped_column(String(64), nullable=False)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="applied")
+    mode: Mapped[str] = mapped_column(String(8), nullable=False, default="apply")
 
     source_filename: Mapped[str] = mapped_column(String(255), nullable=False)
     source_format: Mapped[str] = mapped_column(String(16), nullable=False)
@@ -78,6 +92,9 @@ class ImportBatch(TenantBaseModel):
         MutableDict.as_mutable(JSON), nullable=False, default=dict
     )
 
+    # В режиме ``preview`` те же счётчики означают «сколько БЫЛО БЫ создано /
+    # обновлено / пропущено / отвергнуто». Отдельные колонки под предпросмотр не
+    # заводятся сознательно: это те же величины, а два набора неизбежно разъедутся.
     total_rows: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     created_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     updated_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)

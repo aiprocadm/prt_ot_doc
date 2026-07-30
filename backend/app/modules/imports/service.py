@@ -465,6 +465,15 @@ class ImportService:
                 "import_batch_already_rolled_back", "Batch has already been rolled back"
             )
 
+        if batch.mode == "preview":
+            # Сухой прогон ничего не записывал, поэтому «откатить» его нельзя —
+            # и молча отвечать «откачено» тоже нельзя: пользователь решит, что
+            # что-то отменил, и не станет искать настоящую партию.
+            raise ImportRollbackError(
+                "import_batch_is_preview",
+                "This batch is a dry run: nothing was written, so there is nothing to roll back",
+            )
+
         target = get_target(batch.target)
         if target is None:
             raise ImportRollbackError(

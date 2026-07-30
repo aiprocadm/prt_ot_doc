@@ -11,6 +11,7 @@ const STATUS_LABELS: Record<ImportBatchStatus, string> = {
   pending: "В очереди",
   running: "Выполняется",
   applied: "Применена",
+  previewed: "Проверена",
   failed: "Оборвалась",
   rolled_back: "Откачена"
 };
@@ -19,6 +20,7 @@ const STATUS_VARIANT: Record<ImportBatchStatus, "secondary" | "destructive" | "o
   pending: "outline",
   running: "outline",
   applied: "secondary",
+  previewed: "outline",
   failed: "destructive",
   rolled_back: "outline"
 };
@@ -86,6 +88,9 @@ export const BatchesPanel = ({ batches, onChanged }: BatchesPanelProps) => {
               <div className="flex items-center gap-2">
                 <span className="font-medium">{batch.source_filename}</span>
                 <Badge variant={STATUS_VARIANT[batch.status]}>{STATUS_LABELS[batch.status]}</Badge>
+                {batch.mode === "preview" ? (
+                  <Badge variant="outline">проверка без записи</Badge>
+                ) : null}
               </div>
               {batch.status === "pending" || batch.status === "running" ? (
                 <p className="text-sm text-muted-foreground" role="status">
@@ -97,8 +102,10 @@ export const BatchesPanel = ({ batches, onChanged }: BatchesPanelProps) => {
                 </p>
               ) : (
                 <p className="text-sm text-muted-foreground">
-                  создано {batch.created_count} · обновлено {batch.updated_count} · без изменений{" "}
-                  {batch.skipped_count} · ошибок {batch.failed_count}
+                  {batch.mode === "preview" ? "будет создано " : "создано "}
+                  {batch.created_count} · {batch.mode === "preview" ? "обновлено" : "обновлено"}{" "}
+                  {batch.updated_count} · без изменений {batch.skipped_count} · ошибок{" "}
+                  {batch.failed_count}
                 </p>
               )}
               {batch.error_message ? (
@@ -111,7 +118,8 @@ export const BatchesPanel = ({ batches, onChanged }: BatchesPanelProps) => {
                   {openBatchId === batch.id ? "Скрыть ошибки" : "Показать ошибки"}
                 </Button>
               ) : null}
-              {batch.status === "applied" || batch.status === "failed" ? (
+              {batch.mode !== "preview" &&
+              (batch.status === "applied" || batch.status === "failed") ? (
                 <Button
                   variant="outline"
                   size="sm"
