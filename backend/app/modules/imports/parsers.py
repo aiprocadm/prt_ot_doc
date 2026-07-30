@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import csv
 import json
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from io import BytesIO, StringIO
 
@@ -26,6 +27,7 @@ from app.core.archive_safety import ArchiveSafetyError, assert_safe_office_archi
 __all__ = [
     "MAX_ASYNC_IMPORT_ROWS",
     "MAX_IMPORT_ROWS",
+    "open_import_source",
     "ImportFileError",
     "ParsedFile",
     "SUPPORTED_EXTENSIONS",
@@ -36,10 +38,11 @@ __all__ = [
 # HTTP-запроса, не упираясь в таймаут прокси.
 MAX_IMPORT_ROWS = 5000
 
-# Потолок асинхронного импорта. Он на порядок выше, но не бесконечен: файл целиком
-# читается в память, и «без предела» означает падение воркера по OOM на чужом
-# файле — отказ, который выглядит как «импорт иногда не работает».
-MAX_ASYNC_IMPORT_ROWS = 100_000
+# Потолок асинхронного импорта. Фоновый путь читает файл ПОТОКОМ (см.
+# ``open_import_source``), поэтому память больше не упирается в размер файла —
+# предел остался как защита от бесконечной работы на явно неадекватном вводе, а
+# не как следствие «всё в памяти». Отсюда и порядок величины.
+MAX_ASYNC_IMPORT_ROWS = 1_000_000
 
 SUPPORTED_EXTENSIONS: tuple[str, ...] = (".xlsx", ".csv", ".json")
 
@@ -194,3 +197,102 @@ def parse_import_file(
         "import_format_unsupported",
         f"Unsupported file format: {filename!r}. Supported: {', '.join(SUPPORTED_EXTENSIONS)}",
     )
+
+
+# --- потоковое чтение -----------------------------------------------------
+
+
+def open_import_source(
+    filename: str, content: bytes, *, max_rows: int = MAX_ASYNC_IMPORT_ROWS
+) -> tuple[list[str], Iterator[dict[str, object]]]:
+    """Заголовки + ЛЕНИВЫЙ поток строк файла.
+
+    Отличие от :func:`parse_import_file` принципиальное: строки не собираются в
+    список. Файл на сотни тысяч строк не должен целиком лежать в памяти воркера —
+    именно это ограничение и держало прежний потолок.
+
+    Заголовки читаются сразу (их нужно знать до маппинга), поэтому возвращаются
+    отдельно, а не первым элементом потока: иначе каждый потребитель начинался бы
+    с одинакового «пропустить первую строку», и кто-нибудь однажды забыл бы.
+    """
+
+    name = (filename or "").lower()
+    if name.endswith(".csv"):
+        return _stream_csv(content, max_rows)
+    if name.endswith(".xlsx"):
+        return _stream_xlsx(content, max_rows)
+    if name.endswith(".json"):
+        # JSON без потоковой библиотеки разбирается целиком по своей природе:
+        # массив нельзя читать по одному объекту, не написав свой парсер.
+        # Честнее переиспользовать общий разбор, чем делать вид, что он потоковый.
+        parsed = parse_json(content, max_rows=max_rows)
+        return parsed.headers, iter(parsed.rows)
+    raise ImportFileError(
+        "import_format_unsupported",
+        f"Unsupported file format: {filename!r}. Supported: {', '.join(SUPPORTED_EXTENSIONS)}",
+    )
+
+
+def _stream_csv(content: bytes, max_rows: int) -> tuple[list[str], Iterator[dict[str, object]]]:
+    try:
+        text = content.decode("utf-8-sig")
+    except UnicodeDecodeError as exc:
+        raise ImportFileError("import_file_encoding", "CSV must be UTF-8 encoded") from exc
+    reader = csv.DictReader(StringIO(text))
+    headers = [h for h in (_clean_header(h) for h in (reader.fieldnames or [])) if h]
+
+    def _rows() -> Iterator[dict[str, object]]:
+        count = 0
+        for raw in reader:
+            row = {_clean_header(k): v for k, v in raw.items() if _clean_header(k)}
+            if _is_blank_row(row):
+                continue
+            count += 1
+            _guard_row_count(count, max_rows)
+            yield row
+
+    return headers, _rows()
+
+
+def _stream_xlsx(content: bytes, max_rows: int) -> tuple[list[str], Iterator[dict[str, object]]]:
+    try:
+        assert_safe_office_archive(content)
+    except ArchiveSafetyError as exc:
+        raise ImportFileError(exc.code, exc.args[-1] if exc.args else str(exc)) from exc
+
+    from openpyxl import load_workbook
+
+    try:
+        workbook = load_workbook(BytesIO(content), read_only=True, data_only=True)
+    except Exception as exc:  # noqa: BLE001 — openpyxl бросает разнородные ошибки
+        raise ImportFileError("import_file_unreadable", "XLSX file is not readable") from exc
+
+    sheet = workbook.active
+    if sheet is None:
+        workbook.close()
+        return [], iter(())
+    raw_rows = sheet.iter_rows(values_only=True)
+    try:
+        header_row = next(raw_rows)
+    except StopIteration:
+        workbook.close()
+        return [], iter(())
+    headers_all = [_clean_header(c) for c in header_row]
+    headers = [h for h in headers_all if h]
+
+    def _rows() -> Iterator[dict[str, object]]:
+        count = 0
+        try:
+            for raw in raw_rows:
+                row = {h: v for h, v in zip(headers_all, raw) if h}
+                if _is_blank_row(row):
+                    continue
+                count += 1
+                _guard_row_count(count, max_rows)
+                yield row
+        finally:
+            # Книга закрывается ТОЛЬКО когда поток исчерпан или брошен: read_only
+            # держит открытый дескриптор внутри zip, и ранний close оборвал бы чтение.
+            workbook.close()
+
+    return headers, _rows()

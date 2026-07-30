@@ -24,13 +24,14 @@ from datetime import datetime, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.imports import ImportBatch, ImportRow
+from app.models.imports import ImportBatch
 from app.models.tenanting import Tenant
 from app.modules.files import s3
 from app.modules.imports.parsers import MAX_ASYNC_IMPORT_ROWS, ImportFileError
 from app.modules.imports.quality import run_quality_check_for_batch
 from app.modules.imports.registry import get_target
 from app.modules.imports.service import ImportMappingError, ImportService
+from app.modules.imports.stream import run_streaming
 
 __all__ = [
     "IMPORT_SOURCE_PREFIX",
@@ -133,17 +134,27 @@ async def execute_import_batch(
         return await _fail(session, batch, "import_source_unavailable", str(exc)[:500])
 
     try:
-        await ImportService(session, tenant).apply(
+        # Потоком, а не целиком в памяти: файл на сотни тысяч строк не должен
+        # существовать в воркере одним списком (см. modules/imports/stream.py).
+        service = ImportService(session, tenant)
+        summary = await run_streaming(
+            service,
             target,
+            batch,
             batch.source_filename,
             payload,
+            mode="apply",
             overrides=dict(batch.mapping or {}) or None,
-            actor_id=batch.applied_by,
-            max_rows=MAX_ASYNC_IMPORT_ROWS,
-            batch=batch,
-            on_progress=_on_progress,
             chunk_size=chunk_size,
+            on_progress=_on_progress,
+            max_rows=MAX_ASYNC_IMPORT_ROWS,
         )
+        batch.mapping = dict(summary.mapping)
+        batch.notes = {
+            **(batch.notes or {}),
+            "unmapped_headers": list(summary.unmapped_headers),
+            "unknown_references": {k: list(v) for k, v in summary.unknown_references.items()},
+        }
     except (ImportFileError, ImportMappingError) as exc:
         code = getattr(exc, "code", "import_rejected")
         return await _fail(session, batch, code, str(exc)[:500])
@@ -186,11 +197,15 @@ async def _run_preview(
         return await _fail(session, batch, "import_source_unavailable", str(exc)[:500])
 
     try:
-        plan, mapping, _ = await ImportService(session, tenant).build(
+        summary = await run_streaming(
+            ImportService(session, tenant),
             target,
+            batch,
             batch.source_filename,
             payload,
-            dict(batch.mapping or {}) or None,
+            mode="preview",
+            overrides=dict(batch.mapping or {}) or None,
+            max_error_rows=MAX_PREVIEW_ERROR_ROWS,
             max_rows=MAX_ASYNC_IMPORT_ROWS,
         )
     except (ImportFileError, ImportMappingError) as exc:
@@ -201,43 +216,18 @@ async def _run_preview(
         await session.rollback()
         return await _fail(session, batch, "import_failed", str(exc)[:500])
 
-    counts = plan.counts()
-    batch.mapping = dict(plan.mapping)
-    batch.total_rows = counts["total"]
-    batch.processed_rows = counts["total"]
-    # Те же счётчики читаются как «сколько БЫЛО БЫ»: режим партии говорит, что
-    # ничего не применялось, а второй набор колонок неизбежно разъехался бы с первым.
-    batch.created_count = counts["create"]
-    batch.updated_count = counts["update"]
-    batch.skipped_count = counts["skip"]
-    batch.failed_count = counts["error"]
-
-    error_rows = [row for row in plan.rows if row.action == "error"]
-    stored = error_rows[:MAX_PREVIEW_ERROR_ROWS]
-    for planned in stored:
-        session.add(
-            ImportRow(
-                tenant_id=tenant.id,
-                batch_id=batch.id,
-                row_number=planned.row_number,
-                action="failed",
-                natural_key=planned.natural_key or None,
-                errors=[
-                    {"code": e.code, "field": e.field, "message": e.message} for e in planned.errors
-                ],
-                message="; ".join(e.message for e in planned.errors)[:2000],
-            )
-        )
-
+    # Счётчики предпросмотра читаются как «сколько БЫЛО БЫ»: режим партии говорит,
+    # что ничего не применялось, а второй набор колонок разъехался бы с первым.
+    batch.mapping = dict(summary.mapping)
     batch.notes = {
-        "unmapped_headers": list(plan.unmapped_headers),
-        "unknown_references": {k: list(v) for k, v in plan.unknown_references.items()},
-        "ambiguous_headers": list(mapping.ambiguous_headers),
-        "errors_total": len(error_rows),
+        "unmapped_headers": list(summary.unmapped_headers),
+        "unknown_references": {k: list(v) for k, v in summary.unknown_references.items()},
+        "errors_total": summary.errors_total,
         # Усечение обязано быть видно: «показано 500» без пометки читается как
         # «ошибок ровно 500», и остаток обнаружится уже при применении.
-        "errors_truncated": len(error_rows) > len(stored),
+        "errors_truncated": summary.errors_total > summary.errors_stored,
     }
+
     batch.status = "previewed"
     batch.finished_at = _now()
     await session.commit()
