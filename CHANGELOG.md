@@ -12,6 +12,11 @@
   туда не заходят, поэтому zip-бомба и макрос-контейнер (в т.ч. через переименование
   `.xlsm`→`.xlsx`) попадали прямо в openpyxl. `ArchiveSafetyError` маппится в 422
   с кодом причины на обеих ручках импорта СОУТ.
+- `api/dependencies.py::_fetch_tenant_by_identifier` разрешает неоднозначность явным
+  порядком id → slug → код вместо `scalar_one_or_none()`. Совпасть могут несколько
+  арендаторов (код одного равен slug'у другого), и прежний код бросал
+  `MultipleResultsFound` → 500 на обычном запросе. Латентный дефект: вскрыт полным
+  прогоном после перевода биллинг-гейта на этот резолвер.
 - `middleware/billing_guard.py` ищет арендатора общим `_fetch_tenant_by_identifier`
   вместо `Tenant.slug == заголовок`. В `X-Tenant` приходит и UUID, и код: при таком
   заголовке арендатор не находился и биллинг-гейт пропускал запрос, не считая лимиты
@@ -22,6 +27,7 @@
 - `backend/tests/test_sout_import_archive_safety.py` (4), включая проверку, что
   легитимный отчёт СОУТ по-прежнему разбирается.
 - `backend/tests/test_billing_guard_tenant_resolution.py` (5).
+- `backend/tests/test_tenant_identifier_resolution.py` (5).
 
 ### Найдено, не чинилось
 - `resolve_tenant_slug` приводит заголовок к нижнему регистру ДО поиска, поэтому
