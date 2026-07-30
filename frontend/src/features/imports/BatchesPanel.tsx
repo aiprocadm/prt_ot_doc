@@ -25,6 +25,29 @@ const STATUS_VARIANT: Record<ImportBatchStatus, "secondary" | "destructive" | "o
   rolled_back: "outline"
 };
 
+/** Итог проверки качества по записям партии (разд. 71.3). */
+const QualityLine = ({ batch }: { batch: ImportBatchDto }) => {
+  const quality = (batch.notes as { data_quality?: Record<string, unknown> } | null)?.data_quality;
+  if (!quality) return null;
+  if (typeof quality.error === "string") {
+    return (
+      <p className="text-sm text-muted-foreground">
+        Проверка качества не выполнилась: {quality.error}
+      </p>
+    );
+  }
+  const total = Number(quality.issues_total ?? 0);
+  if (total === 0) {
+    return <p className="text-sm text-muted-foreground">Проверка качества: замечаний нет</p>;
+  }
+  return (
+    <p className="text-sm text-amber-700">
+      Проверка качества: замечаний {total}
+      {quality.sample_truncated ? " (показаны не все)" : ""}
+    </p>
+  );
+};
+
 interface BatchesPanelProps {
   batches: ImportBatchDto[];
   onChanged: () => void;
@@ -64,6 +87,18 @@ export const BatchesPanel = ({ batches, onChanged }: BatchesPanelProps) => {
       await importsApi.downloadReport(batchId);
     } catch {
       // Причину уже показал глобальный обработчик API.
+    }
+  };
+
+  const checkQuality = async (batchId: string) => {
+    setBusyId(batchId);
+    try {
+      await importsApi.qualityCheck(batchId);
+      onChanged();
+    } catch {
+      // Причину уже показал глобальный обработчик API.
+    } finally {
+      setBusyId(null);
     }
   };
 
@@ -119,6 +154,7 @@ export const BatchesPanel = ({ batches, onChanged }: BatchesPanelProps) => {
               {batch.error_message ? (
                 <p className="text-sm text-destructive">{batch.error_message}</p>
               ) : null}
+              <QualityLine batch={batch} />
             </div>
             <div className="flex gap-2">
               <Button
@@ -128,6 +164,16 @@ export const BatchesPanel = ({ batches, onChanged }: BatchesPanelProps) => {
               >
                 Отчёт
               </Button>
+              {batch.mode !== "preview" && batch.status === "applied" ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={busyId === batch.id}
+                  onClick={() => void checkQuality(batch.id)}
+                >
+                  Проверить качество
+                </Button>
+              ) : null}
               {batch.failed_count > 0 ? (
                 <Button variant="outline" size="sm" onClick={() => void toggleRows(batch)}>
                   {openBatchId === batch.id ? "Скрыть ошибки" : "Показать ошибки"}

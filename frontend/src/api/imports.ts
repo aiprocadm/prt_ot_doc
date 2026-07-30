@@ -128,6 +128,10 @@ export const importsApi = {
     ).data;
   },
 
+  async qualityCheck(batchId: string): Promise<ImportBatchDto> {
+    return (await apiClient.post<ImportBatchDto>(`${BASE}/batches/${batchId}/quality-check`)).data;
+  },
+
   async rollback(batchId: string): Promise<ImportBatchDto> {
     return (await apiClient.post<ImportBatchDto>(`${BASE}/batches/${batchId}/rollback`)).data;
   }
