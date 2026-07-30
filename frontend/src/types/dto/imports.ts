@@ -39,8 +39,21 @@ export interface ImportPlannedRowDto {
   errors: ImportRowErrorDto[];
 }
 
+export interface ImportProfileDto {
+  code: string;
+  title: string;
+  target: string;
+  source: string;
+  description: string;
+  mapping: Record<string, string>;
+  split_columns: string[];
+}
+
 export interface ImportPreviewDto {
   target: string;
+  /** Профиль, опознанный по заголовкам файла: подсказка, а не решение. */
+  detected_profile: string | null;
+  applied_profile: string | null;
   counts: Record<string, number>;
   mapping: Record<string, string>;
   unmapped_headers: string[];

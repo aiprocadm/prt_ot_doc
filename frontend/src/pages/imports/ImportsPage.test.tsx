@@ -23,6 +23,7 @@ vi.mock("@/api/imports", async (importOriginal) => {
       batchRows: vi.fn(),
       downloadReport: vi.fn(),
       qualityCheck: vi.fn(),
+      profiles: vi.fn(),
       rollback: vi.fn()
     }
   };
@@ -83,6 +84,8 @@ const TARGET: ImportTargetDto = {
 
 const PREVIEW: ImportPreviewDto = {
   target: "persons",
+  detected_profile: null,
+  applied_profile: null,
   counts: { create: 2, update: 1, skip: 0, error: 1, total: 4 },
   mapping: { company_id: "Организация", last_name: "Фамилия" },
   unmapped_headers: ["Оклад"],
@@ -145,6 +148,17 @@ describe("ImportsPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocked.targets.mockResolvedValue([TARGET]);
+    mocked.profiles.mockResolvedValue([
+      {
+        code: "1c_zup_persons",
+        title: "1С:ЗУП — список сотрудников",
+        target: "persons",
+        source: "1c",
+        description: "",
+        mapping: {},
+        split_columns: ["ФИО"]
+      }
+    ]);
     mocked.batches.mockResolvedValue([BATCH]);
     mocked.dryRun.mockResolvedValue(PREVIEW);
     mocked.apply.mockResolvedValue({ batch: BATCH, preview: PREVIEW });
@@ -472,5 +486,56 @@ describe("ImportsPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Проверить качество" }));
 
     await waitFor(() => expect(mocked.qualityCheck).toHaveBeenCalledWith("batch-1"));
+  });
+  it("предлагает профиль источника для выбранной цели", async () => {
+    renderPage();
+    await screen.findByText("Импорт данных");
+    fireEvent.change(screen.getByLabelText("Тип данных"), { target: { value: "persons" } });
+
+    await waitFor(() => expect(screen.getByLabelText("Откуда файл")).toBeInTheDocument());
+    expect(screen.getByRole("option", { name: "1С:ЗУП — список сотрудников" })).toBeInTheDocument();
+  });
+
+  it("выбранный профиль уходит в проверку и в применение", async () => {
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    renderPage();
+    await selectTargetAndFile();
+    fireEvent.change(screen.getByLabelText("Откуда файл"), { target: { value: "1c_zup_persons" } });
+
+    fireEvent.click(screen.getByRole("button", { name: "Проверить без записи" }));
+    await waitFor(() => expect(mocked.dryRun).toHaveBeenCalled());
+    expect(mocked.dryRun.mock.calls[0][3]).toBe("1c_zup_persons");
+
+    fireEvent.click(screen.getByRole("button", { name: "Применить импорт" }));
+    await waitFor(() => expect(mocked.apply).toHaveBeenCalled());
+    expect(mocked.apply.mock.calls[0][4]).toBe("1c_zup_persons");
+    confirmSpy.mockRestore();
+  });
+
+  it("опознанный источник показывается подсказкой, пока его не выбрали", async () => {
+    mocked.dryRun.mockResolvedValue({ ...PREVIEW, detected_profile: "1c_zup_persons" });
+    renderPage();
+    await selectTargetAndFile();
+
+    fireEvent.click(screen.getByRole("button", { name: "Проверить без записи" }));
+
+    await waitFor(() =>
+      expect(screen.getByText(/Похоже на выгрузку: 1С:ЗУП/)).toBeInTheDocument()
+    );
+  });
+
+  it("применённый профиль подсказку не показывает", async () => {
+    mocked.dryRun.mockResolvedValue({
+      ...PREVIEW,
+      detected_profile: "1c_zup_persons",
+      applied_profile: "1c_zup_persons"
+    });
+    renderPage();
+    await selectTargetAndFile();
+
+    fireEvent.click(screen.getByRole("button", { name: "Проверить без записи" }));
+
+    await waitFor(() => expect(screen.getByText("Создать: 2")).toBeInTheDocument());
+    expect(screen.queryByText(/Похоже на выгрузку/)).toBeNull();
   });
 });

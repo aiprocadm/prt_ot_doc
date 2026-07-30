@@ -37,6 +37,11 @@ from app.modules.imports.planner import (
     normalize_header,
     resolve_rows,
 )
+from app.modules.imports.profiles import (
+    ImportProfile,
+    apply_profile_splits,
+    profile_overrides,
+)
 from app.modules.imports.registry import CREATABLE_LOOKUPS, ImportTarget, get_target
 
 __all__ = [
@@ -291,8 +296,20 @@ class ImportService:
         *,
         max_rows: int = MAX_IMPORT_ROWS,
         create_missing: frozenset[str] | None = None,
+        profile: ImportProfile | None = None,
     ) -> tuple[ImportPlan, MappingResult, ParsedFile]:
         parsed = parse_import_file(filename, content, max_rows=max_rows)
+
+        if profile is not None:
+            # Разбор составных колонок — нормализация ИСТОЧНИКА, и делается она
+            # один раз, до маппинга: иначе «ФИО одной ячейкой» пришлось бы
+            # разбирать в каждом правиле валидации по отдельности.
+            added = apply_profile_splits(profile, parsed.rows)
+            parsed.headers = list(parsed.headers) + [h for h in added if h not in parsed.headers]
+            # Сопоставление профиля — основа, но ручной выбор пользователя сильнее:
+            # профиль знает типовой файл, а перед нами может быть его вариация.
+            overrides = {**profile_overrides(profile), **(overrides or {})}
+
         mapping = build_mapping(target, parsed.headers, overrides)
         if mapping.missing_required:
             raise ImportMappingError(mapping.missing_required, parsed.headers)
@@ -383,6 +400,7 @@ class ImportService:
         actor_id: str | None = None,
         max_rows: int = MAX_IMPORT_ROWS,
         create_missing: frozenset[str] | None = None,
+        profile: ImportProfile | None = None,
         batch: ImportBatch | None = None,
         on_progress: ProgressHook | None = None,
         chunk_size: int = 200,
@@ -396,7 +414,13 @@ class ImportService:
         """
 
         plan, mapping, _ = await self.build(
-            target, filename, content, overrides, max_rows=max_rows, create_missing=create_missing
+            target,
+            filename,
+            content,
+            overrides,
+            max_rows=max_rows,
+            create_missing=create_missing,
+            profile=profile,
         )
 
         if batch is None:

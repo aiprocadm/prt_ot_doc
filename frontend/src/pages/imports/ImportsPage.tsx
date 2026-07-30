@@ -12,14 +12,20 @@ import { BatchesPanel } from "@/features/imports/BatchesPanel";
 import { MappingEditor } from "@/features/imports/MappingEditor";
 import { PreviewPanel } from "@/features/imports/PreviewPanel";
 import { useAsyncResource } from "@/hooks/useAsyncResource";
-import type { ImportBatchDto, ImportPreviewDto, ImportTargetDto } from "@/types/dto/imports";
+import type {
+  ImportBatchDto,
+  ImportPreviewDto,
+  ImportProfileDto,
+  ImportTargetDto
+} from "@/types/dto/imports";
 
 interface ImportsPageData {
   targets: ImportTargetDto[];
   batches: ImportBatchDto[];
+  profiles: ImportProfileDto[];
 }
 
-const INITIAL: ImportsPageData = { targets: [], batches: [] };
+const INITIAL: ImportsPageData = { targets: [], batches: [], profiles: [] };
 
 const LOOKUP_LABELS: Record<string, string> = {
   position: "должности",
@@ -45,13 +51,17 @@ const ImportsPage = () => {
   // Справочники, которые пользователь разрешил дозавести. Выбор поимённый:
   // «создавать недостающее» одной галкой означало бы и организации тоже.
   const [createMissing, setCreateMissing] = useState<string[]>([]);
+  // Профиль источника: применяется ТОЛЬКО по явному выбору — он меняет трактовку
+  // колонок, и ошибиться здесь дороже, чем не угадать.
+  const [profileCode, setProfileCode] = useState<string>("");
 
   const loader = useCallback(async (): Promise<ImportsPageData> => {
-    const [targets, batches] = await Promise.all([
+    const [targets, batches, profiles] = await Promise.all([
       importsApi.targets(),
-      importsApi.batches({ limit: 20 })
+      importsApi.batches({ limit: 20 }),
+      importsApi.profiles()
     ]);
-    return { targets, batches };
+    return { targets, batches, profiles };
   }, []);
 
   const resource = useAsyncResource<ImportsPageData>({
@@ -63,6 +73,11 @@ const ImportsPage = () => {
   const target = useMemo(
     () => resource.data.targets.find((item) => item.code === targetCode) ?? null,
     [resource.data.targets, targetCode]
+  );
+
+  const targetProfiles = useMemo(
+    () => resource.data.profiles.filter((p) => p.target === targetCode),
+    [resource.data.profiles, targetCode]
   );
 
   const creatableLookups = useMemo(() => {
@@ -91,11 +106,19 @@ const ImportsPage = () => {
     return base;
   };
 
+  const profileTitle = (code: string): string =>
+    resource.data.profiles.find((p) => p.code === code)?.title ?? code;
+
   const runDryRun = async () => {
     if (!target || !file) return;
     setBusy(true);
     try {
-      const result = await importsApi.dryRun(target.code, file, preview ? effectiveMapping() : undefined);
+      const result = await importsApi.dryRun(
+        target.code,
+        file,
+        preview ? effectiveMapping() : undefined,
+        profileCode || null
+      );
       setPreview(result);
       setOversized(false);
     } catch (error) {
@@ -161,7 +184,8 @@ const ImportsPage = () => {
         target.code,
         file,
         effectiveMapping(),
-        createMissing
+        createMissing,
+        profileCode || null
       );
       toast.success(
         `Импорт применён: создано ${result.batch.created_count}, обновлено ${result.batch.updated_count}`
@@ -251,6 +275,25 @@ const ImportsPage = () => {
             resetPreview();
           }}
         />
+        {targetProfiles.length > 0 ? (
+          <div className="space-y-1">
+            <Label htmlFor="import-profile">Откуда файл</Label>
+            <select
+              id="import-profile"
+              className="h-9 min-w-64 rounded-md border px-3 text-sm"
+              value={profileCode}
+              onChange={(event) => setProfileCode(event.target.value)}
+            >
+              <option value="">— наш шаблон —</option>
+              {targetProfiles.map((item) => (
+                <option key={item.code} value={item.code}>
+                  {item.title}
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : null}
+
         <div>
           <Button disabled={!target || !file || busy} onClick={() => void runDryRun()}>
             Проверить без записи
@@ -298,6 +341,12 @@ const ImportsPage = () => {
 
           <section className="space-y-3 rounded-md border p-4">
             <h2 className="text-lg font-medium">4. Результат проверки</h2>
+            {preview.detected_profile && !preview.applied_profile ? (
+              <div className="rounded-md border border-blue-300 bg-blue-50 p-3 text-sm">
+                Похоже на выгрузку: {profileTitle(preview.detected_profile)}. Выберите её в
+                поле «Откуда файл» и проверьте снова — колонки сопоставятся сами.
+              </div>
+            ) : null}
             <PreviewPanel preview={preview} />
             {creatableLookups.length > 0 && Object.keys(preview.unknown_references).length > 0 ? (
               <div className="space-y-2 rounded-md border p-3">
