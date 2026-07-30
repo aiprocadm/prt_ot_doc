@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import enum as py_enum
+from collections.abc import Awaitable, Callable
 from datetime import date, datetime, timezone
 from typing import Any
 
@@ -24,11 +25,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.imports import ImportBatch, ImportRow
 from app.models.master_data import Company, Position
 from app.models.tenanting import Tenant
-from app.modules.imports.parsers import ParsedFile, parse_import_file
+from app.modules.imports.parsers import MAX_IMPORT_ROWS, ParsedFile, parse_import_file
 from app.modules.imports.planner import (
     KEY_SEPARATOR,
     ImportPlan,
     MappingResult,
+    PlannedRow,
     build_mapping,
     build_plan,
     make_key,
@@ -41,7 +43,12 @@ __all__ = [
     "ImportMappingError",
     "ImportRollbackError",
     "ImportService",
+    "ProgressHook",
 ]
+
+# Хук прогресса: вызывается по ходу применения, чтобы клиенту было что опрашивать.
+# Возвращать ничего не должен — его дело зафиксировать состояние партии.
+ProgressHook = Callable[["ImportBatch"], Awaitable[None]]
 
 
 class ImportMappingError(Exception):
@@ -192,8 +199,10 @@ class ImportService:
         filename: str,
         content: bytes,
         overrides: dict[str, str] | None = None,
+        *,
+        max_rows: int = MAX_IMPORT_ROWS,
     ) -> tuple[ImportPlan, MappingResult, ParsedFile]:
-        parsed = parse_import_file(filename, content)
+        parsed = parse_import_file(filename, content, max_rows=max_rows)
         mapping = build_mapping(target, parsed.headers, overrides)
         if mapping.missing_required:
             raise ImportMappingError(mapping.missing_required, parsed.headers)
@@ -234,6 +243,32 @@ class ImportService:
                 return datetime.fromisoformat(value)
         return value
 
+    def new_batch(
+        self,
+        target: ImportTarget,
+        filename: str,
+        *,
+        status: str,
+        actor_id: str | None = None,
+        source_key: str | None = None,
+    ) -> ImportBatch:
+        """Создать запись партии. Асинхронный путь заводит её ДО обработки."""
+
+        batch = ImportBatch(
+            tenant_id=self.tenant.id,
+            target=target.code,
+            status=status,
+            source_filename=filename[:255],
+            source_format=filename.rsplit(".", 1)[-1].lower()[:16],
+            mapping={},
+            notes={},
+            source_key=source_key,
+            applied_by=actor_id,
+            applied_at=_now(),
+        )
+        self.session.add(batch)
+        return batch
+
     async def apply(
         self,
         target: ImportTarget,
@@ -242,180 +277,170 @@ class ImportService:
         *,
         overrides: dict[str, str] | None = None,
         actor_id: str | None = None,
+        max_rows: int = MAX_IMPORT_ROWS,
+        batch: ImportBatch | None = None,
+        on_progress: ProgressHook | None = None,
+        chunk_size: int = 200,
     ) -> tuple[ImportBatch, ImportPlan]:
-        plan, mapping, _ = await self.build(target, filename, content, overrides)
+        """Применить импорт.
 
-        batch = ImportBatch(
-            tenant_id=self.tenant.id,
-            target=target.code,
-            status="applied",
-            source_filename=filename[:255],
-            source_format=filename.rsplit(".", 1)[-1].lower()[:16],
-            mapping=dict(plan.mapping),
-            notes={
-                "unmapped_headers": list(plan.unmapped_headers),
-                "unknown_references": {k: list(v) for k, v in plan.unknown_references.items()},
-                "ambiguous_headers": list(mapping.ambiguous_headers),
-            },
-            applied_by=actor_id,
-            applied_at=_now(),
-        )
-        self.session.add(batch)
+        ``batch`` передаётся асинхронным путём: запись партии там создана и
+        закоммичена ДО начала работы, иначе клиенту нечего опрашивать, пока
+        файл обрабатывается. ``on_progress`` вызывается каждые ``chunk_size``
+        строк — прогресс, видимый только в конце, это не прогресс.
+        """
+
+        plan, mapping, _ = await self.build(target, filename, content, overrides, max_rows=max_rows)
+
+        if batch is None:
+            batch = self.new_batch(target, filename, status="applied", actor_id=actor_id)
+        batch.mapping = dict(plan.mapping)
+        batch.notes = {
+            "unmapped_headers": list(plan.unmapped_headers),
+            "unknown_references": {k: list(v) for k, v in plan.unknown_references.items()},
+            "ambiguous_headers": list(mapping.ambiguous_headers),
+        }
+        batch.total_rows = len(plan.rows)
         await self.session.flush()
 
         table = target.model.__tablename__
         counts = {"created": 0, "updated": 0, "skipped": 0, "failed": 0}
 
-        for planned in plan.rows:
-            if planned.action == "error":
-                counts["failed"] += 1
-                self.session.add(
-                    ImportRow(
-                        tenant_id=self.tenant.id,
-                        batch_id=batch.id,
-                        row_number=planned.row_number,
-                        action="failed",
-                        natural_key=(planned.natural_key or None),
-                        errors=[
-                            {"code": e.code, "field": e.field, "message": e.message}
-                            for e in planned.errors
-                        ],
-                        message="; ".join(e.message for e in planned.errors)[:2000],
-                    )
-                )
-                continue
+        async def _tick(processed: int) -> None:
+            batch.processed_rows = processed
+            batch.created_count = counts["created"]
+            batch.updated_count = counts["updated"]
+            batch.skipped_count = counts["skipped"]
+            batch.failed_count = counts["failed"]
+            if on_progress is not None and processed % chunk_size == 0:
+                await on_progress(batch)
 
-            if planned.action == "skip":
-                counts["skipped"] += 1
-                self.session.add(
-                    ImportRow(
-                        tenant_id=self.tenant.id,
-                        batch_id=batch.id,
-                        row_number=planned.row_number,
-                        action="skipped",
-                        natural_key=planned.natural_key,
-                        entity_table=table,
-                        entity_id=planned.entity_id,
-                    )
-                )
-                continue
+        for processed_index, planned in enumerate(plan.rows, start=1):
+            outcome = await self._apply_row(target, batch, planned, table)
+            counts[outcome] += 1
+            await _tick(processed_index)
 
-            if planned.action == "create":
-                entity = target.model(
-                    tenant_id=self.tenant.id,
-                    **{f: self._coerce_for_model(target, f, v) for f, v in planned.values.items()},
-                )
-                # SAVEPOINT на строку: ограничение БД, которое планировщик увидеть не
-                # мог (например, уникальность, занятая МЯГКО удалённой записью),
-                # обязано провалить ОДНУ строку. Без изоляции такой INSERT рвёт всю
-                # транзакцию, и «частичный импорт» из разд. 71.1 превращается в 500
-                # на весь файл — ровно то поведение, которого требование избегает.
-                try:
-                    async with self.session.begin_nested():
-                        self.session.add(entity)
-                        await self.session.flush()
-                except IntegrityError as exc:
-                    counts["failed"] += 1
-                    self.session.add(
-                        ImportRow(
-                            tenant_id=self.tenant.id,
-                            batch_id=batch.id,
-                            row_number=planned.row_number,
-                            action="failed",
-                            natural_key=planned.natural_key,
-                            errors=[
-                                {
-                                    "code": "constraint_violation",
-                                    "field": None,
-                                    "message": "Database rejected the row "
-                                    f"({type(exc.orig).__name__ if exc.orig else 'IntegrityError'})",
-                                }
-                            ],
-                        )
-                    )
-                    continue
-                counts["created"] += 1
-                self.session.add(
-                    ImportRow(
-                        tenant_id=self.tenant.id,
-                        batch_id=batch.id,
-                        row_number=planned.row_number,
-                        action="created",
-                        natural_key=planned.natural_key,
-                        entity_table=table,
-                        entity_id=entity.id,
-                    )
-                )
-                continue
-
-            # update
-            entity = await self.session.get(target.model, planned.entity_id)
-            if entity is None or getattr(entity, "tenant_id", None) != self.tenant.id:
-                counts["failed"] += 1
-                self.session.add(
-                    ImportRow(
-                        tenant_id=self.tenant.id,
-                        batch_id=batch.id,
-                        row_number=planned.row_number,
-                        action="failed",
-                        natural_key=planned.natural_key,
-                        errors=[
-                            {
-                                "code": "entity_vanished",
-                                "field": None,
-                                "message": "Row disappeared between planning and apply",
-                            }
-                        ],
-                    )
-                )
-                continue
-            try:
-                async with self.session.begin_nested():
-                    for field_name, value in planned.values.items():
-                        setattr(
-                            entity, field_name, self._coerce_for_model(target, field_name, value)
-                        )
-                    await self.session.flush()
-            except IntegrityError:
-                counts["failed"] += 1
-                self.session.add(
-                    ImportRow(
-                        tenant_id=self.tenant.id,
-                        batch_id=batch.id,
-                        row_number=planned.row_number,
-                        action="failed",
-                        natural_key=planned.natural_key,
-                        errors=[
-                            {
-                                "code": "constraint_violation",
-                                "field": None,
-                                "message": "Database rejected the update",
-                            }
-                        ],
-                    )
-                )
-                continue
-            counts["updated"] += 1
-            self.session.add(
-                ImportRow(
-                    tenant_id=self.tenant.id,
-                    batch_id=batch.id,
-                    row_number=planned.row_number,
-                    action="updated",
-                    natural_key=planned.natural_key,
-                    entity_table=table,
-                    entity_id=entity.id,
-                    before_values={f: _json_safe(v) for f, v in planned.before.items()},
-                )
-            )
-
-        batch.total_rows = len(plan.rows)
+        batch.processed_rows = len(plan.rows)
         batch.created_count = counts["created"]
         batch.updated_count = counts["updated"]
         batch.skipped_count = counts["skipped"]
         batch.failed_count = counts["failed"]
         await self.session.flush()
         return batch, plan
+
+    async def _apply_row(
+        self,
+        target: ImportTarget,
+        batch: ImportBatch,
+        planned: PlannedRow,
+        table: str,
+    ) -> str:
+        """Применить ОДНУ строку плана. Возвращает исход: created/updated/skipped/failed.
+
+        Вынесено из цикла ради прогресса: счётчик обязан увеличиваться после
+        каждой строки независимо от того, какой веткой она обработалась, а
+        полтора десятка `continue` этого не позволяли.
+        """
+
+        def _failed(code: str, message: str) -> str:
+            self.session.add(
+                ImportRow(
+                    tenant_id=self.tenant.id,
+                    batch_id=batch.id,
+                    row_number=planned.row_number,
+                    action="failed",
+                    natural_key=planned.natural_key or None,
+                    errors=[{"code": code, "field": None, "message": message}],
+                    message=message[:2000],
+                )
+            )
+            return "failed"
+
+        if planned.action == "error":
+            self.session.add(
+                ImportRow(
+                    tenant_id=self.tenant.id,
+                    batch_id=batch.id,
+                    row_number=planned.row_number,
+                    action="failed",
+                    natural_key=planned.natural_key or None,
+                    errors=[
+                        {"code": e.code, "field": e.field, "message": e.message}
+                        for e in planned.errors
+                    ],
+                    message="; ".join(e.message for e in planned.errors)[:2000],
+                )
+            )
+            return "failed"
+
+        if planned.action == "skip":
+            self.session.add(
+                ImportRow(
+                    tenant_id=self.tenant.id,
+                    batch_id=batch.id,
+                    row_number=planned.row_number,
+                    action="skipped",
+                    natural_key=planned.natural_key,
+                    entity_table=table,
+                    entity_id=planned.entity_id,
+                )
+            )
+            return "skipped"
+
+        if planned.action == "create":
+            entity = target.model(
+                tenant_id=self.tenant.id,
+                **{f: self._coerce_for_model(target, f, v) for f, v in planned.values.items()},
+            )
+            # SAVEPOINT на строку: ограничение БД, которое планировщик увидеть не
+            # мог (например, уникальность, занятая МЯГКО удалённой записью), обязано
+            # провалить ОДНУ строку. Без изоляции такой INSERT рвёт всю транзакцию,
+            # и «частичный импорт» из разд. 71.1 превращается в 500 на весь файл.
+            try:
+                async with self.session.begin_nested():
+                    self.session.add(entity)
+                    await self.session.flush()
+            except IntegrityError as exc:
+                origin = type(exc.orig).__name__ if exc.orig else "IntegrityError"
+                return _failed("constraint_violation", f"Database rejected the row ({origin})")
+            self.session.add(
+                ImportRow(
+                    tenant_id=self.tenant.id,
+                    batch_id=batch.id,
+                    row_number=planned.row_number,
+                    action="created",
+                    natural_key=planned.natural_key,
+                    entity_table=table,
+                    entity_id=entity.id,
+                )
+            )
+            return "created"
+
+        entity = await self.session.get(target.model, planned.entity_id)
+        if entity is None or getattr(entity, "tenant_id", None) != self.tenant.id:
+            return _failed("entity_vanished", "Row disappeared between planning and apply")
+
+        try:
+            async with self.session.begin_nested():
+                for field_name, value in planned.values.items():
+                    setattr(entity, field_name, self._coerce_for_model(target, field_name, value))
+                await self.session.flush()
+        except IntegrityError:
+            return _failed("constraint_violation", "Database rejected the update")
+
+        self.session.add(
+            ImportRow(
+                tenant_id=self.tenant.id,
+                batch_id=batch.id,
+                row_number=planned.row_number,
+                action="updated",
+                natural_key=planned.natural_key,
+                entity_table=table,
+                entity_id=entity.id,
+                before_values={f: _json_safe(v) for f, v in planned.before.items()},
+            )
+        )
+        return "updated"
 
     # --- откат -------------------------------------------------------------
 

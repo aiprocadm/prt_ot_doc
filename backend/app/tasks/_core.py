@@ -93,6 +93,10 @@ from app.tasks.file_jobs import (  # noqa: E402, F401
     index_file_content_job,
 )
 
+# Importing import_jobs registers the async-import task (OPS-71 срез-2) with Celery.
+# noqa F401: re-export only.
+from app.tasks.import_jobs import run_import_batch_job  # noqa: E402, F401
+
 # Importing notification_jobs registers its tasks with Celery and re-exposes them as
 # ``app.tasks.*``. noqa F401: re-export only (the reminders.scan beat entry resolves by name).
 from app.tasks.notification_jobs import (  # noqa: E402, F401

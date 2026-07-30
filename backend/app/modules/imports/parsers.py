@@ -24,6 +24,7 @@ from io import BytesIO, StringIO
 from app.core.archive_safety import ArchiveSafetyError, assert_safe_office_archive
 
 __all__ = [
+    "MAX_ASYNC_IMPORT_ROWS",
     "MAX_IMPORT_ROWS",
     "ImportFileError",
     "ParsedFile",
@@ -31,8 +32,14 @@ __all__ = [
     "parse_import_file",
 ]
 
-# Потолок строк одного синхронного импорта.
+# Потолок строк ОДНОГО СИНХРОННОГО импорта: столько успевает обработаться внутри
+# HTTP-запроса, не упираясь в таймаут прокси.
 MAX_IMPORT_ROWS = 5000
+
+# Потолок асинхронного импорта. Он на порядок выше, но не бесконечен: файл целиком
+# читается в память, и «без предела» означает падение воркера по OOM на чужом
+# файле — отказ, который выглядит как «импорт иногда не работает».
+MAX_ASYNC_IMPORT_ROWS = 100_000
 
 SUPPORTED_EXTENSIONS: tuple[str, ...] = (".xlsx", ".csv", ".json")
 
@@ -62,16 +69,20 @@ def _is_blank_row(row: dict[str, object]) -> bool:
     return all(v is None or (isinstance(v, str) and not v.strip()) for v in row.values())
 
 
-def _guard_row_count(count: int) -> None:
-    if count > MAX_IMPORT_ROWS:
+def _guard_row_count(count: int, max_rows: int) -> None:
+    if count > max_rows:
+        hint = (
+            "Use the asynchronous import for files of this size."
+            if max_rows == MAX_IMPORT_ROWS
+            else "Split the file into parts."
+        )
         raise ImportFileError(
             "import_file_too_many_rows",
-            f"File has {count} data rows, the synchronous limit is {MAX_IMPORT_ROWS}. "
-            "Split the file into parts.",
+            f"File has {count} data rows, the limit is {max_rows}. {hint}",
         )
 
 
-def parse_csv(content: bytes) -> ParsedFile:
+def parse_csv(content: bytes, *, max_rows: int = MAX_IMPORT_ROWS) -> ParsedFile:
     # utf-8-sig: Excel сохраняет CSV с BOM, и без этого первый заголовок
     # приезжает как "﻿Табельный номер" и не находится маппингом.
     try:
@@ -85,11 +96,11 @@ def parse_csv(content: bytes) -> ParsedFile:
         row = {_clean_header(k): v for k, v in raw.items() if _clean_header(k)}
         if not _is_blank_row(row):
             rows.append(row)
-        _guard_row_count(len(rows))
+        _guard_row_count(len(rows), max_rows)
     return ParsedFile(headers=[h for h in headers if h], rows=rows)
 
 
-def parse_xlsx(content: bytes) -> ParsedFile:
+def parse_xlsx(content: bytes, *, max_rows: int = MAX_IMPORT_ROWS) -> ParsedFile:
     # XLSX — это ZIP, и открывает его наш код. Гард разд. 64.2 стоит на загрузке
     # файлов в модуле files, а этот путь в него не заходит: без явного вызова
     # zip-бомба и макрос-контейнер приезжали бы в парсер мимо всей защиты.
@@ -120,7 +131,7 @@ def parse_xlsx(content: bytes) -> ParsedFile:
             row = {h: v for h, v in zip(headers, raw) if h}
             if not _is_blank_row(row):
                 rows.append(row)
-            _guard_row_count(len(rows))
+            _guard_row_count(len(rows), max_rows)
     finally:
         # read_only=True держит открытым файловый дескриптор внутри zip —
         # без close() они копятся на каждом импорте.
@@ -128,7 +139,7 @@ def parse_xlsx(content: bytes) -> ParsedFile:
     return ParsedFile(headers=[h for h in headers if h], rows=rows)
 
 
-def parse_json(content: bytes) -> ParsedFile:
+def parse_json(content: bytes, *, max_rows: int = MAX_IMPORT_ROWS) -> ParsedFile:
     """Массив объектов ``[{"Табельный номер": "001", ...}, ...]``.
 
     Объект-обёртка ``{"rows": [...]}`` тоже принимается: так выглядит выгрузка
@@ -163,20 +174,22 @@ def parse_json(content: bytes) -> ParsedFile:
             if key not in headers:
                 headers.append(key)
         rows.append(row)
-        _guard_row_count(len(rows))
+        _guard_row_count(len(rows), max_rows)
     return ParsedFile(headers=headers, rows=rows)
 
 
-def parse_import_file(filename: str, content: bytes) -> ParsedFile:
+def parse_import_file(
+    filename: str, content: bytes, *, max_rows: int = MAX_IMPORT_ROWS
+) -> ParsedFile:
     """Выбрать парсер по расширению имени файла."""
 
     name = (filename or "").lower()
     if name.endswith(".xlsx"):
-        return parse_xlsx(content)
+        return parse_xlsx(content, max_rows=max_rows)
     if name.endswith(".csv"):
-        return parse_csv(content)
+        return parse_csv(content, max_rows=max_rows)
     if name.endswith(".json"):
-        return parse_json(content)
+        return parse_json(content, max_rows=max_rows)
     raise ImportFileError(
         "import_format_unsupported",
         f"Unsupported file format: {filename!r}. Supported: {', '.join(SUPPORTED_EXTENSIONS)}",
