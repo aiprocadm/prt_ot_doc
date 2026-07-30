@@ -12,7 +12,7 @@ from typing import Any, cast
 from urllib.parse import urlparse
 
 import httpx
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings, get_settings
@@ -305,6 +305,107 @@ class WebhookDispatcher:
             urls=self._resolve_urls(event_type),
         )
 
+    def _tenant_ok(self, sub_tenant_id: str | None, tenant_id: str) -> bool:
+        """Подписка принадлежит арендатору доставки ИЛИ глобальна (tenant_id=NULL).
+
+        Чужая арендаторская НИКОГДА не годится: её секрет ушёл бы на её URL под
+        именем чужого арендатора (cross-tenant leak — воспроизведено ревью).
+        """
+
+        return sub_tenant_id is None or sub_tenant_id == tenant_id
+
+    async def _resolve_secret_for_destination(
+        self,
+        *,
+        url: str,
+        headers: dict[str, Any],
+        event_type: str,
+        tenant_id: str,
+        session: AsyncSession | None,
+    ) -> tuple[str | None, str | None]:
+        """(endpoint_id, секрет-плейнтекст) для явного назначения — СТРОГО.
+
+        Состязательное ревью вскрыло у наивной версии целый класс дыр: секрет
+        тёк между арендаторами, подписывались отключённые подписки, алиасы
+        event_type (Signed/Exported) уходили без подписи, ошибка расшифровки
+        глоталась (fail-open). Здесь каждая ветка проверяет:
+
+        * подписка СВОЯ (tenant_id == доставка) или глобальная (tenant_id=NULL);
+        * ``enabled`` и ``event_type`` (с алиасами);
+        * порядок детерминирован (своя раньше глобальной, старейшая раньше).
+
+        Ошибки НЕ глотаются: сбой расшифровки (отозванный ключ, SEC-67) или БД
+        летит наверх — ``OutboxProcessor._dispatch_entry`` пометит FAILED и уведёт
+        в ретрай. Тихая доставка без подписи на отозванном ключе хуже отложенной:
+        подписчик отверг бы её всё равно.
+        """
+
+        if session is None:
+            return None, None
+
+        variants = self._event_aliases(event_type)
+        endpoint_id = (
+            str(
+                headers.get("X-Webhook-Endpoint-Id")
+                or headers.get("X-Webhook-Subscription-Id")
+                or ""
+            ).strip()
+            or None
+        )
+
+        # Все запросы резолва — в SAVEPOINT (найдено ревью: без него ошибка БД
+        # здесь на общей сессии процессора отравляла бы транзакцию, и следующие
+        # _mark_sent/_record_delivery падали бы уже ВНЕ try, роняя весь батч и
+        # оставляя записи в IN_PROGRESS → повторная доставка). Savepoint откатит
+        # только чтение резолва; ошибка всё равно поднимется наверх — доставку
+        # пометят FAILED и уведут в ретрай.
+        async with session.begin_nested():
+            if endpoint_id:
+                sub = await session.get(WebhookSubscription, endpoint_id)
+                if (
+                    sub is not None
+                    and sub.enabled
+                    and sub.event_type in variants
+                    and self._tenant_ok(sub.tenant_id, tenant_id)
+                    and sub.secret
+                ):
+                    return endpoint_id, decrypt_secret(sub.secret)
+                legacy = await session.get(WebhookEndpoint, endpoint_id)
+                if (
+                    legacy is not None
+                    and legacy.is_enabled
+                    and legacy.tenant_id == tenant_id  # у легаси-модели tenant_id NOT NULL
+                    and legacy.secret
+                ):
+                    return endpoint_id, decrypt_secret(legacy.secret)
+
+            rows = (
+                (
+                    await session.execute(
+                        select(WebhookSubscription)
+                        .where(
+                            WebhookSubscription.url == url,
+                            WebhookSubscription.event_type.in_(variants),
+                            WebhookSubscription.enabled.is_(True),
+                            or_(
+                                WebhookSubscription.tenant_id == tenant_id,
+                                WebhookSubscription.tenant_id.is_(None),
+                            ),
+                        )
+                        .order_by(
+                            WebhookSubscription.tenant_id.is_(None),
+                            WebhookSubscription.created_at.asc(),
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            for sub in rows:
+                if sub.secret:
+                    return sub.id, decrypt_secret(sub.secret)
+        return endpoint_id, None
+
     async def dispatch(
         self,
         *,
@@ -317,7 +418,24 @@ class WebhookDispatcher:
         session: AsyncSession | None = None,
     ) -> None:
         if destination:
-            destinations = [WebhookDestination(url=destination, headers={})]
+            # SEC-67-смежный фикс (найден исследованием OPS-73 срез-2, ужесточён
+            # состязательным ревью): раньше явный destination строился БЕЗ секрета
+            # — доставка уходила неподписанной, хотя у подписки секрет есть.
+            # Секрет восстанавливается строгим резолвом (свой арендатор или
+            # глобальная подписка, enabled, event_type с алиасами), расшифровка в
+            # момент использования (SEC-67); в Outbox секрет не персистится.
+            endpoint_id, secret = await self._resolve_secret_for_destination(
+                url=destination,
+                headers=headers or {},
+                event_type=event_type,
+                tenant_id=tenant_id,
+                session=session,
+            )
+            destinations = [
+                WebhookDestination(
+                    url=destination, headers={}, endpoint_id=endpoint_id, secret=secret
+                )
+            ]
         else:
             destinations = await self._resolve_destinations(
                 event_type=event_type,
