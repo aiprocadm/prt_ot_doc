@@ -176,6 +176,7 @@ class ImportBatchOut(BaseModel):
     id: str
     target: str
     status: str
+    mode: str
     source_filename: str
     source_format: str
     mapping: dict[str, str]
@@ -256,6 +257,7 @@ def _batch_out(batch: ImportBatch) -> ImportBatchOut:
         id=batch.id,
         target=batch.target,
         status=batch.status,
+        mode=batch.mode,
         source_filename=batch.source_filename,
         source_format=batch.source_format,
         mapping=dict(batch.mapping or {}),
@@ -405,29 +407,23 @@ async def apply_import(
     return ImportApplyOut(batch=_batch_out(batch), preview=_preview_out(target.code, plan))
 
 
-@router.post("/{target_code}/apply-async", response_model=ImportBatchOut, status_code=202)
-@audit_operation("import.apply_async", "import_batch")
-async def apply_import_async(
-    target_code: str,
-    session: SessionDep,
-    tenant: TenantDep,
-    access: ImportAccess,
-    file: Annotated[UploadFile, File()],
-    mapping: Annotated[str | None, Form()] = None,
-) -> ImportBatchOut:
-    """Поставить импорт в очередь и вернуть партию для опроса прогресса.
-
-    Отвечает 202 сразу: файл на десятки тысяч строк не укладывается в таймаут
-    прокси. Клиент опрашивает `GET /imports/batches/{id}` — там `status`,
-    `processed_rows` и `total_rows`.
+async def _enqueue_batch(
+    *,
+    session: AsyncSession,
+    tenant: Tenant,
+    target: ImportTarget,
+    access: AccessContext,
+    file: UploadFile,
+    mapping: str | None,
+    mode: str,
+) -> ImportBatch:
+    """Принять файл и поставить фоновую партию (общее для apply и dry-run).
 
     **Файл сначала кладётся в хранилище, и только потом ставится задача.**
     Обратный порядок дал бы гонку: воркер успевает взять задачу раньше, чем
     появился файл, и партия падает на ровном месте.
     """
 
-    await _require_enabled(session, tenant)
-    target = _require_target(target_code)
     content = await _read_upload(file)
     filename = file.filename or "import"
     overrides = _parse_overrides(mapping)
@@ -439,9 +435,8 @@ async def apply_import_async(
         status="pending",
         actor_id=getattr(access, "user_id", None),
     )
+    batch.mode = mode
     await session.flush()
-    # Схема маппинга едет с партией: воркер получает ровно то, что выбрал
-    # пользователь, а не догадывается по заголовкам заново.
     batch.mapping = dict(overrides)
     batch.source_key = build_source_key(
         tenant_id=str(tenant.id), batch_id=batch.id, filename=filename
@@ -462,9 +457,8 @@ async def apply_import_async(
     try:
         run_import_batch_job.delay(tenant.slug, batch.id)
     except Exception as exc:  # noqa: BLE001 — брокер недоступен
-        # Партия осталась в ``pending`` и файл в хранилище: её подберёт повторная
-        # постановка. Молчаливый 202 здесь означал бы импорт, который никогда не
-        # начнётся, — клиент ждал бы прогресса вечно.
+        # Молчаливый 202 здесь означал бы работу, которая никогда не начнётся, —
+        # клиент ждал бы прогресса вечно.
         discard_source(batch.source_key)
         batch.status = "failed"
         batch.error_message = f"import_enqueue_failed: {str(exc)[:400]}"
@@ -475,6 +469,67 @@ async def apply_import_async(
             "Import queue is unavailable, the batch was not started",
         ) from exc
 
+    return batch
+
+
+@router.post("/{target_code}/dry-run-async", response_model=ImportBatchOut, status_code=202)
+@audit_operation("import.dry_run_async", "import_batch")
+async def dry_run_import_async(
+    target_code: str,
+    session: SessionDep,
+    tenant: TenantDep,
+    access: ImportAccess,
+    file: Annotated[UploadFile, File()],
+    mapping: Annotated[str | None, Form()] = None,
+) -> ImportBatchOut:
+    """Сухой прогон большого файла в фоне: план считается, в БД ничего не пишется.
+
+    Синхронный `dry-run` ограничен потолком строк, поэтому у большого файла
+    предпросмотра не было вовсе — оставалось «применить и посмотреть, что вышло».
+    """
+
+    await _require_enabled(session, tenant)
+    target = _require_target(target_code)
+    batch = await _enqueue_batch(
+        session=session,
+        tenant=tenant,
+        target=target,
+        access=access,
+        file=file,
+        mapping=mapping,
+        mode="preview",
+    )
+    return _batch_out(batch)
+
+
+@router.post("/{target_code}/apply-async", response_model=ImportBatchOut, status_code=202)
+@audit_operation("import.apply_async", "import_batch")
+async def apply_import_async(
+    target_code: str,
+    session: SessionDep,
+    tenant: TenantDep,
+    access: ImportAccess,
+    file: Annotated[UploadFile, File()],
+    mapping: Annotated[str | None, Form()] = None,
+) -> ImportBatchOut:
+    """Поставить импорт в очередь и вернуть партию для опроса прогресса.
+
+    Отвечает 202 сразу: файл на десятки тысяч строк не укладывается в таймаут
+    прокси. Клиент опрашивает `GET /imports/batches/{id}` — там `status`,
+    `processed_rows` и `total_rows`.
+    """
+
+    await _require_enabled(session, tenant)
+    target = _require_target(target_code)
+    batch = await _enqueue_batch(
+        session=session,
+        tenant=tenant,
+        target=target,
+        access=access,
+        file=file,
+        mapping=mapping,
+        mode="apply",
+    )
     return _batch_out(batch)
 
 
