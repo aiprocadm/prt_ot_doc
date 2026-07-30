@@ -44,6 +44,7 @@ from app.modules.imports.parsers import (
     ImportFileError,
 )
 from app.modules.imports.planner import template_headers
+from app.modules.imports.profiles import ImportProfile, detect_profile, get_profile, list_profiles
 from app.modules.imports.quality import run_quality_check_for_batch
 from app.modules.imports.registry import (
     CREATABLE_LOOKUPS,
@@ -157,6 +158,27 @@ def _parse_create_missing(raw: str | None) -> frozenset[str]:
     return frozenset(items)
 
 
+def _require_profile(code: str | None, target: ImportTarget) -> ImportProfile | None:
+    """Профиль источника по коду. Чужой цели профиль не подходит по определению."""
+
+    if not code:
+        return None
+    profile = get_profile(code)
+    if profile is None:
+        raise _problem(
+            status.HTTP_404_NOT_FOUND, "IMPORT_PROFILE_UNKNOWN", f"Unknown import profile {code!r}"
+        )
+    if profile.target != target.code:
+        # Молча проигнорировать несовпадение нельзя: пользователь думал, что
+        # загружает по профилю, а маппинг собрался бы автоопределением.
+        raise _problem(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "IMPORT_PROFILE_TARGET_MISMATCH",
+            f"Profile {profile.code!r} is for target {profile.target!r}, not {target.code!r}",
+        )
+    return profile
+
+
 def _lookup_not_creatable(exc: ImportLookupNotCreatableError) -> HTTPException:
     return _problem(
         status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -188,6 +210,16 @@ class ImportTargetOut(BaseModel):
     columns: list[ImportColumnOut]
 
 
+class ImportProfileOut(BaseModel):
+    code: str
+    title: str
+    target: str
+    source: str
+    description: str
+    mapping: dict[str, str]
+    split_columns: list[str] = Field(default_factory=list)
+
+
 class RowErrorOut(BaseModel):
     code: str
     field: str | None = None
@@ -204,6 +236,10 @@ class PlannedRowOut(BaseModel):
 
 class ImportPreviewOut(BaseModel):
     target: str
+    # Профиль, опознанный по заголовкам файла. Подсказка, а не решение: применён
+    # он только если его явно попросили.
+    detected_profile: str | None = None
+    applied_profile: str | None = None
     counts: dict[str, int]
     mapping: dict[str, str]
     unmapped_headers: list[str]
@@ -270,9 +306,29 @@ def _target_out(target: ImportTarget) -> ImportTargetOut:
     )
 
 
-def _preview_out(target_code: str, plan) -> ImportPreviewOut:
+def _profile_out(profile: ImportProfile) -> ImportProfileOut:
+    return ImportProfileOut(
+        code=profile.code,
+        title=profile.title,
+        target=profile.target,
+        source=profile.source,
+        description=profile.description,
+        mapping=dict(profile.mapping),
+        split_columns=[s.source for s in profile.splits],
+    )
+
+
+def _preview_out(
+    target_code: str,
+    plan,
+    *,
+    detected: str | None = None,
+    applied: str | None = None,
+) -> ImportPreviewOut:
     return ImportPreviewOut(
         target=target_code,
+        detected_profile=detected,
+        applied_profile=applied,
         counts=plan.counts(),
         mapping=plan.mapping,
         unmapped_headers=plan.unmapped_headers,
@@ -363,6 +419,19 @@ async def list_import_targets(
     return [_target_out(t) for t in list_targets()]
 
 
+@router.get("/profiles", response_model=list[ImportProfileOut])
+async def list_import_profiles(
+    session: SessionDep,
+    tenant: TenantDep,
+    _access: ImportAccess,
+    target: Annotated[str | None, Query()] = None,
+) -> list[ImportProfileOut]:
+    """Готовые сценарии переезда (разд. 71.2): 1С, типовые Excel, конкуренты."""
+
+    await _require_enabled(session, tenant)
+    return [_profile_out(p) for p in list_profiles(target)]
+
+
 @router.get("/targets/{target_code}/template")
 async def download_template(
     target_code: str, session: SessionDep, tenant: TenantDep, _access: ImportAccess
@@ -397,6 +466,7 @@ async def dry_run_import(
     _access: ImportAccess,
     file: Annotated[UploadFile, File()],
     mapping: Annotated[str | None, Form()] = None,
+    profile: Annotated[str | None, Form()] = None,
 ) -> ImportPreviewOut:
     """Показать, что будет создано / обновлено / пропущено — БЕЗ записи в БД.
 
@@ -407,16 +477,26 @@ async def dry_run_import(
     await _require_enabled(session, tenant)
     target = _require_target(target_code)
     content = await _read_upload(file)
+    selected = _require_profile(profile, target)
     service = ImportService(session, tenant)
     try:
-        plan, _mapping_result, _parsed = await service.build(
-            target, file.filename or "", content, _parse_overrides(mapping)
+        plan, _mapping_result, parsed = await service.build(
+            target, file.filename or "", content, _parse_overrides(mapping), profile=selected
         )
     except ImportFileError as exc:
         raise _file_error(exc) from exc
     except ImportMappingError as exc:
         raise _mapping_error(exc) from exc
-    return _preview_out(target.code, plan)
+
+    # Подсказка «похоже на выгрузку 1С» считается ВСЕГДА: она полезна именно
+    # тогда, когда пользователь профиль не выбрал.
+    detected = detect_profile(target.code, parsed.headers)
+    return _preview_out(
+        target.code,
+        plan,
+        detected=detected.code if detected else None,
+        applied=selected.code if selected else None,
+    )
 
 
 @router.post("/{target_code}/apply", response_model=ImportApplyOut, status_code=201)
@@ -429,6 +509,7 @@ async def apply_import(
     file: Annotated[UploadFile, File()],
     mapping: Annotated[str | None, Form()] = None,
     create_missing: Annotated[str | None, Form()] = None,
+    profile: Annotated[str | None, Form()] = None,
 ) -> ImportApplyOut:
     """Применить импорт: корректные строки записываются, ошибочные откладываются.
 
@@ -450,6 +531,7 @@ async def apply_import(
             overrides=_parse_overrides(mapping),
             actor_id=getattr(access, "user_id", None),
             create_missing=_parse_create_missing(create_missing),
+            profile=_require_profile(profile, target),
         )
     except ImportFileError as exc:
         raise _file_error(exc) from exc
@@ -458,7 +540,10 @@ async def apply_import(
     except ImportLookupNotCreatableError as exc:
         raise _lookup_not_creatable(exc) from exc
     await session.commit()
-    return ImportApplyOut(batch=_batch_out(batch), preview=_preview_out(target.code, plan))
+    return ImportApplyOut(
+        batch=_batch_out(batch),
+        preview=_preview_out(target.code, plan, applied=profile or None),
+    )
 
 
 async def _enqueue_batch(
