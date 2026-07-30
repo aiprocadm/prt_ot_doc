@@ -16,7 +16,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from app.models.master_data import Person, Position
+from app.models.master_data import Person, Position, Site
+from app.models.ppe import PPENorm
 
 __all__ = [
     "CREATABLE_LOOKUPS",
@@ -56,6 +57,11 @@ class ImportColumn:
     # автосоздание юрлица из опечатки в файле на 10 000 строк засорило бы справочник
     # так, что чистить пришлось бы руками.
     lookup_creatable: bool = False
+    # Колонка нужна ТОЛЬКО для поиска и ключа, в модель она не пишется. Нормы СИЗ
+    # висят на должности и организации не хранят, но найти должность без
+    # организации нельзя: одноимённые должности разных юрлиц — разные записи.
+    # Без этого флага значение уехало бы в конструктор модели как чужой аргумент.
+    transient: bool = False
     # Дополнительно положить СЫРОЙ текст колонки в это поле. Карточка сотрудника
     # показывает свободнотекстовую должность, и терять её при сопоставлении со
     # справочником нельзя: пользователь увидит пустую строку там, где он что-то ввёл.
@@ -250,9 +256,127 @@ PERSONS_TARGET = ImportTarget(
 )
 
 
+SITES_TARGET = ImportTarget(
+    code="sites",
+    title="Объекты и площадки",
+    model=Site,
+    description="Производственные объекты организации: адрес, тип, контакты.",
+    columns=(
+        _COMPANY,
+        ImportColumn(
+            field="name",
+            title="Объект",
+            required=True,
+            max_length=255,
+            aliases=("объект", "площадка", "наименование объекта", "site"),
+        ),
+        ImportColumn(
+            field="address",
+            title="Адрес",
+            max_length=255,
+            aliases=("адрес", "address", "местонахождение"),
+        ),
+        ImportColumn(
+            field="site_type",
+            title="Тип объекта",
+            max_length=64,
+            aliases=("тип объекта", "тип", "site type"),
+        ),
+        ImportColumn(
+            field="hazard_class",
+            title="Класс опасности",
+            max_length=32,
+            aliases=("класс опасности", "hazard class"),
+        ),
+        ImportColumn(
+            field="contact_name",
+            title="Контактное лицо",
+            max_length=255,
+            aliases=("контактное лицо", "ответственный", "contact"),
+        ),
+        ImportColumn(
+            field="contact_phone",
+            title="Телефон",
+            max_length=32,
+            aliases=("телефон", "phone", "тел"),
+        ),
+    ),
+    natural_keys=(NaturalKey(fields=("company_id", "name"), title="организация + объект"),),
+)
+
+
+PPE_NORMS_TARGET = ImportTarget(
+    code="ppe_norms",
+    title="Нормы выдачи СИЗ",
+    model=PPENorm,
+    description=(
+        "Нормы СИЗ по должности и опасности (разд. 71.2, «мастера под частые "
+        "структуры»). Должности и опасности должны существовать заранее."
+    ),
+    columns=(
+        # Организация нужна, чтобы найти ДОЛЖНОСТЬ: одноимённые должности разных
+        # юрлиц — разные записи. В самой норме организации нет, поэтому колонка
+        # помечена transient и в модель не попадает.
+        ImportColumn(
+            field="company_id",
+            title="Организация",
+            required=True,
+            aliases=("организация", "компания", "юрлицо"),
+            lookup="company",
+            transient=True,
+        ),
+        ImportColumn(
+            field="position_id",
+            title="Должность",
+            required=True,
+            aliases=("должность", "position"),
+            lookup="position",
+            lookup_scope_field="company_id",
+            lookup_creatable=True,
+        ),
+        ImportColumn(
+            field="hazard_id",
+            title="Опасность",
+            required=True,
+            aliases=("опасность", "вредный фактор", "фактор", "hazard"),
+            lookup="hazard",
+        ),
+        ImportColumn(
+            field="item_name",
+            title="Наименование СИЗ",
+            required=True,
+            max_length=255,
+            aliases=("наименование сиз", "сиз", "средство защиты", "item"),
+        ),
+        ImportColumn(
+            field="quantity",
+            title="Количество",
+            kind="int",
+            aliases=("количество", "кол-во", "quantity", "норма выдачи"),
+        ),
+        ImportColumn(
+            field="interval_days",
+            title="Срок носки, дней",
+            kind="int",
+            aliases=("срок носки дней", "срок носки", "периодичность", "interval"),
+        ),
+    ),
+    # Ровно уникальный ключ таблицы: повторная загрузка нормы обновляет её,
+    # а не падает на UNIQUE(tenant, position, hazard, item_name).
+    natural_keys=(
+        NaturalKey(
+            fields=("position_id", "hazard_id", "item_name"),
+            title="должность + опасность + СИЗ",
+        ),
+    ),
+)
+
+
 IMPORT_TARGETS: dict[str, ImportTarget] = {
     POSITIONS_TARGET.code: POSITIONS_TARGET,
     PERSONS_TARGET.code: PERSONS_TARGET,
+    SITES_TARGET.code: SITES_TARGET,
+    PPE_NORMS_TARGET.code: PPE_NORMS_TARGET,
 }
 
 

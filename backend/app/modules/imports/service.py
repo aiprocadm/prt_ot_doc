@@ -24,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.imports import ImportBatch, ImportRow
 from app.models.master_data import Company, Position
+from app.models.risk import RiskHazard
 from app.models.tenanting import Tenant
 from app.modules.imports.parsers import MAX_IMPORT_ROWS, ParsedFile, parse_import_file
 from app.modules.imports.planner import (
@@ -88,7 +89,11 @@ class ImportRollbackError(Exception):
 
 # Модель под каждым справочником: нужна и чтобы дозавести запись, и чтобы откат
 # знал, что удалять — строка партии хранит имя таблицы, а не класс.
-LOOKUP_MODELS: dict[str, Any] = {"company": Company, "position": Position}
+LOOKUP_MODELS: dict[str, Any] = {
+    "company": Company,
+    "position": Position,
+    "hazard": RiskHazard,
+}
 
 
 def _now() -> datetime:
@@ -143,6 +148,16 @@ class ImportService:
             ).all()
             lookups["company"] = {normalize_header(name): cid for cid, name in rows}
 
+        if "hazard" in needed:
+            rows = (
+                await self.session.execute(
+                    select(RiskHazard.id, RiskHazard.title).where(
+                        RiskHazard.tenant_id == self.tenant.id
+                    )
+                )
+            ).all()
+            lookups["hazard"] = {normalize_header(title): hid for hid, title in rows}
+
         if "position" in needed:
             rows = (
                 await self.session.execute(
@@ -161,8 +176,15 @@ class ImportService:
 
     # --- существующие записи ----------------------------------------------
 
+    @staticmethod
+    def _transient_fields(target: ImportTarget) -> frozenset[str]:
+        """Поля, которые нужны плану, но не принадлежат модели."""
+
+        return frozenset(c.field for c in target.columns if c.transient)
+
     def _tracked_fields(self, target: ImportTarget) -> list[str]:
-        fields = [c.field for c in target.columns]
+        transient = self._transient_fields(target)
+        fields = [c.field for c in target.columns if c.field not in transient]
         fields += [c.also_set_raw for c in target.columns if c.also_set_raw]
         return fields
 
@@ -177,12 +199,15 @@ class ImportService:
         """
 
         model = target.model
+        transient = self._transient_fields(target)
         conditions_sets = []
         for natural in target.natural_keys:
             values_by_field: dict[str, set[Any]] = {}
             for values in resolved_values:
                 if all(values.get(f) not in (None, "") for f in natural.fields):
                     for f in natural.fields:
+                        if f in transient:
+                            continue
                         values_by_field.setdefault(f, set()).add(values[f])
             if values_by_field:
                 conditions_sets.append(values_by_field)
@@ -546,9 +571,14 @@ class ImportService:
             return "skipped"
 
         if planned.action == "create":
+            transient = self._transient_fields(target)
             entity = target.model(
                 tenant_id=self.tenant.id,
-                **{f: self._coerce_for_model(target, f, v) for f, v in planned.values.items()},
+                **{
+                    f: self._coerce_for_model(target, f, v)
+                    for f, v in planned.values.items()
+                    if f not in transient
+                },
             )
             # SAVEPOINT на строку: ограничение БД, которое планировщик увидеть не
             # мог (например, уникальность, занятая МЯГКО удалённой записью), обязано
@@ -579,8 +609,11 @@ class ImportService:
             return _failed("entity_vanished", "Row disappeared between planning and apply")
 
         try:
+            transient = self._transient_fields(target)
             async with self.session.begin_nested():
                 for field_name, value in planned.values.items():
+                    if field_name in transient:
+                        continue
                     setattr(entity, field_name, self._coerce_for_model(target, field_name, value))
                 await self.session.flush()
         except IntegrityError:
