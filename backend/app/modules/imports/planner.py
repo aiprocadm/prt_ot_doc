@@ -260,6 +260,9 @@ def resolve_rows(
     parsed: ParsedFile,
     mapping: dict[str, str],
     lookups: dict[str, dict[str, str]],
+    *,
+    seen_keys: dict[str, int] | None = None,
+    first_row_number: int = 2,
 ) -> tuple[list[ResolvedRow], dict[str, list[str]]]:
     """Файл → значения полей модели + построчные ошибки + естественный ключ.
 
@@ -270,9 +273,14 @@ def resolve_rows(
 
     unknown: dict[str, list[str]] = {}
     resolved: list[ResolvedRow] = []
-    seen_keys: dict[str, int] = {}
+    # Карта уже встреченных ключей передаётся снаружи при потоковой обработке:
+    # дубль во второй порции обязан быть виден, даже если оригинал был в первой.
+    if seen_keys is None:
+        seen_keys = {}
 
-    for index, source in enumerate(parsed.rows, start=2):  # строка 1 — заголовки
+    # Нумерация продолжается сквозь порции: номер строки в отчёте должен совпадать
+    # с номером в файле, иначе человек ищет ошибку не там.
+    for index, source in enumerate(parsed.rows, start=first_row_number):
         row = ResolvedRow(row_number=index, raw=dict(source))
         lookup_pending: list[tuple[ImportColumn, str]] = []
 
