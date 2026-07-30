@@ -2659,5 +2659,5887 @@
     "app__schemas__sout__WorkplaceRead",
     "app__schemas__sout__WorkplaceUpdate"
   ],
+  "schema_fields": {
+    "ActionPlanItemOut": {
+      "id": "string",
+      "hazard_id": "null|string",
+      "measure_text": "string",
+      "owner_role": "null|string",
+      "owner_id": "null|string",
+      "due_date": "null|string",
+      "status": "string"
+    },
+    "ActionPlanOut": {
+      "id": "string",
+      "assessment_id": "string",
+      "status": "string",
+      "company_id": "null|string",
+      "site_id": "null|string",
+      "workplace_id": "null|string",
+      "position_id": "null|string",
+      "employee_id": "null|string",
+      "methodology_id": "null|string",
+      "methodology_version": "integer|null",
+      "items": "array"
+    },
+    "AdminPingResponse": {
+      "status": "string",
+      "user_id": "string"
+    },
+    "AgendaItemCreate": {
+      "title": "string",
+      "seq": "integer",
+      "presenter_person_id": "null|string"
+    },
+    "AgendaItemRead": {
+      "id": "string",
+      "meeting_id": "string",
+      "seq": "integer",
+      "title": "string",
+      "presenter_person_id": "null|string"
+    },
+    "ApiTokenCreateRequest": {
+      "name": "string",
+      "scopes": "array",
+      "expires_at": "null|string"
+    },
+    "ApiTokenCreateResponse": {
+      "id": "string",
+      "name": "string",
+      "scopes": "array",
+      "token": "string",
+      "expires_at": "null|string",
+      "created_at": "string"
+    },
+    "ApiTokenRead": {
+      "id": "string",
+      "name": "string",
+      "scopes": "array",
+      "created_at": "string",
+      "last_used_at": "null|string",
+      "expires_at": "null|string",
+      "is_revoked": "boolean"
+    },
+    "ApplyHeadersAccepted": {
+      "job_id": "string",
+      "step": "string"
+    },
+    "ApplyHeadersRequest": {
+      "preset_code": "string",
+      "data": "null|object",
+      "watermark_override": "null|object"
+    },
+    "ApprovalActionIn": {
+      "comment": "null|string",
+      "target_user_id": "null|string"
+    },
+    "ApprovalDecisionCreate": {
+      "decision": "ApprovalDecisionType",
+      "comment": "null|string",
+      "delegate_to_user_id": "null|string"
+    },
+    "ApprovalRequestCreate": {
+      "document_version_id": "string",
+      "route_id": "null|string",
+      "route_code": "null|string"
+    },
+    "ApprovalRouteIn": {
+      "code": "string",
+      "name": "string",
+      "conditions": "object",
+      "steps": "array",
+      "is_active": "boolean",
+      "priority": "integer"
+    },
+    "ApprovalRouteStepCreate": {
+      "order_no": "integer",
+      "step_type": "string",
+      "role_code": "null|string",
+      "user_id": "null|string",
+      "can_delegate": "boolean",
+      "deadline_hours": "integer|null",
+      "escalation_role_code": "null|string",
+      "escalation_user_id": "null|string",
+      "conditions_json": "null|object"
+    },
+    "AssessIn": {
+      "company_id": "null|string",
+      "place_id": "null|string",
+      "workplace_id": "null|string",
+      "position_id": "null|string",
+      "employee_id": "null|string",
+      "document_pack_id": "null|string",
+      "job_title": "null|string",
+      "methodology_id": "null|string",
+      "assessment_key": "null|string",
+      "assessment_version": "integer|null",
+      "hazard_code": "null|string",
+      "before": "array|null",
+      "controls": "array",
+      "after": "array|null",
+      "created_by": "null|string",
+      "items": "array|null"
+    },
+    "AssessItemIn": {
+      "hazard_code": "string",
+      "probability": "integer",
+      "severity": "integer"
+    },
+    "AssignRolePayload": {
+      "user_id": "string",
+      "role_id": "string",
+      "scope_json": "object"
+    },
+    "AttendanceBulkUpdate": {
+      "items": "array"
+    },
+    "AttendanceItem": {
+      "person_id": "string",
+      "present": "boolean"
+    },
+    "AttendanceRead": {
+      "id": "string",
+      "meeting_id": "string",
+      "person_id": "string",
+      "present": "boolean"
+    },
+    "AttentionItem": {
+      "item_type": "string",
+      "id": "string",
+      "severity": "string",
+      "title": "string",
+      "status": "string",
+      "due_at": "null|string",
+      "entity_type": "null|string",
+      "entity_id": "null|string",
+      "reason": "string"
+    },
+    "AttentionSummary": {
+      "overdue_tasks": "integer",
+      "due_soon_tasks": "integer",
+      "overdue_deadlines": "integer",
+      "pending_sync_batches": "integer",
+      "failed_sync_batches": "integer",
+      "readiness_blockers": "integer"
+    },
+    "AttestationCreate": {
+      "person_id": "string",
+      "position_id": "null|string",
+      "name": "string",
+      "issued_at": "null|string",
+      "expires_at": "null|string",
+      "status": "AttestationStatus",
+      "responsible_id": "null|string",
+      "notes": "null|string"
+    },
+    "AttestationPage": {
+      "items": "array",
+      "total": "integer"
+    },
+    "AttestationRead": {
+      "id": "string",
+      "person_id": "string",
+      "position_id": "null|string",
+      "name": "string",
+      "issued_at": "null|string",
+      "expires_at": "null|string",
+      "status": "AttestationStatus",
+      "responsible_id": "null|string",
+      "notes": "null|string",
+      "created_at": "string",
+      "updated_at": "string"
+    },
+    "AttestationUpdate": {
+      "person_id": "null|string",
+      "position_id": "null|string",
+      "name": "null|string",
+      "issued_at": "null|string",
+      "expires_at": "null|string",
+      "status": "AttestationStatus|null",
+      "responsible_id": "null|string",
+      "notes": "null|string"
+    },
+    "AuditExportCreate": {
+      "filters": "object",
+      "format": "string"
+    },
+    "AuditExportCreateResponse": {
+      "export_job_id": "string"
+    },
+    "AuditExportRead": {
+      "id": "string",
+      "status": "string",
+      "format": "string",
+      "signed_url": "null|string",
+      "expires_at": "null|string",
+      "error": "null|string"
+    },
+    "AuditLogEntry": {
+      "id": "string",
+      "ts": "string",
+      "actor_type": "string",
+      "actor_id": "null|string",
+      "actor_email": "null|string",
+      "action": "string",
+      "entity_type": "string",
+      "entity_id": "string",
+      "object_type": "string",
+      "object_id": "string",
+      "parent_type": "null|string",
+      "parent_id": "null|string",
+      "correlation_id": "null|string",
+      "meta": "object",
+      "diff": "object"
+    },
+    "AuditLogHistory": {
+      "total": "integer",
+      "items": "array"
+    },
+    "AutomationRuleBase": {
+      "name": "string",
+      "description": "null|string",
+      "event_type": "string",
+      "conditions_json": "object",
+      "actions_json": "array",
+      "priority": "integer",
+      "is_enabled": "boolean"
+    },
+    "AutomationRuleCreate": {
+      "name": "string",
+      "description": "null|string",
+      "event_type": "string",
+      "conditions_json": "object",
+      "actions_json": "array",
+      "priority": "integer",
+      "is_enabled": "boolean"
+    },
+    "AutomationRulePage": {
+      "items": "array",
+      "total": "integer",
+      "limit": "integer",
+      "offset": "integer"
+    },
+    "AutomationRuleRead": {
+      "name": "string",
+      "description": "null|string",
+      "event_type": "string",
+      "conditions_json": "object",
+      "actions_json": "array",
+      "priority": "integer",
+      "is_enabled": "boolean",
+      "id": "string",
+      "created_at": "string",
+      "updated_at": "string"
+    },
+    "AutomationRuleUpdate": {
+      "name": "null|string",
+      "description": "null|string",
+      "event_type": "null|string",
+      "conditions_json": "null|object",
+      "actions_json": "array|null",
+      "priority": "integer|null",
+      "is_enabled": "boolean|null"
+    },
+    "BandDef": {
+      "name": "string",
+      "max": "integer"
+    },
+    "BillingChangePlanRequest": {
+      "plan_code": "string"
+    },
+    "BillingEventRead": {
+      "id": "string",
+      "event_type": "string",
+      "payload": "object",
+      "created_at": "string"
+    },
+    "BillingInvoiceRead": {
+      "id": "string",
+      "period_yyyymm": "integer",
+      "amount": "number",
+      "status": "string",
+      "due_date": "null|string",
+      "payload": "object"
+    },
+    "BillingPlanRead": {
+      "code": "string",
+      "name": "string",
+      "limits": "object",
+      "features": "object"
+    },
+    "BillingStatusMutationRequest": {
+      "grace_days": "integer"
+    },
+    "BillingSummaryRead": {
+      "plan": "object",
+      "subscription": "object",
+      "limits": "object",
+      "features": "object",
+      "usage": "object",
+      "remaining": "object"
+    },
+    "Body_apply_import_api_v1_imports__target_code__apply_post": {
+      "file": "string",
+      "mapping": "null|string",
+      "create_missing": "null|string",
+      "profile": "null|string"
+    },
+    "Body_apply_import_async_api_v1_imports__target_code__apply_async_post": {
+      "file": "string",
+      "mapping": "null|string"
+    },
+    "Body_create_replace_map_api_v1_replace_maps_post": {
+      "payload": "null|string",
+      "replace_csv": "null|string"
+    },
+    "Body_create_template_api_v1_templates_post": {
+      "file": "string",
+      "name": "string",
+      "description": "null|string",
+      "metadata": "null|string",
+      "document_type": "string",
+      "required_fields_schema": "string",
+      "applicability_rules": "null|string",
+      "output_types": "string",
+      "profile": "null|string"
+    },
+    "Body_create_template_version_api_v1_templates__template_id__versions_post": {
+      "file": "string",
+      "status_value": "string"
+    },
+    "Body_docx_headers_api_v1_docx_headers_post": {
+      "file": "string",
+      "header_text": "null|string",
+      "footer_text": "null|string"
+    },
+    "Body_docx_mass_replace_api_v1_docx_mass_replace_post": {
+      "file": "string",
+      "replacements": "string"
+    },
+    "Body_dry_run_import_api_v1_imports__target_code__dry_run_post": {
+      "file": "string",
+      "mapping": "null|string",
+      "profile": "null|string"
+    },
+    "Body_dry_run_import_async_api_v1_imports__target_code__dry_run_async_post": {
+      "file": "string",
+      "mapping": "null|string"
+    },
+    "Body_files_upload_multipart": {
+      "file": "string"
+    },
+    "Body_generate_document_batch_api_v1_documents_batch_post": {
+      "file": "string",
+      "template_code": "null|string",
+      "template_id": "null|string",
+      "template_version": "integer|null",
+      "company_id": "null|string",
+      "naming_pattern": "null|string"
+    },
+    "Body_import_apply_api_v1_sout__cid__import_apply_post": {
+      "file": "string"
+    },
+    "Body_import_preview_api_v1_sout__cid__import_preview_post": {
+      "file": "string"
+    },
+    "Body_upload_file_api_v1_files_legacy_upload_post": {
+      "file": "string",
+      "company_id": "null|string",
+      "pack_id": "null|string",
+      "kind": "FileKind|null"
+    },
+    "Body_upload_template_api_v1_files_legacy_upload_template_post": {
+      "file": "string",
+      "template_type": "string",
+      "scenario": "null|string",
+      "company_id": "null|string",
+      "pack_id": "null|string",
+      "extra": "null|string"
+    },
+    "Body_upload_template_version_api_v1_templates__template_id__versions_upload_post": {
+      "file": "string",
+      "document_type": "null|string",
+      "applicability_rules": "null|string",
+      "output_types": "null|string",
+      "profile": "null|string",
+      "status_value": "string"
+    },
+    "Body_uploads_api_v1_client_portal_uploads_post": {
+      "file": "string"
+    },
+    "BranchCreate": {
+      "company_id": "string",
+      "name": "string",
+      "code": "null|string",
+      "address": "null|string",
+      "contact_name": "null|string",
+      "contact_phone": "null|string",
+      "contact_email": "null|string",
+      "status": "string"
+    },
+    "BranchPage": {
+      "items": "array",
+      "total": "integer"
+    },
+    "BranchRead": {
+      "company_id": "string",
+      "name": "string",
+      "code": "null|string",
+      "address": "null|string",
+      "contact_name": "null|string",
+      "contact_phone": "null|string",
+      "contact_email": "null|string",
+      "status": "string",
+      "id": "string"
+    },
+    "BranchUpdate": {
+      "name": "null|string",
+      "code": "null|string",
+      "address": "null|string",
+      "contact_name": "null|string",
+      "contact_phone": "null|string",
+      "contact_email": "null|string",
+      "status": "null|string"
+    },
+    "BrandingContact": {
+      "full_name": "null|string",
+      "position": "null|string",
+      "email": "null|string",
+      "phone": "null|string"
+    },
+    "BrandingGenerationHistoryItem": {
+      "pipeline_run_id": "string",
+      "company_id": "string",
+      "site_id": "null|string",
+      "template_id": "null|string",
+      "template_version_id": "null|string",
+      "status": "string",
+      "generated_at": "null|string",
+      "preset_code": "null|string",
+      "document_title": "null|string",
+      "document_number": "null|string",
+      "output_name": "null|string",
+      "reproducibility": "object"
+    },
+    "BrandingGenerationHistoryResponse": {
+      "items": "array"
+    },
+    "BrandingImageSet": {
+      "logo_file_id": "null|string",
+      "stamp_file_id": "null|string",
+      "signature_file_id": "null|string"
+    },
+    "BrandingPalette": {
+      "primary": "null|string",
+      "secondary": "null|string",
+      "accent": "null|string",
+      "watermark": "null|string"
+    },
+    "BrandingPreviewRequest": {
+      "company_id": "string",
+      "site_id": "null|string",
+      "preset_code": "null|string",
+      "document_title": "null|string",
+      "document_number": "null|string",
+      "generated_at": "null|string",
+      "watermark_override": "null|object"
+    },
+    "BrandingPreviewResponse": {
+      "profile": "BrandingProfileRead",
+      "preset_code": "null|string",
+      "sections": "object",
+      "unresolved_placeholders": "array",
+      "watermark": "object",
+      "apply_headers_payload": "object",
+      "wizard_defaults": "object"
+    },
+    "BrandingProfilePatch": {
+      "preferred_header_preset_code": "null|string",
+      "branding": "BrandingProfilePayload",
+      "site_id": "null|string"
+    },
+    "BrandingProfilePayload": {
+      "legal_name": "null|string",
+      "short_name": "null|string",
+      "inn": "null|string",
+      "kpp": "null|string",
+      "ogrn": "null|string",
+      "legal_address": "null|string",
+      "actual_address": "null|string",
+      "website": "null|string",
+      "email": "null|string",
+      "phones": "array",
+      "header_details": "array",
+      "footer_details": "array",
+      "service_notes": "array",
+      "branch_label": "null|string",
+      "passport_label": "null|string",
+      "preferred_letterhead_preset": "null|string",
+      "watermark_text": "null|string",
+      "watermark_enabled": "boolean",
+      "contacts": "array",
+      "images": "BrandingImageSet",
+      "palette": "BrandingPalette",
+      "signatories": "array",
+      "metadata": "object"
+    },
+    "BrandingProfileRead": {
+      "company_id": "string",
+      "site_id": "null|string",
+      "scope": "string",
+      "preferred_header_preset_code": "null|string",
+      "branding": "BrandingProfilePayload",
+      "header_context": "object",
+      "reproducibility": "object",
+      "resolution": "BrandingResolutionMeta"
+    },
+    "BrandingResolutionMeta": {
+      "scope_chain": "array",
+      "company_has_branding": "boolean",
+      "site_has_branding": "boolean",
+      "site_branding_applied": "boolean",
+      "effective_preset_code": "null|string",
+      "effective_preset_source": "null|string"
+    },
+    "BrandingSignatory": {
+      "full_name": "null|string",
+      "position": "null|string",
+      "basis": "null|string",
+      "signature_file_id": "null|string",
+      "stamp_file_id": "null|string"
+    },
+    "BriefingBulkCreatePayload": {
+      "briefing_journal_id": "string",
+      "briefing_template_id": "null|string",
+      "person_id": "null|string",
+      "instructor_user_id": "null|string",
+      "site_id": "null|string",
+      "department_id": "null|string",
+      "workplace_id": "null|string",
+      "briefing_type": "string",
+      "briefing_date": "string",
+      "valid_until": "null|string",
+      "reason": "null|string",
+      "status": "string",
+      "notes": "null|string",
+      "person_ids": "array"
+    },
+    "BriefingCollection": {
+      "items": "array",
+      "total": "integer"
+    },
+    "BriefingConfirmCodePayload": {
+      "code": "string"
+    },
+    "BriefingEntryPayload": {
+      "briefing_journal_id": "string",
+      "briefing_template_id": "null|string",
+      "person_id": "null|string",
+      "instructor_user_id": "null|string",
+      "site_id": "null|string",
+      "department_id": "null|string",
+      "workplace_id": "null|string",
+      "briefing_type": "string",
+      "briefing_date": "string",
+      "valid_until": "null|string",
+      "reason": "null|string",
+      "status": "string",
+      "notes": "null|string"
+    },
+    "BriefingEntryRead": {
+      "briefing_journal_id": "string",
+      "briefing_template_id": "null|string",
+      "person_id": "null|string",
+      "instructor_user_id": "null|string",
+      "site_id": "null|string",
+      "department_id": "null|string",
+      "workplace_id": "null|string",
+      "briefing_type": "string",
+      "briefing_date": "string",
+      "valid_until": "null|string",
+      "reason": "null|string",
+      "status": "string",
+      "notes": "null|string",
+      "id": "string",
+      "signatures": "array",
+      "is_overdue": "boolean"
+    },
+    "BriefingJournalPayload": {
+      "code": "string",
+      "title": "string",
+      "site_id": "null|string",
+      "department_id": "null|string",
+      "journal_type": "string",
+      "status": "string"
+    },
+    "BriefingJournalRead": {
+      "code": "string",
+      "title": "string",
+      "site_id": "null|string",
+      "department_id": "null|string",
+      "journal_type": "string",
+      "status": "string",
+      "id": "string"
+    },
+    "BriefingSignPayload": {
+      "signer_user_id": "null|string",
+      "signature_payload": "object"
+    },
+    "BriefingSignatureRead": {
+      "id": "string",
+      "signer_type": "string",
+      "signer_user_id": "null|string",
+      "signature_mode": "string",
+      "signed_at": "string",
+      "signature_payload": "null|object"
+    },
+    "BriefingTemplatePayload": {
+      "code": "string",
+      "title": "string",
+      "briefing_type": "string",
+      "status": "string",
+      "description": "null|string",
+      "validity_days": "integer|null",
+      "require_signature_code": "boolean"
+    },
+    "BriefingTemplateRead": {
+      "code": "string",
+      "title": "string",
+      "briefing_type": "string",
+      "status": "string",
+      "description": "null|string",
+      "validity_days": "integer|null",
+      "require_signature_code": "boolean",
+      "id": "string"
+    },
+    "BudgetArticleActualRead": {
+      "article_id": "null|string",
+      "article_name": "string",
+      "amount": "number"
+    },
+    "BudgetArticleCreate": {
+      "code": "string",
+      "name": "string",
+      "domain": "null|string",
+      "is_active": "boolean"
+    },
+    "BudgetArticlePage": {
+      "items": "array",
+      "total": "integer",
+      "limit": "integer",
+      "offset": "integer"
+    },
+    "BudgetArticleRead": {
+      "id": "string",
+      "code": "string",
+      "name": "string",
+      "domain": "null|string",
+      "is_active": "boolean"
+    },
+    "BudgetArticleUpdate": {
+      "name": "null|string",
+      "domain": "null|string",
+      "is_active": "boolean|null"
+    },
+    "BudgetBreakdownItem": {
+      "id": "string",
+      "name": "string",
+      "amount": "number"
+    },
+    "BudgetBreakdownResponse": {
+      "dimension": "string",
+      "date_from": "string",
+      "date_to": "string",
+      "total": "integer",
+      "items": "array"
+    },
+    "BudgetExpenseCreate": {
+      "domain": "string",
+      "article_id": "null|string",
+      "title": "string",
+      "occurred_on": "string",
+      "amount": "number",
+      "company_id": "null|string",
+      "branch_id": "null|string",
+      "site_id": "null|string",
+      "entity_type": "null|string",
+      "entity_id": "null|string",
+      "notes": "null|string"
+    },
+    "BudgetExpensePage": {
+      "items": "array",
+      "total": "integer",
+      "limit": "integer",
+      "offset": "integer"
+    },
+    "BudgetExpenseRead": {
+      "id": "string",
+      "domain": "string",
+      "article_id": "null|string",
+      "article_name": "null|string",
+      "title": "string",
+      "occurred_on": "string",
+      "amount": "number",
+      "company_id": "null|string",
+      "branch_id": "null|string",
+      "site_id": "null|string",
+      "entity_type": "null|string",
+      "entity_id": "null|string",
+      "notes": "null|string"
+    },
+    "BudgetExpenseUpdate": {
+      "article_id": "null|string",
+      "title": "null|string",
+      "occurred_on": "null|string",
+      "amount": "null|number",
+      "company_id": "null|string",
+      "branch_id": "null|string",
+      "site_id": "null|string",
+      "entity_type": "null|string",
+      "entity_id": "null|string",
+      "notes": "null|string"
+    },
+    "BudgetOverviewBudgetRow": {
+      "id": "string",
+      "name": "string",
+      "period_start": "string",
+      "period_end": "string",
+      "planned_amount": "number",
+      "actual_own_period": "number",
+      "remaining": "number"
+    },
+    "BudgetOverviewDomain": {
+      "domain": "string",
+      "read_only": "boolean",
+      "planned": "number",
+      "actual": "number",
+      "remaining": "number",
+      "warning_unpriced_receipts": "integer|null",
+      "budgets": "array"
+    },
+    "BudgetOverviewResponse": {
+      "generated_at": "string",
+      "date_from": "string",
+      "date_to": "string",
+      "domains": "array"
+    },
+    "BudgetSeedResult": {
+      "created": "integer",
+      "skipped": "integer"
+    },
+    "CalendarEventItem": {
+      "id": "string",
+      "source_type": "string",
+      "source_id": "string",
+      "title": "string",
+      "starts_at": "string",
+      "ends_at": "null|string",
+      "status": "null|string",
+      "is_overdue": "boolean",
+      "person_id": "null|string",
+      "site_id": "null|string",
+      "company_id": "null|string",
+      "assigned_user_id": "null|string",
+      "expected_at": "null|string",
+      "actual_at": "null|string",
+      "variance_days": "integer|null",
+      "days_to_due": "integer|null",
+      "sla_band": "null|string",
+      "extra": "object"
+    },
+    "CalendarEventRead": {
+      "id": "string",
+      "source": "string",
+      "entity_type": "string",
+      "entity_id": "string",
+      "title": "string",
+      "date": "string",
+      "status": "null|string",
+      "deeplink": "null|string"
+    },
+    "CalendarEventsResponse": {
+      "generated_at": "string",
+      "range_from": "null|string",
+      "range_to": "null|string",
+      "total": "integer",
+      "overdue_count": "integer",
+      "by_source": "array",
+      "items": "array"
+    },
+    "CalendarSourceCount": {
+      "source_type": "string",
+      "count": "integer",
+      "overdue_count": "integer"
+    },
+    "CampaignCreate": {
+      "name": "string",
+      "expert_org_name": "null|string",
+      "report_number": "null|string",
+      "report_date": "null|string",
+      "planned_date": "null|string"
+    },
+    "CampaignPage": {
+      "items": "array",
+      "total": "integer",
+      "limit": "integer",
+      "offset": "integer"
+    },
+    "CampaignRead": {
+      "id": "string",
+      "name": "string",
+      "expert_org_name": "null|string",
+      "report_number": "null|string",
+      "report_date": "null|string",
+      "status": "SoutCampaignStatus",
+      "planned_date": "null|string",
+      "completed_date": "null|string",
+      "created_at": "string",
+      "updated_at": "string"
+    },
+    "CampaignReport": {
+      "campaign": "CampaignRead",
+      "workplaces": "array"
+    },
+    "CampaignStatusUpdate": {
+      "status": "SoutCampaignStatus"
+    },
+    "CampaignUpdate": {
+      "name": "null|string",
+      "expert_org_name": "null|string",
+      "report_number": "null|string",
+      "report_date": "null|string",
+      "planned_date": "null|string",
+      "completed_date": "null|string"
+    },
+    "CascadeMedicalAction": {
+      "exam_kind": "string",
+      "op": "string",
+      "periodicity_months": "integer",
+      "interval_days": "integer",
+      "target_class": "string",
+      "current_class": "null|string",
+      "factor_codes": "array",
+      "reason": "string"
+    },
+    "CascadePreview": {
+      "assessed_class": "null|string",
+      "can_apply": "boolean",
+      "medical": "array",
+      "ppe_advisory": "array"
+    },
+    "CascadeResult": {
+      "created": "integer",
+      "reclassified": "integer",
+      "conflicts": "integer",
+      "ppe_advisory_count": "integer"
+    },
+    "ChannelSettingsIn": {
+      "email_enabled": "boolean",
+      "telegram_enabled": "boolean",
+      "inapp_enabled": "boolean",
+      "email": "null|string",
+      "telegram_chat_id": "null|string",
+      "quiet_hours": "null|object",
+      "digest_mode": "null|string",
+      "channel_preferences": "null|object"
+    },
+    "ChannelSettingsOut": {
+      "email_enabled": "boolean",
+      "telegram_enabled": "boolean",
+      "inapp_enabled": "boolean",
+      "email": "null|string",
+      "telegram_chat_id": "null|string",
+      "quiet_hours": "null|object",
+      "digest_mode": "null|string",
+      "channel_preferences": "null|object",
+      "user_id": "string"
+    },
+    "ClassHistoryRead": {
+      "id": "string",
+      "workplace_id": "string",
+      "old_class": "SoutClass|null",
+      "new_class": "SoutClass|null",
+      "changed_at": "string",
+      "note": "null|string",
+      "is_worsening": "boolean"
+    },
+    "CommitteeCreate": {
+      "kind": "CommitteeKind",
+      "name": "string",
+      "description": "null|string",
+      "is_active": "boolean"
+    },
+    "CommitteeKpiDto": {
+      "committees_total": "integer",
+      "committees_active": "integer",
+      "meetings_planned": "integer",
+      "meetings_held": "integer",
+      "meetings_cancelled": "integer",
+      "decisions_total": "integer",
+      "tasks_total": "integer",
+      "tasks_open": "integer",
+      "tasks_overdue": "integer",
+      "tasks_done": "integer",
+      "held_meetings": "integer",
+      "avg_attendance_pct": "number",
+      "quorum_rate_pct": "number"
+    },
+    "CommitteePage": {
+      "items": "array",
+      "total": "integer",
+      "limit": "integer",
+      "offset": "integer"
+    },
+    "CommitteeRead": {
+      "id": "string",
+      "kind": "CommitteeKind",
+      "name": "string",
+      "description": "null|string",
+      "is_active": "boolean",
+      "created_at": "string",
+      "updated_at": "string"
+    },
+    "CommitteeUpdate": {
+      "kind": "CommitteeKind|null",
+      "name": "null|string",
+      "description": "null|string",
+      "is_active": "boolean|null"
+    },
+    "CompanyCreate": {
+      "name": "string",
+      "inn": "null|string",
+      "kpp": "null|string",
+      "ogrn": "null|string",
+      "activity_type": "null|string",
+      "okved_codes": "array",
+      "legal_address": "null|string",
+      "actual_address": "null|string",
+      "director": "null|string",
+      "bank_name": "null|string",
+      "bank_bik": "null|string",
+      "bank_account": "null|string",
+      "phone_numbers": "array",
+      "contact_person": "null|string",
+      "contact_phone": "null|string",
+      "contact_email": "null|string",
+      "email": "null|string",
+      "logo_file_id": "null|string",
+      "stamp_file_id": "null|string",
+      "branding_payload": "object",
+      "preferred_header_preset_code": "null|string",
+      "work_types": "array",
+      "hazardous_factors": "array",
+      "is_hazardous_production_facility": "boolean",
+      "has_dangerous_objects": "boolean",
+      "status": "string",
+      "tags": "array"
+    },
+    "CompanyPage": {
+      "items": "array",
+      "total": "integer"
+    },
+    "CompanyRead": {
+      "id": "string",
+      "name": "string",
+      "inn": "null|string",
+      "kpp": "null|string",
+      "ogrn": "null|string",
+      "activity_type": "null|string",
+      "okved_codes": "array",
+      "legal_address": "null|string",
+      "actual_address": "null|string",
+      "director": "null|string",
+      "bank_name": "null|string",
+      "bank_bik": "null|string",
+      "bank_account": "null|string",
+      "phone_numbers": "array",
+      "contact_person": "null|string",
+      "contact_phone": "null|string",
+      "contact_email": "null|string",
+      "email": "null|string",
+      "logo_file_id": "null|string",
+      "stamp_file_id": "null|string",
+      "branding_payload": "object",
+      "preferred_header_preset_code": "null|string",
+      "work_types": "array",
+      "hazardous_factors": "array",
+      "is_hazardous_production_facility": "boolean",
+      "has_dangerous_objects": "boolean",
+      "status": "string",
+      "tags": "array"
+    },
+    "CompanyUpdate": {
+      "name": "null|string",
+      "inn": "null|string",
+      "kpp": "null|string",
+      "ogrn": "null|string",
+      "activity_type": "null|string",
+      "okved_codes": "array|null",
+      "legal_address": "null|string",
+      "actual_address": "null|string",
+      "director": "null|string",
+      "bank_name": "null|string",
+      "bank_bik": "null|string",
+      "bank_account": "null|string",
+      "phone_numbers": "array|null",
+      "contact_person": "null|string",
+      "contact_phone": "null|string",
+      "contact_email": "null|string",
+      "email": "null|string",
+      "logo_file_id": "null|string",
+      "stamp_file_id": "null|string",
+      "branding_payload": "null|object",
+      "preferred_header_preset_code": "null|string",
+      "work_types": "array|null",
+      "hazardous_factors": "array|null",
+      "is_hazardous_production_facility": "boolean|null",
+      "has_dangerous_objects": "boolean|null",
+      "status": "null|string",
+      "tags": "array|null"
+    },
+    "CompleteUploadRequest": {
+      "file_id": "string"
+    },
+    "ConditionResult": {
+      "field": "string",
+      "op": "string",
+      "value": "any",
+      "actual": "any",
+      "matched": "boolean"
+    },
+    "ContingentItem": {
+      "person_id": "string",
+      "exam_kind": "MedicalExamKind",
+      "status": "string",
+      "valid_until": "null|string",
+      "due_at": "null|string"
+    },
+    "ContingentPage": {
+      "items": "array",
+      "total": "integer"
+    },
+    "ContingentRegisterPage": {
+      "items": "array",
+      "total": "integer"
+    },
+    "ContingentRegisterRow": {
+      "position_id": "string",
+      "position_name": "string",
+      "factors": "array",
+      "headcount": "integer",
+      "exam_kinds": "array",
+      "periodicity_months": "integer|null"
+    },
+    "ContractCreate": {
+      "company_id": "string",
+      "department_id": "null|string",
+      "site_id": "null|string",
+      "title": "string",
+      "counterparty_name": "string",
+      "contract_number": "null|string",
+      "status": "null|string",
+      "signed_at": "null|string",
+      "valid_from": "null|string",
+      "valid_until": "null|string",
+      "total_amount": "null|number",
+      "currency": "null|string"
+    },
+    "ContractPage": {
+      "items": "array",
+      "total": "integer"
+    },
+    "ContractRead": {
+      "id": "string",
+      "tenant_id": "string",
+      "company_id": "string",
+      "department_id": "null|string",
+      "site_id": "null|string",
+      "title": "string",
+      "counterparty_name": "string",
+      "contract_number": "null|string",
+      "status": "string",
+      "signed_at": "null|string",
+      "valid_from": "null|string",
+      "valid_until": "null|string",
+      "total_amount": "null|number",
+      "currency": "string"
+    },
+    "ContractUpdate": {
+      "company_id": "null|string",
+      "department_id": "null|string",
+      "site_id": "null|string",
+      "title": "null|string",
+      "counterparty_name": "null|string",
+      "contract_number": "null|string",
+      "status": "null|string",
+      "signed_at": "null|string",
+      "valid_from": "null|string",
+      "valid_until": "null|string",
+      "total_amount": "null|number",
+      "currency": "null|string"
+    },
+    "ContractorDocumentCreate": {
+      "contractor_id": "string",
+      "employee_id": "null|string",
+      "doc_type": "string",
+      "title": "string",
+      "number": "null|string",
+      "issuing_org": "null|string",
+      "issued_at": "null|string",
+      "valid_until": "null|string",
+      "file_id": "null|string"
+    },
+    "ContractorDocumentPatch": {
+      "doc_type": "null|string",
+      "title": "null|string",
+      "number": "null|string",
+      "issuing_org": "null|string",
+      "issued_at": "null|string",
+      "valid_until": "null|string",
+      "file_id": "null|string",
+      "status": "null|string"
+    },
+    "ContractorEmployeeCreate": {
+      "contractor_id": "string",
+      "full_name": "string",
+      "position": "null|string",
+      "personnel_number": "null|string",
+      "access_status": "ComplianceStatus",
+      "training_status": "ComplianceStatus",
+      "medical_status": "ComplianceStatus"
+    },
+    "ContractorEmployeePatch": {
+      "position": "null|string",
+      "access_status": "ComplianceStatus|null",
+      "training_status": "ComplianceStatus|null",
+      "medical_status": "ComplianceStatus|null"
+    },
+    "ContractorIncidentCreate": {
+      "contractor_id": "string",
+      "employee_id": "null|string",
+      "incident_type": "string",
+      "severity": "string",
+      "status": "string",
+      "occurred_at": "string",
+      "description": "null|string"
+    },
+    "ContractorRegistryCreate": {
+      "name": "string",
+      "legal_name": "null|string",
+      "company_id": "null|string",
+      "inn": "null|string",
+      "contact_person": "null|string",
+      "contact_phone": "null|string"
+    },
+    "ContractorRegistryPatch": {
+      "name": "null|string",
+      "legal_name": "null|string",
+      "company_id": "null|string",
+      "inn": "null|string",
+      "status": "null|string",
+      "contact_person": "null|string",
+      "contact_phone": "null|string"
+    },
+    "ControlIn": {
+      "code": "string",
+      "title": "string",
+      "type": "string",
+      "description": "null|string"
+    },
+    "ConvertPdfAccepted": {
+      "job_id": "string",
+      "pdf_run_id": "string",
+      "output_file_id": "null|string",
+      "status_url": "string"
+    },
+    "ConvertPdfOptions": {
+      "timeout_s": "integer",
+      "embed_fonts": "boolean"
+    },
+    "ConvertPdfRequest": {
+      "mode": "string",
+      "options": "ConvertPdfOptions"
+    },
+    "CorrectiveActionIn": {
+      "source_type": "string",
+      "source_id": "string",
+      "title": "string",
+      "action_type": "string",
+      "due_date": "null|string",
+      "description": "null|string",
+      "responsible_user_id": "null|string",
+      "site_id": "null|string"
+    },
+    "CorrectiveActionVerifyIn": {
+      "effective": "boolean",
+      "partial": "boolean",
+      "comment": "null|string"
+    },
+    "DashboardDocumentInboxItem": {
+      "id": "string",
+      "title": "string",
+      "route_label": "string",
+      "status": "string",
+      "risk": "string",
+      "created_at": "string",
+      "template_code": "null|string",
+      "template_version": "integer|null"
+    },
+    "DashboardOperationalSnapshot": {
+      "tasks": "array",
+      "documents": "array",
+      "readiness": "DashboardReadinessSnapshot",
+      "generated_at": "string"
+    },
+    "DashboardReadinessSnapshot": {
+      "packages_total": "integer",
+      "open_gaps": "integer",
+      "critical_gaps": "integer",
+      "latest_target_date": "null|string",
+      "readiness_score": "integer",
+      "reasons": "array"
+    },
+    "DashboardSummary": {
+      "overdue_tasks": "integer",
+      "critical_obligations": "integer",
+      "incidents_open": "integer",
+      "risks_total": "integer",
+      "training": "DashboardTrainingSummary",
+      "generated_at": "string"
+    },
+    "DashboardTaskInboxItem": {
+      "id": "string",
+      "title": "string",
+      "owner_label": "null|string",
+      "due_at": "null|string",
+      "priority": "string",
+      "status": "string",
+      "overdue": "boolean",
+      "entity_type": "null|string",
+      "entity_id": "null|string"
+    },
+    "DashboardTrainingSummary": {
+      "total": "integer",
+      "overdue": "integer",
+      "due_soon": "integer",
+      "status": "string"
+    },
+    "DecideIn": {
+      "decision": "string",
+      "comment": "null|string",
+      "delegate_to_user_id": "null|string"
+    },
+    "DecisionCreate": {
+      "text": "string",
+      "agenda_item_id": "null|string"
+    },
+    "DecisionRead": {
+      "id": "string",
+      "meeting_id": "string",
+      "agenda_item_id": "null|string",
+      "text": "string",
+      "decided_at": "string"
+    },
+    "DecisionTaskCreate": {
+      "assignee_person_id": "null|string",
+      "due_date": "null|string",
+      "evidence_note": "null|string"
+    },
+    "DecisionTaskRead": {
+      "id": "string",
+      "decision_id": "string",
+      "assignee_person_id": "null|string",
+      "due_date": "null|string",
+      "status": "DecisionTaskStatus",
+      "evidence_note": "null|string",
+      "is_overdue": "boolean"
+    },
+    "DecisionTaskUpdate": {
+      "assignee_person_id": "null|string",
+      "due_date": "null|string",
+      "status": "DecisionTaskStatus|null",
+      "evidence_note": "null|string"
+    },
+    "DecisionVoteSummary": {
+      "decision_id": "string",
+      "votes_for": "integer",
+      "votes_against": "integer",
+      "votes_abstain": "integer",
+      "outcome": "null|string",
+      "votes": "array"
+    },
+    "DeclarationPreview": {
+      "campaign_id": "string",
+      "campaign_name": "string",
+      "eligible": "array",
+      "ineligible": "array",
+      "eligible_count": "integer",
+      "ineligible_count": "integer"
+    },
+    "DeclarationRowRead": {
+      "workplace_code": "string",
+      "position_name": "string",
+      "assessed_class": "null|string",
+      "headcount": "string",
+      "report_ref": "null|string",
+      "eligible": "boolean",
+      "ineligible_reason": "null|string"
+    },
+    "DelegateIn": {
+      "to_user_id": "string",
+      "reason": "null|string"
+    },
+    "DepartmentCreate": {
+      "company_id": "string",
+      "name": "string",
+      "code": "null|string",
+      "description": "null|string"
+    },
+    "DepartmentPage": {
+      "items": "array",
+      "total": "integer"
+    },
+    "DepartmentRead": {
+      "id": "string",
+      "tenant_id": "string",
+      "company_id": "string",
+      "name": "string",
+      "code": "null|string",
+      "description": "null|string"
+    },
+    "DepartmentUpdate": {
+      "company_id": "null|string",
+      "name": "null|string",
+      "code": "null|string",
+      "description": "null|string"
+    },
+    "DocGeneratePipelineRequest": {
+      "template": "GenerateTemplateRef",
+      "data": "GenerateDataPayload",
+      "pipeline": "GeneratePipelinePayload|null",
+      "npa_binding_id": "null|string"
+    },
+    "DocGenerateRequest": {
+      "template_code": "null|string",
+      "template_id": "null|string",
+      "template_version": "integer|null",
+      "company_id": "null|string",
+      "person_id": "null|string",
+      "data": "object",
+      "pipeline_profile_id": "null|string",
+      "input_source_id": "null|string",
+      "inline_data": "null|object",
+      "options": "object",
+      "visible_passport": "boolean",
+      "npa_binding_id": "null|string",
+      "letterhead": "LetterheadOverride|null"
+    },
+    "DocumentBatchItemRead": {
+      "id": "string",
+      "row_index": "integer",
+      "status": "string",
+      "error": "null|string",
+      "document_id": "null|string",
+      "document_version_id": "null|string",
+      "output_name": "null|string"
+    },
+    "DocumentBatchRunRead": {
+      "id": "string",
+      "status": "string",
+      "total": "integer",
+      "processed": "integer",
+      "succeeded": "integer",
+      "failed": "integer",
+      "items": "array"
+    },
+    "DocumentCompanySummaryRead": {
+      "id": "string",
+      "created_at": "string",
+      "updated_at": "string",
+      "name": "string",
+      "inn": "string",
+      "status": "string"
+    },
+    "DocumentDependencyMapRead": {
+      "template": "null|object",
+      "template_version": "null|object",
+      "npa_bindings": "array",
+      "pipeline_profile_hint": "null|object"
+    },
+    "DocumentDependencyNpaBindingRead": {
+      "binding_id": "string",
+      "npa_id": "string",
+      "npa_code": "string",
+      "npa_title": "string",
+      "ref": "null|string",
+      "entity_type": "string"
+    },
+    "DocumentFileLinkRead": {
+      "id": "string",
+      "url": "string",
+      "name": "string",
+      "mime_type": "string",
+      "size": "integer",
+      "created_at": "string"
+    },
+    "DocumentHistoryEntryRead": {
+      "id": "string",
+      "created_at": "string",
+      "updated_at": "string",
+      "document_id": "string",
+      "status": "string",
+      "storage": "DocumentFileLinkRead|null",
+      "comment": "null|string"
+    },
+    "DocumentMappingValidateRequest": {
+      "source_fields": "array",
+      "mapping": "object",
+      "required_template_fields": "array"
+    },
+    "DocumentPaginationRead": {
+      "page": "integer",
+      "page_size": "integer",
+      "total": "integer"
+    },
+    "DocumentPipelineStageRead": {
+      "stage_id": "string",
+      "label": "string",
+      "complete": "boolean",
+      "detail": "null|string"
+    },
+    "DocumentQualityCheckRequest": {
+      "data": "object",
+      "required_fields": "array",
+      "date_fields": "array",
+      "numeric_fields": "array",
+      "rendered_text": "null|string"
+    },
+    "DocumentRead": {
+      "id": "string",
+      "company_id": "string",
+      "template_id": "string",
+      "person_id": "null|string",
+      "site_id": "null|string",
+      "template_version_id": "null|string",
+      "status": "DocumentStatus",
+      "storage_key": "null|string",
+      "file_id": "null|string",
+      "signed_file_id": "null|string",
+      "content_sha256": "null|string",
+      "job_id": "null|string",
+      "created_by": "string",
+      "created_at": "string",
+      "updated_at": "string"
+    },
+    "DocumentReadinessRead": {
+      "score": "integer",
+      "blockers": "array",
+      "recommended_actions": "array",
+      "pipeline_stages": "array"
+    },
+    "DocumentRequirementCreate": {
+      "doc_type": "string",
+      "scope": "string",
+      "mandatory": "boolean"
+    },
+    "DocumentStatusUpdate": {
+      "to": "DocumentStatus"
+    },
+    "DocumentUiListResponse": {
+      "items": "array",
+      "pagination": "DocumentPaginationRead"
+    },
+    "DocumentUiRead": {
+      "id": "string",
+      "created_at": "string",
+      "updated_at": "string",
+      "name": "string",
+      "type": "string",
+      "company": "DocumentCompanySummaryRead",
+      "status": "string",
+      "version": "string",
+      "current_version_id": "null|string",
+      "template_id": "null|string",
+      "storage": "DocumentFileLinkRead|null",
+      "history": "array"
+    },
+    "DocumentVersionCompareRead": {
+      "document_id": "string",
+      "left_version_id": "string",
+      "right_version_id": "string",
+      "diffs": "array",
+      "template_version_changed": "boolean"
+    },
+    "DocumentVersionDataDiffRead": {
+      "field": "string",
+      "before": "any",
+      "after": "any",
+      "change": "string"
+    },
+    "DownloadRead": {
+      "url": "string"
+    },
+    "DownloadURLResponse": {
+      "url": "string",
+      "expires_in": "integer"
+    },
+    "DownloadUrlRequest": {
+      "purpose": "string",
+      "ttl_seconds": "integer"
+    },
+    "DownloadUrlResponse": {
+      "signed_get_url": "string"
+    },
+    "DryRunEvent": {
+      "event_type": "string",
+      "payload": "object"
+    },
+    "DryRunIn": {
+      "rule": "AutomationRuleBase",
+      "event": "DryRunEvent"
+    },
+    "DryRunOut": {
+      "matched": "boolean",
+      "condition_results": "array",
+      "would_actions": "array"
+    },
+    "EdoMessageIn": {
+      "entity_type": "string",
+      "entity_id": "string",
+      "operator_code": "string",
+      "message_type": "string"
+    },
+    "EdoSendIn": {
+      "document_version_id": "null|string",
+      "object_type": "string",
+      "object_id": "null|string",
+      "provider": "string",
+      "operator_code": "null|string",
+      "recipient": "null|string",
+      "meta": "null|object"
+    },
+    "EdoSendRequest": {
+      "document_version_id": "string",
+      "provider_code": "string",
+      "recipient": "null|string",
+      "operator_code": "null|string"
+    },
+    "EdoWebhookPayload": {
+      "event_id": "string",
+      "external_id": "string",
+      "status": "EdoStatus",
+      "raw_payload": "object"
+    },
+    "ElectricalGroupReadiness": {
+      "ok": "boolean",
+      "insufficient": "array"
+    },
+    "EmployeeAuditItem": {
+      "id": "string",
+      "when": "string",
+      "action": "string",
+      "actor_email": "null|string",
+      "correlation_id": "null|string",
+      "changed_fields": "object"
+    },
+    "EmployeeAuditSection": {
+      "count": "integer",
+      "items": "array"
+    },
+    "EmployeeBriefingItem": {
+      "id": "string",
+      "briefing_template_id": "null|string",
+      "briefing_template_title": "null|string",
+      "briefing_type": "string",
+      "briefing_date": "string",
+      "valid_until": "null|string",
+      "status": "string",
+      "is_expired": "boolean"
+    },
+    "EmployeeBriefingsSection": {
+      "count": "integer",
+      "expired_count": "integer",
+      "items": "array"
+    },
+    "EmployeeCard": {
+      "person_id": "string",
+      "tenant_id": "string",
+      "generated_at": "string",
+      "personal": "EmployeePersonal",
+      "roles_and_assignments": "EmployeeRolesAndAssignments",
+      "training": "EmployeeTrainingSection",
+      "medicals": "EmployeeMedicalSection",
+      "ppe": "EmployeePPESection",
+      "permits": "EmployeePermitsSection",
+      "incidents": "EmployeeIncidentsSection",
+      "documents": "EmployeeDocumentsSection",
+      "briefings": "EmployeeBriefingsSection",
+      "compliance_deadlines": "EmployeeComplianceDeadlinesSection",
+      "audit": "EmployeeAuditSection"
+    },
+    "EmployeeComplianceDeadlineItem": {
+      "id": "string",
+      "entity_type": "string",
+      "entity_id": "string",
+      "due_at": "string",
+      "status": "string",
+      "reminder_policy": "null|string",
+      "is_overdue": "boolean"
+    },
+    "EmployeeComplianceDeadlinesSection": {
+      "count": "integer",
+      "overdue_count": "integer",
+      "upcoming_count": "integer",
+      "items": "array"
+    },
+    "EmployeeDocumentItem": {
+      "id": "string",
+      "template_id": "null|string",
+      "template_name": "null|string",
+      "status": "DocumentStatus",
+      "is_signed": "boolean",
+      "created_at": "string"
+    },
+    "EmployeeDocumentsSection": {
+      "count": "integer",
+      "signed_count": "integer",
+      "items": "array"
+    },
+    "EmployeeIncidentItem": {
+      "id": "string",
+      "title": "string",
+      "incident_type": "IncidentType",
+      "severity": "IncidentSeverity",
+      "status": "IncidentStatus",
+      "occurred_at": "string",
+      "role": "IncidentPersonRole"
+    },
+    "EmployeeIncidentsSection": {
+      "count": "integer",
+      "open_count": "integer",
+      "items": "array"
+    },
+    "EmployeeMedicalItem": {
+      "id": "string",
+      "exam_type": "string",
+      "exam_date": "string",
+      "valid_until": "string",
+      "conclusion": "null|string",
+      "is_expired": "boolean"
+    },
+    "EmployeeMedicalSection": {
+      "count": "integer",
+      "expired_count": "integer",
+      "items": "array"
+    },
+    "EmployeePPEIssueItem": {
+      "id": "string",
+      "item_id": "null|string",
+      "item_name": "string",
+      "quantity": "integer",
+      "issued_at": "string",
+      "expires_at": "null|string",
+      "returned_at": "null|string",
+      "status": "PPEIssueStatus",
+      "is_expired": "boolean"
+    },
+    "EmployeePPESection": {
+      "count": "integer",
+      "active_count": "integer",
+      "expired_count": "integer",
+      "items": "array"
+    },
+    "EmployeePermitItem": {
+      "id": "string",
+      "permit_type": "string",
+      "issued_at": "string",
+      "valid_until": "null|string",
+      "status": "string",
+      "position_id": "null|string",
+      "is_expired": "boolean"
+    },
+    "EmployeePermitsSection": {
+      "count": "integer",
+      "active_count": "integer",
+      "expired_count": "integer",
+      "items": "array"
+    },
+    "EmployeePersonal": {
+      "id": "string",
+      "company_id": "string",
+      "company_name": "null|string",
+      "position_id": "null|string",
+      "position_name": "null|string",
+      "workplace_id": "null|string",
+      "workplace_name": "null|string",
+      "first_name": "string",
+      "last_name": "string",
+      "middle_name": "null|string",
+      "fio": "string",
+      "birth_date": "null|string",
+      "email": "null|string",
+      "phone": "null|string",
+      "personnel_number": "null|string",
+      "hired_at": "null|string",
+      "snils": "null|string",
+      "passport": "null|string",
+      "employment_status": "EmploymentStatus",
+      "working_conditions_class": "null|string",
+      "hazardous_factors": "array",
+      "qualifications": "array",
+      "current_ppe": "array"
+    },
+    "EmployeeRolesAndAssignments": {
+      "company_id": "string",
+      "company_name": "null|string",
+      "position_id": "null|string",
+      "position_name": "null|string",
+      "workplace_id": "null|string",
+      "workplace_name": "null|string",
+      "employment_status": "EmploymentStatus",
+      "user_account": "EmployeeUserAccount|null"
+    },
+    "EmployeeTrainingCertificate": {
+      "id": "string",
+      "code": "null|string",
+      "course_id": "null|string",
+      "course_title": "null|string",
+      "issued_at": "string",
+      "valid_until": "null|string",
+      "status": "null|string"
+    },
+    "EmployeeTrainingItem": {
+      "id": "string",
+      "course_id": "null|string",
+      "course_title": "null|string",
+      "plan_id": "null|string",
+      "status": "TrainingSessionStatus",
+      "started_at": "null|string",
+      "completed_at": "null|string",
+      "score": "integer|null"
+    },
+    "EmployeeTrainingSection": {
+      "sessions_count": "integer",
+      "certificates_count": "integer",
+      "sessions": "array",
+      "certificates": "array"
+    },
+    "EmployeeUserAccount": {
+      "user_id": "string",
+      "email": "string",
+      "role": "string",
+      "is_active": "boolean",
+      "last_login_at": "null|string",
+      "additional_roles": "array"
+    },
+    "EntityFileListItem": {
+      "file_id": "string",
+      "role": "string",
+      "status": "string",
+      "display_name": "string",
+      "size": "integer",
+      "link_id": "null|string"
+    },
+    "EvaluatePayload": {
+      "resource": "string",
+      "action": "string",
+      "attrs": "object"
+    },
+    "EventFieldMeta": {
+      "name": "string",
+      "kind": "string"
+    },
+    "EventTypeMeta": {
+      "event_type": "string",
+      "fields": "array"
+    },
+    "EventTypePage": {
+      "items": "array",
+      "total": "integer"
+    },
+    "EvidenceFileRef": {
+      "file_id": "string",
+      "role": "string",
+      "status": "string",
+      "display_name": "null|string",
+      "size": "integer|null"
+    },
+    "ExportCreate": {
+      "export_type": "string",
+      "dataset_code": "null|string",
+      "schema_version": "string",
+      "anonymized": "boolean",
+      "target_type": "string",
+      "target_config": "object",
+      "scope_json": "object",
+      "filters_json": "object"
+    },
+    "ExportScheduleCreate": {
+      "name": "string",
+      "dataset_code": "string",
+      "schema_version": "string",
+      "cron_expr": "string",
+      "anonymized": "boolean",
+      "target_type": "string",
+      "target_config": "object",
+      "filters_json": "object"
+    },
+    "FactorCreate": {
+      "name": "string",
+      "code": "null|string",
+      "measured_class": "SoutClass|null",
+      "note": "null|string",
+      "hazard_id": "null|string"
+    },
+    "FactorRead": {
+      "id": "string",
+      "workplace_id": "string",
+      "hazard_id": "null|string",
+      "code": "null|string",
+      "name": "string",
+      "measured_class": "SoutClass|null",
+      "note": "null|string"
+    },
+    "FactorRef": {
+      "code": "string",
+      "name": "string"
+    },
+    "FactorUpdate": {
+      "name": "null|string",
+      "code": "null|string",
+      "measured_class": "SoutClass|null",
+      "note": "null|string",
+      "hazard_id": "null|string"
+    },
+    "FailedJobItem": {
+      "id": "string",
+      "kind": "null|string",
+      "error_code": "null|string",
+      "error_payload": "null|object",
+      "started_at": "null|string",
+      "ended_at": "null|string",
+      "correlation_id": "null|string"
+    },
+    "FailedJobsResponse": {
+      "total": "integer",
+      "items": "array"
+    },
+    "FeatureCatalogEntry": {
+      "code": "string",
+      "title": "string"
+    },
+    "FileDownloadResponse": {
+      "id": "string",
+      "storage_key": "string",
+      "sha256": "string",
+      "size": "integer",
+      "mime": "string",
+      "original_name": "null|string",
+      "company_id": "null|string",
+      "pack_id": "null|string",
+      "url": "string",
+      "expires_at": "string"
+    },
+    "FileDto": {
+      "id": "string",
+      "bucket": "string",
+      "object_key": "string",
+      "content_type": "string",
+      "size_bytes": "integer",
+      "sha256": "string",
+      "status": "string",
+      "av_vendor": "null|string",
+      "av_result_json": "object",
+      "metadata_json": "object",
+      "links": "array",
+      "content_index": "FileIndexStatusDto|null"
+    },
+    "FileIndexStatusDto": {
+      "status": "string",
+      "attempts": "integer",
+      "last_error": "null|string"
+    },
+    "FileUploadResponse": {
+      "id": "string",
+      "storage_key": "string",
+      "sha256": "string",
+      "size": "integer",
+      "mime": "string",
+      "kind": "FileKind",
+      "original_name": "null|string",
+      "company_id": "null|string",
+      "pack_id": "null|string",
+      "metadata": "object",
+      "quarantined": "boolean",
+      "scan_status": "FileScanStatus",
+      "download_url": "null|string"
+    },
+    "FileVersionDto": {
+      "id": "string",
+      "file_id": "string",
+      "sha256": "string",
+      "size_bytes": "integer",
+      "s3_version_id": "null|string",
+      "created_by": "null|string",
+      "created_at": "string"
+    },
+    "FinalizeUploadResponse": {
+      "file_id": "string",
+      "status": "string"
+    },
+    "FindingIn": {
+      "source_type": "string",
+      "source_id": "string",
+      "title": "string",
+      "severity": "string",
+      "finding_type": "string",
+      "description": "null|string",
+      "due_date": "null|string",
+      "site_id": "null|string"
+    },
+    "FindingUpdate": {
+      "status": "null|string",
+      "due_date": "null|string",
+      "description": "null|string",
+      "severity": "null|string"
+    },
+    "GapRecalcIn": {
+      "missing_documents": "integer",
+      "open_prescriptions": "integer",
+      "overdue_actions": "integer",
+      "high_risks": "integer"
+    },
+    "GenerateDataPayload": {
+      "type": "string",
+      "payload": "null|object",
+      "file_id": "null|string"
+    },
+    "GeneratePipelinePayload": {
+      "profile_code": "null|string",
+      "steps": "GenerateStepOptions|null"
+    },
+    "GenerateStepOptions": {
+      "apply_headers": "null|object",
+      "replace": "null|object",
+      "pdf": "null|object",
+      "zip": "null|object"
+    },
+    "GenerateTemplateRef": {
+      "code": "string",
+      "version": "integer"
+    },
+    "GuaranteeCreate": {
+      "kind": "SoutGuaranteeKind",
+      "detail": "null|string"
+    },
+    "GuaranteeRead": {
+      "id": "string",
+      "workplace_id": "string",
+      "kind": "SoutGuaranteeKind",
+      "detail": "null|string"
+    },
+    "HTTPValidationError": {
+      "detail": "array"
+    },
+    "HazardFactorMappingIn": {
+      "factor_code": "null|string"
+    },
+    "HazardFactorMappingPage": {
+      "items": "array",
+      "total": "integer"
+    },
+    "HazardFactorMappingRead": {
+      "hazard_id": "string",
+      "hazard_code": "string",
+      "hazard_title": "string",
+      "factor_code": "null|string",
+      "factor_name": "null|string"
+    },
+    "HazardIn": {
+      "code": "string",
+      "title": "string",
+      "module": "string",
+      "description": "null|string",
+      "recommended_measures": "array"
+    },
+    "HazardMeasureIn": {
+      "text": "string",
+      "owner_role": "null|string",
+      "owner_id": "null|string",
+      "due_in_days": "integer|null"
+    },
+    "HeaderFooterPresetCreate": {
+      "code": "string",
+      "name": "string",
+      "different_first": "boolean",
+      "different_odd_even": "boolean",
+      "header_first_xml": "null|string",
+      "header_odd_xml": "null|string",
+      "header_even_xml": "null|string",
+      "footer_first_xml": "null|string",
+      "footer_odd_xml": "null|string",
+      "footer_even_xml": "null|string",
+      "watermark": "object"
+    },
+    "HeaderFooterPresetPatch": {
+      "name": "null|string",
+      "different_first": "boolean|null",
+      "different_odd_even": "boolean|null",
+      "header_first_xml": "null|string",
+      "header_odd_xml": "null|string",
+      "header_even_xml": "null|string",
+      "footer_first_xml": "null|string",
+      "footer_odd_xml": "null|string",
+      "footer_even_xml": "null|string",
+      "watermark": "null|object"
+    },
+    "HeaderFooterPresetRead": {
+      "code": "string",
+      "name": "string",
+      "different_first": "boolean",
+      "different_odd_even": "boolean",
+      "header_first_xml": "null|string",
+      "header_odd_xml": "null|string",
+      "header_even_xml": "null|string",
+      "footer_first_xml": "null|string",
+      "footer_odd_xml": "null|string",
+      "footer_even_xml": "null|string",
+      "watermark": "object",
+      "id": "string",
+      "tenant_id": "string"
+    },
+    "ImportApplyOut": {
+      "batch": "ImportBatchOut",
+      "preview": "ImportPreviewOut"
+    },
+    "ImportBatchOut": {
+      "id": "string",
+      "target": "string",
+      "status": "string",
+      "mode": "string",
+      "source_filename": "string",
+      "source_format": "string",
+      "mapping": "object",
+      "notes": "object",
+      "total_rows": "integer",
+      "processed_rows": "integer",
+      "created_count": "integer",
+      "updated_count": "integer",
+      "skipped_count": "integer",
+      "failed_count": "integer",
+      "applied_at": "string",
+      "applied_by": "null|string",
+      "finished_at": "null|string",
+      "error_message": "null|string",
+      "rolled_back_at": "null|string",
+      "rolled_back_by": "null|string"
+    },
+    "ImportColumnOut": {
+      "field": "string",
+      "title": "string",
+      "kind": "string",
+      "required": "boolean",
+      "aliases": "array",
+      "enum_values": "array",
+      "lookup": "null|string",
+      "lookup_creatable": "boolean"
+    },
+    "ImportFactorRow": {
+      "code": "null|string",
+      "name": "string",
+      "parsed_class": "null|string",
+      "class_unparsed": "null|string"
+    },
+    "ImportPreview": {
+      "campaign_id": "string",
+      "rows": "array",
+      "new_count": "integer",
+      "changed_count": "integer",
+      "unchanged_count": "integer",
+      "removed_count": "integer",
+      "error_count": "integer",
+      "can_apply": "boolean"
+    },
+    "ImportPreviewOut": {
+      "target": "string",
+      "detected_profile": "null|string",
+      "applied_profile": "null|string",
+      "counts": "object",
+      "mapping": "object",
+      "unmapped_headers": "array",
+      "unknown_references": "object",
+      "rows": "array"
+    },
+    "ImportProfileOut": {
+      "code": "string",
+      "title": "string",
+      "target": "string",
+      "source": "string",
+      "description": "string",
+      "mapping": "object",
+      "split_columns": "array"
+    },
+    "ImportResult": {
+      "campaign_id": "string",
+      "created": "integer",
+      "updated": "integer",
+      "skipped": "integer",
+      "removed_detected": "integer",
+      "errors": "array"
+    },
+    "ImportRowOut": {
+      "row_number": "integer",
+      "action": "string",
+      "natural_key": "null|string",
+      "entity_id": "null|string",
+      "errors": "array",
+      "message": "null|string"
+    },
+    "ImportTargetOut": {
+      "code": "string",
+      "title": "string",
+      "description": "string",
+      "natural_keys": "array",
+      "columns": "array"
+    },
+    "ImportWorkplaceRow": {
+      "row_index": "integer",
+      "workplace_code": "string",
+      "position_name": "string",
+      "parsed_class": "null|string",
+      "current_class": "null|string",
+      "change": "string",
+      "factors": "array",
+      "errors": "array",
+      "warnings": "array"
+    },
+    "IncidentCreate": {
+      "title": "string",
+      "incident_type": "IncidentType",
+      "occurred_at": "string",
+      "company_id": "string",
+      "site_id": "string",
+      "severity": "IncidentSeverity",
+      "description": "null|string",
+      "location_description": "null|string",
+      "pack_id": "null|string",
+      "victim_ids": "array"
+    },
+    "IncidentLogCreate": {
+      "stage": "IncidentStage",
+      "status": "IncidentStatus",
+      "message": "string",
+      "metadata_json": "object"
+    },
+    "IncidentLogRead": {
+      "id": "string",
+      "incident_id": "string",
+      "author_id": "null|string",
+      "stage": "IncidentStage",
+      "status": "IncidentStatus",
+      "message": "string",
+      "metadata_json": "object",
+      "created_at": "string"
+    },
+    "IncidentPage": {
+      "items": "array",
+      "total": "integer"
+    },
+    "IncidentRead": {
+      "id": "string",
+      "title": "string",
+      "description": "null|string",
+      "incident_type": "IncidentType",
+      "occurred_at": "string",
+      "company_id": "string",
+      "site_id": "string",
+      "severity": "IncidentSeverity",
+      "status": "IncidentStatus",
+      "investigation_stage": "IncidentStage",
+      "location_description": "null|string",
+      "pack_id": "null|string",
+      "victim_ids": "array"
+    },
+    "IncidentUpdate": {
+      "title": "null|string",
+      "incident_type": "IncidentType|null",
+      "occurred_at": "null|string",
+      "company_id": "null|string",
+      "site_id": "null|string",
+      "severity": "IncidentSeverity|null",
+      "status": "IncidentStatus|null",
+      "investigation_stage": "IncidentStage|null",
+      "description": "null|string",
+      "location_description": "null|string",
+      "pack_id": "null|string",
+      "victim_ids": "array|null"
+    },
+    "InspectionCreate": {
+      "company_id": "string",
+      "site_id": "null|string",
+      "inspection_type": "InspectionType",
+      "responsible_id": "null|string",
+      "recurrence_rule": "null|string",
+      "authority": "string",
+      "purpose": "null|string",
+      "scheduled_at": "null|string",
+      "status": "InspectionStatus",
+      "started_at": "null|string"
+    },
+    "InspectionPage": {
+      "items": "array",
+      "total": "integer"
+    },
+    "InspectionRead": {
+      "id": "string",
+      "company_id": "string",
+      "site_id": "null|string",
+      "inspection_type": "InspectionType",
+      "responsible_id": "null|string",
+      "recurrence_rule": "null|string",
+      "authority": "string",
+      "purpose": "null|string",
+      "scheduled_at": "null|string",
+      "started_at": "null|string",
+      "finished_at": "null|string",
+      "status": "InspectionStatus",
+      "result_summary": "null|string",
+      "results": "array"
+    },
+    "InspectionResultCreate": {
+      "title": "string",
+      "outcome": "null|string",
+      "notes": "null|string",
+      "issued_at": "null|string",
+      "file_id": "null|string"
+    },
+    "InspectionResultRead": {
+      "id": "string",
+      "inspection_id": "string",
+      "title": "string",
+      "outcome": "null|string",
+      "notes": "null|string",
+      "issued_at": "null|string",
+      "file_id": "null|string",
+      "created_at": "string"
+    },
+    "InspectionUpdate": {
+      "company_id": "null|string",
+      "site_id": "null|string",
+      "inspection_type": "InspectionType|null",
+      "responsible_id": "null|string",
+      "recurrence_rule": "null|string",
+      "authority": "null|string",
+      "purpose": "null|string",
+      "scheduled_at": "null|string",
+      "started_at": "null|string",
+      "finished_at": "null|string",
+      "status": "InspectionStatus|null",
+      "result_summary": "null|string"
+    },
+    "InspectorReportDTO": {
+      "available": "array",
+      "used": "array",
+      "undefined": "array",
+      "unused": "array",
+      "required_missing": "array",
+      "filters": "array",
+      "unknown_filters": "array",
+      "loops": "array",
+      "conditions": "array",
+      "summary": "object"
+    },
+    "InspectorRequest": {
+      "available_variables": "null|object",
+      "required_fields": "array|null"
+    },
+    "InvoiceCreate": {
+      "contract_id": "string",
+      "order_id": "null|string",
+      "invoice_number": "string",
+      "status": "null|string",
+      "issued_at": "null|string",
+      "due_at": "null|string",
+      "paid_at": "null|string",
+      "total_amount": "null|number",
+      "currency": "null|string"
+    },
+    "InvoicePage": {
+      "items": "array",
+      "total": "integer"
+    },
+    "InvoiceRead": {
+      "id": "string",
+      "tenant_id": "string",
+      "contract_id": "string",
+      "order_id": "null|string",
+      "invoice_number": "string",
+      "status": "string",
+      "issued_at": "null|string",
+      "due_at": "null|string",
+      "paid_at": "null|string",
+      "total_amount": "null|number",
+      "currency": "string"
+    },
+    "InvoiceUpdate": {
+      "contract_id": "null|string",
+      "order_id": "null|string",
+      "invoice_number": "null|string",
+      "status": "null|string",
+      "issued_at": "null|string",
+      "due_at": "null|string",
+      "paid_at": "null|string",
+      "total_amount": "null|number",
+      "currency": "null|string"
+    },
+    "IssuerRef": {
+      "kind": "string",
+      "company_id": "null|string",
+      "inline": "BrandingProfilePayload|null"
+    },
+    "JobCreateRequest": {
+      "profile_code": "null|string",
+      "preset_id": "null|string",
+      "profile_id": "null|string",
+      "input_payload": "object",
+      "inputs": "object",
+      "options": "object"
+    },
+    "JobCreateResponse": {
+      "job_id": "string",
+      "status": "string",
+      "correlation_id": "string",
+      "steps": "array"
+    },
+    "JobEnvelopeRead": {
+      "id": "string",
+      "kind": "null|string",
+      "status": "string",
+      "correlation_id": "null|string",
+      "started_at": "null|string",
+      "ended_at": "null|string",
+      "error_code": "null|string",
+      "error_payload": "null|object",
+      "profile_id": "null|string",
+      "created_by": "null|string"
+    },
+    "JobListRead": {
+      "items": "array",
+      "next_cursor": "null|string"
+    },
+    "JobLogRead": {
+      "timestamp": "string",
+      "level": "string",
+      "message": "string",
+      "step_name": "null|string",
+      "meta_json": "null|object"
+    },
+    "JobRead": {
+      "job": "JobEnvelopeRead",
+      "steps": "array",
+      "logs": "array",
+      "result": "null|object"
+    },
+    "JobStepRead": {
+      "code": "string",
+      "step_name": "string",
+      "status": "string",
+      "attempt": "integer",
+      "max_attempts": "integer",
+      "started_at": "null|string",
+      "ended_at": "null|string",
+      "input_ref": "null|object",
+      "output_ref": "null|object",
+      "logs_ref": "null|string",
+      "error_code": "null|string",
+      "error_payload": "null|object"
+    },
+    "JournalEntryPage": {
+      "items": "array",
+      "total": "integer"
+    },
+    "JournalEntryRead": {
+      "id": "string",
+      "journal_id": "string",
+      "person_id": "string",
+      "entry_type": "JournalType",
+      "entry_date": "string",
+      "instructor": "null|string",
+      "notes": "null|string",
+      "metadata_json": "object",
+      "created_at": "string",
+      "updated_at": "string"
+    },
+    "JournalEntryUpdate": {
+      "journal_id": "null|string",
+      "person_id": "null|string",
+      "entry_type": "JournalType|null",
+      "entry_date": "null|string",
+      "instructor": "null|string",
+      "notes": "null|string",
+      "metadata_json": "null|object"
+    },
+    "JournalPage": {
+      "items": "array",
+      "total": "integer"
+    },
+    "JournalRead": {
+      "id": "string",
+      "company_id": "null|string",
+      "title": "null|string",
+      "journal_type": "JournalType",
+      "started_at": "null|string",
+      "closed_at": "null|string",
+      "metadata_json": "object",
+      "created_at": "string",
+      "updated_at": "string"
+    },
+    "JournalUpdate": {
+      "company_id": "null|string",
+      "title": "null|string",
+      "journal_type": "JournalType|null",
+      "started_at": "null|string",
+      "closed_at": "null|string",
+      "metadata_json": "null|object"
+    },
+    "KpiDefinitionCreate": {
+      "code": "string",
+      "name": "string",
+      "dataset_code": "string",
+      "formula_json": "object",
+      "threshold_json": "object",
+      "locale_labels": "object"
+    },
+    "LayoutPresetList": {
+      "items": "array"
+    },
+    "LetterheadOverride": {
+      "issuer": "IssuerRef|null",
+      "preset_code": "null|string",
+      "disabled": "boolean"
+    },
+    "LinkFileRequest": {
+      "entity_type": "string",
+      "entity_id": "string",
+      "role": "null|string",
+      "tag": "null|string"
+    },
+    "LinkFileResponse": {
+      "link_id": "string"
+    },
+    "LintReportDTO": {
+      "found_fields": "array",
+      "blocks": "object",
+      "errors": "array",
+      "warnings": "array",
+      "summary": "object",
+      "filters": "array",
+      "duplicates": "array",
+      "empty_placeholders": "array",
+      "undefined_variables": "array",
+      "unused_variables": "array"
+    },
+    "LintRequest": {
+      "sample_schema": "null|object",
+      "required_fields": "array|null"
+    },
+    "LoginRequest": {
+      "email": "string",
+      "password": "string"
+    },
+    "MachineKeyCreate": {
+      "name": "string",
+      "scopes": "array",
+      "rate_limit_per_minute": "integer|null"
+    },
+    "MapItemUpsert": {
+      "hazard_id": "string",
+      "probability_value": "number",
+      "severity_value": "number",
+      "exposure_value": "null|number",
+      "measure_ids": "array"
+    },
+    "MappingPreviewRequest": {
+      "source_file_id": "null|string",
+      "row_limit": "integer",
+      "rows": "array"
+    },
+    "MarkReadRequest": {
+      "ids": "array"
+    },
+    "MarketplaceInstallRequest": {
+      "mode": "string",
+      "target_code": "null|string",
+      "title_suffix": "null|string"
+    },
+    "MarketplaceItemCreate": {
+      "item_type": "string",
+      "code": "string",
+      "name": "string",
+      "version_label": "string",
+      "category": "null|string",
+      "tags_json": "array",
+      "description": "null|string",
+      "preview_json": "object",
+      "compatibility_json": "object",
+      "dependency_json": "object",
+      "source_ref": "null|string"
+    },
+    "MatrixRow": {
+      "severity": "integer",
+      "likelihood": "integer",
+      "score": "integer",
+      "band": "string"
+    },
+    "MatrixUp": {
+      "methodology_id": "null|string",
+      "rows": "array"
+    },
+    "MeResponse": {
+      "sub": "string",
+      "email": "string",
+      "role": "string",
+      "tenant_id": "null|string",
+      "tenant_slug": "null|string",
+      "roles": "array",
+      "permissions": "array",
+      "company_id": "null|string",
+      "attributes": "object",
+      "abac_scopes": "object",
+      "abilities": "array"
+    },
+    "MedicalExamCreate": {
+      "person_id": "string",
+      "exam_kind": "MedicalExamKind",
+      "exam_date": "string",
+      "fitness": "MedicalFitness|null",
+      "conclusion": "null|string",
+      "restrictions": "null|string",
+      "contraindications": "array",
+      "valid_until": "null|string",
+      "medical_org_name": "null|string",
+      "referral_id": "null|string",
+      "exam_type": "null|string",
+      "psychiatric_protocol_no": "null|string",
+      "psychiatric_activity_codes": "array"
+    },
+    "MedicalExamPage": {
+      "items": "array",
+      "total": "integer"
+    },
+    "MedicalExamRead": {
+      "id": "string",
+      "person_id": "string",
+      "exam_type": "string",
+      "exam_date": "string",
+      "conclusion": "null|string",
+      "valid_until": "string",
+      "created_at": "string",
+      "updated_at": "string",
+      "exam_kind": "MedicalExamKind|null",
+      "fitness": "MedicalFitness|null",
+      "restrictions": "null|string",
+      "contraindications": "array",
+      "referral_id": "null|string",
+      "medical_org_name": "null|string",
+      "psychiatric_protocol_no": "null|string",
+      "psychiatric_activity_codes": "array"
+    },
+    "MedicalExamSuggestion": {
+      "position_id": "string",
+      "exam_kind": "string",
+      "periodicity_months": "integer",
+      "factor_codes": "array",
+      "reason": "string"
+    },
+    "MedicalExamUpdate": {
+      "fitness": "MedicalFitness|null",
+      "conclusion": "null|string",
+      "restrictions": "null|string",
+      "contraindications": "array|null",
+      "valid_until": "null|string"
+    },
+    "MedicalFactorCreate": {
+      "code": "string",
+      "name": "string",
+      "category": "string",
+      "exam_kinds": "array",
+      "periodicity_months": "integer",
+      "participants": "array|null",
+      "lab_tests": "array|null"
+    },
+    "MedicalFactorPage": {
+      "items": "array",
+      "total": "integer"
+    },
+    "MedicalFactorRead": {
+      "id": "string",
+      "code": "string",
+      "name": "string",
+      "category": "string",
+      "exam_kinds": "array",
+      "periodicity_months": "integer",
+      "participants": "array|null",
+      "lab_tests": "array|null"
+    },
+    "MedicalFactorUpdate": {
+      "name": "null|string",
+      "category": "null|string",
+      "exam_kinds": "array|null",
+      "periodicity_months": "integer|null",
+      "participants": "array|null",
+      "lab_tests": "array|null"
+    },
+    "MedicalNormCreate": {
+      "position_id": "string",
+      "exam_kind": "MedicalExamKind",
+      "hazard_id": "null|string",
+      "interval_days": "integer",
+      "working_conditions_class": "null|string"
+    },
+    "MedicalNormPage": {
+      "items": "array",
+      "total": "integer"
+    },
+    "MedicalNormRead": {
+      "id": "string",
+      "position_id": "string",
+      "hazard_id": "null|string",
+      "exam_kind": "MedicalExamKind",
+      "interval_days": "integer",
+      "working_conditions_class": "null|string"
+    },
+    "MedicalNormUpdate": {
+      "exam_kind": "MedicalExamKind|null",
+      "hazard_id": "null|string",
+      "interval_days": "integer|null",
+      "working_conditions_class": "null|string"
+    },
+    "MedicalReferralCreate": {
+      "person_id": "string",
+      "exam_kind": "MedicalExamKind",
+      "due_at": "null|string",
+      "medical_org_name": "null|string"
+    },
+    "MedicalReferralPage": {
+      "items": "array",
+      "total": "integer"
+    },
+    "MedicalReferralRead": {
+      "id": "string",
+      "person_id": "string",
+      "exam_kind": "MedicalExamKind",
+      "due_at": "null|string",
+      "status": "MedicalReferralStatus",
+      "medical_org_name": "null|string",
+      "result_exam_id": "null|string",
+      "is_overdue": "boolean"
+    },
+    "MedicalReferralTransition": {
+      "to": "MedicalReferralStatus",
+      "result_exam_id": "null|string",
+      "note": "null|string"
+    },
+    "MedicalRequirementCreate": {
+      "person_id": "string",
+      "due_date": "null|string",
+      "notes": "null|string"
+    },
+    "MedicalSummary": {
+      "by_status": "object",
+      "total": "integer",
+      "overdue_count": "integer",
+      "suspended_count": "integer"
+    },
+    "MedicalSuspensionPage": {
+      "items": "array",
+      "total": "integer"
+    },
+    "MedicalSuspensionRead": {
+      "id": "string",
+      "person_id": "string",
+      "reason": "MedicalSuspensionReason",
+      "status": "MedicalSuspensionStatus",
+      "source_exam_id": "null|string"
+    },
+    "MeetingCreate": {
+      "scheduled_at": "string",
+      "location": "null|string"
+    },
+    "MeetingPage": {
+      "items": "array",
+      "total": "integer",
+      "limit": "integer",
+      "offset": "integer"
+    },
+    "MeetingRead": {
+      "id": "string",
+      "committee_id": "string",
+      "scheduled_at": "string",
+      "location": "null|string",
+      "status": "MeetingStatus",
+      "held_at": "null|string",
+      "protocol_seq": "integer|null",
+      "protocol_year": "integer|null",
+      "members_total": "integer|null",
+      "present_count": "integer|null",
+      "quorum_met": "boolean|null",
+      "created_at": "string",
+      "updated_at": "string",
+      "protocol_no": "null|string"
+    },
+    "MeetingStatusUpdate": {
+      "status": "MeetingStatus"
+    },
+    "MemberCreate": {
+      "person_id": "string",
+      "role": "CommitteeMemberRole"
+    },
+    "MemberDetailRead": {
+      "id": "string",
+      "committee_id": "string",
+      "person_id": "string",
+      "role": "CommitteeMemberRole",
+      "person_fio": "null|string"
+    },
+    "MemberRead": {
+      "id": "string",
+      "committee_id": "string",
+      "person_id": "string",
+      "role": "CommitteeMemberRole"
+    },
+    "MethodologyClone": {
+      "version_no": "integer|null",
+      "name": "null|string"
+    },
+    "MethodologyCreate": {
+      "code": "string",
+      "name": "string",
+      "type": "string",
+      "status": "string",
+      "version_no": "integer",
+      "formula_json": "object",
+      "scale_json": "object"
+    },
+    "MethodologyIn": {
+      "name": "string",
+      "code": "null|string",
+      "severity_scale": "array",
+      "likelihood_scale": "array",
+      "bands": "array"
+    },
+    "MethodologyOut": {
+      "name": "string",
+      "code": "null|string",
+      "severity_scale": "array",
+      "likelihood_scale": "array",
+      "bands": "array",
+      "id": "string",
+      "version": "integer"
+    },
+    "MethodologyUpdate": {
+      "name": "null|string",
+      "code": "null|string",
+      "severity_scale": "array|null",
+      "likelihood_scale": "array|null",
+      "bands": "array|null"
+    },
+    "NamedListPage": {
+      "items": "array",
+      "total": "integer"
+    },
+    "NamedListRow": {
+      "person_id": "string",
+      "full_name": "string",
+      "position_name": "null|string",
+      "department": "null|string",
+      "factors": "array",
+      "required_kinds": "array",
+      "last_exam_date": "null|string",
+      "next_due_date": "null|string",
+      "status": "string"
+    },
+    "NewFileVersionRequest": {
+      "filename": "string",
+      "content_type": "string",
+      "size_bytes": "integer",
+      "metadata_json": "null|object"
+    },
+    "NewFileVersionResponse": {
+      "file_id": "string",
+      "version_id": "string",
+      "signed_put_url": "string",
+      "expires_at": "string",
+      "status": "string"
+    },
+    "NormSuggestions": {
+      "ppe": "array",
+      "medical": "array"
+    },
+    "NotificationPage": {
+      "items": "array",
+      "next_cursor": "null|string",
+      "unread_count": "integer"
+    },
+    "NotificationRead": {
+      "id": "string",
+      "channel": "string",
+      "type": "string",
+      "title": "string",
+      "body": "string",
+      "payload": "null|object",
+      "priority": "string",
+      "status": "string",
+      "is_read": "boolean",
+      "deeplink": "null|string",
+      "scheduled_at": "string",
+      "sent_at": "null|string"
+    },
+    "NotificationTemplateIn": {
+      "code": "string",
+      "channel": "string",
+      "type": "string",
+      "locale": "string",
+      "subject_template": "null|string",
+      "title_template": "null|string",
+      "body_template": "string",
+      "is_active": "boolean",
+      "variables_schema": "null|object"
+    },
+    "NotificationTemplateOut": {
+      "code": "string",
+      "channel": "string",
+      "type": "string",
+      "locale": "string",
+      "subject_template": "null|string",
+      "title_template": "null|string",
+      "body_template": "string",
+      "is_active": "boolean",
+      "variables_schema": "null|object",
+      "id": "string"
+    },
+    "NpaActListResponse": {
+      "items": "array"
+    },
+    "NpaActRead": {
+      "id": "string",
+      "code": "string",
+      "title": "string",
+      "edition": "string",
+      "valid_from": "null|string",
+      "valid_to": "null|string",
+      "clauses": "array"
+    },
+    "NpaClauseRead": {
+      "id": "string",
+      "code": "string",
+      "text": "string"
+    },
+    "ObligationSummary": {
+      "items": "array",
+      "total": "integer",
+      "overdue": "integer"
+    },
+    "ObligationSummaryItem": {
+      "entity_type": "null|string",
+      "total": "integer",
+      "overdue": "integer"
+    },
+    "OffboardingCancel": {
+      "reason": "null|string"
+    },
+    "OffboardingPurge": {
+      "confirm_slug": "string"
+    },
+    "OffboardingRequest": {
+      "reason": "null|string",
+      "grace_days": "integer"
+    },
+    "OrderCreate": {
+      "contract_id": "string",
+      "order_number": "string",
+      "status": "null|string",
+      "ordered_at": "null|string",
+      "total_amount": "null|number",
+      "currency": "null|string"
+    },
+    "OrderPage": {
+      "items": "array",
+      "total": "integer"
+    },
+    "OrderRead": {
+      "id": "string",
+      "tenant_id": "string",
+      "contract_id": "string",
+      "order_number": "string",
+      "status": "string",
+      "ordered_at": "null|string",
+      "total_amount": "null|number",
+      "currency": "string"
+    },
+    "OrderUpdate": {
+      "contract_id": "null|string",
+      "order_number": "null|string",
+      "status": "null|string",
+      "ordered_at": "null|string",
+      "total_amount": "null|number",
+      "currency": "null|string"
+    },
+    "OutboxEntry": {
+      "id": "string",
+      "tenant_id": "string",
+      "event_type": "string",
+      "destination": "string",
+      "status": "OutboxStatus",
+      "attempts": "integer",
+      "next_attempt_at": "null|string",
+      "sent_at": "null|string",
+      "created_at": "string",
+      "updated_at": "string",
+      "last_error": "null|object"
+    },
+    "OutboxEventEntry": {
+      "id": "string",
+      "tenant_id": "string",
+      "event_id": "string",
+      "event_type": "string",
+      "status": "OutboxEventStatus",
+      "attempts": "integer",
+      "next_attempt_at": "null|string",
+      "created_at": "string",
+      "last_error": "null|string"
+    },
+    "OutboxEventListResponse": {
+      "total": "integer",
+      "items": "array"
+    },
+    "OutboxListResponse": {
+      "total": "integer",
+      "items": "array"
+    },
+    "PPEBudgetCategoryActualRead": {
+      "category": "string",
+      "amount": "number"
+    },
+    "PPECardRead": {
+      "person_id": "string",
+      "full_name": "string",
+      "personnel_number": "null|string",
+      "hired_at": "null|string",
+      "position_name": "null|string",
+      "sizes": "null|object",
+      "required": "array",
+      "issues": "array",
+      "timeline": "array",
+      "summary_status": "string"
+    },
+    "PPECardRequiredLine": {
+      "item_id": "null|string",
+      "item_name": "string",
+      "required_quantity": "integer",
+      "interval_days": "integer|null",
+      "status": "string"
+    },
+    "PPECardTimelineEvent": {
+      "occurred_at": "string",
+      "event": "string",
+      "issue_id": "string",
+      "item_name": "string"
+    },
+    "PPEInventoryCountCreate": {
+      "scope_item_id": "null|string",
+      "scope_location": "null|string",
+      "note": "null|string"
+    },
+    "PPEInventoryCountDetail": {
+      "id": "string",
+      "status": "string",
+      "scope_item_id": "null|string",
+      "scope_location": "null|string",
+      "note": "null|string",
+      "applied_at": "null|string",
+      "created_at": "string",
+      "line_count": "integer",
+      "counted_count": "integer",
+      "diff_count": "integer",
+      "lines": "array"
+    },
+    "PPEInventoryCountLineInput": {
+      "line_id": "string",
+      "counted_qty": "integer|null"
+    },
+    "PPEInventoryCountLineRead": {
+      "id": "string",
+      "batch_id": "string",
+      "item_id": "string",
+      "batch_no": "string",
+      "location": "null|string",
+      "item_name": "string",
+      "system_qty": "integer",
+      "counted_qty": "integer|null",
+      "on_hand": "integer",
+      "delta": "integer|null",
+      "adjustment_movement_id": "null|string"
+    },
+    "PPEInventoryCountLinesUpdate": {
+      "entries": "array"
+    },
+    "PPEInventoryCountPage": {
+      "items": "array",
+      "total": "integer"
+    },
+    "PPEInventoryCountRead": {
+      "id": "string",
+      "status": "string",
+      "scope_item_id": "null|string",
+      "scope_location": "null|string",
+      "note": "null|string",
+      "applied_at": "null|string",
+      "created_at": "string",
+      "line_count": "integer",
+      "counted_count": "integer"
+    },
+    "PPEIssueCreate": {
+      "person_id": "string",
+      "item_id": "string",
+      "quantity": "integer",
+      "issued_at": "null|string",
+      "wear_days": "integer|null",
+      "expires_at": "null|string",
+      "certificate_no": "null|string",
+      "wear_percent": "integer|null",
+      "signature_doc_ref": "null|string",
+      "batch_id": "null|string"
+    },
+    "PPEIssuePage": {
+      "items": "array",
+      "total": "integer"
+    },
+    "PPEIssueRead": {
+      "id": "string",
+      "person_id": "string",
+      "item_id": "null|string",
+      "item_name": "string",
+      "quantity": "integer",
+      "issued_at": "string",
+      "expires_at": "null|string",
+      "returned_at": "null|string",
+      "wear_days": "integer|null",
+      "status": "PPEIssueStatus",
+      "certificate_no": "null|string",
+      "wear_percent": "integer|null",
+      "return_wear_percent": "integer|null",
+      "signature_doc_ref": "null|string",
+      "writeoff_reason": "null|string",
+      "replaces_issue_id": "null|string",
+      "created_at": "string",
+      "updated_at": "string"
+    },
+    "PPEIssueReplaceRequest": {
+      "item_id": "null|string",
+      "quantity": "integer|null",
+      "wear_days": "integer|null",
+      "expires_at": "null|string",
+      "certificate_no": "null|string",
+      "wear_percent": "integer|null",
+      "signature_doc_ref": "null|string",
+      "batch_id": "null|string"
+    },
+    "PPEIssueReturnRequest": {
+      "returned_at": "null|string",
+      "return_wear_percent": "integer|null",
+      "signature_doc_ref": "null|string"
+    },
+    "PPEIssueUpdate": {
+      "status": "PPEIssueStatus|null",
+      "returned_at": "null|string",
+      "expires_at": "null|string",
+      "wear_days": "integer|null"
+    },
+    "PPEIssueWriteoffRequest": {
+      "writeoff_reason": "string"
+    },
+    "PPEItem": {
+      "name": "string",
+      "issued_at": "null|string",
+      "expires_at": "null|string",
+      "status": "null|string"
+    },
+    "PPEItemCreate": {
+      "name": "string",
+      "code": "null|string",
+      "category": "PPEItemCategory",
+      "description": "null|string",
+      "default_wear_days": "integer",
+      "min_stock": "integer",
+      "preferred_supplier_id": "null|string",
+      "metadata_json": "object"
+    },
+    "PPEItemPage": {
+      "items": "array",
+      "total": "integer"
+    },
+    "PPEItemRead": {
+      "id": "string",
+      "name": "string",
+      "code": "null|string",
+      "category": "PPEItemCategory",
+      "description": "null|string",
+      "default_wear_days": "integer",
+      "min_stock": "integer",
+      "preferred_supplier_id": "null|string",
+      "metadata_json": "object",
+      "created_at": "string",
+      "updated_at": "string"
+    },
+    "PPEItemUpdate": {
+      "name": "null|string",
+      "code": "null|string",
+      "category": "PPEItemCategory|null",
+      "description": "null|string",
+      "default_wear_days": "integer|null",
+      "min_stock": "integer|null",
+      "preferred_supplier_id": "null|string",
+      "metadata_json": "null|object"
+    },
+    "PPENormCreate": {
+      "position_id": "string",
+      "hazard_id": "string",
+      "item_id": "string",
+      "quantity": "integer",
+      "interval_days": "integer"
+    },
+    "PPENormPage": {
+      "items": "array",
+      "total": "integer"
+    },
+    "PPENormRead": {
+      "id": "string",
+      "position_id": "string",
+      "hazard_id": "string",
+      "item_id": "null|string",
+      "item_name": "string",
+      "quantity": "integer",
+      "interval_days": "integer",
+      "created_at": "string",
+      "updated_at": "string"
+    },
+    "PPENormUpdate": {
+      "item_id": "null|string",
+      "quantity": "integer|null",
+      "interval_days": "integer|null"
+    },
+    "PPEReorderDraftRead": {
+      "groups": "array",
+      "total_lines": "integer",
+      "total_deficit": "integer"
+    },
+    "PPEReorderGroupRead": {
+      "supplier_id": "null|string",
+      "supplier_name": "null|string",
+      "supplier_inn": "null|string",
+      "supplier_contact": "null|string",
+      "lines": "array",
+      "line_count": "integer",
+      "total_deficit": "integer"
+    },
+    "PPEReorderLineRead": {
+      "item_id": "string",
+      "item_name": "string",
+      "deficit": "integer"
+    },
+    "PPESafetyBudgetCreate": {
+      "name": "string",
+      "period_start": "string",
+      "period_end": "string",
+      "planned_amount": "number",
+      "notes": "null|string"
+    },
+    "PPESafetyBudgetDetail": {
+      "id": "string",
+      "name": "string",
+      "period_start": "string",
+      "period_end": "string",
+      "planned_amount": "number",
+      "notes": "null|string",
+      "created_at": "string",
+      "updated_at": "string",
+      "actual_total": "number",
+      "remaining": "number",
+      "by_category": "array",
+      "priced_receipt_count": "integer",
+      "unpriced_receipt_count": "integer"
+    },
+    "PPESafetyBudgetPage": {
+      "items": "array",
+      "total": "integer"
+    },
+    "PPESafetyBudgetRead": {
+      "id": "string",
+      "name": "string",
+      "period_start": "string",
+      "period_end": "string",
+      "planned_amount": "number",
+      "notes": "null|string",
+      "created_at": "string",
+      "updated_at": "string"
+    },
+    "PPESafetyBudgetUpdate": {
+      "name": "null|string",
+      "period_start": "null|string",
+      "period_end": "null|string",
+      "planned_amount": "null|number",
+      "notes": "null|string"
+    },
+    "PPESizesRead": {
+      "person_id": "string",
+      "sizes": "null|object"
+    },
+    "PPESizesUpdate": {
+      "height": "integer|null",
+      "clothing_size": "null|string",
+      "shoe_size": "null|string",
+      "headgear_size": "null|string",
+      "gas_mask_size": "null|string",
+      "respirator_size": "null|string",
+      "gloves_size": "null|string",
+      "mittens_size": "null|string"
+    },
+    "PPEStockBatchCreate": {
+      "item_id": "string",
+      "batch_no": "string",
+      "quantity": "integer",
+      "received_at": "null|string",
+      "certificate_no": "null|string",
+      "certificate_expires_at": "null|string",
+      "location": "null|string",
+      "supplier_id": "null|string",
+      "unit_cost": "null|number"
+    },
+    "PPEStockBatchPage": {
+      "items": "array",
+      "total": "integer"
+    },
+    "PPEStockBatchRead": {
+      "id": "string",
+      "item_id": "string",
+      "batch_no": "string",
+      "quantity": "integer",
+      "received_at": "null|string",
+      "certificate_no": "null|string",
+      "certificate_expires_at": "null|string",
+      "location": "null|string",
+      "supplier_id": "null|string",
+      "unit_cost": "null|number",
+      "created_at": "string",
+      "updated_at": "string"
+    },
+    "PPEStockBatchUpdate": {
+      "batch_no": "null|string",
+      "received_at": "null|string",
+      "certificate_no": "null|string",
+      "certificate_expires_at": "null|string",
+      "location": "null|string",
+      "supplier_id": "null|string",
+      "unit_cost": "null|number"
+    },
+    "PPEStockLevelByLocationPage": {
+      "items": "array",
+      "total": "integer"
+    },
+    "PPEStockLevelByLocationRead": {
+      "item_id": "string",
+      "item_name": "string",
+      "location": "null|string",
+      "quantity": "integer",
+      "batch_count": "integer"
+    },
+    "PPEStockLevelPage": {
+      "items": "array",
+      "total": "integer"
+    },
+    "PPEStockLevelRead": {
+      "item_id": "string",
+      "item_name": "string",
+      "total_quantity": "integer",
+      "batch_count": "integer",
+      "nearest_certificate_expiry": "null|string"
+    },
+    "PPEStockMovementCreate": {
+      "batch_id": "string",
+      "kind": "string",
+      "quantity": "integer",
+      "reason": "null|string",
+      "occurred_at": "null|string"
+    },
+    "PPEStockMovementPage": {
+      "items": "array",
+      "total": "integer"
+    },
+    "PPEStockMovementRead": {
+      "id": "string",
+      "item_id": "string",
+      "batch_id": "null|string",
+      "kind": "string",
+      "quantity_delta": "integer",
+      "occurred_at": "string",
+      "reason": "null|string",
+      "ref_type": "null|string",
+      "ref_id": "null|string",
+      "created_at": "string"
+    },
+    "PPEStockShortagePage": {
+      "items": "array",
+      "total": "integer",
+      "window_days": "integer"
+    },
+    "PPEStockShortageRead": {
+      "item_id": "string",
+      "item_name": "string",
+      "min_stock": "integer",
+      "on_hand": "integer",
+      "deficit": "integer",
+      "below_threshold": "boolean",
+      "avg_daily_consumption": "number",
+      "days_to_depletion": "null|number",
+      "projected_breach_date": "null|string",
+      "supplier_id": "null|string",
+      "supplier_name": "null|string",
+      "supplier_inn": "null|string",
+      "supplier_contact": "null|string",
+      "supplier_source": "null|string"
+    },
+    "PPEStockTransferCreate": {
+      "source_batch_id": "string",
+      "to_location": "string",
+      "quantity": "integer",
+      "reason": "null|string",
+      "occurred_at": "null|string"
+    },
+    "PPEStockTransferPage": {
+      "items": "array",
+      "total": "integer"
+    },
+    "PPEStockTransferRead": {
+      "ref_id": "string",
+      "item_id": "string",
+      "item_name": "string",
+      "batch_no": "string",
+      "from_location": "null|string",
+      "to_location": "string",
+      "quantity": "integer",
+      "source_batch_id": "string",
+      "dest_batch_id": "string",
+      "out_movement_id": "string",
+      "in_movement_id": "string",
+      "reason": "null|string",
+      "occurred_at": "string"
+    },
+    "PPESupplierCreate": {
+      "name": "string",
+      "inn": "null|string",
+      "contact_email": "null|string",
+      "contact_phone": "null|string"
+    },
+    "PPESupplierPage": {
+      "items": "array",
+      "total": "integer"
+    },
+    "PPESupplierRead": {
+      "id": "string",
+      "name": "string",
+      "inn": "null|string",
+      "contact_email": "null|string",
+      "contact_phone": "null|string",
+      "created_at": "string",
+      "updated_at": "string"
+    },
+    "PPESupplierUpdate": {
+      "name": "null|string",
+      "inn": "null|string",
+      "contact_email": "null|string",
+      "contact_phone": "null|string"
+    },
+    "PackFromScenarioRequest": {
+      "name": "null|string",
+      "description": "null|string",
+      "is_active": "boolean"
+    },
+    "PackGenerateRequest": {
+      "pack_code": "string",
+      "company_id": "string",
+      "site_id": "null|string",
+      "person_ids": "array",
+      "data": "object",
+      "letterhead": "LetterheadOverride|null",
+      "naming": "PackNamingConfig",
+      "include_docx": "boolean",
+      "include_pdf": "boolean"
+    },
+    "PackListItem": {
+      "id": "string",
+      "code": "string",
+      "name": "string",
+      "description": "null|string",
+      "module": "string",
+      "scenario_type": "string",
+      "is_active": "boolean",
+      "created_at": "string",
+      "updated_at": "string"
+    },
+    "PackListMeta": {
+      "page": "integer",
+      "per_page": "integer",
+      "total": "integer",
+      "pages": "integer"
+    },
+    "PackListResponse": {
+      "ok": "boolean",
+      "data": "array",
+      "meta": "PackListMeta"
+    },
+    "PackNamingConfig": {
+      "org": "null|string",
+      "unit": "null|string",
+      "project": "null|string",
+      "client": "null|string",
+      "topic": "null|string",
+      "version": "integer|null",
+      "reference_date": "null|string",
+      "flags": "array"
+    },
+    "PackRunAccepted": {
+      "pack_run_id": "string",
+      "status": "string"
+    },
+    "PackRunCreate": {
+      "package_preset_id": "string",
+      "source_file_id": "null|string",
+      "selected_rows": "array",
+      "override_profile_id": "null|string",
+      "override_options": "object",
+      "rows": "array"
+    },
+    "PackRunItemRead": {
+      "id": "string",
+      "row_no": "integer",
+      "status": "string",
+      "file_name": "string",
+      "error_code": "null|string"
+    },
+    "PackRunLogRead": {
+      "id": "string",
+      "level": "string",
+      "step": "null|string",
+      "message": "string",
+      "payload": "null|object",
+      "created_at": "string"
+    },
+    "PackRunRead": {
+      "id": "string",
+      "package_preset_id": "string",
+      "package_profile_id": "string",
+      "status": "string",
+      "source_rows_count": "integer",
+      "selected_rows_count": "integer",
+      "stats_json": "object",
+      "created_at": "string",
+      "started_at": "null|string",
+      "ended_at": "null|string"
+    },
+    "PackRunRequest": {
+      "pack_code": "string",
+      "company_id": "string",
+      "site_id": "null|string",
+      "person_ids": "array",
+      "data": "object",
+      "letterhead": "LetterheadOverride|null"
+    },
+    "PackRunResponse": {
+      "batch_id": "string",
+      "tasks": "array"
+    },
+    "PackRunTask": {
+      "run_id": "string",
+      "template_id": "string",
+      "template_name": "string",
+      "person_id": "null|string",
+      "task_id": "null|string",
+      "status": "string"
+    },
+    "PackScenarioDescriptor": {
+      "code": "string",
+      "name": "string",
+      "description": "string",
+      "scenario": "string",
+      "module": "string",
+      "scenario_type": "string",
+      "templates": "array"
+    },
+    "PackScenarioListResponse": {
+      "ok": "boolean",
+      "data": "array"
+    },
+    "PackScenarioTemplate": {
+      "code": "string",
+      "name": "string",
+      "category": "string"
+    },
+    "PackagePresetItemCreate": {
+      "order_no": "integer",
+      "template_id": "null|string",
+      "template_version_id": "string",
+      "header_preset_json": "null|object",
+      "replace_mode": "string",
+      "replace_map_json": "null|object",
+      "output_format": "string",
+      "is_required": "boolean",
+      "conditions_json": "null|object"
+    },
+    "PackagePresetItemPatch": {
+      "order_no": "integer|null",
+      "template_id": "null|string",
+      "template_version_id": "null|string",
+      "header_preset_json": "null|object",
+      "replace_mode": "null|string",
+      "replace_map_json": "null|object",
+      "output_format": "null|string",
+      "is_required": "boolean|null",
+      "conditions_json": "null|object"
+    },
+    "PackagePresetItemRead": {
+      "id": "string",
+      "order_no": "integer",
+      "template_id": "null|string",
+      "template_version_id": "string",
+      "replace_mode": "string",
+      "output_format": "string",
+      "is_required": "boolean"
+    },
+    "PackagePresetRead": {
+      "id": "string",
+      "code": "string",
+      "name": "string",
+      "description": "null|string",
+      "package_profile_id": "string",
+      "naming_rule": "string",
+      "source_type": "string",
+      "mapping_json": "object",
+      "options_json": "object",
+      "status": "string",
+      "items": "array"
+    },
+    "PackageProfileCreate": {
+      "code": "string",
+      "name": "string",
+      "description": "null|string",
+      "pipeline_steps_json": "array",
+      "concurrency_limit": "integer|null",
+      "status": "string"
+    },
+    "PackageProfilePatch": {
+      "name": "null|string",
+      "description": "null|string",
+      "pipeline_steps_json": "array|null",
+      "concurrency_limit": "integer|null",
+      "status": "null|string"
+    },
+    "PackageProfileRead": {
+      "id": "string",
+      "code": "string",
+      "name": "string",
+      "description": "null|string",
+      "pipeline_steps_json": "array",
+      "concurrency_limit": "integer|null",
+      "status": "string"
+    },
+    "PackageRunCreate": {
+      "preset_code": "string",
+      "client_company_id": "null|string"
+    },
+    "PackageTicketCreate": {
+      "title": "string",
+      "message": "string"
+    },
+    "PdfRunRead": {
+      "id": "string",
+      "input_file_id": "string",
+      "output_file_id": "null|string",
+      "status": "string",
+      "timeout_s": "integer",
+      "attempts": "integer",
+      "error_code": "null|string",
+      "error_payload": "object",
+      "correlation_id": "null|string",
+      "created_by": "null|string",
+      "started_at": "null|string",
+      "ended_at": "null|string",
+      "created_at": "string",
+      "updated_at": "string"
+    },
+    "PdnAccessLogEntry": {
+      "id": "string",
+      "subject_person_id": "string",
+      "action": "string",
+      "actor_user_id": "null|string",
+      "actor_email": "null|string",
+      "actor_role": "null|string",
+      "purpose": "null|string",
+      "ip": "null|string",
+      "request_id": "null|string",
+      "occurred_at": "string"
+    },
+    "PdnAccessLogPage": {
+      "items": "array",
+      "total": "integer",
+      "limit": "integer",
+      "offset": "integer"
+    },
+    "PdnAgreementCreate": {
+      "kind": "string",
+      "party_role": "string",
+      "counterparty_name": "string",
+      "counterparty_inn": "null|string",
+      "counterparty_tenant_slug": "null|string",
+      "document_ref": "null|string",
+      "signed_at": "null|string",
+      "valid_until": "null|string",
+      "status": "string",
+      "subprocessing_allowed": "boolean",
+      "breach_notification_hours": "integer|null",
+      "covered_activity_codes": "array",
+      "notes": "null|string"
+    },
+    "PdnAgreementEntry": {
+      "id": "string",
+      "kind": "string",
+      "party_role": "string",
+      "counterparty_name": "string",
+      "counterparty_inn": "null|string",
+      "counterparty_tenant_slug": "null|string",
+      "document_ref": "null|string",
+      "signed_at": "null|string",
+      "valid_until": "null|string",
+      "status": "string",
+      "subprocessing_allowed": "boolean",
+      "breach_notification_hours": "integer|null",
+      "covered_activity_codes": "array",
+      "notes": "null|string"
+    },
+    "PdnAgreementPage": {
+      "items": "array",
+      "total": "integer",
+      "uncovered_activity_codes": "array"
+    },
+    "PdnConsentEntry": {
+      "id": "string",
+      "subject_person_id": "string",
+      "purpose": "string",
+      "legal_basis": "string",
+      "version": "integer",
+      "status": "string",
+      "document_ref": "null|string",
+      "text_sha256": "null|string",
+      "expires_at": "null|string",
+      "granted_at": "string",
+      "withdrawn_at": "null|string",
+      "withdrawal_reason": "null|string",
+      "recorded_by_email": "null|string"
+    },
+    "PdnConsentGrant": {
+      "purpose": "string",
+      "legal_basis": "string",
+      "document_ref": "null|string",
+      "text_sha256": "null|string",
+      "expires_at": "null|string"
+    },
+    "PdnConsentPage": {
+      "items": "array",
+      "total": "integer",
+      "remaining_legal_bases": "array"
+    },
+    "PdnConsentWithdraw": {
+      "purpose": "string",
+      "reason": "null|string"
+    },
+    "PdnErasureRequest": {
+      "reason": "null|string"
+    },
+    "PdnErasureResult": {
+      "id": "string",
+      "subject_person_id": "string",
+      "pseudonym": "string",
+      "reason": "null|string",
+      "scrubbed_fields": "object",
+      "retained_sections": "object",
+      "performed_at": "string",
+      "performed_by_email": "null|string",
+      "already_anonymized": "boolean"
+    },
+    "PdnExportSubject": {
+      "person_id": "string",
+      "full_name": "string",
+      "email": "null|string",
+      "personnel_number": "null|string"
+    },
+    "PdnProcessingActivityEntry": {
+      "id": "string",
+      "code": "string",
+      "name": "string",
+      "purpose": "string",
+      "purpose_description": "null|string",
+      "legal_basis": "string",
+      "data_categories": "array",
+      "subject_categories": "array",
+      "retention_months": "integer|null",
+      "retention_basis": "null|string",
+      "access_roles": "array",
+      "recipients": "array",
+      "storage_location": "string",
+      "cross_border_transfer": "boolean",
+      "is_active": "boolean",
+      "review_at": "null|string",
+      "notes": "null|string"
+    },
+    "PdnProcessingActivityPage": {
+      "items": "array",
+      "total": "integer",
+      "has_special_categories": "boolean"
+    },
+    "PdnProcessingActivityUpsert": {
+      "code": "string",
+      "name": "string",
+      "purpose": "string",
+      "legal_basis": "string",
+      "data_categories": "array",
+      "subject_categories": "array",
+      "retention_months": "integer|null",
+      "retention_basis": "null|string",
+      "access_roles": "array",
+      "recipients": "array",
+      "storage_location": "string",
+      "cross_border_transfer": "boolean",
+      "review_at": "null|string",
+      "notes": "null|string"
+    },
+    "PdnSubjectExport": {
+      "format_version": "string",
+      "tenant_id": "string",
+      "generated_at": "string",
+      "subject": "PdnExportSubject",
+      "data_categories": "array",
+      "truncated": "boolean",
+      "max_items_per_section": "integer",
+      "data": "EmployeeCard",
+      "access_log": "array"
+    },
+    "PepConfirmIn": {
+      "code": "null|string"
+    },
+    "PepDeclineIn": {
+      "reason": "null|string"
+    },
+    "PepRequestIn": {
+      "object_type": "string",
+      "object_id": "string",
+      "purpose": "string",
+      "signer_user_id": "null|string",
+      "signer_person_id": "null|string"
+    },
+    "PermissionsResponse": {
+      "roles": "array",
+      "permissions": "array",
+      "abac_scopes": "object"
+    },
+    "PermitCreate": {
+      "person_id": "string",
+      "permit_type": "string",
+      "issued_at": "null|string",
+      "valid_until": "null|string",
+      "position_id": "null|string"
+    },
+    "PermitExtend": {
+      "valid_until": "string"
+    },
+    "PermitPage": {
+      "items": "array",
+      "total": "integer"
+    },
+    "PermitRead": {
+      "id": "string",
+      "person_id": "string",
+      "position_id": "null|string",
+      "permit_type": "string",
+      "issued_at": "string",
+      "valid_until": "null|string",
+      "status": "string",
+      "is_expired": "boolean",
+      "created_at": "string",
+      "updated_at": "string"
+    },
+    "PermitUpdate": {
+      "permit_type": "null|string",
+      "valid_until": "null|string",
+      "position_id": "null|string"
+    },
+    "PersonCreate": {
+      "company_id": "string",
+      "position_id": "null|string",
+      "position_title": "null|string",
+      "workplace_id": "null|string",
+      "first_name": "string",
+      "last_name": "string",
+      "middle_name": "null|string",
+      "birth_date": "null|string",
+      "personnel_number": "null|string",
+      "hired_at": "null|string",
+      "qualifications": "array",
+      "snils": "null|string",
+      "passport": "null|string",
+      "email": "null|string",
+      "phone": "null|string",
+      "employment_status": "EmploymentStatus",
+      "current_ppe": "array",
+      "working_conditions_class": "null|string",
+      "hazardous_factors": "array"
+    },
+    "PersonPage": {
+      "items": "array",
+      "total": "integer"
+    },
+    "PersonRead": {
+      "id": "string",
+      "company_id": "string",
+      "position_id": "null|string",
+      "position_title": "null|string",
+      "workplace_id": "null|string",
+      "first_name": "string",
+      "last_name": "string",
+      "middle_name": "null|string",
+      "birth_date": "null|string",
+      "personnel_number": "null|string",
+      "hired_at": "null|string",
+      "qualifications": "array",
+      "snils": "null|string",
+      "passport": "null|string",
+      "email": "null|string",
+      "phone": "null|string",
+      "employment_status": "EmploymentStatus",
+      "current_ppe": "array",
+      "working_conditions_class": "null|string",
+      "hazardous_factors": "array",
+      "fio": "string"
+    },
+    "PersonUpdate": {
+      "company_id": "null|string",
+      "position_id": "null|string",
+      "position_title": "null|string",
+      "workplace_id": "null|string",
+      "first_name": "null|string",
+      "last_name": "null|string",
+      "middle_name": "null|string",
+      "birth_date": "null|string",
+      "personnel_number": "null|string",
+      "hired_at": "null|string",
+      "qualifications": "array|null",
+      "snils": "null|string",
+      "passport": "null|string",
+      "email": "null|string",
+      "phone": "null|string",
+      "employment_status": "EmploymentStatus|null",
+      "current_ppe": "array|null",
+      "working_conditions_class": "null|string",
+      "hazardous_factors": "array|null"
+    },
+    "PipelineEdge": {
+      "from": "string",
+      "to": "string",
+      "condition": "null|string"
+    },
+    "PipelineGraph-Input": {
+      "nodes": "array",
+      "edges": "array",
+      "inputs": "object",
+      "outputs": "object"
+    },
+    "PipelineGraph-Output": {
+      "nodes": "array",
+      "edges": "array",
+      "inputs": "object",
+      "outputs": "object"
+    },
+    "PipelineLimitsSchema": {
+      "max_parallel": "integer",
+      "max_parallel_per_step": "object"
+    },
+    "PipelineNode": {
+      "id": "string",
+      "type": "string",
+      "config": "object",
+      "retry": "PipelineRetryPolicy",
+      "timeout_s": "integer",
+      "on_error": "string",
+      "emit_events": "boolean"
+    },
+    "PipelineProfileCreate": {
+      "code": "string",
+      "name": "string",
+      "description": "null|string",
+      "steps": "array|null",
+      "graph": "PipelineGraph-Input|null",
+      "limits": "PipelineLimitsSchema",
+      "is_active": "boolean",
+      "concurrency_limit_per_tenant": "integer|null"
+    },
+    "PipelineProfilePatch": {
+      "name": "null|string",
+      "description": "null|string",
+      "steps": "array|null",
+      "graph": "PipelineGraph-Input|null",
+      "limits": "PipelineLimitsSchema|null",
+      "is_active": "boolean|null",
+      "concurrency_limit_per_tenant": "integer|null"
+    },
+    "PipelineProfileRead": {
+      "id": "string",
+      "code": "string",
+      "name": "string",
+      "description": "null|string",
+      "is_active": "boolean",
+      "steps": "array",
+      "graph": "PipelineGraph-Output|null",
+      "limits": "PipelineLimitsSchema",
+      "profile_version": "integer",
+      "version": "integer",
+      "concurrency_limit_per_tenant": "integer|null"
+    },
+    "PipelineRetryPolicy": {
+      "max_attempts": "integer",
+      "backoff_seconds": "integer"
+    },
+    "PipelineRunAccepted": {
+      "run_id": "string",
+      "job_id": "string",
+      "status": "string",
+      "correlation_id": "string",
+      "step_runs": "array"
+    },
+    "PipelineRunRequest": {
+      "profile_code": "null|string",
+      "profile_id": "null|string",
+      "pipeline_profile_code": "null|string",
+      "pipeline_profile_id": "null|string",
+      "preset_id": "null|string",
+      "sources": "array",
+      "template_versions": "array",
+      "header_preset_id": "null|string",
+      "replace_map_file_id": "null|string",
+      "naming_template": "null|string",
+      "inputs": "object",
+      "options": "null|object"
+    },
+    "PipelineStepRunRead": {
+      "step_run_id": "string",
+      "run_id": "string",
+      "step_code": "string",
+      "status": "string",
+      "attempt": "integer",
+      "started_at": "null|string",
+      "ended_at": "null|string",
+      "error_code": "null|string",
+      "error_payload": "null|object",
+      "max_attempts": "integer",
+      "logs_ref": "null|string",
+      "input": "null|object",
+      "output": "null|object"
+    },
+    "PipelineStepSchema": {
+      "code": "string",
+      "required": "boolean",
+      "params_schema": "string"
+    },
+    "PlanCatalog": {
+      "plans": "array",
+      "features": "array"
+    },
+    "PlannedRowOut": {
+      "row_number": "integer",
+      "action": "string",
+      "natural_key": "null|string",
+      "changed_fields": "array",
+      "errors": "array"
+    },
+    "PoisonedEventItem": {
+      "id": "string",
+      "event_type": "string",
+      "attempts": "integer",
+      "last_error": "null|string",
+      "created_at": "string",
+      "next_attempt_at": "null|string"
+    },
+    "PoisonedEventsResponse": {
+      "total": "integer",
+      "items": "array"
+    },
+    "PolicyPayload": {
+      "resource": "string",
+      "action": "string",
+      "effect": "string",
+      "conditions_json": "object",
+      "priority": "integer",
+      "enabled": "boolean"
+    },
+    "PortalFilesResponse": {
+      "files": "array"
+    },
+    "PortalLinkResponse": {
+      "portal_url": "string",
+      "expires_at": "string"
+    },
+    "PositionActivitiesIn": {
+      "activity_codes": "array"
+    },
+    "PositionActivitiesPage": {
+      "items": "array",
+      "total": "integer"
+    },
+    "PositionActivitiesRead": {
+      "position_id": "string",
+      "activity_codes": "array"
+    },
+    "PpeNormSuggestion": {
+      "position_id": "string",
+      "hazard_id": "string",
+      "hazard_title": "string",
+      "factor_name": "string",
+      "factor_code": "null|string",
+      "measured_class": "SoutClass|null",
+      "reason": "string"
+    },
+    "PrepPackageIn": {
+      "code": "string",
+      "title": "string",
+      "target_inspection_date": "null|string"
+    },
+    "PrescriptionCreate": {
+      "inspection_id": "string",
+      "incident_id": "null|string",
+      "description": "string",
+      "due_at": "null|string",
+      "assignee_id": "null|string"
+    },
+    "PrescriptionIn": {
+      "code": "string",
+      "source_type": "string",
+      "title": "string"
+    },
+    "PrescriptionPage": {
+      "items": "array",
+      "total": "integer"
+    },
+    "PrescriptionRead": {
+      "id": "string",
+      "inspection_id": "string",
+      "incident_id": "null|string",
+      "description": "string",
+      "due_at": "null|string",
+      "status": "PrescriptionStatus",
+      "assignee_id": "null|string",
+      "evidence": "null|string",
+      "closed_at": "null|string",
+      "created_at": "string",
+      "updated_at": "string",
+      "is_overdue": "boolean",
+      "evidence_files": "array"
+    },
+    "PrescriptionSummary": {
+      "by_status": "object",
+      "total": "integer",
+      "overdue_count": "integer",
+      "closure_rate": "number"
+    },
+    "PrescriptionTransition": {
+      "to": "PrescriptionStatus",
+      "evidence": "null|string",
+      "evidence_file_ids": "array|null",
+      "note": "null|string"
+    },
+    "PrescriptionUpdate": {
+      "inspection_id": "null|string",
+      "incident_id": "null|string",
+      "description": "null|string",
+      "due_at": "null|string",
+      "assignee_id": "null|string"
+    },
+    "PreviewRequest": {
+      "data": "object",
+      "render_pdf": "boolean"
+    },
+    "PreviewResponse": {
+      "job_id": "string",
+      "status": "string",
+      "docx_url": "string",
+      "pdf_url": "null|string"
+    },
+    "ProtocolDecision": {
+      "decision": "DecisionRead",
+      "tasks": "array",
+      "votes_for": "integer",
+      "votes_against": "integer",
+      "votes_abstain": "integer",
+      "outcome": "null|string",
+      "votes": "array"
+    },
+    "ProtocolJournalItem": {
+      "meeting_id": "string",
+      "committee_id": "string",
+      "committee_name": "string",
+      "protocol_no": "string",
+      "held_at": "string",
+      "members_total": "integer|null",
+      "present_count": "integer|null",
+      "decisions_count": "integer"
+    },
+    "ProtocolJournalPage": {
+      "items": "array",
+      "total": "integer",
+      "limit": "integer",
+      "offset": "integer"
+    },
+    "ProtocolRead": {
+      "meeting": "MeetingRead",
+      "decisions": "array"
+    },
+    "ProviderStatusItem": {
+      "name": "string",
+      "adapter": "string",
+      "mode": "string",
+      "production_ready": "boolean",
+      "warning": "null|string"
+    },
+    "ProviderStatusResponse": {
+      "generated_at": "string",
+      "production_ready": "boolean",
+      "providers": "array",
+      "blocking_for_golive": "array"
+    },
+    "PsychiatricActivityTypeCreate": {
+      "code": "string",
+      "name": "string",
+      "interval_days": "integer"
+    },
+    "PsychiatricActivityTypePage": {
+      "items": "array",
+      "total": "integer"
+    },
+    "PsychiatricActivityTypeRead": {
+      "id": "string",
+      "code": "string",
+      "name": "string",
+      "interval_days": "integer"
+    },
+    "PsychiatricActivityTypeUpdate": {
+      "name": "null|string",
+      "interval_days": "integer|null"
+    },
+    "PublicWebhookSubscriptionCreate": {
+      "name": "string",
+      "url": "string",
+      "subscribed_events": "array",
+      "timeout_ms": "integer",
+      "headers": "object"
+    },
+    "PwaBootstrapResponse": {
+      "current_user": "PwaCurrentUser",
+      "tenant_branding": "PwaTenantBranding",
+      "route_permissions": "array",
+      "briefing_templates": "array",
+      "active_journals": "array",
+      "assigned_training": "array",
+      "compliance_deadlines_summary": "object",
+      "offline_queue": "object",
+      "dictionaries": "object",
+      "sync_state": "object",
+      "diagnostics": "object"
+    },
+    "PwaBriefingJournalProjection": {
+      "id": "string",
+      "code": "string",
+      "title": "string",
+      "journal_type": "string",
+      "status": "string",
+      "site_id": "null|string",
+      "department_id": "null|string",
+      "updated_at": "null|string"
+    },
+    "PwaBriefingTemplateProjection": {
+      "id": "string",
+      "code": "string",
+      "title": "string",
+      "briefing_type": "string",
+      "status": "string",
+      "validity_days": "integer|null",
+      "updated_at": "null|string"
+    },
+    "PwaCurrentUser": {
+      "id": "string",
+      "email": "null|string",
+      "role": "string",
+      "roles": "array",
+      "permissions": "array",
+      "company_id": "null|string",
+      "tenant_id": "null|string",
+      "tenant_slug": "null|string"
+    },
+    "PwaRoutePermission": {
+      "route": "string",
+      "allowed": "boolean",
+      "permissions": "array"
+    },
+    "PwaTenantBranding": {
+      "slug": "string",
+      "name": "string"
+    },
+    "PwaTrainingEnrollmentProjection": {
+      "id": "string",
+      "training_program_id": "string",
+      "training_group_id": "null|string",
+      "person_id": "null|string",
+      "status": "string",
+      "due_at": "null|string",
+      "expires_at": "null|string",
+      "progress_percent": "number",
+      "attempt_count": "integer",
+      "updated_at": "null|string"
+    },
+    "QualificationRecord": {
+      "name": "string",
+      "kind": "string",
+      "issued_at": "null|string",
+      "valid_until": "null|string",
+      "issuer": "null|string",
+      "document": "null|string",
+      "level": "null|string"
+    },
+    "QualityIssue": {
+      "code": "string",
+      "message": "string",
+      "severity": "string",
+      "stage": "string",
+      "details": "object"
+    },
+    "QualityReport": {
+      "status": "string",
+      "release_blocked": "boolean",
+      "summary": "object",
+      "issues": "array"
+    },
+    "QueueSummaryResponse": {
+      "generated_at": "string",
+      "queued": "integer",
+      "running": "integer",
+      "failed_last24h": "integer",
+      "failed_total": "integer",
+      "canceled_total": "integer",
+      "success_last24h": "integer"
+    },
+    "ReadinessBlocker": {
+      "code": "string",
+      "title": "string",
+      "severity": "string",
+      "count": "integer",
+      "reason": "string",
+      "entity_type": "string",
+      "action_hint": "string"
+    },
+    "ReadinessReportRead": {
+      "ok": "boolean",
+      "violations": "array"
+    },
+    "RefreshRequest": {
+      "refresh_token": "null|string"
+    },
+    "ReimbursementCreate": {
+      "title": "string",
+      "period_start": "string",
+      "period_end": "string",
+      "requested_amount": "number",
+      "reference": "null|string",
+      "company_id": "null|string",
+      "notes": "null|string"
+    },
+    "ReimbursementDecision": {
+      "approved_amount": "null|number",
+      "decision_reason": "null|string"
+    },
+    "ReimbursementDetail": {
+      "id": "string",
+      "title": "string",
+      "status": "string",
+      "period_start": "string",
+      "period_end": "string",
+      "requested_amount": "number",
+      "approved_amount": "null|number",
+      "reference": "null|string",
+      "company_id": "null|string",
+      "decision_reason": "null|string",
+      "submitted_at": "null|string",
+      "decided_at": "null|string",
+      "paid_at": "null|string",
+      "notes": "null|string",
+      "item_count": "integer",
+      "items_amount": "number",
+      "items": "array"
+    },
+    "ReimbursementItemCreate": {
+      "expense_id": "string"
+    },
+    "ReimbursementItemRead": {
+      "expense_id": "string",
+      "title": "string",
+      "domain": "string",
+      "occurred_on": "string",
+      "amount": "number"
+    },
+    "ReimbursementPage": {
+      "items": "array",
+      "total": "integer",
+      "limit": "integer",
+      "offset": "integer"
+    },
+    "ReimbursementRead": {
+      "id": "string",
+      "title": "string",
+      "status": "string",
+      "period_start": "string",
+      "period_end": "string",
+      "requested_amount": "number",
+      "approved_amount": "null|number",
+      "reference": "null|string",
+      "company_id": "null|string",
+      "decision_reason": "null|string",
+      "submitted_at": "null|string",
+      "decided_at": "null|string",
+      "paid_at": "null|string",
+      "notes": "null|string",
+      "item_count": "integer",
+      "items_amount": "number"
+    },
+    "ReimbursementUpdate": {
+      "title": "null|string",
+      "period_start": "null|string",
+      "period_end": "null|string",
+      "requested_amount": "null|number",
+      "reference": "null|string",
+      "company_id": "null|string",
+      "notes": "null|string"
+    },
+    "ReindexFileResponse": {
+      "file_id": "string",
+      "status": "string"
+    },
+    "RenderPreviewRequest": {
+      "code": "string",
+      "version": "integer",
+      "data": "object",
+      "visible_passport": "boolean",
+      "npa_binding_id": "null|string"
+    },
+    "RenderPreviewResponse": {
+      "file_id": "string",
+      "sha256": "string",
+      "passport": "object",
+      "warnings": "array",
+      "generated_at": "string"
+    },
+    "ReplaceLaunchRequest": {
+      "replace_map_code": "null|string",
+      "replace_map_id": "null|string",
+      "options": "ReplaceOptions"
+    },
+    "ReplaceLaunchResponse": {
+      "job_id": "string",
+      "replace_run_id": "string",
+      "status_url": "null|string",
+      "new_document_version_id": "null|string",
+      "document_id": "null|string",
+      "version_number": "integer|null",
+      "file_id": "null|string",
+      "file_key": "null|string",
+      "restored_from_version_id": "null|string",
+      "report_file_id": "null|string",
+      "report_file_key": "null|string",
+      "hits_count": "integer|null",
+      "examples": "array"
+    },
+    "ReplaceMapList": {
+      "items": "array"
+    },
+    "ReplaceMapPatch": {
+      "name": "null|string",
+      "rules": "array|null",
+      "exclusions": "null|object"
+    },
+    "ReplaceMapRead": {
+      "code": "string",
+      "name": "string",
+      "source_type": "string",
+      "rules": "array",
+      "exclusions": "object",
+      "id": "string",
+      "tenant_id": "string"
+    },
+    "ReplaceOptions": {
+      "case_sensitive": "boolean",
+      "whole_word": "boolean",
+      "regex_enabled": "boolean",
+      "scope": "array"
+    },
+    "ReplaceRollbackRequest": {
+      "target_document_version_id": "null|string",
+      "rollback_to_version_number": "integer|null"
+    },
+    "ReplaceRunRead": {
+      "id": "string",
+      "tenant_id": "string",
+      "document_version_id": "string",
+      "replace_map_id": "string",
+      "mode": "string",
+      "options": "object",
+      "report_json": "object",
+      "before_file_id": "string",
+      "after_file_id": "null|string",
+      "status": "string"
+    },
+    "ReportColumnMeta": {
+      "key": "string",
+      "label": "string",
+      "kind": "string",
+      "aggregatable": "boolean",
+      "enum_values": "array|null",
+      "ops": "array"
+    },
+    "ReportDatasetPage": {
+      "items": "array",
+      "total": "integer"
+    },
+    "ReportDatasetRead": {
+      "code": "string",
+      "title": "string",
+      "columns": "array"
+    },
+    "ReportDefinitionCreate": {
+      "name": "string",
+      "description": "null|string",
+      "dataset_code": "string",
+      "config_json": "object"
+    },
+    "ReportDefinitionPage": {
+      "items": "array",
+      "total": "integer"
+    },
+    "ReportDefinitionRead": {
+      "id": "string",
+      "name": "string",
+      "description": "null|string",
+      "dataset_code": "string",
+      "config_json": "object",
+      "is_system": "boolean",
+      "created_at": "string",
+      "updated_at": "string"
+    },
+    "ReportDefinitionUpdate": {
+      "name": "null|string",
+      "description": "null|string",
+      "dataset_code": "null|string",
+      "config_json": "null|object"
+    },
+    "ReportPreviewIn": {
+      "dataset_code": "string",
+      "config_json": "object"
+    },
+    "ReportPreviewOut": {
+      "columns": "array",
+      "rows": "array",
+      "total": "integer"
+    },
+    "ReportRunIn": {
+      "format": "string"
+    },
+    "ReportRunOut": {
+      "job_id": "string",
+      "status": "string"
+    },
+    "RequestCreate": {
+      "title": "string",
+      "body": "string",
+      "package_id": "null|string",
+      "project_id": "null|string",
+      "client_company_id": "null|string",
+      "priority": "string"
+    },
+    "RequestMessageCreate": {
+      "body": "string",
+      "author_role": "string"
+    },
+    "RequestPatch": {
+      "status": "null|string",
+      "priority": "null|string"
+    },
+    "RetryJobRequest": {
+      "step_key": "null|string",
+      "from_step_key": "null|string",
+      "retry_failed_only": "boolean"
+    },
+    "RetryResponse": {
+      "outbox_id": "string",
+      "status": "OutboxStatus",
+      "attempts": "integer",
+      "next_attempt_at": "null|string"
+    },
+    "RetryStepRequest": {
+      "step_key": "string"
+    },
+    "RiskAssessmentItemOut": {
+      "id": "string",
+      "hazard_id": "string",
+      "hazard_code": "string",
+      "hazard_title": "string",
+      "probability": "integer",
+      "severity": "integer",
+      "score": "integer",
+      "level": "string"
+    },
+    "RiskAssessmentOut": {
+      "id": "string",
+      "assessment_key": "string",
+      "assessment_version": "integer",
+      "methodology_id": "null|string",
+      "methodology_version": "integer|null",
+      "company_id": "null|string",
+      "place_id": "null|string",
+      "workplace_id": "null|string",
+      "position_id": "null|string",
+      "employee_id": "null|string",
+      "document_pack_id": "null|string",
+      "items": "array",
+      "risk_card_ids": "array",
+      "action_plan_id": "null|string"
+    },
+    "RiskAssessmentResponse": {
+      "assessment_id": "string",
+      "assessment_key": "string",
+      "assessment_version": "integer",
+      "risk_card_ids": "array",
+      "action_plan_id": "null|string"
+    },
+    "RiskCardOut": {
+      "id": "string",
+      "assessment_id": "string",
+      "company_id": "null|string",
+      "site_id": "null|string",
+      "workplace_id": "null|string",
+      "position_id": "null|string",
+      "employee_id": "null|string",
+      "methodology_id": "null|string",
+      "methodology_version": "integer|null",
+      "summary": "object"
+    },
+    "RiskListResponse": {
+      "items": "array",
+      "report": "RiskReport|null"
+    },
+    "RiskMapCreate": {
+      "entity_type": "string",
+      "entity_id": "string",
+      "risk_methodology_id": "string",
+      "source": "null|string"
+    },
+    "RiskMapIn": {
+      "methodology_id": "string",
+      "company_id": "string",
+      "site_id": "null|string",
+      "position_id": "null|string",
+      "document_pack_id": "null|string"
+    },
+    "RiskMapOut": {
+      "id": "string",
+      "matrix": "object",
+      "methodology_id": "string",
+      "company_id": "string",
+      "site_id": "null|string",
+      "position_id": "null|string",
+      "document_pack_id": "null|string"
+    },
+    "RiskRead": {
+      "id": "string",
+      "tenant_id": "string",
+      "company_id": "string",
+      "site_id": "null|string",
+      "hazard": "string",
+      "probability": "integer",
+      "severity": "integer",
+      "level": "integer",
+      "controls": "null|string"
+    },
+    "RiskReport": {
+      "site_id": "null|string",
+      "total": "integer",
+      "highest_level": "integer|null",
+      "average_level": "null|number",
+      "distribution": "object"
+    },
+    "RolePayload": {
+      "code": "string",
+      "name": "string",
+      "is_system": "boolean"
+    },
+    "RoleWorkspaceSummary": {
+      "generated_at": "string",
+      "role": "string",
+      "open_tasks": "integer",
+      "overdue_tasks": "integer",
+      "open_incidents": "integer",
+      "open_inspections": "integer",
+      "overdue_training": "integer",
+      "expired_ppe": "integer",
+      "overdue_deadlines": "integer",
+      "recommendations": "array"
+    },
+    "RowErrorOut": {
+      "code": "string",
+      "field": "null|string",
+      "message": "string"
+    },
+    "RuleTestIn": {
+      "limit": "integer"
+    },
+    "RuleTestOut": {
+      "events_checked": "integer",
+      "matched_count": "integer",
+      "results": "array"
+    },
+    "RuleTestResultItem": {
+      "event_key": "string",
+      "occurred_at": "null|string",
+      "matched": "boolean"
+    },
+    "SafetyBudgetCreate": {
+      "name": "string",
+      "domain": "string",
+      "period_start": "string",
+      "period_end": "string",
+      "planned_amount": "number",
+      "notes": "null|string"
+    },
+    "SafetyBudgetDetail": {
+      "id": "string",
+      "name": "string",
+      "domain": "string",
+      "period_start": "string",
+      "period_end": "string",
+      "planned_amount": "number",
+      "notes": "null|string",
+      "actual_total": "number",
+      "remaining": "number",
+      "expense_count": "integer",
+      "by_article": "array"
+    },
+    "SafetyBudgetPage": {
+      "items": "array",
+      "total": "integer",
+      "limit": "integer",
+      "offset": "integer"
+    },
+    "SafetyBudgetRead": {
+      "id": "string",
+      "name": "string",
+      "domain": "string",
+      "period_start": "string",
+      "period_end": "string",
+      "planned_amount": "number",
+      "notes": "null|string"
+    },
+    "SafetyBudgetUpdate": {
+      "name": "null|string",
+      "period_start": "null|string",
+      "period_end": "null|string",
+      "planned_amount": "null|number",
+      "notes": "null|string"
+    },
+    "SavedCalendarView": {
+      "id": "string",
+      "name": "string",
+      "payload": "SavedCalendarViewPayload",
+      "created_at": "string",
+      "updated_at": "string"
+    },
+    "SavedCalendarViewCreateRequest": {
+      "name": "string",
+      "payload": "SavedCalendarViewPayload"
+    },
+    "SavedCalendarViewPayload": {
+      "view": "null|string",
+      "sources": "array",
+      "person_id": "null|string",
+      "site_id": "null|string",
+      "include_fact": "boolean",
+      "include_sla": "boolean",
+      "sla_bands": "array",
+      "include_load": "boolean",
+      "load_dim": "null|string"
+    },
+    "SavedCalendarViewUpdateRequest": {
+      "name": "string",
+      "payload": "SavedCalendarViewPayload"
+    },
+    "ScaleItem": {
+      "value": "integer",
+      "label": "string",
+      "description": "null|string"
+    },
+    "SignRequestIn": {
+      "document_version_id": "null|string",
+      "object_type": "string",
+      "object_id": "null|string",
+      "provider": "string",
+      "kind": "null|string",
+      "payload": "null|object"
+    },
+    "SignSubmitIn": {
+      "document_version_id": "string",
+      "kind": "string",
+      "signed_blob": "string",
+      "cert_info": "object"
+    },
+    "SignatureCreate": {
+      "document_version_id": "string",
+      "type": "SignatureType"
+    },
+    "SignatureSubmitIn": {
+      "document_version_id": "string",
+      "kind": "SignatureType",
+      "signed_blob": "string",
+      "cert_info": "object"
+    },
+    "SignedUrlRequest": {
+      "action": "string",
+      "ttl_seconds": "integer"
+    },
+    "SignedUrlResponse": {
+      "signed_url": "string"
+    },
+    "SiteCreate": {
+      "company_id": "string",
+      "branch_id": "null|string",
+      "name": "string",
+      "address": "null|string",
+      "geo_json": "null|object",
+      "hazard_class": "null|string",
+      "site_type": "null|string",
+      "contact_name": "null|string",
+      "contact_phone": "null|string",
+      "contact_email": "null|string",
+      "is_hazardous_production_facility": "boolean",
+      "opo_register_number": "null|string",
+      "branding_payload": "object"
+    },
+    "SitePage": {
+      "items": "array",
+      "total": "integer"
+    },
+    "SiteRead": {
+      "company_id": "string",
+      "branch_id": "null|string",
+      "name": "string",
+      "address": "null|string",
+      "geo_json": "null|object",
+      "hazard_class": "null|string",
+      "site_type": "null|string",
+      "contact_name": "null|string",
+      "contact_phone": "null|string",
+      "contact_email": "null|string",
+      "is_hazardous_production_facility": "boolean",
+      "opo_register_number": "null|string",
+      "branding_payload": "object",
+      "id": "string"
+    },
+    "SiteUpdate": {
+      "branch_id": "null|string",
+      "name": "null|string",
+      "address": "null|string",
+      "geo_json": "null|object",
+      "hazard_class": "null|string",
+      "site_type": "null|string",
+      "contact_name": "null|string",
+      "contact_phone": "null|string",
+      "contact_email": "null|string",
+      "is_hazardous_production_facility": "boolean|null",
+      "opo_register_number": "null|string",
+      "branding_payload": "null|object"
+    },
+    "SourcePreviewRead": {
+      "source_file_id": "null|string",
+      "source_type": "string",
+      "columns": "array",
+      "rows_count": "integer",
+      "sample_rows": "array"
+    },
+    "SubscriptionPlanRead": {
+      "code": "string",
+      "title": "string",
+      "feature_codes": "array",
+      "quotas": "object"
+    },
+    "TaskAcceptedResponse": {
+      "task_id": "string",
+      "job_id": "null|string",
+      "correlation_id": "null|string",
+      "status_url": "string",
+      "document_version_id": "null|string"
+    },
+    "TaskCreate": {
+      "title": "string",
+      "description": "null|string",
+      "entity_type": "null|string",
+      "entity_id": "null|string",
+      "due_at": "null|string",
+      "assignee_id": "null|string",
+      "priority": "null|string"
+    },
+    "TaskInboxItem": {
+      "id": "string",
+      "title": "string",
+      "status": "string",
+      "priority": "string",
+      "due_at": "null|string",
+      "assignee_id": "null|string",
+      "entity_type": "null|string",
+      "entity_id": "null|string",
+      "overdue": "boolean"
+    },
+    "TaskListResponse": {
+      "items": "array",
+      "pagination": "TaskPagination"
+    },
+    "TaskPagination": {
+      "page": "integer",
+      "page_size": "integer",
+      "total": "integer"
+    },
+    "TaskRead": {
+      "id": "string",
+      "title": "string",
+      "description": "null|string",
+      "entity_type": "null|string",
+      "entity_id": "null|string",
+      "due_at": "null|string",
+      "status": "string",
+      "assignee_id": "null|string",
+      "created_by": "null|string",
+      "priority": "string",
+      "next_remind_at": "null|string",
+      "reminder_channel": "null|string",
+      "completed_at": "null|string",
+      "created_at": "string",
+      "updated_at": "string",
+      "overdue": "boolean"
+    },
+    "TaskStatusResponse": {
+      "task_id": "string",
+      "status": "string",
+      "document_id": "null|string",
+      "document_version_id": "null|string",
+      "error": "null|string",
+      "metadata": "null|object",
+      "result": "null|object"
+    },
+    "TaskUpdate": {
+      "title": "null|string",
+      "description": "null|string",
+      "due_at": "null|string",
+      "status": "null|string",
+      "assignee_id": "null|string",
+      "priority": "null|string"
+    },
+    "TemplateAuditItemDTO": {
+      "template_id": "string",
+      "template_code": "null|string",
+      "template_name": "string",
+      "tenant_id": "string",
+      "version_id": "string",
+      "version_number": "integer",
+      "status": "string",
+      "file_key": "null|string",
+      "errors": "array",
+      "warnings": "array",
+      "summary": "object",
+      "load_error": "null|string",
+      "severity": "string"
+    },
+    "TemplateAuditReportDTO": {
+      "summary": "object",
+      "items": "array"
+    },
+    "TemplateCreateRequest": {
+      "code": "string",
+      "name": "string",
+      "description": "null|string",
+      "category": "null|string",
+      "status": "null|string",
+      "template_type": "null|string",
+      "scope": "TemplateScopeDTO"
+    },
+    "TemplateDTO": {
+      "id": "string",
+      "code": "null|string",
+      "name": "string",
+      "description": "null|string",
+      "category": "null|string",
+      "status": "null|string",
+      "scope": "TemplateScopeDTO",
+      "current_version_id": "null|string",
+      "updated_at": "string",
+      "created_at": "string",
+      "version": "integer",
+      "metadata_json": "null|object",
+      "template_type": "null|string",
+      "current_version": "TemplateVersionDTO|null",
+      "versions": "array"
+    },
+    "TemplatePage": {
+      "items": "array",
+      "total": "integer"
+    },
+    "TemplatePatchRequest": {
+      "code": "null|string",
+      "name": "null|string",
+      "description": "null|string",
+      "category": "null|string",
+      "status": "null|string",
+      "current_version_id": "null|string",
+      "version": "integer|null",
+      "scope": "TemplateScopeDTO|null",
+      "template_type": "null|string"
+    },
+    "TemplateRead": {
+      "id": "string",
+      "code": "null|string",
+      "name": "string",
+      "description": "null|string",
+      "status": "null|string",
+      "metadata_json": "object",
+      "storage_key": "null|string",
+      "category": "null|string",
+      "scope": "object"
+    },
+    "TemplateResolveCandidateRead": {
+      "template_id": "string",
+      "template_code": "string",
+      "template_name": "string",
+      "template_version": "integer",
+      "scope_level": "string",
+      "scope_match": "string",
+      "score": "integer",
+      "rationale": "array"
+    },
+    "TemplateResolveRequest": {
+      "case_type": "null|string",
+      "document_type": "null|string",
+      "category": "null|string",
+      "company_id": "null|string",
+      "site_id": "null|string",
+      "person_id": "null|string"
+    },
+    "TemplateResolveResponse": {
+      "template_id": "string",
+      "template_code": "string",
+      "template_name": "string",
+      "template_version": "integer",
+      "scope_level": "string",
+      "resolution_chain": "array",
+      "alternatives": "array"
+    },
+    "TemplateScopeDTO": {
+      "level": "string",
+      "tenant_id": "null|string",
+      "company_id": "null|string",
+      "site_id": "null|string",
+      "label": "null|string",
+      "applicability": "null|string"
+    },
+    "TemplateVersionDTO": {
+      "id": "string",
+      "template_id": "string",
+      "version": "integer",
+      "status": "string",
+      "sha256": "null|string",
+      "size_bytes": "integer|null",
+      "file_id": "null|string",
+      "placeholder_index": "null|object",
+      "linter_report_json": "null|object",
+      "created_at": "string",
+      "updated_at": "string",
+      "document_type": "null|string",
+      "applicability_rules": "null|object",
+      "output_types": "array|null",
+      "profile": "null|object"
+    },
+    "TenantCreate": {
+      "slug": "string",
+      "name": "string",
+      "contact_email": "string",
+      "code": "null|string",
+      "parent_id": "null|string",
+      "kind": "string"
+    },
+    "TenantFeatureRead": {
+      "code": "string",
+      "title": "string",
+      "on": "boolean"
+    },
+    "TenantFleetItem": {
+      "tenant": "TenantRead",
+      "quotas": "TenantQuotaRead|null",
+      "plan": "null|string",
+      "features": "array"
+    },
+    "TenantFleetPage": {
+      "items": "array",
+      "total": "integer",
+      "managing_tenant_slug": "string"
+    },
+    "TenantHealthResponse": {
+      "generated_at": "string",
+      "score": "integer",
+      "grade": "string",
+      "failed_jobs_last24h": "integer",
+      "outbox_pending": "integer",
+      "outbox_failed": "integer",
+      "outbox_events_poisoned": "integer",
+      "non_production_providers": "integer",
+      "blocking_providers": "array",
+      "recommendations": "array"
+    },
+    "TenantPage": {
+      "items": "array",
+      "total": "integer"
+    },
+    "TenantPlanPatch": {
+      "plan": "string"
+    },
+    "TenantProvisionRequest": {
+      "slug": "string",
+      "name": "string",
+      "owner_email": "string",
+      "owner_password": "string",
+      "kind": "string",
+      "demo_data": "boolean"
+    },
+    "TenantProvisionResult": {
+      "tenant": "TenantRead",
+      "created": "array",
+      "reused": "array",
+      "warnings": "array"
+    },
+    "TenantQuotaPatch": {
+      "max_parallel_jobs": "integer|null",
+      "max_doc_generations_per_month": "integer|null",
+      "max_storage_mb": "integer|null",
+      "monthly_edo_outgoing": "integer|null",
+      "enforce_billing_gate": "boolean|null"
+    },
+    "TenantQuotaRead": {
+      "tenant_id": "string",
+      "max_parallel_jobs": "integer",
+      "max_doc_generations_per_month": "integer",
+      "max_storage_mb": "integer",
+      "monthly_edo_outgoing": "integer",
+      "enforce_billing_gate": "boolean"
+    },
+    "TenantRead": {
+      "id": "string",
+      "name": "string",
+      "slug": "string",
+      "code": "null|string",
+      "contact_email": "string",
+      "is_active": "boolean",
+      "parent_id": "null|string",
+      "kind": "null|string",
+      "schema_name": "null|string"
+    },
+    "TenantStatusPatch": {
+      "is_active": "boolean"
+    },
+    "TokenPair": {
+      "access_token": "string"
+    },
+    "TrainingCertificateCreate": {
+      "person_id": "string",
+      "course_id": "string",
+      "plan_id": "null|string",
+      "session_id": "null|string",
+      "file_id": "null|string",
+      "number": "null|string",
+      "issued_at": "null|string",
+      "valid_until": "null|string",
+      "permit_type": "null|string",
+      "position_id": "null|string"
+    },
+    "TrainingCertificatePage": {
+      "items": "array",
+      "total": "integer"
+    },
+    "TrainingCertificateRead": {
+      "id": "string",
+      "person_id": "string",
+      "course_id": "string",
+      "plan_id": "null|string",
+      "session_id": "null|string",
+      "file_id": "null|string",
+      "number": "null|string",
+      "issued_at": "string",
+      "valid_until": "null|string",
+      "created_at": "string",
+      "updated_at": "string"
+    },
+    "TrainingCourseCreate": {
+      "title": "string",
+      "code": "null|string",
+      "description": "null|string",
+      "duration_hours": "integer|null",
+      "valid_period_days": "integer|null",
+      "metadata": "object"
+    },
+    "TrainingCoursePage": {
+      "items": "array",
+      "total": "integer"
+    },
+    "TrainingCourseRead": {
+      "title": "string",
+      "code": "null|string",
+      "description": "null|string",
+      "duration_hours": "integer|null",
+      "valid_period_days": "integer|null",
+      "metadata": "object",
+      "id": "string",
+      "created_at": "string",
+      "updated_at": "string"
+    },
+    "TrainingCourseUpdate": {
+      "title": "null|string",
+      "code": "null|string",
+      "description": "null|string",
+      "duration_hours": "integer|null",
+      "valid_period_days": "integer|null",
+      "metadata": "null|object"
+    },
+    "TrainingPlanCreate": {
+      "company_id": "string",
+      "course_id": "string",
+      "position_id": "null|string",
+      "person_id": "null|string",
+      "due_date": "null|string",
+      "is_mandatory": "boolean"
+    },
+    "TrainingPlanRead": {
+      "id": "string",
+      "company_id": "string",
+      "course_id": "string",
+      "position_id": "null|string",
+      "person_id": "null|string",
+      "due_date": "null|string",
+      "is_mandatory": "boolean",
+      "assigned_at": "string",
+      "created_at": "string",
+      "updated_at": "string"
+    },
+    "TrainingSessionCreate": {
+      "person_id": "string",
+      "course_id": "string",
+      "plan_id": "null|string",
+      "status": "TrainingSessionStatus",
+      "started_at": "null|string",
+      "completed_at": "null|string",
+      "score": "integer|null",
+      "notes": "null|string"
+    },
+    "TrainingSessionRead": {
+      "id": "string",
+      "person_id": "string",
+      "course_id": "string",
+      "plan_id": "null|string",
+      "status": "TrainingSessionStatus",
+      "started_at": "null|string",
+      "completed_at": "null|string",
+      "score": "integer|null",
+      "notes": "null|string",
+      "created_at": "string",
+      "updated_at": "string"
+    },
+    "TriggerPage": {
+      "items": "array",
+      "total": "integer",
+      "limit": "integer",
+      "offset": "integer"
+    },
+    "TriggerRead": {
+      "id": "string",
+      "rule_id": "string",
+      "event_type": "string",
+      "event_key": "string",
+      "correlation_id": "null|string",
+      "status": "string",
+      "actions_result": "array",
+      "created_at": "string"
+    },
+    "UploadCompleteRequest": {
+      "file_id": "string",
+      "version_id": "string"
+    },
+    "UploadCompleteResponse": {
+      "version_id": "string",
+      "status": "string",
+      "av_status": "string"
+    },
+    "UploadInitRequest": {
+      "filename": "string",
+      "kind": "string",
+      "owner_entity_type": "string",
+      "owner_entity_id": "string",
+      "tags": "array"
+    },
+    "UploadInitResponse": {
+      "file_id": "string",
+      "version_id": "string",
+      "upload_url": "string",
+      "s3_key": "string"
+    },
+    "UploadSessionRequest": {
+      "filename": "string",
+      "content_type": "string",
+      "size_bytes": "integer",
+      "metadata": "null|object",
+      "metadata_json": "null|object",
+      "sha256": "null|string"
+    },
+    "UploadSessionResponse": {
+      "file_id": "string",
+      "signed_put_url": "string",
+      "expires_at": "string",
+      "required_headers": "object",
+      "existing": "boolean"
+    },
+    "UserAttributesRequest": {
+      "company_ids": "array",
+      "site_ids": "array",
+      "project_ids": "array",
+      "contractor_ids": "array"
+    },
+    "UserAttributesResponse": {
+      "user_id": "string",
+      "company_ids": "array",
+      "site_ids": "array",
+      "project_ids": "array",
+      "contractor_ids": "array"
+    },
+    "UserListItem": {
+      "id": "string",
+      "email": "string",
+      "full_name": "string",
+      "role": "RoleEnum",
+      "is_active": "boolean",
+      "last_login_at": "null|string",
+      "company_id": "null|string",
+      "created_at": "string",
+      "updated_at": "string"
+    },
+    "UserListPage": {
+      "items": "array",
+      "total": "integer"
+    },
+    "UserRolesRequest": {
+      "roles": "array"
+    },
+    "UserRolesResponse": {
+      "user_id": "string",
+      "roles": "array"
+    },
+    "ValidationError": {
+      "loc": "array",
+      "msg": "string",
+      "type": "string"
+    },
+    "ViolationRead": {
+      "person_id": "string",
+      "role": "string",
+      "code": "string",
+      "severity": "string"
+    },
+    "VoteCreate": {
+      "person_id": "string",
+      "choice": "VoteChoice"
+    },
+    "VoteRead": {
+      "id": "string",
+      "decision_id": "string",
+      "person_id": "string",
+      "choice": "VoteChoice"
+    },
+    "WebhookDeliveryOut": {
+      "id": "string",
+      "event_id": "string",
+      "endpoint_id": "string",
+      "attempts": "integer",
+      "status": "string",
+      "next_attempt_at": "null|string",
+      "response_status": "integer|null",
+      "last_response_body": "null|string",
+      "last_error": "null|object",
+      "latency_ms": "integer|null",
+      "started_at": "null|string",
+      "ended_at": "null|string"
+    },
+    "WebhookDeliveryWithDiagnostics": {
+      "id": "string",
+      "event_id": "string",
+      "endpoint_id": "string",
+      "attempts": "integer",
+      "status": "string",
+      "next_attempt_at": "null|string",
+      "response_status": "integer|null",
+      "last_response_body": "null|string",
+      "latency_ms": "integer|null",
+      "started_at": "null|string",
+      "ended_at": "null|string",
+      "diagnostics": "WebhookFailureDiagnostics|null"
+    },
+    "WebhookEndpointCreateOut": {
+      "id": "string",
+      "name": "null|string",
+      "url": "string",
+      "secret_masked": "null|string",
+      "enabled": "boolean",
+      "subscribed_events": "array",
+      "timeout_ms": "integer",
+      "headers": "object",
+      "created_at": "string",
+      "updated_at": "string",
+      "secret": "null|string"
+    },
+    "WebhookEndpointIn": {
+      "name": "null|string",
+      "url": "string",
+      "secret": "null|string",
+      "enabled": "boolean",
+      "subscribed_events": "array",
+      "timeout_ms": "integer",
+      "headers": "object"
+    },
+    "WebhookEndpointOut": {
+      "id": "string",
+      "name": "null|string",
+      "url": "string",
+      "secret_masked": "null|string",
+      "enabled": "boolean",
+      "subscribed_events": "array",
+      "timeout_ms": "integer",
+      "headers": "object",
+      "created_at": "string",
+      "updated_at": "string"
+    },
+    "WebhookFailureDiagnostics": {
+      "failure_category": "FailureCategory|string",
+      "retry_eligible": "boolean",
+      "http_status_code": "integer|null",
+      "error_class": "null|string",
+      "error_message": "null|string",
+      "current_attempt": "integer",
+      "max_attempts": "integer",
+      "attempts_remaining": "integer",
+      "next_attempt_in_seconds": "integer|null",
+      "timestamp": "null|string"
+    },
+    "WebhookRetryEligibility": {
+      "delivery_id": "string",
+      "eligible": "boolean",
+      "reason": "string",
+      "failure_category": "FailureCategory|null|string",
+      "next_attempt_in_seconds": "integer|null"
+    },
+    "WebhookSubscriptionIn": {
+      "event_type": "string",
+      "url": "string",
+      "secret": "string"
+    },
+    "WorkPermitActionRequest": {
+      "photo_file_id": "null|string",
+      "note": "null|string"
+    },
+    "WorkPermitBriefingCreate": {
+      "conducted_by_person_id": "null|string",
+      "conducted_at": "null|string",
+      "topics_text": "null|string"
+    },
+    "WorkPermitBriefingRead": {
+      "id": "string",
+      "work_permit_id": "string",
+      "conducted_by_person_id": "null|string",
+      "conducted_at": "null|string",
+      "topics_text": "null|string",
+      "created_at": "string",
+      "updated_at": "string"
+    },
+    "WorkPermitBriefingUpdate": {
+      "conducted_by_person_id": "null|string",
+      "conducted_at": "null|string",
+      "topics_text": "null|string"
+    },
+    "WorkPermitClosingRecordCreate": {
+      "completion_text": "string"
+    },
+    "WorkPermitClosingSummary": {
+      "completion_text": "null|string",
+      "completion_recorded_at": "null|string",
+      "signatures": "array",
+      "can_close": "boolean",
+      "missing": "array"
+    },
+    "WorkPermitCreate": {
+      "work_type": "string",
+      "zone_text": "string",
+      "number": "null|string",
+      "site_id": "null|string",
+      "equipment_text": "null|string",
+      "hazards_text": "null|string",
+      "measures_text": "null|string",
+      "planned_start": "null|string",
+      "planned_end": "null|string",
+      "subdivision_text": "null|string",
+      "content_text": "null|string",
+      "conditions_text": "null|string",
+      "safety_systems": "array|null",
+      "measures_before_text": "null|string",
+      "measures_during_text": "null|string",
+      "special_conditions_text": "null|string",
+      "ppe_text": "null|string",
+      "type_specific": "null|object"
+    },
+    "WorkPermitDailyAdmissionCreate": {
+      "admission_date": "string",
+      "start_at": "null|string",
+      "end_at": "null|string",
+      "admitted_by_person_id": "null|string",
+      "note": "null|string"
+    },
+    "WorkPermitDailyAdmissionRead": {
+      "id": "string",
+      "work_permit_id": "string",
+      "admission_date": "string",
+      "start_at": "null|string",
+      "end_at": "null|string",
+      "admitted_by_person_id": "null|string",
+      "note": "null|string",
+      "created_at": "string",
+      "updated_at": "string"
+    },
+    "WorkPermitDailyAdmissionUpdate": {
+      "start_at": "null|string",
+      "end_at": "null|string",
+      "admitted_by_person_id": "null|string",
+      "note": "null|string"
+    },
+    "WorkPermitEventRead": {
+      "id": "string",
+      "event_type": "string",
+      "at": "string",
+      "actor_user_id": "null|string",
+      "photo_file_id": "null|string",
+      "note": "null|string",
+      "meta": "null|object"
+    },
+    "WorkPermitExtendRequest": {
+      "planned_end": "string"
+    },
+    "WorkPermitMemberCreate": {
+      "person_id": "string",
+      "role": "string"
+    },
+    "WorkPermitMemberRead": {
+      "id": "string",
+      "person_id": "string",
+      "role": "string",
+      "created_at": "string",
+      "electrical_group": "null|string"
+    },
+    "WorkPermitPage": {
+      "items": "array",
+      "total": "integer"
+    },
+    "WorkPermitRead": {
+      "id": "string",
+      "number": "null|string",
+      "work_type": "string",
+      "zone_text": "string",
+      "site_id": "null|string",
+      "equipment_text": "null|string",
+      "hazards_text": "null|string",
+      "measures_text": "null|string",
+      "planned_start": "null|string",
+      "planned_end": "null|string",
+      "status": "string",
+      "opened_at": "null|string",
+      "closed_at": "null|string",
+      "suspended_at": "null|string",
+      "members": "array",
+      "subdivision_text": "null|string",
+      "content_text": "null|string",
+      "conditions_text": "null|string",
+      "safety_systems": "array|null",
+      "measures_before_text": "null|string",
+      "measures_during_text": "null|string",
+      "special_conditions_text": "null|string",
+      "ppe_text": "null|string",
+      "type_specific": "null|object",
+      "created_at": "string",
+      "updated_at": "string",
+      "electrical_group_readiness": "ElectricalGroupReadiness|null"
+    },
+    "WorkPermitSignatureCreate": {
+      "person_id": "string",
+      "mode": "string"
+    },
+    "WorkPermitSignatureRead": {
+      "id": "string",
+      "stream": "string",
+      "object_type": "string",
+      "object_id": "string",
+      "purpose": "string",
+      "status": "string",
+      "signer_person_id": "null|string",
+      "signer_name": "null|string",
+      "content_hash": "null|string",
+      "signed_at": "null|string",
+      "confirm_code": "null|string"
+    },
+    "WorkPermitUpdate": {
+      "work_type": "null|string",
+      "zone_text": "null|string",
+      "number": "null|string",
+      "site_id": "null|string",
+      "equipment_text": "null|string",
+      "hazards_text": "null|string",
+      "measures_text": "null|string",
+      "planned_start": "null|string",
+      "planned_end": "null|string",
+      "subdivision_text": "null|string",
+      "content_text": "null|string",
+      "conditions_text": "null|string",
+      "safety_systems": "array|null",
+      "measures_before_text": "null|string",
+      "measures_during_text": "null|string",
+      "special_conditions_text": "null|string",
+      "ppe_text": "null|string",
+      "type_specific": "null|object"
+    },
+    "WorkflowDefinitionIn": {
+      "code": "string",
+      "name": "string",
+      "description": "null|string",
+      "entity_type": "string",
+      "graph": "object",
+      "variables_schema": "object"
+    },
+    "WorkflowDefinitionRead": {
+      "id": "string",
+      "code": "string",
+      "name": "string",
+      "description": "null|string",
+      "entity_type": "string",
+      "current_version_id": "null|string",
+      "versions": "array"
+    },
+    "WorkflowInstanceListItem": {
+      "id": "string",
+      "definition_id": "string",
+      "definition_version_id": "string",
+      "entity_type": "string",
+      "entity_id": "string",
+      "status": "string",
+      "current_node_id": "null|string",
+      "correlation_id": "null|string",
+      "open_tasks": "integer",
+      "updated_at": "string"
+    },
+    "WorkflowInstanceRead": {
+      "id": "string",
+      "definition_id": "string",
+      "definition_version_id": "string",
+      "entity_type": "string",
+      "entity_id": "string",
+      "status": "string",
+      "current_node_id": "null|string",
+      "context_json": "object",
+      "correlation_id": "null|string",
+      "timeline": "array",
+      "tasks": "array"
+    },
+    "WorkflowStartIn": {
+      "definition_code": "null|string",
+      "version_id": "null|string",
+      "entity_type": "string",
+      "entity_id": "string",
+      "context": "object"
+    },
+    "WorkflowTaskActionIn": {
+      "decision": "null|string",
+      "payload": "object",
+      "assignee_user_id": "null|string",
+      "assignee_role_code": "null|string"
+    },
+    "WorkflowTaskRead": {
+      "id": "string",
+      "instance_id": "string",
+      "node_id": "string",
+      "title": "string",
+      "assignee_user_id": "null|string",
+      "assignee_role_code": "null|string",
+      "status": "string",
+      "due_at": "null|string",
+      "completed_at": "null|string",
+      "task_payload": "object"
+    },
+    "WorkflowTimelineRead": {
+      "id": "string",
+      "node_id": "null|string",
+      "event_type": "string",
+      "actor_user_id": "null|string",
+      "payload": "object",
+      "created_at": "string"
+    },
+    "WorkflowVersionRead": {
+      "id": "string",
+      "definition_id": "string",
+      "version_no": "integer",
+      "status": "string",
+      "graph_json": "object",
+      "variables_schema": "object"
+    },
+    "WorkplaceReport": {
+      "workplace": "app__schemas__sout__WorkplaceRead",
+      "factors": "array",
+      "guarantees": "array"
+    },
+    "WorkspaceAttentionResponse": {
+      "generated_at": "string",
+      "summary": "AttentionSummary",
+      "items": "array",
+      "blockers": "array",
+      "recommendations": "array"
+    },
+    "WorkspaceConfig": {
+      "role": "string",
+      "workspace_type": "string",
+      "primary_modules": "array",
+      "dashboard_route": "string",
+      "kpis_enabled": "array",
+      "quick_actions": "array"
+    },
+    "WorkspaceTaskInboxResponse": {
+      "total": "integer",
+      "overdue": "integer",
+      "items": "array"
+    },
+    "WsEventItem": {
+      "id": "string",
+      "event_type": "string",
+      "status": "string",
+      "destination": "string",
+      "attempts": "integer",
+      "created_at": "null|string",
+      "payload_keys": "array"
+    },
+    "WsEventsFallbackResponse": {
+      "transport_mode": "string",
+      "provider_mode": "string",
+      "websocket_available": "boolean",
+      "polling_interval_seconds": "integer",
+      "generated_at": "string",
+      "count": "integer",
+      "items": "array",
+      "diagnostics": "object"
+    },
+    "app__api__routes__approval_orchestration__ApprovalRouteCreate": {
+      "code": "string",
+      "name": "string",
+      "description": "null|string",
+      "applies_to": "string",
+      "conditions_json": "object",
+      "is_default": "boolean",
+      "status": "string"
+    },
+    "app__api__routes__approval_orchestration__ApprovalStartIn": {
+      "entity_type": "string",
+      "entity_id": "string",
+      "approval_route_id": "string"
+    },
+    "app__api__routes__approval_orchestration__SignatureRequestIn": {
+      "entity_type": "string",
+      "entity_id": "string",
+      "signature_type": "string",
+      "provider_code": "string",
+      "options": "object",
+      "approval_instance_id": "null|string"
+    },
+    "app__api__routes__approval_signing_v1__ApprovalStartIn": {
+      "object_type": "string",
+      "object_id": "string",
+      "context": "object"
+    },
+    "app__api__routes__client_portal__PackagePresetCreate": {
+      "code": "string",
+      "name": "string",
+      "description": "null|string",
+      "steps_json": "object",
+      "required_inputs_json": "array",
+      "is_active": "boolean"
+    },
+    "app__api__routes__client_portal__PackagePresetPatch": {
+      "name": "null|string",
+      "description": "null|string",
+      "steps_json": "null|object",
+      "required_inputs_json": "array|null",
+      "is_active": "boolean|null"
+    },
+    "app__api__routes__edo_workflow__ApprovalRouteCreate": {
+      "code": "string",
+      "name": "string",
+      "rules_json": "object",
+      "version": "integer",
+      "is_active": "boolean"
+    },
+    "app__api__routes__edo_workflow__SignatureRequestIn": {
+      "document_version_id": "string",
+      "kind": "SignatureType"
+    },
+    "app__modules__packs__schemas__PackagePresetCreate": {
+      "code": "string",
+      "name": "string",
+      "description": "null|string",
+      "package_profile_id": "string",
+      "naming_rule": "string",
+      "source_type": "string",
+      "mapping_json": "object",
+      "options_json": "object",
+      "status": "string"
+    },
+    "app__modules__packs__schemas__PackagePresetPatch": {
+      "name": "null|string",
+      "description": "null|string",
+      "package_profile_id": "null|string",
+      "naming_rule": "null|string",
+      "source_type": "null|string",
+      "mapping_json": "null|object",
+      "options_json": "null|object",
+      "status": "null|string"
+    },
+    "app__modules__pipelines__schemas__PipelineRunRead": {
+      "run_id": "string",
+      "profile_id": "null|string",
+      "status": "string",
+      "inputs_json": "null|object",
+      "outputs_json": "null|object",
+      "created_by": "null|string",
+      "correlation_id": "null|string",
+      "step_runs": "array"
+    },
+    "app__schemas__common__PipelineRunRead": {
+      "id": "string",
+      "status": "string",
+      "context": "object",
+      "idempotency_key": "string",
+      "docx_storage_key": "null|string",
+      "pdf_storage_key": "null|string",
+      "result_s3_key": "null|string",
+      "result_metadata": "object",
+      "outputs": "null|object",
+      "error": "null|string",
+      "started_at": "null|string",
+      "finished_at": "null|string",
+      "payload": "object"
+    },
+    "app__schemas__site__WorkplaceCreate": {
+      "company_id": "string",
+      "site_id": "null|string",
+      "name": "string",
+      "description": "null|string",
+      "location": "null|string",
+      "working_conditions_class": "null|string",
+      "hazard_ids": "array",
+      "document_file_ids": "array"
+    },
+    "app__schemas__site__WorkplacePage": {
+      "items": "array",
+      "total": "integer"
+    },
+    "app__schemas__site__WorkplaceRead": {
+      "company_id": "string",
+      "site_id": "null|string",
+      "name": "string",
+      "description": "null|string",
+      "location": "null|string",
+      "working_conditions_class": "null|string",
+      "hazard_ids": "array",
+      "document_file_ids": "array",
+      "id": "string"
+    },
+    "app__schemas__site__WorkplaceUpdate": {
+      "site_id": "null|string",
+      "name": "null|string",
+      "description": "null|string",
+      "location": "null|string",
+      "working_conditions_class": "null|string",
+      "hazard_ids": "array|null",
+      "document_file_ids": "array|null"
+    },
+    "app__schemas__sout__WorkplaceCreate": {
+      "workplace_code": "string",
+      "position_name": "string",
+      "person_id": "null|string",
+      "position_id": "null|string",
+      "assessed_class": "SoutClass|null",
+      "assessment_date": "null|string",
+      "next_assessment_date": "null|string"
+    },
+    "app__schemas__sout__WorkplacePage": {
+      "items": "array",
+      "total": "integer",
+      "limit": "integer",
+      "offset": "integer"
+    },
+    "app__schemas__sout__WorkplaceRead": {
+      "id": "string",
+      "campaign_id": "string",
+      "workplace_code": "string",
+      "position_name": "string",
+      "person_id": "null|string",
+      "position_id": "null|string",
+      "assessed_class": "SoutClass|null",
+      "assessment_date": "null|string",
+      "next_assessment_date": "null|string",
+      "is_reassessment_due": "boolean",
+      "created_at": "string",
+      "updated_at": "string"
+    },
+    "app__schemas__sout__WorkplaceUpdate": {
+      "workplace_code": "null|string",
+      "position_name": "null|string",
+      "person_id": "null|string",
+      "position_id": "null|string",
+      "assessed_class": "SoutClass|null",
+      "assessment_date": "null|string",
+      "next_assessment_date": "null|string"
+    }
+  },
   "openapi_version": "3.1.0"
 }

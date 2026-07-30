@@ -113,6 +113,7 @@ class Metrics:
     files_download_denied_total: Counter
     outbox_routed_total: Counter
     outbox_no_destination_total: Counter
+    api_deprecated_requests_total: Counter
     _http_latency_tracker: "LatencyTracker" = field(
         default_factory=lambda: LatencyTracker(), repr=False
     )
@@ -305,6 +306,20 @@ class Metrics:
             event_type=sanitize_label(event_type),
             destination=sanitize_label(destination),
             error_class=sanitize_label(error_class),
+        ).inc()
+
+    def record_api_deprecated_request(self, *, path_prefix: str, status_class: str) -> None:
+        """OPS-73 (разд. 73.2): обращение к устаревшей поверхности API.
+
+        Labels — префикс из реестра (не сырой путь: пути с id раздули бы
+        кардинальность) и класс статуса. Класс обязателен: живая интеграция
+        видна как 2xx, а сканерный шум по отключённой поверхности — как 4xx;
+        без разреза критерий «трафик упал до нуля» недостижим никогда.
+        """
+
+        self.api_deprecated_requests_total.labels(
+            path_prefix=sanitize_label(path_prefix),
+            status_class=sanitize_label(status_class),
         ).inc()
 
     def record_outbox_dead(self, *, event_type: str, destination: str) -> None:
@@ -518,6 +533,12 @@ def _build_metrics() -> Metrics:
         labelnames=("event_type", "destination", "error_class"),
         registry=registry,
     )
+    api_deprecated_requests_total = Counter(
+        "api_deprecated_requests_total",
+        "Requests hitting deprecated API surfaces, by registry prefix and status class (OPS-73).",
+        labelnames=("path_prefix", "status_class"),
+        registry=registry,
+    )
     outbox_dead_total = Counter(
         "outbox_dead_total",
         "Total outbox events moved to dead-letter grouped by event type and destination.",
@@ -629,6 +650,7 @@ def _build_metrics() -> Metrics:
         outbox_dispatcher_loop_duration_seconds=outbox_dispatcher_loop_duration_seconds,
         outbox_routed_total=outbox_routed_total,
         outbox_no_destination_total=outbox_no_destination_total,
+        api_deprecated_requests_total=api_deprecated_requests_total,
     )
 
 

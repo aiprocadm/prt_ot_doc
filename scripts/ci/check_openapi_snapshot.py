@@ -20,6 +20,7 @@ Modes:
 
 Baseline: docs/stabilization/openapi_routes_baseline.json
 """
+
 from __future__ import annotations
 
 import argparse
@@ -44,11 +45,50 @@ def _collect() -> dict:
             operations.append(f"{method.upper()} {path}")
             if isinstance(op, dict) and op.get("operationId"):
                 operation_ids.append(str(op["operationId"]))
-    schemas = sorted((spec.get("components") or {}).get("schemas", {}).keys())
+    schema_map = (spec.get("components") or {}).get("schemas", {})
+    schemas = sorted(schema_map.keys())
+    # OPS-73 (разд. 73.1): подпись полей каждой схемы — {поле: тип}. Без неё
+    # контрактный гейт видел бы только исчезновение схемы ЦЕЛИКОМ, а удаление
+    # или смена типа поля (remove_field / change_type из API_BREAKING_CHANGES)
+    # проходили бы зелёными.
+    schema_fields: dict[str, dict[str, str]] = {}
+    for name, schema in schema_map.items():
+        if not isinstance(schema, dict):
+            continue
+        props = schema.get("properties")
+        if not isinstance(props, dict):
+            continue
+        fields: dict[str, str] = {}
+        for field_name, field_schema in props.items():
+            if isinstance(field_schema, dict):
+                if "type" in field_schema:
+                    ftype = str(field_schema["type"])
+                elif "$ref" in field_schema:
+                    ftype = str(field_schema["$ref"]).rsplit("/", 1)[-1]
+                elif "anyOf" in field_schema or "oneOf" in field_schema or "allOf" in field_schema:
+                    variants = (
+                        field_schema.get("anyOf")
+                        or field_schema.get("oneOf")
+                        or field_schema.get("allOf")
+                    )
+                    parts = []
+                    for v in variants:
+                        if isinstance(v, dict):
+                            parts.append(
+                                str(v.get("type") or str(v.get("$ref", "?")).rsplit("/", 1)[-1])
+                            )
+                    ftype = "|".join(sorted(parts))
+                else:
+                    ftype = "any"
+            else:
+                ftype = "any"
+            fields[str(field_name)] = ftype
+        schema_fields[name] = fields
     return {
         "operations": sorted(operations),
         "operation_ids": sorted(operation_ids),
         "schemas": schemas,
+        "schema_fields": schema_fields,
         "openapi_version": spec.get("openapi", ""),
     }
 

@@ -26,6 +26,7 @@ from app.core.rate_limit import (
 )
 from app.db.rls_runtime import UnsafeDatabaseRoleError, verify_runtime_role
 from app.db.session import aensure_shared_schema, dispose_engine
+from app.middleware.api_deprecation import ApiDeprecationMiddleware
 from app.middleware.billing_guard import BillingGuardMiddleware
 from app.middleware.global_error_handler import GlobalErrorHandlerMiddleware
 from app.middleware.observability import ObservabilityMiddleware
@@ -256,6 +257,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(v1_router, prefix=settings.api_v1_prefix)
 
     register_exception_handlers(app)
+
+    # OPS-73 (разд. 73.2). Регистрируется здесь же, во внешнем поясе: заголовки
+    # Deprecation/Sunset обязаны стоять и на ответах ошибок устаревшей ручки —
+    # интеграция, получающая от неё только 4xx, всё равно должна узнать об
+    # устаревании. Реестр поверхностей — core/api_deprecation.py (данные, не код).
+    app.add_middleware(ApiDeprecationMiddleware)
 
     # SEC-64 (разд. 64.1). Регистрируется САМЫМ ПОСЛЕДНИМ — после обработчиков
     # ошибок и idempotency-слоя: добавленный позже оборачивает добавленных раньше.
