@@ -30,16 +30,28 @@ from app.models.base import TenantBaseModel
 __all__ = [
     "IMPORT_BATCH_STATUSES",
     "IMPORT_ROW_ACTIONS",
+    "IMPORT_TERMINAL_STATUSES",
     "ImportBatch",
     "ImportRow",
 ]
 
 IMPORT_BATCH_STATUSES: tuple[str, ...] = (
+    # Файл принят и поставлен в очередь, обработка ещё не началась (async).
+    "pending",
+    # Обработка идёт: ``processed_rows`` растёт, по нему рисуется прогресс.
+    "running",
     # Партия применена: часть строк создана/обновлена, ошибочные отложены.
     "applied",
+    # Обработка оборвалась целиком (нечитаемый файл, упавший воркер).
+    # Строки, применённые до обрыва, остаются и откатываются штатным откатом —
+    # именно поэтому статус отдельный, а не «как будто ничего не было».
+    "failed",
     # Партия отменена целиком.
     "rolled_back",
 )
+
+# Статусы, из которых партия уже не сдвинется сама.
+IMPORT_TERMINAL_STATUSES: frozenset[str] = frozenset({"applied", "failed", "rolled_back"})
 
 IMPORT_ROW_ACTIONS: tuple[str, ...] = ("created", "updated", "skipped", "failed")
 
@@ -78,7 +90,25 @@ class ImportBatch(TenantBaseModel):
         MutableDict.as_mutable(JSON), nullable=False, default=dict
     )
 
+    # Сколько строк уже обработано. Растёт по ходу асинхронного импорта и
+    # коммитится отдельной транзакцией: прогресс, видимый только в конце, —
+    # это не прогресс, адва состояния «ничего» и «всё».
+    processed_rows: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    # Ключ исходного файла в хранилище. Воркер живёт в другом процессе, и тело
+    # запроса ему недоступно — файл кладётся в хранилище арендатора, а после
+    # терминального статуса удаляется: это ПДн, и держать вторую копию дольше
+    # необходимого незачем (SEC-66).
+    source_key: Mapped[str | None] = mapped_column(String(512), nullable=True)
+
+    # Причина обрыва. Пустой ``failed`` без причины заставляет лезть в логи.
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
     applied_by: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # Момент постановки партии: для синхронного импорта он же и момент записи,
+    # для асинхронного — время приёма файла. Завершение — ``finished_at``.
     applied_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     rolled_back_by: Mapped[str | None] = mapped_column(String(64), nullable=True)
     rolled_back_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

@@ -45,11 +45,13 @@ from app.modules.imports.parsers import (
 )
 from app.modules.imports.planner import template_headers
 from app.modules.imports.registry import ImportTarget, get_target, list_targets
+from app.modules.imports.runner import build_source_key, discard_source, store_source
 from app.modules.imports.service import (
     ImportMappingError,
     ImportRollbackError,
     ImportService,
 )
+from app.tasks.import_jobs import run_import_batch_job
 
 router = APIRouter(prefix="/imports", tags=["imports"])
 
@@ -179,12 +181,15 @@ class ImportBatchOut(BaseModel):
     mapping: dict[str, str]
     notes: dict[str, Any]
     total_rows: int
+    processed_rows: int
     created_count: int
     updated_count: int
     skipped_count: int
     failed_count: int
     applied_at: datetime
     applied_by: str | None = None
+    finished_at: datetime | None = None
+    error_message: str | None = None
     rolled_back_at: datetime | None = None
     rolled_back_by: str | None = None
 
@@ -256,12 +261,15 @@ def _batch_out(batch: ImportBatch) -> ImportBatchOut:
         mapping=dict(batch.mapping or {}),
         notes=dict(batch.notes or {}),
         total_rows=batch.total_rows,
+        processed_rows=batch.processed_rows,
         created_count=batch.created_count,
         updated_count=batch.updated_count,
         skipped_count=batch.skipped_count,
         failed_count=batch.failed_count,
         applied_at=batch.applied_at,
         applied_by=batch.applied_by,
+        finished_at=batch.finished_at,
+        error_message=batch.error_message,
         rolled_back_at=batch.rolled_back_at,
         rolled_back_by=batch.rolled_back_by,
     )
@@ -395,6 +403,79 @@ async def apply_import(
         raise _mapping_error(exc) from exc
     await session.commit()
     return ImportApplyOut(batch=_batch_out(batch), preview=_preview_out(target.code, plan))
+
+
+@router.post("/{target_code}/apply-async", response_model=ImportBatchOut, status_code=202)
+@audit_operation("import.apply_async", "import_batch")
+async def apply_import_async(
+    target_code: str,
+    session: SessionDep,
+    tenant: TenantDep,
+    access: ImportAccess,
+    file: Annotated[UploadFile, File()],
+    mapping: Annotated[str | None, Form()] = None,
+) -> ImportBatchOut:
+    """Поставить импорт в очередь и вернуть партию для опроса прогресса.
+
+    Отвечает 202 сразу: файл на десятки тысяч строк не укладывается в таймаут
+    прокси. Клиент опрашивает `GET /imports/batches/{id}` — там `status`,
+    `processed_rows` и `total_rows`.
+
+    **Файл сначала кладётся в хранилище, и только потом ставится задача.**
+    Обратный порядок дал бы гонку: воркер успевает взять задачу раньше, чем
+    появился файл, и партия падает на ровном месте.
+    """
+
+    await _require_enabled(session, tenant)
+    target = _require_target(target_code)
+    content = await _read_upload(file)
+    filename = file.filename or "import"
+    overrides = _parse_overrides(mapping)
+
+    service = ImportService(session, tenant)
+    batch = service.new_batch(
+        target,
+        filename,
+        status="pending",
+        actor_id=getattr(access, "user_id", None),
+    )
+    await session.flush()
+    # Схема маппинга едет с партией: воркер получает ровно то, что выбрал
+    # пользователь, а не догадывается по заголовкам заново.
+    batch.mapping = dict(overrides)
+    batch.source_key = build_source_key(
+        tenant_id=str(tenant.id), batch_id=batch.id, filename=filename
+    )
+
+    try:
+        store_source(key=batch.source_key, content=content, filename=filename)
+    except Exception as exc:  # noqa: BLE001 — хранилище отдаёт разнородные ошибки
+        await session.rollback()
+        raise _problem(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "IMPORT_SOURCE_STORE_FAILED",
+            "Could not store the uploaded file for background processing",
+        ) from exc
+
+    await session.commit()
+
+    try:
+        run_import_batch_job.delay(tenant.slug, batch.id)
+    except Exception as exc:  # noqa: BLE001 — брокер недоступен
+        # Партия осталась в ``pending`` и файл в хранилище: её подберёт повторная
+        # постановка. Молчаливый 202 здесь означал бы импорт, который никогда не
+        # начнётся, — клиент ждал бы прогресса вечно.
+        discard_source(batch.source_key)
+        batch.status = "failed"
+        batch.error_message = f"import_enqueue_failed: {str(exc)[:400]}"
+        await session.commit()
+        raise _problem(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "IMPORT_ENQUEUE_FAILED",
+            "Import queue is unavailable, the batch was not started",
+        ) from exc
+
+    return _batch_out(batch)
 
 
 @router.get("/batches", response_model=list[ImportBatchOut])
