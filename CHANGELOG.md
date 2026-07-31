@@ -1,5 +1,30 @@
 # CHANGELOG
 
+## 2026-07-30 (worktree-sec64-pip-audit-blocking — SEC-64.1: pip-audit переведён в блокирующий гейт)
+
+Шаги 1/3/4 плана `docs/security/DEPENDENCY_AUDIT.md`. Новая Python-advisory
+без записи в исключениях теперь красит CI, а не ждёт аудита перед релизом.
+
+### Security
+- Подъём зависимостей: `python-multipart` 0.0.31 (PYSEC-2026-3036/3037/3040),
+  `python-dotenv` 1.2.2 (PYSEC-2026-2270), `click` 8.3.3 (PYSEC-2026-2132)
+  + `typer` 0.27.0 (typer<0.16 несовместим с click>=8.2).
+- `ci.yml`: шаг `pip-audit gate` — блокирующий (снят `continue-on-error`).
+- Осознанный остаток (starlette ×7 до отдельного PR подъёма fastapi; ecdsa без
+  апстрим-фикса; dev-only pytest/black — мажорные бампы отдельными PR) — записи
+  `tool: pip-audit` в `.github/security-exceptions.yml` со сроками пересмотра;
+  просрочка валит CI (`check_security_exceptions.py`).
+
+### Added
+- `scripts/ci/render_pip_audit_ignores.py` — рендер `--ignore-vuln`-флагов из
+  security-exceptions (аналог `render_trivyignore.py`; у pip-audit нет
+  ignore-файла).
+
+### Docs
+- `docs/security/DEPENDENCY_AUDIT.md` — состояние и остаток (npm audit всё ещё
+  observe-mode — следующий шаг); матрица SEC-64 дополнена; в SEC-69 снята
+  устаревшая пометка «semgrep observe-mode» (semgrep — блокирующий ratchet).
+
 ## 2026-07-30 (worktree-outbox-signing — фикс: OutboxProcessor подписывает вебхуки, строго и tenant-безопасно, SEC-67-смежный)
 
 Дефект найден исследованием OPS-73 срез-2: путь OutboxProcessor доставлял

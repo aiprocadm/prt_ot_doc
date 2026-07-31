@@ -171,24 +171,30 @@ jobs:
       # Trivy смотрит на дерево зависимостей по файлам-манифестам, pip-audit — по
       # базе PyPI advisories; они пересекаются не полностью, поэтому ТЗ называет оба.
       #
-      # OBSERVE-MODE (continue-on-error), как semgrep: на момент включения
-      # pip-audit даёт 18 находок (starlette 0.41.3, python-multipart, ecdsa,
-      # pytest, python-dotenv), npm audit — 31 (21 high, 2 critical). Сделать их
-      # блокирующими сразу значит покрасить CI на всех PR, не относящихся к
-      # обновлению зависимостей. Порядок перевода в блокирующие —
-      # docs/security/DEPENDENCY_AUDIT.md.
-      - name: pip-audit (Python advisories, observe-mode)
-        continue-on-error: true
+      # BLOCKING (2026-07-30, шаг 4 из docs/security/DEPENDENCY_AUDIT.md): база
+      # находок вычищена подъёмом python-multipart/python-dotenv/click(+typer);
+      # осознанный остаток (starlette до отдельного PR подъёма fastapi, ecdsa без
+      # апстрим-фикса, dev-only pytest/black) принят записями ``tool: pip-audit``
+      # в .github/security-exceptions.yml — их валидирует (и валит по сроку)
+      # job security-exceptions, а сюда они попадают как --ignore-vuln через
+      # render_pip_audit_ignores.py. Новая advisory без записи = красный CI.
+      - name: pip-audit gate (Python advisories)
         run: |
           python -m pip install --quiet pip-audit
+          IGNORES="$(python scripts/ci/render_pip_audit_ignores.py)"
+          echo "pip-audit ignores (из security-exceptions.yml): ${IGNORES:-<пусто>}"
+          set -o pipefail
+          status=0
+          # || status=$? — дефолтный bash -e иначе оборвёт шаг до записи summary.
           pip-audit --requirement requirements.txt --requirement requirements-dev.txt \
-            | tee pip-audit.txt || true
+            ${IGNORES} | tee pip-audit.txt || status=$?
           {
-            echo "### pip-audit (observe-mode)"
+            echo "### pip-audit (blocking gate)"
             echo '```'
             tail -40 pip-audit.txt || true
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
 
       - uses: actions/setup-node@v4
         with:
