@@ -896,6 +896,15 @@
 
 ---
 
+## Last Agent Handoff (2026-07-30, SEC-64.1: pip-audit → БЛОКИРУЮЩИЙ ГЕЙТ — ветка worktree-sec64-pip-audit-blocking)
+
+- **Дата:** 2026-07-30. «Продолжай по ТЗ» → сверка → Phase 16, разд. 64.1: выполнены шаги 1/3/4 плана `docs/security/DEPENDENCY_AUDIT.md` (pip-audit из observe-mode в блокирующий). Примечание сверки: журнал этот отставал на месяц (июльские волны 2026-07-28/29 — PR #814–#831 — писались только в матрицу и память ассистента); «Следующий точный шаг» ниже по файлу — исторические записи, не руководство.
+- **Сделано:** (1) подъём зависимостей: `python-multipart` 0.0.27→0.0.31, `python-dotenv` 1.0.1→1.2.2, `click` 8.1.8→8.3.3 + вынужденно `typer` 0.12.3→0.27.0 (typer<0.16 падает на click>=8.2; CLI использует только базовый API — smoke `python -m app.cli.main --help` зелёный). (2) 11 записей `tool: pip-audit` в `.github/security-exceptions.yml` (starlette ×7 — блокированы пином fastapi 0.115.4 <0.42.0, до отдельного PR подъёма; ecdsa PYSEC-2026-1325 — апстрим-фикса не существует; pytest 9.x и black 26.x — dev-only мажоры отдельными PR), все со сроками `expires_on`, просрочку валит существующий `check_security_exceptions.py`. (3) новый `scripts/ci/render_pip_audit_ignores.py` (аналог `render_trivyignore.py`) печатает `--ignore-vuln`-флаги из записей; id валидируется как одиночный токен (защита от инъекции слов в CLI). (4) `ci.yml`: шаг «pip-audit gate» без `continue-on-error`, с summary до exit (bash -e) — новая advisory без записи = красный CI.
+- **Верификация:** чистое окружение uv по обновлённым requirements ставится без конфликтов; `pip-audit` на нём: «No known vulnerabilities found, 13 ignored», exit 0; рендерер и валидатор исключений зелёные; полный pytest-прогон — см. текст сессии. Матрица: SEC-64 дополнена, в SEC-69 снята устаревшая пометка «semgrep observe-mode» (semgrep давно блокирующий ratchet через `--baseline-commit` — сверено по `ci.yml`).
+- **Next (точный шаг):** npm audit → блокирующий (31 находка, у npm audit нет ignore-механизма — нужна чистка/overrides + свой фильтр); отдельные PR: подъём fastapi/starlette (снимает 7 исключений + trivy CVE-2025-62727), pytest 9.x, black 26.x (переформатирование). Сроки исключений: starlette 2026-08-31, pytest/black 2026-09-30, ecdsa 2026-10-31 — CI сам напомнит.
+
+---
+
 ## Last Agent Handoff (2026-07-03, P10-06 СИЗ СКЛАД — МИН-ОСТАТОК + ПРОГНОЗ ДЕФИЦИТА — ветка claude/goofy-mendel-ae01ef)
 
 - **Дата:** 2026-07-03. Продолжение контура P10-06 после журнала движений (wa04): добавлен per-item порог `PPEItem.min_stock` (миграция `wa05`, аддитивная) и endpoint прогноза дефицита `GET /api/v1/ppe/stock/shortages` (за флагом `warehouse`, ManagerAccess, без ETag — вычисляемый агрегат, не сущность).

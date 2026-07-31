@@ -1,12 +1,24 @@
 # SEC-64 (разд. 64.1): аудит зависимостей — состояние и план ужесточения
 
 ТЗ требует «Vulnerable Components: **Trivy + pip-audit + npm audit** в CI (Trivy уже
-есть)». Оба недостающих инструмента добавлены в `ci.yml`, но **в observe-mode**
-(`continue-on-error: true`) — и это осознанное решение, а не недоделка.
+есть)». Состояние на 2026-07-30:
 
-## Почему observe-mode, а не блокирующий гейт
+- **pip-audit — БЛОКИРУЮЩИЙ** (шаги 1, 3, 4 плана ниже выполнены): база находок
+  вычищена подъёмом `python-multipart` 0.0.31 / `python-dotenv` 1.2.2 /
+  `click` 8.3.3 (+`typer` 0.27.0 — typer<0.16 ломается на click>=8.2); осознанный
+  остаток принят записями `tool: pip-audit` в `.github/security-exceptions.yml`
+  (starlette ×7 — ждёт отдельного PR подъёма fastapi; ecdsa — апстрим-фикса нет;
+  pytest 9 и black 26 — dev-only мажоры отдельными PR). Записи имеют срок
+  `expires_on`, просрочку валит `check_security_exceptions.py`; в команду
+  pip-audit они попадают как `--ignore-vuln` через
+  `scripts/ci/render_pip_audit_ignores.py`. Новая advisory без записи = красный CI.
+- **npm audit — всё ещё observe-mode** (`continue-on-error: true`) — осознанное
+  решение, а не недоделка: 31 находка (21 high, 2 critical), в основном
+  транзитивные. Перевод — следующий шаг, тем же механизмом.
 
-На момент включения инструменты дают:
+## Почему изначально observe-mode, а не блокирующий гейт
+
+На момент включения (до чистки 2026-07-30) инструменты давали:
 
 | Инструмент | Находок | Основные пакеты |
 |---|---|---|
@@ -34,16 +46,18 @@ dev/транзитивные.
 
 ## Порядок перевода в блокирующие
 
-1. Поднять то, что обновляется без ломающих изменений (`python-multipart`,
-   `python-dotenv`), и убедиться, что счётчик находок падает.
+1. ~~Поднять то, что обновляется без ломающих изменений~~ — **сделано 2026-07-30**:
+   `python-multipart` 0.0.31, `python-dotenv` 1.2.2, `click` 8.3.3 + `typer` 0.27.0.
 2. Отдельной задачей — `fastapi`/`starlette` до версий без advisories, с полным
-   прогоном набора и db-гейта.
-3. Для остатка, который осознанно не обновляется, — записи в
-   `.github/security-exceptions.yml` с обоснованием и сроком пересмотра (механизм уже
-   используется для Trivy: `scripts/ci/render_trivyignore.py`).
-4. Убрать `continue-on-error` сначала у `pip-audit`, затем у `npm audit`.
-
-Пункт 3 обязателен: без него шаг 4 просто вернёт красный CI.
+   прогоном набора и db-гейта. Туда же (отдельными PR): `pytest` 9.x
+   (тянет совместимость pytest-asyncio/cov/timeout/xdist) и `black` 26.x
+   (меняет стиль — потребует переформатирования под `make lint`).
+3. ~~Для остатка — записи в `.github/security-exceptions.yml`~~ — **сделано**:
+   11 записей `tool: pip-audit` со сроками; в CLI попадают через
+   `scripts/ci/render_pip_audit_ignores.py` (аналог `render_trivyignore.py`).
+4. Убрать `continue-on-error`: у `pip-audit` — **сделано** (шаг «pip-audit gate»
+   в `ci.yml`); у `npm audit` — осталось (нужна своя чистка/исключения, у npm
+   audit нет штатного ignore-механизма).
 
 ## Как проверить локально
 

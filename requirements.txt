@@ -7,7 +7,8 @@ asyncpg==0.29.0; python_version < "3.13"
 asyncpg==0.31.0; python_version >= "3.13"
 boto3==1.35.36
 celery==5.4.0
-click==8.1.8
+# click: PYSEC-2026-2132 fixed at 8.3.3; click>=8.2 needs typer>=0.16 (see typer pin).
+click==8.3.3
 docxtpl==0.17.0
 email-validator==2.2.0
 fastapi==0.115.4
@@ -19,7 +20,8 @@ prometheus-client==0.21.0
 pydantic-settings==2.5.2
 pydantic==2.9.2
 python-docx==1.1.2
-python-dotenv==1.0.1
+# python-dotenv: PYSEC-2026-2270 fixed at 1.2.2.
+python-dotenv==1.2.2
 python-jose[cryptography]==3.5.0
 python-magic==0.4.27
 # pyasn1: direct pin to override transitive (pulled by python-jose/cryptography).
@@ -27,7 +29,8 @@ python-magic==0.4.27
 # python-jose 3.5.0 loosened its constraint to pyasn1>=0.5.0 (3.4.0 required <0.5.0),
 # so the 0.6.3 pin is resolvable together with python-jose>=3.5.0.
 pyasn1>=0.6.3
-python-multipart==0.0.27
+# python-multipart: PYSEC-2026-3036/3037/3040 fixed at 0.0.31.
+python-multipart==0.0.31
 redis==5.0.3
 slowapi==0.1.9
 sqlalchemy==2.0.36
@@ -36,5 +39,6 @@ sqlalchemy==2.0.36
 # fastapi 0.115.4 permits starlette in [0.40.0, 0.42.0).
 starlette>=0.40.0,<0.42.0
 greenlet==3.4.0
-typer==0.12.3
+# typer: bumped alongside click (typer<0.16 breaks on click>=8.2).
+typer==0.27.0
 uvicorn[standard]==0.30.5
