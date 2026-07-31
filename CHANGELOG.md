@@ -1,5 +1,23 @@
 # CHANGELOG
 
+## 2026-07-31 (feat/sec64-npm-audit-gate — SEC-64.1: npm audit переведён в блокирующий гейт; план DEPENDENCY_AUDIT.md выполнен целиком)
+
+### Security
+- `npm audit fix --package-lock-only`: вычищены все high/critical в
+  runtime-зависимостях фронта (axios, form-data, ws, postcss, rollup и др.);
+  `frontend/package.json` не менялся — только lock-файл.
+- `ci.yml`: шаг `npm audit gate` — блокирующий (снят `continue-on-error`).
+- Остаток — 6 корневых advisory, все в dev-инструментах (vitest UI-server —
+  critical, CI гоняет headless; vite dev-server под Windows; minimatch ×3,
+  brace-expansion — ReDoS в eslint-цепочке) — записи `tool: npm-audit` в
+  `.github/security-exceptions.yml` со сроками 2026-09-30.
+
+### Added
+- `scripts/ci/check_npm_audit.py` — гейт по КОРНЕВЫМ GHSA (у npm audit нет
+  ignore-механизма, а одна дыра minimatch транзитивно красит десятки пакетов);
+  валит сборку за непринятую high/critical первопричину, устаревшие исключения
+  печатает как «stale».
+
 ## 2026-07-30 (worktree-sec64-pip-audit-blocking — SEC-64.1: pip-audit переведён в блокирующий гейт)
 
 Шаги 1/3/4 плана `docs/security/DEPENDENCY_AUDIT.md`. Новая Python-advisory

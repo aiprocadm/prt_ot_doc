@@ -12,9 +12,17 @@
   `expires_on`, просрочку валит `check_security_exceptions.py`; в команду
   pip-audit они попадают как `--ignore-vuln` через
   `scripts/ci/render_pip_audit_ignores.py`. Новая advisory без записи = красный CI.
-- **npm audit — всё ещё observe-mode** (`continue-on-error: true`) — осознанное
-  решение, а не недоделка: 31 находка (21 high, 2 critical), в основном
-  транзитивные. Перевод — следующий шаг, тем же механизмом.
+- **npm audit — БЛОКИРУЮЩИЙ** (2026-07-31, финал шага 4): runtime-зависимости
+  вычищены `npm audit fix --package-lock-only` (axios, form-data, ws, postcss,
+  rollup и др.; package.json не менялся — только lock). Остаток — **6 корневых
+  advisory, все в dev-инструментах** (vitest UI-server — critical, но CI гоняет
+  headless `vitest run`; vite dev-server под Windows; minimatch ×3 и
+  brace-expansion — ReDoS в eslint-цепочке); приняты записями `tool: npm-audit`
+  со сроками. Механизм: у npm audit нет ignore-файла и раздувается счёт
+  (одна дыра minimatch красит десятки пакетов транзитивно), поэтому гейт —
+  `scripts/ci/check_npm_audit.py`: сравнивает КОРНЕВЫЕ GHSA high/critical из
+  `npm audit --json` с исключениями и валит сборку за любую непринятую;
+  устаревшие исключения печатает как «stale» для чистки.
 
 ## Почему изначально observe-mode, а не блокирующий гейт
 
@@ -56,8 +64,10 @@ dev/транзитивные.
    11 записей `tool: pip-audit` со сроками; в CLI попадают через
    `scripts/ci/render_pip_audit_ignores.py` (аналог `render_trivyignore.py`).
 4. Убрать `continue-on-error`: у `pip-audit` — **сделано** (шаг «pip-audit gate»
-   в `ci.yml`); у `npm audit` — осталось (нужна своя чистка/исключения, у npm
-   audit нет штатного ignore-механизма).
+   в `ci.yml`); у `npm audit` — **сделано 2026-07-31** (шаг «npm audit gate» +
+   `check_npm_audit.py`). Весь план выполнен; остаток долга — только мажорные
+   бампы из п. 2 (fastapi/starlette, pytest 9, black 26, vite 8, vitest 4,
+   eslint-цепочка), каждый снимает свои записи из security-exceptions.yml.
 
 ## Как проверить локально
 

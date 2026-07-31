@@ -202,17 +202,27 @@ jobs:
           cache: "npm"
           cache-dependency-path: frontend/package-lock.json
 
-      - name: npm audit (frontend advisories, observe-mode)
-        continue-on-error: true
-        working-directory: frontend
+      # BLOCKING (2026-07-31, финал шага 4 из docs/security/DEPENDENCY_AUDIT.md):
+      # runtime-зависимости вычищены `npm audit fix`; остаток — 6 корневых
+      # advisory в dev-инструментах (vitest/vite/minimatch/brace-expansion),
+      # принят записями ``tool: npm-audit`` в security-exceptions.yml. У npm
+      # audit нет ignore-механизма, поэтому гейт — check_npm_audit.py: валит
+      # сборку за любую НЕ принятую high/critical первопричину (GHSA), а не за
+      # раздутый список транзитивно помеченных пакетов.
+      - name: npm audit gate (frontend advisories)
         run: |
-          npm audit --audit-level=high | tee ../npm-audit.txt || true
+          status=0
+          # || — сам npm audit при находках выходит ненулевым; вердикт выносит
+          # check_npm_audit.py по JSON и security-exceptions.yml.
+          npm --prefix frontend audit --json > npm-audit.json || true
+          python scripts/ci/check_npm_audit.py --audit-json npm-audit.json || status=$?
           {
-            echo "### npm audit (observe-mode)"
+            echo "### npm audit gate"
             echo '```'
-            tail -30 ../npm-audit.txt || true
+            npm --prefix frontend audit --audit-level=high | tail -30 || true
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
 
   secret-scan:
     runs-on: ubuntu-latest
