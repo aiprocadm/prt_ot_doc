@@ -896,6 +896,15 @@
 
 ---
 
+## Last Agent Handoff (2026-07-31, SEC-64.1 ФИНАЛ: npm audit → БЛОКИРУЮЩИЙ ГЕЙТ — ветка feat/sec64-npm-audit-gate)
+
+- **Дата:** 2026-07-31, продолжение вчерашнего среза (PR #832 pip-audit влит). «Продолжай по ТЗ» → следующий шаг плана `docs/security/DEPENDENCY_AUDIT.md` — npm audit из observe-mode в блокирующий. **План DEPENDENCY_AUDIT.md выполнен целиком** (шаги 1/3/4 по обоим инструментам).
+- **Сделано:** (1) `npm audit fix --package-lock-only` ×2 прохода — вычищены все high/critical runtime-зависимости фронта (axios, form-data, ws, postcss, rollup…), `package.json` НЕ менялся. (2) Остаток — ровно 6 КОРНЕВЫХ advisory, все dev-инструменты: vitest GHSA-5xrq-8626-4rwp (critical, но это UI-сервер vitest — CI гоняет headless `vitest run`), vite GHSA-fx2h-pf6j-xcff (dev-server, Windows-пути), minimatch ×3 + brace-expansion (ReDoS в eslint-цепочке) — записи `tool: npm-audit` со сроком 2026-09-30. (3) Новый `scripts/ci/check_npm_audit.py`: у npm audit НЕТ ignore-механизма, а счёт раздут (одна дыра minimatch транзитивно красит ~20 пакетов high) — гейт сравнивает корневые GHSA high/critical из `npm audit --json` с исключениями; непринятая = exit 1; исчезнувшая из отчёта запись печатается как «stale» для чистки. (4) `ci.yml`: шаг «npm audit gate» без `continue-on-error`.
+- **Верификация:** гейт позитив (6/6 принято, exit 0) и негатив (изъятие записи → exit 1 с BLOCKING-строкой) — зелёные; `check_security_exceptions.py` — 18 записей, просрочек нет; ruff+black чистые; фронт-гейты на обновлённом lock (`npm ci` + typecheck + vitest + build) — см. текст сессии.
+- **Next (точный шаг):** долг только мажорными бампами, отдельными PR (каждый снимает свои записи исключений): fastapi/starlette (7 записей pip-audit + trivy CVE-2025-62727, срок 2026-08-31 — БЛИЖАЙШИЙ), pytest 9 / black 26 (2026-09-30), vite 8 / vitest 4 / eslint-цепочка (2026-09-30). Либо следующий хвост Phase 16 по матрице (SEC-63 привязка вебхуков/ключей к модулям, SEC-66/67 остатки), либо Phase 11 (ценность) по приоритету roadmap.
+
+---
+
 ## Last Agent Handoff (2026-07-30, SEC-64.1: pip-audit → БЛОКИРУЮЩИЙ ГЕЙТ — ветка worktree-sec64-pip-audit-blocking)
 
 - **Дата:** 2026-07-30. «Продолжай по ТЗ» → сверка → Phase 16, разд. 64.1: выполнены шаги 1/3/4 плана `docs/security/DEPENDENCY_AUDIT.md` (pip-audit из observe-mode в блокирующий). Примечание сверки: журнал этот отставал на месяц (июльские волны 2026-07-28/29 — PR #814–#831 — писались только в матрицу и память ассистента); «Следующий точный шаг» ниже по файлу — исторические записи, не руководство.
