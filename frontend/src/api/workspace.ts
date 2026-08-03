@@ -74,5 +74,5 @@ export const workspaceApi = {
     apiClient.get<WorkspaceTaskInboxDto>(`/workspace/task-inbox?limit=${limit}&offset=${offset}`).then((r) => r.data),
 
   getUserWorkspaceConfig: (): Promise<WorkspaceConfig> =>
-    apiClient.get<WorkspaceConfig>("/users/me/workspace").then((r) => r.data),
+    apiClient.get<WorkspaceConfig>("/workspace/users/me/workspace").then((r) => r.data),
 };

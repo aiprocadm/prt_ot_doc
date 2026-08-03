@@ -24,7 +24,7 @@ export const sendUxMetric = async (name: string, payload?: Record<string, unknow
 
   try {
     // Optional endpoint: metric delivery is best-effort only.
-    await apiClient.post("/analytics/ux-events", { name, payload });
+    await apiClient.post("/analytics/ux-events", { name, payload }, { silentApiErrorToast: true });
   } catch {
     // Optional endpoint: metric delivery is best-effort only (endpoint may be absent).
     // swallow — UX metrics must never surface errors to callers

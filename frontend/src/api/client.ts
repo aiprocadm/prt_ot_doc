@@ -43,6 +43,13 @@ const isRecord = (value: unknown): value is Record<string, unknown> => typeof va
 
 type RequestWithServerRetry = InternalAxiosRequestConfig & { _serverRetryCount?: number };
 
+declare module "axios" {
+  export interface AxiosRequestConfig {
+    /** Best-effort запрос: ошибки не показываются пользователю глобальным тостом. */
+    silentApiErrorToast?: boolean;
+  }
+}
+
 const SERVER_RETRY_STATUSES = new Set([500, 502, 503, 504]);
 const MAX_SERVER_RETRIES = 2;
 
@@ -267,7 +274,9 @@ apiClient.interceptors.response.use(
       details: error.response?.data
     });
 
-    handleApiError(apiError, originalRequest?.url);
+    if (!originalRequest?.silentApiErrorToast) {
+      handleApiError(apiError, originalRequest?.url);
+    }
     return Promise.reject(apiError);
   }
 );
