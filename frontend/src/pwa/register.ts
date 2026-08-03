@@ -29,9 +29,19 @@ export const registerPwa = () => {
       if (!registration) {
         return;
       }
-      setInterval(() => {
+      const checkForUpdate = () => {
         void registration.update();
-      }, 60 * 60 * 1000);
+      };
+      // Свежая сборка выкатывается часто; проверяем не только по таймеру,
+      // но и при каждом возврате во вкладку — иначе открытая страница
+      // держит старую версию до часа.
+      setInterval(checkForUpdate, 15 * 60 * 1000);
+      window.addEventListener("focus", checkForUpdate);
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "visible") {
+          checkForUpdate();
+        }
+      });
     },
   });
 };

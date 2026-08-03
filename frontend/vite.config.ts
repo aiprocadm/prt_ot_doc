@@ -1,3 +1,5 @@
+import { fileURLToPath } from "node:url";
+
 import { defineConfig, type UserConfig } from "vite";
 import { configDefaults } from "vitest/config";
 import react from "@vitejs/plugin-react";
@@ -107,6 +109,10 @@ export default defineConfig(({ mode }) => {
       css: true,
       api: false,
       exclude: [...configDefaults.exclude, "**/e2e/**"],
+      // VitePWA в тестовом режиме отключён — его виртуальный модуль подменяем заглушкой.
+      alias: {
+        "virtual:pwa-register": fileURLToPath(new URL("./src/pwa/pwaRegisterStub.ts", import.meta.url)),
+      },
     },
   };
 });
