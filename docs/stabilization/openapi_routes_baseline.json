@@ -58,6 +58,7 @@
     "DELETE /api/v1/work-permits/{wp_id}",
     "DELETE /api/v1/work-permits/{wp_id}/members/{member_id}",
     "DELETE /api/v1/workplaces/{workplace_id}",
+    "GET /api/v1/admin/deprecations",
     "GET /api/v1/admin/outbox",
     "GET /api/v1/admin/outbox/events",
     "GET /api/v1/admin/outbox/{outbox_id}",
@@ -1206,6 +1207,7 @@
     "delete_webhook_api_v1_webhooks_endpoints__webhook_id__delete",
     "delete_work_permit_endpoint_api_v1_work_permits__wp_id__delete",
     "delete_workplace_api_v1_workplaces__workplace_id__delete",
+    "deprecation_overview_api_v1_admin_deprecations_get",
     "disable_webhook_api_v1_webhooks_endpoints__webhook_id__disable_post",
     "documents_api_v1_client_portal_documents_get",
     "docx_headers_api_v1_docx_headers_post",
@@ -2047,6 +2049,9 @@
     "DepartmentPage",
     "DepartmentRead",
     "DepartmentUpdate",
+    "DeprecationEntryRead",
+    "DeprecationOverview",
+    "DeprecationUsageRead",
     "DocGeneratePipelineRequest",
     "DocGenerateRequest",
     "DocumentBatchItemRead",
@@ -4023,6 +4028,25 @@
       "name": "null|string",
       "code": "null|string",
       "description": "null|string"
+    },
+    "DeprecationEntryRead": {
+      "path_prefix": "string",
+      "deprecated_since": "string",
+      "sunset": "string",
+      "successor": "string",
+      "docs_url": "string"
+    },
+    "DeprecationOverview": {
+      "registry": "array",
+      "usage": "array"
+    },
+    "DeprecationUsageRead": {
+      "tenant_slug": "string",
+      "path_prefix": "string",
+      "first_seen_at": "string",
+      "last_seen_at": "string",
+      "hits_2xx": "integer",
+      "last_notified_at": "null|string"
     },
     "DocGeneratePipelineRequest": {
       "template": "GenerateTemplateRef",

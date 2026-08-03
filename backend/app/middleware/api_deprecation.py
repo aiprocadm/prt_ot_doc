@@ -29,6 +29,7 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from app.core.api_deprecation import ApiDeprecation, deprecation_for_path
 from app.core.metrics import get_metrics
+from app.services.api_deprecation_recorder import note_deprecated_hit
 
 __all__ = ["ApiDeprecationMiddleware"]
 
@@ -114,6 +115,10 @@ class ApiDeprecationMiddleware:
                 get_metrics().record_api_deprecated_request(
                     path_prefix=entry.path_prefix, status_class=status_class
                 )
+                # Срез-3: персистентный учёт «кто ещё» — только живой трафик
+                # (2xx), тем же критерием, что и решение об отключении.
+                if status_class == "2xx":
+                    note_deprecated_hit(tenant, entry.path_prefix)
                 logger.info(
                     "api.deprecated_request",
                     extra={
