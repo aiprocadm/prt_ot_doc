@@ -172,8 +172,8 @@ jobs:
       # базе PyPI advisories; они пересекаются не полностью, поэтому ТЗ называет оба.
       #
       # BLOCKING (2026-07-30, шаг 4 из docs/security/DEPENDENCY_AUDIT.md): база
-      # находок вычищена подъёмом python-multipart/python-dotenv/click(+typer);
-      # осознанный остаток (starlette до отдельного PR подъёма fastapi, ecdsa без
+      # находок вычищена подъёмом зависимостей (multipart/dotenv/click+typer,
+      # 2026-07-31 — fastapi 0.141/starlette 1.3.1); осознанный остаток (ecdsa без
       # апстрим-фикса, dev-only pytest/black) принят записями ``tool: pip-audit``
       # в .github/security-exceptions.yml — их валидирует (и валит по сроку)
       # job security-exceptions, а сюда они попадают как --ignore-vuln через

@@ -896,6 +896,16 @@
 
 ---
 
+## Last Agent Handoff (2026-07-31, SEC-64.1: ПОДЪЁМ fastapi 0.141.1 / starlette 1.3.1 — ветка feat/sec64-fastapi-starlette-bump)
+
+- **Дата:** 2026-07-31, та же сессия (PR #832 и #833 влиты). «Продолжай по ТЗ» → ближайший по сроку долг: блок starlette (7 исключений pip-audit + trivy CVE-2025-62727, срок 2026-08-31).
+- **Сделано:** fastapi 0.115.4→0.141.1, starlette пин `>=0.40,<0.42` → `==1.3.1`. Сюрприз разрешения зависимостей: единственный конфликт — dev-инструмент `schemathesis` (3.28 пинит starlette<1; латest 4.24 требует pytest 9 → взят 4.10.2, последний с pytest 8; в тестах schemathesis напрямую НЕ используется — только защитный шим в sitecustomize.py, совместимый с обеими линейками). httpx 0.27.2 / pydantic 2.9.2 / uvicorn не тронуты. 8 записей исключений удалены (закрыты по существу); подчищены комментарии в ci.yml / security-exceptions.yml / DEPENDENCY_AUDIT.md / матрице.
+- **Верификация:** чистое uv-окружение собирается; pip-audit: из блока starlette не осталось ничего (остаток = 4 принятых dev-записи, гейт «…, 4 ignored» exit 0); smoke `app.main:app` поднимается, middleware-цепочка жива. **PG db-гейт ЗЕЛЁНЫЙ** (upgrade heads + round-trip + enum-parity, 9 passed). **OpenAPI-контракт НЕ изменился** (930 операций / 794 схемы, ratchet зелёный). Полный suite: 105 падений в `-n auto`-прогоне → серийный перегон: 98 — перегрузочные 504-флейки, **реальных 3** — `_IncludedRouter` без `.path` (fastapi 0.141 сделал include_router ленивым) в `backend/tests/test_route_group_registry.py` и `tests/test_api_app_factory.py`; починены переходом на `fastapi.routing.iter_route_contexts` (даёт эффективные path/methods/endpoint). Попутно усилен тест коллизий маршрутов: он проходил ВХОЛОСТУЮ на `getattr(route,'path','')` (0 маршрутов собрано) — добавлен гард `api_v1_routes > 500`. Оставшиеся 4 (`test_rls_runtime_role_guard` ×2, `test_core_i18n` locale, `test_files_upload` clamav) — порядкозависимые, падают тем же батчем и на СТАРОМ fastapi → предсуществующие, вне скоупа.
+- **Грабля smoke-запуска вне pytest:** в worktree-`.env` значения SECRET_KEY/S3_* ПУСТЫЕ (тестам их подставляет test_env_defaults через sitecustomize) — для ручного boot задавать заглушки в env инлайн.
+- **Next (точный шаг):** остаток долга — только dev-мажоры (pytest 9 + schemathesis 4.24, black 26, vite 8, vitest 4, eslint-цепочка; сроки исключений 2026-09-30). Либо следующий хвост Phase 16 по матрице (SEC-63 привязка вебхуков/ключей к модулям, SEC-66/67 остатки), либо Phase 11 (ценность) по приоритету roadmap.
+
+---
+
 ## Last Agent Handoff (2026-07-31, SEC-64.1 ФИНАЛ: npm audit → БЛОКИРУЮЩИЙ ГЕЙТ — ветка feat/sec64-npm-audit-gate)
 
 - **Дата:** 2026-07-31, продолжение вчерашнего среза (PR #832 pip-audit влит). «Продолжай по ТЗ» → следующий шаг плана `docs/security/DEPENDENCY_AUDIT.md` — npm audit из observe-mode в блокирующий. **План DEPENDENCY_AUDIT.md выполнен целиком** (шаги 1/3/4 по обоим инструментам).

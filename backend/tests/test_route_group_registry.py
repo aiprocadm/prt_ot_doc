@@ -1,16 +1,25 @@
+from fastapi.routing import iter_route_contexts
+
 from app.api.app import create_app
 from app.api.v1.route_groups import create_public_router, create_tenant_router
 from app.core.config import Settings
 from app.models.document_core import PipelineRun, Template
 from app.models.tenanting import TenantQuota
 
+# fastapi>=0.141: include_router кладёт в .routes ленивые _IncludedRouter-прокси
+# без .path; развёрнутый список с эффективными путями даёт iter_route_contexts.
+
+
+def _paths(router) -> set:  # noqa: ANN001
+    return {route.path for route in iter_route_contexts(router.routes)}
+
 
 def test_route_group_registry_preserves_core_public_and_tenant_paths() -> None:
     public_router = create_public_router()
     tenant_router = create_tenant_router()
 
-    public_paths = {route.path for route in public_router.routes}
-    tenant_paths = {route.path for route in tenant_router.routes}
+    public_paths = _paths(public_router)
+    tenant_paths = _paths(tenant_router)
 
     assert "/auth/login" in public_paths
     assert "/portal/packages" in public_paths
@@ -41,12 +50,19 @@ def test_runtime_routes_do_not_collide_on_critical_path_method_pairs() -> None:
     app = create_app(settings)
 
     seen: dict[tuple[str, tuple[str, ...]], list[str]] = {}
-    for route in app.routes:
-        path = getattr(route, "path", "")
-        methods = tuple(sorted((getattr(route, "methods", set()) or set()) - {"HEAD", "OPTIONS"}))
+    api_v1_routes = 0
+    for route in iter_route_contexts(app.routes):
+        path = route.path or ""
+        methods = tuple(sorted((route.methods or set()) - {"HEAD", "OPTIONS"}))
         if not path.startswith("/api/v1") or not methods:
             continue
+        api_v1_routes += 1
         seen.setdefault((path, methods), []).append(route.endpoint.__module__)
+
+    # Гард против «вакуумного» прохода: если перечисление маршрутов снова
+    # сломается (как на getattr(route, "path", "") при ленивых include),
+    # тест обязан упасть здесь, а не пройти на пустом seen.
+    assert api_v1_routes > 500
 
     critical_keys = {
         ("/api/v1/prescriptions", ("GET",)),
@@ -60,9 +76,7 @@ def test_runtime_routes_do_not_collide_on_critical_path_method_pairs() -> None:
     }
 
     collisions = {
-        key: modules
-        for key, modules in seen.items()
-        if key in critical_keys and len(modules) > 1
+        key: modules for key, modules in seen.items() if key in critical_keys and len(modules) > 1
     }
 
     assert collisions == {}
@@ -72,7 +86,9 @@ def test_files_modern_and_legacy_routers_registered_under_operations_group() -> 
     from app.api.v1.route_groups import describe_router_groups
 
     operations_group = describe_router_groups()["operations"]
-    files_registrations = [entry for entry in operations_group if entry["prefix"] in {"/files", "/files-legacy"}]
+    files_registrations = [
+        entry for entry in operations_group if entry["prefix"] in {"/files", "/files-legacy"}
+    ]
 
     assert len(files_registrations) == 2
     tag_sets = {tuple(entry["tags"]) for entry in files_registrations}
@@ -107,7 +123,7 @@ def test_files_router_registration_switches_with_legacy_flag(monkeypatch) -> Non
         lambda: SimpleNamespace(enable_files_legacy_routes=False),
     )
     tenant_router_without_legacy = route_groups.create_tenant_router()
-    tenant_paths_without_legacy = {route.path for route in tenant_router_without_legacy.routes}
+    tenant_paths_without_legacy = _paths(tenant_router_without_legacy)
     assert "/files/presign-upload" in tenant_paths_without_legacy
     assert "/files-legacy/upload" not in tenant_paths_without_legacy
 
@@ -117,7 +133,7 @@ def test_files_router_registration_switches_with_legacy_flag(monkeypatch) -> Non
         lambda: SimpleNamespace(enable_files_legacy_routes=True),
     )
     tenant_router_with_legacy = route_groups.create_tenant_router()
-    tenant_paths_with_legacy = {route.path for route in tenant_router_with_legacy.routes}
+    tenant_paths_with_legacy = _paths(tenant_router_with_legacy)
     assert "/files/presign-upload" in tenant_paths_with_legacy
     assert "/files-legacy/upload" in tenant_paths_with_legacy
     assert "/files-legacy/{file_id}/download" in tenant_paths_with_legacy
