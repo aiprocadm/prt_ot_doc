@@ -1,5 +1,6 @@
 """Convenient re-exports for ORM models used across the service."""
 
+from app.models.api_deprecation_usage import ApiDeprecationUsage
 from app.models.calendar_views import SavedCalendarView
 from app.models.committees import (
     Committee,

@@ -26,6 +26,7 @@ __all__ = [
     "API_DEPRECATIONS",
     "ApiDeprecation",
     "deprecation_for_path",
+    "deprecation_for_prefix",
 ]
 
 
@@ -59,6 +60,15 @@ API_DEPRECATIONS: tuple[ApiDeprecation, ...] = (
         successor="/api/v1/files",
     ),
 )
+
+
+def deprecation_for_prefix(path_prefix: str) -> ApiDeprecation | None:
+    """Запись реестра по ТОЧНОМУ префиксу (ключ хранения в учёте использования)."""
+
+    for entry in API_DEPRECATIONS:
+        if entry.path_prefix == path_prefix:
+            return entry
+    return None
 
 
 def deprecation_for_path(path: str) -> ApiDeprecation | None:

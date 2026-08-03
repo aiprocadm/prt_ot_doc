@@ -270,3 +270,30 @@ async def _prescriptions_escalate_tick() -> int:
                 await session.commit()
                 processed += len(overdue)
     return processed
+
+
+@celery_app.task(
+    name="api_deprecation.notify.tick",
+    autoretry_for=RETRYABLE_EXCEPTIONS,
+    retry_backoff=True,
+    retry_jitter=True,
+    max_retries=5,
+)
+def api_deprecation_notify_tick() -> int:
+    return _run_coroutine(_api_deprecation_notify_tick())
+
+
+async def _api_deprecation_notify_tick() -> int:
+    # imported lazily to avoid import cycles at task-module load time
+    from app.services.api_deprecation_notify import notify_deprecated_usages
+
+    now = datetime.now(tz=timezone.utc)
+    # rls_bypass: тик пишет outbox-события РАЗНЫМ арендаторам и читает
+    # платформенную таблицу использования — как _fleet_session у платформенных
+    # ручек. Авторизации здесь нет и не нужно: это beat-задача, не запрос.
+    async with AsyncSessionLocal(
+        tenant="public", include_public=False, create_schema=False, rls_bypass=True
+    ) as session:
+        notified = await notify_deprecated_usages(session, now=now)
+        await session.commit()
+    return notified

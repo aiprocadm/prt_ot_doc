@@ -69,12 +69,14 @@ from app.tasks.document_jobs import (  # noqa: E402, F401
 # Importing domain_ticks registers its tasks with Celery and re-exposes them as
 # ``app.tasks.*`` (via app.tasks.__init__ __getattr__). noqa F401: re-export only.
 from app.tasks.domain_ticks import (  # noqa: E402, F401
+    _api_deprecation_notify_tick,
     _contractors_documents_tick,
     _contractors_readiness_tick,
     _medical_contingent_tick,
     _permits_expiry_tick,
     _ppe_expiry_tick,
     _prescriptions_escalate_tick,
+    api_deprecation_notify_tick,
     contractors_documents_tick,
     contractors_readiness_tick,
     medical_contingent_tick,

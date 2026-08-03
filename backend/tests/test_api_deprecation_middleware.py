@@ -105,6 +105,35 @@ class TestHeaders:
         assert response.headers["link"] == '<custom>; rel="self"'
 
 
+class TestUsageRecording:
+    """Срез-3: персистентный учёт «кто ещё на старой версии» (только 2xx)."""
+
+    def test_2xx_hit_is_noted_with_tenant_and_prefix(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        noted: list[tuple[str, str]] = []
+        monkeypatch.setattr(
+            mw_module,
+            "note_deprecated_hit",
+            lambda tenant_slug, path_prefix: noted.append((tenant_slug, path_prefix)),
+        )
+        client.get("/api/v1/files-legacy/list", headers={"X-Tenant": "demo"})
+        assert noted == [("demo", "/api/v1/files-legacy")]
+
+    def test_4xx_and_modern_paths_are_not_recorded(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        noted: list[tuple[str, str]] = []
+        monkeypatch.setattr(
+            mw_module,
+            "note_deprecated_hit",
+            lambda tenant_slug, path_prefix: noted.append((tenant_slug, path_prefix)),
+        )
+        client.get("/api/v1/files-legacy/denied", headers={"X-Tenant": "demo"})  # 403
+        client.get("/api/v1/files/list", headers={"X-Tenant": "demo"})  # живой путь
+        assert noted == []
+
+
 class TestMonitoring:
     def test_calls_are_counted_by_prefix_and_status_class(self, client: TestClient) -> None:
         """Разрез по статусу обязателен: живая интеграция = 2xx, сканерный шум

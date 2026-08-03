@@ -926,6 +926,16 @@
 
 ---
 
+## Last Agent Handoff (2026-08-03/2, OPS-73 СРЕЗ-3: УВЕДОМЛЕНИЯ ПОТРЕБИТЕЛЯМ УСТАРЕВШИХ API — ветка feat/ops73-srez3-deprecation-usage)
+
+- **Дата:** 2026-08-03, вторая волна дня. «Продолжай по ТЗ» → сверка §0.2 → OPS-73 срез-3 (первый в очереди хвостов). Сверка: тесты строки OPS-73 24/24 зелёные; **найден красный хвост своей же волны среза-4** — `committee_meeting_invitation` без RLS (сторож `test_rls_coverage` красный на main) — закрыт ЭТОЙ волной до новой работы (миграция `20260803_sec65_rls_committee_invitation` + реестр).
+- **Сделано (TDD, детали в CHANGELOG 2026-08-03/2):** учёт `api_deprecation_usage` (только 2xx, батч-рекордер), событие `api.deprecation_notice` + beat-тик `api_deprecation.notify.tick` (троттлинг 30 дней, идемпотентность по месяцу), обзор `GET /admin/deprecations` (гейт управляющего арендатора `_require_managing_admin`). Матрица OPS-73 дополнена (остаётся: снятие files-legacy после sunset, конверты v2).
+- **Верификация:** срезовый регресс 52 зелёных (usage/recorder/notify/admin/migration-pin + контракт вебхуков + breaking-changes + route-registry + rls_coverage); PG-гейт `-m db` 35 зелёных (обе миграции волны); ARCH-3 clean; module-gates зелёный; OpenAPI baseline 933/796→934/799 (аддитив); **Celery-базлайн пере-снят 32→35** — кроме нового тика в дрейфе были `imports.run_batch` и `outbox.dispatch_all` (прошлые волны не пере-сняли).
+- **Грабли волны:** (1) новая tenant-таблица без записи в RLS-реестре = красный сторож на main — вооружение RLS обязано ехать В ТОМ ЖЕ PR, что и миграция таблицы. (2) фикстура `sessionmaker` живёт в `tests/conftest.py` — тестам из `backend/tests/` недоступна. (3) Пин «нет tenant_id» по подстроке ловит слово в докстринге — пинить `sa.Column("tenant_id"`. (4) Новый EventType обязан сразу получить payload-модель в `_PAYLOADS` — контракт вебхуков валит тип без модели.
+- **Next (точный шаг):** очередь хвостов: OPS-71 (автосоздание справочников / потоковый разбор), SEC-68 (обмен токена из query на сеансовый — ломает разосланные ссылки, согласовать с владельцем), SEC-64 sandbox парсинга; затем BIZ-49 Managed Clients. По OPS-73 остались: снятие files-legacy (после sunset + нулевого 2xx-трафика — теперь виден в /admin/deprecations), конверты v2.
+
+---
+
 ## Last Agent Handoff (2026-08-03, P10-01 КОМИТЕТЫ СРЕЗ-4 — КОНТУР ЗАКРЫТ — ветка feat/p10-01-committees-srez4)
 
 - **Дата:** 2026-08-03. «Продолжай по ТЗ» → сверка §0.2 → выбран хвост TZ-B17 (комитеты срез-4). Сверка: строка B17 подтверждена (13/13 тестов срезов 2–3 зелёные, evidence-файлы на месте); spot-check SEC-63/64, OPS-73 — файлы на месте; «Next» handoff'а 2026-07-30 уже выполнен прошлыми волнами (npm audit гейт = PR #833, fastapi/starlette bump = PR #834 — проверено по requirements.txt).

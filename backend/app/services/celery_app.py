@@ -72,6 +72,10 @@ celery_app.conf.beat_schedule = {
         "task": "prescriptions.escalate.tick",
         "schedule": crontab(hour=2, minute=0),
     },
+    "api-deprecation-notify-daily": {
+        "task": "api_deprecation.notify.tick",
+        "schedule": crontab(hour=4, minute=30),
+    },
     "medical-contingent-daily": {
         "task": "medical.contingent.tick",
         "schedule": crontab(hour=3, minute=0),

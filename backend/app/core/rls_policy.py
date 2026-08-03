@@ -62,6 +62,7 @@ RLS_ENABLED_TABLES: frozenset[str] = frozenset(
         "committee_decision_vote",
         "committee_meeting",
         "committee_meeting_attendance",
+        "committee_meeting_invitation",
         "committee_member",
         "companies",
         "company",

@@ -41,6 +41,9 @@ class EventType(str, enum.Enum):
     PEP_SIGNED = "PEPSigned"
     PEP_DECLINED = "PEPDeclined"
     RULE_TRIGGERED = "rule.triggered"
+    # OPS-73 разд. 73.2 «уведомления потребителям API»: арендатор всё ещё
+    # ходит в устаревшую поверхность — событие в его вебхуки.
+    API_DEPRECATION_NOTICE = "api.deprecation_notice"
 
 
 class BaseEventPayload(BaseModel):
@@ -187,6 +190,17 @@ class InternalEventPayload(BaseEventPayload):
     metadata: Mapping[str, Any] = Field(default_factory=dict)
 
 
+class ApiDeprecationNoticePayload(BaseEventPayload):
+    """Разд. 73.2: машинное уведомление «вы на устаревшей поверхности»."""
+
+    path_prefix: str
+    successor: str
+    sunset: str  # ISO-дата отключения
+    docs_url: str
+    hits_2xx: int
+    last_seen_at: str  # ISO-момент последнего живого обращения
+
+
 class IncidentCreatedPayload(BaseEventPayload):
     incident_id: str
     company_id: str
@@ -286,6 +300,7 @@ _PAYLOADS: dict[EventType, type[BaseEventPayload]] = {
     EventType.CONTRACTOR_DOCUMENT_EXPIRING: InternalEventPayload,
     EventType.CONTRACTOR_DOCUMENT_EXPIRED: InternalEventPayload,
     EventType.RULE_TRIGGERED: RuleTriggeredPayload,
+    EventType.API_DEPRECATION_NOTICE: ApiDeprecationNoticePayload,
 }
 
 
