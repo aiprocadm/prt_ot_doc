@@ -7,8 +7,9 @@
   вычищена подъёмом `python-multipart` 0.0.31 / `python-dotenv` 1.2.2 /
   `click` 8.3.3 (+`typer` 0.27.0 — typer<0.16 ломается на click>=8.2); осознанный
   остаток принят записями `tool: pip-audit` в `.github/security-exceptions.yml`
-  (starlette ×7 — ждёт отдельного PR подъёма fastapi; ecdsa — апстрим-фикса нет;
-  pytest 9 и black 26 — dev-only мажоры отдельными PR). Записи имеют срок
+  (ecdsa — апстрим-фикса нет; pytest 9 и black 26 — dev-only мажоры отдельными
+  PR; блок starlette ×7 СНЯТ 2026-07-31 подъёмом fastapi 0.141.1 /
+  starlette 1.3.1). Записи имеют срок
   `expires_on`, просрочку валит `check_security_exceptions.py`; в команду
   pip-audit они попадают как `--ignore-vuln` через
   `scripts/ci/render_pip_audit_ignores.py`. Новая advisory без записи = красный CI.
@@ -41,23 +42,24 @@
 Ценность observe-mode не нулевая: отчёт печатается в summary каждого прогона, поэтому
 **новая** уязвимость видна сразу, а не всплывает на аудите перед релизом.
 
-## Что мешает закрыть долг прямо сейчас
+## Что мешало закрыть долг сразу (историческая справка)
 
-Главный блокер — `starlette`: путь от `0.41.3` к версиям без advisories ведёт через
-мажорные `1.x`, а это ломающие изменения в слое middleware (проект держит собственные
-`SecurityHeadersMiddleware`, `TenantMiddleware`, `ObservabilityMiddleware`, а также
-зависит от `fastapi`, который тянет свой диапазон starlette). Такой апгрейд — отдельная
-задача с прогоном всего набора, а не строчка в security-PR.
+Главным блокером был `starlette`: путь от `0.41.3` к версиям без advisories вёл через
+мажорные `1.x` при `fastapi`, пинившем `<0.42.0`. **Снято 2026-07-31:** подняты
+`fastapi` 0.141.1 + `starlette` 1.3.1 (потребовался только бамп dev-инструмента
+`schemathesis` 3.28→4.10.2, пинившего `starlette<1`; httpx/pydantic не тронуты),
+7 записей pip-audit + trivy `CVE-2025-62727` из исключений удалены.
 
-`python-multipart` и `python-dotenv` поднимаются малой кровью; `pytest` и `ecdsa` —
-dev/транзитивные.
+`python-multipart` и `python-dotenv` поднялись малой кровью ещё 2026-07-30;
+`pytest` и `ecdsa` — dev/транзитивные.
 
 ## Порядок перевода в блокирующие
 
 1. ~~Поднять то, что обновляется без ломающих изменений~~ — **сделано 2026-07-30**:
    `python-multipart` 0.0.31, `python-dotenv` 1.2.2, `click` 8.3.3 + `typer` 0.27.0.
-2. Отдельной задачей — `fastapi`/`starlette` до версий без advisories, с полным
-   прогоном набора и db-гейта. Туда же (отдельными PR): `pytest` 9.x
+2. ~~Отдельной задачей — `fastapi`/`starlette` до версий без advisories~~ —
+   **сделано 2026-07-31**: fastapi 0.141.1 + starlette 1.3.1 (+schemathesis
+   4.10.2), полный прогон набора и db-гейта. Остаются (отдельными PR): `pytest` 9.x
    (тянет совместимость pytest-asyncio/cov/timeout/xdist) и `black` 26.x
    (меняет стиль — потребует переформатирования под `make lint`).
 3. ~~Для остатка — записи в `.github/security-exceptions.yml`~~ — **сделано**:
@@ -66,8 +68,9 @@ dev/транзитивные.
 4. Убрать `continue-on-error`: у `pip-audit` — **сделано** (шаг «pip-audit gate»
    в `ci.yml`); у `npm audit` — **сделано 2026-07-31** (шаг «npm audit gate» +
    `check_npm_audit.py`). Весь план выполнен; остаток долга — только мажорные
-   бампы из п. 2 (fastapi/starlette, pytest 9, black 26, vite 8, vitest 4,
-   eslint-цепочка), каждый снимает свои записи из security-exceptions.yml.
+   бампы из п. 2 (pytest 9, black 26, vite 8, vitest 4, eslint-цепочка;
+   fastapi/starlette закрыт 2026-07-31), каждый снимает свои записи из
+   security-exceptions.yml.
 
 ## Как проверить локально
 

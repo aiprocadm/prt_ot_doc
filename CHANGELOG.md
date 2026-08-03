@@ -1,5 +1,26 @@
 # CHANGELOG
 
+## 2026-07-31 (feat/sec64-fastapi-starlette-bump — SEC-64.1: подъём fastapi/starlette, снят последний runtime-блок advisories)
+
+### Security
+- `fastapi` 0.115.4 → **0.141.1**, `starlette` 0.41.3 → **1.3.1**: закрыт весь
+  блок PYSEC-2026-161/248/249/1941/1942/2280/2281 (включая Range-header DoS,
+  принятый ранее как trivy CVE-2025-62727) — 8 записей удалены из
+  `.github/security-exceptions.yml` по существу, а не по сроку.
+- Сопутствующий бамп только один: dev-инструмент `schemathesis` 3.28.0 → 4.10.2
+  (пинил `starlette<1`; в тестах напрямую не используется — sitecustomize-шим
+  совместим с обеими линейками; 4.10.2 — последняя с pytest 8). `httpx`,
+  `pydantic`, `uvicorn` и весь остальной набор не тронуты.
+
+### Tests
+- fastapi 0.141 сделал `include_router` ленивым: в `.routes` лежат
+  `_IncludedRouter`-прокси без `.path`. Тесты реестра маршрутов переведены на
+  `fastapi.routing.iter_route_contexts` (эффективные path/methods/endpoint).
+- Тест коллизий маршрутов проходил вхолостую на `getattr(route, "path", "")`
+  (собирал 0 маршрутов) — добавлен гард `api_v1_routes > 500`.
+- OpenAPI-контракт после бампа НЕ изменился (ratchet: 930 операций / 794 схемы);
+  PG db-гейт зелёный.
+
 ## 2026-07-31 (feat/sec64-npm-audit-gate — SEC-64.1: npm audit переведён в блокирующий гейт; план DEPENDENCY_AUDIT.md выполнен целиком)
 
 ### Security

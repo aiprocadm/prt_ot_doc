@@ -78,4 +78,11 @@ async def test_create_app_configures_middlewares_and_routes() -> None:
         assert metrics.headers["content-type"].startswith("text/plain")
 
     # Ensure router from v1 is registered by checking one known route prefix.
-    assert any(route.path.startswith(settings.api_v1_prefix) for route in app.routes)
+    # fastapi>=0.141: app.routes держит ленивые _IncludedRouter без .path —
+    # эффективные пути даёт iter_route_contexts.
+    from fastapi.routing import iter_route_contexts
+
+    assert any(
+        (route.path or "").startswith(settings.api_v1_prefix)
+        for route in iter_route_contexts(app.routes)
+    )

@@ -11,7 +11,7 @@ celery==5.4.0
 click==8.3.3
 docxtpl==0.17.0
 email-validator==2.2.0
-fastapi==0.115.4
+fastapi==0.141.1
 httpx==0.27.2
 minio==7.2.10
 openpyxl==3.1.5
@@ -35,9 +35,9 @@ redis==5.0.3
 slowapi==0.1.9
 sqlalchemy==2.0.36
 # starlette: direct pin to override transitive (pulled by fastapi).
-# CVE-2024-47874 (HIGH, multipart/form-data DoS) fixed at 0.40.0.
-# fastapi 0.115.4 permits starlette in [0.40.0, 0.42.0).
-starlette>=0.40.0,<0.42.0
+# 1.3.1 закрывает весь блок PYSEC-2026-161/248/249/1941/1942/2280/2281
+# (см. снятые записи pip-audit в .github/security-exceptions.yml).
+starlette==1.3.1
 greenlet==3.4.0
 # typer: bumped alongside click (typer<0.16 breaks on click>=8.2).
 typer==0.27.0
