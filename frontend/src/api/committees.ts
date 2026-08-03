@@ -8,6 +8,7 @@ export interface Committee {
   name: string;
   description?: string | null;
   is_active: boolean;
+  quorum_threshold_pct?: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -91,6 +92,27 @@ export interface Attendance {
   person_id: string;
   present: boolean;
 }
+
+export interface Invitation {
+  id: string;
+  meeting_id: string;
+  person_id: string;
+  invited_at: string;
+}
+
+/**
+ * Клиентское зеркало правила кворума (срез-4): порог в процентах (включительно),
+ * без порога — строго больше половины.
+ */
+export const clientQuorum = (
+  presentCount: number,
+  membersTotal: number,
+  thresholdPct?: number | null,
+): boolean => {
+  if (membersTotal <= 0) return false;
+  if (thresholdPct == null) return presentCount * 2 > membersTotal;
+  return presentCount * 100 >= thresholdPct * membersTotal;
+};
 
 export type VoteChoice = "for" | "against" | "abstain";
 
@@ -180,8 +202,22 @@ export const committeesApi = {
     name: string;
     description?: string | null;
     is_active?: boolean;
+    quorum_threshold_pct?: number | null;
   }): Promise<Committee> {
     return (await apiClient.post<Committee>(base, payload)).data;
+  },
+
+  async updateCommittee(
+    id: string,
+    payload: {
+      kind?: string;
+      name?: string;
+      description?: string | null;
+      is_active?: boolean;
+      quorum_threshold_pct?: number | null;
+    },
+  ): Promise<Committee> {
+    return (await apiClient.patch<Committee>(`${base}/${id}`, payload)).data;
   },
 
   async addMember(
@@ -250,6 +286,37 @@ export const committeesApi = {
     return (
       await apiClient.put<Attendance[]>(`${base}/meetings/${meetingId}/attendance`, { items })
     ).data;
+  },
+
+  // ── Срез-4: приглашения + печатная форма протокола ────────────────────
+
+  async getInvitations(meetingId: string): Promise<Invitation[]> {
+    return (await apiClient.get<Invitation[]>(`${base}/meetings/${meetingId}/invitations`)).data;
+  },
+
+  async putInvitations(meetingId: string, personIds: string[]): Promise<Invitation[]> {
+    return (
+      await apiClient.put<Invitation[]>(`${base}/meetings/${meetingId}/invitations`, {
+        person_ids: personIds,
+      })
+    ).data;
+  },
+
+  async downloadProtocolPrint(
+    meetingId: string,
+    fmt: "docx" | "pdf",
+    nameHint?: string,
+  ): Promise<void> {
+    const { data } = await apiClient.get<Blob>(`${base}/meetings/${meetingId}/protocol/print`, {
+      params: { format: fmt },
+      responseType: "blob",
+    });
+    const url = URL.createObjectURL(data);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `committee-protocol-${nameHint ?? meetingId}.${fmt}`;
+    a.click();
+    URL.revokeObjectURL(url);
   },
 
   async holdMeeting(meetingId: string): Promise<Meeting> {

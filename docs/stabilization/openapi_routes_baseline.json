@@ -143,7 +143,9 @@
     "GET /api/v1/committees/kpi",
     "GET /api/v1/committees/meetings/{mid}",
     "GET /api/v1/committees/meetings/{mid}/attendance",
+    "GET /api/v1/committees/meetings/{mid}/invitations",
     "GET /api/v1/committees/meetings/{mid}/protocol",
+    "GET /api/v1/committees/meetings/{mid}/protocol/print",
     "GET /api/v1/committees/protocols",
     "GET /api/v1/committees/{cid}",
     "GET /api/v1/committees/{cid}/meetings",
@@ -921,6 +923,7 @@
     "POST /api/v1/workflow/versions/{version_id}/publish",
     "POST /api/v1/workplaces",
     "PUT /api/v1/committees/meetings/{mid}/attendance",
+    "PUT /api/v1/committees/meetings/{mid}/invitations",
     "PUT /api/v1/medical/hazards/{hazard_id}/factor",
     "PUT /api/v1/medical/psychiatric/positions/{position_id}/activities",
     "PUT /api/v1/notifications/notification-settings/me",
@@ -1335,6 +1338,7 @@
     "get_instance_api_v1_workflow_instances__instance_id__get",
     "get_integration_readiness_api_v1_integrations_readiness_get",
     "get_inventory_count_api_v1_ppe_stock_inventory_counts__count_id__get",
+    "get_invitations_api_v1_committees_meetings__mid__invitations_get",
     "get_invoice_api_v1_invoices__invoice_id__get",
     "get_issue_api_v1_ppe_issues__issue_id__get",
     "get_item_api_v1_ppe_items__item_id__get",
@@ -1661,6 +1665,7 @@
     "print_declaration_api_v1_sout__cid__declaration_print_get",
     "print_medical_referral_api_v1_medical_referrals__referral_id__print_get",
     "print_named_list_api_v1_medical_named_list_print_get",
+    "print_protocol_api_v1_committees_meetings__mid__protocol_print_get",
     "print_sout_card_api_v1_sout_workplaces__wid__card_print_get",
     "print_summary_sheet_api_v1_sout__cid__summary_print_get",
     "print_work_permit_endpoint_api_v1_work_permits__wp_id__print_get",
@@ -1680,6 +1685,7 @@
     "purge_plan_api_v1_offboarding_purge_plan_get",
     "purge_tenant_data_api_v1_offboarding_purge_post",
     "put_attendance_api_v1_committees_meetings__mid__attendance_put",
+    "put_invitations_api_v1_committees_meetings__mid__invitations_put",
     "put_person_sizes_api_v1_ppe_employees__person_id__sizes_put",
     "put_profile_api_v1_pipelines_profiles__profile_id__put",
     "put_settings_alias_api_v1_notifications_notification_settings_me_put",
@@ -2174,6 +2180,8 @@
     "InspectionUpdate",
     "InspectorReportDTO",
     "InspectorRequest",
+    "InvitationBulkUpdate",
+    "InvitationRead",
     "InvoiceCreate",
     "InvoicePage",
     "InvoiceRead",
@@ -3567,7 +3575,8 @@
       "kind": "CommitteeKind",
       "name": "string",
       "description": "null|string",
-      "is_active": "boolean"
+      "is_active": "boolean",
+      "quorum_threshold_pct": "integer|null"
     },
     "CommitteeKpiDto": {
       "committees_total": "integer",
@@ -3596,6 +3605,7 @@
       "name": "string",
       "description": "null|string",
       "is_active": "boolean",
+      "quorum_threshold_pct": "integer|null",
       "created_at": "string",
       "updated_at": "string"
     },
@@ -3603,7 +3613,8 @@
       "kind": "CommitteeKind|null",
       "name": "null|string",
       "description": "null|string",
-      "is_active": "boolean|null"
+      "is_active": "boolean|null",
+      "quorum_threshold_pct": "integer|null"
     },
     "CompanyCreate": {
       "name": "string",
@@ -4952,6 +4963,15 @@
     "InspectorRequest": {
       "available_variables": "null|object",
       "required_fields": "array|null"
+    },
+    "InvitationBulkUpdate": {
+      "person_ids": "array"
+    },
+    "InvitationRead": {
+      "id": "string",
+      "meeting_id": "string",
+      "person_id": "string",
+      "invited_at": "string"
     },
     "InvoiceCreate": {
       "contract_id": "string",
@@ -7968,7 +7988,9 @@
     "ValidationError": {
       "loc": "array",
       "msg": "string",
-      "type": "string"
+      "type": "string",
+      "input": "any",
+      "ctx": "object"
     },
     "ViolationRead": {
       "person_id": "string",

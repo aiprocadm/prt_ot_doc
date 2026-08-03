@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Annotated
+from typing import Annotated, Literal
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy import func, select
@@ -23,6 +24,7 @@ from app.core.tenant_validation import TenantContextValidator
 from app.domains.committees.kpi import CommitteeKpiService
 from app.domains.committees.lifecycle import (
     MeetingTransitionError,
+    ensure_can_invite,
     ensure_can_vote,
     ensure_meeting_held,
     is_quorum,
@@ -38,6 +40,7 @@ from app.models.committees import (
     CommitteeDecisionVote,
     CommitteeMeeting,
     CommitteeMeetingAttendance,
+    CommitteeMeetingInvitation,
     CommitteeMember,
     MeetingStatus,
 )
@@ -59,6 +62,8 @@ from app.schemas.committees import (
     DecisionTaskRead,
     DecisionTaskUpdate,
     DecisionVoteSummary,
+    InvitationBulkUpdate,
+    InvitationRead,
     MeetingCreate,
     MeetingPage,
     MeetingRead,
@@ -71,6 +76,10 @@ from app.schemas.committees import (
     ProtocolRead,
     VoteCreate,
     VoteRead,
+)
+from app.services.committee_protocol_print import (
+    PdfRendererUnavailable,
+    render_committee_protocol,
 )
 
 router = APIRouter(prefix="/committees", tags=["committees"])
@@ -421,6 +430,7 @@ async def create_committee(
         name=payload.name,
         description=payload.description,
         is_active=payload.is_active,
+        quorum_threshold_pct=payload.quorum_threshold_pct,
     )
     session.add(row)
     await session.flush()
@@ -629,9 +639,12 @@ async def update_meeting(
             validate_meeting_transition(row.status, MeetingStatus.HELD)
         except MeetingTransitionError as exc:
             raise _conflict(exc)
+        committee = await _get_committee(session, tenant, row.committee_id)
         members_total = await _count_members(session, tenant, row.committee_id)
         present_count = await _count_present(session, tenant, mid)
-        if not is_quorum(members_total, present_count):
+        if not is_quorum(
+            members_total, present_count, threshold_pct=committee.quorum_threshold_pct
+        ):
             raise _err(
                 "COMMITTEE_QUORUM_NOT_MET",
                 "Quorum not met",
@@ -764,6 +777,81 @@ async def put_attendance(
     return await get_attendance(mid=mid, tenant=tenant, session=session, access=access)
 
 
+# --- Invitations (срез-4) ---
+@router.get("/meetings/{mid}/invitations", response_model=list[InvitationRead])
+async def get_invitations(
+    mid: str, tenant: TenantDep, session: SessionDep, access: Access
+) -> list[InvitationRead]:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    await _require_committees_enabled(session, tenant)
+    await _get_meeting(session, tenant, mid)
+    rows = (
+        (
+            await session.execute(
+                select(CommitteeMeetingInvitation).where(
+                    CommitteeMeetingInvitation.meeting_id == mid,
+                    CommitteeMeetingInvitation.tenant_id == tenant.id,
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return [InvitationRead.model_validate(r, from_attributes=True) for r in rows]
+
+
+@router.put("/meetings/{mid}/invitations", response_model=list[InvitationRead])
+async def put_invitations(
+    mid: str,
+    payload: InvitationBulkUpdate,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: Access,
+) -> list[InvitationRead]:
+    """Заменить набор приглашённых (PUT-семантика, как у attendance).
+
+    В отличие от присутствия, приглашения НЕ ограничены членами комитета:
+    на заседание зовут и внешних участников (эксперт, докладчик).
+    """
+    TenantContextValidator.ensure_tenant_context(tenant)
+    await _require_committees_enabled(session, tenant)
+    meeting = await _get_meeting(session, tenant, mid)
+    try:
+        ensure_can_invite(meeting.status)
+    except MeetingTransitionError as exc:
+        raise _conflict(exc)
+    # Дедуп payload (повтор person_id → одна строка, не IntegrityError).
+    desired = list(dict.fromkeys(payload.person_ids))
+    existing = (
+        (
+            await session.execute(
+                select(CommitteeMeetingInvitation).where(
+                    CommitteeMeetingInvitation.meeting_id == mid,
+                    CommitteeMeetingInvitation.tenant_id == tenant.id,
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    by_person = {r.person_id: r for r in existing}
+    for person_id in desired:
+        if person_id not in by_person:
+            session.add(
+                CommitteeMeetingInvitation(
+                    tenant_id=tenant.id,
+                    meeting_id=mid,
+                    person_id=person_id,
+                    invited_at=datetime.now(tz=timezone.utc),
+                )
+            )
+    for person_id, row in by_person.items():
+        if person_id not in desired:
+            await session.delete(row)
+    await session.flush()
+    return await get_invitations(mid=mid, tenant=tenant, session=session, access=access)
+
+
 @router.post(
     "/meetings/{mid}/agenda-items",
     response_model=AgendaItemRead,
@@ -812,6 +900,40 @@ async def create_decision(
     await session.flush()
     await session.refresh(row)
     return DecisionRead.model_validate(row, from_attributes=True)
+
+
+@router.get("/meetings/{mid}/protocol/print")
+async def print_protocol(
+    mid: str,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: Access,
+    fmt: Literal["docx", "pdf"] = Query("docx", alias="format"),
+) -> Response:
+    """Печатная форма протокола (срез-4). Только для проведённого заседания."""
+    TenantContextValidator.ensure_tenant_context(tenant)
+    await _require_committees_enabled(session, tenant)
+    meeting = await _get_meeting(session, tenant, mid)
+    try:
+        ensure_meeting_held(meeting.status)
+    except MeetingTransitionError as exc:
+        raise _conflict(exc)
+    try:
+        rendered = await render_committee_protocol(
+            session, tenant_id=tenant.id, meeting=meeting, fmt=fmt
+        )
+    except PdfRendererUnavailable:
+        raise _err(
+            "PDF_RENDERER_UNAVAILABLE",
+            "PDF converter is unavailable",
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
+    encoded_name = quote(rendered.filename, safe="")
+    return Response(
+        content=rendered.content,
+        media_type=rendered.media_type,
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{encoded_name}"},
+    )
 
 
 @router.get("/meetings/{mid}/protocol", response_model=ProtocolRead)
