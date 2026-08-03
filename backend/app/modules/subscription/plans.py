@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 __all__ = [
     "DEFAULT_PLAN_CODE",
     "FEATURE_CATALOG",
+    "MODULE_EVENT_TYPES",
     "PLANS",
     "SubscriptionPlan",
     "plan_code_for_features",
@@ -35,6 +36,37 @@ FEATURE_CATALOG: dict[str, str] = {
     "sout": "СОУТ",
     "rules_engine": "Правила автоматизации",
     "warehouse": "Склад СИЗ",
+}
+
+# SEC-63 (разд. 63.3), риск «осиротевшие доступы»: типы событий, которые порождает
+# ТОЛЬКО данный модуль (по фактическим точкам испускания, не по названию). При
+# отключении модуля apply_plan убирает эти типы из вебхук-подписок арендатора и
+# гасит опустевшие эндпоинты (services/tenants/subscription.py). Правила ведения:
+#
+# * каждый код каталога обязан иметь запись — хотя бы пустую (полноту держит
+#   tests/test_module_event_prune.py, значения сверяются с EventType);
+# * событие может числиться максимум за ОДНИМ модулем; сквозные события ядра
+#   (DocumentGenerated, PPEIssued, TrainingCompleted, …) сюда не входят — их
+#   порождает и базовый контур, отключение модуля не должно рвать их доставку;
+# * PPEWrittenOff/PPEReplacementDue НЕ у warehouse: их испускает базовый цикл
+#   выдачи СИЗ (routes/ppe.py::writeoff, services/ppe_notifications.py), склад
+#   лишь списывает остатки.
+MODULE_EVENT_TYPES: dict[str, frozenset[str]] = {
+    "committees": frozenset(),
+    "contractors": frozenset(
+        {
+            "contractor.readiness_blocked",
+            "contractor.readiness_warning",
+            "contractor.document_expiring",
+            "contractor.document_expired",
+        }
+    ),
+    "medical": frozenset({"MedicalExamRecorded", "PersonSuspended", "PersonReinstated"}),
+    "report_builder": frozenset(),
+    "budget": frozenset(),
+    "sout": frozenset(),
+    "rules_engine": frozenset({"rule.triggered"}),
+    "warehouse": frozenset(),
 }
 
 

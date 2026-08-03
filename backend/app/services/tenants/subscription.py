@@ -20,9 +20,15 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import AsyncSessionLocal
+from app.models.approval_runtime import WebhookEndpoint
 from app.models.feature import Feature, FeatureEnablement
 from app.models.models import Tenant, TenantQuota
-from app.modules.subscription.plans import FEATURE_CATALOG, SubscriptionPlan
+from app.models.tenant_billing import WebhookSubscription
+from app.modules.subscription.plans import (
+    FEATURE_CATALOG,
+    MODULE_EVENT_TYPES,
+    SubscriptionPlan,
+)
 
 __all__ = ["apply_plan", "read_enabled_feature_codes"]
 
@@ -64,6 +70,67 @@ async def read_enabled_feature_codes(target: Tenant) -> set[str]:
         return set()
 
 
+async def _prune_module_webhooks(
+    target_session: AsyncSession, target: Tenant, plan: SubscriptionPlan
+) -> None:
+    """SEC-63 (разд. 63.3): отключение модуля деактивирует связанные вебхуки.
+
+    Для каждого кода каталога, которого нет в ``plan.features``, события из
+    ``MODULE_EVENT_TYPES`` убираются из ``subscribed_events`` эндпоинтов
+    арендатора; эндпоинт, у которого событий не осталось, гасится — пустой
+    список у диспетчера значит «все события», так что оставить его включённым
+    значило бы расширить доставку. Подписки ``WebhookSubscription`` на события
+    модуля выключаются (``enabled=False``), а не удаляются: остаётся след для
+    аудита и возможность осознанного возврата. Обратного автоматического
+    включения при апгрейде нет — платформа не помнит, чьи подписки гасила.
+    Прунинг идемпотентен: повторное применение того же плана — no-op.
+    """
+
+    removed_events: set[str] = set()
+    for code in FEATURE_CATALOG:
+        if code not in plan.features:
+            removed_events |= MODULE_EVENT_TYPES[code]
+    if not removed_events:
+        return
+
+    endpoints = (
+        (
+            await target_session.execute(
+                select(WebhookEndpoint).where(WebhookEndpoint.tenant_id == target.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    for endpoint in endpoints:
+        subscribed = list(endpoint.subscribed_events or [])
+        if not subscribed:
+            # Пустой список = «все события»: тут нечего убирать, и гасить такой
+            # эндпоинт нельзя — он обслуживает и события оставшихся модулей.
+            continue
+        kept = [event for event in subscribed if event not in removed_events]
+        if kept == subscribed:
+            continue
+        endpoint.subscribed_events = kept
+        if not kept:
+            endpoint.is_enabled = False
+
+    subscriptions = (
+        (
+            await target_session.execute(
+                select(WebhookSubscription).where(
+                    WebhookSubscription.tenant_id == target.id,
+                    WebhookSubscription.event_type.in_(sorted(removed_events)),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    for subscription in subscriptions:
+        subscription.enabled = False
+
+
 async def apply_plan(session: AsyncSession, target: Tenant, plan: SubscriptionPlan) -> None:
     """Switch ``target`` onto ``plan``: rewrite its feature flags and its quota preset.
 
@@ -97,6 +164,7 @@ async def apply_plan(session: AsyncSession, target: Tenant, plan: SubscriptionPl
                 )
             else:
                 enablement.on = desired
+        await _prune_module_webhooks(target_session, target, plan)
         await target_session.commit()
 
     quota = (
