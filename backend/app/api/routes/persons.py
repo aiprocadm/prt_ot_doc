@@ -173,14 +173,15 @@ async def list_persons_endpoint(
     correlation_id: str = Depends(get_correlation_id),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
+    q: str | None = Query(None, max_length=200, description="Поиск по ФИО / таб. номеру"),
 ) -> PersonPage | Response:
     TenantContextValidator.ensure_tenant_context(tenant)
 
-    persons, total = await list_persons(session, tenant.id, limit=limit, offset=offset)
+    persons, total = await list_persons(session, tenant.id, limit=limit, offset=offset, q=q)
     etag = compute_list_etag(
         tenant_id=str(tenant.id),
         items=persons,
-        scalars=[("total", total), ("limit", limit), ("offset", offset)],
+        scalars=[("total", total), ("limit", limit), ("offset", offset), ("q", q or "")],
     )
     apply_etag_response_headers(response, etag)
     if request.headers.get("if-none-match") == etag:

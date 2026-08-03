@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from pydantic import computed_field
+from pydantic import Field, computed_field
 
 from app.models.committees import (
     CommitteeKind,
@@ -22,6 +22,8 @@ class CommitteeCreate(BaseSchema):
     name: str
     description: str | None = None
     is_active: bool = True
+    # Порог кворума в процентах; None = строгое большинство (срез-4).
+    quorum_threshold_pct: int | None = Field(default=None, ge=1, le=100)
 
 
 class CommitteeUpdate(BaseSchema):
@@ -29,6 +31,7 @@ class CommitteeUpdate(BaseSchema):
     name: str | None = None
     description: str | None = None
     is_active: bool | None = None
+    quorum_threshold_pct: int | None = Field(default=None, ge=1, le=100)
 
 
 class CommitteeRead(BaseSchema):
@@ -37,6 +40,7 @@ class CommitteeRead(BaseSchema):
     name: str
     description: str | None
     is_active: bool
+    quorum_threshold_pct: int | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -177,6 +181,20 @@ class AttendanceRead(BaseSchema):
     meeting_id: str
     person_id: str
     present: bool
+
+
+# --- Invitations (срез-4) ---
+class InvitationBulkUpdate(BaseSchema):
+    """PUT-семантика: полный желаемый список приглашённых (замена набора)."""
+
+    person_ids: list[str]
+
+
+class InvitationRead(BaseSchema):
+    id: str
+    meeting_id: str
+    person_id: str
+    invited_at: datetime
 
 
 # --- Votes ---

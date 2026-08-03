@@ -48,11 +48,18 @@ class DecisionOutcome(str, enum.Enum):
     REJECTED = "rejected"
 
 
-def is_quorum(members_total: int, present_count: int) -> bool:
-    """Quorum = strictly more than half of active members present."""
+def is_quorum(members_total: int, present_count: int, threshold_pct: int | None = None) -> bool:
+    """Quorum rule.
+
+    ``threshold_pct=None`` — прежнее правило по умолчанию: строго больше
+    половины членов. Явный порог (1..100) — «не меньше N% членов», граница
+    включительно (целочисленно, без плавающей точки: present*100 >= pct*total).
+    """
     if members_total <= 0:
         return False
-    return present_count * 2 > members_total
+    if threshold_pct is None:
+        return present_count * 2 > members_total
+    return present_count * 100 >= threshold_pct * members_total
 
 
 def tally_votes(choices: Iterable[VoteChoice]) -> tuple[int, int, int]:
@@ -76,6 +83,14 @@ def decision_outcome(votes_for: int, votes_against: int) -> DecisionOutcome:
 def next_protocol_seq(existing_seqs: Iterable[int]) -> int:
     """Next sequential protocol number within a committee/year."""
     return max(existing_seqs, default=0) + 1
+
+
+def ensure_can_invite(meeting_status: MeetingStatus) -> None:
+    """Приглашения имеют смысл только до проведения заседания."""
+    if meeting_status is not MeetingStatus.PLANNED:
+        raise MeetingTransitionError(
+            f"Invitations allowed only on a planned meeting (status={meeting_status.value})"
+        )
 
 
 def ensure_can_vote(meeting_status: MeetingStatus) -> None:

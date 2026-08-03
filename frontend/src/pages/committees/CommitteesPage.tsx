@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
+  clientQuorum,
   committeesApi,
   type Attendance,
   type Committee,
+  type Invitation,
   type MemberDetail,
   type Meeting,
   type Protocol,
@@ -12,6 +14,7 @@ import {
   type VoteChoice,
 } from "@/api/committees";
 import { EmptyState } from "@/components/common/EmptyState";
+import { PersonTypeahead, type PersonOption } from "@/components/common/PersonTypeahead";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingScreen } from "@/components/common/LoadingScreen";
 import { RegistryPageHeader } from "@/components/common/RegistryPageHeader";
@@ -83,6 +86,7 @@ const CommitteeList = ({ selected, onSelect }: CommitteeListProps) => {
   const [items, setItems] = useState<Committee[]>([]);
   const [name, setName] = useState("");
   const [kind, setKind] = useState("osms");
+  const [quorumPct, setQuorumPct] = useState("");
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<ApiError | null>(null);
 
@@ -109,8 +113,14 @@ const CommitteeList = ({ selected, onSelect }: CommitteeListProps) => {
     setSaving(true);
     setFormError(null);
     try {
-      await committeesApi.createCommittee({ kind, name: name.trim() });
+      const pct = quorumPct.trim() ? Number(quorumPct) : null;
+      await committeesApi.createCommittee({
+        kind,
+        name: name.trim(),
+        quorum_threshold_pct: pct,
+      });
       setName("");
+      setQuorumPct("");
       await load();
     } catch (err) {
       setFormError(asApiError(err, "Не удалось создать комитет"));
@@ -153,6 +163,22 @@ const CommitteeList = ({ selected, onSelect }: CommitteeListProps) => {
                 </option>
               ))}
             </select>
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs text-muted-foreground" htmlFor="cmt-quorum">
+              Порог кворума, %
+            </label>
+            <Input
+              id="cmt-quorum"
+              type="number"
+              min={1}
+              max={100}
+              className="w-32"
+              value={quorumPct}
+              onChange={(e) => setQuorumPct(e.target.value)}
+              placeholder="больш-во"
+              title="Пусто — простое большинство"
+            />
           </div>
           <Button type="submit" disabled={saving || !name.trim()}>
             Создать комитет
@@ -207,7 +233,7 @@ const MembersPanel = ({ committee }: MembersPanelProps) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
   const [members, setMembers] = useState<MemberDetail[]>([]);
-  const [personId, setPersonId] = useState("");
+  const [person, setPerson] = useState<PersonOption | null>(null);
   const [role, setRole] = useState("member");
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<ApiError | null>(null);
@@ -230,12 +256,12 @@ const MembersPanel = ({ committee }: MembersPanelProps) => {
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!personId.trim()) return;
+    if (!person) return;
     setSaving(true);
     setFormError(null);
     try {
-      await committeesApi.addMember(committee.id, { person_id: personId.trim(), role });
-      setPersonId("");
+      await committeesApi.addMember(committee.id, { person_id: person.id, role });
+      setPerson(null);
       await load();
     } catch (err) {
       setFormError(asApiError(err, "Не удалось добавить члена"));
@@ -263,14 +289,9 @@ const MembersPanel = ({ committee }: MembersPanelProps) => {
         <form className="flex flex-wrap items-end gap-2" onSubmit={handleAdd}>
           <div className="flex-1 min-w-[200px] space-y-1">
             <label className="text-xs text-muted-foreground" htmlFor="member-person">
-              ID сотрудника
+              Сотрудник
             </label>
-            <Input
-              id="member-person"
-              value={personId}
-              onChange={(e) => setPersonId(e.target.value)}
-              placeholder="person_id"
-            />
+            <PersonTypeahead inputId="member-person" value={person} onChange={setPerson} />
           </div>
           <div className="space-y-1">
             <label className="text-xs text-muted-foreground" htmlFor="member-role">
@@ -289,7 +310,7 @@ const MembersPanel = ({ committee }: MembersPanelProps) => {
               ))}
             </select>
           </div>
-          <Button type="submit" disabled={saving || !personId.trim()}>
+          <Button type="submit" disabled={saving || !person}>
             Добавить
           </Button>
         </form>
@@ -457,14 +478,149 @@ const MeetingList = ({ committee, selected, onSelect }: MeetingListProps) => {
   );
 };
 
+// ── Invitations panel (срез-4, planned meeting only) ────────────────────────
+
+interface InvitationsPanelProps {
+  meeting: Meeting;
+}
+
+const InvitationsPanel = ({ meeting }: InvitationsPanelProps) => {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<ApiError | null>(null);
+  const [invitations, setInvitations] = useState<Invitation[]>([]);
+  const [members, setMembers] = useState<MemberDetail[]>([]);
+  const [person, setPerson] = useState<PersonOption | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [actionError, setActionError] = useState<ApiError | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [inv, mem] = await Promise.all([
+        committeesApi.getInvitations(meeting.id),
+        committeesApi.listMembers(meeting.committee_id),
+      ]);
+      setInvitations(inv);
+      setMembers(mem);
+    } catch (err) {
+      setError(asApiError(err, "Не удалось загрузить приглашения"));
+    } finally {
+      setLoading(false);
+    }
+  }, [meeting.committee_id, meeting.id]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const fioByPerson = useMemo(() => {
+    const map = new Map<string, string>();
+    members.forEach((m) => map.set(m.person_id, personLabel(m)));
+    return map;
+  }, [members]);
+
+  const save = async (personIds: string[]) => {
+    setSaving(true);
+    setActionError(null);
+    try {
+      setInvitations(await committeesApi.putInvitations(meeting.id, personIds));
+    } catch (err) {
+      setActionError(asApiError(err, "Не удалось сохранить приглашения"));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const currentIds = invitations.map((i) => i.person_id);
+
+  const handleInvite = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!person) return;
+    const picked = person;
+    setPerson(null);
+    // подписываем ФИО выбранного, чтобы список не показывал голый id
+    fioByPerson.set(picked.id, picked.label);
+    await save([...currentIds, picked.id]);
+  };
+
+  const handleInviteAllMembers = async () => {
+    const ids = new Set([...currentIds, ...members.map((m) => m.person_id)]);
+    await save([...ids]);
+  };
+
+  const handleRemove = async (personId: string) => {
+    await save(currentIds.filter((id) => id !== personId));
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">
+          Приглашения — {formatDate(meeting.scheduled_at)}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <form className="flex flex-wrap items-end gap-2" onSubmit={handleInvite}>
+          <div className="flex-1 min-w-[220px] space-y-1">
+            <label className="text-xs text-muted-foreground" htmlFor="invite-person">
+              Пригласить участника
+            </label>
+            <PersonTypeahead inputId="invite-person" value={person} onChange={setPerson} />
+          </div>
+          <Button type="submit" disabled={saving || !person}>
+            Пригласить
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={saving || members.length === 0}
+            onClick={handleInviteAllMembers}
+          >
+            Пригласить весь состав
+          </Button>
+        </form>
+        <ErrorState error={actionError ?? undefined} />
+        <ErrorState error={error ?? undefined} onRetry={load} />
+        {loading ? <LoadingScreen label="Загрузка приглашений" /> : null}
+        {!loading && !error && invitations.length === 0 ? (
+          <EmptyState title="Нет приглашений" description="На заседание пока никто не приглашён." />
+        ) : null}
+        {!loading && !error && invitations.length > 0 ? (
+          <ul className="space-y-1">
+            {invitations.map((inv) => (
+              <li key={inv.id} className="flex items-center gap-2 text-sm">
+                <span className="flex-1">{fioByPerson.get(inv.person_id) ?? inv.person_id}</span>
+                <span className="text-xs text-muted-foreground">
+                  приглашён(а) {formatDate(inv.invited_at)}
+                </span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  disabled={saving}
+                  onClick={() => handleRemove(inv.person_id)}
+                >
+                  Убрать
+                </Button>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </CardContent>
+    </Card>
+  );
+};
+
 // ── Attendance panel (planned meeting only) ─────────────────────────────────
 
 interface AttendancePanelProps {
   meeting: Meeting;
+  committee: Committee | null;
   onHeld: (updated: Meeting) => void;
 }
 
-const AttendancePanel = ({ meeting, onHeld }: AttendancePanelProps) => {
+const AttendancePanel = ({ meeting, committee, onHeld }: AttendancePanelProps) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
   const [members, setMembers] = useState<MemberDetail[]>([]);
@@ -505,7 +661,8 @@ const AttendancePanel = ({ meeting, onHeld }: AttendancePanelProps) => {
     [members, present],
   );
   const total = members.length;
-  const hasQuorum = presentCount * 2 > total;
+  const thresholdPct = committee?.quorum_threshold_pct ?? null;
+  const hasQuorum = clientQuorum(presentCount, total, thresholdPct);
 
   const toggle = (personId: string) => {
     setSavedNote(null);
@@ -577,6 +734,9 @@ const AttendancePanel = ({ meeting, onHeld }: AttendancePanelProps) => {
               Присутствует {presentCount} из {total} —{" "}
               <span className={hasQuorum ? "text-emerald-600" : "text-destructive"}>
                 {hasQuorum ? "кворум есть" : "кворум нет"}
+              </span>{" "}
+              <span className="text-muted-foreground">
+                ({thresholdPct != null ? `порог ${thresholdPct}%` : "простое большинство"})
               </span>
             </p>
             {savedNote ? <p className="text-xs text-emerald-600">{savedNote}</p> : null}
@@ -742,6 +902,8 @@ const ProtocolPanel = ({ meeting }: ProtocolPanelProps) => {
   const [decisionText, setDecisionText] = useState("");
   const [savingDecision, setSavingDecision] = useState(false);
   const [decisionError, setDecisionError] = useState<ApiError | null>(null);
+  const [printing, setPrinting] = useState(false);
+  const [printError, setPrintError] = useState<ApiError | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -775,6 +937,22 @@ const ProtocolPanel = ({ meeting }: ProtocolPanelProps) => {
   const snapshotMeeting = protocol?.meeting ?? meeting;
   const protocolNo = snapshotMeeting.protocol_no ?? meeting.protocol_no ?? null;
 
+  const handlePrint = async (fmt: "docx" | "pdf") => {
+    setPrinting(true);
+    setPrintError(null);
+    try {
+      await committeesApi.downloadProtocolPrint(
+        meeting.id,
+        fmt,
+        protocolNo?.replace("/", "-") ?? undefined,
+      );
+    } catch (err) {
+      setPrintError(asApiError(err, "Не удалось сформировать печатную форму"));
+    } finally {
+      setPrinting(false);
+    }
+  };
+
   const handleCreateDecision = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!decisionText.trim()) return;
@@ -800,11 +978,34 @@ const ProtocolPanel = ({ meeting }: ProtocolPanelProps) => {
       </CardHeader>
       <CardContent className="space-y-4">
         {isHeld ? (
-          <p className="text-sm text-muted-foreground">
-            Присутствовало {snapshotMeeting.present_count ?? "—"} из{" "}
-            {snapshotMeeting.members_total ?? "—"}
-          </p>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm text-muted-foreground">
+              Присутствовало {snapshotMeeting.present_count ?? "—"} из{" "}
+              {snapshotMeeting.members_total ?? "—"}
+            </p>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={printing}
+                onClick={() => handlePrint("docx")}
+              >
+                Печать DOCX
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={printing}
+                onClick={() => handlePrint("pdf")}
+              >
+                Печать PDF
+              </Button>
+            </div>
+          </div>
         ) : null}
+        <ErrorState error={printError ?? undefined} />
         <ErrorState error={error ?? undefined} onRetry={load} />
         {loading ? <LoadingScreen label="Загрузка протокола" /> : null}
 
@@ -1012,7 +1213,14 @@ const CommitteesPage = () => {
         </>
       ) : null}
       {selectedMeeting !== null && selectedMeeting.status === "planned" ? (
-        <AttendancePanel meeting={selectedMeeting} onHeld={setSelectedMeeting} />
+        <>
+          <InvitationsPanel meeting={selectedMeeting} />
+          <AttendancePanel
+            meeting={selectedMeeting}
+            committee={selectedCommittee}
+            onHeld={setSelectedMeeting}
+          />
+        </>
       ) : null}
       {selectedMeeting !== null ? <ProtocolPanel meeting={selectedMeeting} /> : null}
       <ProtocolJournalPanel onSelect={handleSelectProtocol} />

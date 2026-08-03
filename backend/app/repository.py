@@ -211,9 +211,13 @@ async def list_companies(
 
 
 async def list_persons(
-    session: AsyncSession, tenant_id: str, *, limit: int, offset: int
+    session: AsyncSession, tenant_id: str, *, limit: int, offset: int, q: str | None = None
 ) -> tuple[list[Person], int]:
-    """Return people for a tenant with pagination."""
+    """Return people for a tenant with pagination.
+
+    ``q`` — серверный typeahead (срез-4): подстрока без регистра по фамилии,
+    имени, отчеству или табельному номеру.
+    """
 
     normalized_tenant, normalized_slug = await _resolve_tenant_scope(session, tenant_id)
     tenant_scope = _tenant_scope_values(normalized_tenant, normalized_slug)
@@ -222,6 +226,15 @@ async def list_persons(
         Person.tenant_id.in_(tenant_scope),
         Person.deleted_at.is_(None),
     )
+    needle = (q or "").strip()
+    if needle:
+        pattern = f"%{needle}%"
+        base = base.where(
+            Person.last_name.ilike(pattern)
+            | Person.first_name.ilike(pattern)
+            | Person.middle_name.ilike(pattern)
+            | Person.personnel_number.ilike(pattern)
+        )
     stmt = base.order_by(Person.created_at.desc()).offset(offset).limit(limit)
     rows = (await session.execute(stmt)).scalars().all()
     total_stmt = select(func.count()).select_from(base.subquery())

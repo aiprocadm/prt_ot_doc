@@ -135,3 +135,11 @@ export async function fetchAllPersons(listLimit = 500): Promise<PersonDto[]> {
   });
   return (data.items ?? []).map((row) => normalizePersonRead(row));
 }
+
+/** Серверный typeahead (срез-4): подстрока по ФИО / табельному номеру. */
+export async function searchPersons(q: string, limit = 20): Promise<PersonDto[]> {
+  const { data } = await apiClient.get<PersonListResponse>("/persons", {
+    params: { limit, offset: 0, q }
+  });
+  return (data.items ?? []).map((row) => normalizePersonRead(row));
+}

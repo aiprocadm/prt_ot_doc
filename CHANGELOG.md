@@ -1,5 +1,29 @@
 # CHANGELOG
 
+## 2026-08-03 (feat/p10-01-committees-srez4 — комитеты срез-4: приглашения, порог кворума, печать протокола, person-typeahead)
+
+Контур P10-01 / TZ-B17 закрыт целиком (матрица → `done`):
+
+- **Приглашения на заседание** — миграция `cmt03` (`committee_meeting_invitation`),
+  `GET/PUT /api/v1/committees/meetings/{mid}/invitations` (только для запланированного
+  заседания, PUT-семантика замены набора; приглашать можно и не-членов комитета);
+  панель приглашений в UI с «Пригласить весь состав».
+- **Настраиваемый порог кворума** — `committee.quorum_threshold_pct` (NULL = прежнее
+  строгое большинство; порог в процентах, граница включительно, целочисленная
+  арифметика); применяется при проведении заседания и в клиентском индикаторе.
+- **Печатная форма протокола** — `GET /api/v1/committees/meetings/{mid}/protocol/print?format=docx|pdf`
+  (только held): чистый сборщик `domains/committees/print_form.py` (python-docx, RU-словари)
+  + `services/committee_protocol_print.py` (ФИО-карта, LibreOffice-PDF с 503 при недоступном
+  конвертере); кнопки «Печать DOCX/PDF» в панели протокола.
+- **Серверный person-typeahead** — `GET /persons?q=` (подстрока по ФИО/табельному номеру,
+  ilike; кириллическая регистронезависимость на PG, SQLite — ASCII) + компонент
+  `PersonTypeahead`; ручной ввод `person_id` из форм комитетов убран.
+
+Гейты: PG-гейт `-m db` 35 зелёных (включая upgrade/downgrade `cmt03`); все тесты комитетов
+(38 + 10 новых API/print) зелёные; ARCH-3 boundaries clean; module-gates guard зелёный;
+OpenAPI baseline пере-снят 930/794 → 933/796 (чистый аддитив); фронт: typecheck, 642/642
+vitest, build зелёные.
+
 ## 2026-08-03 (feat/sec63-module-event-prune — SEC-63.3: отключение модуля деактивирует его вебхуки)
 
 Риск «осиротевшие доступы» из разд. 63.3: после понижения тарифа у арендатора

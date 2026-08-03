@@ -30,9 +30,17 @@ const api = vi.hoisted(() => ({
   holdMeeting: vi.fn(),
   castVote: vi.fn(),
   getVotes: vi.fn(),
+  // срез-4
+  updateCommittee: vi.fn(),
+  getInvitations: vi.fn(),
+  putInvitations: vi.fn(),
+  downloadProtocolPrint: vi.fn(),
 }));
 
-vi.mock("@/api/committees", () => ({ committeesApi: api }));
+vi.mock("@/api/committees", async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  committeesApi: api,
+}));
 
 import CommitteesPage from "@/pages/committees/CommitteesPage";
 
@@ -126,6 +134,8 @@ beforeEach(() => {
   api.listMembers.mockResolvedValue(MEMBERS);
   api.listMeetings.mockResolvedValue({ items: [PLANNED_MEETING], total: 1, limit: 100, offset: 0 });
   api.getAttendance.mockResolvedValue(ATTENDANCE_3);
+  api.getInvitations.mockResolvedValue([]);
+  api.putInvitations.mockResolvedValue([]);
   api.getProtocol.mockResolvedValue(EMPTY_PROTOCOL);
   api.listProtocols.mockResolvedValue({ items: [JOURNAL_ITEM], total: 1, limit: 100, offset: 0 });
   api.holdMeeting.mockResolvedValue(HELD_MEETING);

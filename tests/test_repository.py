@@ -158,6 +158,83 @@ async def test_list_persons_excludes_soft_deleted_rows() -> None:
 
 
 @pytest.mark.asyncio
+async def test_list_persons_q_search_typeahead() -> None:
+    """Срез-4: серверный поиск по подстроке ФИО / таб. номеру (без регистра)."""
+    engine, session_factory, tenant_a, tenant_b = await _setup_engine()
+
+    async with session_factory() as session:
+        company = await create_company(
+            session,
+            tenant_a.id,
+            CompanyCreate(
+                name="Alpha LLC",
+                inn="7701000000",
+                kpp="770101001",
+                ogrn="1027700132195",
+                legal_address="Moscow",
+                actual_address="Mytishchi",
+                director="Ivan Ivanov",
+                bank_name="Sberbank",
+                bank_bik="044525225",
+                bank_account="40702810900000000001",
+                phone_numbers=["+7 999 111-22-33"],
+                email="info@alpha.ru",
+                work_types=["Construction"],
+                hazardous_factors=[],
+            ),
+        )
+        session.add_all(
+            [
+                Person(
+                    tenant_id=tenant_a.id,
+                    company_id=company.id,
+                    first_name="Иван",
+                    last_name="Иванов",
+                    middle_name="Иванович",
+                    personnel_number="TAB-100",
+                    qualifications=[],
+                    current_ppe=[],
+                ),
+                Person(
+                    tenant_id=tenant_a.id,
+                    company_id=company.id,
+                    first_name="Пётр",
+                    last_name="Петров",
+                    qualifications=[],
+                    current_ppe=[],
+                ),
+                Person(
+                    tenant_id=tenant_b.id,
+                    company_id=company.id,
+                    first_name="Иван",
+                    last_name="Чужой",
+                    qualifications=[],
+                    current_ppe=[],
+                ),
+            ]
+        )
+        await session.commit()
+
+    async with session_factory() as session:
+        # подстрока фамилии; для кириллицы регистронезависимость даёт PG ILIKE,
+        # SQLite lower() умеет только ASCII — потому здесь подстрока без смены регистра
+        people, total = await list_persons(session, tenant_a.id, limit=10, offset=0, q="ванов")
+        assert total == 1
+        assert people[0].last_name == "Иванов"
+        # табельный номер
+        people, total = await list_persons(session, tenant_a.id, limit=10, offset=0, q="tab-1")
+        assert total == 1 and people[0].personnel_number == "TAB-100"
+        # имя ищется тоже, но чужой арендатор не виден
+        people, total = await list_persons(session, tenant_a.id, limit=10, offset=0, q="Иван")
+        assert total == 1
+        # пустая строка = без фильтра
+        _, total = await list_persons(session, tenant_a.id, limit=10, offset=0, q="  ")
+        assert total == 2
+
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
 async def test_list_templates_scoped_by_tenant() -> None:
     engine, session_factory, tenant_a, tenant_b = await _setup_engine()
 
