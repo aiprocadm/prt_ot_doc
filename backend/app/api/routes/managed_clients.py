@@ -24,8 +24,14 @@ from app.api.helpers.etag import (
 )
 from app.core.errors import api_problem_detail
 from app.core.feature_flags import is_feature_enabled
-from app.core.security import AccessContext, abac
+from app.core.security import AccessContext, AuthContext, abac, get_auth_ctx
 from app.core.tenant_validation import TenantContextValidator
+from app.domains.managed_clients.access import (
+    AccessGrant,
+    AccessGrantError,
+    is_grant_active,
+    validate_grant,
+)
 from app.domains.managed_clients.attention import AggregationStatus, Severity
 from app.domains.managed_clients.attention_service import collect_portfolio_attention
 from app.domains.managed_clients.calendar import CalendarFilters, DeadlineKind, group_by_date
@@ -41,9 +47,12 @@ from app.domains.managed_clients.lifecycle import (
 )
 from app.domains.managed_clients.workload import DEFAULT_THRESHOLDS, OVERLOAD_REASON_TEXT
 from app.domains.managed_clients.workload_service import collect_specialist_workload
-from app.models.managed_clients import ManagedClient
+from app.models.managed_clients import ManagedClient, ManagedClientAccess
 from app.models.tenanting import Tenant
+from app.modules.audit.writer import write_audit_event
 from app.schemas.managed_clients import (
+    AccessGrantCreate,
+    AccessGrantRead,
     AttentionSignalRead,
     CalendarSummary,
     ClientAttentionRead,
@@ -55,6 +64,8 @@ from app.schemas.managed_clients import (
     ManagedClientCreate,
     ManagedClientRead,
     ManagedClientUpdate,
+    MyManagedClient,
+    MyManagedClientsResponse,
     OverloadReasonRead,
     PortfolioItem,
     PortfolioPage,
@@ -143,6 +154,31 @@ def _to_item(row: ManagedClient, *, today: date) -> PortfolioItem:
             today=today,
             horizon_days=CONTRACT_EXPIRY_HORIZON_DAYS,
         ),
+    )
+
+
+def _as_grant(row: ManagedClientAccess) -> AccessGrant:
+    return AccessGrant(
+        client_id=row.managed_client_id,
+        user_id=row.user_id,
+        all_modules=bool(row.all_modules),
+        modules=tuple(row.modules or ()),
+        revoked_at=row.revoked_at,
+    )
+
+
+def _grant_read(row: ManagedClientAccess, *, now: datetime) -> AccessGrantRead:
+    return AccessGrantRead(
+        id=row.id,
+        managed_client_id=row.managed_client_id,
+        user_id=row.user_id,
+        all_modules=bool(row.all_modules),
+        modules=list(row.modules or []),
+        granted_by_user_id=row.granted_by_user_id,
+        granted_at=row.granted_at,
+        revoked_at=row.revoked_at,
+        revoked_by_user_id=row.revoked_by_user_id,
+        active=is_grant_active(_as_grant(row), now=now),
     )
 
 
@@ -474,6 +510,200 @@ async def specialist_workload(
         summary=summary,
         items=items,
     )
+
+
+@router.get("/my", response_model=MyManagedClientsResponse)
+async def my_managed_clients(
+    tenant: TenantDep,
+    session: SessionDep,
+    auth: Annotated[AuthContext, Depends(get_auth_ctx)],
+) -> MyManagedClientsResponse:
+    """Клиенты, доступные текущему специалисту (основа переключателя, разд. 49.3).
+
+    Намеренно БЕЗ роли-гейта портфеля: этот список — не обзор всего портфеля,
+    а личная выборка «куда мне открыт доступ». Отсутствие грантов даёт пустой
+    список, а не весь портфель.
+    """
+
+    TenantContextValidator.ensure_tenant_context(tenant)
+    await _require_enabled(session, tenant)
+    now = datetime.now(tz=timezone.utc)
+
+    rows = list(
+        (
+            await session.execute(
+                select(ManagedClientAccess, ManagedClient)
+                .join(ManagedClient, ManagedClient.id == ManagedClientAccess.managed_client_id)
+                .where(
+                    ManagedClientAccess.tenant_id == tenant.id,
+                    ManagedClientAccess.user_id == auth.sub,
+                    ManagedClient.deleted_at.is_(None),
+                )
+            )
+        ).all()
+    )
+    items = [
+        MyManagedClient(
+            client_id=client.id,
+            client_name=client.name,
+            mode=client.mode,
+            all_modules=grant.all_modules,
+            modules=list(grant.modules or []),
+        )
+        for grant, client in rows
+        if is_grant_active(_as_grant(grant), now=now)
+    ]
+    items.sort(key=lambda i: i.client_name)
+    return MyManagedClientsResponse(items=items)
+
+
+@router.get("/{mcid}/access", response_model=list[AccessGrantRead])
+async def list_access_grants(
+    mcid: str, tenant: TenantDep, session: SessionDep, access: Access
+) -> list[AccessGrantRead]:
+    """Матрица доступа к клиенту, включая ОТОЗВАННЫЕ гранты.
+
+    Отозванные показываются намеренно: «кто имел доступ раньше» — такой же
+    вопрос безопасности, как «кто имеет сейчас».
+    """
+
+    TenantContextValidator.ensure_tenant_context(tenant)
+    await _require_enabled(session, tenant)
+    await _get(session, tenant, mcid)
+    now = datetime.now(tz=timezone.utc)
+    rows = list(
+        (
+            await session.execute(
+                select(ManagedClientAccess)
+                .where(
+                    ManagedClientAccess.tenant_id == tenant.id,
+                    ManagedClientAccess.managed_client_id == mcid,
+                )
+                .order_by(ManagedClientAccess.granted_at.desc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return [_grant_read(row, now=now) for row in rows]
+
+
+@router.post("/{mcid}/access", response_model=AccessGrantRead, status_code=status.HTTP_201_CREATED)
+async def grant_access(
+    mcid: str,
+    payload: AccessGrantCreate,
+    request: Request,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: Access,
+    auth: Annotated[AuthContext, Depends(get_auth_ctx)],
+) -> AccessGrantRead:
+    """Выдать специалисту доступ к клиенту — событие безопасности, идёт в аудит."""
+
+    TenantContextValidator.ensure_tenant_context(tenant)
+    await _require_enabled(session, tenant)
+    await _get(session, tenant, mcid)
+    try:
+        validate_grant(all_modules=payload.all_modules, modules=payload.modules)
+    except AccessGrantError as exc:
+        raise _err("MANAGED_CLIENT_ACCESS_INVALID", str(exc), status.HTTP_422_UNPROCESSABLE_ENTITY)
+
+    now = datetime.now(tz=timezone.utc)
+    existing = (
+        await session.execute(
+            select(ManagedClientAccess).where(
+                ManagedClientAccess.tenant_id == tenant.id,
+                ManagedClientAccess.managed_client_id == mcid,
+                ManagedClientAccess.user_id == payload.user_id,
+                ManagedClientAccess.revoked_at.is_(None),
+            )
+        )
+    ).scalar_one_or_none()
+    if existing is not None:
+        raise _err(
+            "MANAGED_CLIENT_ACCESS_EXISTS",
+            "У этого специалиста уже есть действующий доступ к клиенту",
+            status.HTTP_409_CONFLICT,
+        )
+
+    row = ManagedClientAccess(
+        tenant_id=tenant.id,
+        managed_client_id=mcid,
+        user_id=payload.user_id,
+        all_modules=payload.all_modules,
+        modules=list(payload.modules),
+        granted_by_user_id=auth.sub,
+        granted_at=now,
+    )
+    session.add(row)
+    await session.flush()
+    await write_audit_event(
+        session=session,
+        request=request,
+        tenant_id=str(tenant.id),
+        actor_id=auth.sub,
+        action="managed_client.access.grant",
+        resource_type="managed_client_access",
+        resource_id=row.id,
+        before=None,
+        after={
+            "managed_client_id": mcid,
+            "user_id": payload.user_id,
+            "all_modules": payload.all_modules,
+            "modules": list(payload.modules),
+        },
+    )
+    return _grant_read(row, now=now)
+
+
+@router.delete("/{mcid}/access/{grant_id}", response_model=AccessGrantRead)
+async def revoke_access(
+    mcid: str,
+    grant_id: str,
+    request: Request,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: Access,
+    auth: Annotated[AuthContext, Depends(get_auth_ctx)],
+) -> AccessGrantRead:
+    """Отозвать доступ. Строка НЕ удаляется — остаётся след «имел до»."""
+
+    TenantContextValidator.ensure_tenant_context(tenant)
+    await _require_enabled(session, tenant)
+    row = (
+        await session.execute(
+            select(ManagedClientAccess).where(
+                ManagedClientAccess.id == grant_id,
+                ManagedClientAccess.tenant_id == tenant.id,
+                ManagedClientAccess.managed_client_id == mcid,
+            )
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Access grant not found")
+    if row.revoked_at is not None:
+        raise _err(
+            "MANAGED_CLIENT_ACCESS_ALREADY_REVOKED",
+            "Доступ уже отозван",
+            status.HTTP_409_CONFLICT,
+        )
+
+    now = datetime.now(tz=timezone.utc)
+    row.revoked_at = now
+    row.revoked_by_user_id = auth.sub
+    await session.flush()
+    await write_audit_event(
+        session=session,
+        request=request,
+        tenant_id=str(tenant.id),
+        actor_id=auth.sub,
+        action="managed_client.access.revoke",
+        resource_type="managed_client_access",
+        resource_id=row.id,
+        before={"revoked_at": None},
+        after={"revoked_at": now.isoformat(), "user_id": row.user_id},
+    )
+    return _grant_read(row, now=now)
 
 
 @router.post("", response_model=ManagedClientRead, status_code=status.HTTP_201_CREATED)

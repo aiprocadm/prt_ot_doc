@@ -200,3 +200,38 @@ class SpecialistWorkloadResponse(BaseSchema):
     thresholds: WorkloadThresholdsRead
     summary: WorkloadSummary
     items: list[SpecialistWorkloadRead]
+
+
+# --- Матрица доступа (срез-6, разд. 49.3) ---
+class AccessGrantCreate(BaseSchema):
+    user_id: str
+    #: Доступ ко всему клиенту объявляется явно; пустой список — не «всё».
+    all_modules: bool = False
+    modules: list[str] = Field(default_factory=list)
+
+
+class AccessGrantRead(BaseSchema):
+    id: str
+    managed_client_id: str
+    user_id: str
+    all_modules: bool
+    modules: list[str]
+    granted_by_user_id: str | None = None
+    granted_at: datetime
+    revoked_at: datetime | None = None
+    revoked_by_user_id: str | None = None
+    active: bool
+
+
+class MyManagedClient(BaseSchema):
+    """Клиент, доступный текущему специалисту (основа переключателя, разд. 49.3)."""
+
+    client_id: str
+    client_name: str
+    mode: ManagedClientMode
+    all_modules: bool
+    modules: list[str]
+
+
+class MyManagedClientsResponse(BaseSchema):
+    items: list[MyManagedClient]
