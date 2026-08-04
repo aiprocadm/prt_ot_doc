@@ -248,6 +248,7 @@
     "GET /api/v1/layout-presets/{preset_id}",
     "GET /api/v1/machine-keys",
     "GET /api/v1/managed-clients",
+    "GET /api/v1/managed-clients/attention",
     "GET /api/v1/managed-clients/{mcid}",
     "GET /api/v1/marketplace",
     "GET /api/v1/medical/contingent",
@@ -1159,6 +1160,7 @@
     "create_webhook_api_v1_webhooks_endpoints_post",
     "create_work_permit_endpoint_api_v1_work_permits_post",
     "create_workplace_api_v1_workplaces_post",
+    "cross_client_attention_api_v1_managed_clients_attention_get",
     "dashboard_api_v1_client_portal_dashboard_get",
     "dashboard_breakdown_api_v1_analytics_dashboard_breakdown_get",
     "dashboard_operational_snapshot_api_v1_dashboard_operational_get",
@@ -1889,6 +1891,7 @@
     "AdminPingResponse",
     "AgendaItemCreate",
     "AgendaItemRead",
+    "AggregationStatus",
     "ApiTokenCreateRequest",
     "ApiTokenCreateResponse",
     "ApiTokenRead",
@@ -1907,6 +1910,7 @@
     "AttendanceItem",
     "AttendanceRead",
     "AttentionItem",
+    "AttentionSignalRead",
     "AttentionSummary",
     "AttestationCreate",
     "AttestationPage",
@@ -2005,6 +2009,7 @@
     "ChannelSettingsIn",
     "ChannelSettingsOut",
     "ClassHistoryRead",
+    "ClientAttentionRead",
     "CommitteeCreate",
     "CommitteeKind",
     "CommitteeKpiDto",
@@ -2041,6 +2046,8 @@
     "ConvertPdfRequest",
     "CorrectiveActionIn",
     "CorrectiveActionVerifyIn",
+    "CrossClientAttentionResponse",
+    "CrossClientAttentionSummary",
     "DashboardDocumentInboxItem",
     "DashboardOperationalSnapshot",
     "DashboardReadinessSnapshot",
@@ -2548,8 +2555,10 @@
     "SavedCalendarViewPayload",
     "SavedCalendarViewUpdateRequest",
     "ScaleItem",
+    "Severity",
     "SignRequestIn",
     "SignSubmitIn",
+    "SignalKind",
     "SignatureCreate",
     "SignatureSubmitIn",
     "SignatureType",
@@ -2847,6 +2856,13 @@
       "entity_type": "null|string",
       "entity_id": "null|string",
       "reason": "string"
+    },
+    "AttentionSignalRead": {
+      "kind": "SignalKind",
+      "count": "integer",
+      "severity": "Severity",
+      "title": "string",
+      "action_hint": "string"
     },
     "AttentionSummary": {
       "overdue_tasks": "integer",
@@ -3597,6 +3613,15 @@
       "note": "null|string",
       "is_worsening": "boolean"
     },
+    "ClientAttentionRead": {
+      "client_id": "string",
+      "client_name": "string",
+      "aggregation": "AggregationStatus",
+      "signals": "array",
+      "total": "integer|null",
+      "severity": "Severity|null",
+      "reason": "null|string"
+    },
     "CommitteeCreate": {
       "kind": "CommitteeKind",
       "name": "string",
@@ -3911,6 +3936,18 @@
       "effective": "boolean",
       "partial": "boolean",
       "comment": "null|string"
+    },
+    "CrossClientAttentionResponse": {
+      "generated_at": "string",
+      "summary": "CrossClientAttentionSummary",
+      "items": "array"
+    },
+    "CrossClientAttentionSummary": {
+      "clients_total": "integer",
+      "clients_with_signals": "integer",
+      "clients_not_aggregated": "integer",
+      "signals_total": "integer",
+      "critical_clients": "integer"
     },
     "DashboardDocumentInboxItem": {
       "id": "string",

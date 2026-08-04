@@ -26,6 +26,8 @@ from app.core.errors import api_problem_detail
 from app.core.feature_flags import is_feature_enabled
 from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
+from app.domains.managed_clients.attention import AggregationStatus, Severity
+from app.domains.managed_clients.attention_service import collect_portfolio_attention
 from app.domains.managed_clients.lifecycle import (
     ContractStatus,
     ManagedClientMode,
@@ -38,6 +40,10 @@ from app.domains.managed_clients.lifecycle import (
 from app.models.managed_clients import ManagedClient
 from app.models.tenanting import Tenant
 from app.schemas.managed_clients import (
+    AttentionSignalRead,
+    ClientAttentionRead,
+    CrossClientAttentionResponse,
+    CrossClientAttentionSummary,
     ManagedClientCreate,
     ManagedClientRead,
     ManagedClientUpdate,
@@ -200,6 +206,89 @@ async def portfolio(
         limit=limit,
         offset=offset,
     )
+
+
+@router.get("/attention", response_model=CrossClientAttentionResponse)
+async def cross_client_attention(
+    request: Request,
+    response: Response,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: Access,
+) -> CrossClientAttentionResponse | Response:
+    """Сводный «Центр внимания» по ВСЕМ клиентам портфеля (разд. 49.2).
+
+    Порядок — «где горит сильнее» сверху: аутсорсер читает список сверху вниз,
+    и список, отсортированный по алфавиту, бесполезен.
+    """
+
+    TenantContextValidator.ensure_tenant_context(tenant)
+    await _require_enabled(session, tenant)
+    now = datetime.now(tz=timezone.utc)
+    today = _today()
+
+    rows = await collect_portfolio_attention(
+        session,
+        tenant_id=str(tenant.id),
+        today=today,
+        now=now,
+        horizon_days=CONTRACT_EXPIRY_HORIZON_DAYS,
+    )
+    items = [
+        ClientAttentionRead(
+            client_id=row.client_id,
+            client_name=row.client_name,
+            aggregation=row.aggregation,
+            signals=[
+                AttentionSignalRead(
+                    kind=s.kind,
+                    count=s.count,
+                    severity=s.severity,
+                    title=s.title,
+                    action_hint=s.action_hint,
+                )
+                for s in row.signals
+            ],
+            total=row.total,
+            severity=row.severity,
+            reason=row.reason,
+        )
+        for row in rows
+    ]
+    summary = CrossClientAttentionSummary(
+        clients_total=len(rows),
+        clients_with_signals=sum(1 for r in rows if r.signals),
+        clients_not_aggregated=sum(
+            1 for r in rows if r.aggregation is AggregationStatus.NOT_AGGREGATED
+        ),
+        signals_total=sum(r.total or 0 for r in rows),
+        critical_clients=sum(1 for r in rows if r.severity is Severity.CRITICAL),
+    )
+
+    # ``compute_list_etag`` ждёт ORM-строки с id/updated_at, а здесь вычисляемая
+    # проекция — поэтому состояние портфеля кладётся в скаляр-отпечаток целиком.
+    digest = ";".join(
+        f"{r.client_id}:{r.aggregation.value}:{r.total}:{r.severity.value if r.severity else ''}"
+        for r in rows
+    )
+    etag = compute_list_etag(
+        tenant_id=str(tenant.id),
+        items=[],
+        scalars=[
+            ("clients", summary.clients_total),
+            ("signals", summary.signals_total),
+            ("critical", summary.critical_clients),
+            ("not_aggregated", summary.clients_not_aggregated),
+            ("today", today.isoformat()),
+            ("digest", digest),
+        ],
+    )
+    apply_etag_response_headers(response, etag)
+    if request.headers.get("if-none-match") == etag:
+        return Response(
+            status_code=status.HTTP_304_NOT_MODIFIED, headers=build_not_modified_headers(etag)
+        )
+    return CrossClientAttentionResponse(generated_at=now, summary=summary, items=items)
 
 
 @router.post("", response_model=ManagedClientRead, status_code=status.HTTP_201_CREATED)
