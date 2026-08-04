@@ -30,6 +30,7 @@ api_key_auth = _legacy_security.api_key_auth
 decode_token = _legacy_security.decode_token
 get_auth_ctx = _legacy_security.get_auth_ctx
 issue_access_token = _legacy_security.issue_access_token
+issue_portal_session_token = _legacy_security.issue_portal_session_token
 issue_refresh_token = _legacy_security.issue_refresh_token
 rbac = _legacy_security.rbac
 roles_from_jwt_claims = _legacy_security.roles_from_jwt_claims
@@ -39,6 +40,7 @@ __all__ = [
     "UserContext",
     "enforce",
     "issue_access_token",
+    "issue_portal_session_token",
     "issue_refresh_token",
     "decode_token",
     "verify_token",

@@ -123,6 +123,31 @@ def issue_access_token(
     return jwt.encode(payload, settings.jwt_private_key_pem, algorithm=settings.jwt_algorithm)
 
 
+def issue_portal_session_token(
+    *,
+    token_id: str,
+    tenant: str,
+    expires_at: datetime,
+    settings: Settings | None = None,
+) -> str:
+    """SEC-68: короткоживущий сеансовый токен внешнего портала.
+
+    ``sub`` — id ссылочного ``ClientPortalToken``: авторизация портала на каждом
+    запросе перечитывает ссылку из базы (отзыв ссылки убивает и сеанс), поэтому
+    в сам JWT ничего, кроме указателя и арендатора, не кладётся.
+    """
+
+    settings = settings or get_settings()
+    payload = _base_payload(
+        str(token_id),
+        expires_at=expires_at,
+        token_type="portal_session",
+        settings=settings,
+        additional_claims={"tenant": str(tenant)},
+    )
+    return jwt.encode(payload, settings.jwt_private_key_pem, algorithm=settings.jwt_algorithm)
+
+
 def issue_refresh_token(
     *,
     subject: str,
