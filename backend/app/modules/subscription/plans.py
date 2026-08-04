@@ -28,6 +28,7 @@ __all__ = [
 # is_feature_enabled(<code>) and blocks (404) when the tenant lacks it. Keep this
 # list in sync with the _FEATURE_CODE constants across the gated routers.
 FEATURE_CATALOG: dict[str, str] = {
+    "managed_clients": "Ведение клиентов (аутсорсинг)",
     "committees": "Комитеты",
     "contractors": "Подрядчики",
     "medical": "Медосмотры",
@@ -52,6 +53,8 @@ FEATURE_CATALOG: dict[str, str] = {
 #   выдачи СИЗ (routes/ppe.py::writeoff, services/ppe_notifications.py), склад
 #   лишь списывает остатки.
 MODULE_EVENT_TYPES: dict[str, frozenset[str]] = {
+    # BIZ-49 срез-1 — портфель клиентов событий пока не испускает.
+    "managed_clients": frozenset(),
     "committees": frozenset(),
     "contractors": frozenset(
         {
