@@ -24,6 +24,7 @@
     "DELETE /api/v1/journals/{journal_id}",
     "DELETE /api/v1/layout-presets/{preset_id}",
     "DELETE /api/v1/managed-clients/{mcid}",
+    "DELETE /api/v1/managed-clients/{mcid}/access/{grant_id}",
     "DELETE /api/v1/medical/factors/{factor_id}",
     "DELETE /api/v1/medical/norms/{norm_id}",
     "DELETE /api/v1/medical/psychiatric/activity-types/{activity_id}",
@@ -250,8 +251,10 @@
     "GET /api/v1/managed-clients",
     "GET /api/v1/managed-clients/attention",
     "GET /api/v1/managed-clients/calendar",
+    "GET /api/v1/managed-clients/my",
     "GET /api/v1/managed-clients/workload",
     "GET /api/v1/managed-clients/{mcid}",
+    "GET /api/v1/managed-clients/{mcid}/access",
     "GET /api/v1/marketplace",
     "GET /api/v1/medical/contingent",
     "GET /api/v1/medical/contingent/register",
@@ -727,6 +730,7 @@
     "POST /api/v1/machine-keys/{item_id}/revoke",
     "POST /api/v1/machine-keys/{item_id}/rotate",
     "POST /api/v1/managed-clients",
+    "POST /api/v1/managed-clients/{mcid}/access",
     "POST /api/v1/marketplace",
     "POST /api/v1/marketplace/{item_id}/install",
     "POST /api/v1/medical/contingent/generate-referrals",
@@ -1433,6 +1437,7 @@
     "get_workplace_api_v1_sout_workplaces__wid__get",
     "get_workplace_api_v1_workplaces__workplace_id__get",
     "global_search_api_v1_search_get",
+    "grant_access_api_v1_managed_clients__mcid__access_post",
     "grant_subject_consent_api_v1_privacy_subjects__person_id__consents_post",
     "history_api_v1_client_portal_history_get",
     "import_apply_api_v1_sout__cid__import_apply_post",
@@ -1455,6 +1460,7 @@
     "learner_dashboard_api_v1_training_learner_dashboard_get",
     "lift_suspension_api_v1_medical_suspensions__suspension_id__lift_post",
     "lint_template_version_api_v1_templates__template_id__versions__version_id__lint_post",
+    "list_access_grants_api_v1_managed_clients__mcid__access_get",
     "list_acknowledgements_api_v1_sign_acknowledgements_get",
     "list_action_plans_api_v1_risk_action_plans_get",
     "list_actions_api_v1_corrective_actions_get",
@@ -1622,6 +1628,7 @@
     "mark_read_api_v1_notifications_mark_read_post",
     "me_api_v1_auth_me_get",
     "me_permissions_api_v1_auth_me_permissions_get",
+    "my_managed_clients_api_v1_managed_clients_my_get",
     "obligations_summary_api_v1_obligations_summary_get",
     "offboarding_status_api_v1_offboarding_status_get",
     "overdue_dashboard_api_v1_analytics_dashboard_overdue_get",
@@ -1750,6 +1757,7 @@
     "retry_step_compat_api_v1_jobs__job_id__retry_step_post",
     "retry_step_run_api_v1_pipelines_runs__run_id__steps__step_run_id__retry_post",
     "return_issue_endpoint_api_v1_ppe_issues__issue_id__return_post",
+    "revoke_access_api_v1_managed_clients__mcid__access__grant_id__delete",
     "revoke_api_token_api_v1_api_tokens__token_id__delete",
     "revoke_certificate_api_v1_training_certificates__item_id__revoke_post",
     "revoke_machine_key_api_v1_machine_keys__item_id__revoke_post",
@@ -1890,6 +1898,8 @@
     "ws_events_stub_ws_v1_events_get"
   ],
   "schemas": [
+    "AccessGrantCreate",
+    "AccessGrantRead",
     "ActionPlanItemOut",
     "ActionPlanOut",
     "AdminPingResponse",
@@ -2295,6 +2305,8 @@
     "MethodologyIn",
     "MethodologyOut",
     "MethodologyUpdate",
+    "MyManagedClient",
+    "MyManagedClientsResponse",
     "NamedListPage",
     "NamedListRow",
     "NewFileVersionRequest",
@@ -2718,6 +2730,23 @@
     "app__schemas__sout__WorkplaceUpdate"
   ],
   "schema_fields": {
+    "AccessGrantCreate": {
+      "user_id": "string",
+      "all_modules": "boolean",
+      "modules": "array"
+    },
+    "AccessGrantRead": {
+      "id": "string",
+      "managed_client_id": "string",
+      "user_id": "string",
+      "all_modules": "boolean",
+      "modules": "array",
+      "granted_by_user_id": "null|string",
+      "granted_at": "string",
+      "revoked_at": "null|string",
+      "revoked_by_user_id": "null|string",
+      "active": "boolean"
+    },
     "ActionPlanItemOut": {
       "id": "string",
       "hazard_id": "null|string",
@@ -5627,6 +5656,16 @@
       "severity_scale": "array|null",
       "likelihood_scale": "array|null",
       "bands": "array|null"
+    },
+    "MyManagedClient": {
+      "client_id": "string",
+      "client_name": "string",
+      "mode": "ManagedClientMode",
+      "all_modules": "boolean",
+      "modules": "array"
+    },
+    "MyManagedClientsResponse": {
+      "items": "array"
     },
     "NamedListPage": {
       "items": "array",
