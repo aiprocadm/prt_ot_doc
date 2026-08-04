@@ -768,6 +768,7 @@
     "POST /api/v1/platform/tenants",
     "POST /api/v1/portal-requests/{request_id}/messages",
     "POST /api/v1/portal/packages/{run_id}/tickets",
+    "POST /api/v1/portal/session",
     "POST /api/v1/ppe/budgets",
     "POST /api/v1/ppe/issues",
     "POST /api/v1/ppe/issues/{issue_id}/replace",
@@ -1109,6 +1110,7 @@
     "create_person_endpoint_api_v1_persons_post",
     "create_policy_api_v1_admin_policies_post",
     "create_portal_link_api_v1_packages_runs__run_id__portal_link_post",
+    "create_portal_session_api_v1_portal_session_post",
     "create_prep_package_api_v1_inspection_prep_packages_post",
     "create_prescription_api_v1_prescriptions_post",
     "create_prescription_api_v1_safety_ops_prescriptions_post",
@@ -2424,6 +2426,7 @@
     "PolicyPayload",
     "PortalFilesResponse",
     "PortalLinkResponse",
+    "PortalSessionResponse",
     "PositionActivitiesIn",
     "PositionActivitiesPage",
     "PositionActivitiesRead",
@@ -6738,6 +6741,10 @@
     },
     "PortalLinkResponse": {
       "portal_url": "string",
+      "expires_at": "string"
+    },
+    "PortalSessionResponse": {
+      "session_token": "string",
       "expires_at": "string"
     },
     "PositionActivitiesIn": {

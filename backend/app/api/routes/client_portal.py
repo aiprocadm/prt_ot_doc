@@ -22,7 +22,7 @@ from app.core.external_perimeter import (
     enforce_portal_traffic,
     record_auth_failure,
 )
-from app.core.security import AccessContext, abac
+from app.core.security import AccessContext, abac, issue_portal_session_token, verify_token
 from app.db.session import rearm_session_tenant_context
 from app.models.models import (
     ClientPackagePreset,
@@ -216,6 +216,13 @@ class PortalLinkResponse(BaseModel):
     expires_at: datetime
 
 
+class PortalSessionResponse(BaseModel):
+    """SEC-68: результат обмена ссылочного токена на сеансовый."""
+
+    session_token: str
+    expires_at: datetime
+
+
 class PackageTicketCreate(BaseModel):
     title: str
     message: str
@@ -253,42 +260,7 @@ def _serialize_package_run(run: ClientPackageRun) -> dict[str, Any]:
     }
 
 
-async def _portal_auth(
-    request: Request,
-    session: Annotated[AsyncSession, Depends(get_session)],
-    x_portal_token: Annotated[str | None, Header(alias="X-Portal-Token")] = None,
-    token: Annotated[str | None, Query()] = None,
-) -> PortalAuth:
-    # SEC-68 (разд. 68.2): внешний контур ограничивается жёстче внутреннего, и
-    # проверка идёт ДО обращения к базе — перебор не должен стоить нам запроса
-    # в БД на каждую попытку.
-    enforce_portal_traffic(request)
-    assert_not_locked_out(request)
-
-    raw = x_portal_token or token
-    if not raw:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Portal token is required")
-    token_hash = _hash_token(raw)
-    stmt = select(ClientPortalToken).where(ClientPortalToken.token_hash == token_hash)
-    record = (await session.execute(stmt)).scalar_one_or_none()
-    if record is None:
-        record_auth_failure(request)
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid portal token")
-    expires_at = _as_utc(record.expires_at)
-    if record.revoked_at is not None or expires_at <= _utcnow():
-        # Протухший/отозванный токен НЕ считаем попыткой перебора: это обычная
-        # ситуация у легитимного клиента со старой ссылкой в почте.
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Portal token expired or revoked")
-    if not hmac.compare_digest(_hash_token(raw), record.token_hash):
-        record_auth_failure(request)
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid portal token")
-
-    # SEC-68 (разд. 68.1 «одноразовость где возможно»): лимит использований.
-    if record.max_uses is not None and (record.uses_count or 0) >= record.max_uses:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Portal token usage limit reached")
-    record.uses_count = (record.uses_count or 0) + 1
-    record.last_used_at = _utcnow()
-
+def _auth_from_record(record: ClientPortalToken) -> PortalAuth:
     scope = record.scope_json or {}
     package_ids = set(scope.get("package_run_ids") or [record.package_run_id])
     return PortalAuth(
@@ -298,6 +270,76 @@ async def _portal_auth(
         can_tickets=bool(scope.get("tickets", True)),
         can_download=bool(scope.get("download", True)),
     )
+
+
+def _ensure_link_alive(record: ClientPortalToken) -> None:
+    expires_at = _as_utc(record.expires_at)
+    if record.revoked_at is not None or expires_at <= _utcnow():
+        # Протухший/отозванный токен НЕ считаем попыткой перебора: это обычная
+        # ситуация у легитимного клиента со старой ссылкой в почте.
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Portal token expired or revoked")
+
+
+async def _resolve_link_token(
+    request: Request, session: AsyncSession, raw: str, *, burn_use: bool
+) -> ClientPortalToken:
+    """Найти и проверить ссылочный токен; ``burn_use`` тратит одно использование."""
+
+    token_hash = _hash_token(raw)
+    stmt = select(ClientPortalToken).where(ClientPortalToken.token_hash == token_hash)
+    record = (await session.execute(stmt)).scalar_one_or_none()
+    if record is None:
+        record_auth_failure(request)
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid portal token")
+    _ensure_link_alive(record)
+    if not hmac.compare_digest(_hash_token(raw), record.token_hash):
+        record_auth_failure(request)
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid portal token")
+
+    if burn_use:
+        # SEC-68 (разд. 68.1 «одноразовость где возможно»): лимит использований.
+        if record.max_uses is not None and (record.uses_count or 0) >= record.max_uses:
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Portal token usage limit reached")
+        record.uses_count = (record.uses_count or 0) + 1
+        record.last_used_at = _utcnow()
+    return record
+
+
+async def _portal_auth(
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    x_portal_session: Annotated[str | None, Header(alias="X-Portal-Session")] = None,
+    x_portal_token: Annotated[str | None, Header(alias="X-Portal-Token")] = None,
+    token: Annotated[str | None, Query()] = None,
+) -> PortalAuth:
+    # SEC-68 (разд. 68.2): внешний контур ограничивается жёстче внутреннего, и
+    # проверка идёт ДО обращения к базе — перебор не должен стоить нам запроса
+    # в БД на каждую попытку.
+    enforce_portal_traffic(request)
+    assert_not_locked_out(request)
+
+    # Сеансовый токен (обмен по разд. 68.1) — приоритетный путь: не тратит
+    # использований ссылки, принимается ТОЛЬКО заголовком (в query ему не место).
+    if x_portal_session:
+        try:
+            claims = verify_token(x_portal_session, expected_type="portal_session")
+        except HTTPException:
+            # Подделка сеансового токена — та же попытка перебора.
+            record_auth_failure(request)
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid portal session")
+        record = await session.get(ClientPortalToken, str(claims.get("sub") or ""))
+        if record is None:
+            record_auth_failure(request)
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid portal session")
+        # Отзыв ссылки обязан убивать и сеанс — перепроверяем на каждом запросе.
+        _ensure_link_alive(record)
+        return _auth_from_record(record)
+
+    raw = x_portal_token or token
+    if not raw:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Portal token is required")
+    record = await _resolve_link_token(request, session, raw, burn_use=True)
+    return _auth_from_record(record)
 
 
 async def _get_run_for_tenant(
@@ -551,6 +593,41 @@ async def create_portal_link(
     )
     await session.commit()
     return PortalLinkResponse(portal_url=f"/portal?token={plain}", expires_at=expires_at)
+
+
+@router.post("/session", response_model=PortalSessionResponse)
+async def create_portal_session(
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    x_portal_token: Annotated[str | None, Header(alias="X-Portal-Token")] = None,
+    token: Annotated[str | None, Query()] = None,
+) -> PortalSessionResponse:
+    """SEC-68 (разд. 68.1): обменять ссылочный токен на короткоживущий сеансовый.
+
+    Ссылка из письма остаётся входным билетом (разосланные ссылки не ломаются),
+    но после обмена токен из query больше нигде не фигурирует: сеанс ходит
+    ТОЛЬКО заголовком ``X-Portal-Session`` и не тратит использований ссылки —
+    одноразовая ссылка (max_uses=1) переживает UI из многих запросов.
+    """
+
+    enforce_portal_traffic(request)
+    assert_not_locked_out(request)
+    raw = x_portal_token or token
+    if not raw:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Portal token is required")
+    record = await _resolve_link_token(request, session, raw, burn_use=True)
+
+    settings = get_settings()
+    link_expires = _as_utc(record.expires_at)
+    session_expires = min(
+        _utcnow() + timedelta(minutes=settings.portal_session_ttl_minutes), link_expires
+    )
+    session_token = issue_portal_session_token(
+        token_id=str(record.id),
+        tenant=str(record.tenant_id),
+        expires_at=session_expires,
+    )
+    return PortalSessionResponse(session_token=session_token, expires_at=session_expires)
 
 
 @router.get("/packages")
