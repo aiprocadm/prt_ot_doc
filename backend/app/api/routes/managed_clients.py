@@ -90,6 +90,11 @@ def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> str | No
 # и показывал бы им коммерческие данные чужих клиентов.
 _ROLES = ["admin", "owner", "manager", "ot_pb_lead"]
 Access = Annotated[AccessContext, Depends(abac(_tenant_resource_id, required_roles=_ROLES))]
+# «Мои клиенты» доступны ЛЮБОМУ аутентифицированному специалисту арендатора:
+# это личная выборка, а не обзор портфеля. Пустой список ролей = только
+# аутентификация; она же кладёт access_context, из которого get_auth_ctx
+# берёт субъекта (без неё роут отвечал 401 при валидном токене).
+AnyAuthenticated = Annotated[AccessContext, Depends(abac(_tenant_resource_id))]
 
 _FEATURE_CODE = "managed_clients"
 
@@ -516,6 +521,7 @@ async def specialist_workload(
 async def my_managed_clients(
     tenant: TenantDep,
     session: SessionDep,
+    access: AnyAuthenticated,
     auth: Annotated[AuthContext, Depends(get_auth_ctx)],
 ) -> MyManagedClientsResponse:
     """Клиенты, доступные текущему специалисту (основа переключателя, разд. 49.3).
