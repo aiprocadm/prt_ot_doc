@@ -70,6 +70,7 @@ export const SyncConflictHelpPage = lazy(() => import("@/pages/help/SyncConflict
 export const WorkPermitsPage = lazy(() => import("@/pages/work-permits/WorkPermitsPage"));
 export const WorkPermitDetailPage = lazy(() => import("@/pages/work-permits/WorkPermitDetailPage"));
 export const CommitteesPage = lazy(() => import("@/pages/committees/CommitteesPage"));
+export const ClientCockpitPage = lazy(() => import("@/pages/managed-clients/ClientCockpitPage"));
 export const CommitteeKpiPage = lazy(() => import("@/pages/committees/CommitteeKpiPage"));
 export const SoutPage = lazy(() => import("@/pages/sout/SoutPage"));
 export const RulesPage = lazy(() => import("@/pages/rules/RulesPage"));

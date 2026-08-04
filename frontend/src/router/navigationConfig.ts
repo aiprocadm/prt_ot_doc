@@ -109,6 +109,7 @@ export const MAIN_NAV_GROUPS: NavGroup[] = [
   {
     title: "Бизнес и аналитика",
     items: [
+      { label: "Клиенты (аутсорсинг)", to: "/managed-clients", icon: Briefcase, permission: PERMISSIONS.MANAGED_CLIENTS_VIEW },
       { label: "CRM / Финансы", to: "/crm-finance", icon: Briefcase, permission: PERMISSIONS.CRM_FINANCE_VIEW },
       { label: "НПА / Нормативная база", to: "/npa", icon: BookOpen, permission: PERMISSIONS.NPA_VIEW },
       { label: "Отчёты", to: "/reports", icon: ShieldCheck, permission: PERMISSIONS.REPORTS_VIEW },
