@@ -303,7 +303,9 @@ async def test_my_clients_only_with_active_grant(sessionmaker):
         )
         await session.commit()
 
-        out = await routes.my_managed_clients(tenant=_tenant(), session=session, auth=_auth("u1"))
+        out = await routes.my_managed_clients(
+            tenant=_tenant(), session=session, access=SimpleNamespace(), auth=_auth("u1")
+        )
     assert [i.client_name for i in out.items] == ["Доступен"]
 
 
@@ -314,7 +316,7 @@ async def test_no_grants_means_empty_not_whole_portfolio(sessionmaker):
         await _client(session, name="Чей-то клиент")
         await session.commit()
         out = await routes.my_managed_clients(
-            tenant=_tenant(), session=session, auth=_auth("u-без-грантов")
+            tenant=_tenant(), session=session, access=SimpleNamespace(), auth=_auth("u-без-грантов")
         )
     assert out.items == []
 
@@ -334,7 +336,9 @@ async def test_my_clients_are_tenant_scoped(sessionmaker):
             )
         )
         await session.commit()
-        out = await routes.my_managed_clients(tenant=_tenant(), session=session, auth=_auth("u1"))
+        out = await routes.my_managed_clients(
+            tenant=_tenant(), session=session, access=SimpleNamespace(), auth=_auth("u1")
+        )
     assert out.items == []
 
 
@@ -343,5 +347,7 @@ async def test_my_clients_respects_feature_flag(sessionmaker, monkeypatch):
     monkeypatch.setattr(routes, "is_feature_enabled", AsyncMock(return_value=False))
     async with sessionmaker() as session:
         with pytest.raises(HTTPException) as exc:
-            await routes.my_managed_clients(tenant=_tenant(), session=session, auth=_auth("u1"))
+            await routes.my_managed_clients(
+                tenant=_tenant(), session=session, access=SimpleNamespace(), auth=_auth("u1")
+            )
     assert exc.value.status_code == 404
