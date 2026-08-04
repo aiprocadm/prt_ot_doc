@@ -9,6 +9,7 @@ from pydantic import Field, field_validator
 from app.domains.managed_clients.attention import AggregationStatus, Severity, SignalKind
 from app.domains.managed_clients.calendar import DeadlineKind
 from app.domains.managed_clients.lifecycle import ContractStatus, ManagedClientMode
+from app.domains.managed_clients.workload import OverloadReason
 from app.schemas.base import BaseSchema
 
 
@@ -159,3 +160,43 @@ class CrossClientCalendarResponse(BaseSchema):
     horizon_days: int
     summary: CalendarSummary
     days: list[DeadlineDayRead]
+
+
+# --- Загрузка специалистов (срез-5, разд. 49.2) ---
+class OverloadReasonRead(BaseSchema):
+    code: OverloadReason
+    text: str
+
+
+class SpecialistWorkloadRead(BaseSchema):
+    person_id: str
+    person_name: str | None = None
+    #: Строка «клиенты без ответственного» — не специалист, но и не невидимка.
+    unassigned: bool
+    clients_total: int
+    clients_critical: int
+    signals_total: int
+    overdue_deadlines: int
+    overloaded: bool
+    overload_reasons: list[OverloadReasonRead]
+
+
+class WorkloadThresholdsRead(BaseSchema):
+    """Пороги в ответе: руководитель должен видеть, по какому правилу красное."""
+
+    max_clients: int
+    max_signals: int
+    max_overdue: int
+
+
+class WorkloadSummary(BaseSchema):
+    specialists_total: int = 0
+    overloaded: int = 0
+    clients_unassigned: int = 0
+
+
+class SpecialistWorkloadResponse(BaseSchema):
+    generated_at: datetime
+    thresholds: WorkloadThresholdsRead
+    summary: WorkloadSummary
+    items: list[SpecialistWorkloadRead]

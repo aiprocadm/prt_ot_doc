@@ -39,6 +39,8 @@ from app.domains.managed_clients.lifecycle import (
     validate_contract_transition,
     validate_mode_binding,
 )
+from app.domains.managed_clients.workload import DEFAULT_THRESHOLDS, OVERLOAD_REASON_TEXT
+from app.domains.managed_clients.workload_service import collect_specialist_workload
 from app.models.managed_clients import ManagedClient
 from app.models.tenanting import Tenant
 from app.schemas.managed_clients import (
@@ -53,9 +55,14 @@ from app.schemas.managed_clients import (
     ManagedClientCreate,
     ManagedClientRead,
     ManagedClientUpdate,
+    OverloadReasonRead,
     PortfolioItem,
     PortfolioPage,
     PortfolioSummary,
+    SpecialistWorkloadRead,
+    SpecialistWorkloadResponse,
+    WorkloadSummary,
+    WorkloadThresholdsRead,
 )
 
 router = APIRouter(prefix="/managed-clients", tags=["managed-clients"])
@@ -383,6 +390,89 @@ async def cross_client_calendar(
         )
     return CrossClientCalendarResponse(
         generated_at=now, horizon_days=days, summary=summary, days=days_out
+    )
+
+
+@router.get("/workload", response_model=SpecialistWorkloadResponse)
+async def specialist_workload(
+    request: Request,
+    response: Response,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: Access,
+    days: int = Query(30, ge=1, le=365, description="Горизонт для просрочек, дней"),
+) -> SpecialistWorkloadResponse | Response:
+    """Загрузка специалистов по портфелю (разд. 49.2, блок «Загрузка специалистов»).
+
+    Пороги перегруза возвращаются вместе с данными: строка «перегружен» без
+    объяснения, по какому правилу, вызывает спор, а не действие.
+    """
+
+    TenantContextValidator.ensure_tenant_context(tenant)
+    await _require_enabled(session, tenant)
+    now = datetime.now(tz=timezone.utc)
+    today = _today()
+
+    rows = await collect_specialist_workload(
+        session,
+        tenant_id=str(tenant.id),
+        today=today,
+        horizon_days=days,
+        thresholds=DEFAULT_THRESHOLDS,
+        now=now,
+    )
+    items = [
+        SpecialistWorkloadRead(
+            person_id=r.person_id,
+            person_name=r.person_name,
+            unassigned=r.unassigned,
+            clients_total=r.clients_total,
+            clients_critical=r.clients_critical,
+            signals_total=r.signals_total,
+            overdue_deadlines=r.overdue_deadlines,
+            overloaded=r.overloaded,
+            overload_reasons=[
+                OverloadReasonRead(code=reason, text=OVERLOAD_REASON_TEXT[reason])
+                for reason in r.overload_reasons
+            ],
+        )
+        for r in rows
+    ]
+    summary = WorkloadSummary(
+        specialists_total=sum(1 for r in rows if not r.unassigned),
+        overloaded=sum(1 for r in rows if r.overloaded and not r.unassigned),
+        clients_unassigned=sum(r.clients_total for r in rows if r.unassigned),
+    )
+
+    digest = ";".join(
+        f"{r.person_id}:{r.clients_total}:{r.signals_total}:{r.overdue_deadlines}:{int(r.overloaded)}"
+        for r in rows
+    )
+    etag = compute_list_etag(
+        tenant_id=str(tenant.id),
+        items=[],
+        scalars=[
+            ("specialists", summary.specialists_total),
+            ("overloaded", summary.overloaded),
+            ("days", days),
+            ("today", today.isoformat()),
+            ("digest", digest),
+        ],
+    )
+    apply_etag_response_headers(response, etag)
+    if request.headers.get("if-none-match") == etag:
+        return Response(
+            status_code=status.HTTP_304_NOT_MODIFIED, headers=build_not_modified_headers(etag)
+        )
+    return SpecialistWorkloadResponse(
+        generated_at=now,
+        thresholds=WorkloadThresholdsRead(
+            max_clients=DEFAULT_THRESHOLDS.max_clients,
+            max_signals=DEFAULT_THRESHOLDS.max_signals,
+            max_overdue=DEFAULT_THRESHOLDS.max_overdue,
+        ),
+        summary=summary,
+        items=items,
     )
 
 

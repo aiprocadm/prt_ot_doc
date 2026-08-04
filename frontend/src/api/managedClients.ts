@@ -122,6 +122,43 @@ export interface CrossClientCalendar {
   days: DeadlineDay[];
 }
 
+export interface OverloadReason {
+  code: "too_many_clients" | "too_many_signals" | "too_many_overdue" | "critical_client";
+  text: string;
+}
+
+export interface SpecialistWorkload {
+  person_id: string;
+  person_name?: string | null;
+  /** Строка «клиенты без ответственного» — не специалист, но и не невидимка. */
+  unassigned: boolean;
+  clients_total: number;
+  clients_critical: number;
+  signals_total: number;
+  overdue_deadlines: number;
+  overloaded: boolean;
+  overload_reasons: OverloadReason[];
+}
+
+export interface WorkloadThresholds {
+  max_clients: number;
+  max_signals: number;
+  max_overdue: number;
+}
+
+export interface WorkloadSummary {
+  specialists_total: number;
+  overloaded: number;
+  clients_unassigned: number;
+}
+
+export interface SpecialistWorkloadResponse {
+  generated_at: string;
+  thresholds: WorkloadThresholds;
+  summary: WorkloadSummary;
+  items: SpecialistWorkload[];
+}
+
 // ── API ────────────────────────────────────────────────────────────────────
 
 const base = "/managed-clients";
@@ -154,6 +191,14 @@ export const managedClientsApi = {
   ): Promise<CrossClientCalendar> {
     const r = await apiClient.get<CrossClientCalendar>(`${base}/calendar`, {
       params: { days: 30, ...params },
+      ...silent
+    });
+    return r.data;
+  },
+
+  async workload(days = 30): Promise<SpecialistWorkloadResponse> {
+    const r = await apiClient.get<SpecialistWorkloadResponse>(`${base}/workload`, {
+      params: { days },
       ...silent
     });
     return r.data;
