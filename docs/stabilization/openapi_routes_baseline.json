@@ -250,6 +250,7 @@
     "GET /api/v1/managed-clients",
     "GET /api/v1/managed-clients/attention",
     "GET /api/v1/managed-clients/calendar",
+    "GET /api/v1/managed-clients/workload",
     "GET /api/v1/managed-clients/{mcid}",
     "GET /api/v1/marketplace",
     "GET /api/v1/medical/contingent",
@@ -1792,6 +1793,7 @@
     "sign_submit_v1_api_v1_v1_sign_submit_post",
     "sign_webhook_api_v1_webhooks_sign__provider_code__post",
     "sla_load_dashboard_api_v1_analytics_dashboard_sla_load_get",
+    "specialist_workload_api_v1_managed_clients_workload_get",
     "start_approval_api_v1_approvals_start_post",
     "start_approval_request_api_v1_approvals_requests_post",
     "start_approval_request_v1_api_v1_edo_workflow_approvals_start_post",
@@ -2320,6 +2322,8 @@
     "OutboxEventStatus",
     "OutboxListResponse",
     "OutboxStatus",
+    "OverloadReason",
+    "OverloadReasonRead",
     "PPEBudgetCategoryActualRead",
     "PPECardRead",
     "PPECardRequiredLine",
@@ -2579,6 +2583,8 @@
     "SoutCampaignStatus",
     "SoutClass",
     "SoutGuaranteeKind",
+    "SpecialistWorkloadRead",
+    "SpecialistWorkloadResponse",
     "SubscriptionPlanRead",
     "TaskAcceptedResponse",
     "TaskCreate",
@@ -2682,6 +2688,8 @@
     "WorkflowTaskRead",
     "WorkflowTimelineRead",
     "WorkflowVersionRead",
+    "WorkloadSummary",
+    "WorkloadThresholdsRead",
     "WorkplaceReport",
     "WorkspaceAttentionResponse",
     "WorkspaceConfig",
@@ -5793,6 +5801,10 @@
       "total": "integer",
       "items": "array"
     },
+    "OverloadReasonRead": {
+      "code": "OverloadReason",
+      "text": "string"
+    },
     "PPEBudgetCategoryActualRead": {
       "category": "string",
       "amount": "number"
@@ -7699,6 +7711,23 @@
       "rows_count": "integer",
       "sample_rows": "array"
     },
+    "SpecialistWorkloadRead": {
+      "person_id": "string",
+      "person_name": "null|string",
+      "unassigned": "boolean",
+      "clients_total": "integer",
+      "clients_critical": "integer",
+      "signals_total": "integer",
+      "overdue_deadlines": "integer",
+      "overloaded": "boolean",
+      "overload_reasons": "array"
+    },
+    "SpecialistWorkloadResponse": {
+      "generated_at": "string",
+      "thresholds": "WorkloadThresholdsRead",
+      "summary": "WorkloadSummary",
+      "items": "array"
+    },
     "SubscriptionPlanRead": {
       "code": "string",
       "title": "string",
@@ -8540,6 +8569,16 @@
       "status": "string",
       "graph_json": "object",
       "variables_schema": "object"
+    },
+    "WorkloadSummary": {
+      "specialists_total": "integer",
+      "overloaded": "integer",
+      "clients_unassigned": "integer"
+    },
+    "WorkloadThresholdsRead": {
+      "max_clients": "integer",
+      "max_signals": "integer",
+      "max_overdue": "integer"
     },
     "WorkplaceReport": {
       "workplace": "app__schemas__sout__WorkplaceRead",

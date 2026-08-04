@@ -11,6 +11,7 @@ import {
   type PortfolioItem,
   type PortfolioPage,
   type Severity,
+  type SpecialistWorkloadResponse,
 } from "@/api/managedClients";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
@@ -301,6 +302,97 @@ const CalendarPanel = ({ clients }: CalendarPanelProps) => {
   );
 };
 
+// ── Загрузка специалистов ───────────────────────────────────────────────────
+
+interface WorkloadPanelProps {
+  data: SpecialistWorkloadResponse | null;
+  loading: boolean;
+  error: ApiError | null;
+  onRetry: () => void;
+}
+
+const WorkloadPanel = ({ data, loading, error, onRetry }: WorkloadPanelProps) => (
+  <Card>
+    <CardHeader>
+      <CardTitle className="text-base">Загрузка специалистов</CardTitle>
+    </CardHeader>
+    <CardContent className="space-y-3">
+      <ErrorState error={error ?? undefined} onRetry={onRetry} />
+      {loading ? <LoadingScreen label="Загрузка по специалистам" /> : null}
+      {!loading && !error && data ? (
+        <>
+          <div className="flex flex-wrap gap-4 text-sm" data-testid="workload-summary">
+            <span>
+              Специалистов: <strong>{data.summary.specialists_total}</strong>
+            </span>
+            <span className={data.summary.overloaded > 0 ? "text-destructive" : undefined}>
+              Перегружено: <strong>{data.summary.overloaded}</strong>
+            </span>
+            {data.summary.clients_unassigned > 0 ? (
+              <span className="text-destructive">
+                Без ответственного: <strong>{data.summary.clients_unassigned}</strong>
+              </span>
+            ) : null}
+          </div>
+          {/* Пороги показываем рядом: «перегружен» без правила — повод для спора,
+              а не для действия. */}
+          <p className="text-xs text-muted-foreground">
+            Порог перегруза: клиентов &gt; {data.thresholds.max_clients}, сигналов &gt;{" "}
+            {data.thresholds.max_signals}, просрочек &gt; {data.thresholds.max_overdue}, либо
+            есть критический клиент.
+          </p>
+          {data.items.length === 0 ? (
+            <EmptyState
+              title="Нет данных"
+              description="Назначьте ответственных специалистов клиентам."
+            />
+          ) : (
+            <Table data-testid="workload-table">
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Специалист</TableHead>
+                  <TableHead>Клиентов</TableHead>
+                  <TableHead>Сигналов</TableHead>
+                  <TableHead>Просрочено</TableHead>
+                  <TableHead>Состояние</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {data.items.map((row) => (
+                  <TableRow key={row.person_id} data-testid="workload-row">
+                    <TableCell className="font-medium">
+                      {row.unassigned ? "Без ответственного" : row.person_name ?? row.person_id}
+                    </TableCell>
+                    <TableCell>{row.clients_total}</TableCell>
+                    <TableCell>{row.signals_total}</TableCell>
+                    <TableCell>{row.overdue_deadlines}</TableCell>
+                    <TableCell>
+                      {row.overloaded ? (
+                        <span className="flex flex-col gap-1">
+                          <Badge variant="destructive" className="w-fit">
+                            Перегруз
+                          </Badge>
+                          {row.overload_reasons.map((reason) => (
+                            <span key={reason.code} className="text-xs text-muted-foreground">
+                              {reason.text}
+                            </span>
+                          ))}
+                        </span>
+                      ) : (
+                        <span className="text-sm text-muted-foreground">В норме</span>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </>
+      ) : null}
+    </CardContent>
+  </Card>
+);
+
 // ── Портфель ────────────────────────────────────────────────────────────────
 
 interface PortfolioPanelProps {
@@ -421,7 +513,7 @@ const PortfolioPanel = ({ data, loading, error, onRetry, onCreated }: PortfolioP
             {data.items.length === 0 ? (
               <EmptyState title="Портфель пуст" description="Клиенты ещё не заведены." />
             ) : (
-              <Table>
+              <Table data-testid="portfolio-table">
                 <TableHeader>
                   <TableRow>
                     <TableHead>Клиент</TableHead>
@@ -472,25 +564,30 @@ const PortfolioPanel = ({ data, loading, error, onRetry, onCreated }: PortfolioP
 const ClientCockpitPage = () => {
   const [portfolio, setPortfolio] = useState<PortfolioPage | null>(null);
   const [attention, setAttention] = useState<CrossClientAttention | null>(null);
+  const [workload, setWorkload] = useState<SpecialistWorkloadResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [portfolioError, setPortfolioError] = useState<ApiError | null>(null);
   const [attentionError, setAttentionError] = useState<ApiError | null>(null);
+  const [workloadError, setWorkloadError] = useState<ApiError | null>(null);
   const [moduleDisabled, setModuleDisabled] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     setPortfolioError(null);
     setAttentionError(null);
+    setWorkloadError(null);
     setModuleDisabled(false);
-    const [portfolioResult, attentionResult] = await Promise.allSettled([
+    const [portfolioResult, attentionResult, workloadResult] = await Promise.allSettled([
       managedClientsApi.portfolio(),
       managedClientsApi.attention(),
+      managedClientsApi.workload(),
     ]);
 
     // Модуль выключен — это не сбой: показываем объяснение вместо двух ошибок.
     const disabled =
       (portfolioResult.status === "rejected" && isModuleDisabled(portfolioResult.reason)) ||
-      (attentionResult.status === "rejected" && isModuleDisabled(attentionResult.reason));
+      (attentionResult.status === "rejected" && isModuleDisabled(attentionResult.reason)) ||
+      (workloadResult.status === "rejected" && isModuleDisabled(workloadResult.reason));
     if (disabled) {
       setModuleDisabled(true);
       setLoading(false);
@@ -506,6 +603,11 @@ const ClientCockpitPage = () => {
       setAttention(attentionResult.value);
     } else {
       setAttentionError(asApiError(attentionResult.reason, "Не удалось загрузить сводку внимания"));
+    }
+    if (workloadResult.status === "fulfilled") {
+      setWorkload(workloadResult.value);
+    } else {
+      setWorkloadError(asApiError(workloadResult.reason, "Не удалось загрузить загрузку специалистов"));
     }
     setLoading(false);
   }, []);
@@ -544,6 +646,14 @@ const ClientCockpitPage = () => {
             error={portfolioError}
             onRetry={load}
             onCreated={load}
+          />
+          {/* Загрузка — после портфеля: сначала «что горит» и сроки,
+              потом вопрос «кто это тянет». */}
+          <WorkloadPanel
+            data={workload}
+            loading={loading}
+            error={workloadError}
+            onRetry={load}
           />
         </>
       )}

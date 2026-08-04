@@ -2,12 +2,18 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { CrossClientAttention, CrossClientCalendar, PortfolioPage } from "@/api/managedClients";
+import type {
+  CrossClientAttention,
+  CrossClientCalendar,
+  PortfolioPage,
+  SpecialistWorkloadResponse
+} from "@/api/managedClients";
 
 const api = vi.hoisted(() => ({
   portfolio: vi.fn(),
   attention: vi.fn(),
   calendar: vi.fn(),
+  workload: vi.fn(),
   create: vi.fn(),
   update: vi.fn(),
   remove: vi.fn()
@@ -161,11 +167,43 @@ const CALENDAR: CrossClientCalendar = {
 };
 
 
+const WORKLOAD: SpecialistWorkloadResponse = {
+  generated_at: "2026-08-04T10:00:00Z",
+  thresholds: { max_clients: 8, max_signals: 25, max_overdue: 10 },
+  summary: { specialists_total: 1, overloaded: 1, clients_unassigned: 2 },
+  items: [
+    {
+      person_id: "spec-1",
+      person_name: "Иванов Иван",
+      unassigned: false,
+      clients_total: 3,
+      clients_critical: 1,
+      signals_total: 12,
+      overdue_deadlines: 2,
+      overloaded: true,
+      overload_reasons: [{ code: "critical_client", text: "Есть клиент в критическом состоянии" }]
+    },
+    {
+      person_id: "__unassigned__",
+      person_name: null,
+      unassigned: true,
+      clients_total: 2,
+      clients_critical: 0,
+      signals_total: 3,
+      overdue_deadlines: 0,
+      overloaded: false,
+      overload_reasons: []
+    }
+  ]
+};
+
+
 beforeEach(() => {
   Object.values(api).forEach((fn) => fn.mockReset());
   api.portfolio.mockResolvedValue(PORTFOLIO);
   api.attention.mockResolvedValue(ATTENTION);
   api.calendar.mockResolvedValue(CALENDAR);
+  api.workload.mockResolvedValue(WORKLOAD);
   api.create.mockResolvedValue({ id: "mc3" });
 });
 
@@ -206,7 +244,7 @@ describe("ClientCockpitPage", () => {
 
     expect(screen.getByText("Истекает")).toBeInTheDocument();
     // имя клиента есть и в блоке внимания, и в портфеле — проверяем именно таблицу
-    const table = screen.getByRole("table");
+    const table = screen.getByTestId("portfolio-table");
     expect(within(table).getByText("ООО Ромашка")).toBeInTheDocument();
     expect(within(table).getByText("Свой контур")).toBeInTheDocument();
   });
@@ -255,7 +293,7 @@ describe("ClientCockpitPage", () => {
     render(<ClientCockpitPage />);
     await waitFor(() => expect(screen.getByTestId("portfolio-summary")).toBeInTheDocument());
     // имя встречается ещё в фильтре календаря — проверяем именно таблицу портфеля
-    expect(within(screen.getByRole("table")).getByText("ООО Ромашка")).toBeInTheDocument();
+    expect(within(screen.getByTestId("portfolio-table")).getByText("ООО Ромашка")).toBeInTheDocument();
   });
 
   it("показывает календарь дедлайнов с просрочкой", async () => {
@@ -287,5 +325,30 @@ describe("ClientCockpitPage", () => {
     await user.selectOptions(screen.getByLabelText("Горизонт"), "7");
     await waitFor(() => expect(api.calendar.mock.calls.at(-1)?.[0]).toMatchObject({ days: 7 }));
     expect(api.calendar.mock.calls.at(-1)?.[0].kind).toBeUndefined();
+  });
+
+  it("показывает загрузку специалистов с причиной перегруза", async () => {
+    render(<ClientCockpitPage />);
+    await waitFor(() => expect(screen.getByTestId("workload-summary")).toBeInTheDocument());
+
+    const table = screen.getByTestId("workload-table");
+    expect(within(table).getByText("Иванов Иван")).toBeInTheDocument();
+    expect(within(table).getByText("Перегруз")).toBeInTheDocument();
+    expect(screen.getByText("Есть клиент в критическом состоянии")).toBeInTheDocument();
+  });
+
+  it("показывает пороги: «перегружен» без правила — повод для спора", async () => {
+    render(<ClientCockpitPage />);
+    await waitFor(() => expect(screen.getByTestId("workload-summary")).toBeInTheDocument());
+    expect(screen.getByText(/Порог перегруза/)).toBeInTheDocument();
+  });
+
+  it("клиенты без ответственного видны отдельной строкой", async () => {
+    render(<ClientCockpitPage />);
+    await waitFor(() => expect(screen.getByTestId("workload-summary")).toBeInTheDocument());
+
+    expect(screen.getByText("Без ответственного")).toBeInTheDocument();
+    expect(screen.getByText(/Без ответственного:/)).toBeInTheDocument();
+    expect(screen.getAllByTestId("workload-row")).toHaveLength(2);
   });
 });
