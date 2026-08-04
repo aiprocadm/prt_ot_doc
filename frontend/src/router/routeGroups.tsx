@@ -8,6 +8,7 @@ import { searchAndFilesRoutes } from "@/router/features/searchAndFilesRoutes";
 import {
   ActivitiesPage,
   CommitteeKpiPage,
+  ClientCockpitPage,
   CommitteesPage,
   SoutPage,
   AdminLayoutPresetsPage,
@@ -254,6 +255,7 @@ export const buildProtectedRouteGroups = (): ReactElement[] => {
     { permission: PERMISSIONS.CRM_FINANCE_VIEW, routes: [<Route key="/crm-finance" path="/crm-finance" element={<CrmFinancePage />} />] },
     { permission: PERMISSIONS.INTEGRATIONS_VIEW, routes: [<Route key="/integrations" path="/integrations" element={<IntegrationsPage />} />] },
     { permission: PERMISSIONS.COMMITTEE_VIEW, routes: [<Route key="/committees" path="/committees" element={<CommitteesPage />} />] },
+    { permission: PERMISSIONS.MANAGED_CLIENTS_VIEW, routes: [<Route key="/managed-clients" path="/managed-clients" element={<ClientCockpitPage />} />] },
     { permission: PERMISSIONS.SOUT_VIEW, routes: [<Route key="/sout" path="/sout" element={<SoutPage />} />] },
     { permission: PERMISSIONS.RULES_VIEW, routes: [<Route key="/rules" path="/rules" element={<RulesPage />} />] },
     { permission: PERMISSIONS.BUDGET_VIEW, routes: [<Route key="/budget" path="/budget" element={<BudgetPage />} />] },

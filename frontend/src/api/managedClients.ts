@@ -1,0 +1,148 @@
+import { apiClient } from "@/api/client";
+
+// ── Types ──────────────────────────────────────────────────────────────────
+
+export type ManagedClientMode = "lightweight" | "dedicated";
+export type ContractStatus = "draft" | "active" | "suspended" | "terminated";
+
+export interface ManagedClient {
+  id: string;
+  name: string;
+  mode: ManagedClientMode;
+  company_id?: string | null;
+  dedicated_tenant_slug?: string | null;
+  contract_status: ContractStatus;
+  contract_no?: string | null;
+  contract_starts_at?: string | null;
+  contract_ends_at?: string | null;
+  responsible_person_id?: string | null;
+  notes?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PortfolioItem extends ManagedClient {
+  contract_days_left?: number | null;
+  contract_expiring: boolean;
+}
+
+export interface PortfolioSummary {
+  total: number;
+  active: number;
+  draft: number;
+  suspended: number;
+  terminated: number;
+  lightweight: number;
+  dedicated: number;
+  contracts_expiring: number;
+}
+
+export interface PortfolioPage {
+  items: PortfolioItem[];
+  summary: PortfolioSummary;
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export type Severity = "low" | "medium" | "high" | "critical";
+export type AggregationStatus = "aggregated" | "not_aggregated";
+export type SignalKind =
+  | "medical_overdue"
+  | "ppe_overdue"
+  | "training_overdue"
+  | "contract_expiring"
+  | "contacts_missing";
+
+export interface AttentionSignal {
+  kind: SignalKind;
+  count: number;
+  severity: Severity;
+  title: string;
+  action_hint: string;
+}
+
+export interface ClientAttention {
+  client_id: string;
+  client_name: string;
+  aggregation: AggregationStatus;
+  signals: AttentionSignal[];
+  /** null = данные клиента не собирались (свой контур), а НЕ «ноль проблем». */
+  total: number | null;
+  severity: Severity | null;
+  reason?: string | null;
+}
+
+export interface CrossClientAttentionSummary {
+  clients_total: number;
+  clients_with_signals: number;
+  clients_not_aggregated: number;
+  signals_total: number;
+  critical_clients: number;
+}
+
+export interface CrossClientAttention {
+  generated_at: string;
+  summary: CrossClientAttentionSummary;
+  items: ClientAttention[];
+}
+
+// ── API ────────────────────────────────────────────────────────────────────
+
+const base = "/managed-clients";
+
+/**
+ * Модуль ведения клиентов выключен по умолчанию: пока арендатор его не
+ * подключил, бэкенд отвечает 404 (`MANAGED_CLIENTS_DISABLED`). Это штатное
+ * состояние, а не сбой, поэтому глобальный тост тут не нужен — страница
+ * показывает объяснение сама.
+ */
+const silent = { silentApiErrorToast: true } as const;
+
+export const MANAGED_CLIENTS_DISABLED = "MANAGED_CLIENTS_DISABLED";
+
+export const managedClientsApi = {
+  async portfolio(params: { limit?: number; offset?: number } = {}): Promise<PortfolioPage> {
+    const r = await apiClient.get<PortfolioPage>(base, {
+      params: { limit: 100, offset: 0, ...params },
+      ...silent
+    });
+    return r.data;
+  },
+
+  async attention(): Promise<CrossClientAttention> {
+    return (await apiClient.get<CrossClientAttention>(`${base}/attention`, silent)).data;
+  },
+
+  async create(payload: {
+    name: string;
+    mode: ManagedClientMode;
+    company_id?: string | null;
+    dedicated_tenant_slug?: string | null;
+    contract_no?: string | null;
+    contract_ends_at?: string | null;
+  }): Promise<ManagedClient> {
+    return (await apiClient.post<ManagedClient>(base, payload)).data;
+  },
+
+  async update(
+    id: string,
+    payload: Partial<{
+      name: string;
+      mode: ManagedClientMode;
+      company_id: string | null;
+      dedicated_tenant_slug: string | null;
+      contract_status: ContractStatus;
+      contract_no: string | null;
+      contract_ends_at: string | null;
+      responsible_person_id: string | null;
+      notes: string | null;
+    }>
+  ): Promise<ManagedClient> {
+    return (await apiClient.patch<ManagedClient>(`${base}/${id}`, payload)).data;
+  },
+
+  async remove(id: string): Promise<void> {
+    await apiClient.delete(`${base}/${id}`);
+  }
+};

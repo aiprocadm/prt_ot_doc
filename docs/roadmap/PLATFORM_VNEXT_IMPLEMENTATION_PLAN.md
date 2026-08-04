@@ -1591,10 +1591,15 @@ Quick Pack Wizard + измеримый UX-бюджет + Module Registry/entitle
 «где горит сильнее» сверху; у Dedicated-клиентов честный статус
 `not_aggregated` вместо тихого нуля (их данные в другом арендаторе).
 
-Дальше по контуру: Client Cockpit UI, cross-client календарь и загрузка
-специалистов (49.2), делегированный доступ + impersonation с аудитом и ABAC
-`managed_client_id` (49.3 — он же снимет `not_aggregated`), перевод
-Lightweight→Dedicated без потери истории.
+**Срез-3 влит 2026-08-04:** Client Cockpit — страница `/managed-clients`
+(право `MANAGED_CLIENTS_VIEW`, роль «Аутсорсер / руководитель проектов»):
+внимание сверху, портфель ниже, отдельный вид для клиентов «данные не собраны»,
+дружелюбное состояние «модуль не подключён» вместо ошибки.
+
+Дальше по контуру: cross-client календарь и загрузка специалистов (49.2),
+делегированный доступ + impersonation с аудитом и ABAC `managed_client_id`
+(49.3 — он же снимет `not_aggregated`), перевод Lightweight→Dedicated без
+потери истории.
 
 ### Phase 12 — Change Feed + Compliance Baseline [vNext-BIZ]
 `BIZ-51`. Client Change Feed + периодический авто-аудит соответствия +
