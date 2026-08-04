@@ -5,7 +5,10 @@ import {
   managedClientsApi,
   type ClientAttention,
   type CrossClientAttention,
+  type CrossClientCalendar,
+  type DeadlineKind,
   type ManagedClientMode,
+  type PortfolioItem,
   type PortfolioPage,
   type Severity,
 } from "@/api/managedClients";
@@ -143,6 +146,160 @@ const AttentionPanel = ({ data, loading, error, onRetry }: AttentionPanelProps) 
     </CardContent>
   </Card>
 );
+
+// ── Календарь дедлайнов ─────────────────────────────────────────────────────
+
+const KIND_FILTERS: Array<{ value: DeadlineKind | "all"; label: string }> = [
+  { value: "all", label: "Все типы" },
+  { value: "medical", label: "Медосмотры" },
+  { value: "ppe", label: "СИЗ" },
+  { value: "training", label: "Обучение" },
+  { value: "contract", label: "Договоры" },
+];
+
+interface CalendarPanelProps {
+  clients: PortfolioItem[];
+}
+
+const CalendarPanel = ({ clients }: CalendarPanelProps) => {
+  const [data, setData] = useState<CrossClientCalendar | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<ApiError | null>(null);
+  const [days, setDays] = useState(30);
+  const [clientId, setClientId] = useState("");
+  const [kind, setKind] = useState<DeadlineKind | "all">("all");
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      setData(
+        await managedClientsApi.calendar({
+          days,
+          client_id: clientId || undefined,
+          kind: kind === "all" ? undefined : [kind],
+        })
+      );
+    } catch (err) {
+      setError(asApiError(err, "Не удалось загрузить календарь"));
+    } finally {
+      setLoading(false);
+    }
+  }, [days, clientId, kind]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Календарь дедлайнов</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="flex flex-wrap items-end gap-2">
+          <div className="space-y-1">
+            <label className="text-xs text-muted-foreground" htmlFor="cal-days">
+              Горизонт
+            </label>
+            <select
+              id="cal-days"
+              className={selectClass}
+              value={days}
+              onChange={(e) => setDays(Number(e.target.value))}
+            >
+              <option value={7}>7 дней</option>
+              <option value={30}>30 дней</option>
+              <option value={90}>90 дней</option>
+            </select>
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs text-muted-foreground" htmlFor="cal-client">
+              Клиент
+            </label>
+            <select
+              id="cal-client"
+              className={selectClass}
+              value={clientId}
+              onChange={(e) => setClientId(e.target.value)}
+            >
+              <option value="">Все клиенты</option>
+              {clients.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs text-muted-foreground" htmlFor="cal-kind">
+              Тип
+            </label>
+            <select
+              id="cal-kind"
+              className={selectClass}
+              value={kind}
+              onChange={(e) => setKind(e.target.value as DeadlineKind | "all")}
+            >
+              {KIND_FILTERS.map((f) => (
+                <option key={f.value} value={f.value}>
+                  {f.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <ErrorState error={error ?? undefined} onRetry={load} />
+        {loading ? <LoadingScreen label="Загрузка календаря" /> : null}
+        {!loading && !error && data ? (
+          <>
+            <div className="flex flex-wrap gap-4 text-sm" data-testid="calendar-summary">
+              <span className={data.summary.overdue > 0 ? "text-destructive" : undefined}>
+                Просрочено: <strong>{data.summary.overdue}</strong>
+              </span>
+              <span>
+                Сегодня: <strong>{data.summary.due_today}</strong>
+              </span>
+              <span>
+                Впереди: <strong>{data.summary.upcoming}</strong>
+              </span>
+            </div>
+            {data.days.length === 0 ? (
+              <EmptyState
+                title="Дедлайнов нет"
+                description="В выбранном окне и по выбранным фильтрам сроков не найдено."
+              />
+            ) : (
+              <div className="space-y-3">
+                {data.days.map((day) => (
+                  <div key={day.due_date} className="space-y-1" data-testid="calendar-day">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">{formatDate(day.due_date)}</span>
+                      {day.overdue ? <Badge variant="destructive">Просрочено</Badge> : null}
+                    </div>
+                    <ul className="space-y-1">
+                      {day.events.map((event) => (
+                        <li
+                          key={`${event.client_id}-${event.kind}-${event.subject}-${event.due_date}`}
+                          className="text-sm"
+                        >
+                          <span className="text-muted-foreground">{event.title}:</span>{" "}
+                          {event.subject}{" "}
+                          <span className="text-muted-foreground">— {event.client_name}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        ) : null}
+      </CardContent>
+    </Card>
+  );
+};
 
 // ── Портфель ────────────────────────────────────────────────────────────────
 
@@ -378,6 +535,9 @@ const ClientCockpitPage = () => {
             error={attentionError}
             onRetry={load}
           />
+          {/* Календарь — между «что горит» и портфелем: он про ближайшие
+              действия, а список клиентов нужен уже для навигации. */}
+          <CalendarPanel clients={portfolio?.items ?? []} />
           <PortfolioPanel
             data={portfolio}
             loading={loading}

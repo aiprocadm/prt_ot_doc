@@ -249,6 +249,7 @@
     "GET /api/v1/machine-keys",
     "GET /api/v1/managed-clients",
     "GET /api/v1/managed-clients/attention",
+    "GET /api/v1/managed-clients/calendar",
     "GET /api/v1/managed-clients/{mcid}",
     "GET /api/v1/marketplace",
     "GET /api/v1/medical/contingent",
@@ -1161,6 +1162,7 @@
     "create_work_permit_endpoint_api_v1_work_permits_post",
     "create_workplace_api_v1_workplaces_post",
     "cross_client_attention_api_v1_managed_clients_attention_get",
+    "cross_client_calendar_api_v1_managed_clients_calendar_get",
     "dashboard_api_v1_client_portal_dashboard_get",
     "dashboard_breakdown_api_v1_analytics_dashboard_breakdown_get",
     "dashboard_operational_snapshot_api_v1_dashboard_operational_get",
@@ -1997,6 +1999,7 @@
     "CalendarEventRead",
     "CalendarEventsResponse",
     "CalendarSourceCount",
+    "CalendarSummary",
     "CampaignCreate",
     "CampaignPage",
     "CampaignRead",
@@ -2048,12 +2051,16 @@
     "CorrectiveActionVerifyIn",
     "CrossClientAttentionResponse",
     "CrossClientAttentionSummary",
+    "CrossClientCalendarResponse",
     "DashboardDocumentInboxItem",
     "DashboardOperationalSnapshot",
     "DashboardReadinessSnapshot",
     "DashboardSummary",
     "DashboardTaskInboxItem",
     "DashboardTrainingSummary",
+    "DeadlineDayRead",
+    "DeadlineEventRead",
+    "DeadlineKind",
     "DecideIn",
     "DecisionCreate",
     "DecisionRead",
@@ -3521,6 +3528,13 @@
       "count": "integer",
       "overdue_count": "integer"
     },
+    "CalendarSummary": {
+      "events_total": "integer",
+      "overdue": "integer",
+      "due_today": "integer",
+      "upcoming": "integer",
+      "clients_touched": "integer"
+    },
     "CampaignCreate": {
       "name": "string",
       "expert_org_name": "null|string",
@@ -3949,6 +3963,12 @@
       "signals_total": "integer",
       "critical_clients": "integer"
     },
+    "CrossClientCalendarResponse": {
+      "generated_at": "string",
+      "horizon_days": "integer",
+      "summary": "CalendarSummary",
+      "days": "array"
+    },
     "DashboardDocumentInboxItem": {
       "id": "string",
       "title": "string",
@@ -3997,6 +4017,22 @@
       "overdue": "integer",
       "due_soon": "integer",
       "status": "string"
+    },
+    "DeadlineDayRead": {
+      "due_date": "string",
+      "overdue": "boolean",
+      "events": "array"
+    },
+    "DeadlineEventRead": {
+      "kind": "DeadlineKind",
+      "title": "string",
+      "due_date": "string",
+      "client_id": "string",
+      "client_name": "string",
+      "subject": "string",
+      "responsible_person_id": "null|string",
+      "days_left": "integer",
+      "overdue": "boolean"
     },
     "DecideIn": {
       "decision": "string",

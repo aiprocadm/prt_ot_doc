@@ -7,6 +7,7 @@ from datetime import date, datetime
 from pydantic import Field, field_validator
 
 from app.domains.managed_clients.attention import AggregationStatus, Severity, SignalKind
+from app.domains.managed_clients.calendar import DeadlineKind
 from app.domains.managed_clients.lifecycle import ContractStatus, ManagedClientMode
 from app.schemas.base import BaseSchema
 
@@ -124,3 +125,37 @@ class CrossClientAttentionResponse(BaseSchema):
     generated_at: datetime
     summary: CrossClientAttentionSummary
     items: list[ClientAttentionRead]
+
+
+# --- Cross-client календарь (срез-4, разд. 49.2) ---
+class DeadlineEventRead(BaseSchema):
+    kind: DeadlineKind
+    title: str
+    due_date: date
+    client_id: str
+    client_name: str
+    subject: str
+    responsible_person_id: str | None = None
+    days_left: int
+    overdue: bool
+
+
+class DeadlineDayRead(BaseSchema):
+    due_date: date
+    overdue: bool
+    events: list[DeadlineEventRead]
+
+
+class CalendarSummary(BaseSchema):
+    events_total: int = 0
+    overdue: int = 0
+    due_today: int = 0
+    upcoming: int = 0
+    clients_touched: int = 0
+
+
+class CrossClientCalendarResponse(BaseSchema):
+    generated_at: datetime
+    horizon_days: int
+    summary: CalendarSummary
+    days: list[DeadlineDayRead]
