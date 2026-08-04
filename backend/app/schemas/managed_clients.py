@@ -6,6 +6,7 @@ from datetime import date, datetime
 
 from pydantic import Field, field_validator
 
+from app.domains.managed_clients.attention import AggregationStatus, Severity, SignalKind
 from app.domains.managed_clients.lifecycle import ContractStatus, ManagedClientMode
 from app.schemas.base import BaseSchema
 
@@ -89,3 +90,37 @@ class PortfolioPage(BaseSchema):
     total: int
     limit: int
     offset: int
+
+
+# --- Cross-client attention (срез-2, разд. 49.2) ---
+class AttentionSignalRead(BaseSchema):
+    kind: SignalKind
+    count: int
+    severity: Severity
+    title: str
+    action_hint: str
+
+
+class ClientAttentionRead(BaseSchema):
+    client_id: str
+    client_name: str
+    aggregation: AggregationStatus
+    signals: list[AttentionSignalRead]
+    #: ``None`` = данные клиента в этом срезе не собирались (свой контур).
+    total: int | None = None
+    severity: Severity | None = None
+    reason: str | None = None
+
+
+class CrossClientAttentionSummary(BaseSchema):
+    clients_total: int = 0
+    clients_with_signals: int = 0
+    clients_not_aggregated: int = 0
+    signals_total: int = 0
+    critical_clients: int = 0
+
+
+class CrossClientAttentionResponse(BaseSchema):
+    generated_at: datetime
+    summary: CrossClientAttentionSummary
+    items: list[ClientAttentionRead]

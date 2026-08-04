@@ -1585,9 +1585,16 @@ Quick Pack Wizard + измеримый UX-бюджет + Module Registry/entitle
 аутсорсера / Dedicated со своим арендатором), FSM договора, портфель со сводкой
 по всему портфелю и сигналом «договор истекает» (разд. 49.2, первый блок),
 миграция `mc01` с RLS, флаг `managed_clients` default-off.
-Дальше по контуру: Client Cockpit UI, cross-client attention/календарь/загрузка
+**Срез-2 влит 2026-08-04:** сводный «Центр внимания» по портфелю
+(`GET /managed-clients/attention`) — просроченные медосмотры/СИЗ/обучение,
+неполные контакты и истекающие договоры по всем клиентам сразу, порядок
+«где горит сильнее» сверху; у Dedicated-клиентов честный статус
+`not_aggregated` вместо тихого нуля (их данные в другом арендаторе).
+
+Дальше по контуру: Client Cockpit UI, cross-client календарь и загрузка
 специалистов (49.2), делегированный доступ + impersonation с аудитом и ABAC
-`managed_client_id` (49.3), перевод Lightweight→Dedicated без потери истории.
+`managed_client_id` (49.3 — он же снимет `not_aggregated`), перевод
+Lightweight→Dedicated без потери истории.
 
 ### Phase 12 — Change Feed + Compliance Baseline [vNext-BIZ]
 `BIZ-51`. Client Change Feed + периодический авто-аудит соответствия +

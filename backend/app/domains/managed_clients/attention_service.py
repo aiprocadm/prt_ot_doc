@@ -1,0 +1,194 @@
+"""BIZ-49 срез-2: сбор сигналов внимания по портфелю клиентов (разд. 49.2).
+
+Отделено от чистых правил (``attention.py``): здесь только SQL и склейка,
+все решения «что важнее» живут в правилах.
+
+**Почему считаем по организации клиента.** У режима Lightweight клиент — это
+организация внутри пространства аутсорсера, поэтому сотрудники клиента
+находятся через ``Person.company_id``, а их просрочки — через ``person_id``.
+У режима Dedicated данные лежат в ДРУГОМ арендаторе: до делегированного
+доступа (разд. 49.3) читать их нечем, и такие клиенты помечаются
+``not_aggregated`` вместо тихого нуля.
+
+**Один запрос на сигнал, а не на клиента.** Портфель бывает на сотню клиентов;
+запрос в цикле дал бы сотни round-trip'ов на каждое открытие экрана.
+"""
+
+from __future__ import annotations
+
+from datetime import date, datetime, timezone
+
+from sqlalchemy import func, or_, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.domains.managed_clients.attention import (
+    ClientAttention,
+    SignalKind,
+    build_client_attention,
+    not_aggregated,
+    sort_portfolio,
+)
+from app.domains.managed_clients.lifecycle import ManagedClientMode, is_contract_expiring
+from app.models.managed_clients import ManagedClient
+from app.models.master_data import Person
+from app.models.medical import MedicalExam
+from app.models.ppe import PPEIssue
+from app.models.training import TrainingEnrollment
+
+__all__ = ["DEDICATED_REASON", "collect_portfolio_attention"]
+
+DEDICATED_REASON = (
+    "Данные ведутся в отдельном контуре клиента; сводка станет доступна "
+    "после подключения делегированного доступа"
+)
+
+_ACTIVE_TRAINING_STATUSES = ("assigned", "in_progress")
+
+
+async def _count_by_company(session: AsyncSession, stmt) -> dict[str, int]:
+    rows = (await session.execute(stmt)).all()
+    return {str(company_id): int(count or 0) for company_id, count in rows if company_id}
+
+
+async def collect_portfolio_attention(
+    session: AsyncSession,
+    *,
+    tenant_id: str,
+    today: date,
+    now: datetime | None = None,
+    horizon_days: int,
+) -> list[ClientAttention]:
+    """Сводка внимания по всем ведомым клиентам арендатора."""
+
+    now = now or datetime.now(tz=timezone.utc)
+
+    clients = list(
+        (
+            await session.execute(
+                select(ManagedClient).where(
+                    ManagedClient.tenant_id == tenant_id,
+                    ManagedClient.deleted_at.is_(None),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if not clients:
+        return []
+
+    lightweight = [c for c in clients if c.mode is ManagedClientMode.LIGHTWEIGHT and c.company_id]
+    company_ids = {c.company_id for c in lightweight if c.company_id}
+
+    medical: dict[str, int] = {}
+    ppe: dict[str, int] = {}
+    training: dict[str, int] = {}
+    contacts: dict[str, int] = {}
+
+    if company_ids:
+        medical = await _count_by_company(
+            session,
+            select(Person.company_id, func.count())
+            .select_from(MedicalExam)
+            .join(Person, Person.id == MedicalExam.person_id)
+            .where(
+                MedicalExam.tenant_id == tenant_id,
+                MedicalExam.deleted_at.is_(None),
+                MedicalExam.valid_until < today,
+                Person.company_id.in_(company_ids),
+                Person.deleted_at.is_(None),
+            )
+            .group_by(Person.company_id),
+        )
+        ppe = await _count_by_company(
+            session,
+            select(Person.company_id, func.count())
+            .select_from(PPEIssue)
+            .join(Person, Person.id == PPEIssue.person_id)
+            .where(
+                PPEIssue.tenant_id == tenant_id,
+                PPEIssue.deleted_at.is_(None),
+                # Возвращённый СИЗ не просрочен — он уже не у человека.
+                PPEIssue.returned_at.is_(None),
+                PPEIssue.expires_at.is_not(None),
+                PPEIssue.expires_at < now,
+                Person.company_id.in_(company_ids),
+                Person.deleted_at.is_(None),
+            )
+            .group_by(Person.company_id),
+        )
+        training = await _count_by_company(
+            session,
+            select(Person.company_id, func.count())
+            .select_from(TrainingEnrollment)
+            .join(Person, Person.id == TrainingEnrollment.person_id)
+            .where(
+                TrainingEnrollment.tenant_id == tenant_id,
+                TrainingEnrollment.deleted_at.is_(None),
+                TrainingEnrollment.status.in_(_ACTIVE_TRAINING_STATUSES),
+                TrainingEnrollment.due_at.is_not(None),
+                TrainingEnrollment.due_at < now,
+                Person.company_id.in_(company_ids),
+                Person.deleted_at.is_(None),
+            )
+            .group_by(Person.company_id),
+        )
+        contacts = await _count_by_company(
+            session,
+            select(Person.company_id, func.count())
+            .where(
+                Person.tenant_id == tenant_id,
+                Person.deleted_at.is_(None),
+                Person.company_id.in_(company_ids),
+                or_(Person.email.is_(None), Person.phone.is_(None)),
+            )
+            .group_by(Person.company_id),
+        )
+
+    rows: list[ClientAttention] = []
+    for client in clients:
+        expiring = is_contract_expiring(
+            client.contract_status,
+            client.contract_ends_at,
+            today=today,
+            horizon_days=horizon_days,
+        )
+        if client.mode is ManagedClientMode.DEDICATED or not client.company_id:
+            # Договор ведёт аутсорсер, и он виден всегда; остальное — не читаем.
+            row = not_aggregated(
+                client_id=client.id, client_name=client.name, reason=DEDICATED_REASON
+            )
+            if expiring:
+                row = ClientAttention(
+                    client_id=row.client_id,
+                    client_name=row.client_name,
+                    aggregation=row.aggregation,
+                    signals=build_client_attention(
+                        client_id=client.id,
+                        client_name=client.name,
+                        counts={},
+                        contract_expiring=True,
+                    ).signals,
+                    total=None,
+                    severity=None,
+                    reason=row.reason,
+                )
+            rows.append(row)
+            continue
+
+        cid = client.company_id
+        rows.append(
+            build_client_attention(
+                client_id=client.id,
+                client_name=client.name,
+                counts={
+                    SignalKind.MEDICAL_OVERDUE: medical.get(cid, 0),
+                    SignalKind.PPE_OVERDUE: ppe.get(cid, 0),
+                    SignalKind.TRAINING_OVERDUE: training.get(cid, 0),
+                    SignalKind.CONTACTS_MISSING: contacts.get(cid, 0),
+                },
+                contract_expiring=expiring,
+            )
+        )
+
+    return sort_portfolio(rows)
