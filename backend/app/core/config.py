@@ -473,6 +473,12 @@ class Settings(BaseSettings):
     )
     archive_max_entry_bytes: int = Field(104_857_600, alias="ARCHIVE_MAX_ENTRY_BYTES")
     archive_max_compression_ratio: float = Field(500.0, alias="ARCHIVE_MAX_COMPRESSION_RATIO")
+    # SEC-64 (разд. 64.2 «Изоляция обработки»): ресурсные лимиты песочницы
+    # тяжёлых подпроцессов (LibreOffice-конвертация). Память — щедрая: soffice
+    # легитимно ест сотни мегабайт на больших документах.
+    parse_sandbox_max_memory_mb: int = Field(2048, alias="PARSE_SANDBOX_MAX_MEMORY_MB")
+    parse_sandbox_max_cpu_s: int = Field(120, alias="PARSE_SANDBOX_MAX_CPU_S")
+    parse_sandbox_max_output_mb: int = Field(512, alias="PARSE_SANDBOX_MAX_OUTPUT_MB")
     # SEC-64 (разд. 64.1): заголовки безопасности на уровне приложения.
     # CSP пустой = строгая политика по умолчанию (default-src 'none' для JSON-API).
     security_headers_enabled: bool = Field(True, alias="SECURITY_HEADERS_ENABLED")
