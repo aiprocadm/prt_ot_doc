@@ -28,6 +28,8 @@ from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
 from app.domains.managed_clients.attention import AggregationStatus, Severity
 from app.domains.managed_clients.attention_service import collect_portfolio_attention
+from app.domains.managed_clients.calendar import CalendarFilters, DeadlineKind, group_by_date
+from app.domains.managed_clients.calendar_service import collect_portfolio_deadlines
 from app.domains.managed_clients.lifecycle import (
     ContractStatus,
     ManagedClientMode,
@@ -41,9 +43,13 @@ from app.models.managed_clients import ManagedClient
 from app.models.tenanting import Tenant
 from app.schemas.managed_clients import (
     AttentionSignalRead,
+    CalendarSummary,
     ClientAttentionRead,
     CrossClientAttentionResponse,
     CrossClientAttentionSummary,
+    CrossClientCalendarResponse,
+    DeadlineDayRead,
+    DeadlineEventRead,
     ManagedClientCreate,
     ManagedClientRead,
     ManagedClientUpdate,
@@ -289,6 +295,95 @@ async def cross_client_attention(
             status_code=status.HTTP_304_NOT_MODIFIED, headers=build_not_modified_headers(etag)
         )
     return CrossClientAttentionResponse(generated_at=now, summary=summary, items=items)
+
+
+@router.get("/calendar", response_model=CrossClientCalendarResponse)
+async def cross_client_calendar(
+    request: Request,
+    response: Response,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: Access,
+    days: int = Query(30, ge=1, le=365, description="Горизонт вперёд, дней"),
+    client_id: str | None = Query(None, description="Фильтр по клиенту"),
+    responsible_person_id: str | None = Query(None, description="Фильтр по специалисту"),
+    kind: list[DeadlineKind] | None = Query(None, description="Фильтр по типу дедлайна"),
+) -> CrossClientCalendarResponse | Response:
+    """Единый календарь дедлайнов по всем клиентам (разд. 49.2).
+
+    Просроченное всегда в выборке — оно и есть самое срочное; горизонт
+    ограничивает только будущее.
+    """
+
+    TenantContextValidator.ensure_tenant_context(tenant)
+    await _require_enabled(session, tenant)
+    now = datetime.now(tz=timezone.utc)
+    today = _today()
+
+    events = await collect_portfolio_deadlines(
+        session,
+        tenant_id=str(tenant.id),
+        today=today,
+        horizon_days=days,
+        filters=CalendarFilters(
+            client_id=client_id,
+            responsible_person_id=responsible_person_id,
+            kinds=set(kind) if kind else None,
+        ),
+        now=now,
+    )
+    summary = CalendarSummary(
+        events_total=len(events),
+        overdue=sum(1 for e in events if e.overdue),
+        due_today=sum(1 for e in events if e.days_left == 0),
+        upcoming=sum(1 for e in events if e.days_left > 0),
+        clients_touched=len({e.client_id for e in events}),
+    )
+    days_out = [
+        DeadlineDayRead(
+            due_date=group.due_date,
+            overdue=group.overdue,
+            events=[
+                DeadlineEventRead(
+                    kind=e.kind,
+                    title=e.title,
+                    due_date=e.due_date,
+                    client_id=e.client_id,
+                    client_name=e.client_name,
+                    subject=e.subject,
+                    responsible_person_id=e.responsible_person_id,
+                    days_left=e.days_left,
+                    overdue=e.overdue,
+                )
+                for e in group.events
+            ],
+        )
+        for group in group_by_date(events)
+    ]
+
+    digest = ";".join(f"{e.client_id}:{e.kind.value}:{e.due_date}:{e.subject}" for e in events)
+    etag = compute_list_etag(
+        tenant_id=str(tenant.id),
+        items=[],
+        scalars=[
+            ("events", summary.events_total),
+            ("overdue", summary.overdue),
+            ("days", days),
+            ("client", client_id or ""),
+            ("responsible", responsible_person_id or ""),
+            ("kinds", ",".join(sorted(k.value for k in kind)) if kind else ""),
+            ("today", today.isoformat()),
+            ("digest", digest),
+        ],
+    )
+    apply_etag_response_headers(response, etag)
+    if request.headers.get("if-none-match") == etag:
+        return Response(
+            status_code=status.HTTP_304_NOT_MODIFIED, headers=build_not_modified_headers(etag)
+        )
+    return CrossClientCalendarResponse(
+        generated_at=now, horizon_days=days, summary=summary, days=days_out
+    )
 
 
 @router.post("", response_model=ManagedClientRead, status_code=status.HTTP_201_CREATED)

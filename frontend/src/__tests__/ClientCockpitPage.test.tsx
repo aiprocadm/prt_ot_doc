@@ -2,11 +2,12 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { CrossClientAttention, PortfolioPage } from "@/api/managedClients";
+import type { CrossClientAttention, CrossClientCalendar, PortfolioPage } from "@/api/managedClients";
 
 const api = vi.hoisted(() => ({
   portfolio: vi.fn(),
   attention: vi.fn(),
+  calendar: vi.fn(),
   create: vi.fn(),
   update: vi.fn(),
   remove: vi.fn()
@@ -117,10 +118,54 @@ const ATTENTION: CrossClientAttention = {
   ]
 };
 
+const CALENDAR: CrossClientCalendar = {
+  generated_at: "2026-08-04T10:00:00Z",
+  horizon_days: 30,
+  summary: { events_total: 2, overdue: 1, due_today: 0, upcoming: 1, clients_touched: 1 },
+  days: [
+    {
+      due_date: "2026-08-01",
+      overdue: true,
+      events: [
+        {
+          kind: "medical",
+          title: "Медосмотр",
+          due_date: "2026-08-01",
+          client_id: "mc1",
+          client_name: "ООО Ромашка",
+          subject: "Иванов Иван",
+          responsible_person_id: null,
+          days_left: -3,
+          overdue: true
+        }
+      ]
+    },
+    {
+      due_date: "2026-08-09",
+      overdue: false,
+      events: [
+        {
+          kind: "contract",
+          title: "Договор",
+          due_date: "2026-08-09",
+          client_id: "mc1",
+          client_name: "ООО Ромашка",
+          subject: "Д-1",
+          responsible_person_id: null,
+          days_left: 5,
+          overdue: false
+        }
+      ]
+    }
+  ]
+};
+
+
 beforeEach(() => {
   Object.values(api).forEach((fn) => fn.mockReset());
   api.portfolio.mockResolvedValue(PORTFOLIO);
   api.attention.mockResolvedValue(ATTENTION);
+  api.calendar.mockResolvedValue(CALENDAR);
   api.create.mockResolvedValue({ id: "mc3" });
 });
 
@@ -209,6 +254,38 @@ describe("ClientCockpitPage", () => {
 
     render(<ClientCockpitPage />);
     await waitFor(() => expect(screen.getByTestId("portfolio-summary")).toBeInTheDocument());
-    expect(screen.getByText("ООО Ромашка")).toBeInTheDocument();
+    // имя встречается ещё в фильтре календаря — проверяем именно таблицу портфеля
+    expect(within(screen.getByRole("table")).getByText("ООО Ромашка")).toBeInTheDocument();
+  });
+
+  it("показывает календарь дедлайнов с просрочкой", async () => {
+    render(<ClientCockpitPage />);
+    await waitFor(() => expect(screen.getByTestId("calendar-summary")).toBeInTheDocument());
+
+    expect(screen.getByText(/Просрочено:/)).toBeInTheDocument();
+    expect(screen.getAllByTestId("calendar-day")).toHaveLength(2);
+    // просроченный день помечен
+    expect(screen.getAllByText("Просрочено").length).toBeGreaterThan(0);
+  });
+
+  it("фильтр по типу перезапрашивает календарь", async () => {
+    const user = userEvent.setup();
+    render(<ClientCockpitPage />);
+    await waitFor(() => expect(screen.getByTestId("calendar-summary")).toBeInTheDocument());
+    api.calendar.mockClear();
+
+    await user.selectOptions(screen.getByLabelText("Тип"), "medical");
+    await waitFor(() => expect(api.calendar).toHaveBeenCalled());
+    expect(api.calendar.mock.calls.at(-1)?.[0]).toMatchObject({ kind: ["medical"] });
+  });
+
+  it("фильтр «все типы» не шлёт лишний параметр", async () => {
+    const user = userEvent.setup();
+    render(<ClientCockpitPage />);
+    await waitFor(() => expect(screen.getByTestId("calendar-summary")).toBeInTheDocument());
+
+    await user.selectOptions(screen.getByLabelText("Горизонт"), "7");
+    await waitFor(() => expect(api.calendar.mock.calls.at(-1)?.[0]).toMatchObject({ days: 7 }));
+    expect(api.calendar.mock.calls.at(-1)?.[0].kind).toBeUndefined();
   });
 });

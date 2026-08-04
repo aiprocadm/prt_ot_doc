@@ -87,6 +87,41 @@ export interface CrossClientAttention {
   items: ClientAttention[];
 }
 
+export type DeadlineKind = "medical" | "ppe" | "training" | "contract";
+
+export interface DeadlineEvent {
+  kind: DeadlineKind;
+  title: string;
+  due_date: string;
+  client_id: string;
+  client_name: string;
+  subject: string;
+  responsible_person_id?: string | null;
+  days_left: number;
+  overdue: boolean;
+}
+
+export interface DeadlineDay {
+  due_date: string;
+  overdue: boolean;
+  events: DeadlineEvent[];
+}
+
+export interface CalendarSummary {
+  events_total: number;
+  overdue: number;
+  due_today: number;
+  upcoming: number;
+  clients_touched: number;
+}
+
+export interface CrossClientCalendar {
+  generated_at: string;
+  horizon_days: number;
+  summary: CalendarSummary;
+  days: DeadlineDay[];
+}
+
 // ── API ────────────────────────────────────────────────────────────────────
 
 const base = "/managed-clients";
@@ -112,6 +147,16 @@ export const managedClientsApi = {
 
   async attention(): Promise<CrossClientAttention> {
     return (await apiClient.get<CrossClientAttention>(`${base}/attention`, silent)).data;
+  },
+
+  async calendar(
+    params: { days?: number; client_id?: string; kind?: DeadlineKind[] } = {}
+  ): Promise<CrossClientCalendar> {
+    const r = await apiClient.get<CrossClientCalendar>(`${base}/calendar`, {
+      params: { days: 30, ...params },
+      ...silent
+    });
+    return r.data;
   },
 
   async create(payload: {
