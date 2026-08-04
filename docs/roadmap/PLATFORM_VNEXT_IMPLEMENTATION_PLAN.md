@@ -1580,6 +1580,15 @@ Quick Pack Wizard + измеримый UX-бюджет + Module Registry/entitle
 (default-OFF). Опора: `packs`, `contractors`, `client_portal`, `feature_flags`.
 Наибольшая ценность для бизнеса аутсорсера.
 
+**BIZ-49 — в работе (срез-1 влит 2026-08-04):** доменная сущность `ManagedClient`
+(два режима ведения из разд. 49.1 с инвариантами: Lightweight внутри пространства
+аутсорсера / Dedicated со своим арендатором), FSM договора, портфель со сводкой
+по всему портфелю и сигналом «договор истекает» (разд. 49.2, первый блок),
+миграция `mc01` с RLS, флаг `managed_clients` default-off.
+Дальше по контуру: Client Cockpit UI, cross-client attention/календарь/загрузка
+специалистов (49.2), делегированный доступ + impersonation с аудитом и ABAC
+`managed_client_id` (49.3), перевод Lightweight→Dedicated без потери истории.
+
 ### Phase 12 — Change Feed + Compliance Baseline [vNext-BIZ]
 `BIZ-51`. Client Change Feed + периодический авто-аудит соответствия +
 отчёт клиенту. Опора: `rules_engine`, `data_quality`, `calendar`.

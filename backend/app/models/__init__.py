@@ -37,6 +37,7 @@ from app.models.finance import (
     OrderStatus,
 )
 from app.models.job_engine import InboundWebhookDedup
+from app.models.managed_clients import ManagedClient
 from app.models.models import (
     NPA,
     ApiKey,
@@ -159,6 +160,7 @@ from app.models.sout import (
 from app.models.work_permit import WorkPermit, WorkPermitEvent, WorkPermitMember
 
 __all__ = [
+    "ApiDeprecationUsage",
     "Document",
     "DocumentBatchItem",
     "DocumentBatchItemStatus",
@@ -192,6 +194,7 @@ __all__ = [
     "IncidentType",
     "IncidentStage",
     "JournalEntry",
+    "ManagedClient",
     "MedicalExam",
     "NPA",
     "NPABinding",
