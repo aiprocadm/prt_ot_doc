@@ -731,6 +731,7 @@
     "POST /api/v1/machine-keys/{item_id}/rotate",
     "POST /api/v1/managed-clients",
     "POST /api/v1/managed-clients/{mcid}/access",
+    "POST /api/v1/managed-clients/{mcid}/context",
     "POST /api/v1/marketplace",
     "POST /api/v1/marketplace/{item_id}/install",
     "POST /api/v1/medical/contingent/generate-referrals",
@@ -1256,6 +1257,7 @@
     "edo_webhook_status_api_v1_v1_edo_webhook_status_post",
     "eisot_webhook_api_v1_external_registry_webhooks_eisot_post",
     "enable_webhook_api_v1_webhooks_endpoints__webhook_id__enable_post",
+    "enter_client_context_api_v1_managed_clients__mcid__context_post",
     "escalate_task_api_v1_workflow_tasks__task_id__escalate_post",
     "eval_policy_api_v1_admin_policies_evaluate_post",
     "events_api_v1_work_permits__wp_id__events_get",
@@ -2025,6 +2027,7 @@
     "ChannelSettingsOut",
     "ClassHistoryRead",
     "ClientAttentionRead",
+    "ClientContextRead",
     "CommitteeCreate",
     "CommitteeKind",
     "CommitteeKpiDto",
@@ -3672,6 +3675,14 @@
       "total": "integer|null",
       "severity": "Severity|null",
       "reason": "null|string"
+    },
+    "ClientContextRead": {
+      "client_id": "string",
+      "client_name": "string",
+      "mode": "ManagedClientMode",
+      "all_modules": "boolean",
+      "modules": "array",
+      "audit_recorded": "boolean"
     },
     "CommitteeCreate": {
       "kind": "CommitteeKind",

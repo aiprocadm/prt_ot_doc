@@ -43,3 +43,24 @@ async def test_my_clients_without_token_is_rejected(async_client, make_auth_head
     response = await async_client.get(f"{API_PREFIX}/managed-clients/my", headers=headers)
 
     assert response.status_code == 401
+
+
+@pytest.mark.anyio
+async def test_enter_context_authenticates_with_a_normal_token(
+    async_client, make_auth_headers
+) -> None:
+    """Урок среза-6: каждый новый роут проверяем через настоящий HTTP-клиент.
+
+    С валидным токеном ожидается 404 (модуль выключен), а НЕ 401 — 404
+    доказывает, что цепочка зависимостей отработала.
+    """
+
+    headers = await make_auth_headers(RoleEnum.OT_SPECIALIST)
+    response = await async_client.post(
+        f"{API_PREFIX}/managed-clients/00000000-0000-0000-0000-000000000000/context",
+        headers=headers,
+    )
+
+    assert response.status_code != 401, "валидный токен не должен давать 401"
+    assert response.status_code == 404
+    assert response.json()["code"] == "MANAGED_CLIENTS_DISABLED"

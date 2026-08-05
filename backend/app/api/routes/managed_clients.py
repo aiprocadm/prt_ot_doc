@@ -36,6 +36,11 @@ from app.domains.managed_clients.attention import AggregationStatus, Severity
 from app.domains.managed_clients.attention_service import collect_portfolio_attention
 from app.domains.managed_clients.calendar import CalendarFilters, DeadlineKind, group_by_date
 from app.domains.managed_clients.calendar_service import collect_portfolio_deadlines
+from app.domains.managed_clients.context import (
+    ClientContextDenied,
+    build_context_audit_meta,
+    resolve_client_context,
+)
 from app.domains.managed_clients.lifecycle import (
     ContractStatus,
     ManagedClientMode,
@@ -56,6 +61,7 @@ from app.schemas.managed_clients import (
     AttentionSignalRead,
     CalendarSummary,
     ClientAttentionRead,
+    ClientContextRead,
     CrossClientAttentionResponse,
     CrossClientAttentionSummary,
     CrossClientCalendarResponse,
@@ -128,6 +134,12 @@ def _err(code: str, message: str, status_code: int) -> HTTPException:
 
 def _invalid(exc: ManagedClientTransitionError) -> HTTPException:
     return _err("MANAGED_CLIENT_MODE_INVALID", str(exc), status.HTTP_422_UNPROCESSABLE_ENTITY)
+
+
+def _context_denied(message: str) -> HTTPException:
+    """Отказ входа в контекст: 403 вместо тихого игнорирования заявки."""
+
+    return _err("MANAGED_CLIENT_CONTEXT_DENIED", message, status.HTTP_403_FORBIDDEN)
 
 
 def _conflict(exc: ManagedClientTransitionError) -> HTTPException:
@@ -561,6 +573,83 @@ async def my_managed_clients(
     ]
     items.sort(key=lambda i: i.client_name)
     return MyManagedClientsResponse(items=items)
+
+
+@router.post("/{mcid}/context", response_model=ClientContextRead)
+async def enter_client_context(
+    mcid: str,
+    request: Request,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: AnyAuthenticated,
+    auth: Annotated[AuthContext, Depends(get_auth_ctx)],
+) -> ClientContextRead:
+    """Войти в контекст клиента — «работаю от имени этого клиента» (разд. 49.3).
+
+    Точка входа для переключателя клиентов: проверяет грант и ФИКСИРУЕТ вход
+    в аудите. Отдельные роуты данных получают тот же контекст зависимостью
+    ``ClientContextDep`` по заголовку ``X-Managed-Client``.
+    """
+
+    TenantContextValidator.ensure_tenant_context(tenant)
+    await _require_enabled(session, tenant)
+    now = datetime.now(tz=timezone.utc)
+
+    client = (
+        await session.execute(
+            select(ManagedClient).where(
+                ManagedClient.id == mcid,
+                ManagedClient.tenant_id == tenant.id,
+                ManagedClient.deleted_at.is_(None),
+            )
+        )
+    ).scalar_one_or_none()
+    if client is None:
+        # Тот же ответ, что и при отсутствии гранта: существование чужого
+        # клиента — тоже сведения, которых спрашивающий знать не должен.
+        raise _context_denied("Нет доступа к этому клиенту")
+
+    row = (
+        await session.execute(
+            select(ManagedClientAccess).where(
+                ManagedClientAccess.tenant_id == tenant.id,
+                ManagedClientAccess.managed_client_id == client.id,
+                ManagedClientAccess.user_id == auth.sub,
+                ManagedClientAccess.revoked_at.is_(None),
+            )
+        )
+    ).scalar_one_or_none()
+
+    try:
+        context = resolve_client_context(
+            grant=_as_grant(row) if row is not None else None,
+            user_id=auth.sub,
+            client_id=client.id,
+            client_name=client.name,
+            now=now,
+        )
+    except ClientContextDenied as exc:
+        raise _context_denied(str(exc)) from exc
+
+    await write_audit_event(
+        session=session,
+        request=request,
+        tenant_id=str(tenant.id),
+        actor_id=auth.sub,
+        action="managed_client.context.enter",
+        resource_type="managed_client",
+        resource_id=client.id,
+        before=None,
+        after=None,
+        meta=build_context_audit_meta(context, action="context.enter"),
+    )
+    return ClientContextRead(
+        client_id=context.client_id,
+        client_name=context.client_name,
+        mode=client.mode,
+        all_modules=context.all_modules,
+        modules=list(context.modules),
+    )
 
 
 @router.get("/{mcid}/access", response_model=list[AccessGrantRead])
