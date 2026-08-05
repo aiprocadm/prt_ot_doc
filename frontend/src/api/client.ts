@@ -2,6 +2,7 @@ import axios, { type AxiosError, type AxiosInstance, type InternalAxiosRequestCo
 import { appConfig } from "@/config/env";
 import { handleApiError } from "@/api/errorHandling";
 import { tokenStorage } from "@/api/tokenStorage";
+import { managedClientStorage } from "@/api/managedClientStorage";
 import { tenantStorage } from "@/api/tenantStorage";
 import type { ApiError, ApiFieldError } from "@/types/dto/common";
 import type { RefreshResponseDto } from "@/types/dto/auth";
@@ -167,6 +168,7 @@ export const apiClient: AxiosInstance = axios.create({
 
 tokenStorage.hydrate();
 tenantStorage.hydrate();
+managedClientStorage.hydrate();
 
 apiClient.interceptors.request.use((config) => {
   const token = tokenStorage.getAccessToken();
@@ -192,6 +194,13 @@ apiClient.interceptors.request.use((config) => {
   }
   if (tenant && requiresTenant) {
     config.headers["X-Tenant"] = tenant.slug;
+  }
+  // BIZ-49 разд. 49.3: активный контекст клиента едет тем же путём, что и
+  // арендатор — заголовком. Бэкенд проверит грант и запишет след в аудит;
+  // если гранта нет, он ответит 403, а не сделает вид, что контекста не было.
+  const clientContext = managedClientStorage.get();
+  if (clientContext && requiresTenant) {
+    config.headers["X-Managed-Client"] = clientContext.clientId;
   }
   config.timeout = config.timeout ?? 15_000;
   return config;

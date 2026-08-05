@@ -159,6 +159,23 @@ export interface SpecialistWorkloadResponse {
   items: SpecialistWorkload[];
 }
 
+export interface MyManagedClient {
+  client_id: string;
+  client_name: string;
+  mode: ManagedClientMode;
+  all_modules: boolean;
+  modules: string[];
+}
+
+export interface ClientContextResponse {
+  client_id: string;
+  client_name: string;
+  mode: ManagedClientMode;
+  all_modules: boolean;
+  modules: string[];
+  audit_recorded: boolean;
+}
+
 // ── API ────────────────────────────────────────────────────────────────────
 
 const base = "/managed-clients";
@@ -202,6 +219,17 @@ export const managedClientsApi = {
       ...silent
     });
     return r.data;
+  },
+
+  /** Клиенты, к которым У МЕНЯ есть доступ (основа переключателя). */
+  async my(): Promise<MyManagedClient[]> {
+    const r = await apiClient.get<{ items: MyManagedClient[] }>(`${base}/my`, silent);
+    return r.data.items;
+  },
+
+  /** Войти в контекст клиента: бэкенд проверит грант и запишет след в аудит. */
+  async enterContext(clientId: string): Promise<ClientContextResponse> {
+    return (await apiClient.post<ClientContextResponse>(`${base}/${clientId}/context`, {})).data;
   },
 
   async create(payload: {
