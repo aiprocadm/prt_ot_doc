@@ -11,6 +11,13 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_correlation_id, get_session, get_tenant_record
+from app.api.dependencies_managed_client import ClientScopeDep
+from app.api.helpers.client_scope import (
+    ensure_in_client_scope,
+    ensure_writable_client_scope,
+    forbid_impersonated_action,
+    scope_company_id,
+)
 from app.api.helpers.etag import (
     apply_etag_response_headers,
     build_not_modified_headers,
@@ -170,6 +177,7 @@ async def list_persons_endpoint(
     tenant: TenantDep,
     session: SessionDep,
     access: ManagerAccess,
+    scope: ClientScopeDep,
     correlation_id: str = Depends(get_correlation_id),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
@@ -177,11 +185,33 @@ async def list_persons_endpoint(
 ) -> PersonPage | Response:
     TenantContextValidator.ensure_tenant_context(tenant)
 
-    persons, total = await list_persons(session, tenant.id, limit=limit, offset=offset, q=q)
+    # Работа «от имени клиента» (BIZ-49 срез-9): область видимости сужается до
+    # его организации. Если данных клиента в этом контуре нет — список пуст,
+    # но НИКОГДА не «весь арендатор»: иначе под вывеской «вы работаете от
+    # имени ООО Ромашка» специалист увидит сотрудников всех остальных клиентов.
+    if scope is not None and not scope.visible:
+        persons, total = [], 0
+    else:
+        persons, total = await list_persons(
+            session,
+            tenant.id,
+            limit=limit,
+            offset=offset,
+            q=q,
+            company_id=scope_company_id(scope),
+        )
     etag = compute_list_etag(
         tenant_id=str(tenant.id),
         items=persons,
-        scalars=[("total", total), ("limit", limit), ("offset", offset), ("q", q or "")],
+        scalars=[
+            ("total", total),
+            ("limit", limit),
+            ("offset", offset),
+            ("q", q or ""),
+            # Иначе кэш, набранный вне контекста, вернулся бы 304-м ответом
+            # уже внутри контекста клиента — со всем арендатором внутри.
+            ("managed_client", scope.client_id if scope else ""),
+        ],
     )
     apply_etag_response_headers(response, etag)
     if request.headers.get("if-none-match") == etag:
@@ -199,13 +229,20 @@ async def create_person_endpoint(
     tenant: TenantDep,
     session: SessionDep,
     access: EditorAccess,
+    scope: ClientScopeDep,
     correlation_id: str = Depends(get_correlation_id),
 ) -> PersonRead:
     TenantContextValidator.ensure_tenant_context(tenant)
 
     # Не использовать users.create: квота max_users считает записи User, а не Person — блокировало HR-сценарии.
     await BillingService(session).assert_allowed(tenant, "persons.create")
+    ensure_writable_client_scope(scope)
     company = await _get_company(session, tenant, payload.company_id)
+    # В контексте клиента заводить можно ТОЛЬКО его сотрудников. Иначе самая
+    # дорогая ошибка аутсорсера — человек, заведённый не в ту организацию, —
+    # совершается именно тогда, когда специалист уверен, что работает «от
+    # имени» нужного клиента.
+    ensure_in_client_scope(scope, company.id, entity="Company")
     position_id = None
     workplace_id = None
     if payload.position_id is not None:
@@ -261,11 +298,16 @@ async def get_person_endpoint(
     tenant: TenantDep,
     session: SessionDep,
     access: ManagerAccess,
+    scope: ClientScopeDep,
     correlation_id: str = Depends(get_correlation_id),
 ) -> PersonRead:
     TenantContextValidator.ensure_tenant_context(tenant)
 
     person = await _get_person(session, tenant, person_id)
+    # Чужой человек — 404, а не 403: «доступ запрещён» подтвердило бы, что
+    # такая запись есть, и перебором идентификаторов раскрыло бы состав
+    # организаций других клиентов аутсорсера.
+    ensure_in_client_scope(scope, person.company_id, entity="Person")
     return PersonRead.model_validate(person)
 
 
@@ -277,11 +319,14 @@ async def update_person_endpoint(
     tenant: TenantDep,
     session: SessionDep,
     access: EditorAccess,
+    scope: ClientScopeDep,
     correlation_id: str = Depends(get_correlation_id),
 ) -> PersonRead:
     TenantContextValidator.ensure_tenant_context(tenant)
 
     person = await _get_person(session, tenant, person_id)
+    ensure_writable_client_scope(scope)
+    ensure_in_client_scope(scope, person.company_id, entity="Person")
     data = payload.model_dump(exclude_unset=True)
 
     # SEC-66 (разд. 66.2): обезличивание необратимо. Правка ПДн обезличенного
@@ -303,6 +348,9 @@ async def update_person_endpoint(
         if data["company_id"] is None:
             raise _person_unprocessable("company_id cannot be null")
         target_company = await _get_company(session, tenant, data["company_id"])
+        # Перенос человека НАРУЖУ контекста клиента запрещён: иначе работа «от
+        # имени» становится способом увести сотрудника в чужую организацию.
+        ensure_in_client_scope(scope, target_company.id, entity="Company")
         person.company_id = target_company.id
 
     company_for_position_id = target_company.id if target_company else person.company_id
@@ -403,11 +451,18 @@ async def delete_person_endpoint(
     tenant: TenantDep,
     session: SessionDep,
     access: EditorAccess,
+    scope: ClientScopeDep,
     correlation_id: str = Depends(get_correlation_id),
 ) -> None:
     TenantContextValidator.ensure_tenant_context(tenant)
 
     person = await _get_person(session, tenant, person_id)
+    ensure_in_client_scope(scope, person.company_id, entity="Person")
+    # Доп. №3 разд. 63.2: удаление данных запрещено имперсонатору ДАЖE в
+    # контексте клиента. Убрать чужого сотрудника «от имени клиента» — самое
+    # неприятное из возможного: следов правки нет, есть только пропавший
+    # человек. Первое применение запрета; общий список запретов — срез-10.
+    forbid_impersonated_action(scope, action="удаление сотрудника")
     if person.deleted_at is None:
         person.deleted_at = datetime.now(timezone.utc)
     await session.commit()

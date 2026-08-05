@@ -235,6 +235,11 @@ class MyManagedClient(BaseSchema):
 
 class MyManagedClientsResponse(BaseSchema):
     items: list[MyManagedClient]
+    #: Разделы, где контекст клиента УЖЕ работает как фильтр (срез-9).
+    #: Индикатор в интерфейсе называет именно их: обещать фильтр там, где его
+    #: ещё нет, — это ровно тот случай, когда специалист верит вывеске и
+    #: заводит документ не тому клиенту.
+    scoped_sections: list[str] = []
 
 
 # --- Контекст клиента (срез-7, разд. 49.3) ---
@@ -248,3 +253,5 @@ class ClientContextRead(BaseSchema):
     modules: list[str]
     #: Подтверждение, что вход зафиксирован в аудите (требование ПДн из ТЗ).
     audit_recorded: bool = True
+    #: Разделы, где контекст уже работает как фильтр (срез-9).
+    scoped_sections: list[str] = []

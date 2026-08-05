@@ -25,7 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.errors import api_problem_detail
-from app.core.security import AuthContext, get_auth_ctx
+from app.core.security import AccessContext, abac
 from app.domains.managed_clients.access import AccessGrant
 from app.domains.managed_clients.context import (
     ClientContext,
@@ -33,11 +33,18 @@ from app.domains.managed_clients.context import (
     build_context_audit_meta,
     resolve_client_context,
 )
+from app.domains.managed_clients.scope import ClientDataScope, resolve_client_scope
 from app.models.managed_clients import ManagedClient, ManagedClientAccess
 from app.models.tenanting import Tenant
 from app.modules.audit.writer import write_audit_event
 
-__all__ = ["CLIENT_CONTEXT_HEADER", "ClientContextDep", "require_client_context"]
+__all__ = [
+    "CLIENT_CONTEXT_HEADER",
+    "ClientContextDep",
+    "ClientScopeDep",
+    "require_client_context",
+    "resolve_request_client_scope",
+]
 
 CLIENT_CONTEXT_HEADER = "X-Managed-Client"
 
@@ -53,11 +60,25 @@ def _denied(message: str) -> HTTPException:
     )
 
 
+def _context_tenant_id(tenant: Tenant = Depends(get_tenant_record)) -> str | None:
+    return getattr(tenant, "id", None)
+
+
+# Своя проверка доступа, а не ``get_auth_ctx``: тот лишь ЧИТАЕТ контекст,
+# положенный ``abac``/``rbac`` соседней зависимости, а порядок зависимостей
+# FastAPI не гарантирует. На этих граблях уже был 401 при живом токене
+# (PR #848). Пустой список ролей = «любой аутентифицированный».
+_ContextAccess = Annotated[
+    AccessContext,
+    Depends(abac(_context_tenant_id, action="work on behalf of managed client")),
+]
+
+
 async def require_client_context(
     request: Request,
     session: Annotated[AsyncSession, Depends(get_session)],
     tenant: Annotated[Tenant, Depends(get_tenant_record)],
-    auth: Annotated[AuthContext, Depends(get_auth_ctx)],
+    access: _ContextAccess,
     x_managed_client: Annotated[str | None, Header(alias=CLIENT_CONTEXT_HEADER)] = None,
 ) -> ClientContext | None:
     """Подтвердить контекст клиента, если он заявлен, и записать след."""
@@ -65,6 +86,7 @@ async def require_client_context(
     if not x_managed_client:
         return None
 
+    auth = access.to_auth_context()
     now = datetime.now(tz=timezone.utc)
     client = (
         await session.execute(
@@ -109,6 +131,8 @@ async def require_client_context(
             client_id=client.id,
             client_name=client.name,
             now=now,
+            mode=client.mode,
+            company_id=str(client.company_id) if client.company_id else None,
         )
     except ClientContextDenied as exc:
         raise _denied(str(exc)) from exc
@@ -132,3 +156,19 @@ async def require_client_context(
 
 
 ClientContextDep = Annotated[ClientContext | None, Depends(require_client_context)]
+
+
+async def resolve_request_client_scope(context: ClientContextDep) -> ClientDataScope | None:
+    """Область видимости данных для роутов, умеющих работать от имени клиента.
+
+    ``None`` — контекста нет, роут работает как обычно (по всему арендатору).
+    Иначе выборки обязаны сузиться до данных клиента, а при ``visible is False``
+    — вернуть ПУСТО с объяснением, но никогда не «всё подряд».
+    """
+
+    if context is None:
+        return None
+    return resolve_client_scope(context)
+
+
+ClientScopeDep = Annotated[ClientDataScope | None, Depends(resolve_request_client_scope)]

@@ -36,14 +36,15 @@ const CLIENTS = [
 beforeEach(() => {
   managedClientStorage.clear();
   Object.values(api).forEach((fn) => fn.mockReset());
-  api.my.mockResolvedValue(CLIENTS);
+  api.my.mockResolvedValue({ items: CLIENTS, scopedSections: ["Люди", "Медосмотры"] });
   api.enterContext.mockResolvedValue({
     client_id: "mc1",
     client_name: "ООО Ромашка",
     mode: "lightweight",
     all_modules: true,
     modules: [],
-    audit_recorded: true
+    audit_recorded: true,
+    scoped_sections: ["Люди", "Медосмотры"]
   });
 });
 
@@ -95,6 +96,17 @@ describe("ClientContextSwitcher", () => {
     expect(banner).toHaveTextContent("Действия фиксируются в аудите");
   });
 
+  it("индикатор честно называет разделы, где фильтр уже действует", async () => {
+    managedClientStorage.set({ clientId: "mc1", clientName: "ООО Ромашка" });
+    render(<ClientContextSwitcher />);
+
+    const sections = await screen.findByTestId("client-context-sections");
+    expect(sections).toHaveTextContent("Люди");
+    expect(sections).toHaveTextContent("Медосмотры");
+    // Обещать фильтр там, где его нет, — прямой путь к данным не того клиента.
+    expect(sections).toHaveTextContent("В остальных — данные всех клиентов");
+  });
+
   it("выход из контекста — в один клик", async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
@@ -109,7 +121,7 @@ describe("ClientContextSwitcher", () => {
   });
 
   it("без доступных клиентов переключатель не мозолит глаза", async () => {
-    api.my.mockResolvedValue([]);
+    api.my.mockResolvedValue({ items: [], scopedSections: [] });
     const { container } = render(<ClientContextSwitcher />);
     await waitFor(() => expect(api.my).toHaveBeenCalled());
     expect(container).toBeEmptyDOMElement();

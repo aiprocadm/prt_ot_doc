@@ -50,6 +50,7 @@ from app.domains.managed_clients.lifecycle import (
     validate_contract_transition,
     validate_mode_binding,
 )
+from app.domains.managed_clients.scope import scoped_section_titles
 from app.domains.managed_clients.workload import DEFAULT_THRESHOLDS, OVERLOAD_REASON_TEXT
 from app.domains.managed_clients.workload_service import collect_specialist_workload
 from app.models.managed_clients import ManagedClient, ManagedClientAccess
@@ -572,7 +573,7 @@ async def my_managed_clients(
         if is_grant_active(_as_grant(grant), now=now)
     ]
     items.sort(key=lambda i: i.client_name)
-    return MyManagedClientsResponse(items=items)
+    return MyManagedClientsResponse(items=items, scoped_sections=scoped_section_titles())
 
 
 @router.post("/{mcid}/context", response_model=ClientContextRead)
@@ -644,6 +645,7 @@ async def enter_client_context(
         meta=build_context_audit_meta(context, action="context.enter"),
     )
     return ClientContextRead(
+        scoped_sections=scoped_section_titles(),
         client_id=context.client_id,
         client_name=context.client_name,
         mode=client.mode,

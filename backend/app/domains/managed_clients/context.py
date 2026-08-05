@@ -22,6 +22,7 @@ from datetime import datetime
 from typing import Any
 
 from app.domains.managed_clients.access import AccessGrant, grant_allows, is_grant_active
+from app.domains.managed_clients.lifecycle import ManagedClientMode
 
 __all__ = [
     "ClientContext",
@@ -37,13 +38,20 @@ class ClientContextDenied(PermissionError):
 
 @dataclass(frozen=True)
 class ClientContext:
-    """Подтверждённый контекст: специалист работает ОТ ИМЕНИ клиента."""
+    """Подтверждённый контекст: специалист работает ОТ ИМЕНИ клиента.
+
+    Режим и организация клиента приезжают вместе с контекстом (срез-9): без
+    них каждый роут, которому нужен фильтр по данным, лез бы за ними в базу
+    отдельным запросом — на каждый запрос страницы.
+    """
 
     user_id: str
     client_id: str
     client_name: str
     all_modules: bool
     modules: tuple[str, ...]
+    mode: ManagedClientMode = ManagedClientMode.LIGHTWEIGHT
+    company_id: str | None = None
 
     def allows(self, module: str) -> bool:
         return self.all_modules or module in self.modules
@@ -56,6 +64,8 @@ def resolve_client_context(
     client_id: str,
     client_name: str,
     now: datetime,
+    mode: ManagedClientMode = ManagedClientMode.LIGHTWEIGHT,
+    company_id: str | None = None,
 ) -> ClientContext:
     """Подтвердить заявленный контекст клиента или отказать."""
 
@@ -74,6 +84,8 @@ def resolve_client_context(
         client_name=client_name,
         all_modules=grant.all_modules,
         modules=tuple(grant.modules),
+        mode=mode,
+        company_id=company_id,
     )
 
 

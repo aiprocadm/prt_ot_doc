@@ -211,12 +211,21 @@ async def list_companies(
 
 
 async def list_persons(
-    session: AsyncSession, tenant_id: str, *, limit: int, offset: int, q: str | None = None
+    session: AsyncSession,
+    tenant_id: str,
+    *,
+    limit: int,
+    offset: int,
+    q: str | None = None,
+    company_id: str | None = None,
 ) -> tuple[list[Person], int]:
     """Return people for a tenant with pagination.
 
     ``q`` — серверный typeahead (срез-4): подстрока без регистра по фамилии,
     имени, отчеству или табельному номеру.
+
+    ``company_id`` — работа «от имени клиента» (BIZ-49 срез-9): выборка сужается
+    до сотрудников организации клиента.
     """
 
     normalized_tenant, normalized_slug = await _resolve_tenant_scope(session, tenant_id)
@@ -226,6 +235,8 @@ async def list_persons(
         Person.tenant_id.in_(tenant_scope),
         Person.deleted_at.is_(None),
     )
+    if company_id:
+        base = base.where(Person.company_id == company_id)
     needle = (q or "").strip()
     if needle:
         pattern = f"%{needle}%"
