@@ -56,6 +56,9 @@ NO_COMPANY_REASON = (
 CLIENT_SCOPED_SECTIONS: tuple[tuple[str, str], ...] = (
     ("persons", "Люди"),
     ("medical", "Медосмотры"),
+    ("ppe", "СИЗ"),
+    ("training", "Обучение"),
+    ("documents", "Документы"),
 )
 
 

@@ -12,6 +12,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.exc import StaleDataError
 
 from app.api.dependencies import get_correlation_id, get_session, get_tenant_record
+from app.api.dependencies_managed_client import ClientScopeDep
+from app.api.helpers.client_scope import (
+    apply_person_scope,
+    ensure_person_in_client_scope,
+    filter_rows_by_person_scope,
+)
 from app.api.helpers.etag import (
     apply_etag_response_headers,
     build_not_modified_headers,
@@ -564,6 +570,7 @@ async def list_issues(
     tenant: TenantDep,
     session: SessionDep,
     access: ManagerAccess,
+    scope: ClientScopeDep,
     person_id: str | None = None,
     active_only: bool = False,
     limit: int = Query(50, ge=1, le=200),
@@ -576,6 +583,9 @@ async def list_issues(
         stmt = stmt.where(PPEIssue.person_id == person_id)
     if active_only:
         stmt = stmt.where(PPEIssue.status == PPEIssueStatus.ISSUED)
+    # Работа «от имени клиента» (BIZ-49 срез-11): выдача СИЗ принадлежит
+    # клиенту через сотрудника.
+    stmt = apply_person_scope(stmt, PPEIssue.person_id, scope, tenant_id=str(tenant.id))
     stmt = stmt.order_by(PPEIssue.issued_at.desc()).limit(limit).offset(offset)
     issues = list((await session.execute(stmt)).scalars().all())
     count_stmt = select(func.count()).where(
@@ -586,6 +596,9 @@ async def list_issues(
         count_stmt = count_stmt.where(PPEIssue.person_id == person_id)
     if active_only:
         count_stmt = count_stmt.where(PPEIssue.status == PPEIssueStatus.ISSUED)
+    # Тот же фильтр и на подсчёте: иначе итог показал бы «всего 40» под
+    # списком из двух строк — и специалист решит, что интерфейс что-то потерял.
+    count_stmt = apply_person_scope(count_stmt, PPEIssue.person_id, scope, tenant_id=str(tenant.id))
     total = (await session.execute(count_stmt)).scalar_one()
     etag = compute_list_etag(
         tenant_id=str(tenant.id),
@@ -596,6 +609,7 @@ async def list_issues(
             ("offset", offset),
             ("person", person_id or ""),
             ("active_only", "1" if active_only else "0"),
+            ("managed_client", scope.client_id if scope else ""),
         ],
     )
     apply_etag_response_headers(response, etag)
@@ -612,11 +626,18 @@ async def expiring_issues(
     tenant: TenantDep,
     session: SessionDep,
     access: ManagerAccess,
+    scope: ClientScopeDep,
     within_days: int = Query(30, ge=1, le=365),
 ) -> PPEIssuePage:
     TenantContextValidator.ensure_tenant_context(tenant)
 
     issues = await list_expiring_issues(session, tenant_id=tenant.id, within_days=within_days)
+    # Отбор делаем здесь, а не в модуле СИЗ: модулю нечего знать про ведомых
+    # клиентов и организации — это чужой контекст (ARCH-3). Список без
+    # пагинации, поэтому лишнего запроса на страницу это не стоит.
+    issues = await filter_rows_by_person_scope(
+        session, issues, lambda row: row.person_id, scope, tenant_id=str(tenant.id)
+    )
     return PPEIssuePage(items=[_issue_schema(item) for item in issues], total=len(issues))
 
 
@@ -838,11 +859,14 @@ async def get_issue(
     tenant: TenantDep,
     session: SessionDep,
     access: ManagerAccess,
+    scope: ClientScopeDep,
     correlation_id: str = Depends(get_correlation_id),
 ) -> PPEIssueRead:
     TenantContextValidator.ensure_tenant_context(tenant)
 
     issue = await _get_issue(session, tenant, issue_id)
+    # Чужая выдача — 404, а не 403: «запрещено» подтвердило бы, что запись есть.
+    await ensure_person_in_client_scope(session, issue.person_id, scope, tenant_id=str(tenant.id))
     return _issue_schema(issue)
 
 

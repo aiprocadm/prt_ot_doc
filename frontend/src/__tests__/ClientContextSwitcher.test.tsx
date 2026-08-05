@@ -37,7 +37,7 @@ const CLIENTS = [
 beforeEach(() => {
   managedClientStorage.clear();
   Object.values(api).forEach((fn) => fn.mockReset());
-  api.my.mockResolvedValue({ items: CLIENTS, scopedSections: ["Люди", "Медосмотры"] });
+  api.my.mockResolvedValue({ items: CLIENTS, scopedSections: ["Люди", "Медосмотры", "СИЗ", "Обучение", "Документы"] });
   api.enterContext.mockResolvedValue({
     client_id: "mc1",
     client_name: "ООО Ромашка",
@@ -45,7 +45,7 @@ beforeEach(() => {
     all_modules: true,
     modules: [],
     audit_recorded: true,
-    scoped_sections: ["Люди", "Медосмотры"],
+    scoped_sections: ["Люди", "Медосмотры", "СИЗ", "Обучение", "Документы"],
     expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString()
   });
   api.leaveContext.mockResolvedValue(undefined);
@@ -109,6 +109,8 @@ describe("ClientContextSwitcher", () => {
     const sections = await screen.findByTestId("client-context-sections");
     expect(sections).toHaveTextContent("Люди");
     expect(sections).toHaveTextContent("Медосмотры");
+    expect(sections).toHaveTextContent("СИЗ");
+    expect(sections).toHaveTextContent("Документы");
     // Обещать фильтр там, где его нет, — прямой путь к данным не того клиента.
     expect(sections).toHaveTextContent("В остальных — данные всех клиентов");
   });
