@@ -8,6 +8,8 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.api.dependencies_managed_client import ClientScopeDep
+from app.api.helpers.client_scope import apply_person_scope
 from app.core.audit_decorator import audit_operation
 from app.core.security import rbac
 from app.models.models import (
@@ -412,6 +414,7 @@ async def complete_group(
 
 @router.get("/enrollments")
 async def list_enrollments(
+    scope: ClientScopeDep,
     tenant: Tenant = Depends(get_tenant_record),
     session: AsyncSession = Depends(get_session),
     person_id: str | None = Query(default=None),
@@ -425,6 +428,9 @@ async def list_enrollments(
         stmt = stmt.where(TrainingEnrollment.person_id == person_id)
     if status_f:
         stmt = stmt.where(TrainingEnrollment.status == status_f)
+    # Работа «от имени клиента» (BIZ-49 срез-11): запись на обучение
+    # принадлежит клиенту через сотрудника.
+    stmt = apply_person_scope(stmt, TrainingEnrollment.person_id, scope, tenant_id=str(tenant.id))
     rows = (await session.execute(stmt)).scalars().all()
     return {"items": rows, "total": len(rows)}
 
@@ -532,9 +538,9 @@ async def mark_passed(
     e.completed_at = now
     program = await session.get(TrainingProgram, e.training_program_id)
     if program and str(program.tenant_id) == str(e.tenant_id) and program.validity_months:
-        e.expires_at = TrainingEnrollmentService._add_months(
-            now, program.validity_months
-        ).replace(microsecond=0)
+        e.expires_at = TrainingEnrollmentService._add_months(now, program.validity_months).replace(
+            microsecond=0
+        )
     await session.flush()
     return e
 

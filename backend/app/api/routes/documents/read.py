@@ -17,6 +17,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api.dependencies import get_file_storage_service
+from app.api.dependencies_managed_client import ClientScopeDep
+from app.api.helpers.client_scope import apply_company_scope
 from app.api.helpers.etag import (
     apply_etag_response_headers,
     build_not_modified_headers,
@@ -232,6 +234,7 @@ def _document_read_query(tenant_id: str):
 async def list_documents(
     request: Request,
     response: Response,
+    scope: ClientScopeDep,
     tenant: Tenant = TenantDep,
     session: AsyncSession = SessionDep,
     access: AccessContext = ReadAccessDep,
@@ -249,6 +252,11 @@ async def list_documents(
     access.ensure_tenant_access(tenant.id, action="read documents")
 
     stmt = _document_read_query(str(tenant.id))
+    # Работа «от имени клиента» (BIZ-49 срез-11): у документа своя организация,
+    # поэтому фильтр прямой. Ставим ПЕРЕД остальными условиями — так его не
+    # обойти параметром ?company_id=<чужая организация>: сужение остаётся
+    # сужением, что бы ни просил вызывающий.
+    stmt = apply_company_scope(stmt, Document.company_id, scope)
     if company_id:
         stmt = stmt.where(Document.company_id == company_id)
     if template_id:
@@ -340,7 +348,14 @@ async def list_documents(
     etag = compute_list_etag(
         tenant_id=str(tenant.id),
         items=items,
-        scalars=[("page", page), ("page_size", page_size), ("total", total)],
+        scalars=[
+            ("page", page),
+            ("page_size", page_size),
+            ("total", total),
+            # Иначе кэш, набранный вне контекста, вернулся бы 304-м ответом
+            # уже внутри контекста клиента.
+            ("managed_client", scope.client_id if scope else ""),
+        ],
     )
     apply_etag_response_headers(response, etag)
     if request.headers.get("if-none-match") == etag:
@@ -358,6 +373,7 @@ async def list_documents(
 @router.get("/{document_id}", response_model=DocumentUiRead)
 async def get_document(
     document_id: str,
+    scope: ClientScopeDep,
     tenant: Tenant = TenantDep,
     session: AsyncSession = SessionDep,
     access: AccessContext = ReadAccessDep,
@@ -369,6 +385,12 @@ async def get_document(
         )
     ).scalar_one_or_none()
     if document is None:
+        raise _documents_not_found(code="DOCUMENT_NOT_FOUND", message="Document not found")
+    # Чужой документ — «не найден», а не «запрещено»: иначе перебором
+    # идентификаторов виден состав дел других клиентов аутсорсера.
+    if scope is not None and (
+        not scope.visible or str(document.company_id) != str(scope.company_id)
+    ):
         raise _documents_not_found(code="DOCUMENT_NOT_FOUND", message="Document not found")
     access.ensure_abac(
         action="read document",
@@ -580,18 +602,22 @@ async def get_document_dependency_map_endpoint(
 @router.get("/{document_id}/status", response_model=DocumentUiRead)
 async def get_document_status(
     document_id: str,
+    scope: ClientScopeDep,
     tenant: Tenant = TenantDep,
     session: AsyncSession = SessionDep,
     access: AccessContext = ReadAccessDep,
 ) -> DocumentUiRead:
+    # Статус — та же карточка, поэтому и контекст клиента тот же: иначе
+    # «запрещённый» документ виден через соседний роут.
     return await get_document(
-        document_id=document_id, tenant=tenant, session=session, access=access
+        document_id=document_id, scope=scope, tenant=tenant, session=session, access=access
     )
 
 
 @router.get("/{document_id}/download")
 async def download_document(
     document_id: str,
+    scope: ClientScopeDep,
     tenant: Tenant = TenantDep,
     session: AsyncSession = SessionDep,
     access: AccessContext = ReadAccessDep,
@@ -604,6 +630,11 @@ async def download_document(
         )
     ).scalar_one_or_none()
     if document is None:
+        raise _documents_not_found(code="DOCUMENT_NOT_FOUND", message="Document not found")
+    # Скачивание — самый ценный способ утечки: файл уносится целиком.
+    if scope is not None and (
+        not scope.visible or str(document.company_id) != str(scope.company_id)
+    ):
         raise _documents_not_found(code="DOCUMENT_NOT_FOUND", message="Document not found")
     access.ensure_abac(
         action="download document",
