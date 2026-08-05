@@ -41,6 +41,10 @@ from app.domains.managed_clients.context import (
     build_context_audit_meta,
     resolve_client_context,
 )
+from app.domains.managed_clients.impersonation import (
+    session_expires_at,
+    session_seconds_left,
+)
 from app.domains.managed_clients.lifecycle import (
     ContractStatus,
     ManagedClientMode,
@@ -51,9 +55,14 @@ from app.domains.managed_clients.lifecycle import (
     validate_mode_binding,
 )
 from app.domains.managed_clients.scope import scoped_section_titles
+from app.domains.managed_clients.session_service import close_open_sessions
 from app.domains.managed_clients.workload import DEFAULT_THRESHOLDS, OVERLOAD_REASON_TEXT
 from app.domains.managed_clients.workload_service import collect_specialist_workload
-from app.models.managed_clients import ManagedClient, ManagedClientAccess
+from app.models.managed_clients import (
+    ManagedClient,
+    ManagedClientAccess,
+    ManagedClientContextSession,
+)
 from app.models.tenanting import Tenant
 from app.modules.audit.writer import write_audit_event
 from app.schemas.managed_clients import (
@@ -632,6 +641,22 @@ async def enter_client_context(
     except ClientContextDenied as exc:
         raise _context_denied(str(exc)) from exc
 
+    # Срез-10: вход открывает СЕССИЮ со сроком. Прошлые открытые сессии этого
+    # специалиста закрываются: две одновременные работы «от имени» разных
+    # клиентов сделали бы журнал доступа невосстановимым — непонятно, к чьим
+    # данным относится действие.
+    await close_open_sessions(
+        session, tenant_id=str(tenant.id), user_id=auth.sub, now=now, reason="switched"
+    )
+    row_session = ManagedClientContextSession(
+        tenant_id=tenant.id,
+        managed_client_id=client.id,
+        user_id=auth.sub,
+        started_at=now,
+    )
+    session.add(row_session)
+    await session.flush()
+
     await write_audit_event(
         session=session,
         request=request,
@@ -651,7 +676,52 @@ async def enter_client_context(
         mode=client.mode,
         all_modules=context.all_modules,
         modules=list(context.modules),
+        expires_at=session_expires_at(now),
+        seconds_left=session_seconds_left(started_at=now, now=now),
     )
+
+
+@router.delete("/context", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
+async def leave_client_context(
+    request: Request,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: AnyAuthenticated,
+    auth: Annotated[AuthContext, Depends(get_auth_ctx)],
+) -> Response:
+    """Выйти из контекста клиента (разд. 49.3 + Доп. №3 63.2).
+
+    До среза-10 выход был чисто интерфейсным: баннер исчезал, а сервер об этом
+    не знал — в журнале доступа работа «от имени» не имела конца. Теперь выход
+    закрывает сессию и пишется в аудит.
+
+    Идемпотентен: выйти из контекста, которого нет, — не ошибка. Иначе
+    повторный клик или вкладка, открытая со вчерашним состоянием, отдавали бы
+    пользователю отказ на действии, которое ничего не ломает.
+    """
+
+    TenantContextValidator.ensure_tenant_context(tenant)
+    await _require_enabled(session, tenant)
+    now = datetime.now(tz=timezone.utc)
+
+    closed = await close_open_sessions(
+        session, tenant_id=str(tenant.id), user_id=auth.sub, now=now, reason="left"
+    )
+    for row in closed:
+        await write_audit_event(
+            session=session,
+            request=request,
+            tenant_id=str(tenant.id),
+            actor_id=auth.sub,
+            action="managed_client.context.leave",
+            resource_type="managed_client",
+            resource_id=row.managed_client_id,
+            before=None,
+            after=None,
+            meta={"on_behalf_of_client": False, "managed_client_id": row.managed_client_id},
+        )
+    await session.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/{mcid}/access", response_model=list[AccessGrantRead])

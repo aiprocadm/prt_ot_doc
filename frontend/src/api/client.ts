@@ -206,11 +206,27 @@ apiClient.interceptors.request.use((config) => {
   return config;
 });
 
+const CONTEXT_EXPIRED_CODE = "MANAGED_CLIENT_CONTEXT_EXPIRED";
+
+const isExpiredClientContext = (data: unknown): boolean => {
+  if (!data || typeof data !== "object") return false;
+  const body = data as Record<string, unknown>;
+  const detail = body.detail as Record<string, unknown> | undefined;
+  return body.code === CONTEXT_EXPIRED_CODE || detail?.code === CONTEXT_EXPIRED_CODE;
+};
+
 apiClient.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
     const originalRequest = error.config;
     const status = error.response?.status ?? 0;
+    // BIZ-49 срез-10: сервер сказал, что работа «от имени клиента» истекла.
+    // Держать локальный контекст после этого нельзя: интерфейс продолжил бы
+    // показывать баннер «вы работаете от имени X», хотя каждый следующий
+    // запрос получает отказ — а данные при этом уже НЕ отфильтрованы.
+    if (status === 403 && isExpiredClientContext(error.response?.data)) {
+      managedClientStorage.clear();
+    }
     if (status === 401 && originalRequest && !originalRequest._retry) {
       const requestAuthHeader = originalRequest.headers?.Authorization;
       const hasAccessToken = Boolean(

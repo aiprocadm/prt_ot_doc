@@ -37,7 +37,11 @@ from app.models.finance import (
     OrderStatus,
 )
 from app.models.job_engine import InboundWebhookDedup
-from app.models.managed_clients import ManagedClient, ManagedClientAccess
+from app.models.managed_clients import (
+    ManagedClient,
+    ManagedClientAccess,
+    ManagedClientContextSession,
+)
 from app.models.models import (
     NPA,
     ApiKey,
@@ -196,6 +200,7 @@ __all__ = [
     "JournalEntry",
     "ManagedClient",
     "ManagedClientAccess",
+    "ManagedClientContextSession",
     "MedicalExam",
     "NPA",
     "NPABinding",

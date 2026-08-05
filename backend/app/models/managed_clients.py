@@ -102,3 +102,44 @@ class ManagedClientAccess(TenantBaseModel):
         Index("ix_managed_client_access_client_user", "tenant_id", "managed_client_id", "user_id"),
         Index("ix_managed_client_access_user", "tenant_id", "user_id"),
     )
+
+
+class ManagedClientContextSession(TenantBaseModel):
+    """BIZ-49 срез-10 (Доп. №3, разд. 63.2): сессия работы «от имени клиента».
+
+    До этого контекст был бессрочным: заголовок в запросе проверялся по гранту,
+    и всё. ТЗ требует, чтобы работа «от имени» ИСТЕКАЛА (напр. через 60 минут),
+    а выход из неё был событием на сервере, а не просто исчезнувшим баннером.
+
+    Строка не удаляется при выходе — закрывается ``ended_at``. Журнал доступа к
+    своим данным клиент вправе запросить (разд. 66), а удалённая сессия не
+    отвечает на вопрос «кто и когда работал от моего имени».
+    """
+
+    __tablename__ = "managed_client_context_session"
+
+    managed_client_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("managed_client.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("user.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    #: Проставляется при выходе ИЛИ при отзыве доступа. Истечение по сроку
+    #: здесь не пишется: его считает правило, иначе пришлось бы держать
+    #: фоновую задачу, которая закрывает сессии ровно в минуту икс.
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    ended_reason: Mapped[str | None] = mapped_column(String(32), nullable=True)
+
+    __table_args__ = (
+        Index(
+            "ix_mc_context_session_active",
+            "tenant_id",
+            "user_id",
+            "managed_client_id",
+            "started_at",
+        ),
+    )

@@ -255,3 +255,8 @@ class ClientContextRead(BaseSchema):
     audit_recorded: bool = True
     #: Разделы, где контекст уже работает как фильтр (срез-9).
     scoped_sections: list[str] = []
+    #: Когда работа «от имени» перестанет действовать (срез-10, Доп. №3 63.2).
+    expires_at: datetime | None = None
+    #: Сколько секунд осталось — чтобы интерфейс мог показать счётчик, а не
+    #: вычислять срок сам и разъезжаться с сервером на часовых поясах.
+    seconds_left: int | None = None

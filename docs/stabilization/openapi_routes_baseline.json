@@ -23,6 +23,7 @@
     "DELETE /api/v1/journals/entries/{entry_id}",
     "DELETE /api/v1/journals/{journal_id}",
     "DELETE /api/v1/layout-presets/{preset_id}",
+    "DELETE /api/v1/managed-clients/context",
     "DELETE /api/v1/managed-clients/{mcid}",
     "DELETE /api/v1/managed-clients/{mcid}/access/{grant_id}",
     "DELETE /api/v1/medical/factors/{factor_id}",
@@ -1460,6 +1461,7 @@
     "issue_machine_key_api_v1_machine_keys_post",
     "issue_protocol_api_v1_training_protocols__item_id__issue_post",
     "learner_dashboard_api_v1_training_learner_dashboard_get",
+    "leave_client_context_api_v1_managed_clients_context_delete",
     "lift_suspension_api_v1_medical_suspensions__suspension_id__lift_post",
     "lint_template_version_api_v1_templates__template_id__versions__version_id__lint_post",
     "list_access_grants_api_v1_managed_clients__mcid__access_get",
@@ -3682,7 +3684,10 @@
       "mode": "ManagedClientMode",
       "all_modules": "boolean",
       "modules": "array",
-      "audit_recorded": "boolean"
+      "audit_recorded": "boolean",
+      "scoped_sections": "array",
+      "expires_at": "null|string",
+      "seconds_left": "integer|null"
     },
     "CommitteeCreate": {
       "kind": "CommitteeKind",
@@ -5676,7 +5681,8 @@
       "modules": "array"
     },
     "MyManagedClientsResponse": {
-      "items": "array"
+      "items": "array",
+      "scoped_sections": "array"
     },
     "NamedListPage": {
       "items": "array",

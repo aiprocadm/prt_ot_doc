@@ -6,7 +6,8 @@ import { managedClientStorage } from "@/api/managedClientStorage";
 
 const api = vi.hoisted(() => ({
   my: vi.fn(),
-  enterContext: vi.fn()
+  enterContext: vi.fn(),
+  leaveContext: vi.fn()
 }));
 
 vi.mock("@/api/managedClients", async (importOriginal) => ({
@@ -44,8 +45,10 @@ beforeEach(() => {
     all_modules: true,
     modules: [],
     audit_recorded: true,
-    scoped_sections: ["Люди", "Медосмотры"]
+    scoped_sections: ["Люди", "Медосмотры"],
+    expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString()
   });
+  api.leaveContext.mockResolvedValue(undefined);
 });
 
 describe("ClientContextSwitcher", () => {
@@ -64,10 +67,13 @@ describe("ClientContextSwitcher", () => {
     await user.selectOptions(screen.getByLabelText("Работать от имени клиента"), "mc1");
 
     await waitFor(() => expect(api.enterContext).toHaveBeenCalledWith("mc1"));
-    expect(managedClientStorage.get()).toEqual({
+    expect(managedClientStorage.get()).toMatchObject({
       clientId: "mc1",
       clientName: "ООО Ромашка"
     });
+    // Срок приезжает с сервера: считать его на клиенте значит разъехаться
+    // с сервером на часовых поясах и подведённых часах.
+    expect(managedClientStorage.get()?.expiresAt).toBeTruthy();
   });
 
   it("отказ сервера не оставляет ложный контекст", async () => {
@@ -132,5 +138,58 @@ describe("ClientContextSwitcher", () => {
     const { container } = render(<ClientContextSwitcher />);
     await waitFor(() => expect(api.my).toHaveBeenCalled());
     expect(container).toBeEmptyDOMElement();
+  });
+});
+
+describe("ClientContextSwitcher — срок работы «от имени» (срез-10)", () => {
+  it("показывает, сколько осталось", async () => {
+    managedClientStorage.set({
+      clientId: "mc1",
+      clientName: "ООО Ромашка",
+      expiresAt: new Date(Date.now() + 30 * 60 * 1000).toISOString()
+    });
+    render(<ClientContextSwitcher />);
+
+    const counter = await screen.findByTestId("client-context-countdown");
+    expect(counter).toHaveTextContent(/Осталось \d+ мин/);
+  });
+
+  it("протухший контекст не показывается вовсе", async () => {
+    // Вкладка пролежала ночь. Показать баннер «вы работаете от имени» нельзя:
+    // сервер такой контекст уже не признаёт, а данные НЕ отфильтрованы.
+    managedClientStorage.set({
+      clientId: "mc1",
+      clientName: "ООО Ромашка",
+      expiresAt: new Date(Date.now() - 1000).toISOString()
+    });
+    render(<ClientContextSwitcher />);
+
+    await waitFor(() => expect(screen.queryByTestId("client-context-banner")).not.toBeInTheDocument());
+    expect(managedClientStorage.get()).toBeNull();
+  });
+
+  it("выход сообщает серверу, а не только гасит баннер", async () => {
+    const user = userEvent.setup();
+    managedClientStorage.set({ clientId: "mc1", clientName: "ООО Ромашка" });
+    render(<ClientContextSwitcher />);
+
+    await user.click(await screen.findByRole("button", { name: "Выйти из контекста" }));
+
+    await waitFor(() => expect(api.leaveContext).toHaveBeenCalled());
+    expect(managedClientStorage.get()).toBeNull();
+  });
+
+  it("сбой сети при выходе всё равно выпускает из контекста", async () => {
+    // Иначе специалист остаётся в чужом контексте с ошибкой на экране —
+    // худшее сочетание из возможных.
+    api.leaveContext.mockRejectedValue(new Error("network"));
+    const user = userEvent.setup();
+    managedClientStorage.set({ clientId: "mc1", clientName: "ООО Ромашка" });
+    render(<ClientContextSwitcher />);
+
+    await user.click(await screen.findByRole("button", { name: "Выйти из контекста" }));
+
+    await waitFor(() => expect(managedClientStorage.get()).toBeNull());
+    expect(screen.queryByTestId("client-context-banner")).not.toBeInTheDocument();
   });
 });

@@ -25,6 +25,12 @@ const asApiError = (err: unknown, fallback: string): ApiError =>
     ? (err as ApiError)
     : { status: 0, message: fallback };
 
+const formatLeft = (seconds: number): string => {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return m > 0 ? `${m} мин` : `${s} сек`;
+};
+
 const selectClass =
   "flex h-9 rounded-md border border-input bg-background px-2 py-1 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50";
 
@@ -36,11 +42,20 @@ interface ClientContextSwitcherProps {
 export const ClientContextSwitcher = ({ onContextChange }: ClientContextSwitcherProps) => {
   const [clients, setClients] = useState<MyManagedClient[]>([]);
   const [sections, setSections] = useState<string[]>([]);
-  const [active, setActive] = useState<StoredClientContext | null>(() =>
-    managedClientStorage.get()
-  );
+  const [active, setActive] = useState<StoredClientContext | null>(() => {
+    // Вкладка могла пролежать всю ночь: показывать «вы работаете от имени»
+    // по протухшему состоянию нельзя — сервер такой контекст уже не признаёт.
+    const stored = managedClientStorage.get();
+    if (managedClientStorage.isExpired(stored)) {
+      managedClientStorage.clear();
+      return null;
+    }
+    return stored;
+  });
   const [error, setError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState(false);
+  const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
+  const [expired, setExpired] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -69,7 +84,11 @@ export const ClientContextSwitcher = ({ onContextChange }: ClientContextSwitcher
       // Записывать контекст локально до подтверждения нельзя — иначе интерфейс
       // покажет работу «от имени клиента», которой на сервере не случилось.
       const confirmed = await managedClientsApi.enterContext(clientId);
-      const next = { clientId: confirmed.client_id, clientName: confirmed.client_name };
+      const next = {
+        clientId: confirmed.client_id,
+        clientName: confirmed.client_name,
+        expiresAt: confirmed.expires_at ?? undefined
+      };
       managedClientStorage.set(next);
       setActive(next);
       onContextChange?.(next);
@@ -80,11 +99,39 @@ export const ClientContextSwitcher = ({ onContextChange }: ClientContextSwitcher
     }
   };
 
-  const leave = () => {
-    managedClientStorage.clear();
-    setActive(null);
-    onContextChange?.(null);
-  };
+  const leave = useCallback(
+    async (expired = false) => {
+      // Сначала гасим локально: если сеть отвалилась, специалист всё равно
+      // обязан выйти из чужого контекста, а не остаться в нём с ошибкой.
+      managedClientStorage.clear();
+      setActive(null);
+      setExpired(expired);
+      onContextChange?.(null);
+      try {
+        await managedClientsApi.leaveContext();
+      } catch {
+        // Сервер закроет сессию сам по сроку — молчим, чтобы выход из
+        // контекста не выглядел неудавшимся.
+      }
+    },
+    [onContextChange]
+  );
+
+  // Срок работы «от имени» истекает и БЕЗ участия пользователя: вкладка может
+  // просто лежать открытой. Пока баннер висит, счётчик обязан идти сам.
+  useEffect(() => {
+    if (!active?.expiresAt) return;
+    const tick = () => {
+      if (managedClientStorage.isExpired(active)) {
+        void leave(true);
+        return;
+      }
+      setSecondsLeft(Math.max(0, Math.round((Date.parse(active.expiresAt!) - Date.now()) / 1000)));
+    };
+    tick();
+    const timer = window.setInterval(tick, 1000);
+    return () => window.clearInterval(timer);
+  }, [active, leave]);
 
   if (active) {
     return (
@@ -98,6 +145,11 @@ export const ClientContextSwitcher = ({ onContextChange }: ClientContextSwitcher
           Вы работаете от имени: <strong>{active.clientName}</strong>
         </span>
         <span className="text-xs text-muted-foreground">Действия фиксируются в аудите</span>
+        {secondsLeft !== null && (
+          <span className="text-xs font-medium" data-testid="client-context-countdown">
+            Осталось {formatLeft(secondsLeft)}
+          </span>
+        )}
         {/* Фильтр применён пока не во всех разделах, и молчать об этом нельзя:
             специалист поверит вывеске и внесёт данные не тому клиенту. */}
         {sections.length > 0 && (
@@ -106,7 +158,7 @@ export const ClientContextSwitcher = ({ onContextChange }: ClientContextSwitcher
             всех клиентов.
           </span>
         )}
-        <Button type="button" size="sm" variant="outline" onClick={leave}>
+        <Button type="button" size="sm" variant="outline" onClick={() => void leave()}>
           Выйти из контекста
         </Button>
       </div>
@@ -119,6 +171,11 @@ export const ClientContextSwitcher = ({ onContextChange }: ClientContextSwitcher
 
   return (
     <div className="flex flex-wrap items-center gap-2" data-testid="client-context-switcher">
+      {expired && (
+        <span className="text-xs text-amber-700" data-testid="client-context-expired">
+          Время работы от имени клиента вышло — войдите заново, если работа продолжается.
+        </span>
+      )}
       <label className="text-xs text-muted-foreground" htmlFor="client-context-select">
         Работать от имени клиента
       </label>
