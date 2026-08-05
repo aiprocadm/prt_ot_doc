@@ -13,6 +13,7 @@ import {
   type Severity,
   type SpecialistWorkloadResponse,
 } from "@/api/managedClients";
+import { ClientContextSwitcher } from "@/components/common/ClientContextSwitcher";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingScreen } from "@/components/common/LoadingScreen";
@@ -622,6 +623,9 @@ const ClientCockpitPage = () => {
         title="Клиенты (аутсорсинг)"
         description="Единое окно: что горит по всем ведомым клиентам и состояние портфеля."
       />
+      {/* Переключатель и индикатор контекста — ВЫШЕ данных: если специалист
+          работает от имени клиента, он обязан видеть это, не прокручивая. */}
+      <ClientContextSwitcher onContextChange={() => void load()} />
       {moduleDisabled ? (
         <EmptyState
           title="Модуль не подключён"

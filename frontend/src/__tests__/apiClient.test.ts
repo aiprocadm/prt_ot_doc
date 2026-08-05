@@ -194,3 +194,55 @@ describe("apiClient", () => {
     mock.restore();
   });
 });
+
+describe("apiClient: контекст ведомого клиента (BIZ-49 разд. 49.3)", () => {
+  beforeEach(async () => {
+    const { managedClientStorage } = await import("@/api/managedClientStorage");
+    managedClientStorage.clear();
+    tenantStorage.clear();
+    tokenStorage.clear();
+  });
+
+  it("подставляет X-Managed-Client, когда контекст активен", async () => {
+    const { managedClientStorage } = await import("@/api/managedClientStorage");
+    tenantStorage.setTenant({ slug: "severstroy" });
+    managedClientStorage.set({ clientId: "mc1", clientName: "Ромашка" });
+
+    const mock = new MockAdapter(apiClient);
+    mock.onGet("/documents").reply((config) => {
+      expect(config.headers?.["X-Managed-Client"]).toBe("mc1");
+      return [200, {}];
+    });
+    await apiClient.get("/documents");
+    mock.restore();
+  });
+
+  it("без контекста заголовка нет", async () => {
+    tenantStorage.setTenant({ slug: "severstroy" });
+
+    const mock = new MockAdapter(apiClient);
+    mock.onGet("/documents").reply((config) => {
+      expect(config.headers?.["X-Managed-Client"]).toBeUndefined();
+      return [200, {}];
+    });
+    await apiClient.get("/documents");
+    mock.restore();
+  });
+
+  it("смена контура сбрасывает контекст клиента: заголовок не уедет к соседу", async () => {
+    const { managedClientStorage } = await import("@/api/managedClientStorage");
+    tenantStorage.setTenant({ slug: "severstroy" });
+    managedClientStorage.set({ clientId: "mc1", clientName: "Ромашка" });
+
+    tenantStorage.setTenant({ slug: "uralenergo" });
+
+    expect(managedClientStorage.get()).toBeNull();
+    const mock = new MockAdapter(apiClient);
+    mock.onGet("/documents").reply((config) => {
+      expect(config.headers?.["X-Managed-Client"]).toBeUndefined();
+      return [200, {}];
+    });
+    await apiClient.get("/documents");
+    mock.restore();
+  });
+});
