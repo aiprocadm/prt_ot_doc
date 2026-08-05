@@ -235,3 +235,16 @@ class MyManagedClient(BaseSchema):
 
 class MyManagedClientsResponse(BaseSchema):
     items: list[MyManagedClient]
+
+
+# --- Контекст клиента (срез-7, разд. 49.3) ---
+class ClientContextRead(BaseSchema):
+    """Подтверждённый контекст: специалист работает от имени клиента."""
+
+    client_id: str
+    client_name: str
+    mode: ManagedClientMode
+    all_modules: bool
+    modules: list[str]
+    #: Подтверждение, что вход зафиксирован в аудите (требование ПДн из ТЗ).
+    audit_recorded: bool = True
