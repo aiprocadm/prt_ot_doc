@@ -174,6 +174,18 @@ export interface ClientContextResponse {
   all_modules: boolean;
   modules: string[];
   audit_recorded: boolean;
+  scoped_sections: string[];
+}
+
+/**
+ * Клиенты специалиста + разделы, где контекст УЖЕ работает как фильтр.
+ * Список приходит с бэкенда, а не зашит здесь: захардкоженный на фронте, он
+ * разъехался бы с кодом в день, когда фильтр добавят в новый раздел, — и
+ * индикатор начал бы обещать больше, чем платформа делает.
+ */
+export interface MyManagedClientsResult {
+  items: MyManagedClient[];
+  scopedSections: string[];
 }
 
 // ── API ────────────────────────────────────────────────────────────────────
@@ -222,9 +234,12 @@ export const managedClientsApi = {
   },
 
   /** Клиенты, к которым У МЕНЯ есть доступ (основа переключателя). */
-  async my(): Promise<MyManagedClient[]> {
-    const r = await apiClient.get<{ items: MyManagedClient[] }>(`${base}/my`, silent);
-    return r.data.items;
+  async my(): Promise<MyManagedClientsResult> {
+    const r = await apiClient.get<{ items: MyManagedClient[]; scoped_sections?: string[] }>(
+      `${base}/my`,
+      silent
+    );
+    return { items: r.data.items, scopedSections: r.data.scoped_sections ?? [] };
   },
 
   /** Войти в контекст клиента: бэкенд проверит грант и запишет след в аудит. */

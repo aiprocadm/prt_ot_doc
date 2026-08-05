@@ -5,8 +5,10 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from fastapi import HTTPException, Query, Request, Response, status
+from sqlalchemy import false as sa_false
 from sqlalchemy import func, select
 
+from app.api.dependencies_managed_client import ClientScopeDep
 from app.api.helpers.etag import (
     apply_etag_response_headers,
     build_not_modified_headers,
@@ -53,6 +55,7 @@ async def list_medical_exams(
     tenant: TenantDep,
     session: SessionDep,
     access: MedicalReadAccess,
+    scope: ClientScopeDep,
     person_id: str | None = Query(default=None),
     status_filter: str | None = Query(default=None, alias="status"),
     exam_kind: str | None = Query(default=None),
@@ -66,6 +69,24 @@ async def list_medical_exams(
     stmt = select(MedicalExam).where(
         MedicalExam.tenant_id == tenant.id, MedicalExam.deleted_at.is_(None)
     )
+    # Работа «от имени клиента» (BIZ-49 срез-9): медосмотр принадлежит клиенту
+    # через сотрудника. Подзапросом, а не join'ом: пагинация и подсчёт итога
+    # идут по той же выборке, а join размножил бы строки.
+    if scope is not None:
+        if not scope.visible:
+            # Пусто, а не «все медосмотры арендатора»: сводка внимания уже
+            # честно говорит, что данные такого клиента отсюда не читаются.
+            stmt = stmt.where(sa_false())
+        else:
+            stmt = stmt.where(
+                MedicalExam.person_id.in_(
+                    select(Person.id).where(
+                        Person.tenant_id == tenant.id,
+                        Person.company_id == scope.company_id,
+                        Person.deleted_at.is_(None),
+                    )
+                )
+            )
     if person_id:
         stmt = stmt.where(MedicalExam.person_id == person_id)
     if status_filter == "expired":
@@ -101,6 +122,8 @@ async def list_medical_exams(
             ("status", status_filter or ""),
             ("kind", exam_kind or ""),
             ("fitness", fitness or ""),
+            # Без этого 304-й ответ отдал бы кэш, набранный вне контекста.
+            ("managed_client", scope.client_id if scope else ""),
         ],
     )
     apply_etag_response_headers(response, etag)

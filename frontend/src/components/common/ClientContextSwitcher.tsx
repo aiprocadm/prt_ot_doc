@@ -35,6 +35,7 @@ interface ClientContextSwitcherProps {
 
 export const ClientContextSwitcher = ({ onContextChange }: ClientContextSwitcherProps) => {
   const [clients, setClients] = useState<MyManagedClient[]>([]);
+  const [sections, setSections] = useState<string[]>([]);
   const [active, setActive] = useState<StoredClientContext | null>(() =>
     managedClientStorage.get()
   );
@@ -43,12 +44,15 @@ export const ClientContextSwitcher = ({ onContextChange }: ClientContextSwitcher
 
   const load = useCallback(async () => {
     try {
-      setClients(await managedClientsApi.my());
+      const mine = await managedClientsApi.my();
+      setClients(mine.items);
+      setSections(mine.scopedSections);
       setError(null);
     } catch {
       // Модуль может быть не подключён — это не ошибка пользователя,
       // переключателю просто нечего показывать.
       setClients([]);
+      setSections([]);
     }
   }, []);
 
@@ -94,6 +98,14 @@ export const ClientContextSwitcher = ({ onContextChange }: ClientContextSwitcher
           Вы работаете от имени: <strong>{active.clientName}</strong>
         </span>
         <span className="text-xs text-muted-foreground">Действия фиксируются в аудите</span>
+        {/* Фильтр применён пока не во всех разделах, и молчать об этом нельзя:
+            специалист поверит вывеске и внесёт данные не тому клиенту. */}
+        {sections.length > 0 && (
+          <span className="text-xs text-muted-foreground" data-testid="client-context-sections">
+            Данные клиента показываются в разделах: {sections.join(", ")}. В остальных — данные
+            всех клиентов.
+          </span>
+        )}
         <Button type="button" size="sm" variant="outline" onClick={leave}>
           Выйти из контекста
         </Button>
