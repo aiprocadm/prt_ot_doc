@@ -33,12 +33,18 @@ from app.domains.managed_clients.context import (
     build_context_audit_meta,
     resolve_client_context,
 )
+from app.domains.managed_clients.impersonation import (
+    ImpersonationExpired,
+    ensure_session_active,
+)
 from app.domains.managed_clients.scope import ClientDataScope, resolve_client_scope
+from app.domains.managed_clients.session_service import find_open_session
 from app.models.managed_clients import ManagedClient, ManagedClientAccess
 from app.models.tenanting import Tenant
 from app.modules.audit.writer import write_audit_event
 
 __all__ = [
+    "CLIENT_CONTEXT_EXPIRED_CODE",
     "CLIENT_CONTEXT_HEADER",
     "ClientContextDep",
     "ClientScopeDep",
@@ -47,6 +53,22 @@ __all__ = [
 ]
 
 CLIENT_CONTEXT_HEADER = "X-Managed-Client"
+CLIENT_CONTEXT_EXPIRED_CODE = "MANAGED_CLIENT_CONTEXT_EXPIRED"
+
+
+def _expired(message: str) -> HTTPException:
+    """Отдельный код ответа: интерфейсу нужно ОТЛИЧАТЬ «нет доступа» от
+    «время вышло». В первом случае баннер оставлять нельзя как ошибочный,
+    во втором — надо предложить войти в контекст заново."""
+
+    return HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail=api_problem_detail(
+            code="MANAGED_CLIENT_CONTEXT_EXPIRED",
+            message=message,
+            error_type="managed_clients",
+        ),
+    )
 
 
 def _denied(message: str) -> HTTPException:
@@ -136,6 +158,24 @@ async def require_client_context(
         )
     except ClientContextDenied as exc:
         raise _denied(str(exc)) from exc
+
+    # Срез-10 (Доп. №3 63.2): у работы «от имени» есть срок. Заголовок с
+    # правильным идентификатором сам по себе больше не даёт контекста —
+    # нужна открытая и не истёкшая сессия, начатая явным входом.
+    row_session = await find_open_session(
+        session, tenant_id=str(tenant.id), user_id=auth.sub, client_id=client.id
+    )
+    if row_session is None:
+        raise _expired(
+            "Работа от имени клиента не начата или уже завершена. "
+            "Войдите в контекст клиента заново."
+        )
+    try:
+        ensure_session_active(
+            started_at=row_session.started_at, ended_at=row_session.ended_at, now=now
+        )
+    except ImpersonationExpired as exc:
+        raise _expired(str(exc)) from exc
 
     # Обязательная пометка: ТЗ требует трассируемости действий аутсорсера
     # в данных клиента. Ошибку записи НЕ глушим — без следа работать нельзя.

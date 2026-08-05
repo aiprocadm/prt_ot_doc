@@ -175,6 +175,9 @@ export interface ClientContextResponse {
   modules: string[];
   audit_recorded: boolean;
   scoped_sections: string[];
+  /** Когда работа «от имени» истечёт (срез-10, Доп. №3 63.2). */
+  expires_at?: string | null;
+  seconds_left?: number | null;
 }
 
 /**
@@ -245,6 +248,15 @@ export const managedClientsApi = {
   /** Войти в контекст клиента: бэкенд проверит грант и запишет след в аудит. */
   async enterContext(clientId: string): Promise<ClientContextResponse> {
     return (await apiClient.post<ClientContextResponse>(`${base}/${clientId}/context`, {})).data;
+  },
+
+  /**
+   * Выйти из контекста. До среза-10 выход был чисто интерфейсным: баннер
+   * исчезал, а на сервере работа «от имени» не имела конца — в журнале
+   * доступа клиента это выглядело как бесконечная сессия.
+   */
+  async leaveContext(): Promise<void> {
+    await apiClient.delete(`${base}/context`, silent);
   },
 
   async create(payload: {

@@ -246,3 +246,35 @@ describe("apiClient: контекст ведомого клиента (BIZ-49 р
     mock.restore();
   });
 });
+
+describe("apiClient: истёкший контекст клиента (BIZ-49 срез-10)", () => {
+  it("отказ «время вышло» гасит локальный контекст", async () => {
+    // Иначе баннер продолжает обещать работу «от имени», каждый запрос
+    // получает отказ, а данные при этом уже НЕ отфильтрованы.
+    const { managedClientStorage } = await import("@/api/managedClientStorage");
+    tenantStorage.setTenant({ slug: "severstroy" });
+    managedClientStorage.set({ clientId: "mc1", clientName: "Ромашка" });
+
+    const mock = new MockAdapter(apiClient);
+    mock.onGet("/persons").reply(403, {
+      detail: { code: "MANAGED_CLIENT_CONTEXT_EXPIRED", message: "Срок истёк" }
+    });
+
+    await expect(apiClient.get("/persons")).rejects.toBeDefined();
+    expect(managedClientStorage.get()).toBeNull();
+    mock.restore();
+  });
+
+  it("обычный отказ 403 контекст не трогает", async () => {
+    const { managedClientStorage } = await import("@/api/managedClientStorage");
+    tenantStorage.setTenant({ slug: "severstroy" });
+    managedClientStorage.set({ clientId: "mc1", clientName: "Ромашка" });
+
+    const mock = new MockAdapter(apiClient);
+    mock.onGet("/persons").reply(403, { detail: { code: "FORBIDDEN", message: "Нет прав" } });
+
+    await expect(apiClient.get("/persons")).rejects.toBeDefined();
+    expect(managedClientStorage.get()).not.toBeNull();
+    mock.restore();
+  });
+});

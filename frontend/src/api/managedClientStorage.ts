@@ -5,6 +5,12 @@ const CONTEXT_KEY = "prt-managed-client";
 export type StoredClientContext = {
   clientId: string;
   clientName: string;
+  /**
+   * Когда работа «от имени» истекает (срез-10). Храним МОМЕНТ, а не остаток:
+   * вкладка, пролежавшая ночь в фоне, при пробуждении обязана показать
+   * «время вышло», а не досчитывать вчерашние 40 минут.
+   */
+  expiresAt?: string;
 };
 
 /**
@@ -22,7 +28,11 @@ const parse = (raw: string | null): StoredClientContext | null => {
   try {
     const parsed = JSON.parse(raw);
     if (parsed && typeof parsed.clientId === "string" && typeof parsed.clientName === "string") {
-      return { clientId: parsed.clientId, clientName: parsed.clientName };
+      return {
+        clientId: parsed.clientId,
+        clientName: parsed.clientName,
+        expiresAt: typeof parsed.expiresAt === "string" ? parsed.expiresAt : undefined
+      };
     }
     return null;
   } catch {
@@ -49,5 +59,12 @@ export const managedClientStorage = {
   clear(): void {
     contextValue = null;
     localStorageRemoveItem(CONTEXT_KEY);
+  },
+
+  /** Истёк ли срок работы «от имени» (проверяется на КАЖДОМ чтении в интерфейсе). */
+  isExpired(context: StoredClientContext | null, now: number = Date.now()): boolean {
+    if (!context?.expiresAt) return false;
+    const at = Date.parse(context.expiresAt);
+    return Number.isFinite(at) && at <= now;
   }
 };

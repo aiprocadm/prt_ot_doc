@@ -29,6 +29,7 @@ from app.db.session import aensure_shared_schema, dispose_engine
 from app.middleware.api_deprecation import ApiDeprecationMiddleware
 from app.middleware.billing_guard import BillingGuardMiddleware
 from app.middleware.global_error_handler import GlobalErrorHandlerMiddleware
+from app.middleware.impersonation_guard import ImpersonationGuardMiddleware
 from app.middleware.observability import ObservabilityMiddleware
 from app.middleware.offboarding_readonly import OffboardingReadOnlyMiddleware
 from app.middleware.security_headers import DEFAULT_API_CSP, SecurityHeadersMiddleware
@@ -105,6 +106,11 @@ def _configure_middlewares(app: FastAPI, settings: Settings) -> None:
     # арендатору честнее ответить «идёт расторжение, данные только на чтение»,
     # чем «оплатите подписку» — платить он как раз и не собирается.
     app.add_middleware(OffboardingReadOnlyMiddleware)
+    # BIZ-49 срез-10: запреты для работы «от имени клиента» (Доп. №3 63.2).
+    # Добавлен после офбординга, то есть выполняется ПЕРЕД ним: специалисту,
+    # который пытается удалить данные из чужого контекста, надо ответить
+    # именно про контекст, а не про состояние подписки арендатора.
+    app.add_middleware(ImpersonationGuardMiddleware)
     app.add_middleware(SlowAPIMiddleware)
     app.add_middleware(ObservabilityMiddleware, settings=settings)
 
@@ -281,6 +287,5 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             ),
             exempt_path_prefixes=_docs_path_prefixes(settings),
         )
-
 
     return app
