@@ -384,17 +384,17 @@ beforeEach(() => {
   // toastMock — обычные vi.fn(), restoreAllMocks их не трогает: чистим вызовы вручную.
   toastMock.success.mockClear();
   toastMock.error.mockClear();
-  (budgetApi.getOverview as any).mockResolvedValue(OVERVIEW);
-  (budgetApi.getBreakdown as any).mockImplementation(
+  vi.mocked(budgetApi.getOverview).mockResolvedValue(OVERVIEW);
+  vi.mocked(budgetApi.getBreakdown).mockImplementation(
     ({ dimension }: { dimension: string }) =>
       Promise.resolve(BREAKDOWN_BY_DIMENSION[dimension]),
   );
-  (budgetApi.listBudgets as any).mockResolvedValue(BUDGETS_PAGE);
-  (budgetApi.getBudget as any).mockResolvedValue(BUDGET_DETAIL);
-  (budgetApi.listArticles as any).mockResolvedValue(EMPTY_PAGE);
-  (budgetApi.listExpenses as any).mockResolvedValue(EMPTY_PAGE);
-  (budgetApi.listReimbursements as any).mockResolvedValue(EMPTY_PAGE);
-  (budgetApi.listBranchesLite as any).mockResolvedValue({ items: [] });
+  vi.mocked(budgetApi.listBudgets).mockResolvedValue(BUDGETS_PAGE);
+  vi.mocked(budgetApi.getBudget).mockResolvedValue(BUDGET_DETAIL);
+  vi.mocked(budgetApi.listArticles).mockResolvedValue(EMPTY_PAGE);
+  vi.mocked(budgetApi.listExpenses).mockResolvedValue(EMPTY_PAGE);
+  vi.mocked(budgetApi.listReimbursements).mockResolvedValue(EMPTY_PAGE);
+  vi.mocked(budgetApi.listBranchesLite).mockResolvedValue({ items: [] });
   analyticsMock.getCompanies.mockResolvedValue({ items: [] });
   analyticsMock.getSites.mockResolvedValue({ items: [] });
   analyticsMock.getContractors.mockResolvedValue({ items: [] });
@@ -409,7 +409,7 @@ const renderPage = () =>
 
 // getByText's default normalizer collapses whitespace (incl. NBSP) in the DOM text it scans,
 // but does NOT run the same normalization over a plain-string matcher — so a matcher built
-// from formatRub() (which groups digits with  ) never equals the collapsed DOM text
+// from formatRub() (which groups digits with NBSP U+00A0) never equals the collapsed DOM text
 // unless we pre-normalize it the same way here.
 // Нормализуем ВСЕ пробельные, а не только U+00A0: ICU в CI может отдавать U+202F.
 const rub = (value: number) => formatRub(value).replace(/\s/g, " ");
@@ -498,7 +498,7 @@ describe("BudgetPage", () => {
     // Мутация на вкладке «Бюджеты» дёргает reload() всей страницы — окно должно пережить его,
     // а не откатиться к дефолтному календарному году.
     await openBudgetsTab();
-    (budgetApi.deleteBudget as any).mockResolvedValue(undefined);
+    vi.mocked(budgetApi.deleteBudget).mockResolvedValue(undefined);
     vi.spyOn(window, "confirm").mockReturnValue(true);
     fireEvent.click(screen.getByRole("button", { name: "Удалить" }));
 
@@ -537,7 +537,7 @@ describe("BudgetPage", () => {
   });
 
   it("creates a budget through BudgetFormDialog with the entered payload", async () => {
-    (budgetApi.createBudget as any).mockResolvedValue({
+    vi.mocked(budgetApi.createBudget).mockResolvedValue({
       id: "bt2",
       name: "Тестовый бюджет",
       domain: "training",
@@ -585,7 +585,7 @@ describe("BudgetPage", () => {
   });
 
   it("sends only the changed fields when editing a budget", async () => {
-    (budgetApi.updateBudget as any).mockResolvedValue({
+    vi.mocked(budgetApi.updateBudget).mockResolvedValue({
       ...BUDGETS_PAGE.items[0],
       planned_amount: 999,
     });
@@ -611,19 +611,21 @@ describe("BudgetPage", () => {
   });
 
   it("shows the feature-off empty state when the API answers feature-disabled 404", async () => {
-    (budgetApi.getOverview as any).mockRejectedValue(FEATURE_OFF_ERROR);
-    (budgetApi.listBudgets as any).mockRejectedValue(FEATURE_OFF_ERROR);
-    (budgetApi.listArticles as any).mockRejectedValue(FEATURE_OFF_ERROR);
-    (budgetApi.listExpenses as any).mockRejectedValue(FEATURE_OFF_ERROR);
-    (budgetApi.listReimbursements as any).mockRejectedValue(FEATURE_OFF_ERROR);
+    vi.mocked(budgetApi.getOverview).mockRejectedValue(FEATURE_OFF_ERROR);
+    vi.mocked(budgetApi.listBudgets).mockRejectedValue(FEATURE_OFF_ERROR);
+    vi.mocked(budgetApi.listArticles).mockRejectedValue(FEATURE_OFF_ERROR);
+    vi.mocked(budgetApi.listExpenses).mockRejectedValue(FEATURE_OFF_ERROR);
+    vi.mocked(budgetApi.listReimbursements).mockRejectedValue(
+      FEATURE_OFF_ERROR,
+    );
     renderPage();
 
     expect(await screen.findByText("Функция недоступна")).toBeInTheDocument();
   });
 
   it("renders the expenses list; the domain filter refetches without empty date bounds", async () => {
-    (budgetApi.listArticles as any).mockResolvedValue(ARTICLES_PAGE);
-    (budgetApi.listExpenses as any).mockResolvedValue(EXPENSES_PAGE);
+    vi.mocked(budgetApi.listArticles).mockResolvedValue(ARTICLES_PAGE);
+    vi.mocked(budgetApi.listExpenses).mockResolvedValue(EXPENSES_PAGE);
     renderPage();
     await openExpensesTab();
 
@@ -632,22 +634,22 @@ describe("BudgetPage", () => {
     expect(screen.getByText("Инструктаж")).toBeInTheDocument();
     expect(screen.getByText("— без статьи")).toBeInTheDocument();
 
-    (budgetApi.listExpenses as any).mockClear();
-    (budgetApi.listExpenses as any).mockResolvedValue(EXPENSES_PAGE);
+    vi.mocked(budgetApi.listExpenses).mockClear();
+    vi.mocked(budgetApi.listExpenses).mockResolvedValue(EXPENSES_PAGE);
 
     fireEvent.change(screen.getByLabelText("Домен"), {
       target: { value: "training" },
     });
 
     await waitFor(() => expect(budgetApi.listExpenses).toHaveBeenCalled());
-    const params = (budgetApi.listExpenses as any).mock.calls.at(-1)[0];
+    const params = vi.mocked(budgetApi.listExpenses).mock.calls.at(-1)?.[0];
     expect(params).toEqual({ domain: "training" });
   });
 
   it("creates an expense with domain-filtered article options and no entity link when unchecked", async () => {
-    (budgetApi.listArticles as any).mockResolvedValue(ARTICLES_PAGE);
-    (budgetApi.listExpenses as any).mockResolvedValue(EXPENSES_PAGE);
-    (budgetApi.createExpense as any).mockResolvedValue({
+    vi.mocked(budgetApi.listArticles).mockResolvedValue(ARTICLES_PAGE);
+    vi.mocked(budgetApi.listExpenses).mockResolvedValue(EXPENSES_PAGE);
+    vi.mocked(budgetApi.createExpense).mockResolvedValue({
       ...EXPENSES_PAGE.items[0],
       id: "exp3",
     });
@@ -702,9 +704,9 @@ describe("BudgetPage", () => {
   });
 
   it("sends entity_type derived from the domain when the entity link checkbox is checked", async () => {
-    (budgetApi.listArticles as any).mockResolvedValue(ARTICLES_PAGE);
-    (budgetApi.listExpenses as any).mockResolvedValue(EXPENSES_PAGE);
-    (budgetApi.createExpense as any).mockResolvedValue({
+    vi.mocked(budgetApi.listArticles).mockResolvedValue(ARTICLES_PAGE);
+    vi.mocked(budgetApi.listExpenses).mockResolvedValue(EXPENSES_PAGE);
+    vi.mocked(budgetApi.createExpense).mockResolvedValue({
       ...EXPENSES_PAGE.items[0],
       id: "exp4",
     });
@@ -756,9 +758,9 @@ describe("BudgetPage", () => {
   });
 
   it("deletes an expense after confirm and reloads", async () => {
-    (budgetApi.listArticles as any).mockResolvedValue(ARTICLES_PAGE);
-    (budgetApi.listExpenses as any).mockResolvedValue(EXPENSES_PAGE);
-    (budgetApi.deleteExpense as any).mockResolvedValue(undefined);
+    vi.mocked(budgetApi.listArticles).mockResolvedValue(ARTICLES_PAGE);
+    vi.mocked(budgetApi.listExpenses).mockResolvedValue(EXPENSES_PAGE);
+    vi.mocked(budgetApi.deleteExpense).mockResolvedValue(undefined);
     vi.spyOn(window, "confirm").mockReturnValue(true);
     renderPage();
     await openExpensesTab();
@@ -777,8 +779,8 @@ describe("BudgetPage", () => {
   });
 
   it("renders the articles list and seeds default articles then reloads", async () => {
-    (budgetApi.listArticles as any).mockResolvedValue(ARTICLES_PAGE);
-    (budgetApi.seedDefaultArticles as any).mockResolvedValue({
+    vi.mocked(budgetApi.listArticles).mockResolvedValue(ARTICLES_PAGE);
+    vi.mocked(budgetApi.seedDefaultArticles).mockResolvedValue({
       created: 5,
       skipped: 2,
     });
@@ -800,9 +802,9 @@ describe("BudgetPage", () => {
   });
 
   it("stays on the active tab and keeps filters across a mutation-triggered reload", async () => {
-    (budgetApi.listArticles as any).mockResolvedValue(ARTICLES_PAGE);
-    (budgetApi.listExpenses as any).mockResolvedValue(EXPENSES_PAGE);
-    (budgetApi.deleteExpense as any).mockResolvedValue(undefined);
+    vi.mocked(budgetApi.listArticles).mockResolvedValue(ARTICLES_PAGE);
+    vi.mocked(budgetApi.listExpenses).mockResolvedValue(EXPENSES_PAGE);
+    vi.mocked(budgetApi.deleteExpense).mockResolvedValue(undefined);
     vi.spyOn(window, "confirm").mockReturnValue(true);
     renderPage();
     await openExpensesTab();
@@ -835,9 +837,9 @@ describe("BudgetPage", () => {
   });
 
   it("clears BOTH entity fields when unchecking the link on an already-linked expense", async () => {
-    (budgetApi.listArticles as any).mockResolvedValue(ARTICLES_PAGE);
-    (budgetApi.listExpenses as any).mockResolvedValue(LINKED_EXPENSES_PAGE);
-    (budgetApi.updateExpense as any).mockResolvedValue(
+    vi.mocked(budgetApi.listArticles).mockResolvedValue(ARTICLES_PAGE);
+    vi.mocked(budgetApi.listExpenses).mockResolvedValue(LINKED_EXPENSES_PAGE);
+    vi.mocked(budgetApi.updateExpense).mockResolvedValue(
       LINKED_EXPENSES_PAGE.items[0],
     );
     renderPage();
@@ -867,9 +869,9 @@ describe("BudgetPage", () => {
   });
 
   it("resets the picked article when the domain changes on create", async () => {
-    (budgetApi.listArticles as any).mockResolvedValue(ARTICLES_PAGE);
-    (budgetApi.listExpenses as any).mockResolvedValue(EXPENSES_PAGE);
-    (budgetApi.createExpense as any).mockResolvedValue({
+    vi.mocked(budgetApi.listArticles).mockResolvedValue(ARTICLES_PAGE);
+    vi.mocked(budgetApi.listExpenses).mockResolvedValue(EXPENSES_PAGE);
+    vi.mocked(budgetApi.createExpense).mockResolvedValue({
       ...EXPENSES_PAGE.items[0],
       id: "exp5",
     });
@@ -906,16 +908,16 @@ describe("BudgetPage", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: "Сохранить" }));
 
     await waitFor(() => expect(budgetApi.createExpense).toHaveBeenCalled());
-    expect((budgetApi.createExpense as any).mock.calls.at(-1)[0]).toMatchObject(
-      {
-        domain: "training",
-        article_id: null,
-      },
-    );
+    expect(
+      vi.mocked(budgetApi.createExpense).mock.calls.at(-1)?.[0],
+    ).toMatchObject({
+      domain: "training",
+      article_id: null,
+    });
   });
 
   it("renders reimbursements with status-dependent actions", async () => {
-    (budgetApi.listReimbursements as any).mockResolvedValue(
+    vi.mocked(budgetApi.listReimbursements).mockResolvedValue(
       REIMBURSEMENTS_PAGE,
     );
     renderPage();
@@ -958,14 +960,14 @@ describe("BudgetPage", () => {
   });
 
   it("filters reimbursements by status through a dedicated request", async () => {
-    (budgetApi.listReimbursements as any).mockResolvedValue(
+    vi.mocked(budgetApi.listReimbursements).mockResolvedValue(
       REIMBURSEMENTS_PAGE,
     );
     renderPage();
     await openReimbursementsTab();
     await screen.findByText("Возмещение (черновик)");
 
-    (budgetApi.listReimbursements as any).mockResolvedValue({
+    vi.mocked(budgetApi.listReimbursements).mockResolvedValue({
       ...EMPTY_PAGE,
       limit: 100,
     });
@@ -985,10 +987,10 @@ describe("BudgetPage", () => {
   });
 
   it("runs a no-input FSM action directly and reloads", async () => {
-    (budgetApi.listReimbursements as any).mockResolvedValue(
+    vi.mocked(budgetApi.listReimbursements).mockResolvedValue(
       REIMBURSEMENTS_PAGE,
     );
-    (budgetApi.reimbursementAction as any).mockResolvedValue(
+    vi.mocked(budgetApi.reimbursementAction).mockResolvedValue(
       REIMBURSEMENTS_PAGE.items[1],
     );
     renderPage();
@@ -1011,10 +1013,10 @@ describe("BudgetPage", () => {
   });
 
   it("prefills the approve dialog and refuses an amount above the requested one", async () => {
-    (budgetApi.listReimbursements as any).mockResolvedValue(
+    vi.mocked(budgetApi.listReimbursements).mockResolvedValue(
       REIMBURSEMENTS_PAGE,
     );
-    (budgetApi.reimbursementAction as any).mockResolvedValue(
+    vi.mocked(budgetApi.reimbursementAction).mockResolvedValue(
       REIMBURSEMENTS_PAGE.items[2],
     );
     renderPage();
@@ -1054,10 +1056,10 @@ describe("BudgetPage", () => {
   });
 
   it("requires a reason before rejecting", async () => {
-    (budgetApi.listReimbursements as any).mockResolvedValue(
+    vi.mocked(budgetApi.listReimbursements).mockResolvedValue(
       REIMBURSEMENTS_PAGE,
     );
-    (budgetApi.reimbursementAction as any).mockResolvedValue({
+    vi.mocked(budgetApi.reimbursementAction).mockResolvedValue({
       ...REIMBURSEMENTS_PAGE.items[1],
       status: "rejected",
     });
@@ -1097,14 +1099,15 @@ describe("BudgetPage", () => {
   });
 
   it("opens a claim, attaches an expense and hides already-linked ones from the picker", async () => {
-    (budgetApi.listReimbursements as any).mockResolvedValue(
+    vi.mocked(budgetApi.listReimbursements).mockResolvedValue(
       REIMBURSEMENTS_PAGE,
     );
-    (budgetApi.listExpenses as any).mockResolvedValue(EXPENSES_PAGE);
-    (budgetApi.getReimbursement as any).mockResolvedValue(REIMBURSEMENT_DETAIL);
-    (budgetApi.addReimbursementItem as any).mockResolvedValue(
-      REIMBURSEMENT_DETAIL.items[0],
+    vi.mocked(budgetApi.listExpenses).mockResolvedValue(EXPENSES_PAGE);
+    vi.mocked(budgetApi.getReimbursement).mockResolvedValue(
+      REIMBURSEMENT_DETAIL,
     );
+    // Ручка возвращает Promise<void> — резолвим undefined, а не «созданный» item.
+    vi.mocked(budgetApi.addReimbursementItem).mockResolvedValue(undefined);
     renderPage();
     await openReimbursementsTab();
     await screen.findByText("Возмещение (черновик)");
@@ -1141,12 +1144,14 @@ describe("BudgetPage", () => {
   });
 
   it("detaches an expense from an open draft claim", async () => {
-    (budgetApi.listReimbursements as any).mockResolvedValue(
+    vi.mocked(budgetApi.listReimbursements).mockResolvedValue(
       REIMBURSEMENTS_PAGE,
     );
-    (budgetApi.listExpenses as any).mockResolvedValue(EXPENSES_PAGE);
-    (budgetApi.getReimbursement as any).mockResolvedValue(REIMBURSEMENT_DETAIL);
-    (budgetApi.removeReimbursementItem as any).mockResolvedValue(undefined);
+    vi.mocked(budgetApi.listExpenses).mockResolvedValue(EXPENSES_PAGE);
+    vi.mocked(budgetApi.getReimbursement).mockResolvedValue(
+      REIMBURSEMENT_DETAIL,
+    );
+    vi.mocked(budgetApi.removeReimbursementItem).mockResolvedValue(undefined);
     renderPage();
     await openReimbursementsTab();
     await screen.findByText("Возмещение (черновик)");
@@ -1169,10 +1174,10 @@ describe("BudgetPage", () => {
   });
 
   it("deletes a draft claim after confirm", async () => {
-    (budgetApi.listReimbursements as any).mockResolvedValue(
+    vi.mocked(budgetApi.listReimbursements).mockResolvedValue(
       REIMBURSEMENTS_PAGE,
     );
-    (budgetApi.deleteReimbursement as any).mockResolvedValue(undefined);
+    vi.mocked(budgetApi.deleteReimbursement).mockResolvedValue(undefined);
     vi.spyOn(window, "confirm").mockReturnValue(true);
     renderPage();
     await openReimbursementsTab();
@@ -1191,7 +1196,7 @@ describe("BudgetPage", () => {
   });
 
   it("disables the code field when editing an article", async () => {
-    (budgetApi.listArticles as any).mockResolvedValue(ARTICLES_PAGE);
+    vi.mocked(budgetApi.listArticles).mockResolvedValue(ARTICLES_PAGE);
     renderPage();
     await openArticlesTab();
     await screen.findByText("Универсальная статья");

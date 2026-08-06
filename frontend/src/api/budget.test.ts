@@ -24,12 +24,18 @@ vi.mock("@/api/client", () => ({
 
 beforeEach(() => {
   vi.clearAllMocks();
-  (apiClient.get as any).mockResolvedValue({
+  (apiClient.get as ReturnType<typeof vi.fn>).mockResolvedValue({
     data: { items: [], total: 0, limit: 0, offset: 0 },
   });
-  (apiClient.post as any).mockResolvedValue({ data: { id: "x" } });
-  (apiClient.patch as any).mockResolvedValue({ data: { id: "x" } });
-  (apiClient.delete as any).mockResolvedValue({ data: null });
+  (apiClient.post as ReturnType<typeof vi.fn>).mockResolvedValue({
+    data: { id: "x" },
+  });
+  (apiClient.patch as ReturnType<typeof vi.fn>).mockResolvedValue({
+    data: { id: "x" },
+  });
+  (apiClient.delete as ReturnType<typeof vi.fn>).mockResolvedValue({
+    data: null,
+  });
 });
 
 describe("budgetApi", () => {
@@ -79,7 +85,7 @@ describe("budgetApi", () => {
       period_end: "2026-12-31",
       planned_amount: 100000,
     };
-    (apiClient.post as any).mockResolvedValue({
+    (apiClient.post as ReturnType<typeof vi.fn>).mockResolvedValue({
       data: { ...payload, id: "b1", notes: null },
     });
     const created = await budgetApi.createBudget(payload);

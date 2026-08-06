@@ -337,8 +337,3 @@ apiClient.interceptors.response.use(
     return Promise.reject(apiError);
   },
 );
-
-export const setAuthHeader = (token: string | null) => {
-  if (!token) return;
-  apiClient.defaults.headers.common.Authorization = `Bearer ${token}`;
-};

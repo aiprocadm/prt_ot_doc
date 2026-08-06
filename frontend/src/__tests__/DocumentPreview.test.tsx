@@ -20,13 +20,11 @@ const quickSignSpy = vi.fn().mockResolvedValue({});
 
 vi.mock("@/api/release", () => ({
   releaseApi: {
-    documentReleaseStatus: vi
-      .fn()
-      .mockResolvedValue({
-        approval: "approved",
-        signature: "pending",
-        edo: "queued",
-      }),
+    documentReleaseStatus: vi.fn().mockResolvedValue({
+      approval: "approved",
+      signature: "pending",
+      edo: "queued",
+    }),
     quickApprove: vi.fn(),
     quickReject: vi.fn(),
     quickSign: (...args: unknown[]) => quickSignSpy(...args),

@@ -575,11 +575,9 @@ export const operationsApi = {
       apiTokensResponse,
       auditResponse,
     ] = await Promise.all([
-      apiClient
-        .get<TenancyContextDto>("/tenancy/context")
-        .catch(() => ({
-          data: { tenant: { id: "", slug: "" } } as TenancyContextDto,
-        })),
+      apiClient.get<TenancyContextDto>("/tenancy/context").catch(() => ({
+        data: { tenant: { id: "", slug: "" } } as TenancyContextDto,
+      })),
       apiClient
         .get<{ items: OutboxDto[]; total: number }>("/admin/outbox")
         .catch(() => ({ data: { items: [], total: 0 } })),

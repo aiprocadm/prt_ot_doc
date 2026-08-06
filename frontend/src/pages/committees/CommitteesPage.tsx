@@ -977,8 +977,14 @@ const DecisionTaskForm = ({
   return (
     <form className="flex flex-wrap items-end gap-2" onSubmit={handleSubmit}>
       <div className="space-y-1">
-        <label className="text-xs text-muted-foreground">Ответственный</label>
+        <label
+          className="text-xs text-muted-foreground"
+          htmlFor={`task-assignee-${decisionId}`}
+        >
+          Ответственный
+        </label>
         <select
+          id={`task-assignee-${decisionId}`}
           className={selectClass}
           value={assignee}
           onChange={(e) => setAssignee(e.target.value)}
@@ -992,16 +998,28 @@ const DecisionTaskForm = ({
         </select>
       </div>
       <div className="space-y-1">
-        <label className="text-xs text-muted-foreground">Срок</label>
+        <label
+          className="text-xs text-muted-foreground"
+          htmlFor={`task-due-${decisionId}`}
+        >
+          Срок
+        </label>
         <Input
+          id={`task-due-${decisionId}`}
           type="date"
           value={dueDate}
           onChange={(e) => setDueDate(e.target.value)}
         />
       </div>
       <div className="flex-1 min-w-[160px] space-y-1">
-        <label className="text-xs text-muted-foreground">Примечание</label>
+        <label
+          className="text-xs text-muted-foreground"
+          htmlFor={`task-note-${decisionId}`}
+        >
+          Примечание
+        </label>
         <Input
+          id={`task-note-${decisionId}`}
           value={note}
           onChange={(e) => setNote(e.target.value)}
           placeholder="Примечание"

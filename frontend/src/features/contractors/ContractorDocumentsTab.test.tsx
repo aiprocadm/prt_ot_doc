@@ -26,7 +26,7 @@ vi.mock("@/components/permissions/Can", () => ({
 
 beforeEach(() => {
   vi.clearAllMocks();
-  (contractorsApi.listDocuments as any).mockResolvedValue({
+  vi.mocked(contractorsApi.listDocuments).mockResolvedValue({
     items: [
       {
         id: "d1",
@@ -39,11 +39,18 @@ beforeEach(() => {
     ],
     total: 1,
   });
-  (contractorsApi.listEmployees as any).mockResolvedValue({
+  vi.mocked(contractorsApi.listEmployees).mockResolvedValue({
     items: [],
     total: 0,
   });
-  (contractorsApi.createDocument as any).mockResolvedValue({ id: "d2" });
+  vi.mocked(contractorsApi.createDocument).mockResolvedValue({
+    id: "d2",
+    contractor_id: "c1",
+    doc_type: "license",
+    title: "Новый документ",
+    status: "active",
+    expiry_status: "ok",
+  });
 });
 
 describe("ContractorDocumentsTab", () => {
@@ -56,7 +63,7 @@ describe("ContractorDocumentsTab", () => {
   });
 
   it("renders a soft state when the feature is disabled", async () => {
-    (contractorsApi.listDocuments as any).mockRejectedValue({
+    vi.mocked(contractorsApi.listDocuments).mockRejectedValue({
       status: 404,
       message: "Contractors feature is not enabled for this tenant",
     });

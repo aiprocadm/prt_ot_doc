@@ -76,13 +76,6 @@ export const listEntityFiles = async (entityType: string, entityId: string) => {
   return data;
 };
 
-export const fetchDownloadUrl = async (fileId: string, versionId: string) => {
-  const { data } = await apiClient.get<{ url: string }>(
-    `/files/${fileId}/versions/${versionId}:download-url`,
-  );
-  return data.url;
-};
-
 export const fetchFileDownloadLink = async (fileId: string) => {
   const signed_get_url = await getDownloadUrl(fileId, "ui_download");
   return { url: signed_get_url, expires_in: 600 };

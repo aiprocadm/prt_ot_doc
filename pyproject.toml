@@ -49,6 +49,8 @@ target-version = ["py312"]
 
 [tool.mypy]
 python_version = "3.12"
+# pydantic-плагин: без него mypy не понимает @computed_field поверх @property.
+plugins = ["pydantic.mypy"]
 ignore_missing_imports = true
 # Основной объём типов: services + schemas. Дополнительный «staged» слой в CI:
 # `scripts/ci/static_gates.sh` — tenant_row_guard + tenant_row_http с --follow-imports=skip.

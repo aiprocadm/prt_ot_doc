@@ -1,3 +1,4 @@
+import { apiClient } from "@/api/client";
 import type {
   CompanyDto,
   CompanyStatus,
@@ -5,6 +6,17 @@ import type {
 } from "@/types/dto/companies";
 import type { CompanyFormValues } from "@/types/forms/companies";
 import type { DocumentDto } from "@/types/dto/documents";
+
+/** Список компаний арендатора, приведённый к CompanyDto. */
+export async function listCompanies(
+  params: { limit?: number; offset?: number } = {},
+): Promise<CompanyDto[]> {
+  const { data } = await apiClient.get<{ items?: unknown[] }>("/companies", {
+    params: { limit: params.limit ?? 200, offset: params.offset ?? 0 },
+  });
+  const rows = Array.isArray(data?.items) ? data.items : [];
+  return rows.map((row) => normalizeCompanyRead(row));
+}
 
 /** Поля, которые принимает бэкенд (CompanyCreate / CompanyUpdate). website по-прежнему не в модели API. */
 export function buildCompanyWriteBody(

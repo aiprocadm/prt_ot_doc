@@ -14,10 +14,18 @@ vi.mock("@/api/client", () => ({
 
 beforeEach(() => {
   vi.clearAllMocks();
-  (apiClient.get as any).mockResolvedValue({ data: { items: [], total: 0 } });
-  (apiClient.post as any).mockResolvedValue({ data: { id: "x" } });
-  (apiClient.patch as any).mockResolvedValue({ data: { id: "x" } });
-  (apiClient.delete as any).mockResolvedValue({ data: null });
+  (apiClient.get as ReturnType<typeof vi.fn>).mockResolvedValue({
+    data: { items: [], total: 0 },
+  });
+  (apiClient.post as ReturnType<typeof vi.fn>).mockResolvedValue({
+    data: { id: "x" },
+  });
+  (apiClient.patch as ReturnType<typeof vi.fn>).mockResolvedValue({
+    data: { id: "x" },
+  });
+  (apiClient.delete as ReturnType<typeof vi.fn>).mockResolvedValue({
+    data: null,
+  });
 });
 
 describe("contractorsApi", () => {
@@ -36,7 +44,7 @@ describe("contractorsApi", () => {
   });
 
   it("admits an employee via the admit endpoint", async () => {
-    (apiClient.post as any).mockResolvedValue({
+    (apiClient.post as ReturnType<typeof vi.fn>).mockResolvedValue({
       data: { employee_id: "e1", status: "ok", violations: [], warnings: [] },
     });
     const verdict = await contractorsApi.admitEmployee("e1");

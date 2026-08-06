@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { normalizeCompanyRead } from "@/api/companiesApi";
-import { apiClient } from "@/api/client";
+import { listCompanies } from "@/api/companiesApi";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingScreen } from "@/components/common/LoadingScreen";
@@ -27,14 +26,9 @@ const BranchesPage = () => {
 
   useEffect(() => {
     let active = true;
-    apiClient
-      .get<{ items?: unknown[] }>("/companies", {
-        params: { limit: 200, offset: 0 },
-      })
-      .then(({ data }) => {
-        if (!active) return;
-        const rows = Array.isArray(data?.items) ? data.items : [];
-        setCompanies(rows.map((row) => normalizeCompanyRead(row)));
+    listCompanies()
+      .then((rows) => {
+        if (active) setCompanies(rows);
       })
       .catch(() => {
         if (active) setCompanies([]);

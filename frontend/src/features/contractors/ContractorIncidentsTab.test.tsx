@@ -24,7 +24,7 @@ vi.mock("@/components/permissions/Can", () => ({
 
 beforeEach(() => {
   vi.clearAllMocks();
-  (contractorsApi.listIncidents as any).mockResolvedValue({
+  vi.mocked(contractorsApi.listIncidents).mockResolvedValue({
     items: [
       {
         id: "i1",
@@ -37,7 +37,14 @@ beforeEach(() => {
     ],
     total: 1,
   });
-  (contractorsApi.createIncident as any).mockResolvedValue({ id: "i2" });
+  vi.mocked(contractorsApi.createIncident).mockResolvedValue({
+    id: "i2",
+    contractor_id: "c1",
+    incident_type: "порез",
+    severity: "medium",
+    status: "open",
+    occurred_at: "2026-06-02T09:00:00Z",
+  });
 });
 
 describe("ContractorIncidentsTab", () => {

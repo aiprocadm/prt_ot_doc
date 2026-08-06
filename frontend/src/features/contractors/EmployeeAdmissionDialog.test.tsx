@@ -29,13 +29,13 @@ const employee: ContractorEmployee = {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  (contractorsApi.getEmployeeReadiness as any).mockResolvedValue({
+  vi.mocked(contractorsApi.getEmployeeReadiness).mockResolvedValue({
     employee_id: "e1",
     status: "warning",
     violations: [],
     warnings: ["Медосмотр истекает"],
   });
-  (contractorsApi.getEmployeeChecklist as any).mockResolvedValue({
+  vi.mocked(contractorsApi.getEmployeeChecklist).mockResolvedValue({
     employee_id: "e1",
     items: [
       {
@@ -71,13 +71,13 @@ describe("EmployeeAdmissionDialog", () => {
   });
 
   it("renders the translated cleared label on the allowed happy path", async () => {
-    (contractorsApi.getEmployeeReadiness as any).mockResolvedValue({
+    vi.mocked(contractorsApi.getEmployeeReadiness).mockResolvedValue({
       employee_id: "e1",
       status: "allowed",
       violations: [],
       warnings: [],
     });
-    (contractorsApi.admitEmployee as any).mockResolvedValue({
+    vi.mocked(contractorsApi.admitEmployee).mockResolvedValue({
       employee_id: "e1",
       status: "allowed",
       violations: [],
@@ -96,7 +96,7 @@ describe("EmployeeAdmissionDialog", () => {
   });
 
   it("admits successfully with a warning verdict", async () => {
-    (contractorsApi.admitEmployee as any).mockResolvedValue({
+    vi.mocked(contractorsApi.admitEmployee).mockResolvedValue({
       employee_id: "e1",
       status: "warning",
       violations: [],
@@ -113,7 +113,7 @@ describe("EmployeeAdmissionDialog", () => {
   });
 
   it("shows violations when admit is blocked (409)", async () => {
-    (contractorsApi.admitEmployee as any).mockRejectedValue({
+    vi.mocked(contractorsApi.admitEmployee).mockRejectedValue({
       status: 409,
       code: "requirements_not_met",
       message: "not cleared",

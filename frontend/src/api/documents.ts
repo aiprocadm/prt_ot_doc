@@ -1,9 +1,5 @@
 import { apiClient } from "@/api/client";
-import type {
-  DocumentDependencyMapDto,
-  DocumentReadinessDto,
-  DocumentVersionCompareDto,
-} from "@/types/dto/documents";
+import type { DocumentReadinessDto } from "@/types/dto/documents";
 import type { QualityReport } from "@/types/dto/documentQuality";
 
 export type WizardPipelineStatus =
@@ -165,30 +161,6 @@ export const getGenerationTaskStatus = async (taskId: string) => {
 export const getDocumentReadiness = async (documentId: string) => {
   const response = await apiClient.get<DocumentReadinessDto>(
     `/documents/${documentId}/readiness`,
-  );
-  return response.data;
-};
-
-export const compareDocumentVersions = async (
-  documentId: string,
-  leftVersionId: string,
-  rightVersionId: string,
-) => {
-  const response = await apiClient.get<DocumentVersionCompareDto>(
-    `/documents/${documentId}/versions/compare`,
-    {
-      params: {
-        left_version_id: leftVersionId,
-        right_version_id: rightVersionId,
-      },
-    },
-  );
-  return response.data;
-};
-
-export const getDocumentDependencyMap = async (documentId: string) => {
-  const response = await apiClient.get<DocumentDependencyMapDto>(
-    `/documents/${documentId}/dependency-map`,
   );
   return response.data;
 };

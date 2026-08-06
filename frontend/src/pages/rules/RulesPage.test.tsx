@@ -101,17 +101,17 @@ const FEATURE_OFF_ERROR = {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  (rulesApi.list as any).mockResolvedValue({
+  vi.mocked(rulesApi.list).mockResolvedValue({
     items: [RULE],
     total: 1,
     limit: 100,
     offset: 0,
   });
-  (rulesApi.eventTypes as any).mockResolvedValue({
+  vi.mocked(rulesApi.eventTypes).mockResolvedValue({
     items: EVENT_TYPES,
     total: EVENT_TYPES.length,
   });
-  (rulesApi.triggers as any).mockResolvedValue({
+  vi.mocked(rulesApi.triggers).mockResolvedValue({
     items: [TRIGGER],
     total: 1,
     limit: 50,
@@ -140,15 +140,15 @@ describe("RulesPage", () => {
   });
 
   it("shows the feature-off empty state when the API answers feature-disabled 404", async () => {
-    (rulesApi.list as any).mockRejectedValue(FEATURE_OFF_ERROR);
-    (rulesApi.eventTypes as any).mockRejectedValue(FEATURE_OFF_ERROR);
-    (rulesApi.triggers as any).mockRejectedValue(FEATURE_OFF_ERROR);
+    vi.mocked(rulesApi.list).mockRejectedValue(FEATURE_OFF_ERROR);
+    vi.mocked(rulesApi.eventTypes).mockRejectedValue(FEATURE_OFF_ERROR);
+    vi.mocked(rulesApi.triggers).mockRejectedValue(FEATURE_OFF_ERROR);
     renderPage();
     expect(await screen.findByText("Функция недоступна")).toBeInTheDocument();
   });
 
   it("creates a rule through the form dialog", async () => {
-    (rulesApi.create as any).mockResolvedValue({
+    vi.mocked(rulesApi.create).mockResolvedValue({
       ...RULE,
       id: "r2",
       name: "Тестовое правило",
@@ -202,7 +202,7 @@ describe("RulesPage", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: "Сохранить" }));
 
     await waitFor(() => expect(rulesApi.create).toHaveBeenCalled());
-    const [payload] = (rulesApi.create as any).mock.calls[0];
+    const [payload] = vi.mocked(rulesApi.create).mock.calls[0];
     expect(payload).toMatchObject({
       name: "Тестовое правило",
       event_type: "IncidentCreated",
@@ -221,7 +221,7 @@ describe("RulesPage", () => {
   });
 
   it("submits boolean-field condition values as real booleans, not strings", async () => {
-    (rulesApi.create as any).mockResolvedValue({
+    vi.mocked(rulesApi.create).mockResolvedValue({
       ...RULE,
       id: "r3",
       name: "Булево правило",
@@ -260,9 +260,9 @@ describe("RulesPage", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: "Сохранить" }));
 
     await waitFor(() => expect(rulesApi.create).toHaveBeenCalled());
-    const [payload] = (rulesApi.create as any).mock.calls[0];
+    const [payload] = vi.mocked(rulesApi.create).mock.calls[0];
     // Строгая проверка: настоящий boolean true, не строка "true".
-    expect(payload.conditions_json.conditions[0]).toEqual({
+    expect(payload.conditions_json.conditions?.[0]).toEqual({
       field: "overdue",
       op: "eq",
       value: true,
@@ -271,7 +271,7 @@ describe("RulesPage", () => {
   });
 
   it("runs a dry-run and shows the matched badge", async () => {
-    (rulesApi.dryRun as any).mockResolvedValue({
+    vi.mocked(rulesApi.dryRun).mockResolvedValue({
       matched: true,
       condition_results: [
         {

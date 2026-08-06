@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
@@ -28,27 +28,27 @@ vi.mock("@/components/permissions/Can", () => ({
 
 beforeEach(() => {
   vi.clearAllMocks();
-  (contractorsApi.getRegistry as any).mockResolvedValue({
+  vi.mocked(contractorsApi.getRegistry).mockResolvedValue({
     id: "c1",
     name: "ООО Подрядчик",
     status: "active",
     inn: "7701",
   });
-  (contractorsApi.getComplianceSummary as any).mockResolvedValue({
+  vi.mocked(contractorsApi.getComplianceSummary).mockResolvedValue({
     employees_total: 3,
     admission: { valid: 2, pending: 1 },
     training: { valid: 3 },
     medical: { pending: 3 },
   });
-  (contractorsApi.listEmployees as any).mockResolvedValue({
+  vi.mocked(contractorsApi.listEmployees).mockResolvedValue({
     items: [],
     total: 0,
   });
-  (contractorsApi.listIncidents as any).mockResolvedValue({
+  vi.mocked(contractorsApi.listIncidents).mockResolvedValue({
     items: [],
     total: 0,
   });
-  (contractorsApi.listDocuments as any).mockResolvedValue({
+  vi.mocked(contractorsApi.listDocuments).mockResolvedValue({
     items: [],
     total: 0,
   });

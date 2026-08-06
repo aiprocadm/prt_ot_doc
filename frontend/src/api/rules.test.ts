@@ -15,10 +15,18 @@ vi.mock("@/api/client", () => ({
 
 beforeEach(() => {
   vi.clearAllMocks();
-  (apiClient.get as any).mockResolvedValue({ data: { items: [], total: 0 } });
-  (apiClient.post as any).mockResolvedValue({ data: { id: "x" } });
-  (apiClient.patch as any).mockResolvedValue({ data: { id: "x" } });
-  (apiClient.delete as any).mockResolvedValue({ data: null });
+  (apiClient.get as ReturnType<typeof vi.fn>).mockResolvedValue({
+    data: { items: [], total: 0 },
+  });
+  (apiClient.post as ReturnType<typeof vi.fn>).mockResolvedValue({
+    data: { id: "x" },
+  });
+  (apiClient.patch as ReturnType<typeof vi.fn>).mockResolvedValue({
+    data: { id: "x" },
+  });
+  (apiClient.delete as ReturnType<typeof vi.fn>).mockResolvedValue({
+    data: null,
+  });
 });
 
 describe("rulesApi", () => {
@@ -45,7 +53,7 @@ describe("rulesApi", () => {
       priority: 100,
       is_enabled: true,
     };
-    (apiClient.post as any).mockResolvedValue({
+    (apiClient.post as ReturnType<typeof vi.fn>).mockResolvedValue({
       data: { ...payload, id: "r1", created_at: "now", updated_at: "now" },
     });
     const created = await rulesApi.create(payload);

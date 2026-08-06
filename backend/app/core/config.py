@@ -945,7 +945,7 @@ class Settings(BaseSettings):
 
 @lru_cache
 def _load_settings() -> Settings:
-    return Settings()  # type: ignore[call-arg]  # pydantic-settings loads fields from env vars
+    return Settings()
 
 
 def get_settings(*, force_reload: bool = False) -> Settings:

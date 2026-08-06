@@ -27,7 +27,7 @@ vi.mock("@/components/permissions/Can", () => ({
 
 beforeEach(() => {
   vi.clearAllMocks();
-  (contractorsApi.listEmployees as any).mockResolvedValue({
+  vi.mocked(contractorsApi.listEmployees).mockResolvedValue({
     items: [
       {
         id: "e1",
@@ -41,7 +41,14 @@ beforeEach(() => {
     ],
     total: 1,
   });
-  (contractorsApi.createEmployee as any).mockResolvedValue({ id: "e2" });
+  vi.mocked(contractorsApi.createEmployee).mockResolvedValue({
+    id: "e2",
+    contractor_id: "c1",
+    full_name: "Новый Н.Н.",
+    access_status: "pending",
+    training_status: "pending",
+    medical_status: "pending",
+  });
 });
 
 describe("ContractorEmployeesTab", () => {

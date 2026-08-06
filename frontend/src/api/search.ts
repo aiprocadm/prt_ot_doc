@@ -122,18 +122,3 @@ export const deleteSavedSearch = async (id: string) => {
   );
   return data;
 };
-
-export const fetchArchiveFiles = async (params: {
-  cursor?: string;
-  limit?: number;
-  status?: string;
-  site_id?: string;
-  project_id?: string;
-  contractor_id?: string;
-}) => {
-  const { data } = await apiClient.get<{
-    items: Array<Record<string, unknown>>;
-    next_cursor?: string | null;
-  }>("/archive/files", { params });
-  return data;
-};

@@ -31,25 +31,34 @@ vi.mock("@/components/permissions/Can", () => ({
 
 beforeEach(() => {
   vi.clearAllMocks();
-  (contractorsApi.listRegistry as any).mockResolvedValue({
+  vi.mocked(contractorsApi.listRegistry).mockResolvedValue({
     items: [
       { id: "c1", name: "ООО Подрядчик", status: "active", company_id: null },
     ],
     total: 1,
   });
-  (contractorsApi.listEmployees as any).mockResolvedValue({
-    items: [{ id: "e1", contractor_id: "c1" }],
+  vi.mocked(contractorsApi.listEmployees).mockResolvedValue({
+    items: [
+      {
+        id: "e1",
+        contractor_id: "c1",
+        full_name: "Сидоров С.С.",
+        access_status: "pending",
+        training_status: "valid",
+        medical_status: "valid",
+      },
+    ],
     total: 1,
   });
-  (contractorsApi.listIncidents as any).mockResolvedValue({
+  vi.mocked(contractorsApi.listIncidents).mockResolvedValue({
     items: [],
     total: 0,
   });
-  (contractorsApi.listExpiringDocuments as any).mockResolvedValue({
+  vi.mocked(contractorsApi.listExpiringDocuments).mockResolvedValue({
     items: [],
     total: 0,
   });
-  (contractorsApi.listRequirements as any).mockResolvedValue({
+  vi.mocked(contractorsApi.listRequirements).mockResolvedValue({
     items: [],
     total: 0,
   });
@@ -69,7 +78,7 @@ describe("ContractorsPage registry tab", () => {
   });
 
   it("creates a contractor via the dialog", async () => {
-    (contractorsApi.createRegistry as any).mockResolvedValue({
+    vi.mocked(contractorsApi.createRegistry).mockResolvedValue({
       id: "c2",
       name: "Новый",
       status: "active",
@@ -90,7 +99,7 @@ describe("ContractorsPage registry tab", () => {
   });
 
   it("still renders the registry when expiring-docs is feature-disabled (404)", async () => {
-    (contractorsApi.listExpiringDocuments as any).mockRejectedValue({
+    vi.mocked(contractorsApi.listExpiringDocuments).mockRejectedValue({
       status: 404,
       message: "Contractors feature is not enabled for this tenant",
     });

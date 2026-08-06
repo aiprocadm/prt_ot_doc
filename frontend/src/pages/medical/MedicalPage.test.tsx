@@ -23,7 +23,7 @@ vi.mock("@/api/operations", () => ({
 
 beforeEach(() => {
   vi.clearAllMocks();
-  (operationsApi.getMedicalSnapshot as any).mockResolvedValue({
+  vi.mocked(operationsApi.getMedicalSnapshot).mockResolvedValue({
     exams: [
       {
         id: "e1",
@@ -37,12 +37,28 @@ beforeEach(() => {
       },
     ],
     persons: [
-      { id: "p1", full_name: "Иванов Иван", status: "active" },
-      { id: "p2", full_name: "Петров Пётр", status: "active" },
+      {
+        id: "p1",
+        first_name: "Иван",
+        last_name: "Иванов",
+        full_name: "Иванов Иван",
+        status: "active",
+        created_at: "2026-01-01T00:00:00Z",
+        updated_at: "2026-01-01T00:00:00Z",
+      },
+      {
+        id: "p2",
+        first_name: "Пётр",
+        last_name: "Петров",
+        full_name: "Петров Пётр",
+        status: "active",
+        created_at: "2026-01-01T00:00:00Z",
+        updated_at: "2026-01-01T00:00:00Z",
+      },
     ],
     tasks: [],
   });
-  (operationsApi.getPsychiatricSnapshot as any).mockResolvedValue({
+  vi.mocked(operationsApi.getPsychiatricSnapshot).mockResolvedValue({
     activityTypes: [
       {
         id: "a1",
@@ -53,10 +69,10 @@ beforeEach(() => {
     ],
     contingent: [],
   });
-  (operationsApi.seedPsychiatricDefaults as any).mockResolvedValue({
+  vi.mocked(operationsApi.seedPsychiatricDefaults).mockResolvedValue({
     count: 9,
   });
-  (operationsApi.getMedicalOversightSnapshot as any).mockResolvedValue({
+  vi.mocked(operationsApi.getMedicalOversightSnapshot).mockResolvedValue({
     summary: {
       by_status: { ok: 1, overdue: 2 },
       total: 5,
@@ -87,24 +103,33 @@ beforeEach(() => {
       },
     ],
   });
-  (operationsApi.downloadContingentRegisterPrint as any).mockResolvedValue(
+  vi.mocked(operationsApi.downloadContingentRegisterPrint).mockResolvedValue(
     undefined,
   );
-  (operationsApi.downloadNamedListPrint as any).mockResolvedValue(undefined);
-  (operationsApi.listMedicalReferrals as any).mockResolvedValue([]);
-  (operationsApi.createMedicalReferral as any).mockResolvedValue({
+  vi.mocked(operationsApi.downloadNamedListPrint).mockResolvedValue(undefined);
+  vi.mocked(operationsApi.listMedicalReferrals).mockResolvedValue([]);
+  vi.mocked(operationsApi.createMedicalReferral).mockResolvedValue({
     id: "r-new",
+    person_id: "p1",
+    exam_kind: "periodic",
+    status: "issued",
+    is_overdue: false,
   });
-  (operationsApi.transitionMedicalReferral as any).mockResolvedValue({
+  vi.mocked(operationsApi.transitionMedicalReferral).mockResolvedValue({
     id: "r1",
+    person_id: "p1",
+    exam_kind: "periodic",
     status: "scheduled",
+    is_overdue: false,
   });
-  (operationsApi.generateMedicalReferrals as any).mockResolvedValue({
+  vi.mocked(operationsApi.generateMedicalReferrals).mockResolvedValue({
     count: 4,
   });
-  (operationsApi.listMedicalSuspensions as any).mockResolvedValue([]);
-  (operationsApi.liftMedicalSuspension as any).mockResolvedValue({
+  vi.mocked(operationsApi.listMedicalSuspensions).mockResolvedValue([]);
+  vi.mocked(operationsApi.liftMedicalSuspension).mockResolvedValue({
     id: "s1",
+    person_id: "p1",
+    reason: "unfit",
     status: "lifted",
   });
 });
@@ -121,7 +146,7 @@ describe("MedicalPage psychiatric section", () => {
   });
 
   it("calls seedPsychiatricDefaults when the seed button is clicked", async () => {
-    (operationsApi.getPsychiatricSnapshot as any).mockResolvedValue({
+    vi.mocked(operationsApi.getPsychiatricSnapshot).mockResolvedValue({
       activityTypes: [],
       contingent: [],
     });
@@ -172,7 +197,7 @@ describe("MedicalPage contingent section", () => {
   });
 
   it("shows a print error when the renderer is unavailable", async () => {
-    (operationsApi.downloadContingentRegisterPrint as any).mockRejectedValue({
+    vi.mocked(operationsApi.downloadContingentRegisterPrint).mockRejectedValue({
       status: 503,
       message: "PDF converter is unavailable",
     });
@@ -187,7 +212,7 @@ describe("MedicalPage contingent section", () => {
 
 describe("MedicalPage referrals section", () => {
   it("renders referrals with resolved person names and statuses", async () => {
-    (operationsApi.listMedicalReferrals as any).mockResolvedValue([
+    vi.mocked(operationsApi.listMedicalReferrals).mockResolvedValue([
       {
         id: "r1",
         person_id: "p1",
@@ -221,7 +246,7 @@ describe("MedicalPage referrals section", () => {
       await screen.findByText("Создано направлений: 4"),
     ).toBeInTheDocument();
     expect(
-      (operationsApi.listMedicalReferrals as any).mock.calls.length,
+      vi.mocked(operationsApi.listMedicalReferrals).mock.calls.length,
     ).toBeGreaterThanOrEqual(2);
   });
 
@@ -259,7 +284,7 @@ describe("MedicalPage referrals section", () => {
   });
 
   it("schedules and cancels an issued referral", async () => {
-    (operationsApi.listMedicalReferrals as any).mockResolvedValue([
+    vi.mocked(operationsApi.listMedicalReferrals).mockResolvedValue([
       {
         id: "r1",
         person_id: "p1",
@@ -293,7 +318,7 @@ describe("MedicalPage referrals section", () => {
   });
 
   it("surfaces a transition error in the alert region", async () => {
-    (operationsApi.listMedicalReferrals as any).mockResolvedValue([
+    vi.mocked(operationsApi.listMedicalReferrals).mockResolvedValue([
       {
         id: "r1",
         person_id: "p1",
@@ -305,7 +330,7 @@ describe("MedicalPage referrals section", () => {
         is_overdue: false,
       },
     ]);
-    (operationsApi.transitionMedicalReferral as any).mockRejectedValue({
+    vi.mocked(operationsApi.transitionMedicalReferral).mockRejectedValue({
       status: 409,
       message: "Invalid transition",
     });
@@ -322,7 +347,7 @@ describe("MedicalPage referrals section", () => {
 
 describe("MedicalPage referral completion", () => {
   it("completes a scheduled referral with a selected result exam", async () => {
-    (operationsApi.listMedicalReferrals as any).mockResolvedValue([
+    vi.mocked(operationsApi.listMedicalReferrals).mockResolvedValue([
       {
         id: "r1",
         person_id: "p1",
@@ -354,7 +379,7 @@ describe("MedicalPage referral completion", () => {
   });
 
   it("shows a hint instead of the picker when the person has no exams", async () => {
-    (operationsApi.listMedicalReferrals as any).mockResolvedValue([
+    vi.mocked(operationsApi.listMedicalReferrals).mockResolvedValue([
       {
         id: "r2",
         person_id: "p2",
@@ -380,7 +405,7 @@ describe("MedicalPage referral completion", () => {
 
 describe("MedicalPage suspensions section", () => {
   it("renders suspensions with reason labels and source exam", async () => {
-    (operationsApi.listMedicalSuspensions as any).mockResolvedValue([
+    vi.mocked(operationsApi.listMedicalSuspensions).mockResolvedValue([
       {
         id: "s1",
         person_id: "p1",
@@ -400,7 +425,7 @@ describe("MedicalPage suspensions section", () => {
   });
 
   it("lifts an active suspension after confirmation and reloads", async () => {
-    (operationsApi.listMedicalSuspensions as any).mockResolvedValue([
+    vi.mocked(operationsApi.listMedicalSuspensions).mockResolvedValue([
       {
         id: "s1",
         person_id: "p1",
@@ -419,18 +444,18 @@ describe("MedicalPage suspensions section", () => {
       expect(operationsApi.liftMedicalSuspension).toHaveBeenCalledWith("s1"),
     );
     expect(
-      (operationsApi.getMedicalOversightSnapshot as any).mock.calls.length,
+      vi.mocked(operationsApi.getMedicalOversightSnapshot).mock.calls.length,
     ).toBeGreaterThanOrEqual(2);
     await waitFor(() =>
       expect(
-        (operationsApi.listMedicalSuspensions as any).mock.calls.length,
+        vi.mocked(operationsApi.listMedicalSuspensions).mock.calls.length,
       ).toBeGreaterThanOrEqual(2),
     );
     confirmSpy.mockRestore();
   });
 
   it("surfaces a lift error in the alert region", async () => {
-    (operationsApi.listMedicalSuspensions as any).mockResolvedValue([
+    vi.mocked(operationsApi.listMedicalSuspensions).mockResolvedValue([
       {
         id: "s1",
         person_id: "p1",
@@ -439,7 +464,7 @@ describe("MedicalPage suspensions section", () => {
         source_exam_id: null,
       },
     ]);
-    (operationsApi.liftMedicalSuspension as any).mockRejectedValue({
+    vi.mocked(operationsApi.liftMedicalSuspension).mockRejectedValue({
       status: 403,
       message: "Only admin or owner may lift a medical suspension",
     });
@@ -456,7 +481,7 @@ describe("MedicalPage suspensions section", () => {
   });
 
   it("does not lift when the confirmation is dismissed", async () => {
-    (operationsApi.listMedicalSuspensions as any).mockResolvedValue([
+    vi.mocked(operationsApi.listMedicalSuspensions).mockResolvedValue([
       {
         id: "s1",
         person_id: "p1",
