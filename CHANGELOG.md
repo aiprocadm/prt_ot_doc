@@ -1,5 +1,34 @@
 # CHANGELOG
 
+## 2026-08-06 (worktree-code-cleanup — уборка кода + реанимация CI)
+
+Главное: **GitHub Actions был выключен на уровне репозитория с 16 июня** —
+~7 недель PR вливались без единой проверки. Actions включён обратно; накопленный
+за глухой период долг вычищен, поведение продукта не менялось (OpenAPI-контракт
+без изменений: 949 операций / 831 схема).
+
+- **Механика:** ruff (79 автофиксов импортов), black (202 файла), prettier
+  (весь фронт, добавлен `.prettierignore`).
+- **eslint 158→0 без eslint-disable:** в тестах `(fn as any)` → `vi.mocked(fn)`;
+  «Филиалы» ходят через `companiesApi.listCompanies` (правило слоёв);
+  a11y-метки в «Комитетах»; `argsIgnorePattern: "^_"`.
+- **mypy 7→0:** TYPE_CHECKING-контракт хост-класса для `RunLifecycleMixin`,
+  подключён pydantic-плагин (снял протухший ignore в `core/config.py`).
+- **Удалён мёртвый код** (с адверсарной проверкой ссылок): `backend/app/config.py`,
+  `core/logging_config.py`, `patch.diff`, `migrate_routes.py`, `migrate_final.py`,
+  4 файла-сироты фронта, 6 мёртвых экспортов `src/api/*`; 13 отчётов волн из
+  корня занесены в `docs/CLEANUP_CANDIDATES.md`.
+- **Починены 3 теста, красные на самом main** (CI молчал): комитеты не мокали
+  `_get_committee` с новым `quorum_threshold_pct`; канарейка дрейфа не видела
+  `_TABLE = "…"`-константы миграций mc01–mc03 — парсер научен их резолвить.
+- **Дефлейк долгих прогонов:** `REQUEST_TIMEOUT_SECONDS=120` в тестовой среде
+  (ложные 504 на медленной машине), `_now()` вместо импорт-времени в тестах
+  портала, терминальная задача в SSE-тесте джобов (чинит GeneratorExit соседа).
+
+Гейты: backend полный прогон exit 0 / 0 FAILED; фронт 673/673, tsc, eslint 0,
+build; mypy оба staged-гейта; RLS 283/1/284; scoped-queries, module-gates,
+матрица, secrets — зелёные.
+
 ## 2026-08-05 (feat/biz49-srez11-scope-more-sections — BIZ-49 срез-11: фильтр по клиенту в СИЗ, обучении и документах)
 
 Срез-9 сделал фильтр в разделах «Люди» и «Медосмотры», и индикатор честно
