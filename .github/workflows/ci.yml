@@ -598,6 +598,9 @@ jobs:
           S3_SECRET_KEY=minioadmin
           APP_DB_PASSWORD=ci-ptd-app-not-for-production
           EOF
+          # DATABASE_URL в .env.example содержит пароль-заглушку CHANGE_ME —
+          # роль же создаётся initdb с APP_DB_PASSWORD; синхронизируем.
+          sed -i 's|ptd_app:CHANGE_ME|ptd_app:ci-ptd-app-not-for-production|' .env
 
       - name: Enable Redis memory overcommit
         run: sudo sysctl -w vm.overcommit_memory=1
@@ -674,6 +677,9 @@ jobs:
           ADMIN_TENANT=demo
           RATE_LIMIT_ENABLED=false
           EOF
+          # DATABASE_URL в .env.example содержит пароль-заглушку CHANGE_ME —
+          # роль же создаётся initdb с APP_DB_PASSWORD; синхронизируем.
+          sed -i 's|ptd_app:CHANGE_ME|ptd_app:ci-ptd-app-not-for-production|' .env
 
       - name: Enable Redis memory overcommit
         run: sudo sysctl -w vm.overcommit_memory=1
