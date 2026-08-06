@@ -142,11 +142,11 @@ describe("ClientPortalPackagesPage", () => {
       </MemoryRouter>,
     );
 
-    await waitFor(() =>
-      expect(screen.getByText("Список пакетов")).toBeInTheDocument(),
-    );
-    const buttons = screen.getAllByRole("button");
-    fireEvent.click(buttons[buttons.length - 1]); // второй пакет в списке
+    // Ждём именно строку второго пакета: заголовок «Список пакетов» статичен
+    // и появляется ДО загрузки списка — «последняя кнопка» на медленном CI
+    // оказывалась не строкой пакета (гонка).
+    const runTwo = await screen.findByText("run-2");
+    fireEvent.click(runTwo.closest("button") as HTMLElement);
     expect(await screen.findByText(/RUN2_MARKER_EVENT/i)).toBeInTheDocument();
   });
 });
