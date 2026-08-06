@@ -1,0 +1,28 @@
+# Исторические ложные срабатывания gitleaks (полный скан истории, 2026-08-06).
+# Каждый отпечаток привязан к конкретному коммиту+файлу+правилу+строке и НЕ
+# маскирует новые утечки. Проверено вручную, настоящих секретов нет:
+# - _TEST_PRIVATE_KEY в тестах и в удалённом patch.diff — публично известная
+#   dev-пара RSA для подписи JWT в тестах («Using bundled development RSA key
+#   pair» из app/core/config.py), не боевой ключ;
+# - generic-api-key в test_packs_run/test_outbox_* — заголовок Idempotency-Key
+#   в фикстурах, не API-ключ;
+# - Backend_TZ*.md — примеры из архивной документации ТЗ.
+# PR-прогоны сканируют только новые коммиты и этих записей не видят; список
+# нужен, чтобы полный скан (workflow_dispatch/локальный) тоже был зелёным.
+1cabc0cd34885610e78bfcaea69ed2c735cdeed2:prt_ot_doc-main/docs/archive/Backend_TZ_v2.0_2025-10-15.md:generic-api-key:152
+1cabc0cd34885610e78bfcaea69ed2c735cdeed2:prt_ot_doc-main/tests/test_packs_run.py:generic-api-key:479
+2b6e04630270bcc46e3eb1b1c6f68989180dbaae:Backend_TZ.md:generic-api-key:152
+47cbf3d807de5499ddb5c82726a0ae23f903b155:prt_ot_doc-main/docs/archive/Backend_TZ_v2.0_2025-10-15.md:generic-api-key:152
+47cbf3d807de5499ddb5c82726a0ae23f903b155:prt_ot_doc-main/tests/test_packs_run.py:generic-api-key:479
+6e9e46583ac7e1ec73a80c346558cb0ec6a84ea3:tests/test_outbox_acceptance_guarantees.py:generic-api-key:76
+9e216af7a67fc22e91523254507a0c3cec3193e0:tests/test_packs_run.py:generic-api-key:476
+9e405c826a7f61e8a8c1652a40379db59d473549:patch.diff:private-key:660
+b708366187abf71ac74efaa5cb19ca2e86d225b5:tests/test_openapi_docs_paths_and_production.py:private-key:13
+bbf8e6285f2fcec4ddc26ac12aadcc3e5886459b:docs/archive/Backend_TZ_v2.0_2025-10-15.md:generic-api-key:152
+bbf8e6285f2fcec4ddc26ac12aadcc3e5886459b:patch.diff:private-key:660
+bbf8e6285f2fcec4ddc26ac12aadcc3e5886459b:tests/test_openapi_docs_paths_and_production.py:private-key:13
+bbf8e6285f2fcec4ddc26ac12aadcc3e5886459b:tests/test_outbox_acceptance_guarantees.py:generic-api-key:77
+bbf8e6285f2fcec4ddc26ac12aadcc3e5886459b:tests/test_packs_run.py:generic-api-key:479
+d0ec43051bb9ddfc9869cca35e4843ecd7ec037a:Backend_TZ.md:generic-api-key:152
+dcea9a89874462f03106c1744ba42fb12662b8b4:patch.diff:private-key:660
+e536a5332e5eb2a1b2303d63b7e086c4a0a14242:tests/test_openapi_docs_paths_and_production.py:private-key:13
