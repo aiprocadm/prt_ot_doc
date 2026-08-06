@@ -49,9 +49,13 @@ def _tenant_tables() -> set[str]:
     tables: dict = {}
     for md in (SharedBase.metadata, TenantBase.metadata):
         tables.update(md.tables)
+    # table.name, а не ключ metadata: ключ у SharedBase квалифицирован схемой
+    # («public.api_tokens»), когда DATABASE_URL указывает на PostgreSQL, и гол
+    # («api_tokens») на SQLite — реестр же ведётся голыми именами. Без
+    # нормализации гейт зависит от диалекта окружения (в CI нет .env → PG).
     return {
-        name
-        for name, table in tables.items()
+        table.name
+        for table in tables.values()
         if any(col.name == "tenant_id" for col in table.columns)
     }
 

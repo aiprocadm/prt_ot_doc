@@ -153,10 +153,11 @@ describe("WarehousePage", () => {
         <WarehousePage />
       </MemoryRouter>,
     );
+    // Ждём именно строку движения: заголовок «Движения» статичен и появляется
+    // ДО завершения загрузки — ожидание по нему давало гонку на медленном CI.
     await waitFor(() =>
-      expect(screen.getByText("Движения")).toBeInTheDocument(),
+      expect(screen.getByText("поступление")).toBeInTheDocument(),
     );
-    expect(screen.getByText("поступление")).toBeInTheDocument();
   });
 
   it("shows an empty state when there are no levels", async () => {

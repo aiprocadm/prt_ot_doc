@@ -584,6 +584,21 @@ jobs:
       - name: Prepare env
         run: cp .env.example .env
 
+      - name: Fill required CI secrets (placeholders only)
+        # .env.example намеренно оставляет секреты пустыми (SEC-67), а bootstrap
+        # отвергает пустые SECRET_KEY / S3_* — без этого шага api-контейнер не
+        # стартует. APP_DB_PASSWORD обязателен с SEC-65: initdb создаёт
+        # непривилегированную роль ptd_app только при заданном пароле, иначе
+        # api падает на "password authentication failed for user ptd_app".
+        run: |
+          cat >> .env <<'EOF'
+          SECRET_KEY=ci-smoke-compose-not-for-production
+          POSTGRES_PASSWORD=ptd
+          S3_ACCESS_KEY=minioadmin
+          S3_SECRET_KEY=minioadmin
+          APP_DB_PASSWORD=ci-ptd-app-not-for-production
+          EOF
+
       - name: Enable Redis memory overcommit
         run: sudo sysctl -w vm.overcommit_memory=1
 
@@ -652,6 +667,7 @@ jobs:
           POSTGRES_PASSWORD=ptd
           S3_ACCESS_KEY=minioadmin
           S3_SECRET_KEY=minioadmin
+          APP_DB_PASSWORD=ci-ptd-app-not-for-production
           APP_ENV=development
           ADMIN_BOOTSTRAP=1
           ADMIN_PASSWORD=PerfSmokeAdmin123!

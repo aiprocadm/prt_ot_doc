@@ -7,6 +7,9 @@ asyncpg==0.29.0; python_version < "3.13"
 asyncpg==0.31.0; python_version >= "3.13"
 boto3==1.35.36
 celery==5.4.0
+# msgpack: транзитивная (kombu); прямой пин — GHSA-6v7p-g79w-8964 (HIGH,
+# out-of-bounds read) закрыт в 1.2.1, docker-сборка иначе ставит 1.1.2.
+msgpack==1.2.1
 # click: PYSEC-2026-2132 fixed at 8.3.3; click>=8.2 needs typer>=0.16 (see typer pin).
 click==8.3.3
 docxtpl==0.17.0
