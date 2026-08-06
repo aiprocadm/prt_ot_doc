@@ -11,7 +11,12 @@ interface CanProps {
   children: ReactNode | ((allowed: boolean) => ReactNode);
 }
 
-export const Can = ({ permission, resource, fallback = null, children }: CanProps) => {
+export const Can = ({
+  permission,
+  resource,
+  fallback = null,
+  children,
+}: CanProps) => {
   const { can } = useAbility();
   const allowed = can(permission, resource);
 

@@ -2,7 +2,12 @@ import { useCallback, useMemo, useState } from "react";
 import { useDropzone, type FileRejection } from "react-dropzone";
 import { toast } from "sonner";
 
-import { createUploadSession, finalizeUpload, getFile, uploadToSignedUrl } from "@/api/files";
+import {
+  createUploadSession,
+  finalizeUpload,
+  getFile,
+  uploadToSignedUrl,
+} from "@/api/files";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -19,20 +24,25 @@ interface UploadItem {
 
 const ACCEPTED_FILE_TYPES = {
   "application/pdf": [".pdf"],
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [".docx"],
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [
+    ".docx",
+  ],
   "application/msword": [".doc"],
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [".xlsx"],
-  "application/vnd.ms-excel": [".xls"]
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [
+    ".xlsx",
+  ],
+  "application/vnd.ms-excel": [".xls"],
 };
 
-const sleep = (timeout: number) => new Promise((resolve) => setTimeout(resolve, timeout));
+const sleep = (timeout: number) =>
+  new Promise((resolve) => setTimeout(resolve, timeout));
 
 const statusLabel: Record<UploadStatus, string> = {
   pending: "В очереди",
   uploading: "Загрузка",
   processing: "Проверка",
   ready: "Готово",
-  error: "Ошибка"
+  error: "Ошибка",
 };
 
 interface FileUploaderProps {
@@ -40,13 +50,18 @@ interface FileUploaderProps {
   pollIntervalMs?: number;
 }
 
-export const FileUploader = ({ pollAttempts = 20, pollIntervalMs = 500 }: FileUploaderProps) => {
+export const FileUploader = ({
+  pollAttempts = 20,
+  pollIntervalMs = 500,
+}: FileUploaderProps) => {
   const [description, setDescription] = useState("");
   const [uploads, setUploads] = useState<UploadItem[]>([]);
   const [isUploading, setIsUploading] = useState(false);
 
   const updateUpload = useCallback((id: string, patch: Partial<UploadItem>) => {
-    setUploads((current) => current.map((item) => (item.id === id ? { ...item, ...patch } : item)));
+    setUploads((current) =>
+      current.map((item) => (item.id === id ? { ...item, ...patch } : item)),
+    );
   }, []);
 
   const uploadSingleFile = useCallback(
@@ -54,7 +69,7 @@ export const FileUploader = ({ pollAttempts = 20, pollIntervalMs = 500 }: FileUp
       const localId = `${file.name}-${file.size}-${Date.now()}`;
       setUploads((current) => [
         ...current,
-        { id: localId, name: file.name, status: "pending", progress: 0 }
+        { id: localId, name: file.name, status: "pending", progress: 0 },
       ]);
 
       try {
@@ -63,7 +78,7 @@ export const FileUploader = ({ pollAttempts = 20, pollIntervalMs = 500 }: FileUp
           filename: file.name,
           content_type: file.type || "application/octet-stream",
           size_bytes: file.size,
-          metadata_json: { description }
+          metadata_json: { description },
         });
 
         updateUpload(localId, { progress: 45 });
@@ -79,7 +94,10 @@ export const FileUploader = ({ pollAttempts = 20, pollIntervalMs = 500 }: FileUp
             fileReady = true;
             break;
           }
-          if (current.status === "infected" || current.status === "quarantined") {
+          if (
+            current.status === "infected" ||
+            current.status === "quarantined"
+          ) {
             throw new Error(`Файл ${file.name} не прошёл AV-проверку`);
           }
           await sleep(pollIntervalMs);
@@ -89,15 +107,24 @@ export const FileUploader = ({ pollAttempts = 20, pollIntervalMs = 500 }: FileUp
           throw new Error(`Файл ${file.name}: превышено ожидание обработки`);
         }
 
-        updateUpload(localId, { progress: 100, status: "ready", error: undefined });
+        updateUpload(localId, {
+          progress: 100,
+          status: "ready",
+          error: undefined,
+        });
         return true;
       } catch (error) {
-        const message = error instanceof Error ? error.message : "Ошибка загрузки";
-        updateUpload(localId, { status: "error", progress: 100, error: message });
+        const message =
+          error instanceof Error ? error.message : "Ошибка загрузки";
+        updateUpload(localId, {
+          status: "error",
+          progress: 100,
+          error: message,
+        });
         return false;
       }
     },
-    [description, pollAttempts, pollIntervalMs, updateUpload]
+    [description, pollAttempts, pollIntervalMs, updateUpload],
   );
 
   const onDrop = useCallback(
@@ -112,13 +139,15 @@ export const FileUploader = ({ pollAttempts = 20, pollIntervalMs = 500 }: FileUp
         } else if (failed === acceptedFiles.length) {
           toast.error("Не удалось загрузить выбранные файлы");
         } else {
-          toast.warning(`Частичная загрузка: ошибок ${failed} из ${acceptedFiles.length}`);
+          toast.warning(
+            `Частичная загрузка: ошибок ${failed} из ${acceptedFiles.length}`,
+          );
         }
       } finally {
         setIsUploading(false);
       }
     },
-    [uploadSingleFile]
+    [uploadSingleFile],
   );
 
   const onDropRejected = useCallback((rejections: FileRejection[]) => {
@@ -137,10 +166,13 @@ export const FileUploader = ({ pollAttempts = 20, pollIntervalMs = 500 }: FileUp
     onDropRejected,
     accept: ACCEPTED_FILE_TYPES,
     maxSize: 50 * 1024 * 1024,
-    disabled: isUploading
+    disabled: isUploading,
   });
 
-  const hasErrors = useMemo(() => uploads.some((upload) => upload.status === "error"), [uploads]);
+  const hasErrors = useMemo(
+    () => uploads.some((upload) => upload.status === "error"),
+    [uploads],
+  );
 
   return (
     <Card>
@@ -161,32 +193,60 @@ export const FileUploader = ({ pollAttempts = 20, pollIntervalMs = 500 }: FileUp
                 ? "cursor-not-allowed border-muted bg-muted/40 text-muted-foreground"
                 : "cursor-pointer"
             } ${
-              isDragActive && !isUploading ? "border-primary bg-primary/10" : "border-muted-foreground/40"
-            }`
+              isDragActive && !isUploading
+                ? "border-primary bg-primary/10"
+                : "border-muted-foreground/40"
+            }`,
           })}
           aria-disabled={isUploading}
         >
           <input {...getInputProps()} />
-          <p>{isUploading ? "Загрузка в процессе. Дождитесь завершения." : "Перетащите файлы сюда или нажмите для выбора"}</p>
-          <p className="mt-1 text-xs text-muted-foreground">Допустимо: PDF, DOCX, XLSX до 50MB</p>
+          <p>
+            {isUploading
+              ? "Загрузка в процессе. Дождитесь завершения."
+              : "Перетащите файлы сюда или нажмите для выбора"}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Допустимо: PDF, DOCX, XLSX до 50MB
+          </p>
         </div>
-        {isUploading && <p className="text-sm text-muted-foreground">Загрузка выполняется, не закрывайте страницу.</p>}
+        {isUploading && (
+          <p className="text-sm text-muted-foreground">
+            Загрузка выполняется, не закрывайте страницу.
+          </p>
+        )}
         {uploads.length > 0 && (
           <div className="space-y-2 rounded-md border p-3" aria-live="polite">
             {uploads.map((upload) => (
               <div key={upload.id} className="space-y-1 text-sm">
                 <div className="flex items-center justify-between gap-2">
                   <span className="truncate">{upload.name}</span>
-                  <span className="text-xs text-muted-foreground">{statusLabel[upload.status]} · {upload.progress}%</span>
+                  <span className="text-xs text-muted-foreground">
+                    {statusLabel[upload.status]} · {upload.progress}%
+                  </span>
                 </div>
                 <div className="h-2 rounded bg-muted">
-                  <div className="h-2 rounded bg-primary transition-all" style={{ width: `${upload.progress}%` }} />
+                  <div
+                    className="h-2 rounded bg-primary transition-all"
+                    style={{ width: `${upload.progress}%` }}
+                  />
                 </div>
-                {upload.error && <p className="text-xs text-destructive">{upload.error}</p>}
+                {upload.error && (
+                  <p className="text-xs text-destructive">{upload.error}</p>
+                )}
               </div>
             ))}
             {hasErrors && (
-              <Button type="button" variant="outline" size="sm" onClick={() => setUploads((current) => current.filter((item) => item.status !== "error"))}>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  setUploads((current) =>
+                    current.filter((item) => item.status !== "error"),
+                  )
+                }
+              >
                 Очистить ошибки
               </Button>
             )}

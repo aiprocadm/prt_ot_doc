@@ -8,14 +8,14 @@ const getAdminSnapshotMock = vi.fn();
 
 vi.mock("@/api/operations", () => ({
   operationsApi: {
-    getAdminSnapshot: (...args: unknown[]) => getAdminSnapshotMock(...args)
-  }
+    getAdminSnapshot: (...args: unknown[]) => getAdminSnapshotMock(...args),
+  },
 }));
 
 vi.mock("@/permissions/useAbility", () => ({
   useAbility: () => ({
-    can: () => true
-  })
+    can: () => true,
+  }),
 }));
 
 describe("AdminPage", () => {
@@ -26,7 +26,9 @@ describe("AdminPage", () => {
   it("renders enterprise diagnostics widgets from live snapshot", async () => {
     getAdminSnapshotMock.mockResolvedValue({
       tenancy: { tenant: { id: "tenant-1", slug: "corp" } },
-      outbox: [{ id: "o1", event_type: "doc.created", status: "pending", attempts: 1 }],
+      outbox: [
+        { id: "o1", event_type: "doc.created", status: "pending", attempts: 1 },
+      ],
       webhooks: [],
       apiTokens: [],
       auditItems: [],
@@ -36,29 +38,37 @@ describe("AdminPage", () => {
       providerStatus: {
         production_ready: false,
         blocking_for_golive: ["signing"],
-        providers: [{ name: "signing", mode: "non_production", adapter: "internal-fallback" }]
+        providers: [
+          {
+            name: "signing",
+            mode: "non_production",
+            adapter: "internal-fallback",
+          },
+        ],
       },
       tenantHealth: {
         score: 88,
         grade: "B",
         failed_jobs_last24h: 1,
-        outbox_events_poisoned: 0
+        outbox_events_poisoned: 0,
       },
       roleSummary: {
         role: "admin",
         open_tasks: 5,
         overdue_tasks: 2,
-        overdue_deadlines: 1
-      }
+        overdue_deadlines: 1,
+      },
     });
 
     render(
       <MemoryRouter>
         <AdminPage />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
 
-    expect(await screen.findByText("Оценка здоровья тенанта")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Оценка здоровья тенанта"),
+    ).toBeInTheDocument();
     expect(screen.getByText(/Балл: 88 \/ 100/)).toBeInTheDocument();
     expect(screen.getByText(/Роль: admin/)).toBeInTheDocument();
     expect(screen.getByText(/Блокирующих провайдеров: 1/)).toBeInTheDocument();

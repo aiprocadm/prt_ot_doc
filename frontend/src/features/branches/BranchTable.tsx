@@ -16,7 +16,8 @@ interface BranchTableProps {
 }
 
 export const BranchTable = ({ companies, canManage }: BranchTableProps) => {
-  const { items, pagination, list, setPage, setPageSize, remove, loading } = useBranchesStore();
+  const { items, pagination, list, setPage, setPageSize, remove, loading } =
+    useBranchesStore();
 
   const companyName = useMemo(() => {
     const map = new Map(companies.map((c) => [c.id, c.name]));
@@ -32,15 +33,17 @@ export const BranchTable = ({ companies, canManage }: BranchTableProps) => {
           <div className="flex flex-col">
             <span className="font-medium">{row.original.name}</span>
             {row.original.code ? (
-              <span className="text-xs text-muted-foreground">Код: {row.original.code}</span>
+              <span className="text-xs text-muted-foreground">
+                Код: {row.original.code}
+              </span>
             ) : null}
           </div>
-        )
+        ),
       },
       {
         accessorKey: "company_id",
         header: "Компания",
-        cell: ({ row }) => <span>{companyName(row.original.company_id)}</span>
+        cell: ({ row }) => <span>{companyName(row.original.company_id)}</span>,
       },
       {
         accessorKey: "contact_name",
@@ -49,17 +52,21 @@ export const BranchTable = ({ companies, canManage }: BranchTableProps) => {
           <div className="flex flex-col text-sm">
             <span>{row.original.contact_name ?? "—"}</span>
             {row.original.contact_phone ? (
-              <span className="text-xs text-muted-foreground">{row.original.contact_phone}</span>
+              <span className="text-xs text-muted-foreground">
+                {row.original.contact_phone}
+              </span>
             ) : null}
           </div>
-        )
+        ),
       },
       {
         accessorKey: "status",
         header: "Статус",
         cell: ({ row }) => (
-          <span className="uppercase text-xs text-muted-foreground">{row.original.status}</span>
-        )
+          <span className="uppercase text-xs text-muted-foreground">
+            {row.original.status}
+          </span>
+        ),
       },
       {
         id: "actions",
@@ -97,10 +104,10 @@ export const BranchTable = ({ companies, canManage }: BranchTableProps) => {
               <Trash2 className="h-4 w-4 text-destructive" />
             </Button>
           </div>
-        )
-      }
+        ),
+      },
     ],
-    [companies, companyName, canManage, remove]
+    [companies, companyName, canManage, remove],
   );
 
   return (

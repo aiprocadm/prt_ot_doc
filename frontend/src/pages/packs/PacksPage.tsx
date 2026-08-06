@@ -18,13 +18,18 @@ const PacksPage = () => {
 
   return (
     <div className="space-y-6">
-      <Breadcrumb items={[{ label: "Главная", to: ROUTES.DASHBOARD }, { label: "Пакеты" }]} />
+      <Breadcrumb
+        items={[
+          { label: "Главная", to: ROUTES.DASHBOARD },
+          { label: "Пакеты" },
+        ]}
+      />
       <RegistryPageHeader
         title="Пакеты"
         description="Генерация наборов документов и управление профилями пакетов."
         stats={[
           { label: "Всего пакетов", value: pagination.total },
-          { label: "На странице", value: items.length }
+          { label: "На странице", value: items.length },
         ]}
       />
       <PackWizard />

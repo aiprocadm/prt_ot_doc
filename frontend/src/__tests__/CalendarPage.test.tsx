@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -21,12 +27,12 @@ vi.mock("@/api/calendar", () => ({
     listSavedViews: (...args: unknown[]) => listSavedViewsMock(...args),
     createSavedView: (...args: unknown[]) => createSavedViewMock(...args),
     updateSavedView: (...args: unknown[]) => updateSavedViewMock(...args),
-    deleteSavedView: (...args: unknown[]) => deleteSavedViewMock(...args)
-  }
+    deleteSavedView: (...args: unknown[]) => deleteSavedViewMock(...args),
+  },
 }));
 
 vi.mock("@/utils/download", () => ({
-  downloadBlob: (...args: unknown[]) => downloadBlobMock(...args)
+  downloadBlob: (...args: unknown[]) => downloadBlobMock(...args),
 }));
 
 const sampleResponse: CalendarEventsResponseDto = {
@@ -43,7 +49,7 @@ const sampleResponse: CalendarEventsResponseDto = {
     { source_type: "inspection", count: 0, overdue_count: 0 },
     { source_type: "compliance_deadline", count: 0, overdue_count: 0 },
     { source_type: "briefing_entry", count: 1, overdue_count: 0 },
-    { source_type: "calendar_event", count: 0, overdue_count: 0 }
+    { source_type: "calendar_event", count: 0, overdue_count: 0 },
   ],
   items: [
     {
@@ -59,7 +65,7 @@ const sampleResponse: CalendarEventsResponseDto = {
       site_id: null,
       company_id: null,
       assigned_user_id: null,
-      extra: { exam_type: "periodic" }
+      extra: { exam_type: "periodic" },
     },
     {
       id: "ppe_issue:ppe-1",
@@ -74,7 +80,7 @@ const sampleResponse: CalendarEventsResponseDto = {
       site_id: null,
       company_id: null,
       assigned_user_id: null,
-      extra: {}
+      extra: {},
     },
     {
       id: "training_session:ts-1",
@@ -89,7 +95,7 @@ const sampleResponse: CalendarEventsResponseDto = {
       site_id: null,
       company_id: null,
       assigned_user_id: null,
-      extra: {}
+      extra: {},
     },
     {
       id: "briefing_entry:brf-1",
@@ -104,9 +110,9 @@ const sampleResponse: CalendarEventsResponseDto = {
       site_id: null,
       company_id: null,
       assigned_user_id: null,
-      extra: { briefing_type: "primary" }
-    }
-  ]
+      extra: { briefing_type: "primary" },
+    },
+  ],
 };
 
 const factResponse: CalendarEventsResponseDto = {
@@ -133,7 +139,7 @@ const factResponse: CalendarEventsResponseDto = {
       expected_at: "2026-04-01T08:00:00Z",
       actual_at: "2026-04-04T08:00:00Z",
       variance_days: 3,
-      extra: {}
+      extra: {},
     },
     {
       id: "training_session:ts-early",
@@ -151,7 +157,7 @@ const factResponse: CalendarEventsResponseDto = {
       expected_at: "2026-04-10T09:00:00Z",
       actual_at: "2026-04-08T09:00:00Z",
       variance_days: -2,
-      extra: {}
+      extra: {},
     },
     {
       id: "ppe_issue:ppe-on-time",
@@ -169,9 +175,9 @@ const factResponse: CalendarEventsResponseDto = {
       expected_at: "2026-04-15T08:00:00Z",
       actual_at: "2026-04-15T08:00:00Z",
       variance_days: 0,
-      extra: {}
-    }
-  ]
+      extra: {},
+    },
+  ],
 };
 
 const slaResponse: CalendarEventsResponseDto = {
@@ -197,7 +203,7 @@ const slaResponse: CalendarEventsResponseDto = {
       assigned_user_id: null,
       days_to_due: -13,
       sla_band: "overdue",
-      extra: {}
+      extra: {},
     },
     {
       id: "permit:permit-critical",
@@ -214,7 +220,7 @@ const slaResponse: CalendarEventsResponseDto = {
       assigned_user_id: null,
       days_to_due: 4,
       sla_band: "critical",
-      extra: {}
+      extra: {},
     },
     {
       id: "training_session:ts-warning",
@@ -231,7 +237,7 @@ const slaResponse: CalendarEventsResponseDto = {
       assigned_user_id: null,
       days_to_due: 12,
       sla_band: "warning",
-      extra: {}
+      extra: {},
     },
     {
       id: "ppe_issue:ppe-ok",
@@ -248,16 +254,16 @@ const slaResponse: CalendarEventsResponseDto = {
       assigned_user_id: null,
       days_to_due: 54,
       sla_band: "ok",
-      extra: {}
-    }
-  ]
+      extra: {},
+    },
+  ],
 };
 
 const renderPage = (initialPath = "/calendar") =>
   render(
     <MemoryRouter initialEntries={[initialPath]}>
       <CalendarPage />
-    </MemoryRouter>
+    </MemoryRouter>,
   );
 
 describe("CalendarPage", () => {
@@ -277,7 +283,9 @@ describe("CalendarPage", () => {
 
     renderPage();
 
-    expect(await screen.findByRole("heading", { name: "Умный календарь" })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "Умный календарь" }),
+    ).toBeInTheDocument();
     expect(screen.getByText(/Всего событий:/)).toBeInTheDocument();
     expect(screen.getAllByText(/Просрочек/).length).toBeGreaterThan(0);
     expect(screen.getByText("Медосмотр: Иванов И.И.")).toBeInTheDocument();
@@ -287,7 +295,7 @@ describe("CalendarPage", () => {
       person_id: undefined,
       site_id: undefined,
       include_fact: undefined,
-      include_sla: undefined
+      include_sla: undefined,
     });
   });
 
@@ -322,7 +330,7 @@ describe("CalendarPage", () => {
       ...sampleResponse,
       total: 1,
       overdue_count: 1,
-      items: [sampleResponse.items[0]]
+      items: [sampleResponse.items[0]],
     });
 
     await user.click(screen.getByRole("button", { name: /Медосмотры/ }));
@@ -333,7 +341,7 @@ describe("CalendarPage", () => {
         person_id: undefined,
         site_id: undefined,
         include_fact: undefined,
-        include_sla: undefined
+        include_sla: undefined,
       });
     });
   });
@@ -343,12 +351,16 @@ describe("CalendarPage", () => {
 
     renderPage();
 
-    const medicalLink = await screen.findByRole("link", { name: "Медосмотр: Иванов И.И." });
+    const medicalLink = await screen.findByRole("link", {
+      name: "Медосмотр: Иванов И.И.",
+    });
     expect(medicalLink).toHaveAttribute("href", "/medical?focus=exam-1");
 
     const overdueRow = medicalLink.closest("tr");
     expect(overdueRow).not.toBeNull();
-    expect(within(overdueRow as HTMLElement).getByText("Просрочен")).toBeInTheDocument();
+    expect(
+      within(overdueRow as HTMLElement).getByText("Просрочен"),
+    ).toBeInTheDocument();
   });
 
   it("applies person_id filter when Apply is clicked", async () => {
@@ -363,7 +375,7 @@ describe("CalendarPage", () => {
       ...sampleResponse,
       total: 0,
       overdue_count: 0,
-      items: []
+      items: [],
     });
 
     const personInput = screen.getByLabelText("Сотрудник (person_id)");
@@ -376,7 +388,7 @@ describe("CalendarPage", () => {
         person_id: "p-1",
         site_id: undefined,
         include_fact: undefined,
-        include_sla: undefined
+        include_sla: undefined,
       });
     });
   });
@@ -386,19 +398,21 @@ describe("CalendarPage", () => {
       ...sampleResponse,
       total: 0,
       overdue_count: 0,
-      items: []
+      items: [],
     });
 
     renderPage();
 
-    expect(await screen.findByText("Событий в календаре нет")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Событий в календаре нет"),
+    ).toBeInTheDocument();
   });
 
   it("renders error state and retries", async () => {
     getEventsMock.mockRejectedValueOnce({
       status: 500,
       message: "boom",
-      field_errors: []
+      field_errors: [],
     });
 
     renderPage();
@@ -408,7 +422,9 @@ describe("CalendarPage", () => {
     getEventsMock.mockResolvedValueOnce(sampleResponse);
     fireEvent.click(screen.getByRole("button", { name: "Повторить" }));
 
-    expect(await screen.findByText("Медосмотр: Иванов И.И.")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Медосмотр: Иванов И.И."),
+    ).toBeInTheDocument();
   });
 
   it("toggles plan/fact mode and reissues request with include_fact=true", async () => {
@@ -421,7 +437,9 @@ describe("CalendarPage", () => {
 
     getEventsMock.mockResolvedValueOnce(factResponse);
 
-    await user.click(screen.getByRole("button", { name: "Сравнить план/факт" }));
+    await user.click(
+      screen.getByRole("button", { name: "Сравнить план/факт" }),
+    );
 
     await waitFor(() => {
       expect(getEventsMock).toHaveBeenLastCalledWith({
@@ -429,17 +447,23 @@ describe("CalendarPage", () => {
         person_id: undefined,
         site_id: undefined,
         include_fact: true,
-        include_sla: undefined
+        include_sla: undefined,
       });
     });
 
     expect(
-      await screen.findByRole("button", { name: "Скрыть план/факт" })
+      await screen.findByRole("button", { name: "Скрыть план/факт" }),
     ).toBeInTheDocument();
 
-    expect(screen.getByRole("columnheader", { name: "План" })).toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: "Факт" })).toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: "Отклонение" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("columnheader", { name: "План" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("columnheader", { name: "Факт" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("columnheader", { name: "Отклонение" }),
+    ).toBeInTheDocument();
   });
 
   it("renders variance badges (late / early / on-time) when plan/fact enabled", async () => {
@@ -450,21 +474,31 @@ describe("CalendarPage", () => {
     renderPage();
 
     await screen.findByText("Медосмотр: Иванов И.И.");
-    await user.click(screen.getByRole("button", { name: "Сравнить план/факт" }));
+    await user.click(
+      screen.getByRole("button", { name: "Сравнить план/факт" }),
+    );
 
-    const lateRow = (await screen.findByText("Проверка: периодическая")).closest("tr");
+    const lateRow = (
+      await screen.findByText("Проверка: периодическая")
+    ).closest("tr");
     expect(lateRow).not.toBeNull();
-    expect(within(lateRow as HTMLElement).getByText("+3 дн.")).toBeInTheDocument();
+    expect(
+      within(lateRow as HTMLElement).getByText("+3 дн."),
+    ).toBeInTheDocument();
 
     const earlyRow = screen.getByText("Обучение: внеплановое").closest("tr");
     expect(earlyRow).not.toBeNull();
-    expect(within(earlyRow as HTMLElement).getByText("-2 дн.")).toBeInTheDocument();
+    expect(
+      within(earlyRow as HTMLElement).getByText("-2 дн."),
+    ).toBeInTheDocument();
 
     const onTimeRow = screen.getByText("СИЗ: Респиратор").closest("tr");
     expect(onTimeRow).not.toBeNull();
     // "В срок" appears both in the variance badge and the deadline column;
     // require at least one in this row.
-    expect(within(onTimeRow as HTMLElement).getAllByText("В срок").length).toBeGreaterThan(0);
+    expect(
+      within(onTimeRow as HTMLElement).getAllByText("В срок").length,
+    ).toBeGreaterThan(0);
 
     const summary = screen.getByTestId("fact-summary");
     expect(summary).toHaveTextContent("Факт зафиксирован: 3");
@@ -482,7 +516,9 @@ describe("CalendarPage", () => {
     await screen.findByText("Медосмотр: Иванов И.И.");
 
     getEventsMock.mockResolvedValueOnce(factResponse);
-    await user.click(screen.getByRole("button", { name: "Сравнить план/факт" }));
+    await user.click(
+      screen.getByRole("button", { name: "Сравнить план/факт" }),
+    );
     await screen.findByRole("button", { name: "Скрыть план/факт" });
 
     const blob = new Blob(["BEGIN:VCALENDAR"], { type: "text/calendar" });
@@ -496,11 +532,14 @@ describe("CalendarPage", () => {
         person_id: undefined,
         site_id: undefined,
         include_fact: true,
-        include_sla: undefined
+        include_sla: undefined,
       });
     });
 
-    expect(downloadBlobMock).toHaveBeenCalledWith(blob, expect.stringMatching(/^calendar-.*\.ics$/));
+    expect(downloadBlobMock).toHaveBeenCalledWith(
+      blob,
+      expect.stringMatching(/^calendar-.*\.ics$/),
+    );
   });
 
   it("shows ICS error message when download fails", async () => {
@@ -514,7 +553,7 @@ describe("CalendarPage", () => {
     downloadIcsMock.mockRejectedValueOnce({
       status: 500,
       message: "ics boom",
-      field_errors: []
+      field_errors: [],
     });
 
     await user.click(screen.getByRole("button", { name: /Скачать \.ics/ }));
@@ -535,9 +574,11 @@ describe("CalendarPage", () => {
       person_id: undefined,
       site_id: undefined,
       include_fact: true,
-      include_sla: undefined
+      include_sla: undefined,
     });
-    expect(screen.getByRole("button", { name: "Скрыть план/факт" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Скрыть план/факт" }),
+    ).toBeInTheDocument();
   });
 
   it("toggles SLA mode and reissues request with include_sla=true", async () => {
@@ -558,16 +599,18 @@ describe("CalendarPage", () => {
         person_id: undefined,
         site_id: undefined,
         include_fact: undefined,
-        include_sla: true
+        include_sla: true,
       });
     });
 
     expect(
-      await screen.findByRole("button", { name: "Скрыть SLA" })
+      await screen.findByRole("button", { name: "Скрыть SLA" }),
     ).toBeInTheDocument();
     // slaResponse spans Apr/May/Jul → month-view renders multiple buckets,
     // each with its own SLA columnheader; assert at least one is present.
-    expect(screen.getAllByRole("columnheader", { name: "SLA" }).length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByRole("columnheader", { name: "SLA" }).length,
+    ).toBeGreaterThan(0);
     expect(screen.getByTestId("sla-band-filter")).toBeInTheDocument();
   });
 
@@ -580,30 +623,41 @@ describe("CalendarPage", () => {
     await screen.findByText("Медосмотр: Иванов И.И.");
     await user.click(screen.getByRole("button", { name: "Показать SLA" }));
 
-    const overdueRow = (await screen.findByText("Медосмотр: просрочен")).closest("tr");
+    const overdueRow = (
+      await screen.findByText("Медосмотр: просрочен")
+    ).closest("tr");
     expect(overdueRow).not.toBeNull();
-    const overdueBand = within(overdueRow as HTMLElement).getByText("Просрочено");
+    const overdueBand = within(overdueRow as HTMLElement).getByText(
+      "Просрочено",
+    );
     expect(overdueBand).toHaveAttribute("data-sla-band", "overdue");
-    expect(within(overdueRow as HTMLElement).getByText("Просрочено на 13 дн.")).toBeInTheDocument();
+    expect(
+      within(overdueRow as HTMLElement).getByText("Просрочено на 13 дн."),
+    ).toBeInTheDocument();
 
-    const criticalRow = screen.getByText("Допуск: критичный срок").closest("tr");
+    const criticalRow = screen
+      .getByText("Допуск: критичный срок")
+      .closest("tr");
     expect(criticalRow).not.toBeNull();
-    const criticalBand = within(criticalRow as HTMLElement).getByText("Критично");
+    const criticalBand = within(criticalRow as HTMLElement).getByText(
+      "Критично",
+    );
     expect(criticalBand).toHaveAttribute("data-sla-band", "critical");
-    expect(within(criticalRow as HTMLElement).getByText("Осталось 4 дн.")).toBeInTheDocument();
+    expect(
+      within(criticalRow as HTMLElement).getByText("Осталось 4 дн."),
+    ).toBeInTheDocument();
 
     const warningRow = screen.getByText("Обучение: внимание").closest("tr");
     expect(warningRow).not.toBeNull();
-    expect(within(warningRow as HTMLElement).getByText("Внимание")).toHaveAttribute(
-      "data-sla-band",
-      "warning"
-    );
+    expect(
+      within(warningRow as HTMLElement).getByText("Внимание"),
+    ).toHaveAttribute("data-sla-band", "warning");
 
     const okRow = screen.getByText("СИЗ: в норме").closest("tr");
     expect(okRow).not.toBeNull();
     expect(within(okRow as HTMLElement).getByText("В норме")).toHaveAttribute(
       "data-sla-band",
-      "ok"
+      "ok",
     );
 
     const summary = screen.getByTestId("sla-summary");
@@ -629,7 +683,9 @@ describe("CalendarPage", () => {
     await user.click(within(filter).getByRole("button", { name: /Критично/ }));
 
     await waitFor(() => {
-      expect(screen.queryByText("Медосмотр: просрочен")).not.toBeInTheDocument();
+      expect(
+        screen.queryByText("Медосмотр: просрочен"),
+      ).not.toBeInTheDocument();
     });
     expect(screen.getByText("Допуск: критичный срок")).toBeInTheDocument();
     expect(screen.queryByText("Обучение: внимание")).not.toBeInTheDocument();
@@ -660,7 +716,7 @@ describe("CalendarPage", () => {
         person_id: undefined,
         site_id: undefined,
         include_fact: undefined,
-        include_sla: true
+        include_sla: true,
       });
     });
   });
@@ -677,9 +733,11 @@ describe("CalendarPage", () => {
       person_id: undefined,
       site_id: undefined,
       include_fact: undefined,
-      include_sla: true
+      include_sla: true,
     });
-    expect(screen.getByRole("button", { name: "Скрыть SLA" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Скрыть SLA" }),
+    ).toBeInTheDocument();
     // Only "overdue" and "critical" bands shown, others filtered out client-side.
     expect(screen.getByText("Допуск: критичный срок")).toBeInTheDocument();
     expect(screen.queryByText("Обучение: внимание")).not.toBeInTheDocument();
@@ -695,7 +753,9 @@ describe("CalendarPage", () => {
     await screen.findByText("Медосмотр: Иванов И.И.");
 
     // Toggle off → no heatmap.
-    expect(screen.queryByTestId("resource-load-heatmap")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("resource-load-heatmap"),
+    ).not.toBeInTheDocument();
 
     const callsBefore = getEventsMock.mock.calls.length;
     await user.click(screen.getByRole("button", { name: "Показать загрузку" }));
@@ -703,21 +763,21 @@ describe("CalendarPage", () => {
     // Client-side only — no extra fetch.
     expect(getEventsMock.mock.calls.length).toBe(callsBefore);
     expect(
-      await screen.findByRole("button", { name: "Скрыть загрузку" })
+      await screen.findByRole("button", { name: "Скрыть загрузку" }),
     ).toBeInTheDocument();
     const heatmap = screen.getByTestId("resource-load-heatmap");
     expect(heatmap).toBeInTheDocument();
 
     // sampleResponse has person_id values: p-1 (×3) and p-2 (×1).
-    const p1Row = within(heatmap).getAllByRole("row").find((row) =>
-      row.getAttribute("data-load-entity") === "p-1"
-    );
+    const p1Row = within(heatmap)
+      .getAllByRole("row")
+      .find((row) => row.getAttribute("data-load-entity") === "p-1");
     expect(p1Row).toBeDefined();
     expect(p1Row).toHaveAttribute("data-load-total", "3");
 
-    const p2Row = within(heatmap).getAllByRole("row").find((row) =>
-      row.getAttribute("data-load-entity") === "p-2"
-    );
+    const p2Row = within(heatmap)
+      .getAllByRole("row")
+      .find((row) => row.getAttribute("data-load-entity") === "p-2");
     expect(p2Row).toBeDefined();
     expect(p2Row).toHaveAttribute("data-load-total", "1");
   });
@@ -730,8 +790,8 @@ describe("CalendarPage", () => {
         { ...sampleResponse.items[0], site_id: "site-A" },
         { ...sampleResponse.items[1], site_id: "site-B" },
         { ...sampleResponse.items[2], site_id: "site-A" },
-        { ...sampleResponse.items[3], site_id: null }
-      ]
+        { ...sampleResponse.items[3], site_id: null },
+      ],
     };
     getEventsMock.mockResolvedValueOnce(responseWithSite);
 
@@ -742,34 +802,33 @@ describe("CalendarPage", () => {
 
     // Default = person → buttons are in the section header, not in the table.
     const section = await screen.findByTestId("resource-load-section");
-    expect(within(section).getByRole("button", { name: "По людям" })).toHaveAttribute(
-      "aria-pressed",
-      "true"
-    );
-    expect(within(section).getByRole("button", { name: "По объектам" })).toHaveAttribute(
-      "aria-pressed",
-      "false"
-    );
+    expect(
+      within(section).getByRole("button", { name: "По людям" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    expect(
+      within(section).getByRole("button", { name: "По объектам" }),
+    ).toHaveAttribute("aria-pressed", "false");
 
     // Switch to site → 2 rows (site-A=2 events, site-B=1); the briefing with no site_id excluded.
-    await user.click(within(section).getByRole("button", { name: "По объектам" }));
+    await user.click(
+      within(section).getByRole("button", { name: "По объектам" }),
+    );
 
     await waitFor(() => {
-      expect(within(section).getByRole("button", { name: "По объектам" })).toHaveAttribute(
-        "aria-pressed",
-        "true"
-      );
+      expect(
+        within(section).getByRole("button", { name: "По объектам" }),
+      ).toHaveAttribute("aria-pressed", "true");
     });
 
     const heatmap = await screen.findByTestId("resource-load-heatmap");
-    const siteARow = within(heatmap).getAllByRole("row").find((row) =>
-      row.getAttribute("data-load-entity") === "site-A"
-    );
+    const siteARow = within(heatmap)
+      .getAllByRole("row")
+      .find((row) => row.getAttribute("data-load-entity") === "site-A");
     expect(siteARow).toBeDefined();
     expect(siteARow).toHaveAttribute("data-load-total", "2");
-    const siteBRow = within(heatmap).getAllByRole("row").find((row) =>
-      row.getAttribute("data-load-entity") === "site-B"
-    );
+    const siteBRow = within(heatmap)
+      .getAllByRole("row")
+      .find((row) => row.getAttribute("data-load-entity") === "site-B");
     expect(siteBRow).toBeDefined();
     expect(siteBRow).toHaveAttribute("data-load-total", "1");
   });
@@ -778,7 +837,7 @@ describe("CalendarPage", () => {
     const user = userEvent.setup();
     const responseNoSites: CalendarEventsResponseDto = {
       ...sampleResponse,
-      items: sampleResponse.items.map((item) => ({ ...item, site_id: null }))
+      items: sampleResponse.items.map((item) => ({ ...item, site_id: null })),
     };
     getEventsMock.mockResolvedValueOnce(responseNoSites);
 
@@ -787,10 +846,16 @@ describe("CalendarPage", () => {
 
     await user.click(screen.getByRole("button", { name: "Показать загрузку" }));
     const section = await screen.findByTestId("resource-load-section");
-    await user.click(within(section).getByRole("button", { name: "По объектам" }));
+    await user.click(
+      within(section).getByRole("button", { name: "По объектам" }),
+    );
 
-    expect(await screen.findByTestId("resource-load-empty")).toHaveTextContent("site_id");
-    expect(screen.queryByTestId("resource-load-heatmap")).not.toBeInTheDocument();
+    expect(await screen.findByTestId("resource-load-empty")).toHaveTextContent(
+      "site_id",
+    );
+    expect(
+      screen.queryByTestId("resource-load-heatmap"),
+    ).not.toBeInTheDocument();
   });
 
   it("hydrates include_load and load_dim from URL on mount", async () => {
@@ -798,8 +863,8 @@ describe("CalendarPage", () => {
       ...sampleResponse,
       items: [
         { ...sampleResponse.items[0], site_id: "site-A" },
-        { ...sampleResponse.items[2], site_id: "site-A" }
-      ]
+        { ...sampleResponse.items[2], site_id: "site-A" },
+      ],
     };
     getEventsMock.mockResolvedValueOnce(responseWithSite);
 
@@ -808,17 +873,16 @@ describe("CalendarPage", () => {
     await screen.findByText("Медосмотр: Иванов И.И.");
 
     expect(
-      await screen.findByRole("button", { name: "Скрыть загрузку" })
+      await screen.findByRole("button", { name: "Скрыть загрузку" }),
     ).toBeInTheDocument();
     const section = await screen.findByTestId("resource-load-section");
-    expect(within(section).getByRole("button", { name: "По объектам" })).toHaveAttribute(
-      "aria-pressed",
-      "true"
-    );
+    expect(
+      within(section).getByRole("button", { name: "По объектам" }),
+    ).toHaveAttribute("aria-pressed", "true");
     const heatmap = await screen.findByTestId("resource-load-heatmap");
-    const siteARow = within(heatmap).getAllByRole("row").find((row) =>
-      row.getAttribute("data-load-entity") === "site-A"
-    );
+    const siteARow = within(heatmap)
+      .getAllByRole("row")
+      .find((row) => row.getAttribute("data-load-entity") === "site-A");
     expect(siteARow).toBeDefined();
     expect(siteARow).toHaveAttribute("data-load-total", "2");
   });
@@ -840,11 +904,11 @@ describe("CalendarPage", () => {
           include_sla: true,
           sla_bands: ["overdue"],
           include_load: false,
-          load_dim: null
+          load_dim: null,
         },
         created_at: "2026-05-17T10:00:00Z",
-        updated_at: "2026-05-17T10:00:00Z"
-      }
+        updated_at: "2026-05-17T10:00:00Z",
+      },
     ]);
 
     renderPage();
@@ -854,7 +918,9 @@ describe("CalendarPage", () => {
     const select = await screen.findByTestId("saved-views-select");
     // Default option + 1 saved view.
     expect(within(select).getAllByRole("option")).toHaveLength(2);
-    expect(within(select).getByRole("option", { name: "Только просрочки" })).toBeInTheDocument();
+    expect(
+      within(select).getByRole("option", { name: "Только просрочки" }),
+    ).toBeInTheDocument();
   });
 
   it("applies a saved view by reissuing /calendar/events with its filters", async () => {
@@ -873,11 +939,11 @@ describe("CalendarPage", () => {
           include_sla: true,
           sla_bands: ["overdue", "critical"],
           include_load: true,
-          load_dim: "site"
+          load_dim: "site",
         },
         created_at: "2026-05-17T10:00:00Z",
-        updated_at: "2026-05-17T10:00:00Z"
-      }
+        updated_at: "2026-05-17T10:00:00Z",
+      },
     ]);
 
     renderPage();
@@ -885,7 +951,7 @@ describe("CalendarPage", () => {
 
     getEventsMock.mockResolvedValueOnce({
       ...sampleResponse,
-      items: [sampleResponse.items[0]]
+      items: [sampleResponse.items[0]],
     });
 
     const select = await screen.findByTestId("saved-views-select");
@@ -897,13 +963,17 @@ describe("CalendarPage", () => {
         person_id: "p-1",
         site_id: undefined,
         include_fact: undefined,
-        include_sla: true
+        include_sla: true,
       });
     });
 
     // SLA + load toggles flipped on; "Удалить" button is now visible.
-    expect(screen.getByRole("button", { name: "Скрыть SLA" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Скрыть загрузку" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Скрыть SLA" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Скрыть загрузку" }),
+    ).toBeInTheDocument();
     expect(screen.getByTestId("saved-views-delete")).toBeInTheDocument();
   });
 
@@ -924,10 +994,10 @@ describe("CalendarPage", () => {
         include_sla: false,
         sla_bands: [],
         include_load: false,
-        load_dim: null
+        load_dim: null,
       },
       created_at: "2026-05-17T10:00:00Z",
-      updated_at: "2026-05-17T10:00:00Z"
+      updated_at: "2026-05-17T10:00:00Z",
     });
 
     renderPage();
@@ -945,12 +1015,14 @@ describe("CalendarPage", () => {
         sources: [],
         include_fact: false,
         include_sla: false,
-        include_load: false
-      })
+        include_load: false,
+      }),
     });
     // New view appears in dropdown.
     const select = screen.getByTestId("saved-views-select");
-    expect(within(select).getByRole("option", { name: "My filter" })).toBeInTheDocument();
+    expect(
+      within(select).getByRole("option", { name: "My filter" }),
+    ).toBeInTheDocument();
 
     promptSpy.mockRestore();
   });
@@ -963,7 +1035,7 @@ describe("CalendarPage", () => {
     createSavedViewMock.mockRejectedValueOnce({
       status: 409,
       message: "exists",
-      field_errors: []
+      field_errors: [],
     });
 
     renderPage();
@@ -971,7 +1043,9 @@ describe("CalendarPage", () => {
 
     await user.click(screen.getByTestId("saved-views-save"));
 
-    expect(await screen.findByTestId("saved-views-error")).toHaveTextContent(/Dup/);
+    expect(await screen.findByTestId("saved-views-error")).toHaveTextContent(
+      /Dup/,
+    );
     promptSpy.mockRestore();
   });
 
@@ -991,11 +1065,11 @@ describe("CalendarPage", () => {
           include_sla: false,
           sla_bands: [],
           include_load: false,
-          load_dim: null
+          load_dim: null,
         },
         created_at: "2026-05-17T10:00:00Z",
-        updated_at: "2026-05-17T10:00:00Z"
-      }
+        updated_at: "2026-05-17T10:00:00Z",
+      },
     ]);
     deleteSavedViewMock.mockResolvedValueOnce(undefined);
     const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
@@ -1014,7 +1088,7 @@ describe("CalendarPage", () => {
     });
     expect(screen.queryByTestId("saved-views-delete")).not.toBeInTheDocument();
     expect(
-      within(select).queryByRole("option", { name: "Удаляемый" })
+      within(select).queryByRole("option", { name: "Удаляемый" }),
     ).not.toBeInTheDocument();
 
     confirmSpy.mockRestore();

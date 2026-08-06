@@ -6,9 +6,10 @@ from io import BytesIO
 from typing import Any
 from xml.etree import ElementTree as ET
 
-from app.core.xml_security import stdlib_fromstring
 from jinja2 import StrictUndefined
 from jinja2.sandbox import SandboxedEnvironment
+
+from app.core.xml_security import stdlib_fromstring
 
 from .passport import inject_passport
 

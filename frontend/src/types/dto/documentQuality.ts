@@ -26,4 +26,3 @@ export type QualityReport = {
   summary: Record<string, number>;
   issues: QualityIssue[];
 };
-

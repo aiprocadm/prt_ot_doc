@@ -10,8 +10,8 @@ const getPpeOverviewMock = vi.fn();
 
 vi.mock("@/api/ops", () => ({
   opsApi: {
-    getPpeOverview: (...args: unknown[]) => getPpeOverviewMock(...args)
-  }
+    getPpeOverview: (...args: unknown[]) => getPpeOverviewMock(...args),
+  },
 }));
 
 const baseUser = {
@@ -22,16 +22,25 @@ const baseUser = {
   full_name: "PPE User",
   roles: ["worker"],
   permissions: [PERMISSIONS.PPE_VIEW],
-  attributes: { tenant_id: "tenant-1" }
+  attributes: { tenant_id: "tenant-1" },
 };
 
 describe("PpePage", () => {
   beforeEach(() => {
     getPpeOverviewMock.mockReset();
     getPpeOverviewMock.mockResolvedValue({
-      items: [{ id: "item-1", name: "Каска", code: "helmet", category: "head" }],
+      items: [
+        { id: "item-1", name: "Каска", code: "helmet", category: "head" },
+      ],
       issues: [
-        { id: "issue-1", person_id: "person-1", item_id: "item-1", quantity: 1, status: "issued", expires_at: "2020-01-01T00:00:00Z" }
+        {
+          id: "issue-1",
+          person_id: "person-1",
+          item_id: "item-1",
+          quantity: 1,
+          status: "issued",
+          expires_at: "2020-01-01T00:00:00Z",
+        },
       ],
       persons: [
         {
@@ -44,9 +53,9 @@ describe("PpePage", () => {
           full_name: "Иван Иванов",
           position: "Сварщик",
           company_id: "company-1",
-          status: "active"
-        }
-      ]
+          status: "active",
+        },
+      ],
     });
   });
 
@@ -56,49 +65,59 @@ describe("PpePage", () => {
       loading: false,
       error: null,
       isAuthenticated: true,
-      initialized: true
+      initialized: true,
     });
 
     render(
       <MemoryRouter>
         <PpePage />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
 
-    expect(await screen.findByRole("button", { name: /быстрая выдача/i })).toBeDisabled();
+    expect(
+      await screen.findByRole("button", { name: /быстрая выдача/i }),
+    ).toBeDisabled();
   });
 
   it("показывает enabled quick issue action при наличии write permission", async () => {
     useAuthStore.setState({
-      user: { ...baseUser, permissions: [PERMISSIONS.PPE_VIEW, PERMISSIONS.PPE_ISSUE] },
+      user: {
+        ...baseUser,
+        permissions: [PERMISSIONS.PPE_VIEW, PERMISSIONS.PPE_ISSUE],
+      },
       loading: false,
       error: null,
       isAuthenticated: true,
-      initialized: true
+      initialized: true,
     });
 
     render(
       <MemoryRouter>
         <PpePage />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
 
-    expect(await screen.findByRole("button", { name: /быстрая выдача/i })).toBeEnabled();
+    expect(
+      await screen.findByRole("button", { name: /быстрая выдача/i }),
+    ).toBeEnabled();
   });
 
   it("applies status filter from query params", async () => {
     useAuthStore.setState({
-      user: { ...baseUser, permissions: [PERMISSIONS.PPE_VIEW, PERMISSIONS.PPE_ISSUE] },
+      user: {
+        ...baseUser,
+        permissions: [PERMISSIONS.PPE_VIEW, PERMISSIONS.PPE_ISSUE],
+      },
       loading: false,
       error: null,
       isAuthenticated: true,
-      initialized: true
+      initialized: true,
     });
 
     render(
       <MemoryRouter initialEntries={["/ppe?status=overdue"]}>
         <PpePage />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
 
     expect(await screen.findByText("Требует замены")).toBeInTheDocument();
@@ -106,19 +125,24 @@ describe("PpePage", () => {
 
   it("shows a link to mobile issuance for users who can issue", async () => {
     useAuthStore.setState({
-      user: { ...baseUser, permissions: [PERMISSIONS.PPE_VIEW, PERMISSIONS.PPE_ISSUE] },
+      user: {
+        ...baseUser,
+        permissions: [PERMISSIONS.PPE_VIEW, PERMISSIONS.PPE_ISSUE],
+      },
       loading: false,
       error: null,
       isAuthenticated: true,
-      initialized: true
+      initialized: true,
     });
 
     render(
       <MemoryRouter>
         <PpePage />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
 
-    expect(await screen.findByRole("button", { name: /мобильная выдача/i })).toBeEnabled();
+    expect(
+      await screen.findByRole("button", { name: /мобильная выдача/i }),
+    ).toBeEnabled();
   });
 });

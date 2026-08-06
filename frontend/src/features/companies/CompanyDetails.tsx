@@ -19,13 +19,17 @@ const packPresets: { label: string; value: PackPreset }[] = [
   { label: "Выход на объект", value: "site_entry" },
   { label: "Несчастный случай", value: "incident_response" },
   { label: "Пожарная безопасность", value: "fire_safety" },
-  { label: "Экология", value: "environmental" }
+  { label: "Экология", value: "environmental" },
 ];
 
 export const CompanyDetails = ({ company }: { company: CompanyDto }) => {
   const { create } = usePacksStore();
-  const personsRegistryRevision = usePersonsStore((s) => s.personsRegistryRevision);
-  const [companyPeople, setCompanyPeople] = useState<PersonDto[]>(() => company.persons ?? []);
+  const personsRegistryRevision = usePersonsStore(
+    (s) => s.personsRegistryRevision,
+  );
+  const [companyPeople, setCompanyPeople] = useState<PersonDto[]>(
+    () => company.persons ?? [],
+  );
   const [peopleLoading, setPeopleLoading] = useState(false);
 
   const tags = useMemo(() => company.tags ?? [], [company.tags]);
@@ -58,7 +62,10 @@ export const CompanyDetails = ({ company }: { company: CompanyDto }) => {
       <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <CardTitle className="flex items-center gap-2 text-2xl font-semibold">
-            <Building className="h-5 w-5 text-muted-foreground" aria-hidden="true" />
+            <Building
+              className="h-5 w-5 text-muted-foreground"
+              aria-hidden="true"
+            />
             {company.name}
           </CardTitle>
           <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
@@ -70,7 +77,12 @@ export const CompanyDetails = ({ company }: { company: CompanyDto }) => {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {packPresets.map((preset) => (
-            <Button key={preset.value} variant="outline" size="sm" onClick={() => handleGeneratePack(preset.value)}>
+            <Button
+              key={preset.value}
+              variant="outline"
+              size="sm"
+              onClick={() => handleGeneratePack(preset.value)}
+            >
               Сгенерировать: {preset.label}
             </Button>
           ))}
@@ -108,7 +120,8 @@ export const CompanyDetails = ({ company }: { company: CompanyDto }) => {
           </TabsContent>
           <TabsContent value="people" className="space-y-4">
             <p className="text-xs text-muted-foreground">
-              Список подгружается из реестра сотрудников по выбранной организации.{" "}
+              Список подгружается из реестра сотрудников по выбранной
+              организации.{" "}
               <Link to="/persons" className="underline underline-offset-2">
                 Открыть раздел «Сотрудники»
               </Link>
@@ -123,12 +136,16 @@ export const CompanyDetails = ({ company }: { company: CompanyDto }) => {
                 {companyPeople.map((person) => (
                   <li key={person.id} className="rounded-md border p-3">
                     <div className="font-medium">{person.full_name}</div>
-                    <div className="text-sm text-muted-foreground">{person.position ?? "—"}</div>
+                    <div className="text-sm text-muted-foreground">
+                      {person.position ?? "—"}
+                    </div>
                   </li>
                 ))}
               </ul>
             ) : (
-              <p className="text-sm text-muted-foreground">В этой организации пока нет сотрудников в реестре.</p>
+              <p className="text-sm text-muted-foreground">
+                В этой организации пока нет сотрудников в реестре.
+              </p>
             )}
           </TabsContent>
           <TabsContent value="documents" className="space-y-4">
@@ -139,7 +156,9 @@ export const CompanyDetails = ({ company }: { company: CompanyDto }) => {
                     <div className="flex items-center justify-between">
                       <div>
                         <div className="font-medium">{document.name}</div>
-                        <div className="text-xs text-muted-foreground">Версия {document.version}</div>
+                        <div className="text-xs text-muted-foreground">
+                          Версия {document.version}
+                        </div>
                       </div>
                       <StatusBadge status={document.status} />
                     </div>
@@ -147,7 +166,9 @@ export const CompanyDetails = ({ company }: { company: CompanyDto }) => {
                 ))}
               </ul>
             ) : (
-              <p className="text-sm text-muted-foreground">Документы не найдены.</p>
+              <p className="text-sm text-muted-foreground">
+                Документы не найдены.
+              </p>
             )}
           </TabsContent>
         </Tabs>
@@ -156,7 +177,13 @@ export const CompanyDetails = ({ company }: { company: CompanyDto }) => {
   );
 };
 
-const InfoRow = ({ label, value }: { label: string; value?: string | null }) => (
+const InfoRow = ({
+  label,
+  value,
+}: {
+  label: string;
+  value?: string | null;
+}) => (
   <div>
     <div className="text-xs uppercase text-muted-foreground">{label}</div>
     <div className="text-sm font-medium text-foreground">{value || "—"}</div>

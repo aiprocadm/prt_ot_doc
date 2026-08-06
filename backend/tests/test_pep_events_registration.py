@@ -1,5 +1,6 @@
 """PEP events are first-class citizens of the outbox pipeline (sibling parity
 with PPEWrittenOff/PPEReplacementDue registration, СИЗ Срез-1)."""
+
 from __future__ import annotations
 
 import os
@@ -28,8 +29,13 @@ def test_event_types_registered():
 
 def test_dedupe_keys():
     signed = PEPSignedPayload(
-        tenant_id="t1", signature_request_id="sr-1", object_type="ppe_issue",
-        object_id="i-1", purpose="ppe_issue", signer_user_id=None, signer_person_id="p-1",
+        tenant_id="t1",
+        signature_request_id="sr-1",
+        object_type="ppe_issue",
+        object_id="i-1",
+        purpose="ppe_issue",
+        signer_user_id=None,
+        signer_person_id="p-1",
     )
     declined = PEPDeclinedPayload(tenant_id="t1", signature_request_id="sr-1", reason="manual")
     assert dedupe_key_for(EventType.PEP_SIGNED, signed) == "sr-1:pep_signed"

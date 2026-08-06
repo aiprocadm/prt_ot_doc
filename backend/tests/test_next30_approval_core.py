@@ -2,7 +2,13 @@ from app.modules.approval.core import cond_matches, make_request_hash
 
 
 def test_route_matching_counts_hits() -> None:
-    assert cond_matches({"document_type": "invoice", "risk_level": "high"}, {"document_type": "invoice", "risk_level": "high"}) == 2
+    assert (
+        cond_matches(
+            {"document_type": "invoice", "risk_level": "high"},
+            {"document_type": "invoice", "risk_level": "high"},
+        )
+        == 2
+    )
 
 
 def test_route_matching_fails_on_mismatch() -> None:

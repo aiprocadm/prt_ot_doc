@@ -12,14 +12,14 @@ const packsStoreState = vi.hoisted(() => ({
   items: [] as Array<{ id: string; name: string }>,
   loading: false,
   error: null as { status: number; message: string } | null,
-  list: vi.fn().mockResolvedValue(undefined)
+  list: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("@/api/client", () => ({
   apiClient: {
     get: (...args: unknown[]) => getMock(...args),
-    post: vi.fn()
-  }
+    post: vi.fn(),
+  },
 }));
 
 vi.mock("@/stores/packs", () => ({
@@ -36,16 +36,16 @@ vi.mock("@/stores/packs", () => ({
     getById: vi.fn(),
     reset: vi.fn(),
     item: null,
-    filters: {}
-  })
+    filters: {},
+  }),
 }));
 
 vi.mock("@/features/packs/PackWizard", () => ({
-  PackWizard: () => <div data-testid="pack-wizard" />
+  PackWizard: () => <div data-testid="pack-wizard" />,
 }));
 
 vi.mock("@/features/packs/PackTable", () => ({
-  PackTable: () => <div data-testid="pack-table" />
+  PackTable: () => <div data-testid="pack-table" />,
 }));
 
 describe("Packs pages operational states", () => {
@@ -61,7 +61,7 @@ describe("Packs pages operational states", () => {
     render(
       <MemoryRouter>
         <PacksPage />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
 
     expect(await screen.findByText(/пакеты не найдены/i)).toBeInTheDocument();
@@ -77,10 +77,12 @@ describe("Packs pages operational states", () => {
     render(
       <MemoryRouter>
         <PackagePresetsPage />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
 
-    expect(await screen.findByText(/пресеты пакетов отсутствуют/i)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/пресеты пакетов отсутствуют/i),
+    ).toBeInTheDocument();
   });
 
   it("shows error state on PackageProfilesPage when API fails", async () => {
@@ -89,11 +91,13 @@ describe("Packs pages operational states", () => {
     render(
       <MemoryRouter>
         <PackageProfilesPage />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
 
     await waitFor(() => {
-      expect(screen.getByRole("alert")).toHaveTextContent("profiles load failed");
+      expect(screen.getByRole("alert")).toHaveTextContent(
+        "profiles load failed",
+      );
     });
   });
 });

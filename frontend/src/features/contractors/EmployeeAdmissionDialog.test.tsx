@@ -13,8 +13,8 @@ vi.mock("@/api/contractors", async (importOriginal) => {
     contractorsApi: {
       getEmployeeReadiness: vi.fn(),
       getEmployeeChecklist: vi.fn(),
-      admitEmployee: vi.fn()
-    }
+      admitEmployee: vi.fn(),
+    },
   };
 });
 
@@ -24,50 +24,92 @@ const employee: ContractorEmployee = {
   full_name: "Сидоров С.С.",
   access_status: "pending",
   training_status: "valid",
-  medical_status: "valid"
+  medical_status: "valid",
 };
 
 beforeEach(() => {
   vi.clearAllMocks();
-  (contractorsApi.getEmployeeReadiness as any).mockResolvedValue({ employee_id: "e1", status: "warning", violations: [], warnings: ["Медосмотр истекает"] });
+  (contractorsApi.getEmployeeReadiness as any).mockResolvedValue({
+    employee_id: "e1",
+    status: "warning",
+    violations: [],
+    warnings: ["Медосмотр истекает"],
+  });
   (contractorsApi.getEmployeeChecklist as any).mockResolvedValue({
     employee_id: "e1",
-    items: [{ doc_type: "medical_cert", scope: "employee", mandatory: true, status: "due_soon", satisfied_by: null }]
+    items: [
+      {
+        doc_type: "medical_cert",
+        scope: "employee",
+        mandatory: true,
+        status: "due_soon",
+        satisfied_by: null,
+      },
+    ],
   });
 });
 
 const open = async () => {
-  render(<EmployeeAdmissionDialog employee={employee} trigger={<Button>Допуск</Button>} onAdmitted={() => undefined} />);
+  render(
+    <EmployeeAdmissionDialog
+      employee={employee}
+      trigger={<Button>Допуск</Button>}
+      onAdmitted={() => undefined}
+    />,
+  );
   fireEvent.click(screen.getByRole("button", { name: "Допуск" }));
 };
 
 describe("EmployeeAdmissionDialog", () => {
   it("loads readiness and checklist on open", async () => {
     await open();
-    await waitFor(() => expect(contractorsApi.getEmployeeReadiness).toHaveBeenCalledWith("e1"));
+    await waitFor(() =>
+      expect(contractorsApi.getEmployeeReadiness).toHaveBeenCalledWith("e1"),
+    );
     expect(contractorsApi.getEmployeeChecklist).toHaveBeenCalledWith("e1");
     expect(await screen.findByText("Медосмотр истекает")).toBeInTheDocument();
   });
 
   it("renders the translated cleared label on the allowed happy path", async () => {
-    (contractorsApi.getEmployeeReadiness as any).mockResolvedValue({ employee_id: "e1", status: "allowed", violations: [], warnings: [] });
-    (contractorsApi.admitEmployee as any).mockResolvedValue({ employee_id: "e1", status: "allowed", violations: [], warnings: [] });
+    (contractorsApi.getEmployeeReadiness as any).mockResolvedValue({
+      employee_id: "e1",
+      status: "allowed",
+      violations: [],
+      warnings: [],
+    });
+    (contractorsApi.admitEmployee as any).mockResolvedValue({
+      employee_id: "e1",
+      status: "allowed",
+      violations: [],
+      warnings: [],
+    });
     await open();
     // Readiness badge shows the translated label, never the raw backend enum "allowed".
     expect(await screen.findByText("Допущен")).toBeInTheDocument();
     expect(screen.queryByText("allowed")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Допустить" }));
-    await waitFor(() => expect(contractorsApi.admitEmployee).toHaveBeenCalledWith("e1"));
+    await waitFor(() =>
+      expect(contractorsApi.admitEmployee).toHaveBeenCalledWith("e1"),
+    );
     // Success verdict line is non-empty (was blank when the label was keyed "ok").
     expect((await screen.findAllByText("Допущен")).length).toBeGreaterThan(0);
   });
 
   it("admits successfully with a warning verdict", async () => {
-    (contractorsApi.admitEmployee as any).mockResolvedValue({ employee_id: "e1", status: "warning", violations: [], warnings: ["ок с замечаниями"] });
+    (contractorsApi.admitEmployee as any).mockResolvedValue({
+      employee_id: "e1",
+      status: "warning",
+      violations: [],
+      warnings: ["ок с замечаниями"],
+    });
     await open();
     fireEvent.click(await screen.findByRole("button", { name: "Допустить" }));
-    await waitFor(() => expect(contractorsApi.admitEmployee).toHaveBeenCalledWith("e1"));
-    expect(await screen.findByText(/Допущен с замечаниями/)).toBeInTheDocument();
+    await waitFor(() =>
+      expect(contractorsApi.admitEmployee).toHaveBeenCalledWith("e1"),
+    );
+    expect(
+      await screen.findByText(/Допущен с замечаниями/),
+    ).toBeInTheDocument();
   });
 
   it("shows violations when admit is blocked (409)", async () => {
@@ -75,7 +117,14 @@ describe("EmployeeAdmissionDialog", () => {
       status: 409,
       code: "requirements_not_met",
       message: "not cleared",
-      details: { details: [{ employee_id: "e1", violations: ["Нет лицензии", "Просрочен медосмотр"] }] }
+      details: {
+        details: [
+          {
+            employee_id: "e1",
+            violations: ["Нет лицензии", "Просрочен медосмотр"],
+          },
+        ],
+      },
     });
     await open();
     fireEvent.click(await screen.findByRole("button", { name: "Допустить" }));

@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 
-export const DEFAULT_UNSAVED_CHANGES_MESSAGE = "Есть несохраненные изменения. Покинуть страницу?";
+export const DEFAULT_UNSAVED_CHANGES_MESSAGE =
+  "Есть несохраненные изменения. Покинуть страницу?";
 
 export function useUnsavedChanges(
   isDirty: boolean,

@@ -9,7 +9,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger
+  DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -22,7 +22,11 @@ interface PermitExtendDialogProps {
   onSubmitted?: (permit: PermitDto) => void;
 }
 
-export const PermitExtendDialog = ({ trigger, permit, onSubmitted }: PermitExtendDialogProps) => {
+export const PermitExtendDialog = ({
+  trigger,
+  permit,
+  onSubmitted,
+}: PermitExtendDialogProps) => {
   const [open, setOpen] = useState(false);
   const [validUntil, setValidUntil] = useState(permit.valid_until ?? "");
   const [submitting, setSubmitting] = useState(false);
@@ -43,7 +47,10 @@ export const PermitExtendDialog = ({ trigger, permit, onSubmitted }: PermitExten
       toast.success("Допуск продлён");
       setOpen(false);
     } catch (err: unknown) {
-      const message = err && typeof err === "object" && "message" in err ? String(err.message) : "Не удалось продлить допуск";
+      const message =
+        err && typeof err === "object" && "message" in err
+          ? String(err.message)
+          : "Не удалось продлить допуск";
       toast.error(message);
     } finally {
       setSubmitting(false);
@@ -56,7 +63,9 @@ export const PermitExtendDialog = ({ trigger, permit, onSubmitted }: PermitExten
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Продлить допуск</DialogTitle>
-          <DialogDescription>Задайте новую дату «действует до».</DialogDescription>
+          <DialogDescription>
+            Задайте новую дату «действует до».
+          </DialogDescription>
         </DialogHeader>
         <div className="space-y-2">
           <Label htmlFor="extend_valid_until">Действует до</Label>

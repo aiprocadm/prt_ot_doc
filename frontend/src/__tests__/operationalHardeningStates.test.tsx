@@ -46,17 +46,30 @@ describe("operational hardening states", () => {
 
   it("renders integrations diagnostics surface when outbox and events are absent", async () => {
     apiGetMock.mockImplementation((url: string) => {
-      if (url === "/admin/outbox") return Promise.resolve({ data: { items: [] } });
-      if (url === "/admin/outbox/events") return Promise.resolve({ data: { items: [] } });
+      if (url === "/admin/outbox")
+        return Promise.resolve({ data: { items: [] } });
+      if (url === "/admin/outbox/events")
+        return Promise.resolve({ data: { items: [] } });
       if (url === "/integrations/readiness") {
-        return Promise.resolve({ data: { providers: [], webhooks: { configured_total: 0, enabled_total: 0, delivery_failed_total: 0 } } });
+        return Promise.resolve({
+          data: {
+            providers: [],
+            webhooks: {
+              configured_total: 0,
+              enabled_total: 0,
+              delivery_failed_total: 0,
+            },
+          },
+        });
       }
       return Promise.reject(new Error(`Unexpected URL: ${url}`));
     });
 
     render(<IntegrationsPage />);
 
-    expect(await screen.findByText("Готовность провайдеров")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Готовность провайдеров"),
+    ).toBeInTheDocument();
     expect(screen.getByText("История исходящих доставок")).toBeInTheDocument();
   });
 
@@ -68,7 +81,7 @@ describe("operational hardening states", () => {
     render(
       <MemoryRouter>
         <BillingPage />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
 
     expect(await screen.findByText("Тариф и статус")).toBeInTheDocument();
@@ -81,7 +94,7 @@ describe("operational hardening states", () => {
     render(
       <MemoryRouter>
         <PipelineRuns />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
 
     expect(await screen.findByText("Пайплайны не найдены")).toBeInTheDocument();

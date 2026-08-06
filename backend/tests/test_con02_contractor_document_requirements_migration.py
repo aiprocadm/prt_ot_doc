@@ -5,7 +5,10 @@ from pathlib import Path
 
 _MIGRATION = (
     Path(__file__).resolve().parents[1]
-    / "app" / "migrations" / "versions" / "20260610_con02_contractor_document_requirements.py"
+    / "app"
+    / "migrations"
+    / "versions"
+    / "20260610_con02_contractor_document_requirements.py"
 )
 
 
@@ -23,8 +26,15 @@ def test_model_table_and_columns() -> None:
     assert ContractorDocumentRequirement.__tablename__ == "contractor_document_requirement"
     cols = set(ContractorDocumentRequirement.__table__.columns.keys())
     assert {
-        "id", "tenant_id", "version", "created_at", "updated_at", "deleted_at",
-        "doc_type", "scope", "mandatory",
+        "id",
+        "tenant_id",
+        "version",
+        "created_at",
+        "updated_at",
+        "deleted_at",
+        "doc_type",
+        "scope",
+        "mandatory",
     } <= cols
 
 

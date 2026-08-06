@@ -66,9 +66,7 @@ def _catalog_dependencies() -> dict[str, object]:
     from app.modules.subscription import plans
 
     return {
-        name: getattr(plans, name)
-        for name in dir(plans)
-        if name.isupper() and "DEPEND" in name
+        name: getattr(plans, name) for name in dir(plans) if name.isupper() and "DEPEND" in name
     }
 
 

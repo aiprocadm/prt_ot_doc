@@ -38,15 +38,19 @@ def test_training_course_has_required_columns() -> None:
         "updated_at",
         "version",
     }
-    assert required.issubset(columns.keys()), (
-        f"training_course missing columns: {required - set(columns.keys())}"
-    )
+    assert required.issubset(
+        columns.keys()
+    ), f"training_course missing columns: {required - set(columns.keys())}"
 
 
 def test_training_course_unique_title_per_tenant() -> None:
     # Catalog uniqueness: same tenant cannot have two courses with the same
     # title — duplicate names would break human-readable course pickers.
-    unique_names = {uc.name for uc in TrainingCourse.__table__.constraints if hasattr(uc, "columns") and uc.name and uc.name.startswith("uq_")}
+    unique_names = {
+        uc.name
+        for uc in TrainingCourse.__table__.constraints
+        if hasattr(uc, "columns") and uc.name and uc.name.startswith("uq_")
+    }
     assert "uq_training_course_title" in unique_names, (
         "uq_training_course_title (tenant_id, title) is required; without it "
         "tenants can accumulate duplicate course nomenclature entries"

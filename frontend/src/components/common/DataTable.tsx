@@ -1,10 +1,25 @@
-import { type ColumnDef, type SortingState, flexRender, getCoreRowModel, getSortedRowModel, useReactTable } from "@tanstack/react-table";
+import {
+  type ColumnDef,
+  type SortingState,
+  flexRender,
+  getCoreRowModel,
+  getSortedRowModel,
+  useReactTable,
+} from "@tanstack/react-table";
 import { Loader2 } from "lucide-react";
 import * as React from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCaption,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { useDebounce } from "@/hooks/useDebounce";
 
 interface DataTableProps<TData> {
@@ -38,7 +53,7 @@ export function DataTable<TData>({
   searchPlaceholder = "Поиск",
   renderToolbar,
   emptyMessage = "Нет данных",
-  caption
+  caption,
 }: DataTableProps<TData>) {
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [search, setSearch] = React.useState("");
@@ -59,12 +74,12 @@ export function DataTable<TData>({
     data,
     columns,
     state: {
-      sorting
+      sorting,
     },
     onSortingChange: setSorting,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
-    manualSorting: true
+    manualSorting: true,
   });
 
   const pageCount = Math.ceil(total / pageSize) || 1;
@@ -119,17 +134,23 @@ export function DataTable<TData>({
                           onClick={header.column.getToggleSortingHandler()}
                           aria-label="Сортировать"
                         >
-                          {flexRender(header.column.columnDef.header, header.getContext())}
+                          {flexRender(
+                            header.column.columnDef.header,
+                            header.getContext(),
+                          )}
                           <span className="ml-2 text-xs text-muted-foreground">
                             {header.column.getIsSorted() === "asc"
                               ? "↑"
                               : header.column.getIsSorted() === "desc"
-                              ? "↓"
-                              : ""}
+                                ? "↓"
+                                : ""}
                           </span>
                         </Button>
                       ) : (
-                        flexRender(header.column.columnDef.header, header.getContext())
+                        flexRender(
+                          header.column.columnDef.header,
+                          header.getContext(),
+                        )
                       )}
                     </TableHead>
                   );
@@ -140,21 +161,38 @@ export function DataTable<TData>({
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={columns.length} className="h-24 text-center">
-                  <Loader2 className="mx-auto h-6 w-6 animate-spin" aria-label="Загрузка" />
+                <TableCell
+                  colSpan={columns.length}
+                  className="h-24 text-center"
+                >
+                  <Loader2
+                    className="mx-auto h-6 w-6 animate-spin"
+                    aria-label="Загрузка"
+                  />
                 </TableCell>
               </TableRow>
             ) : table.getRowModel().rows?.length ? (
               table.getRowModel().rows.map((row) => (
-                <TableRow key={row.id} data-state={row.getIsSelected() && "selected"}>
+                <TableRow
+                  key={row.id}
+                  data-state={row.getIsSelected() && "selected"}
+                >
                   {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</TableCell>
+                    <TableCell key={cell.id}>
+                      {flexRender(
+                        cell.column.columnDef.cell,
+                        cell.getContext(),
+                      )}
+                    </TableCell>
                   ))}
                 </TableRow>
               ))
             ) : (
               <TableRow>
-                <TableCell colSpan={columns.length} className="h-24 text-center text-muted-foreground">
+                <TableCell
+                  colSpan={columns.length}
+                  className="h-24 text-center text-muted-foreground"
+                >
                   {emptyMessage}
                 </TableCell>
               </TableRow>
@@ -167,10 +205,20 @@ export function DataTable<TData>({
           Страница {pageIndex} из {pageCount} • Всего {total}
         </p>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => onPageChange(1)} disabled={pageIndex === 1}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onPageChange(1)}
+            disabled={pageIndex === 1}
+          >
             « Первая
           </Button>
-          <Button variant="outline" size="sm" onClick={() => onPageChange(Math.max(1, pageIndex - 1))} disabled={pageIndex === 1}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onPageChange(Math.max(1, pageIndex - 1))}
+            disabled={pageIndex === 1}
+          >
             ← Назад
           </Button>
           <Button
@@ -181,7 +229,12 @@ export function DataTable<TData>({
           >
             Вперёд →
           </Button>
-          <Button variant="outline" size="sm" onClick={() => onPageChange(pageCount)} disabled={pageIndex >= pageCount}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onPageChange(pageCount)}
+            disabled={pageIndex >= pageCount}
+          >
             Последняя »
           </Button>
         </div>

@@ -14,23 +14,44 @@ const ClientPortalHistoryPage = () => {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-3">
-        <Breadcrumb items={[{ label: "Главная", to: "/dashboard" }, { label: "Кабинет клиента" }, { label: "История" }]} />
-        <Button variant="outline" onClick={() => void load()} disabled={loading}>Обновить</Button>
+        <Breadcrumb
+          items={[
+            { label: "Главная", to: "/dashboard" },
+            { label: "Кабинет клиента" },
+            { label: "История" },
+          ]}
+        />
+        <Button
+          variant="outline"
+          onClick={() => void load()}
+          disabled={loading}
+        >
+          Обновить
+        </Button>
       </div>
       <ErrorState error={error ?? undefined} onRetry={() => void load()} />
       {loading ? <LoadingScreen label="Загрузка истории пакета" /> : null}
       {!loading && !error && !selected?.events.length ? (
-        <EmptyState title="События отсутствуют" description="История появится после публикации пакета." />
+        <EmptyState
+          title="События отсутствуют"
+          description="История появится после публикации пакета."
+        />
       ) : null}
       <Card>
-        <CardHeader><CardTitle>События пакета</CardTitle></CardHeader>
+        <CardHeader>
+          <CardTitle>События пакета</CardTitle>
+        </CardHeader>
         <CardContent className="space-y-3">
-          {!loading && !error && selected?.events.length ? selected.events.map((event) => (
-            <div key={event.id} className="rounded-lg border p-4 text-sm">
-              <div className="font-medium">{event.type}</div>
-              <div className="text-muted-foreground">{formatDate(event.created_at)}</div>
-            </div>
-          )) : null}
+          {!loading && !error && selected?.events.length
+            ? selected.events.map((event) => (
+                <div key={event.id} className="rounded-lg border p-4 text-sm">
+                  <div className="font-medium">{event.type}</div>
+                  <div className="text-muted-foreground">
+                    {formatDate(event.created_at)}
+                  </div>
+                </div>
+              ))
+            : null}
         </CardContent>
       </Card>
     </div>

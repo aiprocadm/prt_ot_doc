@@ -12,7 +12,12 @@ export type LearnerDashboardDto = {
   completed_total: number;
   overdue_total: number;
   next_due_at?: string | null;
-  items?: Array<{ id: string; completion_status: string; progress_percent: number; due_at?: string | null }>;
+  items?: Array<{
+    id: string;
+    completion_status: string;
+    progress_percent: number;
+    due_at?: string | null;
+  }>;
 };
 
 export type TrainingAnalyticsDto = {
@@ -23,31 +28,48 @@ export type TrainingAnalyticsDto = {
 };
 
 export type TrainingProgramDetailDto = {
-  modules: Array<{ module: { id: string; title: string }; lessons: Array<{ id: string; title: string }> }>;
+  modules: Array<{
+    module: { id: string; title: string };
+    lessons: Array<{ id: string; title: string }>;
+  }>;
 };
 
 export const getTeacherDashboard = async (): Promise<TeacherDashboardDto> => {
-  const { data } = await apiClient.get<TeacherDashboardDto>("/training/teacher/dashboard");
+  const { data } = await apiClient.get<TeacherDashboardDto>(
+    "/training/teacher/dashboard",
+  );
   return data;
 };
 
 export const getTrainingAnalytics = async (): Promise<TrainingAnalyticsDto> => {
-  const { data } = await apiClient.get<TrainingAnalyticsDto>("/training/analytics/overview");
+  const { data } = await apiClient.get<TrainingAnalyticsDto>(
+    "/training/analytics/overview",
+  );
   return data;
 };
 
-export const getTrainingPrograms = async (): Promise<{ items: Array<{ id: string }> }> => {
-  const { data } = await apiClient.get<{ items: Array<{ id: string }> }>("/training/programs");
+export const getTrainingPrograms = async (): Promise<{
+  items: Array<{ id: string }>;
+}> => {
+  const { data } = await apiClient.get<{ items: Array<{ id: string }> }>(
+    "/training/programs",
+  );
   return data;
 };
 
-export const getTrainingProgramDetail = async (programId: string): Promise<TrainingProgramDetailDto> => {
-  const { data } = await apiClient.get<TrainingProgramDetailDto>(`/training/programs/${programId}/detail`);
+export const getTrainingProgramDetail = async (
+  programId: string,
+): Promise<TrainingProgramDetailDto> => {
+  const { data } = await apiClient.get<TrainingProgramDetailDto>(
+    `/training/programs/${programId}/detail`,
+  );
   return data;
 };
 
 export const getLearnerDashboard = async (): Promise<LearnerDashboardDto> => {
-  const { data } = await apiClient.get<LearnerDashboardDto>("/training/learner/dashboard", { params: { person_id: "me" } });
+  const { data } = await apiClient.get<LearnerDashboardDto>(
+    "/training/learner/dashboard",
+    { params: { person_id: "me" } },
+  );
   return data;
 };
-

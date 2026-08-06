@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -9,8 +15,8 @@ const getReportMock = vi.fn();
 
 vi.mock("@/api/dataQuality", () => ({
   dataQualityApi: {
-    getReport: (...args: unknown[]) => getReportMock(...args)
-  }
+    getReport: (...args: unknown[]) => getReportMock(...args),
+  },
 }));
 
 const sampleReport: DataQualityReportDto = {
@@ -24,12 +30,12 @@ const sampleReport: DataQualityReportDto = {
   issue_breakdown: {
     expired_record: 2,
     missing_field: 1,
-    data_mismatch: 1
+    data_mismatch: 1,
   },
   entity_breakdown: {
     person: 2,
     document: 1,
-    permit: 1
+    permit: 1,
   },
   issues: [
     {
@@ -42,7 +48,7 @@ const sampleReport: DataQualityReportDto = {
       affected_entity_id: "p1",
       affected_entity_name: "Иванов И.И.",
       additional_info: { field: "position" },
-      found_at: "2026-05-04T10:00:00Z"
+      found_at: "2026-05-04T10:00:00Z",
     },
     {
       id: "expired_records:p2",
@@ -54,7 +60,7 @@ const sampleReport: DataQualityReportDto = {
       affected_entity_id: "exam-9",
       affected_entity_name: "Медосмотр Петров",
       additional_info: {},
-      found_at: "2026-05-04T10:00:00Z"
+      found_at: "2026-05-04T10:00:00Z",
     },
     {
       id: "expired_permits:permit-1",
@@ -66,7 +72,7 @@ const sampleReport: DataQualityReportDto = {
       affected_entity_id: "permit-1",
       affected_entity_name: null,
       additional_info: {},
-      found_at: "2026-05-04T10:00:00Z"
+      found_at: "2026-05-04T10:00:00Z",
     },
     {
       id: "document_person_company_mismatch:doc-1",
@@ -78,8 +84,8 @@ const sampleReport: DataQualityReportDto = {
       affected_entity_id: "doc-1",
       affected_entity_name: null,
       additional_info: {},
-      found_at: "2026-05-04T10:00:00Z"
-    }
+      found_at: "2026-05-04T10:00:00Z",
+    },
   ],
   check_results: [
     {
@@ -88,7 +94,7 @@ const sampleReport: DataQualityReportDto = {
       total_checked: 100,
       issues_found: 1,
       issues: [],
-      execution_time_ms: 12.4
+      execution_time_ms: 12.4,
     },
     {
       rule_name: "expired_records",
@@ -96,17 +102,17 @@ const sampleReport: DataQualityReportDto = {
       total_checked: 220,
       issues_found: 2,
       issues: [],
-      execution_time_ms: 8.1
-    }
+      execution_time_ms: 8.1,
+    },
   ],
-  generated_at: "2026-05-04T10:00:00Z"
+  generated_at: "2026-05-04T10:00:00Z",
 };
 
 const renderPage = () =>
   render(
     <MemoryRouter>
       <WorkspaceDataQualityPage />
-    </MemoryRouter>
+    </MemoryRouter>,
   );
 
 describe("WorkspaceDataQualityPage", () => {
@@ -135,12 +141,16 @@ describe("WorkspaceDataQualityPage", () => {
 
     expect(await screen.findByText("Истёк медосмотр")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Критично", pressed: false }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Критично", pressed: false }),
+    );
 
     await waitFor(() => {
       expect(screen.queryByText("Истёк медосмотр")).not.toBeInTheDocument();
     });
-    expect(screen.getByText("У сотрудника отсутствует должность")).toBeInTheDocument();
+    expect(
+      screen.getByText("У сотрудника отсутствует должность"),
+    ).toBeInTheDocument();
   });
 
   it("renders drill-down link for known entity types", async () => {
@@ -148,9 +158,13 @@ describe("WorkspaceDataQualityPage", () => {
 
     renderPage();
 
-    const personRow = (await screen.findByText("У сотрудника отсутствует должность")).closest("tr");
+    const personRow = (
+      await screen.findByText("У сотрудника отсутствует должность")
+    ).closest("tr");
     expect(personRow).not.toBeNull();
-    const link = within(personRow as HTMLElement).getByRole("link", { name: /Открыть/ });
+    const link = within(personRow as HTMLElement).getByRole("link", {
+      name: /Открыть/,
+    });
     expect(link).toHaveAttribute("href", "/persons?focus=p1");
   });
 
@@ -164,19 +178,21 @@ describe("WorkspaceDataQualityPage", () => {
       low_issues: 0,
       issue_breakdown: {},
       entity_breakdown: {},
-      issues: []
+      issues: [],
     });
 
     renderPage();
 
-    expect(await screen.findByText("Все проверки пройдены")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Все проверки пройдены"),
+    ).toBeInTheDocument();
   });
 
   it("renders error state and allows retry", async () => {
     getReportMock.mockRejectedValueOnce({
       status: 500,
       message: "boom",
-      field_errors: []
+      field_errors: [],
     });
 
     renderPage();

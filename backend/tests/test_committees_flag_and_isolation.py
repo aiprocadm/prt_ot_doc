@@ -3,6 +3,7 @@
 The flag helper is tested directly (not through an endpoint) so the assertion
 is about the flag decision, not about TenantContextValidator/DI side effects.
 """
+
 from __future__ import annotations
 
 from types import SimpleNamespace
@@ -43,9 +44,7 @@ async def test_require_enabled_passes_default_false_arg(monkeypatch):
 @pytest.mark.asyncio
 async def test_get_committee_cross_tenant_is_404():
     session = AsyncMock()
-    session.execute = AsyncMock(
-        return_value=SimpleNamespace(scalar_one_or_none=lambda: None)
-    )
+    session.execute = AsyncMock(return_value=SimpleNamespace(scalar_one_or_none=lambda: None))
     with pytest.raises(Exception) as exc:
         await routes._get_committee(session, _tenant("tenant-1"), "committee-owned-by-tenant-2")
     assert getattr(exc.value, "status_code", None) == 404

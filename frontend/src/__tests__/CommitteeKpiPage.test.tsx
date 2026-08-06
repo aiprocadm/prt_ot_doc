@@ -32,7 +32,7 @@ const renderPage = () =>
   render(
     <MemoryRouter>
       <CommitteeKpiPage />
-    </MemoryRouter>
+    </MemoryRouter>,
   );
 
 beforeEach(() => {
@@ -45,7 +45,9 @@ describe("CommitteeKpiPage", () => {
 
     renderPage();
 
-    await waitFor(() => expect(screen.getByText("KPI комитетов")).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByText("KPI комитетов")).toBeInTheDocument(),
+    );
     // Grouped sections with RU labels.
     expect(screen.getByText("Заседания")).toBeInTheDocument();
     expect(screen.getByText("Задачи")).toBeInTheDocument();
@@ -62,7 +64,7 @@ describe("CommitteeKpiPage", () => {
     renderPage();
 
     await waitFor(() =>
-      expect(screen.getByText("Модуль комитетов отключён")).toBeInTheDocument()
+      expect(screen.getByText("Модуль комитетов отключён")).toBeInTheDocument(),
     );
   });
 

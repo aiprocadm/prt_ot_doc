@@ -45,7 +45,12 @@ const workplace = {
 describe("SoutPage print download error handling", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    listMock.mockResolvedValue({ items: [campaign], total: 1, limit: 100, offset: 0 });
+    listMock.mockResolvedValue({
+      items: [campaign],
+      total: 1,
+      limit: 100,
+      offset: 0,
+    });
     getReportMock.mockResolvedValue({
       campaign,
       workplaces: [{ workplace, factors: [], guarantees: [] }],
@@ -80,7 +85,9 @@ describe("SoutPage print download error handling", () => {
     await user.click(screen.getByRole("button", { name: "Сводная PDF" }));
 
     await waitFor(() => {
-      expect(toast.error).toHaveBeenCalledWith("PDF-конвертер недоступен, скачайте DOCX");
+      expect(toast.error).toHaveBeenCalledWith(
+        "PDF-конвертер недоступен, скачайте DOCX",
+      );
     });
   });
 });

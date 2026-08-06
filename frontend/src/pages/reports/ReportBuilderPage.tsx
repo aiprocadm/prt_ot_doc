@@ -7,7 +7,13 @@ import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingScreen } from "@/components/common/LoadingScreen";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAsyncResource } from "@/hooks/useAsyncResource";
@@ -19,25 +25,32 @@ import type {
   ReportDefinitionDto,
   ReportExportFormat,
   ReportFilterDto,
-  ReportPreviewDto
+  ReportPreviewDto,
 } from "@/types/dto/reportBuilder";
 
 const POLL_INTERVAL_MS = 1500;
 const POLL_MAX_TICKS = 40; // ~60 секунд
 
 const JOB_ERROR_LABELS: Record<string, string> = {
-  pdf_renderer_unavailable: "PDF-конвертер временно недоступен — попробуйте CSV/XLSX",
+  pdf_renderer_unavailable:
+    "PDF-конвертер временно недоступен — попробуйте CSV/XLSX",
   row_limit_exceeded: "Слишком много строк — сузьте фильтры",
-  pdf_row_limit_exceeded: "Для PDF слишком много строк — сузьте фильтры или используйте CSV/XLSX",
+  pdf_row_limit_exceeded:
+    "Для PDF слишком много строк — сузьте фильтры или используйте CSV/XLSX",
   definition_missing: "Отчёт был удалён",
-  internal_error: "Внутренняя ошибка экспорта — попробуйте ещё раз"
+  internal_error: "Внутренняя ошибка экспорта — попробуйте ещё раз",
 };
 
 type FilterRow = { field: string; op: string; value: string };
 
 type ExportState =
   | { phase: "idle" }
-  | { phase: "polling"; jobId: string; format: ReportExportFormat; ticks: number }
+  | {
+      phase: "polling";
+      jobId: string;
+      format: ReportExportFormat;
+      ticks: number;
+    }
   | { phase: "done"; jobId: string; format: ReportExportFormat }
   | { phase: "failed"; message: string };
 
@@ -45,15 +58,21 @@ const EMPTY_DATASETS = { items: [] as ReportDatasetDto[], total: 0 };
 const EMPTY_DEFINITIONS = { items: [] as ReportDefinitionDto[], total: 0 };
 
 export default function ReportBuilderPage() {
-  const datasetsRes = useAsyncResource<{ items: ReportDatasetDto[]; total: number }>({
+  const datasetsRes = useAsyncResource<{
+    items: ReportDatasetDto[];
+    total: number;
+  }>({
     loader: useCallback(() => reportBuilderApi.listDatasets(), []),
     initialData: EMPTY_DATASETS,
-    errorMessage: "Не удалось загрузить датасеты"
+    errorMessage: "Не удалось загрузить датасеты",
   });
-  const definitionsRes = useAsyncResource<{ items: ReportDefinitionDto[]; total: number }>({
+  const definitionsRes = useAsyncResource<{
+    items: ReportDefinitionDto[];
+    total: number;
+  }>({
     loader: useCallback(() => reportBuilderApi.listDefinitions(), []),
     initialData: EMPTY_DEFINITIONS,
-    errorMessage: "Не удалось загрузить сохранённые отчёты"
+    errorMessage: "Не удалось загрузить сохранённые отчёты",
   });
 
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -70,13 +89,15 @@ export default function ReportBuilderPage() {
   const [preview, setPreview] = useState<ReportPreviewDto | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
-  const [exportState, setExportState] = useState<ExportState>({ phase: "idle" });
+  const [exportState, setExportState] = useState<ExportState>({
+    phase: "idle",
+  });
 
   const datasets = datasetsRes.data.items;
   const definitions = definitionsRes.data.items;
   const dataset = useMemo(
     () => datasets.find((d) => d.code === datasetCode) ?? null,
-    [datasets, datasetCode]
+    [datasets, datasetCode],
   );
   const columnsByKey = useMemo(() => {
     const map = new Map<string, ReportColumnMetaDto>();
@@ -84,25 +105,22 @@ export default function ReportBuilderPage() {
     return map;
   }, [dataset]);
 
-  const resetEditor = useCallback(
-    (ds?: string) => {
-      setEditingId(null);
-      setName("");
-      setDescription("");
-      setSelectedColumns([]);
-      setFilters([]);
-      setGroupBy([]);
-      setSumField("");
-      setSortField("");
-      setSortDir("asc");
-      setPreview(null);
-      setPreviewError(null);
-      setSaveError(null);
-      setExportState({ phase: "idle" });
-      if (ds !== undefined) setDatasetCode(ds);
-    },
-    []
-  );
+  const resetEditor = useCallback((ds?: string) => {
+    setEditingId(null);
+    setName("");
+    setDescription("");
+    setSelectedColumns([]);
+    setFilters([]);
+    setGroupBy([]);
+    setSumField("");
+    setSortField("");
+    setSortDir("asc");
+    setPreview(null);
+    setPreviewError(null);
+    setSaveError(null);
+    setExportState({ phase: "idle" });
+    if (ds !== undefined) setDatasetCode(ds);
+  }, []);
 
   const buildConfig = useCallback((): ReportConfigDto => {
     const config: ReportConfigDto = {};
@@ -130,7 +148,11 @@ export default function ReportBuilderPage() {
         if (values.length === 0) continue; // пустой in — не отправляем
         value = values;
       }
-      parsed.push({ field: row.field, op: row.op as ReportFilterDto["op"], value });
+      parsed.push({
+        field: row.field,
+        op: row.op as ReportFilterDto["op"],
+        value,
+      });
     }
     if (parsed.length > 0) config.filters = parsed;
     // stale sortField (например, после смены колонок/группировки) не отправляем
@@ -139,11 +161,20 @@ export default function ReportBuilderPage() {
         ? [...groupBy, "count", ...(sumField ? [`sum_${sumField}`] : [])]
         : selectedColumns.length > 0
           ? selectedColumns
-          : [...columnsByKey.keys()]
+          : [...columnsByKey.keys()],
     );
-    if (sortField && validSortKeys.has(sortField)) config.sort = [{ field: sortField, dir: sortDir }];
+    if (sortField && validSortKeys.has(sortField))
+      config.sort = [{ field: sortField, dir: sortDir }];
     return config;
-  }, [columnsByKey, filters, groupBy, selectedColumns, sortDir, sortField, sumField]);
+  }, [
+    columnsByKey,
+    filters,
+    groupBy,
+    selectedColumns,
+    sortDir,
+    sortField,
+    sumField,
+  ]);
 
   const loadDefinition = useCallback(
     (def: ReportDefinitionDto, asCopy: boolean) => {
@@ -161,11 +192,13 @@ export default function ReportBuilderPage() {
         (cfg.filters ?? []).map((f) => ({
           field: f.field,
           op: f.op,
-          value: Array.isArray(f.value) ? f.value.join(",") : String(f.value ?? "")
-        }))
+          value: Array.isArray(f.value)
+            ? f.value.join(",")
+            : String(f.value ?? ""),
+        })),
       );
     },
-    [resetEditor]
+    [resetEditor],
   );
 
   const runPreview = useCallback(async () => {
@@ -173,7 +206,12 @@ export default function ReportBuilderPage() {
     setPreviewLoading(true);
     setPreviewError(null);
     try {
-      setPreview(await reportBuilderApi.preview({ dataset_code: datasetCode, config_json: buildConfig() }));
+      setPreview(
+        await reportBuilderApi.preview({
+          dataset_code: datasetCode,
+          config_json: buildConfig(),
+        }),
+      );
     } catch {
       setPreview(null);
       setPreviewError("Не удалось построить предпросмотр — проверьте фильтры");
@@ -192,7 +230,7 @@ export default function ReportBuilderPage() {
       name: name.trim(),
       description: description.trim() || null,
       dataset_code: datasetCode,
-      config_json: buildConfig()
+      config_json: buildConfig(),
     };
     try {
       if (editingId) {
@@ -218,20 +256,26 @@ export default function ReportBuilderPage() {
         /* ошибка удаления не блокирует страницу */
       }
     },
-    [definitionsRes, editingId, resetEditor]
+    [definitionsRes, editingId, resetEditor],
   );
 
   const startExport = useCallback(
     async (format: ReportExportFormat) => {
       if (!editingId) return;
       try {
-        const { job_id } = await reportBuilderApi.runDefinition(editingId, format);
+        const { job_id } = await reportBuilderApi.runDefinition(
+          editingId,
+          format,
+        );
         setExportState({ phase: "polling", jobId: job_id, format, ticks: 0 });
       } catch {
-        setExportState({ phase: "failed", message: "Не удалось запустить экспорт" });
+        setExportState({
+          phase: "failed",
+          message: "Не удалось запустить экспорт",
+        });
       }
     },
-    [editingId]
+    [editingId],
   );
 
   // Поллинг job'а экспорта: usePolling даёт in-flight guard и cleanup;
@@ -245,32 +289,44 @@ export default function ReportBuilderPage() {
       const job = await reportBuilderApi.getExportJob(jobId);
       if (job.status === "done") {
         setExportState((prev) =>
-          prev.phase === "polling" && prev.jobId === jobId ? { phase: "done", jobId, format } : prev
+          prev.phase === "polling" && prev.jobId === jobId
+            ? { phase: "done", jobId, format }
+            : prev,
         );
       } else if (job.status === "failed") {
         const code = job.error_payload?.code ?? "";
         setExportState((prev) =>
           prev.phase === "polling" && prev.jobId === jobId
-            ? { phase: "failed", message: JOB_ERROR_LABELS[code] ?? "Экспорт не удался — попробуйте ещё раз" }
-            : prev
+            ? {
+                phase: "failed",
+                message:
+                  JOB_ERROR_LABELS[code] ??
+                  "Экспорт не удался — попробуйте ещё раз",
+              }
+            : prev,
         );
       } else if (ticks + 1 >= POLL_MAX_TICKS) {
         setExportState((prev) =>
           prev.phase === "polling" && prev.jobId === jobId
-            ? { phase: "failed", message: "Экспорт занял слишком много времени" }
-            : prev
+            ? {
+                phase: "failed",
+                message: "Экспорт занял слишком много времени",
+              }
+            : prev,
         );
       } else {
         setExportState((prev) =>
-          prev.phase === "polling" && prev.jobId === jobId ? { ...prev, ticks: prev.ticks + 1 } : prev
+          prev.phase === "polling" && prev.jobId === jobId
+            ? { ...prev, ticks: prev.ticks + 1 }
+            : prev,
         );
       }
     },
     POLL_INTERVAL_MS,
     {
-      enabled: exportState.phase === "polling"
+      enabled: exportState.phase === "polling",
       // транзиентную ошибку поллинга хук проглатывает (onError не задан) — ждём следующего тика
-    }
+    },
   );
 
   const downloadCurrent = useCallback(async () => {
@@ -278,30 +334,50 @@ export default function ReportBuilderPage() {
     const def = definitions.find((d) => d.id === editingId);
     await reportBuilderApi.downloadReportExport(
       exportState.jobId,
-      `${def?.name ?? "report"}.${exportState.format}`
+      `${def?.name ?? "report"}.${exportState.format}`,
     );
   }, [definitions, editingId, exportState]);
 
   if (datasetsRes.loading || definitionsRes.loading) return <LoadingScreen />;
   if (datasetsRes.error) {
-    return <ErrorState error={datasetsRes.error} onRetry={() => void datasetsRes.reload()} />;
+    return (
+      <ErrorState
+        error={datasetsRes.error}
+        onRetry={() => void datasetsRes.reload()}
+      />
+    );
   }
   if (definitionsRes.error) {
-    return <ErrorState error={definitionsRes.error} onRetry={() => void definitionsRes.reload()} />;
+    return (
+      <ErrorState
+        error={definitionsRes.error}
+        onRetry={() => void definitionsRes.reload()}
+      />
+    );
   }
 
   return (
     <div className="space-y-6">
-      <Breadcrumb items={[{ label: "Отчёты", to: "/reports" }, { label: "Конструктор отчётов" }]} />
+      <Breadcrumb
+        items={[
+          { label: "Отчёты", to: "/reports" },
+          { label: "Конструктор отчётов" },
+        ]}
+      />
 
       <Card>
         <CardHeader>
           <CardTitle>Сохранённые отчёты</CardTitle>
-          <CardDescription>Готовые шаблоны и ваши отчёты. Системные шаблоны можно дублировать.</CardDescription>
+          <CardDescription>
+            Готовые шаблоны и ваши отчёты. Системные шаблоны можно дублировать.
+          </CardDescription>
         </CardHeader>
         <CardContent>
           {definitions.length === 0 ? (
-            <EmptyState title="Пока нет отчётов" description="Создайте первый отчёт в конструкторе ниже." />
+            <EmptyState
+              title="Пока нет отчётов"
+              description="Создайте первый отчёт в конструкторе ниже."
+            />
           ) : (
             <table className="w-full text-sm">
               <thead>
@@ -316,22 +392,38 @@ export default function ReportBuilderPage() {
                 {definitions.map((def) => (
                   <tr key={def.id} className="border-b last:border-0">
                     <td className="py-2 pr-4">
-                      {def.name} {def.is_system ? <Badge variant="secondary">Системный</Badge> : null}
+                      {def.name}{" "}
+                      {def.is_system ? (
+                        <Badge variant="secondary">Системный</Badge>
+                      ) : null}
                     </td>
                     <td className="py-2 pr-4">
-                      {datasets.find((d) => d.code === def.dataset_code)?.title ?? def.dataset_code}
+                      {datasets.find((d) => d.code === def.dataset_code)
+                        ?.title ?? def.dataset_code}
                     </td>
                     <td className="py-2 pr-4">
-                      <Button size="sm" variant="outline" onClick={() => loadDefinition(def, false)}>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => loadDefinition(def, false)}
+                      >
                         Открыть
                       </Button>{" "}
-                      <Button size="sm" variant="outline" onClick={() => loadDefinition(def, true)}>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => loadDefinition(def, true)}
+                      >
                         Дублировать
                       </Button>
                     </td>
                     <td className="py-2 text-right">
                       {!def.is_system ? (
-                        <Button size="sm" variant="destructive" onClick={() => void removeDefinition(def)}>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => void removeDefinition(def)}
+                        >
                           Удалить
                         </Button>
                       ) : null}
@@ -348,18 +440,27 @@ export default function ReportBuilderPage() {
         <CardHeader>
           <CardTitle>Конструктор</CardTitle>
           <CardDescription>
-            Датасет → колонки → фильтры → группировка → сортировка. Предпросмотр показывает первые 100 строк.
+            Датасет → колонки → фильтры → группировка → сортировка. Предпросмотр
+            показывает первые 100 строк.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-4 md:grid-cols-3">
             <div className="space-y-1">
               <Label htmlFor="rb-name">Название отчёта</Label>
-              <Input id="rb-name" value={name} onChange={(e) => setName(e.target.value)} />
+              <Input
+                id="rb-name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
             </div>
             <div className="space-y-1">
               <Label htmlFor="rb-description">Описание</Label>
-              <Input id="rb-description" value={description} onChange={(e) => setDescription(e.target.value)} />
+              <Input
+                id="rb-description"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+              />
             </div>
             <div className="space-y-1">
               <Label htmlFor="rb-dataset">Датасет</Label>
@@ -386,13 +487,18 @@ export default function ReportBuilderPage() {
                   <Label>Колонки</Label>
                   <div className="flex flex-wrap gap-3">
                     {dataset.columns.map((col) => (
-                      <label key={col.key} className="flex items-center gap-1 text-sm">
+                      <label
+                        key={col.key}
+                        className="flex items-center gap-1 text-sm"
+                      >
                         <input
                           type="checkbox"
                           checked={selectedColumns.includes(col.key)}
                           onChange={(e) =>
                             setSelectedColumns((prev) =>
-                              e.target.checked ? [...prev, col.key] : prev.filter((k) => k !== col.key)
+                              e.target.checked
+                                ? [...prev, col.key]
+                                : prev.filter((k) => k !== col.key),
                             )
                           }
                         />
@@ -400,11 +506,14 @@ export default function ReportBuilderPage() {
                       </label>
                     ))}
                   </div>
-                  <p className="text-xs text-muted-foreground">Ничего не выбрано — будут все колонки.</p>
+                  <p className="text-xs text-muted-foreground">
+                    Ничего не выбрано — будут все колонки.
+                  </p>
                 </div>
               ) : (
                 <p className="text-xs text-muted-foreground">
-                  Включена группировка — выводятся группировочные поля и агрегаты.
+                  Включена группировка — выводятся группировочные поля и
+                  агрегаты.
                 </p>
               )}
 
@@ -414,15 +523,26 @@ export default function ReportBuilderPage() {
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => setFilters((prev) => [...prev, { field: "", op: "eq", value: "" }])}
+                    onClick={() =>
+                      setFilters((prev) => [
+                        ...prev,
+                        { field: "", op: "eq", value: "" },
+                      ])
+                    }
                   >
                     Добавить фильтр
                   </Button>
                 </div>
                 {filters.map((row, idx) => {
-                  const col = row.field ? columnsByKey.get(row.field) : undefined;
+                  const col = row.field
+                    ? columnsByKey.get(row.field)
+                    : undefined;
                   return (
-                    <div key={idx} data-testid={`filter-row-${idx}`} className="flex flex-wrap items-end gap-2">
+                    <div
+                      key={idx}
+                      data-testid={`filter-row-${idx}`}
+                      className="flex flex-wrap items-end gap-2"
+                    >
                       <div className="space-y-1">
                         <Label htmlFor={`rb-filter-field-${idx}`}>Поле</Label>
                         <select
@@ -436,11 +556,13 @@ export default function ReportBuilderPage() {
                                 i === idx
                                   ? {
                                       field: e.target.value,
-                                      op: columnsByKey.get(e.target.value)?.ops[0] ?? "eq",
-                                      value: ""
+                                      op:
+                                        columnsByKey.get(e.target.value)
+                                          ?.ops[0] ?? "eq",
+                                      value: "",
                                     }
-                                  : r
-                              )
+                                  : r,
+                              ),
                             )
                           }
                         >
@@ -460,7 +582,11 @@ export default function ReportBuilderPage() {
                           className="h-9 rounded-md border border-input bg-background px-2 text-sm"
                           value={row.op}
                           onChange={(e) =>
-                            setFilters((prev) => prev.map((r, i) => (i === idx ? { ...r, op: e.target.value } : r)))
+                            setFilters((prev) =>
+                              prev.map((r, i) =>
+                                i === idx ? { ...r, op: e.target.value } : r,
+                              ),
+                            )
                           }
                         >
                           {(col?.ops ?? ["eq"]).map((op) => (
@@ -471,7 +597,9 @@ export default function ReportBuilderPage() {
                         </select>
                       </div>
                       <div className="space-y-1">
-                        <Label htmlFor={`rb-filter-value-${idx}`}>Значение</Label>
+                        <Label htmlFor={`rb-filter-value-${idx}`}>
+                          Значение
+                        </Label>
                         {col?.kind === "enum" && row.op !== "in" ? (
                           <select
                             id={`rb-filter-value-${idx}`}
@@ -479,7 +607,13 @@ export default function ReportBuilderPage() {
                             className="h-9 rounded-md border border-input bg-background px-2 text-sm"
                             value={row.value}
                             onChange={(e) =>
-                              setFilters((prev) => prev.map((r, i) => (i === idx ? { ...r, value: e.target.value } : r)))
+                              setFilters((prev) =>
+                                prev.map((r, i) =>
+                                  i === idx
+                                    ? { ...r, value: e.target.value }
+                                    : r,
+                                ),
+                              )
                             }
                           >
                             <option value="">—</option>
@@ -496,7 +630,13 @@ export default function ReportBuilderPage() {
                             className="h-9 rounded-md border border-input bg-background px-2 text-sm"
                             value={row.value}
                             onChange={(e) =>
-                              setFilters((prev) => prev.map((r, i) => (i === idx ? { ...r, value: e.target.value } : r)))
+                              setFilters((prev) =>
+                                prev.map((r, i) =>
+                                  i === idx
+                                    ? { ...r, value: e.target.value }
+                                    : r,
+                                ),
+                              )
                             }
                           >
                             <option value="">—</option>
@@ -518,12 +658,24 @@ export default function ReportBuilderPage() {
                             }
                             value={row.value}
                             onChange={(e) =>
-                              setFilters((prev) => prev.map((r, i) => (i === idx ? { ...r, value: e.target.value } : r)))
+                              setFilters((prev) =>
+                                prev.map((r, i) =>
+                                  i === idx
+                                    ? { ...r, value: e.target.value }
+                                    : r,
+                                ),
+                              )
                             }
                           />
                         )}
                       </div>
-                      <Button size="sm" variant="ghost" onClick={() => setFilters((prev) => prev.filter((_, i) => i !== idx))}>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() =>
+                          setFilters((prev) => prev.filter((_, i) => i !== idx))
+                        }
+                      >
                         Убрать
                       </Button>
                     </div>
@@ -538,7 +690,9 @@ export default function ReportBuilderPage() {
                     id="rb-groupby"
                     className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
                     value={groupBy[0] ?? ""}
-                    onChange={(e) => setGroupBy(e.target.value ? [e.target.value] : [])}
+                    onChange={(e) =>
+                      setGroupBy(e.target.value ? [e.target.value] : [])
+                    }
                   >
                     <option value="">— без группировки —</option>
                     {dataset.columns.map((c) => (
@@ -579,7 +733,11 @@ export default function ReportBuilderPage() {
                     >
                       <option value="">— нет —</option>
                       {(groupBy.length > 0
-                        ? [...groupBy, "count", ...(sumField ? [`sum_${sumField}`] : [])]
+                        ? [
+                            ...groupBy,
+                            "count",
+                            ...(sumField ? [`sum_${sumField}`] : []),
+                          ]
                         : selectedColumns.length > 0
                           ? selectedColumns
                           : dataset.columns.map((c) => c.key)
@@ -593,7 +751,9 @@ export default function ReportBuilderPage() {
                       aria-label="Направление сортировки"
                       className="h-9 rounded-md border border-input bg-background px-2 text-sm"
                       value={sortDir}
-                      onChange={(e) => setSortDir(e.target.value as "asc" | "desc")}
+                      onChange={(e) =>
+                        setSortDir(e.target.value as "asc" | "desc")
+                      }
                     >
                       <option value="asc">по возр.</option>
                       <option value="desc">по убыв.</option>
@@ -603,7 +763,10 @@ export default function ReportBuilderPage() {
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
-                <Button onClick={() => void runPreview()} disabled={previewLoading}>
+                <Button
+                  onClick={() => void runPreview()}
+                  disabled={previewLoading}
+                >
                   Предпросмотр
                 </Button>
                 <Button variant="outline" onClick={() => void saveDefinition()}>
@@ -611,19 +774,35 @@ export default function ReportBuilderPage() {
                 </Button>
                 {editingId ? (
                   <>
-                    <span className="text-sm text-muted-foreground">Экспорт:</span>
-                    <Button size="sm" variant="outline" onClick={() => void startExport("csv")}>
+                    <span className="text-sm text-muted-foreground">
+                      Экспорт:
+                    </span>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => void startExport("csv")}
+                    >
                       CSV
                     </Button>
-                    <Button size="sm" variant="outline" onClick={() => void startExport("xlsx")}>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => void startExport("xlsx")}
+                    >
                       XLSX
                     </Button>
-                    <Button size="sm" variant="outline" onClick={() => void startExport("pdf")}>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => void startExport("pdf")}
+                    >
                       PDF
                     </Button>
                   </>
                 ) : (
-                  <span className="text-xs text-muted-foreground">Сохраните отчёт, чтобы экспортировать.</span>
+                  <span className="text-xs text-muted-foreground">
+                    Сохраните отчёт, чтобы экспортировать.
+                  </span>
                 )}
               </div>
               {saveError ? (
@@ -631,7 +810,9 @@ export default function ReportBuilderPage() {
                   {saveError}
                 </p>
               ) : null}
-              {exportState.phase === "polling" ? <p className="text-sm text-muted-foreground">Формируем файл…</p> : null}
+              {exportState.phase === "polling" ? (
+                <p className="text-sm text-muted-foreground">Формируем файл…</p>
+              ) : null}
               {exportState.phase === "done" ? (
                 <Button size="sm" onClick={() => void downloadCurrent()}>
                   Скачать
@@ -651,7 +832,9 @@ export default function ReportBuilderPage() {
         <Card>
           <CardHeader>
             <CardTitle>Предпросмотр</CardTitle>
-            {preview ? <CardDescription>Всего: {preview.total}</CardDescription> : null}
+            {preview ? (
+              <CardDescription>Всего: {preview.total}</CardDescription>
+            ) : null}
           </CardHeader>
           <CardContent>
             {previewError ? (
@@ -660,7 +843,10 @@ export default function ReportBuilderPage() {
               </p>
             ) : null}
             {preview && preview.rows.length === 0 && !previewError ? (
-              <EmptyState title="Нет данных" description="Под текущие фильтры не попало ни одной строки." />
+              <EmptyState
+                title="Нет данных"
+                description="Под текущие фильтры не попало ни одной строки."
+              />
             ) : null}
             {preview && preview.rows.length > 0 ? (
               <div className="overflow-x-auto">

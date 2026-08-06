@@ -16,7 +16,11 @@ def test_validator_rejects_cycle() -> None:
 
 def test_validator_requires_default_branch() -> None:
     graph = PipelineGraph(
-        nodes=[{"id": "branch", "type": "branch"}, {"id": "left", "type": "noop"}, {"id": "right", "type": "noop"}],
+        nodes=[
+            {"id": "branch", "type": "branch"},
+            {"id": "left", "type": "noop"},
+            {"id": "right", "type": "noop"},
+        ],
         edges=[
             {"from": "branch", "to": "left", "condition": "ctx.get('x') == 1"},
             {"from": "branch", "to": "right", "condition": "ctx.get('x') == 2"},
@@ -27,7 +31,10 @@ def test_validator_requires_default_branch() -> None:
 
 
 def test_condition_engine_safe_eval() -> None:
-    assert safe_eval_condition("ctx['meta']['x'] > 2 and 'pdf' in ctx['artifacts']", {"meta": {"x": 3}, "artifacts": {"pdf": "f1"}})
+    assert safe_eval_condition(
+        "ctx['meta']['x'] > 2 and 'pdf' in ctx['artifacts']",
+        {"meta": {"x": 3}, "artifacts": {"pdf": "f1"}},
+    )
     with pytest.raises(ValueError):
         safe_eval_condition("__import__('os').system('echo x')", {})
 

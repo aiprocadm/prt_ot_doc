@@ -12,8 +12,12 @@ import { useAsyncResource } from "@/hooks/useAsyncResource";
 const SettingsPage = () => {
   const { data, loading, error, reload } = useAsyncResource({
     loader: useCallback(() => operationsApi.getSettingsSnapshot(), []),
-    initialData: { tenancy: { tenant: { id: "", slug: "" } }, notifications: {}, apiTokens: [] },
-    errorMessage: "Не удалось загрузить настройки тенанта"
+    initialData: {
+      tenancy: { tenant: { id: "", slug: "" } },
+      notifications: {},
+      apiTokens: [],
+    },
+    errorMessage: "Не удалось загрузить настройки тенанта",
   });
 
   return (
@@ -21,11 +25,15 @@ const SettingsPage = () => {
       <RegistryPageHeader
         title="Настройки тенанта"
         description="Контекст тенанта, параметры уведомлений и API-токены."
-        actions={<Button asChild variant="outline"><Link to="/admin">Администрирование</Link></Button>}
+        actions={
+          <Button asChild variant="outline">
+            <Link to="/admin">Администрирование</Link>
+          </Button>
+        }
         stats={[
           { label: "Тенант", value: data.tenancy.tenant.slug || "—" },
           { label: "API-токены", value: data.apiTokens.length },
-          { label: "ID корреляции", value: data.tenancy.correlation_id || "—" }
+          { label: "ID корреляции", value: data.tenancy.correlation_id || "—" },
         ]}
       />
       <ErrorState error={error ?? undefined} onRetry={() => void reload()} />
@@ -33,27 +41,78 @@ const SettingsPage = () => {
       {!loading && !error ? (
         <div className="grid gap-4 lg:grid-cols-3">
           <Card>
-            <CardHeader><CardTitle className="text-base">Контур</CardTitle></CardHeader>
+            <CardHeader>
+              <CardTitle className="text-base">Контур</CardTitle>
+            </CardHeader>
             <CardContent className="space-y-2 text-sm">
-              <p>Слаг: <span className="font-medium">{data.tenancy.tenant.slug || "—"}</span></p>
-              <p>Код: <span className="font-medium">{data.tenancy.tenant.code || "—"}</span></p>
-              <p>Схема БД: <span className="font-medium">{data.tenancy.tenant.schema_name || "—"}</span></p>
+              <p>
+                Слаг:{" "}
+                <span className="font-medium">
+                  {data.tenancy.tenant.slug || "—"}
+                </span>
+              </p>
+              <p>
+                Код:{" "}
+                <span className="font-medium">
+                  {data.tenancy.tenant.code || "—"}
+                </span>
+              </p>
+              <p>
+                Схема БД:{" "}
+                <span className="font-medium">
+                  {data.tenancy.tenant.schema_name || "—"}
+                </span>
+              </p>
             </CardContent>
           </Card>
           <Card>
-            <CardHeader><CardTitle className="text-base">Квоты и использование</CardTitle></CardHeader>
+            <CardHeader>
+              <CardTitle className="text-base">Квоты и использование</CardTitle>
+            </CardHeader>
             <CardContent className="space-y-2 text-sm">
-              <p>Параллельные задания: <span className="font-medium">{data.tenancy.quota?.max_parallel_jobs ?? "—"}</span></p>
-              <p>Лимит генераций/месяц: <span className="font-medium">{data.tenancy.quota?.max_doc_generations_per_month ?? "—"}</span></p>
-              <p>Текущие генерации: <span className="font-medium">{data.tenancy.usage?.doc_generations ?? "—"}</span></p>
+              <p>
+                Параллельные задания:{" "}
+                <span className="font-medium">
+                  {data.tenancy.quota?.max_parallel_jobs ?? "—"}
+                </span>
+              </p>
+              <p>
+                Лимит генераций/месяц:{" "}
+                <span className="font-medium">
+                  {data.tenancy.quota?.max_doc_generations_per_month ?? "—"}
+                </span>
+              </p>
+              <p>
+                Текущие генерации:{" "}
+                <span className="font-medium">
+                  {data.tenancy.usage?.doc_generations ?? "—"}
+                </span>
+              </p>
             </CardContent>
           </Card>
           <Card>
-            <CardHeader><CardTitle className="text-base">Уведомления и доступ</CardTitle></CardHeader>
+            <CardHeader>
+              <CardTitle className="text-base">Уведомления и доступ</CardTitle>
+            </CardHeader>
             <CardContent className="space-y-2 text-sm">
-              <p>Email: <span className="font-medium">{data.notifications.email_enabled ? "Включен" : "Выключен"}</span></p>
-              <p>Telegram: <span className="font-medium">{data.notifications.telegram_enabled ? "Включен" : "Выключен"}</span></p>
-              <p>Окно напоминаний (дней): <span className="font-medium">{data.notifications.reminder_window_days ?? "—"}</span></p>
+              <p>
+                Email:{" "}
+                <span className="font-medium">
+                  {data.notifications.email_enabled ? "Включен" : "Выключен"}
+                </span>
+              </p>
+              <p>
+                Telegram:{" "}
+                <span className="font-medium">
+                  {data.notifications.telegram_enabled ? "Включен" : "Выключен"}
+                </span>
+              </p>
+              <p>
+                Окно напоминаний (дней):{" "}
+                <span className="font-medium">
+                  {data.notifications.reminder_window_days ?? "—"}
+                </span>
+              </p>
             </CardContent>
           </Card>
         </div>

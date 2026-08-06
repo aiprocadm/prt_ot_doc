@@ -148,9 +148,7 @@ def test_purge_executes_on_a_real_schema_with_enforced_foreign_keys() -> None:
                     template = await factory.create_template(
                         tenant=owner, session=session, code=f"purge-pg-{index}"
                     )
-                    await factory.create_document(
-                        tenant=owner, template=template, session=session
-                    )
+                    await factory.create_document(tenant=owner, template=template, session=session)
                 await session.commit()
 
                 service = TenantPurgeService(

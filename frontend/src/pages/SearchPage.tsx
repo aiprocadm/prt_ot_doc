@@ -16,18 +16,45 @@ import { useSearchResults } from "@/pages/search/useSearchResults";
 import { useSearchUrlState } from "@/pages/search/useSearchUrlState";
 
 const SearchPage = () => {
-  const { q, type, status, companyId, siteId, projectId, riskLevel, activeTypes, activeFilterCount, patchParams, replaceWithSavedSearch, tabs } = useSearchUrlState();
-  const [recent, setRecent] = useState<Array<{ id: string; q: string; types: string[] }>>([]);
+  const {
+    q,
+    type,
+    status,
+    companyId,
+    siteId,
+    projectId,
+    riskLevel,
+    activeTypes,
+    activeFilterCount,
+    patchParams,
+    replaceWithSavedSearch,
+    tabs,
+  } = useSearchUrlState();
+  const [recent, setRecent] = useState<
+    Array<{ id: string; q: string; types: string[] }>
+  >([]);
   const [saved, setSaved] = useState<SavedSearchItem[]>([]);
   const debouncedQ = useDebounce(q, 350);
 
   const loadMemory = async () => {
-    const [recentItems, savedItems] = await Promise.all([fetchRecentSearches(), fetchSavedSearches()]);
+    const [recentItems, savedItems] = await Promise.all([
+      fetchRecentSearches(),
+      fetchSavedSearches(),
+    ]);
     setRecent(recentItems);
     setSaved(savedItems);
   };
 
-  const { items, facets, nextCursor, loading, loadingMore, error, loadMore, reload } = useSearchResults({
+  const {
+    items,
+    facets,
+    nextCursor,
+    loading,
+    loadingMore,
+    error,
+    loadMore,
+    reload,
+  } = useSearchResults({
     query: debouncedQ,
     activeTypes,
     status,
@@ -55,8 +82,8 @@ const SearchPage = () => {
         ...(companyId ? { company_id: companyId } : {}),
         ...(siteId ? { site_id: siteId } : {}),
         ...(projectId ? { project_id: projectId } : {}),
-        ...(riskLevel ? { risk_level: riskLevel } : {})
-      }
+        ...(riskLevel ? { risk_level: riskLevel } : {}),
+      },
     });
     await loadMemory();
   };
@@ -65,7 +92,9 @@ const SearchPage = () => {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-semibold">Центр поиска</h1>
-        <div className="rounded-full border px-3 py-1 text-xs text-muted-foreground">Активных фильтров: {activeFilterCount}</div>
+        <div className="rounded-full border px-3 py-1 text-xs text-muted-foreground">
+          Активных фильтров: {activeFilterCount}
+        </div>
       </div>
       <div className="grid gap-4 xl:grid-cols-[1.4fr,0.8fr]">
         <div className="space-y-4">

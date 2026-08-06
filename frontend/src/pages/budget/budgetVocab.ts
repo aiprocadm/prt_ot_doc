@@ -2,7 +2,7 @@ import type {
   BreakdownDimension,
   BudgetDomain,
   BudgetOverviewDomainCode,
-  BudgetReimbursementStatus
+  BudgetReimbursementStatus,
 } from "@/types/dto/budget";
 import type { ApiError } from "@/types/dto/common";
 
@@ -10,7 +10,7 @@ export const BUDGET_DOMAIN_LABELS: Record<BudgetOverviewDomainCode, string> = {
   training: "Обучение",
   medical: "Медосмотры",
   events: "Мероприятия",
-  ppe: "СИЗ (склад)"
+  ppe: "СИЗ (склад)",
 };
 
 /**
@@ -21,20 +21,22 @@ export const BUDGET_DOMAINS: BudgetDomain[] = ["training", "medical", "events"];
 
 /** Нормализует неизвестную ошибку до ApiError для локальных ErrorState во вкладках. */
 export const toApiError = (err: unknown, fallback: string): ApiError =>
-  err && typeof err === "object" && "message" in err ? (err as ApiError) : { status: 0, message: fallback };
+  err && typeof err === "object" && "message" in err
+    ? (err as ApiError)
+    : { status: 0, message: fallback };
 
 export const BREAKDOWN_DIMENSION_LABELS: Record<BreakdownDimension, string> = {
   article: "По статьям",
   domain: "По доменам",
   company: "По компаниям",
   branch: "По филиалам",
-  site: "По объектам"
+  site: "По объектам",
 };
 
 const rubFormatter = new Intl.NumberFormat("ru-RU", {
   style: "currency",
   currency: "RUB",
-  maximumFractionDigits: 0
+  maximumFractionDigits: 0,
 });
 
 /** Единый формат денег для всех вкладок бюджета (Сводка / Бюджеты / Расходы / Возмещения). */
@@ -49,13 +51,16 @@ export const REIMBURSEMENT_STATUSES: BudgetReimbursementStatus[] = [
   "submitted",
   "approved",
   "rejected",
-  "paid"
+  "paid",
 ];
 
-export const REIMBURSEMENT_STATUS_LABELS: Record<BudgetReimbursementStatus, string> = {
+export const REIMBURSEMENT_STATUS_LABELS: Record<
+  BudgetReimbursementStatus,
+  string
+> = {
   draft: "Черновик",
   submitted: "Подана",
   approved: "Одобрена",
   rejected: "Отклонена",
-  paid: "Выплачена"
+  paid: "Выплачена",
 };

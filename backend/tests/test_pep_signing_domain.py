@@ -2,6 +2,7 @@
 
 Hermetic: no DB, no routes (route-importing tests are un-collectable on this machine).
 """
+
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone

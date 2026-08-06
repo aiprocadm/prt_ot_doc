@@ -12,14 +12,14 @@ const getCalendarEventsMock = vi.fn();
 vi.mock("@/api/client", () => ({
   apiClient: {
     get: (...args: unknown[]) => getMock(...args),
-    post: vi.fn()
-  }
+    post: vi.fn(),
+  },
 }));
 
 vi.mock("@/api/calendar", () => ({
   calendarApi: {
-    getEvents: (...args: unknown[]) => getCalendarEventsMock(...args)
-  }
+    getEvents: (...args: unknown[]) => getCalendarEventsMock(...args),
+  },
 }));
 
 const emptyCalendar: CalendarEventsResponseDto = {
@@ -29,7 +29,7 @@ const emptyCalendar: CalendarEventsResponseDto = {
   total: 0,
   overdue_count: 0,
   by_source: [],
-  items: []
+  items: [],
 };
 
 describe("Workflow and Calendar operational states", () => {
@@ -44,19 +44,23 @@ describe("Workflow and Calendar operational states", () => {
     render(
       <MemoryRouter>
         <CalendarPage />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
 
-    expect(await screen.findByText(/событий в календаре нет/i)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/событий в календаре нет/i),
+    ).toBeInTheDocument();
   });
 
   it("forwards source_types and view from query params", async () => {
     getCalendarEventsMock.mockResolvedValue(emptyCalendar);
 
     render(
-      <MemoryRouter initialEntries={["/calendar?view=week&sources=training_session"]}>
+      <MemoryRouter
+        initialEntries={["/calendar?view=week&sources=training_session"]}
+      >
         <CalendarPage />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
 
     await waitFor(() => {
@@ -65,14 +69,20 @@ describe("Workflow and Calendar operational states", () => {
         person_id: undefined,
         site_id: undefined,
         include_fact: undefined,
-        include_sla: undefined
+        include_sla: undefined,
       });
     });
   });
 
   it("shows workflow empty states when definitions, tasks and instances are empty", async () => {
     getMock.mockImplementation((url: string) => {
-      if (["/workflow/definitions", "/workflow/tasks", "/workflow/instances"].includes(url)) {
+      if (
+        [
+          "/workflow/definitions",
+          "/workflow/tasks",
+          "/workflow/instances",
+        ].includes(url)
+      ) {
         return Promise.resolve({ data: [] });
       }
       throw new Error(`Unexpected GET ${url}`);
@@ -81,10 +91,12 @@ describe("Workflow and Calendar operational states", () => {
     render(
       <MemoryRouter>
         <WorkflowPage />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
 
-    expect(await screen.findByText(/нет данных по процессам/i)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/нет данных по процессам/i),
+    ).toBeInTheDocument();
     expect(screen.getByText(/нет описаний процессов/i)).toBeInTheDocument();
     expect(screen.getByText(/нет экземпляров процессов/i)).toBeInTheDocument();
     expect(screen.getByText(/нет задач процесса/i)).toBeInTheDocument();
@@ -96,11 +108,13 @@ describe("Workflow and Calendar operational states", () => {
     render(
       <MemoryRouter>
         <WorkflowPage />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
 
     await waitFor(() => {
-      expect(screen.getByRole("alert")).toHaveTextContent("workflow fetch failed");
+      expect(screen.getByRole("alert")).toHaveTextContent(
+        "workflow fetch failed",
+      );
     });
   });
 });

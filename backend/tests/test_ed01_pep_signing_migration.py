@@ -1,4 +1,5 @@
 """ed01 migration guard: PEP columns on signature_requests, additive + reversible."""
+
 from __future__ import annotations
 
 import importlib.util
@@ -10,7 +11,13 @@ os.environ.setdefault("SECRET_KEY", "test-secret-key")
 os.environ.setdefault("S3_ACCESS_KEY", "test-access-key")
 os.environ.setdefault("S3_SECRET_KEY", "test-secret-key")
 
-MIGRATION = Path(__file__).resolve().parents[1] / "app" / "migrations" / "versions" / "20260611_ed01_pep_signing_columns.py"
+MIGRATION = (
+    Path(__file__).resolve().parents[1]
+    / "app"
+    / "migrations"
+    / "versions"
+    / "20260611_ed01_pep_signing_columns.py"
+)
 
 PEP_COLUMNS = {
     "signer_user_id",
@@ -67,7 +74,9 @@ def test_migration_revision_chain():
 def test_upgrade_adds_exactly_pep_columns(monkeypatch):
     module = _load_module()
     added: list[tuple[str, str]] = []
-    monkeypatch.setattr(module.op, "add_column", lambda table, col, *a, **k: added.append((table, col.name)))
+    monkeypatch.setattr(
+        module.op, "add_column", lambda table, col, *a, **k: added.append((table, col.name))
+    )
     monkeypatch.setattr(module.op, "create_index", lambda *a, **k: None)
     monkeypatch.setattr(module.op, "create_foreign_key", lambda *a, **k: None)
     monkeypatch.setattr(module.op, "execute", lambda *a, **k: None)
@@ -80,7 +89,9 @@ def test_upgrade_adds_exactly_pep_columns(monkeypatch):
 def test_downgrade_drops_exactly_pep_columns(monkeypatch):
     module = _load_module()
     dropped: list[tuple[str, str]] = []
-    monkeypatch.setattr(module.op, "drop_column", lambda table, col, *a, **k: dropped.append((table, col)))
+    monkeypatch.setattr(
+        module.op, "drop_column", lambda table, col, *a, **k: dropped.append((table, col))
+    )
     monkeypatch.setattr(module.op, "drop_index", lambda *a, **k: None)
     monkeypatch.setattr(module.op, "drop_constraint", lambda *a, **k: None)
     monkeypatch.setattr(module.op, "execute", lambda *a, **k: None)
@@ -94,6 +105,11 @@ def test_pg_branch_has_using_cast_and_type_lifecycle():
     src = MIGRATION.read_text(encoding="utf-8")
     assert "USING status::text" in src
     assert "DROP TYPE IF EXISTS signaturerequeststatus" in src
-    assert "CREATE TYPE signaturerequeststatus AS ENUM ('created', 'requested', 'signed', 'failed')" in src
+    assert (
+        "CREATE TYPE signaturerequeststatus AS ENUM ('created', 'requested', 'signed', 'failed')"
+        in src
+    )
     assert "USING status::signaturerequeststatus" in src
-    assert "NOT IN ('created', 'requested', 'signed', 'failed')" in src  # downgrade blocker (inverted)
+    assert (
+        "NOT IN ('created', 'requested', 'signed', 'failed')" in src
+    )  # downgrade blocker (inverted)

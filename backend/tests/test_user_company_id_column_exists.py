@@ -60,9 +60,10 @@ def test_user_table_has_company_index_for_tenant_scoped_lookups() -> None:
     )
 
     company_index = next(idx for idx in User.__table__.indexes if idx.name == "ix_user_company")
-    assert [col.name for col in company_index.columns] == ["tenant_id", "company_id"], (
-        "ix_user_company must be on (tenant_id, company_id) for tenant-scoped lookups"
-    )
+    assert [col.name for col in company_index.columns] == [
+        "tenant_id",
+        "company_id",
+    ], "ix_user_company must be on (tenant_id, company_id) for tenant-scoped lookups"
 
 
 def test_iter21_migration_chains_to_current_head() -> None:

@@ -3,6 +3,7 @@ the member .value (lowercase/CamelCase), not the member NAME — AND a *named*
 PG type. An unnamed native enum makes ``metadata.create_all`` fail on
 PostgreSQL at app startup with ``CompileError: AsyncPgEnum type requires a
 name`` (surfaced by the perf-smoke job once CI was re-enabled)."""
+
 from __future__ import annotations
 
 import enum
@@ -19,7 +20,7 @@ class _Color(str, enum.Enum):
 
 def test_native_enum_binds_values_not_names() -> None:
     t = native_enum(_Color, name="color")
-    assert list(t.enums) == ["red", "dark_blue"]      # .value, not NAME
+    assert list(t.enums) == ["red", "dark_blue"]  # .value, not NAME
     assert t.name == "color"
     assert t.enum_class is _Color
 

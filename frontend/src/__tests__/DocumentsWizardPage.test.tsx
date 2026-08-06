@@ -13,20 +13,24 @@ const documentsApiMock = vi.hoisted(() => ({
   getDocumentBatch: vi.fn(),
   getGenerationTaskStatus: vi.fn(),
   getReplaceReport: vi.fn(),
-  replaceDryRun: vi.fn()
+  replaceDryRun: vi.fn(),
 }));
 
 const pipelinesApiMock = vi.hoisted(() => ({
-  getPipelineRun: vi.fn()
+  getPipelineRun: vi.fn(),
 }));
 
 const brandingApiMock = vi.hoisted(() => ({
   getBrandingProfile: vi.fn(async () => ({
     scope: "company",
-    preferred_header_preset_code: "company_brand"
+    preferred_header_preset_code: "company_brand",
   })),
-  listLayoutPresets: vi.fn(async () => [{ id: "preset-1", code: "company_brand", name: "Company brand" }]),
-  listSites: vi.fn(async () => [{ id: "site-1", company_id: "company-1", name: "Main site" }]),
+  listLayoutPresets: vi.fn(async () => [
+    { id: "preset-1", code: "company_brand", name: "Company brand" },
+  ]),
+  listSites: vi.fn(async () => [
+    { id: "site-1", company_id: "company-1", name: "Main site" },
+  ]),
   previewBranding: vi.fn(async () => ({
     preset_code: "company_brand",
     sections: { header_odd: "АО Тест / Main site", footer_odd: "ИНН 123" },
@@ -35,14 +39,18 @@ const brandingApiMock = vi.hoisted(() => ({
       reproducibility: { generated_at: "2026-03-19T00:00:00Z" },
       resolution: {
         scope_chain: ["tenant", "company", "site"],
-        effective_preset_source: "site.branding.preferred_letterhead_preset"
-      }
+        effective_preset_source: "site.branding.preferred_letterhead_preset",
+      },
     },
     watermark: { text: "PREVIEW" },
     unresolved_placeholders: [],
     apply_headers_payload: { preset_code: "company_brand" },
-    wizard_defaults: { company_id: "company-1", site_id: "site-1", preset_code: "company_brand" }
-  }))
+    wizard_defaults: {
+      company_id: "company-1",
+      site_id: "site-1",
+      preset_code: "company_brand",
+    },
+  })),
 }));
 
 vi.mock("@/api/documents", () => ({
@@ -51,29 +59,29 @@ vi.mock("@/api/documents", () => ({
   getDocumentBatch: documentsApiMock.getDocumentBatch,
   getGenerationTaskStatus: documentsApiMock.getGenerationTaskStatus,
   getReplaceReport: documentsApiMock.getReplaceReport,
-  replaceDryRun: documentsApiMock.replaceDryRun
+  replaceDryRun: documentsApiMock.replaceDryRun,
 }));
 
 vi.mock("@/api/pipelines", () => ({
-  getPipelineRun: pipelinesApiMock.getPipelineRun
+  getPipelineRun: pipelinesApiMock.getPipelineRun,
 }));
 
 vi.mock("@/api/branding", () => ({
   getBrandingProfile: brandingApiMock.getBrandingProfile,
   listLayoutPresets: brandingApiMock.listLayoutPresets,
   listSites: brandingApiMock.listSites,
-  previewBranding: brandingApiMock.previewBranding
+  previewBranding: brandingApiMock.previewBranding,
 }));
 
 vi.mock("@/api/files", () => ({
-  fetchFileDownloadLink: vi.fn()
+  fetchFileDownloadLink: vi.fn(),
 }));
 
 vi.mock("sonner", () => ({
   toast: {
     success: vi.fn(),
-    error: vi.fn()
-  }
+    error: vi.fn(),
+  },
 }));
 
 import DocumentsWizardPage from "@/pages/documents/DocumentsWizardPage";
@@ -93,10 +101,14 @@ describe("DocumentsWizardPage", () => {
 
     brandingApiMock.getBrandingProfile.mockResolvedValue({
       scope: "company",
-      preferred_header_preset_code: "company_brand"
+      preferred_header_preset_code: "company_brand",
     });
-    brandingApiMock.listLayoutPresets.mockResolvedValue([{ id: "preset-1", code: "company_brand", name: "Company brand" }]);
-    brandingApiMock.listSites.mockResolvedValue([{ id: "site-1", company_id: "company-1", name: "Main site" }]);
+    brandingApiMock.listLayoutPresets.mockResolvedValue([
+      { id: "preset-1", code: "company_brand", name: "Company brand" },
+    ]);
+    brandingApiMock.listSites.mockResolvedValue([
+      { id: "site-1", company_id: "company-1", name: "Main site" },
+    ]);
     brandingApiMock.previewBranding.mockResolvedValue({
       preset_code: "company_brand",
       sections: { header_odd: "АО Тест / Main site", footer_odd: "ИНН 123" },
@@ -105,32 +117,48 @@ describe("DocumentsWizardPage", () => {
         reproducibility: { generated_at: "2026-03-19T00:00:00Z" },
         resolution: {
           scope_chain: ["tenant", "company", "site"],
-          effective_preset_source: "site.branding.preferred_letterhead_preset"
-        }
+          effective_preset_source: "site.branding.preferred_letterhead_preset",
+        },
       },
       watermark: { text: "PREVIEW" },
       unresolved_placeholders: [],
       apply_headers_payload: { preset_code: "company_brand" },
-      wizard_defaults: { company_id: "company-1", site_id: "site-1", preset_code: "company_brand" }
+      wizard_defaults: {
+        company_id: "company-1",
+        site_id: "site-1",
+        preset_code: "company_brand",
+      },
     });
   });
 
   it("blocks api flow without tenant", async () => {
     useDocumentsWizardStore.getState().reset();
     useDocumentsWizardStore.setState({ step: 1 });
-    useCompaniesStore.setState({ items: [], list: vi.fn(async () => undefined) } as never);
-    useTenantStore.setState({ tenant: null, tenants: [], setTenant: vi.fn(), clearTenant: vi.fn() });
+    useCompaniesStore.setState({
+      items: [],
+      list: vi.fn(async () => undefined),
+    } as never);
+    useTenantStore.setState({
+      tenant: null,
+      tenants: [],
+      setTenant: vi.fn(),
+      clearTenant: vi.fn(),
+    });
     const user = userEvent.setup();
 
     render(
       <MemoryRouter>
         <DocumentsWizardPage />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
 
-    expect(screen.getByText(/без x-tenant запросы заблокированы/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/без x-tenant запросы заблокированы/i),
+    ).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /далее/i }));
-    expect(await screen.findByRole("heading", { name: /шаг 2: файл/i })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: /шаг 2: файл/i }),
+    ).toBeInTheDocument();
   });
 
   it("shows archive readiness summary and real navigation actions instead of placeholder button", () => {
@@ -144,36 +172,42 @@ describe("DocumentsWizardPage", () => {
         processed: 0,
         succeeded: 0,
         failed: 0,
-        items: []
+        items: [],
       },
       pipelineRun: {
         run_id: "run-1",
         status: "done",
         step_runs: [],
-        artifacts: undefined
-      }
+        artifacts: undefined,
+      },
     });
     useTenantStore.setState({
       tenant: { slug: "demo", name: "Demo tenant" } as never,
       tenants: [],
       setTenant: vi.fn(),
-      clearTenant: vi.fn()
+      clearTenant: vi.fn(),
     });
-    useCompaniesStore.setState({ items: [{ id: "company-1", name: "АО Тест" }], list: vi.fn(async () => undefined) } as never);
+    useCompaniesStore.setState({
+      items: [{ id: "company-1", name: "АО Тест" }],
+      list: vi.fn(async () => undefined),
+    } as never);
 
     render(
       <MemoryRouter>
         <DocumentsWizardPage />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
 
     expect(screen.getByText(/архив готов к публикации/i)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /перейти в архив/i })).toHaveAttribute("href", "/archive");
-    expect(screen.getByRole("link", { name: /открыть согласование \/ подпись/i })).toHaveAttribute(
-      "href",
-      "/approvals"
-    );
-    expect(screen.queryByRole("button", { name: /mvp placeholder/i })).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: /перейти в архив/i }),
+    ).toHaveAttribute("href", "/archive");
+    expect(
+      screen.getByRole("link", { name: /открыть согласование \/ подпись/i }),
+    ).toHaveAttribute("href", "/approvals");
+    expect(
+      screen.queryByRole("button", { name: /mvp placeholder/i }),
+    ).not.toBeInTheDocument();
   });
 
   it("renders branding preview controls on step 5 and shows reproducibility snapshot", async () => {
@@ -182,31 +216,45 @@ describe("DocumentsWizardPage", () => {
       step: 5,
       companyId: "company-1",
       templateCode: "outbound_cover",
-      templateVersion: 3
+      templateVersion: 3,
     });
     useTenantStore.setState({
       tenant: { slug: "demo", name: "Demo tenant" } as never,
       tenants: [],
       setTenant: vi.fn(),
-      clearTenant: vi.fn()
+      clearTenant: vi.fn(),
     });
-    useCompaniesStore.setState({ items: [{ id: "company-1", name: "АО Тест" }], list: vi.fn(async () => undefined) } as never);
+    useCompaniesStore.setState({
+      items: [{ id: "company-1", name: "АО Тест" }],
+      list: vi.fn(async () => undefined),
+    } as never);
     const user = userEvent.setup();
 
     render(
       <MemoryRouter>
         <DocumentsWizardPage />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
 
-    await user.click(screen.getByRole("button", { name: /собрать превью с брендингом/i }));
+    await user.click(
+      screen.getByRole("button", { name: /собрать превью с брендингом/i }),
+    );
 
-    expect(await screen.findByText(/АО Тест \/ Main site/i)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/АО Тест \/ Main site/i),
+    ).toBeInTheDocument();
     expect(screen.getByText(/снимок воспроизводимости/i)).toBeInTheDocument();
-    expect(screen.getByText(/site.branding.preferred_letterhead_preset/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/site.branding.preferred_letterhead_preset/i),
+    ).toBeInTheDocument();
     expect(screen.getAllByText(/company_brand/i).length).toBeGreaterThan(0);
-    expect(useDocumentsWizardStore.getState().brandingPreview?.wizard_defaults.site_id).toBe("site-1");
-    expect(useDocumentsWizardStore.getState().brandingPreviewHistory).toHaveLength(1);
+    expect(
+      useDocumentsWizardStore.getState().brandingPreview?.wizard_defaults
+        .site_id,
+    ).toBe("site-1");
+    expect(
+      useDocumentsWizardStore.getState().brandingPreviewHistory,
+    ).toHaveLength(1);
     expect(useDocumentsWizardStore.getState().siteId).toBe("site-1");
   });
 
@@ -216,31 +264,38 @@ describe("DocumentsWizardPage", () => {
       step: 5,
       companyId: "company-1",
       templateCode: "outbound_cover",
-      templateVersion: 3
+      templateVersion: 3,
     });
     useTenantStore.setState({
       tenant: { slug: "demo", name: "Demo tenant" } as never,
       tenants: [],
       setTenant: vi.fn(),
-      clearTenant: vi.fn()
+      clearTenant: vi.fn(),
     });
-    useCompaniesStore.setState({ items: [{ id: "company-1", name: "АО Тест" }], list: vi.fn(async () => undefined) } as never);
+    useCompaniesStore.setState({
+      items: [{ id: "company-1", name: "АО Тест" }],
+      list: vi.fn(async () => undefined),
+    } as never);
     const user = userEvent.setup();
 
     render(
       <MemoryRouter>
         <DocumentsWizardPage />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
 
-    const previewButton = screen.getByRole("button", { name: /собрать превью с брендингом/i });
+    const previewButton = screen.getByRole("button", {
+      name: /собрать превью с брендингом/i,
+    });
     await user.click(previewButton);
     await screen.findByText(/АО Тест \/ Main site/i);
     await user.click(previewButton);
 
     const state = useDocumentsWizardStore.getState();
     expect(state.brandingPreviewHistory).toHaveLength(1);
-    expect(state.brandingPreview?.wizard_defaults.preset_code).toBe("company_brand");
+    expect(state.brandingPreview?.wizard_defaults.preset_code).toBe(
+      "company_brand",
+    );
   });
 
   it("shows toast error when branded preview request fails", async () => {
@@ -249,27 +304,36 @@ describe("DocumentsWizardPage", () => {
       step: 5,
       companyId: "company-1",
       templateCode: "outbound_cover",
-      templateVersion: 3
+      templateVersion: 3,
     });
     useTenantStore.setState({
       tenant: { slug: "demo", name: "Demo tenant" } as never,
       tenants: [],
       setTenant: vi.fn(),
-      clearTenant: vi.fn()
+      clearTenant: vi.fn(),
     });
-    useCompaniesStore.setState({ items: [{ id: "company-1", name: "АО Тест" }], list: vi.fn(async () => undefined) } as never);
-    brandingApiMock.previewBranding.mockRejectedValue(new Error("preview failed"));
+    useCompaniesStore.setState({
+      items: [{ id: "company-1", name: "АО Тест" }],
+      list: vi.fn(async () => undefined),
+    } as never);
+    brandingApiMock.previewBranding.mockRejectedValue(
+      new Error("preview failed"),
+    );
 
     const user = userEvent.setup();
     render(
       <MemoryRouter>
         <DocumentsWizardPage />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
 
-    await user.click(screen.getByRole("button", { name: /собрать превью с брендингом/i }));
+    await user.click(
+      screen.getByRole("button", { name: /собрать превью с брендингом/i }),
+    );
 
-    expect(await screen.findByText(/история появится после сборки превью/i)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/история появится после сборки превью/i),
+    ).toBeInTheDocument();
     expect(toast.error).toHaveBeenCalledWith("preview failed");
   });
 
@@ -280,25 +344,32 @@ describe("DocumentsWizardPage", () => {
       companyId: "company-1",
       templateCode: "outbound_cover",
       templateVersion: 2,
-      headerPreset: "company_brand"
+      headerPreset: "company_brand",
     });
     useTenantStore.setState({
       tenant: { slug: "demo", name: "Demo tenant" } as never,
       tenants: [],
       setTenant: vi.fn(),
-      clearTenant: vi.fn()
+      clearTenant: vi.fn(),
     });
-    useCompaniesStore.setState({ items: [{ id: "company-1", name: "АО Тест" }], list: vi.fn(async () => undefined) } as never);
-    documentsApiMock.generateDocument.mockRejectedValue(new Error("single pipeline failed"));
+    useCompaniesStore.setState({
+      items: [{ id: "company-1", name: "АО Тест" }],
+      list: vi.fn(async () => undefined),
+    } as never);
+    documentsApiMock.generateDocument.mockRejectedValue(
+      new Error("single pipeline failed"),
+    );
 
     const user = userEvent.setup();
     render(
       <MemoryRouter>
         <DocumentsWizardPage />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
 
-    await user.click(screen.getByRole("button", { name: /запустить одиночный пайплайн/i }));
+    await user.click(
+      screen.getByRole("button", { name: /запустить одиночный пайплайн/i }),
+    );
 
     expect(toast.error).toHaveBeenCalledWith("single pipeline failed");
     expect(useDocumentsWizardStore.getState().pipelineRun).toBeNull();
@@ -314,26 +385,29 @@ describe("DocumentsWizardPage", () => {
       pipelineRun: {
         run_id: "task-1",
         status: "queued",
-        step_runs: []
-      }
+        step_runs: [],
+      },
     });
     useTenantStore.setState({
       tenant: { slug: "demo", name: "Demo tenant" } as never,
       tenants: [],
       setTenant: vi.fn(),
-      clearTenant: vi.fn()
+      clearTenant: vi.fn(),
     });
-    useCompaniesStore.setState({ items: [{ id: "company-1", name: "АО Тест" }], list: vi.fn(async () => undefined) } as never);
+    useCompaniesStore.setState({
+      items: [{ id: "company-1", name: "АО Тест" }],
+      list: vi.fn(async () => undefined),
+    } as never);
     pipelinesApiMock.getPipelineRun.mockResolvedValue({
       run_id: "task-1",
       status: "done",
-      step_runs: []
+      step_runs: [],
     });
 
     render(
       <MemoryRouter>
         <DocumentsWizardPage />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
 
     await act(async () => {
@@ -357,22 +431,27 @@ describe("DocumentsWizardPage", () => {
         processed: 0,
         succeeded: 0,
         failed: 0,
-        items: []
-      }
+        items: [],
+      },
     });
     useTenantStore.setState({
       tenant: { slug: "demo", name: "Demo tenant" } as never,
       tenants: [],
       setTenant: vi.fn(),
-      clearTenant: vi.fn()
+      clearTenant: vi.fn(),
     });
-    useCompaniesStore.setState({ items: [{ id: "company-1", name: "АО Тест" }], list: vi.fn(async () => undefined) } as never);
-    documentsApiMock.getDocumentBatch.mockRejectedValue(new Error("batch poll failed"));
+    useCompaniesStore.setState({
+      items: [{ id: "company-1", name: "АО Тест" }],
+      list: vi.fn(async () => undefined),
+    } as never);
+    documentsApiMock.getDocumentBatch.mockRejectedValue(
+      new Error("batch poll failed"),
+    );
 
     render(
       <MemoryRouter>
         <DocumentsWizardPage />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
 
     await act(async () => {
@@ -380,6 +459,8 @@ describe("DocumentsWizardPage", () => {
     });
 
     expect(documentsApiMock.getDocumentBatch).toHaveBeenCalledWith("batch-1");
-    expect(toast.error).toHaveBeenCalledWith("Не удалось обновить batch статус.");
+    expect(toast.error).toHaveBeenCalledWith(
+      "Не удалось обновить batch статус.",
+    );
   });
 });

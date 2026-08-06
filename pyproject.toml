@@ -39,6 +39,9 @@ ignore = ["E501"]
 # importing the app (settings are read at import time), so its imports cannot
 # sit at the top of the file — E402 there is intentional, not a defect.
 "tests/conftest.py" = ["E402"]
+# Файл целиком skip-нут на уровне модуля (ждёт закрытия Phase 2.1): тесты пишут
+# будущий API, импортов для него ещё нет — F821 там ожидаем.
+"backend/tests/test_operational_dashboard.py" = ["F821", "F841"]
 
 [tool.black]
 line-length = 100

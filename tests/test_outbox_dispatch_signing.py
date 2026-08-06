@@ -19,7 +19,6 @@
 from __future__ import annotations
 
 import hmac
-import json
 from hashlib import sha256
 
 import httpx
@@ -420,8 +419,6 @@ async def test_db_error_in_secret_resolution_does_not_poison_the_batch(
     """
 
     from sqlalchemy.exc import OperationalError
-
-    from app.services import webhooks as webhooks_module
 
     requests: list[httpx.Request] = []
     async with sessionmaker() as session:

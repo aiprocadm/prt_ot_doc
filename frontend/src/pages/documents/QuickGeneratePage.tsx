@@ -30,7 +30,10 @@ const createIdempotencyKey = () =>
     : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
 const isTerminalStatus = (status: string | undefined) =>
-  Boolean(status && ["success", "failed", "done", "error", "canceled"].includes(status));
+  Boolean(
+    status &&
+      ["success", "failed", "done", "error", "canceled"].includes(status),
+  );
 
 const ORCHESTRATION_LABELS: Record<string, string> = {
   generated: "Документ сгенерирован",
@@ -41,12 +44,20 @@ const ORCHESTRATION_LABELS: Record<string, string> = {
   failed: "Ошибка",
 };
 
-const STEP_ORDER = ["generated", "headers_applied", "pdf_ready", "handoff_ready", "retrying", "failed"];
+const STEP_ORDER = [
+  "generated",
+  "headers_applied",
+  "pdf_ready",
+  "handoff_ready",
+  "retrying",
+  "failed",
+];
 
 const getUserFacingError = (task: TaskStatusResponse | null) => {
-  const value = task?.metadata && typeof task.metadata === "object"
-    ? (task.metadata["user_facing_error"] as string | undefined)
-    : undefined;
+  const value =
+    task?.metadata && typeof task.metadata === "object"
+      ? (task.metadata["user_facing_error"] as string | undefined)
+      : undefined;
   return value ?? task?.error ?? null;
 };
 
@@ -56,7 +67,8 @@ const QuickGeneratePage = () => {
   const canCreate = can(PERMISSIONS.DOCUMENT_CREATE);
   const { tenant, companies, sites } = useDocumentsWizardBootstrap();
   const { items: persons, list: listPersons, setPageSize } = usePersonsStore();
-  const { quickGenerationHistory, pushQuickGenerationHistory } = useDocumentsWizardStore();
+  const { quickGenerationHistory, pushQuickGenerationHistory } =
+    useDocumentsWizardStore();
 
   const [companyId, setCompanyId] = useState("");
   const [siteId, setSiteId] = useState("");
@@ -68,7 +80,9 @@ const QuickGeneratePage = () => {
   const [comments, setComments] = useState("");
   const [resolving, setResolving] = useState(false);
   const [launching, setLaunching] = useState(false);
-  const [resolved, setResolved] = useState<TemplateResolveResponse | null>(null);
+  const [resolved, setResolved] = useState<TemplateResolveResponse | null>(
+    null,
+  );
   const [task, setTask] = useState<TaskStatusResponse | null>(null);
   const [pollingInterval, setPollingInterval] = useState(2000);
 
@@ -103,7 +117,7 @@ const QuickGeneratePage = () => {
 
   const selectedPerson = useMemo<PersonDto | undefined>(
     () => persons.find((item) => item.id === personId),
-    [persons, personId]
+    [persons, personId],
   );
 
   const runResolve = async () => {
@@ -123,10 +137,17 @@ const QuickGeneratePage = () => {
         person_id: personId || undefined,
       });
       setResolved(next);
-      trackUxMetric("navigation_click", { source: "quick-generate-resolve", scope: next.scope_level });
-      toast.success(`Шаблон подобран: ${next.template_name} v${next.template_version}`);
+      trackUxMetric("navigation_click", {
+        source: "quick-generate-resolve",
+        scope: next.scope_level,
+      });
+      toast.success(
+        `Шаблон подобран: ${next.template_name} v${next.template_version}`,
+      );
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Не удалось подобрать шаблон");
+      toast.error(
+        error instanceof Error ? error.message : "Не удалось подобрать шаблон",
+      );
       setResolved(null);
     } finally {
       setResolving(false);
@@ -161,7 +182,11 @@ const QuickGeneratePage = () => {
             person: selectedPerson
               ? {
                   id: selectedPerson.id,
-                  full_name: [selectedPerson.last_name, selectedPerson.first_name, selectedPerson.middle_name]
+                  full_name: [
+                    selectedPerson.last_name,
+                    selectedPerson.first_name,
+                    selectedPerson.middle_name,
+                  ]
                     .filter(Boolean)
                     .join(" "),
                   position: selectedPerson.position ?? null,
@@ -171,7 +196,7 @@ const QuickGeneratePage = () => {
             quick_generate: true,
           },
         },
-        idempotencyKey
+        idempotencyKey,
       );
       const initialTask = await getGenerationTaskStatus(accepted.task_id);
       setTask(initialTask);
@@ -193,7 +218,11 @@ const QuickGeneratePage = () => {
         accepted_ms: Date.now() - startedAt,
       });
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Не удалось запустить генерацию");
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Не удалось запустить генерацию",
+      );
     } finally {
       setLaunching(false);
     }
@@ -204,7 +233,9 @@ const QuickGeneratePage = () => {
       if (!task?.task_id || isTerminalStatus(task.status)) return;
       const next = await getGenerationTaskStatus(task.task_id);
       setTask(next);
-      setPollingInterval((prev) => (isTerminalStatus(next.status) ? 2000 : Math.min(prev + 1000, 8000)));
+      setPollingInterval((prev) =>
+        isTerminalStatus(next.status) ? 2000 : Math.min(prev + 1000, 8000),
+      );
       if (next.status === "success" || next.status === "done") {
         toast.success("Документ готов.");
       }
@@ -218,15 +249,21 @@ const QuickGeneratePage = () => {
       onError: () => {
         setPollingInterval((prev) => Math.min(prev + 2000, 12000));
       },
-    }
+    },
   );
 
-  const orchestration = task?.metadata && typeof task.metadata === "object"
-    ? ((task.metadata["orchestration"] as Record<string, unknown> | undefined) ?? undefined)
-    : undefined;
-  const orchestrationState = typeof orchestration?.state === "string" ? orchestration.state : null;
+  const orchestration =
+    task?.metadata && typeof task.metadata === "object"
+      ? ((task.metadata["orchestration"] as
+          | Record<string, unknown>
+          | undefined) ?? undefined)
+      : undefined;
+  const orchestrationState =
+    typeof orchestration?.state === "string" ? orchestration.state : null;
   const timelineStates = Array.isArray(orchestration?.timeline)
-    ? (orchestration.timeline as Array<Record<string, unknown>>).map((item) => String(item.state ?? ""))
+    ? (orchestration.timeline as Array<Record<string, unknown>>).map((item) =>
+        String(item.state ?? ""),
+      )
     : [];
 
   if (!canCreate) {
@@ -291,38 +328,68 @@ const QuickGeneratePage = () => {
                 <option value="">— Не выбран —</option>
                 {persons.map((person) => (
                   <option key={person.id} value={person.id}>
-                    {[person.last_name, person.first_name, person.middle_name].filter(Boolean).join(" ")}
+                    {[person.last_name, person.first_name, person.middle_name]
+                      .filter(Boolean)
+                      .join(" ")}
                   </option>
                 ))}
               </select>
             </div>
             <div className="space-y-2">
               <Label htmlFor="qg-case">Тип случая</Label>
-              <Input id="qg-case" value={caseType} onChange={(event) => setCaseType(event.target.value)} />
+              <Input
+                id="qg-case"
+                value={caseType}
+                onChange={(event) => setCaseType(event.target.value)}
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="qg-doc-type">Тип документа</Label>
-              <Input id="qg-doc-type" value={documentType} onChange={(event) => setDocumentType(event.target.value)} />
+              <Input
+                id="qg-doc-type"
+                value={documentType}
+                onChange={(event) => setDocumentType(event.target.value)}
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="qg-category">Категория (опционально)</Label>
-              <Input id="qg-category" value={category} onChange={(event) => setCategory(event.target.value)} />
+              <Input
+                id="qg-category"
+                value={category}
+                onChange={(event) => setCategory(event.target.value)}
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="qg-date">Дата действия</Label>
-              <Input id="qg-date" type="date" value={effectiveDate} onChange={(event) => setEffectiveDate(event.target.value)} />
+              <Input
+                id="qg-date"
+                type="date"
+                value={effectiveDate}
+                onChange={(event) => setEffectiveDate(event.target.value)}
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="qg-comments">Комментарий</Label>
-              <Input id="qg-comments" value={comments} onChange={(event) => setComments(event.target.value)} />
+              <Input
+                id="qg-comments"
+                value={comments}
+                onChange={(event) => setComments(event.target.value)}
+              />
             </div>
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" onClick={() => void runResolve()} disabled={resolving || launching}>
+            <Button
+              variant="outline"
+              onClick={() => void runResolve()}
+              disabled={resolving || launching}
+            >
               {resolving ? "Подбираем шаблон..." : "Подобрать шаблон"}
             </Button>
-            <Button onClick={() => void runGenerate()} disabled={!resolved || launching}>
+            <Button
+              onClick={() => void runGenerate()}
+              disabled={!resolved || launching}
+            >
               {launching ? "Запуск..." : "Сгенерировать"}
             </Button>
             <Button asChild variant="ghost">
@@ -333,39 +400,63 @@ const QuickGeneratePage = () => {
           {resolved ? (
             <div className="rounded-md border p-3 text-sm">
               <p className="font-medium">
-                Выбран шаблон: {resolved.template_name} ({resolved.template_code}) v{resolved.template_version}
+                Выбран шаблон: {resolved.template_name} (
+                {resolved.template_code}) v{resolved.template_version}
               </p>
-              <p className="text-muted-foreground">Приоритет: {resolved.scope_level}. Цепочка: {resolved.resolution_chain.join(" -> ")}.</p>
+              <p className="text-muted-foreground">
+                Приоритет: {resolved.scope_level}. Цепочка:{" "}
+                {resolved.resolution_chain.join(" -> ")}.
+              </p>
             </div>
           ) : null}
 
           {task ? (
             <div className="rounded-md border p-3 text-sm">
               <p className="font-medium">Статус запуска: {task.status}</p>
-              {getUserFacingError(task) ? <p className="text-destructive">{getUserFacingError(task)}</p> : null}
+              {getUserFacingError(task) ? (
+                <p className="text-destructive">{getUserFacingError(task)}</p>
+              ) : null}
               {task.document_id ? <p>Документ: {task.document_id}</p> : null}
-              {task.document_version_id ? <p>Версия: {task.document_version_id}</p> : null}
+              {task.document_version_id ? (
+                <p>Версия: {task.document_version_id}</p>
+              ) : null}
               <div className="mt-3 grid gap-1">
-                <p className="text-xs text-muted-foreground">Этапы оркестрации:</p>
+                <p className="text-xs text-muted-foreground">
+                  Этапы оркестрации:
+                </p>
                 {STEP_ORDER.map((step) => {
                   const isDone = timelineStates.includes(step);
                   const isCurrent = orchestrationState === step;
                   return (
                     <div key={step} className="flex items-center gap-2 text-xs">
                       <span>{isDone ? "✅" : isCurrent ? "🟡" : "⚪"}</span>
-                      <span className={step === "failed" && isDone ? "text-destructive" : ""}>{ORCHESTRATION_LABELS[step] ?? step}</span>
+                      <span
+                        className={
+                          step === "failed" && isDone ? "text-destructive" : ""
+                        }
+                      >
+                        {ORCHESTRATION_LABELS[step] ?? step}
+                      </span>
                     </div>
                   );
                 })}
               </div>
-              {(task.status === "failed" || task.status === "error") ? (
+              {task.status === "failed" || task.status === "error" ? (
                 <div className="mt-3 flex flex-wrap gap-2">
                   {personId ? (
                     <Button asChild size="sm" variant="outline">
-                      <Link to={`/persons?person_id=${encodeURIComponent(personId)}`}>Исправить данные сотрудника</Link>
+                      <Link
+                        to={`/persons?person_id=${encodeURIComponent(personId)}`}
+                      >
+                        Исправить данные сотрудника
+                      </Link>
                     </Button>
                   ) : null}
-                  <Button size="sm" variant="outline" onClick={() => setResolved(null)}>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setResolved(null)}
+                  >
                     Сменить шаблон
                   </Button>
                   <Button size="sm" onClick={() => void runGenerate()}>
@@ -391,7 +482,8 @@ const QuickGeneratePage = () => {
                   {item.templateCode} v{item.templateVersion} · {item.caseType}
                 </p>
                 <p className="text-muted-foreground">
-                  task: {item.taskId} · person: {item.personId || "—"} · status: {item.status}
+                  task: {item.taskId} · person: {item.personId || "—"} · status:{" "}
+                  {item.status}
                 </p>
               </div>
             ))

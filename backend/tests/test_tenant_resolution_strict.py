@@ -22,7 +22,9 @@ def _request(path: str, headers: list[tuple[bytes, bytes]] | None = None) -> Req
 
 
 @pytest.mark.asyncio
-async def test_get_tenant_record_without_explicit_tenant_does_not_use_default(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_get_tenant_record_without_explicit_tenant_does_not_use_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     async def _fail_fetch(_identifier: str):  # pragma: no cover - must not be called
         raise AssertionError("fallback lookup should be disabled for user requests")
 
@@ -36,10 +38,14 @@ async def test_get_tenant_record_without_explicit_tenant_does_not_use_default(mo
 
 
 @pytest.mark.asyncio
-async def test_get_auth_tenant_record_uses_verified_token_claim(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_get_auth_tenant_record_uses_verified_token_claim(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     tenant = SimpleNamespace(slug="acme", id="acme-id")
 
-    monkeypatch.setattr("app.core.security.verify_token", lambda token, expected_type: {"tenant": "acme"})
+    monkeypatch.setattr(
+        "app.core.security.verify_token", lambda token, expected_type: {"tenant": "acme"}
+    )
 
     async def _fetch(identifier: str):
         assert identifier == "acme"
@@ -56,7 +62,9 @@ async def test_get_auth_tenant_record_uses_verified_token_claim(monkeypatch: pyt
 
 
 @pytest.mark.asyncio
-async def test_internal_fallback_is_disabled_even_for_explicit_test_scenarios(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_internal_fallback_is_disabled_even_for_explicit_test_scenarios(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     async def _fail_fetch(_identifier: str):  # pragma: no cover - must not be called
         raise AssertionError("fallback lookup must stay disabled")
 

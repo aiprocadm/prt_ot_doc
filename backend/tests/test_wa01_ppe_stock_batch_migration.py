@@ -1,4 +1,5 @@
 """Pin: PPEStockBatch model + ppe_stock_batch migration shape (W-A / TZ-3.2-V11-01)."""
+
 from __future__ import annotations
 
 import importlib.util

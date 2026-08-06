@@ -13,7 +13,7 @@ describe("StatusBadge medical oversight statuses", () => {
         <StatusBadge status="scheduled" />
         <StatusBadge status="completed" />
         <StatusBadge status="lifted" />
-      </>
+      </>,
     );
     expect(screen.getByText("Просрочен")).toBeInTheDocument();
     expect(screen.getByText("Истекает")).toBeInTheDocument();

@@ -17,15 +17,23 @@ import { TenantPlanDialog } from "@/features/tenants/TenantPlanDialog";
 import { useAsyncResource } from "@/hooks/useAsyncResource";
 import { useLocalRegistry } from "@/hooks/useLocalRegistry";
 import { PERMISSIONS } from "@/permissions/permissions";
-import type { PlanCatalog, TenantFleetItem, TenantFleetPage } from "@/types/dto/tenants";
+import type {
+  PlanCatalog,
+  TenantFleetItem,
+  TenantFleetPage,
+} from "@/types/dto/tenants";
 
 const KIND_LABELS: Record<string, string> = {
   customer: "Заказчик",
   branch: "Филиал",
-  contractor: "Подрядчик"
+  contractor: "Подрядчик",
 };
 
-const emptyFleet: TenantFleetPage = { items: [], total: 0, managing_tenant_slug: "" };
+const emptyFleet: TenantFleetPage = {
+  items: [],
+  total: 0,
+  managing_tenant_slug: "",
+};
 const emptyPlans: PlanCatalog = { plans: [], features: [] };
 
 const TenantsPage = () => {
@@ -33,7 +41,7 @@ const TenantsPage = () => {
   const res = useAsyncResource<TenantFleetPage>({
     loader,
     initialData: emptyFleet,
-    errorMessage: "Не удалось загрузить список тенантов"
+    errorMessage: "Не удалось загрузить список тенантов",
   });
 
   const plansLoader = useCallback(() => tenantsApi.plans(), []);
@@ -42,7 +50,7 @@ const TenantsPage = () => {
     initialData: emptyPlans,
     // A 403 here is the same "not the managing tenant" case the list handles below;
     // swallow it so it never surfaces as a page error.
-    errorMessage: ""
+    errorMessage: "",
   });
   const plans = plansRes.data.plans;
   const planTitle = (code?: string | null) =>
@@ -60,7 +68,7 @@ const TenantsPage = () => {
         .filter(Boolean)
         .join(" ")
         .toLowerCase()
-        .includes(query)
+        .includes(query),
   });
 
   const managingSlug = res.data.managing_tenant_slug;
@@ -71,7 +79,7 @@ const TenantsPage = () => {
       toast.success(
         nextActive
           ? `Доступ для «${item.tenant.name}» включён`
-          : `Доступ для «${item.tenant.name}» приостановлен`
+          : `Доступ для «${item.tenant.name}» приостановлен`,
       );
       reload();
     } catch {
@@ -91,19 +99,24 @@ const TenantsPage = () => {
               управляющий
             </Badge>
           ) : null}
-          <p className="text-xs text-muted-foreground">{row.original.tenant.contact_email}</p>
+          <p className="text-xs text-muted-foreground">
+            {row.original.tenant.contact_email}
+          </p>
         </div>
-      )
+      ),
     },
     {
       accessorKey: "tenant.slug",
       header: "Слаг",
-      cell: ({ row }) => <code className="text-xs">{row.original.tenant.slug}</code>
+      cell: ({ row }) => (
+        <code className="text-xs">{row.original.tenant.slug}</code>
+      ),
     },
     {
       id: "kind",
       header: "Тип",
-      cell: ({ row }) => KIND_LABELS[row.original.tenant.kind ?? "customer"] ?? "—"
+      cell: ({ row }) =>
+        KIND_LABELS[row.original.tenant.kind ?? "customer"] ?? "—",
     },
     {
       id: "quotas",
@@ -113,10 +126,11 @@ const TenantsPage = () => {
         if (!quotas) return <span className="text-muted-foreground">—</span>;
         return (
           <span className="text-xs">
-            {quotas.max_doc_generations_per_month} док/мес · {quotas.max_storage_mb} МБ
+            {quotas.max_doc_generations_per_month} док/мес ·{" "}
+            {quotas.max_storage_mb} МБ
           </span>
         );
-      }
+      },
     },
     {
       id: "plan",
@@ -125,7 +139,9 @@ const TenantsPage = () => {
         const item = row.original;
         return (
           <div className="flex items-center gap-2">
-            <Badge variant={item.plan ? "default" : "secondary"}>{planTitle(item.plan)}</Badge>
+            <Badge variant={item.plan ? "default" : "secondary"}>
+              {planTitle(item.plan)}
+            </Badge>
             <Can permission={PERMISSIONS.ADMIN_MANAGE_TENANTS}>
               <TenantPlanDialog
                 item={item}
@@ -140,7 +156,7 @@ const TenantsPage = () => {
             </Can>
           </div>
         );
-      }
+      },
     },
     {
       id: "status",
@@ -170,8 +186,8 @@ const TenantsPage = () => {
             </div>
           </Can>
         );
-      }
-    }
+      },
+    },
   ];
 
   // A 403 here is not a failure to report as an error: it simply means this tenant is not
@@ -201,16 +217,20 @@ const TenantsPage = () => {
             permission={PERMISSIONS.ADMIN_MANAGE_TENANTS}
             fallback={<Button disabled>Новый тенант</Button>}
           >
-            <TenantFormDialog trigger={<Button>Новый тенант</Button>} onSubmitted={reload} />
+            <TenantFormDialog
+              trigger={<Button>Новый тенант</Button>}
+              onSubmitted={reload}
+            />
           </Can>
         }
         stats={[
           { label: "Всего тенантов", value: res.data.total },
           {
             label: "Активных",
-            value: res.data.items.filter((item) => item.tenant.is_active).length
+            value: res.data.items.filter((item) => item.tenant.is_active)
+              .length,
           },
-          { label: "Управляющий", value: managingSlug || "—" }
+          { label: "Управляющий", value: managingSlug || "—" },
         ]}
       />
       <ErrorState error={res.error ?? undefined} onRetry={reload} />

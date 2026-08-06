@@ -10,7 +10,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger
+  DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -20,7 +20,7 @@ import type {
   BudgetDomain,
   SafetyBudgetCreateInput,
   SafetyBudgetDto,
-  SafetyBudgetUpdateInput
+  SafetyBudgetUpdateInput,
 } from "@/types/dto/budget";
 
 const BUDGET_DOMAINS: BudgetDomain[] = ["training", "medical", "events"];
@@ -37,10 +37,14 @@ const emptyForm = {
   period_start: "",
   period_end: "",
   planned_amount: "",
-  notes: ""
+  notes: "",
 };
 
-export const BudgetFormDialog = ({ trigger, initialData, onSubmitted }: Props) => {
+export const BudgetFormDialog = ({
+  trigger,
+  initialData,
+  onSubmitted,
+}: Props) => {
   const [open, setOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState(emptyForm);
@@ -56,13 +60,14 @@ export const BudgetFormDialog = ({ trigger, initialData, onSubmitted }: Props) =
             period_start: initialData.period_start,
             period_end: initialData.period_end,
             planned_amount: String(initialData.planned_amount),
-            notes: initialData.notes ?? ""
+            notes: initialData.notes ?? "",
           }
-        : emptyForm
+        : emptyForm,
     );
   }, [open, initialData]);
 
-  const set = (key: keyof typeof form, value: string) => setForm((prev) => ({ ...prev, [key]: value }));
+  const set = (key: keyof typeof form, value: string) =>
+    setForm((prev) => ({ ...prev, [key]: value }));
 
   const onSubmit = async () => {
     if (!form.name.trim()) {
@@ -84,13 +89,19 @@ export const BudgetFormDialog = ({ trigger, initialData, onSubmitted }: Props) =
         const payload: SafetyBudgetUpdateInput = {};
         const trimmedName = form.name.trim();
         if (trimmedName !== initialData.name) payload.name = trimmedName;
-        if (form.period_start !== initialData.period_start) payload.period_start = form.period_start;
-        if (form.period_end !== initialData.period_end) payload.period_end = form.period_end;
-        if (form.planned_amount.trim() !== "" && Number(form.planned_amount) !== initialData.planned_amount) {
+        if (form.period_start !== initialData.period_start)
+          payload.period_start = form.period_start;
+        if (form.period_end !== initialData.period_end)
+          payload.period_end = form.period_end;
+        if (
+          form.planned_amount.trim() !== "" &&
+          Number(form.planned_amount) !== initialData.planned_amount
+        ) {
           payload.planned_amount = Number(form.planned_amount);
         }
         const normalizedNotes = form.notes.trim() || null;
-        if (normalizedNotes !== initialData.notes) payload.notes = normalizedNotes;
+        if (normalizedNotes !== initialData.notes)
+          payload.notes = normalizedNotes;
         await budgetApi.updateBudget(initialData.id, payload);
         toast.success("Бюджет обновлён");
       } else {
@@ -100,7 +111,7 @@ export const BudgetFormDialog = ({ trigger, initialData, onSubmitted }: Props) =
           period_start: form.period_start,
           period_end: form.period_end,
           planned_amount: Number(form.planned_amount),
-          notes: form.notes.trim() || null
+          notes: form.notes.trim() || null,
         };
         await budgetApi.createBudget(payload);
         toast.success("Бюджет создан");
@@ -108,7 +119,9 @@ export const BudgetFormDialog = ({ trigger, initialData, onSubmitted }: Props) =
       onSubmitted?.();
       setOpen(false);
     } catch (err) {
-      toast.error((err as { message?: string })?.message ?? "Не удалось сохранить бюджет");
+      toast.error(
+        (err as { message?: string })?.message ?? "Не удалось сохранить бюджет",
+      );
     } finally {
       setSubmitting(false);
     }
@@ -119,13 +132,21 @@ export const BudgetFormDialog = ({ trigger, initialData, onSubmitted }: Props) =
       <DialogTrigger asChild>{trigger}</DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{isEdit ? "Редактировать бюджет" : "Новый бюджет"}</DialogTitle>
-          <DialogDescription>Плановая сумма и период бюджета по домену безопасности.</DialogDescription>
+          <DialogTitle>
+            {isEdit ? "Редактировать бюджет" : "Новый бюджет"}
+          </DialogTitle>
+          <DialogDescription>
+            Плановая сумма и период бюджета по домену безопасности.
+          </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="b-name">Название</Label>
-            <Input id="b-name" value={form.name} onChange={(e) => set("name", e.target.value)} />
+            <Input
+              id="b-name"
+              value={form.name}
+              onChange={(e) => set("name", e.target.value)}
+            />
           </div>
           <div className="space-y-2">
             <Label htmlFor="b-domain">Домен</Label>
@@ -174,7 +195,11 @@ export const BudgetFormDialog = ({ trigger, initialData, onSubmitted }: Props) =
           </div>
           <div className="space-y-2">
             <Label htmlFor="b-notes">Примечания</Label>
-            <Textarea id="b-notes" value={form.notes} onChange={(e) => set("notes", e.target.value)} />
+            <Textarea
+              id="b-notes"
+              value={form.notes}
+              onChange={(e) => set("notes", e.target.value)}
+            />
           </div>
         </div>
         <DialogFooter>

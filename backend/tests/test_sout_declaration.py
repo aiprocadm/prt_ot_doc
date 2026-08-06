@@ -1,4 +1,5 @@
 """Юниты чистого домена декларации СОУТ (без БД, без async)."""
+
 from io import BytesIO
 
 from docx import Document
@@ -61,24 +62,32 @@ def test_build_docx_lists_eligible_rows_and_employer_placeholders() -> None:
         report_date="2026-06-01",
         rows=[
             DeclarationRow(
-                workplace_code="РМ-02", position_name="Слесарь",
-                assessed_class="acceptable", headcount="1",
-                report_ref="СОУТ-1 от 2026-06-01", eligible=True, ineligible_reason=None,
+                workplace_code="РМ-02",
+                position_name="Слесарь",
+                assessed_class="acceptable",
+                headcount="1",
+                report_ref="СОУТ-1 от 2026-06-01",
+                eligible=True,
+                ineligible_reason=None,
             ),
         ],
     )
     txt = _text(build_declaration_docx(data))
     assert "Декларация соответствия условий труда" in txt
     assert "ООО Ромашка" in txt
-    assert "ИНН" in txt and "ОГРН" in txt   # плейсхолдеры реквизитов работодателя
+    assert "ИНН" in txt and "ОГРН" in txt  # плейсхолдеры реквизитов работодателя
     assert "РМ-02" in txt and "Слесарь" in txt
-    assert "СОУТ-1" in txt                   # основание (отчёт СОУТ)
+    assert "СОУТ-1" in txt  # основание (отчёт СОУТ)
 
 
 def test_build_docx_empty_rows_renders_placeholder() -> None:
     data = DeclarationPrintData(
-        org_header="ООО Ромашка", generated_at="2026-06-28",
-        campaign_name="Пустая", report_number=None, report_date=None, rows=[],
+        org_header="ООО Ромашка",
+        generated_at="2026-06-28",
+        campaign_name="Пустая",
+        report_number=None,
+        report_date=None,
+        rows=[],
     )
     txt = _text(build_declaration_docx(data))
     assert "Нет рабочих мест" in txt

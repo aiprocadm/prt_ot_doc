@@ -1,6 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
 
-const serverConfigured = Boolean(process.env.E2E_BASE_URL || process.env.E2E_START_SERVER === "1");
+const serverConfigured = Boolean(
+  process.env.E2E_BASE_URL || process.env.E2E_START_SERVER === "1",
+);
 
 const loginAsDefaultUser = async (page: Page) => {
   const tenant = process.env.E2E_TENANT ?? "demo";
@@ -18,7 +20,7 @@ test.describe("key user scenarios", () => {
   test("create company flow opens from companies page", async ({ page }) => {
     test.skip(
       !process.env.E2E_USER_EMAIL || !process.env.E2E_USER_PASSWORD,
-      "Set E2E_USER_EMAIL and E2E_USER_PASSWORD"
+      "Set E2E_USER_EMAIL and E2E_USER_PASSWORD",
     );
     await loginAsDefaultUser(page);
 
@@ -29,7 +31,7 @@ test.describe("key user scenarios", () => {
   test("upload document flow opens document wizard", async ({ page }) => {
     test.skip(
       !process.env.E2E_USER_EMAIL || !process.env.E2E_USER_PASSWORD,
-      "Set E2E_USER_EMAIL and E2E_USER_PASSWORD"
+      "Set E2E_USER_EMAIL and E2E_USER_PASSWORD",
     );
     await loginAsDefaultUser(page);
 
@@ -37,15 +39,19 @@ test.describe("key user scenarios", () => {
     await expect(page).toHaveURL(/\/documents\/wizard/);
   });
 
-  test("quick generation timeline shows orchestration states for chain flow", async ({ page }) => {
+  test("quick generation timeline shows orchestration states for chain flow", async ({
+    page,
+  }) => {
     test.skip(
       !process.env.E2E_USER_EMAIL || !process.env.E2E_USER_PASSWORD,
-      "Set E2E_USER_EMAIL and E2E_USER_PASSWORD"
+      "Set E2E_USER_EMAIL and E2E_USER_PASSWORD",
     );
     await loginAsDefaultUser(page);
 
     await page.goto("/documents/quick-generate");
-    await expect(page.getByRole("heading", { name: /Быстрая генерация/i })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: /Быстрая генерация/i }),
+    ).toBeVisible();
 
     // Scenario hook: when a task is already loaded by real backend flow,
     // operator should see chain-state timeline labels.
@@ -55,7 +61,7 @@ test.describe("key user scenarios", () => {
   test("assign task flow opens task registry", async ({ page }) => {
     test.skip(
       !process.env.E2E_USER_EMAIL || !process.env.E2E_USER_PASSWORD,
-      "Set E2E_USER_EMAIL and E2E_USER_PASSWORD"
+      "Set E2E_USER_EMAIL and E2E_USER_PASSWORD",
     );
     await loginAsDefaultUser(page);
 
@@ -66,7 +72,7 @@ test.describe("key user scenarios", () => {
   test("run inspection flow opens inspections page", async ({ page }) => {
     test.skip(
       !process.env.E2E_USER_EMAIL || !process.env.E2E_USER_PASSWORD,
-      "Set E2E_USER_EMAIL and E2E_USER_PASSWORD"
+      "Set E2E_USER_EMAIL and E2E_USER_PASSWORD",
     );
     await loginAsDefaultUser(page);
 
@@ -74,4 +80,3 @@ test.describe("key user scenarios", () => {
     await expect(page.getByRole("heading", { name: /Проверк/i })).toBeVisible();
   });
 });
-

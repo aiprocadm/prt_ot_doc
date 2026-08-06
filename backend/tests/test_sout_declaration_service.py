@@ -1,4 +1,5 @@
 """Тесты чистой проекции декларации (без БД)."""
+
 from types import SimpleNamespace
 
 from app.services.sout_declaration import build_declaration_projection
@@ -6,8 +7,11 @@ from app.services.sout_declaration import build_declaration_projection
 
 def _wp(code="РМ-01", cls="acceptable", person_id=None):
     return SimpleNamespace(
-        id=code, workplace_code=code, position_name="Слесарь",
-        assessed_class=cls, person_id=person_id,
+        id=code,
+        workplace_code=code,
+        position_name="Слесарь",
+        assessed_class=cls,
+        person_id=person_id,
     )
 
 
@@ -26,10 +30,10 @@ def test_projection_marks_eligible_and_ineligible() -> None:
     )
     by_code = {r.workplace_code: r for r in rows}
     assert by_code["РМ-01"].eligible is True
-    assert by_code["РМ-01"].headcount == "1"        # person_id задан
-    assert by_code["РМ-02"].eligible is False        # класс 3.1
-    assert by_code["РМ-03"].eligible is False        # класс 2, но фактор 3.1
-    assert by_code["РМ-03"].headcount == "—"         # person_id нет
+    assert by_code["РМ-01"].headcount == "1"  # person_id задан
+    assert by_code["РМ-02"].eligible is False  # класс 3.1
+    assert by_code["РМ-03"].eligible is False  # класс 2, но фактор 3.1
+    assert by_code["РМ-03"].headcount == "—"  # person_id нет
 
 
 def test_projection_report_ref_built_from_campaign() -> None:

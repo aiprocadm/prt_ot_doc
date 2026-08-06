@@ -5,7 +5,15 @@ import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useCompaniesStore } from "@/stores/companies";
@@ -25,7 +33,7 @@ const emptyPersonForm: PersonFormValues = {
   phone: "",
   status: "active",
   electrical_group: "",
-  electrical_group_valid_until: ""
+  electrical_group_valid_until: "",
 };
 
 interface PersonFormDialogProps {
@@ -41,10 +49,14 @@ const PERSON_API_FIELD_MAP: Record<string, keyof PersonFormValues> = {
   middle_name: "middle_name",
   email: "email",
   phone: "phone",
-  employment_status: "status"
+  employment_status: "status",
 };
 
-export const PersonFormDialog = ({ trigger, initialData, onSubmitted }: PersonFormDialogProps) => {
+export const PersonFormDialog = ({
+  trigger,
+  initialData,
+  onSubmitted,
+}: PersonFormDialogProps) => {
   const [open, setOpen] = useState(false);
   const { list: listCompanies, items: companies } = useCompaniesStore();
 
@@ -66,8 +78,8 @@ export const PersonFormDialog = ({ trigger, initialData, onSubmitted }: PersonFo
       phone: initialData?.phone ?? "",
       status: initialData?.status ?? "active",
       electrical_group: "",
-      electrical_group_valid_until: ""
-    }
+      electrical_group_valid_until: "",
+    },
   });
 
   const { create, update } = usePersonsStore();
@@ -79,17 +91,21 @@ export const PersonFormDialog = ({ trigger, initialData, onSubmitted }: PersonFo
   useEffect(() => {
     if (!open) return;
     if (initialData) {
-      const quals: Array<Record<string, unknown>> = Array.isArray(initialData.qualifications)
+      const quals: Array<Record<string, unknown>> = Array.isArray(
+        initialData.qualifications,
+      )
         ? (initialData.qualifications as Array<Record<string, unknown>>)
         : [];
 
       // Находим запись electrical_safety_group
-      const elecEntry = quals.find((q) => q.kind === "electrical_safety_group") as
-        | Record<string, unknown>
-        | undefined;
+      const elecEntry = quals.find(
+        (q) => q.kind === "electrical_safety_group",
+      ) as Record<string, unknown> | undefined;
 
       // Остальные квалификации сохраняем для merge
-      otherQualsRef.current = quals.filter((q) => q.kind !== "electrical_safety_group");
+      otherQualsRef.current = quals.filter(
+        (q) => q.kind !== "electrical_safety_group",
+      );
 
       form.reset({
         company_id: initialData.company_id ?? "",
@@ -101,9 +117,13 @@ export const PersonFormDialog = ({ trigger, initialData, onSubmitted }: PersonFo
         phone: initialData.phone ?? "",
         status: initialData.status,
         electrical_group: elecEntry
-          ? (String(elecEntry.level ?? "") as PersonFormValues["electrical_group"])
+          ? (String(
+              elecEntry.level ?? "",
+            ) as PersonFormValues["electrical_group"])
           : "",
-        electrical_group_valid_until: elecEntry ? String(elecEntry.valid_until ?? "") : ""
+        electrical_group_valid_until: elecEntry
+          ? String(elecEntry.valid_until ?? "")
+          : "",
       });
     } else {
       otherQualsRef.current = [];
@@ -114,11 +134,16 @@ export const PersonFormDialog = ({ trigger, initialData, onSubmitted }: PersonFo
   const onSubmit = async (values: PersonFormValues) => {
     try {
       // Merge-safe: берём все прочие квалификации + новую/обновлённую electrical_safety_group
-      const qualifications = mergeElectricalGroupQuals(otherQualsRef.current, values);
+      const qualifications = mergeElectricalGroupQuals(
+        otherQualsRef.current,
+        values,
+      );
 
       const payload: PersonFormValues = { ...values, qualifications };
 
-      const result = initialData ? await update(initialData.id, payload) : await create(payload);
+      const result = initialData
+        ? await update(initialData.id, payload)
+        : await create(payload);
       onSubmitted?.(result);
       const cid = result.company_id ?? values.company_id;
       if (cid) {
@@ -145,8 +170,12 @@ export const PersonFormDialog = ({ trigger, initialData, onSubmitted }: PersonFo
       <DialogTrigger asChild>{trigger}</DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{initialData ? "Редактировать сотрудника" : "Новый сотрудник"}</DialogTitle>
-          <DialogDescription>Добавьте или обновите данные сотрудника.</DialogDescription>
+          <DialogTitle>
+            {initialData ? "Редактировать сотрудника" : "Новый сотрудник"}
+          </DialogTitle>
+          <DialogDescription>
+            Добавьте или обновите данные сотрудника.
+          </DialogDescription>
         </DialogHeader>
         <form
           className="space-y-4"
@@ -160,7 +189,11 @@ export const PersonFormDialog = ({ trigger, initialData, onSubmitted }: PersonFo
         >
           <div className="space-y-2">
             <Label htmlFor="company_id">Компания</Label>
-            <select id="company_id" className="h-10 w-full rounded-md border px-3" {...form.register("company_id")}>
+            <select
+              id="company_id"
+              className="h-10 w-full rounded-md border px-3"
+              {...form.register("company_id")}
+            >
               <option value="">— Выберите компанию —</option>
               {companies.map((c) => (
                 <option key={c.id} value={c.id}>
@@ -169,7 +202,9 @@ export const PersonFormDialog = ({ trigger, initialData, onSubmitted }: PersonFo
               ))}
             </select>
             {form.formState.errors.company_id && (
-              <p className="text-xs text-destructive">{form.formState.errors.company_id.message}</p>
+              <p className="text-xs text-destructive">
+                {form.formState.errors.company_id.message}
+              </p>
             )}
             {companies.length === 0 ? (
               <p className="text-xs text-muted-foreground">
@@ -186,14 +221,18 @@ export const PersonFormDialog = ({ trigger, initialData, onSubmitted }: PersonFo
               <Label htmlFor="first_name">Имя</Label>
               <Input id="first_name" {...form.register("first_name")} />
               {form.formState.errors.first_name && (
-                <p className="text-xs text-destructive">{form.formState.errors.first_name.message}</p>
+                <p className="text-xs text-destructive">
+                  {form.formState.errors.first_name.message}
+                </p>
               )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="last_name">Фамилия</Label>
               <Input id="last_name" {...form.register("last_name")} />
               {form.formState.errors.last_name && (
-                <p className="text-xs text-destructive">{form.formState.errors.last_name.message}</p>
+                <p className="text-xs text-destructive">
+                  {form.formState.errors.last_name.message}
+                </p>
               )}
             </div>
             <div className="space-y-2">
@@ -207,7 +246,11 @@ export const PersonFormDialog = ({ trigger, initialData, onSubmitted }: PersonFo
             <div className="space-y-2">
               <Label htmlFor="email">Электронная почта</Label>
               <Input id="email" type="email" {...form.register("email")} />
-              {form.formState.errors.email && <p className="text-xs text-destructive">{form.formState.errors.email.message}</p>}
+              {form.formState.errors.email && (
+                <p className="text-xs text-destructive">
+                  {form.formState.errors.email.message}
+                </p>
+              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="phone">Телефон</Label>
@@ -215,7 +258,11 @@ export const PersonFormDialog = ({ trigger, initialData, onSubmitted }: PersonFo
             </div>
             <div className="space-y-2">
               <Label htmlFor="status">Статус</Label>
-              <select id="status" className="h-10 rounded-md border px-3" {...form.register("status")}>
+              <select
+                id="status"
+                className="h-10 rounded-md border px-3"
+                {...form.register("status")}
+              >
                 <option value="active">Активен</option>
                 <option value="inactive">Неактивен</option>
                 <option value="dismissed">Уволен</option>
@@ -225,10 +272,14 @@ export const PersonFormDialog = ({ trigger, initialData, onSubmitted }: PersonFo
 
           {/* Группа по электробезопасности */}
           <div className="space-y-2 border-t pt-4">
-            <Label className="text-sm font-medium">Группа по электробезопасности</Label>
+            <Label className="text-sm font-medium">
+              Группа по электробезопасности
+            </Label>
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-1">
-                <Label htmlFor="electrical_group">Группа по электробезопасности</Label>
+                <Label htmlFor="electrical_group">
+                  Группа по электробезопасности
+                </Label>
                 <select
                   id="electrical_group"
                   className="h-10 w-full rounded-md border px-3"
@@ -243,7 +294,9 @@ export const PersonFormDialog = ({ trigger, initialData, onSubmitted }: PersonFo
                 </select>
               </div>
               <div className="space-y-1">
-                <Label htmlFor="electrical_group_valid_until">Действует до</Label>
+                <Label htmlFor="electrical_group_valid_until">
+                  Действует до
+                </Label>
                 <Input
                   id="electrical_group_valid_until"
                   type="date"

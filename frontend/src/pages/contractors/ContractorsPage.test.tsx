@@ -17,33 +17,49 @@ vi.mock("@/api/contractors", async (importOriginal) => {
       listRequirements: vi.fn(),
       createRegistry: vi.fn(),
       createRequirement: vi.fn(),
-      deleteRequirement: vi.fn()
-    }
+      deleteRequirement: vi.fn(),
+    },
   };
 });
 
 vi.mock("@/components/permissions/Can", () => ({
   Can: ({ children }: { children: unknown }) =>
-    typeof children === "function" ? (children as (v: boolean) => unknown)(true) : children
+    typeof children === "function"
+      ? (children as (v: boolean) => unknown)(true)
+      : children,
 }));
 
 beforeEach(() => {
   vi.clearAllMocks();
   (contractorsApi.listRegistry as any).mockResolvedValue({
-    items: [{ id: "c1", name: "ООО Подрядчик", status: "active", company_id: null }],
-    total: 1
+    items: [
+      { id: "c1", name: "ООО Подрядчик", status: "active", company_id: null },
+    ],
+    total: 1,
   });
-  (contractorsApi.listEmployees as any).mockResolvedValue({ items: [{ id: "e1", contractor_id: "c1" }], total: 1 });
-  (contractorsApi.listIncidents as any).mockResolvedValue({ items: [], total: 0 });
-  (contractorsApi.listExpiringDocuments as any).mockResolvedValue({ items: [], total: 0 });
-  (contractorsApi.listRequirements as any).mockResolvedValue({ items: [], total: 0 });
+  (contractorsApi.listEmployees as any).mockResolvedValue({
+    items: [{ id: "e1", contractor_id: "c1" }],
+    total: 1,
+  });
+  (contractorsApi.listIncidents as any).mockResolvedValue({
+    items: [],
+    total: 0,
+  });
+  (contractorsApi.listExpiringDocuments as any).mockResolvedValue({
+    items: [],
+    total: 0,
+  });
+  (contractorsApi.listRequirements as any).mockResolvedValue({
+    items: [],
+    total: 0,
+  });
 });
 
 const renderPage = () =>
   render(
     <MemoryRouter>
       <ContractorsPage />
-    </MemoryRouter>
+    </MemoryRouter>,
   );
 
 describe("ContractorsPage registry tab", () => {
@@ -53,20 +69,30 @@ describe("ContractorsPage registry tab", () => {
   });
 
   it("creates a contractor via the dialog", async () => {
-    (contractorsApi.createRegistry as any).mockResolvedValue({ id: "c2", name: "Новый", status: "active" });
+    (contractorsApi.createRegistry as any).mockResolvedValue({
+      id: "c2",
+      name: "Новый",
+      status: "active",
+    });
     renderPage();
-    fireEvent.click(await screen.findByRole("button", { name: "Новый контрагент" }));
-    fireEvent.change(await screen.findByLabelText("Название"), { target: { value: "Новый" } });
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Новый контрагент" }),
+    );
+    fireEvent.change(await screen.findByLabelText("Название"), {
+      target: { value: "Новый" },
+    });
     fireEvent.click(screen.getByRole("button", { name: "Сохранить" }));
     await waitFor(() =>
-      expect(contractorsApi.createRegistry).toHaveBeenCalledWith(expect.objectContaining({ name: "Новый" }))
+      expect(contractorsApi.createRegistry).toHaveBeenCalledWith(
+        expect.objectContaining({ name: "Новый" }),
+      ),
     );
   });
 
   it("still renders the registry when expiring-docs is feature-disabled (404)", async () => {
     (contractorsApi.listExpiringDocuments as any).mockRejectedValue({
       status: 404,
-      message: "Contractors feature is not enabled for this tenant"
+      message: "Contractors feature is not enabled for this tenant",
     });
     renderPage();
     // The ungated registry must survive a feature-disabled expiring-docs call

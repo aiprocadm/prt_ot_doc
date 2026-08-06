@@ -4,8 +4,9 @@ import re
 from io import BytesIO
 from zipfile import ZIP_DEFLATED, ZipFile
 
-from app.core.xml_security import lxml_fromstring
 from lxml import etree
+
+from app.core.xml_security import lxml_fromstring
 
 W = {
     "w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main",

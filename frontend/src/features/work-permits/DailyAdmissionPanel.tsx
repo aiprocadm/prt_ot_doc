@@ -6,7 +6,10 @@ import { Button } from "@/components/ui/button";
 import { Can } from "@/components/permissions/Can";
 import { Input } from "@/components/ui/input";
 import { PERMISSIONS } from "@/permissions/permissions";
-import type { WorkPermitDailyAdmissionDto, WorkPermitDto } from "@/types/dto/workPermits";
+import type {
+  WorkPermitDailyAdmissionDto,
+  WorkPermitDto,
+} from "@/types/dto/workPermits";
 
 interface Props {
   wp: WorkPermitDto;
@@ -19,10 +22,15 @@ export const DailyAdmissionPanel = ({ wp, onRefresh }: Props) => {
   const [saving, setSaving] = useState(false);
 
   const load = useCallback(() => {
-    workPermitsApi.listAdmissions(wp.id).then(setRows).catch(() => undefined);
+    workPermitsApi
+      .listAdmissions(wp.id)
+      .then(setRows)
+      .catch(() => undefined);
   }, [wp.id]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+  }, [load]);
 
   const canAdmit = wp.status === "issued";
 
@@ -50,7 +58,9 @@ export const DailyAdmissionPanel = ({ wp, onRefresh }: Props) => {
 
   const handleClose = async (a: WorkPermitDailyAdmissionDto) => {
     try {
-      await workPermitsApi.updateAdmission(wp.id, a.id, { end_at: new Date().toISOString() });
+      await workPermitsApi.updateAdmission(wp.id, a.id, {
+        end_at: new Date().toISOString(),
+      });
       toast.success("Смена закрыта");
       load();
     } catch {
@@ -65,15 +75,28 @@ export const DailyAdmissionPanel = ({ wp, onRefresh }: Props) => {
       ) : (
         <ul className="space-y-1 text-sm">
           {rows.map((a) => (
-            <li key={a.id} className="flex flex-wrap items-center justify-between gap-2 border-b pb-1">
+            <li
+              key={a.id}
+              className="flex flex-wrap items-center justify-between gap-2 border-b pb-1"
+            >
               <span>
-                {new Date(`${a.admission_date}T00:00:00`).toLocaleDateString("ru-RU")}
-                {a.start_at ? ` · с ${new Date(a.start_at).toLocaleTimeString("ru-RU")}` : ""}
-                {a.end_at ? ` · по ${new Date(a.end_at).toLocaleTimeString("ru-RU")}` : ""}
+                {new Date(`${a.admission_date}T00:00:00`).toLocaleDateString(
+                  "ru-RU",
+                )}
+                {a.start_at
+                  ? ` · с ${new Date(a.start_at).toLocaleTimeString("ru-RU")}`
+                  : ""}
+                {a.end_at
+                  ? ` · по ${new Date(a.end_at).toLocaleTimeString("ru-RU")}`
+                  : ""}
               </span>
               {!a.end_at && (
                 <Can permission={PERMISSIONS.WORK_PERMIT_MANAGE}>
-                  <Button size="sm" variant="ghost" onClick={() => void handleClose(a)}>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => void handleClose(a)}
+                  >
                     Закрыть смену
                   </Button>
                 </Can>
@@ -86,8 +109,17 @@ export const DailyAdmissionPanel = ({ wp, onRefresh }: Props) => {
       {canAdmit && (
         <Can permission={PERMISSIONS.WORK_PERMIT_MANAGE}>
           <div className="flex flex-wrap items-end gap-2 pt-1">
-            <Input type="date" className="w-44" value={day} onChange={(e) => setDay(e.target.value)} />
-            <Button size="sm" disabled={saving || !day} onClick={() => void handleAdd()}>
+            <Input
+              type="date"
+              className="w-44"
+              value={day}
+              onChange={(e) => setDay(e.target.value)}
+            />
+            <Button
+              size="sm"
+              disabled={saving || !day}
+              onClick={() => void handleAdd()}
+            >
               {saving ? "..." : "Допустить на смену"}
             </Button>
           </div>

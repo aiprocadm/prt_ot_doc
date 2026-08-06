@@ -21,7 +21,13 @@ interface Props {
   onConfirm: (requestId: string, code: string) => Promise<void>;
 }
 
-export const SignaturesPanel = ({ title, signers, signatures, onSign, onConfirm }: Props) => {
+export const SignaturesPanel = ({
+  title,
+  signers,
+  signatures,
+  onSign,
+  onConfirm,
+}: Props) => {
   const [codeInput, setCodeInput] = useState<Record<string, string>>({});
 
   // latest signature per person
@@ -55,20 +61,32 @@ export const SignaturesPanel = ({ title, signers, signatures, onSign, onConfirm 
   return (
     <div className="space-y-2">
       <div className="text-sm font-medium">{title}</div>
-      {signers.length === 0 && <p className="text-sm text-muted-foreground">Подписанты не назначены</p>}
+      {signers.length === 0 && (
+        <p className="text-sm text-muted-foreground">Подписанты не назначены</p>
+      )}
       <ul className="space-y-2 text-sm">
         {signers.map((row) => {
           const sig = sigByPerson.get(row.personId);
           const signed = sig?.status === "signed";
           const awaiting = sig?.status === "awaiting_code";
           return (
-            <li key={row.personId} className="flex flex-wrap items-center justify-between gap-2 border-b pb-1">
+            <li
+              key={row.personId}
+              className="flex flex-wrap items-center justify-between gap-2 border-b pb-1"
+            >
               <span>
-                {row.name} <span className="text-muted-foreground">· {row.roleLabel}</span>
+                {row.name}{" "}
+                <span className="text-muted-foreground">· {row.roleLabel}</span>
               </span>
               <span className="flex items-center gap-2">
-                <span className={signed ? "text-green-600" : "text-muted-foreground"}>
-                  {sig ? labelOf(SIGN_STATUS_LABELS, sig.status) : "Не подписан"}
+                <span
+                  className={
+                    signed ? "text-green-600" : "text-muted-foreground"
+                  }
+                >
+                  {sig
+                    ? labelOf(SIGN_STATUS_LABELS, sig.status)
+                    : "Не подписан"}
                 </span>
                 {!signed && (
                   <Can permission={PERMISSIONS.WORK_PERMIT_MANAGE}>
@@ -79,18 +97,37 @@ export const SignaturesPanel = ({ title, signers, signatures, onSign, onConfirm 
                           className="h-8 w-24 rounded-md border px-2 text-sm"
                           placeholder="код"
                           value={codeInput[sig.id] ?? ""}
-                          onChange={(e) => setCodeInput((m) => ({ ...m, [sig.id]: e.target.value }))}
+                          onChange={(e) =>
+                            setCodeInput((m) => ({
+                              ...m,
+                              [sig.id]: e.target.value,
+                            }))
+                          }
                         />
-                        <Button size="sm" variant="outline" onClick={() => void handleConfirm(sig)}>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => void handleConfirm(sig)}
+                        >
                           Подтвердить
                         </Button>
                       </>
                     ) : (
                       <>
-                        <Button size="sm" variant="outline" onClick={() => void handleSign(row.personId, "attested")}>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() =>
+                            void handleSign(row.personId, "attested")
+                          }
+                        >
                           Зафиксировать
                         </Button>
-                        <Button size="sm" variant="ghost" onClick={() => void handleSign(row.personId, "code")}>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => void handleSign(row.personId, "code")}
+                        >
                           Запросить код
                         </Button>
                       </>

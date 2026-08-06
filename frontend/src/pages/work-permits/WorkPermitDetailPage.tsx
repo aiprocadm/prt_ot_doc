@@ -2,7 +2,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 
-import { fetchAllPersons, workPermitsApi, type PersonOption } from "@/api/workPermits";
+import {
+  fetchAllPersons,
+  workPermitsApi,
+  type PersonOption,
+} from "@/api/workPermits";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingScreen } from "@/components/common/LoadingScreen";
 import { StatusBadge } from "@/components/common/StatusBadge";
@@ -14,7 +18,10 @@ import { ClosingPanel } from "@/features/work-permits/ClosingPanel";
 import { DailyAdmissionPanel } from "@/features/work-permits/DailyAdmissionPanel";
 import { PrintButtons } from "@/features/work-permits/PrintButtons";
 import { ReadinessPanel } from "@/features/work-permits/ReadinessPanel";
-import { SignaturesPanel, type SignerRow } from "@/features/work-permits/SignaturesPanel";
+import {
+  SignaturesPanel,
+  type SignerRow,
+} from "@/features/work-permits/SignaturesPanel";
 import { WorkPermitEventsTimeline } from "@/features/work-permits/WorkPermitEventsTimeline";
 import { WorkPermitFormDialog } from "@/features/work-permits/WorkPermitFormDialog";
 import { useAsyncResource } from "@/hooks/useAsyncResource";
@@ -34,12 +41,22 @@ import {
   labelOf,
 } from "@/lib/workPermitVocab";
 import { PERMISSIONS } from "@/permissions/permissions";
-import type { ElectricalGroupReadinessDto, ReadinessReportDto, WorkPermitClosingSummaryDto, WorkPermitDto, WorkPermitEventDto, WorkPermitSignatureDto } from "@/types/dto/workPermits";
+import type {
+  ElectricalGroupReadinessDto,
+  ReadinessReportDto,
+  WorkPermitClosingSummaryDto,
+  WorkPermitDto,
+  WorkPermitEventDto,
+  WorkPermitSignatureDto,
+} from "@/types/dto/workPermits";
 
 // Actions available per status (excluding "Продлить" which needs a date input)
 const ACTIONS_BY_STATUS: Record<
   string,
-  Array<{ name: "issue" | "suspend" | "resume" | "close" | "cancel"; label: string }>
+  Array<{
+    name: "issue" | "suspend" | "resume" | "close" | "cancel";
+    label: string;
+  }>
 > = {
   draft: [
     { name: "issue", label: "Выдать" },
@@ -69,7 +86,13 @@ function getResponseData(e: unknown): Record<string, unknown> | null {
 }
 
 // Section display helper — renders only when value is non-empty
-function Section({ title, value }: { title: string; value: string | null | undefined }) {
+function Section({
+  title,
+  value,
+}: {
+  title: string;
+  value: string | null | undefined;
+}) {
   if (!value) return null;
   return (
     <div>
@@ -93,11 +116,14 @@ function ElectricalGroupReadinessBanner({
 
   return (
     <div className="mt-3 rounded-md border border-yellow-400 bg-yellow-50 p-2 text-sm text-yellow-800">
-      <div className="font-medium mb-1">Группы электробезопасности: требуется повышение</div>
+      <div className="font-medium mb-1">
+        Группы электробезопасности: требуется повышение
+      </div>
       <ul className="space-y-0.5">
         {readiness.insufficient.map((item) => (
           <li key={item.person_id}>
-            {MEMBER_ROLE_LABELS[item.role] ?? item.role}: группа {item.group ?? "—"} {"<"} требуется {item.required}
+            {MEMBER_ROLE_LABELS[item.role] ?? item.role}: группа{" "}
+            {item.group ?? "—"} {"<"} требуется {item.required}
           </li>
         ))}
       </ul>
@@ -113,7 +139,8 @@ export default function WorkPermitDetailPage() {
   const [readiness, setReadiness] = useState<ReadinessReportDto | null>(null);
   const [events, setEvents] = useState<WorkPermitEventDto[]>([]);
   const [signatures, setSignatures] = useState<WorkPermitSignatureDto[]>([]);
-  const [closingSummary, setClosingSummary] = useState<WorkPermitClosingSummaryDto | null>(null);
+  const [closingSummary, setClosingSummary] =
+    useState<WorkPermitClosingSummaryDto | null>(null);
 
   // Extend dialog state
   const [extendOpen, setExtendOpen] = useState(false);
@@ -122,7 +149,12 @@ export default function WorkPermitDetailPage() {
 
   // Main permit loader
   const loader = useCallback(() => workPermitsApi.get(id), [id]);
-  const { data: wp, loading, error, reload } = useAsyncResource<WorkPermitDto | null>({
+  const {
+    data: wp,
+    loading,
+    error,
+    reload,
+  } = useAsyncResource<WorkPermitDto | null>({
     loader,
     initialData: null,
     errorMessage: "Не удалось загрузить наряд",
@@ -130,15 +162,29 @@ export default function WorkPermitDetailPage() {
 
   // Fetch person list once
   useEffect(() => {
-    fetchAllPersons().then(setPersons).catch(() => undefined);
+    fetchAllPersons()
+      .then(setPersons)
+      .catch(() => undefined);
   }, []);
 
   // Refresh side panels (readiness + events + signatures + closing) when permit changes
   const refreshSide = useCallback(() => {
-    workPermitsApi.readiness(id).then(setReadiness).catch(() => undefined);
-    workPermitsApi.events(id).then(setEvents).catch(() => undefined);
-    workPermitsApi.listSignatures(id).then(setSignatures).catch(() => undefined);
-    workPermitsApi.getClosing(id).then(setClosingSummary).catch(() => undefined);
+    workPermitsApi
+      .readiness(id)
+      .then(setReadiness)
+      .catch(() => undefined);
+    workPermitsApi
+      .events(id)
+      .then(setEvents)
+      .catch(() => undefined);
+    workPermitsApi
+      .listSignatures(id)
+      .then(setSignatures)
+      .catch(() => undefined);
+    workPermitsApi
+      .getClosing(id)
+      .then(setClosingSummary)
+      .catch(() => undefined);
   }, [id]);
 
   useEffect(() => {
@@ -152,10 +198,15 @@ export default function WorkPermitDetailPage() {
   }, [persons]);
 
   if (loading) return <LoadingScreen label="Загрузка наряда" />;
-  if (error || !wp) return <ErrorState error={error ?? undefined} onRetry={() => void reload()} />;
+  if (error || !wp)
+    return (
+      <ErrorState error={error ?? undefined} onRetry={() => void reload()} />
+    );
 
   // Run a lifecycle action; handle WORK_PERMIT_BLOCKED (409) and generic errors
-  const runAction = async (name: "issue" | "suspend" | "resume" | "close" | "cancel") => {
+  const runAction = async (
+    name: "issue" | "suspend" | "resume" | "close" | "cancel",
+  ) => {
     try {
       await workPermitsApi.action(wp.id, name);
       toast.success("Готово");
@@ -163,15 +214,23 @@ export default function WorkPermitDetailPage() {
     } catch (e: unknown) {
       const data = getResponseData(e);
       if (data?.code === "WORK_PERMIT_BLOCKED") {
-        toast.error("Бригада не готова — наряд нельзя выдать. Проверьте панель готовности.");
+        toast.error(
+          "Бригада не готова — наряд нельзя выдать. Проверьте панель готовности.",
+        );
         refreshSide();
       } else if (data?.code === "WORK_PERMIT_CLOSING_INCOMPLETE") {
         const missing = Array.isArray(data.missing)
           ? (data.missing as string[])
           : [];
-        const { CLOSING_MISSING_LABELS } = await import("@/lib/workPermitVocab");
-        const reasons = missing.map((k) => CLOSING_MISSING_LABELS[k] ?? k).join("; ");
-        toast.error(`Не выполнены условия закрытия: ${reasons || "проверьте панель закрытия"}`);
+        const { CLOSING_MISSING_LABELS } = await import(
+          "@/lib/workPermitVocab"
+        );
+        const reasons = missing
+          .map((k) => CLOSING_MISSING_LABELS[k] ?? k)
+          .join("; ");
+        toast.error(
+          `Не выполнены условия закрытия: ${reasons || "проверьте панель закрытия"}`,
+        );
         refreshSide();
       } else if (data?.code === "WORK_PERMIT_TRANSITION_INVALID") {
         toast.error("Действие недоступно в текущем статусе");
@@ -216,17 +275,29 @@ export default function WorkPermitDetailPage() {
   const RESP_ROLES = new Set(["issuer", "supervisor", "admitter", "foreman"]);
   const responsibleSigners: SignerRow[] = wp.members
     .filter((m) => RESP_ROLES.has(m.role))
-    .map((m) => ({ personId: m.person_id, name: nameOf(m.person_id), roleLabel: labelOf(MEMBER_ROLE_LABELS, m.role) }));
+    .map((m) => ({
+      personId: m.person_id,
+      name: nameOf(m.person_id),
+      roleLabel: labelOf(MEMBER_ROLE_LABELS, m.role),
+    }));
   const permitSignatures = signatures.filter((s) => s.stream === "permit");
 
   const CLOSING_ROLES = new Set(["foreman", "supervisor", "admitter"]);
   const closingSigners: SignerRow[] = wp.members
     .filter((m) => CLOSING_ROLES.has(m.role))
-    .map((m) => ({ personId: m.person_id, name: nameOf(m.person_id), roleLabel: labelOf(MEMBER_ROLE_LABELS, m.role) }));
+    .map((m) => ({
+      personId: m.person_id,
+      name: nameOf(m.person_id),
+      roleLabel: labelOf(MEMBER_ROLE_LABELS, m.role),
+    }));
 
   const signPermit = async (personId: string, mode: "attested" | "code") => {
-    const res = await workPermitsApi.createPermitSignature(wp.id, { person_id: personId, mode });
-    if (mode === "code" && res.confirm_code) toast.success(`Код для подписанта: ${res.confirm_code}`);
+    const res = await workPermitsApi.createPermitSignature(wp.id, {
+      person_id: personId,
+      mode,
+    });
+    if (mode === "code" && res.confirm_code)
+      toast.success(`Код для подписанта: ${res.confirm_code}`);
     refreshSide();
   };
   const confirmSign = async (requestId: string, code: string) => {
@@ -240,7 +311,8 @@ export default function WorkPermitDetailPage() {
     try {
       await workPermitsApi.downloadPrint(wp.id, fmt, wp.number ?? undefined);
     } catch (e: unknown) {
-      const status = (e as { response?: { status?: number } })?.response?.status;
+      const status = (e as { response?: { status?: number } })?.response
+        ?.status;
       if (fmt === "pdf" && status === 503) {
         toast.error("PDF-конвертер недоступен, скачайте DOCX");
       } else {
@@ -250,11 +322,16 @@ export default function WorkPermitDetailPage() {
   };
 
   const safetySystemsText =
-    (wp.safety_systems ?? []).map((c) => SAFETY_SYSTEM_LABELS[c] ?? c).join(", ") || null;
+    (wp.safety_systems ?? [])
+      .map((c) => SAFETY_SYSTEM_LABELS[c] ?? c)
+      .join(", ") || null;
 
   return (
     <div className="space-y-5">
-      <Link to="/work-permits" className="text-sm text-muted-foreground hover:underline">
+      <Link
+        to="/work-permits"
+        className="text-sm text-muted-foreground hover:underline"
+      >
         ← Наряды-допуски
       </Link>
 
@@ -316,7 +393,10 @@ export default function WorkPermitDetailPage() {
                 <Button
                   size="sm"
                   variant="ghost"
-                  onClick={() => { setExtendOpen(false); setExtendDate(""); }}
+                  onClick={() => {
+                    setExtendOpen(false);
+                    setExtendDate("");
+                  }}
                 >
                   Отмена
                 </Button>
@@ -346,66 +426,122 @@ export default function WorkPermitDetailPage() {
           {wp.work_type === "height" ? (
             <Section title="Системы безопасности" value={safetySystemsText} />
           ) : null}
-          <Section title="Мероприятия до начала" value={wp.measures_before_text} />
-          <Section title="Мероприятия в процессе" value={wp.measures_during_text} />
+          <Section
+            title="Мероприятия до начала"
+            value={wp.measures_before_text}
+          />
+          <Section
+            title="Мероприятия в процессе"
+            value={wp.measures_during_text}
+          />
           <Section title="Особые условия" value={wp.special_conditions_text} />
           <Section title="СИЗ" value={wp.ppe_text} />
           {wp.work_type === "confined_space" && wp.type_specific ? (
             <div className="text-sm">
-              <div className="font-medium">Анализ воздушной среды и вентиляция (902н)</div>
+              <div className="font-medium">
+                Анализ воздушной среды и вентиляция (902н)
+              </div>
               {(wp.type_specific as { ventilation?: string }).ventilation ? (
-                <div>Вентиляция: {VENTILATION_LABELS[(wp.type_specific as { ventilation: string }).ventilation] ?? "—"}</div>
+                <div>
+                  Вентиляция:{" "}
+                  {VENTILATION_LABELS[
+                    (wp.type_specific as { ventilation: string }).ventilation
+                  ] ?? "—"}
+                </div>
               ) : null}
-              {((wp.type_specific as { gas_analysis?: Array<{ parameter: string; value: string }> }).gas_analysis ?? []).map((m, i) => (
-                <div key={i}>{GAS_PARAMETER_LABELS[m.parameter] ?? m.parameter}: {m.value}</div>
+              {(
+                (
+                  wp.type_specific as {
+                    gas_analysis?: Array<{ parameter: string; value: string }>;
+                  }
+                ).gas_analysis ?? []
+              ).map((m, i) => (
+                <div key={i}>
+                  {GAS_PARAMETER_LABELS[m.parameter] ?? m.parameter}: {m.value}
+                </div>
               ))}
             </div>
           ) : null}
           {wp.work_type === "hot_work" && wp.type_specific ? (
             <div className="text-sm">
-              <div className="font-medium">Пожарная безопасность огневых работ (1479)</div>
-              {((wp.type_specific as { fire_fighting_means?: string[] }).fire_fighting_means ?? []).length ? (
+              <div className="font-medium">
+                Пожарная безопасность огневых работ (1479)
+              </div>
+              {(
+                (wp.type_specific as { fire_fighting_means?: string[] })
+                  .fire_fighting_means ?? []
+              ).length ? (
                 <div>
                   Средства пожаротушения:{" "}
-                  {((wp.type_specific as { fire_fighting_means: string[] }).fire_fighting_means)
+                  {(
+                    wp.type_specific as { fire_fighting_means: string[] }
+                  ).fire_fighting_means
                     .map((c) => FIRE_FIGHTING_MEANS_LABELS[c] ?? c)
                     .join(", ")}
                 </div>
               ) : null}
-              {((wp.type_specific as { gas_analysis?: Array<{ parameter: string; value: string }> }).gas_analysis ?? []).map((m, i) => (
-                <div key={i}>{GAS_PARAMETER_LABELS[m.parameter] ?? m.parameter}: {m.value}</div>
+              {(
+                (
+                  wp.type_specific as {
+                    gas_analysis?: Array<{ parameter: string; value: string }>;
+                  }
+                ).gas_analysis ?? []
+              ).map((m, i) => (
+                <div key={i}>
+                  {GAS_PARAMETER_LABELS[m.parameter] ?? m.parameter}: {m.value}
+                </div>
               ))}
             </div>
           ) : null}
           {wp.work_type === "gas_hazardous" && wp.type_specific ? (
             <div className="text-sm">
-              <div className="font-medium">Защита органов дыхания и анализ среды (528)</div>
-              {((wp.type_specific as { respiratory_ppe?: string[] }).respiratory_ppe ?? []).length ? (
+              <div className="font-medium">
+                Защита органов дыхания и анализ среды (528)
+              </div>
+              {(
+                (wp.type_specific as { respiratory_ppe?: string[] })
+                  .respiratory_ppe ?? []
+              ).length ? (
                 <div>
                   СИЗОД:{" "}
-                  {((wp.type_specific as { respiratory_ppe: string[] }).respiratory_ppe)
+                  {(
+                    wp.type_specific as { respiratory_ppe: string[] }
+                  ).respiratory_ppe
                     .map((c) => RESPIRATORY_PPE_LABELS[c] ?? c)
                     .join(", ")}
                 </div>
               ) : null}
-              {((wp.type_specific as { gas_analysis?: Array<{ parameter: string; value: string }> }).gas_analysis ?? []).map((m, i) => (
-                <div key={i}>{GAS_PARAMETER_LABELS[m.parameter] ?? m.parameter}: {m.value}</div>
+              {(
+                (
+                  wp.type_specific as {
+                    gas_analysis?: Array<{ parameter: string; value: string }>;
+                  }
+                ).gas_analysis ?? []
+              ).map((m, i) => (
+                <div key={i}>
+                  {GAS_PARAMETER_LABELS[m.parameter] ?? m.parameter}: {m.value}
+                </div>
               ))}
             </div>
           ) : null}
           {wp.work_type === "excavation" && wp.type_specific ? (
             <div className="text-sm">
-              <div className="font-medium">Безопасность земляных работ (883н)</div>
+              <div className="font-medium">
+                Безопасность земляных работ (883н)
+              </div>
               {(wp.type_specific as { shoring?: string }).shoring ? (
                 <div>
                   Защита стенок выемки:{" "}
-                  {SHORING_METHOD_LABELS[(wp.type_specific as { shoring: string }).shoring] ?? "—"}
+                  {SHORING_METHOD_LABELS[
+                    (wp.type_specific as { shoring: string }).shoring
+                  ] ?? "—"}
                 </div>
               ) : null}
-              {((wp.type_specific as { utilities?: string[] }).utilities ?? []).length ? (
+              {((wp.type_specific as { utilities?: string[] }).utilities ?? [])
+                .length ? (
                 <div>
                   Подземные коммуникации:{" "}
-                  {((wp.type_specific as { utilities: string[] }).utilities)
+                  {(wp.type_specific as { utilities: string[] }).utilities
                     .map((c) => UTILITIES_LABELS[c] ?? c)
                     .join(", ")}
                 </div>
@@ -414,27 +550,38 @@ export default function WorkPermitDetailPage() {
           ) : null}
           {wp.work_type === "electrical" && wp.type_specific ? (
             <div className="text-sm">
-              <div className="font-medium">Меры безопасности в электроустановках (903н)</div>
-              {(wp.type_specific as { voltage_level?: string }).voltage_level ? (
+              <div className="font-medium">
+                Меры безопасности в электроустановках (903н)
+              </div>
+              {(wp.type_specific as { voltage_level?: string })
+                .voltage_level ? (
                 <div>
                   Класс напряжения:{" "}
                   {VOLTAGE_LEVEL_LABELS[
-                    (wp.type_specific as { voltage_level: string }).voltage_level
+                    (wp.type_specific as { voltage_level: string })
+                      .voltage_level
                   ] ?? "—"}
                 </div>
               ) : null}
-              {(wp.type_specific as { voltage_condition?: string }).voltage_condition ? (
+              {(wp.type_specific as { voltage_condition?: string })
+                .voltage_condition ? (
                 <div>
                   Условие проведения:{" "}
                   {VOLTAGE_CONDITION_LABELS[
-                    (wp.type_specific as { voltage_condition: string }).voltage_condition
+                    (wp.type_specific as { voltage_condition: string })
+                      .voltage_condition
                   ] ?? "—"}
                 </div>
               ) : null}
-              {((wp.type_specific as { technical_measures?: string[] }).technical_measures ?? []).length ? (
+              {(
+                (wp.type_specific as { technical_measures?: string[] })
+                  .technical_measures ?? []
+              ).length ? (
                 <div>
                   Технические мероприятия:{" "}
-                  {((wp.type_specific as { technical_measures: string[] }).technical_measures)
+                  {(
+                    wp.type_specific as { technical_measures: string[] }
+                  ).technical_measures
                     .map((c) => ELECTRICAL_MEASURES_LABELS[c] ?? c)
                     .join("; ")}
                 </div>
@@ -449,7 +596,9 @@ export default function WorkPermitDetailPage() {
             !wp.measures_during_text &&
             !wp.special_conditions_text &&
             !wp.ppe_text && (
-              <p className="text-sm text-muted-foreground">Описательные поля не заполнены</p>
+              <p className="text-sm text-muted-foreground">
+                Описательные поля не заполнены
+              </p>
             )}
         </div>
 
@@ -512,7 +661,12 @@ export default function WorkPermitDetailPage() {
       {/* Целевой инструктаж */}
       <div className="rounded-md border p-3">
         <div className="text-sm font-medium mb-2">Целевой инструктаж</div>
-        <BriefingPanel wp={wp} nameOf={nameOf} signatures={signatures} onRefresh={refreshSide} />
+        <BriefingPanel
+          wp={wp}
+          nameOf={nameOf}
+          signatures={signatures}
+          onRefresh={refreshSide}
+        />
       </div>
 
       {/* Подписи ответственных лиц */}
@@ -533,24 +687,25 @@ export default function WorkPermitDetailPage() {
       </div>
 
       {/* Закрытие наряда (Ф3b) — только для issued / suspended / closed */}
-      {["issued", "suspended", "closed"].includes(wp.status) && closingSummary && (
-        <div className="rounded-md border p-3">
-          <div className="text-sm font-medium mb-2">Закрытие наряда</div>
-          <Can permission={PERMISSIONS.WORK_PERMIT_MANAGE}>
-            {(canManage) => (
-              <ClosingPanel
-                summary={closingSummary}
-                signers={closingSigners}
-                canManage={canManage}
-                workPermitId={wp.id}
-                nameOf={nameOf}
-                onRefresh={refreshSide}
-                onClose={() => void runAction("close")}
-              />
-            )}
-          </Can>
-        </div>
-      )}
+      {["issued", "suspended", "closed"].includes(wp.status) &&
+        closingSummary && (
+          <div className="rounded-md border p-3">
+            <div className="text-sm font-medium mb-2">Закрытие наряда</div>
+            <Can permission={PERMISSIONS.WORK_PERMIT_MANAGE}>
+              {(canManage) => (
+                <ClosingPanel
+                  summary={closingSummary}
+                  signers={closingSigners}
+                  canManage={canManage}
+                  workPermitId={wp.id}
+                  nameOf={nameOf}
+                  onRefresh={refreshSide}
+                  onClose={() => void runAction("close")}
+                />
+              )}
+            </Can>
+          </div>
+        )}
 
       {/* Events log */}
       <div className="rounded-md border p-3">

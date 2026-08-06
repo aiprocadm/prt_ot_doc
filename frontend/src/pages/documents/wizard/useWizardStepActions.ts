@@ -42,7 +42,9 @@ type ActionDeps = Pick<
 >;
 
 export const useWizardStepActions = (deps: ActionDeps) => {
-  const handleSourceFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
+  const handleSourceFileChange = async (
+    event: ChangeEvent<HTMLInputElement>,
+  ) => {
     const file = event.target.files?.[0] ?? null;
     if (!file) return;
     if (file.size > 10 * 1024 * 1024) {
@@ -72,12 +74,22 @@ export const useWizardStepActions = (deps: ActionDeps) => {
       });
       deps.pushBrandingPreview(preview);
       deps.setPartial({
-        companyId: (preview.wizard_defaults.company_id as string | undefined) ?? deps.companyId,
-        siteId: (preview.wizard_defaults.site_id as string | undefined) ?? deps.siteId,
-        headerPreset: (preview.wizard_defaults.preset_code as string | undefined) ?? deps.headerPreset,
+        companyId:
+          (preview.wizard_defaults.company_id as string | undefined) ??
+          deps.companyId,
+        siteId:
+          (preview.wizard_defaults.site_id as string | undefined) ??
+          deps.siteId,
+        headerPreset:
+          (preview.wizard_defaults.preset_code as string | undefined) ??
+          deps.headerPreset,
       });
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Не удалось собрать branded preview");
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Не удалось собрать branded preview",
+      );
     }
   };
 
@@ -90,12 +102,24 @@ export const useWizardStepActions = (deps: ActionDeps) => {
   const handleReplaceDryRun = async () => {
     try {
       if (!deps.docxFile || !deps.replaceMapFile) return;
-      const result = await replaceDryRun({ docxFile: deps.docxFile, replaceMapFile: deps.replaceMapFile, idempotencyKey: deps.idempotencyKey });
+      const result = await replaceDryRun({
+        docxFile: deps.docxFile,
+        replaceMapFile: deps.replaceMapFile,
+        idempotencyKey: deps.idempotencyKey,
+      });
       deps.setPartial({ replaceDryRun: result });
-      const fullReport = await getReplaceReport(result.report_id, { limit: 100 });
-      deps.setPartial({ replaceDryRun: { ...result, preview_samples: fullReport.rows } });
+      const fullReport = await getReplaceReport(result.report_id, {
+        limit: 100,
+      });
+      deps.setPartial({
+        replaceDryRun: { ...result, preview_samples: fullReport.rows },
+      });
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Не удалось выполнить dry-run replace");
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Не удалось выполнить dry-run replace",
+      );
     }
   };
 
@@ -111,7 +135,9 @@ export const useWizardStepActions = (deps: ActionDeps) => {
       deps.setPartial({ batch: response });
       toast.success("Batch запущен");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Не удалось запустить batch");
+      toast.error(
+        error instanceof Error ? error.message : "Не удалось запустить batch",
+      );
     }
   };
 
@@ -127,7 +153,8 @@ export const useWizardStepActions = (deps: ActionDeps) => {
           headerPreset: deps.headerPreset,
           siteId: deps.siteId || null,
           branding_preview: deps.brandingPreview?.apply_headers_payload ?? null,
-          reproducibility: deps.brandingPreview?.profile.reproducibility ?? null,
+          reproducibility:
+            deps.brandingPreview?.profile.reproducibility ?? null,
         },
       };
       const task = await generateDocument(payload, deps.idempotencyKey);
@@ -143,7 +170,11 @@ export const useWizardStepActions = (deps: ActionDeps) => {
         toast.error(status.error ?? "Pipeline завершился с ошибкой");
       }
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Не удалось запустить single pipeline");
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Не удалось запустить single pipeline",
+      );
     }
   };
 
@@ -159,13 +190,21 @@ export const useWizardStepActions = (deps: ActionDeps) => {
         toast.warning("Маппинг содержит незаполненные обязательные поля");
       }
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Не удалось проверить маппинг");
+      toast.error(
+        error instanceof Error ? error.message : "Не удалось проверить маппинг",
+      );
     }
   };
 
   const handleOpenFirstArtifact = async () => {
     try {
-      const fileId = String((deps.pipelineRun?.artifacts?.all as Array<{ file_id?: string }> | undefined)?.[0]?.file_id ?? "");
+      const fileId = String(
+        (
+          deps.pipelineRun?.artifacts?.all as
+            | Array<{ file_id?: string }>
+            | undefined
+        )?.[0]?.file_id ?? "",
+      );
       if (!fileId) {
         toast.error("Файл артефакта не найден.");
         return;
@@ -173,7 +212,9 @@ export const useWizardStepActions = (deps: ActionDeps) => {
       const link = await fetchFileDownloadLink(fileId);
       window.open(link.url, "_blank", "noopener,noreferrer");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Не удалось скачать артефакт");
+      toast.error(
+        error instanceof Error ? error.message : "Не удалось скачать артефакт",
+      );
     }
   };
 

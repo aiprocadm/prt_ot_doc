@@ -1,4 +1,5 @@
 """Unit + API: СОУТ class-of-conditions history (P10-04 срез-2)."""
+
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -13,15 +14,20 @@ from app.domains.sout.service import build_class_history_row, history_to_read
 from app.models.sout import SoutCampaignStatus, SoutClass, SoutClassHistory
 from app.schemas.sout import WorkplaceUpdate
 
-
 # ── model shape ──────────────────────────────────────────────────────────────
+
 
 def test_class_history_table_and_columns() -> None:
     assert SoutClassHistory.__tablename__ == "sout_class_history"
     cols = set(SoutClassHistory.__table__.columns.keys())
     assert {
-        "id", "tenant_id", "workplace_id", "old_class", "new_class",
-        "changed_at", "note",
+        "id",
+        "tenant_id",
+        "workplace_id",
+        "old_class",
+        "new_class",
+        "changed_at",
+        "note",
     } <= cols
 
 
@@ -32,10 +38,15 @@ def test_history_reuses_shared_soutclass_enum() -> None:
 
 # ── severity / worsening ─────────────────────────────────────────────────────
 
+
 def test_severity_is_monotonic_optimal_to_dangerous() -> None:
     order = [
-        SoutClass.OPTIMAL, SoutClass.ACCEPTABLE, SoutClass.HARMFUL_3_1,
-        SoutClass.HARMFUL_3_2, SoutClass.HARMFUL_3_3, SoutClass.HARMFUL_3_4,
+        SoutClass.OPTIMAL,
+        SoutClass.ACCEPTABLE,
+        SoutClass.HARMFUL_3_1,
+        SoutClass.HARMFUL_3_2,
+        SoutClass.HARMFUL_3_3,
+        SoutClass.HARMFUL_3_4,
         SoutClass.DANGEROUS,
     ]
     ranks = [CLASS_SEVERITY[c] for c in order]
@@ -61,17 +72,25 @@ def test_worsening_false_when_new_unknown() -> None:
 
 # ── service helpers ──────────────────────────────────────────────────────────
 
+
 def test_build_history_row_none_when_unchanged() -> None:
-    assert build_class_history_row(
-        tenant_id="t1", workplace_id="w1",
-        old_class=SoutClass.HARMFUL_3_1, new_class=SoutClass.HARMFUL_3_1,
-    ) is None
+    assert (
+        build_class_history_row(
+            tenant_id="t1",
+            workplace_id="w1",
+            old_class=SoutClass.HARMFUL_3_1,
+            new_class=SoutClass.HARMFUL_3_1,
+        )
+        is None
+    )
 
 
 def test_build_history_row_created_on_change() -> None:
     row = build_class_history_row(
-        tenant_id="t1", workplace_id="w1",
-        old_class=SoutClass.ACCEPTABLE, new_class=SoutClass.HARMFUL_3_3,
+        tenant_id="t1",
+        workplace_id="w1",
+        old_class=SoutClass.ACCEPTABLE,
+        new_class=SoutClass.HARMFUL_3_3,
     )
     assert row is not None
     assert row.tenant_id == "t1"
@@ -81,7 +100,10 @@ def test_build_history_row_created_on_change() -> None:
 
 def test_build_history_row_initial_assignment() -> None:
     row = build_class_history_row(
-        tenant_id="t1", workplace_id="w1", old_class=None, new_class=SoutClass.OPTIMAL,
+        tenant_id="t1",
+        workplace_id="w1",
+        old_class=None,
+        new_class=SoutClass.OPTIMAL,
     )
     assert row is not None
     assert row.old_class is None
@@ -89,15 +111,19 @@ def test_build_history_row_initial_assignment() -> None:
 
 def test_history_to_read_marks_worsening() -> None:
     raw = SimpleNamespace(
-        id="h1", workplace_id="w1",
-        old_class=SoutClass.ACCEPTABLE, new_class=SoutClass.HARMFUL_3_2,
-        changed_at=datetime(2026, 6, 26, tzinfo=timezone.utc), note=None,
+        id="h1",
+        workplace_id="w1",
+        old_class=SoutClass.ACCEPTABLE,
+        new_class=SoutClass.HARMFUL_3_2,
+        changed_at=datetime(2026, 6, 26, tzinfo=timezone.utc),
+        note=None,
     )
     read = history_to_read(raw)
     assert read.is_worsening is True
 
 
 # ── API: PATCH records history on class change ──────────────────────────────
+
 
 def _tenant():
     return SimpleNamespace(id="tenant-1", is_active=True, slug="t1")
@@ -106,10 +132,18 @@ def _tenant():
 def _workplace(assessed_class=SoutClass.ACCEPTABLE):
     now = datetime(2026, 6, 26, tzinfo=timezone.utc)
     return SimpleNamespace(
-        id="w1", campaign_id="c1", tenant_id="tenant-1",
-        workplace_code="РМ-001", position_name="Сварщик", person_id=None,
-        assessed_class=assessed_class, assessment_date=None, next_assessment_date=None,
-        created_at=now, updated_at=now, deleted_at=None,
+        id="w1",
+        campaign_id="c1",
+        tenant_id="tenant-1",
+        workplace_code="РМ-001",
+        position_name="Сварщик",
+        person_id=None,
+        assessed_class=assessed_class,
+        assessment_date=None,
+        next_assessment_date=None,
+        created_at=now,
+        updated_at=now,
+        deleted_at=None,
     )
 
 
@@ -118,9 +152,15 @@ def _open_campaign():
     mutable while the campaign is still open."""
     now = datetime(2026, 6, 26, tzinfo=timezone.utc)
     return SimpleNamespace(
-        id="c1", tenant_id="tenant-1", name="СОУТ 2026",
-        status=SoutCampaignStatus.IN_PROGRESS, planned_date=None, completed_date=None,
-        created_at=now, updated_at=now, deleted_at=None,
+        id="c1",
+        tenant_id="tenant-1",
+        name="СОУТ 2026",
+        status=SoutCampaignStatus.IN_PROGRESS,
+        planned_date=None,
+        completed_date=None,
+        created_at=now,
+        updated_at=now,
+        deleted_at=None,
     )
 
 
@@ -140,7 +180,9 @@ async def test_update_workplace_records_history_on_class_change(monkeypatch):
     await routes.update_workplace(
         wid="w1",
         payload=WorkplaceUpdate(assessed_class=SoutClass.HARMFUL_3_2),
-        tenant=_tenant(), session=session, access=SimpleNamespace(),
+        tenant=_tenant(),
+        session=session,
+        access=SimpleNamespace(),
     )
     hist = [o for o in added if isinstance(o, SoutClassHistory)]
     assert len(hist) == 1
@@ -165,7 +207,9 @@ async def test_update_workplace_no_history_when_class_untouched(monkeypatch):
     await routes.update_workplace(
         wid="w1",
         payload=WorkplaceUpdate(position_name="Электрик"),
-        tenant=_tenant(), session=session, access=SimpleNamespace(),
+        tenant=_tenant(),
+        session=session,
+        access=SimpleNamespace(),
     )
     assert [o for o in added if isinstance(o, SoutClassHistory)] == []
 
@@ -186,6 +230,8 @@ async def test_update_workplace_no_history_when_same_class(monkeypatch):
     await routes.update_workplace(
         wid="w1",
         payload=WorkplaceUpdate(assessed_class=SoutClass.HARMFUL_3_1),
-        tenant=_tenant(), session=session, access=SimpleNamespace(),
+        tenant=_tenant(),
+        session=session,
+        access=SimpleNamespace(),
     )
     assert [o for o in added if isinstance(o, SoutClassHistory)] == []

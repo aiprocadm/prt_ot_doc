@@ -1,11 +1,19 @@
-import { localStorageGetItem, localStorageSetItem } from "@/utils/browserStorage";
+import {
+  localStorageGetItem,
+  localStorageSetItem,
+} from "@/utils/browserStorage";
 import { sendUxMetric } from "@/api/navigation";
 
 const UX_METRICS_STORAGE_KEY = "ux.metrics.events.v1";
 const MAX_EVENTS = 200;
 
 export type UxMetricEvent = {
-  name: "time_to_first_action" | "nav_backtrack_rate" | "empty_state_to_action_rate" | "navigation_click" | "route_view";
+  name:
+    | "time_to_first_action"
+    | "nav_backtrack_rate"
+    | "empty_state_to_action_rate"
+    | "navigation_click"
+    | "route_view";
   ts: number;
   payload?: Record<string, string | number | boolean | null | undefined>;
 };
@@ -22,12 +30,15 @@ const readEvents = (): UxMetricEvent[] => {
 };
 
 const writeEvents = (events: UxMetricEvent[]) => {
-  localStorageSetItem(UX_METRICS_STORAGE_KEY, JSON.stringify(events.slice(-MAX_EVENTS)));
+  localStorageSetItem(
+    UX_METRICS_STORAGE_KEY,
+    JSON.stringify(events.slice(-MAX_EVENTS)),
+  );
 };
 
 export const trackUxMetric = (
   name: UxMetricEvent["name"],
-  payload?: UxMetricEvent["payload"]
+  payload?: UxMetricEvent["payload"],
 ) => {
   const events = readEvents();
   events.push({ name, ts: Date.now(), payload });

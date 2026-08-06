@@ -3,7 +3,7 @@ import type {
   CalendarEventsQuery,
   CalendarEventsResponseDto,
   CalendarSavedViewDto,
-  CalendarSavedViewWriteRequest
+  CalendarSavedViewWriteRequest,
 } from "@/types/dto/calendar";
 
 const buildParams = (query: CalendarEventsQuery): Record<string, unknown> => {
@@ -21,15 +21,17 @@ const buildParams = (query: CalendarEventsQuery): Record<string, unknown> => {
 };
 
 export const calendarApi = {
-  async getEvents(query: CalendarEventsQuery = {}): Promise<CalendarEventsResponseDto> {
+  async getEvents(
+    query: CalendarEventsQuery = {},
+  ): Promise<CalendarEventsResponseDto> {
     const { data } = await apiClient.get<CalendarEventsResponseDto>(
       "/calendar/events",
       {
         params: buildParams(query),
         paramsSerializer: {
-          indexes: null
-        }
-      }
+          indexes: null,
+        },
+      },
     );
     return data;
   },
@@ -37,38 +39,38 @@ export const calendarApi = {
     const { data } = await apiClient.get<Blob>("/calendar/events.ics", {
       params: buildParams(query),
       paramsSerializer: {
-        indexes: null
+        indexes: null,
       },
-      responseType: "blob"
+      responseType: "blob",
     });
     return data;
   },
   async listSavedViews(): Promise<CalendarSavedViewDto[]> {
     const { data } = await apiClient.get<CalendarSavedViewDto[]>(
-      "/calendar/saved-views"
+      "/calendar/saved-views",
     );
     return data;
   },
   async createSavedView(
-    payload: CalendarSavedViewWriteRequest
+    payload: CalendarSavedViewWriteRequest,
   ): Promise<CalendarSavedViewDto> {
     const { data } = await apiClient.post<CalendarSavedViewDto>(
       "/calendar/saved-views",
-      payload
+      payload,
     );
     return data;
   },
   async updateSavedView(
     id: string,
-    payload: CalendarSavedViewWriteRequest
+    payload: CalendarSavedViewWriteRequest,
   ): Promise<CalendarSavedViewDto> {
     const { data } = await apiClient.patch<CalendarSavedViewDto>(
       `/calendar/saved-views/${encodeURIComponent(id)}`,
-      payload
+      payload,
     );
     return data;
   },
   async deleteSavedView(id: string): Promise<void> {
     await apiClient.delete(`/calendar/saved-views/${encodeURIComponent(id)}`);
-  }
+  },
 };

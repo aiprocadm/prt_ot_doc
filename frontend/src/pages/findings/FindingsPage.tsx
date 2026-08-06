@@ -19,14 +19,26 @@ import { formatDate } from "@/utils/datetime";
 
 const FindingsPage = () => {
   const loadFindings = useCallback(() => opsApi.getFindings(), []);
-  const { data: items, loading, error, reload } = useAsyncResource<FindingDto[]>({
+  const {
+    data: items,
+    loading,
+    error,
+    reload,
+  } = useAsyncResource<FindingDto[]>({
     loader: loadFindings,
     initialData: [],
-    errorMessage: "Не удалось загрузить замечания"
+    errorMessage: "Не удалось загрузить замечания",
   });
-  const [online, setOnline] = useState(() => (typeof navigator === "undefined" ? true : navigator.onLine));
+  const [online, setOnline] = useState(() =>
+    typeof navigator === "undefined" ? true : navigator.onLine,
+  );
   const [hasConflict, setHasConflict] = useState(false);
-  const syncState = resolveSyncState({ online, loading, hasConflict, hasError: Boolean(error) });
+  const syncState = resolveSyncState({
+    online,
+    loading,
+    hasConflict,
+    hasError: Boolean(error),
+  });
 
   useEffect(() => {
     const onOnline = () => setOnline(true);
@@ -40,20 +52,36 @@ const FindingsPage = () => {
   }, []);
 
   useEffect(() => {
-    emitSyncTelemetry({ type: "sync_state_changed", state: syncState, screen: "findings" });
+    emitSyncTelemetry({
+      type: "sync_state_changed",
+      state: syncState,
+      screen: "findings",
+    });
     if (error?.message) {
-      emitSyncTelemetry({ type: "sync_error", screen: "findings", message: error.message });
+      emitSyncTelemetry({
+        type: "sync_error",
+        screen: "findings",
+        message: error.message,
+      });
     }
   }, [error?.message, syncState]);
 
   const registry = useLocalRegistry({
     items,
     match: (item, query) =>
-      [item.id, item.title, item.status, item.severity, item.source_type, item.finding_type, item.description]
+      [
+        item.id,
+        item.title,
+        item.status,
+        item.severity,
+        item.source_type,
+        item.finding_type,
+        item.description,
+      ]
         .filter(Boolean)
         .join(" ")
         .toLowerCase()
-        .includes(query)
+        .includes(query),
   });
 
   return (
@@ -77,13 +105,25 @@ const FindingsPage = () => {
       </div>
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Открытые, подтверждённые и закрытые замечания</CardTitle>
+          <CardTitle className="text-base">
+            Открытые, подтверждённые и закрытые замечания
+          </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          <ErrorState error={error ?? undefined} onRetry={() => void reload()} />
+          <ErrorState
+            error={error ?? undefined}
+            onRetry={() => void reload()}
+          />
           {loading ? <LoadingScreen label="Загрузка замечаний" /> : null}
           {!loading && !error && registry.total === 0 ? (
-            <EmptyState title="Замечаний не найдено" description={registry.query ? "Измените строку поиска." : "В текущем тенанте пока нет записей."} />
+            <EmptyState
+              title="Замечаний не найдено"
+              description={
+                registry.query
+                  ? "Измените строку поиска."
+                  : "В текущем тенанте пока нет записей."
+              }
+            />
           ) : null}
           {!loading && !error && registry.total > 0 ? (
             <RegistryTable
@@ -91,7 +131,11 @@ const FindingsPage = () => {
                 {
                   accessorKey: "id",
                   header: "ID",
-                  cell: ({ row }) => <span className="font-medium">{row.original.id.slice(0, 8)}</span>
+                  cell: ({ row }) => (
+                    <span className="font-medium">
+                      {row.original.id.slice(0, 8)}
+                    </span>
+                  ),
                 },
                 {
                   accessorKey: "title",
@@ -99,9 +143,11 @@ const FindingsPage = () => {
                   cell: ({ row }) => (
                     <div>
                       <div className="font-medium">{row.original.title}</div>
-                      <div className="text-xs text-muted-foreground">{row.original.finding_type}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {row.original.finding_type}
+                      </div>
                     </div>
-                  )
+                  ),
                 },
                 {
                   id: "source",
@@ -109,25 +155,39 @@ const FindingsPage = () => {
                   cell: ({ row }) => (
                     <div>
                       <div>{row.original.source_type}</div>
-                      <div className="text-xs text-muted-foreground">{row.original.source_id.slice(0, 8)}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {row.original.source_id.slice(0, 8)}
+                      </div>
                     </div>
-                  )
+                  ),
                 },
                 {
                   accessorKey: "due_date",
                   header: "Срок",
-                  cell: ({ row }) => formatDate(row.original.due_date) || "—"
+                  cell: ({ row }) => formatDate(row.original.due_date) || "—",
                 },
                 {
                   accessorKey: "severity",
                   header: "Критичность",
-                  cell: ({ row }) => <Badge variant={row.original.severity === "critical" ? "destructive" : "secondary"}>{row.original.severity}</Badge>
+                  cell: ({ row }) => (
+                    <Badge
+                      variant={
+                        row.original.severity === "critical"
+                          ? "destructive"
+                          : "secondary"
+                      }
+                    >
+                      {row.original.severity}
+                    </Badge>
+                  ),
                 },
                 {
                   accessorKey: "status",
                   header: "Статус",
-                  cell: ({ row }) => <StatusBadge status={row.original.status} />
-                }
+                  cell: ({ row }) => (
+                    <StatusBadge status={row.original.status} />
+                  ),
+                },
               ]}
               data={registry.pagedItems}
               pageIndex={registry.pageIndex}

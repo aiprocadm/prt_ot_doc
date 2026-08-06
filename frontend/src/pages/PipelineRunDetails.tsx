@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 
-import { cancelPipelineRun, getPipelineRun, retryPipelineRun, retryPipelineStepRun, type PipelineRun } from "@/api/pipelines";
+import {
+  cancelPipelineRun,
+  getPipelineRun,
+  retryPipelineRun,
+  retryPipelineStepRun,
+  type PipelineRun,
+} from "@/api/pipelines";
 import { getFile, listEntityFiles, reindexFile } from "@/api/files";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
@@ -59,11 +65,15 @@ const PipelineRunDetails = () => {
     };
 
     try {
-      const source = new EventSource(`/api/v1/pipelines/runs/${id}/events`, { withCredentials: true });
+      const source = new EventSource(`/api/v1/pipelines/runs/${id}/events`, {
+        withCredentials: true,
+      });
       sseRef.current = source;
       source.addEventListener("run.update", (event) => {
         try {
-          const payload = JSON.parse((event as MessageEvent<string>).data) as PipelineRun;
+          const payload = JSON.parse(
+            (event as MessageEvent<string>).data,
+          ) as PipelineRun;
           setRun(payload);
           setError(null);
         } catch {
@@ -77,7 +87,9 @@ const PipelineRunDetails = () => {
       });
       source.addEventListener("run.done", (event) => {
         try {
-          const payload = JSON.parse((event as MessageEvent<string>).data) as PipelineRun;
+          const payload = JSON.parse(
+            (event as MessageEvent<string>).data,
+          ) as PipelineRun;
           setRun(payload);
           setError(null);
         } finally {
@@ -103,7 +115,10 @@ const PipelineRunDetails = () => {
     };
   }, [id]);
 
-  const failedStep = useMemo(() => run?.step_runs.find((s) => s.status === "failed"), [run]);
+  const failedStep = useMemo(
+    () => run?.step_runs.find((s) => s.status === "failed"),
+    [run],
+  );
 
   const stepLogs = useMemo(() => run?.logs ?? [], [run]);
 
@@ -194,7 +209,10 @@ const PipelineRunDetails = () => {
       <JobTimeline steps={run.step_runs} />
       <div className="rounded border p-3 text-sm">
         <h2 className="mb-2 font-medium">Найдено по содержимому</h2>
-        <p className="text-muted-foreground">Файлы проиндексированы: <span className="font-medium">{indexStatus}</span></p>
+        <p className="text-muted-foreground">
+          Файлы проиндексированы:{" "}
+          <span className="font-medium">{indexStatus}</span>
+        </p>
         <button
           className="mt-2 rounded border px-3 py-1"
           disabled={!indexedFileId}
@@ -219,7 +237,9 @@ const PipelineRunDetails = () => {
             ) : (
               stepLogs.slice(-50).map((log, idx) => (
                 <div key={`${log.timestamp}-${idx}`} className="text-xs">
-                  <span className="text-muted-foreground">[{log.level}]</span> {log.step_name ? `${log.step_name}: ` : ""}{log.message}
+                  <span className="text-muted-foreground">[{log.level}]</span>{" "}
+                  {log.step_name ? `${log.step_name}: ` : ""}
+                  {log.message}
                 </div>
               ))
             )}

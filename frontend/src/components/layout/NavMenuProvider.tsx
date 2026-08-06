@@ -1,9 +1,20 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 
 import { getBillingSummary } from "@/api/billing";
 import { useAbility } from "@/permissions/useAbility";
 import { filterNavGroupsByAccess } from "@/router/navVisibility";
-import { CLIENT_PORTAL_NAV_GROUPS, MAIN_NAV_GROUPS, type NavGroup } from "@/router/navigationConfig";
+import {
+  CLIENT_PORTAL_NAV_GROUPS,
+  MAIN_NAV_GROUPS,
+  type NavGroup,
+} from "@/router/navigationConfig";
 import { useClientPortalOnlyMode } from "@/router/useNavScope";
 
 export type NavMenuContextValue = {
@@ -11,7 +22,9 @@ export type NavMenuContextValue = {
   clientPortalOnlyMode: boolean;
 };
 
-const NavMenuContext = createContext<NavMenuContextValue | undefined>(undefined);
+const NavMenuContext = createContext<NavMenuContextValue | undefined>(
+  undefined,
+);
 
 export const NavMenuProvider = ({ children }: { children: ReactNode }) => {
   const { can } = useAbility();
@@ -41,19 +54,23 @@ export const NavMenuProvider = ({ children }: { children: ReactNode }) => {
     };
   }, []);
 
-  const scopedGroups = clientPortalOnlyMode ? CLIENT_PORTAL_NAV_GROUPS : MAIN_NAV_GROUPS;
+  const scopedGroups = clientPortalOnlyMode
+    ? CLIENT_PORTAL_NAV_GROUPS
+    : MAIN_NAV_GROUPS;
 
   const visibleGroups = useMemo(
     () => filterNavGroupsByAccess(scopedGroups, can, featureFlags),
-    [scopedGroups, can, featureFlags]
+    [scopedGroups, can, featureFlags],
   );
 
   const value = useMemo(
     () => ({ visibleGroups, clientPortalOnlyMode }),
-    [visibleGroups, clientPortalOnlyMode]
+    [visibleGroups, clientPortalOnlyMode],
   );
 
-  return <NavMenuContext.Provider value={value}>{children}</NavMenuContext.Provider>;
+  return (
+    <NavMenuContext.Provider value={value}>{children}</NavMenuContext.Provider>
+  );
 };
 
 export const useNavMenuData = (): NavMenuContextValue => {

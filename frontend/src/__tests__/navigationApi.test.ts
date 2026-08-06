@@ -17,4 +17,3 @@ describe("navigation api", () => {
     mock.restore();
   });
 });
-

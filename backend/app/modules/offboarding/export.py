@@ -166,9 +166,7 @@ class TenantExportService:
                 continue
 
             result = await self.session.execute(
-                text(
-                    f"SELECT * FROM {quoted} WHERE tenant_id = :tenant LIMIT :limit"
-                ),
+                text(f"SELECT * FROM {quoted} WHERE tenant_id = :tenant LIMIT :limit"),
                 {"tenant": self.tenant_id, "limit": self.rows_per_table},
             )
             mappings = result.mappings().all()
@@ -200,6 +198,4 @@ class TenantExportService:
 
     async def build_json(self) -> bytes:
         manifest = await self.build(include_rows=True)
-        return json.dumps(manifest.to_dict(include_rows=True), ensure_ascii=False).encode(
-            "utf-8"
-        )
+        return json.dumps(manifest.to_dict(include_rows=True), ensure_ascii=False).encode("utf-8")

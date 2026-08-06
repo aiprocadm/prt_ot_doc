@@ -9,7 +9,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger
+  DialogTrigger,
 } from "@/components/ui/dialog";
 import { permitsApi } from "@/api/permits";
 import type { PermitDto } from "@/types/dto/permits";
@@ -20,7 +20,11 @@ interface RevokePermitDialogProps {
   onSubmitted?: (permit: PermitDto) => void;
 }
 
-export const RevokePermitDialog = ({ trigger, permit, onSubmitted }: RevokePermitDialogProps) => {
+export const RevokePermitDialog = ({
+  trigger,
+  permit,
+  onSubmitted,
+}: RevokePermitDialogProps) => {
   const [open, setOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
@@ -32,7 +36,10 @@ export const RevokePermitDialog = ({ trigger, permit, onSubmitted }: RevokePermi
       toast.success("Допуск отозван");
       setOpen(false);
     } catch (err: unknown) {
-      const message = err && typeof err === "object" && "message" in err ? String(err.message) : "Не удалось отозвать допуск";
+      const message =
+        err && typeof err === "object" && "message" in err
+          ? String(err.message)
+          : "Не удалось отозвать допуск";
       toast.error(message);
     } finally {
       setSubmitting(false);
@@ -46,11 +53,16 @@ export const RevokePermitDialog = ({ trigger, permit, onSubmitted }: RevokePermi
         <DialogHeader>
           <DialogTitle>Отозвать допуск?</DialogTitle>
           <DialogDescription>
-            Допуск «{permit.permit_type}» будет отозван без возможности восстановления.
+            Допуск «{permit.permit_type}» будет отозван без возможности
+            восстановления.
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>
-          <Button variant="destructive" onClick={() => void submit()} disabled={submitting}>
+          <Button
+            variant="destructive"
+            onClick={() => void submit()}
+            disabled={submitting}
+          >
             {submitting ? "Отзыв..." : "Отозвать"}
           </Button>
         </DialogFooter>

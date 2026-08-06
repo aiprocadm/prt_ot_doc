@@ -5,4 +5,5 @@ type RegisterSWOptions = {
   onRegistered?: (registration: ServiceWorkerRegistration | undefined) => void;
 };
 
-export const registerSW = (_options?: RegisterSWOptions) => () => Promise.resolve();
+export const registerSW = (_options?: RegisterSWOptions) => () =>
+  Promise.resolve();

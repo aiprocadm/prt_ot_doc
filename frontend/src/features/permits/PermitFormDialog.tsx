@@ -11,7 +11,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger
+  DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -25,14 +25,14 @@ const emptyForm: PermitFormValues = {
   person_id: "",
   permit_type: "",
   issued_at: "",
-  valid_until: ""
+  valid_until: "",
 };
 
 const PERMIT_API_FIELD_MAP: Record<string, keyof PermitFormValues> = {
   person_id: "person_id",
   permit_type: "permit_type",
   issued_at: "issued_at",
-  valid_until: "valid_until"
+  valid_until: "valid_until",
 };
 
 interface PermitFormDialogProps {
@@ -42,13 +42,18 @@ interface PermitFormDialogProps {
   onSubmitted?: (permit: PermitDto) => void;
 }
 
-export const PermitFormDialog = ({ trigger, persons, initialData, onSubmitted }: PermitFormDialogProps) => {
+export const PermitFormDialog = ({
+  trigger,
+  persons,
+  initialData,
+  onSubmitted,
+}: PermitFormDialogProps) => {
   const [open, setOpen] = useState(false);
   const isEdit = Boolean(initialData);
 
   const form = useForm<PermitFormValues>({
     resolver: zodResolver(permitFormSchema),
-    defaultValues: emptyForm
+    defaultValues: emptyForm,
   });
 
   useEffect(() => {
@@ -58,7 +63,7 @@ export const PermitFormDialog = ({ trigger, persons, initialData, onSubmitted }:
         person_id: initialData.person_id,
         permit_type: initialData.permit_type,
         issued_at: initialData.issued_at ?? "",
-        valid_until: initialData.valid_until ?? ""
+        valid_until: initialData.valid_until ?? "",
       });
     } else {
       form.reset(emptyForm);
@@ -70,13 +75,13 @@ export const PermitFormDialog = ({ trigger, persons, initialData, onSubmitted }:
       const result = initialData
         ? await permitsApi.updatePermit(initialData.id, {
             permit_type: values.permit_type,
-            valid_until: values.valid_until || undefined
+            valid_until: values.valid_until || undefined,
           })
         : await permitsApi.createPermit({
             person_id: values.person_id,
             permit_type: values.permit_type,
             issued_at: values.issued_at || undefined,
-            valid_until: values.valid_until || undefined
+            valid_until: values.valid_until || undefined,
           });
       onSubmitted?.(result);
       toast.success(initialData ? "Допуск обновлён" : "Допуск создан");
@@ -97,8 +102,12 @@ export const PermitFormDialog = ({ trigger, persons, initialData, onSubmitted }:
       <DialogTrigger asChild>{trigger}</DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{isEdit ? "Редактировать допуск" : "Новый допуск"}</DialogTitle>
-          <DialogDescription>Заполните данные личного допуска сотрудника.</DialogDescription>
+          <DialogTitle>
+            {isEdit ? "Редактировать допуск" : "Новый допуск"}
+          </DialogTitle>
+          <DialogDescription>
+            Заполните данные личного допуска сотрудника.
+          </DialogDescription>
         </DialogHeader>
         <form
           className="space-y-4"
@@ -126,24 +135,41 @@ export const PermitFormDialog = ({ trigger, persons, initialData, onSubmitted }:
               ))}
             </select>
             {form.formState.errors.person_id && (
-              <p className="text-xs text-destructive">{form.formState.errors.person_id.message}</p>
+              <p className="text-xs text-destructive">
+                {form.formState.errors.person_id.message}
+              </p>
             )}
           </div>
           <div className="space-y-2">
             <Label htmlFor="permit_type">Тип допуска</Label>
-            <Input id="permit_type" placeholder="напр. Работа на высоте" {...form.register("permit_type")} />
+            <Input
+              id="permit_type"
+              placeholder="напр. Работа на высоте"
+              {...form.register("permit_type")}
+            />
             {form.formState.errors.permit_type && (
-              <p className="text-xs text-destructive">{form.formState.errors.permit_type.message}</p>
+              <p className="text-xs text-destructive">
+                {form.formState.errors.permit_type.message}
+              </p>
             )}
           </div>
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="issued_at">Выдан</Label>
-              <Input id="issued_at" type="date" disabled={isEdit} {...form.register("issued_at")} />
+              <Input
+                id="issued_at"
+                type="date"
+                disabled={isEdit}
+                {...form.register("issued_at")}
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="valid_until">Действует до</Label>
-              <Input id="valid_until" type="date" {...form.register("valid_until")} />
+              <Input
+                id="valid_until"
+                type="date"
+                {...form.register("valid_until")}
+              />
             </div>
           </div>
           <DialogFooter>

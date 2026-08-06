@@ -4,7 +4,11 @@ import type { ApiError } from "@/types/dto/common";
 
 /** Проверяет, является ли пойманная ошибка нормализованным `ApiError` (содержит `message: string`). */
 export function isApiError(err: unknown): err is ApiError {
-  return typeof err === "object" && err !== null && typeof (err as ApiError).message === "string";
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    typeof (err as ApiError).message === "string"
+  );
 }
 
 /**
@@ -34,7 +38,7 @@ export function formatApiErrorMessage(err: unknown, fallback: string): string {
 export function applyApiFieldErrorsToForm<T extends FieldValues>(
   setError: UseFormSetError<T>,
   error: ApiError,
-  map: Record<string, FieldPath<T>>
+  map: Record<string, FieldPath<T>>,
 ): void {
   const seen = new Set<string>();
   for (const fe of error.field_errors ?? []) {

@@ -10,7 +10,14 @@ import { StatusBadge } from "@/components/common/StatusBadge";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { PERMISSIONS } from "@/permissions/permissions";
 import type { ApiError } from "@/types/dto/common";
 
@@ -38,9 +45,11 @@ const APPROVAL_EVENT_PREFIX = "approval.";
 const RETRYABLE_OUTBOX_STATUSES = new Set(["failed", "dead"]);
 const RETRYABLE_EVENT_STATUSES = new Set(["failed", "poisoned"]);
 
-const formatDateTime = (value?: string | null) => (value ? new Date(value).toLocaleString() : "—");
+const formatDateTime = (value?: string | null) =>
+  value ? new Date(value).toLocaleString() : "—";
 
-const isApprovalEvent = (eventType?: string) => typeof eventType === "string" && eventType.startsWith(APPROVAL_EVENT_PREFIX);
+const isApprovalEvent = (eventType?: string) =>
+  typeof eventType === "string" && eventType.startsWith(APPROVAL_EVENT_PREFIX);
 
 const ApprovalsOutboxPage = () => {
   const [deliveries, setDeliveries] = useState<OutboxEntry[]>([]);
@@ -57,10 +66,23 @@ const ApprovalsOutboxPage = () => {
         integrationsApi.getOutbox<OutboxEntry>(),
         integrationsApi.getOutboxEvents<OutboxEventEntry>(),
       ]);
-      setDeliveries((outboxResponse.items ?? []).filter((item) => isApprovalEvent(item.event_type)));
-      setEvents((eventsResponse.items ?? []).filter((item) => isApprovalEvent(item.event_type)));
+      setDeliveries(
+        (outboxResponse.items ?? []).filter((item) =>
+          isApprovalEvent(item.event_type),
+        ),
+      );
+      setEvents(
+        (eventsResponse.items ?? []).filter((item) =>
+          isApprovalEvent(item.event_type),
+        ),
+      );
     } catch (err) {
-      setError((err as ApiError) ?? { message: "Не удалось загрузить исходящие согласования", status: 0 });
+      setError(
+        (err as ApiError) ?? {
+          message: "Не удалось загрузить исходящие согласования",
+          status: 0,
+        },
+      );
     } finally {
       setLoading(false);
     }
@@ -90,19 +112,33 @@ const ApprovalsOutboxPage = () => {
     }
   };
 
-  const hasData = useMemo(() => deliveries.length > 0 || events.length > 0, [deliveries.length, events.length]);
+  const hasData = useMemo(
+    () => deliveries.length > 0 || events.length > 0,
+    [deliveries.length, events.length],
+  );
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <Breadcrumb items={[{ label: "Главная", to: "/dashboard" }, { label: "Согласования: исходящие" }]} />
-        <Button variant="outline" onClick={() => void load()} disabled={loading}>
+        <Breadcrumb
+          items={[
+            { label: "Главная", to: "/dashboard" },
+            { label: "Согласования: исходящие" },
+          ]}
+        />
+        <Button
+          variant="outline"
+          onClick={() => void load()}
+          disabled={loading}
+        >
           Обновить
         </Button>
       </div>
 
       <ErrorState error={error ?? undefined} onRetry={() => void load()} />
-      {loading ? <LoadingScreen label="Загрузка исходящих согласований" /> : null}
+      {loading ? (
+        <LoadingScreen label="Загрузка исходящих согласований" />
+      ) : null}
 
       {!loading && !error && !hasData ? (
         <Card>
@@ -112,7 +148,7 @@ const ApprovalsOutboxPage = () => {
           <CardContent>
             <EmptyState
               title="Исходящие согласования пока отсутствуют"
-              description="После запуска согласований здесь появятся статусы доставок и событий исходящей очереди." 
+              description="После запуска согласований здесь появятся статусы доставок и событий исходящей очереди."
             />
           </CardContent>
         </Card>
@@ -140,15 +176,28 @@ const ApprovalsOutboxPage = () => {
                   <TableRow key={item.id}>
                     <TableCell>
                       <div className="font-medium">{item.event_type}</div>
-                      <div className="text-xs text-muted-foreground">{item.id}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {item.id}
+                      </div>
                     </TableCell>
-                    <TableCell className="max-w-[320px] truncate">{item.destination}</TableCell>
-                    <TableCell><StatusBadge status={item.status} /></TableCell>
+                    <TableCell className="max-w-[320px] truncate">
+                      {item.destination}
+                    </TableCell>
+                    <TableCell>
+                      <StatusBadge status={item.status} />
+                    </TableCell>
                     <TableCell>{item.attempts}</TableCell>
                     <TableCell>
-                      <div className="text-sm">создано: {formatDateTime(item.created_at)}</div>
-                      <div className="text-xs text-muted-foreground">следующая попытка: {formatDateTime(item.next_attempt_at)}</div>
-                      <div className="text-xs text-muted-foreground">отправлено: {formatDateTime(item.sent_at)}</div>
+                      <div className="text-sm">
+                        создано: {formatDateTime(item.created_at)}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        следующая попытка:{" "}
+                        {formatDateTime(item.next_attempt_at)}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        отправлено: {formatDateTime(item.sent_at)}
+                      </div>
                     </TableCell>
                     <TableCell className="text-right">
                       {RETRYABLE_OUTBOX_STATUSES.has(item.status) ? (
@@ -195,9 +244,13 @@ const ApprovalsOutboxPage = () => {
                   <TableRow key={item.id}>
                     <TableCell>
                       <div className="font-medium">{item.event_type}</div>
-                      <div className="text-xs text-muted-foreground">{item.id}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {item.id}
+                      </div>
                     </TableCell>
-                    <TableCell><StatusBadge status={item.status} /></TableCell>
+                    <TableCell>
+                      <StatusBadge status={item.status} />
+                    </TableCell>
                     <TableCell>{item.attempts}</TableCell>
                     <TableCell>{formatDateTime(item.created_at)}</TableCell>
                     <TableCell className="text-right">
@@ -213,7 +266,9 @@ const ApprovalsOutboxPage = () => {
                           </Button>
                         </Can>
                       ) : (
-                        <span className="text-xs text-muted-foreground">{formatDateTime(item.next_attempt_at)}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {formatDateTime(item.next_attempt_at)}
+                        </span>
                       )}
                     </TableCell>
                   </TableRow>

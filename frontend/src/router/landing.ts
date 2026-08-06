@@ -1,7 +1,9 @@
 import { PERMISSIONS, type Permission } from "@/permissions/permissions";
 import { workspaceApi } from "@/api/workspace";
 
-const shouldPrioritizeAttentionHub = (can: (permission: Permission) => boolean) => {
+const shouldPrioritizeAttentionHub = (
+  can: (permission: Permission) => boolean,
+) => {
   const hasWorkspacePermission = can(PERMISSIONS.DASHBOARD_VIEW);
   const hasOtAttentionScope =
     can(PERMISSIONS.TRAINING_VIEW) ||
@@ -20,14 +22,19 @@ const LANDING_PRIORITY: Array<{ permission: Permission; route: string }> = [
   { permission: PERMISSIONS.FILE_VIEW, route: "/archive" },
   { permission: PERMISSIONS.PACK_VIEW, route: "/packs" },
   { permission: PERMISSIONS.TASK_VIEW, route: "/tasks" },
-  { permission: PERMISSIONS.CLIENT_PORTAL_VIEW, route: "/client-portal/dashboard" }
+  {
+    permission: PERMISSIONS.CLIENT_PORTAL_VIEW,
+    route: "/client-portal/dashboard",
+  },
 ];
 
 /**
  * Get role-based landing route using workspace configuration.
  * Falls back to permission-based routing if workspace config fetch fails.
  */
-export const getLandingRoute = async (can: (permission: Permission) => boolean): Promise<string> => {
+export const getLandingRoute = async (
+  can: (permission: Permission) => boolean,
+): Promise<string> => {
   try {
     // Try to fetch role-based workspace config (Phase 1.1)
     const workspaceConfig = await workspaceApi.getUserWorkspaceConfig();

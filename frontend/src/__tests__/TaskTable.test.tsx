@@ -18,24 +18,25 @@ vi.mock("@/stores/tasks", () => ({
         due_at: "2024-01-10",
         updated_at: "2024-01-05",
         overdue: true,
-        created_at: "2024-01-01"
-      }
+        created_at: "2024-01-01",
+      },
     ],
     pagination: { page: 1, page_size: 10, total: 1 },
     list: vi.fn(),
     setPage: vi.fn(),
     setPageSize: vi.fn(),
     loading: false,
-    patchTask: vi.fn()
-  })
+    patchTask: vi.fn(),
+  }),
 }));
 
 describe("TaskTable", () => {
-  const renderTaskTable = () => render(
-    <MemoryRouter>
-      <TaskTable />
-    </MemoryRouter>
-  );
+  const renderTaskTable = () =>
+    render(
+      <MemoryRouter>
+        <TaskTable />
+      </MemoryRouter>,
+    );
 
   beforeEach(() => {
     useAuthStore.setState({
@@ -47,12 +48,12 @@ describe("TaskTable", () => {
         full_name: "Task User",
         roles: ["worker"],
         permissions: [PERMISSIONS.TASK_VIEW],
-        attributes: { tenant_id: "tenant-1" }
+        attributes: { tenant_id: "tenant-1" },
       },
       loading: false,
       error: null,
       isAuthenticated: true,
-      initialized: true
+      initialized: true,
     });
   });
 
@@ -76,12 +77,12 @@ describe("TaskTable", () => {
         full_name: "Task Manager",
         roles: ["line_manager"],
         permissions: [PERMISSIONS.TASK_VIEW, PERMISSIONS.TASK_UPDATE],
-        attributes: { tenant_id: "tenant-1" }
+        attributes: { tenant_id: "tenant-1" },
       },
       loading: false,
       error: null,
       isAuthenticated: true,
-      initialized: true
+      initialized: true,
     });
 
     renderTaskTable();

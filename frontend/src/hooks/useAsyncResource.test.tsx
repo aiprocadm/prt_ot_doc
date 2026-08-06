@@ -12,8 +12,12 @@ describe("useAsyncResource", () => {
     const loaders = [() => firstLoad, () => Promise.resolve("second")] as const;
     const { result, rerender } = renderHook(
       ({ idx }: { idx: 0 | 1 }) =>
-        useAsyncResource({ loader: loaders[idx], initialData: "initial", errorMessage: "err" }),
-      { initialProps: { idx: 0 as 0 | 1 } }
+        useAsyncResource({
+          loader: loaders[idx],
+          initialData: "initial",
+          errorMessage: "err",
+        }),
+      { initialProps: { idx: 0 as 0 | 1 } },
     );
     rerender({ idx: 1 });
     await waitFor(() => expect(result.current.data).toBe("second"));
@@ -33,8 +37,12 @@ describe("useAsyncResource", () => {
     const loaders = [() => firstLoad, () => Promise.resolve("second")] as const;
     const { result, rerender } = renderHook(
       ({ idx }: { idx: 0 | 1 }) =>
-        useAsyncResource({ loader: loaders[idx], initialData: "initial", errorMessage: "err" }),
-      { initialProps: { idx: 0 as 0 | 1 } }
+        useAsyncResource({
+          loader: loaders[idx],
+          initialData: "initial",
+          errorMessage: "err",
+        }),
+      { initialProps: { idx: 0 as 0 | 1 } },
     );
     rerender({ idx: 1 });
     await waitFor(() => expect(result.current.data).toBe("second"));

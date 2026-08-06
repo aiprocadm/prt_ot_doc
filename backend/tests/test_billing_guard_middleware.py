@@ -10,7 +10,10 @@ def _request(method: str, path: str) -> Request:
 
 
 def test_resolve_billing_action_documents_generate() -> None:
-    assert resolve_billing_action(_request("POST", "/api/v1/documents:generate")) == "documents.generate"
+    assert (
+        resolve_billing_action(_request("POST", "/api/v1/documents:generate"))
+        == "documents.generate"
+    )
 
 
 def test_resolve_billing_action_persons_create() -> None:

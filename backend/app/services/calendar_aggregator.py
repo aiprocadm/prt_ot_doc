@@ -676,9 +676,7 @@ class CalendarAggregatorService:
             )
 
         base_count = self._apply_window(
-            self._scoped_count(Permit, person_id=person_id).where(
-                Permit.valid_until.is_not(None)
-            ),
+            self._scoped_count(Permit, person_id=person_id).where(Permit.valid_until.is_not(None)),
             Permit.valid_until,
             from_at,
             to_at,

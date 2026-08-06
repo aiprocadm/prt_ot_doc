@@ -10,13 +10,15 @@ const statuses: { label: string; value?: CompanyStatus }[] = [
   { label: "Все" },
   { label: "Активные", value: "active" },
   { label: "Черновики", value: "draft" },
-  { label: "Архив", value: "archived" }
+  { label: "Архив", value: "archived" },
 ];
 
 export const CompanyFilters = () => {
   const { filters, setFilters, list } = useCompaniesStore();
   const [localSearch, setLocalSearch] = useState(filters.search ?? "");
-  const [localStatus, setLocalStatus] = useState<CompanyStatus | undefined>(filters.status);
+  const [localStatus, setLocalStatus] = useState<CompanyStatus | undefined>(
+    filters.status,
+  );
 
   useEffect(() => {
     setLocalSearch(filters.search ?? "");
@@ -36,7 +38,11 @@ export const CompanyFilters = () => {
   };
 
   return (
-    <form className="space-y-4" onSubmit={(event) => event.preventDefault()} aria-label="Фильтры компаний">
+    <form
+      className="space-y-4"
+      onSubmit={(event) => event.preventDefault()}
+      aria-label="Фильтры компаний"
+    >
       <div className="space-y-2">
         <Label htmlFor="company-search">Поиск</Label>
         <Input
@@ -50,12 +56,18 @@ export const CompanyFilters = () => {
         <Label>Статус</Label>
         <div className="flex flex-col space-y-1">
           {statuses.map((status) => (
-            <label key={status.label} className="inline-flex items-center gap-2 text-sm">
+            <label
+              key={status.label}
+              className="inline-flex items-center gap-2 text-sm"
+            >
               <input
                 type="radio"
                 name="company-status"
                 value={status.value ?? ""}
-                checked={status.value === localStatus || (!status.value && !localStatus)}
+                checked={
+                  status.value === localStatus ||
+                  (!status.value && !localStatus)
+                }
                 onChange={() => setLocalStatus(status.value)}
               />
               <span>{status.label}</span>

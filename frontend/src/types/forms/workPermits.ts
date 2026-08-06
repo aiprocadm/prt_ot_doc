@@ -1,27 +1,64 @@
 import { z } from "zod";
 
 export const SAFETY_SYSTEM_CODES = [
-  "restraint", "positioning", "fall_arrest", "rescue_evacuation", "access",
+  "restraint",
+  "positioning",
+  "fall_arrest",
+  "rescue_evacuation",
+  "access",
 ] as const;
 
 export const GAS_PARAMETER_CODES = ["oxygen", "flammable", "harmful"] as const;
-export const VENTILATION_CODES = ["natural", "forced", "none", "not_required"] as const;
+export const VENTILATION_CODES = [
+  "natural",
+  "forced",
+  "none",
+  "not_required",
+] as const;
 export const FIRE_FIGHTING_MEANS_CODES = [
-  "extinguisher_powder", "extinguisher_co2", "water", "sand", "felt", "fire_hose",
+  "extinguisher_powder",
+  "extinguisher_co2",
+  "water",
+  "sand",
+  "felt",
+  "fire_hose",
 ] as const;
 
 export const RESPIRATORY_PPE_CODES = [
-  "hose_mask", "scba", "isolating_mask", "filter_mask", "air_supply",
+  "hose_mask",
+  "scba",
+  "isolating_mask",
+  "filter_mask",
+  "air_supply",
 ] as const;
 
 export const ELECTRICAL_MEASURE_CODES = [
-  "disconnect", "lockout_signs", "verify_no_voltage", "grounding", "barriers_signs",
+  "disconnect",
+  "lockout_signs",
+  "verify_no_voltage",
+  "grounding",
+  "barriers_signs",
 ] as const;
-export const VOLTAGE_CONDITION_CODES = ["de_energized", "near_live", "away_live"] as const;
+export const VOLTAGE_CONDITION_CODES = [
+  "de_energized",
+  "near_live",
+  "away_live",
+] as const;
 export const VOLTAGE_LEVEL_CODES = ["le_1000", "gt_1000"] as const;
 
-export const UTILITY_CODES = ["power_cable", "gas_pipe", "water_sewer", "heating", "comms"] as const;
-export const SHORING_METHOD_CODES = ["natural_slopes", "shield_bracing", "sheet_piling", "none_shallow"] as const;
+export const UTILITY_CODES = [
+  "power_cable",
+  "gas_pipe",
+  "water_sewer",
+  "heating",
+  "comms",
+] as const;
+export const SHORING_METHOD_CODES = [
+  "natural_slopes",
+  "shield_bracing",
+  "sheet_piling",
+  "none_shallow",
+] as const;
 
 export const excavationSafetySchema = z.object({
   utilities: z.array(z.enum(UTILITY_CODES)).optional(),

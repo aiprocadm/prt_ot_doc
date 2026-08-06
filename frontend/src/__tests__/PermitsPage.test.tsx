@@ -17,12 +17,12 @@ vi.mock("@/api/permits", () => ({
     createPermit: vi.fn(),
     updatePermit: vi.fn(),
     extendPermit: vi.fn(),
-    revokePermit: vi.fn()
-  }
+    revokePermit: vi.fn(),
+  },
 }));
 
 vi.mock("@/api/personsApi", () => ({
-  fetchAllPersons: (...args: unknown[]) => fetchAllPersonsMock(...args)
+  fetchAllPersons: (...args: unknown[]) => fetchAllPersonsMock(...args),
 }));
 
 const setUser = (permissions: string[]) =>
@@ -34,12 +34,12 @@ const setUser = (permissions: string[]) =>
       email: "a@a.io",
       full_name: "Test User",
       roles: ["worker"],
-      permissions
+      permissions,
     },
     loading: false,
     error: null,
     isAuthenticated: true,
-    initialized: true
+    initialized: true,
   } as never);
 
 describe("PermitsPage", () => {
@@ -48,7 +48,9 @@ describe("PermitsPage", () => {
     countPermitsMock.mockReset();
     fetchAllPersonsMock.mockReset();
     countPermitsMock.mockResolvedValue(0);
-    fetchAllPersonsMock.mockResolvedValue([{ id: "p1", full_name: "Иванов И. И." }]);
+    fetchAllPersonsMock.mockResolvedValue([
+      { id: "p1", full_name: "Иванов И. И." },
+    ]);
   });
 
   it("shows empty state when there are no permits", async () => {
@@ -57,7 +59,7 @@ describe("PermitsPage", () => {
     render(
       <MemoryRouter>
         <PermitsPage />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
     expect(await screen.findByText(/Допуски не найдены/i)).toBeInTheDocument();
   });
@@ -74,16 +76,16 @@ describe("PermitsPage", () => {
           status: "active",
           is_expired: true,
           created_at: "2025-01-01T00:00:00Z",
-          updated_at: "2025-01-01T00:00:00Z"
-        }
+          updated_at: "2025-01-01T00:00:00Z",
+        },
       ],
-      total: 1
+      total: 1,
     });
     setUser([PERMISSIONS.PERMIT_VIEW, PERMISSIONS.PERMIT_MANAGE]);
     render(
       <MemoryRouter>
         <PermitsPage />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
     expect(await screen.findByText("Иванов И. И.")).toBeInTheDocument();
     expect(screen.getByText("Просрочен")).toBeInTheDocument();
@@ -95,8 +97,10 @@ describe("PermitsPage", () => {
     render(
       <MemoryRouter>
         <PermitsPage />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
-    expect(await screen.findByRole("button", { name: /Новый допуск/i })).toBeDisabled();
+    expect(
+      await screen.findByRole("button", { name: /Новый допуск/i }),
+    ).toBeDisabled();
   });
 });

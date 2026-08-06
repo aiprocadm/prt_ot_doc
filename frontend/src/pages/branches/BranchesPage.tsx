@@ -18,7 +18,8 @@ import { useBranchesStore } from "@/stores/branches";
 import type { CompanyDto } from "@/types/dto/companies";
 
 const BranchesPage = () => {
-  const { list, items, loading, error, setFilters, filters } = useBranchesStore();
+  const { list, items, loading, error, setFilters, filters } =
+    useBranchesStore();
   const { can } = useAbility();
   const canManage = can(PERMISSIONS.BRANCH_MANAGE);
 
@@ -27,7 +28,9 @@ const BranchesPage = () => {
   useEffect(() => {
     let active = true;
     apiClient
-      .get<{ items?: unknown[] }>("/companies", { params: { limit: 200, offset: 0 } })
+      .get<{ items?: unknown[] }>("/companies", {
+        params: { limit: 200, offset: 0 },
+      })
       .then(({ data }) => {
         if (!active) return;
         const rows = Array.isArray(data?.items) ? data.items : [];
@@ -50,15 +53,20 @@ const BranchesPage = () => {
       setFilters({ company_id: companyId || undefined });
       void list({ company_id: companyId || undefined }).catch(() => undefined);
     },
-    [setFilters, list]
+    [setFilters, list],
   );
 
-  const isEmpty = useMemo(() => !loading && !error && items.length === 0, [loading, error, items]);
+  const isEmpty = useMemo(
+    () => !loading && !error && items.length === 0,
+    [loading, error, items],
+  );
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-2">
-        <Breadcrumb items={[{ label: "Главная", to: "/dashboard" }, { label: "Филиалы" }]} />
+        <Breadcrumb
+          items={[{ label: "Главная", to: "/dashboard" }, { label: "Филиалы" }]}
+        />
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold">Филиалы</h1>
           <Can permission={PERMISSIONS.BRANCH_MANAGE}>
@@ -106,8 +114,13 @@ const BranchesPage = () => {
             </select>
           </div>
 
-          <ErrorState error={error ?? undefined} onRetry={() => void list().catch(() => undefined)} />
-          {loading && items.length === 0 ? <LoadingScreen label="Загрузка филиалов" /> : null}
+          <ErrorState
+            error={error ?? undefined}
+            onRetry={() => void list().catch(() => undefined)}
+          />
+          {loading && items.length === 0 ? (
+            <LoadingScreen label="Загрузка филиалов" />
+          ) : null}
           {isEmpty ? (
             <EmptyState
               title="Филиалы не найдены"

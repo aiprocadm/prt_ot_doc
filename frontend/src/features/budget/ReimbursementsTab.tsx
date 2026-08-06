@@ -15,7 +15,7 @@ import {
   DialogDescription,
   DialogFooter,
   DialogHeader,
-  DialogTitle
+  DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -26,7 +26,7 @@ import {
   REIMBURSEMENT_STATUS_LABELS,
   REIMBURSEMENT_STATUSES,
   formatRub,
-  toApiError
+  toApiError,
 } from "@/pages/budget/budgetVocab";
 import { PERMISSIONS } from "@/permissions/permissions";
 import type { ApiError } from "@/types/dto/common";
@@ -35,7 +35,7 @@ import type {
   BudgetReimbursementDetailDto,
   BudgetReimbursementDto,
   BudgetReimbursementPageDto,
-  BudgetReimbursementStatus
+  BudgetReimbursementStatus,
 } from "@/types/dto/budget";
 
 type ReimbursementAction = "submit" | "approve" | "reject" | "pay";
@@ -44,13 +44,16 @@ type ReimbursementAction = "submit" | "approve" | "reject" | "pay";
  * Разрешённые переходы FSM (тот же паттерн, что ACTIONS_BY_STATUS в WorkPermitDetailPage):
  * терминальные rejected/paid действий не предлагают вовсе.
  */
-const ACTIONS_BY_STATUS: Record<string, Array<{ name: ReimbursementAction; label: string }>> = {
+const ACTIONS_BY_STATUS: Record<
+  string,
+  Array<{ name: ReimbursementAction; label: string }>
+> = {
   draft: [{ name: "submit", label: "Подать" }],
   submitted: [
     { name: "approve", label: "Одобрить" },
-    { name: "reject", label: "Отклонить" }
+    { name: "reject", label: "Отклонить" },
   ],
-  approved: [{ name: "pay", label: "Выплатить" }]
+  approved: [{ name: "pay", label: "Выплатить" }],
 };
 
 /** Решение (approve/reject) требует ввода — собираем его отдельным маленьким диалогом. */
@@ -65,15 +68,25 @@ interface Props {
   onChanged: () => void;
 }
 
-export const ReimbursementsTab = ({ reimbursements, expenses, onChanged }: Props) => {
-  const [statusFilter, setStatusFilter] = useState<BudgetReimbursementStatus | "">("");
-  const [items, setItems] = useState<BudgetReimbursementDto[]>(reimbursements.items);
+export const ReimbursementsTab = ({
+  reimbursements,
+  expenses,
+  onChanged,
+}: Props) => {
+  const [statusFilter, setStatusFilter] = useState<
+    BudgetReimbursementStatus | ""
+  >("");
+  const [items, setItems] = useState<BudgetReimbursementDto[]>(
+    reimbursements.items,
+  );
   const [listLoading, setListLoading] = useState(false);
   const [listError, setListError] = useState<ApiError | null>(null);
   const requestSeq = useRef(0);
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [detail, setDetail] = useState<BudgetReimbursementDetailDto | null>(null);
+  const [detail, setDetail] = useState<BudgetReimbursementDetailDto | null>(
+    null,
+  );
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<ApiError | null>(null);
 
@@ -106,7 +119,8 @@ export const ReimbursementsTab = ({ reimbursements, expenses, onChanged }: Props
         if (seq === requestSeq.current) setItems(page.items);
       })
       .catch((err) => {
-        if (seq === requestSeq.current) setListError(toApiError(err, "Не удалось загрузить заявки"));
+        if (seq === requestSeq.current)
+          setListError(toApiError(err, "Не удалось загрузить заявки"));
       })
       .finally(() => {
         if (seq === requestSeq.current) setListLoading(false);
@@ -126,7 +140,9 @@ export const ReimbursementsTab = ({ reimbursements, expenses, onChanged }: Props
     budgetApi
       .getReimbursement(id)
       .then(setDetail)
-      .catch((err) => setDetailError(toApiError(err, "Не удалось загрузить заявку")))
+      .catch((err) =>
+        setDetailError(toApiError(err, "Не удалось загрузить заявку")),
+      )
       .finally(() => setDetailLoading(false));
   }, []);
 
@@ -149,11 +165,16 @@ export const ReimbursementsTab = ({ reimbursements, expenses, onChanged }: Props
     }
   };
 
-  const runAction = async (reimbursement: BudgetReimbursementDto, name: ReimbursementAction) => {
+  const runAction = async (
+    reimbursement: BudgetReimbursementDto,
+    name: ReimbursementAction,
+  ) => {
     // approve/reject требуют ввода (сумма / причина) — уходим в диалог решения.
     if (name === "approve" || name === "reject") {
       setDecision({ reimbursement, action: name });
-      setApprovedAmount(name === "approve" ? String(reimbursement.requested_amount) : "");
+      setApprovedAmount(
+        name === "approve" ? String(reimbursement.requested_amount) : "",
+      );
       setDecisionReason("");
       return;
     }
@@ -193,12 +214,21 @@ export const ReimbursementsTab = ({ reimbursements, expenses, onChanged }: Props
     }
     setDecisionSubmitting(true);
     try {
-      await budgetApi.reimbursementAction(decision.reimbursement.id, decision.action, body);
-      toast.success(decision.action === "approve" ? "Заявка одобрена" : "Заявка отклонена");
+      await budgetApi.reimbursementAction(
+        decision.reimbursement.id,
+        decision.action,
+        body,
+      );
+      toast.success(
+        decision.action === "approve" ? "Заявка одобрена" : "Заявка отклонена",
+      );
       setDecision(null);
       afterMutation();
     } catch (err) {
-      toast.error((err as { message?: string })?.message ?? "Не удалось выполнить действие");
+      toast.error(
+        (err as { message?: string })?.message ??
+          "Не удалось выполнить действие",
+      );
     } finally {
       setDecisionSubmitting(false);
     }
@@ -229,8 +259,12 @@ export const ReimbursementsTab = ({ reimbursements, expenses, onChanged }: Props
   };
 
   // Прикреплять предлагаем только ещё не связанные расходы из уже загруженного страницей списка.
-  const linkedIds = new Set((detail?.items ?? []).map((item) => item.expense_id));
-  const attachableExpenses = expenses.items.filter((expense) => !linkedIds.has(expense.id));
+  const linkedIds = new Set(
+    (detail?.items ?? []).map((item) => item.expense_id),
+  );
+  const attachableExpenses = expenses.items.filter(
+    (expense) => !linkedIds.has(expense.id),
+  );
 
   return (
     <div className="space-y-4">
@@ -241,7 +275,9 @@ export const ReimbursementsTab = ({ reimbursements, expenses, onChanged }: Props
             id="reimbursement-status-filter"
             className="h-9 rounded-md border px-3 text-sm"
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as BudgetReimbursementStatus | "")}
+            onChange={(e) =>
+              setStatusFilter(e.target.value as BudgetReimbursementStatus | "")
+            }
           >
             <option value="">Все статусы</option>
             {REIMBURSEMENT_STATUSES.map((s) => (
@@ -252,7 +288,10 @@ export const ReimbursementsTab = ({ reimbursements, expenses, onChanged }: Props
           </select>
         </div>
         <Can permission={PERMISSIONS.BUDGET_MANAGE}>
-          <ReimbursementFormDialog trigger={<Button>Новая заявка</Button>} onSubmitted={onChanged} />
+          <ReimbursementFormDialog
+            trigger={<Button>Новая заявка</Button>}
+            onSubmitted={onChanged}
+          />
         </Can>
       </div>
 
@@ -261,9 +300,15 @@ export const ReimbursementsTab = ({ reimbursements, expenses, onChanged }: Props
 
       {!listLoading && !listError && items.length === 0 ? (
         statusFilter ? (
-          <EmptyState title="Ничего не найдено по фильтру" description="Измените или сбросьте фильтр." />
+          <EmptyState
+            title="Ничего не найдено по фильтру"
+            description="Измените или сбросьте фильтр."
+          />
         ) : (
-          <EmptyState title="Заявок нет" description="Создайте первую заявку на возмещение." />
+          <EmptyState
+            title="Заявок нет"
+            description="Создайте первую заявку на возмещение."
+          />
         )
       ) : null}
 
@@ -291,14 +336,22 @@ export const ReimbursementsTab = ({ reimbursements, expenses, onChanged }: Props
                   <td className="py-2 pr-4">
                     {reimbursement.period_start} – {reimbursement.period_end}
                   </td>
-                  <td className="py-2 pr-4">{formatRub(reimbursement.requested_amount)}</td>
                   <td className="py-2 pr-4">
-                    {reimbursement.approved_amount === null ? "—" : formatRub(reimbursement.approved_amount)}
+                    {formatRub(reimbursement.requested_amount)}
+                  </td>
+                  <td className="py-2 pr-4">
+                    {reimbursement.approved_amount === null
+                      ? "—"
+                      : formatRub(reimbursement.approved_amount)}
                   </td>
                   <td className="py-2 pr-4">{reimbursement.item_count}</td>
                   <td className="py-2">
                     <div className="flex flex-wrap gap-1">
-                      <Button size="sm" variant="outline" onClick={() => openReimbursement(reimbursement.id)}>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => openReimbursement(reimbursement.id)}
+                      >
                         Открыть
                       </Button>
                       <Can permission={PERMISSIONS.BUDGET_MANAGE}>
@@ -317,22 +370,28 @@ export const ReimbursementsTab = ({ reimbursements, expenses, onChanged }: Props
                             <Button
                               size="sm"
                               variant="destructive"
-                              onClick={() => void removeReimbursement(reimbursement)}
+                              onClick={() =>
+                                void removeReimbursement(reimbursement)
+                              }
                             >
                               Удалить
                             </Button>
                           </>
                         ) : null}
-                        {(ACTIONS_BY_STATUS[reimbursement.status] ?? []).map((a) => (
-                          <Button
-                            key={a.name}
-                            size="sm"
-                            variant="outline"
-                            onClick={() => void runAction(reimbursement, a.name)}
-                          >
-                            {a.label}
-                          </Button>
-                        ))}
+                        {(ACTIONS_BY_STATUS[reimbursement.status] ?? []).map(
+                          (a) => (
+                            <Button
+                              key={a.name}
+                              size="sm"
+                              variant="outline"
+                              onClick={() =>
+                                void runAction(reimbursement, a.name)
+                              }
+                            >
+                              {a.label}
+                            </Button>
+                          ),
+                        )}
                       </Can>
                     </div>
                   </td>
@@ -349,7 +408,12 @@ export const ReimbursementsTab = ({ reimbursements, expenses, onChanged }: Props
             <CardTitle>Детали заявки</CardTitle>
           </CardHeader>
           <CardContent>
-            {detailError ? <ErrorState error={detailError} onRetry={() => openReimbursement(selectedId)} /> : null}
+            {detailError ? (
+              <ErrorState
+                error={detailError}
+                onRetry={() => openReimbursement(selectedId)}
+              />
+            ) : null}
             {detailLoading ? <LoadingScreen label="Загрузка заявки" /> : null}
             {!detailLoading && !detailError && detail ? (
               <div className="space-y-3">
@@ -360,24 +424,35 @@ export const ReimbursementsTab = ({ reimbursements, expenses, onChanged }: Props
                   </div>
                   <div>
                     <span className="text-muted-foreground">Одобрено:</span>{" "}
-                    {detail.approved_amount === null ? "—" : formatRub(detail.approved_amount)}
+                    {detail.approved_amount === null
+                      ? "—"
+                      : formatRub(detail.approved_amount)}
                   </div>
                   <div>
-                    <span className="text-muted-foreground">Сумма расходов:</span>{" "}
+                    <span className="text-muted-foreground">
+                      Сумма расходов:
+                    </span>{" "}
                     {formatRub(detail.items_amount)}
                   </div>
                   <div data-testid="reimbursement-detail-item-count">
-                    <span className="text-muted-foreground">Записей расходов:</span> {detail.item_count}
+                    <span className="text-muted-foreground">
+                      Записей расходов:
+                    </span>{" "}
+                    {detail.item_count}
                   </div>
                 </div>
                 {detail.reference ? (
                   <p className="text-sm">
-                    <span className="text-muted-foreground">Номер в СФР:</span> {detail.reference}
+                    <span className="text-muted-foreground">Номер в СФР:</span>{" "}
+                    {detail.reference}
                   </p>
                 ) : null}
                 {detail.decision_reason ? (
                   <p className="text-sm">
-                    <span className="text-muted-foreground">Причина решения:</span> {detail.decision_reason}
+                    <span className="text-muted-foreground">
+                      Причина решения:
+                    </span>{" "}
+                    {detail.decision_reason}
                   </p>
                 ) : null}
 
@@ -385,7 +460,9 @@ export const ReimbursementsTab = ({ reimbursements, expenses, onChanged }: Props
                   <Can permission={PERMISSIONS.BUDGET_MANAGE}>
                     <div className="flex flex-wrap items-end gap-2">
                       <div className="space-y-1">
-                        <Label htmlFor="reimbursement-attach-expense">Добавить расход</Label>
+                        <Label htmlFor="reimbursement-attach-expense">
+                          Добавить расход
+                        </Label>
                         <select
                           id="reimbursement-attach-expense"
                           className="h-9 rounded-md border px-3 text-sm"
@@ -400,7 +477,11 @@ export const ReimbursementsTab = ({ reimbursements, expenses, onChanged }: Props
                           ))}
                         </select>
                       </div>
-                      <Button size="sm" variant="outline" onClick={() => void attachExpense()}>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => void attachExpense()}
+                      >
                         Добавить
                       </Button>
                     </div>
@@ -408,7 +489,9 @@ export const ReimbursementsTab = ({ reimbursements, expenses, onChanged }: Props
                 ) : null}
 
                 {detail.items.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">Расходов в заявке пока нет.</p>
+                  <p className="text-sm text-muted-foreground">
+                    Расходов в заявке пока нет.
+                  </p>
                 ) : (
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
@@ -423,18 +506,27 @@ export const ReimbursementsTab = ({ reimbursements, expenses, onChanged }: Props
                       </thead>
                       <tbody>
                         {detail.items.map((item) => (
-                          <tr key={item.expense_id} className="border-b last:border-0">
+                          <tr
+                            key={item.expense_id}
+                            className="border-b last:border-0"
+                          >
                             <td className="py-2 pr-4">{item.occurred_on}</td>
                             <td className="py-2 pr-4">{item.title}</td>
-                            <td className="py-2 pr-4">{BUDGET_DOMAIN_LABELS[item.domain]}</td>
-                            <td className="py-2 pr-4">{formatRub(item.amount)}</td>
+                            <td className="py-2 pr-4">
+                              {BUDGET_DOMAIN_LABELS[item.domain]}
+                            </td>
+                            <td className="py-2 pr-4">
+                              {formatRub(item.amount)}
+                            </td>
                             <td className="py-2">
                               {detail.status === "draft" ? (
                                 <Can permission={PERMISSIONS.BUDGET_MANAGE}>
                                   <Button
                                     size="sm"
                                     variant="outline"
-                                    onClick={() => void detachExpense(item.expense_id)}
+                                    onClick={() =>
+                                      void detachExpense(item.expense_id)
+                                    }
                                   >
                                     Убрать
                                   </Button>
@@ -453,10 +545,17 @@ export const ReimbursementsTab = ({ reimbursements, expenses, onChanged }: Props
         </Card>
       ) : null}
 
-      <Dialog open={decision !== null} onOpenChange={(next) => (next ? undefined : setDecision(null))}>
+      <Dialog
+        open={decision !== null}
+        onOpenChange={(next) => (next ? undefined : setDecision(null))}
+      >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{decision?.action === "approve" ? "Одобрить заявку" : "Отклонить заявку"}</DialogTitle>
+            <DialogTitle>
+              {decision?.action === "approve"
+                ? "Одобрить заявку"
+                : "Отклонить заявку"}
+            </DialogTitle>
             <DialogDescription>
               {decision?.action === "approve"
                 ? "Одобренная сумма по умолчанию равна запрашиваемой и не может её превышать."
@@ -486,7 +585,10 @@ export const ReimbursementsTab = ({ reimbursements, expenses, onChanged }: Props
             )}
           </div>
           <DialogFooter>
-            <Button onClick={() => void submitDecision()} disabled={decisionSubmitting}>
+            <Button
+              onClick={() => void submitDecision()}
+              disabled={decisionSubmitting}
+            >
               {decisionSubmitting ? "Сохранение..." : "Подтвердить"}
             </Button>
           </DialogFooter>

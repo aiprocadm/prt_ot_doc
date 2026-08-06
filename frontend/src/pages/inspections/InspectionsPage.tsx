@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
-import { inspectionsApi, type Inspection, type InspectionResult } from "@/api/inspections";
+import {
+  inspectionsApi,
+  type Inspection,
+  type InspectionResult,
+} from "@/api/inspections";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingScreen } from "@/components/common/LoadingScreen";
@@ -13,10 +17,23 @@ import { StatusBadge } from "@/components/common/StatusBadge";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { PERMISSIONS } from "@/permissions/permissions";
 import type { ApiError } from "@/types/dto/common";
 import { formatDate } from "@/utils/datetime";
@@ -25,39 +42,50 @@ import { useCompaniesStore } from "@/stores/companies";
 import { entityCardLink } from "@/utils/workspaceNavigation";
 import { emitSyncTelemetry, resolveSyncState } from "@/pwa/sync";
 
-const INSPECTION_TYPES = ["planned", "unplanned", "documentary", "on_site", "counter"];
+const INSPECTION_TYPES = [
+  "planned",
+  "unplanned",
+  "documentary",
+  "on_site",
+  "counter",
+];
 const INSPECTION_TYPE_LABELS: Record<string, string> = {
   planned: "Плановая",
   unplanned: "Внеплановая",
   documentary: "Документарная",
   on_site: "Выездная",
-  counter: "Встречная"
+  counter: "Встречная",
 };
 const INSPECTION_STATUS_LABELS: Record<string, string> = {
   planned: "Запланирована",
   in_progress: "В работе",
-  completed: "Завершена"
+  completed: "Завершена",
 };
 const INSPECTION_STATUS_OPTIONS = [
   { value: "", label: "Все статусы" },
   { value: "planned", label: "Запланирована" },
   { value: "in_progress", label: "В работе" },
-  { value: "completed", label: "Завершена" }
+  { value: "completed", label: "Завершена" },
 ];
 
 const InspectionsPage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const [items, setItems] = useState<Inspection[]>([]);
-  const [statusFilter, setStatusFilter] = useState<string>(searchParams.get("status") ?? "");
+  const [statusFilter, setStatusFilter] = useState<string>(
+    searchParams.get("status") ?? "",
+  );
   const { items: companies, list: listCompanies } = useCompaniesStore();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
-  const [online, setOnline] = useState(() => (typeof navigator === "undefined" ? true : navigator.onLine));
+  const [online, setOnline] = useState(() =>
+    typeof navigator === "undefined" ? true : navigator.onLine,
+  );
   const [hasConflict, setHasConflict] = useState(false);
   const [focusResults, setFocusResults] = useState<InspectionResult[]>([]);
   const focusedEntityType = searchParams.get("entity_type") ?? undefined;
   const focusedEntityId = searchParams.get("entity_id") ?? undefined;
-  const focusedView = searchParams.get("view") === "timeline" ? "timeline" : "summary";
+  const focusedView =
+    searchParams.get("view") === "timeline" ? "timeline" : "summary";
 
   // create dialog state
   const [createOpen, setCreateOpen] = useState(false);
@@ -68,24 +96,29 @@ const InspectionsPage = () => {
     inspection_type: "planned",
     authority: "",
     purpose: "",
-    scheduled_at: new Date().toISOString().slice(0, 10)
+    scheduled_at: new Date().toISOString().slice(0, 10),
   });
 
-  const load = useCallback(async (status = statusFilter) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const page = await inspectionsApi.list({
-        limit: 100,
-        status_filter: status || undefined
-      });
-      setItems(page.items);
-    } catch (err) {
-      setError((err as ApiError) ?? { message: "Не удалось загрузить проверки" });
-    } finally {
-      setLoading(false);
-    }
-  }, [statusFilter]);
+  const load = useCallback(
+    async (status = statusFilter) => {
+      setLoading(true);
+      setError(null);
+      try {
+        const page = await inspectionsApi.list({
+          limit: 100,
+          status_filter: status || undefined,
+        });
+        setItems(page.items);
+      } catch (err) {
+        setError(
+          (err as ApiError) ?? { message: "Не удалось загрузить проверки" },
+        );
+      } finally {
+        setLoading(false);
+      }
+    },
+    [statusFilter],
+  );
 
   useEffect(() => {
     void load(statusFilter);
@@ -97,15 +130,32 @@ const InspectionsPage = () => {
       setFocusResults([]);
       return;
     }
-    inspectionsApi.listResults(focusedEntityId).then(setFocusResults).catch(() => setFocusResults([]));
+    inspectionsApi
+      .listResults(focusedEntityId)
+      .then(setFocusResults)
+      .catch(() => setFocusResults([]));
   }, [focusedEntityId, focusedEntityType]);
 
-  const focusedInspection = focusedEntityType === "inspection" && focusedEntityId
-    ? items.find((inspection) => inspection.id === focusedEntityId) ?? null
-    : null;
-  const syncState = resolveSyncState({ online, loading, hasConflict, hasError: Boolean(error) });
-  const focusSummaryLink = entityCardLink(focusedEntityType, focusedEntityId, "summary");
-  const focusTimelineLink = entityCardLink(focusedEntityType, focusedEntityId, "timeline");
+  const focusedInspection =
+    focusedEntityType === "inspection" && focusedEntityId
+      ? (items.find((inspection) => inspection.id === focusedEntityId) ?? null)
+      : null;
+  const syncState = resolveSyncState({
+    online,
+    loading,
+    hasConflict,
+    hasError: Boolean(error),
+  });
+  const focusSummaryLink = entityCardLink(
+    focusedEntityType,
+    focusedEntityId,
+    "summary",
+  );
+  const focusTimelineLink = entityCardLink(
+    focusedEntityType,
+    focusedEntityId,
+    "timeline",
+  );
 
   const handleCreate = async () => {
     if (!form.company_id || !form.authority) {
@@ -120,7 +170,9 @@ const InspectionsPage = () => {
         inspection_type: form.inspection_type,
         authority: form.authority,
         purpose: form.purpose || undefined,
-        scheduled_at: form.scheduled_at ? new Date(form.scheduled_at).toISOString() : undefined
+        scheduled_at: form.scheduled_at
+          ? new Date(form.scheduled_at).toISOString()
+          : undefined,
       });
       toast.success("Проверка создана");
       setCreateOpen(false);
@@ -130,7 +182,7 @@ const InspectionsPage = () => {
         inspection_type: "planned",
         authority: "",
         purpose: "",
-        scheduled_at: new Date().toISOString().slice(0, 10)
+        scheduled_at: new Date().toISOString().slice(0, 10),
       });
       const next = new URLSearchParams(searchParams);
       next.set("entity_type", "inspection");
@@ -157,16 +209,29 @@ const InspectionsPage = () => {
   }, []);
 
   useEffect(() => {
-    emitSyncTelemetry({ type: "sync_state_changed", state: syncState, screen: "inspections" });
+    emitSyncTelemetry({
+      type: "sync_state_changed",
+      state: syncState,
+      screen: "inspections",
+    });
     if (error?.message) {
-      emitSyncTelemetry({ type: "sync_error", screen: "inspections", message: error.message });
+      emitSyncTelemetry({
+        type: "sync_error",
+        screen: "inspections",
+        message: error.message,
+      });
     }
   }, [error?.message, syncState]);
 
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <Breadcrumb items={[{ label: "Главная", to: "/dashboard" }, { label: "Проверки/предписания" }]} />
+        <Breadcrumb
+          items={[
+            { label: "Главная", to: "/dashboard" },
+            { label: "Проверки/предписания" },
+          ]}
+        />
         <div className="flex items-center gap-2">
           <select
             value={statusFilter}
@@ -188,11 +253,17 @@ const InspectionsPage = () => {
               </option>
             ))}
           </select>
-          <Button variant="outline" onClick={() => void load()}>Обновить</Button>
+          <Button variant="outline" onClick={() => void load()}>
+            Обновить
+          </Button>
 
           <Can
             permission={PERMISSIONS.INSPECTION_CREATE}
-            fallback={<Button disabled title="Недостаточно прав для создания проверки">Создать проверку</Button>}
+            fallback={
+              <Button disabled title="Недостаточно прав для создания проверки">
+                Создать проверку
+              </Button>
+            }
           >
             <Dialog open={createOpen} onOpenChange={setCreateOpen}>
               <DialogTrigger asChild>
@@ -210,11 +281,18 @@ const InspectionsPage = () => {
                         id="insp-company"
                         className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
                         value={form.company_id}
-                        onChange={(e) => setForm((prev) => ({ ...prev, company_id: e.target.value }))}
+                        onChange={(e) =>
+                          setForm((prev) => ({
+                            ...prev,
+                            company_id: e.target.value,
+                          }))
+                        }
                       >
                         <option value="">Выберите компанию</option>
                         {companies.map((company) => (
-                          <option key={company.id} value={company.id}>{company.name}</option>
+                          <option key={company.id} value={company.id}>
+                            {company.name}
+                          </option>
                         ))}
                       </select>
                     </div>
@@ -223,7 +301,12 @@ const InspectionsPage = () => {
                       <Input
                         id="insp-site"
                         value={form.site_id}
-                        onChange={(e) => setForm((prev) => ({ ...prev, site_id: e.target.value }))}
+                        onChange={(e) =>
+                          setForm((prev) => ({
+                            ...prev,
+                            site_id: e.target.value,
+                          }))
+                        }
                         placeholder="Опционально"
                       />
                     </div>
@@ -235,10 +318,17 @@ const InspectionsPage = () => {
                         id="insp-type"
                         className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
                         value={form.inspection_type}
-                        onChange={(e) => setForm((prev) => ({ ...prev, inspection_type: e.target.value }))}
+                        onChange={(e) =>
+                          setForm((prev) => ({
+                            ...prev,
+                            inspection_type: e.target.value,
+                          }))
+                        }
                       >
                         {INSPECTION_TYPES.map((t) => (
-                          <option key={t} value={t}>{t}</option>
+                          <option key={t} value={t}>
+                            {t}
+                          </option>
                         ))}
                       </select>
                     </div>
@@ -248,7 +338,12 @@ const InspectionsPage = () => {
                         id="insp-date"
                         type="date"
                         value={form.scheduled_at}
-                        onChange={(e) => setForm((prev) => ({ ...prev, scheduled_at: e.target.value }))}
+                        onChange={(e) =>
+                          setForm((prev) => ({
+                            ...prev,
+                            scheduled_at: e.target.value,
+                          }))
+                        }
                       />
                     </div>
                   </div>
@@ -257,7 +352,12 @@ const InspectionsPage = () => {
                     <Input
                       id="insp-authority"
                       value={form.authority}
-                      onChange={(e) => setForm((prev) => ({ ...prev, authority: e.target.value }))}
+                      onChange={(e) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          authority: e.target.value,
+                        }))
+                      }
                       placeholder="Ростехнадзор, Роструд, МЧС…"
                     />
                   </div>
@@ -266,13 +366,26 @@ const InspectionsPage = () => {
                     <Input
                       id="insp-purpose"
                       value={form.purpose}
-                      onChange={(e) => setForm((prev) => ({ ...prev, purpose: e.target.value }))}
+                      onChange={(e) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          purpose: e.target.value,
+                        }))
+                      }
                       placeholder="Контроль соблюдения требований ОТ"
                     />
                   </div>
                   <div className="flex justify-end gap-2">
-                    <Button variant="outline" onClick={() => setCreateOpen(false)}>Отмена</Button>
-                    <Button disabled={creating} onClick={() => void handleCreate()}>
+                    <Button
+                      variant="outline"
+                      onClick={() => setCreateOpen(false)}
+                    >
+                      Отмена
+                    </Button>
+                    <Button
+                      disabled={creating}
+                      onClick={() => void handleCreate()}
+                    >
                       {creating ? "Создание…" : "Создать проверку"}
                     </Button>
                   </div>
@@ -296,7 +409,9 @@ const InspectionsPage = () => {
       {focusedEntityId && focusedEntityType === "inspection" ? (
         <Card>
           <CardContent className="py-4" data-testid="inspection-focus-card">
-            <div className="text-sm font-semibold">Фокус проверки из рабочего пространства</div>
+            <div className="text-sm font-semibold">
+              Фокус проверки из рабочего пространства
+            </div>
             <p className="mt-1 text-xs text-muted-foreground">
               {focusedInspection
                 ? `${INSPECTION_TYPE_LABELS[focusedInspection.inspection_type] ?? focusedInspection.inspection_type} · ${INSPECTION_STATUS_LABELS[focusedInspection.status] ?? focusedInspection.status} · ${focusedInspection.authority}`
@@ -304,12 +419,20 @@ const InspectionsPage = () => {
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
               {focusSummaryLink ? (
-                <Button size="sm" variant={focusedView === "summary" ? "default" : "outline"} asChild>
+                <Button
+                  size="sm"
+                  variant={focusedView === "summary" ? "default" : "outline"}
+                  asChild
+                >
                   <Link to={focusSummaryLink}>Сводка</Link>
                 </Button>
               ) : null}
               {focusTimelineLink ? (
-                <Button size="sm" variant={focusedView === "timeline" ? "default" : "outline"} asChild>
+                <Button
+                  size="sm"
+                  variant={focusedView === "timeline" ? "default" : "outline"}
+                  asChild
+                >
                   <Link to={focusTimelineLink}>Хронология</Link>
                 </Button>
               ) : null}
@@ -321,15 +444,23 @@ const InspectionsPage = () => {
               <div className="mt-3 space-y-2">
                 {focusResults.length ? (
                   focusResults.slice(0, 6).map((result) => (
-                    <div key={result.id} className="rounded-md border p-2 text-xs">
+                    <div
+                      key={result.id}
+                      className="rounded-md border p-2 text-xs"
+                    >
                       <div className="font-medium">{result.title}</div>
                       <div className="text-muted-foreground">
-                        {result.outcome ?? "без outcome"} · {result.issued_at ? formatDate(result.issued_at) : "дата не задана"}
+                        {result.outcome ?? "без outcome"} ·{" "}
+                        {result.issued_at
+                          ? formatDate(result.issued_at)
+                          : "дата не задана"}
                       </div>
                     </div>
                   ))
                 ) : (
-                  <p className="text-xs text-muted-foreground">События timeline пока отсутствуют.</p>
+                  <p className="text-xs text-muted-foreground">
+                    События timeline пока отсутствуют.
+                  </p>
                 )}
               </div>
             ) : null}
@@ -344,7 +475,10 @@ const InspectionsPage = () => {
         </CardHeader>
         <CardContent>
           {!loading && items.length === 0 ? (
-            <EmptyState title="Проверки не найдены" description="Измените фильтры или создайте новую проверку." />
+            <EmptyState
+              title="Проверки не найдены"
+              description="Измените фильтры или создайте новую проверку."
+            />
           ) : (
             <Table>
               <TableHeader>
@@ -360,16 +494,26 @@ const InspectionsPage = () => {
               <TableBody>
                 {items.map((inspection) => (
                   <TableRow key={inspection.id}>
-                    <TableCell className="font-medium">{inspection.id}</TableCell>
-                    <TableCell>{INSPECTION_TYPE_LABELS[inspection.inspection_type] ?? inspection.inspection_type}</TableCell>
+                    <TableCell className="font-medium">
+                      {inspection.id}
+                    </TableCell>
+                    <TableCell>
+                      {INSPECTION_TYPE_LABELS[inspection.inspection_type] ??
+                        inspection.inspection_type}
+                    </TableCell>
                     <TableCell>{inspection.site_id ?? "—"}</TableCell>
                     <TableCell>{inspection.authority}</TableCell>
-                    <TableCell>{inspection.scheduled_at ? formatDate(inspection.scheduled_at) : "—"}</TableCell>
+                    <TableCell>
+                      {inspection.scheduled_at
+                        ? formatDate(inspection.scheduled_at)
+                        : "—"}
+                    </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
                         <StatusBadge status={inspection.status} />
                         <span className="text-xs text-muted-foreground">
-                          {INSPECTION_STATUS_LABELS[inspection.status] ?? inspection.status}
+                          {INSPECTION_STATUS_LABELS[inspection.status] ??
+                            inspection.status}
                         </span>
                       </div>
                     </TableCell>

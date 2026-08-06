@@ -13,7 +13,9 @@ describe("ApprovalTimeline", () => {
   it("renders timeline header with current step", () => {
     render(<ApprovalTimeline items={[]} currentStep={3} />);
 
-    expect(screen.getByText(/Timeline \(current step: 3\)/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Timeline \(current step: 3\)/),
+    ).toBeInTheDocument();
   });
 
   it("renders single approval decision", () => {
@@ -21,8 +23,8 @@ describe("ApprovalTimeline", () => {
       {
         step_no: 1,
         decision: "Approved",
-        comment: "All checks passed"
-      }
+        comment: "All checks passed",
+      },
     ];
 
     render(<ApprovalTimeline items={items} currentStep={1} />);
@@ -37,27 +39,33 @@ describe("ApprovalTimeline", () => {
       {
         step_no: 1,
         decision: "Approved",
-        comment: "Initial review"
+        comment: "Initial review",
       },
       {
         step_no: 2,
         decision: "Rejected",
-        comment: "Missing signature"
+        comment: "Missing signature",
       },
       {
         step_no: 3,
         decision: "Approved",
-        comment: "Signature added"
-      }
+        comment: "Signature added",
+      },
     ];
 
     render(<ApprovalTimeline items={items} currentStep={3} />);
 
     // Component renders `Step N: <b>{decision}</b> — {comment}` — text is split across
     // text nodes, so use textContent of the enclosing element for multi-fragment matching.
-    expect(screen.getByText(/Step 1:/).textContent).toMatch(/Step 1: Approved\s+—\s+Initial review/);
-    expect(screen.getByText(/Step 2:/).textContent).toMatch(/Step 2: Rejected\s+—\s+Missing signature/);
-    expect(screen.getByText(/Step 3:/).textContent).toMatch(/Step 3: Approved\s+—\s+Signature added/);
+    expect(screen.getByText(/Step 1:/).textContent).toMatch(
+      /Step 1: Approved\s+—\s+Initial review/,
+    );
+    expect(screen.getByText(/Step 2:/).textContent).toMatch(
+      /Step 2: Rejected\s+—\s+Missing signature/,
+    );
+    expect(screen.getByText(/Step 3:/).textContent).toMatch(
+      /Step 3: Approved\s+—\s+Signature added/,
+    );
   });
 
   it("renders decision without comment", () => {
@@ -65,8 +73,8 @@ describe("ApprovalTimeline", () => {
       {
         step_no: 2,
         decision: "Pending",
-        comment: null
-      }
+        comment: null,
+      },
     ];
 
     render(<ApprovalTimeline items={items} currentStep={2} />);
@@ -83,8 +91,8 @@ describe("ApprovalTimeline", () => {
       {
         step_no: 1,
         decision: "Reviewed",
-        comment: undefined
-      }
+        comment: undefined,
+      },
     ];
 
     render(<ApprovalTimeline items={items} currentStep={1} />);
@@ -96,13 +104,15 @@ describe("ApprovalTimeline", () => {
     const items = Array.from({ length: 5 }, (_, i) => ({
       step_no: i + 1,
       decision: i % 2 === 0 ? "Approved" : "Rejected",
-      comment: `Comment for step ${i + 1}`
+      comment: `Comment for step ${i + 1}`,
     }));
 
     render(<ApprovalTimeline items={items} currentStep={5} />);
 
     for (let i = 0; i < 5; i++) {
-      expect(screen.getByText(new RegExp(`Step ${i + 1}:`))).toBeInTheDocument();
+      expect(
+        screen.getByText(new RegExp(`Step ${i + 1}:`)),
+      ).toBeInTheDocument();
     }
   });
 
@@ -110,10 +120,12 @@ describe("ApprovalTimeline", () => {
     const items = [
       { step_no: 1, decision: "Approved", comment: "Done" },
       { step_no: 2, decision: "In Progress", comment: "Being reviewed" },
-      { step_no: 3, decision: "Pending", comment: null }
+      { step_no: 3, decision: "Pending", comment: null },
     ];
 
-    const { rerender } = render(<ApprovalTimeline items={items} currentStep={1} />);
+    const { rerender } = render(
+      <ApprovalTimeline items={items} currentStep={1} />,
+    );
     expect(screen.getByText(/current step: 1/)).toBeInTheDocument();
 
     rerender(<ApprovalTimeline items={items} currentStep={2} />);

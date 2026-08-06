@@ -2,7 +2,12 @@ import MockAdapter from "axios-mock-adapter";
 import { describe, expect, it } from "vitest";
 
 import { apiClient } from "@/api/client";
-import { getLearnerDashboard, getTeacherDashboard, getTrainingProgramDetail, getTrainingPrograms } from "@/api/training";
+import {
+  getLearnerDashboard,
+  getTeacherDashboard,
+  getTrainingProgramDetail,
+  getTrainingPrograms,
+} from "@/api/training";
 import { tenantStorage } from "@/api/tenantStorage";
 
 describe("training api", () => {
@@ -14,16 +19,20 @@ describe("training api", () => {
       groups_total: 3,
       enrollments_total: 10,
       completed_total: 5,
-      average_progress_percent: 60
+      average_progress_percent: 60,
     });
     mock.onGet("/training/learner/dashboard").reply(200, {
       assigned_total: 7,
       completed_total: 4,
-      overdue_total: 1
+      overdue_total: 1,
     });
 
-    await expect(getTeacherDashboard()).resolves.toMatchObject({ groups_total: 3 });
-    await expect(getLearnerDashboard()).resolves.toMatchObject({ assigned_total: 7 });
+    await expect(getTeacherDashboard()).resolves.toMatchObject({
+      groups_total: 3,
+    });
+    await expect(getLearnerDashboard()).resolves.toMatchObject({
+      assigned_total: 7,
+    });
 
     mock.restore();
   });
@@ -32,9 +41,16 @@ describe("training api", () => {
     tenantStorage.setTenant({ slug: "demo" });
     const mock = new MockAdapter(apiClient);
 
-    mock.onGet("/training/programs").reply(200, { items: [{ id: "program-1" }] });
+    mock
+      .onGet("/training/programs")
+      .reply(200, { items: [{ id: "program-1" }] });
     mock.onGet("/training/programs/program-1/detail").reply(200, {
-      modules: [{ module: { id: "m1", title: "Module 1" }, lessons: [{ id: "l1", title: "Lesson 1" }] }]
+      modules: [
+        {
+          module: { id: "m1", title: "Module 1" },
+          lessons: [{ id: "l1", title: "Lesson 1" }],
+        },
+      ],
     });
 
     const programs = await getTrainingPrograms();
@@ -44,4 +60,3 @@ describe("training api", () => {
     mock.restore();
   });
 });
-

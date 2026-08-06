@@ -23,21 +23,30 @@ describe("package action states", () => {
 
   it("keeps profile form values and shows error when profile creation fails", async () => {
     getMock.mockResolvedValue({ data: [] });
-    postMock.mockRejectedValueOnce({ status: 400, message: "profile create failed" });
+    postMock.mockRejectedValueOnce({
+      status: 400,
+      message: "profile create failed",
+    });
 
     render(
       <MemoryRouter>
         <PackageProfilesPage />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
 
     await screen.findByText(/профили пакетов отсутствуют/i);
-    fireEvent.change(screen.getByPlaceholderText("Код"), { target: { value: "pack-default" } });
-    fireEvent.change(screen.getByPlaceholderText("Название"), { target: { value: "Pack profile" } });
+    fireEvent.change(screen.getByPlaceholderText("Код"), {
+      target: { value: "pack-default" },
+    });
+    fireEvent.change(screen.getByPlaceholderText("Название"), {
+      target: { value: "Pack profile" },
+    });
     fireEvent.click(screen.getByRole("button", { name: "Создать" }));
 
     await waitFor(() => {
-      expect(screen.getByRole("alert")).toHaveTextContent("profile create failed");
+      expect(screen.getByRole("alert")).toHaveTextContent(
+        "profile create failed",
+      );
     });
     expect(screen.getByPlaceholderText("Код")).toHaveValue("pack-default");
     expect(screen.getByPlaceholderText("Название")).toHaveValue("Pack profile");
@@ -46,26 +55,37 @@ describe("package action states", () => {
   it("shows error when preset validation fails without reloading away the list", async () => {
     getMock.mockImplementation((url: string) => {
       if (url === "/package-presets") {
-        return Promise.resolve({ data: [{ id: "preset-1", code: "pack-a", name: "Pack A", status: "draft" }] });
+        return Promise.resolve({
+          data: [
+            { id: "preset-1", code: "pack-a", name: "Pack A", status: "draft" },
+          ],
+        });
       }
       if (url === "/package-profiles") {
-        return Promise.resolve({ data: [{ id: "profile-1", code: "profile-a" }] });
+        return Promise.resolve({
+          data: [{ id: "profile-1", code: "profile-a" }],
+        });
       }
       throw new Error(`Unexpected GET ${url}`);
     });
-    postMock.mockRejectedValueOnce({ status: 400, message: "preset validate failed" });
+    postMock.mockRejectedValueOnce({
+      status: 400,
+      message: "preset validate failed",
+    });
 
     render(
       <MemoryRouter>
         <PackagePresetsPage />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
 
     await screen.findByText(/pack-a — pack a \(draft\)/i);
     fireEvent.click(screen.getByRole("button", { name: "Проверить" }));
 
     await waitFor(() => {
-      expect(screen.getByRole("alert")).toHaveTextContent("preset validate failed");
+      expect(screen.getByRole("alert")).toHaveTextContent(
+        "preset validate failed",
+      );
     });
     expect(screen.getByText(/pack-a — pack a \(draft\)/i)).toBeInTheDocument();
   });

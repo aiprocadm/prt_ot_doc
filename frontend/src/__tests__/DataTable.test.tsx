@@ -11,8 +11,8 @@ const columns: ColumnDef<Row>[] = [
   {
     accessorKey: "name",
     header: "Название",
-    cell: ({ getValue }) => <span>{getValue<string>()}</span>
-  }
+    cell: ({ getValue }) => <span>{getValue<string>()}</span>,
+  },
 ];
 
 describe("DataTable", () => {
@@ -22,14 +22,17 @@ describe("DataTable", () => {
     render(
       <DataTable
         columns={columns}
-        data={[{ id: 1, name: "A" }, { id: 2, name: "B" }]}
+        data={[
+          { id: 1, name: "A" },
+          { id: 2, name: "B" },
+        ]}
         pageIndex={1}
         pageSize={10}
         total={25}
         onPageChange={onPageChange}
         onPageSizeChange={() => undefined}
         emptyMessage="Нет строк"
-      />
+      />,
     );
 
     expect(screen.getByText("A")).toBeInTheDocument();
@@ -53,16 +56,19 @@ describe("DataTable", () => {
         onPageChange={() => undefined}
         onPageSizeChange={() => undefined}
         onSearchChange={onSearchChange}
-      />
+      />,
     );
 
     await act(async () => {
       await user.type(screen.getByRole("textbox", { name: "Поиск" }), "ABC");
     });
-    await waitFor(() => {
-      const lastCall = onSearchChange.mock.calls.at(-1);
-      expect(lastCall?.[0]).toBe("ABC");
-    }, { timeout: 1000 });
+    await waitFor(
+      () => {
+        const lastCall = onSearchChange.mock.calls.at(-1);
+        expect(lastCall?.[0]).toBe("ABC");
+      },
+      { timeout: 1000 },
+    );
   });
 
   it("отображает сообщение об отсутствии данных", () => {
@@ -76,7 +82,7 @@ describe("DataTable", () => {
         onPageChange={() => undefined}
         onPageSizeChange={() => undefined}
         emptyMessage="Данных нет"
-      />
+      />,
     );
 
     expect(screen.getByText("Данных нет")).toBeInTheDocument();

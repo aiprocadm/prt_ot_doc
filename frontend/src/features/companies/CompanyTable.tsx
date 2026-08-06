@@ -15,7 +15,8 @@ interface CompanyTableProps {
 }
 
 export const CompanyTable = ({ onSelect }: CompanyTableProps) => {
-  const { items, pagination, list, setPage, setPageSize, remove, loading } = useCompaniesStore();
+  const { items, pagination, list, setPage, setPageSize, remove, loading } =
+    useCompaniesStore();
 
   const columns = useMemo<ColumnDef<CompanyDto>[]>(
     () => [
@@ -25,26 +26,37 @@ export const CompanyTable = ({ onSelect }: CompanyTableProps) => {
         cell: ({ row }) => (
           <div className="flex flex-col">
             <span className="font-medium">{row.original.name}</span>
-            <span className="text-xs text-muted-foreground">ИНН {row.original.inn}</span>
+            <span className="text-xs text-muted-foreground">
+              ИНН {row.original.inn}
+            </span>
           </div>
-        )
+        ),
       },
       {
         accessorKey: "status",
         header: "Статус",
-        cell: ({ row }) => <span className="uppercase text-xs text-muted-foreground">{row.original.status}</span>
+        cell: ({ row }) => (
+          <span className="uppercase text-xs text-muted-foreground">
+            {row.original.status}
+          </span>
+        ),
       },
       {
         accessorKey: "updated_at",
         header: "Обновлено",
-        cell: ({ row }) => formatDate(row.original.updated_at)
+        cell: ({ row }) => formatDate(row.original.updated_at),
       },
       {
         id: "actions",
         header: "Действия",
         cell: ({ row }) => (
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="icon" onClick={() => onSelect(row.original)} aria-label="Открыть">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => onSelect(row.original)}
+              aria-label="Открыть"
+            >
               <Eye className="h-4 w-4" />
             </Button>
             <CompanyFormDialog
@@ -71,10 +83,10 @@ export const CompanyTable = ({ onSelect }: CompanyTableProps) => {
               <Trash2 className="h-4 w-4 text-destructive" />
             </Button>
           </div>
-        )
-      }
+        ),
+      },
     ],
-    [list, onSelect, remove]
+    [list, onSelect, remove],
   );
 
   return (

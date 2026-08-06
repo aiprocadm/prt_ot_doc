@@ -11,7 +11,10 @@ import { PERMISSIONS } from "@/permissions/permissions";
 import { useAbility } from "@/permissions/useAbility";
 import { useRiskStore } from "@/stores/risk";
 import { useCompaniesStore } from "@/stores/companies";
-import { riskAssessmentSchema, type RiskAssessmentFormValues } from "@/types/forms/risk";
+import {
+  riskAssessmentSchema,
+  type RiskAssessmentFormValues,
+} from "@/types/forms/risk";
 
 export const RiskAssessmentForm = () => {
   const { hazards, createAssessment } = useRiskStore();
@@ -20,9 +23,12 @@ export const RiskAssessmentForm = () => {
   const canAssess = can(PERMISSIONS.RISK_ASSESS);
   const form = useForm<RiskAssessmentFormValues>({
     resolver: zodResolver(riskAssessmentSchema),
-    defaultValues: { company_id: "", hazards: [] }
+    defaultValues: { company_id: "", hazards: [] },
   });
-  const { fields, append, remove } = useFieldArray({ control: form.control, name: "hazards" });
+  const { fields, append, remove } = useFieldArray({
+    control: form.control,
+    name: "hazards",
+  });
 
   useEffect(() => {
     if (canAssess) {
@@ -32,7 +38,12 @@ export const RiskAssessmentForm = () => {
 
   const handleAddHazard = (hazardId: string) => {
     if (!hazardId) return;
-    append({ hazard_id: hazardId, probability: 1, severity: 1, mitigations: "" });
+    append({
+      hazard_id: hazardId,
+      probability: 1,
+      severity: 1,
+      mitigations: "",
+    });
   };
 
   const scoreHint = (probability?: number, severity?: number) => {
@@ -59,11 +70,15 @@ export const RiskAssessmentForm = () => {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-xl font-semibold">Новый расчёт риска</CardTitle>
+        <CardTitle className="text-xl font-semibold">
+          Новый расчёт риска
+        </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         {!canAssess && (
-          <div className="rounded-md border border-dashed px-3 py-2 text-xs text-muted-foreground">Только просмотр</div>
+          <div className="rounded-md border border-dashed px-3 py-2 text-xs text-muted-foreground">
+            Только просмотр
+          </div>
         )}
         <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)}>
           <div className="space-y-2">
@@ -102,11 +117,17 @@ export const RiskAssessmentForm = () => {
           </div>
           <div className="space-y-3">
             {fields.map((field, index) => (
-              <div key={field.id} className="grid gap-2 rounded-md border p-3 md:grid-cols-4">
+              <div
+                key={field.id}
+                className="grid gap-2 rounded-md border p-3 md:grid-cols-4"
+              >
                 <div className="md:col-span-2">
-                  <Label className="text-xs uppercase text-muted-foreground">Опасность</Label>
+                  <Label className="text-xs uppercase text-muted-foreground">
+                    Опасность
+                  </Label>
                   <div className="text-sm font-medium">
-                    {hazards.find((hazard) => hazard.id === field.hazard_id)?.title ?? field.hazard_id}
+                    {hazards.find((hazard) => hazard.id === field.hazard_id)
+                      ?.title ?? field.hazard_id}
                   </div>
                 </div>
                 <div>
@@ -117,9 +138,13 @@ export const RiskAssessmentForm = () => {
                     min={1}
                     max={5}
                     disabled={!canAssess}
-                    {...form.register(`hazards.${index}.probability`, { valueAsNumber: true })}
+                    {...form.register(`hazards.${index}.probability`, {
+                      valueAsNumber: true,
+                    })}
                   />
-                  <p className="mt-1 text-xs text-muted-foreground">Шкала 1-5</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Шкала 1-5
+                  </p>
                 </div>
                 <div>
                   <Label htmlFor={`severity-${index}`}>Тяжесть</Label>
@@ -129,26 +154,46 @@ export const RiskAssessmentForm = () => {
                     min={1}
                     max={5}
                     disabled={!canAssess}
-                    {...form.register(`hazards.${index}.severity`, { valueAsNumber: true })}
+                    {...form.register(`hazards.${index}.severity`, {
+                      valueAsNumber: true,
+                    })}
                   />
-                  <p className="mt-1 text-xs text-muted-foreground">Шкала 1-5</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Шкала 1-5
+                  </p>
                 </div>
                 <div className="md:col-span-4 text-xs text-muted-foreground">
-                  Индекс по опасности: {scoreHint(form.watch(`hazards.${index}.probability`), form.watch(`hazards.${index}.severity`))}
+                  Индекс по опасности:{" "}
+                  {scoreHint(
+                    form.watch(`hazards.${index}.probability`),
+                    form.watch(`hazards.${index}.severity`),
+                  )}
                 </div>
                 <div className="md:col-span-4">
                   <Label htmlFor={`mitigations-${index}`}>Мероприятия</Label>
-                  <Input id={`mitigations-${index}`} disabled={!canAssess} {...form.register(`hazards.${index}.mitigations`)} />
+                  <Input
+                    id={`mitigations-${index}`}
+                    disabled={!canAssess}
+                    {...form.register(`hazards.${index}.mitigations`)}
+                  />
                 </div>
                 <div className="md:col-span-4">
-                  <Button variant="outline" type="button" disabled={!canAssess} onClick={() => remove(index)}>
+                  <Button
+                    variant="outline"
+                    type="button"
+                    disabled={!canAssess}
+                    onClick={() => remove(index)}
+                  >
                     Удалить
                   </Button>
                 </div>
               </div>
             ))}
           </div>
-          <Button type="submit" disabled={!canAssess || form.formState.isSubmitting}>
+          <Button
+            type="submit"
+            disabled={!canAssess || form.formState.isSubmitting}
+          >
             {form.formState.isSubmitting ? "Сохранение..." : "Сохранить расчёт"}
           </Button>
         </form>

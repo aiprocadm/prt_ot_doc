@@ -10,12 +10,20 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger
+  DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { BUDGET_DOMAIN_LABELS, BUDGET_DOMAINS } from "@/pages/budget/budgetVocab";
-import type { BudgetArticleCreateInput, BudgetArticleDto, BudgetArticleUpdateInput, BudgetDomain } from "@/types/dto/budget";
+import {
+  BUDGET_DOMAIN_LABELS,
+  BUDGET_DOMAINS,
+} from "@/pages/budget/budgetVocab";
+import type {
+  BudgetArticleCreateInput,
+  BudgetArticleDto,
+  BudgetArticleUpdateInput,
+  BudgetDomain,
+} from "@/types/dto/budget";
 
 interface Props {
   trigger: ReactNode;
@@ -34,10 +42,14 @@ const emptyForm: FormState = {
   code: "",
   name: "",
   domain: "",
-  is_active: true
+  is_active: true,
 };
 
-export const ArticleFormDialog = ({ trigger, initialData, onSubmitted }: Props) => {
+export const ArticleFormDialog = ({
+  trigger,
+  initialData,
+  onSubmitted,
+}: Props) => {
   const [open, setOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState<FormState>(emptyForm);
@@ -51,9 +63,9 @@ export const ArticleFormDialog = ({ trigger, initialData, onSubmitted }: Props) 
             code: initialData.code,
             name: initialData.name,
             domain: initialData.domain ?? "",
-            is_active: initialData.is_active
+            is_active: initialData.is_active,
           }
-        : emptyForm
+        : emptyForm,
     );
   }, [open, initialData]);
 
@@ -76,8 +88,10 @@ export const ArticleFormDialog = ({ trigger, initialData, onSubmitted }: Props) 
         const trimmedName = form.name.trim();
         if (trimmedName !== initialData.name) payload.name = trimmedName;
         const normalizedDomain = form.domain || null;
-        if (normalizedDomain !== initialData.domain) payload.domain = normalizedDomain;
-        if (form.is_active !== initialData.is_active) payload.is_active = form.is_active;
+        if (normalizedDomain !== initialData.domain)
+          payload.domain = normalizedDomain;
+        if (form.is_active !== initialData.is_active)
+          payload.is_active = form.is_active;
         await budgetApi.updateArticle(initialData.id, payload);
         toast.success("Статья обновлена");
       } else {
@@ -85,7 +99,7 @@ export const ArticleFormDialog = ({ trigger, initialData, onSubmitted }: Props) 
           code: form.code.trim(),
           name: form.name.trim(),
           domain: form.domain || null,
-          is_active: form.is_active
+          is_active: form.is_active,
         };
         await budgetApi.createArticle(payload);
         toast.success("Статья создана");
@@ -93,7 +107,9 @@ export const ArticleFormDialog = ({ trigger, initialData, onSubmitted }: Props) 
       onSubmitted?.();
       setOpen(false);
     } catch (err) {
-      toast.error((err as { message?: string })?.message ?? "Не удалось сохранить статью");
+      toast.error(
+        (err as { message?: string })?.message ?? "Не удалось сохранить статью",
+      );
     } finally {
       setSubmitting(false);
     }
@@ -104,8 +120,12 @@ export const ArticleFormDialog = ({ trigger, initialData, onSubmitted }: Props) 
       <DialogTrigger asChild>{trigger}</DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{isEdit ? "Редактировать статью" : "Новая статья"}</DialogTitle>
-          <DialogDescription>Статья расходов бюджета безопасности — код, название и домен.</DialogDescription>
+          <DialogTitle>
+            {isEdit ? "Редактировать статью" : "Новая статья"}
+          </DialogTitle>
+          <DialogDescription>
+            Статья расходов бюджета безопасности — код, название и домен.
+          </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
           <div className="space-y-2">
@@ -114,7 +134,9 @@ export const ArticleFormDialog = ({ trigger, initialData, onSubmitted }: Props) 
               id="a-code"
               value={form.code}
               disabled={isEdit}
-              onChange={(e) => setForm((prev) => ({ ...prev, code: e.target.value }))}
+              onChange={(e) =>
+                setForm((prev) => ({ ...prev, code: e.target.value }))
+              }
             />
           </div>
           <div className="space-y-2">
@@ -122,7 +144,9 @@ export const ArticleFormDialog = ({ trigger, initialData, onSubmitted }: Props) 
             <Input
               id="a-name"
               value={form.name}
-              onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
+              onChange={(e) =>
+                setForm((prev) => ({ ...prev, name: e.target.value }))
+              }
             />
           </div>
           <div className="space-y-2">
@@ -131,7 +155,12 @@ export const ArticleFormDialog = ({ trigger, initialData, onSubmitted }: Props) 
               id="a-domain"
               className="h-10 w-full rounded-md border px-3"
               value={form.domain}
-              onChange={(e) => setForm((prev) => ({ ...prev, domain: e.target.value as BudgetDomain | "" }))}
+              onChange={(e) =>
+                setForm((prev) => ({
+                  ...prev,
+                  domain: e.target.value as BudgetDomain | "",
+                }))
+              }
             >
               <option value="">Универсальная</option>
               {BUDGET_DOMAINS.map((d) => (
@@ -146,7 +175,9 @@ export const ArticleFormDialog = ({ trigger, initialData, onSubmitted }: Props) 
               id="a-active"
               type="checkbox"
               checked={form.is_active}
-              onChange={(e) => setForm((prev) => ({ ...prev, is_active: e.target.checked }))}
+              onChange={(e) =>
+                setForm((prev) => ({ ...prev, is_active: e.target.checked }))
+              }
             />
             <Label htmlFor="a-active">Активна</Label>
           </div>

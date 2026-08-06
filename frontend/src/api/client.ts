@@ -1,4 +1,8 @@
-import axios, { type AxiosError, type AxiosInstance, type InternalAxiosRequestConfig } from "axios";
+import axios, {
+  type AxiosError,
+  type AxiosInstance,
+  type InternalAxiosRequestConfig,
+} from "axios";
 import { appConfig } from "@/config/env";
 import { handleApiError } from "@/api/errorHandling";
 import { tokenStorage } from "@/api/tokenStorage";
@@ -40,9 +44,12 @@ const isTenantRequiredPath = (path: string) => {
   return !TENANT_WHITELIST.some((pattern) => pattern.test(path));
 };
 
-const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null;
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null;
 
-type RequestWithServerRetry = InternalAxiosRequestConfig & { _serverRetryCount?: number };
+type RequestWithServerRetry = InternalAxiosRequestConfig & {
+  _serverRetryCount?: number;
+};
 
 declare module "axios" {
   export interface AxiosRequestConfig {
@@ -54,42 +61,57 @@ declare module "axios" {
 const SERVER_RETRY_STATUSES = new Set([500, 502, 503, 504]);
 const MAX_SERVER_RETRIES = 2;
 
-const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+const sleep = (ms: number) =>
+  new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 const normalizeFieldErrors = (value: unknown): ApiFieldError[] => {
   if (!Array.isArray(value)) return [];
   const items: ApiFieldError[] = [];
   value.forEach((item) => {
-    if (!isRecord(item) || typeof item.field !== "string" || typeof item.message !== "string") return;
+    if (
+      !isRecord(item) ||
+      typeof item.field !== "string" ||
+      typeof item.message !== "string"
+    )
+      return;
     items.push({
       field: item.field,
       message: item.message,
-      code: typeof item.code === "string" ? item.code : undefined
+      code: typeof item.code === "string" ? item.code : undefined,
     });
   });
   return items;
 };
 
-const normalizeApiError = (payload: unknown, fallback: { status: number; message: string; details?: unknown }): ApiError => {
+const normalizeApiError = (
+  payload: unknown,
+  fallback: { status: number; message: string; details?: unknown },
+): ApiError => {
   if (!isRecord(payload)) {
     return {
       status: fallback.status,
       message: fallback.message,
       details: fallback.details ?? payload,
-      field_errors: []
+      field_errors: [],
     };
   }
 
-  const details = "details" in payload ? payload.details : fallback.details ?? payload;
+  const details =
+    "details" in payload ? payload.details : (fallback.details ?? payload);
   return {
     status: fallback.status,
     code: typeof payload.code === "string" ? payload.code : undefined,
     type: typeof payload.type === "string" ? payload.type : undefined,
-    message: typeof payload.message === "string" ? payload.message : fallback.message,
+    message:
+      typeof payload.message === "string" ? payload.message : fallback.message,
     details,
     field_errors: normalizeFieldErrors(payload.field_errors),
-    correlation_id: typeof payload.correlation_id === "string" ? payload.correlation_id : undefined,
-    timestamp: typeof payload.timestamp === "string" ? payload.timestamp : undefined
+    correlation_id:
+      typeof payload.correlation_id === "string"
+        ? payload.correlation_id
+        : undefined,
+    timestamp:
+      typeof payload.timestamp === "string" ? payload.timestamp : undefined,
   };
 };
 
@@ -116,7 +138,7 @@ export const requestTokenRefresh = async (): Promise<RefreshResponseDto> => {
       type: "tenancy",
       message: "Выберите контур перед выполнением запроса.",
       details: { url: "/auth/refresh", path: "/auth/refresh" },
-      field_errors: []
+      field_errors: [],
     } satisfies ApiError;
   }
 
@@ -126,8 +148,8 @@ export const requestTokenRefresh = async (): Promise<RefreshResponseDto> => {
     {
       headers: { "X-Tenant": tenant.slug },
       withCredentials: true,
-      timeout: 15_000
-    }
+      timeout: 15_000,
+    },
   );
   return response.data;
 };
@@ -140,7 +162,7 @@ const refreshToken = async (): Promise<string | null> => {
     try {
       const response = await requestTokenRefresh();
       tokenStorage.setTokens({
-        accessToken: response.access_token
+        accessToken: response.access_token,
       });
       return response.access_token;
     } catch {
@@ -163,7 +185,7 @@ const refreshToken = async (): Promise<string | null> => {
 
 export const apiClient: AxiosInstance = axios.create({
   baseURL: API_BASE_URL,
-  withCredentials: true
+  withCredentials: true,
 });
 
 tokenStorage.hydrate();
@@ -175,7 +197,10 @@ apiClient.interceptors.request.use((config) => {
   const tenant = tenantStorage.getTenant();
   config.headers = config.headers ?? {};
   const requestUrl = config.url ?? "";
-  const requestPath = resolveRequestPath(requestUrl, config.baseURL ?? API_BASE_URL);
+  const requestPath = resolveRequestPath(
+    requestUrl,
+    config.baseURL ?? API_BASE_URL,
+  );
   const requiresTenant = isTenantRequiredPath(requestPath);
   if (!tenant && requiresTenant) {
     const error = {
@@ -184,7 +209,7 @@ apiClient.interceptors.request.use((config) => {
       type: "tenancy",
       message: "Выберите контур перед выполнением запроса.",
       details: { url: requestUrl, path: requestPath },
-      field_errors: []
+      field_errors: [],
     } satisfies ApiError;
     handleApiError(error, requestUrl);
     return Promise.reject(error);
@@ -212,7 +237,9 @@ const isExpiredClientContext = (data: unknown): boolean => {
   if (!data || typeof data !== "object") return false;
   const body = data as Record<string, unknown>;
   const detail = body.detail as Record<string, unknown> | undefined;
-  return body.code === CONTEXT_EXPIRED_CODE || detail?.code === CONTEXT_EXPIRED_CODE;
+  return (
+    body.code === CONTEXT_EXPIRED_CODE || detail?.code === CONTEXT_EXPIRED_CODE
+  );
 };
 
 apiClient.interceptors.response.use(
@@ -230,14 +257,15 @@ apiClient.interceptors.response.use(
     if (status === 401 && originalRequest && !originalRequest._retry) {
       const requestAuthHeader = originalRequest.headers?.Authorization;
       const hasAccessToken = Boolean(
-        (typeof requestAuthHeader === "string" && requestAuthHeader.trim()) || tokenStorage.getAccessToken()
+        (typeof requestAuthHeader === "string" && requestAuthHeader.trim()) ||
+          tokenStorage.getAccessToken(),
       );
       if (!hasAccessToken) {
         // No token present: do not storm /auth/refresh, but keep unified auth handling.
         const apiError = normalizeApiError(error.response?.data, {
           status,
           message: error.message ?? "Unauthorized",
-          details: error.response?.data
+          details: error.response?.data,
         });
         handleApiError(apiError, originalRequest?.url);
         return Promise.reject(apiError);
@@ -257,7 +285,7 @@ apiClient.interceptors.response.use(
                 const apiError = normalizeApiError(error.response?.data, {
                   status,
                   message: error.message ?? "Unauthorized",
-                  details: error.response?.data
+                  details: error.response?.data,
                 });
                 handleApiError(apiError, originalRequest?.url);
                 reject(apiError);
@@ -274,7 +302,7 @@ apiClient.interceptors.response.use(
         const apiError = normalizeApiError(error.response?.data, {
           status,
           message: error.message ?? "Unauthorized",
-          details: error.response?.data
+          details: error.response?.data,
         });
         handleApiError(apiError, originalRequest?.url);
         return Promise.reject(apiError);
@@ -285,7 +313,11 @@ apiClient.interceptors.response.use(
       const method = (originalRequest.method ?? "get").toLowerCase();
       const cfg = originalRequest as RequestWithServerRetry;
       const attempt = cfg._serverRetryCount ?? 0;
-      if (method === "get" && SERVER_RETRY_STATUSES.has(status) && attempt < MAX_SERVER_RETRIES) {
+      if (
+        method === "get" &&
+        SERVER_RETRY_STATUSES.has(status) &&
+        attempt < MAX_SERVER_RETRIES
+      ) {
         cfg._serverRetryCount = attempt + 1;
         const backoff = 400 * 2 ** attempt + Math.floor(Math.random() * 250);
         await sleep(backoff);
@@ -296,14 +328,14 @@ apiClient.interceptors.response.use(
     const apiError = normalizeApiError(error.response?.data, {
       status,
       message: error.message ?? "Unexpected error",
-      details: error.response?.data
+      details: error.response?.data,
     });
 
     if (!originalRequest?.silentApiErrorToast) {
       handleApiError(apiError, originalRequest?.url);
     }
     return Promise.reject(apiError);
-  }
+  },
 );
 
 export const setAuthHeader = (token: string | null) => {

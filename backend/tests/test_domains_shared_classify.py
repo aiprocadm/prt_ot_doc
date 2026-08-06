@@ -1,5 +1,7 @@
 from datetime import date
+
 import pytest
+
 from app.domains.shared import ContingentItemStatus, classify
 
 
@@ -18,5 +20,6 @@ def test_classify_buckets(valid_until, expected):
 
 def test_medical_lifecycle_reexports_shared():
     from app.domains.medical import lifecycle as lc
+
     assert lc.classify is classify
     assert lc.ContingentItemStatus is ContingentItemStatus

@@ -37,9 +37,9 @@ def test_training_session_has_required_columns() -> None:
         "updated_at",
         "version",
     }
-    assert required.issubset(columns.keys()), (
-        f"training_session missing columns: {required - set(columns.keys())}"
-    )
+    assert required.issubset(
+        columns.keys()
+    ), f"training_session missing columns: {required - set(columns.keys())}"
     # Note: training_session deliberately does NOT use SoftDeleteMixin —
     # sessions are immutable historical events, not catalog entries.
     assert "deleted_at" not in columns, (
@@ -138,9 +138,9 @@ def test_iter25_migration_creates_all_three_cohort_tables() -> None:
     )
     src = migration_path.read_text(encoding="utf-8")
     for table_name in ("training_course", "training_plan", "training_session"):
-        assert f'op.create_table(\n        "{table_name}"' in src, (
-            f"iter-25 must create the {table_name} table"
-        )
+        assert (
+            f'op.create_table(\n        "{table_name}"' in src
+        ), f"iter-25 must create the {table_name} table"
 
 
 def test_iter25_migration_declares_trainingsessionstatus_enum() -> None:

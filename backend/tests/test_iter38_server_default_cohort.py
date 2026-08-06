@@ -136,12 +136,12 @@ def test_migration_revision_chains_to_iter37() -> None:
     }
     rev = revision_assigns.get("revision")
     down = revision_assigns.get("down_revision")
-    assert isinstance(rev, ast.Constant) and rev.value == "20260529_iter38_server_default_c", (
-        f"revision = {getattr(rev, 'value', None)!r}"
-    )
-    assert isinstance(down, ast.Constant) and down.value == "20260529_iter37_server_default_ab", (
-        f"down_revision = {getattr(down, 'value', None)!r}"
-    )
+    assert (
+        isinstance(rev, ast.Constant) and rev.value == "20260529_iter38_server_default_c"
+    ), f"revision = {getattr(rev, 'value', None)!r}"
+    assert (
+        isinstance(down, ast.Constant) and down.value == "20260529_iter37_server_default_ab"
+    ), f"down_revision = {getattr(down, 'value', None)!r}"
 
 
 def test_cohort_size_pinned_at_thirtythree() -> None:
@@ -164,9 +164,7 @@ def test_no_create_table_in_upgrade() -> None:
             pytest.fail(f"unexpected op.{node.func.attr} call in iter-38 upgrade")
 
 
-@pytest.mark.parametrize(
-    ("table", "column", "_sa_type", "_arg", "_default"), _COHORT_C
-)
+@pytest.mark.parametrize(("table", "column", "_sa_type", "_arg", "_default"), _COHORT_C)
 def test_cohort_column_has_alter_column_in_upgrade(
     table: str, column: str, _sa_type: str, _arg: str | int | None, _default: str
 ) -> None:
@@ -175,9 +173,7 @@ def test_cohort_column_has_alter_column_in_upgrade(
     _alter_for(table, column, upgrade)  # raises via pytest.fail if missing
 
 
-@pytest.mark.parametrize(
-    ("table", "column", "sa_type", "_arg", "_default"), _COHORT_C
-)
+@pytest.mark.parametrize(("table", "column", "sa_type", "_arg", "_default"), _COHORT_C)
 def test_cohort_column_existing_type_present(
     table: str, column: str, sa_type: str, _arg: str | int | None, _default: str
 ) -> None:
@@ -185,17 +181,13 @@ def test_cohort_column_existing_type_present(
     upgrade = _function(tree, "upgrade")
     call = _alter_for(table, column, upgrade)
     existing_type_src = _kw_value_source(call, "existing_type")
-    assert existing_type_src is not None, (
-        f"{table}.{column}: missing existing_type= kwarg"
-    )
-    assert sa_type in existing_type_src, (
-        f"{table}.{column}: existing_type={existing_type_src!r} does not mention {sa_type!r}"
-    )
+    assert existing_type_src is not None, f"{table}.{column}: missing existing_type= kwarg"
+    assert (
+        sa_type in existing_type_src
+    ), f"{table}.{column}: existing_type={existing_type_src!r} does not mention {sa_type!r}"
 
 
-@pytest.mark.parametrize(
-    ("table", "column", "_sa_type", "_arg", "_default"), _COHORT_C
-)
+@pytest.mark.parametrize(("table", "column", "_sa_type", "_arg", "_default"), _COHORT_C)
 def test_cohort_column_existing_nullable_false(
     table: str, column: str, _sa_type: str, _arg: str | int | None, _default: str
 ) -> None:
@@ -203,14 +195,10 @@ def test_cohort_column_existing_nullable_false(
     upgrade = _function(tree, "upgrade")
     call = _alter_for(table, column, upgrade)
     src = _kw_value_source(call, "existing_nullable")
-    assert src == "False", (
-        f"{table}.{column}: existing_nullable={src!r}, expected 'False'"
-    )
+    assert src == "False", f"{table}.{column}: existing_nullable={src!r}, expected 'False'"
 
 
-@pytest.mark.parametrize(
-    ("table", "column", "_sa_type", "_arg", "default"), _COHORT_C
-)
+@pytest.mark.parametrize(("table", "column", "_sa_type", "_arg", "default"), _COHORT_C)
 def test_cohort_column_server_default_matches_model(
     table: str, column: str, _sa_type: str, _arg: str | int | None, default: str
 ) -> None:
@@ -218,9 +206,9 @@ def test_cohort_column_server_default_matches_model(
     upgrade = _function(tree, "upgrade")
     call = _alter_for(table, column, upgrade)
     src = _kw_value_source(call, "server_default")
-    assert src == default, (
-        f"{table}.{column}: server_default source = {src!r}, expected {default!r}"
-    )
+    assert (
+        src == default
+    ), f"{table}.{column}: server_default source = {src!r}, expected {default!r}"
 
 
 def test_downgrade_removes_server_default_for_every_cohort_col() -> None:

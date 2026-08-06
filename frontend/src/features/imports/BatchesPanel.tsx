@@ -5,7 +5,11 @@ import { importsApi } from "@/api/imports";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useBatchProgress } from "@/features/imports/useBatchProgress";
-import type { ImportBatchDto, ImportBatchRowDto, ImportBatchStatus } from "@/types/dto/imports";
+import type {
+  ImportBatchDto,
+  ImportBatchRowDto,
+  ImportBatchStatus,
+} from "@/types/dto/imports";
 
 const STATUS_LABELS: Record<ImportBatchStatus, string> = {
   pending: "В очереди",
@@ -13,21 +17,26 @@ const STATUS_LABELS: Record<ImportBatchStatus, string> = {
   applied: "Применена",
   previewed: "Проверена",
   failed: "Оборвалась",
-  rolled_back: "Откачена"
+  rolled_back: "Откачена",
 };
 
-const STATUS_VARIANT: Record<ImportBatchStatus, "secondary" | "destructive" | "outline"> = {
+const STATUS_VARIANT: Record<
+  ImportBatchStatus,
+  "secondary" | "destructive" | "outline"
+> = {
   pending: "outline",
   running: "outline",
   applied: "secondary",
   previewed: "outline",
   failed: "destructive",
-  rolled_back: "outline"
+  rolled_back: "outline",
 };
 
 /** Итог проверки качества по записям партии (разд. 71.3). */
 const QualityLine = ({ batch }: { batch: ImportBatchDto }) => {
-  const quality = (batch.notes as { data_quality?: Record<string, unknown> } | null)?.data_quality;
+  const quality = (
+    batch.notes as { data_quality?: Record<string, unknown> } | null
+  )?.data_quality;
   if (!quality) return null;
   if (typeof quality.error === "string") {
     return (
@@ -38,7 +47,11 @@ const QualityLine = ({ batch }: { batch: ImportBatchDto }) => {
   }
   const total = Number(quality.issues_total ?? 0);
   if (total === 0) {
-    return <p className="text-sm text-muted-foreground">Проверка качества: замечаний нет</p>;
+    return (
+      <p className="text-sm text-muted-foreground">
+        Проверка качества: замечаний нет
+      </p>
+    );
   }
   return (
     <p className="text-sm text-amber-700">
@@ -103,7 +116,11 @@ export const BatchesPanel = ({ batches, onChanged }: BatchesPanelProps) => {
   };
 
   const rollback = async (batch: ImportBatchDto) => {
-    if (!window.confirm(`Откатить загрузку «${batch.source_filename}»? Созданные записи будут удалены.`)) {
+    if (
+      !window.confirm(
+        `Откатить загрузку «${batch.source_filename}»? Созданные записи будут удалены.`,
+      )
+    ) {
       return;
     }
     setBusyId(batch.id);
@@ -119,7 +136,9 @@ export const BatchesPanel = ({ batches, onChanged }: BatchesPanelProps) => {
   };
 
   if (liveBatches.length === 0) {
-    return <p className="text-sm text-muted-foreground">Загрузок пока не было.</p>;
+    return (
+      <p className="text-sm text-muted-foreground">Загрузок пока не было.</p>
+    );
   }
 
   return (
@@ -130,7 +149,9 @@ export const BatchesPanel = ({ batches, onChanged }: BatchesPanelProps) => {
             <div className="space-y-1">
               <div className="flex items-center gap-2">
                 <span className="font-medium">{batch.source_filename}</span>
-                <Badge variant={STATUS_VARIANT[batch.status]}>{STATUS_LABELS[batch.status]}</Badge>
+                <Badge variant={STATUS_VARIANT[batch.status]}>
+                  {STATUS_LABELS[batch.status]}
+                </Badge>
                 {batch.mode === "preview" ? (
                   <Badge variant="outline">проверка без записи</Badge>
                 ) : null}
@@ -146,13 +167,16 @@ export const BatchesPanel = ({ batches, onChanged }: BatchesPanelProps) => {
               ) : (
                 <p className="text-sm text-muted-foreground">
                   {batch.mode === "preview" ? "будет создано " : "создано "}
-                  {batch.created_count} · {batch.mode === "preview" ? "обновлено" : "обновлено"}{" "}
-                  {batch.updated_count} · без изменений {batch.skipped_count} · ошибок{" "}
-                  {batch.failed_count}
+                  {batch.created_count} ·{" "}
+                  {batch.mode === "preview" ? "обновлено" : "обновлено"}{" "}
+                  {batch.updated_count} · без изменений {batch.skipped_count} ·
+                  ошибок {batch.failed_count}
                 </p>
               )}
               {batch.error_message ? (
-                <p className="text-sm text-destructive">{batch.error_message}</p>
+                <p className="text-sm text-destructive">
+                  {batch.error_message}
+                </p>
               ) : null}
               <QualityLine batch={batch} />
             </div>
@@ -175,8 +199,14 @@ export const BatchesPanel = ({ batches, onChanged }: BatchesPanelProps) => {
                 </Button>
               ) : null}
               {batch.failed_count > 0 ? (
-                <Button variant="outline" size="sm" onClick={() => void toggleRows(batch)}>
-                  {openBatchId === batch.id ? "Скрыть ошибки" : "Показать ошибки"}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void toggleRows(batch)}
+                >
+                  {openBatchId === batch.id
+                    ? "Скрыть ошибки"
+                    : "Показать ошибки"}
                 </Button>
               ) : null}
               {batch.mode !== "preview" &&
@@ -197,10 +227,13 @@ export const BatchesPanel = ({ batches, onChanged }: BatchesPanelProps) => {
             <ul className="mt-2 space-y-1 text-sm">
               {rows.map((row) => (
                 <li key={row.row_number} className="rounded border p-2">
-                  <span className="font-medium">Строка {row.row_number}:</span> {row.message ?? "—"}
+                  <span className="font-medium">Строка {row.row_number}:</span>{" "}
+                  {row.message ?? "—"}
                 </li>
               ))}
-              {rows.length === 0 ? <li className="text-muted-foreground">Ошибок нет.</li> : null}
+              {rows.length === 0 ? (
+                <li className="text-muted-foreground">Ошибок нет.</li>
+              ) : null}
             </ul>
           ) : null}
         </div>

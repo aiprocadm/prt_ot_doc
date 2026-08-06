@@ -16,7 +16,14 @@ type RuntimePollingParams = {
   onBatch: (batch: DocumentBatchRun) => void;
 };
 
-export const useDocumentsWizardRuntimePolling = ({ tenantSlug, taskId, pipelineRun, batch, onPipelineRun, onBatch }: RuntimePollingParams) => {
+export const useDocumentsWizardRuntimePolling = ({
+  tenantSlug,
+  taskId,
+  pipelineRun,
+  batch,
+  onPipelineRun,
+  onBatch,
+}: RuntimePollingParams) => {
   const lastRunSignatureRef = useRef<string>("");
   const lastBatchSignatureRef = useRef<string>("");
   const [runPollingInterval, setRunPollingInterval] = useState(3000);
@@ -35,8 +42,8 @@ export const useDocumentsWizardRuntimePolling = ({ tenantSlug, taskId, pipelineR
           status: step.status,
           error_code: step.error_code,
           started_at: step.started_at,
-          ended_at: step.ended_at
-        }))
+          ended_at: step.ended_at,
+        })),
       });
       if (nextSignature === lastRunSignatureRef.current) {
         setRunPollingInterval((prev) => Math.min(prev + 1000, 10000));
@@ -48,9 +55,13 @@ export const useDocumentsWizardRuntimePolling = ({ tenantSlug, taskId, pipelineR
     },
     runPollingInterval,
     {
-      enabled: Boolean(taskId && tenantSlug && (!pipelineRun || ["queued", "running"].includes(pipelineRun.status))),
-      onError: () => toast.error("Не удалось обновить timeline job.")
-    }
+      enabled: Boolean(
+        taskId &&
+          tenantSlug &&
+          (!pipelineRun || ["queued", "running"].includes(pipelineRun.status)),
+      ),
+      onError: () => toast.error("Не удалось обновить timeline job."),
+    },
   );
 
   usePolling(
@@ -70,8 +81,8 @@ export const useDocumentsWizardRuntimePolling = ({ tenantSlug, taskId, pipelineR
           status: item.status,
           error: item.error,
           document_id: item.document_id,
-          document_version_id: item.document_version_id
-        }))
+          document_version_id: item.document_version_id,
+        })),
       });
       if (nextSignature === lastBatchSignatureRef.current) {
         setBatchPollingInterval((prev) => Math.min(prev + 1000, 10000));
@@ -83,8 +94,10 @@ export const useDocumentsWizardRuntimePolling = ({ tenantSlug, taskId, pipelineR
     },
     batchPollingInterval,
     {
-      enabled: Boolean(batch?.id && tenantSlug && ["queued", "running"].includes(batch.status)),
-      onError: () => toast.error("Не удалось обновить batch статус.")
-    }
+      enabled: Boolean(
+        batch?.id && tenantSlug && ["queued", "running"].includes(batch.status),
+      ),
+      onError: () => toast.error("Не удалось обновить batch статус."),
+    },
   );
 };

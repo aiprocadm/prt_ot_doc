@@ -294,7 +294,9 @@ class TestWebhookRetryPolicyFiltering:
             {"category": FailureCategory.TERMINAL_HTTP_4XX, "attempts": 1},
         ]
 
-        timeout_failures = [f for f in failures if f["category"] == FailureCategory.RETRYABLE_TIMEOUT]
+        timeout_failures = [
+            f for f in failures if f["category"] == FailureCategory.RETRYABLE_TIMEOUT
+        ]
 
         assert len(timeout_failures) == 1
         assert timeout_failures[0]["attempts"] == 2

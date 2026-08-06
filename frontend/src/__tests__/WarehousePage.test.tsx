@@ -44,18 +44,20 @@ vi.mock("@/api/warehouse", () => ({
     cancelCount: (...args: unknown[]) => cancelCountMock(...args),
     listTransfers: (...args: unknown[]) => listTransfersMock(...args),
     createTransfer: (...args: unknown[]) => createTransferMock(...args),
-    listLevelsByLocation: (...args: unknown[]) => listLevelsByLocationMock(...args),
+    listLevelsByLocation: (...args: unknown[]) =>
+      listLevelsByLocationMock(...args),
     listSuppliers: (...args: unknown[]) => listSuppliersMock(...args),
     createSupplier: (...args: unknown[]) => createSupplierMock(...args),
     updateSupplier: (...args: unknown[]) => updateSupplierMock(...args),
     deleteSupplier: (...args: unknown[]) => deleteSupplierMock(...args),
     getReorderDraft: (...args: unknown[]) => getReorderDraftMock(...args),
     createBatch: (...args: unknown[]) => createBatchMock(...args),
-    patchItemPreferredSupplier: (...args: unknown[]) => patchItemPreferredSupplierMock(...args),
+    patchItemPreferredSupplier: (...args: unknown[]) =>
+      patchItemPreferredSupplierMock(...args),
     listBudgets: (...args: unknown[]) => listBudgetsMock(...args),
     getBudget: (...args: unknown[]) => getBudgetMock(...args),
-    createBudget: (...args: unknown[]) => createBudgetMock(...args)
-  }
+    createBudget: (...args: unknown[]) => createBudgetMock(...args),
+  },
 }));
 
 describe("WarehousePage", () => {
@@ -90,19 +92,40 @@ describe("WarehousePage", () => {
     listTransfersMock.mockResolvedValue([]);
     listLevelsByLocationMock.mockResolvedValue([]);
     listSuppliersMock.mockResolvedValue([]);
-    getReorderDraftMock.mockResolvedValue({ groups: [], total_lines: 0, total_deficit: 0 });
+    getReorderDraftMock.mockResolvedValue({
+      groups: [],
+      total_lines: 0,
+      total_deficit: 0,
+    });
     listBudgetsMock.mockResolvedValue([]);
   });
 
   it("renders stock levels from the warehouse API", async () => {
     listLevelsMock.mockResolvedValue([
-      { item_id: "i1", item_name: "Каска", total_quantity: 12, batch_count: 2, nearest_certificate_expiry: null }
+      {
+        item_id: "i1",
+        item_name: "Каска",
+        total_quantity: 12,
+        batch_count: 2,
+        nearest_certificate_expiry: null,
+      },
     ]);
     listBatchesMock.mockResolvedValue([
-      { id: "b1", item_id: "i1", batch_no: "B-1", quantity: 12, created_at: "2026-05-29T00:00:00Z", updated_at: "2026-05-29T00:00:00Z" }
+      {
+        id: "b1",
+        item_id: "i1",
+        batch_no: "B-1",
+        quantity: 12,
+        created_at: "2026-05-29T00:00:00Z",
+        updated_at: "2026-05-29T00:00:00Z",
+      },
     ]);
 
-    render(<MemoryRouter><WarehousePage /></MemoryRouter>);
+    render(
+      <MemoryRouter>
+        <WarehousePage />
+      </MemoryRouter>,
+    );
     await waitFor(() => expect(screen.getByText("Каска")).toBeInTheDocument());
     expect(screen.getByText("Партий: 1")).toBeInTheDocument();
   });
@@ -111,19 +134,42 @@ describe("WarehousePage", () => {
     listLevelsMock.mockResolvedValue([]);
     listBatchesMock.mockResolvedValue([]);
     listMovementsMock.mockResolvedValue([
-      { id: "m1", item_id: "i1", batch_id: "b1", kind: "receipt", quantity_delta: 5, occurred_at: "2026-07-02T00:00:00Z", reason: "поступление", ref_type: null, ref_id: null, created_at: "2026-07-02T00:00:00Z" }
+      {
+        id: "m1",
+        item_id: "i1",
+        batch_id: "b1",
+        kind: "receipt",
+        quantity_delta: 5,
+        occurred_at: "2026-07-02T00:00:00Z",
+        reason: "поступление",
+        ref_type: null,
+        ref_id: null,
+        created_at: "2026-07-02T00:00:00Z",
+      },
     ]);
 
-    render(<MemoryRouter><WarehousePage /></MemoryRouter>);
-    await waitFor(() => expect(screen.getByText("Движения")).toBeInTheDocument());
+    render(
+      <MemoryRouter>
+        <WarehousePage />
+      </MemoryRouter>,
+    );
+    await waitFor(() =>
+      expect(screen.getByText("Движения")).toBeInTheDocument(),
+    );
     expect(screen.getByText("поступление")).toBeInTheDocument();
   });
 
   it("shows an empty state when there are no levels", async () => {
     listLevelsMock.mockResolvedValue([]);
     listBatchesMock.mockResolvedValue([]);
-    render(<MemoryRouter><WarehousePage /></MemoryRouter>);
-    await waitFor(() => expect(screen.getByText("Позиции не найдены")).toBeInTheDocument());
+    render(
+      <MemoryRouter>
+        <WarehousePage />
+      </MemoryRouter>,
+    );
+    await waitFor(() =>
+      expect(screen.getByText("Позиции не найдены")).toBeInTheDocument(),
+    );
   });
 
   it("submits a manual movement with the form payload", async () => {
@@ -140,19 +186,32 @@ describe("WarehousePage", () => {
       reason: null,
       ref_type: null,
       ref_id: null,
-      created_at: "2026-07-02T00:00:00Z"
+      created_at: "2026-07-02T00:00:00Z",
     });
 
-    render(<MemoryRouter><WarehousePage /></MemoryRouter>);
-    await waitFor(() => expect(screen.getByText("Движения")).toBeInTheDocument());
+    render(
+      <MemoryRouter>
+        <WarehousePage />
+      </MemoryRouter>,
+    );
+    await waitFor(() =>
+      expect(screen.getByText("Движения")).toBeInTheDocument(),
+    );
 
-    fireEvent.change(screen.getByPlaceholderText("ID партии"), { target: { value: "b1" } });
+    fireEvent.change(screen.getByPlaceholderText("ID партии"), {
+      target: { value: "b1" },
+    });
     fireEvent.click(screen.getByRole("button", { name: "Провести" }));
 
     await waitFor(() =>
       expect(createMovementMock).toHaveBeenCalledWith(
-        expect.objectContaining({ batch_id: "b1", kind: "receipt", quantity: 1, reason: null })
-      )
+        expect.objectContaining({
+          batch_id: "b1",
+          kind: "receipt",
+          quantity: 1,
+          reason: null,
+        }),
+      ),
     );
   });
 
@@ -162,16 +221,31 @@ describe("WarehousePage", () => {
     listMovementsMock.mockResolvedValue([]);
     listShortagesMock.mockResolvedValue([
       {
-        item_id: "i1", item_name: "Каска", min_stock: 10, on_hand: 3, deficit: 7,
-        below_threshold: true, avg_daily_consumption: 1, days_to_depletion: 3,
+        item_id: "i1",
+        item_name: "Каска",
+        min_stock: 10,
+        on_hand: 3,
+        deficit: 7,
+        below_threshold: true,
+        avg_daily_consumption: 1,
+        days_to_depletion: 3,
         projected_breach_date: "2026-07-06",
-        supplier_id: "s1", supplier_name: "Alpha", supplier_inn: null,
-        supplier_contact: null, supplier_source: "explicit"
-      }
+        supplier_id: "s1",
+        supplier_name: "Alpha",
+        supplier_inn: null,
+        supplier_contact: null,
+        supplier_source: "explicit",
+      },
     ]);
 
-    render(<MemoryRouter><WarehousePage /></MemoryRouter>);
-    await waitFor(() => expect(screen.getByText("Дефицит / мин-остаток")).toBeInTheDocument());
+    render(
+      <MemoryRouter>
+        <WarehousePage />
+      </MemoryRouter>,
+    );
+    await waitFor(() =>
+      expect(screen.getByText("Дефицит / мин-остаток")).toBeInTheDocument(),
+    );
     expect(screen.getByText("Каска")).toBeInTheDocument();
     expect(screen.getByText("7")).toBeInTheDocument();
     expect(screen.getByText("Alpha")).toBeInTheDocument();
@@ -182,14 +256,26 @@ describe("WarehousePage", () => {
     listBatchesMock.mockResolvedValue([]);
     listCountsMock.mockResolvedValue([
       {
-        id: "c1", status: "draft", scope_item_id: null, scope_location: null,
-        note: "июль", applied_at: null, created_at: "2026-07-03T00:00:00Z",
-        line_count: 2, counted_count: 0
-      }
+        id: "c1",
+        status: "draft",
+        scope_item_id: null,
+        scope_location: null,
+        note: "июль",
+        applied_at: null,
+        created_at: "2026-07-03T00:00:00Z",
+        line_count: 2,
+        counted_count: 0,
+      },
     ]);
 
-    render(<MemoryRouter><WarehousePage /></MemoryRouter>);
-    await waitFor(() => expect(screen.getByText("Инвентаризация")).toBeInTheDocument());
+    render(
+      <MemoryRouter>
+        <WarehousePage />
+      </MemoryRouter>,
+    );
+    await waitFor(() =>
+      expect(screen.getByText("Инвентаризация")).toBeInTheDocument(),
+    );
     expect(screen.getByText("июль")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Открыть" })).toBeInTheDocument();
   });
@@ -199,20 +285,41 @@ describe("WarehousePage", () => {
     listBatchesMock.mockResolvedValue([]);
     listCountsMock.mockResolvedValue([]);
     createCountMock.mockResolvedValue({
-      id: "c9", status: "draft", scope_item_id: null, scope_location: null,
-      note: null, applied_at: null, created_at: "2026-07-03T00:00:00Z",
-      line_count: 1, counted_count: 0, diff_count: 0,
+      id: "c9",
+      status: "draft",
+      scope_item_id: null,
+      scope_location: null,
+      note: null,
+      applied_at: null,
+      created_at: "2026-07-03T00:00:00Z",
+      line_count: 1,
+      counted_count: 0,
+      diff_count: 0,
       lines: [
         {
-          id: "l1", batch_id: "b1", item_id: "i1", batch_no: "B-1", location: null,
-          item_name: "Каска", system_qty: 10, counted_qty: null, on_hand: 10,
-          delta: null, adjustment_movement_id: null
-        }
-      ]
+          id: "l1",
+          batch_id: "b1",
+          item_id: "i1",
+          batch_no: "B-1",
+          location: null,
+          item_name: "Каска",
+          system_qty: 10,
+          counted_qty: null,
+          on_hand: 10,
+          delta: null,
+          adjustment_movement_id: null,
+        },
+      ],
     });
 
-    render(<MemoryRouter><WarehousePage /></MemoryRouter>);
-    await waitFor(() => expect(screen.getByText("Инвентаризация")).toBeInTheDocument());
+    render(
+      <MemoryRouter>
+        <WarehousePage />
+      </MemoryRouter>,
+    );
+    await waitFor(() =>
+      expect(screen.getByText("Инвентаризация")).toBeInTheDocument(),
+    );
     fireEvent.click(screen.getByRole("button", { name: "Создать" }));
 
     await waitFor(() => expect(createCountMock).toHaveBeenCalled());
@@ -222,24 +329,57 @@ describe("WarehousePage", () => {
   it("creates a stock transfer between locations", async () => {
     listLevelsMock.mockResolvedValue([]);
     listBatchesMock.mockResolvedValue([
-      { id: "b1", item_id: "i1", batch_no: "B-1", quantity: 10, location: "A", created_at: "2026-07-04T00:00:00Z", updated_at: "2026-07-04T00:00:00Z" }
+      {
+        id: "b1",
+        item_id: "i1",
+        batch_no: "B-1",
+        quantity: 10,
+        location: "A",
+        created_at: "2026-07-04T00:00:00Z",
+        updated_at: "2026-07-04T00:00:00Z",
+      },
     ]);
     listLevelsByLocationMock.mockResolvedValue([
-      { item_id: "i1", item_name: "Каска", location: "A", quantity: 10, batch_count: 1 }
+      {
+        item_id: "i1",
+        item_name: "Каска",
+        location: "A",
+        quantity: 10,
+        batch_count: 1,
+      },
     ]);
     createTransferMock.mockResolvedValue({
-      ref_id: "r1", item_id: "i1", item_name: "Каска", batch_no: "B-1",
-      from_location: "A", to_location: "B", quantity: 3,
-      source_batch_id: "b1", dest_batch_id: "d1", out_movement_id: "m1", in_movement_id: "m2",
-      reason: null, occurred_at: "2026-07-04T00:00:00Z"
+      ref_id: "r1",
+      item_id: "i1",
+      item_name: "Каска",
+      batch_no: "B-1",
+      from_location: "A",
+      to_location: "B",
+      quantity: 3,
+      source_batch_id: "b1",
+      dest_batch_id: "d1",
+      out_movement_id: "m1",
+      in_movement_id: "m2",
+      reason: null,
+      occurred_at: "2026-07-04T00:00:00Z",
     });
 
-    render(<MemoryRouter><WarehousePage /></MemoryRouter>);
+    render(
+      <MemoryRouter>
+        <WarehousePage />
+      </MemoryRouter>,
+    );
     await screen.findByText(/Перемещения между локациями/i);
 
-    fireEvent.change(screen.getByLabelText(/Партия-источник/i), { target: { value: "b1" } });
-    fireEvent.change(screen.getByLabelText(/Куда \(локация\)/i), { target: { value: "B" } });
-    fireEvent.change(screen.getByLabelText(/Количество для переноса/i), { target: { value: "3" } });
+    fireEvent.change(screen.getByLabelText(/Партия-источник/i), {
+      target: { value: "b1" },
+    });
+    fireEvent.change(screen.getByLabelText(/Куда \(локация\)/i), {
+      target: { value: "B" },
+    });
+    fireEvent.change(screen.getByLabelText(/Количество для переноса/i), {
+      target: { value: "3" },
+    });
     fireEvent.click(screen.getByRole("button", { name: /Перенести/i }));
 
     await waitFor(() =>
@@ -247,8 +387,8 @@ describe("WarehousePage", () => {
         source_batch_id: "b1",
         to_location: "B",
         quantity: 3,
-        reason: null
-      })
+        reason: null,
+      }),
     );
   });
 
@@ -256,11 +396,23 @@ describe("WarehousePage", () => {
     listLevelsMock.mockResolvedValue([]);
     listBatchesMock.mockResolvedValue([]);
     listSuppliersMock.mockResolvedValue([
-      { id: "s1", name: "Alpha", inn: "7701234567", contact_email: null, contact_phone: null }
+      {
+        id: "s1",
+        name: "Alpha",
+        inn: "7701234567",
+        contact_email: null,
+        contact_phone: null,
+      },
     ]);
 
-    render(<MemoryRouter><WarehousePage /></MemoryRouter>);
-    await waitFor(() => expect(screen.getByText("Поставщики")).toBeInTheDocument());
+    render(
+      <MemoryRouter>
+        <WarehousePage />
+      </MemoryRouter>,
+    );
+    await waitFor(() =>
+      expect(screen.getByText("Поставщики")).toBeInTheDocument(),
+    );
     expect(screen.getAllByText("Alpha").length).toBeGreaterThan(0);
     expect(screen.getByText("7701234567")).toBeInTheDocument();
   });
@@ -270,19 +422,33 @@ describe("WarehousePage", () => {
     listBatchesMock.mockResolvedValue([]);
     listSuppliersMock.mockResolvedValue([]);
     createSupplierMock.mockResolvedValue({
-      id: "s2", name: "Beta", inn: null, contact_email: null, contact_phone: null
+      id: "s2",
+      name: "Beta",
+      inn: null,
+      contact_email: null,
+      contact_phone: null,
     });
 
-    render(<MemoryRouter><WarehousePage /></MemoryRouter>);
-    await waitFor(() => expect(screen.getByText("Поставщики")).toBeInTheDocument());
+    render(
+      <MemoryRouter>
+        <WarehousePage />
+      </MemoryRouter>,
+    );
+    await waitFor(() =>
+      expect(screen.getByText("Поставщики")).toBeInTheDocument(),
+    );
 
-    fireEvent.change(screen.getByLabelText(/Название поставщика/i), { target: { value: "Beta" } });
-    fireEvent.click(screen.getByRole("button", { name: /Сохранить поставщика/i }));
+    fireEvent.change(screen.getByLabelText(/Название поставщика/i), {
+      target: { value: "Beta" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: /Сохранить поставщика/i }),
+    );
 
     await waitFor(() =>
       expect(createSupplierMock).toHaveBeenCalledWith(
-        expect.objectContaining({ name: "Beta" })
-      )
+        expect.objectContaining({ name: "Beta" }),
+      ),
     );
   });
 
@@ -298,15 +464,21 @@ describe("WarehousePage", () => {
           supplier_contact: null,
           lines: [{ item_id: "i1", item_name: "Каска", deficit: 10 }],
           line_count: 1,
-          total_deficit: 10
-        }
+          total_deficit: 10,
+        },
       ],
       total_lines: 1,
-      total_deficit: 10
+      total_deficit: 10,
     });
 
-    render(<MemoryRouter><WarehousePage /></MemoryRouter>);
-    await waitFor(() => expect(screen.getByText("Дозаказ")).toBeInTheDocument());
+    render(
+      <MemoryRouter>
+        <WarehousePage />
+      </MemoryRouter>,
+    );
+    await waitFor(() =>
+      expect(screen.getByText("Дозаказ")).toBeInTheDocument(),
+    );
     expect(screen.getByText("Каска")).toBeInTheDocument();
     expect(screen.getAllByText("10").length).toBeGreaterThan(0);
   });
@@ -315,32 +487,58 @@ describe("WarehousePage", () => {
     listLevelsMock.mockResolvedValue([]);
     listBatchesMock.mockResolvedValue([]);
     listSuppliersMock.mockResolvedValue([
-      { id: "s1", name: "Alpha", inn: null, contact_email: null, contact_phone: null }
+      {
+        id: "s1",
+        name: "Alpha",
+        inn: null,
+        contact_email: null,
+        contact_phone: null,
+      },
     ]);
     listShortagesMock.mockResolvedValue([
       {
-        item_id: "i1", item_name: "Каска", min_stock: 10, on_hand: 3, deficit: 7,
-        below_threshold: true, avg_daily_consumption: 1, days_to_depletion: 3,
+        item_id: "i1",
+        item_name: "Каска",
+        min_stock: 10,
+        on_hand: 3,
+        deficit: 7,
+        below_threshold: true,
+        avg_daily_consumption: 1,
+        days_to_depletion: 3,
         projected_breach_date: "2026-07-06",
-        supplier_id: null, supplier_name: null, supplier_inn: null,
-        supplier_contact: null, supplier_source: null
-      }
+        supplier_id: null,
+        supplier_name: null,
+        supplier_inn: null,
+        supplier_contact: null,
+        supplier_source: null,
+      },
     ]);
     patchItemPreferredSupplierMock.mockResolvedValue(undefined);
 
-    render(<MemoryRouter><WarehousePage /></MemoryRouter>);
-    await waitFor(() => expect(screen.getByText("Дефицит / мин-остаток")).toBeInTheDocument());
-
-    const reorderCallsBefore = getReorderDraftMock.mock.calls.length;
-    fireEvent.change(screen.getByLabelText(/Предпочтительный поставщик Каска/i), {
-      target: { value: "s1" }
-    });
-
-    await waitFor(() =>
-      expect(patchItemPreferredSupplierMock).toHaveBeenCalledWith("i1", "s1")
+    render(
+      <MemoryRouter>
+        <WarehousePage />
+      </MemoryRouter>,
     );
     await waitFor(() =>
-      expect(getReorderDraftMock.mock.calls.length).toBeGreaterThan(reorderCallsBefore)
+      expect(screen.getByText("Дефицит / мин-остаток")).toBeInTheDocument(),
+    );
+
+    const reorderCallsBefore = getReorderDraftMock.mock.calls.length;
+    fireEvent.change(
+      screen.getByLabelText(/Предпочтительный поставщик Каска/i),
+      {
+        target: { value: "s1" },
+      },
+    );
+
+    await waitFor(() =>
+      expect(patchItemPreferredSupplierMock).toHaveBeenCalledWith("i1", "s1"),
+    );
+    await waitFor(() =>
+      expect(getReorderDraftMock.mock.calls.length).toBeGreaterThan(
+        reorderCallsBefore,
+      ),
     );
   });
 
@@ -358,14 +556,18 @@ describe("WarehousePage", () => {
           supplier_contact: "mail@x.ru; +7 900 000-00-00",
           lines: [{ item_id: "i1", item_name: "Каска", deficit: 10 }],
           line_count: 1,
-          total_deficit: 10
-        }
+          total_deficit: 10,
+        },
       ],
       total_lines: 1,
-      total_deficit: 10
+      total_deficit: 10,
     });
 
-    render(<MemoryRouter><WarehousePage /></MemoryRouter>);
+    render(
+      <MemoryRouter>
+        <WarehousePage />
+      </MemoryRouter>,
+    );
     const btn = await screen.findByText("Копировать CSV");
     fireEvent.click(btn);
 
@@ -378,10 +580,22 @@ describe("WarehousePage", () => {
     listLevelsMock.mockResolvedValue([]);
     listBatchesMock.mockResolvedValue([]);
     listBudgetsMock.mockResolvedValue([
-      { id: "bud-1", name: "Бюджет 2026", period_start: "2026-01-01", period_end: "2026-12-31",
-        planned_amount: 100000, notes: null, created_at: "2026-01-01", updated_at: "2026-01-01" }
+      {
+        id: "bud-1",
+        name: "Бюджет 2026",
+        period_start: "2026-01-01",
+        period_end: "2026-12-31",
+        planned_amount: 100000,
+        notes: null,
+        created_at: "2026-01-01",
+        updated_at: "2026-01-01",
+      },
     ]);
-    render(<MemoryRouter><WarehousePage /></MemoryRouter>);
+    render(
+      <MemoryRouter>
+        <WarehousePage />
+      </MemoryRouter>,
+    );
     expect(await screen.findByText("Бюджет безопасности")).toBeInTheDocument();
     expect(await screen.findByText("Бюджет 2026")).toBeInTheDocument();
   });
@@ -390,17 +604,37 @@ describe("WarehousePage", () => {
     listLevelsMock.mockResolvedValue([]);
     listBatchesMock.mockResolvedValue([]);
     listBudgetsMock.mockResolvedValue([
-      { id: "bud-1", name: "Бюджет 2026", period_start: "2026-01-01", period_end: "2026-12-31",
-        planned_amount: 100000, notes: null, created_at: "2026-01-01", updated_at: "2026-01-01" }
+      {
+        id: "bud-1",
+        name: "Бюджет 2026",
+        period_start: "2026-01-01",
+        period_end: "2026-12-31",
+        planned_amount: 100000,
+        notes: null,
+        created_at: "2026-01-01",
+        updated_at: "2026-01-01",
+      },
     ]);
     getBudgetMock.mockResolvedValue({
-      id: "bud-1", name: "Бюджет 2026", period_start: "2026-01-01", period_end: "2026-12-31",
-      planned_amount: 100000, notes: null, created_at: "2026-01-01", updated_at: "2026-01-01",
-      actual_total: 30000, remaining: 70000,
+      id: "bud-1",
+      name: "Бюджет 2026",
+      period_start: "2026-01-01",
+      period_end: "2026-12-31",
+      planned_amount: 100000,
+      notes: null,
+      created_at: "2026-01-01",
+      updated_at: "2026-01-01",
+      actual_total: 30000,
+      remaining: 70000,
       by_category: [{ category: "head", amount: 30000 }],
-      priced_receipt_count: 2, unpriced_receipt_count: 1
+      priced_receipt_count: 2,
+      unpriced_receipt_count: 1,
     });
-    render(<MemoryRouter><WarehousePage /></MemoryRouter>);
+    render(
+      <MemoryRouter>
+        <WarehousePage />
+      </MemoryRouter>,
+    );
     fireEvent.click(await screen.findByRole("button", { name: /Открыть/ }));
     expect(await screen.findByText(/Приходов без цены: 1/)).toBeInTheDocument();
   });

@@ -3,13 +3,13 @@ import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 
 const { getMock } = vi.hoisted(() => ({
-  getMock: vi.fn()
+  getMock: vi.fn(),
 }));
 
 vi.mock("@/api/client", () => ({
   apiClient: {
-    get: getMock
-  }
+    get: getMock,
+  },
 }));
 
 import ClientPortalPackagesPage from "@/pages/client-portal/ClientPortalPackagesPage";
@@ -18,23 +18,50 @@ describe("ClientPortalPackagesPage", () => {
   it("loads packages and renders selected package details", async () => {
     getMock.mockImplementation((url: string) => {
       if (url === "/client-portal/packages") {
-        return Promise.resolve({ data: [{ id: "run-1", status: "published", started_at: "2026-03-18T10:00:00Z" }] });
+        return Promise.resolve({
+          data: [
+            {
+              id: "run-1",
+              status: "published",
+              started_at: "2026-03-18T10:00:00Z",
+            },
+          ],
+        });
       }
       return Promise.resolve({
         data: {
           run: { id: "run-1", status: "published" },
-          history: { status_flow: ["running", "published"], events_count: 2, tickets_count: 1, requirements_total: 3, requirements_missing: 1 },
-          files: [{ kind: "zip", signed_url: "memory://signed/file", sha256: "abc", size: 128 }],
-          events: [{ id: "evt-1", type: "package_run.published", created_at: "2026-03-18T11:00:00Z" }],
-          tickets: []
-        }
+          history: {
+            status_flow: ["running", "published"],
+            events_count: 2,
+            tickets_count: 1,
+            requirements_total: 3,
+            requirements_missing: 1,
+          },
+          files: [
+            {
+              kind: "zip",
+              signed_url: "memory://signed/file",
+              sha256: "abc",
+              size: 128,
+            },
+          ],
+          events: [
+            {
+              id: "evt-1",
+              type: "package_run.published",
+              created_at: "2026-03-18T11:00:00Z",
+            },
+          ],
+          tickets: [],
+        },
       });
     });
 
     render(
       <MemoryRouter>
         <ClientPortalPackagesPage />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
 
     await waitFor(() => {
@@ -50,8 +77,18 @@ describe("ClientPortalPackagesPage", () => {
       if (url === "/client-portal/packages") {
         return Promise.resolve({
           data: [
-            { id: "rm-1", package_id: "run-1", status: "published", started_at: "2026-03-18T10:00:00Z" },
-            { id: "rm-2", package_id: "run-2", status: "published", started_at: "2026-03-19T10:00:00Z" },
+            {
+              id: "rm-1",
+              package_id: "run-1",
+              status: "published",
+              started_at: "2026-03-18T10:00:00Z",
+            },
+            {
+              id: "rm-2",
+              package_id: "run-2",
+              status: "published",
+              started_at: "2026-03-19T10:00:00Z",
+            },
           ],
         });
       }
@@ -59,9 +96,21 @@ describe("ClientPortalPackagesPage", () => {
         return Promise.resolve({
           data: {
             run: { id: "run-2", status: "published" },
-            history: { status_flow: ["published"], events_count: 1, tickets_count: 0, requirements_total: 0, requirements_missing: 0 },
+            history: {
+              status_flow: ["published"],
+              events_count: 1,
+              tickets_count: 0,
+              requirements_total: 0,
+              requirements_missing: 0,
+            },
             files: [],
-            events: [{ id: "evt-2", type: "RUN2_MARKER_EVENT", created_at: "2026-03-19T11:00:00Z" }],
+            events: [
+              {
+                id: "evt-2",
+                type: "RUN2_MARKER_EVENT",
+                created_at: "2026-03-19T11:00:00Z",
+              },
+            ],
             tickets: [],
           },
         });
@@ -70,7 +119,13 @@ describe("ClientPortalPackagesPage", () => {
         return Promise.resolve({
           data: {
             run: { id: "run-1", status: "published" },
-            history: { status_flow: ["published"], events_count: 0, tickets_count: 0, requirements_total: 0, requirements_missing: 0 },
+            history: {
+              status_flow: ["published"],
+              events_count: 0,
+              tickets_count: 0,
+              requirements_total: 0,
+              requirements_missing: 0,
+            },
             files: [],
             events: [],
             tickets: [],
@@ -87,7 +142,9 @@ describe("ClientPortalPackagesPage", () => {
       </MemoryRouter>,
     );
 
-    await waitFor(() => expect(screen.getByText("Список пакетов")).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByText("Список пакетов")).toBeInTheDocument(),
+    );
     const buttons = screen.getAllByRole("button");
     fireEvent.click(buttons[buttons.length - 1]); // второй пакет в списке
     expect(await screen.findByText(/RUN2_MARKER_EVENT/i)).toBeInTheDocument();

@@ -30,7 +30,7 @@ const statusColors: Record<string, "default" | "secondary" | "destructive"> = {
   submitted: "secondary",
   approved: "default",
   rejected: "destructive",
-  paid: "default"
+  paid: "default",
 };
 
 /** Подписи для типичных статусов API; неизвестные значения показываем как есть. */
@@ -70,7 +70,7 @@ const statusLabelsRu: Record<string, string> = {
   submitted: "Подана",
   approved: "Одобрена",
   rejected: "Отклонена",
-  paid: "Выплачена"
+  paid: "Выплачена",
 };
 
 export const StatusBadge = ({ status }: { status?: string | null }) => {

@@ -1,5 +1,9 @@
 import type { WorkPermitEventDto } from "@/types/dto/workPermits";
-import { EVENT_TYPE_LABELS, MEMBER_ROLE_LABELS, labelOf } from "@/lib/workPermitVocab";
+import {
+  EVENT_TYPE_LABELS,
+  MEMBER_ROLE_LABELS,
+  labelOf,
+} from "@/lib/workPermitVocab";
 
 const fmt = (d: string | null | undefined): string =>
   d ? new Date(d).toLocaleString("ru-RU") : "—";
@@ -13,7 +17,10 @@ function metaText(
   if (e.event_type === "extended" && (m.old_end || m.new_end)) {
     return `с ${fmt(m.old_end)} до ${fmt(m.new_end)}`;
   }
-  if ((e.event_type === "member_added" || e.event_type === "member_removed") && m.person_id) {
+  if (
+    (e.event_type === "member_added" || e.event_type === "member_removed") &&
+    m.person_id
+  ) {
     const role = m.role ? ` (${labelOf(MEMBER_ROLE_LABELS, m.role)})` : "";
     return `${nameOf(m.person_id)}${role}`;
   }
@@ -39,7 +46,9 @@ export const WorkPermitEventsTimeline = ({ events, nameOf }: Props) => {
               {new Date(e.at).toLocaleString("ru-RU")}
             </span>
             <span>{labelOf(EVENT_TYPE_LABELS, e.event_type)}</span>
-            {detail ? <span className="text-muted-foreground">— {detail}</span> : null}
+            {detail ? (
+              <span className="text-muted-foreground">— {detail}</span>
+            ) : null}
           </li>
         );
       })}

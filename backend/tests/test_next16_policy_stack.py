@@ -53,7 +53,9 @@ def test_policy_engine_abac_denies_foreign_site() -> None:
     )
     # admins bypass ABAC, so use non-admin role for deny check
     if decision.allowed:
-        actor = ActorContext(user_id="u1", tenant_id="t1", roles=("executor",), site_ids=("site-A",))
+        actor = ActorContext(
+            user_id="u1", tenant_id="t1", roles=("executor",), site_ids=("site-A",)
+        )
         decision = policy_engine.enforce(
             actor,
             action="read",

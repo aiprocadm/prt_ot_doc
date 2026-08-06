@@ -35,7 +35,9 @@ class DummySession:
 
 
 def test_tenant_middleware_requires_tenant_header() -> None:
-    exc = TenantMiddleware._error(400, "corr-1", code="TENANT_REQUIRED", message="X-Tenant header required")
+    exc = TenantMiddleware._error(
+        400, "corr-1", code="TENANT_REQUIRED", message="X-Tenant header required"
+    )
     assert isinstance(exc, HTTPException)
     assert exc.status_code == 400
     assert exc.detail["code"] == "TENANT_REQUIRED"
@@ -77,8 +79,12 @@ def test_policy_engine_matrix_smoke() -> None:
     admin = ActorContext(user_id="u1", tenant_id="t1", roles=("admin",))
     viewer = ActorContext(user_id="u2", tenant_id="t1", roles=("executor",), site_ids=("site-a",))
 
-    allow = policy_engine.enforce(admin, action="approve", resource="documents", ctx={"site_id": "site-x"})
-    deny = policy_engine.enforce(viewer, action="read", resource="documents", ctx={"site_id": "site-z"})
+    allow = policy_engine.enforce(
+        admin, action="approve", resource="documents", ctx={"site_id": "site-x"}
+    )
+    deny = policy_engine.enforce(
+        viewer, action="read", resource="documents", ctx={"site_id": "site-z"}
+    )
 
     assert allow.allowed is True
     assert deny.allowed is False
