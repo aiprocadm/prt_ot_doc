@@ -16,6 +16,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import date
 
 import pytest
@@ -28,6 +29,18 @@ from app.core import metrics as metrics_module
 from app.core.api_deprecation import ApiDeprecation, deprecation_for_path
 from app.middleware import api_deprecation as mw_module
 from app.middleware.api_deprecation import ApiDeprecationMiddleware
+
+
+@pytest.fixture(autouse=True)
+def _propagate_deprecation_logger():
+    """caplog ловит записи через root: если более ранний тест в том же
+    xdist-воркере включил боевой logging-конфиг (propagate=False у app.*),
+    записи до root не доходят — принудительно возвращаем propagate."""
+    lg = logging.getLogger("app.middleware.api_deprecation")
+    prev = lg.propagate
+    lg.propagate = True
+    yield
+    lg.propagate = prev
 
 ENTRY = ApiDeprecation(
     path_prefix="/api/v1/files-legacy",

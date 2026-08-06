@@ -72,6 +72,18 @@ def test_privileged_role_is_fatal_when_enforcing(privileges: DatabaseRolePrivile
     assert "MIGRATION_DATABASE_URL" in str(excinfo.value)
 
 
+@pytest.fixture(autouse=True)
+def _propagate_rls_logger():
+    """caplog ловит записи через root: если более ранний тест в том же
+    xdist-воркере включил боевой logging-конфиг (propagate=False у app.*),
+    записи до root не доходят — принудительно возвращаем propagate."""
+    lg = logging.getLogger("app.db.rls_runtime")
+    prev = lg.propagate
+    lg.propagate = True
+    yield
+    lg.propagate = prev
+
+
 def test_privileged_role_only_warns_when_not_enforcing(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
