@@ -148,6 +148,7 @@ RLS_ENABLED_TABLES: frozenset[str] = frozenset(
         "kpi_definitions",
         "managed_client",
         "managed_client_access",
+        "managed_client_consent",
         "managed_client_context_session",
         "marketplace_catalog_items",
         "medical_exam",

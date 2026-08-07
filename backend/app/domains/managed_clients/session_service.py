@@ -19,7 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.managed_clients import ManagedClientContextSession
 
-__all__ = ["close_open_sessions", "find_open_session"]
+__all__ = ["close_open_sessions", "close_open_sessions_for_client", "find_open_session"]
 
 
 async def find_open_session(
@@ -39,6 +39,35 @@ async def find_open_session(
         .limit(1)
     )
     return (await session.execute(stmt)).scalar_one_or_none()
+
+
+async def close_open_sessions_for_client(
+    session: AsyncSession,
+    *,
+    tenant_id: str,
+    client_id: str,
+    now: datetime,
+    reason: str,
+) -> list[ManagedClientContextSession]:
+    """Закрыть открытые сессии ВСЕХ специалистов по клиенту.
+
+    Срез-12: отзыв согласия клиента обязан немедленно прекращать текущую
+    работу «от имени» — иначе отозванное согласие продолжало бы действовать
+    до конца чьей-то сессии.
+    """
+
+    stmt = select(ManagedClientContextSession).where(
+        ManagedClientContextSession.tenant_id == tenant_id,
+        ManagedClientContextSession.managed_client_id == client_id,
+        ManagedClientContextSession.ended_at.is_(None),
+    )
+    rows = list((await session.execute(stmt)).scalars().all())
+    for row in rows:
+        row.ended_at = now
+        row.ended_reason = reason
+    if rows:
+        await session.flush()
+    return rows
 
 
 async def close_open_sessions(

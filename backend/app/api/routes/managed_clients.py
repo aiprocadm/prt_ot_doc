@@ -36,6 +36,12 @@ from app.domains.managed_clients.attention import AggregationStatus, Severity
 from app.domains.managed_clients.attention_service import collect_portfolio_attention
 from app.domains.managed_clients.calendar import CalendarFilters, DeadlineKind, group_by_date
 from app.domains.managed_clients.calendar_service import collect_portfolio_deadlines
+from app.domains.managed_clients.consent import (
+    ClientConsent,
+    ConsentInvalid,
+    require_active_consent,
+    validate_consent,
+)
 from app.domains.managed_clients.context import (
     ClientContextDenied,
     build_context_audit_meta,
@@ -55,12 +61,16 @@ from app.domains.managed_clients.lifecycle import (
     validate_mode_binding,
 )
 from app.domains.managed_clients.scope import scoped_section_titles
-from app.domains.managed_clients.session_service import close_open_sessions
+from app.domains.managed_clients.session_service import (
+    close_open_sessions,
+    close_open_sessions_for_client,
+)
 from app.domains.managed_clients.workload import DEFAULT_THRESHOLDS, OVERLOAD_REASON_TEXT
 from app.domains.managed_clients.workload_service import collect_specialist_workload
 from app.models.managed_clients import (
     ManagedClient,
     ManagedClientAccess,
+    ManagedClientConsent,
     ManagedClientContextSession,
 )
 from app.models.tenanting import Tenant
@@ -72,6 +82,9 @@ from app.schemas.managed_clients import (
     CalendarSummary,
     ClientAttentionRead,
     ClientContextRead,
+    ConsentCreate,
+    ConsentRead,
+    ConsentRevoke,
     CrossClientAttentionResponse,
     CrossClientAttentionSummary,
     CrossClientCalendarResponse,
@@ -207,6 +220,72 @@ def _grant_read(row: ManagedClientAccess, *, now: datetime) -> AccessGrantRead:
         revoked_by_user_id=row.revoked_by_user_id,
         active=is_grant_active(_as_grant(row), now=now),
     )
+
+
+def _as_consent(row: ManagedClientConsent) -> ClientConsent:
+    return ClientConsent(
+        client_id=row.managed_client_id,
+        document_ref=row.document_ref,
+        granted_at=row.granted_at,
+        expires_at=row.expires_at,
+        revoked_at=row.revoked_at,
+    )
+
+
+def _consent_read(row: ManagedClientConsent, *, now: datetime) -> ConsentRead:
+    from app.domains.managed_clients.consent import is_consent_active
+
+    return ConsentRead(
+        id=row.id,
+        managed_client_id=row.managed_client_id,
+        document_ref=row.document_ref,
+        granted_by_user_id=row.granted_by_user_id,
+        granted_at=row.granted_at,
+        expires_at=row.expires_at,
+        revoked_at=row.revoked_at,
+        revoked_by_user_id=row.revoked_by_user_id,
+        revoke_reason=row.revoke_reason,
+        active=is_consent_active(_as_consent(row), now=now),
+    )
+
+
+async def _client_consents(
+    session: AsyncSession, tenant: Tenant, client_id: str
+) -> list[ManagedClientConsent]:
+    return list(
+        (
+            await session.execute(
+                select(ManagedClientConsent)
+                .where(
+                    ManagedClientConsent.tenant_id == tenant.id,
+                    ManagedClientConsent.managed_client_id == client_id,
+                )
+                .order_by(ManagedClientConsent.granted_at.desc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+
+async def _require_client_consent(
+    session: AsyncSession, tenant: Tenant, client_id: str, *, now: datetime
+) -> None:
+    """Срез-12: без действующего согласия клиента делегированный доступ закрыт.
+
+    Отдельный код ошибки (как MANAGED_CLIENT_CONTEXT_EXPIRED в срезе-10):
+    интерфейс должен отличать «нет согласия — принесите документ» от
+    «нет доступа» и не отправлять человека выпрашивать грант, который
+    ему не поможет.
+    """
+
+    rows = await _client_consents(session, tenant, client_id)
+    from app.domains.managed_clients.consent import ConsentRequired
+
+    try:
+        require_active_consent([_as_consent(r) for r in rows], now=now)
+    except ConsentRequired as exc:
+        raise _err("MANAGED_CLIENT_CONSENT_REQUIRED", str(exc), status.HTTP_409_CONFLICT) from exc
 
 
 @router.get("", response_model=PortfolioPage)
@@ -641,6 +720,10 @@ async def enter_client_context(
     except ClientContextDenied as exc:
         raise _context_denied(str(exc)) from exc
 
+    # Срез-12: гранты долгоживущие, а согласие клиента может быть отозвано
+    # позже выдачи — вход «от имени» перепроверяет его каждый раз.
+    await _require_client_consent(session, tenant, client.id, now=now)
+
     # Срез-10: вход открывает СЕССИЮ со сроком. Прошлые открытые сессии этого
     # специалиста закрываются: две одновременные работы «от имени» разных
     # клиентов сделали бы журнал доступа невосстановимым — непонятно, к чьим
@@ -770,6 +853,8 @@ async def grant_access(
     TenantContextValidator.ensure_tenant_context(tenant)
     await _require_enabled(session, tenant)
     await _get(session, tenant, mcid)
+    # Срез-12: без действующего согласия клиента грант не выдаётся (разд. 66.3).
+    await _require_client_consent(session, tenant, mcid, now=datetime.now(tz=timezone.utc))
     try:
         validate_grant(all_modules=payload.all_modules, modules=payload.modules)
     except AccessGrantError as exc:
@@ -871,6 +956,165 @@ async def revoke_access(
         after={"revoked_at": now.isoformat(), "user_id": row.user_id},
     )
     return _grant_read(row, now=now)
+
+
+@router.get("/{mcid}/consents", response_model=list[ConsentRead])
+async def list_client_consents(
+    mcid: str, tenant: TenantDep, session: SessionDep, access: Access
+) -> list[ConsentRead]:
+    """Согласия клиента, включая ОТОЗВАННЫЕ и истёкшие.
+
+    Прошлые согласия показываются намеренно: «действовало ли согласие, когда
+    специалист работал в данных клиента» — вопрос аудита, а не истории.
+    """
+
+    TenantContextValidator.ensure_tenant_context(tenant)
+    await _require_enabled(session, tenant)
+    await _get(session, tenant, mcid)
+    now = datetime.now(tz=timezone.utc)
+    rows = await _client_consents(session, tenant, mcid)
+    return [_consent_read(row, now=now) for row in rows]
+
+
+@router.post("/{mcid}/consents", response_model=ConsentRead, status_code=status.HTTP_201_CREATED)
+async def record_client_consent(
+    mcid: str,
+    payload: ConsentCreate,
+    request: Request,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: Access,
+    auth: Annotated[AuthContext, Depends(get_auth_ctx)],
+) -> ConsentRead:
+    """Зафиксировать согласие клиента на делегированный доступ (разд. 66.3).
+
+    Это событие безопасности — идёт в аудит. Один и тот же документ дважды
+    не записывается: даблклик не должен плодить два «основания».
+    """
+
+    TenantContextValidator.ensure_tenant_context(tenant)
+    await _require_enabled(session, tenant)
+    await _get(session, tenant, mcid)
+    now = datetime.now(tz=timezone.utc)
+    try:
+        validate_consent(
+            document_ref=payload.document_ref, granted_at=now, expires_at=payload.expires_at
+        )
+    except ConsentInvalid as exc:
+        raise _err(
+            "MANAGED_CLIENT_CONSENT_INVALID", str(exc), status.HTTP_422_UNPROCESSABLE_ENTITY
+        ) from exc
+
+    from app.domains.managed_clients.consent import is_consent_active
+
+    duplicate = next(
+        (
+            row
+            for row in await _client_consents(session, tenant, mcid)
+            if row.document_ref == payload.document_ref.strip()
+            and is_consent_active(_as_consent(row), now=now)
+        ),
+        None,
+    )
+    if duplicate is not None:
+        raise _err(
+            "MANAGED_CLIENT_CONSENT_EXISTS",
+            "Согласие по этому документу уже действует",
+            status.HTTP_409_CONFLICT,
+        )
+
+    row = ManagedClientConsent(
+        tenant_id=tenant.id,
+        managed_client_id=mcid,
+        document_ref=payload.document_ref.strip(),
+        granted_by_user_id=auth.sub,
+        granted_at=now,
+        expires_at=payload.expires_at,
+    )
+    session.add(row)
+    await session.flush()
+    await write_audit_event(
+        session=session,
+        request=request,
+        tenant_id=str(tenant.id),
+        actor_id=auth.sub,
+        action="managed_client.consent.grant",
+        resource_type="managed_client_consent",
+        resource_id=row.id,
+        before=None,
+        after={
+            "managed_client_id": mcid,
+            "document_ref": row.document_ref,
+            "expires_at": row.expires_at.isoformat() if row.expires_at else None,
+        },
+    )
+    return _consent_read(row, now=now)
+
+
+@router.delete("/{mcid}/consents/{consent_id}", response_model=ConsentRead)
+async def revoke_client_consent(
+    mcid: str,
+    consent_id: str,
+    payload: ConsentRevoke | None,
+    request: Request,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: Access,
+    auth: Annotated[AuthContext, Depends(get_auth_ctx)],
+) -> ConsentRead:
+    """Отозвать согласие клиента — след, а не удаление.
+
+    Отзыв немедленно ЗАКРЫВАЕТ открытые сессии работы «от имени» этого
+    клиента у всех специалистов: отозванное согласие не может продолжать
+    действовать до конца чьей-то сессии.
+    """
+
+    TenantContextValidator.ensure_tenant_context(tenant)
+    await _require_enabled(session, tenant)
+    await _get(session, tenant, mcid)
+    now = datetime.now(tz=timezone.utc)
+    row = (
+        await session.execute(
+            select(ManagedClientConsent).where(
+                ManagedClientConsent.tenant_id == tenant.id,
+                ManagedClientConsent.managed_client_id == mcid,
+                ManagedClientConsent.id == consent_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        raise _err(
+            "MANAGED_CLIENT_CONSENT_NOT_FOUND", "Согласие не найдено", status.HTTP_404_NOT_FOUND
+        )
+    if row.revoked_at is not None:
+        raise _err(
+            "MANAGED_CLIENT_CONSENT_ALREADY_REVOKED",
+            "Согласие уже отозвано",
+            status.HTTP_409_CONFLICT,
+        )
+
+    row.revoked_at = now
+    row.revoked_by_user_id = auth.sub
+    row.revoke_reason = payload.reason if payload else None
+    closed = await close_open_sessions_for_client(
+        session, tenant_id=str(tenant.id), client_id=mcid, now=now, reason="consent_revoked"
+    )
+    await session.flush()
+    await write_audit_event(
+        session=session,
+        request=request,
+        tenant_id=str(tenant.id),
+        actor_id=auth.sub,
+        action="managed_client.consent.revoke",
+        resource_type="managed_client_consent",
+        resource_id=row.id,
+        before={"document_ref": row.document_ref},
+        after={
+            "revoke_reason": row.revoke_reason,
+            "closed_sessions": len(closed),
+        },
+    )
+    return _consent_read(row, now=now)
 
 
 @router.post("", response_model=ManagedClientRead, status_code=status.HTTP_201_CREATED)
