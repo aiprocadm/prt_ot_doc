@@ -781,9 +781,20 @@ jobs:
             --max-p99-ms 600 \
             --output-json artifacts/perf/health-smoke.json
 
+          # Профили меряют ЦЕЛЕВЫЕ эндпоинты: логин — один раз через
+          # --login-email (ровно так задуман api_load, см. комментарий у флага).
+          # Прежний flow-json логинился на КАЖДОЙ итерации × 12 воркеров, а
+          # аудит-запись логина идёт в хеш-цепочку под глобальным advisory-lock —
+          # логины сериализуются по замыслу SEC, и профиль структурно не мог
+          # пройти пороги (p50 4.4s, 500-ки от гонки last_login_at — та гонка
+          # починена отдельно core-UPDATE'ом в auth.py).
+          # templates/search до этого шли вовсе БЕЗ auth и после ужесточения
+          # (auth_required) получали 401 — профили никогда не добегали.
           python scripts/perf/api_load.py \
             --base-url http://localhost:8000 \
-            --flow-json "$(cat scripts/perf/flows/dashboard_summary.json)" \
+            --path /api/v1/dashboard/summary \
+            --login-email admin@example.com \
+            --login-password 'PerfSmokeAdmin123!' \
             --tenant demo \
             --requests 60 \
             --concurrency 12 \
@@ -797,6 +808,8 @@ jobs:
           python scripts/perf/api_load.py \
             --base-url http://localhost:8000 \
             --path /api/v1/templates \
+            --login-email admin@example.com \
+            --login-password 'PerfSmokeAdmin123!' \
             --tenant demo \
             --requests 60 \
             --concurrency 12 \
@@ -810,6 +823,8 @@ jobs:
           python scripts/perf/api_load.py \
             --base-url http://localhost:8000 \
             --path '/api/v1/search/suggest?q=doc' \
+            --login-email admin@example.com \
+            --login-password 'PerfSmokeAdmin123!' \
             --tenant demo \
             --requests 60 \
             --concurrency 12 \

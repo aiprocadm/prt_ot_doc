@@ -9,7 +9,7 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from starlette.concurrency import run_in_threadpool
@@ -198,7 +198,15 @@ async def login(
     # GUCs (SEC-65), so the refresh-session INSERT below — which only lands on the
     # commit at the end of this handler — would be evaluated without a tenant context.
     # ``last_login_at`` rides along on that same final commit.
-    user.last_login_at = datetime.now(timezone.utc)
+    #
+    # Core-UPDATE вместо ORM-присваивания: у моделей оптимистичная блокировка
+    # (version_id_col), и ДВА одновременных логина одного пользователя гонялись
+    # за счётчиком версии — проигравший падал StaleDataError → 500 (две вкладки,
+    # даблклик, perf-smoke). Для телеметрийного поля верна семантика
+    # «последняя запись побеждает», версию не трогаем.
+    await session.execute(
+        update(User).where(User.id == user.id).values(last_login_at=datetime.now(timezone.utc))
+    )
 
     role_values = _collect_user_roles(user)
     additional_claims: dict[str, Any] = {"tenant_id": user.tenant_id, "roles": role_values}
