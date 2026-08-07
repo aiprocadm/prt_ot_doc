@@ -17,6 +17,7 @@ from app.domains.managed_clients.lifecycle import ContractStatus, ManagedClientM
 from app.models.managed_clients import (
     ManagedClient,
     ManagedClientAccess,
+    ManagedClientConsent,
     ManagedClientContextSession,
 )
 from app.models.models import Tenant
@@ -73,6 +74,16 @@ async def _client_with_grant(session, tid, *, user_id="u1"):
             all_modules=True,
             modules=[],
             granted_at=_NOW,
+        )
+    )
+    # Срез-12: вход «от имени» требует действующего согласия клиента.
+    session.add(
+        ManagedClientConsent(
+            tenant_id=tid,
+            managed_client_id=client.id,
+            document_ref="Поручение №1",
+            granted_at=_NOW,
+            granted_by_user_id="admin-1",
         )
     )
     await session.flush()
@@ -249,6 +260,15 @@ async def test_switching_clients_closes_the_previous_session(sessionmaker):
                 user_id="u1",
                 all_modules=True,
                 modules=[],
+                granted_at=_NOW,
+            )
+        )
+        # Срез-12: вход «от имени» требует действующего согласия клиента.
+        session.add(
+            ManagedClientConsent(
+                tenant_id=tid,
+                managed_client_id=second.id,
+                document_ref="Поручение №2",
                 granted_at=_NOW,
             )
         )

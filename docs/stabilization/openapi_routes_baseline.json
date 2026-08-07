@@ -26,6 +26,7 @@
     "DELETE /api/v1/managed-clients/context",
     "DELETE /api/v1/managed-clients/{mcid}",
     "DELETE /api/v1/managed-clients/{mcid}/access/{grant_id}",
+    "DELETE /api/v1/managed-clients/{mcid}/consents/{consent_id}",
     "DELETE /api/v1/medical/factors/{factor_id}",
     "DELETE /api/v1/medical/norms/{norm_id}",
     "DELETE /api/v1/medical/psychiatric/activity-types/{activity_id}",
@@ -256,6 +257,7 @@
     "GET /api/v1/managed-clients/workload",
     "GET /api/v1/managed-clients/{mcid}",
     "GET /api/v1/managed-clients/{mcid}/access",
+    "GET /api/v1/managed-clients/{mcid}/consents",
     "GET /api/v1/marketplace",
     "GET /api/v1/medical/contingent",
     "GET /api/v1/medical/contingent/register",
@@ -732,6 +734,7 @@
     "POST /api/v1/machine-keys/{item_id}/rotate",
     "POST /api/v1/managed-clients",
     "POST /api/v1/managed-clients/{mcid}/access",
+    "POST /api/v1/managed-clients/{mcid}/consents",
     "POST /api/v1/managed-clients/{mcid}/context",
     "POST /api/v1/marketplace",
     "POST /api/v1/marketplace/{item_id}/install",
@@ -1488,6 +1491,7 @@
     "list_campaigns_api_v1_sout_get",
     "list_certificates_api_v1_training_certificates_get",
     "list_class_history_api_v1_sout_workplaces__wid__class_history_get",
+    "list_client_consents_api_v1_managed_clients__mcid__consents_get",
     "list_committees_api_v1_committees_get",
     "list_companies_endpoint_api_v1_companies_get",
     "list_contractor_documents_api_v1_contractors_documents_get",
@@ -1726,6 +1730,7 @@
     "recalculate_map_api_v1_risk_advanced_maps__map_id__recalculate_post",
     "recompute_api_v1_compliance_deadlines_recompute_post",
     "recompute_dashboard_api_v1_analytics_recompute_post",
+    "record_client_consent_api_v1_managed_clients__mcid__consents_post",
     "record_closing_endpoint_api_v1_work_permits__wp_id__closing_post",
     "refresh_edo_status_api_v1_edo_messages__message_id__refresh_status_post",
     "refresh_sign_status_api_v1_sign_requests__request_id__refresh_status_post",
@@ -1764,6 +1769,7 @@
     "revoke_access_api_v1_managed_clients__mcid__access__grant_id__delete",
     "revoke_api_token_api_v1_api_tokens__token_id__delete",
     "revoke_certificate_api_v1_training_certificates__item_id__revoke_post",
+    "revoke_client_consent_api_v1_managed_clients__mcid__consents__consent_id__delete",
     "revoke_machine_key_api_v1_machine_keys__item_id__revoke_post",
     "revoke_permit_endpoint_api_v1_permits__permit_id__revoke_post",
     "risk_summary_api_v1_risk_advanced_maps__map_id__summary_get",
@@ -2044,6 +2050,9 @@
     "CompleteUploadRequest",
     "ComplianceStatus",
     "ConditionResult",
+    "ConsentCreate",
+    "ConsentRead",
+    "ConsentRevoke",
     "ContingentItem",
     "ContingentPage",
     "ContingentRegisterPage",
@@ -3835,6 +3844,25 @@
       "value": "any",
       "actual": "any",
       "matched": "boolean"
+    },
+    "ConsentCreate": {
+      "document_ref": "string",
+      "expires_at": "null|string"
+    },
+    "ConsentRead": {
+      "id": "string",
+      "managed_client_id": "string",
+      "document_ref": "string",
+      "granted_by_user_id": "null|string",
+      "granted_at": "string",
+      "expires_at": "null|string",
+      "revoked_at": "null|string",
+      "revoked_by_user_id": "null|string",
+      "revoke_reason": "null|string",
+      "active": "boolean"
+    },
+    "ConsentRevoke": {
+      "reason": "null|string"
     },
     "ContingentItem": {
       "person_id": "string",

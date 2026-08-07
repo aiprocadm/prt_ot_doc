@@ -143,3 +143,38 @@ class ManagedClientContextSession(TenantBaseModel):
             "started_at",
         ),
     )
+
+
+class ManagedClientConsent(TenantBaseModel):
+    """BIZ-49 срез-12 (разд. 49.3 + 66.3): согласие клиента на делегированный доступ.
+
+    Аутсорсер обрабатывает ПДн сотрудников клиента — по 152-ФЗ нужны
+    «согласия/поручения по цепочке». Строка фиксирует документ-основание;
+    без действующей строки грант не выдаётся и контекст не открывается.
+
+    Отзыв не удаляет строку — ставит ``revoked_at`` (след, как у грантов):
+    «действовало ли согласие в момент работы специалиста» — вопрос, на который
+    платформа обязана отвечать и после отзыва.
+    """
+
+    __tablename__ = "managed_client_consent"
+
+    managed_client_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("managed_client.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    #: Реквизиты документа-основания (номер поручения обработки / согласия).
+    document_ref: Mapped[str] = mapped_column(String(255), nullable=False)
+    granted_by_user_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    granted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    #: Срок из документа. Истёкшее согласие равно отозванному.
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    revoked_by_user_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    revoke_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    __table_args__ = (
+        Index("ix_mc_consent_client", "tenant_id", "managed_client_id", "granted_at"),
+    )

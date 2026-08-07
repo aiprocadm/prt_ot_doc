@@ -223,6 +223,32 @@ class AccessGrantRead(BaseSchema):
     active: bool
 
 
+class ConsentCreate(BaseSchema):
+    """Согласие клиента на делегированный доступ (срез-12, разд. 66.3)."""
+
+    #: Реквизиты документа-основания — согласие «на словах» не основание.
+    document_ref: str
+    #: Срок из документа; истёкшее согласие равно отозванному.
+    expires_at: datetime | None = None
+
+
+class ConsentRevoke(BaseSchema):
+    reason: str | None = None
+
+
+class ConsentRead(BaseSchema):
+    id: str
+    managed_client_id: str
+    document_ref: str
+    granted_by_user_id: str | None = None
+    granted_at: datetime
+    expires_at: datetime | None = None
+    revoked_at: datetime | None = None
+    revoked_by_user_id: str | None = None
+    revoke_reason: str | None = None
+    active: bool
+
+
 class MyManagedClient(BaseSchema):
     """Клиент, доступный текущему специалисту (основа переключателя, разд. 49.3)."""
 
