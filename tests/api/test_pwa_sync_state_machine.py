@@ -455,6 +455,8 @@ async def test_resolve_conflict_server_wins_marks_applied(
             },
         },
     )
+    # Статус проверяем ДО взятия id: при флейке (429/5xx) KeyError прятал причину.
+    assert conflict.status_code == 200, conflict.text
     failed_id = conflict.json()["id"]
 
     resolved = await async_client.post(
@@ -499,6 +501,8 @@ async def test_resolve_conflict_client_retry_marks_pending_with_patch(
             },
         },
     )
+    # Статус проверяем ДО взятия id: при флейке (429/5xx) KeyError прятал причину.
+    assert conflict.status_code == 200, conflict.text
     failed_id = conflict.json()["id"]
 
     resolved = await async_client.post(
@@ -531,6 +535,8 @@ async def test_resolve_conflict_invalid_strategy_returns_422(
             "payload": {"entity_type": "briefing_entry", "id": entry_id},
         },
     )
+    # Статус проверяем ДО взятия id: при флейке (429/5xx) KeyError прятал причину.
+    assert conflict.status_code == 200, conflict.text
     failed_id = conflict.json()["id"]
     response = await async_client.post(
         f"/api/v1/pwa/sync/conflicts/{failed_id}/resolve",
@@ -558,6 +564,8 @@ async def test_resolve_conflict_invalid_payload_patch_returns_422(
             "payload": {"entity_type": "briefing_entry", "id": entry_id},
         },
     )
+    # Статус проверяем ДО взятия id: при флейке (429/5xx) KeyError прятал причину.
+    assert conflict.status_code == 200, conflict.text
     failed_id = conflict.json()["id"]
     response = await async_client.post(
         f"/api/v1/pwa/sync/conflicts/{failed_id}/resolve",
@@ -599,6 +607,7 @@ async def test_sync_status_returns_batch_for_owner(
             "payload": {"text": "x"},
         },
     )
+    assert created.status_code == 200, created.text
     batch_id = created.json()["id"]
     response = await async_client.get(f"/api/v1/pwa/sync/status/{batch_id}", headers=headers)
     assert response.status_code == 200
