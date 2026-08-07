@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import time
 import uuid
 
@@ -21,6 +22,8 @@ from app.core.request_context import (
     set_request_scope,
 )
 from app.core.tracing import reset_trace_id, set_trace_id
+
+logger = logging.getLogger(__name__)
 
 
 class _BodyTooLargeError(Exception):
@@ -88,10 +91,30 @@ class ObservabilityMiddleware:
                     message["headers"] = list(mutable_headers.raw)
                 await send(message)
 
-            await asyncio.wait_for(
-                self.app(scope, limited_receive, send_wrapper),
-                timeout=self._timeout_seconds,
-            )
+            # Не wait_for напрямую: при таймауте нам нужен СТЕК зависшего
+            # обработчика. 504 без стека месяцами оставался «спорадическим
+            # флейком» — виновную строку было не найти.
+            handler_task = asyncio.ensure_future(self.app(scope, limited_receive, send_wrapper))
+            try:
+                await asyncio.wait_for(asyncio.shield(handler_task), timeout=self._timeout_seconds)
+            except asyncio.TimeoutError:
+                frames = handler_task.get_stack(limit=12)
+                stack_lines = [
+                    f"{f.f_code.co_filename}:{f.f_lineno} in {f.f_code.co_name}" for f in frames
+                ]
+                logger.error(
+                    "request.timeout.stack",
+                    extra={
+                        "request_path": scope.get("path"),
+                        "timeout_seconds": self._timeout_seconds,
+                        "hung_stack": stack_lines,
+                    },
+                )
+                handler_task.cancel()
+                raise
+            except BaseException:
+                handler_task.cancel()
+                raise
         except _BodyTooLargeError:
             status_code = status.HTTP_413_REQUEST_ENTITY_TOO_LARGE
             if not response_started:
