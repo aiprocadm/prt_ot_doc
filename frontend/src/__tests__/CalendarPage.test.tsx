@@ -283,12 +283,16 @@ describe("CalendarPage", () => {
 
     renderPage();
 
+    // Ждём именно строку события: заголовок «Умный календарь» статичен и
+    // появляется ДО ответа getEvents — синхронные getBy* давали гонку.
     expect(
-      await screen.findByRole("heading", { name: "Умный календарь" }),
+      await screen.findByText("Медосмотр: Иванов И.И."),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Умный календарь" }),
     ).toBeInTheDocument();
     expect(screen.getByText(/Всего событий:/)).toBeInTheDocument();
     expect(screen.getAllByText(/Просрочек/).length).toBeGreaterThan(0);
-    expect(screen.getByText("Медосмотр: Иванов И.И.")).toBeInTheDocument();
     expect(screen.getByText("СИЗ: Каска")).toBeInTheDocument();
     expect(getEventsMock).toHaveBeenCalledWith({
       source_types: undefined,
@@ -451,8 +455,13 @@ describe("CalendarPage", () => {
       });
     });
 
+    // Лейбл «Скрыть план/факт» переключается синхронно от state ещё ДО ответа
+    // мока, а таблица размонтируется на время refetch — ждём строку из factResponse.
     expect(
-      await screen.findByRole("button", { name: "Скрыть план/факт" }),
+      await screen.findByText("Проверка: периодическая"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Скрыть план/факт" }),
     ).toBeInTheDocument();
 
     expect(
@@ -603,8 +612,11 @@ describe("CalendarPage", () => {
       });
     });
 
+    // Лейбл «Скрыть SLA» меняется синхронно от state ещё ДО ответа мока —
+    // ждём строку из slaResponse: во время refetch таблица с колонкой SLA скрыта.
+    expect(await screen.findByText("Медосмотр: просрочен")).toBeInTheDocument();
     expect(
-      await screen.findByRole("button", { name: "Скрыть SLA" }),
+      screen.getByRole("button", { name: "Скрыть SLA" }),
     ).toBeInTheDocument();
     // slaResponse spans Apr/May/Jul → month-view renders multiple buckets,
     // each with its own SLA columnheader; assert at least one is present.

@@ -1,4 +1,4 @@
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 
@@ -64,11 +64,13 @@ describe("ClientPortalPackagesPage", () => {
       </MemoryRouter>,
     );
 
-    await waitFor(() => {
-      expect(screen.getByText("Список пакетов")).toBeInTheDocument();
-    });
+    // Ждём сами детали пакета: заголовок «Список пакетов» статичен и
+    // появляется ДО ответов API — синхронные getBy*/getAllBy* давали гонку.
+    expect(
+      await screen.findByText(/package_run.published/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Список пакетов")).toBeInTheDocument();
     expect(screen.getAllByText("run-1")).toHaveLength(2);
-    expect(screen.getByText(/package_run.published/i)).toBeInTheDocument();
     expect(screen.getByText(/SHA256: abc/i)).toBeInTheDocument();
   });
 

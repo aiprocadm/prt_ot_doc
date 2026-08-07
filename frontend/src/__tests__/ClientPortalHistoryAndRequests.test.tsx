@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 
@@ -68,10 +68,12 @@ describe("client portal pages", () => {
       </MemoryRouter>,
     );
 
-    await waitFor(() =>
-      expect(screen.getByText("События пакета")).toBeInTheDocument(),
-    );
-    expect(screen.getByText(/package_run.published/i)).toBeInTheDocument();
+    // Ждём само событие из API: заголовок «События пакета» статичен и
+    // появляется ДО загрузки деталей — синхронный getBy* давал гонку.
+    expect(
+      await screen.findByText(/package_run.published/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText("События пакета")).toBeInTheDocument();
   });
 
   it("renders requests from package details API", async () => {
@@ -82,9 +84,10 @@ describe("client portal pages", () => {
       </MemoryRouter>,
     );
 
-    await waitFor(() =>
-      expect(screen.getByText("Запросы и обращения")).toBeInTheDocument(),
-    );
-    expect(screen.getByText(/Нужна уточняющая справка/i)).toBeInTheDocument();
+    // Ждём сам текст из API: заголовок статичен и появляется до загрузки —
+    // синхронная проверка сразу после него гонялась на медленном CI.
+    expect(
+      await screen.findByText(/Нужна уточняющая справка/i),
+    ).toBeInTheDocument();
   });
 });

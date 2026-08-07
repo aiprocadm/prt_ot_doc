@@ -114,8 +114,10 @@ describe("ManagementDashboardPage", () => {
     // "Просроченное обучение" is also a Trend chart title (TREND_METRICS) — collides as
     // a KPI-card query, so this assertion checks another overdue-sourced KPI instead
     // (ppe_overdue) to keep verifying the "overdue" dashboard widgets render.
-    expect(screen.getByText("Просроченные СИЗ")).toBeInTheDocument();
-    expect(screen.getByText("Нарушен SLA")).toBeInTheDocument();
+    // Карточки overdue/sla-load приходят из ДРУГИХ моков и могут отрисоваться
+    // позже executive — ждём каждую, иначе межэндпоинтная гонка.
+    expect(await screen.findByText("Просроченные СИЗ")).toBeInTheDocument();
+    expect(await screen.findByText("Нарушен SLA")).toBeInTheDocument();
   });
 
   it("renders six trend charts and switches period", async () => {

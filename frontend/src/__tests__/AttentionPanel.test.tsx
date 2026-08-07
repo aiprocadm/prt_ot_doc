@@ -45,8 +45,10 @@ describe("AttentionPanel", () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByText("Центр внимания")).toBeInTheDocument();
-    expect(screen.getByText("2 просроченных задач")).toBeInTheDocument();
+    // Ждём сами данные из getAttention: заголовок «Центр внимания» статичен
+    // и появляется ДО ответа API — синхронные getBy* давали гонку.
+    expect(await screen.findByText("2 просроченных задач")).toBeInTheDocument();
+    expect(screen.getByText("Центр внимания")).toBeInTheDocument();
     expect(screen.getByText("Сотрудники без медосмотра")).toBeInTheDocument();
     expect(
       screen.getByText("Закрыть просроченные задачи по обучению"),

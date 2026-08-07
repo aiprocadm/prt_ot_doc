@@ -528,10 +528,12 @@ describe("BudgetPage", () => {
     await waitFor(() =>
       expect(budgetApi.getBudget).toHaveBeenCalledWith("bt1"),
     );
-    expect(await screen.findByText("Детали бюджета")).toBeInTheDocument();
-    expect(screen.getByTestId("budget-detail-expense-count")).toHaveTextContent(
-      "Записей расходов: 3",
-    );
+    // «Детали бюджета» появляется сразу по selectedId, ДО ответа getBudget —
+    // ждём сам контент деталей, иначе синхронные getBy* давали гонку на CI.
+    expect(
+      await screen.findByTestId("budget-detail-expense-count"),
+    ).toHaveTextContent("Записей расходов: 3");
+    expect(screen.getByText("Детали бюджета")).toBeInTheDocument();
     const byArticleRow = screen.getByText("Обучение по ОТ").closest("tr");
     expect(byArticleRow).not.toBeNull();
   });
@@ -1121,10 +1123,12 @@ describe("BudgetPage", () => {
     await waitFor(() =>
       expect(budgetApi.getReimbursement).toHaveBeenCalledWith("rb1"),
     );
-    expect(await screen.findByText("Детали заявки")).toBeInTheDocument();
+    // «Детали заявки» появляется сразу по selectedId, ДО ответа getReimbursement —
+    // ждём сам контент деталей, иначе синхронные getBy* давали гонку на CI.
     expect(
-      screen.getByTestId("reimbursement-detail-item-count"),
+      await screen.findByTestId("reimbursement-detail-item-count"),
     ).toHaveTextContent("Записей расходов: 1");
+    expect(screen.getByText("Детали заявки")).toBeInTheDocument();
 
     // exp1 уже в заявке — в пикере остаётся только exp2.
     const picker = screen.getByLabelText("Добавить расход");
@@ -1161,9 +1165,9 @@ describe("BudgetPage", () => {
         name: "Открыть",
       }),
     );
-    await screen.findByText("Детали заявки");
-
-    fireEvent.click(screen.getByRole("button", { name: "Убрать" }));
+    // «Детали заявки» появляется сразу по selectedId, ДО ответа getReimbursement —
+    // кнопка «Убрать» живёт в списке позиций под гейтом загрузки, ждём её саму.
+    fireEvent.click(await screen.findByRole("button", { name: "Убрать" }));
 
     await waitFor(() =>
       expect(budgetApi.removeReimbursementItem).toHaveBeenCalledWith(

@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -244,10 +250,10 @@ describe("WarehousePage", () => {
         <WarehousePage />
       </MemoryRouter>,
     );
-    await waitFor(() =>
-      expect(screen.getByText("Дефицит / мин-остаток")).toBeInTheDocument(),
-    );
-    expect(screen.getByText("Каска")).toBeInTheDocument();
+    // Ждём именно строку дефицита: заголовок «Дефицит / мин-остаток» статичен
+    // и появляется ДО ответа listShortages — синхронные getBy* давали гонку.
+    expect(await screen.findByText("Каска")).toBeInTheDocument();
+    expect(screen.getByText("Дефицит / мин-остаток")).toBeInTheDocument();
     expect(screen.getByText("7")).toBeInTheDocument();
     expect(screen.getByText("Alpha")).toBeInTheDocument();
   });
@@ -274,10 +280,10 @@ describe("WarehousePage", () => {
         <WarehousePage />
       </MemoryRouter>,
     );
-    await waitFor(() =>
-      expect(screen.getByText("Инвентаризация")).toBeInTheDocument(),
-    );
-    expect(screen.getByText("июль")).toBeInTheDocument();
+    // Ждём именно строку инвентаризации: заголовок «Инвентаризация» статичен
+    // и появляется ДО ответа listCounts — синхронные getBy* давали гонку.
+    expect(await screen.findByText("июль")).toBeInTheDocument();
+    expect(screen.getByText("Инвентаризация")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Открыть" })).toBeInTheDocument();
   });
 
@@ -411,10 +417,10 @@ describe("WarehousePage", () => {
         <WarehousePage />
       </MemoryRouter>,
     );
-    await waitFor(() =>
-      expect(screen.getByText("Поставщики")).toBeInTheDocument(),
-    );
-    expect(screen.getAllByText("Alpha").length).toBeGreaterThan(0);
+    // Ждём именно строку поставщика: заголовок «Поставщики» статичен
+    // и появляется ДО ответа listSuppliers — синхронные getBy* давали гонку.
+    expect((await screen.findAllByText("Alpha")).length).toBeGreaterThan(0);
+    expect(screen.getByText("Поставщики")).toBeInTheDocument();
     expect(screen.getByText("7701234567")).toBeInTheDocument();
   });
 
@@ -477,10 +483,10 @@ describe("WarehousePage", () => {
         <WarehousePage />
       </MemoryRouter>,
     );
-    await waitFor(() =>
-      expect(screen.getByText("Дозаказ")).toBeInTheDocument(),
-    );
-    expect(screen.getByText("Каска")).toBeInTheDocument();
+    // Ждём именно строку дозаказа: заголовок «Дозаказ» статичен и появляется
+    // ДО ответа getReorderDraft — синхронные getBy* давали гонку.
+    expect(await screen.findByText("Каска")).toBeInTheDocument();
+    expect(screen.getByText("Дозаказ")).toBeInTheDocument();
     expect(screen.getAllByText("10").length).toBeGreaterThan(0);
   });
 
@@ -521,17 +527,17 @@ describe("WarehousePage", () => {
         <WarehousePage />
       </MemoryRouter>,
     );
-    await waitFor(() =>
-      expect(screen.getByText("Дефицит / мин-остаток")).toBeInTheDocument(),
+    // Ждём сам селект из строки дефицита и опцию поставщика в нём: заголовок
+    // «Дефицит / мин-остаток» статичен и появляется ДО ответов API — гонка.
+    const supplierSelect = await screen.findByLabelText(
+      /Предпочтительный поставщик Каска/i,
     );
+    await within(supplierSelect).findByRole("option", { name: "Alpha" });
 
     const reorderCallsBefore = getReorderDraftMock.mock.calls.length;
-    fireEvent.change(
-      screen.getByLabelText(/Предпочтительный поставщик Каска/i),
-      {
-        target: { value: "s1" },
-      },
-    );
+    fireEvent.change(supplierSelect, {
+      target: { value: "s1" },
+    });
 
     await waitFor(() =>
       expect(patchItemPreferredSupplierMock).toHaveBeenCalledWith("i1", "s1"),
@@ -569,8 +575,10 @@ describe("WarehousePage", () => {
         <WarehousePage />
       </MemoryRouter>,
     );
-    const btn = await screen.findByText("Копировать CSV");
-    fireEvent.click(btn);
+    // Кнопка «Копировать CSV» есть сразу, но disabled до загрузки reorderDraft —
+    // клик по ней терялся. Ждём строку дозаказа: она рендерится тем же стейтом.
+    await screen.findByText("Каска");
+    fireEvent.click(screen.getByText("Копировать CSV"));
 
     await waitFor(() => expect(writeText).toHaveBeenCalled());
     const csv = writeText.mock.calls[0][0] as string;

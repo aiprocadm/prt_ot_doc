@@ -154,7 +154,10 @@ describe("BriefingsPage", () => {
       </MemoryRouter>,
     );
 
-    const personSelect = await screen.findByLabelText("Сотрудник");
+    // Label и <select> рендерятся безусловно, а опции строятся из ответа
+    // fetchAllPersons — ждём саму опцию из мока, selectOptions не ретраит.
+    await screen.findByRole("option", { name: "Иванов Иван Иванович" });
+    const personSelect = screen.getByLabelText("Сотрудник");
     await user.selectOptions(personSelect, "person-1");
     await user.click(screen.getByRole("button", { name: "Назначить" }));
 

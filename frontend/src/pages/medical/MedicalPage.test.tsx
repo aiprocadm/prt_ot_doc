@@ -1,4 +1,10 @@
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import {
+  render,
+  screen,
+  waitFor,
+  fireEvent,
+  within,
+} from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 import MedicalPage from "./MedicalPage";
@@ -255,6 +261,9 @@ describe("MedicalPage referrals section", () => {
     const personSelect = await screen.findByLabelText(
       "Сотрудник для направления",
     );
+    // Селект статичен, а опции приходят из data.persons (мок API) — без
+    // ожидания опции change по value="p2" записал бы "" (гонка).
+    await within(personSelect).findByRole("option", { name: "Петров Пётр" });
     fireEvent.change(personSelect, { target: { value: "p2" } });
     fireEvent.change(screen.getByLabelText("Вид осмотра"), {
       target: { value: "psychiatric" },

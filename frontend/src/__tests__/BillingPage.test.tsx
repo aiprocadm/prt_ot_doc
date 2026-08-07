@@ -76,12 +76,11 @@ describe("BillingPage", () => {
       </MemoryRouter>,
     );
 
-    await screen.findByText("Тариф и статус");
-    const switchPlanButtons = screen
-      .getAllByRole("button")
-      .filter((el) => (el.textContent ?? "").trim() === "Сменить");
+    // Кнопки «Сменить» появляются только после ответа getBillingPlans —
+    // заголовок «Тариф и статус» статичен, синхронный getAllByRole давал гонку.
+    const switchPlanButtons = await screen.findAllByText("Сменить");
     expect(switchPlanButtons.length).toBeGreaterThanOrEqual(1);
-    fireEvent.click(switchPlanButtons[0]!);
+    fireEvent.click(switchPlanButtons[0]!.closest("button") as HTMLElement);
 
     await waitFor(() => {
       expect(screen.getByRole("alert")).toHaveTextContent("plan change failed");

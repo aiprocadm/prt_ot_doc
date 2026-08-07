@@ -73,7 +73,9 @@ describe("CommitteeKpiPage", () => {
 
     renderPage();
 
-    await waitFor(() => expect(getKpiMock).toHaveBeenCalled());
+    // Мок вызывается синхронно в первом эффекте, ДО setError/setLoading(false),
+    // а до этого страница — LoadingScreen; ждём сам ErrorState (role=alert).
+    expect(await screen.findByRole("alert")).toBeInTheDocument();
     // Title still renders; the KPI groups do not.
     expect(screen.getByText("KPI комитетов")).toBeInTheDocument();
     expect(screen.queryByText("Явка и кворум")).not.toBeInTheDocument();
