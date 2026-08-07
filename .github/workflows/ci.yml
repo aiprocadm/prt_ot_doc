@@ -431,11 +431,22 @@ jobs:
 
   backend-tests:
     runs-on: ubuntu-latest
-    # Suite is parallelized with pytest-xdist (-n auto) + bounded per-test by
-    # pytest-timeout below. timeout-minutes is the job-level backstop against
-    # runaway billing (GitHub default is 360min). 150 — под -n 2: суите на
-    # 5100+ тестов с покрытием нужно ~1.5-2 часа на двух воркерах.
-    timeout-minutes: 150
+    # ШАРДЫ: единый прогон 5100+ тестов с branch-coverage копит память по ходу
+    # (SQLAlchemy/приложение на каждый тест) и убивает 16-ГБ раннер на ~60-75
+    # минуте («runner lost communication … starves it for CPU/Memory») — при
+    # любом числе xdist-воркеров. Три осколка (~1300-2000 тестов) держат
+    # пик памяти низким; покрытие склеивает job backend-coverage-gate.
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - shard: backend-unit
+            targets: backend/tests integration_tests
+          - shard: tests-dirs-ak
+            targets: tests/api tests/contract tests/domains tests/e2e tests/headers tests/integration tests/minio tests/pdf tests/services tests/unit tests/utils tests/test_[a-k]*.py
+          - shard: tests-lz
+            targets: tests/test_[l-z]*.py
     services:
       # Включает @pytest.mark.db: keystone enum-label guard + enum write-smoke.
       # Гарды сами создают/дропают throwaway-БД enum_*<uuid> через TEST_PG_ADMIN_URL;
@@ -484,28 +495,59 @@ jobs:
           DB_URL: sqlite:///./ci-alembic.db
         run: alembic -c backend/app/migrations/alembic.ini heads
 
-      - name: Backend test suite with coverage
-        # -n 2 вместо -n auto (4): на 5100+ тестах четыре воркера с branch-coverage
-        # душат 16-ГБ раннер — три прогона подряд умирали «runner lost
-        # communication … starves it for CPU/Memory» на ~60-70 минуте.
+      - name: Backend test shard (${{ matrix.shard }})
         # --durations=25 — наблюдаемость: имена самых медленных тестов в логе.
+        # --cov-report= (пусто) — отчёты не нужны: сырой .coverage уходит в
+        # backend-coverage-gate, который склеивает осколки и гоняет гейты.
         run: |
           mkdir -p artifacts
-          pytest \
-            -n 2 \
+          pytest ${{ matrix.targets }} \
+            -n auto \
             --timeout=300 \
             --durations=25 \
             -rfE --tb=short \
-            --junitxml=artifacts/backend-junit.xml \
+            --junitxml=artifacts/backend-junit-${{ matrix.shard }}.xml \
             --cov=backend/app \
             --cov-branch \
-            --cov-report=xml:artifacts/coverage.xml \
-            --cov-report=json:artifacts/coverage.json \
-            --cov-report=term-missing:skip-covered
+            --cov-report=
+          mv .coverage artifacts/.coverage.${{ matrix.shard }}
 
-      - name: Export term-missing coverage report
+      - name: Upload shard artifacts
         if: always()
-        run: python -m coverage report -m > artifacts/coverage-term-missing.txt
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-shard-${{ matrix.shard }}
+          include-hidden-files: true
+          path: |
+            artifacts/backend-junit-${{ matrix.shard }}.xml
+            artifacts/.coverage.${{ matrix.shard }}
+
+  backend-coverage-gate:
+    runs-on: ubuntu-latest
+    needs: backend-tests
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install coverage
+        run: python -m pip install --upgrade pip coverage
+
+      - name: Download shard coverage
+        uses: actions/download-artifact@v4
+        with:
+          pattern: backend-shard-*
+          merge-multiple: true
+          path: artifacts
+
+      - name: Combine shards and build reports
+        run: |
+          coverage combine artifacts/.coverage.*
+          coverage xml -o artifacts/coverage.xml
+          coverage json -o artifacts/coverage.json
+          coverage report -m > artifacts/coverage-term-missing.txt
 
       - name: Enforce backend coverage baseline
         run: python scripts/ci/check_backend_coverage_baseline.py --coverage-json artifacts/coverage.json --baseline docs/stabilization/backend_coverage_baseline.json
@@ -521,7 +563,7 @@ jobs:
         with:
           name: backend-test-report
           path: |
-            artifacts/backend-junit.xml
+            artifacts/backend-junit-*.xml
             artifacts/coverage.xml
             artifacts/coverage.json
             artifacts/coverage-term-missing.txt
