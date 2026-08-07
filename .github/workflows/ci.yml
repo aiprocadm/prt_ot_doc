@@ -439,14 +439,25 @@ jobs:
     timeout-minutes: 60
     strategy:
       fail-fast: false
+      # Осколки ~500-2000 тестов (~7-10 минут): инфраструктура hosted-раннеров
+      # периодически шлёт shutdown-волны, и джобы длиннее ~15-20 минут в них
+      # попадают; короткие успевают финишировать между волнами.
       matrix:
         include:
           - shard: backend-unit
             targets: backend/tests integration_tests
-          - shard: tests-dirs-ak
-            targets: tests/api tests/contract tests/domains tests/e2e tests/headers tests/integration tests/minio tests/pdf tests/services tests/unit tests/utils tests/test_[a-k]*.py
-          - shard: tests-lz
-            targets: tests/test_[l-z]*.py
+          - shard: api-am
+            targets: tests/api/test_[a-m]*.py
+          - shard: api-nz
+            targets: tests/api/test_[n-z]*.py
+          - shard: dirs-ae
+            targets: tests/contract tests/domains tests/e2e tests/headers tests/integration tests/minio tests/pdf tests/services tests/unit tests/utils tests/test_[a-e]*.py
+          - shard: fk-lo
+            targets: tests/test_[f-o]*.py
+          - shard: pr
+            targets: tests/test_[p-r]*.py
+          - shard: sz
+            targets: tests/test_[s-z]*.py
     services:
       # Включает @pytest.mark.db: keystone enum-label guard + enum write-smoke.
       # Гарды сами создают/дропают throwaway-БД enum_*<uuid> через TEST_PG_ADMIN_URL;
