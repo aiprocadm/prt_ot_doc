@@ -73,15 +73,17 @@ def test_privileged_role_is_fatal_when_enforcing(privileges: DatabaseRolePrivile
 
 
 @pytest.fixture(autouse=True)
-def _propagate_rls_logger():
-    """caplog ловит записи через root: если более ранний тест в том же
-    xdist-воркере включил боевой logging-конфиг (propagate=False у app.*),
-    записи до root не доходят — принудительно возвращаем propagate."""
+def _capture_rls_logger(caplog: pytest.LogCaptureFixture):
+    """Цепляем обработчик caplog НАПРЯМУЮ к целевому логгеру: путь через root
+    зависит от состояния, которое оставляют соседние тесты воркера (боевой
+    logging-конфиг, propagate, уровни) — в CI записи терялись."""
     lg = logging.getLogger("app.db.rls_runtime")
-    prev = lg.propagate
-    lg.propagate = True
+    prev_disabled = lg.disabled
+    lg.disabled = False
+    lg.addHandler(caplog.handler)
     yield
-    lg.propagate = prev
+    lg.removeHandler(caplog.handler)
+    lg.disabled = prev_disabled
 
 
 def test_privileged_role_only_warns_when_not_enforcing(
