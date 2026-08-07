@@ -12,6 +12,7 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+from starlette.concurrency import run_in_threadpool
 
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.audit_decorator import audit_operation
@@ -184,7 +185,11 @@ async def login(
     if user is None or not user.is_active:
         raise _invalid_credentials()
 
-    if not verify_password(payload.password, user.hashed_password):
+    # Argon2 — умышленно дорогой CPU-bound верифай (~75+ мс): синхронный вызов
+    # в async-обработчике замораживал event loop на КАЖДЫЙ логин, и всплеск
+    # логинов серийно стопорил все запросы воркера (perf-smoke: p50 4.4s).
+    # argon2-cffi отпускает GIL — в threadpool верифаи идут параллельно.
+    if not await run_in_threadpool(verify_password, payload.password, user.hashed_password):
         raise _invalid_credentials()
 
     tenant_slug = tenant.slug
