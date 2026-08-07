@@ -58,6 +58,7 @@ from app.domains.managed_clients.lifecycle import (
     contract_days_left,
     is_contract_expiring,
     validate_contract_transition,
+    validate_conversion_to_dedicated,
     validate_mode_binding,
 )
 from app.domains.managed_clients.scope import scoped_section_titles
@@ -85,6 +86,8 @@ from app.schemas.managed_clients import (
     ConsentCreate,
     ConsentRead,
     ConsentRevoke,
+    ConversionRead,
+    ConvertToDedicated,
     CrossClientAttentionResponse,
     CrossClientAttentionSummary,
     CrossClientCalendarResponse,
@@ -104,6 +107,7 @@ from app.schemas.managed_clients import (
     WorkloadSummary,
     WorkloadThresholdsRead,
 )
+from app.services.tenants.bootstrap.service import BootstrapTenantService
 
 router = APIRouter(prefix="/managed-clients", tags=["managed-clients"])
 
@@ -1115,6 +1119,88 @@ async def revoke_client_consent(
         },
     )
     return _consent_read(row, now=now)
+
+
+@router.post("/{mcid}/convert-to-dedicated", response_model=ConversionRead)
+async def convert_to_dedicated(
+    mcid: str,
+    payload: ConvertToDedicated,
+    request: Request,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: Access,
+    auth: Annotated[AuthContext, Depends(get_auth_ctx)],
+) -> ConversionRead:
+    """Перевод Lightweight → Dedicated (разд. 49.1) — без потери истории ядра.
+
+    Под клиента поднимается собственный арендатор (bootstrap: настройки, квота,
+    владелец, каталог прав, стартовый пакет), запись клиента переключается в
+    Dedicated. Вся история ведения (договор, гранты, согласия, сессии, аудит)
+    остаётся на ТОЙ ЖЕ строке клиента, а организация в пространстве аутсорсера
+    остаётся ссылкой на историю (инвариант режима из среза-1). Перенос доменных
+    данных организации в новый арендатор — следующий срез 49.1.
+    """
+
+    TenantContextValidator.ensure_tenant_context(tenant)
+    await _require_enabled(session, tenant)
+    row = await _get(session, tenant, mcid)
+
+    slug = payload.tenant_slug.strip().lower()
+    try:
+        validate_conversion_to_dedicated(
+            mode=row.mode, contract_status=row.contract_status, target_slug=slug
+        )
+    except ManagedClientTransitionError as exc:
+        raise _err("MANAGED_CLIENT_CONVERSION_INVALID", str(exc), status.HTTP_409_CONFLICT) from exc
+
+    # Слаг обязан быть СВОБОДЕН: bootstrap «переиспользует» существующего
+    # арендатора, а перевод в ЧУЖОЙ арендатор пришил бы клиента к чужим данным.
+    taken = (await session.execute(select(Tenant).where(Tenant.slug == slug))).scalar_one_or_none()
+    if taken is not None:
+        raise _err(
+            "MANAGED_CLIENT_TENANT_SLUG_TAKEN",
+            "Арендатор с таким слагом уже существует — перевод возможен только в новый",
+            status.HTTP_409_CONFLICT,
+        )
+
+    summary = await BootstrapTenantService(session).run(
+        tenant_slug=slug,
+        tenant_name=payload.tenant_name or row.name,
+        owner_email=payload.owner_email,
+        owner_password=payload.owner_password,
+    )
+
+    before = {"mode": row.mode.value, "dedicated_tenant_slug": row.dedicated_tenant_slug}
+    row.mode = ManagedClientMode.DEDICATED
+    row.dedicated_tenant_slug = slug
+    # company_id НЕ трогаем: у dedicated он законен как ссылка на историю.
+    validate_mode_binding(
+        row.mode, company_id=row.company_id, tenant_slug=row.dedicated_tenant_slug
+    )
+    await session.flush()
+
+    await write_audit_event(
+        session=session,
+        request=request,
+        tenant_id=str(tenant.id),
+        actor_id=auth.sub,
+        action="managed_client.converted_to_dedicated",
+        resource_type="managed_client",
+        resource_id=row.id,
+        before=before,
+        after={
+            "mode": row.mode.value,
+            "dedicated_tenant_slug": slug,
+            "history_company_id": row.company_id,
+            "tenant_created": list(summary.created),
+        },
+    )
+    return ConversionRead(
+        client=ManagedClientRead.model_validate(row, from_attributes=True),
+        tenant_slug=slug,
+        tenant_created=list(summary.created),
+        history_company_id=row.company_id,
+    )
 
 
 @router.post("", response_model=ManagedClientRead, status_code=status.HTTP_201_CREATED)
