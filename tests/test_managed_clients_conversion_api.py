@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi import HTTPException
@@ -55,18 +55,39 @@ async def _client(session, *, mode=ManagedClientMode.LIGHTWEIGHT, status=Contrac
     return row
 
 
+class _TrustedWrapper:
+    """Тестовая «доверенная сессия»: та же сессия теста, commit → flush.
+
+    Реальная межарендаторная механика (_trusted_session с rls_bypass под
+    FORCE RLS) проверяется отдельным db-тестом на живом PostgreSQL.
+    """
+
+    def __init__(self, session):
+        self._session = session
+
+    async def __aenter__(self):
+        self._orig_commit = self._session.commit
+        self._session.commit = self._session.flush
+        return self._session
+
+    async def __aexit__(self, *exc):
+        self._session.commit = self._orig_commit
+        return False
+
+
 async def _convert(session, mcid, *, slug="romashka", email="owner@romashka.ru"):
-    return await routes.convert_to_dedicated(
-        mcid=mcid,
-        payload=ConvertToDedicated(
-            tenant_slug=slug, owner_email=email, owner_password="Secret123!"
-        ),
-        request=_request(),
-        tenant=_tenant(),
-        session=session,
-        access=SimpleNamespace(),
-        auth=_auth(),
-    )
+    with patch.object(routes, "_trusted_session", lambda: _TrustedWrapper(session)):
+        return await routes.convert_to_dedicated(
+            mcid=mcid,
+            payload=ConvertToDedicated(
+                tenant_slug=slug, owner_email=email, owner_password="Secret123!"
+            ),
+            request=_request(),
+            tenant=_tenant(),
+            session=session,
+            access=SimpleNamespace(),
+            auth=_auth(),
+        )
 
 
 @pytest.mark.asyncio
