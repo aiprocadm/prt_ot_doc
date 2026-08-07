@@ -446,10 +446,14 @@ jobs:
         include:
           - shard: backend-unit
             targets: backend/tests integration_tests
-          - shard: api-am
-            targets: tests/api/test_[a-m]*.py
-          - shard: api-nz
-            targets: tests/api/test_[n-z]*.py
+          - shard: api-ae
+            targets: tests/api/test_[a-e]*.py
+          - shard: api-fm
+            targets: tests/api/test_[f-m]*.py
+          - shard: api-np
+            targets: tests/api/test_[n-p]*.py
+          - shard: api-qz
+            targets: tests/api/test_[q-z]*.py
           - shard: dirs-ae
             targets: tests/contract tests/domains tests/e2e tests/headers tests/integration tests/minio tests/pdf tests/services tests/unit tests/utils tests/test_[a-e]*.py
           - shard: fk-lo
