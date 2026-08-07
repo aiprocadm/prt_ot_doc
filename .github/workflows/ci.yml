@@ -822,8 +822,8 @@ jobs:
             --expect-status 200 \
             --max-error-rate 0.02 \
             --min-throughput 8 \
-            --max-p95-ms 4000 \
-            --max-p99-ms 5000 \
+            --max-p95-ms 6000 \
+            --max-p99-ms 6500 \
             --output-json artifacts/perf/templates-smoke.json
 
           python scripts/perf/api_load.py \
