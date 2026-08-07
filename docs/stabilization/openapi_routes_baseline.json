@@ -736,6 +736,7 @@
     "POST /api/v1/managed-clients/{mcid}/access",
     "POST /api/v1/managed-clients/{mcid}/consents",
     "POST /api/v1/managed-clients/{mcid}/context",
+    "POST /api/v1/managed-clients/{mcid}/convert-to-dedicated",
     "POST /api/v1/marketplace",
     "POST /api/v1/marketplace/{item_id}/install",
     "POST /api/v1/medical/contingent/generate-referrals",
@@ -1052,6 +1053,7 @@
     "confirm_pep_request_api_v1_sign_pep_requests__request_id__confirm_post",
     "contractor_compliance_summary_api_v1_contractors_compliance_summary_get",
     "convert_file_to_pdf_api_v1_files__file_id__convert_pdf_post",
+    "convert_to_dedicated_api_v1_managed_clients__mcid__convert_to_dedicated_post",
     "create_action_api_v1_corrective_actions_post",
     "create_activity_type_api_v1_medical_psychiatric_activity_types_post",
     "create_admission_endpoint_api_v1_work_permits__wp_id__admissions_post",
@@ -2070,9 +2072,11 @@
     "ContractorRegistryCreate",
     "ContractorRegistryPatch",
     "ControlIn",
+    "ConversionRead",
     "ConvertPdfAccepted",
     "ConvertPdfOptions",
     "ConvertPdfRequest",
+    "ConvertToDedicated",
     "CorrectiveActionIn",
     "CorrectiveActionVerifyIn",
     "CrossClientAttentionResponse",
@@ -4003,6 +4007,12 @@
       "type": "string",
       "description": "null|string"
     },
+    "ConversionRead": {
+      "client": "ManagedClientRead",
+      "tenant_slug": "string",
+      "tenant_created": "array",
+      "history_company_id": "null|string"
+    },
     "ConvertPdfAccepted": {
       "job_id": "string",
       "pdf_run_id": "string",
@@ -4016,6 +4026,12 @@
     "ConvertPdfRequest": {
       "mode": "string",
       "options": "ConvertPdfOptions"
+    },
+    "ConvertToDedicated": {
+      "tenant_slug": "string",
+      "tenant_name": "null|string",
+      "owner_email": "string",
+      "owner_password": "string"
     },
     "CorrectiveActionIn": {
       "source_type": "string",

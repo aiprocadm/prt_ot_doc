@@ -223,6 +223,29 @@ class AccessGrantRead(BaseSchema):
     active: bool
 
 
+class ConvertToDedicated(BaseSchema):
+    """Перевод Lightweight → Dedicated (срез-13, разд. 49.1)."""
+
+    tenant_slug: str
+    #: Имя нового арендатора; по умолчанию — имя клиента.
+    tenant_name: str | None = None
+    owner_email: str
+    owner_password: str
+
+
+class ConversionRead(BaseSchema):
+    """Итог перевода: клиент + что создано в новом арендаторе."""
+
+    client: "ManagedClientRead"
+    tenant_slug: str
+    #: Сущности, созданные bootstrap'ом нового арендатора.
+    tenant_created: list[str]
+    #: Организация клиента остаётся в пространстве аутсорсера ссылкой на
+    #: историю (инвариант режима из среза-1); перенос доменных данных —
+    #: следующий срез 49.1.
+    history_company_id: str | None = None
+
+
 class ConsentCreate(BaseSchema):
     """Согласие клиента на делегированный доступ (срез-12, разд. 66.3)."""
 

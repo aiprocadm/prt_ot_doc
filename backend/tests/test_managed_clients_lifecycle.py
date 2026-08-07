@@ -18,6 +18,7 @@ from app.domains.managed_clients.lifecycle import (
     contract_days_left,
     is_contract_expiring,
     validate_contract_transition,
+    validate_conversion_to_dedicated,
     validate_mode_binding,
 )
 
@@ -108,3 +109,47 @@ class TestPortfolioSignals:
 
     def test_no_end_date_never_signals(self):
         assert not is_contract_expiring(ContractStatus.ACTIVE, None, today=_TODAY, horizon_days=30)
+
+
+# --- срез-13: перевод Lightweight → Dedicated (разд. 49.1) -------------------
+class TestConversionToDedicated:
+    def test_lightweight_with_live_contract_converts(self):
+        validate_conversion_to_dedicated(
+            mode=ManagedClientMode.LIGHTWEIGHT,
+            contract_status=ContractStatus.ACTIVE,
+            target_slug="romashka",
+        )
+
+    def test_dedicated_cannot_convert_twice(self):
+        """Второй перевод означал бы два арендатора с непонятно чьей историей."""
+        with pytest.raises(ManagedClientTransitionError):
+            validate_conversion_to_dedicated(
+                mode=ManagedClientMode.DEDICATED,
+                contract_status=ContractStatus.ACTIVE,
+                target_slug="romashka",
+            )
+
+    def test_terminated_contract_blocks_conversion(self):
+        """Перевод — часть живого ведения, а не операция над архивом."""
+        with pytest.raises(ManagedClientTransitionError):
+            validate_conversion_to_dedicated(
+                mode=ManagedClientMode.LIGHTWEIGHT,
+                contract_status=ContractStatus.TERMINATED,
+                target_slug="romashka",
+            )
+
+    def test_draft_and_suspended_contracts_allow_conversion(self):
+        for cs in (ContractStatus.DRAFT, ContractStatus.SUSPENDED):
+            validate_conversion_to_dedicated(
+                mode=ManagedClientMode.LIGHTWEIGHT, contract_status=cs, target_slug="romashka"
+            )
+
+    def test_bad_slug_rejected_before_tenant_creation(self):
+        """Битое имя схемы БД всплыло бы только при первом обращении к данным."""
+        for bad in ("", "R", "ООО-Ромашка", "has space", "-lead", "a" * 64):
+            with pytest.raises(ManagedClientTransitionError):
+                validate_conversion_to_dedicated(
+                    mode=ManagedClientMode.LIGHTWEIGHT,
+                    contract_status=ContractStatus.ACTIVE,
+                    target_slug=bad,
+                )
