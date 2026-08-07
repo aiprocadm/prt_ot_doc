@@ -15,13 +15,21 @@ interface Props {
   onRefresh: () => void;
 }
 
-export const BrigadeMembersPanel = ({ wp, persons, nameOf, onRefresh }: Props) => {
+export const BrigadeMembersPanel = ({
+  wp,
+  persons,
+  nameOf,
+  onRefresh,
+}: Props) => {
   const [selectedPersonId, setSelectedPersonId] = useState("");
   const [selectedRole, setSelectedRole] = useState("member");
   const [adding, setAdding] = useState(false);
 
   // Ф3a: состав бригады редактируется и в работе (issued/suspended), не только в черновике
-  const canEdit = wp.status === "draft" || wp.status === "issued" || wp.status === "suspended";
+  const canEdit =
+    wp.status === "draft" ||
+    wp.status === "issued" ||
+    wp.status === "suspended";
 
   const handleAdd = async () => {
     if (!selectedPersonId) {
@@ -61,7 +69,9 @@ export const BrigadeMembersPanel = ({ wp, persons, nameOf, onRefresh }: Props) =
         {wp.members.map((m) => (
           <li key={m.id} className="flex items-center justify-between gap-2">
             <span>{nameOf(m.person_id)}</span>
-            <span className="text-muted-foreground">{labelOf(MEMBER_ROLE_LABELS, m.role)}</span>
+            <span className="text-muted-foreground">
+              {labelOf(MEMBER_ROLE_LABELS, m.role)}
+            </span>
             {wp.work_type === "electrical" && (
               <span className="text-xs text-muted-foreground">
                 Группа: {m.electrical_group ?? "—"}
@@ -89,7 +99,12 @@ export const BrigadeMembersPanel = ({ wp, persons, nameOf, onRefresh }: Props) =
         <Can permission={PERMISSIONS.WORK_PERMIT_MANAGE}>
           <div className="flex flex-wrap items-end gap-2 pt-1">
             <div className="flex flex-col gap-1">
-              <label htmlFor="bm-person" className="text-xs text-muted-foreground">Сотрудник</label>
+              <label
+                htmlFor="bm-person"
+                className="text-xs text-muted-foreground"
+              >
+                Сотрудник
+              </label>
               <select
                 id="bm-person"
                 className="h-9 rounded-md border px-2 text-sm min-w-[180px]"
@@ -105,7 +120,12 @@ export const BrigadeMembersPanel = ({ wp, persons, nameOf, onRefresh }: Props) =
               </select>
             </div>
             <div className="flex flex-col gap-1">
-              <label htmlFor="bm-role" className="text-xs text-muted-foreground">Роль</label>
+              <label
+                htmlFor="bm-role"
+                className="text-xs text-muted-foreground"
+              >
+                Роль
+              </label>
               <select
                 id="bm-role"
                 className="h-9 rounded-md border px-2 text-sm"

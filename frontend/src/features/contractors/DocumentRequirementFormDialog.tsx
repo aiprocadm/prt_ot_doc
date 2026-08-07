@@ -10,10 +10,15 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger
+  DialogTrigger,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { DOC_TYPE_LABELS, DOC_TYPE_OPTIONS, SCOPE_LABELS, SCOPE_OPTIONS } from "@/pages/contractors/contractorsVocab";
+import {
+  DOC_TYPE_LABELS,
+  DOC_TYPE_OPTIONS,
+  SCOPE_LABELS,
+  SCOPE_OPTIONS,
+} from "@/pages/contractors/contractorsVocab";
 import type { DocScope, DocType } from "@/types/dto/contractors";
 
 interface Props {
@@ -21,7 +26,10 @@ interface Props {
   onSubmitted?: () => void;
 }
 
-export const DocumentRequirementFormDialog = ({ trigger, onSubmitted }: Props) => {
+export const DocumentRequirementFormDialog = ({
+  trigger,
+  onSubmitted,
+}: Props) => {
   const [open, setOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [docType, setDocType] = useState<DocType>("license");
@@ -31,14 +39,20 @@ export const DocumentRequirementFormDialog = ({ trigger, onSubmitted }: Props) =
   const onSubmit = async () => {
     setSubmitting(true);
     try {
-      await contractorsApi.createRequirement({ doc_type: docType, scope, mandatory });
+      await contractorsApi.createRequirement({
+        doc_type: docType,
+        scope,
+        mandatory,
+      });
       toast.success("Требование добавлено");
       onSubmitted?.();
       setOpen(false);
     } catch (err) {
       const e = err as { status?: number; code?: string; message?: string };
       if (e.status === 409 || e.code === "requirement_exists") {
-        toast.error("Требование для этого типа документа и области уже существует");
+        toast.error(
+          "Требование для этого типа документа и области уже существует",
+        );
       } else {
         toast.error(e.message ?? "Не удалось добавить требование");
       }
@@ -53,7 +67,9 @@ export const DocumentRequirementFormDialog = ({ trigger, onSubmitted }: Props) =
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Новое требование к документу</DialogTitle>
-          <DialogDescription>Тип документа и область применения обязательного требования.</DialogDescription>
+          <DialogDescription>
+            Тип документа и область применения обязательного требования.
+          </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
           <div className="space-y-2">
@@ -87,7 +103,11 @@ export const DocumentRequirementFormDialog = ({ trigger, onSubmitted }: Props) =
             </select>
           </div>
           <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={mandatory} onChange={(e) => setMandatory(e.target.checked)} />
+            <input
+              type="checkbox"
+              checked={mandatory}
+              onChange={(e) => setMandatory(e.target.checked)}
+            />
             Обязательный документ
           </label>
         </div>

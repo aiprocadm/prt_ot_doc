@@ -39,9 +39,9 @@ def test_inspection_result_has_required_columns() -> None:
         "updated_at",
         "version",
     }
-    assert required.issubset(columns.keys()), (
-        f"inspection_result missing columns: {required - set(columns.keys())}"
-    )
+    assert required.issubset(
+        columns.keys()
+    ), f"inspection_result missing columns: {required - set(columns.keys())}"
 
 
 def test_inspection_result_inspection_fk_cascades() -> None:
@@ -97,9 +97,7 @@ def _load_iter26_migration():
         / "versions"
         / "20260527_iter26_inspection_result.py"
     )
-    assert migration_path.exists(), (
-        f"iter-26 migration file missing at {migration_path}"
-    )
+    assert migration_path.exists(), f"iter-26 migration file missing at {migration_path}"
     spec = importlib.util.spec_from_file_location("iter26_migration", migration_path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
@@ -130,9 +128,9 @@ def test_iter26_migration_creates_inspection_result_only() -> None:
         / "20260527_iter26_inspection_result.py"
     )
     src = migration_path.read_text(encoding="utf-8")
-    assert 'op.create_table(\n        "inspection_result"' in src, (
-        "iter-26 must create the inspection_result table"
-    )
+    assert (
+        'op.create_table(\n        "inspection_result"' in src
+    ), "iter-26 must create the inspection_result table"
     # Guard: no other table create — iter-26 is standalone.
     create_table_count = src.count("op.create_table(")
     assert create_table_count == 1, (

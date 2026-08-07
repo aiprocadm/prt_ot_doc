@@ -13,14 +13,27 @@ from app.services.sout_import import ImportValidationError, apply_import, previe
 
 def test_import_preview_schema_roundtrip():
     row = ImportWorkplaceRow(
-        row_index=0, workplace_code="РМ-01", position_name="Слесарь",
-        parsed_class="acceptable", current_class=None, change="new",
-        factors=[ImportFactorRow(code=None, name="Шум", parsed_class="harmful_3_1", class_unparsed=None)],
-        errors=[], warnings=["класс 1-2, но указан вредный фактор (3.1+)"],
+        row_index=0,
+        workplace_code="РМ-01",
+        position_name="Слесарь",
+        parsed_class="acceptable",
+        current_class=None,
+        change="new",
+        factors=[
+            ImportFactorRow(code=None, name="Шум", parsed_class="harmful_3_1", class_unparsed=None)
+        ],
+        errors=[],
+        warnings=["класс 1-2, но указан вредный фактор (3.1+)"],
     )
     preview = ImportPreview(
-        campaign_id="c1", rows=[row], new_count=1, changed_count=0,
-        unchanged_count=0, removed_count=0, error_count=0, can_apply=True,
+        campaign_id="c1",
+        rows=[row],
+        new_count=1,
+        changed_count=0,
+        unchanged_count=0,
+        removed_count=0,
+        error_count=0,
+        can_apply=True,
     )
     assert preview.rows[0].change == "new"
     assert preview.can_apply is True
@@ -56,10 +69,15 @@ async def campaign(db_session):
     c = SoutCampaign(tenant_id=t.id, name="СОУТ 2026")
     db_session.add(c)
     await db_session.flush()
-    db_session.add(SoutWorkplace(
-        tenant_id=t.id, campaign_id=c.id, workplace_code="РМ-01",
-        position_name="Слесарь", assessed_class=SoutClass.ACCEPTABLE,
-    ))
+    db_session.add(
+        SoutWorkplace(
+            tenant_id=t.id,
+            campaign_id=c.id,
+            workplace_code="РМ-01",
+            position_name="Слесарь",
+            assessed_class=SoutClass.ACCEPTABLE,
+        )
+    )
     await db_session.flush()
     return t, c
 
@@ -68,10 +86,12 @@ async def campaign(db_session):
 async def test_preview_classifies_new_changed_unchanged(db_session, campaign):
     t, c = campaign
     content = _csv(
-        "РМ-01,Слесарь,3.1,,\n"     # changed (было acceptable)
-        "РМ-02,Сварщик,2,,\n"        # new
+        "РМ-01,Слесарь,3.1,,\n"  # changed (было acceptable)
+        "РМ-02,Сварщик,2,,\n"  # new
     )
-    preview = await preview_import(db_session, tenant=t, campaign_id=c.id, content=content, filename="r.csv")
+    preview = await preview_import(
+        db_session, tenant=t, campaign_id=c.id, content=content, filename="r.csv"
+    )
     by_code = {r.workplace_code: r for r in preview.rows}
     assert by_code["РМ-01"].change == "changed"
     assert by_code["РМ-02"].change == "new"
@@ -82,7 +102,9 @@ async def test_preview_classifies_new_changed_unchanged(db_session, campaign):
 @pytest.mark.asyncio
 async def test_preview_missing_campaign_returns_none(db_session):
     t = _Tenant()
-    out = await preview_import(db_session, tenant=t, campaign_id="nope", content=_csv("РМ-9,X,2,,\n"), filename="r.csv")
+    out = await preview_import(
+        db_session, tenant=t, campaign_id="nope", content=_csv("РМ-9,X,2,,\n"), filename="r.csv"
+    )
     assert out is None
 
 
@@ -90,15 +112,19 @@ async def test_preview_missing_campaign_returns_none(db_session):
 async def test_apply_creates_updates_and_writes_history(db_session, campaign):
     t, c = campaign
     content = _csv(
-        "РМ-01,Слесарь,3.1,,\n"          # changed → history old=acceptable new=3.1
-        "РМ-02,Сварщик,2,Шум,3.1\n"      # new + factor
+        "РМ-01,Слесарь,3.1,,\n"  # changed → history old=acceptable new=3.1
+        "РМ-02,Сварщик,2,Шум,3.1\n"  # new + factor
     )
-    result = await apply_import(db_session, tenant=t, campaign_id=c.id, content=content, filename="r.csv")
+    result = await apply_import(
+        db_session, tenant=t, campaign_id=c.id, content=content, filename="r.csv"
+    )
     assert result.created == 1 and result.updated == 1
     await db_session.flush()
-    wps = (await db_session.execute(
-        select(SoutWorkplace).where(SoutWorkplace.campaign_id == c.id)
-    )).scalars().all()
+    wps = (
+        (await db_session.execute(select(SoutWorkplace).where(SoutWorkplace.campaign_id == c.id)))
+        .scalars()
+        .all()
+    )
     assert {w.workplace_code for w in wps} == {"РМ-01", "РМ-02"}
     rm01 = next(w for w in wps if w.workplace_code == "РМ-01")
     assert rm01.assessed_class == SoutClass.HARMFUL_3_1
@@ -115,9 +141,11 @@ async def test_apply_changed_syncs_position_name(db_session, campaign):
     content = _csv("РМ-01,Слесарь-ремонтник,3.1,,\n")  # класс изменился + имя должности
     await apply_import(db_session, tenant=t, campaign_id=c.id, content=content, filename="r.csv")
     await db_session.flush()
-    rm01 = (await db_session.execute(
-        select(SoutWorkplace).where(SoutWorkplace.workplace_code == "РМ-01")
-    )).scalar_one()
+    rm01 = (
+        await db_session.execute(
+            select(SoutWorkplace).where(SoutWorkplace.workplace_code == "РМ-01")
+        )
+    ).scalar_one()
     assert rm01.position_name == "Слесарь-ремонтник"
     assert rm01.assessed_class == SoutClass.HARMFUL_3_1
 
@@ -127,10 +155,18 @@ async def test_apply_all_or_nothing_on_blocking_error(db_session, campaign):
     t, c = campaign
     content = _csv("РМ-03,,2,,\n")  # пустая должность → блокирующая ошибка
     with pytest.raises(ImportValidationError):
-        await apply_import(db_session, tenant=t, campaign_id=c.id, content=content, filename="r.csv")
-    wps = (await db_session.execute(
-        select(SoutWorkplace).where(SoutWorkplace.workplace_code == "РМ-03")
-    )).scalars().all()
+        await apply_import(
+            db_session, tenant=t, campaign_id=c.id, content=content, filename="r.csv"
+        )
+    wps = (
+        (
+            await db_session.execute(
+                select(SoutWorkplace).where(SoutWorkplace.workplace_code == "РМ-03")
+            )
+        )
+        .scalars()
+        .all()
+    )
     assert wps == []
 
 
@@ -138,5 +174,7 @@ async def test_apply_all_or_nothing_on_blocking_error(db_session, campaign):
 async def test_apply_idempotent_second_run_is_noop(db_session, campaign):
     t, c = campaign
     content = _csv("РМ-01,Слесарь,2,,\n")  # совпадает с существующим → unchanged
-    result = await apply_import(db_session, tenant=t, campaign_id=c.id, content=content, filename="r.csv")
+    result = await apply_import(
+        db_session, tenant=t, campaign_id=c.id, content=content, filename="r.csv"
+    )
     assert result.created == 0 and result.updated == 0 and result.skipped == 1

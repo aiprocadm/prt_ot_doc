@@ -3,6 +3,7 @@
 Text-level checks (no route imports — un-collectable on this machine);
 HTTP-level honesty is covered by tests/api/.
 """
+
 from __future__ import annotations
 
 from pathlib import Path

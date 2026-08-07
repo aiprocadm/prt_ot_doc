@@ -25,7 +25,9 @@ def _depends_call_by_parameter(endpoint: Callable[..., object], parameter_name: 
             if isinstance(metadata, Depends):
                 return metadata.dependency
 
-    raise AssertionError(f"Parameter {parameter_name} on {endpoint.__name__} has no Depends() binding")
+    raise AssertionError(
+        f"Parameter {parameter_name} on {endpoint.__name__} has no Depends() binding"
+    )
 
 
 def test_files_access_roles_read_write_parity() -> None:

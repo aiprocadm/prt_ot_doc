@@ -20,9 +20,9 @@ def test_allowed_transitions():
 
 def test_unknown_status_rejected():
     with pytest.raises(lc.PermitTransitionError):
-        lc.validate_transition(lc.PERMIT_STATUS_ACTIVE, "draft")     # unknown target
+        lc.validate_transition(lc.PERMIT_STATUS_ACTIVE, "draft")  # unknown target
     with pytest.raises(lc.PermitTransitionError):
-        lc.validate_transition("pending", lc.PERMIT_STATUS_ACTIVE)   # unknown current
+        lc.validate_transition("pending", lc.PERMIT_STATUS_ACTIVE)  # unknown current
 
 
 def test_forbidden_transitions_raise():

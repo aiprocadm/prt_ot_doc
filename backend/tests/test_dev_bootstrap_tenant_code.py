@@ -12,8 +12,6 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-import pytest
-
 ROOT = Path(__file__).resolve().parents[2]
 DEV_BOOTSTRAP_FILE = ROOT / "backend" / "app" / "services" / "dev_bootstrap.py"
 
@@ -23,10 +21,7 @@ def _find_tenant_constructor_kwargs() -> set[str]:
     inside bootstrap_admin_user. There should be exactly one such call."""
     tree = ast.parse(DEV_BOOTSTRAP_FILE.read_text(encoding="utf-8"))
     for node in ast.walk(tree):
-        if not (
-            isinstance(node, ast.AsyncFunctionDef)
-            and node.name == "bootstrap_admin_user"
-        ):
+        if not (isinstance(node, ast.AsyncFunctionDef) and node.name == "bootstrap_admin_user"):
             continue
         for sub in ast.walk(node):
             if (
@@ -57,6 +52,4 @@ def test_dev_bootstrap_tenant_constructor_sets_required_columns() -> None:
     kwargs = _find_tenant_constructor_kwargs()
     required = {"code", "slug", "name", "contact_email", "schema_name", "is_active"}
     missing = required - kwargs
-    assert not missing, (
-        f"Tenant() constructor in dev_bootstrap missing required kwargs: {missing}"
-    )
+    assert not missing, f"Tenant() constructor in dev_bootstrap missing required kwargs: {missing}"

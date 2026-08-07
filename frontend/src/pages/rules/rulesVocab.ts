@@ -1,4 +1,8 @@
-import type { RuleActionType, RuleConditionOp, TriggerStatus } from "@/types/dto/rules";
+import type {
+  RuleActionType,
+  RuleConditionOp,
+  TriggerStatus,
+} from "@/types/dto/rules";
 
 export const OP_LABELS: Record<RuleConditionOp, string> = {
   eq: "равно",
@@ -10,26 +14,26 @@ export const OP_LABELS: Record<RuleConditionOp, string> = {
   lt: "меньше",
   lte: "не больше",
   contains: "содержит",
-  exists: "заполнено"
+  exists: "заполнено",
 };
 
 export const ACTION_LABELS: Record<RuleActionType, string> = {
   create_task: "Создать задачу",
   notify: "Уведомление",
-  webhook: "Webhook"
+  webhook: "Webhook",
 };
 
 export const STATUS_LABELS: Record<TriggerStatus, string> = {
   success: "Успех",
   partial: "Частично",
-  error: "Ошибка"
+  error: "Ошибка",
 };
 
 export const OUTCOME_LABELS: Record<string, string> = {
   created: "создано",
   deduped: "дубль",
   suppressed: "подавлено",
-  error: "ошибка"
+  error: "ошибка",
 };
 
 export const EVENT_LABELS: Record<string, string> = {
@@ -57,7 +61,7 @@ export const EVENT_LABELS: Record<string, string> = {
   "contractor.readiness_blocked": "Подрядчик не допущен",
   "contractor.readiness_warning": "Подрядчик: предупреждение",
   PEPSigned: "ПЭП: подписано",
-  PEPDeclined: "ПЭП: отклонено"
+  PEPDeclined: "ПЭП: отклонено",
 };
 
 export const eventLabel = (code: string): string => EVENT_LABELS[code] ?? code;
@@ -69,7 +73,7 @@ const KIND_LABELS: Record<string, string> = {
   datetime: "дата-время",
   date: "дата",
   array: "список",
-  object: "объект"
+  object: "объект",
 };
 
 export const kindLabel = (kind: string): string => KIND_LABELS[kind] ?? kind;

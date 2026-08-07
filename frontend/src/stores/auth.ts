@@ -7,8 +7,12 @@ import { resetTenantStores } from "@/stores/reset";
 import { useTenantStore } from "@/stores/tenant";
 import { normalizeError } from "@/utils/apiFormErrors";
 import type { ApiError } from "@/types/dto/common";
-import type { LoginRequestDto, LoginResponseDto, PermissionsResponseDto, UserDto } from "@/types/dto/auth";
-
+import type {
+  LoginRequestDto,
+  LoginResponseDto,
+  PermissionsResponseDto,
+  UserDto,
+} from "@/types/dto/auth";
 
 type LoginActionPayload = LoginRequestDto & {
   tenant: string;
@@ -28,35 +32,44 @@ interface AuthState {
 
 const persistTokens = (payload: { access_token: string }) => {
   tokenStorage.setTokens({
-    accessToken: payload.access_token
+    accessToken: payload.access_token,
   });
 };
 
-
-
-const hydratePermissions = async (user: UserDto | null): Promise<UserDto | null> => {
+const hydratePermissions = async (
+  user: UserDto | null,
+): Promise<UserDto | null> => {
   if (!user) return user;
   try {
-    const { data } = await apiClient.get<PermissionsResponseDto>("/auth/me/permissions");
+    const { data } = await apiClient.get<PermissionsResponseDto>(
+      "/auth/me/permissions",
+    );
     return {
       ...user,
       roles: data.roles?.length ? data.roles : user.roles,
       permissions: data.permissions,
       attributes: {
         ...(user.attributes ?? {}),
-        company_ids: data.abac_scopes?.company_ids ?? user.attributes?.company_ids,
+        company_ids:
+          data.abac_scopes?.company_ids ?? user.attributes?.company_ids,
         site_ids: data.abac_scopes?.site_ids ?? user.attributes?.site_ids,
-        project_ids: data.abac_scopes?.project_ids ?? user.attributes?.project_ids,
-        contractor_ids: data.abac_scopes?.contractor_ids ?? user.attributes?.contractor_ids,
-        risk_level_max: data.abac_scopes?.risk_level_max ?? user.attributes?.risk_level_max
-      }
+        project_ids:
+          data.abac_scopes?.project_ids ?? user.attributes?.project_ids,
+        contractor_ids:
+          data.abac_scopes?.contractor_ids ?? user.attributes?.contractor_ids,
+        risk_level_max:
+          data.abac_scopes?.risk_level_max ?? user.attributes?.risk_level_max,
+      },
     };
   } catch {
     return user;
   }
 };
 
-const loadProfileWithPermissions = async (): Promise<{ profile: UserDto | null; profileError: ApiError | null }> => {
+const loadProfileWithPermissions = async (): Promise<{
+  profile: UserDto | null;
+  profileError: ApiError | null;
+}> => {
   let profile: UserDto | null = null;
   let profileError: ApiError | null = null;
   try {
@@ -104,10 +117,12 @@ export const useAuthStore = createWithEqualityFn<AuthState>()(
       });
       try {
         const tenantSlug = payload.tenant.trim();
-        useTenantStore.getState().setTenant({ slug: tenantSlug, name: tenantSlug });
+        useTenantStore
+          .getState()
+          .setTenant({ slug: tenantSlug, name: tenantSlug });
         const { data } = await apiClient.post<LoginResponseDto>("/auth/login", {
           email: payload.email,
-          password: payload.password
+          password: payload.password,
         });
         persistTokens(data);
         const { profile, profileError } = await loadProfileWithPermissions();
@@ -163,6 +178,6 @@ export const useAuthStore = createWithEqualityFn<AuthState>()(
         state.initialized = true;
         state.error = null;
       });
-    }
-  }))
+    },
+  })),
 );

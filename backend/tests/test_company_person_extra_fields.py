@@ -42,13 +42,24 @@ def test_company_update_accepts_status_tags() -> None:
 
 
 def test_person_create_and_read_position_title() -> None:
-    p = PersonCreate(company_id="comp-1", first_name="Иван", last_name="Иванов", position_title="Слесарь")
+    p = PersonCreate(
+        company_id="comp-1", first_name="Иван", last_name="Иванов", position_title="Слесарь"
+    )
     assert p.position_title == "Слесарь"
     r = PersonRead.model_validate(
-        {"id": "p1", "company_id": "comp-1", "first_name": "Иван", "last_name": "Иванов", "position_title": "Слесарь"}
+        {
+            "id": "p1",
+            "company_id": "comp-1",
+            "first_name": "Иван",
+            "last_name": "Иванов",
+            "position_title": "Слесарь",
+        }
     )
     assert r.position_title == "Слесарь"
 
 
 def test_person_update_accepts_position_title() -> None:
-    assert PersonUpdate(position_title="Мастер").model_dump(exclude_unset=True)["position_title"] == "Мастер"
+    assert (
+        PersonUpdate(position_title="Мастер").model_dump(exclude_unset=True)["position_title"]
+        == "Мастер"
+    )

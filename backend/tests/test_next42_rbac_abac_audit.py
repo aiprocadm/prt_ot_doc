@@ -31,7 +31,9 @@ def test_policy_engine_allow_with_permission_and_abac_policy() -> None:
         resource="documents",
         action="read",
         effect="allow",
-        conditions_json={"all": [{"attr": "company_id", "op": "in", "value": "$scope.company_ids"}]},
+        conditions_json={
+            "all": [{"attr": "company_id", "op": "in", "value": "$scope.company_ids"}]
+        },
         priority=10,
         enabled=True,
         created_at=datetime.now(tz=timezone.utc),
@@ -42,7 +44,11 @@ def test_policy_engine_allow_with_permission_and_abac_policy() -> None:
         subject,
         "read",
         Resource(resource_type="documents", attrs={"company_id": "c1"}),
-        PolicyContext(tenant_id="t1", abac_scopes={"company_ids": ["c1"]}, request_attrs={"policies": [policy]}),
+        PolicyContext(
+            tenant_id="t1",
+            abac_scopes={"company_ids": ["c1"]},
+            request_attrs={"policies": [policy]},
+        ),
     )
     assert decision.allow is True
     assert decision.matched_policy_id == "p-1"
@@ -86,7 +92,11 @@ def test_deny_overrides_allow_same_priority() -> None:
         subject,
         "read",
         Resource(resource_type="documents", attrs={"company_id": "c1", "status": "archived"}),
-        PolicyContext(tenant_id="t1", abac_scopes={"company_ids": ["c1"]}, request_attrs={"policies": [allow_policy, deny_policy]}),
+        PolicyContext(
+            tenant_id="t1",
+            abac_scopes={"company_ids": ["c1"]},
+            request_attrs={"policies": [allow_policy, deny_policy]},
+        ),
     )
     assert decision.allow is False
     assert decision.reason == "policy_deny"
@@ -115,7 +125,10 @@ def test_condition_ops(op: str, left, right, expected: bool) -> None:
 
 def test_field_level_diff_nested_and_masking() -> None:
     before = {"profile": {"email": "a@x.com", "name": "A"}, "items": [{"id": "1", "v": 1}]}
-    after = {"profile": {"email": "b@x.com", "name": "B"}, "items": [{"id": "1", "v": 2}, {"id": "2", "v": 3}]}
+    after = {
+        "profile": {"email": "b@x.com", "name": "B"},
+        "items": [{"id": "1", "v": 2}, {"id": "2", "v": 3}],
+    }
     diff = field_level_diff(before, after)
     assert "profile.email" in diff["fields"]
     assert diff["fields"]["profile.email"]["to"].endswith("@x.com")

@@ -28,7 +28,10 @@ describe("ApprovalsOutboxPage", () => {
         email: "user@example.com",
         full_name: "User",
         roles: ["ot_specialist"],
-        permissions: [PERMISSIONS.DOCUMENT_VIEW, PERMISSIONS.ADMIN_OUTBOX_MANAGE],
+        permissions: [
+          PERMISSIONS.DOCUMENT_VIEW,
+          PERMISSIONS.ADMIN_OUTBOX_MANAGE,
+        ],
       },
       loading: false,
       error: null,
@@ -64,10 +67,12 @@ describe("ApprovalsOutboxPage", () => {
     render(
       <MemoryRouter>
         <ApprovalsOutboxPage />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
 
-    expect(await screen.findByText(/исходящие согласования пока отсутствуют/i)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/исходящие согласования пока отсутствуют/i),
+    ).toBeInTheDocument();
   });
 
   it("shows approval outbox rows and retry actions", async () => {
@@ -111,10 +116,12 @@ describe("ApprovalsOutboxPage", () => {
     render(
       <MemoryRouter>
         <ApprovalsOutboxPage />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
 
-    expect(await screen.findByText(/доставки согласований/i)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/доставки согласований/i),
+    ).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /повторить/i }));
     await waitFor(() => {
@@ -123,7 +130,9 @@ describe("ApprovalsOutboxPage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /в очередь/i }));
     await waitFor(() => {
-      expect(postMock).toHaveBeenCalledWith("/admin/outbox/events/event-1/requeue");
+      expect(postMock).toHaveBeenCalledWith(
+        "/admin/outbox/events/event-1/requeue",
+      );
     });
   });
 
@@ -133,7 +142,7 @@ describe("ApprovalsOutboxPage", () => {
     render(
       <MemoryRouter>
         <ApprovalsOutboxPage />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
 
     await waitFor(() => {

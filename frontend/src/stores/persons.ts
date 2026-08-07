@@ -2,7 +2,11 @@ import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
 
 import { apiClient } from "@/api/client";
-import { buildPersonCreateBody, buildPersonPatchBody, normalizePersonRead } from "@/api/personsApi";
+import {
+  buildPersonCreateBody,
+  buildPersonPatchBody,
+  normalizePersonRead,
+} from "@/api/personsApi";
 import { defaultPagination } from "@/stores/helpers";
 import type { PaginatedState } from "@/stores/types";
 import type { PersonDto, PersonStatus } from "@/types/dto/persons";
@@ -63,7 +67,7 @@ export const usePersonsStore = create<PersonsState>()(
         pagination: defaultPagination(),
         loading: false,
         error: null,
-        personsRegistryRevision: 0
+        personsRegistryRevision: 0,
       }));
     },
     list: async (params) => {
@@ -73,20 +77,26 @@ export const usePersonsStore = create<PersonsState>()(
       });
       const { page, page_size: pageSize } = get().pagination;
       const rawLimit = Number(pageSize);
-      const limit = Math.min(200, Math.max(1, Number.isFinite(rawLimit) ? rawLimit : 10));
+      const limit = Math.min(
+        200,
+        Math.max(1, Number.isFinite(rawLimit) ? rawLimit : 10),
+      );
       const rawPage = Number(page);
-      const safePage = Number.isFinite(rawPage) && rawPage >= 1 ? Math.floor(rawPage) : 1;
+      const safePage =
+        Number.isFinite(rawPage) && rawPage >= 1 ? Math.floor(rawPage) : 1;
       const offset = Math.max(0, (safePage - 1) * limit);
       const query = { ...get().filters, ...params, limit, offset };
       try {
-        const { data } = await apiClient.get<PersonListResponse>("/persons", { params: query });
+        const { data } = await apiClient.get<PersonListResponse>("/persons", {
+          params: query,
+        });
         const items = (data.items ?? []).map((row) => normalizePersonRead(row));
         set((state) => {
           state.items = items;
           state.pagination = {
             page,
             page_size: pageSize,
-            total: data.total ?? items.length
+            total: data.total ?? items.length,
           };
         });
       } catch (error) {
@@ -130,7 +140,9 @@ export const usePersonsStore = create<PersonsState>()(
       const { data } = await apiClient.patch<unknown>(`/persons/${id}`, body);
       const normalized = normalizePersonRead(data);
       set((state) => {
-        state.items = state.items.map((person) => (person.id === id ? normalized : person));
+        state.items = state.items.map((person) =>
+          person.id === id ? normalized : person,
+        );
         if (state.item?.id === id) {
           state.item = normalized;
         }
@@ -153,6 +165,6 @@ export const usePersonsStore = create<PersonsState>()(
         });
         throw error;
       }
-    }
-  }))
+    },
+  })),
 );

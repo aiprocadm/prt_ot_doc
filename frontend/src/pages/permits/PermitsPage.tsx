@@ -28,9 +28,12 @@ type PermitsData = {
   counts: { total: number; active: number; expired: number };
 };
 
-const permitBadge = (p: PermitDto): { label: string; variant: "default" | "secondary" | "destructive" } => {
+const permitBadge = (
+  p: PermitDto,
+): { label: string; variant: "default" | "secondary" | "destructive" } => {
   if (p.status === "revoked") return { label: "Отозван", variant: "secondary" };
-  if (p.is_expired || p.status === "expired") return { label: "Просрочен", variant: "destructive" };
+  if (p.is_expired || p.status === "expired")
+    return { label: "Просрочен", variant: "destructive" };
   return { label: "Действует", variant: "default" };
 };
 
@@ -47,15 +50,19 @@ const PermitsPage = () => {
       fetchAllPersons(),
       permitsApi.countPermits({}),
       permitsApi.countPermits({ status: "active" }),
-      permitsApi.countPermits({ expired_only: true })
+      permitsApi.countPermits({ expired_only: true }),
     ]);
     return { permits: page.items, persons, counts: { total, active, expired } };
   }, [statusFilter, expiredOnly]);
 
   const { data, loading, error, reload } = useAsyncResource<PermitsData>({
     loader,
-    initialData: { permits: [], persons: [], counts: { total: 0, active: 0, expired: 0 } },
-    errorMessage: "Не удалось загрузить допуски"
+    initialData: {
+      permits: [],
+      persons: [],
+      counts: { total: 0, active: 0, expired: 0 },
+    },
+    errorMessage: "Не удалось загрузить допуски",
   });
 
   const personName = useMemo(() => {
@@ -69,7 +76,7 @@ const PermitsPage = () => {
       [personName(permit.person_id), permit.permit_type, permit.status]
         .join(" ")
         .toLowerCase()
-        .includes(query)
+        .includes(query),
   });
 
   const onChanged = useCallback(() => void reload(), [reload]);
@@ -78,18 +85,22 @@ const PermitsPage = () => {
     {
       id: "person",
       header: "Сотрудник",
-      cell: ({ row }) => <span className="font-medium">{personName(row.original.person_id)}</span>
+      cell: ({ row }) => (
+        <span className="font-medium">
+          {personName(row.original.person_id)}
+        </span>
+      ),
     },
     { accessorKey: "permit_type", header: "Тип допуска" },
     {
       accessorKey: "issued_at",
       header: "Выдан",
-      cell: ({ row }) => formatDate(row.original.issued_at) || "—"
+      cell: ({ row }) => formatDate(row.original.issued_at) || "—",
     },
     {
       accessorKey: "valid_until",
       header: "Действует до",
-      cell: ({ row }) => formatDate(row.original.valid_until) || "—"
+      cell: ({ row }) => formatDate(row.original.valid_until) || "—",
     },
     {
       accessorKey: "status",
@@ -97,16 +108,20 @@ const PermitsPage = () => {
       cell: ({ row }) => {
         const badge = permitBadge(row.original);
         return <Badge variant={badge.variant}>{badge.label}</Badge>;
-      }
+      },
     },
     {
       id: "actions",
       header: "Действия",
       cell: ({ row }) => {
         const permit = row.original;
-        if (permit.status === "revoked") return <span className="text-muted-foreground">—</span>;
+        if (permit.status === "revoked")
+          return <span className="text-muted-foreground">—</span>;
         return (
-          <Can permission={PERMISSIONS.PERMIT_MANAGE} fallback={<span className="text-muted-foreground">—</span>}>
+          <Can
+            permission={PERMISSIONS.PERMIT_MANAGE}
+            fallback={<span className="text-muted-foreground">—</span>}
+          >
             <div className="flex gap-2">
               {permit.status === "active" ? (
                 <PermitFormDialog
@@ -141,8 +156,8 @@ const PermitsPage = () => {
             </div>
           </Can>
         );
-      }
-    }
+      },
+    },
   ];
 
   return (
@@ -153,14 +168,12 @@ const PermitsPage = () => {
         stats={[
           { label: "Всего", value: data.counts.total },
           { label: "Действует", value: data.counts.active },
-          { label: "Просрочено", value: data.counts.expired }
+          { label: "Просрочено", value: data.counts.expired },
         ]}
         actions={
           <Can
             permission={PERMISSIONS.PERMIT_MANAGE}
-            fallback={
-              <Button disabled>Новый допуск</Button>
-            }
+            fallback={<Button disabled>Новый допуск</Button>}
           >
             <PermitFormDialog
               persons={data.persons}
@@ -195,12 +208,19 @@ const PermitsPage = () => {
             </label>
           </div>
 
-          <ErrorState error={error ?? undefined} onRetry={() => void reload()} />
+          <ErrorState
+            error={error ?? undefined}
+            onRetry={() => void reload()}
+          />
           {loading ? <LoadingScreen label="Загрузка допусков" /> : null}
           {!loading && !error && registry.total === 0 ? (
             <EmptyState
               title="Допуски не найдены"
-              description={registry.query ? "Измените запрос поиска." : "В этом tenant пока нет допусков."}
+              description={
+                registry.query
+                  ? "Измените запрос поиска."
+                  : "В этом tenant пока нет допусков."
+              }
             />
           ) : null}
           {!loading && !error && registry.total > 0 ? (

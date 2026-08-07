@@ -22,8 +22,6 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-import pytest
-
 from app.models.models import RoleEnum, UserRole
 from app.modules.workflow.api import _extract_role_codes
 
@@ -108,7 +106,9 @@ def test_extract_role_codes_matches_workflowtask_assignee_role_code_format() -> 
     :attr:`WorkflowTask.assignee_role_code` (a plain String column populated
     via :class:`RoleEnum` ``.value``). Pin the contract."""
 
-    from app.modules.workflow.service import WorkflowService  # late import — avoids circular at module load
+    from app.modules.workflow.service import (
+        WorkflowService,  # late import — avoids circular at module load
+    )
 
     # Service uses role_codes for an SQL IN-clause filter against assignee_role_code.
     # No actual DB call here — we just sanity-check that the extracted code is a

@@ -9,10 +9,20 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ExpenseFormDialog } from "@/features/budget/ExpenseFormDialog";
-import { BUDGET_DOMAIN_LABELS, BUDGET_DOMAINS, formatRub, toApiError } from "@/pages/budget/budgetVocab";
+import {
+  BUDGET_DOMAIN_LABELS,
+  BUDGET_DOMAINS,
+  formatRub,
+  toApiError,
+} from "@/pages/budget/budgetVocab";
 import { PERMISSIONS } from "@/permissions/permissions";
 import type { ApiError } from "@/types/dto/common";
-import type { BudgetArticlePageDto, BudgetDomain, BudgetExpenseDto, BudgetExpensePageDto } from "@/types/dto/budget";
+import type {
+  BudgetArticlePageDto,
+  BudgetDomain,
+  BudgetExpenseDto,
+  BudgetExpensePageDto,
+} from "@/types/dto/budget";
 
 interface Props {
   expenses: BudgetExpensePageDto;
@@ -33,7 +43,9 @@ export const ExpensesTab = ({ expenses, articles, onChanged }: Props) => {
   // Каждый фильтр независим (в отличие от Сводки, где обе границы периода обязаны идти
   // парой) — отправляем только непустые поля, иначе пустая строка ушла бы на бэкенд как
   // валидный (но неверный) фильтр.
-  const hasFilter = Boolean(domainFilter || articleFilter || dateFrom || dateTo);
+  const hasFilter = Boolean(
+    domainFilter || articleFilter || dateFrom || dateTo,
+  );
 
   const fetchList = useCallback(() => {
     if (!hasFilter) {
@@ -49,7 +61,12 @@ export const ExpensesTab = ({ expenses, articles, onChanged }: Props) => {
     const seq = ++requestSeq.current;
     setListLoading(true);
     setListError(null);
-    const params: { domain?: BudgetDomain; article_id?: string; date_from?: string; date_to?: string } = {};
+    const params: {
+      domain?: BudgetDomain;
+      article_id?: string;
+      date_from?: string;
+      date_to?: string;
+    } = {};
     if (domainFilter) params.domain = domainFilter;
     if (articleFilter) params.article_id = articleFilter;
     if (dateFrom) params.date_from = dateFrom;
@@ -60,7 +77,8 @@ export const ExpensesTab = ({ expenses, articles, onChanged }: Props) => {
         if (seq === requestSeq.current) setItems(page.items);
       })
       .catch((err) => {
-        if (seq === requestSeq.current) setListError(toApiError(err, "Не удалось загрузить расходы"));
+        if (seq === requestSeq.current)
+          setListError(toApiError(err, "Не удалось загрузить расходы"));
       })
       .finally(() => {
         if (seq === requestSeq.current) setListLoading(false);
@@ -91,7 +109,9 @@ export const ExpensesTab = ({ expenses, articles, onChanged }: Props) => {
               id="expense-domain-filter"
               className="h-9 rounded-md border px-3 text-sm"
               value={domainFilter}
-              onChange={(e) => setDomainFilter(e.target.value as BudgetDomain | "")}
+              onChange={(e) =>
+                setDomainFilter(e.target.value as BudgetDomain | "")
+              }
             >
               <option value="">Все домены</option>
               {BUDGET_DOMAINS.map((d) => (
@@ -128,11 +148,20 @@ export const ExpensesTab = ({ expenses, articles, onChanged }: Props) => {
           </div>
           <div className="space-y-1">
             <Label htmlFor="expense-date-to">По</Label>
-            <Input id="expense-date-to" type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+            <Input
+              id="expense-date-to"
+              type="date"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+            />
           </div>
         </div>
         <Can permission={PERMISSIONS.BUDGET_MANAGE}>
-          <ExpenseFormDialog trigger={<Button>Новый расход</Button>} articles={articles} onSubmitted={onChanged} />
+          <ExpenseFormDialog
+            trigger={<Button>Новый расход</Button>}
+            articles={articles}
+            onSubmitted={onChanged}
+          />
         </Can>
       </div>
 
@@ -141,9 +170,15 @@ export const ExpensesTab = ({ expenses, articles, onChanged }: Props) => {
 
       {!listLoading && !listError && items.length === 0 ? (
         hasFilter ? (
-          <EmptyState title="Ничего не найдено по фильтрам" description="Измените или сбросьте фильтры." />
+          <EmptyState
+            title="Ничего не найдено по фильтрам"
+            description="Измените или сбросьте фильтры."
+          />
         ) : (
-          <EmptyState title="Расходов нет" description="Добавьте первый расход." />
+          <EmptyState
+            title="Расходов нет"
+            description="Добавьте первый расход."
+          />
         )
       ) : null}
 
@@ -165,8 +200,12 @@ export const ExpensesTab = ({ expenses, articles, onChanged }: Props) => {
                 <tr key={expense.id} className="border-b last:border-0">
                   <td className="py-2 pr-4">{expense.occurred_on}</td>
                   <td className="py-2 pr-4">{expense.title}</td>
-                  <td className="py-2 pr-4">{BUDGET_DOMAIN_LABELS[expense.domain]}</td>
-                  <td className="py-2 pr-4">{expense.article_name ?? "— без статьи"}</td>
+                  <td className="py-2 pr-4">
+                    {BUDGET_DOMAIN_LABELS[expense.domain]}
+                  </td>
+                  <td className="py-2 pr-4">
+                    {expense.article_name ?? "— без статьи"}
+                  </td>
                   <td className="py-2 pr-4">{formatRub(expense.amount)}</td>
                   <td className="py-2">
                     <Can permission={PERMISSIONS.BUDGET_MANAGE}>
@@ -181,7 +220,11 @@ export const ExpensesTab = ({ expenses, articles, onChanged }: Props) => {
                           articles={articles}
                           onSubmitted={onChanged}
                         />
-                        <Button size="sm" variant="destructive" onClick={() => void removeExpense(expense)}>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => void removeExpense(expense)}
+                        >
                           Удалить
                         </Button>
                       </div>

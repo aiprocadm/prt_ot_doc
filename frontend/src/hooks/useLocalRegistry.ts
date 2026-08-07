@@ -6,7 +6,11 @@ type LocalRegistryOptions<TItem> = {
   initialPageSize?: number;
 };
 
-export const useLocalRegistry = <TItem>({ items, match, initialPageSize = 10 }: LocalRegistryOptions<TItem>) => {
+export const useLocalRegistry = <TItem>({
+  items,
+  match,
+  initialPageSize = 10,
+}: LocalRegistryOptions<TItem>) => {
   const [pageIndex, setPageIndex] = useState(1);
   const [pageSize, setPageSize] = useState(initialPageSize);
   const [query, setQuery] = useState("");
@@ -45,6 +49,6 @@ export const useLocalRegistry = <TItem>({ items, match, initialPageSize = 10 }: 
     total: filtered.length,
     onSearchChange,
     onPageChange,
-    onPageSizeChange
+    onPageSizeChange,
   };
 };

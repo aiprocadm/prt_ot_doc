@@ -23,7 +23,9 @@ async def test_stub_accounting_export_has_non_production_details() -> None:
 
     status = await provider.export_document({"doc_id": "d-1"})
 
-    _assert_non_production_details(status.details, provider=provider.name, operation="export_document")
+    _assert_non_production_details(
+        status.details, provider=provider.name, operation="export_document"
+    )
     assert status.details["received"] is True
 
 
@@ -40,7 +42,9 @@ async def test_stub_frdo_submit_has_non_production_details() -> None:
 
     status = await provider.submit_record({"record": "r-1"})
 
-    _assert_non_production_details(status.details, provider=provider.name, operation="submit_record")
+    _assert_non_production_details(
+        status.details, provider=provider.name, operation="submit_record"
+    )
     assert status.details["payload"] == {"record": "r-1"}
 
 
@@ -50,5 +54,7 @@ async def test_stub_eisot_publish_has_non_production_details() -> None:
 
     status = await provider.publish_report({"report": "rp-1"})
 
-    _assert_non_production_details(status.details, provider=provider.name, operation="publish_report")
+    _assert_non_production_details(
+        status.details, provider=provider.name, operation="publish_report"
+    )
     assert status.details["payload"] == {"report": "rp-1"}

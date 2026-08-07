@@ -23,13 +23,13 @@ const TASK_TYPE_OPTIONS = [
   { value: "training_plan", label: "Обучение" },
   { value: "medical_requirement", label: "Медосмотры" },
   { value: "inspection", label: "Инспекции" },
-  { value: "attestation", label: "Аттестации" }
+  { value: "attestation", label: "Аттестации" },
 ];
 
 const DUE_FILTER_OPTIONS = [
   { value: "all", label: "Все задачи" },
   { value: "upcoming", label: "Предстоящие" },
-  { value: "overdue", label: "Просроченные" }
+  { value: "overdue", label: "Просроченные" },
 ];
 
 const PRIORITY_OPTIONS = [
@@ -37,12 +37,13 @@ const PRIORITY_OPTIONS = [
   { value: "low", label: "Низкий" },
   { value: "medium", label: "Средний" },
   { value: "high", label: "Высокий" },
-  { value: "critical", label: "Критичный" }
+  { value: "critical", label: "Критичный" },
 ];
 
 const TASK_PRIORITIES: TaskPriority[] = ["low", "medium", "high", "critical"];
 
-const isTaskPriority = (value: string): value is TaskPriority => TASK_PRIORITIES.includes(value as TaskPriority);
+const isTaskPriority = (value: string): value is TaskPriority =>
+  TASK_PRIORITIES.includes(value as TaskPriority);
 
 const TasksPage = () => {
   const {
@@ -58,10 +59,14 @@ const TasksPage = () => {
     createTask,
     pagination,
     taskFocusLoadError,
-    clearTaskFocusState
+    clearTaskFocusState,
   } = useTasksStore();
   const [searchParams, setSearchParams] = useSearchParams();
-  const updateFilterQuery = (patch: { type?: string; overdue?: boolean; priority?: string }) => {
+  const updateFilterQuery = (patch: {
+    type?: string;
+    overdue?: boolean;
+    priority?: string;
+  }) => {
     const next = new URLSearchParams(searchParams);
     if ("type" in patch) {
       if (patch.type) next.set("type", patch.type);
@@ -82,9 +87,12 @@ const TasksPage = () => {
   const [creating, setCreating] = useState(false);
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [newTaskDescription, setNewTaskDescription] = useState("");
-  const [newTaskPriority, setNewTaskPriority] = useState<TaskPriority>("medium");
+  const [newTaskPriority, setNewTaskPriority] =
+    useState<TaskPriority>("medium");
   const [newTaskDueAt, setNewTaskDueAt] = useState("");
-  const [newTaskLinkType, setNewTaskLinkType] = useState<"" | "employee" | "company" | "task">("");
+  const [newTaskLinkType, setNewTaskLinkType] = useState<
+    "" | "employee" | "company" | "task"
+  >("");
   const [newTaskLinkEntityId, setNewTaskLinkEntityId] = useState("");
   const focusedTaskId = searchParams.get("task_id") ?? undefined;
   const focusedEntityType = searchParams.get("entity_type") ?? undefined;
@@ -97,9 +105,16 @@ const TasksPage = () => {
     const type = params.get("type") ?? undefined;
     const overdueParam = params.get("overdue");
     const overdue =
-      overdueParam === "true" ? true : overdueParam === "false" ? false : undefined;
+      overdueParam === "true"
+        ? true
+        : overdueParam === "false"
+          ? false
+          : undefined;
     const priorityParam = params.get("priority");
-    const priority = priorityParam && isTaskPriority(priorityParam) ? priorityParam : undefined;
+    const priority =
+      priorityParam && isTaskPriority(priorityParam)
+        ? priorityParam
+        : undefined;
     setFilters({ type, overdue, priority });
     list({ type, overdue, priority });
   }, [list, queryString, setFilters]);
@@ -114,7 +129,10 @@ const TasksPage = () => {
 
   const focusedTask = useMemo(() => {
     if (!focusedTaskId) return null;
-    return items.find((task) => task.id === focusedTaskId) ?? (item?.id === focusedTaskId ? item : null);
+    return (
+      items.find((task) => task.id === focusedTaskId) ??
+      (item?.id === focusedTaskId ? item : null)
+    );
   }, [focusedTaskId, item, items]);
 
   const stats = useMemo(() => {
@@ -131,8 +149,10 @@ const TasksPage = () => {
       if (!task.due_at) return;
       const dueAt = new Date(task.due_at);
       if (task.overdue) overdueCount += 1;
-      if (isWithinInterval(dueAt, { start: todayStart, end: todayEnd })) todayCount += 1;
-      if (isWithinInterval(dueAt, { start: todayStart, end: weekEnd })) weekCount += 1;
+      if (isWithinInterval(dueAt, { start: todayStart, end: todayEnd }))
+        todayCount += 1;
+      if (isWithinInterval(dueAt, { start: todayStart, end: weekEnd }))
+        weekCount += 1;
     });
 
     return { overdueCount, todayCount, weekCount };
@@ -145,7 +165,8 @@ const TasksPage = () => {
   };
 
   const handleDueFilterChange = (value: string) => {
-    const overdue = value === "overdue" ? true : value === "upcoming" ? false : undefined;
+    const overdue =
+      value === "overdue" ? true : value === "upcoming" ? false : undefined;
     setFilters({ overdue });
     updateFilterQuery({ overdue });
   };
@@ -194,7 +215,7 @@ const TasksPage = () => {
       due_at: dueAtIso,
       entity_type: entityType,
       entity_id: entityId,
-      assignee_id: newTaskLinkType === "employee" ? entityId : null
+      assignee_id: newTaskLinkType === "employee" ? entityId : null,
     });
     setCreating(false);
     if (!created) {
@@ -212,7 +233,12 @@ const TasksPage = () => {
 
   return (
     <div className="space-y-6">
-      <Breadcrumb items={[{ label: "Главная", to: ROUTES.DASHBOARD }, { label: "Задачи" }]} />
+      <Breadcrumb
+        items={[
+          { label: "Главная", to: ROUTES.DASHBOARD },
+          { label: "Задачи" },
+        ]}
+      />
       <RegistryPageHeader
         title="Задачи и обязательства"
         description="Контроль сроков, статусов и исполнителей по обязательствам."
@@ -228,7 +254,11 @@ const TasksPage = () => {
                 }
                 setShowCreateForm(true);
               }}
-              title={showCreateForm ? "Скрыть форму добавления задачи" : "Добавить задачу"}
+              title={
+                showCreateForm
+                  ? "Скрыть форму добавления задачи"
+                  : "Добавить задачу"
+              }
               disabledReason="Недостаточно прав для добавления задачи"
             >
               {showCreateForm ? "Скрыть форму" : "Добавить задачу"}
@@ -237,7 +267,11 @@ const TasksPage = () => {
               variant="ghost"
               onClick={() => {
                 setFilters({ type: undefined, overdue: undefined });
-                updateFilterQuery({ type: undefined, overdue: undefined, priority: undefined });
+                updateFilterQuery({
+                  type: undefined,
+                  overdue: undefined,
+                  priority: undefined,
+                });
               }}
               disabled={loading}
             >
@@ -252,7 +286,7 @@ const TasksPage = () => {
           { label: "Всего задач", value: pagination.total },
           { label: "Просрочено (на странице)", value: stats.overdueCount },
           { label: "Сегодня (на странице)", value: stats.todayCount },
-          { label: "На 7 дней (на странице)", value: stats.weekCount }
+          { label: "На 7 дней (на странице)", value: stats.weekCount },
         ]}
       />
       <Card>
@@ -289,7 +323,13 @@ const TasksPage = () => {
               <select
                 id="task-due"
                 className="h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground"
-                value={filters.overdue === true ? "overdue" : filters.overdue === false ? "upcoming" : "all"}
+                value={
+                  filters.overdue === true
+                    ? "overdue"
+                    : filters.overdue === false
+                      ? "upcoming"
+                      : "all"
+                }
                 onChange={(event) => handleDueFilterChange(event.target.value)}
               >
                 {DUE_FILTER_OPTIONS.map((option) => (

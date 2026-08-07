@@ -39,7 +39,10 @@ describe("PipelineBuilderPage", () => {
             code: "ot-default",
             name: "OT pipeline",
             profile_version: 3,
-            graph: { nodes: [{ id: "render", type: "render_docx" }], edges: [] },
+            graph: {
+              nodes: [{ id: "render", type: "render_docx" }],
+              edges: [],
+            },
           },
         ],
       });
@@ -51,7 +54,9 @@ describe("PipelineBuilderPage", () => {
       render(<PipelineBuilderPage />);
     });
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("profiles load failed");
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "profiles load failed",
+    );
 
     shouldFail = false;
     await act(async () => {
@@ -69,7 +74,9 @@ describe("PipelineBuilderPage", () => {
       render(<PipelineBuilderPage />);
     });
 
-    expect(await screen.findByText(/профили пайплайна не найдены/i)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/профили пайплайна не найдены/i),
+    ).toBeInTheDocument();
   });
 
   it("blocks save for duplicate node ids", async () => {
@@ -93,7 +100,9 @@ describe("PipelineBuilderPage", () => {
     });
 
     expect(await screen.findByText(/есть дубли id нод/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /сохранить профиль/i })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: /сохранить профиль/i }),
+    ).toBeDisabled();
     expect(apiClientMock.post).not.toHaveBeenCalled();
   });
 
@@ -107,7 +116,10 @@ describe("PipelineBuilderPage", () => {
             code: "doc-default",
             name: "Профиль по умолчанию",
             profile_version: 1,
-            graph: { nodes: [{ id: "render", type: "render_docx" }], edges: [{ from: "render", to: "pdf" }] },
+            graph: {
+              nodes: [{ id: "render", type: "render_docx" }],
+              edges: [{ from: "render", to: "pdf" }],
+            },
           },
         ],
       });
@@ -122,7 +134,9 @@ describe("PipelineBuilderPage", () => {
     await screen.findByText(/профили пайплайна не найдены/i);
 
     await act(async () => {
-      await user.click(screen.getByRole("button", { name: /сохранить профиль/i }));
+      await user.click(
+        screen.getByRole("button", { name: /сохранить профиль/i }),
+      );
     });
 
     expect(apiClientMock.post).toHaveBeenCalledWith(
@@ -131,7 +145,7 @@ describe("PipelineBuilderPage", () => {
         code: "doc-default",
         name: "Профиль по умолчанию",
         is_active: true,
-      })
+      }),
     );
     expect(await screen.findByText("doc-default")).toBeInTheDocument();
   });

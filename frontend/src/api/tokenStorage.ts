@@ -39,5 +39,5 @@ export const tokenStorage = {
   clear: () => {
     accessToken = null;
     expiresAt = null;
-  }
+  },
 };

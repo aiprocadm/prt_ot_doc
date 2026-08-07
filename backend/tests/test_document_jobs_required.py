@@ -79,15 +79,21 @@ def test_document_job_named_bridges_execute_runtime_handler(monkeypatch) -> None
 
     register_compatibility_bridge("export_report", fake_export)
 
-    monkeypatch.setattr(module, "tenant_context", lambda tenant_slug: __import__('contextlib').nullcontext())
+    monkeypatch.setattr(
+        module, "tenant_context", lambda tenant_slug: __import__("contextlib").nullcontext()
+    )
     monkeypatch.setattr(module, "ensure_tenant_schema", lambda tenant_slug: None)
 
     def fake_run(coro):
         import asyncio
+
         return asyncio.run(coro)
 
     import types
-    monkeypatch.setitem(__import__('sys').modules, 'app.tasks', types.SimpleNamespace(_run_coroutine=fake_run))
+
+    monkeypatch.setitem(
+        __import__("sys").modules, "app.tasks", types.SimpleNamespace(_run_coroutine=fake_run)
+    )
 
     response = export_report_job(tenant_slug="tenant-a", report_id="report-42")
 

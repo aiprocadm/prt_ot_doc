@@ -12,12 +12,15 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger
+  DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { TenantProvisionResult } from "@/types/dto/tenants";
-import { tenantProvisionSchema, type TenantProvisionFormValues } from "@/types/forms/tenants";
+import {
+  tenantProvisionSchema,
+  type TenantProvisionFormValues,
+} from "@/types/forms/tenants";
 import { applyApiFieldErrorsToForm, isApiError } from "@/utils/apiFormErrors";
 
 const emptyTenantForm: TenantProvisionFormValues = {
@@ -26,7 +29,7 @@ const emptyTenantForm: TenantProvisionFormValues = {
   owner_email: "",
   owner_password: "",
   kind: "customer",
-  demo_data: false
+  demo_data: false,
 };
 
 const TENANT_API_FIELD_MAP: Record<string, keyof TenantProvisionFormValues> = {
@@ -34,7 +37,7 @@ const TENANT_API_FIELD_MAP: Record<string, keyof TenantProvisionFormValues> = {
   name: "name",
   owner_email: "owner_email",
   owner_password: "owner_password",
-  kind: "kind"
+  kind: "kind",
 };
 
 interface TenantFormDialogProps {
@@ -42,11 +45,14 @@ interface TenantFormDialogProps {
   onSubmitted?: (result: TenantProvisionResult) => void;
 }
 
-export const TenantFormDialog = ({ trigger, onSubmitted }: TenantFormDialogProps) => {
+export const TenantFormDialog = ({
+  trigger,
+  onSubmitted,
+}: TenantFormDialogProps) => {
   const [open, setOpen] = useState(false);
   const form = useForm<TenantProvisionFormValues>({
     resolver: zodResolver(tenantProvisionSchema),
-    defaultValues: emptyTenantForm
+    defaultValues: emptyTenantForm,
   });
 
   useEffect(() => {
@@ -79,8 +85,8 @@ export const TenantFormDialog = ({ trigger, onSubmitted }: TenantFormDialogProps
         <DialogHeader>
           <DialogTitle>Новый тенант</DialogTitle>
           <DialogDescription>
-            Создаётся сразу рабочим: схема БД, квоты, стартовый набор справочников и учётная
-            запись владельца, под которой можно войти.
+            Создаётся сразу рабочим: схема БД, квоты, стартовый набор
+            справочников и учётная запись владельца, под которой можно войти.
           </DialogDescription>
         </DialogHeader>
         <form
@@ -95,16 +101,29 @@ export const TenantFormDialog = ({ trigger, onSubmitted }: TenantFormDialogProps
         >
           <div className="space-y-2">
             <Label htmlFor="tenant-slug">Слаг</Label>
-            <Input id="tenant-slug" placeholder="acme" {...form.register("slug")} />
+            <Input
+              id="tenant-slug"
+              placeholder="acme"
+              {...form.register("slug")}
+            />
             <p className="text-xs text-muted-foreground">
-              Короткий код латиницей — под ним вводят тенант на форме входа. Изменить позже нельзя.
+              Короткий код латиницей — под ним вводят тенант на форме входа.
+              Изменить позже нельзя.
             </p>
-            {errors.slug ? <p className="text-xs text-destructive">{errors.slug.message}</p> : null}
+            {errors.slug ? (
+              <p className="text-xs text-destructive">{errors.slug.message}</p>
+            ) : null}
           </div>
           <div className="space-y-2">
             <Label htmlFor="tenant-name">Название</Label>
-            <Input id="tenant-name" placeholder="ООО «Акме»" {...form.register("name")} />
-            {errors.name ? <p className="text-xs text-destructive">{errors.name.message}</p> : null}
+            <Input
+              id="tenant-name"
+              placeholder="ООО «Акме»"
+              {...form.register("name")}
+            />
+            {errors.name ? (
+              <p className="text-xs text-destructive">{errors.name.message}</p>
+            ) : null}
           </div>
           <div className="space-y-2">
             <Label htmlFor="tenant-kind">Тип</Label>
@@ -128,7 +147,9 @@ export const TenantFormDialog = ({ trigger, onSubmitted }: TenantFormDialogProps
               {...form.register("owner_email")}
             />
             {errors.owner_email ? (
-              <p className="text-xs text-destructive">{errors.owner_email.message}</p>
+              <p className="text-xs text-destructive">
+                {errors.owner_email.message}
+              </p>
             ) : null}
           </div>
           <div className="space-y-2">
@@ -143,7 +164,9 @@ export const TenantFormDialog = ({ trigger, onSubmitted }: TenantFormDialogProps
               Передайте его владельцу — под этой парой он войдёт в свой тенант.
             </p>
             {errors.owner_password ? (
-              <p className="text-xs text-destructive">{errors.owner_password.message}</p>
+              <p className="text-xs text-destructive">
+                {errors.owner_password.message}
+              </p>
             ) : null}
           </div>
           <div className="flex items-center gap-2">

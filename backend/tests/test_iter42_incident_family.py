@@ -23,12 +23,7 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MIGRATION_PATH = (
-    REPO_ROOT
-    / "backend"
-    / "app"
-    / "migrations"
-    / "versions"
-    / "20260529_iter42_incident_family.py"
+    REPO_ROOT / "backend" / "app" / "migrations" / "versions" / "20260529_iter42_incident_family.py"
 )
 
 # (column, nullable, fk_target, ondelete, has_server_default).
@@ -67,7 +62,14 @@ _INCIDENT_LOG_COHORT: list[tuple[str, str, bool]] = [
     ("version", "Integer", False),
 ]
 
-_INCIDENT_LOG_BUSINESS_COLS = {"incident_id", "author_id", "stage", "status", "message", "metadata_json"}
+_INCIDENT_LOG_BUSINESS_COLS = {
+    "incident_id",
+    "author_id",
+    "stage",
+    "status",
+    "message",
+    "metadata_json",
+}
 
 _INCIDENT_LOG_INDEXES: set[str] = {
     "ix_incident_log_tenant_id",
@@ -177,11 +179,7 @@ def _column_in_create_table(create_call: ast.Call, column: str) -> ast.Call | No
             and arg.func.attr == "Column"
         ):
             continue
-        if (
-            arg.args
-            and isinstance(arg.args[0], ast.Constant)
-            and arg.args[0].value == column
-        ):
+        if arg.args and isinstance(arg.args[0], ast.Constant) and arg.args[0].value == column:
             return arg
     return None
 
@@ -258,7 +256,11 @@ def test_revision_chains_to_iter38() -> None:
 
 @pytest.mark.parametrize(("column", "_n", "_fk", "_od", "_sd"), _INCIDENT_ADD_COLS)
 def test_incident_alter_adds_column(
-    column: str, _n: bool, _fk: str | None, _od: str | None, _sd: bool,
+    column: str,
+    _n: bool,
+    _fk: str | None,
+    _od: str | None,
+    _sd: bool,
 ) -> None:
     tree = _tree()
     upgrade = _upgrade_fn(tree)
@@ -267,7 +269,11 @@ def test_incident_alter_adds_column(
 
 @pytest.mark.parametrize(("column", "nullable", "_fk", "_od", "_sd"), _INCIDENT_ADD_COLS)
 def test_incident_alter_column_nullable_matches(
-    column: str, nullable: bool, _fk: str | None, _od: str | None, _sd: bool,
+    column: str,
+    nullable: bool,
+    _fk: str | None,
+    _od: str | None,
+    _sd: bool,
 ) -> None:
     tree = _tree()
     upgrade = _upgrade_fn(tree)
@@ -276,20 +282,25 @@ def test_incident_alter_column_nullable_matches(
     for kw in col_call.keywords:
         if kw.arg == "nullable" and isinstance(kw.value, ast.Constant):
             nullable_kw = kw.value.value
-    assert nullable_kw is nullable, (
-        f"incident.{column}: expected nullable={nullable}, got {nullable_kw!r}"
-    )
+    assert (
+        nullable_kw is nullable
+    ), f"incident.{column}: expected nullable={nullable}, got {nullable_kw!r}"
 
 
 @pytest.mark.parametrize(("column", "_n", "fk_target", "ondelete", "_sd"), _INCIDENT_ADD_COLS)
 def test_incident_alter_column_fk_target_matches(
-    column: str, _n: bool, fk_target: str | None, ondelete: str | None, _sd: bool,
+    column: str,
+    _n: bool,
+    fk_target: str | None,
+    ondelete: str | None,
+    _sd: bool,
 ) -> None:
     tree = _tree()
     upgrade = _upgrade_fn(tree)
     col_call = _column_call_for("incident", column, upgrade)
     fk_args = [
-        arg for arg in col_call.args
+        arg
+        for arg in col_call.args
         if isinstance(arg, ast.Call)
         and isinstance(arg.func, ast.Attribute)
         and arg.func.attr == "ForeignKey"
@@ -304,22 +315,26 @@ def test_incident_alter_column_fk_target_matches(
     for kw in fk_args[0].keywords:
         if kw.arg == "ondelete" and isinstance(kw.value, ast.Constant):
             ondelete_kw = kw.value.value
-    assert ondelete_kw == ondelete, (
-        f"incident.{column}: expected ondelete={ondelete}, got {ondelete_kw!r}"
-    )
+    assert (
+        ondelete_kw == ondelete
+    ), f"incident.{column}: expected ondelete={ondelete}, got {ondelete_kw!r}"
 
 
 @pytest.mark.parametrize(("column", "_n", "_fk", "_od", "has_default"), _INCIDENT_ADD_COLS)
 def test_incident_alter_column_server_default_when_expected(
-    column: str, _n: bool, _fk: str | None, _od: str | None, has_default: bool,
+    column: str,
+    _n: bool,
+    _fk: str | None,
+    _od: str | None,
+    has_default: bool,
 ) -> None:
     tree = _tree()
     upgrade = _upgrade_fn(tree)
     col_call = _column_call_for("incident", column, upgrade)
     has_kw = any(kw.arg == "server_default" for kw in col_call.keywords)
-    assert has_kw is has_default, (
-        f"incident.{column}: expected server_default present={has_default}, got {has_kw}"
-    )
+    assert (
+        has_kw is has_default
+    ), f"incident.{column}: expected server_default present={has_default}, got {has_kw}"
 
 
 def test_incident_alter_creates_all_new_indexes() -> None:
@@ -347,14 +362,16 @@ def test_incident_log_create_table_has_column(column: str, _sa: str, _n: bool) -
     upgrade = _upgrade_fn(tree)
     create_calls = _create_table_calls(upgrade, "incident_log")
     assert create_calls, "no create_table('incident_log')"
-    assert _column_in_create_table(create_calls[0], column) is not None, (
-        f"incident_log.{column} missing"
-    )
+    assert (
+        _column_in_create_table(create_calls[0], column) is not None
+    ), f"incident_log.{column} missing"
 
 
 @pytest.mark.parametrize(("column", "sa_type", "_n"), _INCIDENT_LOG_COHORT)
 def test_incident_log_create_table_column_sa_type(
-    column: str, sa_type: str, _n: bool,
+    column: str,
+    sa_type: str,
+    _n: bool,
 ) -> None:
     tree = _tree()
     upgrade = _upgrade_fn(tree)
@@ -362,14 +379,14 @@ def test_incident_log_create_table_column_sa_type(
     col_call = _column_in_create_table(create_calls[0], column)
     assert col_call is not None
     actual = _sa_type_of(col_call)
-    assert actual == sa_type, (
-        f"incident_log.{column}: expected sa.{sa_type}, got sa.{actual}"
-    )
+    assert actual == sa_type, f"incident_log.{column}: expected sa.{sa_type}, got sa.{actual}"
 
 
 @pytest.mark.parametrize(("column", "_sa", "nullable"), _INCIDENT_LOG_COHORT)
 def test_incident_log_create_table_column_nullable(
-    column: str, _sa: str, nullable: bool,
+    column: str,
+    _sa: str,
+    nullable: bool,
 ) -> None:
     tree = _tree()
     upgrade = _upgrade_fn(tree)
@@ -409,21 +426,19 @@ def test_incident_log_incident_fk_has_cascade_ondelete() -> None:
         if not (isinstance(local, ast.List) and isinstance(target, ast.List)):
             continue
         local_names = [
-            e.value for e in local.elts
-            if isinstance(e, ast.Constant) and isinstance(e.value, str)
+            e.value for e in local.elts if isinstance(e, ast.Constant) and isinstance(e.value, str)
         ]
         target_names = [
-            e.value for e in target.elts
-            if isinstance(e, ast.Constant) and isinstance(e.value, str)
+            e.value for e in target.elts if isinstance(e, ast.Constant) and isinstance(e.value, str)
         ]
         if local_names == ["incident_id"] and target_names == ["incident.id"]:
             ondelete_kw = None
             for kw in arg.keywords:
                 if kw.arg == "ondelete" and isinstance(kw.value, ast.Constant):
                     ondelete_kw = kw.value.value
-            assert ondelete_kw == "CASCADE", (
-                f"incident_log.incident_id: expected ondelete=CASCADE, got {ondelete_kw!r}"
-            )
+            assert (
+                ondelete_kw == "CASCADE"
+            ), f"incident_log.incident_id: expected ondelete=CASCADE, got {ondelete_kw!r}"
             return
     pytest.fail("incident_log.incident_id FK constraint missing")
 
@@ -464,8 +479,7 @@ def test_incident_person_unique_constraint_present() -> None:
         ):
             continue
         cols = [
-            a.value for a in arg.args
-            if isinstance(a, ast.Constant) and isinstance(a.value, str)
+            a.value for a in arg.args if isinstance(a, ast.Constant) and isinstance(a.value, str)
         ]
         name_kw = None
         for kw in arg.keywords:
@@ -494,9 +508,9 @@ def test_incident_person_role_has_victim_server_default() -> None:
     for kw in col_call.keywords:
         if kw.arg == "server_default" and isinstance(kw.value, ast.Constant):
             sd_kw = kw.value.value
-    assert sd_kw == "VICTIM", (
-        f"incident_person.role: expected server_default='VICTIM', got {sd_kw!r}"
-    )
+    assert (
+        sd_kw == "VICTIM"
+    ), f"incident_person.role: expected server_default='VICTIM', got {sd_kw!r}"
 
 
 # ---------------------------------------------------------------------------
@@ -506,7 +520,8 @@ def test_incident_person_role_has_victim_server_default() -> None:
 
 @pytest.mark.parametrize(("enum_name", "expected_values"), _NEW_ENUMS)
 def test_new_pg_enum_declared_with_expected_values(
-    enum_name: str, expected_values: tuple[str, ...],
+    enum_name: str,
+    expected_values: tuple[str, ...],
 ) -> None:
     """Each new enum appears as ``sa.Enum(*<VALUES>, name="<enum_name>")``
     in at least one column declaration. We pin only the name+values; the
@@ -537,29 +552,26 @@ def test_new_pg_enum_declared_with_expected_values(
             if isinstance(starred_arg, ast.Name):
                 # Find the module-level assignment.
                 for top in tree.body:
-                    if (
-                        isinstance(top, ast.Assign)
-                        and any(isinstance(t, ast.Name) and t.id == starred_arg.id for t in top.targets)
+                    if isinstance(top, ast.Assign) and any(
+                        isinstance(t, ast.Name) and t.id == starred_arg.id for t in top.targets
                     ):
                         if isinstance(top.value, ast.Tuple):
                             actual = tuple(
-                                e.value for e in top.value.elts
+                                e.value
+                                for e in top.value.elts
                                 if isinstance(e, ast.Constant) and isinstance(e.value, str)
                             )
-                            assert actual == expected_values, (
-                                f"enum {enum_name}: expected {expected_values}, got {actual}"
-                            )
+                            assert (
+                                actual == expected_values
+                            ), f"enum {enum_name}: expected {expected_values}, got {actual}"
                             return
         # Plain positional case.
         actual = tuple(
-            a.value for a in positional
-            if isinstance(a, ast.Constant) and isinstance(a.value, str)
+            a.value for a in positional if isinstance(a, ast.Constant) and isinstance(a.value, str)
         )
         if actual == expected_values:
             return
-    pytest.fail(
-        f"enum {enum_name!r} not declared with values {expected_values} in upgrade"
-    )
+    pytest.fail(f"enum {enum_name!r} not declared with values {expected_values} in upgrade")
 
 
 # ---------------------------------------------------------------------------
@@ -664,8 +676,12 @@ def test_audit_credits_incident_new_business_cols() -> None:
     migration_cols = audit.collect_migration_columns()
     credited = migration_cols.get("incident", set())
     expected_cols = {
-        "company_id", "site_id", "incident_type",
-        "investigation_stage", "location_description", "pack_id",
+        "company_id",
+        "site_id",
+        "incident_type",
+        "investigation_stage",
+        "location_description",
+        "pack_id",
     }
     missing = expected_cols - credited
     assert not missing, (

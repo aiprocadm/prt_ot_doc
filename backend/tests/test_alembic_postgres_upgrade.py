@@ -11,6 +11,7 @@ connection (a maintenance DB such as .../postgres) able to CREATE/DROP
 databases. Locally: ``postgresql://postgres:postgres@localhost:5432/postgres``.
 CI sets it to the job's Postgres service.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -34,7 +35,9 @@ def _async_url(admin_url: str, dbname: str) -> str:
     return f"{base}/{dbname}"
 
 
-@pytest.mark.skipif(not ADMIN_URL, reason="set TEST_PG_ADMIN_URL to run the Postgres migration guard")
+@pytest.mark.skipif(
+    not ADMIN_URL, reason="set TEST_PG_ADMIN_URL to run the Postgres migration guard"
+)
 def test_alembic_upgrade_heads_on_fresh_postgres() -> None:
     import asyncpg
     from alembic import command
@@ -68,7 +71,9 @@ def test_alembic_upgrade_heads_on_fresh_postgres() -> None:
         get_settings.cache_clear()
 
 
-@pytest.mark.skipif(not ADMIN_URL, reason="set TEST_PG_ADMIN_URL to run the Postgres migration guard")
+@pytest.mark.skipif(
+    not ADMIN_URL, reason="set TEST_PG_ADMIN_URL to run the Postgres migration guard"
+)
 def test_alembic_downgrade_base_then_reupgrade_on_fresh_postgres() -> None:
     """Full reversibility: ``upgrade heads`` -> ``downgrade base`` -> ``upgrade heads``.
 

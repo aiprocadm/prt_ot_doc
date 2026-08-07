@@ -2,18 +2,17 @@
 
 Покрываем: current_group, meets_minimum, readiness.
 """
+
 from __future__ import annotations
 
 from datetime import date
 
-import pytest
-
 from app.domains.work_permits import electrical_groups as eg
-
 
 # ---------------------------------------------------------------------------
 # current_group
 # ---------------------------------------------------------------------------
+
 
 class TestCurrentGroup:
     def test_returns_highest_of_multiple(self):
@@ -89,6 +88,7 @@ class TestCurrentGroup:
 # meets_minimum
 # ---------------------------------------------------------------------------
 
+
 class TestMeetsMinimum:
     def test_foreman_with_III_meets(self):
         assert eg.meets_minimum("III", "foreman") is True
@@ -120,6 +120,7 @@ class TestMeetsMinimum:
 # ---------------------------------------------------------------------------
 # readiness
 # ---------------------------------------------------------------------------
+
 
 class TestReadiness:
     def test_all_sufficient(self):
@@ -181,6 +182,7 @@ class TestReadiness:
 # role_min (voltage_level)
 # ---------------------------------------------------------------------------
 
+
 class TestRoleMin:
     def test_foreman_gt_1000_requires_IV(self):
         assert eg.role_min("foreman", "gt_1000") == "IV"
@@ -199,6 +201,7 @@ class TestRoleMin:
 # meets_minimum (voltage_level)
 # ---------------------------------------------------------------------------
 
+
 class TestMeetsMinimumVoltage:
     def test_foreman_III_gt_1000_fails(self):
         assert eg.meets_minimum("III", "foreman", "gt_1000") is False
@@ -216,6 +219,7 @@ class TestMeetsMinimumVoltage:
 # ---------------------------------------------------------------------------
 # readiness (voltage_level)
 # ---------------------------------------------------------------------------
+
 
 class TestReadinessVoltage:
     def test_foreman_III_gt_1000_insufficient(self):

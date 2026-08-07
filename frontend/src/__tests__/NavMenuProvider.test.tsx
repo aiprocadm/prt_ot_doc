@@ -1,7 +1,10 @@
 import { screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import { NavMenuProvider, useNavMenuData } from "@/components/layout/NavMenuProvider";
+import {
+  NavMenuProvider,
+  useNavMenuData,
+} from "@/components/layout/NavMenuProvider";
 import { PERMISSIONS } from "@/permissions/permissions";
 import { useAuthStore } from "@/stores/auth";
 import { renderWithRouter } from "@/test-utils/renderWithRouter";
@@ -9,7 +12,7 @@ import { renderWithRouter } from "@/test-utils/renderWithRouter";
 const getBillingSummaryMock = vi.fn();
 
 vi.mock("@/api/billing", () => ({
-  getBillingSummary: (...args: unknown[]) => getBillingSummaryMock(...args)
+  getBillingSummary: (...args: unknown[]) => getBillingSummaryMock(...args),
 }));
 
 const NavMenuConsumerProbe = () => {
@@ -34,18 +37,18 @@ describe("NavMenuProvider", () => {
         full_name: "Provider User",
         roles: ["owner"],
         permissions: [PERMISSIONS.DASHBOARD_VIEW, PERMISSIONS.DOCUMENT_VIEW],
-        attributes: { tenant_id: "tenant-1" }
+        attributes: { tenant_id: "tenant-1" },
       },
       loading: false,
       error: null,
       isAuthenticated: true,
-      initialized: true
+      initialized: true,
     });
 
     renderWithRouter(
       <NavMenuProvider>
         <NavMenuConsumerProbe />
-      </NavMenuProvider>
+      </NavMenuProvider>,
     );
 
     await waitFor(() => {
@@ -66,18 +69,18 @@ describe("NavMenuProvider", () => {
         full_name: "Provider User 2",
         roles: ["owner"],
         permissions: [PERMISSIONS.DASHBOARD_VIEW, PERMISSIONS.DOCUMENT_VIEW],
-        attributes: { tenant_id: "tenant-1" }
+        attributes: { tenant_id: "tenant-1" },
       },
       loading: false,
       error: null,
       isAuthenticated: true,
-      initialized: true
+      initialized: true,
     });
 
     renderWithRouter(
       <NavMenuProvider>
         <NavMenuConsumerProbe />
-      </NavMenuProvider>
+      </NavMenuProvider>,
     );
 
     await waitFor(() => {

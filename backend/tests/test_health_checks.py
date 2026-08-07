@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
 
-from app.main import app
 from app.core.config import Settings
+from app.main import app
 from app.modules.health_checks.schemas import (
     HealthCheckComprehensiveResponse,
     HealthCheckItem,
@@ -73,6 +72,7 @@ class TestHealthCheckCache:
 
         # Wait for expiration
         import time
+
         time.sleep(1.1)
         assert cache.get("tenant-1") is None
 
@@ -123,9 +123,7 @@ class TestHealthCheckService:
         with patch("app.modules.health_checks.service.engine") as mock_engine:
             mock_connection = AsyncMock()
             mock_engine.connect = MagicMock()
-            mock_engine.connect.return_value.__aenter__ = AsyncMock(
-                return_value=mock_connection
-            )
+            mock_engine.connect.return_value.__aenter__ = AsyncMock(return_value=mock_connection)
             mock_engine.connect.return_value.__aexit__ = AsyncMock(return_value=None)
             mock_connection.execute = AsyncMock()
 
@@ -200,9 +198,7 @@ class TestHealthCheckService:
         with patch("app.modules.health_checks.service.engine") as mock_engine:
             mock_connection = AsyncMock()
             mock_engine.connect = MagicMock()
-            mock_engine.connect.return_value.__aenter__ = AsyncMock(
-                return_value=mock_connection
-            )
+            mock_engine.connect.return_value.__aenter__ = AsyncMock(return_value=mock_connection)
             mock_engine.connect.return_value.__aexit__ = AsyncMock(return_value=None)
             mock_connection.execute = AsyncMock()
 
@@ -221,15 +217,11 @@ class TestHealthCheckService:
         with patch("app.modules.health_checks.service.engine") as mock_engine:
             mock_connection = AsyncMock()
             mock_engine.connect = MagicMock()
-            mock_engine.connect.return_value.__aenter__ = AsyncMock(
-                return_value=mock_connection
-            )
+            mock_engine.connect.return_value.__aenter__ = AsyncMock(return_value=mock_connection)
             mock_engine.connect.return_value.__aexit__ = AsyncMock(return_value=None)
             mock_connection.execute = AsyncMock()
 
-            result = await service.run_all_checks(
-                tenant_id="test-tenant", skip_slow=True
-            )
+            result = await service.run_all_checks(tenant_id="test-tenant", skip_slow=True)
             assert result.status == "ok"
             assert "postgres" in result.checks
             assert "redis" in result.checks
@@ -247,9 +239,7 @@ class TestHealthCheckService:
         with patch("app.modules.health_checks.service.engine") as mock_engine:
             mock_connection = AsyncMock()
             mock_engine.connect = MagicMock()
-            mock_engine.connect.return_value.__aenter__ = AsyncMock(
-                return_value=mock_connection
-            )
+            mock_engine.connect.return_value.__aenter__ = AsyncMock(return_value=mock_connection)
             mock_engine.connect.return_value.__aexit__ = AsyncMock(return_value=None)
             mock_connection.execute = AsyncMock()
 
@@ -262,9 +252,7 @@ class TestHealthCheckService:
             assert result2.timestamp == first_timestamp  # Same timestamp = cached
 
             # Third call with skip_cache - should be different
-            result3 = await service.run_all_checks(
-                tenant_id="test-tenant", skip_cache=True
-            )
+            result3 = await service.run_all_checks(tenant_id="test-tenant", skip_cache=True)
             assert result3.timestamp > first_timestamp  # Different timestamp
 
     @pytest.mark.asyncio
@@ -277,15 +265,11 @@ class TestHealthCheckService:
         with patch("app.modules.health_checks.service.engine") as mock_engine:
             mock_connection = AsyncMock()
             mock_engine.connect = MagicMock()
-            mock_engine.connect.return_value.__aenter__ = AsyncMock(
-                return_value=mock_connection
-            )
+            mock_engine.connect.return_value.__aenter__ = AsyncMock(return_value=mock_connection)
             mock_engine.connect.return_value.__aexit__ = AsyncMock(return_value=None)
             mock_connection.execute = AsyncMock()
 
-            with patch.object(
-                service, "check_workers", new_callable=AsyncMock
-            ) as mock_workers:
+            with patch.object(service, "check_workers", new_callable=AsyncMock) as mock_workers:
                 mock_workers.return_value = HealthCheckItem(
                     name="workers", status="failed", error="no workers", duration_ms=0.0
                 )
@@ -322,9 +306,10 @@ class TestHealthCheckEndpoint:
 
     def test_health_comprehensive_success(self, client):
         """Test successful health comprehensive endpoint call."""
-        with patch("app.api.routes.health._resolve_settings") as mock_rs, patch(
-            "app.api.routes.health.HealthCheckService"
-        ) as mock_service_class:
+        with (
+            patch("app.api.routes.health._resolve_settings") as mock_rs,
+            patch("app.api.routes.health.HealthCheckService") as mock_service_class,
+        ):
             mock_rs.return_value = MagicMock(health_check_comprehensive_enabled=True)
             mock_service = AsyncMock()
             mock_service_class.return_value = mock_service
@@ -348,9 +333,10 @@ class TestHealthCheckEndpoint:
 
     def test_health_comprehensive_skip_cache(self, client):
         """Test skip_cache query parameter."""
-        with patch("app.api.routes.health._resolve_settings") as mock_rs, patch(
-            "app.api.routes.health.HealthCheckService"
-        ) as mock_service_class:
+        with (
+            patch("app.api.routes.health._resolve_settings") as mock_rs,
+            patch("app.api.routes.health.HealthCheckService") as mock_service_class,
+        ):
             mock_rs.return_value = MagicMock(health_check_comprehensive_enabled=True)
             mock_service = AsyncMock()
             mock_service_class.return_value = mock_service

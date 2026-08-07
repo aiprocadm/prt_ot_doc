@@ -1,11 +1,6 @@
 import type { SearchType } from "@/api/search";
 
-export type SearchTab =
-  | SearchType
-  | "tasks"
-  | "npa"
-  | "contracts"
-  | "orders";
+export type SearchTab = SearchType | "tasks" | "npa" | "contracts" | "orders";
 
 export type SearchFacets = {
   type_counts?: Record<string, number>;

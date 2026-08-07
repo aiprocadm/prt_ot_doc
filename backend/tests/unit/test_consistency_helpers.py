@@ -36,12 +36,7 @@ class TestErrorBuilder:
 
     def test_build_minimal_error(self):
         """Test building error with only required fields."""
-        error = (
-            ErrorBuilder()
-            .with_code("MINIMAL")
-            .with_message("Minimal error")
-            .build()
-        )
+        error = ErrorBuilder().with_code("MINIMAL").with_message("Minimal error").build()
 
         assert error.error_code == "MINIMAL"
         assert error.message == "Minimal error"
@@ -54,10 +49,7 @@ class TestErrorBuilder:
         token = CorrelationIDManager.set("ctx-corr-123")
         try:
             error = (
-                ErrorBuilder()
-                .with_code("CTX_ERROR")
-                .with_message("Context backed error")
-                .build()
+                ErrorBuilder().with_code("CTX_ERROR").with_message("Context backed error").build()
             )
         finally:
             CorrelationIDManager.reset(token)
@@ -334,6 +326,7 @@ class TestErrorCodes:
 
 
 # Integration-style tests
+
 
 class TestConsistencyIntegration:
     """Integration tests for consistency helpers."""

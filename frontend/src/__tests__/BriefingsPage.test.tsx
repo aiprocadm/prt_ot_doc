@@ -26,12 +26,12 @@ vi.mock("@/api/briefings", () => ({
     createJournal: vi.fn(),
     createEntry: (...a: unknown[]) => createEntryMock(...a),
     sign: vi.fn(),
-    complete: vi.fn()
-  }
+    complete: vi.fn(),
+  },
 }));
 
 vi.mock("@/api/personsApi", () => ({
-  fetchAllPersons: () => fetchAllPersonsMock()
+  fetchAllPersons: () => fetchAllPersonsMock(),
 }));
 
 describe("BriefingsPage", () => {
@@ -62,12 +62,12 @@ describe("BriefingsPage", () => {
         full_name: "Briefings User",
         roles: ["worker"],
         permissions: [PERMISSIONS.TRAINING_VIEW],
-        attributes: { tenant_id: "tenant-1" }
+        attributes: { tenant_id: "tenant-1" },
       },
       loading: false,
       error: null,
       isAuthenticated: true,
-      initialized: true
+      initialized: true,
     });
   });
 
@@ -75,16 +75,22 @@ describe("BriefingsPage", () => {
     render(
       <MemoryRouter>
         <BriefingsPage />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
 
     await waitFor(() => {
       expect(listTemplatesMock).toHaveBeenCalled();
     });
 
-    expect(screen.getByRole("button", { name: "Напомнить о просрочке" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Создать шаблон" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Создать журнал" })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Напомнить о просрочке" }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Создать шаблон" }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Создать журнал" }),
+    ).toBeDisabled();
     expect(screen.getByRole("button", { name: "Назначить" })).toBeDisabled();
   });
 
@@ -94,19 +100,24 @@ describe("BriefingsPage", () => {
       user: state.user
         ? {
             ...state.user,
-            permissions: [PERMISSIONS.TRAINING_VIEW, PERMISSIONS.TRAINING_ASSIGN]
+            permissions: [
+              PERMISSIONS.TRAINING_VIEW,
+              PERMISSIONS.TRAINING_ASSIGN,
+            ],
           }
-        : null
+        : null,
     }));
 
     const user = userEvent.setup();
     render(
       <MemoryRouter>
         <BriefingsPage />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
 
-    const remindButton = await screen.findByRole("button", { name: "Напомнить о просрочке" });
+    const remindButton = await screen.findByRole("button", {
+      name: "Напомнить о просрочке",
+    });
     expect(remindButton).toBeEnabled();
 
     await user.click(remindButton);
@@ -117,25 +128,42 @@ describe("BriefingsPage", () => {
     useAuthStore.setState((state) => ({
       ...state,
       user: state.user
-        ? { ...state.user, permissions: [PERMISSIONS.TRAINING_VIEW, PERMISSIONS.TRAINING_ASSIGN] }
-        : null
+        ? {
+            ...state.user,
+            permissions: [
+              PERMISSIONS.TRAINING_VIEW,
+              PERMISSIONS.TRAINING_ASSIGN,
+            ],
+          }
+        : null,
     }));
     fetchAllPersonsMock.mockResolvedValue([
-      { id: "person-1", full_name: "Иванов Иван Иванович", first_name: "Иван", last_name: "Иванов", status: "active" }
+      {
+        id: "person-1",
+        full_name: "Иванов Иван Иванович",
+        first_name: "Иван",
+        last_name: "Иванов",
+        status: "active",
+      },
     ]);
 
     const user = userEvent.setup();
     render(
       <MemoryRouter>
         <BriefingsPage />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
 
-    const personSelect = await screen.findByLabelText("Сотрудник");
+    // Label и <select> рендерятся безусловно, а опции строятся из ответа
+    // fetchAllPersons — ждём саму опцию из мока, selectOptions не ретраит.
+    await screen.findByRole("option", { name: "Иванов Иван Иванович" });
+    const personSelect = screen.getByLabelText("Сотрудник");
     await user.selectOptions(personSelect, "person-1");
     await user.click(screen.getByRole("button", { name: "Назначить" }));
 
     await waitFor(() => expect(createEntryMock).toHaveBeenCalled());
-    expect(createEntryMock.mock.calls[0][0]).toMatchObject({ person_id: "person-1" });
+    expect(createEntryMock.mock.calls[0][0]).toMatchObject({
+      person_id: "person-1",
+    });
   });
 });

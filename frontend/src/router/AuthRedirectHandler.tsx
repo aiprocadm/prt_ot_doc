@@ -13,7 +13,8 @@ export const AuthRedirectHandler = () => {
       navigate(custom.detail?.to ?? "/auth/login", { replace: true });
     };
     window.addEventListener(AUTH_REDIRECT_EVENT, onAuthRequired);
-    return () => window.removeEventListener(AUTH_REDIRECT_EVENT, onAuthRequired);
+    return () =>
+      window.removeEventListener(AUTH_REDIRECT_EVENT, onAuthRequired);
   }, [navigate]);
 
   return null;

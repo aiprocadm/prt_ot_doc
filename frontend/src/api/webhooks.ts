@@ -14,6 +14,5 @@ export const webhooksApi = {
   },
   testEndpoint: async (id: string): Promise<void> => {
     await apiClient.post(`/webhooks/endpoints/${id}:test`);
-  }
+  },
 };
-

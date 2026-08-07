@@ -1,4 +1,5 @@
 """Chain + shape guard for ed04 (BriefingTemplate.require_signature_code)."""
+
 from __future__ import annotations
 
 import importlib.util
@@ -6,7 +7,9 @@ from pathlib import Path
 
 _MIGRATION = (
     Path(__file__).resolve().parents[1]
-    / "app" / "migrations" / "versions"
+    / "app"
+    / "migrations"
+    / "versions"
     / "20260613_ed04_briefing_require_signature_code.py"
 )
 
@@ -28,8 +31,8 @@ def test_ed04_chains_to_med02():
 
 def test_ed04_adds_column_with_literal_names():
     src = _MIGRATION.read_text(encoding="utf-8")
-    assert 'add_column(' in src and '"briefing_templates"' in src
+    assert "add_column(" in src and '"briefing_templates"' in src
     assert '"require_signature_code"' in src
-    assert 'server_default=sa.false()' in src
+    assert "server_default=sa.false()" in src
     # honest downgrade drops the column
     assert 'drop_column("briefing_templates", "require_signature_code")' in src

@@ -70,8 +70,8 @@ def _teardown(dbname: str) -> None:
 
 async def _seed_tenant(conn, *, tenant_id: str, slug: str, code: str) -> None:
     await conn.execute(
-        'INSERT INTO tenant (id, code, slug, name, contact_email, kind, schema_name, '
-        'is_active, settings, created_at, updated_at, version) '
+        "INSERT INTO tenant (id, code, slug, name, contact_email, kind, schema_name, "
+        "is_active, settings, created_at, updated_at, version) "
         "VALUES ($1, $2, $3, $4, $5, 'customer', $6, TRUE, '{}', now(), now(), 1)",
         tenant_id,
         code,
@@ -170,7 +170,11 @@ def test_outbox_events_legacy_tenant_slug_is_backfilled() -> None:
         conn = await asyncpg.connect(f"{_sync_base()}/{dbname}")
         try:
             await _seed_tenant(conn, tenant_id=tenant_id, slug="acme", code="acme-code")
-            for row_id, tenant_ref in ((by_slug, "acme"), (by_code, "acme-code"), (by_id, tenant_id)):
+            for row_id, tenant_ref in (
+                (by_slug, "acme"),
+                (by_code, "acme-code"),
+                (by_id, tenant_id),
+            ):
                 await _seed_outbox_event(
                     conn, row_id=row_id, tenant_ref=tenant_ref, event_id=str(uuid.uuid4())
                 )

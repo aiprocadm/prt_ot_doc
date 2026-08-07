@@ -25,7 +25,9 @@ export const ClosingPanel = ({
   onRefresh,
   workPermitId,
 }: Props) => {
-  const [completionText, setCompletionText] = useState(summary.completion_text ?? "");
+  const [completionText, setCompletionText] = useState(
+    summary.completion_text ?? "",
+  );
   const [savingAct, setSavingAct] = useState(false);
 
   // Текст акта приходит из summary; после onRefresh (или правки другим пользователем) поле
@@ -55,7 +57,11 @@ export const ClosingPanel = ({
   const handleSign = async (personId: string, mode: "attested" | "code") => {
     if (!workPermitId) return;
     try {
-      const res = await workPermitsApi.createClosingSignature(workPermitId, personId, mode);
+      const res = await workPermitsApi.createClosingSignature(
+        workPermitId,
+        personId,
+        mode,
+      );
       if (mode === "code" && res.confirm_code) {
         toast.success(`Код для подписанта: ${res.confirm_code}`);
       }
@@ -77,7 +83,9 @@ export const ClosingPanel = ({
       <div className="space-y-2">
         <div className="text-sm font-medium">Акт окончания работ</div>
         {summary.completion_text ? (
-          <div className="text-sm whitespace-pre-wrap">{summary.completion_text}</div>
+          <div className="text-sm whitespace-pre-wrap">
+            {summary.completion_text}
+          </div>
         ) : (
           <p className="text-sm text-muted-foreground">Акт не оформлен</p>
         )}
@@ -89,7 +97,11 @@ export const ClosingPanel = ({
               value={completionText}
               onChange={(e) => setCompletionText(e.target.value)}
             />
-            <Button size="sm" disabled={savingAct} onClick={() => void handleRecordAct()}>
+            <Button
+              size="sm"
+              disabled={savingAct}
+              onClick={() => void handleRecordAct()}
+            >
               {savingAct ? "Сохранение..." : "Оформить акт"}
             </Button>
           </div>

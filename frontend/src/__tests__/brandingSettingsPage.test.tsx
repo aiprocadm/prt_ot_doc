@@ -1,4 +1,10 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
@@ -13,12 +19,17 @@ const brandingApiMock = vi.hoisted(() => ({
 }));
 
 vi.mock("@/api/branding", () => ({
-  getBrandingHistory: (...args: unknown[]) => brandingApiMock.getBrandingHistory(...args),
-  getBrandingProfile: (...args: unknown[]) => brandingApiMock.getBrandingProfile(...args),
-  listLayoutPresets: (...args: unknown[]) => brandingApiMock.listLayoutPresets(...args),
+  getBrandingHistory: (...args: unknown[]) =>
+    brandingApiMock.getBrandingHistory(...args),
+  getBrandingProfile: (...args: unknown[]) =>
+    brandingApiMock.getBrandingProfile(...args),
+  listLayoutPresets: (...args: unknown[]) =>
+    brandingApiMock.listLayoutPresets(...args),
   listSites: (...args: unknown[]) => brandingApiMock.listSites(...args),
-  previewBranding: (...args: unknown[]) => brandingApiMock.previewBranding(...args),
-  updateBrandingProfile: (...args: unknown[]) => brandingApiMock.updateBrandingProfile(...args),
+  previewBranding: (...args: unknown[]) =>
+    brandingApiMock.previewBranding(...args),
+  updateBrandingProfile: (...args: unknown[]) =>
+    brandingApiMock.updateBrandingProfile(...args),
 }));
 
 vi.mock("@/hooks/useUnsavedChanges", () => ({
@@ -146,17 +157,22 @@ describe("BrandingSettingsPage", () => {
       render(
         <MemoryRouter>
           <BrandingSettingsPage />
-        </MemoryRouter>
+        </MemoryRouter>,
       );
     });
 
-    expect((await screen.findAllByDisplayValue("АО Тест")).length).toBeGreaterThan(0);
+    expect(
+      (await screen.findAllByDisplayValue("АО Тест")).length,
+    ).toBeGreaterThan(0);
     expect(screen.getByText("company")).toBeInTheDocument();
     expect(screen.getAllByText("company_brand").length).toBeGreaterThan(0);
     expect(screen.getAllByText("АО Тест").length).toBeGreaterThan(0);
     expect(listCompaniesMock).toHaveBeenCalled();
     expect(brandingApiMock.listSites).toHaveBeenCalledWith("company-1");
-    expect(brandingApiMock.getBrandingProfile).toHaveBeenCalledWith("company-1", undefined);
+    expect(brandingApiMock.getBrandingProfile).toHaveBeenCalledWith(
+      "company-1",
+      undefined,
+    );
   });
 
   it("builds branded preview and stores it in recent history", async () => {
@@ -166,23 +182,33 @@ describe("BrandingSettingsPage", () => {
       render(
         <MemoryRouter>
           <BrandingSettingsPage />
-        </MemoryRouter>
+        </MemoryRouter>,
       );
     });
 
-    expect((await screen.findAllByDisplayValue("АО Тест")).length).toBeGreaterThan(0);
+    expect(
+      (await screen.findAllByDisplayValue("АО Тест")).length,
+    ).toBeGreaterThan(0);
     await act(async () => {
-      await user.click(screen.getByRole("button", { name: /тестовая генерация превью с брендингом/i }));
+      await user.click(
+        screen.getByRole("button", {
+          name: /тестовая генерация превью с брендингом/i,
+        }),
+      );
     });
 
-    expect((await screen.findAllByText(/АО Тест \/ Main site/i)).length).toBeGreaterThan(0);
+    expect(
+      (await screen.findAllByText(/АО Тест \/ Main site/i)).length,
+    ).toBeGreaterThan(0);
     expect(screen.getByText(/все плейсхолдеры разрешены/i)).toBeInTheDocument();
-    expect(screen.getAllByText(/2026-03-26T01:00:00Z/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/2026-03-26T01:00:00Z/i).length).toBeGreaterThan(
+      0,
+    );
     expect(brandingApiMock.previewBranding).toHaveBeenCalledWith(
       expect.objectContaining({
         company_id: "company-1",
         preset_code: "company_brand",
-      })
+      }),
     );
     expect(toast.success).toHaveBeenCalledWith("Предпросмотр обновлён");
   });
@@ -194,22 +220,28 @@ describe("BrandingSettingsPage", () => {
       render(
         <MemoryRouter>
           <BrandingSettingsPage />
-        </MemoryRouter>
+        </MemoryRouter>,
       );
     });
 
-    expect((await screen.findAllByDisplayValue("АО Тест")).length).toBeGreaterThan(0);
+    expect(
+      (await screen.findAllByDisplayValue("АО Тест")).length,
+    ).toBeGreaterThan(0);
 
     const metadataTextarea = getLabeledTextarea("Метаданные (JSON)");
     await act(async () => {
       fireEvent.change(metadataTextarea, { target: { value: "{" } });
     });
     await act(async () => {
-      await user.click(screen.getByRole("button", { name: /сохранить профиль/i }));
+      await user.click(
+        screen.getByRole("button", { name: /сохранить профиль/i }),
+      );
     });
 
     await waitFor(() => {
-      expect(toast.error).toHaveBeenCalledWith("Некорректный JSON в метаданных или подписантах");
+      expect(toast.error).toHaveBeenCalledWith(
+        "Некорректный JSON в метаданных или подписантах",
+      );
     });
     expect(brandingApiMock.updateBrandingProfile).not.toHaveBeenCalled();
   });

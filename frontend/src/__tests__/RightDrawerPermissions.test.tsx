@@ -13,7 +13,7 @@ const baseUser = {
   email: "user@example.com",
   full_name: "User",
   roles: ["worker"],
-  permissions: [PERMISSIONS.DASHBOARD_VIEW]
+  permissions: [PERMISSIONS.DASHBOARD_VIEW],
 };
 
 describe("RightDrawer permission visibility", () => {
@@ -23,7 +23,7 @@ describe("RightDrawer permission visibility", () => {
       loading: false,
       error: null,
       isAuthenticated: true,
-      initialized: true
+      initialized: true,
     });
   });
 
@@ -31,7 +31,7 @@ describe("RightDrawer permission visibility", () => {
     render(
       <MemoryRouter>
         <RightDrawer />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
     expect(screen.queryByText("Создать документ")).not.toBeInTheDocument();
   });
@@ -40,13 +40,15 @@ describe("RightDrawer permission visibility", () => {
     useAuthStore.setState({
       user: { ...baseUser, permissions: [PERMISSIONS.DOCUMENT_CREATE] },
       isAuthenticated: true,
-      initialized: true
+      initialized: true,
     });
     render(
       <MemoryRouter>
         <RightDrawer />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
-    expect(screen.getByRole("link", { name: /создать документ/i })).toHaveAttribute("href", "/documents/wizard");
+    expect(
+      screen.getByRole("link", { name: /создать документ/i }),
+    ).toHaveAttribute("href", "/documents/wizard");
   });
 });

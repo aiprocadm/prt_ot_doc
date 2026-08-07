@@ -1,4 +1,5 @@
 """Юниты чистого сборщика печатных форм СОУТ (без БД, без async)."""
+
 from io import BytesIO
 
 from docx import Document
@@ -9,8 +10,8 @@ from app.domains.sout.print_form import (
     SoutCardPrintData,
     SoutSummaryPrintData,
     SoutSummaryRow,
-    build_summary_sheet_docx,
     build_sout_card_docx,
+    build_summary_sheet_docx,
     class_counts,
     harmful_factor_count,
 )
@@ -49,16 +50,16 @@ def test_card_contains_identity_and_class_labels() -> None:
     txt = _text(out)
     assert "РМ-01" in txt and "Сварщик" in txt
     assert "ЭкспертОрг" in txt
-    assert "3.2" in txt          # итоговый класс РМ (RU-метка)
+    assert "3.2" in txt  # итоговый класс РМ (RU-метка)
     assert "Шум" in txt and "3.1" in txt
-    assert "Молоко" in txt       # GUARANTEE_KIND_LABELS["milk"]
+    assert "Молоко" in txt  # GUARANTEE_KIND_LABELS["milk"]
 
 
 def test_card_empty_sections_render() -> None:
     out = build_sout_card_docx(_card(factors=[], guarantees=[], assessed_class=None))
     txt = _text(out)
     assert "РМ-01" in txt
-    assert "—" in txt            # отсутствующий класс / пустые секции
+    assert "—" in txt  # отсутствующий класс / пустые секции
 
 
 def test_harmful_factor_count_counts_3_1_and_above() -> None:
@@ -91,13 +92,17 @@ def test_summary_lists_workplaces_and_stats() -> None:
         report_date="2026-06-01",
         rows=[
             SoutSummaryRow(
-                workplace_code="РМ-01", position_name="Сварщик",
-                assessed_class="harmful_3_2", harmful_factor_count=2,
+                workplace_code="РМ-01",
+                position_name="Сварщик",
+                assessed_class="harmful_3_2",
+                harmful_factor_count=2,
                 next_assessment_date="2031-05-20",
             ),
             SoutSummaryRow(
-                workplace_code="РМ-02", position_name="Слесарь",
-                assessed_class="acceptable", harmful_factor_count=0,
+                workplace_code="РМ-02",
+                position_name="Слесарь",
+                assessed_class="acceptable",
+                harmful_factor_count=0,
                 next_assessment_date=None,
             ),
         ],
@@ -112,9 +117,14 @@ def test_summary_lists_workplaces_and_stats() -> None:
 
 def test_summary_empty_campaign_renders() -> None:
     data = SoutSummaryPrintData(
-        org_header="ООО Ромашка", generated_at="2026-06-27",
-        campaign_name="Пустая", expert_org_name=None,
-        report_number=None, report_date=None, rows=[], class_counts=[],
+        org_header="ООО Ромашка",
+        generated_at="2026-06-27",
+        campaign_name="Пустая",
+        expert_org_name=None,
+        report_number=None,
+        report_date=None,
+        rows=[],
+        class_counts=[],
     )
     txt = _text(build_summary_sheet_docx(data))
     assert "Пустая" in txt

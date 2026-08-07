@@ -14,11 +14,24 @@ import { ContractorIncidentsTab } from "@/features/contractors/ContractorInciden
 import { useAsyncResource } from "@/hooks/useAsyncResource";
 import { COMPLIANCE_STATUS_LABELS } from "@/pages/contractors/contractorsVocab";
 import { PERMISSIONS } from "@/permissions/permissions";
-import type { ComplianceStatus, ContractorComplianceSummary, ContractorRegistry } from "@/types/dto/contractors";
+import type {
+  ComplianceStatus,
+  ContractorComplianceSummary,
+  ContractorRegistry,
+} from "@/types/dto/contractors";
 
-type DetailData = { contractor: ContractorRegistry | null; compliance: ContractorComplianceSummary | null };
+type DetailData = {
+  contractor: ContractorRegistry | null;
+  compliance: ContractorComplianceSummary | null;
+};
 
-const ComplianceRow = ({ title, totals }: { title: string; totals: Record<string, number> }) => (
+const ComplianceRow = ({
+  title,
+  totals,
+}: {
+  title: string;
+  totals: Record<string, number>;
+}) => (
   <div className="rounded-md border p-3">
     <div className="mb-2 text-sm font-medium">{title}</div>
     <div className="flex flex-wrap gap-3 text-sm">
@@ -27,7 +40,8 @@ const ComplianceRow = ({ title, totals }: { title: string; totals: Record<string
       ) : (
         Object.entries(totals).map(([status, count]) => (
           <span key={status}>
-            {COMPLIANCE_STATUS_LABELS[status as ComplianceStatus] ?? status}: <strong>{count}</strong>
+            {COMPLIANCE_STATUS_LABELS[status as ComplianceStatus] ?? status}:{" "}
+            <strong>{count}</strong>
           </span>
         ))
       )}
@@ -41,7 +55,7 @@ export default function ContractorDetailPage() {
   const loader = useCallback(async (): Promise<DetailData> => {
     const [contractor, compliance] = await Promise.all([
       contractorsApi.getRegistry(id),
-      contractorsApi.getComplianceSummary({ contractor_id: id })
+      contractorsApi.getComplianceSummary({ contractor_id: id }),
     ]);
     return { contractor, compliance };
   }, [id]);
@@ -49,17 +63,23 @@ export default function ContractorDetailPage() {
   const { data, loading, error, reload } = useAsyncResource<DetailData>({
     loader,
     initialData: { contractor: null, compliance: null },
-    errorMessage: "Не удалось загрузить подрядчика"
+    errorMessage: "Не удалось загрузить подрядчика",
   });
 
   if (loading) return <LoadingScreen label="Загрузка подрядчика" />;
-  if (error || !data.contractor) return <ErrorState error={error ?? undefined} onRetry={() => void reload()} />;
+  if (error || !data.contractor)
+    return (
+      <ErrorState error={error ?? undefined} onRetry={() => void reload()} />
+    );
 
   const c = data.contractor;
 
   return (
     <div className="space-y-5">
-      <Link to="/contractors" className="text-sm text-muted-foreground hover:underline">
+      <Link
+        to="/contractors"
+        className="text-sm text-muted-foreground hover:underline"
+      >
         ← Подрядчики
       </Link>
 
@@ -91,16 +111,30 @@ export default function ContractorDetailPage() {
         </TabsList>
 
         <TabsContent value="overview" className="space-y-3">
-          <p className="text-sm">Сотрудников: {data.compliance?.employees_total ?? 0}</p>
+          <p className="text-sm">
+            Сотрудников: {data.compliance?.employees_total ?? 0}
+          </p>
           <div className="grid gap-3 md:grid-cols-3">
-            <ComplianceRow title="Допуск" totals={data.compliance?.admission ?? {}} />
-            <ComplianceRow title="Обучение" totals={data.compliance?.training ?? {}} />
-            <ComplianceRow title="Медосмотр" totals={data.compliance?.medical ?? {}} />
+            <ComplianceRow
+              title="Допуск"
+              totals={data.compliance?.admission ?? {}}
+            />
+            <ComplianceRow
+              title="Обучение"
+              totals={data.compliance?.training ?? {}}
+            />
+            <ComplianceRow
+              title="Медосмотр"
+              totals={data.compliance?.medical ?? {}}
+            />
           </div>
         </TabsContent>
 
         <TabsContent value="employees">
-          <ContractorEmployeesTab contractorId={c.id} onChanged={() => void reload()} />
+          <ContractorEmployeesTab
+            contractorId={c.id}
+            onChanged={() => void reload()}
+          />
         </TabsContent>
 
         <TabsContent value="documents">

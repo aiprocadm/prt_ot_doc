@@ -8,7 +8,10 @@ interface HealthState {
   data: HealthComprehensiveDto | null;
   loading: boolean;
   error: ApiError | null;
-  fetchComprehensive: (params?: { skip_cache?: boolean; skip_slow?: boolean }) => Promise<void>;
+  fetchComprehensive: (params?: {
+    skip_cache?: boolean;
+    skip_slow?: boolean;
+  }) => Promise<void>;
   reset: () => void;
 }
 
@@ -39,6 +42,6 @@ export const useHealthStore = create<HealthState>()(
     },
     reset: () => {
       set(() => ({ data: null, loading: false, error: null }));
-    }
-  }))
+    },
+  })),
 );

@@ -8,7 +8,10 @@ import { Button } from "@/components/ui/button";
 import { ArticleFormDialog } from "@/features/budget/ArticleFormDialog";
 import { BUDGET_DOMAIN_LABELS } from "@/pages/budget/budgetVocab";
 import { PERMISSIONS } from "@/permissions/permissions";
-import type { BudgetArticleDto, BudgetArticlePageDto } from "@/types/dto/budget";
+import type {
+  BudgetArticleDto,
+  BudgetArticlePageDto,
+} from "@/types/dto/budget";
 
 interface Props {
   articles: BudgetArticlePageDto;
@@ -22,10 +25,15 @@ export const ArticlesTab = ({ articles, onChanged }: Props) => {
     setSeeding(true);
     try {
       const result = await budgetApi.seedDefaultArticles();
-      toast.success(`Добавлено: ${result.created}, пропущено: ${result.skipped}`);
+      toast.success(
+        `Добавлено: ${result.created}, пропущено: ${result.skipped}`,
+      );
       onChanged();
     } catch (err) {
-      toast.error((err as { message?: string })?.message ?? "Не удалось заполнить статьи по умолчанию");
+      toast.error(
+        (err as { message?: string })?.message ??
+          "Не удалось заполнить статьи по умолчанию",
+      );
     } finally {
       setSeeding(false);
     }
@@ -45,15 +53,25 @@ export const ArticlesTab = ({ articles, onChanged }: Props) => {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-end gap-2">
         <Can permission={PERMISSIONS.BUDGET_MANAGE}>
-          <Button variant="outline" onClick={() => void seedDefaults()} disabled={seeding}>
+          <Button
+            variant="outline"
+            onClick={() => void seedDefaults()}
+            disabled={seeding}
+          >
             {seeding ? "Заполняем..." : "Заполнить стандартными"}
           </Button>
-          <ArticleFormDialog trigger={<Button>Новая статья</Button>} onSubmitted={onChanged} />
+          <ArticleFormDialog
+            trigger={<Button>Новая статья</Button>}
+            onSubmitted={onChanged}
+          />
         </Can>
       </div>
 
       {articles.items.length === 0 ? (
-        <EmptyState title="Статей нет" description="Создайте статью или заполните стандартный набор." />
+        <EmptyState
+          title="Статей нет"
+          description="Создайте статью или заполните стандартный набор."
+        />
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -72,9 +90,13 @@ export const ArticlesTab = ({ articles, onChanged }: Props) => {
                   <td className="py-2 pr-4">{article.code}</td>
                   <td className="py-2 pr-4">{article.name}</td>
                   <td className="py-2 pr-4">
-                    {article.domain ? BUDGET_DOMAIN_LABELS[article.domain] : "Универсальная"}
+                    {article.domain
+                      ? BUDGET_DOMAIN_LABELS[article.domain]
+                      : "Универсальная"}
                   </td>
-                  <td className="py-2 pr-4">{article.is_active ? "Активна" : "Отключена"}</td>
+                  <td className="py-2 pr-4">
+                    {article.is_active ? "Активна" : "Отключена"}
+                  </td>
                   <td className="py-2">
                     <Can permission={PERMISSIONS.BUDGET_MANAGE}>
                       <div className="flex flex-wrap gap-1">
@@ -87,7 +109,11 @@ export const ArticlesTab = ({ articles, onChanged }: Props) => {
                           initialData={article}
                           onSubmitted={onChanged}
                         />
-                        <Button size="sm" variant="destructive" onClick={() => void removeArticle(article)}>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => void removeArticle(article)}
+                        >
                           Удалить
                         </Button>
                       </div>

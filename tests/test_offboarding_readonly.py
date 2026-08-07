@@ -39,9 +39,7 @@ async def _start_grace(async_client, headers, *, grace_days: int = 30) -> None:
 
 @pytest.mark.anyio
 class TestGraceReadOnly:
-    async def test_write_is_rejected_during_grace(
-        self, async_client, make_auth_headers
-    ) -> None:
+    async def test_write_is_rejected_during_grace(self, async_client, make_auth_headers) -> None:
         headers = await make_auth_headers(RoleEnum.ADMIN)
         await _start_grace(async_client, headers)
 
@@ -58,9 +56,7 @@ class TestGraceReadOnly:
         # как поломка.
         assert detail["grace_until"]
 
-    async def test_read_still_works_during_grace(
-        self, async_client, make_auth_headers
-    ) -> None:
+    async def test_read_still_works_during_grace(self, async_client, make_auth_headers) -> None:
         headers = await make_auth_headers(RoleEnum.ADMIN)
         await _start_grace(async_client, headers)
 
@@ -113,9 +109,7 @@ class TestGraceReadOnly:
 
         assert response.status_code != 409, response.text
 
-    async def test_export_still_works_during_grace(
-        self, async_client, make_auth_headers
-    ) -> None:
+    async def test_export_still_works_during_grace(self, async_client, make_auth_headers) -> None:
         """Забрать данные — ровно то, ради чего grace-период и существует."""
 
         headers = await make_auth_headers(RoleEnum.ADMIN)
@@ -126,9 +120,7 @@ class TestGraceReadOnly:
         )
         assert response.status_code == 200, response.text
 
-    async def test_another_tenant_is_not_frozen(
-        self, async_client, make_auth_headers
-    ) -> None:
+    async def test_another_tenant_is_not_frozen(self, async_client, make_auth_headers) -> None:
         """Расторжение одного арендатора не останавливает работу соседа."""
 
         leaving = await make_auth_headers(RoleEnum.ADMIN)

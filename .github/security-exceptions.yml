@@ -8,6 +8,35 @@
 # - expires_on: YYYY-MM-DD (CI rejects expired entries)
 # Optional fields: created_on, scope.paths, ticket
 exceptions:
+  # --- trivy (container-image-scan): base-image/toolchain, не зависимости приложения. ---
+
+  - id: GHSA-6v7p-g79w-8964
+    tool: trivy
+    category: container
+    owner: reviewers-platform-infra
+    reason: >-
+      msgpack 1.1.2 в образе — это НЕ зависимость приложения (requirements
+      пинит msgpack==1.2.1, где GHSA закрыт), а копия, вендоренная внутри pip
+      (pip/_vendor/msgpack): даже новейший pip 26.1.2 несёт 1.1.2, апгрейд pip
+      не помогает. Код недостижим в рантайме приложения (pip в проде не
+      вызывается). Re-review: снять после релиза pip с msgpack>=1.2.1.
+    expires_on: 2026-11-30
+    created_on: 2026-08-06
+
+  - id: CVE-2025-47273
+    tool: trivy
+    category: container
+    owner: reviewers-platform-infra
+    reason: >-
+      setuptools 70.3.0 — фантом из манифеста вендоренных компонентов pip
+      (pip/_vendor/vendor.txt + bom.cdx.json): файлов setuptools-70.3.0 в
+      образе нет (проверено find по живому образу), реальный setuptools в
+      site-packages поднят Dockerfile'ом до 83.0.0. Уязвимый код (PackageIndex)
+      в рантайме приложения недостижим. Re-review: снять после релиза pip с
+      setuptools>=78.1.1 в vendor.txt.
+    expires_on: 2026-11-30
+    created_on: 2026-08-06
+
   # --- pip-audit (разд. 64.1): остаток после подъёма зависимостей. ---
   # Записи скармливаются шагу pip-audit как --ignore-vuln через
   # scripts/ci/render_pip_audit_ignores.py. (2026-07-31: блок starlette ×7 и

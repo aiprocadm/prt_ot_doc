@@ -1,4 +1,5 @@
 """Pin: so02 СОУТ class-history migration shape (P10-04 срез-2)."""
+
 from __future__ import annotations
 
 import ast
@@ -7,7 +8,10 @@ from pathlib import Path
 
 _MIGRATION = (
     Path(__file__).resolve().parents[1]
-    / "app" / "migrations" / "versions" / "20260626_so02_sout_class_history.py"
+    / "app"
+    / "migrations"
+    / "versions"
+    / "20260626_so02_sout_class_history.py"
 )
 
 
@@ -52,4 +56,4 @@ def test_creates_single_table_reusing_existing_enum() -> None:
     assert _count_op_calls(text, "drop_table") == 1
     # soutclass owned by so01 → referenced, never re-created here
     assert "create_type=False" in text
-    assert 'enum_type.create' not in text
+    assert "enum_type.create" not in text

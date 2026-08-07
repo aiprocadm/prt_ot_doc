@@ -90,9 +90,7 @@ class TestConsentVersioning:
         assert withdrawn.status == "withdrawn"
         assert withdrawn.withdrawn_at is not None
         assert withdrawn.withdrawal_reason == "отзыв субъекта"
-        rows = (
-            (await test_db_session.execute(select(PdnConsent))).scalars().all()
-        )
+        rows = (await test_db_session.execute(select(PdnConsent))).scalars().all()
         assert len(rows) == 1, "отзыв не должен удалять строку"
 
     async def test_withdraw_without_active_consent_returns_none(
@@ -110,9 +108,7 @@ class TestConsentVersioning:
         tenant, person = await _subject(data_factory, test_db_session)
         service = PdnConsentService(test_db_session, tenant_id=str(tenant.id))
         await service.grant(person_id=str(person.id), purpose="medical_exams")
-        await service.grant(
-            person_id=str(person.id), purpose="employment", legal_basis="contract"
-        )
+        await service.grant(person_id=str(person.id), purpose="employment", legal_basis="contract")
 
         await service.withdraw(person_id=str(person.id), purpose="medical_exams")
 
@@ -127,9 +123,7 @@ class TestConsentVersioning:
         with pytest.raises(UnknownPurposeError):
             await service.grant(person_id=str(person.id), purpose="marketing")
         with pytest.raises(UnknownLegalBasisError):
-            await service.grant(
-                person_id=str(person.id), purpose="training", legal_basis="because"
-            )
+            await service.grant(person_id=str(person.id), purpose="training", legal_basis="because")
 
     async def test_consents_are_isolated_between_tenants(
         self, test_db_session: AsyncSession, data_factory: TestDataFactory

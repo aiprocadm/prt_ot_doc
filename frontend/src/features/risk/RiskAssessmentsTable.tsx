@@ -12,7 +12,7 @@ import { downloadBlob } from "@/utils/download";
 
 const RISK_STATUS_LABELS: Record<RiskAssessmentDto["status"], string> = {
   draft: "Черновик",
-  approved: "Утвержден"
+  approved: "Утвержден",
 };
 
 const resolveRiskLevel = (score: number) => {
@@ -23,7 +23,8 @@ const resolveRiskLevel = (score: number) => {
 };
 
 export const RiskAssessmentsTable = () => {
-  const { assessments, listAssessments, exportAssessment, loading } = useRiskStore();
+  const { assessments, listAssessments, exportAssessment, loading } =
+    useRiskStore();
   const companies = useCompaniesStore((state) => state.items);
 
   const columns = useMemo<ColumnDef<RiskAssessmentDto>[]>(
@@ -31,27 +32,31 @@ export const RiskAssessmentsTable = () => {
       {
         accessorKey: "id",
         header: "ID",
-        cell: ({ row }) => row.original.id
+        cell: ({ row }) => row.original.id,
       },
       {
         accessorKey: "company_id",
         header: "Компания",
-        cell: ({ row }) => companies.find((company) => company.id === row.original.company_id)?.name ?? row.original.company_id
+        cell: ({ row }) =>
+          companies.find((company) => company.id === row.original.company_id)
+            ?.name ?? row.original.company_id,
       },
       {
         accessorKey: "status",
         header: "Статус",
-        cell: ({ row }) => RISK_STATUS_LABELS[row.original.status] ?? row.original.status
+        cell: ({ row }) =>
+          RISK_STATUS_LABELS[row.original.status] ?? row.original.status,
       },
       {
         accessorKey: "total_score",
         header: "Индекс",
-        cell: ({ row }) => `${row.original.total_score.toFixed(2)} · ${resolveRiskLevel(row.original.total_score)}`
+        cell: ({ row }) =>
+          `${row.original.total_score.toFixed(2)} · ${resolveRiskLevel(row.original.total_score)}`,
       },
       {
         accessorKey: "updated_at",
         header: "Обновлено",
-        cell: ({ row }) => formatDate(row.original.updated_at)
+        cell: ({ row }) => formatDate(row.original.updated_at),
       },
       {
         id: "export",
@@ -59,7 +64,10 @@ export const RiskAssessmentsTable = () => {
         cell: ({ row }) => (
           <ActionButton
             permission={PERMISSIONS.RISK_EXPORT}
-            abilityResource={{ status: row.original.status, company_id: row.original.company_id }}
+            abilityResource={{
+              status: row.original.status,
+              company_id: row.original.company_id,
+            }}
             variant="ghost"
             size="sm"
             disabledReason="Экспорт доступен после утверждения расчёта"
@@ -70,10 +78,10 @@ export const RiskAssessmentsTable = () => {
           >
             Скачать
           </ActionButton>
-        )
-      }
+        ),
+      },
     ],
-    [companies, exportAssessment]
+    [companies, exportAssessment],
   );
 
   return (

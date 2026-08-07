@@ -2,9 +2,17 @@
 // Read-only aggregate that joins personal + roles + training + medicals
 // + ppe + permits + incidents + audit for the Unified Employee Card.
 
-export type EmployeeEmploymentStatus = "active" | "on_leave" | "suspended" | "terminated";
+export type EmployeeEmploymentStatus =
+  | "active"
+  | "on_leave"
+  | "suspended"
+  | "terminated";
 
-export type EmployeeTrainingStatus = "scheduled" | "in_progress" | "completed" | "failed";
+export type EmployeeTrainingStatus =
+  | "scheduled"
+  | "in_progress"
+  | "completed"
+  | "failed";
 
 export type EmployeePermitStatus = "active" | "expired" | "revoked";
 
@@ -12,7 +20,11 @@ export type EmployeePPEIssueStatus = "issued" | "returned" | "lost";
 
 export type EmployeeIncidentSeverity = "low" | "medium" | "high";
 
-export type EmployeeIncidentType = "accident" | "microtrauma" | "near_miss" | "unsafe_condition";
+export type EmployeeIncidentType =
+  | "accident"
+  | "microtrauma"
+  | "near_miss"
+  | "unsafe_condition";
 
 export type EmployeeIncidentStatus =
   | "reported"

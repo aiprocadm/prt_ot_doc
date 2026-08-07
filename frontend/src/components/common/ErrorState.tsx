@@ -16,7 +16,13 @@ const serverSupportLine = (error: ApiError): string | null => {
   return parts.length ? parts.join(" · ") : null;
 };
 
-export const ErrorState = ({ error, onRetry }: { error?: ApiError | null; onRetry?: () => void }) => {
+export const ErrorState = ({
+  error,
+  onRetry,
+}: {
+  error?: ApiError | null;
+  onRetry?: () => void;
+}) => {
   if (!error) return null;
 
   const isServerSide = error.status >= 500 || error.code === "INTERNAL_ERROR";
@@ -35,19 +41,29 @@ export const ErrorState = ({ error, onRetry }: { error?: ApiError | null; onRetr
       <div className="space-y-1">
         <p className="text-sm font-semibold">{resolveUserMessage(error)}</p>
         {supportLine ? (
-          <p className="break-all font-mono text-[11px] opacity-75" title="Передайте строку в поддержку при обращении">
+          <p
+            className="break-all font-mono text-[11px] opacity-75"
+            title="Передайте строку в поддержку при обращении"
+          >
             {supportLine}
           </p>
         ) : null}
-        {!isServerSide && error.code ? <p className="text-xs opacity-90">Код: {error.code}</p> : null}
+        {!isServerSide && error.code ? (
+          <p className="text-xs opacity-90">Код: {error.code}</p>
+        ) : null}
         {!isServerSide && error.correlation_id ? (
-          <p className="text-xs opacity-90">ID корреляции: {error.correlation_id}</p>
+          <p className="text-xs opacity-90">
+            ID корреляции: {error.correlation_id}
+          </p>
         ) : null}
         {error.field_errors?.length ? (
           <ul className="list-disc space-y-1 pl-5 text-left text-xs">
             {error.field_errors.map((fieldError) => (
-              <li key={`${fieldError.field}:${fieldError.code ?? fieldError.message}`}>
-                <span className="font-medium">{fieldError.field}:</span> {fieldError.message}
+              <li
+                key={`${fieldError.field}:${fieldError.code ?? fieldError.message}`}
+              >
+                <span className="font-medium">{fieldError.field}:</span>{" "}
+                {fieldError.message}
               </li>
             ))}
           </ul>

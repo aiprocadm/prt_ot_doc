@@ -33,7 +33,7 @@ const batch = (over: Partial<ImportBatchDto> = {}): ImportBatchDto => ({
   error_message: null,
   rolled_back_at: null,
   rolled_back_by: null,
-  ...over
+  ...over,
 });
 
 describe("useBatchProgress", () => {
@@ -49,7 +49,9 @@ describe("useBatchProgress", () => {
   it("опрашивает незавершённую партию и отдаёт свежий прогресс", async () => {
     mocked.batch.mockResolvedValue(batch({ processed_rows: 4 }));
 
-    const { result } = renderHook(() => useBatchProgress([batch()], { intervalMs: 1000 }));
+    const { result } = renderHook(() =>
+      useBatchProgress([batch()], { intervalMs: 1000 }),
+    );
     expect(result.current[0].processed_rows).toBe(0);
 
     // waitFor здесь неприменим: он крутит СВОЙ таймер, а таймеры подменены —
@@ -62,7 +64,9 @@ describe("useBatchProgress", () => {
   });
 
   it("не опрашивает завершённые партии", async () => {
-    renderHook(() => useBatchProgress([batch({ status: "applied" })], { intervalMs: 1000 }));
+    renderHook(() =>
+      useBatchProgress([batch({ status: "applied" })], { intervalMs: 1000 }),
+    );
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(5000);
@@ -74,10 +78,14 @@ describe("useBatchProgress", () => {
   });
 
   it("останавливает опрос, когда партия дошла до терминала, и зовёт onSettled", async () => {
-    mocked.batch.mockResolvedValue(batch({ status: "applied", processed_rows: 10 }));
+    mocked.batch.mockResolvedValue(
+      batch({ status: "applied", processed_rows: 10 }),
+    );
     const onSettled = vi.fn();
 
-    renderHook(() => useBatchProgress([batch()], { intervalMs: 1000, onSettled }));
+    renderHook(() =>
+      useBatchProgress([batch()], { intervalMs: 1000, onSettled }),
+    );
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(1000);
@@ -96,7 +104,9 @@ describe("useBatchProgress", () => {
     mocked.batch.mockResolvedValueOnce(batch({ processed_rows: 3 }));
     mocked.batch.mockRejectedValueOnce(new Error("network"));
 
-    const { result } = renderHook(() => useBatchProgress([batch()], { intervalMs: 1000 }));
+    const { result } = renderHook(() =>
+      useBatchProgress([batch()], { intervalMs: 1000 }),
+    );
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(1000);

@@ -73,9 +73,7 @@ class ArchiveLimits:
             max_uncompressed_bytes=int(
                 getattr(settings, "archive_max_uncompressed_bytes", cls.max_uncompressed_bytes)
             ),
-            max_entry_bytes=int(
-                getattr(settings, "archive_max_entry_bytes", cls.max_entry_bytes)
-            ),
+            max_entry_bytes=int(getattr(settings, "archive_max_entry_bytes", cls.max_entry_bytes)),
             max_compression_ratio=float(
                 getattr(settings, "archive_max_compression_ratio", cls.max_compression_ratio)
             ),

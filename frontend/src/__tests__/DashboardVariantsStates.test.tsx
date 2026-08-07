@@ -25,10 +25,12 @@ describe("Dashboard variants operational states", () => {
     render(
       <MemoryRouter>
         <SafetyDashboardPage />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
 
-    expect(await screen.findByText(/данные дашборда отсутствуют/i)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/данные дашборда отсутствуют/i),
+    ).toBeInTheDocument();
   });
 
   it("shows loading state on TrainingDashboardPage while API call is pending", async () => {
@@ -37,23 +39,28 @@ describe("Dashboard variants operational states", () => {
     render(
       <MemoryRouter>
         <TrainingDashboardPage />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
 
     expect(await screen.findByText(/загрузка дашборда/i)).toBeInTheDocument();
   });
 
   it("shows error state on ClientDeliveryDashboardPage when API fails", async () => {
-    getMock.mockRejectedValue({ status: 400, message: "dashboard load failed" });
+    getMock.mockRejectedValue({
+      status: 400,
+      message: "dashboard load failed",
+    });
 
     render(
       <MemoryRouter>
         <ClientDeliveryDashboardPage />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
 
     await waitFor(() => {
-      expect(screen.getByRole("alert")).toHaveTextContent("dashboard load failed");
+      expect(screen.getByRole("alert")).toHaveTextContent(
+        "dashboard load failed",
+      );
     });
   });
 });

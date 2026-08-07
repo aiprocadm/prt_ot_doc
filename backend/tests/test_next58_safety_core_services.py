@@ -48,7 +48,9 @@ def test_fine_kinney_calculation() -> None:
             ]
         },
     }
-    result = RiskCalculationService.calculate_item(methodology, probability=2, severity=6, exposure=10)
+    result = RiskCalculationService.calculate_item(
+        methodology, probability=2, severity=6, exposure=10
+    )
     assert result.raw_score == 120
     assert result.risk_level == "high"
 
@@ -77,7 +79,10 @@ def test_ppe_required_union_and_missing_projection() -> None:
         "helmet": {"current_quantity": 1.0, "next_due_at": None},
         "respirator": {"current_quantity": 1.0, "next_due_at": None},
     }
-    assert RiskPPEProjectionService.missing_required(required, issued) == {"goggles": 1.0, "respirator": 1.0}
+    assert RiskPPEProjectionService.missing_required(required, issued) == {
+        "goggles": 1.0,
+        "respirator": 1.0,
+    }
 
 
 def test_issue_return_updates_personal_card_projection() -> None:
@@ -135,4 +140,7 @@ def test_risk_map_generation_archives_removed_bindings() -> None:
 def test_pack_safety_clearance_rule() -> None:
     assert PackSafetySummaryService.has_clearance(risk_levels=["low"], missing_ppe={}) is True
     assert PackSafetySummaryService.has_clearance(risk_levels=["high"], missing_ppe={}) is False
-    assert PackSafetySummaryService.has_clearance(risk_levels=["medium"], missing_ppe={"helmet": 1}) is False
+    assert (
+        PackSafetySummaryService.has_clearance(risk_levels=["medium"], missing_ppe={"helmet": 1})
+        is False
+    )

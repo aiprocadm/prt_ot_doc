@@ -7,7 +7,14 @@ import { SlaIndicator } from "@/components/common/SlaIndicator";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { WorkspaceTaskInboxDto } from "@/api/workspace";
 import type { DashboardOperationalSnapshotDto } from "@/types/dto/dashboard";
@@ -35,7 +42,7 @@ export const DashboardTabsSection = ({
   setTaskStatusFilter,
   setTaskPriorityFilter,
   operational,
-  operationalLoading
+  operationalLoading,
 }: Props) => (
   <Tabs defaultValue="tasks">
     <TabsList>
@@ -51,7 +58,8 @@ export const DashboardTabsSection = ({
         <CardContent className="space-y-4">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div className="text-sm text-muted-foreground">
-              Inbox: {taskInbox.total} задач, просрочено: {taskInbox.overdue}, показано: {filteredTaskInbox.length}
+              Inbox: {taskInbox.total} задач, просрочено: {taskInbox.overdue},
+              показано: {filteredTaskInbox.length}
             </div>
             <div className="flex flex-wrap gap-2">
               <div className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
@@ -60,7 +68,11 @@ export const DashboardTabsSection = ({
                   aria-label="Фильтр задач по статусу"
                   className="bg-transparent outline-none"
                   value={taskStatusFilter}
-                  onChange={(event) => setTaskStatusFilter(event.target.value as "all" | "overdue" | "active")}
+                  onChange={(event) =>
+                    setTaskStatusFilter(
+                      event.target.value as "all" | "overdue" | "active",
+                    )
+                  }
                 >
                   <option value="all">Все</option>
                   <option value="overdue">Просроченные</option>
@@ -73,7 +85,11 @@ export const DashboardTabsSection = ({
                   aria-label="Фильтр задач по приоритету"
                   className="bg-transparent outline-none"
                   value={taskPriorityFilter}
-                  onChange={(event) => setTaskPriorityFilter(event.target.value as "all" | "critical_high" | "normal")}
+                  onChange={(event) =>
+                    setTaskPriorityFilter(
+                      event.target.value as "all" | "critical_high" | "normal",
+                    )
+                  }
                 >
                   <option value="all">Все</option>
                   <option value="critical_high">Critical / High</option>
@@ -102,36 +118,63 @@ export const DashboardTabsSection = ({
                       <LoadingScreen label="Загрузка входящих задач" />
                     </TableCell>
                   </TableRow>
-                ) : filteredTaskInbox.length ? filteredTaskInbox.map((task) => (
-                  <TableRow key={task.id}>
-                    <TableCell className="font-medium">{task.id.slice(0, 8)}</TableCell>
-                    <TableCell>
-                      <Link to={taskInboxLink(task)} className="font-medium text-blue-600 hover:underline">
-                        {task.title}
-                      </Link>
-                    </TableCell>
-                    <TableCell>
-                      <StatusBadge status={task.status} />
-                    </TableCell>
-                    <TableCell className="capitalize">{task.priority}</TableCell>
-                    <TableCell>{task.assignee_id ? task.assignee_id.slice(0, 8) : "Не назначен"}</TableCell>
-                    <TableCell>
-                      {entityContextPath(task.entity_type) ? (
-                        <Link to={entityContextPath(task.entity_type) ?? "/tasks"} className="text-blue-600 hover:underline">
-                          {task.entity_type}
+                ) : filteredTaskInbox.length ? (
+                  filteredTaskInbox.map((task) => (
+                    <TableRow key={task.id}>
+                      <TableCell className="font-medium">
+                        {task.id.slice(0, 8)}
+                      </TableCell>
+                      <TableCell>
+                        <Link
+                          to={taskInboxLink(task)}
+                          className="font-medium text-blue-600 hover:underline"
+                        >
+                          {task.title}
                         </Link>
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <SlaIndicator
-                        status={task.overdue ? "overdue" : task.priority === "critical" || task.priority === "high" ? "warning" : "ok"}
-                        label={task.due_at ? `Срок: ${formatDate(task.due_at)}` : "Без срока"}
-                      />
-                    </TableCell>
-                  </TableRow>
-                )) : (
+                      </TableCell>
+                      <TableCell>
+                        <StatusBadge status={task.status} />
+                      </TableCell>
+                      <TableCell className="capitalize">
+                        {task.priority}
+                      </TableCell>
+                      <TableCell>
+                        {task.assignee_id
+                          ? task.assignee_id.slice(0, 8)
+                          : "Не назначен"}
+                      </TableCell>
+                      <TableCell>
+                        {entityContextPath(task.entity_type) ? (
+                          <Link
+                            to={entityContextPath(task.entity_type) ?? "/tasks"}
+                            className="text-blue-600 hover:underline"
+                          >
+                            {task.entity_type}
+                          </Link>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <SlaIndicator
+                          status={
+                            task.overdue
+                              ? "overdue"
+                              : task.priority === "critical" ||
+                                  task.priority === "high"
+                                ? "warning"
+                                : "ok"
+                          }
+                          label={
+                            task.due_at
+                              ? `Срок: ${formatDate(task.due_at)}`
+                              : "Без срока"
+                          }
+                        />
+                      </TableCell>
+                    </TableRow>
+                  ))
+                ) : (
                   <TableRow>
                     <TableCell colSpan={7}>
                       <EmptyState
@@ -170,19 +213,23 @@ export const DashboardTabsSection = ({
                     <LoadingScreen label="Загрузка сводки по документам и маршрутам" />
                   </TableCell>
                 </TableRow>
-              ) : operational?.documents.length ? operational.documents.map((doc) => (
-                <TableRow key={doc.id}>
-                  <TableCell className="font-medium">{doc.id.slice(0, 8)}</TableCell>
-                  <TableCell>{doc.title}</TableCell>
-                  <TableCell>{doc.route_label}</TableCell>
-                  <TableCell>
-                    <StatusBadge status={doc.status} />
-                  </TableCell>
-                  <TableCell>
-                    <RiskBadge level={doc.risk} />
-                  </TableCell>
-                </TableRow>
-              )) : (
+              ) : operational?.documents.length ? (
+                operational.documents.map((doc) => (
+                  <TableRow key={doc.id}>
+                    <TableCell className="font-medium">
+                      {doc.id.slice(0, 8)}
+                    </TableCell>
+                    <TableCell>{doc.title}</TableCell>
+                    <TableCell>{doc.route_label}</TableCell>
+                    <TableCell>
+                      <StatusBadge status={doc.status} />
+                    </TableCell>
+                    <TableCell>
+                      <RiskBadge level={doc.risk} />
+                    </TableCell>
+                  </TableRow>
+                ))
+              ) : (
                 <TableRow>
                   <TableCell colSpan={5}>
                     <EmptyState
@@ -204,9 +251,13 @@ export const DashboardTabsSection = ({
         </CardHeader>
         <CardContent className="grid gap-4 md:grid-cols-2">
           <div className="rounded-md border bg-muted/30 p-4">
-            <div className="text-sm font-semibold">Готовность к инспекционной подготовке</div>
+            <div className="text-sm font-semibold">
+              Готовность к инспекционной подготовке
+            </div>
             <p className="mt-1 text-xs text-muted-foreground">
-              Пакетов: {operational?.readiness.packages_total ?? 0}, пробелов: {operational?.readiness.open_gaps ?? 0}, критичных: {operational?.readiness.critical_gaps ?? 0}.
+              Пакетов: {operational?.readiness.packages_total ?? 0}, пробелов:{" "}
+              {operational?.readiness.open_gaps ?? 0}, критичных:{" "}
+              {operational?.readiness.critical_gaps ?? 0}.
             </p>
             <div className="mt-3 flex gap-2">
               <Button size="sm" asChild>
@@ -218,9 +269,13 @@ export const DashboardTabsSection = ({
             </div>
           </div>
           <div className="rounded-md border bg-muted/30 p-4">
-            <div className="text-sm font-semibold">Индекс готовности: {operational?.readiness.readiness_score ?? 0}%</div>
+            <div className="text-sm font-semibold">
+              Индекс готовности: {operational?.readiness.readiness_score ?? 0}%
+            </div>
             <p className="mt-1 text-xs text-muted-foreground">
-              {(operational?.readiness.reasons ?? ["Нет данных о readiness."]).join(" ")}
+              {(
+                operational?.readiness.reasons ?? ["Нет данных о readiness."]
+              ).join(" ")}
             </p>
             <div className="mt-3 flex gap-2">
               <Button size="sm" variant="outline" asChild>
@@ -236,4 +291,3 @@ export const DashboardTabsSection = ({
     </TabsContent>
   </Tabs>
 );
-

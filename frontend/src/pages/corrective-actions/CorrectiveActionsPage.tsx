@@ -18,14 +18,26 @@ import { formatDate } from "@/utils/datetime";
 
 const CorrectiveActionsPage = () => {
   const loadActions = useCallback(() => opsApi.getCorrectiveActions(), []);
-  const { data: items, loading, error, reload } = useAsyncResource<CorrectiveActionDto[]>({
+  const {
+    data: items,
+    loading,
+    error,
+    reload,
+  } = useAsyncResource<CorrectiveActionDto[]>({
     loader: loadActions,
     initialData: [],
-    errorMessage: "Не удалось загрузить CAPA"
+    errorMessage: "Не удалось загрузить CAPA",
   });
-  const [online, setOnline] = useState(() => (typeof navigator === "undefined" ? true : navigator.onLine));
+  const [online, setOnline] = useState(() =>
+    typeof navigator === "undefined" ? true : navigator.onLine,
+  );
   const [hasConflict, setHasConflict] = useState(false);
-  const syncState = resolveSyncState({ online, loading, hasConflict, hasError: Boolean(error) });
+  const syncState = resolveSyncState({
+    online,
+    loading,
+    hasConflict,
+    hasError: Boolean(error),
+  });
 
   useEffect(() => {
     const onOnline = () => setOnline(true);
@@ -39,20 +51,36 @@ const CorrectiveActionsPage = () => {
   }, []);
 
   useEffect(() => {
-    emitSyncTelemetry({ type: "sync_state_changed", state: syncState, screen: "corrective_actions" });
+    emitSyncTelemetry({
+      type: "sync_state_changed",
+      state: syncState,
+      screen: "corrective_actions",
+    });
     if (error?.message) {
-      emitSyncTelemetry({ type: "sync_error", screen: "corrective_actions", message: error.message });
+      emitSyncTelemetry({
+        type: "sync_error",
+        screen: "corrective_actions",
+        message: error.message,
+      });
     }
   }, [error?.message, syncState]);
 
   const registry = useLocalRegistry({
     items,
     match: (item, query) =>
-      [item.id, item.title, item.status, item.source_type, item.action_type, item.effectiveness_status, item.description]
+      [
+        item.id,
+        item.title,
+        item.status,
+        item.source_type,
+        item.action_type,
+        item.effectiveness_status,
+        item.description,
+      ]
         .filter(Boolean)
         .join(" ")
         .toLowerCase()
-        .includes(query)
+        .includes(query),
   });
 
   return (
@@ -72,13 +100,25 @@ const CorrectiveActionsPage = () => {
       </div>
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Корректирующие и предупреждающие действия</CardTitle>
+          <CardTitle className="text-base">
+            Корректирующие и предупреждающие действия
+          </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          <ErrorState error={error ?? undefined} onRetry={() => void reload()} />
+          <ErrorState
+            error={error ?? undefined}
+            onRetry={() => void reload()}
+          />
           {loading ? <LoadingScreen label="Загрузка реестра CAPA" /> : null}
           {!loading && !error && registry.total === 0 ? (
-            <EmptyState title="Действия не найдены" description={registry.query ? "Попробуйте другой запрос." : "В текущем тенанте пока нет корректирующих действий."} />
+            <EmptyState
+              title="Действия не найдены"
+              description={
+                registry.query
+                  ? "Попробуйте другой запрос."
+                  : "В текущем тенанте пока нет корректирующих действий."
+              }
+            />
           ) : null}
           {!loading && !error && registry.total > 0 ? (
             <RegistryTable
@@ -86,7 +126,11 @@ const CorrectiveActionsPage = () => {
                 {
                   accessorKey: "id",
                   header: "ID",
-                  cell: ({ row }) => <span className="font-medium">{row.original.id.slice(0, 8)}</span>
+                  cell: ({ row }) => (
+                    <span className="font-medium">
+                      {row.original.id.slice(0, 8)}
+                    </span>
+                  ),
                 },
                 {
                   accessorKey: "title",
@@ -94,9 +138,11 @@ const CorrectiveActionsPage = () => {
                   cell: ({ row }) => (
                     <div>
                       <div className="font-medium">{row.original.title}</div>
-                      <div className="text-xs text-muted-foreground">{row.original.action_type}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {row.original.action_type}
+                      </div>
                     </div>
-                  )
+                  ),
                 },
                 {
                   id: "source",
@@ -104,25 +150,29 @@ const CorrectiveActionsPage = () => {
                   cell: ({ row }) => (
                     <div>
                       <div>{row.original.source_type}</div>
-                      <div className="text-xs text-muted-foreground">{row.original.source_id.slice(0, 8)}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {row.original.source_id.slice(0, 8)}
+                      </div>
                     </div>
-                  )
+                  ),
                 },
                 {
                   accessorKey: "due_date",
                   header: "Срок",
-                  cell: ({ row }) => formatDate(row.original.due_date) || "—"
+                  cell: ({ row }) => formatDate(row.original.due_date) || "—",
                 },
                 {
                   accessorKey: "status",
                   header: "Статус",
-                  cell: ({ row }) => <StatusBadge status={row.original.status} />
+                  cell: ({ row }) => (
+                    <StatusBadge status={row.original.status} />
+                  ),
                 },
                 {
                   accessorKey: "effectiveness_status",
                   header: "Эффективность",
-                  cell: ({ row }) => row.original.effectiveness_status ?? "—"
-                }
+                  cell: ({ row }) => row.original.effectiveness_status ?? "—",
+                },
               ]}
               data={registry.pagedItems}
               pageIndex={registry.pageIndex}

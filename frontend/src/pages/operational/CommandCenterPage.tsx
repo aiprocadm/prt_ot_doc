@@ -10,7 +10,9 @@ export function CommandCenterPage() {
   const data = useOperationalDashboardStore((state) => state.data);
   const loading = useOperationalDashboardStore((state) => state.loading);
   const error = useOperationalDashboardStore((state) => state.error);
-  const fetchDashboard = useOperationalDashboardStore((state) => state.fetchDashboard);
+  const fetchDashboard = useOperationalDashboardStore(
+    (state) => state.fetchDashboard,
+  );
 
   useEffect(() => {
     void fetchDashboard();

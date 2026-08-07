@@ -12,7 +12,9 @@ from app.db.session import TenantBase
 from app.models.models import OfflineMediaQueue, OfflineSyncBatch
 
 
-def _access_ctx(*, user_id: str, tenant_id: str, tenant_slug: str, role: str = "employee") -> AccessContext:
+def _access_ctx(
+    *, user_id: str, tenant_id: str, tenant_slug: str, role: str = "employee"
+) -> AccessContext:
     user = SimpleNamespace(
         id=user_id,
         email=f"{user_id}@tenant.test",

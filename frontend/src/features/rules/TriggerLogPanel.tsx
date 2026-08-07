@@ -6,19 +6,38 @@ import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingScreen } from "@/components/common/LoadingScreen";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { useAsyncResource } from "@/hooks/useAsyncResource";
-import { ACTION_LABELS, OUTCOME_LABELS, STATUS_LABELS, eventLabel } from "@/pages/rules/rulesVocab";
-import type { AutomationRuleRead, RuleActionType, TriggerRead, TriggerStatus } from "@/types/dto/rules";
+import {
+  ACTION_LABELS,
+  OUTCOME_LABELS,
+  STATUS_LABELS,
+  eventLabel,
+} from "@/pages/rules/rulesVocab";
+import type {
+  AutomationRuleRead,
+  RuleActionType,
+  TriggerRead,
+  TriggerStatus,
+} from "@/types/dto/rules";
 
 interface Props {
   rules: AutomationRuleRead[];
 }
 
-const STATUS_BADGE_VARIANT: Record<TriggerStatus, "secondary" | "outline" | "destructive"> = {
+const STATUS_BADGE_VARIANT: Record<
+  TriggerStatus,
+  "secondary" | "outline" | "destructive"
+> = {
   success: "secondary",
   partial: "outline",
-  error: "destructive"
+  error: "destructive",
 };
 
 const formatResults = (trigger: TriggerRead): string =>
@@ -34,22 +53,28 @@ export const TriggerLogPanel = ({ rules }: Props) => {
   const [ruleFilter, setRuleFilter] = useState("");
 
   const loader = useCallback(
-    () => rulesApi.triggers(ruleFilter ? { rule_id: ruleFilter } : {}).then((page) => page.items),
-    [ruleFilter]
+    () =>
+      rulesApi
+        .triggers(ruleFilter ? { rule_id: ruleFilter } : {})
+        .then((page) => page.items),
+    [ruleFilter],
   );
   const { data, loading, error, reload } = useAsyncResource<TriggerRead[]>({
     loader,
     initialData: [],
-    errorMessage: "Не удалось загрузить журнал срабатываний"
+    errorMessage: "Не удалось загрузить журнал срабатываний",
   });
 
-  const ruleName = (ruleId: string): string => rules.find((r) => r.id === ruleId)?.name ?? ruleId;
+  const ruleName = (ruleId: string): string =>
+    rules.find((r) => r.id === ruleId)?.name ?? ruleId;
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>Журнал срабатываний</CardTitle>
-        <CardDescription>Последние срабатывания правил и результаты действий.</CardDescription>
+        <CardDescription>
+          Последние срабатывания правил и результаты действий.
+        </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
         <div className="flex flex-wrap items-center gap-2">
@@ -66,14 +91,24 @@ export const TriggerLogPanel = ({ rules }: Props) => {
               </option>
             ))}
           </select>
-          <Button size="sm" variant="outline" onClick={() => void reload().catch(() => undefined)}>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => void reload().catch(() => undefined)}
+          >
             Обновить
           </Button>
         </div>
-        <ErrorState error={error ?? undefined} onRetry={() => void reload().catch(() => undefined)} />
+        <ErrorState
+          error={error ?? undefined}
+          onRetry={() => void reload().catch(() => undefined)}
+        />
         {loading ? <LoadingScreen label="Загрузка журнала" /> : null}
         {!loading && !error && data.length === 0 ? (
-          <EmptyState title="Срабатываний нет" description="Правила ещё не срабатывали или фильтр пуст." />
+          <EmptyState
+            title="Срабатываний нет"
+            description="Правила ещё не срабатывали или фильтр пуст."
+          />
         ) : null}
         {!loading && !error && data.length > 0 ? (
           <div className="overflow-x-auto">
@@ -94,9 +129,13 @@ export const TriggerLogPanel = ({ rules }: Props) => {
                       {new Date(trigger.created_at).toLocaleString("ru-RU")}
                     </td>
                     <td className="py-2 pr-4">{ruleName(trigger.rule_id)}</td>
-                    <td className="py-2 pr-4">{eventLabel(trigger.event_type)}</td>
                     <td className="py-2 pr-4">
-                      <Badge variant={STATUS_BADGE_VARIANT[trigger.status]}>{STATUS_LABELS[trigger.status]}</Badge>
+                      {eventLabel(trigger.event_type)}
+                    </td>
+                    <td className="py-2 pr-4">
+                      <Badge variant={STATUS_BADGE_VARIANT[trigger.status]}>
+                        {STATUS_LABELS[trigger.status]}
+                      </Badge>
                     </td>
                     <td className="py-2">{formatResults(trigger) || "—"}</td>
                   </tr>

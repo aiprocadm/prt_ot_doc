@@ -31,8 +31,12 @@ describe("foundation operational pages", () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByText("ЭДО сообщения отсутствуют")).toBeInTheDocument();
-    expect(screen.getByText(/Provider mode: non-production/)).toBeInTheDocument();
+    expect(
+      await screen.findByText("ЭДО сообщения отсутствуют"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Provider mode: non-production/),
+    ).toBeInTheDocument();
   });
 
   it("renders signatures empty state with provider warning", async () => {
@@ -44,7 +48,9 @@ describe("foundation operational pages", () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByText("Запросы на подпись отсутствуют")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Запросы на подпись отсутствуют"),
+    ).toBeInTheDocument();
     expect(screen.getByText(/non-production/)).toBeInTheDocument();
   });
 });

@@ -1,7 +1,18 @@
 import { apiClient } from "@/api/client";
 import { downloadBlob } from "@/utils/download";
-import { briefingsApi, type BriefingEntryDto, type BriefingJournalDto, type BriefingTemplateDto } from "@/api/briefings";
-import { opsApi, type CorrectiveActionDto, type InspectionDto, type PrescriptionDto, type PpeItemDto } from "@/api/ops";
+import {
+  briefingsApi,
+  type BriefingEntryDto,
+  type BriefingJournalDto,
+  type BriefingTemplateDto,
+} from "@/api/briefings";
+import {
+  opsApi,
+  type CorrectiveActionDto,
+  type InspectionDto,
+  type PrescriptionDto,
+  type PpeItemDto,
+} from "@/api/ops";
 import type { PersonDto } from "@/types/dto/persons";
 import type { TaskDto } from "@/types/dto/tasks";
 
@@ -35,8 +46,6 @@ export type ContractDto = {
   expires_at?: string | null;
 };
 
-
-
 export type TrainingProgramDto = {
   id: string;
   title?: string;
@@ -53,8 +62,17 @@ export type TemplateDto = {
 };
 
 export type TenancyContextDto = {
-  tenant: { id: string; slug: string; code?: string | null; schema_name?: string | null };
-  quota?: { max_parallel_jobs?: number; max_doc_generations_per_month?: number; max_storage_mb?: number } | null;
+  tenant: {
+    id: string;
+    slug: string;
+    code?: string | null;
+    schema_name?: string | null;
+  };
+  quota?: {
+    max_parallel_jobs?: number;
+    max_doc_generations_per_month?: number;
+    max_storage_mb?: number;
+  } | null;
   usage?: { yyyymm?: string; doc_generations?: number } | null;
   correlation_id?: string | null;
 };
@@ -133,8 +151,20 @@ export type MedicalSummaryDto = {
   suspended_count: number;
 };
 
-export type OutboxDto = { id: string; status: string; event_type: string; destination: string; attempts: number; created_at: string };
-export type WebhookEndpointDto = { id: string; code?: string | null; target_url: string; is_active: boolean };
+export type OutboxDto = {
+  id: string;
+  status: string;
+  event_type: string;
+  destination: string;
+  attempts: number;
+  created_at: string;
+};
+export type WebhookEndpointDto = {
+  id: string;
+  code?: string | null;
+  target_url: string;
+  is_active: boolean;
+};
 export type IntegrationReadinessDto = {
   tenant_id: string;
   providers: Array<{
@@ -243,164 +273,250 @@ export type RoleWorkspaceSummaryDto = {
 
 export const operationsApi = {
   getReferenceSnapshot: async () => {
-    const [npaResponse, ppeResponse, programsResponse, templatesResponse, briefingTemplates] = await Promise.all([
-      apiClient.get<{ items: Array<{ id: string; code: string; title: string }> }>("/npa"),
-      apiClient.get<{ items: PpeItemDto[]; total: number }>("/ppe/items", { params: { limit: 100, offset: 0 } }),
+    const [
+      npaResponse,
+      ppeResponse,
+      programsResponse,
+      templatesResponse,
+      briefingTemplates,
+    ] = await Promise.all([
+      apiClient.get<{
+        items: Array<{ id: string; code: string; title: string }>;
+      }>("/npa"),
+      apiClient.get<{ items: PpeItemDto[]; total: number }>("/ppe/items", {
+        params: { limit: 100, offset: 0 },
+      }),
       apiClient.get<{ items: TrainingProgramDto[] }>("/training/programs"),
-      apiClient.get<{ items: TemplateDto[]; total?: number }>("/templates", { params: { limit: 100, offset: 0 } }),
-      briefingsApi.listTemplates()
+      apiClient.get<{ items: TemplateDto[]; total?: number }>("/templates", {
+        params: { limit: 100, offset: 0 },
+      }),
+      briefingsApi.listTemplates(),
     ]);
     return {
       npa: npaResponse.data.items ?? [],
       ppeItems: ppeResponse.data.items ?? [],
       programs: programsResponse.data.items ?? [],
       templates: templatesResponse.data.items ?? [],
-      briefingTemplates
+      briefingTemplates,
     };
   },
 
   getSettingsSnapshot: async () => {
-    const [tenancyResponse, notificationsResponse, apiTokensResponse] = await Promise.all([
-      apiClient.get<TenancyContextDto>("/tenancy/context"),
-      apiClient.get<NotificationSettingsDto>("/notifications/settings/me"),
-      apiClient.get<ApiTokenDto[]>("/api-tokens")
-    ]);
+    const [tenancyResponse, notificationsResponse, apiTokensResponse] =
+      await Promise.all([
+        apiClient.get<TenancyContextDto>("/tenancy/context"),
+        apiClient.get<NotificationSettingsDto>("/notifications/settings/me"),
+        apiClient.get<ApiTokenDto[]>("/api-tokens"),
+      ]);
     return {
       tenancy: tenancyResponse.data,
       notifications: notificationsResponse.data,
-      apiTokens: apiTokensResponse.data ?? []
+      apiTokens: apiTokensResponse.data ?? [],
     };
   },
 
   getActivitiesSnapshot: async () => {
     const [tasksResponse, actions] = await Promise.all([
-      apiClient.get<{ items: TaskDto[]; pagination: { total: number } }>("/tasks", { params: { page: 1, page_size: 100 } }),
-      opsApi.getCorrectiveActions()
+      apiClient.get<{ items: TaskDto[]; pagination: { total: number } }>(
+        "/tasks",
+        { params: { page: 1, page_size: 100 } },
+      ),
+      opsApi.getCorrectiveActions(),
     ]);
     return {
       tasks: tasksResponse.data.items ?? [],
-      correctiveActions: actions
+      correctiveActions: actions,
     };
   },
 
   getMedicalSnapshot: async () => {
     const [examsResponse, personsResponse, tasksResponse] = await Promise.all([
-      apiClient.get<{ items: MedicalExamDto[]; total: number }>("/medical/exams", { params: { limit: 100, offset: 0 } }),
-      apiClient.get<{ items: PersonDto[]; total: number }>("/persons", { params: { page: 1, page_size: 100 } }),
-      apiClient.get<{ items: TaskDto[]; pagination: { total: number } }>("/tasks", { params: { type: "medical_requirement", page: 1, page_size: 100 } })
+      apiClient.get<{ items: MedicalExamDto[]; total: number }>(
+        "/medical/exams",
+        { params: { limit: 100, offset: 0 } },
+      ),
+      apiClient.get<{ items: PersonDto[]; total: number }>("/persons", {
+        params: { page: 1, page_size: 100 },
+      }),
+      apiClient.get<{ items: TaskDto[]; pagination: { total: number } }>(
+        "/tasks",
+        { params: { type: "medical_requirement", page: 1, page_size: 100 } },
+      ),
     ]);
     return {
       exams: examsResponse.data.items ?? [],
       persons: personsResponse.data.items ?? [],
-      tasks: tasksResponse.data.items ?? []
+      tasks: tasksResponse.data.items ?? [],
     };
   },
 
   getPsychiatricSnapshot: async () => {
     const [typesResponse, contingentResponse] = await Promise.all([
-      apiClient.get<{ items: { id: string; code: string; name: string; interval_days: number }[]; total: number }>(
-        "/medical/psychiatric/activity-types",
-        { params: { limit: 200, offset: 0 } }
-      ),
-      apiClient.get<{ items: { person_id: string; exam_kind: string; status: string; due_at: string | null }[]; total: number }>(
-        "/medical/contingent",
-        { params: {} }
-      ),
+      apiClient.get<{
+        items: {
+          id: string;
+          code: string;
+          name: string;
+          interval_days: number;
+        }[];
+        total: number;
+      }>("/medical/psychiatric/activity-types", {
+        params: { limit: 200, offset: 0 },
+      }),
+      apiClient.get<{
+        items: {
+          person_id: string;
+          exam_kind: string;
+          status: string;
+          due_at: string | null;
+        }[];
+        total: number;
+      }>("/medical/contingent", { params: {} }),
     ]);
     return {
       activityTypes: typesResponse.data.items ?? [],
-      contingent: (contingentResponse.data.items ?? []).filter((i) => i.exam_kind === "psychiatric"),
+      contingent: (contingentResponse.data.items ?? []).filter(
+        (i) => i.exam_kind === "psychiatric",
+      ),
     };
   },
 
   seedPsychiatricDefaults: async () => {
     const response = await apiClient.post<{ count: number }>(
-      "/medical/psychiatric/activity-types/seed-defaults"
+      "/medical/psychiatric/activity-types/seed-defaults",
     );
     return response.data;
   },
 
   getMedicalOversightSnapshot: async () => {
-    const [summaryResponse, registerResponse, namedListResponse] = await Promise.all([
-      apiClient.get<MedicalSummaryDto>("/medical/summary"),
-      apiClient.get<{ items: ContingentRegisterRowDto[]; total: number }>("/medical/contingent/register"),
-      apiClient.get<{ items: NamedListRowDto[]; total: number }>("/medical/named-list")
-    ]);
+    const [summaryResponse, registerResponse, namedListResponse] =
+      await Promise.all([
+        apiClient.get<MedicalSummaryDto>("/medical/summary"),
+        apiClient.get<{ items: ContingentRegisterRowDto[]; total: number }>(
+          "/medical/contingent/register",
+        ),
+        apiClient.get<{ items: NamedListRowDto[]; total: number }>(
+          "/medical/named-list",
+        ),
+      ]);
     return {
       summary: summaryResponse.data,
       register: registerResponse.data.items ?? [],
-      namedList: namedListResponse.data.items ?? []
+      namedList: namedListResponse.data.items ?? [],
     };
   },
 
   downloadContingentRegisterPrint: async (fmt: "docx" | "pdf") => {
-    const { data } = await apiClient.get<Blob>("/medical/contingent/register/print", {
-      params: { format: fmt },
-      responseType: "blob"
-    });
+    const { data } = await apiClient.get<Blob>(
+      "/medical/contingent/register/print",
+      {
+        params: { format: fmt },
+        responseType: "blob",
+      },
+    );
     downloadBlob(data, `contingent-register.${fmt}`);
   },
 
   downloadNamedListPrint: async (fmt: "docx" | "pdf") => {
     const { data } = await apiClient.get<Blob>("/medical/named-list/print", {
       params: { format: fmt },
-      responseType: "blob"
+      responseType: "blob",
     });
     downloadBlob(data, `named-list.${fmt}`);
   },
 
   downloadReferralPrint: async (referralId: string, fmt: "docx" | "pdf") => {
-    const { data } = await apiClient.get<Blob>(`/medical/referrals/${referralId}/print`, {
-      params: { format: fmt },
-      responseType: "blob"
-    });
+    const { data } = await apiClient.get<Blob>(
+      `/medical/referrals/${referralId}/print`,
+      {
+        params: { format: fmt },
+        responseType: "blob",
+      },
+    );
     downloadBlob(data, `referral-${referralId}.${fmt}`);
   },
 
   listMedicalReferrals: async (params?: { status?: string }) => {
-    const response = await apiClient.get<{ items: MedicalReferralDto[]; total: number }>("/medical/referrals", {
-      params: { limit: 100, offset: 0, ...(params?.status ? { status: params.status } : {}) }
+    const response = await apiClient.get<{
+      items: MedicalReferralDto[];
+      total: number;
+    }>("/medical/referrals", {
+      params: {
+        limit: 100,
+        offset: 0,
+        ...(params?.status ? { status: params.status } : {}),
+      },
     });
     return response.data.items ?? [];
   },
 
-  createMedicalReferral: async (payload: { person_id: string; exam_kind: string; due_at?: string; medical_org_name?: string }) => {
-    const response = await apiClient.post<MedicalReferralDto>("/medical/referrals", payload);
+  createMedicalReferral: async (payload: {
+    person_id: string;
+    exam_kind: string;
+    due_at?: string;
+    medical_org_name?: string;
+  }) => {
+    const response = await apiClient.post<MedicalReferralDto>(
+      "/medical/referrals",
+      payload,
+    );
     return response.data;
   },
 
-  transitionMedicalReferral: async (referralId: string, payload: { to: MedicalReferralDto["status"]; result_exam_id?: string }) => {
-    const response = await apiClient.post<MedicalReferralDto>(`/medical/referrals/${referralId}/transition`, payload);
+  transitionMedicalReferral: async (
+    referralId: string,
+    payload: { to: MedicalReferralDto["status"]; result_exam_id?: string },
+  ) => {
+    const response = await apiClient.post<MedicalReferralDto>(
+      `/medical/referrals/${referralId}/transition`,
+      payload,
+    );
     return response.data;
   },
 
   generateMedicalReferrals: async () => {
-    const response = await apiClient.post<{ count: number }>("/medical/contingent/generate-referrals");
+    const response = await apiClient.post<{ count: number }>(
+      "/medical/contingent/generate-referrals",
+    );
     return response.data;
   },
 
   listMedicalSuspensions: async (params?: { status?: "active" }) => {
-    const response = await apiClient.get<{ items: MedicalSuspensionDto[]; total: number }>("/medical/suspensions", {
-      params: params?.status ? { status: params.status } : {}
+    const response = await apiClient.get<{
+      items: MedicalSuspensionDto[];
+      total: number;
+    }>("/medical/suspensions", {
+      params: params?.status ? { status: params.status } : {},
     });
     return response.data.items ?? [];
   },
 
   liftMedicalSuspension: async (suspensionId: string) => {
-    const response = await apiClient.post<MedicalSuspensionDto>(`/medical/suspensions/${suspensionId}/lift`);
+    const response = await apiClient.post<MedicalSuspensionDto>(
+      `/medical/suspensions/${suspensionId}/lift`,
+    );
     return response.data;
   },
 
   getFireSafetySnapshot: async () => {
-    const [sitesResponse, inspectionsResponse, tasksResponse] = await Promise.all([
-      apiClient.get<{ items: SiteDto[]; total: number }>("/sites", { params: { limit: 100, offset: 0 } }),
-      apiClient.get<{ items: InspectionDto[]; total: number }>("/inspections", { params: { limit: 100, offset: 0 } }),
-      apiClient.get<{ items: TaskDto[]; pagination: { total: number } }>("/tasks", { params: { type: "inspection", page: 1, page_size: 100 } })
-    ]);
+    const [sitesResponse, inspectionsResponse, tasksResponse] =
+      await Promise.all([
+        apiClient.get<{ items: SiteDto[]; total: number }>("/sites", {
+          params: { limit: 100, offset: 0 },
+        }),
+        apiClient.get<{ items: InspectionDto[]; total: number }>(
+          "/inspections",
+          { params: { limit: 100, offset: 0 } },
+        ),
+        apiClient.get<{ items: TaskDto[]; pagination: { total: number } }>(
+          "/tasks",
+          { params: { type: "inspection", page: 1, page_size: 100 } },
+        ),
+      ]);
     return {
       sites: sitesResponse.data.items ?? [],
       inspections: inspectionsResponse.data.items ?? [],
-      tasks: tasksResponse.data.items ?? []
+      tasks: tasksResponse.data.items ?? [],
     };
   },
 
@@ -409,55 +525,103 @@ export const operationsApi = {
       briefingsApi.listTemplates(),
       briefingsApi.listJournals(),
       briefingsApi.listOverdue(),
-      apiClient.get<{ items: TrainingProgramDto[] }>("/training/programs")
+      apiClient.get<{ items: TrainingProgramDto[] }>("/training/programs"),
     ]);
     return {
       templates,
       journals,
       overdueEntries: overdue,
-      programs: programsResponse.data.items ?? []
+      programs: programsResponse.data.items ?? [],
     };
   },
 
   getInspectionWorkspaceSnapshot: async () => {
-    const [inspectionsResponse, prescriptions, tasksResponse, templates, packsResponse] = await Promise.all([
-      apiClient.get<{ items: InspectionDto[]; total: number }>("/inspections", { params: { limit: 100, offset: 0 } }),
+    const [
+      inspectionsResponse,
+      prescriptions,
+      tasksResponse,
+      templates,
+      packsResponse,
+    ] = await Promise.all([
+      apiClient.get<{ items: InspectionDto[]; total: number }>("/inspections", {
+        params: { limit: 100, offset: 0 },
+      }),
       opsApi.getPrescriptions(),
-      apiClient.get<{ items: TaskDto[]; pagination: { total: number } }>("/tasks", { params: { type: "inspection", page: 1, page_size: 100 } }),
-      apiClient.get<{ items: TemplateDto[]; total?: number }>("/templates", { params: { limit: 100, offset: 0 } }),
-      apiClient.get<unknown[]>("/pack-runs").catch(() => ({ data: [] as unknown[] }))
+      apiClient.get<{ items: TaskDto[]; pagination: { total: number } }>(
+        "/tasks",
+        { params: { type: "inspection", page: 1, page_size: 100 } },
+      ),
+      apiClient.get<{ items: TemplateDto[]; total?: number }>("/templates", {
+        params: { limit: 100, offset: 0 },
+      }),
+      apiClient
+        .get<unknown[]>("/pack-runs")
+        .catch(() => ({ data: [] as unknown[] })),
     ]);
     return {
       inspections: inspectionsResponse.data.items ?? [],
       prescriptions,
       tasks: tasksResponse.data.items ?? [],
       templates: templates.data.items ?? [],
-      packRuns: Array.isArray(packsResponse.data) ? packsResponse.data : []
+      packRuns: Array.isArray(packsResponse.data) ? packsResponse.data : [],
     };
   },
 
   getAdminSnapshot: async () => {
-    const [tenancyResponse, outboxResponse, webhookResponse, apiTokensResponse, auditResponse] = await Promise.all([
-      apiClient.get<TenancyContextDto>("/tenancy/context").catch(() => ({ data: { tenant: { id: "", slug: "" } } as TenancyContextDto })),
-      apiClient.get<{ items: OutboxDto[]; total: number }>("/admin/outbox").catch(() => ({ data: { items: [], total: 0 } })),
-      apiClient.get<WebhookEndpointDto[]>("/webhooks/endpoints").catch(() => ({ data: [] as WebhookEndpointDto[] })),
-      apiClient.get<ApiTokenDto[]>("/api-tokens").catch(() => ({ data: [] as ApiTokenDto[] })),
+    const [
+      tenancyResponse,
+      outboxResponse,
+      webhookResponse,
+      apiTokensResponse,
+      auditResponse,
+    ] = await Promise.all([
+      apiClient.get<TenancyContextDto>("/tenancy/context").catch(() => ({
+        data: { tenant: { id: "", slug: "" } } as TenancyContextDto,
+      })),
       apiClient
-        .get<{ items: Array<{ id: string; action: string; object_type: string; created_at: string }>; total: number }>("/audit")
-        .catch(() => ({ data: { items: [], total: 0 } }))
+        .get<{ items: OutboxDto[]; total: number }>("/admin/outbox")
+        .catch(() => ({ data: { items: [], total: 0 } })),
+      apiClient
+        .get<WebhookEndpointDto[]>("/webhooks/endpoints")
+        .catch(() => ({ data: [] as WebhookEndpointDto[] })),
+      apiClient
+        .get<ApiTokenDto[]>("/api-tokens")
+        .catch(() => ({ data: [] as ApiTokenDto[] })),
+      apiClient
+        .get<{
+          items: Array<{
+            id: string;
+            action: string;
+            object_type: string;
+            created_at: string;
+          }>;
+          total: number;
+        }>("/audit")
+        .catch(() => ({ data: { items: [], total: 0 } })),
     ]);
 
-    const [integrationReadinessResponse, workspaceAttentionResponse, taskInboxResponse, providerStatusResponse, tenantHealthResponse, roleSummaryResponse] = await Promise.all([
+    const [
+      integrationReadinessResponse,
+      workspaceAttentionResponse,
+      taskInboxResponse,
+      providerStatusResponse,
+      tenantHealthResponse,
+      roleSummaryResponse,
+    ] = await Promise.all([
       apiClient
         .get<IntegrationReadinessDto>("/integrations/readiness")
         .then((response) => response.data)
         .catch(() => null),
       apiClient
-        .get<WorkspaceAttentionDto>("/workspace/attention", { params: { limit: 20 } })
+        .get<WorkspaceAttentionDto>("/workspace/attention", {
+          params: { limit: 20 },
+        })
         .then((response) => response.data)
         .catch(() => null),
       apiClient
-        .get<WorkspaceTaskInboxDto>("/workspace/task-inbox", { params: { limit: 20, offset: 0 } })
+        .get<WorkspaceTaskInboxDto>("/workspace/task-inbox", {
+          params: { limit: 20, offset: 0 },
+        })
         .then((response) => response.data)
         .catch(() => null),
       apiClient
@@ -471,7 +635,7 @@ export const operationsApi = {
       apiClient
         .get<RoleWorkspaceSummaryDto>("/workspace/role-summary")
         .then((response) => response.data)
-        .catch(() => null)
+        .catch(() => null),
     ]);
 
     return {
@@ -485,20 +649,40 @@ export const operationsApi = {
       taskInbox: taskInboxResponse,
       providerStatus: providerStatusResponse,
       tenantHealth: tenantHealthResponse,
-      roleSummary: roleSummaryResponse
+      roleSummary: roleSummaryResponse,
     };
-  }
+  },
 };
 
-export type FireTrainingSnapshot = Awaited<ReturnType<typeof operationsApi.getFireTrainingSnapshot>>;
-export type InspectionWorkspaceSnapshot = Awaited<ReturnType<typeof operationsApi.getInspectionWorkspaceSnapshot>>;
-export type AdminSnapshot = Awaited<ReturnType<typeof operationsApi.getAdminSnapshot>>;
-export type MedicalSnapshot = Awaited<ReturnType<typeof operationsApi.getMedicalSnapshot>>;
-export type SettingsSnapshot = Awaited<ReturnType<typeof operationsApi.getSettingsSnapshot>>;
-export type ReferenceSnapshot = Awaited<ReturnType<typeof operationsApi.getReferenceSnapshot>>;
-export type ActivitiesSnapshot = Awaited<ReturnType<typeof operationsApi.getActivitiesSnapshot>>;
-export type FireSafetySnapshot = Awaited<ReturnType<typeof operationsApi.getFireSafetySnapshot>>;
-export type BriefingCollections = { templates: BriefingTemplateDto[]; journals: BriefingJournalDto[]; overdueEntries: BriefingEntryDto[] };
+export type FireTrainingSnapshot = Awaited<
+  ReturnType<typeof operationsApi.getFireTrainingSnapshot>
+>;
+export type InspectionWorkspaceSnapshot = Awaited<
+  ReturnType<typeof operationsApi.getInspectionWorkspaceSnapshot>
+>;
+export type AdminSnapshot = Awaited<
+  ReturnType<typeof operationsApi.getAdminSnapshot>
+>;
+export type MedicalSnapshot = Awaited<
+  ReturnType<typeof operationsApi.getMedicalSnapshot>
+>;
+export type SettingsSnapshot = Awaited<
+  ReturnType<typeof operationsApi.getSettingsSnapshot>
+>;
+export type ReferenceSnapshot = Awaited<
+  ReturnType<typeof operationsApi.getReferenceSnapshot>
+>;
+export type ActivitiesSnapshot = Awaited<
+  ReturnType<typeof operationsApi.getActivitiesSnapshot>
+>;
+export type FireSafetySnapshot = Awaited<
+  ReturnType<typeof operationsApi.getFireSafetySnapshot>
+>;
+export type BriefingCollections = {
+  templates: BriefingTemplateDto[];
+  journals: BriefingJournalDto[];
+  overdueEntries: BriefingEntryDto[];
+};
 export type OperationalActionDto = CorrectiveActionDto;
 export type InspectionRegistryDto = InspectionDto;
 export type PrescriptionRegistryDto = PrescriptionDto;

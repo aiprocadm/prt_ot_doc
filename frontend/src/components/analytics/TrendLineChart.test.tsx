@@ -16,9 +16,9 @@ describe("TrendLineChart", () => {
         title="Инциденты"
         series={[
           { date: "2026-07-01", value: 2 },
-          { date: "2026-07-02", value: 5 }
+          { date: "2026-07-02", value: 5 },
         ]}
-      />
+      />,
     );
     expect(screen.getByText("Инциденты")).toBeInTheDocument();
     expect(screen.getByTestId("trend-chart-Инциденты")).toBeInTheDocument();

@@ -8,13 +8,13 @@ const {
   fetchRecentSearchesMock,
   fetchSavedSearchesMock,
   createSavedSearchMock,
-  deleteSavedSearchMock
+  deleteSavedSearchMock,
 } = vi.hoisted(() => ({
   fetchSearchMock: vi.fn(),
   fetchRecentSearchesMock: vi.fn(),
   fetchSavedSearchesMock: vi.fn(),
   createSavedSearchMock: vi.fn(),
-  deleteSavedSearchMock: vi.fn()
+  deleteSavedSearchMock: vi.fn(),
 }));
 
 vi.mock("@/api/search", () => ({
@@ -22,7 +22,7 @@ vi.mock("@/api/search", () => ({
   fetchRecentSearches: (...args: unknown[]) => fetchRecentSearchesMock(...args),
   fetchSavedSearches: (...args: unknown[]) => fetchSavedSearchesMock(...args),
   createSavedSearch: (...args: unknown[]) => createSavedSearchMock(...args),
-  deleteSavedSearch: (...args: unknown[]) => deleteSavedSearchMock(...args)
+  deleteSavedSearch: (...args: unknown[]) => deleteSavedSearchMock(...args),
 }));
 
 import SearchPage from "@/pages/SearchPage";
@@ -42,48 +42,66 @@ describe("SearchPage states", () => {
     fetchSearchMock.mockResolvedValue({
       items: [],
       facets: {},
-      next_cursor: null
+      next_cursor: null,
     });
 
     render(
       <MemoryRouter initialEntries={["/search?q=audit&type=documents"]}>
         <SearchPage />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
 
     expect(await screen.findByText("Ничего не найдено")).toBeInTheDocument();
   });
 
   it("shows api error state for failed search", async () => {
-    fetchSearchMock.mockRejectedValue({ status: 400, message: "Search backend unavailable" });
+    fetchSearchMock.mockRejectedValue({
+      status: 400,
+      message: "Search backend unavailable",
+    });
 
     render(
       <MemoryRouter initialEntries={["/search?q=risk&type=documents"]}>
         <SearchPage />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
 
-    await waitFor(() => expect(screen.getByText("Search backend unavailable")).toBeInTheDocument());
+    await waitFor(() =>
+      expect(
+        screen.getByText("Search backend unavailable"),
+      ).toBeInTheDocument(),
+    );
   });
 
   it("debounces search input changes before calling api", async () => {
-    fetchSearchMock.mockResolvedValue({ items: [], facets: {}, next_cursor: null });
+    fetchSearchMock.mockResolvedValue({
+      items: [],
+      facets: {},
+      next_cursor: null,
+    });
 
     render(
       <MemoryRouter initialEntries={["/search?q=&type=documents"]}>
         <SearchPage />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
 
     const input = screen.getByPlaceholderText("Поиск по системе");
     await userEvent.type(input, "audit");
 
-    await waitFor(() => expect(fetchSearchMock).toHaveBeenCalledTimes(1), { timeout: 1200 });
+    await waitFor(() => expect(fetchSearchMock).toHaveBeenCalledTimes(1), {
+      timeout: 1200,
+    });
   });
 
   it("ignores stale responses from older search requests", async () => {
     type SearchPayload = {
-      items: Array<{ kind: "entity"; entity_type: string; entity_id: string; title: string }>;
+      items: Array<{
+        kind: "entity";
+        entity_type: string;
+        entity_id: string;
+        title: string;
+      }>;
       facets: Record<string, unknown>;
       next_cursor: null;
     };
@@ -98,41 +116,59 @@ describe("SearchPage states", () => {
         () =>
           new Promise<SearchPayload>((resolve) => {
             resolvers.first = resolve;
-          })
+          }),
       )
       .mockImplementationOnce(
         () =>
           new Promise<SearchPayload>((resolve) => {
             resolvers.second = resolve;
-          })
+          }),
       );
 
     render(
       <MemoryRouter initialEntries={["/search?q=first&type=documents"]}>
         <SearchPage />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
 
-    await waitFor(() => expect(fetchSearchMock).toHaveBeenCalledTimes(1), { timeout: 1200 });
+    await waitFor(() => expect(fetchSearchMock).toHaveBeenCalledTimes(1), {
+      timeout: 1200,
+    });
 
     const input = screen.getByPlaceholderText("Поиск по системе");
     await userEvent.clear(input);
     await userEvent.type(input, "second");
 
-    await waitFor(() => expect(fetchSearchMock).toHaveBeenCalledTimes(2), { timeout: 1200 });
+    await waitFor(() => expect(fetchSearchMock).toHaveBeenCalledTimes(2), {
+      timeout: 1200,
+    });
 
     resolvers.second!({
-      items: [{ kind: "entity", entity_type: "documents", entity_id: "new", title: "Second result" }],
+      items: [
+        {
+          kind: "entity",
+          entity_type: "documents",
+          entity_id: "new",
+          title: "Second result",
+        },
+      ],
       facets: {},
-      next_cursor: null
+      next_cursor: null,
     });
 
     expect(await screen.findByText("Second result")).toBeInTheDocument();
 
     resolvers.first!({
-      items: [{ kind: "entity", entity_type: "documents", entity_id: "old", title: "First result" }],
+      items: [
+        {
+          kind: "entity",
+          entity_type: "documents",
+          entity_id: "old",
+          title: "First result",
+        },
+      ],
       facets: {},
-      next_cursor: null
+      next_cursor: null,
     });
 
     await waitFor(() => {

@@ -26,22 +26,31 @@ export const useSearchUrlState = () => {
     setParams(next);
   };
 
-  const replaceWithSavedSearch = (item: { q: string; types: string[]; filters?: Record<string, unknown> }) => {
+  const replaceWithSavedSearch = (item: {
+    q: string;
+    types: string[];
+    filters?: Record<string, unknown>;
+  }) => {
     const next = new URLSearchParams();
     next.set("q", item.q);
     if (item.types[0]) next.set("type", item.types[0]);
     const filters = item.filters ?? {};
     if (typeof filters.status === "string") next.set("status", filters.status);
-    if (typeof filters.company_id === "string") next.set("company_id", filters.company_id);
-    if (typeof filters.site_id === "string") next.set("site_id", filters.site_id);
-    if (typeof filters.project_id === "string") next.set("project_id", filters.project_id);
-    if (typeof filters.risk_level === "string") next.set("risk_level", filters.risk_level);
+    if (typeof filters.company_id === "string")
+      next.set("company_id", filters.company_id);
+    if (typeof filters.site_id === "string")
+      next.set("site_id", filters.site_id);
+    if (typeof filters.project_id === "string")
+      next.set("project_id", filters.project_id);
+    if (typeof filters.risk_level === "string")
+      next.set("risk_level", filters.risk_level);
     setParams(next);
   };
 
   const activeTypes = useMemo(() => asSearchTypeList(type), [type]);
   const activeFilterCount = useMemo(
-    () => [status, companyId, siteId, projectId, riskLevel].filter(Boolean).length,
+    () =>
+      [status, companyId, siteId, projectId, riskLevel].filter(Boolean).length,
     [status, companyId, siteId, projectId, riskLevel],
   );
 

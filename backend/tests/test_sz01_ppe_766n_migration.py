@@ -1,4 +1,5 @@
 """sz01 migration + model shape: 766н fields, item_id on norms, VARCHAR status."""
+
 from __future__ import annotations
 
 import re
@@ -6,7 +7,13 @@ from pathlib import Path
 
 from app.models.models import Person, PPEIssue, PPEIssueStatus, PPENorm
 
-MIGRATION = Path(__file__).resolve().parents[1] / "app" / "migrations" / "versions" / "20260610_sz01_ppe_norms_card_766n.py"
+MIGRATION = (
+    Path(__file__).resolve().parents[1]
+    / "app"
+    / "migrations"
+    / "versions"
+    / "20260610_sz01_ppe_norms_card_766n.py"
+)
 
 
 def test_ppenorm_has_item_id():
@@ -23,8 +30,12 @@ def test_person_has_ppe_sizes_json():
 def test_ppeissue_766n_columns():
     cols = PPEIssue.__table__.c
     for name in (
-        "certificate_no", "wear_percent", "return_wear_percent",
-        "signature_doc_ref", "writeoff_reason", "replaces_issue_id",
+        "certificate_no",
+        "wear_percent",
+        "return_wear_percent",
+        "signature_doc_ref",
+        "writeoff_reason",
+        "replaces_issue_id",
     ):
         assert name in cols, name
         assert cols[name].nullable is True, name
@@ -39,7 +50,11 @@ def test_ppeissue_status_is_varchar_not_native_enum():
 
 def test_status_enum_has_all_five_values():
     assert {m.value for m in PPEIssueStatus} == {
-        "issued", "returned", "written_off", "replaced", "lost",
+        "issued",
+        "returned",
+        "written_off",
+        "replaced",
+        "lost",
     }
 
 
@@ -56,8 +71,13 @@ def test_migration_converts_status_and_drops_enum_type():
     assert "DROP TYPE IF EXISTS ppeissuestatus" in src
     # additive columns present
     for name in (
-        "item_id", "ppe_sizes", "certificate_no", "wear_percent",
-        "return_wear_percent", "signature_doc_ref", "writeoff_reason",
+        "item_id",
+        "ppe_sizes",
+        "certificate_no",
+        "wear_percent",
+        "return_wear_percent",
+        "signature_doc_ref",
+        "writeoff_reason",
         "replaces_issue_id",
     ):
         assert name in src, name
@@ -95,9 +115,15 @@ def test_downgrade_guard_raises_before_destructive_ops(monkeypatch):
     destructive_calls: list[str] = []
     monkeypatch.setattr(module.op, "get_bind", lambda: _FakeBind())
     monkeypatch.setattr(module.op, "execute", lambda *a, **k: destructive_calls.append("execute"))
-    monkeypatch.setattr(module.op, "drop_index", lambda *a, **k: destructive_calls.append("drop_index"))
-    monkeypatch.setattr(module.op, "drop_column", lambda *a, **k: destructive_calls.append("drop_column"))
-    monkeypatch.setattr(module.op, "drop_constraint", lambda *a, **k: destructive_calls.append("drop_constraint"))
+    monkeypatch.setattr(
+        module.op, "drop_index", lambda *a, **k: destructive_calls.append("drop_index")
+    )
+    monkeypatch.setattr(
+        module.op, "drop_column", lambda *a, **k: destructive_calls.append("drop_column")
+    )
+    monkeypatch.setattr(
+        module.op, "drop_constraint", lambda *a, **k: destructive_calls.append("drop_constraint")
+    )
 
     with _pytest.raises(RuntimeError, match="written_off/replaced"):
         module.downgrade()

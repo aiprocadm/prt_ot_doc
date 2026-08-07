@@ -1,6 +1,17 @@
-import { Activity, AlertTriangle, CheckCircle2, RefreshCw, XCircle, type LucideIcon } from "lucide-react";
+import {
+  Activity,
+  AlertTriangle,
+  CheckCircle2,
+  RefreshCw,
+  XCircle,
+  type LucideIcon,
+} from "lucide-react";
 
-import type { HealthCheckItem, HealthCheckStatus, HealthComprehensiveDto } from "@/api/health";
+import type {
+  HealthCheckItem,
+  HealthCheckStatus,
+  HealthComprehensiveDto,
+} from "@/api/health";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -14,22 +25,26 @@ const CHECK_LABELS_RU: Record<string, string> = {
   workers: "Воркеры (Celery)",
   "1c_integration": "Интеграция 1С",
   edo_integration: "Интеграция ЭДО",
-  email: "Email"
+  email: "Email",
 };
 
 /** Surface problems first: failed → degraded → ok, then alphabetical. */
-const STATUS_ORDER: Record<HealthCheckStatus, number> = { failed: 0, degraded: 1, ok: 2 };
+const STATUS_ORDER: Record<HealthCheckStatus, number> = {
+  failed: 0,
+  degraded: 1,
+  ok: 2,
+};
 
 const STATUS_ICON: Record<HealthCheckStatus, LucideIcon> = {
   ok: CheckCircle2,
   degraded: AlertTriangle,
-  failed: XCircle
+  failed: XCircle,
 };
 
 const STATUS_ICON_CLASS: Record<HealthCheckStatus, string> = {
   ok: "text-emerald-500",
   degraded: "text-amber-500",
-  failed: "text-red-500"
+  failed: "text-red-500",
 };
 
 export type HealthStatusPanelProps = {
@@ -46,15 +61,26 @@ function CheckRow({ check }: { check: HealthCheckItem }) {
     <Card data-testid={`health-check-${check.name}`}>
       <CardContent className="flex items-start justify-between gap-4 p-4">
         <div className="flex items-start gap-3">
-          <Icon className={cn("mt-0.5 h-5 w-5 shrink-0", STATUS_ICON_CLASS[check.status])} aria-hidden />
+          <Icon
+            className={cn(
+              "mt-0.5 h-5 w-5 shrink-0",
+              STATUS_ICON_CLASS[check.status],
+            )}
+            aria-hidden
+          />
           <div className="space-y-1">
             <div className="font-medium">{label}</div>
             {check.error ? (
-              <p className="text-sm text-red-600" data-testid={`health-check-${check.name}-error`}>
+              <p
+                className="text-sm text-red-600"
+                data-testid={`health-check-${check.name}-error`}
+              >
                 {check.error}
               </p>
             ) : (
-              <p className="text-sm text-muted-foreground">{check.duration_ms.toFixed(0)} мс</p>
+              <p className="text-sm text-muted-foreground">
+                {check.duration_ms.toFixed(0)} мс
+              </p>
             )}
           </div>
         </div>
@@ -69,10 +95,16 @@ function CheckRow({ check }: { check: HealthCheckItem }) {
  * email). Pure presentational: data/loading/error come from props, so it is
  * unit-tested directly without mocking a store or the API client.
  */
-export function HealthStatusPanel({ data, loading, error, onRefresh }: HealthStatusPanelProps) {
+export function HealthStatusPanel({
+  data,
+  loading,
+  error,
+  onRefresh,
+}: HealthStatusPanelProps) {
   const checks = data
     ? Object.values(data.checks).sort((a, b) => {
-        const order = (STATUS_ORDER[a.status] ?? 9) - (STATUS_ORDER[b.status] ?? 9);
+        const order =
+          (STATUS_ORDER[a.status] ?? 9) - (STATUS_ORDER[b.status] ?? 9);
         return order !== 0 ? order : a.name.localeCompare(b.name);
       })
     : [];
@@ -86,8 +118,16 @@ export function HealthStatusPanel({ data, loading, error, onRefresh }: HealthSta
           {data ? <StatusBadge status={data.status} /> : null}
         </div>
         {onRefresh ? (
-          <Button variant="outline" size="sm" onClick={onRefresh} disabled={loading}>
-            <RefreshCw className={cn("mr-2 h-4 w-4", loading && "animate-spin")} aria-hidden />
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onRefresh}
+            disabled={loading}
+          >
+            <RefreshCw
+              className={cn("mr-2 h-4 w-4", loading && "animate-spin")}
+              aria-hidden
+            />
             Обновить
           </Button>
         ) : null}
@@ -96,7 +136,8 @@ export function HealthStatusPanel({ data, loading, error, onRefresh }: HealthSta
       {error ? (
         <Card data-testid="health-status-error">
           <CardContent className="p-4 text-sm text-red-600">
-            Не удалось загрузить состояние системы{error.message ? `: ${error.message}` : "."}
+            Не удалось загрузить состояние системы
+            {error.message ? `: ${error.message}` : "."}
           </CardContent>
         </Card>
       ) : null}
@@ -104,7 +145,9 @@ export function HealthStatusPanel({ data, loading, error, onRefresh }: HealthSta
       {!error && checks.length === 0 ? (
         <Card>
           <CardContent className="p-4 text-sm text-muted-foreground">
-            {loading ? "Загрузка состояния системы…" : "Нет данных о состоянии системы."}
+            {loading
+              ? "Загрузка состояния системы…"
+              : "Нет данных о состоянии системы."}
           </CardContent>
         </Card>
       ) : null}

@@ -147,9 +147,12 @@ async def render_referral(
     snils: str | None = None
     factors: list[tuple[str, str]] = []
     if person is not None:
-        full_name = " ".join(
-            part for part in (person.last_name, person.first_name, person.middle_name) if part
-        ).strip() or "—"
+        full_name = (
+            " ".join(
+                part for part in (person.last_name, person.first_name, person.middle_name) if part
+            ).strip()
+            or "—"
+        )
         position_name = person.position.name if person.position else person.position_title
         department = person.workplace.name if person.workplace else None
         birth_date = _iso(person.birth_date)

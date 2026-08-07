@@ -13,19 +13,15 @@ import { useDocumentsWizardBootstrap } from "./wizard/useDocumentsWizardBootstra
 import { getArchiveStatusSummary } from "./wizard/utils";
 import { WizardStepper } from "@/components/wizard/WizardStepper";
 
-const clampStep = (value: number) => Math.min(Math.max(value, 1), wizardSteps.length);
+const clampStep = (value: number) =>
+  Math.min(Math.max(value, 1), wizardSteps.length);
 
 const DocumentsWizardPage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const queryStep = searchParams.get("step");
   const didInitFromQueryRef = useRef(false);
-  const {
-    tenant,
-    companies,
-    sites,
-    layoutPresets,
-    brandingProfileScope
-  } = useDocumentsWizardBootstrap();
+  const { tenant, companies, sites, layoutPresets, brandingProfileScope } =
+    useDocumentsWizardBootstrap();
 
   const {
     step,
@@ -47,7 +43,7 @@ const DocumentsWizardPage = () => {
     idempotencyKey,
     rowStatusFilter,
     pushBrandingPreview,
-    setPartial
+    setPartial,
   } = useDocumentsWizardStore();
   const normalizedStep = clampStep(step);
 
@@ -76,11 +72,14 @@ const DocumentsWizardPage = () => {
 
   useEffect(() => {
     if (queryStep !== String(normalizedStep)) {
-      setSearchParams((prev) => {
-        const next = new URLSearchParams(prev);
-        next.set("step", String(normalizedStep));
-        return next;
-      }, { replace: true });
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          next.set("step", String(normalizedStep));
+          return next;
+        },
+        { replace: true },
+      );
     }
   }, [normalizedStep, queryStep, setSearchParams]);
 
@@ -96,17 +95,20 @@ const DocumentsWizardPage = () => {
     () =>
       getArchiveStatusSummary({
         batchStatus: batch?.status,
-        pipelineStatus: pipelineRun?.status
+        pipelineStatus: pipelineRun?.status,
       }),
-    [batch?.status, pipelineRun?.status]
+    [batch?.status, pipelineRun?.status],
   );
 
-  const handleStepClick = useCallback((s: number) => {
-    const nextStep = clampStep(s);
-    if (nextStep !== normalizedStep) {
-      setPartial({ step: nextStep });
-    }
-  }, [normalizedStep, setPartial]);
+  const handleStepClick = useCallback(
+    (s: number) => {
+      const nextStep = clampStep(s);
+      if (nextStep !== normalizedStep) {
+        setPartial({ step: nextStep });
+      }
+    },
+    [normalizedStep, setPartial],
+  );
 
   const goPrevStep = useCallback(() => {
     setPartial({ step: clampStep(normalizedStep - 1) });
@@ -120,9 +122,20 @@ const DocumentsWizardPage = () => {
 
   return (
     <div className="space-y-4">
-      <Breadcrumb items={[{ label: "Главная", to: "/dashboard" }, { label: "Документы" }, { label: "Мастер пакета" }]} />
+      <Breadcrumb
+        items={[
+          { label: "Главная", to: "/dashboard" },
+          { label: "Документы" },
+          { label: "Мастер пакета" },
+        ]}
+      />
       {!tenant ? (
-        <Card><CardContent className="pt-6 text-sm text-destructive">Выберите tenant перед запуском мастера. Без X-Tenant запросы заблокированы.</CardContent></Card>
+        <Card>
+          <CardContent className="pt-6 text-sm text-destructive">
+            Выберите tenant перед запуском мастера. Без X-Tenant запросы
+            заблокированы.
+          </CardContent>
+        </Card>
       ) : null}
       <WizardStepper
         steps={wizardSteps}
@@ -131,7 +144,11 @@ const DocumentsWizardPage = () => {
       />
 
       <Card>
-        <CardHeader><CardTitle>Шаг {normalizedStep}: {wizardSteps[normalizedStep - 1].title}</CardTitle></CardHeader>
+        <CardHeader>
+          <CardTitle>
+            Шаг {normalizedStep}: {wizardSteps[normalizedStep - 1].title}
+          </CardTitle>
+        </CardHeader>
         <CardContent className="space-y-4">
           <WizardStepContent
             step={normalizedStep}
@@ -172,8 +189,19 @@ const DocumentsWizardPage = () => {
           />
 
           <div className="flex justify-between border-t pt-3">
-            <Button variant="outline" onClick={goPrevStep} disabled={normalizedStep === 1}>Назад</Button>
-            <Button onClick={goNextStep} disabled={normalizedStep === wizardSteps.length}>Далее</Button>
+            <Button
+              variant="outline"
+              onClick={goPrevStep}
+              disabled={normalizedStep === 1}
+            >
+              Назад
+            </Button>
+            <Button
+              onClick={goNextStep}
+              disabled={normalizedStep === wizardSteps.length}
+            >
+              Далее
+            </Button>
           </div>
         </CardContent>
       </Card>

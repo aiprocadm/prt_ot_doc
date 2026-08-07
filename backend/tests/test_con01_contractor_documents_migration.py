@@ -1,4 +1,5 @@
 """Pin: ContractorDocument model + con01 migration shape (Подрядчики Срез-2)."""
+
 from __future__ import annotations
 
 import importlib.util
@@ -6,7 +7,10 @@ from pathlib import Path
 
 _MIGRATION = (
     Path(__file__).resolve().parents[1]
-    / "app" / "migrations" / "versions" / "20260609_con01_contractor_documents.py"
+    / "app"
+    / "migrations"
+    / "versions"
+    / "20260609_con01_contractor_documents.py"
 )
 
 
@@ -24,9 +28,22 @@ def test_model_table_and_columns() -> None:
     assert ContractorDocument.__tablename__ == "contractor_documents"
     cols = set(ContractorDocument.__table__.columns.keys())
     assert {
-        "id", "tenant_id", "version", "created_at", "updated_at", "deleted_at",
-        "contractor_id", "employee_id", "doc_type", "title", "number",
-        "issuing_org", "issued_at", "valid_until", "file_id", "status",
+        "id",
+        "tenant_id",
+        "version",
+        "created_at",
+        "updated_at",
+        "deleted_at",
+        "contractor_id",
+        "employee_id",
+        "doc_type",
+        "title",
+        "number",
+        "issuing_org",
+        "issued_at",
+        "valid_until",
+        "file_id",
+        "status",
     } <= cols
 
 

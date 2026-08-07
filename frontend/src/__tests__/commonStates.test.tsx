@@ -7,7 +7,9 @@ import { ErrorState } from "@/components/common/ErrorState";
 
 describe("common states", () => {
   it("renders EmptyState content", () => {
-    render(<EmptyState title="Nothing here" description="Add records to continue" />);
+    render(
+      <EmptyState title="Nothing here" description="Add records to continue" />,
+    );
 
     expect(screen.getByText("Nothing here")).toBeInTheDocument();
     expect(screen.getByText("Add records to continue")).toBeInTheDocument();
@@ -25,10 +27,10 @@ describe("common states", () => {
           type: "validation",
           message: "Validation failed",
           correlation_id: "corr-123",
-          field_errors: [{ field: "template_code", message: "Required" }]
+          field_errors: [{ field: "template_code", message: "Required" }],
         }}
         onRetry={onRetry}
-      />
+      />,
     );
 
     expect(screen.getByRole("alert")).toBeInTheDocument();
@@ -49,14 +51,14 @@ describe("common states", () => {
           code: "INTERNAL_ERROR",
           message: "Internal server error",
           correlation_id: "ef0d63642f1547538ab5ee7f9f8ca4d5",
-          field_errors: []
+          field_errors: [],
         }}
-      />
+      />,
     );
 
     expect(screen.getByText(/Сервер временно не отвечает/)).toBeInTheDocument();
     expect(
-      screen.getByText("INTERNAL_ERROR · ef0d63642f1547538ab5ee7f9f8ca4d5")
+      screen.getByText("INTERNAL_ERROR · ef0d63642f1547538ab5ee7f9f8ca4d5"),
     ).toBeInTheDocument();
   });
 });

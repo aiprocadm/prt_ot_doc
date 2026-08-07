@@ -43,11 +43,15 @@ export const inspectionsApi = {
     limit?: number;
     offset?: number;
   }) => {
-    const { data } = await apiClient.get<InspectionPage>("/inspections", { params });
+    const { data } = await apiClient.get<InspectionPage>("/inspections", {
+      params,
+    });
     return data;
   },
   listResults: async (inspectionId: string) => {
-    const { data } = await apiClient.get<InspectionResult[]>(`/inspections/${inspectionId}/results`);
+    const { data } = await apiClient.get<InspectionResult[]>(
+      `/inspections/${inspectionId}/results`,
+    );
     return data;
   },
   create: async (payload: {
@@ -60,5 +64,5 @@ export const inspectionsApi = {
   }) => {
     const { data } = await apiClient.post<Inspection>("/inspections", payload);
     return data;
-  }
+  },
 };

@@ -26,7 +26,7 @@ const resolveTenant = (stored: StoredTenant | null): TenantOption | null => {
     id: stored.slug,
     slug: stored.slug,
     name: stored.slug,
-    site: stored.site ?? null
+    site: stored.site ?? null,
   };
 };
 
@@ -37,7 +37,7 @@ const normalizeTenant = (tenant: TenantInput): TenantOption => {
     id: tenant.id ?? tenant.slug,
     slug: tenant.slug,
     name: tenant.name?.trim() || tenant.slug,
-    site: tenant.site ?? null
+    site: tenant.site ?? null,
   };
 };
 
@@ -54,5 +54,5 @@ export const useTenantStore = create<TenantState>((set) => ({
     tenantStorage.clear();
     resetTenantStores();
     set({ tenant: null });
-  }
+  },
 }));

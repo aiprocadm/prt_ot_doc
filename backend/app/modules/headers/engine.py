@@ -4,10 +4,11 @@ import re
 from io import BytesIO
 from zipfile import ZIP_DEFLATED, ZipFile
 
+from lxml import etree
+
 from app.core.xml_security import lxml_fromstring
 from app.modules.headers.placeholders import render_placeholders
 from app.modules.headers.report import ApplyHeadersReport
-from lxml import etree
 
 W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 R_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"

@@ -40,47 +40,68 @@ export default defineConfig(({ mode }) => {
       tsconfigPaths(),
       !isTest &&
         VitePWA({
-      registerType: "autoUpdate",
-      includeAssets: ["pwa-icon.svg", "mask-icon.svg", "apple-touch-icon.svg"],
-      manifest: {
-        name: "PRT OT SaaS Platform",
-        short_name: "PRT OT",
-        description: "Tenant-aware operational platform for OT, PB, fire safety, ecology, EDO and document workflows.",
-        theme_color: "#0f172a",
-        background_color: "#f8fafc",
-        display: "standalone",
-        start_url: "/",
-        scope: "/",
-        icons: [
-          { src: "/pwa-icon.svg", sizes: "any", type: "image/svg+xml", purpose: "any" },
-          { src: "/mask-icon.svg", sizes: "any", type: "image/svg+xml", purpose: "maskable" },
-          { src: "/apple-touch-icon.svg", sizes: "180x180", type: "image/svg+xml", purpose: "any" }
-        ]
-      },
-      workbox: {
-        navigateFallback: "/index.html",
-        cleanupOutdatedCaches: true,
-        clientsClaim: true,
-        skipWaiting: true,
-        globPatterns: ["**/*.{js,css,html,svg,png,ico,json}"],
-        runtimeCaching: [
-          {
-            urlPattern: ({ request }) => request.mode === "navigate",
-            handler: "NetworkFirst",
-            options: { cacheName: "app-shell" }
+          registerType: "autoUpdate",
+          includeAssets: [
+            "pwa-icon.svg",
+            "mask-icon.svg",
+            "apple-touch-icon.svg",
+          ],
+          manifest: {
+            name: "PRT OT SaaS Platform",
+            short_name: "PRT OT",
+            description:
+              "Tenant-aware operational platform for OT, PB, fire safety, ecology, EDO and document workflows.",
+            theme_color: "#0f172a",
+            background_color: "#f8fafc",
+            display: "standalone",
+            start_url: "/",
+            scope: "/",
+            icons: [
+              {
+                src: "/pwa-icon.svg",
+                sizes: "any",
+                type: "image/svg+xml",
+                purpose: "any",
+              },
+              {
+                src: "/mask-icon.svg",
+                sizes: "any",
+                type: "image/svg+xml",
+                purpose: "maskable",
+              },
+              {
+                src: "/apple-touch-icon.svg",
+                sizes: "180x180",
+                type: "image/svg+xml",
+                purpose: "any",
+              },
+            ],
           },
-          {
-            urlPattern: ({ request }) => ["style", "script", "worker"].includes(request.destination),
-            handler: "StaleWhileRevalidate",
-            options: { cacheName: "static-assets" }
-          }
-        ]
-      },
-      devOptions: {
-        enabled: mode === "development",
-        navigateFallback: "index.html"
-      }
-    })
+          workbox: {
+            navigateFallback: "/index.html",
+            cleanupOutdatedCaches: true,
+            clientsClaim: true,
+            skipWaiting: true,
+            globPatterns: ["**/*.{js,css,html,svg,png,ico,json}"],
+            runtimeCaching: [
+              {
+                urlPattern: ({ request }) => request.mode === "navigate",
+                handler: "NetworkFirst",
+                options: { cacheName: "app-shell" },
+              },
+              {
+                urlPattern: ({ request }) =>
+                  ["style", "script", "worker"].includes(request.destination),
+                handler: "StaleWhileRevalidate",
+                options: { cacheName: "static-assets" },
+              },
+            ],
+          },
+          devOptions: {
+            enabled: mode === "development",
+            navigateFallback: "index.html",
+          },
+        }),
     ].filter(Boolean),
     server: {
       host: true,
@@ -111,7 +132,9 @@ export default defineConfig(({ mode }) => {
       exclude: [...configDefaults.exclude, "**/e2e/**"],
       // VitePWA в тестовом режиме отключён — его виртуальный модуль подменяем заглушкой.
       alias: {
-        "virtual:pwa-register": fileURLToPath(new URL("./src/pwa/pwaRegisterStub.ts", import.meta.url)),
+        "virtual:pwa-register": fileURLToPath(
+          new URL("./src/pwa/pwaRegisterStub.ts", import.meta.url),
+        ),
       },
     },
   };

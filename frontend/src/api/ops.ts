@@ -103,18 +103,27 @@ export type AuditPrepSnapshot = {
 
 export const opsApi = {
   async getPpeOverview(): Promise<PpeOverviewSnapshot> {
-    const [itemsResponse, issuesResponse, expiringResponse, personsResponse] = await Promise.all([
-      apiClient.get<PageResponse<PpeItemDto>>("/ppe/items", { params: { limit: 100, offset: 0 } }),
-      apiClient.get<PageResponse<PpeIssueDto>>("/ppe/issues", { params: { limit: 100, offset: 0 } }),
-      apiClient.get<PageResponse<PpeIssueDto>>("/ppe/issues/expiring", { params: { within_days: 30 } }),
-      apiClient.get<PageResponse<PersonDto>>("/persons", { params: { page: 1, page_size: 100 } })
-    ]);
+    const [itemsResponse, issuesResponse, expiringResponse, personsResponse] =
+      await Promise.all([
+        apiClient.get<PageResponse<PpeItemDto>>("/ppe/items", {
+          params: { limit: 100, offset: 0 },
+        }),
+        apiClient.get<PageResponse<PpeIssueDto>>("/ppe/issues", {
+          params: { limit: 100, offset: 0 },
+        }),
+        apiClient.get<PageResponse<PpeIssueDto>>("/ppe/issues/expiring", {
+          params: { within_days: 30 },
+        }),
+        apiClient.get<PageResponse<PersonDto>>("/persons", {
+          params: { page: 1, page_size: 100 },
+        }),
+      ]);
 
     return {
       items: itemsResponse.data.items ?? [],
       issues: issuesResponse.data.items ?? [],
       expiring: expiringResponse.data.items ?? [],
-      persons: personsResponse.data.items ?? []
+      persons: personsResponse.data.items ?? [],
     };
   },
 
@@ -124,7 +133,10 @@ export const opsApi = {
   },
 
   async getPrescriptions(): Promise<PrescriptionDto[]> {
-    const response = await apiClient.get<PageResponse<PrescriptionDto>>("/prescriptions", { params: { limit: 100, offset: 0 } });
+    const response = await apiClient.get<PageResponse<PrescriptionDto>>(
+      "/prescriptions",
+      { params: { limit: 100, offset: 0 } },
+    );
     return response.data.items ?? [];
   },
 
@@ -134,21 +146,30 @@ export const opsApi = {
   },
 
   async getCorrectiveActions(): Promise<CorrectiveActionDto[]> {
-    const response = await apiClient.get<CorrectiveActionDto[]>("/corrective-actions");
+    const response = await apiClient.get<CorrectiveActionDto[]>(
+      "/corrective-actions",
+    );
     return response.data ?? [];
   },
 
   async getAuditPrepSnapshot(): Promise<AuditPrepSnapshot> {
-    const [inspectionsResponse, prescriptionsResponse, tasksResponse] = await Promise.all([
-      apiClient.get<PageResponse<InspectionDto>>("/inspections", { params: { limit: 100, offset: 0 } }),
-      apiClient.get<PageResponse<PrescriptionDto>>("/prescriptions", { params: { limit: 100, offset: 0 } }),
-      apiClient.get<PageResponse<TaskDto>>("/tasks", { params: { overdue: true, page: 1, page_size: 100 } })
-    ]);
+    const [inspectionsResponse, prescriptionsResponse, tasksResponse] =
+      await Promise.all([
+        apiClient.get<PageResponse<InspectionDto>>("/inspections", {
+          params: { limit: 100, offset: 0 },
+        }),
+        apiClient.get<PageResponse<PrescriptionDto>>("/prescriptions", {
+          params: { limit: 100, offset: 0 },
+        }),
+        apiClient.get<PageResponse<TaskDto>>("/tasks", {
+          params: { overdue: true, page: 1, page_size: 100 },
+        }),
+      ]);
 
     return {
       inspections: inspectionsResponse.data.items ?? [],
       prescriptions: prescriptionsResponse.data.items ?? [],
-      overdueTasks: tasksResponse.data.items ?? []
+      overdueTasks: tasksResponse.data.items ?? [],
     };
-  }
+  },
 };

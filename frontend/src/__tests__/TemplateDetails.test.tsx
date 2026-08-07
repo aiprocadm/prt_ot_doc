@@ -13,22 +13,22 @@ const previewVersionMock = vi.fn();
 
 vi.mock("@/stores/templates", () => ({
   useTemplatesStore: () => ({
-    activateVersion: activateVersionMock
-  })
+    activateVersion: activateVersionMock,
+  }),
 }));
 
 vi.mock("@/permissions/useAbility", () => ({
   useAbility: () => ({
-    can: () => true
-  })
+    can: () => true,
+  }),
 }));
 
 vi.mock("@/api/templates", () => ({
   templatesApi: {
     uploadVersion: (...args: unknown[]) => uploadVersionMock(...args),
     lintVersion: (...args: unknown[]) => lintVersionMock(...args),
-    previewVersion: (...args: unknown[]) => previewVersionMock(...args)
-  }
+    previewVersion: (...args: unknown[]) => previewVersionMock(...args),
+  },
 }));
 
 vi.mock("sonner", () => ({
@@ -36,7 +36,7 @@ vi.mock("sonner", () => ({
     success: vi.fn(),
     error: vi.fn(),
     warning: vi.fn(),
-  }
+  },
 }));
 
 describe("TemplateDetails", () => {
@@ -56,7 +56,7 @@ describe("TemplateDetails", () => {
       version: 1,
       status: "active",
       created_at: "2025-01-01T00:00:00Z",
-      updated_at: "2025-01-01T00:00:00Z"
+      updated_at: "2025-01-01T00:00:00Z",
     },
     versions: [
       {
@@ -65,7 +65,7 @@ describe("TemplateDetails", () => {
         version: 1,
         status: "active",
         created_at: "2025-01-01T00:00:00Z",
-        updated_at: "2025-01-01T00:00:00Z"
+        updated_at: "2025-01-01T00:00:00Z",
       },
       {
         id: "ver-2",
@@ -73,9 +73,9 @@ describe("TemplateDetails", () => {
         version: 2,
         status: "active",
         created_at: "2025-01-02T00:00:00Z",
-        updated_at: "2025-01-02T00:00:00Z"
-      }
-    ]
+        updated_at: "2025-01-02T00:00:00Z",
+      },
+    ],
   };
 
   beforeEach(() => {
@@ -88,9 +88,7 @@ describe("TemplateDetails", () => {
   });
 
   it("renders versions and allows activating non-current version", async () => {
-    render(
-      <TemplateDetails template={template} />
-    );
+    render(<TemplateDetails template={template} />);
 
     expect(screen.getByText("Версия 1")).toBeInTheDocument();
     expect(screen.getByText("Версия 2")).toBeInTheDocument();
@@ -98,7 +96,9 @@ describe("TemplateDetails", () => {
     const currentButton = screen.getByRole("button", { name: "Текущая" });
     expect(currentButton).toBeDisabled();
 
-    expect(screen.getByRole("tab", { name: "Upload/Lint/Preview" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("tab", { name: "Upload/Lint/Preview" }),
+    ).toBeInTheDocument();
 
     const activateButton = screen.getByRole("button", { name: "Активировать" });
     expect(activateButton).toBeEnabled();
@@ -116,7 +116,9 @@ describe("TemplateDetails", () => {
     render(<TemplateDetails template={template} />);
 
     await user.click(screen.getByRole("tab", { name: "Upload/Lint/Preview" }));
-    fireEvent.change(await screen.findByRole("textbox"), { target: { value: "{" } });
+    fireEvent.change(await screen.findByRole("textbox"), {
+      target: { value: "{" },
+    });
     fireEvent.click(screen.getByRole("button", { name: "Предпросмотр" }));
 
     await waitFor(() => {

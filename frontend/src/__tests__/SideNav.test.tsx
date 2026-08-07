@@ -11,11 +11,11 @@ const renderSideNav = () =>
   renderWithRouter(
     <NavMenuProvider>
       <SideNav />
-    </NavMenuProvider>
+    </NavMenuProvider>,
   );
 
 vi.mock("@/api/billing", () => ({
-  getBillingSummary: vi.fn().mockResolvedValue({ features: {} })
+  getBillingSummary: vi.fn().mockResolvedValue({ features: {} }),
 }));
 
 describe("SideNav", () => {
@@ -29,12 +29,12 @@ describe("SideNav", () => {
         full_name: "Nav User",
         roles: ["worker"],
         permissions: [PERMISSIONS.DASHBOARD_VIEW, PERMISSIONS.DOCUMENT_VIEW],
-        attributes: { tenant_id: "tenant-1" }
+        attributes: { tenant_id: "tenant-1" },
       },
       loading: false,
       error: null,
       isAuthenticated: true,
-      initialized: true
+      initialized: true,
     });
   });
 
@@ -42,7 +42,9 @@ describe("SideNav", () => {
     renderSideNav();
 
     await waitFor(() => {
-      expect(screen.queryByRole("link", { name: "Генерация" })).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("link", { name: "Генерация" }),
+      ).not.toBeInTheDocument();
     });
   });
 
@@ -52,15 +54,22 @@ describe("SideNav", () => {
       user: state.user
         ? {
             ...state.user,
-            permissions: [PERMISSIONS.DASHBOARD_VIEW, PERMISSIONS.DOCUMENT_VIEW, PERMISSIONS.DOCUMENT_CREATE]
+            permissions: [
+              PERMISSIONS.DASHBOARD_VIEW,
+              PERMISSIONS.DOCUMENT_VIEW,
+              PERMISSIONS.DOCUMENT_CREATE,
+            ],
           }
-        : null
+        : null,
     }));
 
     renderSideNav();
 
     await waitFor(() => {
-      expect(screen.getByRole("link", { name: "Генерация" })).toHaveAttribute("href", "/generation");
+      expect(screen.getByRole("link", { name: "Генерация" })).toHaveAttribute(
+        "href",
+        "/generation",
+      );
     });
   });
 });

@@ -1,6 +1,17 @@
 import { apiClient } from "@/api/client";
 
-export type SearchType = "documents" | "people" | "sites" | "incidents" | "inspections" | "files" | "ppe" | "risk" | "training" | "jobs" | "templates";
+export type SearchType =
+  | "documents"
+  | "people"
+  | "sites"
+  | "incidents"
+  | "inspections"
+  | "files"
+  | "ppe"
+  | "risk"
+  | "training"
+  | "jobs"
+  | "templates";
 
 export interface SearchItem {
   kind: "entity" | "file";
@@ -49,28 +60,28 @@ export interface SavedSearchItem extends SearchMemoryItem {
 
 export const fetchSearch = async (
   params: {
-  q?: string;
-  types?: SearchType[];
-  cursor?: string;
-  limit?: number;
-  status?: string;
-  company_id?: string;
-  site_id?: string;
-  project_id?: string;
-  contractor_id?: string;
-  risk_level?: string;
-  date_from?: string;
-  date_to?: string;
-  sort?: "relevance" | "updated_at" | "date";
+    q?: string;
+    types?: SearchType[];
+    cursor?: string;
+    limit?: number;
+    status?: string;
+    company_id?: string;
+    site_id?: string;
+    project_id?: string;
+    contractor_id?: string;
+    risk_level?: string;
+    date_from?: string;
+    date_to?: string;
+    sort?: "relevance" | "updated_at" | "date";
   },
-  options?: { signal?: AbortSignal }
+  options?: { signal?: AbortSignal },
 ) => {
   const { data } = await apiClient.get<SearchResponse>("/search", {
     signal: options?.signal,
     params: {
       ...params,
-      types: params.types?.join(",")
-    }
+      types: params.types?.join(","),
+    },
   });
   return data;
 };
@@ -78,33 +89,36 @@ export const fetchSearch = async (
 export const searchGlobal = async (q: string) => fetchSearch({ q, limit: 8 });
 
 export const fetchRecentSearches = async () => {
-  const { data } = await apiClient.get<{ items: SearchMemoryItem[] }>("/search/recent");
+  const { data } = await apiClient.get<{ items: SearchMemoryItem[] }>(
+    "/search/recent",
+  );
   return Array.isArray(data?.items) ? data.items : [];
 };
 
 export const fetchSavedSearches = async () => {
-  const { data } = await apiClient.get<{ items: SavedSearchItem[] }>("/search/saved");
+  const { data } = await apiClient.get<{ items: SavedSearchItem[] }>(
+    "/search/saved",
+  );
   return Array.isArray(data?.items) ? data.items : [];
 };
 
-export const createSavedSearch = async (payload: { name: string; q: string; types: string[]; filters?: Record<string, unknown>; is_shared?: boolean }) => {
-  const { data } = await apiClient.post<SavedSearchItem>("/search/saved", payload);
+export const createSavedSearch = async (payload: {
+  name: string;
+  q: string;
+  types: string[];
+  filters?: Record<string, unknown>;
+  is_shared?: boolean;
+}) => {
+  const { data } = await apiClient.post<SavedSearchItem>(
+    "/search/saved",
+    payload,
+  );
   return data;
 };
 
 export const deleteSavedSearch = async (id: string) => {
-  const { data } = await apiClient.delete<{ deleted: boolean }>(`/search/saved/${id}`);
-  return data;
-};
-
-export const fetchArchiveFiles = async (params: {
-  cursor?: string;
-  limit?: number;
-  status?: string;
-  site_id?: string;
-  project_id?: string;
-  contractor_id?: string;
-}) => {
-  const { data } = await apiClient.get<{ items: Array<Record<string, unknown>>; next_cursor?: string | null }>("/archive/files", { params });
+  const { data } = await apiClient.delete<{ deleted: boolean }>(
+    `/search/saved/${id}`,
+  );
   return data;
 };

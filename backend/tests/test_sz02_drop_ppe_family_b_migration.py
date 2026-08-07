@@ -12,6 +12,7 @@ the orphan ``warehouseppe`` (initial schema) lost their ORM classes in СИЗ
     later (next58's three explicit indexes, warehouseppe's index, and the
     iter37 ``server_default="0"`` state on ``warehouseppe.quantity``).
 """
+
 from __future__ import annotations
 
 import importlib.util
@@ -25,7 +26,13 @@ os.environ.setdefault("SECRET_KEY", "test-secret-key")
 os.environ.setdefault("S3_ACCESS_KEY", "test-access-key")
 os.environ.setdefault("S3_SECRET_KEY", "test-secret-key")
 
-MIGRATION = Path(__file__).resolve().parents[1] / "app" / "migrations" / "versions" / "20260611_sz02_drop_ppe_family_b_tables.py"
+MIGRATION = (
+    Path(__file__).resolve().parents[1]
+    / "app"
+    / "migrations"
+    / "versions"
+    / "20260611_sz02_drop_ppe_family_b_tables.py"
+)
 
 FAMILY_B_TABLES = {
     "ppe_personal_card_items",
@@ -57,7 +64,6 @@ def test_dropped_tables_have_no_orm_mapping():
     while the live family-A PPE tables stay mapped — proof we are dropping the
     dead contour, not the live one."""
     import app.db.base  # noqa: F401  # side-effect: registers every model
-
     from app.db.session import SharedBase, TenantBase
 
     mapped = set(SharedBase.metadata.tables) | set(TenantBase.metadata.tables)
@@ -144,6 +150,12 @@ def test_downgrade_recreates_tables_indexes_and_iter37_state(monkeypatch):
 
     # warehouseppe shape sanity: initial-schema columns, no deleted_at
     assert set(created["warehouseppe"]) == {
-        "item_name", "quantity", "location", "tenant_id",
-        "created_at", "updated_at", "version", "id",
+        "item_name",
+        "quantity",
+        "location",
+        "tenant_id",
+        "created_at",
+        "updated_at",
+        "version",
+        "id",
     }

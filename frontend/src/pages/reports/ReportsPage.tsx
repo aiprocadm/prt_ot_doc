@@ -35,26 +35,36 @@ const ReportsPage = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
   const [kpi, setKpi] = useState<KpiPayload | null>(null);
-  const [dateFrom, setDateFrom] = useState(searchParams.get("date_from") ?? monthAgo());
+  const [dateFrom, setDateFrom] = useState(
+    searchParams.get("date_from") ?? monthAgo(),
+  );
   const [dateTo, setDateTo] = useState(searchParams.get("date_to") ?? today());
-  const patchQuery = useCallback((nextDateFrom: string, nextDateTo: string) => {
-    const next = new URLSearchParams(searchParams);
-    if (nextDateFrom) next.set("date_from", nextDateFrom);
-    else next.delete("date_from");
-    if (nextDateTo) next.set("date_to", nextDateTo);
-    else next.delete("date_to");
-    setSearchParams(next, { replace: true });
-  }, [searchParams, setSearchParams]);
+  const patchQuery = useCallback(
+    (nextDateFrom: string, nextDateTo: string) => {
+      const next = new URLSearchParams(searchParams);
+      if (nextDateFrom) next.set("date_from", nextDateFrom);
+      else next.delete("date_from");
+      if (nextDateTo) next.set("date_to", nextDateTo);
+      else next.delete("date_to");
+      setSearchParams(next, { replace: true });
+    },
+    [searchParams, setSearchParams],
+  );
 
   const [exporting, setExporting] = useState(false);
   const [lastExportId, setLastExportId] = useState<string | null>(null);
-  const canExportReports = ability.can(PERMISSIONS.DOCUMENT_EXPORT) || ability.can(PERMISSIONS.REPORTS_VIEW);
+  const canExportReports =
+    ability.can(PERMISSIONS.DOCUMENT_EXPORT) ||
+    ability.can(PERMISSIONS.REPORTS_VIEW);
 
   const loadKpi = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const data = await reportsApi.getKpi<KpiPayload>({ date_from: dateFrom, date_to: dateTo });
+      const data = await reportsApi.getKpi<KpiPayload>({
+        date_from: dateFrom,
+        date_to: dateTo,
+      });
       setKpi(data);
     } catch (err) {
       setError((err as ApiError) ?? { message: "Не удалось загрузить KPI" });
@@ -82,16 +92,34 @@ const ReportsPage = () => {
 
   const cards = [
     { label: "Высокие риски", value: kpi?.risks_high ?? 0, href: "/risk" },
-    { label: "Просроченные обучения", value: kpi?.trainings_overdue ?? 0, href: "/training" },
-    { label: "Выдачи СИЗ за период", value: kpi?.ppe_issues_month ?? 0, href: "/ppe" },
-    { label: "Открытые инциденты", value: kpi?.incidents_open ?? 0, href: "/incidents" },
-    { label: "Просроченные предписания", value: kpi?.prescriptions_overdue ?? 0, href: "/inspections" }
+    {
+      label: "Просроченные обучения",
+      value: kpi?.trainings_overdue ?? 0,
+      href: "/training",
+    },
+    {
+      label: "Выдачи СИЗ за период",
+      value: kpi?.ppe_issues_month ?? 0,
+      href: "/ppe",
+    },
+    {
+      label: "Открытые инциденты",
+      value: kpi?.incidents_open ?? 0,
+      href: "/incidents",
+    },
+    {
+      label: "Просроченные предписания",
+      value: kpi?.prescriptions_overdue ?? 0,
+      href: "/inspections",
+    },
   ];
 
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <Breadcrumb items={[{ label: "Главная", to: "/dashboard" }, { label: "Отчёты" }]} />
+        <Breadcrumb
+          items={[{ label: "Главная", to: "/dashboard" }, { label: "Отчёты" }]}
+        />
         <div className="flex gap-2">
           <Button variant="outline" asChild>
             <Link to="/reports/builder">Конструктор отчётов</Link>
@@ -99,7 +127,9 @@ const ReportsPage = () => {
           <Button
             variant="outline"
             disabled={exporting || !canExportReports}
-            title={canExportReports ? undefined : "Недостаточно прав для экспорта"}
+            title={
+              canExportReports ? undefined : "Недостаточно прав для экспорта"
+            }
             onClick={() => void exportReport("xlsx")}
           >
             {exporting ? "Экспорт…" : "XLSX"}
@@ -107,7 +137,9 @@ const ReportsPage = () => {
           <Button
             variant="outline"
             disabled={exporting || !canExportReports}
-            title={canExportReports ? undefined : "Недостаточно прав для экспорта"}
+            title={
+              canExportReports ? undefined : "Недостаточно прав для экспорта"
+            }
             onClick={() => void exportReport("pdf")}
           >
             PDF
@@ -156,7 +188,11 @@ const ReportsPage = () => {
       {lastExportId ? (
         <Card>
           <CardContent className="py-4 text-sm text-muted-foreground">
-            Последний export job: <a href="/exports" className="text-primary underline">{lastExportId}</a>. Отслеживание статуса и повторный запуск доступны в Export Center.
+            Последний export job:{" "}
+            <a href="/exports" className="text-primary underline">
+              {lastExportId}
+            </a>
+            . Отслеживание статуса и повторный запуск доступны в Export Center.
           </CardContent>
         </Card>
       ) : null}
@@ -165,12 +201,19 @@ const ReportsPage = () => {
         {cards.map((item) => (
           <Card key={item.label} className="transition hover:shadow-md">
             <CardHeader>
-              <CardTitle className="text-sm text-muted-foreground">{item.label}</CardTitle>
+              <CardTitle className="text-sm text-muted-foreground">
+                {item.label}
+              </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-semibold">{loading ? "—" : item.value}</div>
+              <div className="text-3xl font-semibold">
+                {loading ? "—" : item.value}
+              </div>
               {item.href && (
-                <a href={item.href} className="mt-2 inline-block text-xs text-primary underline">
+                <a
+                  href={item.href}
+                  className="mt-2 inline-block text-xs text-primary underline"
+                >
                   Подробнее →
                 </a>
               )}

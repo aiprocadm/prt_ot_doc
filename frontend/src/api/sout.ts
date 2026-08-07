@@ -192,7 +192,9 @@ export interface SoutImportResult {
 const base = "/sout";
 
 export const soutApi = {
-  async list(params: { limit?: number; offset?: number } = {}): Promise<SoutCampaignPage> {
+  async list(
+    params: { limit?: number; offset?: number } = {},
+  ): Promise<SoutCampaignPage> {
     const r = await apiClient.get<SoutCampaignPage>(base, {
       params: { limit: 100, offset: 0, ...params },
     });
@@ -207,77 +209,145 @@ export const soutApi = {
     campaignId: string,
     params: { limit?: number; offset?: number } = {},
   ): Promise<SoutWorkplacePage> {
-    const r = await apiClient.get<SoutWorkplacePage>(`${base}/${campaignId}/workplaces`, {
-      params: { limit: 100, offset: 0, ...params },
-    });
+    const r = await apiClient.get<SoutWorkplacePage>(
+      `${base}/${campaignId}/workplaces`,
+      {
+        params: { limit: 100, offset: 0, ...params },
+      },
+    );
     return r.data;
   },
 
   async getReport(campaignId: string): Promise<SoutCampaignReport> {
-    return (await apiClient.get<SoutCampaignReport>(`${base}/${campaignId}/report`)).data;
+    return (
+      await apiClient.get<SoutCampaignReport>(`${base}/${campaignId}/report`)
+    ).data;
   },
 
-  async listClassHistory(workplaceId: string): Promise<SoutClassHistoryEntry[]> {
-    return (await apiClient.get<SoutClassHistoryEntry[]>(`${base}/workplaces/${workplaceId}/class-history`)).data;
+  async listClassHistory(
+    workplaceId: string,
+  ): Promise<SoutClassHistoryEntry[]> {
+    return (
+      await apiClient.get<SoutClassHistoryEntry[]>(
+        `${base}/workplaces/${workplaceId}/class-history`,
+      )
+    ).data;
   },
 
   async getNormSuggestions(workplaceId: string): Promise<NormSuggestions> {
-    return (await apiClient.get<NormSuggestions>(`${base}/workplaces/${workplaceId}/norm-suggestions`)).data;
+    return (
+      await apiClient.get<NormSuggestions>(
+        `${base}/workplaces/${workplaceId}/norm-suggestions`,
+      )
+    ).data;
   },
 
   async previewCascade(workplaceId: string): Promise<CascadePreview> {
-    return (await apiClient.get<CascadePreview>(`${base}/workplaces/${workplaceId}/cascade/preview`)).data;
+    return (
+      await apiClient.get<CascadePreview>(
+        `${base}/workplaces/${workplaceId}/cascade/preview`,
+      )
+    ).data;
   },
 
   async applyCascade(workplaceId: string): Promise<CascadeResult> {
-    return (await apiClient.post<CascadeResult>(`${base}/workplaces/${workplaceId}/cascade/apply`)).data;
+    return (
+      await apiClient.post<CascadeResult>(
+        `${base}/workplaces/${workplaceId}/cascade/apply`,
+      )
+    ).data;
   },
 
-  async linkWorkplacePosition(workplaceId: string, positionId: string): Promise<void> {
-    await apiClient.patch(`${base}/workplaces/${workplaceId}`, { position_id: positionId });
+  async linkWorkplacePosition(
+    workplaceId: string,
+    positionId: string,
+  ): Promise<void> {
+    await apiClient.patch(`${base}/workplaces/${workplaceId}`, {
+      position_id: positionId,
+    });
   },
 
   async linkFactorHazard(factorId: string, hazardId: string): Promise<void> {
-    await apiClient.patch(`${base}/factors/${factorId}`, { hazard_id: hazardId });
+    await apiClient.patch(`${base}/factors/${factorId}`, {
+      hazard_id: hazardId,
+    });
   },
 
-  async downloadCard(workplaceId: string, fmt: "docx" | "pdf", nameHint?: string): Promise<void> {
-    const { data } = await apiClient.get<Blob>(`${base}/workplaces/${workplaceId}/card/print`, {
-      params: { format: fmt },
-      responseType: "blob",
-    });
+  async downloadCard(
+    workplaceId: string,
+    fmt: "docx" | "pdf",
+    nameHint?: string,
+  ): Promise<void> {
+    const { data } = await apiClient.get<Blob>(
+      `${base}/workplaces/${workplaceId}/card/print`,
+      {
+        params: { format: fmt },
+        responseType: "blob",
+      },
+    );
     downloadBlob(data, `sout-card-${nameHint ?? workplaceId}.${fmt}`);
   },
 
-  async downloadSummary(campaignId: string, fmt: "docx" | "pdf", nameHint?: string): Promise<void> {
-    const { data } = await apiClient.get<Blob>(`${base}/${campaignId}/summary/print`, {
-      params: { format: fmt },
-      responseType: "blob",
-    });
+  async downloadSummary(
+    campaignId: string,
+    fmt: "docx" | "pdf",
+    nameHint?: string,
+  ): Promise<void> {
+    const { data } = await apiClient.get<Blob>(
+      `${base}/${campaignId}/summary/print`,
+      {
+        params: { format: fmt },
+        responseType: "blob",
+      },
+    );
     downloadBlob(data, `sout-summary-${nameHint ?? campaignId}.${fmt}`);
   },
 
   async getDeclaration(campaignId: string): Promise<SoutDeclarationPreview> {
-    return (await apiClient.get<SoutDeclarationPreview>(`${base}/${campaignId}/declaration`)).data;
+    return (
+      await apiClient.get<SoutDeclarationPreview>(
+        `${base}/${campaignId}/declaration`,
+      )
+    ).data;
   },
 
-  async downloadDeclaration(campaignId: string, fmt: "docx" | "pdf", nameHint?: string): Promise<void> {
-    const { data } = await apiClient.get<Blob>(`${base}/${campaignId}/declaration/print`, {
-      params: { format: fmt },
-      responseType: "blob",
-    });
+  async downloadDeclaration(
+    campaignId: string,
+    fmt: "docx" | "pdf",
+    nameHint?: string,
+  ): Promise<void> {
+    const { data } = await apiClient.get<Blob>(
+      `${base}/${campaignId}/declaration/print`,
+      {
+        params: { format: fmt },
+        responseType: "blob",
+      },
+    );
     downloadBlob(data, `sout-declaration-${nameHint ?? campaignId}.${fmt}`);
   },
 
-  async previewImport(campaignId: string, file: File): Promise<SoutImportPreview> {
+  async previewImport(
+    campaignId: string,
+    file: File,
+  ): Promise<SoutImportPreview> {
     const form = new FormData();
     form.append("file", file);
-    return (await apiClient.post<SoutImportPreview>(`${base}/${campaignId}/import/preview`, form)).data;
+    return (
+      await apiClient.post<SoutImportPreview>(
+        `${base}/${campaignId}/import/preview`,
+        form,
+      )
+    ).data;
   },
 
   async applyImport(campaignId: string, file: File): Promise<SoutImportResult> {
     const form = new FormData();
     form.append("file", file);
-    return (await apiClient.post<SoutImportResult>(`${base}/${campaignId}/import/apply`, form)).data;
+    return (
+      await apiClient.post<SoutImportResult>(
+        `${base}/${campaignId}/import/apply`,
+        form,
+      )
+    ).data;
   },
 };

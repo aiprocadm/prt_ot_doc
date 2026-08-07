@@ -119,9 +119,7 @@ async def export_manifest(
     TenantContextValidator.ensure_tenant_context(tenant)
     _ = access
 
-    service = TenantExportService(
-        session, tenant_id=str(tenant.id), tenant_slug=tenant.slug
-    )
+    service = TenantExportService(session, tenant_id=str(tenant.id), tenant_slug=tenant.slug)
     manifest = await service.build(include_rows=False)
     return manifest.to_dict(include_rows=False)
 
@@ -177,14 +175,10 @@ async def export_tenant_files(
     TenantContextValidator.ensure_tenant_context(tenant)
     _ = access
 
-    service = TenantFilesArchiveService(
-        session, tenant_id=str(tenant.id), tenant_slug=tenant.slug
-    )
+    service = TenantFilesArchiveService(session, tenant_id=str(tenant.id), tenant_slug=tenant.slug)
     payload, report = await service.build()
     headers = {
-        "Content-Disposition": (
-            f'attachment; filename="tenant-{tenant.slug}-files.zip"'
-        ),
+        "Content-Disposition": (f'attachment; filename="tenant-{tenant.slug}-files.zip"'),
         # Усечение видно и снаружи архива: клиент, скачивающий скриптом, не
         # обязан разбирать ZIP, чтобы понять, что получил не всё.
         "X-Export-Truncated": "true" if report.truncated else "false",
@@ -239,9 +233,7 @@ async def request_offboarding(
 
     TenantContextValidator.ensure_tenant_context(tenant)
 
-    service = TenantOffboardingService(
-        session, tenant_id=str(tenant.id), tenant_slug=tenant.slug
-    )
+    service = TenantOffboardingService(session, tenant_id=str(tenant.id), tenant_slug=tenant.slug)
     record = await service.request(
         reason=payload.reason,
         grace_days=payload.grace_days,
@@ -262,9 +254,7 @@ async def cancel_offboarding(
     TenantContextValidator.ensure_tenant_context(tenant)
     _ = access
 
-    service = TenantOffboardingService(
-        session, tenant_id=str(tenant.id), tenant_slug=tenant.slug
-    )
+    service = TenantOffboardingService(session, tenant_id=str(tenant.id), tenant_slug=tenant.slug)
     record = await service.cancel(reason=payload.reason)
     if record is None:
         raise HTTPException(
@@ -295,9 +285,7 @@ async def purge_plan(
     TenantContextValidator.ensure_tenant_context(tenant)
     _ = access
 
-    service = TenantOffboardingService(
-        session, tenant_id=str(tenant.id), tenant_slug=tenant.slug
-    )
+    service = TenantOffboardingService(session, tenant_id=str(tenant.id), tenant_slug=tenant.slug)
     return (await service.build_purge_plan()).to_dict()
 
 
@@ -336,9 +324,7 @@ async def purge_tenant_data(
             ),
         )
 
-    service = TenantPurgeService(
-        session, tenant_id=str(tenant.id), tenant_slug=tenant.slug
-    )
+    service = TenantPurgeService(session, tenant_id=str(tenant.id), tenant_slug=tenant.slug)
     try:
         act = await service.execute()
     except OffboardingStateError as error:

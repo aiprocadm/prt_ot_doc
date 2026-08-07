@@ -174,14 +174,17 @@ def test_migration_depends_on_table_and_fk_targets() -> None:
     """
     assigns = _module_assigns(_migration_tree())
     deps = _strings_in(assigns.get("depends_on"))
-    assert _EXPECTED_DEPENDS_ON <= deps, (
-        f"depends_on must include {_EXPECTED_DEPENDS_ON}, AST shows {deps}"
-    )
+    assert (
+        _EXPECTED_DEPENDS_ON <= deps
+    ), f"depends_on must include {_EXPECTED_DEPENDS_ON}, AST shows {deps}"
 
 
 @pytest.mark.parametrize(("column", "_nullable", "_fk_target", "_ondelete"), _COHORT)
 def test_cohort_column_present_in_upgrade(
-    column: str, _nullable: bool, _fk_target: str | None, _ondelete: str | None,
+    column: str,
+    _nullable: bool,
+    _fk_target: str | None,
+    _ondelete: str | None,
 ) -> None:
     upgrade = _upgrade_fn(_migration_tree())
     _column_call_for(column, upgrade)  # raises pytest.fail if missing
@@ -189,7 +192,10 @@ def test_cohort_column_present_in_upgrade(
 
 @pytest.mark.parametrize(("column", "nullable", "_fk_target", "_ondelete"), _COHORT)
 def test_cohort_column_nullable_matches_spec(
-    column: str, nullable: bool, _fk_target: str | None, _ondelete: str | None,
+    column: str,
+    nullable: bool,
+    _fk_target: str | None,
+    _ondelete: str | None,
 ) -> None:
     upgrade = _upgrade_fn(_migration_tree())
     col_call = _column_call_for(column, upgrade)
@@ -197,19 +203,23 @@ def test_cohort_column_nullable_matches_spec(
     for kw in col_call.keywords:
         if kw.arg == "nullable" and isinstance(kw.value, ast.Constant):
             nullable_kw = kw.value.value
-    assert nullable_kw is nullable, (
-        f"{_TABLE}.{column}: expected nullable={nullable}, AST shows {nullable_kw!r}"
-    )
+    assert (
+        nullable_kw is nullable
+    ), f"{_TABLE}.{column}: expected nullable={nullable}, AST shows {nullable_kw!r}"
 
 
 @pytest.mark.parametrize(("column", "_n", "fk_target", "_ondelete"), _COHORT)
 def test_cohort_column_fk_target_present_when_expected(
-    column: str, _n: bool, fk_target: str | None, _ondelete: str | None,
+    column: str,
+    _n: bool,
+    fk_target: str | None,
+    _ondelete: str | None,
 ) -> None:
     upgrade = _upgrade_fn(_migration_tree())
     col_call = _column_call_for(column, upgrade)
     fk_args = [
-        arg for arg in col_call.args
+        arg
+        for arg in col_call.args
         if isinstance(arg, ast.Call)
         and isinstance(arg.func, ast.Attribute)
         and arg.func.attr == "ForeignKey"
@@ -220,14 +230,17 @@ def test_cohort_column_fk_target_present_when_expected(
         assert fk_args, f"{_TABLE}.{column}: expected ForeignKey({fk_target}.id), AST has none"
         first = fk_args[0].args[0]
         assert isinstance(first, ast.Constant) and isinstance(first.value, str)
-        assert first.value == f"{fk_target}.id", (
-            f"{_TABLE}.{column}: FK target expected {fk_target}.id, got {first.value!r}"
-        )
+        assert (
+            first.value == f"{fk_target}.id"
+        ), f"{_TABLE}.{column}: FK target expected {fk_target}.id, got {first.value!r}"
 
 
 @pytest.mark.parametrize(("column", "_n", "fk_target", "ondelete"), _COHORT)
 def test_cohort_column_ondelete_matches_spec(
-    column: str, _n: bool, fk_target: str | None, ondelete: str | None,
+    column: str,
+    _n: bool,
+    fk_target: str | None,
+    ondelete: str | None,
 ) -> None:
     """The ``ApprovalDecision`` FK cols declare NO ondelete (plain FK), unlike
     iter-40's CASCADE/SET NULL cohort. For FK cols expect ondelete absent;
@@ -237,7 +250,8 @@ def test_cohort_column_ondelete_matches_spec(
     upgrade = _upgrade_fn(_migration_tree())
     col_call = _column_call_for(column, upgrade)
     fk_args = [
-        arg for arg in col_call.args
+        arg
+        for arg in col_call.args
         if isinstance(arg, ast.Call)
         and isinstance(arg.func, ast.Attribute)
         and arg.func.attr == "ForeignKey"
@@ -247,9 +261,9 @@ def test_cohort_column_ondelete_matches_spec(
     for kw in fk_args[0].keywords:
         if kw.arg == "ondelete" and isinstance(kw.value, ast.Constant):
             ondelete_kw = kw.value.value
-    assert ondelete_kw == ondelete, (
-        f"{_TABLE}.{column}: expected ondelete={ondelete!r}, AST shows {ondelete_kw!r}"
-    )
+    assert (
+        ondelete_kw == ondelete
+    ), f"{_TABLE}.{column}: expected ondelete={ondelete!r}, AST shows {ondelete_kw!r}"
 
 
 def test_indexes_for_fk_columns_present_in_upgrade() -> None:
@@ -267,13 +281,16 @@ def test_indexes_for_fk_columns_present_in_upgrade() -> None:
             continue
         idx_name, table, cols = node.args[0], node.args[1], node.args[2]
         if not (
-            isinstance(idx_name, ast.Constant) and isinstance(idx_name.value, str)
-            and isinstance(table, ast.Constant) and isinstance(table.value, str)
+            isinstance(idx_name, ast.Constant)
+            and isinstance(idx_name.value, str)
+            and isinstance(table, ast.Constant)
+            and isinstance(table.value, str)
             and isinstance(cols, ast.List)
         ):
             continue
         col_names = tuple(
-            elt.value for elt in cols.elts
+            elt.value
+            for elt in cols.elts
             if isinstance(elt, ast.Constant) and isinstance(elt.value, str)
         )
         found.add((idx_name.value, table.value, col_names))
@@ -379,6 +396,4 @@ def test_audit_drift_approval_decisions_cleared_after_iter46() -> None:
     migration_cols = audit.collect_migration_columns()
     drift = audit.compute_drift(models, migration_cols)
     drift_tables = {info.tablename for info, _missing in drift}
-    assert _TABLE not in drift_tables, (
-        "approval_decisions should be cleared by iter-46"
-    )
+    assert _TABLE not in drift_tables, "approval_decisions should be cleared by iter-46"

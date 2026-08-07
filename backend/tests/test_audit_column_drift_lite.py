@@ -20,8 +20,6 @@ import importlib.util
 import textwrap
 from pathlib import Path
 
-import pytest
-
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _AUDIT_PATH = _REPO_ROOT / "scripts" / "audit" / "column_drift_lite.py"
 
@@ -65,6 +63,7 @@ def _collect_one(tmp_path: Path, name: str, body: str) -> dict[str, set[str]]:
 
 def test_is_column_value_accepts_mapped_column() -> None:
     import ast as _ast
+
     tree = _ast.parse("foo = mapped_column(String(64))")
     call = tree.body[0].value  # type: ignore[attr-defined]
     assert _AUDIT._is_column_value(call) is True
@@ -72,6 +71,7 @@ def test_is_column_value_accepts_mapped_column() -> None:
 
 def test_is_column_value_rejects_relationship() -> None:
     import ast as _ast
+
     tree = _ast.parse('foo = relationship("Bar", backref="baz")')
     call = tree.body[0].value  # type: ignore[attr-defined]
     assert _AUDIT._is_column_value(call) is False
@@ -79,6 +79,7 @@ def test_is_column_value_rejects_relationship() -> None:
 
 def test_is_column_value_accepts_attribute_form() -> None:
     import ast as _ast
+
     tree = _ast.parse("foo = sa.Column(sa.String(64))")
     call = tree.body[0].value  # type: ignore[attr-defined]
     assert _AUDIT._is_column_value(call) is True
@@ -273,17 +274,15 @@ def test_mapped_column_first_string_arg_resolves_to_db_column_name(tmp_path: Pat
         """,
     )
     foo = models["foo"]
-    assert "tax_id" in foo.columns, (
-        "first-arg string Constant should be resolved as DB column name"
-    )
+    assert "tax_id" in foo.columns, "first-arg string Constant should be resolved as DB column name"
     assert "address" in foo.columns, "second override should also be resolved"
-    assert "inn" not in foo.columns, (
-        "Python attribute name must NOT leak when first-arg override is present"
-    )
+    assert (
+        "inn" not in foo.columns
+    ), "Python attribute name must NOT leak when first-arg override is present"
     assert "legal_address" not in foo.columns
-    assert "plain" in foo.columns, (
-        "plain mapped_column without first-string-arg keeps attribute name"
-    )
+    assert (
+        "plain" in foo.columns
+    ), "plain mapped_column without first-string-arg keeps attribute name"
 
 
 def _load_models_from_files(tmp_path: Path, files: dict[str, str]) -> dict:
@@ -332,12 +331,8 @@ def test_find_versioned_models_walks_all_files_in_models_dir(tmp_path: Path) -> 
         tmp_path,
         {"file_a.py": body_a, "file_b.py": body_b},
     )
-    assert "foo_from_a" in models, (
-        "model in file_a.py must be detected by multi-file walk"
-    )
-    assert "bar_from_b" in models, (
-        "model in file_b.py must be detected by multi-file walk"
-    )
+    assert "foo_from_a" in models, "model in file_a.py must be detected by multi-file walk"
+    assert "bar_from_b" in models, "model in file_b.py must be detected by multi-file walk"
     assert "alpha" in models["foo_from_a"].columns
     assert "beta" in models["bar_from_b"].columns
 
@@ -378,12 +373,12 @@ def test_find_versioned_models_skips_init_and_base_files(tmp_path: Path) -> None
         },
     )
     assert "real_model" in models
-    assert "ghost_from_init" not in models, (
-        "__init__.py models must be skipped — re-exports only by convention"
-    )
-    assert "ghost_from_base" not in models, (
-        "base.py models must be skipped — only mixin/base classes live there"
-    )
+    assert (
+        "ghost_from_init" not in models
+    ), "__init__.py models must be skipped — re-exports only by convention"
+    assert (
+        "ghost_from_base" not in models
+    ), "base.py models must be skipped — only mixin/base classes live there"
 
 
 def test_mapped_column_first_non_string_arg_keeps_attribute_name(tmp_path: Path) -> None:
@@ -424,9 +419,9 @@ def test_real_codebase_training_enrollments_has_no_drift() -> None:
     info = models["training_enrollments"]
     model_business = info.columns - _AUDIT.MIXIN_COLUMNS
     mig_business = migration_cols.get("training_enrollments", set()) - _AUDIT.MIXIN_COLUMNS
-    assert model_business <= mig_business, (
-        f"Drift detected on training_enrollments: missing={sorted(model_business - mig_business)}"
-    )
+    assert (
+        model_business <= mig_business
+    ), f"Drift detected on training_enrollments: missing={sorted(model_business - mig_business)}"
 
 
 def test_real_codebase_incident_log_no_longer_critical_absent() -> None:
@@ -440,15 +435,13 @@ def test_real_codebase_incident_log_no_longer_critical_absent() -> None:
     migration_cols = _AUDIT.collect_migration_columns()
     assert "incident_log" in models
     # incident_log now exists in migrations with the business cols populated.
-    assert "incident_log" in migration_cols, (
-        "incident_log should be created by iter-42 — regression in migration coverage"
-    )
+    assert (
+        "incident_log" in migration_cols
+    ), "incident_log should be created by iter-42 — regression in migration coverage"
     credited = migration_cols["incident_log"]
     business_cols = {"incident_id", "author_id", "stage", "status", "message", "metadata_json"}
     missing = business_cols - credited
-    assert not missing, (
-        f"incident_log missing business cols after iter-42: {sorted(missing)}"
-    )
+    assert not missing, f"incident_log missing business cols after iter-42: {sorted(missing)}"
 
 
 def test_real_codebase_no_unexpected_versioned_classes_missed() -> None:
@@ -562,9 +555,9 @@ def test_batch_alter_table_dynamic_name_unresolvable_does_not_crash(tmp_path: Pa
                 batch.add_column(sa.Column("ghost", sa.String(36)))
         """,
     )
-    assert all("ghost" not in cols for cols in result.values()), (
-        "unresolvable dynamic table name must not credit cols anywhere"
-    )
+    assert all(
+        "ghost" not in cols for cols in result.values()
+    ), "unresolvable dynamic table name must not credit cols anywhere"
 
 
 def test_batch_alter_table_dynamic_name_resolver_skips_none_returns(tmp_path: Path) -> None:
@@ -637,8 +630,7 @@ def test_real_codebase_npabinding_no_longer_flagged() -> None:
         f"got mig_business={sorted(mig_business)}"
     )
     assert model_business <= mig_business, (
-        f"npabinding drift after iter-39: "
-        f"missing={sorted(model_business - mig_business)}"
+        f"npabinding drift after iter-39: " f"missing={sorted(model_business - mig_business)}"
     )
 
 
@@ -658,9 +650,9 @@ def test_real_codebase_npabinding_cleared_from_drift_after_iter39() -> None:
     migration_cols = _AUDIT.collect_migration_columns()
     drift = _AUDIT.compute_drift(models, migration_cols)
     drift_tables = {info.tablename for info, _missing in drift}
-    assert "npabinding" not in drift_tables, (
-        "npabinding must be cleared by iter-39 dynamic-batch resolution"
-    )
+    assert (
+        "npabinding" not in drift_tables
+    ), "npabinding must be cleared by iter-39 dynamic-batch resolution"
 
 
 # ---------------------------------------------------------------------------
@@ -670,58 +662,68 @@ def test_real_codebase_npabinding_cleared_from_drift_after_iter39() -> None:
 
 def test_function_return_literals_collects_all_string_returns() -> None:
     import ast as _ast
-    src = textwrap.dedent("""
+
+    src = textwrap.dedent(
+        """
         def f(x):
             if x == 1:
                 return "alpha"
             if x == 2:
                 return "beta"
             return None
-    """).lstrip()
+    """
+    ).lstrip()
     func = _ast.parse(src).body[0]
     assert _AUDIT._function_return_literals(func) == {"alpha", "beta"}
 
 
 def test_function_return_literals_ignores_non_string_returns() -> None:
     import ast as _ast
-    src = textwrap.dedent("""
+
+    src = textwrap.dedent(
+        """
         def f():
             if True:
                 return 42
             if False:
                 return some_var
             return None
-    """).lstrip()
+    """
+    ).lstrip()
     func = _ast.parse(src).body[0]
     assert _AUDIT._function_return_literals(func) == set()
 
 
 def test_resolve_dynamic_name_traces_call_to_module_function() -> None:
     import ast as _ast
-    src = textwrap.dedent("""
+
+    src = textwrap.dedent(
+        """
         def _helper():
             return "tbl_x"
         def upgrade():
             tname = _helper()
             with op.batch_alter_table(tname) as batch:
                 pass
-    """).lstrip()
+    """
+    ).lstrip()
     tree = _ast.parse(src)
     functions = {n.name: n for n in tree.body if isinstance(n, _ast.FunctionDef)}
     upgrade = functions["upgrade"]
-    resolved = _AUDIT._resolve_dynamic_name_from_assignments(
-        "tname", upgrade, functions
-    )
+    resolved = _AUDIT._resolve_dynamic_name_from_assignments("tname", upgrade, functions)
     assert resolved == ["tbl_x"]
 
 
 def test_resolve_dynamic_name_returns_empty_when_var_not_assigned() -> None:
     import ast as _ast
-    src = textwrap.dedent("""
+
+    src = textwrap.dedent(
+        """
         def upgrade():
             with op.batch_alter_table(other_name) as batch:
                 pass
-    """).lstrip()
+    """
+    ).lstrip()
     tree = _ast.parse(src)
     functions = {n.name: n for n in tree.body if isinstance(n, _ast.FunctionDef)}
     resolved = _AUDIT._resolve_dynamic_name_from_assignments(

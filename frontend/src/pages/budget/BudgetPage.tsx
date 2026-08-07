@@ -17,7 +17,7 @@ import type {
   BudgetExpensePageDto,
   BudgetOverviewDto,
   BudgetReimbursementPageDto,
-  SafetyBudgetPageDto
+  SafetyBudgetPageDto,
 } from "@/types/dto/budget";
 
 interface BudgetPageData {
@@ -35,7 +35,7 @@ const INITIAL_DATA: BudgetPageData = {
   budgets: EMPTY_PAGE,
   articles: EMPTY_PAGE,
   expenses: EMPTY_PAGE,
-  reimbursements: EMPTY_PAGE
+  reimbursements: EMPTY_PAGE,
 };
 
 const BudgetPage = () => {
@@ -43,31 +43,38 @@ const BudgetPage = () => {
   // (создание/правка/удаление бюджета, в дальнейшем — расходы и статьи) молча сбрасывал бы
   // выбранный пользователем период обратно к дефолтному календарному году.
   // Имя не `window` — глобальный window нужен вкладкам (window.confirm) и затенять его опасно.
-  const [dateWindow, setDateWindow] = useState<{ date_from: string; date_to: string } | null>(null);
+  const [dateWindow, setDateWindow] = useState<{
+    date_from: string;
+    date_to: string;
+  } | null>(null);
   // Активная вкладка тоже управляется страницей: с defaultValue Radix сбрасывал бы её на
   // «Сводку» при каждом remount поддерева (см. ниже про loading).
   const [activeTab, setActiveTab] = useState("overview");
 
   const loader = useCallback(async (): Promise<BudgetPageData> => {
-    const [overview, budgets, articles, expenses, reimbursements] = await Promise.all([
-      budgetApi.getOverview(dateWindow ?? undefined),
-      budgetApi.listBudgets(),
-      budgetApi.listArticles(),
-      budgetApi.listExpenses(),
-      budgetApi.listReimbursements()
-    ]);
+    const [overview, budgets, articles, expenses, reimbursements] =
+      await Promise.all([
+        budgetApi.getOverview(dateWindow ?? undefined),
+        budgetApi.listBudgets(),
+        budgetApi.listArticles(),
+        budgetApi.listExpenses(),
+        budgetApi.listReimbursements(),
+      ]);
     return { overview, budgets, articles, expenses, reimbursements };
   }, [dateWindow]);
 
   const budgetRes = useAsyncResource<BudgetPageData>({
     loader,
     initialData: INITIAL_DATA,
-    errorMessage: "Не удалось загрузить данные бюджета безопасности"
+    errorMessage: "Не удалось загрузить данные бюджета безопасности",
   });
 
   if (budgetRes.error && isFeatureDisabledError(budgetRes.error)) {
     return (
-      <EmptyState title="Функция недоступна" description="Бюджет безопасности не включён для этого тенанта." />
+      <EmptyState
+        title="Функция недоступна"
+        description="Бюджет безопасности не включён для этого тенанта."
+      />
     );
   }
 
@@ -92,11 +99,18 @@ const BudgetPage = () => {
         description="Плановые бюджеты, статьи, журнал расходов и заявки на возмещение СФР по доменам обучения, медосмотров и мероприятий."
       />
 
-      <ErrorState error={budgetRes.error ?? undefined} onRetry={() => void budgetRes.reload().catch(() => undefined)} />
+      <ErrorState
+        error={budgetRes.error ?? undefined}
+        onRetry={() => void budgetRes.reload().catch(() => undefined)}
+      />
       {isFirstLoad ? <LoadingScreen label="Загрузка бюджета" /> : null}
 
       {!isFirstLoad && !budgetRes.error ? (
-        <Tabs value={activeTab} onValueChange={setActiveTab} aria-busy={isRefreshing}>
+        <Tabs
+          value={activeTab}
+          onValueChange={setActiveTab}
+          aria-busy={isRefreshing}
+        >
           {isRefreshing ? (
             <p className="pb-2 text-sm text-muted-foreground" role="status">
               Обновление...
@@ -110,10 +124,16 @@ const BudgetPage = () => {
             <TabsTrigger value="reimbursements">Возмещения СФР</TabsTrigger>
           </TabsList>
           <TabsContent value="overview" data-testid="budget-tab-overview">
-            <OverviewTab overview={budgetRes.data.overview} onWindowChange={setDateWindow} />
+            <OverviewTab
+              overview={budgetRes.data.overview}
+              onWindowChange={setDateWindow}
+            />
           </TabsContent>
           <TabsContent value="budgets" data-testid="budget-tab-budgets">
-            <BudgetsTab budgets={budgetRes.data.budgets} onChanged={reloadAll} />
+            <BudgetsTab
+              budgets={budgetRes.data.budgets}
+              onChanged={reloadAll}
+            />
           </TabsContent>
           <TabsContent value="expenses" data-testid="budget-tab-expenses">
             <ExpensesTab
@@ -123,9 +143,15 @@ const BudgetPage = () => {
             />
           </TabsContent>
           <TabsContent value="articles" data-testid="budget-tab-articles">
-            <ArticlesTab articles={budgetRes.data.articles} onChanged={reloadAll} />
+            <ArticlesTab
+              articles={budgetRes.data.articles}
+              onChanged={reloadAll}
+            />
           </TabsContent>
-          <TabsContent value="reimbursements" data-testid="budget-tab-reimbursements">
+          <TabsContent
+            value="reimbursements"
+            data-testid="budget-tab-reimbursements"
+          >
             <ReimbursementsTab
               reimbursements={budgetRes.data.reimbursements}
               expenses={budgetRes.data.expenses}

@@ -41,11 +41,15 @@ export const incidentsApi = {
     limit?: number;
     offset?: number;
   }) => {
-    const { data } = await apiClient.get<IncidentPage>("/incidents", { params });
+    const { data } = await apiClient.get<IncidentPage>("/incidents", {
+      params,
+    });
     return data;
   },
   listLogs: async (incidentId: string) => {
-    const { data } = await apiClient.get<IncidentLog[]>(`/incidents/${incidentId}/logs`);
+    const { data } = await apiClient.get<IncidentLog[]>(
+      `/incidents/${incidentId}/logs`,
+    );
     return data;
   },
   create: async (payload: {
@@ -59,5 +63,5 @@ export const incidentsApi = {
   }) => {
     const { data } = await apiClient.post<Incident>("/incidents", payload);
     return data;
-  }
+  },
 };

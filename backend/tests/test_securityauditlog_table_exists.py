@@ -42,9 +42,9 @@ def test_securityauditlog_has_required_columns() -> None:
         "updated_at",
         "version",
     }
-    assert required.issubset(columns.keys()), (
-        f"securityauditlog missing columns: {required - set(columns.keys())}"
-    )
+    assert required.issubset(
+        columns.keys()
+    ), f"securityauditlog missing columns: {required - set(columns.keys())}"
 
 
 def test_securityauditlog_user_fk_sets_null_on_delete() -> None:
@@ -58,9 +58,9 @@ def test_securityauditlog_user_fk_sets_null_on_delete() -> None:
     # SET NULL (not CASCADE) preserves audit history when a user is deleted —
     # regulatory requirement: we must remember a decision was made even after
     # the actor is removed.
-    assert fk.ondelete == "SET NULL", (
-        "ondelete must be SET NULL — preserve audit row after user deletion"
-    )
+    assert (
+        fk.ondelete == "SET NULL"
+    ), "ondelete must be SET NULL — preserve audit row after user deletion"
 
 
 def test_securityauditlog_user_id_is_nullable() -> None:
@@ -80,15 +80,12 @@ def test_securityauditlog_has_decision_lookup_indexes() -> None:
         "ix_security_auditlog_when",
     }
     missing = required - index_names
-    assert not missing, (
-        f"securityauditlog missing required indexes for audit queries: {missing}"
-    )
+    assert not missing, f"securityauditlog missing required indexes for audit queries: {missing}"
 
 
 def test_iter23_migration_creates_securityauditlog_table() -> None:
     # Static check via importlib (same trick as the iter-21 pin tests) —
     # confirms the upgrade() body contains create_table("securityauditlog").
-    import importlib.util  # noqa: PLC0415
     from pathlib import Path  # noqa: PLC0415
 
     migration_path = (
@@ -101,10 +98,9 @@ def test_iter23_migration_creates_securityauditlog_table() -> None:
     assert migration_path.exists()
     source = migration_path.read_text(encoding="utf-8")
     # Quoted literal — keeps the assert resilient to whitespace/keyword reordering.
-    assert '"securityauditlog"' in source, (
-        "iter-23 migration must contain create_table for 'securityauditlog'"
-    )
+    assert (
+        '"securityauditlog"' in source
+    ), "iter-23 migration must contain create_table for 'securityauditlog'"
     assert '"refresh_session"' in source, (
-        "iter-23 migration must also contain create_table for 'refresh_session' "
-        "(cohort fix)"
+        "iter-23 migration must also contain create_table for 'refresh_session' " "(cohort fix)"
     )

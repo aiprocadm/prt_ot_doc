@@ -5,7 +5,13 @@ import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingScreen } from "@/components/common/LoadingScreen";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
-import { defaultWorkflowGraph, type WorkflowDefinition, type WorkflowInstance, type WorkflowInstanceListItem, type WorkflowTask } from "@/features/workflow/types";
+import {
+  defaultWorkflowGraph,
+  type WorkflowDefinition,
+  type WorkflowInstance,
+  type WorkflowInstanceListItem,
+  type WorkflowTask,
+} from "@/features/workflow/types";
 import type { ApiError } from "@/types/dto/common";
 import { WorkflowComposerCard } from "@/widgets/workflow/WorkflowComposerCard";
 import { WorkflowDefinitionsCard } from "@/widgets/workflow/WorkflowDefinitionsCard";
@@ -14,10 +20,13 @@ import { WorkflowRuntimePanel } from "@/widgets/workflow/WorkflowRuntimePanel";
 const WorkflowPage = () => {
   const [definitions, setDefinitions] = useState<WorkflowDefinition[]>([]);
   const [tasks, setTasks] = useState<WorkflowTask[]>([]);
-  const [selectedInstance, setSelectedInstance] = useState<WorkflowInstance | null>(null);
+  const [selectedInstance, setSelectedInstance] =
+    useState<WorkflowInstance | null>(null);
   const [instances, setInstances] = useState<WorkflowInstanceListItem[]>([]);
   const [newCode, setNewCode] = useState("document-approval-v1");
-  const [graphText, setGraphText] = useState(JSON.stringify(defaultWorkflowGraph, null, 2));
+  const [graphText, setGraphText] = useState(
+    JSON.stringify(defaultWorkflowGraph, null, 2),
+  );
   const [validation, setValidation] = useState<string | null>(null);
   const [reassignRole, setReassignRole] = useState("admin");
   const [reassignUserId, setReassignUserId] = useState("");
@@ -31,13 +40,17 @@ const WorkflowPage = () => {
       const [nextDefinitions, nextTasks, nextInstances] = await Promise.all([
         workflowApi.getDefinitions(),
         workflowApi.getTasks(),
-        workflowApi.getInstances()
+        workflowApi.getInstances(),
       ]);
       setDefinitions(nextDefinitions);
       setTasks(nextTasks);
       setInstances(nextInstances);
     } catch (nextError) {
-      setError((nextError as ApiError) ?? { message: "Не удалось загрузить workflow данные" });
+      setError(
+        (nextError as ApiError) ?? {
+          message: "Не удалось загрузить workflow данные",
+        },
+      );
     } finally {
       setLoading(false);
     }
@@ -55,7 +68,11 @@ const WorkflowPage = () => {
     }
   }, [graphText]);
 
-  const hasOperationalData = definitions.length > 0 || tasks.length > 0 || instances.length > 0 || selectedInstance !== null;
+  const hasOperationalData =
+    definitions.length > 0 ||
+    tasks.length > 0 ||
+    instances.length > 0 ||
+    selectedInstance !== null;
 
   const setActionError = (nextError: unknown, fallbackMessage: string) => {
     setError((nextError as ApiError) ?? { message: fallbackMessage });
@@ -71,7 +88,11 @@ const WorkflowPage = () => {
         entity_type: "document",
         description: "Описание процесса на основе JSON-графа",
         graph: parsedGraph,
-        variables_schema: { approved: "boolean", initiator_id: "string", escalation_role: "string" }
+        variables_schema: {
+          approved: "boolean",
+          initiator_id: "string",
+          escalation_role: "string",
+        },
       });
       await load();
     } catch (nextError) {
@@ -90,11 +111,16 @@ const WorkflowPage = () => {
         name: "Проверка",
         entity_type: "document",
         graph: parsedGraph,
-        variables_schema: {}
+        variables_schema: {},
       });
-      setValidation(`Граф валиден · типы узлов: ${(response.node_types ?? []).join(", ")}`);
+      setValidation(
+        `Граф валиден · типы узлов: ${(response.node_types ?? []).join(", ")}`,
+      );
     } catch (nextError) {
-      setValidation((nextError as ApiError)?.message ?? "Не удалось проверить граф процесса");
+      setValidation(
+        (nextError as ApiError)?.message ??
+          "Не удалось проверить граф процесса",
+      );
     }
   };
 
@@ -149,23 +175,37 @@ const WorkflowPage = () => {
     }
   };
 
-  const moveTask = async (taskId: string, mode: "delegate" | "escalate" | "reassign") => {
+  const moveTask = async (
+    taskId: string,
+    mode: "delegate" | "escalate" | "reassign",
+  ) => {
     setError(null);
     try {
       await workflowApi.moveTask(taskId, mode, reassignRole, reassignUserId);
       await load();
     } catch (nextError) {
-      setActionError(nextError, `Не удалось выполнить действие «${mode}» для задачи процесса`);
+      setActionError(
+        nextError,
+        `Не удалось выполнить действие «${mode}» для задачи процесса`,
+      );
     }
   };
 
   return (
     <div className="space-y-6">
-      <Breadcrumb items={[{ label: "Главная", to: "/dashboard" }, { label: "Процессы (workflow)" }]} />
+      <Breadcrumb
+        items={[
+          { label: "Главная", to: "/dashboard" },
+          { label: "Процессы (workflow)" },
+        ]}
+      />
       <ErrorState error={error ?? undefined} onRetry={() => void load()} />
       {loading ? <LoadingScreen label="Загрузка данных процессов" /> : null}
       {!loading && !error && !hasOperationalData ? (
-        <EmptyState title="Нет данных по процессам" description="Определения, экземпляры и задачи появятся после создания и запуска первого процесса." />
+        <EmptyState
+          title="Нет данных по процессам"
+          description="Определения, экземпляры и задачи появятся после создания и запуска первого процесса."
+        />
       ) : null}
       <WorkflowComposerCard
         newCode={newCode}

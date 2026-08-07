@@ -106,7 +106,9 @@ if settings.outbox_dispatch_schedule_enabled:
     _outbox_every = max(int(settings.outbox_dispatch_schedule_minutes), 1)
     celery_app.conf.beat_schedule["outbox-dispatch-all"] = {
         "task": "outbox.dispatch_all",
-        "schedule": crontab(minute=f"*/{_outbox_every}") if _outbox_every < 60 else crontab(minute=0),
+        "schedule": (
+            crontab(minute=f"*/{_outbox_every}") if _outbox_every < 60 else crontab(minute=0)
+        ),
     }
 
 celery_app.conf.task_queues = (

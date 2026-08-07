@@ -11,6 +11,7 @@ Also write-tests that every label the iter-49 migration adds (e.g. 'webhook',
 
 Skips unless TEST_PG_ADMIN_URL points at a PG superuser/owner maintenance DB (e.g.
 postgresql://postgres:postgres@localhost:5432/postgres). NEVER touches `cabinet`."""
+
 from __future__ import annotations
 
 import asyncio
@@ -138,14 +139,28 @@ def test_pg_accepts_previously_added_enum_labels_on_write() -> None:
         "documentstatus": ["archived", "draft", "review", "signed"],
         "notificationchannel": ["webhook"],
         "notificationtype": [
-            "ApprovalDeadline", "BillingLimitWarning", "EdoStatusChanged",
-            "IncidentCreated", "InspectionCreated", "IntegrationError",
-            "MedicalOverdue", "PPEOverdue", "PackageRunCompleted",
-            "PackageRunFailed", "PrescriptionOverdue",
+            "ApprovalDeadline",
+            "BillingLimitWarning",
+            "EdoStatusChanged",
+            "IncidentCreated",
+            "InspectionCreated",
+            "IntegrationError",
+            "MedicalOverdue",
+            "PPEOverdue",
+            "PackageRunCompleted",
+            "PackageRunFailed",
+            "PrescriptionOverdue",
         ],
         "roleenum": [
-            "auditor_ro", "clerk", "client", "executor", "inspector_contractor",
-            "manager", "ot_head", "student", "teacher",
+            "auditor_ro",
+            "clerk",
+            "client",
+            "executor",
+            "inspector_contractor",
+            "manager",
+            "ot_head",
+            "student",
+            "teacher",
         ],
     }
 
@@ -163,9 +178,9 @@ def test_pg_accepts_previously_added_enum_labels_on_write() -> None:
                 for v in values:
                     await conn.execute(f"INSERT INTO {table}(v) VALUES ($1::text::{type_name})", v)
                 rows = await conn.fetch(f"SELECT v::text AS v FROM {table}")
-                assert {r["v"] for r in rows} == set(values), (
-                    f"{type_name}: wrote {sorted(values)} but read {sorted(r['v'] for r in rows)}"
-                )
+                assert {r["v"] for r in rows} == set(
+                    values
+                ), f"{type_name}: wrote {sorted(values)} but read {sorted(r['v'] for r in rows)}"
         finally:
             await conn.close()
 

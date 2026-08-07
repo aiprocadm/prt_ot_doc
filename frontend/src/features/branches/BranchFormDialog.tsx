@@ -3,7 +3,10 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
 
-import { buildBranchCreateBody, buildBranchUpdateBody } from "@/api/branchesApi";
+import {
+  buildBranchCreateBody,
+  buildBranchUpdateBody,
+} from "@/api/branchesApi";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -12,7 +15,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger
+  DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -31,7 +34,7 @@ const emptyBranchForm: BranchFormValues = {
   contact_name: "",
   contact_phone: "",
   contact_email: "",
-  status: "active"
+  status: "active",
 };
 
 const BRANCH_API_FIELD_MAP: Record<string, keyof BranchFormValues> = {
@@ -42,7 +45,7 @@ const BRANCH_API_FIELD_MAP: Record<string, keyof BranchFormValues> = {
   contact_name: "contact_name",
   contact_phone: "contact_phone",
   contact_email: "contact_email",
-  status: "status"
+  status: "status",
 };
 
 interface BranchFormDialogProps {
@@ -58,12 +61,12 @@ export const BranchFormDialog = ({
   companies,
   initialData,
   defaultCompanyId,
-  onSubmitted
+  onSubmitted,
 }: BranchFormDialogProps) => {
   const [open, setOpen] = useState(false);
   const form = useForm<BranchFormValues>({
     resolver: zodResolver(branchSchema),
-    defaultValues: { ...emptyBranchForm, company_id: defaultCompanyId ?? "" }
+    defaultValues: { ...emptyBranchForm, company_id: defaultCompanyId ?? "" },
   });
 
   const { create, update } = useBranchesStore();
@@ -79,7 +82,7 @@ export const BranchFormDialog = ({
         contact_name: initialData.contact_name ?? "",
         contact_phone: initialData.contact_phone ?? "",
         contact_email: initialData.contact_email ?? "",
-        status: initialData.status
+        status: initialData.status,
       });
     } else {
       form.reset({ ...emptyBranchForm, company_id: defaultCompanyId ?? "" });
@@ -110,7 +113,9 @@ export const BranchFormDialog = ({
       <DialogTrigger asChild>{trigger}</DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{initialData ? "Редактировать филиал" : "Новый филиал"}</DialogTitle>
+          <DialogTitle>
+            {initialData ? "Редактировать филиал" : "Новый филиал"}
+          </DialogTitle>
           <DialogDescription>
             Филиал — уровень между компанией и объектами (площадками).
           </DialogDescription>
@@ -142,10 +147,14 @@ export const BranchFormDialog = ({
                 ))}
               </select>
               {initialData ? (
-                <p className="text-xs text-muted-foreground">Компанию филиала изменить нельзя.</p>
+                <p className="text-xs text-muted-foreground">
+                  Компанию филиала изменить нельзя.
+                </p>
               ) : null}
               {form.formState.errors.company_id && (
-                <p className="text-xs text-destructive">{form.formState.errors.company_id.message}</p>
+                <p className="text-xs text-destructive">
+                  {form.formState.errors.company_id.message}
+                </p>
               )}
             </div>
             <div className="space-y-2">
@@ -164,24 +173,40 @@ export const BranchFormDialog = ({
               <Label htmlFor="branch-name">Название</Label>
               <Input id="branch-name" {...form.register("name")} required />
               {form.formState.errors.name && (
-                <p className="text-xs text-destructive">{form.formState.errors.name.message}</p>
+                <p className="text-xs text-destructive">
+                  {form.formState.errors.name.message}
+                </p>
               )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="branch-code">Код</Label>
-              <Input id="branch-code" {...form.register("code")} placeholder="необязательно" />
+              <Input
+                id="branch-code"
+                {...form.register("code")}
+                placeholder="необязательно"
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="branch-contact-name">Контактное лицо</Label>
-              <Input id="branch-contact-name" {...form.register("contact_name")} />
+              <Input
+                id="branch-contact-name"
+                {...form.register("contact_name")}
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="branch-contact-phone">Телефон</Label>
-              <Input id="branch-contact-phone" {...form.register("contact_phone")} />
+              <Input
+                id="branch-contact-phone"
+                {...form.register("contact_phone")}
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="branch-contact-email">Электронная почта</Label>
-              <Input id="branch-contact-email" type="email" {...form.register("contact_email")} />
+              <Input
+                id="branch-contact-email"
+                type="email"
+                {...form.register("contact_email")}
+              />
               {form.formState.errors.contact_email && (
                 <p className="text-xs text-destructive">
                   {form.formState.errors.contact_email.message}
@@ -191,7 +216,11 @@ export const BranchFormDialog = ({
           </div>
           <div className="space-y-2">
             <Label htmlFor="branch-address">Адрес</Label>
-            <Textarea id="branch-address" {...form.register("address")} rows={2} />
+            <Textarea
+              id="branch-address"
+              {...form.register("address")}
+              rows={2}
+            />
           </div>
           <DialogFooter>
             <Button type="submit" disabled={form.formState.isSubmitting}>

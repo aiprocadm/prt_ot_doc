@@ -68,6 +68,15 @@ from app.models.briefings import (
     BriefingTemplate,
 )
 
+# §12.4 bg01/bg02: re-export budget models from app.models.budget.
+from app.models.budget import (  # noqa: E402
+    BudgetExpense,
+    BudgetExpenseArticle,
+    BudgetReimbursement,
+    BudgetReimbursementItem,
+    SafetyBudget,
+)
+
 # ARCH-2: re-export field_ops-domain models moved to app.models.field_ops.
 from app.models.field_ops import (
     CalendarEvent,
@@ -239,15 +248,6 @@ from app.models.rules_engine import (  # noqa: E402
     AutomationRule,
     AutomationRuleTrigger,
     RuleTriggerStatus,
-)
-
-# §12.4 bg01/bg02: re-export budget models from app.models.budget.
-from app.models.budget import (  # noqa: E402
-    BudgetExpense,
-    BudgetExpenseArticle,
-    BudgetReimbursement,
-    BudgetReimbursementItem,
-    SafetyBudget,
 )
 
 # ARCH-2: re-export templates-domain models moved to app.models.templates.

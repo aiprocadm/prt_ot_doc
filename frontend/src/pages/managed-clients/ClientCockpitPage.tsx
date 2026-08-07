@@ -22,7 +22,14 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import type { ApiError } from "@/types/dto/common";
 import { formatDate } from "@/utils/datetime";
 
@@ -47,7 +54,10 @@ const SEVERITY_LABELS: Record<Severity, string> = {
   low: "Низкое",
 };
 
-const SEVERITY_VARIANT: Record<Severity, "default" | "destructive" | "secondary" | "outline"> = {
+const SEVERITY_VARIANT: Record<
+  Severity,
+  "default" | "destructive" | "secondary" | "outline"
+> = {
   critical: "destructive",
   high: "destructive",
   medium: "default",
@@ -63,20 +73,31 @@ const asApiError = (err: unknown, fallback: string): ApiError =>
     : { status: 0, message: fallback };
 
 const isModuleDisabled = (err: unknown): boolean =>
-  Boolean(err && typeof err === "object" && (err as ApiError).code === MANAGED_CLIENTS_DISABLED);
+  Boolean(
+    err &&
+      typeof err === "object" &&
+      (err as ApiError).code === MANAGED_CLIENTS_DISABLED,
+  );
 
 // ── Блок внимания (что горит) ──────────────────────────────────────────────
 
 const AttentionRow = ({ row }: { row: ClientAttention }) => {
   const notAggregated = row.aggregation === "not_aggregated";
   return (
-    <div className="rounded-md border border-border p-3 space-y-2" data-testid="attention-row">
+    <div
+      className="rounded-md border border-border p-3 space-y-2"
+      data-testid="attention-row"
+    >
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-medium">{row.client_name}</span>
         {row.severity ? (
-          <Badge variant={SEVERITY_VARIANT[row.severity]}>{SEVERITY_LABELS[row.severity]}</Badge>
+          <Badge variant={SEVERITY_VARIANT[row.severity]}>
+            {SEVERITY_LABELS[row.severity]}
+          </Badge>
         ) : null}
-        {notAggregated ? <Badge variant="outline">Данные не собраны</Badge> : null}
+        {notAggregated ? (
+          <Badge variant="outline">Данные не собраны</Badge>
+        ) : null}
         {!notAggregated && row.signals.length === 0 ? (
           <span className="text-sm text-emerald-600">Без сигналов</span>
         ) : null}
@@ -88,8 +109,11 @@ const AttentionRow = ({ row }: { row: ClientAttention }) => {
         <ul className="space-y-1">
           {row.signals.map((signal) => (
             <li key={signal.kind} className="text-sm">
-              <span className="font-medium">{signal.title}:</span> {signal.count}{" "}
-              <span className="text-muted-foreground">— {signal.action_hint}</span>
+              <span className="font-medium">{signal.title}:</span>{" "}
+              {signal.count}{" "}
+              <span className="text-muted-foreground">
+                — {signal.action_hint}
+              </span>
             </li>
           ))}
         </ul>
@@ -105,7 +129,12 @@ interface AttentionPanelProps {
   onRetry: () => void;
 }
 
-const AttentionPanel = ({ data, loading, error, onRetry }: AttentionPanelProps) => (
+const AttentionPanel = ({
+  data,
+  loading,
+  error,
+  onRetry,
+}: AttentionPanelProps) => (
   <Card>
     <CardHeader>
       <CardTitle className="text-base">Что горит по клиентам</CardTitle>
@@ -115,19 +144,29 @@ const AttentionPanel = ({ data, loading, error, onRetry }: AttentionPanelProps) 
       {loading ? <LoadingScreen label="Загрузка сводки внимания" /> : null}
       {!loading && !error && data ? (
         <>
-          <div className="flex flex-wrap gap-4 text-sm" data-testid="attention-summary">
+          <div
+            className="flex flex-wrap gap-4 text-sm"
+            data-testid="attention-summary"
+          >
             <span>
               Клиентов: <strong>{data.summary.clients_total}</strong>
             </span>
             <span>
               С сигналами: <strong>{data.summary.clients_with_signals}</strong>
             </span>
-            <span className={data.summary.critical_clients > 0 ? "text-destructive" : undefined}>
+            <span
+              className={
+                data.summary.critical_clients > 0
+                  ? "text-destructive"
+                  : undefined
+              }
+            >
               Критичных: <strong>{data.summary.critical_clients}</strong>
             </span>
             {data.summary.clients_not_aggregated > 0 ? (
               <span className="text-muted-foreground">
-                Данные не собраны: <strong>{data.summary.clients_not_aggregated}</strong>
+                Данные не собраны:{" "}
+                <strong>{data.summary.clients_not_aggregated}</strong>
               </span>
             ) : null}
           </div>
@@ -180,7 +219,7 @@ const CalendarPanel = ({ clients }: CalendarPanelProps) => {
           days,
           client_id: clientId || undefined,
           kind: kind === "all" ? undefined : [kind],
-        })
+        }),
       );
     } catch (err) {
       setError(asApiError(err, "Не удалось загрузить календарь"));
@@ -216,7 +255,10 @@ const CalendarPanel = ({ clients }: CalendarPanelProps) => {
             </select>
           </div>
           <div className="space-y-1">
-            <label className="text-xs text-muted-foreground" htmlFor="cal-client">
+            <label
+              className="text-xs text-muted-foreground"
+              htmlFor="cal-client"
+            >
               Клиент
             </label>
             <select
@@ -256,8 +298,15 @@ const CalendarPanel = ({ clients }: CalendarPanelProps) => {
         {loading ? <LoadingScreen label="Загрузка календаря" /> : null}
         {!loading && !error && data ? (
           <>
-            <div className="flex flex-wrap gap-4 text-sm" data-testid="calendar-summary">
-              <span className={data.summary.overdue > 0 ? "text-destructive" : undefined}>
+            <div
+              className="flex flex-wrap gap-4 text-sm"
+              data-testid="calendar-summary"
+            >
+              <span
+                className={
+                  data.summary.overdue > 0 ? "text-destructive" : undefined
+                }
+              >
                 Просрочено: <strong>{data.summary.overdue}</strong>
               </span>
               <span>
@@ -275,10 +324,18 @@ const CalendarPanel = ({ clients }: CalendarPanelProps) => {
             ) : (
               <div className="space-y-3">
                 {data.days.map((day) => (
-                  <div key={day.due_date} className="space-y-1" data-testid="calendar-day">
+                  <div
+                    key={day.due_date}
+                    className="space-y-1"
+                    data-testid="calendar-day"
+                  >
                     <div className="flex items-center gap-2">
-                      <span className="font-medium">{formatDate(day.due_date)}</span>
-                      {day.overdue ? <Badge variant="destructive">Просрочено</Badge> : null}
+                      <span className="font-medium">
+                        {formatDate(day.due_date)}
+                      </span>
+                      {day.overdue ? (
+                        <Badge variant="destructive">Просрочено</Badge>
+                      ) : null}
                     </div>
                     <ul className="space-y-1">
                       {day.events.map((event) => (
@@ -286,9 +343,13 @@ const CalendarPanel = ({ clients }: CalendarPanelProps) => {
                           key={`${event.client_id}-${event.kind}-${event.subject}-${event.due_date}`}
                           className="text-sm"
                         >
-                          <span className="text-muted-foreground">{event.title}:</span>{" "}
+                          <span className="text-muted-foreground">
+                            {event.title}:
+                          </span>{" "}
                           {event.subject}{" "}
-                          <span className="text-muted-foreground">— {event.client_name}</span>
+                          <span className="text-muted-foreground">
+                            — {event.client_name}
+                          </span>
                         </li>
                       ))}
                     </ul>
@@ -312,7 +373,12 @@ interface WorkloadPanelProps {
   onRetry: () => void;
 }
 
-const WorkloadPanel = ({ data, loading, error, onRetry }: WorkloadPanelProps) => (
+const WorkloadPanel = ({
+  data,
+  loading,
+  error,
+  onRetry,
+}: WorkloadPanelProps) => (
   <Card>
     <CardHeader>
       <CardTitle className="text-base">Загрузка специалистов</CardTitle>
@@ -322,25 +388,33 @@ const WorkloadPanel = ({ data, loading, error, onRetry }: WorkloadPanelProps) =>
       {loading ? <LoadingScreen label="Загрузка по специалистам" /> : null}
       {!loading && !error && data ? (
         <>
-          <div className="flex flex-wrap gap-4 text-sm" data-testid="workload-summary">
+          <div
+            className="flex flex-wrap gap-4 text-sm"
+            data-testid="workload-summary"
+          >
             <span>
               Специалистов: <strong>{data.summary.specialists_total}</strong>
             </span>
-            <span className={data.summary.overloaded > 0 ? "text-destructive" : undefined}>
+            <span
+              className={
+                data.summary.overloaded > 0 ? "text-destructive" : undefined
+              }
+            >
               Перегружено: <strong>{data.summary.overloaded}</strong>
             </span>
             {data.summary.clients_unassigned > 0 ? (
               <span className="text-destructive">
-                Без ответственного: <strong>{data.summary.clients_unassigned}</strong>
+                Без ответственного:{" "}
+                <strong>{data.summary.clients_unassigned}</strong>
               </span>
             ) : null}
           </div>
           {/* Пороги показываем рядом: «перегружен» без правила — повод для спора,
               а не для действия. */}
           <p className="text-xs text-muted-foreground">
-            Порог перегруза: клиентов &gt; {data.thresholds.max_clients}, сигналов &gt;{" "}
-            {data.thresholds.max_signals}, просрочек &gt; {data.thresholds.max_overdue}, либо
-            есть критический клиент.
+            Порог перегруза: клиентов &gt; {data.thresholds.max_clients},
+            сигналов &gt; {data.thresholds.max_signals}, просрочек &gt;{" "}
+            {data.thresholds.max_overdue}, либо есть критический клиент.
           </p>
           {data.items.length === 0 ? (
             <EmptyState
@@ -362,7 +436,9 @@ const WorkloadPanel = ({ data, loading, error, onRetry }: WorkloadPanelProps) =>
                 {data.items.map((row) => (
                   <TableRow key={row.person_id} data-testid="workload-row">
                     <TableCell className="font-medium">
-                      {row.unassigned ? "Без ответственного" : row.person_name ?? row.person_id}
+                      {row.unassigned
+                        ? "Без ответственного"
+                        : (row.person_name ?? row.person_id)}
                     </TableCell>
                     <TableCell>{row.clients_total}</TableCell>
                     <TableCell>{row.signals_total}</TableCell>
@@ -374,13 +450,18 @@ const WorkloadPanel = ({ data, loading, error, onRetry }: WorkloadPanelProps) =>
                             Перегруз
                           </Badge>
                           {row.overload_reasons.map((reason) => (
-                            <span key={reason.code} className="text-xs text-muted-foreground">
+                            <span
+                              key={reason.code}
+                              className="text-xs text-muted-foreground"
+                            >
                               {reason.text}
                             </span>
                           ))}
                         </span>
                       ) : (
-                        <span className="text-sm text-muted-foreground">В норме</span>
+                        <span className="text-sm text-muted-foreground">
+                          В норме
+                        </span>
                       )}
                     </TableCell>
                   </TableRow>
@@ -404,7 +485,13 @@ interface PortfolioPanelProps {
   onCreated: () => void;
 }
 
-const PortfolioPanel = ({ data, loading, error, onRetry, onCreated }: PortfolioPanelProps) => {
+const PortfolioPanel = ({
+  data,
+  loading,
+  error,
+  onRetry,
+  onCreated,
+}: PortfolioPanelProps) => {
   const [name, setName] = useState("");
   const [mode, setMode] = useState<ManagedClientMode>("lightweight");
   const [companyId, setCompanyId] = useState("");
@@ -422,7 +509,8 @@ const PortfolioPanel = ({ data, loading, error, onRetry, onCreated }: PortfolioP
         name: name.trim(),
         mode,
         company_id: mode === "lightweight" ? companyId.trim() || null : null,
-        dedicated_tenant_slug: mode === "dedicated" ? tenantSlug.trim() || null : null,
+        dedicated_tenant_slug:
+          mode === "dedicated" ? tenantSlug.trim() || null : null,
       });
       setName("");
       setCompanyId("");
@@ -441,12 +529,19 @@ const PortfolioPanel = ({ data, loading, error, onRetry, onCreated }: PortfolioP
         <CardTitle className="text-base">Портфель клиентов</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
-        <form className="flex flex-wrap items-end gap-2" onSubmit={handleCreate}>
+        <form
+          className="flex flex-wrap items-end gap-2"
+          onSubmit={handleCreate}
+        >
           <div className="flex-1 min-w-[180px] space-y-1">
             <label className="text-xs text-muted-foreground" htmlFor="mc-name">
               Название клиента
             </label>
-            <Input id="mc-name" value={name} onChange={(e) => setName(e.target.value)} />
+            <Input
+              id="mc-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
           </div>
           <div className="space-y-1">
             <label className="text-xs text-muted-foreground" htmlFor="mc-mode">
@@ -464,7 +559,10 @@ const PortfolioPanel = ({ data, loading, error, onRetry, onCreated }: PortfolioP
           </div>
           {mode === "lightweight" ? (
             <div className="space-y-1">
-              <label className="text-xs text-muted-foreground" htmlFor="mc-company">
+              <label
+                className="text-xs text-muted-foreground"
+                htmlFor="mc-company"
+              >
                 Организация клиента
               </label>
               <Input
@@ -476,7 +574,10 @@ const PortfolioPanel = ({ data, loading, error, onRetry, onCreated }: PortfolioP
             </div>
           ) : (
             <div className="space-y-1">
-              <label className="text-xs text-muted-foreground" htmlFor="mc-tenant">
+              <label
+                className="text-xs text-muted-foreground"
+                htmlFor="mc-tenant"
+              >
                 Контур клиента
               </label>
               <Input
@@ -497,7 +598,10 @@ const PortfolioPanel = ({ data, loading, error, onRetry, onCreated }: PortfolioP
 
         {!loading && !error && data ? (
           <>
-            <div className="flex flex-wrap gap-4 text-sm" data-testid="portfolio-summary">
+            <div
+              className="flex flex-wrap gap-4 text-sm"
+              data-testid="portfolio-summary"
+            >
               <span>
                 Всего: <strong>{data.summary.total}</strong>
               </span>
@@ -507,12 +611,22 @@ const PortfolioPanel = ({ data, loading, error, onRetry, onCreated }: PortfolioP
               <span>
                 Черновиков: <strong>{data.summary.draft}</strong>
               </span>
-              <span className={data.summary.contracts_expiring > 0 ? "text-destructive" : undefined}>
-                Истекают договоры: <strong>{data.summary.contracts_expiring}</strong>
+              <span
+                className={
+                  data.summary.contracts_expiring > 0
+                    ? "text-destructive"
+                    : undefined
+                }
+              >
+                Истекают договоры:{" "}
+                <strong>{data.summary.contracts_expiring}</strong>
               </span>
             </div>
             {data.items.length === 0 ? (
-              <EmptyState title="Портфель пуст" description="Клиенты ещё не заведены." />
+              <EmptyState
+                title="Портфель пуст"
+                description="Клиенты ещё не заведены."
+              />
             ) : (
               <Table data-testid="portfolio-table">
                 <TableHeader>
@@ -531,13 +645,22 @@ const PortfolioPanel = ({ data, loading, error, onRetry, onCreated }: PortfolioP
                         {MODE_LABELS[item.mode] ?? item.mode}
                       </TableCell>
                       <TableCell>
-                        <Badge variant={item.contract_status === "active" ? "default" : "outline"}>
-                          {CONTRACT_LABELS[item.contract_status] ?? item.contract_status}
+                        <Badge
+                          variant={
+                            item.contract_status === "active"
+                              ? "default"
+                              : "outline"
+                          }
+                        >
+                          {CONTRACT_LABELS[item.contract_status] ??
+                            item.contract_status}
                         </Badge>
                       </TableCell>
                       <TableCell>
                         <span className="flex items-center gap-2">
-                          {item.contract_ends_at ? formatDate(item.contract_ends_at) : "—"}
+                          {item.contract_ends_at
+                            ? formatDate(item.contract_ends_at)
+                            : "—"}
                           {item.contract_expiring ? (
                             <Badge variant="destructive" className="text-xs">
                               {typeof item.contract_days_left === "number" &&
@@ -565,7 +688,9 @@ const PortfolioPanel = ({ data, loading, error, onRetry, onCreated }: PortfolioP
 const ClientCockpitPage = () => {
   const [portfolio, setPortfolio] = useState<PortfolioPage | null>(null);
   const [attention, setAttention] = useState<CrossClientAttention | null>(null);
-  const [workload, setWorkload] = useState<SpecialistWorkloadResponse | null>(null);
+  const [workload, setWorkload] = useState<SpecialistWorkloadResponse | null>(
+    null,
+  );
   const [loading, setLoading] = useState(false);
   const [portfolioError, setPortfolioError] = useState<ApiError | null>(null);
   const [attentionError, setAttentionError] = useState<ApiError | null>(null);
@@ -578,17 +703,21 @@ const ClientCockpitPage = () => {
     setAttentionError(null);
     setWorkloadError(null);
     setModuleDisabled(false);
-    const [portfolioResult, attentionResult, workloadResult] = await Promise.allSettled([
-      managedClientsApi.portfolio(),
-      managedClientsApi.attention(),
-      managedClientsApi.workload(),
-    ]);
+    const [portfolioResult, attentionResult, workloadResult] =
+      await Promise.allSettled([
+        managedClientsApi.portfolio(),
+        managedClientsApi.attention(),
+        managedClientsApi.workload(),
+      ]);
 
     // Модуль выключен — это не сбой: показываем объяснение вместо двух ошибок.
     const disabled =
-      (portfolioResult.status === "rejected" && isModuleDisabled(portfolioResult.reason)) ||
-      (attentionResult.status === "rejected" && isModuleDisabled(attentionResult.reason)) ||
-      (workloadResult.status === "rejected" && isModuleDisabled(workloadResult.reason));
+      (portfolioResult.status === "rejected" &&
+        isModuleDisabled(portfolioResult.reason)) ||
+      (attentionResult.status === "rejected" &&
+        isModuleDisabled(attentionResult.reason)) ||
+      (workloadResult.status === "rejected" &&
+        isModuleDisabled(workloadResult.reason));
     if (disabled) {
       setModuleDisabled(true);
       setLoading(false);
@@ -598,17 +727,29 @@ const ClientCockpitPage = () => {
     if (portfolioResult.status === "fulfilled") {
       setPortfolio(portfolioResult.value);
     } else {
-      setPortfolioError(asApiError(portfolioResult.reason, "Не удалось загрузить портфель"));
+      setPortfolioError(
+        asApiError(portfolioResult.reason, "Не удалось загрузить портфель"),
+      );
     }
     if (attentionResult.status === "fulfilled") {
       setAttention(attentionResult.value);
     } else {
-      setAttentionError(asApiError(attentionResult.reason, "Не удалось загрузить сводку внимания"));
+      setAttentionError(
+        asApiError(
+          attentionResult.reason,
+          "Не удалось загрузить сводку внимания",
+        ),
+      );
     }
     if (workloadResult.status === "fulfilled") {
       setWorkload(workloadResult.value);
     } else {
-      setWorkloadError(asApiError(workloadResult.reason, "Не удалось загрузить загрузку специалистов"));
+      setWorkloadError(
+        asApiError(
+          workloadResult.reason,
+          "Не удалось загрузить загрузку специалистов",
+        ),
+      );
     }
     setLoading(false);
   }, []);

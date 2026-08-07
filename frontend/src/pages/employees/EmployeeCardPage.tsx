@@ -8,8 +8,21 @@ import { LoadingScreen } from "@/components/common/LoadingScreen";
 import { Badge } from "@/components/ui/badge";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { ApiError } from "@/types/dto/common";
 import type {
@@ -23,46 +36,46 @@ import type {
   EmployeePermitItemDto,
   EmployeePPEIssueItemDto,
   EmployeeTrainingCertificateDto,
-  EmployeeTrainingItemDto
+  EmployeeTrainingItemDto,
 } from "@/types/dto/employee";
 
 const EMPLOYMENT_STATUS_LABELS: Record<string, string> = {
   active: "Работает",
   on_leave: "В отпуске",
   suspended: "Отстранён",
-  terminated: "Уволен"
+  terminated: "Уволен",
 };
 
 const TRAINING_STATUS_LABELS: Record<string, string> = {
   scheduled: "Запланировано",
   in_progress: "В процессе",
   completed: "Пройдено",
-  failed: "Провалено"
+  failed: "Провалено",
 };
 
 const PERMIT_STATUS_LABELS: Record<string, string> = {
   active: "Действует",
   expired: "Истёк",
-  revoked: "Отозван"
+  revoked: "Отозван",
 };
 
 const PPE_ISSUE_STATUS_LABELS: Record<string, string> = {
   issued: "Выдано",
   returned: "Возвращено",
-  lost: "Утрачено"
+  lost: "Утрачено",
 };
 
 const INCIDENT_TYPE_LABELS: Record<string, string> = {
   accident: "Несчастный случай",
   microtrauma: "Микротравма",
   near_miss: "Опасное событие",
-  unsafe_condition: "Опасное состояние"
+  unsafe_condition: "Опасное состояние",
 };
 
 const INCIDENT_SEVERITY_LABELS: Record<string, string> = {
   low: "Низкая",
   medium: "Средняя",
-  high: "Высокая"
+  high: "Высокая",
 };
 
 const INCIDENT_STATUS_LABELS: Record<string, string> = {
@@ -70,13 +83,13 @@ const INCIDENT_STATUS_LABELS: Record<string, string> = {
   investigating: "Расследование",
   corrective_actions: "Меры",
   closed: "Закрыт",
-  cancelled: "Отменён"
+  cancelled: "Отменён",
 };
 
 const INCIDENT_ROLE_LABELS: Record<string, string> = {
   victim: "Пострадавший",
   witness: "Свидетель",
-  participant: "Участник"
+  participant: "Участник",
 };
 
 const DOCUMENT_STATUS_LABELS: Record<string, string> = {
@@ -86,7 +99,7 @@ const DOCUMENT_STATUS_LABELS: Record<string, string> = {
   approved: "Утверждён",
   signed: "Подписан",
   archived: "В архиве",
-  revoked: "Отозван"
+  revoked: "Отозван",
 };
 
 const BRIEFING_TYPE_LABELS: Record<string, string> = {
@@ -94,13 +107,13 @@ const BRIEFING_TYPE_LABELS: Record<string, string> = {
   repeated: "Повторный",
   unscheduled: "Внеплановый",
   targeted: "Целевой",
-  introductory: "Вводный"
+  introductory: "Вводный",
 };
 
 const BRIEFING_STATUS_LABELS: Record<string, string> = {
   draft: "Черновик",
   signed: "Подписан",
-  cancelled: "Отменён"
+  cancelled: "Отменён",
 };
 
 const DEADLINE_ENTITY_LABELS: Record<string, string> = {
@@ -110,7 +123,7 @@ const DEADLINE_ENTITY_LABELS: Record<string, string> = {
   ppe_issue: "Выдача СИЗ",
   permit: "Допуск",
   briefing: "Инструктаж",
-  document: "Документ"
+  document: "Документ",
 };
 
 const DEADLINE_STATUS_LABELS: Record<string, string> = {
@@ -119,18 +132,24 @@ const DEADLINE_STATUS_LABELS: Record<string, string> = {
   overdue: "Просрочен",
   closed: "Закрыт",
   completed: "Выполнен",
-  cancelled: "Отменён"
+  cancelled: "Отменён",
 };
 
-const labelFor = (map: Record<string, string>, key: string | null | undefined) =>
-  (key && map[key]) || (key ?? "—");
+const labelFor = (
+  map: Record<string, string>,
+  key: string | null | undefined,
+) => (key && map[key]) || (key ?? "—");
 
 const formatDate = (iso: string | null | undefined) => {
   if (!iso) return "—";
   try {
     const dt = new Date(iso);
     if (Number.isNaN(dt.getTime())) return iso;
-    return dt.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric" });
+    return dt.toLocaleDateString("ru-RU", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    });
   } catch {
     return iso ?? "—";
   }
@@ -146,7 +165,7 @@ const formatDateTime = (iso: string | null | undefined) => {
       month: "2-digit",
       year: "numeric",
       hour: "2-digit",
-      minute: "2-digit"
+      minute: "2-digit",
     });
   } catch {
     return iso ?? "—";
@@ -156,7 +175,9 @@ const formatDateTime = (iso: string | null | undefined) => {
 const Info = ({ label, value }: { label: string; value?: string | null }) => (
   <div>
     <div className="text-xs uppercase text-muted-foreground">{label}</div>
-    <div className="text-sm font-medium">{value && value !== "" ? value : "—"}</div>
+    <div className="text-sm font-medium">
+      {value && value !== "" ? value : "—"}
+    </div>
   </div>
 );
 
@@ -191,10 +212,15 @@ const PersonalTab = ({ card }: { card: EmployeeCardDto }) => {
       <Info label="Телефон" value={personal.phone} />
       <Info label="Табельный номер" value={personal.personnel_number} />
       <Info label="СНИЛС" value={personal.snils} />
-      <Info label="Класс условий труда" value={personal.working_conditions_class} />
+      <Info
+        label="Класс условий труда"
+        value={personal.working_conditions_class}
+      />
       {personal.hazardous_factors.length > 0 ? (
         <div className="md:col-span-2">
-          <div className="text-xs uppercase text-muted-foreground">Вредные факторы</div>
+          <div className="text-xs uppercase text-muted-foreground">
+            Вредные факторы
+          </div>
           <div className="flex flex-wrap gap-1.5 pt-1">
             {personal.hazardous_factors.map((factor) => (
               <Badge key={factor} variant="outline" className="text-xs">
@@ -222,7 +248,9 @@ const RolesTab = ({ card }: { card: EmployeeCardDto }) => {
         />
       </div>
       <div className="rounded-md border p-3">
-        <div className="text-xs uppercase text-muted-foreground">Системный аккаунт</div>
+        <div className="text-xs uppercase text-muted-foreground">
+          Системный аккаунт
+        </div>
         {roles.user_account ? (
           <div className="mt-2 grid gap-2 md:grid-cols-2">
             <Info label="Email" value={roles.user_account.email} />
@@ -231,10 +259,15 @@ const RolesTab = ({ card }: { card: EmployeeCardDto }) => {
               label="Активен"
               value={roles.user_account.is_active ? "да" : "нет"}
             />
-            <Info label="Последний вход" value={formatDateTime(roles.user_account.last_login_at)} />
+            <Info
+              label="Последний вход"
+              value={formatDateTime(roles.user_account.last_login_at)}
+            />
             {roles.user_account.additional_roles.length > 0 ? (
               <div className="md:col-span-2">
-                <div className="text-xs uppercase text-muted-foreground">Дополнительные роли</div>
+                <div className="text-xs uppercase text-muted-foreground">
+                  Дополнительные роли
+                </div>
                 <div className="flex flex-wrap gap-1.5 pt-1">
                   {roles.user_account.additional_roles.map((role) => (
                     <Badge key={role} variant="outline" className="text-xs">
@@ -246,7 +279,9 @@ const RolesTab = ({ card }: { card: EmployeeCardDto }) => {
             ) : null}
           </div>
         ) : (
-          <p className="mt-2 text-sm text-muted-foreground">Нет связанной учётной записи.</p>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Нет связанной учётной записи.
+          </p>
         )}
       </div>
     </div>
@@ -261,7 +296,9 @@ const TrainingTab = ({ card }: { card: EmployeeCardDto }) => {
   return (
     <div className="space-y-6">
       <section>
-        <h3 className="text-sm font-semibold">Курсы и сессии · {training.sessions_count}</h3>
+        <h3 className="text-sm font-semibold">
+          Курсы и сессии · {training.sessions_count}
+        </h3>
         {training.sessions.length === 0 ? (
           <EmptyTabContent message="Сессии обучения не зафиксированы." />
         ) : (
@@ -284,10 +321,17 @@ const TrainingTab = ({ card }: { card: EmployeeCardDto }) => {
                         {session.course_title ?? "—"}
                       </TableCell>
                       <TableCell className="text-sm">
-                        {labelFor(TRAINING_STATUS_LABELS, String(session.status))}
+                        {labelFor(
+                          TRAINING_STATUS_LABELS,
+                          String(session.status),
+                        )}
                       </TableCell>
-                      <TableCell className="text-sm">{formatDate(session.started_at)}</TableCell>
-                      <TableCell className="text-sm">{formatDate(session.completed_at)}</TableCell>
+                      <TableCell className="text-sm">
+                        {formatDate(session.started_at)}
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        {formatDate(session.completed_at)}
+                      </TableCell>
                       <TableCell className="text-right text-sm">
                         {session.score ?? "—"}
                       </TableCell>
@@ -318,16 +362,24 @@ const TrainingTab = ({ card }: { card: EmployeeCardDto }) => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {training.certificates.map((cert: EmployeeTrainingCertificateDto) => (
-                    <TableRow key={cert.id}>
-                      <TableCell className="text-sm font-medium">
-                        {cert.course_title ?? "—"}
-                      </TableCell>
-                      <TableCell className="text-sm font-mono">{cert.code ?? "—"}</TableCell>
-                      <TableCell className="text-sm">{formatDate(cert.issued_at)}</TableCell>
-                      <TableCell className="text-sm">{formatDate(cert.valid_until)}</TableCell>
-                    </TableRow>
-                  ))}
+                  {training.certificates.map(
+                    (cert: EmployeeTrainingCertificateDto) => (
+                      <TableRow key={cert.id}>
+                        <TableCell className="text-sm font-medium">
+                          {cert.course_title ?? "—"}
+                        </TableCell>
+                        <TableCell className="text-sm font-mono">
+                          {cert.code ?? "—"}
+                        </TableCell>
+                        <TableCell className="text-sm">
+                          {formatDate(cert.issued_at)}
+                        </TableCell>
+                        <TableCell className="text-sm">
+                          {formatDate(cert.valid_until)}
+                        </TableCell>
+                      </TableRow>
+                    ),
+                  )}
                 </TableBody>
               </Table>
             </CardContent>
@@ -359,10 +411,18 @@ const MedicalsTab = ({ card }: { card: EmployeeCardDto }) => {
           <TableBody>
             {medicals.items.map((exam: EmployeeMedicalItemDto) => (
               <TableRow key={exam.id}>
-                <TableCell className="text-sm font-medium">{exam.exam_type}</TableCell>
-                <TableCell className="text-sm">{formatDate(exam.exam_date)}</TableCell>
-                <TableCell className="text-sm">{formatDate(exam.valid_until)}</TableCell>
-                <TableCell className="text-sm">{exam.conclusion ?? "—"}</TableCell>
+                <TableCell className="text-sm font-medium">
+                  {exam.exam_type}
+                </TableCell>
+                <TableCell className="text-sm">
+                  {formatDate(exam.exam_date)}
+                </TableCell>
+                <TableCell className="text-sm">
+                  {formatDate(exam.valid_until)}
+                </TableCell>
+                <TableCell className="text-sm">
+                  {exam.conclusion ?? "—"}
+                </TableCell>
                 <TableCell>
                   {exam.is_expired ? (
                     <Badge variant="destructive">Просрочен</Badge>
@@ -400,10 +460,18 @@ const PPETab = ({ card }: { card: EmployeeCardDto }) => {
           <TableBody>
             {ppe.items.map((issue: EmployeePPEIssueItemDto) => (
               <TableRow key={issue.id}>
-                <TableCell className="text-sm font-medium">{issue.item_name}</TableCell>
-                <TableCell className="text-right text-sm">{issue.quantity}</TableCell>
-                <TableCell className="text-sm">{formatDateTime(issue.issued_at)}</TableCell>
-                <TableCell className="text-sm">{formatDateTime(issue.expires_at)}</TableCell>
+                <TableCell className="text-sm font-medium">
+                  {issue.item_name}
+                </TableCell>
+                <TableCell className="text-right text-sm">
+                  {issue.quantity}
+                </TableCell>
+                <TableCell className="text-sm">
+                  {formatDateTime(issue.issued_at)}
+                </TableCell>
+                <TableCell className="text-sm">
+                  {formatDateTime(issue.expires_at)}
+                </TableCell>
                 <TableCell>
                   {issue.is_expired ? (
                     <Badge variant="destructive">Просрочено</Badge>
@@ -442,9 +510,15 @@ const PermitsTab = ({ card }: { card: EmployeeCardDto }) => {
           <TableBody>
             {permits.items.map((permit: EmployeePermitItemDto) => (
               <TableRow key={permit.id}>
-                <TableCell className="text-sm font-medium">{permit.permit_type}</TableCell>
-                <TableCell className="text-sm">{formatDate(permit.issued_at)}</TableCell>
-                <TableCell className="text-sm">{formatDate(permit.valid_until)}</TableCell>
+                <TableCell className="text-sm font-medium">
+                  {permit.permit_type}
+                </TableCell>
+                <TableCell className="text-sm">
+                  {formatDate(permit.issued_at)}
+                </TableCell>
+                <TableCell className="text-sm">
+                  {formatDate(permit.valid_until)}
+                </TableCell>
                 <TableCell>
                   {permit.is_expired ? (
                     <Badge variant="destructive">Просрочен</Badge>
@@ -466,7 +540,9 @@ const PermitsTab = ({ card }: { card: EmployeeCardDto }) => {
 const IncidentsTab = ({ card }: { card: EmployeeCardDto }) => {
   const { incidents } = card;
   if (incidents.items.length === 0) {
-    return <EmptyTabContent message="Происшествий с участием сотрудника не зарегистрировано." />;
+    return (
+      <EmptyTabContent message="Происшествий с участием сотрудника не зарегистрировано." />
+    );
   }
   return (
     <Card>
@@ -494,16 +570,28 @@ const IncidentsTab = ({ card }: { card: EmployeeCardDto }) => {
                   </Link>
                 </TableCell>
                 <TableCell className="text-sm">
-                  {labelFor(INCIDENT_TYPE_LABELS, String(incident.incident_type))}
+                  {labelFor(
+                    INCIDENT_TYPE_LABELS,
+                    String(incident.incident_type),
+                  )}
                 </TableCell>
                 <TableCell>
                   <Badge
-                    variant={String(incident.severity) === "high" ? "destructive" : "secondary"}
+                    variant={
+                      String(incident.severity) === "high"
+                        ? "destructive"
+                        : "secondary"
+                    }
                   >
-                    {labelFor(INCIDENT_SEVERITY_LABELS, String(incident.severity))}
+                    {labelFor(
+                      INCIDENT_SEVERITY_LABELS,
+                      String(incident.severity),
+                    )}
                   </Badge>
                 </TableCell>
-                <TableCell className="text-sm">{formatDateTime(incident.occurred_at)}</TableCell>
+                <TableCell className="text-sm">
+                  {formatDateTime(incident.occurred_at)}
+                </TableCell>
                 <TableCell className="text-sm">
                   {labelFor(INCIDENT_ROLE_LABELS, String(incident.role))}
                 </TableCell>
@@ -547,7 +635,9 @@ const DocumentsTab = ({ card }: { card: EmployeeCardDto }) => {
                     {doc.template_name ?? "Без названия"}
                   </Link>
                 </TableCell>
-                <TableCell className="text-sm">{formatDateTime(doc.created_at)}</TableCell>
+                <TableCell className="text-sm">
+                  {formatDateTime(doc.created_at)}
+                </TableCell>
                 <TableCell className="text-sm">
                   {labelFor(DOCUMENT_STATUS_LABELS, String(doc.status))}
                 </TableCell>
@@ -594,8 +684,12 @@ const BriefingsTab = ({ card }: { card: EmployeeCardDto }) => {
                 <TableCell className="text-sm">
                   {labelFor(BRIEFING_TYPE_LABELS, String(entry.briefing_type))}
                 </TableCell>
-                <TableCell className="text-sm">{formatDateTime(entry.briefing_date)}</TableCell>
-                <TableCell className="text-sm">{formatDateTime(entry.valid_until)}</TableCell>
+                <TableCell className="text-sm">
+                  {formatDateTime(entry.briefing_date)}
+                </TableCell>
+                <TableCell className="text-sm">
+                  {formatDateTime(entry.valid_until)}
+                </TableCell>
                 <TableCell>
                   {entry.is_expired ? (
                     <Badge variant="destructive">Просрочен</Badge>
@@ -632,29 +726,39 @@ const ComplianceDeadlinesTab = ({ card }: { card: EmployeeCardDto }) => {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {deadlines.items.map((deadline: EmployeeComplianceDeadlineItemDto) => (
-              <TableRow key={deadline.id}>
-                <TableCell className="text-sm font-medium">
-                  {labelFor(DEADLINE_ENTITY_LABELS, String(deadline.entity_type))}
-                  <div className="text-xs font-mono text-muted-foreground">
-                    {deadline.entity_id}
-                  </div>
-                </TableCell>
-                <TableCell className="text-sm">{formatDateTime(deadline.due_at)}</TableCell>
-                <TableCell>
-                  {deadline.is_overdue ? (
-                    <Badge variant="destructive">Просрочен</Badge>
-                  ) : (
-                    <Badge variant="secondary">
-                      {labelFor(DEADLINE_STATUS_LABELS, String(deadline.status))}
-                    </Badge>
-                  )}
-                </TableCell>
-                <TableCell className="text-xs text-muted-foreground">
-                  {deadline.reminder_policy ?? "—"}
-                </TableCell>
-              </TableRow>
-            ))}
+            {deadlines.items.map(
+              (deadline: EmployeeComplianceDeadlineItemDto) => (
+                <TableRow key={deadline.id}>
+                  <TableCell className="text-sm font-medium">
+                    {labelFor(
+                      DEADLINE_ENTITY_LABELS,
+                      String(deadline.entity_type),
+                    )}
+                    <div className="text-xs font-mono text-muted-foreground">
+                      {deadline.entity_id}
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-sm">
+                    {formatDateTime(deadline.due_at)}
+                  </TableCell>
+                  <TableCell>
+                    {deadline.is_overdue ? (
+                      <Badge variant="destructive">Просрочен</Badge>
+                    ) : (
+                      <Badge variant="secondary">
+                        {labelFor(
+                          DEADLINE_STATUS_LABELS,
+                          String(deadline.status),
+                        )}
+                      </Badge>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-xs text-muted-foreground">
+                    {deadline.reminder_policy ?? "—"}
+                  </TableCell>
+                </TableRow>
+              ),
+            )}
           </TableBody>
         </Table>
       </CardContent>
@@ -665,7 +769,9 @@ const ComplianceDeadlinesTab = ({ card }: { card: EmployeeCardDto }) => {
 const AuditTab = ({ card }: { card: EmployeeCardDto }) => {
   const { audit } = card;
   if (audit.items.length === 0) {
-    return <EmptyTabContent message="Изменений по карточке не зафиксировано." />;
+    return (
+      <EmptyTabContent message="Изменений по карточке не зафиксировано." />
+    );
   }
   return (
     <Card>
@@ -682,9 +788,15 @@ const AuditTab = ({ card }: { card: EmployeeCardDto }) => {
           <TableBody>
             {audit.items.map((entry: EmployeeAuditItemDto) => (
               <TableRow key={entry.id}>
-                <TableCell className="text-sm">{formatDateTime(entry.when)}</TableCell>
-                <TableCell className="text-sm font-mono">{entry.action}</TableCell>
-                <TableCell className="text-sm">{entry.actor_email ?? "—"}</TableCell>
+                <TableCell className="text-sm">
+                  {formatDateTime(entry.when)}
+                </TableCell>
+                <TableCell className="text-sm font-mono">
+                  {entry.action}
+                </TableCell>
+                <TableCell className="text-sm">
+                  {entry.actor_email ?? "—"}
+                </TableCell>
                 <TableCell className="text-xs">
                   {Object.keys(entry.changed_fields ?? {}).length > 0 ? (
                     <code className="rounded bg-muted px-1.5 py-0.5">
@@ -718,7 +830,13 @@ export default function EmployeeCardPage() {
       const data = await employeesApi.getCard(personId);
       setCard(data);
     } catch (err) {
-      setError((err as ApiError) ?? { status: 0, message: "Не удалось загрузить карточку", field_errors: [] });
+      setError(
+        (err as ApiError) ?? {
+          status: 0,
+          message: "Не удалось загрузить карточку",
+          field_errors: [],
+        },
+      );
     } finally {
       setLoading(false);
     }
@@ -728,7 +846,10 @@ export default function EmployeeCardPage() {
     void load();
   }, [load]);
 
-  const headerName = card ? card.personal.fio || `${card.personal.last_name} ${card.personal.first_name}`.trim() : "Сотрудник";
+  const headerName = card
+    ? card.personal.fio ||
+      `${card.personal.last_name} ${card.personal.first_name}`.trim()
+    : "Сотрудник";
 
   return (
     <div className="space-y-6 p-6">
@@ -736,18 +857,24 @@ export default function EmployeeCardPage() {
         items={[
           { label: "Главная", to: "/dashboard" },
           { label: "Сотрудники", to: "/persons" },
-          { label: headerName }
+          { label: headerName },
         ]}
       />
 
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">{headerName}</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">
+            {headerName}
+          </h1>
           {card ? (
             <p className="text-muted-foreground mt-1 text-sm">
               {card.personal.position_name ?? "Без должности"}
-              {card.personal.company_name ? ` · ${card.personal.company_name}` : ""}
-              {card.personal.workplace_name ? ` · ${card.personal.workplace_name}` : ""}
+              {card.personal.company_name
+                ? ` · ${card.personal.company_name}`
+                : ""}
+              {card.personal.workplace_name
+                ? ` · ${card.personal.workplace_name}`
+                : ""}
             </p>
           ) : null}
           {card ? (
@@ -761,8 +888,16 @@ export default function EmployeeCardPage() {
             <ArrowLeft className="mr-2 h-4 w-4" aria-hidden="true" />
             Назад
           </Button>
-          <Button type="button" variant="secondary" onClick={load} disabled={loading}>
-            <RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} aria-hidden="true" />
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={load}
+            disabled={loading}
+          >
+            <RefreshCw
+              className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`}
+              aria-hidden="true"
+            />
             Обновить
           </Button>
         </div>
@@ -770,16 +905,18 @@ export default function EmployeeCardPage() {
 
       <ErrorState error={error ?? undefined} onRetry={load} />
 
-      {loading && !card ? <LoadingScreen label="Загрузка карточки сотрудника" /> : null}
+      {loading && !card ? (
+        <LoadingScreen label="Загрузка карточки сотрудника" />
+      ) : null}
 
       {!loading && !error && card ? (
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-lg">Полные данные сотрудника</CardTitle>
             <CardDescription>
-              Источник — единый агрегат <code>/api/v1/employees/{"{id}"}</code>: персональные
-              данные, роли, обучение, медосмотры, СИЗ, допуски, документы, инструктажи,
-              контрольные сроки, происшествия и аудит.
+              Источник — единый агрегат <code>/api/v1/employees/{"{id}"}</code>:
+              персональные данные, роли, обучение, медосмотры, СИЗ, допуски,
+              документы, инструктажи, контрольные сроки, происшествия и аудит.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -789,7 +926,10 @@ export default function EmployeeCardPage() {
                 <TabsTrigger value="roles">
                   Роли и назначения
                   {card.roles_and_assignments.user_account ? (
-                    <Badge variant="secondary" className="ml-2 px-1.5 text-[11px]">
+                    <Badge
+                      variant="secondary"
+                      className="ml-2 px-1.5 text-[11px]"
+                    >
                       аккаунт
                     </Badge>
                   ) : null}
@@ -797,7 +937,10 @@ export default function EmployeeCardPage() {
                 <TabsTrigger value="training">
                   Обучение
                   <TabBadge
-                    count={card.training.sessions_count + card.training.certificates_count}
+                    count={
+                      card.training.sessions_count +
+                      card.training.certificates_count
+                    }
                   />
                 </TabsTrigger>
                 <TabsTrigger value="medicals">
@@ -828,7 +971,10 @@ export default function EmployeeCardPage() {
                 <TabsTrigger value="deadlines">
                   Сроки
                   <TabBadge count={card.compliance_deadlines.upcoming_count} />
-                  <TabBadge count={card.compliance_deadlines.overdue_count} danger />
+                  <TabBadge
+                    count={card.compliance_deadlines.overdue_count}
+                    danger
+                  />
                 </TabsTrigger>
                 <TabsTrigger value="incidents">
                   Происшествия

@@ -12,9 +12,12 @@ export const TenantGate = ({ children }: { children: ReactNode }) => {
       <div className="flex min-h-screen items-center justify-center bg-background px-6 py-10">
         <Card className="w-full max-w-3xl">
           <CardHeader className="space-y-2 text-center">
-            <CardTitle className="text-2xl font-semibold">Выберите контур</CardTitle>
+            <CardTitle className="text-2xl font-semibold">
+              Выберите контур
+            </CardTitle>
             <p className="text-sm text-muted-foreground">
-              Для загрузки данных нужен активный контур и площадка. Переключение очистит локальный кэш.
+              Для загрузки данных нужен активный контур и площадка. Переключение
+              очистит локальный кэш.
             </p>
           </CardHeader>
           <CardContent className="grid gap-3 md:grid-cols-2">
@@ -26,7 +29,9 @@ export const TenantGate = ({ children }: { children: ReactNode }) => {
                 onClick={() => setTenant(option)}
               >
                 <span className="text-sm font-semibold">{option.name}</span>
-                <span className="text-xs text-muted-foreground">{option.site}</span>
+                <span className="text-xs text-muted-foreground">
+                  {option.site}
+                </span>
               </Button>
             ))}
           </CardContent>

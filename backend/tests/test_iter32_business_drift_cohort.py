@@ -124,9 +124,9 @@ def test_cohort_column_nullable_matches_spec(
     for kw in col_call.keywords:
         if kw.arg == "nullable" and isinstance(kw.value, ast.Constant):
             nullable_kw = kw.value.value
-    assert nullable_kw is nullable, (
-        f"{table}.{column}: expected nullable={nullable}, AST shows {nullable_kw!r}"
-    )
+    assert (
+        nullable_kw is nullable
+    ), f"{table}.{column}: expected nullable={nullable}, AST shows {nullable_kw!r}"
 
 
 @pytest.mark.parametrize(("table", "column", "_n", "has_fk", "_hd"), _COHORT)
@@ -137,7 +137,8 @@ def test_cohort_column_fk_target_present_when_expected(
     upgrade = _upgrade_fn(tree)
     col_call = _column_call_for(table, column, upgrade)
     fk_args = [
-        arg for arg in col_call.args
+        arg
+        for arg in col_call.args
         if isinstance(arg, ast.Call)
         and isinstance(arg.func, ast.Attribute)
         and arg.func.attr == "ForeignKey"
@@ -147,9 +148,9 @@ def test_cohort_column_fk_target_present_when_expected(
         # Sanity: FK first arg is a string like "<table>.id"
         first = fk_args[0].args[0]
         assert isinstance(first, ast.Constant) and isinstance(first.value, str)
-        assert first.value.endswith(".id"), (
-            f"{table}.{column}: FK target {first.value!r} doesn't end with .id"
-        )
+        assert first.value.endswith(
+            ".id"
+        ), f"{table}.{column}: FK target {first.value!r} doesn't end with .id"
     else:
         assert not fk_args, f"{table}.{column}: unexpected ForeignKey() declared"
 
@@ -162,9 +163,9 @@ def test_cohort_column_server_default_when_expected(
     upgrade = _upgrade_fn(tree)
     col_call = _column_call_for(table, column, upgrade)
     has_kw = any(kw.arg == "server_default" for kw in col_call.keywords)
-    assert has_kw is has_default, (
-        f"{table}.{column}: expected server_default present={has_default}, got {has_kw}"
-    )
+    assert (
+        has_kw is has_default
+    ), f"{table}.{column}: expected server_default present={has_default}, got {has_kw}"
 
 
 def test_upgrade_and_downgrade_symmetric() -> None:
@@ -228,6 +229,7 @@ def test_audit_credits_iter32_columns() -> None:
     if not audit_path.exists():
         pytest.skip("column_drift_lite.py absent — pending PR #603")
     import importlib.util as _ilu
+
     spec = _ilu.spec_from_file_location("column_drift_lite", audit_path)
     assert spec is not None and spec.loader is not None
     audit = _ilu.module_from_spec(spec)
@@ -235,6 +237,6 @@ def test_audit_credits_iter32_columns() -> None:
 
     migration_cols = audit.collect_migration_columns()
     for table, column, *_ in _COHORT:
-        assert column in migration_cols.get(table, set()), (
-            f"audit doesn't credit {table}.{column} after iter-32 — closed-loop verify broken"
-        )
+        assert column in migration_cols.get(
+            table, set()
+        ), f"audit doesn't credit {table}.{column} after iter-32 — closed-loop verify broken"

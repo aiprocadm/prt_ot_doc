@@ -179,9 +179,9 @@ def test_last_error_is_nullable() -> None:
     for kw in col_call.keywords:
         if kw.arg == "nullable" and isinstance(kw.value, ast.Constant):
             nullable_kw = kw.value.value
-    assert nullable_kw is True, (
-        f"{_TABLE}.{_COLUMN}: expected nullable=True, AST shows {nullable_kw!r}"
-    )
+    assert (
+        nullable_kw is True
+    ), f"{_TABLE}.{_COLUMN}: expected nullable=True, AST shows {nullable_kw!r}"
 
 
 def test_last_error_has_no_server_default() -> None:
@@ -278,9 +278,9 @@ def test_upgrade_and_downgrade_symmetric() -> None:
             and isinstance(node.args[1], ast.Constant)
         ):
             downgrade_cols.add((node.args[0].value, node.args[1].value))
-    assert upgrade_cols == downgrade_cols == {(_TABLE, _COLUMN)}, (
-        f"col symmetry broken: upgrade={upgrade_cols}, downgrade={downgrade_cols}"
-    )
+    assert (
+        upgrade_cols == downgrade_cols == {(_TABLE, _COLUMN)}
+    ), f"col symmetry broken: upgrade={upgrade_cols}, downgrade={downgrade_cols}"
 
 
 # ---------------------------------------------------------------------------

@@ -2,9 +2,18 @@ import { Search } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type Ref } from "react";
 import { useNavigate } from "react-router-dom";
 
-import { fetchRecentSearches, searchGlobal, type SearchItem } from "@/api/search";
+import {
+  fetchRecentSearches,
+  searchGlobal,
+  type SearchItem,
+} from "@/api/search";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { useDebounce } from "@/hooks/useDebounce";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
@@ -18,7 +27,7 @@ const toTabType = (entityType: string): string => {
     inspection: "inspections",
     file: "files",
     prescription: "jobs",
-    template: "templates"
+    template: "templates",
   };
   return mapping[entityType] ?? "documents";
 };
@@ -33,7 +42,9 @@ type SearchPanelProps = {
 const GlobalSearchPanel = ({ inputRef, onNavigate }: SearchPanelProps) => {
   const [query, setQuery] = useState("");
   const [items, setItems] = useState<SearchItem[]>([]);
-  const [recent, setRecent] = useState<Array<{ id: string; q: string; types: string[] }>>([]);
+  const [recent, setRecent] = useState<
+    Array<{ id: string; q: string; types: string[] }>
+  >([]);
   const debounced = useDebounce(query, 300);
   const navigate = useNavigate();
   const internalRef = useRef<HTMLInputElement | null>(null);
@@ -51,7 +62,9 @@ const GlobalSearchPanel = ({ inputRef, onNavigate }: SearchPanelProps) => {
       return;
     }
     searchGlobal(debounced)
-      .then((result) => setItems(Array.isArray(result.items) ? result.items.slice(0, 10) : []))
+      .then((result) =>
+        setItems(Array.isArray(result.items) ? result.items.slice(0, 10) : []),
+      )
       .catch(() => setItems([]));
   }, [debounced]);
 
@@ -63,7 +76,7 @@ const GlobalSearchPanel = ({ inputRef, onNavigate }: SearchPanelProps) => {
         acc[key].push(item);
         return acc;
       }, {}),
-    [items]
+    [items],
   );
 
   const go = (path: string) => {
@@ -92,36 +105,51 @@ const GlobalSearchPanel = ({ inputRef, onNavigate }: SearchPanelProps) => {
           {query.trim() ? (
             Object.entries(grouped).map(([group, groupItems]) => (
               <div key={group} className="mb-2 last:mb-0">
-                <div className="px-2 py-1 text-xs font-semibold uppercase text-muted-foreground">{group}</div>
+                <div className="px-2 py-1 text-xs font-semibold uppercase text-muted-foreground">
+                  {group}
+                </div>
                 {groupItems.map((item) => (
                   <button
                     type="button"
                     key={`${item.entity_type}-${item.entity_id}`}
                     className="block w-full rounded px-2 py-1 text-left text-sm hover:bg-muted"
                     onClick={() =>
-                      go(item.deeplink ?? `/search?q=${encodeURIComponent(query)}&type=${toTabType(item.entity_type)}`)
+                      go(
+                        item.deeplink ??
+                          `/search?q=${encodeURIComponent(query)}&type=${toTabType(item.entity_type)}`,
+                      )
                     }
                   >
                     <div className="font-medium">{item.title}</div>
-                    {item.snippet ? <div className="text-xs text-muted-foreground">{item.snippet}</div> : null}
+                    {item.snippet ? (
+                      <div className="text-xs text-muted-foreground">
+                        {item.snippet}
+                      </div>
+                    ) : null}
                   </button>
                 ))}
               </div>
             ))
           ) : (
             <div className="space-y-2">
-              <div className="px-2 py-1 text-xs font-semibold uppercase text-muted-foreground">Недавние запросы</div>
+              <div className="px-2 py-1 text-xs font-semibold uppercase text-muted-foreground">
+                Недавние запросы
+              </div>
               {recent.map((item) => (
                 <button
                   type="button"
                   key={item.id}
                   className="block w-full rounded px-2 py-1 text-left text-sm hover:bg-muted"
                   onClick={() =>
-                    go(`/search?q=${encodeURIComponent(item.q)}${item.types[0] ? `&type=${encodeURIComponent(item.types[0])}` : ""}`)
+                    go(
+                      `/search?q=${encodeURIComponent(item.q)}${item.types[0] ? `&type=${encodeURIComponent(item.types[0])}` : ""}`,
+                    )
                   }
                 >
                   <div className="font-medium">{item.q}</div>
-                  <div className="text-xs text-muted-foreground">{item.types.join(", ") || "все типы"}</div>
+                  <div className="text-xs text-muted-foreground">
+                    {item.types.join(", ") || "все типы"}
+                  </div>
                 </button>
               ))}
             </div>
@@ -139,10 +167,18 @@ export const GlobalSearch = () => {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "/" && !(event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement)) {
+      if (
+        event.key === "/" &&
+        !(
+          event.target instanceof HTMLInputElement ||
+          event.target instanceof HTMLTextAreaElement
+        )
+      ) {
         event.preventDefault();
         if (isLg) {
-          const input = document.getElementById(INPUT_ID) as HTMLInputElement | null;
+          const input = document.getElementById(
+            INPUT_ID,
+          ) as HTMLInputElement | null;
           input?.focus();
         } else {
           setMobileOpen(true);
@@ -185,7 +221,10 @@ export const GlobalSearch = () => {
           <DialogHeader>
             <DialogTitle>Поиск</DialogTitle>
           </DialogHeader>
-          <GlobalSearchPanel inputRef={mobileInputRef} onNavigate={() => setMobileOpen(false)} />
+          <GlobalSearchPanel
+            inputRef={mobileInputRef}
+            onNavigate={() => setMobileOpen(false)}
+          />
         </DialogContent>
       </Dialog>
     </>

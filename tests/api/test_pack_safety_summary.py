@@ -24,7 +24,5 @@ async def test_pack_safety_summary_unknown_run_404(
         await session.commit()
     headers = await make_auth_headers(RoleEnum.ADMIN)
 
-    resp = await async_client.get(
-        "/api/v1/packs/does-not-exist/safety-summary", headers=headers
-    )
+    resp = await async_client.get("/api/v1/packs/does-not-exist/safety-summary", headers=headers)
     assert resp.status_code == status.HTTP_404_NOT_FOUND, resp.text

@@ -1,4 +1,5 @@
 """Профиль земляных работ (883н): валидация type_specific и печатная секция."""
+
 from __future__ import annotations
 
 import pytest

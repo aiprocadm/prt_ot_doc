@@ -5,7 +5,7 @@ import {
   ResponsiveContainer,
   Tooltip,
   XAxis,
-  YAxis
+  YAxis,
 } from "recharts";
 
 export interface TrendPoint {
@@ -28,7 +28,11 @@ const shortDate = (iso: string): string => {
 
 /** Линейный график одного тренда (12 точек /analytics/trends/*). jsdom не даёт
  * размеров контейнеру — тесты проверяют заголовок/наличие контейнера, не SVG. */
-export function TrendLineChart({ title, series, height = 220 }: TrendLineChartProps) {
+export function TrendLineChart({
+  title,
+  series,
+  height = 220,
+}: TrendLineChartProps) {
   return (
     <div className="rounded-lg border bg-card p-4">
       <p className="mb-2 text-sm font-medium">{title}</p>
@@ -37,7 +41,10 @@ export function TrendLineChart({ title, series, height = 220 }: TrendLineChartPr
       ) : (
         <div data-testid={`trend-chart-${title}`} style={{ height }}>
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={series} margin={{ top: 4, right: 8, bottom: 0, left: -16 }}>
+            <LineChart
+              data={series}
+              margin={{ top: 4, right: 8, bottom: 0, left: -16 }}
+            >
               <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
               <XAxis dataKey="date" tickFormatter={shortDate} fontSize={11} />
               <YAxis allowDecimals={false} fontSize={11} />
