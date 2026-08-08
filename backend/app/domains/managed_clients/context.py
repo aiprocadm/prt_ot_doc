@@ -25,11 +25,18 @@ from app.domains.managed_clients.access import AccessGrant, grant_allows, is_gra
 from app.domains.managed_clients.lifecycle import ManagedClientMode
 
 __all__ = [
+    "ON_BEHALF_OF_KEY",
     "ClientContext",
     "ClientContextDenied",
+    "active_client_context",
     "build_context_audit_meta",
+    "on_behalf_of_stamp",
     "resolve_client_context",
 ]
+
+#: Ключ, под которым пометка «от имени клиента» лежит в ``details`` аудита.
+#: Одно имя на весь код: по нему и пишут, и ищут в журнале доступа.
+ON_BEHALF_OF_KEY = "on_behalf_of"
 
 
 class ClientContextDenied(PermissionError):
@@ -89,8 +96,32 @@ def resolve_client_context(
     )
 
 
-def build_context_audit_meta(context: ClientContext, *, action: str) -> dict[str, Any]:
+def on_behalf_of_stamp(context: ClientContext) -> dict[str, Any]:
+    """Короткая пометка «X от имени Y» для ЛЮБОЙ записи аудита (разд. 63.2).
+
+    ТЗ требует, чтобы «каждое действие было помечено X от имени Y». Пометка
+    отдельным событием этого не даёт: читающий запись «специалист изменил
+    карточку» не видит рядом ничего, а связать её с входом в контекст можно
+    только вручную по времени. Поэтому метка едет ВНУТРИ самой записи.
+
+    Только JSON-совместимые значения — уходит в JSON-поле аудита.
+    """
+
+    return {
+        "actor_user_id": context.user_id,
+        "managed_client_id": context.client_id,
+        "managed_client_name": context.client_name,
+    }
+
+
+def build_context_audit_meta(
+    context: ClientContext, *, action: str, method: str | None = None
+) -> dict[str, Any]:
     """Пометка аудита: кто, от имени какого клиента, что сделал.
+
+    ``method`` нужен журналу доступа (разд. 63.2): в ответе на вопрос клиента
+    «кто трогал мои данные» чтение и запись — разные ответы, а один только
+    путь их не различает.
 
     Значения только JSON-совместимые — пометка уходит в JSON-поле аудита.
     """
@@ -101,9 +132,27 @@ def build_context_audit_meta(context: ClientContext, *, action: str) -> dict[str
         "managed_client_id": context.client_id,
         "managed_client_name": context.client_name,
         "action": action,
+        "method": method,
         "all_modules": context.all_modules,
         "modules": list(context.modules),
     }
+
+
+def active_client_context() -> ClientContext | None:
+    """Контекст клиента текущего запроса — или ``None`` вне запроса.
+
+    Читается из состояния запроса, куда его кладёт зависимость после проверки
+    гранта. Своего хранилища домен не заводит: у аудита нет и не может быть
+    параметра «а это от имени клиента» — его забыли бы ровно там, где он нужен.
+    """
+
+    from app.core.request_context import get_current_request  # noqa: PLC0415 - цикл импорта
+
+    request = get_current_request()
+    if request is None:
+        return None
+    context = getattr(request.state, "managed_client_context", None)
+    return context if isinstance(context, ClientContext) else None
 
 
 def context_allows_module(

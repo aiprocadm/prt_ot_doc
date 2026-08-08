@@ -9,7 +9,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime, timezone
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy import func, select
@@ -81,6 +81,7 @@ from app.domains.managed_clients.transfer_service import (
 )
 from app.domains.managed_clients.workload import DEFAULT_THRESHOLDS, OVERLOAD_REASON_TEXT
 from app.domains.managed_clients.workload_service import collect_specialist_workload
+from app.models.audit_log import AuditLog
 from app.models.managed_clients import (
     ManagedClient,
     ManagedClientAccess,
@@ -95,6 +96,8 @@ from app.schemas.managed_clients import (
     AccessGrantRead,
     AttentionSignalRead,
     CalendarSummary,
+    ClientAccessLogEntry,
+    ClientAccessLogPage,
     ClientAttentionRead,
     ClientContextRead,
     ConsentCreate,
@@ -289,6 +292,23 @@ def _consent_read(row: ManagedClientConsent, *, now: datetime) -> ConsentRead:
         revoked_by_user_id=row.revoked_by_user_id,
         revoke_reason=row.revoke_reason,
         active=is_consent_active(_as_consent(row), now=now),
+    )
+
+
+def _access_log_entry(row: AuditLog) -> ClientAccessLogEntry:
+    """Строка журнала доступа из записи аудита (срез-18, Доп. №3 63.2)."""
+
+    details: dict[str, Any] = row.details if isinstance(row.details, dict) else {}
+    raw_meta = details.get("meta_json")
+    meta: dict[str, Any] = raw_meta if isinstance(raw_meta, dict) else {}
+    return ClientAccessLogEntry(
+        at=row.when,
+        actor_user_id=row.user_id,
+        actor_email=row.actor_email,
+        method=meta.get("method"),
+        path=meta.get("action"),
+        ip=row.ip,
+        correlation_id=row.correlation_id,
     )
 
 
@@ -793,7 +813,9 @@ async def enter_client_context(
         resource_id=client.id,
         before=None,
         after=None,
-        meta=build_context_audit_meta(context, action="context.enter"),
+        # Метод пишется и здесь: строка «вход в контекст» стоит в журнале
+        # доступа рядом с обращениями к данным и должна читаться так же.
+        meta=build_context_audit_meta(context, action="context.enter", method=request.method),
     )
     return ClientContextRead(
         scoped_sections=scoped_section_titles(),
@@ -999,6 +1021,71 @@ async def revoke_access(
         after={"revoked_at": now.isoformat(), "user_id": row.user_id},
     )
     return _grant_read(row, now=now)
+
+
+@router.get("/{mcid}/access-log", response_model=ClientAccessLogPage)
+async def client_access_log(
+    mcid: str,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: Access,
+    since: Annotated[datetime | None, Query()] = None,
+    until: Annotated[datetime | None, Query()] = None,
+    limit: Annotated[int, Query(ge=1, le=500)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> ClientAccessLogPage:
+    """Кто из специалистов и когда работал в данных этого клиента.
+
+    Доп. №3, разд. 63.2: «клиент может запросить журнал доступа к своим
+    данным». Запрос идёт через аутсорсера — у клиента в режиме Lightweight
+    вообще нет учётной записи, а в Dedicated его арендатор отдельный, и следы
+    работы аутсорсера физически лежат не там. Поэтому журнал отдаётся здесь,
+    а показать его клиенту — обязанность аутсорсера по договору.
+
+    Источник — записи аудита о входе в контекст: зависимость пишет такую на
+    КАЖДЫЙ запрос с заголовком клиента, то есть строка журнала = одно
+    обращение к данным. Что именно менялось, видно в общем аудите по
+    ``correlation_id`` — эти записи с этого среза помечены «X от имени Y».
+
+    Журнал только читается: аудит append-only, и «подчистить» его нельзя ни
+    отсюда, ни откуда-либо ещё.
+    """
+
+    TenantContextValidator.ensure_tenant_context(tenant)
+    await _require_enabled(session, tenant)
+    await _get(session, tenant, mcid)
+
+    conditions = [
+        AuditLog.tenant_id == tenant.id,
+        AuditLog.object_type == "managed_client",
+        AuditLog.object_id == mcid,
+        AuditLog.action == "managed_client.context.enter",
+    ]
+    if since is not None:
+        conditions.append(AuditLog.when >= since)
+    if until is not None:
+        conditions.append(AuditLog.when <= until)
+
+    total = int(
+        (
+            await session.execute(select(func.count()).select_from(AuditLog).where(*conditions))
+        ).scalar_one_or_none()
+        or 0
+    )
+    rows = (
+        (
+            await session.execute(
+                select(AuditLog)
+                .where(*conditions)
+                .order_by(AuditLog.when.desc())
+                .limit(limit)
+                .offset(offset)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return ClientAccessLogPage(items=[_access_log_entry(row) for row in rows], total=total)
 
 
 @router.get("/{mcid}/consents", response_model=list[ConsentRead])

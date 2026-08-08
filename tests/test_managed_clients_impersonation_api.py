@@ -42,12 +42,15 @@ def _access(sub="u1"):
     return SimpleNamespace(to_auth_context=lambda: _auth(sub))
 
 
-def _request(path="/api/v1/persons"):
+def _request(path="/api/v1/persons", method="GET"):
     return SimpleNamespace(
         headers={"user-agent": "tests"},
         client=SimpleNamespace(host="127.0.0.1"),
         state=SimpleNamespace(trace_id="trace-1"),
         url=SimpleNamespace(path=path),
+        # Метод журналируется наравне с путём: «прочитал» и «изменил» — разные
+        # ответы на вопрос клиента, кто трогал его данные (Доп. №3, 63.2).
+        method=method,
     )
 
 

@@ -324,3 +324,26 @@ class ClientContextRead(BaseSchema):
     #: Сколько секунд осталось — чтобы интерфейс мог показать счётчик, а не
     #: вычислять срок сам и разъезжаться с сервером на часовых поясах.
     seconds_left: int | None = None
+
+
+# --- Журнал доступа к данным клиента (срез-18, Доп. №3 разд. 63.2) ---
+class ClientAccessLogEntry(BaseSchema):
+    """Одно обращение специалиста к данным клиента «от имени» клиента."""
+
+    at: datetime
+    actor_user_id: str | None = None
+    actor_email: str | None = None
+    #: Метод и путь: чтение и правка — разные ответы на вопрос «кто трогал
+    #: мои данные», и одним путём они не различаются.
+    method: str | None = None
+    path: str | None = None
+    ip: str | None = None
+    #: Идентификатор запроса — по нему в общем аудите видны сами изменения.
+    correlation_id: str | None = None
+
+
+class ClientAccessLogPage(BaseSchema):
+    """Страница журнала: всегда с общим числом — «покажите всё» проверяемо."""
+
+    items: list[ClientAccessLogEntry]
+    total: int

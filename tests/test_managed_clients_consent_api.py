@@ -38,6 +38,8 @@ def _request():
         headers={"user-agent": "tests"},
         client=SimpleNamespace(host="127.0.0.1"),
         state=SimpleNamespace(trace_id="trace-1"),
+        url=SimpleNamespace(path="/api/v1/managed-clients/x/consents"),
+        method="POST",
     )
 
 
