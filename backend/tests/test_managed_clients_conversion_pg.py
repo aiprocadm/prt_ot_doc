@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import os
 import uuid
+from datetime import date
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -186,13 +187,73 @@ def test_conversion_survives_force_rls_with_unprivileged_role(monkeypatch) -> No
                         select(Company).where(Company.tenant_id == outsourcer_id)
                     )
                 ).scalars().first()
+                person_row = Person(
+                    tenant_id=outsourcer_id,
+                    company_id=company_row.id,
+                    first_name="Иван",
+                    last_name="Иванов",
+                    position_title="Слесарь",
+                )
+                s.add(person_row)
+                await s.flush()
+
+                # Срез-15: доменная история. На PostgreSQL настоящие NOT NULL:
+                # у training_certificates колонки training_program_id и code
+                # обязательные, хотя ORM объявляет их nullable — на SQLite
+                # такая копия прошла бы молча.
+                from app.models.medical import MedicalExam
+                from app.models.ppe import PPEIssue, PPEItem
+                from app.models.training import (
+                    TrainingCertificate,
+                    TrainingCourse,
+                    TrainingProgram,
+                    TrainingSession,
+                )
+
                 s.add(
-                    Person(
+                    MedicalExam(
                         tenant_id=outsourcer_id,
-                        company_id=company_row.id,
-                        first_name="Иван",
-                        last_name="Иванов",
-                        position_title="Слесарь",
+                        person_id=person_row.id,
+                        exam_type="периодический",
+                        exam_date=date(2026, 1, 15),
+                        valid_until=date(2027, 1, 15),
+                        contraindications=["шум"],
+                    )
+                )
+                item = PPEItem(tenant_id=outsourcer_id, name="Каска")
+                course = TrainingCourse(tenant_id=outsourcer_id, title="Работа на высоте")
+                program = TrainingProgram(
+                    tenant_id=outsourcer_id,
+                    code="ПРГ-1",
+                    title="Программа 46н",
+                    category="ot",
+                    kind="program",
+                )
+                s.add_all([item, course, program])
+                await s.flush()
+                s.add(
+                    PPEIssue(
+                        tenant_id=outsourcer_id,
+                        person_id=person_row.id,
+                        item_id=item.id,
+                        item_name="Каска",
+                        quantity=1,
+                    )
+                )
+                s.add(
+                    TrainingSession(
+                        tenant_id=outsourcer_id,
+                        person_id=person_row.id,
+                        course_id=course.id,
+                    )
+                )
+                s.add(
+                    TrainingCertificate(
+                        tenant_id=outsourcer_id,
+                        person_id=person_row.id,
+                        training_program_id=program.id,
+                        code="УД-1",
+                        issued_at=date(2026, 1, 20),
                     )
                 )
                 await s.commit()
@@ -214,6 +275,13 @@ def test_conversion_survives_force_rls_with_unprivileged_role(monkeypatch) -> No
             )
         assert transfer_out.status == "completed"
         assert transfer_out.counts["people"] == 1
+        # Доменная история доехала под настоящими ограничениями PostgreSQL.
+        assert transfer_out.counts["medical_exams"] == 1
+        assert transfer_out.counts["ppe_issues"] == 1
+        assert transfer_out.counts["ppe_items"] == 1
+        assert transfer_out.counts["training_sessions"] == 1
+        assert transfer_out.counts["training_certificates"] == 1
+        assert transfer_out.counts["training_certificates_skipped"] == 0
 
         # Проверка под админом: арендатор создан, владелец есть, клиент переведён.
         verify_engine = create_async_engine(admin_engine_url)
@@ -246,6 +314,32 @@ def test_conversion_survives_force_rls_with_unprivileged_role(monkeypatch) -> No
                     .all()
                 )
                 assert [p.last_name for p in copied] == ["Иванов"]
+
+                from app.models.medical import MedicalExam as ExamModel
+                from app.models.ppe import PPEIssue as IssueModel
+                from app.models.training import (
+                    TrainingCertificate as CertModel,
+                )
+
+                exams = (
+                    (await s.execute(select(ExamModel).where(ExamModel.tenant_id == created.id)))
+                    .scalars()
+                    .all()
+                )
+                assert [e.exam_type for e in exams] == ["периодический"]
+                assert exams[0].person_id == copied[0].id
+                issues = (
+                    (await s.execute(select(IssueModel).where(IssueModel.tenant_id == created.id)))
+                    .scalars()
+                    .all()
+                )
+                assert len(issues) == 1 and issues[0].item_id is not None
+                certs = (
+                    (await s.execute(select(CertModel).where(CertModel.tenant_id == created.id)))
+                    .scalars()
+                    .all()
+                )
+                assert len(certs) == 1 and certs[0].file_id is None
         finally:
             await verify_engine.dispose()
 
