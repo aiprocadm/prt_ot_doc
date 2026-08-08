@@ -135,7 +135,9 @@ async def test_transfer_copies_company_and_people(sessionmaker):
             .all()
         )
         assert sorted(p.last_name for p in copied_people) == ["Иванов", "Петров"]
-        # каталожные ссылки обнулены, текстовая должность жива
+        # У этой организации нет структуры, поэтому ссылок и не было. Когда
+        # должность/рабочее место есть, срез-16 их ПЕРЕВЕШИВАЕТ на копии —
+        # см. tests/test_managed_clients_structure_transfer_api.py.
         assert all(p.position_id is None and p.workplace_id is None for p in copied_people)
         assert all(p.position_title == "Слесарь" for p in copied_people)
         # исходные строки остались историей
