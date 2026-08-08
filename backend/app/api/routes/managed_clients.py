@@ -26,6 +26,7 @@ from app.core.errors import api_problem_detail
 from app.core.feature_flags import is_feature_enabled
 from app.core.security import AccessContext, AuthContext, abac, get_auth_ctx
 from app.core.tenant_validation import TenantContextValidator
+from app.db.session import AsyncSessionLocal
 from app.domains.managed_clients.access import (
     AccessGrant,
     AccessGrantError,
@@ -223,6 +224,30 @@ def _grant_read(row: ManagedClientAccess, *, now: datetime) -> AccessGrantRead:
         revoked_at=row.revoked_at,
         revoked_by_user_id=row.revoked_by_user_id,
         active=is_grant_active(_as_grant(row), now=now),
+    )
+
+
+def _trusted_session() -> AsyncSession:
+    """Доверенная сессия для межарендаторной фазы перевода (SEC-65).
+
+    Перевод пишет в ДВА арендатора: bootstrap нового (tenant, настройки, квота,
+    владелец) и строку клиента в пространстве аутсорсера. Сессия запроса
+    приколота к арендатору аутсорсера, и под FORCE RLS её WITH CHECK отвергает
+    чужие строки — на SQLite это невидимо, на Postgres перевод падал бы.
+    Авторизация проверена ДО вызова (роли Access + флаг модуля) — тот же
+    приём, что у платформенных ручек аренды (platform_tenants).
+    """
+
+    # schema_name="public" ЯВНО: с одним tenant="public" схема выводится как
+    # несуществующая tenant_public, и search_path остаётся пустым — тогда
+    # неквалифицированные enum-касты (INSERT tenant ... ::tenantkind) падают
+    # «type does not exist», хотя тип на месте (поймано PG-тестом перевода).
+    return AsyncSessionLocal(
+        tenant="public",
+        schema_name="public",
+        include_public=False,
+        create_schema=False,
+        rls_bypass=True,
     )
 
 
@@ -1163,44 +1188,60 @@ async def convert_to_dedicated(
             status.HTTP_409_CONFLICT,
         )
 
-    summary = await BootstrapTenantService(session).run(
-        tenant_slug=slug,
-        tenant_name=payload.tenant_name or row.name,
-        owner_email=payload.owner_email,
-        owner_password=payload.owner_password,
-    )
+    # Фаза записи — ОДНА транзакция доверенной сессии (см. _trusted_session):
+    # bootstrap нового арендатора и переключение клиента либо происходят вместе,
+    # либо не происходят вовсе — «арендатор создан, а клиент не переведён»
+    # оставил бы занятый слаг без владельца-клиента.
+    async with _trusted_session() as trusted:
+        summary = await BootstrapTenantService(trusted).run(
+            tenant_slug=slug,
+            tenant_name=payload.tenant_name or row.name,
+            owner_email=payload.owner_email,
+            owner_password=payload.owner_password,
+        )
+        row_t = (
+            await trusted.execute(
+                select(ManagedClient).where(
+                    ManagedClient.id == row.id, ManagedClient.tenant_id == tenant.id
+                )
+            )
+        ).scalar_one()
+        before = {
+            "mode": row_t.mode.value,
+            "dedicated_tenant_slug": row_t.dedicated_tenant_slug,
+        }
+        row_t.mode = ManagedClientMode.DEDICATED
+        row_t.dedicated_tenant_slug = slug
+        # company_id НЕ трогаем: у dedicated он законен как ссылка на историю.
+        validate_mode_binding(
+            row_t.mode, company_id=row_t.company_id, tenant_slug=row_t.dedicated_tenant_slug
+        )
+        await trusted.flush()
 
-    before = {"mode": row.mode.value, "dedicated_tenant_slug": row.dedicated_tenant_slug}
-    row.mode = ManagedClientMode.DEDICATED
-    row.dedicated_tenant_slug = slug
-    # company_id НЕ трогаем: у dedicated он законен как ссылка на историю.
-    validate_mode_binding(
-        row.mode, company_id=row.company_id, tenant_slug=row.dedicated_tenant_slug
-    )
-    await session.flush()
-
-    await write_audit_event(
-        session=session,
-        request=request,
-        tenant_id=str(tenant.id),
-        actor_id=auth.sub,
-        action="managed_client.converted_to_dedicated",
-        resource_type="managed_client",
-        resource_id=row.id,
-        before=before,
-        after={
-            "mode": row.mode.value,
-            "dedicated_tenant_slug": slug,
-            "history_company_id": row.company_id,
-            "tenant_created": list(summary.created),
-        },
-    )
-    return ConversionRead(
-        client=ManagedClientRead.model_validate(row, from_attributes=True),
-        tenant_slug=slug,
-        tenant_created=list(summary.created),
-        history_company_id=row.company_id,
-    )
+        await write_audit_event(
+            session=trusted,
+            request=request,
+            tenant_id=str(tenant.id),
+            actor_id=auth.sub,
+            action="managed_client.converted_to_dedicated",
+            resource_type="managed_client",
+            resource_id=row_t.id,
+            before=before,
+            after={
+                "mode": row_t.mode.value,
+                "dedicated_tenant_slug": slug,
+                "history_company_id": row_t.company_id,
+                "tenant_created": list(summary.created),
+            },
+        )
+        result = ConversionRead(
+            client=ManagedClientRead.model_validate(row_t, from_attributes=True),
+            tenant_slug=slug,
+            tenant_created=list(summary.created),
+            history_company_id=row_t.company_id,
+        )
+        await trusted.commit()
+    return result
 
 
 @router.post("", response_model=ManagedClientRead, status_code=status.HTTP_201_CREATED)
