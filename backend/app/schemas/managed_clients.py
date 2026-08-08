@@ -246,6 +246,21 @@ class ConversionRead(BaseSchema):
     history_company_id: str | None = None
 
 
+class TransferRead(BaseSchema):
+    """Итог переноса данных клиента в его арендатор (срез-14, разд. 49.1)."""
+
+    id: str
+    managed_client_id: str
+    target_tenant_slug: str
+    status: str
+    started_at: datetime
+    finished_at: datetime | None = None
+    started_by_user_id: str | None = None
+    #: {"company": 1, "people": N, "people_skipped": M} — обезличенные и
+    #: удалённые не переносятся (разд. 66.2), это видно честной цифрой.
+    counts: dict[str, int]
+
+
 class ConsentCreate(BaseSchema):
     """Согласие клиента на делегированный доступ (срез-12, разд. 66.3)."""
 

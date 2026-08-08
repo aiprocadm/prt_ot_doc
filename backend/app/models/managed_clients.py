@@ -14,6 +14,7 @@ cross-schema FK, который проект уже однажды снимал 
 from __future__ import annotations
 
 from datetime import date, datetime
+from typing import Any
 
 from sqlalchemy import (
     JSON,
@@ -26,7 +27,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
-from sqlalchemy.ext.mutable import MutableList
+from sqlalchemy.ext.mutable import MutableDict, MutableList
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.domains.managed_clients.lifecycle import ContractStatus, ManagedClientMode
@@ -177,4 +178,36 @@ class ManagedClientConsent(TenantBaseModel):
 
     __table_args__ = (
         Index("ix_mc_consent_client", "tenant_id", "managed_client_id", "granted_at"),
+    )
+
+
+class ManagedClientTransfer(TenantBaseModel):
+    """BIZ-49 срез-14 (разд. 49.1): журнал переноса данных клиента.
+
+    Фиксирует, что, когда и кем перенесено в арендатор клиента, включая
+    соответствие старых и новых идентификаторов (``id_map``) — без него
+    «сохранение timeline» превращается в угадывание, кто есть кто.
+    Строка не удаляется: перенос — часть истории ведения клиента.
+    """
+
+    __tablename__ = "managed_client_transfer"
+
+    managed_client_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("managed_client.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    target_tenant_slug: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="completed")
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    started_by_user_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    #: Сколько чего скопировано: {"company": 1, "people": N, "people_skipped": M}.
+    counts: Mapped[dict[str, Any]] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=False, default=dict
+    )
+    #: Соответствие старых id -> новых: {"company": {old: new}, "people": {old: new}}.
+    id_map: Mapped[dict[str, Any]] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=False, default=dict
     )
