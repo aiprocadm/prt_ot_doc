@@ -117,7 +117,10 @@ async def test_transfer_copies_company_and_people(sessionmaker):
 
         out = await _transfer(session, client.id)
         assert out.status == "completed"
-        assert out.counts == {"company": 1, "people": 2, "people_skipped": 0}
+        # Ядро переноса; доменные счётчики срез-15 добавляет отдельными ключами.
+        assert out.counts["company"] == 1
+        assert out.counts["people"] == 2
+        assert out.counts["people_skipped"] == 0
 
         target = (
             await session.execute(select(Tenant).where(Tenant.slug == "romashka"))
@@ -153,7 +156,9 @@ async def test_transfer_skips_deleted_and_anonymized(sessionmaker):
         await _person(session, company.id, last_name="Обезличенный", anonymized_at=_NOW)
 
         out = await _transfer(session, client.id)
-        assert out.counts == {"company": 1, "people": 1, "people_skipped": 2}
+        assert out.counts["company"] == 1
+        assert out.counts["people"] == 1
+        assert out.counts["people_skipped"] == 2
 
 
 @pytest.mark.asyncio

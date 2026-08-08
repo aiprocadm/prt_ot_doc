@@ -71,7 +71,12 @@ from app.domains.managed_clients.transfer import (
     TransferError,
     validate_transfer_preconditions,
 )
-from app.domains.managed_clients.transfer_service import copy_company_with_people
+from app.domains.managed_clients.transfer_service import (
+    copy_company_with_people,
+    copy_person_domains,
+    copy_training_history,
+    count_left_behind,
+)
 from app.domains.managed_clients.workload import DEFAULT_THRESHOLDS, OVERLOAD_REASON_TEXT
 from app.domains.managed_clients.workload_service import collect_specialist_workload
 from app.models.managed_clients import (
@@ -1354,6 +1359,37 @@ async def transfer_client_data(
             source_company_id=row.company_id,
             target_tenant_id=str(target.id),
         )
+        # Срез-15: доменная история людей — в ТОЙ ЖЕ транзакции. Раздельные
+        # операции оставили бы окно, в котором люди у клиента уже есть, а их
+        # медосмотры и СИЗ ещё нет: по такому состоянию клиент увидел бы
+        # «никто не проходил медосмотр» и принял бы решение по пустоте.
+        counts = dict(result.counts)
+        counts.update(
+            await copy_person_domains(
+                trusted,
+                source_tenant_id=str(tenant.id),
+                target_tenant_id=str(target.id),
+                people_map=result.people_map,
+            )
+        )
+        counts.update(
+            await copy_training_history(
+                trusted,
+                source_tenant_id=str(tenant.id),
+                target_tenant_id=str(target.id),
+                people_map=result.people_map,
+            )
+        )
+        # Что осознанно НЕ поехало — числом: молчаливый ноль читался бы как
+        # «этого у клиента не было».
+        counts.update(
+            await count_left_behind(
+                trusted,
+                source_tenant_id=str(tenant.id),
+                source_company_id=row.company_id,
+                people_map=result.people_map,
+            )
+        )
         journal = ManagedClientTransfer(
             tenant_id=tenant.id,
             managed_client_id=mcid,
@@ -1362,7 +1398,7 @@ async def transfer_client_data(
             started_at=now,
             finished_at=datetime.now(tz=timezone.utc),
             started_by_user_id=auth.sub,
-            counts=result.counts,
+            counts=counts,
             id_map={"company": result.company_map, "people": result.people_map},
         )
         trusted.add(journal)
@@ -1379,7 +1415,7 @@ async def transfer_client_data(
             after={
                 "managed_client_id": mcid,
                 "target_tenant_slug": row.dedicated_tenant_slug,
-                "counts": result.counts,
+                "counts": counts,
             },
         )
         response = _transfer_read(journal)
