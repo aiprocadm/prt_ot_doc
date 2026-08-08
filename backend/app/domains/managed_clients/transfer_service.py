@@ -18,7 +18,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domains.managed_clients.transfer import is_person_transferable
-from app.models.master_data import Company, Person
+from app.models.master_data import Company, Person, Position, Site, Workplace
 from app.models.medical import MedicalExam, MedicalReferral, MedicalSuspension
 from app.models.ppe import PPEIssue, PPEItem
 from app.models.training import (
@@ -31,6 +31,7 @@ from app.models.training import (
 
 __all__ = [
     "TransferResult",
+    "copy_client_history",
     "copy_company_with_people",
     "copy_person_domains",
     "copy_training_history",
@@ -51,11 +52,26 @@ def _copy_value(value):
     return value
 
 
+async def _company_rows(session: AsyncSession, model, *, tenant_id: str, company_id: str):
+    """Живые строки, принадлежащие организации клиента."""
+
+    stmt = select(model).where(model.tenant_id == tenant_id, model.company_id == company_id)
+    if hasattr(model, "deleted_at"):
+        stmt = stmt.where(model.deleted_at.is_(None))
+    return list((await session.execute(stmt)).scalars().all())
+
+
 @dataclass
 class TransferResult:
     company_map: dict[str, str] = field(default_factory=dict)
     people_map: dict[str, str] = field(default_factory=dict)
     people_skipped: int = 0
+    #: Срез-16: структура организации клиента — площадки, должности, рабочие
+    #: места. Это НЕ каталог аутсорсера: у всех трёх ``company_id`` NOT NULL,
+    #: то есть они принадлежат организации клиента и едут вместе с ней.
+    site_map: dict[str, str] = field(default_factory=dict)
+    position_map: dict[str, str] = field(default_factory=dict)
+    workplace_map: dict[str, str] = field(default_factory=dict)
 
     @property
     def counts(self) -> dict[str, int]:
@@ -63,8 +79,28 @@ class TransferResult:
             "company": len(self.company_map),
             "people": len(self.people_map),
             "people_skipped": self.people_skipped,
+            "sites": len(self.site_map),
+            "positions": len(self.position_map),
+            "workplaces": len(self.workplace_map),
         }
 
+
+_SITE_FIELDS = (
+    "name",
+    "address",
+    "geo_json",
+    "hazard_class",
+    "site_type",
+    "contact_name",
+    "contact_phone",
+    "contact_email",
+    "is_hazardous_production_facility",
+    "opo_register_number",
+)
+
+_POSITION_FIELDS = ("name", "description", "safety_category", "working_conditions_class")
+
+_WORKPLACE_FIELDS = ("name", "description", "location", "working_conditions_class")
 
 _PERSON_FIELDS = (
     "first_name",
@@ -128,6 +164,47 @@ async def copy_company_with_people(
     await session.flush()
     result.company_map[src_company.id] = new_company.id
 
+    # Срез-16: структура организации ДО людей — иначе нечем перевешивать
+    # position_id/workplace_id, и они снова обнулились бы.
+    for site in await _company_rows(
+        session, Site, tenant_id=source_tenant_id, company_id=source_company_id
+    ):
+        copy = Site(
+            tenant_id=target_tenant_id,
+            company_id=new_company.id,
+            # Филиал — структура аутсорсера (строковая ссылка без FK).
+            branch_id=None,
+            **{f: _copy_value(getattr(site, f)) for f in _SITE_FIELDS},
+        )
+        session.add(copy)
+        await session.flush()
+        result.site_map[site.id] = copy.id
+
+    for position in await _company_rows(
+        session, Position, tenant_id=source_tenant_id, company_id=source_company_id
+    ):
+        copy = Position(
+            tenant_id=target_tenant_id,
+            company_id=new_company.id,
+            **{f: _copy_value(getattr(position, f)) for f in _POSITION_FIELDS},
+        )
+        session.add(copy)
+        await session.flush()
+        result.position_map[position.id] = copy.id
+
+    for workplace in await _company_rows(
+        session, Workplace, tenant_id=source_tenant_id, company_id=source_company_id
+    ):
+        copy = Workplace(
+            tenant_id=target_tenant_id,
+            company_id=new_company.id,
+            site_id=result.site_map.get(workplace.site_id) if workplace.site_id else None,
+            **{f: _copy_value(getattr(workplace, f)) for f in _WORKPLACE_FIELDS},
+        )
+        session.add(copy)
+        await session.flush()
+        result.workplace_map[workplace.id] = copy.id
+
     people = (
         (
             await session.execute(
@@ -149,9 +226,15 @@ async def copy_company_with_people(
         copy = Person(
             tenant_id=target_tenant_id,
             company_id=new_company.id,
-            # Каталожные ссылки аутсорсера в чужой арендатор не переносятся.
-            position_id=None,
-            workplace_id=None,
+            # Срез-16: должность и рабочее место принадлежат организации
+            # клиента (company_id NOT NULL), поэтому они переехали вместе с
+            # ней — ссылки ПЕРЕВЕШИВАЮТСЯ, а не обнуляются. Обнуление
+            # (срез-14) ослабляло контроль допуска: правила медосмотров и
+            # норм СИЗ считаются по должности.
+            position_id=result.position_map.get(person.position_id) if person.position_id else None,
+            workplace_id=(
+                result.workplace_map.get(person.workplace_id) if person.workplace_id else None
+            ),
             **{f: _copy_value(getattr(person, f)) for f in _PERSON_FIELDS},
         )
         session.add(copy)
@@ -628,9 +711,6 @@ async def count_left_behind(
     """
 
     from app.models.document import Document
-    from app.models.field_ops import Permit
-    from app.models.incidents import Incident
-    from app.models.journals import JournalEntry
     from app.models.training import TrainingEnrollment
 
     person_ids = list(people_map)
@@ -655,9 +735,215 @@ async def count_left_behind(
         )
         return int((await session.execute(stmt)).scalar_one())
 
+    # Срез-16 забрал допуски, журналы инструктажей и происшествия — они больше
+    # не «остались». Осталось ровно два класса, и оба по причине, а не по
+    # недосмотру: документы (нужны шаблоны и копирование объектов хранилища) и
+    # «живой» рантайм обучения (без модулей и тестов он не возобновляем).
     counts["documents_left_behind"] = await _count(Document, by_person=False)
-    counts["incidents_left_behind"] = await _count(Incident, by_person=False)
-    counts["permits_left_behind"] = await _count(Permit, by_person=True)
-    counts["journal_entries_left_behind"] = await _count(JournalEntry, by_person=True)
     counts["training_enrollments_left_behind"] = await _count(TrainingEnrollment, by_person=True)
+    return counts
+
+
+# --- Срез-16: оставшаяся история клиента -------------------------------------
+#
+# Допуски, журналы инструктажей и происшествия. Все три висят на организации
+# клиента или на его людях, то есть это его данные, а не инструменты
+# аутсорсера. Ссылки на пользователей аутсорсера (автор записи) и на его
+# пакеты документов обнуляются.
+
+_PERMIT_FIELDS = ("permit_type", "issued_at", "valid_until", "status")
+
+_JOURNAL_FIELDS = ("title", "journal_type", "started_at", "closed_at", "metadata_json")
+
+_JOURNAL_ENTRY_FIELDS = ("entry_type", "entry_date", "instructor", "notes", "metadata_json")
+
+_INCIDENT_FIELDS = (
+    "title",
+    "description",
+    "incident_type",
+    "occurred_at",
+    "location_description",
+    "severity",
+    "status",
+    "investigation_stage",
+)
+
+_INCIDENT_LOG_FIELDS = ("stage", "status", "message", "metadata_json")
+
+
+async def copy_client_history(
+    session: AsyncSession,
+    *,
+    source_tenant_id: str,
+    source_company_id: str,
+    target_tenant_id: str,
+    company_map: dict[str, str],
+    site_map: dict[str, str],
+    position_map: dict[str, str],
+    people_map: dict[str, str],
+) -> dict[str, int]:
+    """Скопировать допуски, журналы инструктажей и происшествия клиента."""
+
+    from app.models.field_ops import Permit
+    from app.models.incidents import Incident, IncidentLog, IncidentPerson
+    from app.models.journals import Journal, JournalEntry
+
+    counts: dict[str, int] = {}
+    new_company_id = company_map.get(source_company_id)
+    if new_company_id is None:
+        return counts
+    person_ids = list(people_map)
+
+    # Допуски: висят на человеке, должность теперь переезжает вместе с
+    # организацией — ссылка перевешивается, а не теряется.
+    permits = await _live_rows(session, Permit, tenant_id=source_tenant_id, person_ids=person_ids)
+    for row in permits:
+        session.add(
+            Permit(
+                tenant_id=target_tenant_id,
+                person_id=people_map[row.person_id],
+                position_id=position_map.get(row.position_id) if row.position_id else None,
+                **_fields(row, _PERMIT_FIELDS),
+                **_history_stamps(row),
+            )
+        )
+    await session.flush()
+    counts["permits"] = len(permits)
+
+    # Журналы инструктажей: сам журнал висит на организации, записи — на людях.
+    journals = await _company_rows(
+        session, Journal, tenant_id=source_tenant_id, company_id=source_company_id
+    )
+    journal_map: dict[str, str] = {}
+    for row in journals:
+        copy_row = Journal(
+            tenant_id=target_tenant_id,
+            company_id=new_company_id,
+            **_fields(row, _JOURNAL_FIELDS),
+            **_history_stamps(row),
+        )
+        session.add(copy_row)
+        await session.flush()
+        journal_map[row.id] = copy_row.id
+    counts["journals"] = len(journal_map)
+
+    entries = await _live_rows(
+        session, JournalEntry, tenant_id=source_tenant_id, person_ids=person_ids
+    )
+    entries_copied = 0
+    entries_skipped = 0
+    for row in entries:
+        new_journal = journal_map.get(row.journal_id)
+        if new_journal is None:
+            # Запись из журнала другой организации аутсорсера: journal_id
+            # NOT NULL, подставить нечего — строка остаётся у аутсорсера.
+            entries_skipped += 1
+            continue
+        session.add(
+            JournalEntry(
+                tenant_id=target_tenant_id,
+                journal_id=new_journal,
+                person_id=people_map[row.person_id],
+                **_fields(row, _JOURNAL_ENTRY_FIELDS),
+                **_history_stamps(row),
+            )
+        )
+        entries_copied += 1
+    await session.flush()
+    counts["journal_entries"] = entries_copied
+    counts["journal_entries_skipped"] = entries_skipped
+
+    # Происшествия: висят на организации И на площадке (site_id NOT NULL),
+    # поэтому переносятся только после площадок (срез-16 их и переносит).
+    incidents = await _company_rows(
+        session, Incident, tenant_id=source_tenant_id, company_id=source_company_id
+    )
+    incident_map: dict[str, str] = {}
+    incidents_skipped = 0
+    for row in incidents:
+        new_site = site_map.get(row.site_id)
+        if new_site is None:
+            # Площадка чужой организации: site_id NOT NULL, подставить нечего.
+            incidents_skipped += 1
+            continue
+        copy_row = Incident(
+            tenant_id=target_tenant_id,
+            company_id=new_company_id,
+            site_id=new_site,
+            # Пакет документов — инструмент аутсорсера, он не переносится.
+            pack_id=None,
+            **_fields(row, _INCIDENT_FIELDS),
+            **_history_stamps(row),
+        )
+        session.add(copy_row)
+        await session.flush()
+        incident_map[row.id] = copy_row.id
+    counts["incidents"] = len(incident_map)
+    counts["incidents_skipped"] = incidents_skipped
+
+    if incident_map:
+        old_ids = list(incident_map)
+        participants: list = []
+        logs: list = []
+        for start in range(0, len(old_ids), _IN_CHUNK):
+            chunk = old_ids[start : start + _IN_CHUNK]
+            participants.extend(
+                (
+                    await session.execute(
+                        select(IncidentPerson).where(
+                            IncidentPerson.tenant_id == source_tenant_id,
+                            IncidentPerson.incident_id.in_(chunk),
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            logs.extend(
+                (
+                    await session.execute(
+                        select(IncidentLog).where(
+                            IncidentLog.tenant_id == source_tenant_id,
+                            IncidentLog.incident_id.in_(chunk),
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+        participants_copied = 0
+        participants_skipped = 0
+        for row in participants:
+            new_person = people_map.get(row.person_id)
+            if new_person is None:
+                # Участник — обезличенный или удалённый человек: его копии в
+                # новом арендаторе нет (разд. 66.2), связку не создаём.
+                participants_skipped += 1
+                continue
+            session.add(
+                IncidentPerson(
+                    tenant_id=target_tenant_id,
+                    incident_id=incident_map[row.incident_id],
+                    person_id=new_person,
+                    role=row.role,
+                    **_history_stamps(row),
+                )
+            )
+            participants_copied += 1
+        for row in logs:
+            session.add(
+                IncidentLog(
+                    tenant_id=target_tenant_id,
+                    incident_id=incident_map[row.incident_id],
+                    # Автор записи — пользователь аутсорсера.
+                    author_id=None,
+                    **_fields(row, _INCIDENT_LOG_FIELDS),
+                    **_history_stamps(row),
+                )
+            )
+        await session.flush()
+        counts["incident_participants"] = participants_copied
+        counts["incident_participants_skipped"] = participants_skipped
+        counts["incident_logs"] = len(logs)
+
     return counts

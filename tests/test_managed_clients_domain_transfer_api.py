@@ -553,4 +553,4 @@ async def test_left_behind_is_reported_as_numbers(sessionmaker):
         # Документы требуют шаблонов и копирования объектов хранилища —
         # отдельная работа; клиент видит её объём.
         assert out.counts["documents_left_behind"] == 1
-        assert out.counts["permits_left_behind"] == 0
+        assert out.counts["training_enrollments_left_behind"] == 0
