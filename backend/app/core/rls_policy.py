@@ -150,6 +150,7 @@ RLS_ENABLED_TABLES: frozenset[str] = frozenset(
         "managed_client_access",
         "managed_client_consent",
         "managed_client_context_session",
+        "managed_client_transfer",
         "marketplace_catalog_items",
         "medical_exam",
         "medical_factor",

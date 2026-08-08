@@ -67,6 +67,11 @@ from app.domains.managed_clients.session_service import (
     close_open_sessions,
     close_open_sessions_for_client,
 )
+from app.domains.managed_clients.transfer import (
+    TransferError,
+    validate_transfer_preconditions,
+)
+from app.domains.managed_clients.transfer_service import copy_company_with_people
 from app.domains.managed_clients.workload import DEFAULT_THRESHOLDS, OVERLOAD_REASON_TEXT
 from app.domains.managed_clients.workload_service import collect_specialist_workload
 from app.models.managed_clients import (
@@ -74,6 +79,7 @@ from app.models.managed_clients import (
     ManagedClientAccess,
     ManagedClientConsent,
     ManagedClientContextSession,
+    ManagedClientTransfer,
 )
 from app.models.tenanting import Tenant
 from app.modules.audit.writer import write_audit_event
@@ -105,6 +111,7 @@ from app.schemas.managed_clients import (
     PortfolioSummary,
     SpecialistWorkloadRead,
     SpecialistWorkloadResponse,
+    TransferRead,
     WorkloadSummary,
     WorkloadThresholdsRead,
 )
@@ -1242,6 +1249,142 @@ async def convert_to_dedicated(
         )
         await trusted.commit()
     return result
+
+
+def _transfer_read(row: ManagedClientTransfer) -> TransferRead:
+    return TransferRead(
+        id=row.id,
+        managed_client_id=row.managed_client_id,
+        target_tenant_slug=row.target_tenant_slug,
+        status=row.status,
+        started_at=row.started_at,
+        finished_at=row.finished_at,
+        started_by_user_id=row.started_by_user_id,
+        counts=dict(row.counts or {}),
+    )
+
+
+@router.get("/{mcid}/transfers", response_model=list[TransferRead])
+async def list_client_transfers(
+    mcid: str, tenant: TenantDep, session: SessionDep, access: Access
+) -> list[TransferRead]:
+    """Журнал переносов клиента — часть истории ведения."""
+
+    TenantContextValidator.ensure_tenant_context(tenant)
+    await _require_enabled(session, tenant)
+    await _get(session, tenant, mcid)
+    rows = (
+        (
+            await session.execute(
+                select(ManagedClientTransfer)
+                .where(
+                    ManagedClientTransfer.tenant_id == tenant.id,
+                    ManagedClientTransfer.managed_client_id == mcid,
+                )
+                .order_by(ManagedClientTransfer.started_at.desc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return [_transfer_read(row) for row in rows]
+
+
+@router.post("/{mcid}/transfer", response_model=TransferRead)
+async def transfer_client_data(
+    mcid: str,
+    request: Request,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: Access,
+    auth: Annotated[AuthContext, Depends(get_auth_ctx)],
+) -> TransferRead:
+    """Перенос данных клиента в его арендатор (разд. 49.1, продолжение перевода).
+
+    Копирует организацию и сотрудников; исходные строки остаются историей в
+    пространстве аутсорсера, соответствие старых id новым — в журнале
+    (без него «сохранение timeline» превращается в угадывание). Аудит и
+    timeline не переносятся принципиально: хеш-цепочка аудита живёт в своём
+    арендаторе, и переписать её в чужой значит её сломать.
+    """
+
+    TenantContextValidator.ensure_tenant_context(tenant)
+    await _require_enabled(session, tenant)
+    row = await _get(session, tenant, mcid)
+
+    prior = (
+        (
+            await session.execute(
+                select(ManagedClientTransfer).where(
+                    ManagedClientTransfer.tenant_id == tenant.id,
+                    ManagedClientTransfer.managed_client_id == mcid,
+                    ManagedClientTransfer.status == "completed",
+                )
+            )
+        )
+        .scalars()
+        .first()
+    )
+    try:
+        validate_transfer_preconditions(
+            mode=row.mode,
+            dedicated_tenant_slug=row.dedicated_tenant_slug,
+            company_id=row.company_id,
+            has_completed_transfer=prior is not None,
+        )
+    except TransferError as exc:
+        raise _err("MANAGED_CLIENT_TRANSFER_INVALID", str(exc), status.HTTP_409_CONFLICT) from exc
+
+    now = datetime.now(tz=timezone.utc)
+    # Та же доверенная сессия, что у перевода: копии пишутся в ЧУЖОЙ арендатор,
+    # и под FORCE RLS сессия запроса их не пропустит (урок фикса среза-13).
+    async with _trusted_session() as trusted:
+        target = (
+            await trusted.execute(select(Tenant).where(Tenant.slug == row.dedicated_tenant_slug))
+        ).scalar_one_or_none()
+        if target is None:
+            raise _err(
+                "MANAGED_CLIENT_TRANSFER_TARGET_MISSING",
+                "Арендатор клиента не найден — перевод не завершён или арендатор удалён",
+                status.HTTP_409_CONFLICT,
+            )
+        result = await copy_company_with_people(
+            trusted,
+            source_tenant_id=str(tenant.id),
+            source_company_id=row.company_id,
+            target_tenant_id=str(target.id),
+        )
+        journal = ManagedClientTransfer(
+            tenant_id=tenant.id,
+            managed_client_id=mcid,
+            target_tenant_slug=row.dedicated_tenant_slug,
+            status="completed",
+            started_at=now,
+            finished_at=datetime.now(tz=timezone.utc),
+            started_by_user_id=auth.sub,
+            counts=result.counts,
+            id_map={"company": result.company_map, "people": result.people_map},
+        )
+        trusted.add(journal)
+        await trusted.flush()
+        await write_audit_event(
+            session=trusted,
+            request=request,
+            tenant_id=str(tenant.id),
+            actor_id=auth.sub,
+            action="managed_client.data_transferred",
+            resource_type="managed_client_transfer",
+            resource_id=journal.id,
+            before=None,
+            after={
+                "managed_client_id": mcid,
+                "target_tenant_slug": row.dedicated_tenant_slug,
+                "counts": result.counts,
+            },
+        )
+        response = _transfer_read(journal)
+        await trusted.commit()
+    return response
 
 
 @router.post("", response_model=ManagedClientRead, status_code=status.HTTP_201_CREATED)

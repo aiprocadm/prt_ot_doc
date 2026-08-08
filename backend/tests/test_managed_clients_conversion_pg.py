@@ -174,6 +174,47 @@ def test_conversion_survives_force_rls_with_unprivileged_role(monkeypatch) -> No
         assert out.client.mode == ManagedClientMode.DEDICATED
         assert out.tenant_created, "bootstrap обязан отчитаться о созданном"
 
+        # Срез-14: перенос данных под той же непривилегированной ролью —
+        # копии людей пишутся в ЧУЖОЙ арендатор, PG-тест обязателен (урок фикса).
+        from app.models.master_data import Person
+
+        seed_engine = create_async_engine(admin_engine_url)
+        try:
+            async with async_sessionmaker(seed_engine, expire_on_commit=False)() as s:
+                company_row = (
+                    await s.execute(
+                        select(Company).where(Company.tenant_id == outsourcer_id)
+                    )
+                ).scalars().first()
+                s.add(
+                    Person(
+                        tenant_id=outsourcer_id,
+                        company_id=company_row.id,
+                        first_name="Иван",
+                        last_name="Иванов",
+                        position_title="Слесарь",
+                    )
+                )
+                await s.commit()
+        finally:
+            await seed_engine.dispose()
+
+        async with dbs.AsyncSessionLocal(
+            tenant="outsourcer", include_public=True, create_schema=False
+        ) as request_session2:
+            request_session2.info["tenant_id"] = outsourcer_id
+            await dbs.rearm_session_tenant_context(request_session2)
+            transfer_out = await routes.transfer_client_data(
+                mcid=client_id,
+                request=request_ns,
+                tenant=tenant_ns,
+                session=request_session2,
+                access=SimpleNamespace(),
+                auth=auth_ns,
+            )
+        assert transfer_out.status == "completed"
+        assert transfer_out.counts["people"] == 1
+
         # Проверка под админом: арендатор создан, владелец есть, клиент переведён.
         verify_engine = create_async_engine(admin_engine_url)
         try:
@@ -193,6 +234,18 @@ def test_conversion_survives_force_rls_with_unprivileged_role(monkeypatch) -> No
                 assert mc_row.mode == ManagedClientMode.DEDICATED
                 assert mc_row.dedicated_tenant_slug == "romashka-dedicated"
                 assert mc_row.company_id is not None  # ссылка на историю жива
+                from app.models.master_data import Person as PersonModel
+
+                copied = (
+                    (
+                        await s.execute(
+                            select(PersonModel).where(PersonModel.tenant_id == created.id)
+                        )
+                    )
+                    .scalars()
+                    .all()
+                )
+                assert [p.last_name for p in copied] == ["Иванов"]
         finally:
             await verify_engine.dispose()
 
