@@ -33,6 +33,7 @@ __all__ = [
     "TransferResult",
     "copy_client_history",
     "copy_company_with_people",
+    "copy_documents",
     "copy_norms",
     "copy_person_domains",
     "copy_training_history",
@@ -705,27 +706,35 @@ async def count_left_behind(
     """Что этот перенос НЕ забрал — числом, а не молчанием.
 
     Ноль в отчёте читается как «этого не было», поэтому осознанно оставленное
-    показывается отдельными счётчиками ``*_left_behind``: документы (нужны
-    шаблоны и копирование объектов хранилища), допуски и журналы инструктажей,
-    инциденты, «живой» рантайм обучения. Каждый из них — отдельная работа, и
-    клиент должен видеть её объём, а не догадываться о ней.
+    показывается отдельными счётчиками ``*_left_behind``. После среза-19 их два:
+
+    * **«живой» рантайм обучения** — без модулей, тестов и попыток он у клиента
+      не возобновляем, а огрызок курса хуже его отсутствия;
+    * **согласия субъектов на обработку ПДн** — решение ВЛАДЕЛЬЦА (2026-08-08):
+      клиент собирает их заново. Причина не техническая: согласие даётся
+      КОНКРЕТНОМУ оператору на конкретные цели, и переписать его на другого
+      оператора нельзя — это была бы подделка основания обработки.
+
+    Документы уехали (срез-19); то, что в них пропущено осознанно, считают
+    счётчики самого переноса документов.
     """
 
-    from app.models.document import Document
+    from app.models.privacy_consents import PdnConsent
     from app.models.training import TrainingEnrollment
 
     person_ids = list(people_map)
     counts: dict[str, int] = {}
 
-    async def _count(model, *, by_person: bool) -> int:
+    async def _count(model, *, by_person: bool, person_field: str = "person_id") -> int:
         total = 0
         if by_person:
+            column = getattr(model, person_field)
             for start in range(0, len(person_ids), _IN_CHUNK):
                 chunk = person_ids[start : start + _IN_CHUNK]
                 stmt = (
                     select(func.count())
                     .select_from(model)
-                    .where(model.tenant_id == source_tenant_id, model.person_id.in_(chunk))
+                    .where(model.tenant_id == source_tenant_id, column.in_(chunk))
                 )
                 total += int((await session.execute(stmt)).scalar_one())
             return total
@@ -736,12 +745,13 @@ async def count_left_behind(
         )
         return int((await session.execute(stmt)).scalar_one())
 
-    # Срез-16 забрал допуски, журналы инструктажей и происшествия — они больше
-    # не «остались». Осталось ровно два класса, и оба по причине, а не по
-    # недосмотру: документы (нужны шаблоны и копирование объектов хранилища) и
-    # «живой» рантайм обучения (без модулей и тестов он не возобновляем).
-    counts["documents_left_behind"] = await _count(Document, by_person=False)
+    # Срез-16 забрал допуски, журналы и происшествия, срез-19 — документы.
+    # Остался один класс, и по причине, а не по недосмотру: «живой» рантайм
+    # обучения (без модулей и тестов он у клиента не возобновляем).
     counts["training_enrollments_left_behind"] = await _count(TrainingEnrollment, by_person=True)
+    counts["pdn_consents_left_behind"] = await _count(
+        PdnConsent, by_person=True, person_field="subject_person_id"
+    )
     return counts
 
 
@@ -1068,3 +1078,243 @@ async def copy_norms(
     counts["ppe_norms_skipped"] = ppe_skipped
 
     return counts
+
+
+# --- Срез-19: документы клиента и их файлы -----------------------------------
+#
+# Последний класс данных, который оставался у аутсорсера. Он ждал решения
+# ВЛАДЕЛЬЦА: у документа ``created_by`` NOT NULL с RESTRICT, то есть копию
+# нужно на кого-то записать, а специалиста аутсорсера в арендаторе клиента
+# не существует. Решение (2026-08-08): **авторство копий — владелец клиента**.
+# Это честно: в своём арендаторе документ принадлежит клиенту, а кто его
+# готовил, видно в журнале доступа (разд. 63.2) и в аудите аутсорсера.
+#
+# Три решения, которые важнее кода:
+#
+# * **шаблон копируется ЗАГЛУШКОЙ.** ``template_id`` NOT NULL с RESTRICT —
+#   без шаблона документ не вставить. Но тело шаблона это методика
+#   аутсорсера, его интеллектуальная работа: переносится карточка (код,
+#   название, назначение) со статусом «архивный» и без файла. Клиент видит,
+#   ПО ЧЕМУ сделан документ, но не получает инструмент.
+# * **незавершённые документы не переносятся.** Черновик и «на проверке» —
+#   это работа аутсорсера в процессе, а не результат клиента: без тела
+#   шаблона довести её всё равно нельзя. Считаются числом.
+# * **статус готового документа сохраняется.** Сбросить «подписан» в «архив»
+#   значит сказать клиенту, что его приказ не действует. Цепочка согласования
+#   и ЭЦП остаются у аутсорсера как доказательство — их можно запросить
+#   журналом доступа; сами документы от этого силы не теряют.
+
+#: Больше файла в память не берём: копия идёт через чтение целиком, и один
+#: гигантский вложенный архив иначе положит процесс переноса.
+_MAX_COPY_BYTES = 64 * 1024 * 1024
+
+_TEMPLATE_STUB_FIELDS = ("code", "name", "domain", "description", "category")
+
+_FILE_FIELDS = ("sha256", "size", "mime", "original_name", "kind", "is_quarantined", "scan_status")
+
+_DOCUMENT_FIELDS = ("status", "content_sha256")
+
+#: Документы в этих состояниях — незаконченная работа аутсорсера.
+_UNFINISHED_STATUSES = ("draft", "review")
+
+
+def _target_prefix(slug: str) -> str:
+    return f"tenants/{slug}/transferred"
+
+
+async def copy_documents(
+    session: AsyncSession,
+    *,
+    source_tenant_id: str,
+    target_tenant_id: str,
+    target_tenant_slug: str,
+    source_company_id: str,
+    company_map: dict[str, str],
+    people_map: dict[str, str],
+    site_map: dict[str, str],
+    owner_user_id: str,
+    storage=None,
+) -> dict[str, int]:
+    """Скопировать готовые документы организации клиента вместе с файлами."""
+
+    from app.models.document import Document
+    from app.models.templates import Template, TemplateStatus
+
+    if storage is None:  # pragma: no cover - в тестах подставляется явно
+        from app.services.file_storage import FileStorageService
+
+        storage = FileStorageService.default()
+
+    counts: dict[str, int] = {}
+    new_company_id = company_map.get(source_company_id)
+    if new_company_id is None:
+        return counts
+
+    rows = (
+        (
+            await session.execute(
+                select(Document).where(
+                    Document.tenant_id == source_tenant_id,
+                    Document.company_id == source_company_id,
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    finished = [
+        row
+        for row in rows
+        if str(getattr(row.status, "value", row.status)) not in _UNFINISHED_STATUSES
+    ]
+    counts["documents_unfinished_skipped"] = len(rows) - len(finished)
+    if not finished:
+        counts["documents"] = 0
+        return counts
+
+    template_map = await _copy_cards(
+        session,
+        Template,
+        {row.template_id for row in finished if row.template_id},
+        source_tenant_id=source_tenant_id,
+        target_tenant_id=target_tenant_id,
+        fields=_TEMPLATE_STUB_FIELDS,
+        dedupe_field="code",
+        # Заглушка: тело шаблона (методика аутсорсера) не переносится.
+        extra={
+            "storage_key": None,
+            "current_version_id": None,
+            "status": TemplateStatus.ARCHIVED,
+            "metadata_json": {"transferred_stub": True},
+        },
+    )
+    counts["template_stubs"] = len(template_map)
+
+    file_map, files_skipped = await _copy_files(
+        session,
+        {row.file_id for row in finished if row.file_id}
+        | {row.signed_file_id for row in finished if row.signed_file_id},
+        source_tenant_id=source_tenant_id,
+        target_tenant_id=target_tenant_id,
+        target_prefix=_target_prefix(target_tenant_slug),
+        new_company_id=new_company_id,
+        storage=storage,
+    )
+    counts["files"] = len(file_map)
+    counts["files_skipped"] = files_skipped
+
+    copied = 0
+    skipped_no_template = 0
+    for row in finished:
+        new_template = template_map.get(row.template_id) if row.template_id else None
+        if new_template is None:
+            # template_id NOT NULL: без карточки шаблона строку не создать.
+            skipped_no_template += 1
+            continue
+        new_file = file_map.get(row.file_id) if row.file_id else None
+        session.add(
+            Document(
+                tenant_id=target_tenant_id,
+                company_id=new_company_id,
+                person_id=people_map.get(row.person_id) if row.person_id else None,
+                site_id=site_map.get(row.site_id) if row.site_id else None,
+                # Подразделения, договоры, заказы и счета — это либо структура,
+                # которую перенос не забирал, либо коммерция аутсорсера.
+                department_id=None,
+                contract_id=None,
+                order_id=None,
+                invoice_id=None,
+                template_id=new_template,
+                # Версия шаблона осталась у аутсорсера вместе с телом.
+                template_version_id=None,
+                file_id=new_file,
+                signed_file_id=(file_map.get(row.signed_file_id) if row.signed_file_id else None),
+                # Прямой ключ хранилища — legacy-поле рядом с file_id; у копии
+                # ключ другой, и дублировать его второй раз незачем.
+                storage_key=None,
+                # Задание генерации — рантайм аутсорсера.
+                job_id=None,
+                created_by=owner_user_id,
+                created_at=row.created_at,
+                **_fields(row, _DOCUMENT_FIELDS),
+            )
+        )
+        copied += 1
+    await session.flush()
+    counts["documents"] = copied
+    counts["documents_skipped_no_template"] = skipped_no_template
+    return counts
+
+
+async def _copy_files(
+    session: AsyncSession,
+    ids: set[str],
+    *,
+    source_tenant_id: str,
+    target_tenant_id: str,
+    target_prefix: str,
+    new_company_id: str,
+    storage,
+) -> tuple[dict[str, str], int]:
+    """Скопировать файлы вместе с объектами хранилища.
+
+    Ссылаться на ЧУЖОЙ объект хранилища нельзя: удаление у аутсорсера убило бы
+    файл у клиента, а доступ к объекту чужого арендатора — это ровно та утечка,
+    от которой защищает RLS в базе. Поэтому байты копируются в префикс нового
+    арендатора, и у копии свой ключ.
+
+    Объекты копируются внутри транзакции переноса: если она откатится, в
+    хранилище останутся осиротевшие объекты. Это осознанный размен — потерянный
+    файл у клиента хуже лишнего объекта у нас.
+    """
+
+    from app.models.file import File
+
+    mapping: dict[str, str] = {}
+    skipped = 0
+    if not ids:
+        return mapping, skipped
+
+    id_list = [item for item in ids if item]
+    rows: list = []
+    for start in range(0, len(id_list), _IN_CHUNK):
+        rows.extend(
+            (
+                await session.execute(
+                    select(File).where(
+                        File.tenant_id == source_tenant_id,
+                        File.id.in_(id_list[start : start + _IN_CHUNK]),
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+    for row in rows:
+        if row.size is not None and row.size > _MAX_COPY_BYTES:
+            skipped += 1
+            continue
+        try:
+            payload = storage.get(row.storage_key)
+        except Exception:  # noqa: BLE001 - объект мог быть удалён из хранилища
+            # Строка есть, объекта нет: копировать нечего, и молча создавать
+            # «файл» без содержимого — обман. Считаем числом.
+            skipped += 1
+            continue
+        copy_row = File(
+            tenant_id=target_tenant_id,
+            bucket=row.bucket,
+            company_id=new_company_id,
+            meta_json=_copy_value(row.meta_json),
+            storage_key="",  # заполняется ниже: ключ строится по id копии
+            **_fields(row, _FILE_FIELDS),
+            **_history_stamps(row),
+        )
+        session.add(copy_row)
+        await session.flush()
+        copy_row.storage_key = f"{target_prefix}/{copy_row.id}"
+        storage.put(copy_row.storage_key, payload, content_type=row.mime)
+        mapping[row.id] = copy_row.id
+    await session.flush()
+    return mapping, skipped

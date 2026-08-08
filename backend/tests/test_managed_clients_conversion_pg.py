@@ -183,10 +183,10 @@ def test_conversion_survives_force_rls_with_unprivileged_role(monkeypatch) -> No
         try:
             async with async_sessionmaker(seed_engine, expire_on_commit=False)() as s:
                 company_row = (
-                    await s.execute(
-                        select(Company).where(Company.tenant_id == outsourcer_id)
-                    )
-                ).scalars().first()
+                    (await s.execute(select(Company).where(Company.tenant_id == outsourcer_id)))
+                    .scalars()
+                    .first()
+                )
                 # Срез-16: структура организации клиента (площадка/должность/
                 # рабочее место) едет вместе с ней, ссылки человека
                 # перевешиваются. На PG здесь настоящие NOT NULL и нативные
@@ -292,6 +292,50 @@ def test_conversion_survives_force_rls_with_unprivileged_role(monkeypatch) -> No
                         issued_at=date(2026, 1, 20),
                     )
                 )
+                # Срез-19: документ клиента с файлом. На PostgreSQL здесь
+                # настоящие RESTRICT (шаблон, автор) и FORCE RLS: копия
+                # пишется в ЧУЖОЙ арендатор, и любая из этих проверок
+                # сработает по-настоящему, а не «как на SQLite».
+                from app.models.document import Document, DocumentStatus
+                from app.models.file import File, FileKind, FileScanStatus
+                from app.models.templates import Template, TemplateStatus
+                from app.services.file_storage import FileStorageService
+
+                template = Template(
+                    tenant_id=outsourcer_id,
+                    code="INSTR-PG",
+                    name="Инструкция по ОТ",
+                    storage_key="tenants/outsourcer/templates/instr.docx",
+                    status=TemplateStatus.ACTIVE,
+                )
+                doc_file = File(
+                    tenant_id=outsourcer_id,
+                    storage_key="tenants/outsourcer/docs/pg.pdf",
+                    bucket="ptd",
+                    sha256="c" * 64,
+                    size=9,
+                    mime="application/pdf",
+                    original_name="prikaz.pdf",
+                    kind=FileKind.DOCUMENT,
+                    is_quarantined=False,
+                    scan_status=FileScanStatus.CLEAN,
+                )
+                s.add_all([template, doc_file])
+                await s.flush()
+                FileStorageService.default().put(
+                    doc_file.storage_key, b"PDF-BYTES", content_type="application/pdf"
+                )
+                s.add(
+                    Document(
+                        tenant_id=outsourcer_id,
+                        company_id=company_row.id,
+                        person_id=person_row.id,
+                        template_id=template.id,
+                        status=DocumentStatus.SIGNED,
+                        file_id=doc_file.id,
+                        created_by=admin_id,
+                    )
+                )
                 await s.commit()
         finally:
             await seed_engine.dispose()
@@ -323,6 +367,11 @@ def test_conversion_survives_force_rls_with_unprivileged_role(monkeypatch) -> No
         assert transfer_out.counts["positions"] == 1
         assert transfer_out.counts["workplaces"] == 1
         assert transfer_out.counts["incidents"] == 1
+        # Срез-19: документы, их файлы и шаблоны-заглушки.
+        assert transfer_out.counts["documents"] == 1
+        assert transfer_out.counts["files"] == 1
+        assert transfer_out.counts["template_stubs"] == 1
+        assert transfer_out.counts["documents_skipped_no_template"] == 0
 
         # Проверка под админом: арендатор создан, владелец есть, клиент переведён.
         verify_engine = create_async_engine(admin_engine_url)

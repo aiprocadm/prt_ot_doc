@@ -74,6 +74,7 @@ from app.domains.managed_clients.transfer import (
 from app.domains.managed_clients.transfer_service import (
     copy_client_history,
     copy_company_with_people,
+    copy_documents,
     copy_norms,
     copy_person_domains,
     copy_training_history,
@@ -82,6 +83,7 @@ from app.domains.managed_clients.transfer_service import (
 from app.domains.managed_clients.workload import DEFAULT_THRESHOLDS, OVERLOAD_REASON_TEXT
 from app.domains.managed_clients.workload_service import collect_specialist_workload
 from app.models.audit_log import AuditLog
+from app.models.identity import User
 from app.models.managed_clients import (
     ManagedClient,
     ManagedClientAccess,
@@ -89,6 +91,7 @@ from app.models.managed_clients import (
     ManagedClientContextSession,
     ManagedClientTransfer,
 )
+from app.models.tenant_billing import RoleEnum
 from app.models.tenanting import Tenant
 from app.modules.audit.writer import write_audit_event
 from app.schemas.managed_clients import (
@@ -1481,6 +1484,39 @@ async def transfer_client_data(
                 people_map=result.people_map,
             )
         )
+        # Срез-19: документы клиента и их файлы. Владелец решил (2026-08-08),
+        # что авторство копий записывается на ВЛАДЕЛЬЦА КЛИЕНТА: в своём
+        # арендаторе документ принадлежит клиенту, а кто его готовил, видно в
+        # журнале доступа (разд. 63.2). Без владельца документы не переносим —
+        # приписать их первому попавшемуся пользователю значит соврать в поле,
+        # которое потом читают как «кто это сделал».
+        owner = (
+            (
+                await trusted.execute(
+                    select(User)
+                    .where(User.tenant_id == target.id, User.role == RoleEnum.OWNER)
+                    .order_by(User.created_at.asc())
+                )
+            )
+            .scalars()
+            .first()
+        )
+        if owner is not None:
+            counts.update(
+                await copy_documents(
+                    trusted,
+                    source_tenant_id=str(tenant.id),
+                    target_tenant_id=str(target.id),
+                    target_tenant_slug=str(target.slug),
+                    source_company_id=row.company_id,
+                    company_map=result.company_map,
+                    people_map=result.people_map,
+                    site_map=result.site_map,
+                    owner_user_id=str(owner.id),
+                )
+            )
+        else:
+            counts["documents_skipped_no_owner"] = 1
         counts.update(
             await copy_training_history(
                 trusted,
