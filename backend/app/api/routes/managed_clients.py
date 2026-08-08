@@ -74,6 +74,7 @@ from app.domains.managed_clients.transfer import (
 from app.domains.managed_clients.transfer_service import (
     copy_client_history,
     copy_company_with_people,
+    copy_norms,
     copy_person_domains,
     copy_training_history,
     count_left_behind,
@@ -1371,6 +1372,14 @@ async def transfer_client_data(
                 source_tenant_id=str(tenant.id),
                 target_tenant_id=str(target.id),
                 people_map=result.people_map,
+            )
+        )
+        counts.update(
+            await copy_norms(
+                trusted,
+                source_tenant_id=str(tenant.id),
+                target_tenant_id=str(target.id),
+                position_map=result.position_map,
             )
         )
         counts.update(

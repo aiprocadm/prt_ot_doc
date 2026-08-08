@@ -33,6 +33,7 @@ __all__ = [
     "TransferResult",
     "copy_client_history",
     "copy_company_with_people",
+    "copy_norms",
     "copy_person_domains",
     "copy_training_history",
     "count_left_behind",
@@ -945,5 +946,125 @@ async def copy_client_history(
         counts["incident_participants"] = participants_copied
         counts["incident_participants_skipped"] = participants_skipped
         counts["incident_logs"] = len(logs)
+
+    return counts
+
+
+# --- Срез-17: нормы медосмотров и СИЗ ----------------------------------------
+#
+# Нормы висят на ДОЛЖНОСТИ, а должность с срезом-16 переезжает вместе с
+# организацией клиента — значит, нормы стало на что вешать. Без них у клиента
+# в новом арендаторе не считается ни периодичность медосмотров, ни положенные
+# СИЗ: контроль допуска молча падает на «сойдёт любой действующий осмотр».
+#
+# Опасности (`risk_hazards`) — арендаторский справочник, но не методика: это
+# универсальные наименования вредных факторов, без которых норма не существует
+# (у нормы СИЗ ``hazard_id`` NOT NULL). Копируются КАРТОЧКИ использованных
+# опасностей — без вложенного файла обоснования (он в хранилище аутсорсера).
+
+_HAZARD_CARD_FIELDS = ("code", "title", "module", "description", "medical_factor_code")
+
+_MEDICAL_NORM_FIELDS = ("exam_kind", "interval_days", "working_conditions_class")
+
+_PPE_NORM_FIELDS = ("item_name", "quantity", "interval_days")
+
+
+async def copy_norms(
+    session: AsyncSession,
+    *,
+    source_tenant_id: str,
+    target_tenant_id: str,
+    position_map: dict[str, str],
+) -> dict[str, int]:
+    """Скопировать нормы медосмотров и СИЗ по перенесённым должностям."""
+
+    from app.models.medical import MedicalNorm
+    from app.models.ppe import PPENorm
+    from app.models.risk import RiskHazard
+
+    counts: dict[str, int] = {}
+    if not position_map:
+        return counts
+    position_ids = list(position_map)
+
+    async def _by_position(model):
+        rows: list = []
+        for start in range(0, len(position_ids), _IN_CHUNK):
+            chunk = position_ids[start : start + _IN_CHUNK]
+            stmt = select(model).where(
+                model.tenant_id == source_tenant_id, model.position_id.in_(chunk)
+            )
+            if hasattr(model, "deleted_at"):
+                stmt = stmt.where(model.deleted_at.is_(None))
+            rows.extend((await session.execute(stmt)).scalars().all())
+        return rows
+
+    medical_norms = await _by_position(MedicalNorm)
+    ppe_norms = await _by_position(PPENorm)
+
+    hazard_ids = {row.hazard_id for row in medical_norms if row.hazard_id}
+    hazard_ids |= {row.hazard_id for row in ppe_norms if row.hazard_id}
+    hazard_map = await _copy_cards(
+        session,
+        RiskHazard,
+        hazard_ids,
+        source_tenant_id=source_tenant_id,
+        target_tenant_id=target_tenant_id,
+        fields=_HAZARD_CARD_FIELDS,
+        dedupe_field="code",
+        # Файл обоснования лежит в хранилище аутсорсера — ссылку не тащим.
+        extra={"document_file_id": None},
+    )
+    counts["risk_hazards"] = len(hazard_map)
+
+    for row in medical_norms:
+        session.add(
+            MedicalNorm(
+                tenant_id=target_tenant_id,
+                position_id=position_map[row.position_id],
+                # hazard_id у медицинской нормы необязателен: NULL означает
+                # норму «по должности вообще», её смысл не теряется.
+                hazard_id=hazard_map.get(row.hazard_id) if row.hazard_id else None,
+                **_fields(row, _MEDICAL_NORM_FIELDS),
+                **_history_stamps(row),
+            )
+        )
+    await session.flush()
+    counts["medical_norms"] = len(medical_norms)
+
+    item_ids = {row.item_id for row in ppe_norms if row.item_id}
+    item_map = await _copy_cards(
+        session,
+        PPEItem,
+        item_ids,
+        source_tenant_id=source_tenant_id,
+        target_tenant_id=target_tenant_id,
+        fields=_PPE_ITEM_CARD_FIELDS,
+        dedupe_field="name",
+    )
+
+    ppe_copied = 0
+    ppe_skipped = 0
+    for row in ppe_norms:
+        new_hazard = hazard_map.get(row.hazard_id) if row.hazard_id else None
+        if new_hazard is None:
+            # hazard_id у нормы СИЗ NOT NULL: без карточки опасности строку
+            # не создать (например, опасность мягко удалена).
+            ppe_skipped += 1
+            continue
+        session.add(
+            PPENorm(
+                tenant_id=target_tenant_id,
+                position_id=position_map[row.position_id],
+                hazard_id=new_hazard,
+                item_id=item_map.get(row.item_id) if row.item_id else None,
+                **_fields(row, _PPE_NORM_FIELDS),
+                **_history_stamps(row),
+            )
+        )
+        ppe_copied += 1
+    await session.flush()
+    counts["ppe_norms"] = ppe_copied
+    counts["ppe_norms_skipped"] = ppe_skipped
 
     return counts
