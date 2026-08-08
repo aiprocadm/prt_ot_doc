@@ -550,7 +550,11 @@ async def test_left_behind_is_reported_as_numbers(sessionmaker):
         await session.flush()
 
         out = await _transfer(session, client.id)
-        # Документы требуют шаблонов и копирования объектов хранилища —
-        # отдельная работа; клиент видит её объём.
-        assert out.counts["documents_left_behind"] == 1
+        # Срез-19 забрал документы, но в арендаторе клиента этой фикстуры нет
+        # владельца — значит, авторство копий записывать не на кого. Молча
+        # приписать их случайному пользователю нельзя, поэтому перенос
+        # документов не выполняется вовсе и говорит об этом числом.
+        assert out.counts["documents_skipped_no_owner"] == 1
+        assert "documents" not in out.counts
         assert out.counts["training_enrollments_left_behind"] == 0
+        assert out.counts["pdn_consents_left_behind"] == 0
