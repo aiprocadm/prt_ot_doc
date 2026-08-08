@@ -7,14 +7,37 @@ rather than a hash. This module encrypts them with AES-256-GCM.
 Storage formats
 ---------------
 
-* ``enc:v2:<kid>:<base64(nonce[12] || ciphertext || tag)>`` — current. The key id is
-  stored WITH the ciphertext, which is what makes rotation possible without downtime:
-  old rows keep naming the key that can still decrypt them while new writes already
-  use the new key.
+* ``enc:v3:<kid>:<base64(nonce[12] || ciphertext || tag)>`` — current. Same envelope as
+  v2, but the AES key is DERIVED PER TENANT from the keyring key (see below).
+* ``enc:v2:<kid>:<base64(...)>`` — previous. One shared key per kid for every tenant.
+  Still decrypted; never produced any more.
 * ``enc:v1:<base64(...)>`` — legacy, no key id. Decrypted with the key registered as
   ``v1`` (i.e. ``APP_SECRET_ENCRYPTION_KEY``). Never produced any more.
 * anything without a prefix — legacy plaintext, returned verbatim, so a value keeps
   working without a backfill.
+
+Per-tenant key isolation (разд. 67.2)
+-------------------------------------
+
+ТЗ: «компрометация ключа одного арендатора не раскрывает других». Until v3 every
+tenant's secrets were encrypted with the SAME key, so one leaked key opened the whole
+platform — and a ciphertext copied from one tenant's row into another's decrypted
+happily, which is a cross-tenant transplant that RLS cannot see.
+
+v3 derives a separate key per scope with HKDF-SHA256 over the keyring key, using the
+scope as ``info``. Consequences worth stating plainly:
+
+* a derived key that leaks (extracted from a process serving one tenant, a dump of one
+  row's key material) opens ONLY that tenant;
+* a ciphertext moved to another tenant no longer decrypts — the key differs, so the
+  GCM tag fails. That turns a silent data mix-up into a loud error;
+* the MASTER key still opens everything. Derivation contains the blast radius of a
+  derived key, not of the keyring itself — that is what «где возможно» in the spec
+  means, and pretending otherwise would be worse than not writing it down.
+
+Global rows (a webhook subscription with ``tenant_id IS NULL``) use the scope
+``__global__``: they are legitimately platform-wide, and inventing a tenant for them
+would make their secrets undecryptable.
 
 Rotation (разд. 67.2 «сменить ключ шифрования без простоя»)
 -----------------------------------------------------------
@@ -58,11 +81,17 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 _PREFIX_V1 = "enc:v1:"
 _PREFIX_V2 = "enc:v2:"
-_ANY_PREFIX = (_PREFIX_V1, _PREFIX_V2)
+_PREFIX_V3 = "enc:v3:"
+_ANY_PREFIX = (_PREFIX_V1, _PREFIX_V2, _PREFIX_V3)
 _NONCE_BYTES = 12
 _KEY_BYTES = 32
 _DEV_KEY_SALT = b"webhook-secret-v1"
 _LEGACY_KID = "v1"
+#: Соль вывода per-tenant ключей. Меняется только вместе с версией формата:
+#: смена соли делает НЕЧИТАЕМЫМИ все ранее записанные значения.
+_HKDF_SALT = b"ptd-secret-scope-v3"
+#: Область для строк, у которых арендатора нет по существу (глобальные подписки).
+GLOBAL_SCOPE = "__global__"
 # Kid лежит в открытом виде внутри значения — держим его безопасным для парсинга и логов.
 _KID_RE = re.compile(r"^[A-Za-z0-9_.-]{1,32}$")
 
@@ -79,6 +108,32 @@ def _settings():
     from app.core.config import get_settings
 
     return get_settings()
+
+
+def _scope(tenant_id: str | None) -> str:
+    """Область ключа: арендатор или ``__global__``.
+
+    Пустая строка и ``None`` — одно и то же: строка без арендатора. Разводить их
+    значило бы получить два разных ключа для одних и тех же данных, и половина
+    значений перестала бы читаться после безобидного рефакторинга.
+    """
+
+    value = (tenant_id or "").strip()
+    return value or GLOBAL_SCOPE
+
+
+def _derive(master: bytes, tenant_id: str | None) -> bytes:
+    """Ключ арендатора из ключа связки (HKDF-SHA256, разд. 67.2)."""
+
+    from cryptography.hazmat.primitives import hashes  # noqa: PLC0415 - тяжёлый импорт
+    from cryptography.hazmat.primitives.kdf.hkdf import HKDF  # noqa: PLC0415
+
+    return HKDF(
+        algorithm=hashes.SHA256(),
+        length=_KEY_BYTES,
+        salt=_HKDF_SALT,
+        info=_scope(tenant_id).encode("utf-8"),
+    ).derive(master)
 
 
 def _decode_key(raw: str) -> bytes | None:
@@ -182,28 +237,41 @@ def key_id_of(stored: str | None) -> str | None:
         return None
     if stored.startswith(_PREFIX_V1):
         return _LEGACY_KID
-    if stored.startswith(_PREFIX_V2):
-        kid = stored[len(_PREFIX_V2) :].split(":", 1)[0]
-        return kid or None
+    for prefix in (_PREFIX_V2, _PREFIX_V3):
+        if stored.startswith(prefix):
+            kid = stored[len(prefix) :].split(":", 1)[0]
+            return kid or None
     return None
 
 
-def encrypt_secret(plaintext: str, *, settings=None) -> str:
-    """Encrypt ``plaintext`` with the ACTIVE key into the ``enc:v2:<kid>:`` envelope."""
+def encrypt_secret(plaintext: str, *, tenant_id: str | None, settings=None) -> str:
+    """Encrypt ``plaintext`` for ONE tenant into the ``enc:v3:<kid>:`` envelope.
+
+    ``tenant_id`` is keyword-ONLY and has no default on purpose: a default would let a
+    call site quietly encrypt под чужой областью, и обнаружилось бы это только тем,
+    что секрет перестал расшифровываться. ``None`` разрешён и означает «строка
+    платформенная» (глобальная подписка) — но это надо написать явно.
+    """
 
     keyring, kid = load_keyring(settings)
     nonce = os.urandom(_NONCE_BYTES)
-    ct = AESGCM(keyring[kid]).encrypt(nonce, plaintext.encode("utf-8"), None)
-    return f"{_PREFIX_V2}{kid}:" + base64.b64encode(nonce + ct).decode("ascii")
+    key = _derive(keyring[kid], tenant_id)
+    ct = AESGCM(key).encrypt(nonce, plaintext.encode("utf-8"), None)
+    return f"{_PREFIX_V3}{kid}:" + base64.b64encode(nonce + ct).decode("ascii")
 
 
-def decrypt_secret(stored: str | None, *, settings=None) -> str | None:
+def decrypt_secret(stored: str | None, *, tenant_id: str | None, settings=None) -> str | None:
     """Decrypt a stored secret.
 
     Non-prefixed values are returned verbatim (legacy plaintext); ``None`` stays
     ``None``. A value naming a key id that is no longer in the keyring raises:
     returning the ciphertext instead would silently produce signatures that no
     subscriber can verify.
+
+    ``enc:v1``/``enc:v2`` читаются общим ключом связки (как и раньше), ``enc:v3`` —
+    ключом, выведенным для ``tenant_id``. Значение, перенесённое в чужого арендатора,
+    на v3 не расшифруется — это не поломка, а ровно та защита, ради которой формат
+    и введён.
     """
 
     if stored is None:
@@ -212,10 +280,12 @@ def decrypt_secret(stored: str | None, *, settings=None) -> str | None:
         return stored
 
     keyring, _active = load_keyring(settings)
+    per_tenant = stored.startswith(_PREFIX_V3)
     if stored.startswith(_PREFIX_V1):
         kid, payload = _LEGACY_KID, stored[len(_PREFIX_V1) :]
     else:
-        kid, _sep, payload = stored[len(_PREFIX_V2) :].partition(":")
+        prefix = _PREFIX_V3 if per_tenant else _PREFIX_V2
+        kid, _sep, payload = stored[len(prefix) :].partition(":")
 
     key = keyring.get(kid)
     if key is None:
@@ -223,6 +293,8 @@ def decrypt_secret(stored: str | None, *, settings=None) -> str | None:
             f"secret was encrypted with key id {kid!r}, which is not in the keyring "
             f"(known: {sorted(keyring)}) — restore the retired key before rotating"
         )
+    if per_tenant:
+        key = _derive(key, tenant_id)
     try:
         blob = base64.b64decode(payload)
         nonce, ct = blob[:_NONCE_BYTES], blob[_NONCE_BYTES:]
@@ -231,19 +303,20 @@ def decrypt_secret(stored: str | None, *, settings=None) -> str | None:
         raise SecretDecryptError("failed to decrypt secret") from exc
 
 
-def reencrypt_secret(stored: str | None, *, settings=None) -> str | None:
-    """Re-encrypt a stored value onto the active key. Idempotent.
+def reencrypt_secret(stored: str | None, *, tenant_id: str | None, settings=None) -> str | None:
+    """Re-encrypt a stored value onto the active key AND the current format. Idempotent.
 
-    Returns the value unchanged when it is already on the active key, so the rotation
-    script skips writes instead of rewriting every row on every run.
+    Возвращает значение без изменений, только если оно уже на активном ключе И в
+    формате v3 — иначе прогон ротации оставил бы общий ключ v2 навсегда: он ведь
+    «на активном kid», и старая проверка сочла бы его свежим.
     """
 
     if stored is None:
         return None
     _keyring, active = load_keyring(settings)
-    if stored.startswith(_PREFIX_V2) and key_id_of(stored) == active:
+    if stored.startswith(_PREFIX_V3) and key_id_of(stored) == active:
         return stored
-    plaintext = decrypt_secret(stored, settings=settings)
+    plaintext = decrypt_secret(stored, tenant_id=tenant_id, settings=settings)
     if plaintext is None:  # pragma: no cover - guarded by the None check above
         return None
-    return encrypt_secret(plaintext, settings=settings)
+    return encrypt_secret(plaintext, tenant_id=tenant_id, settings=settings)

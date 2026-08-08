@@ -18,6 +18,13 @@
 Обрабатываются все таблицы с секретами вебхуков; список — :data:`SECRET_COLUMNS`.
 Идёт по всем активным арендаторам на bypass-сессии (кросс-тенантная операция).
 
+**Второе назначение (с 2026-08-08): перевод на ключи арендаторов.** Формат ``v3``
+шифрует каждого арендатора СВОИМ выведенным ключом (разд. 67.2). Новые записи
+идут в v3 сами, а уже лежащие значения в общем формате ``v2`` так и останутся
+общими, пока их не перепишет этот скрипт — поэтому **после раскатки его надо
+прогнать один раз, даже если ключ не менялся**. В отчёте ``--check`` такие строки
+видны меткой ``<kid>:shared``: это «на актуальном ключе, но без изоляции».
+
 Использование::
 
     PYTHONPATH=backend python scripts/rotate_secret_keys.py --check   # только отчёт
@@ -65,13 +72,22 @@ async def _rotate(*, apply: bool) -> tuple[Counter, int]:
                 if stored is None:
                     continue
                 kid = key_id_of(stored)
+                # Формат важен наравне с ключом: значение может быть на активном
+                # kid, но в общем (не per-tenant) формате v2 — такое обязано
+                # переехать, иначе ротация «зелёная», а изоляция ключей не
+                # появилась ни у одной строки.
+                per_tenant = isinstance(stored, str) and stored.startswith("enc:v3:")
                 label = kid or "plaintext"
+                if kid and not per_tenant:
+                    label = f"{kid}:shared"
                 stats[f"{model.__tablename__}:{label}"] += 1
-                if kid == active:
+                if kid == active and per_tenant:
                     continue
                 if not apply:
                     continue
-                setattr(row, column, reencrypt_secret(stored))
+                # Область — арендатор самой строки; у платформенных строк её нет.
+                tenant_id = str(getattr(row, "tenant_id", None) or "") or None
+                setattr(row, column, reencrypt_secret(stored, tenant_id=tenant_id))
                 rewritten += 1
         if apply and rewritten:
             await session.commit()
