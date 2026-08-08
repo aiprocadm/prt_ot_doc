@@ -72,6 +72,7 @@ from app.domains.managed_clients.transfer import (
     validate_transfer_preconditions,
 )
 from app.domains.managed_clients.transfer_service import (
+    copy_client_history,
     copy_company_with_people,
     copy_person_domains,
     copy_training_history,
@@ -1369,6 +1370,18 @@ async def transfer_client_data(
                 trusted,
                 source_tenant_id=str(tenant.id),
                 target_tenant_id=str(target.id),
+                people_map=result.people_map,
+            )
+        )
+        counts.update(
+            await copy_client_history(
+                trusted,
+                source_tenant_id=str(tenant.id),
+                source_company_id=row.company_id,
+                target_tenant_id=str(target.id),
+                company_map=result.company_map,
+                site_map=result.site_map,
+                position_map=result.position_map,
                 people_map=result.people_map,
             )
         )

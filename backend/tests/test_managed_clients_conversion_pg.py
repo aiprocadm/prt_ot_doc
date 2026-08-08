@@ -187,14 +187,50 @@ def test_conversion_survives_force_rls_with_unprivileged_role(monkeypatch) -> No
                         select(Company).where(Company.tenant_id == outsourcer_id)
                     )
                 ).scalars().first()
+                # Срез-16: структура организации клиента (площадка/должность/
+                # рабочее место) едет вместе с ней, ссылки человека
+                # перевешиваются. На PG здесь настоящие NOT NULL и нативные
+                # enum-типы — SQLite их не проверяет.
+                from app.models.master_data import Position, Site, Workplace
+
+                site = Site(
+                    tenant_id=outsourcer_id, company_id=company_row.id, name="Площадка Север"
+                )
+                position = Position(
+                    tenant_id=outsourcer_id, company_id=company_row.id, name="Слесарь"
+                )
+                s.add_all([site, position])
+                await s.flush()
+                workplace = Workplace(
+                    tenant_id=outsourcer_id,
+                    company_id=company_row.id,
+                    site_id=site.id,
+                    name="РМ-1",
+                )
+                s.add(workplace)
+                await s.flush()
                 person_row = Person(
                     tenant_id=outsourcer_id,
                     company_id=company_row.id,
+                    position_id=position.id,
+                    workplace_id=workplace.id,
                     first_name="Иван",
                     last_name="Иванов",
                     position_title="Слесарь",
                 )
                 s.add(person_row)
+                await s.flush()
+
+                from app.models.incidents import Incident
+
+                s.add(
+                    Incident(
+                        tenant_id=outsourcer_id,
+                        company_id=company_row.id,
+                        site_id=site.id,
+                        title="Падение с высоты",
+                    )
+                )
                 await s.flush()
 
                 # Срез-15: доменная история. На PostgreSQL настоящие NOT NULL:
@@ -282,6 +318,11 @@ def test_conversion_survives_force_rls_with_unprivileged_role(monkeypatch) -> No
         assert transfer_out.counts["training_sessions"] == 1
         assert transfer_out.counts["training_certificates"] == 1
         assert transfer_out.counts["training_certificates_skipped"] == 0
+        # Срез-16: структура и происшествия.
+        assert transfer_out.counts["sites"] == 1
+        assert transfer_out.counts["positions"] == 1
+        assert transfer_out.counts["workplaces"] == 1
+        assert transfer_out.counts["incidents"] == 1
 
         # Проверка под админом: арендатор создан, владелец есть, клиент переведён.
         verify_engine = create_async_engine(admin_engine_url)
@@ -340,6 +381,32 @@ def test_conversion_survives_force_rls_with_unprivileged_role(monkeypatch) -> No
                     .all()
                 )
                 assert len(certs) == 1 and certs[0].file_id is None
+
+                from app.models.incidents import Incident as IncidentModel
+                from app.models.master_data import Position as PositionModel
+
+                new_positions = (
+                    (
+                        await s.execute(
+                            select(PositionModel).where(PositionModel.tenant_id == created.id)
+                        )
+                    )
+                    .scalars()
+                    .all()
+                )
+                # Ссылка человека перевешена на КОПИЮ должности, а не обнулена.
+                assert len(new_positions) == 1
+                assert copied[0].position_id == new_positions[0].id
+                incidents = (
+                    (
+                        await s.execute(
+                            select(IncidentModel).where(IncidentModel.tenant_id == created.id)
+                        )
+                    )
+                    .scalars()
+                    .all()
+                )
+                assert len(incidents) == 1 and incidents[0].pack_id is None
         finally:
             await verify_engine.dispose()
 
