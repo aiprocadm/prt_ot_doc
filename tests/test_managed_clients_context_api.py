@@ -31,12 +31,13 @@ def _auth(sub="u1"):
     return SimpleNamespace(sub=sub, tenant_id=_TENANT, roles=["ot_specialist"], company_id=None)
 
 
-def _request(path="/api/v1/managed-clients/x/context"):
+def _request(path="/api/v1/managed-clients/x/context", method="POST"):
     return SimpleNamespace(
         headers={"user-agent": "tests"},
         client=SimpleNamespace(host="127.0.0.1"),
         state=SimpleNamespace(trace_id="trace-1"),
         url=SimpleNamespace(path=path),
+        method=method,
     )
 
 

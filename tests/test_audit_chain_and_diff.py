@@ -50,6 +50,37 @@ async def test_audit_delete_uses_delete_action(
 
 
 @pytest.mark.anyio("asyncio")
+async def test_audit_chain_verifies_records_written_without_explicit_when(
+    sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    """Обычная запись аудита должна проходить проверку подписи.
+
+    Так пишет весь код платформы: время записи никто не передаёт. Раньше в
+    подпись попадало одно значение времени, а в строку — другое (два разных
+    вызова «сейчас»), и проверка объявляла подделкой почти каждую запись.
+    Второй капкан — время из БД: SQLite отдаёт его без часового пояса, и после
+    перезагрузки строки подпись снова «не сходилась».
+    """
+
+    async with sessionmaker() as session:
+        tenant = (await session.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()
+        audit = AuditService(session)
+        await audit.log_event(
+            tenant_id=str(tenant.id),
+            action="update",
+            object_type="ChainProbe",
+            object_id="probe-1",
+            user_id=None,
+            ip="127.0.0.1",
+        )
+        # Забыть строку и перечитать из БД — так же, как проверка спустя годы.
+        session.expunge_all()
+        result = await audit.verify_audit_chain(entity_type="ChainProbe")
+        assert result == {"ok": True, "checked": 1, "broken_ids": []}
+        await session.rollback()
+
+
+@pytest.mark.anyio("asyncio")
 async def test_audit_chain_verification_ok(sessionmaker: async_sessionmaker[AsyncSession]) -> None:
     async with sessionmaker() as session:
         tenant = (await session.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()

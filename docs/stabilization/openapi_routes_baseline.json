@@ -257,6 +257,7 @@
     "GET /api/v1/managed-clients/workload",
     "GET /api/v1/managed-clients/{mcid}",
     "GET /api/v1/managed-clients/{mcid}/access",
+    "GET /api/v1/managed-clients/{mcid}/access-log",
     "GET /api/v1/managed-clients/{mcid}/consents",
     "GET /api/v1/managed-clients/{mcid}/transfers",
     "GET /api/v1/marketplace",
@@ -1038,6 +1039,7 @@
     "check_batch_quality_api_v1_imports_batches__batch_id__quality_check_post",
     "check_data_quality_api_v1_data_quality_check_get",
     "check_document_quality_api_v1_documents_quality_check_post",
+    "client_access_log_api_v1_managed_clients__mcid__access_log_get",
     "client_delivery_dashboard_api_v1_analytics_dashboard_client_delivery_get",
     "clone_methodology_api_v1_risk_advanced_methodologies__item_id__clone_post",
     "close_endpoint_api_v1_work_permits__wp_id__close_post",
@@ -2040,6 +2042,8 @@
     "ChannelSettingsIn",
     "ChannelSettingsOut",
     "ClassHistoryRead",
+    "ClientAccessLogEntry",
+    "ClientAccessLogPage",
     "ClientAttentionRead",
     "ClientContextRead",
     "CommitteeCreate",
@@ -3686,6 +3690,19 @@
       "changed_at": "string",
       "note": "null|string",
       "is_worsening": "boolean"
+    },
+    "ClientAccessLogEntry": {
+      "at": "string",
+      "actor_user_id": "null|string",
+      "actor_email": "null|string",
+      "method": "null|string",
+      "path": "null|string",
+      "ip": "null|string",
+      "correlation_id": "null|string"
+    },
+    "ClientAccessLogPage": {
+      "items": "array",
+      "total": "integer"
     },
     "ClientAttentionRead": {
       "client_id": "string",
