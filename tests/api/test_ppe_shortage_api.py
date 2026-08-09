@@ -28,7 +28,26 @@ async def _set_warehouse_flag(sessionmaker, data_factory: TestDataFactory, *, on
             feature = Feature(code="warehouse", title="Warehouse")
             session.add(feature)
             await session.flush()
-        session.add(FeatureEnablement(tenant_id=tenant.id, feature_id=feature.id, on=on))
+        # Обновляем существующую строку, а не добавляем вторую: у арендатора
+        # уже есть выдача модуля (BIZ-61 срез-2 — модуль по умолчанию выключен,
+        # поэтому тестовым арендаторам он выдаётся явно). Вставка дубля делала
+        # ответ гейта неопределённым.
+        enablement = (
+            (
+                await session.execute(
+                    select(FeatureEnablement).where(
+                        FeatureEnablement.tenant_id == tenant.id,
+                        FeatureEnablement.feature_id == feature.id,
+                    )
+                )
+            )
+            .scalars()
+            .first()
+        )
+        if enablement is None:
+            session.add(FeatureEnablement(tenant_id=tenant.id, feature_id=feature.id, on=on))
+        else:
+            enablement.on = on
         await session.commit()
 
 

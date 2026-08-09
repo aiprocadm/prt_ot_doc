@@ -43,7 +43,7 @@ def _request(path="/api/v1/managed-clients/x/context", method="POST"):
 
 @pytest.fixture(autouse=True)
 def _flag_on(monkeypatch):
-    monkeypatch.setattr(routes, "is_feature_enabled", AsyncMock(return_value=True))
+    monkeypatch.setattr(routes, "is_module_enabled", AsyncMock(return_value=True))
 
 
 async def _client(session, *, name="Ромашка", tenant_id=_TENANT):

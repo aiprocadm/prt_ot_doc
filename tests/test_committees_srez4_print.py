@@ -41,7 +41,7 @@ def _tenant(tid="tenant-1"):
 
 @pytest.fixture(autouse=True)
 def _flag_on(monkeypatch):
-    monkeypatch.setattr(routes, "is_feature_enabled", AsyncMock(return_value=True))
+    monkeypatch.setattr(routes, "is_module_enabled", AsyncMock(return_value=True))
 
 
 def _all_text(docx_bytes: bytes) -> str:

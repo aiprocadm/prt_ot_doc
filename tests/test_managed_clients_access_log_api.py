@@ -53,8 +53,8 @@ def _request(path="/api/v1/persons", method="GET"):
 
 @pytest.fixture(autouse=True)
 def _flag_on(monkeypatch):
-    monkeypatch.setattr(routes, "is_feature_enabled", AsyncMock(return_value=True))
-    monkeypatch.setattr(deps, "is_feature_enabled", AsyncMock(return_value=True), raising=False)
+    monkeypatch.setattr(routes, "is_module_enabled", AsyncMock(return_value=True))
+    monkeypatch.setattr(deps, "is_module_enabled", AsyncMock(return_value=True), raising=False)
 
 
 async def _client(session, *, name="Ромашка"):

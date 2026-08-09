@@ -42,7 +42,7 @@ def _request():
 
 @pytest.fixture(autouse=True)
 def _flag_on(monkeypatch):
-    monkeypatch.setattr(routes, "is_feature_enabled", AsyncMock(return_value=True))
+    monkeypatch.setattr(routes, "is_module_enabled", AsyncMock(return_value=True))
 
 
 async def _client(session, *, name="Ромашка", tenant_id=_TENANT):
@@ -359,7 +359,7 @@ async def test_my_clients_are_tenant_scoped(sessionmaker):
 
 @pytest.mark.asyncio
 async def test_my_clients_respects_feature_flag(sessionmaker, monkeypatch):
-    monkeypatch.setattr(routes, "is_feature_enabled", AsyncMock(return_value=False))
+    monkeypatch.setattr(routes, "is_module_enabled", AsyncMock(return_value=False))
     async with sessionmaker() as session:
         with pytest.raises(HTTPException) as exc:
             await routes.my_managed_clients(

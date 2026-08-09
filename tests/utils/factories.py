@@ -30,6 +30,43 @@ class TestDataFactory:
     sessionmaker: async_sessionmaker[AsyncSession]
     __test__ = False  # Prevent pytest from treating this helper as a test case.
 
+    @staticmethod
+    async def _grant_all_modules(session: AsyncSession, tenant_id: str) -> None:
+        """Выдать арендатору все продаваемые модули (тариф «Всё включено»).
+
+        BIZ-61 срез-2: продаваемый модуль по умолчанию ВЫКЛЮЧЕН. Выдаём ТОЛЬКО
+        те, что раньше были доступны из-за дефекта в умолчании гейта: их тесты
+        проверяют бизнес-логику и падали бы с 404. Остальные модули и до среза
+        требовали явной выдачи — их тесты проверяют сам отказ, и включать их
+        здесь значило бы сломать проверку того, что срез защищает.
+        """
+
+        from app.models.feature import Feature, FeatureEnablement
+        from app.modules.subscription.registry import SELLABLE_MODULES
+
+        implicitly_on = {"medical", "contractors", "warehouse"}
+        for module in SELLABLE_MODULES:
+            if module.code not in implicitly_on:
+                continue
+            feature = (
+                await session.execute(select(Feature).where(Feature.code == module.code))
+            ).scalar_one_or_none()
+            if feature is None:
+                feature = Feature(code=module.code, title=module.title)
+                session.add(feature)
+                await session.flush()
+            existing = (
+                await session.execute(
+                    select(FeatureEnablement).where(
+                        FeatureEnablement.tenant_id == tenant_id,
+                        FeatureEnablement.feature_id == feature.id,
+                    )
+                )
+            ).scalar_one_or_none()
+            if existing is None:
+                session.add(FeatureEnablement(tenant_id=tenant_id, feature_id=feature.id, on=True))
+        await session.flush()
+
     async def ensure_tenant(
         self,
         *,
@@ -55,6 +92,7 @@ class TestDataFactory:
             session.add(tenant)
             await session.flush()
             await session.refresh(tenant)
+            await self._grant_all_modules(session, tenant.id)
             return tenant
 
         async with self.sessionmaker() as new_session:
@@ -71,6 +109,8 @@ class TestDataFactory:
                 is_active=is_active,
             )
             new_session.add(tenant)
+            await new_session.flush()
+            await self._grant_all_modules(new_session, tenant.id)
             await new_session.commit()
             await new_session.refresh(tenant)
             return tenant

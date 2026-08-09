@@ -83,7 +83,9 @@ def test_ui_routes_do_not_overlap_between_modules() -> None:
     seen: dict[str, str] = {}
     for module in MODULE_REGISTRY:
         for route in module.ui_routes:
-            assert route not in seen, f"маршрут {route} принадлежит и {seen[route]}, и {module.code}"
+            assert (
+                route not in seen
+            ), f"маршрут {route} принадлежит и {seen[route]}, и {module.code}"
             seen[route] = module.code
 
 

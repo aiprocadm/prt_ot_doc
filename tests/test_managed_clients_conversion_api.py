@@ -38,7 +38,7 @@ def _request():
 
 @pytest.fixture(autouse=True)
 def _flag_on(monkeypatch):
-    monkeypatch.setattr(routes, "is_feature_enabled", AsyncMock(return_value=True))
+    monkeypatch.setattr(routes, "is_module_enabled", AsyncMock(return_value=True))
 
 
 async def _client(session, *, mode=ManagedClientMode.LIGHTWEIGHT, status=ContractStatus.ACTIVE):
