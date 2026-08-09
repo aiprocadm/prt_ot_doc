@@ -47,6 +47,11 @@ class PackScenarioDescriptor(BaseSchema):
     scenario: str
     module: str
     scenario_type: str
+    #: Дисциплина из таблицы разд. 50.1 человеческим языком. Поле ``module``
+    #: хранит грубую группу для БД (ot/fire_safety/health/custom) и не умеет
+    #: сказать «Гражданская оборона и ЧС» — а именно по дисциплине специалист
+    #: и ищет сценарий в каталоге.
+    discipline: str | None = None
     templates: list[PackScenarioTemplate]
 
 
