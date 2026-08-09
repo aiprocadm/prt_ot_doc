@@ -762,6 +762,7 @@
     "POST /api/v1/pack-runs",
     "POST /api/v1/pack-runs/{run_id}:cancel",
     "POST /api/v1/pack-runs/{run_id}:retry-failed",
+    "POST /api/v1/pack-runs:preview",
     "POST /api/v1/package-presets",
     "POST /api/v1/package-presets/{preset_id}/items",
     "POST /api/v1/package-presets/{preset_id}:preview-mapping",
@@ -1699,6 +1700,7 @@
     "prescriptions_summary_api_v1_prescriptions_summary_get",
     "preview_branding_api_v1_branding_preview_post",
     "preview_mapping_api_v1_package_presets__preset_id__preview_mapping_post",
+    "preview_pack_run_api_v1_pack_runs_preview_post",
     "preview_report_api_v1_report_builder_preview_post",
     "preview_template_version_api_v1_templates__template_id__versions__version_id__preview_post",
     "print_contingent_register_api_v1_medical_contingent_register_print_get",
@@ -2431,6 +2433,7 @@
     "PackRunCreate",
     "PackRunItemRead",
     "PackRunLogRead",
+    "PackRunPreviewRead",
     "PackRunRead",
     "PackRunRequest",
     "PackRunResponse",
@@ -2539,6 +2542,7 @@
     "QualityReport",
     "QueueSummaryResponse",
     "ReadinessBlocker",
+    "ReadinessProblemRead",
     "ReadinessReportRead",
     "RefreshRequest",
     "ReimbursementCreate",
@@ -6445,6 +6449,15 @@
       "payload": "null|object",
       "created_at": "string"
     },
+    "PackRunPreviewRead": {
+      "ready": "boolean",
+      "score": "integer",
+      "documents_total": "integer",
+      "rows_total": "integer",
+      "rows_selected": "integer",
+      "rows_ready": "integer",
+      "problems": "array"
+    },
     "PackRunRead": {
       "id": "string",
       "package_preset_id": "string",
@@ -7299,6 +7312,13 @@
       "reason": "string",
       "entity_type": "string",
       "action_hint": "string"
+    },
+    "ReadinessProblemRead": {
+      "code": "string",
+      "message": "string",
+      "blocking": "boolean",
+      "rows": "array",
+      "rows_total": "integer"
     },
     "ReadinessReportRead": {
       "ok": "boolean",
