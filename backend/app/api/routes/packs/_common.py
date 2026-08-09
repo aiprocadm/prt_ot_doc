@@ -176,6 +176,7 @@ def _serialize_definition(definition) -> PackScenarioDescriptor:  # type: ignore
             if hasattr(definition.scenario_type, "value")
             else str(definition.scenario_type)
         ),
+        discipline=(definition.metadata or {}).get("discipline"),
         templates=[
             PackScenarioTemplate(
                 code=template.code,

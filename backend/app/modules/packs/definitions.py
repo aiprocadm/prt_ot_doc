@@ -29,6 +29,10 @@ __all__ = [
     "PACK_CODE_OPO",
     "PACK_CODE_WASTE",
     "PACK_CODE_CEO_SHIELD",
+    "PACK_CODE_NEW_EMPLOYEE",
+    "PACK_CODE_CONTRACTOR",
+    "PACK_CODE_FIRE_INSPECTION",
+    "PACK_CODE_CIVIL_DEFENCE",
 ]
 
 
@@ -41,6 +45,13 @@ PACK_CODE_INSPECTION_PREP = "OT_INSPECTION_PREP"
 PACK_CODE_OPO = "OPO_COMPLIANCE"
 PACK_CODE_WASTE = "ECO_WASTE"
 PACK_CODE_CEO_SHIELD = "CEO_SHIELD"
+# Срез-2: четыре сценария из «минимального набора для запуска» разд. 50.1,
+# которых в каталоге не было. Коды новые, существующие НЕ переименованы:
+# код пакета — естественный ключ, по нему уже заведены строки у арендаторов.
+PACK_CODE_NEW_EMPLOYEE = "OT_NEW_EMPLOYEE"
+PACK_CODE_CONTRACTOR = "OT_NEW_CONTRACTOR"
+PACK_CODE_FIRE_INSPECTION = "PB_SITE_INSPECTION"
+PACK_CODE_CIVIL_DEFENCE = "GOCHS_BASE"
 
 
 class PackScenario(str, Enum):
@@ -51,6 +62,10 @@ class PackScenario(str, Enum):
     WASTE = "waste_and_ecology"
     CEO_SHIELD = "ceo_shield"
     NEW_COMPANY = "new_company"
+    NEW_EMPLOYEE = "new_employee"
+    CONTRACTOR = "contractor_onboarding"
+    FIRE_INSPECTION = "fire_inspection"
+    CIVIL_DEFENCE = "civil_defence"
 
 
 @dataclass(slots=True, frozen=True)
@@ -362,6 +377,239 @@ def _ceo_control_card() -> bytes:
     )
 
 
+# --- Срез-2: сценарии, которых не хватало каталогу (разд. 50.1) ---------------
+#
+# Модуль пакета берётся из существующего перечня БД (ot / fire_safety / health /
+# custom): добавить в него «экологию» или «ГО и ЧС» значило бы миграцию типа
+# ради ярлыка. Дисциплина по ТЗ записана в metadata пакета — так её видно и в
+# каталоге, и в отчётах, а тип в базе остаётся прежним.
+
+
+def _new_employee_intro_briefing() -> bytes:
+    return _doc(
+        "Вводный инструктаж по охране труда",
+        "Компания: {{ company.name }} (ИНН {{ company.inn }})",
+        "Работник: {{ data.employee_name }}, должность: {{ data.position }}",
+        "Дата приёма: {{ data.hire_date }}",
+        "Программа вводного инструктажа: {{ data.program }}",
+        "Инструктаж провёл: {{ ot_responsible }}",
+        header="{{ logo }}",
+        footer="Подпись работника: {{ data.employee_sign }} · {{ stamp }}",
+    )
+
+
+def _new_employee_primary_briefing() -> bytes:
+    return _doc(
+        "Первичный инструктаж на рабочем месте",
+        "Работник: {{ data.employee_name }}",
+        "Рабочее место: {{ data.workplace }}",
+        "Опасные и вредные факторы: {{ hazards }}",
+        "Инструкции по охране труда: {{ data.instructions }}",
+        "Стажировка: {{ data.internship_days }} смен",
+        footer="Инструктаж провёл: {{ ot_responsible }}",
+    )
+
+
+def _new_employee_medical_referral() -> bytes:
+    return _doc(
+        "Направление на предварительный медицинский осмотр",
+        "Компания: {{ company.name }}",
+        "Работник: {{ data.employee_name }}",
+        "Должность: {{ data.position }}",
+        "Вредные факторы и виды работ: {{ hazards }}",
+        "Медицинская организация: {{ data.medical_org }}",
+        header="{{ logo }}",
+        footer="{{ stamp }}",
+    )
+
+
+def _new_employee_ppe_card() -> bytes:
+    return _doc(
+        "Личная карточка учёта выдачи СИЗ",
+        "Работник: {{ data.employee_name }}",
+        "Должность: {{ data.position }}",
+        "Нормы выдачи: {{ data.ppe_norms }}",
+        "Размеры (одежда/обувь/СИЗОД): {{ data.sizes }}",
+        footer="Выдал: {{ ot_responsible }} · Получил: {{ data.employee_sign }}",
+    )
+
+
+def _new_employee_acknowledgement() -> bytes:
+    return _doc(
+        "Лист ознакомления с локальными нормативными актами",
+        "Работник: {{ data.employee_name }}",
+        "Перечень документов: {{ data.documents }}",
+        "Дата ознакомления: {{ data.hire_date }}",
+        footer="Подпись работника: {{ data.employee_sign }}",
+    )
+
+
+def _contractor_questionnaire() -> bytes:
+    return _doc(
+        "Анкета подрядной организации",
+        "Подрядчик: {{ data.contractor_name }} (ИНН {{ data.contractor_inn }})",
+        "Виды выполняемых работ: {{ work_types }}",
+        "Численность привлекаемого персонала: {{ data.headcount }}",
+        "Наличие СРО/допусков: {{ data.permits }}",
+        "Ответственный от подрядчика: {{ data.contractor_responsible }}",
+        header="{{ logo }}",
+        footer="{{ stamp }}",
+    )
+
+
+def _contractor_readiness_check() -> bytes:
+    return _doc(
+        "Проверка готовности подрядчика",
+        "1. Обучение по охране труда: {{ data.training_status }}",
+        "2. Медосмотры персонала: {{ data.medical_status }}",
+        "3. Обеспеченность СИЗ: {{ data.ppe_status }}",
+        "4. Наряды-допуски на опасные работы: {{ data.permits_status }}",
+        "5. Страхование ответственности: {{ data.insurance_status }}",
+        footer="Проверку провёл: {{ ot_responsible }}",
+    )
+
+
+def _contractor_interaction_order() -> bytes:
+    return _doc(
+        "Приказ о порядке взаимодействия с подрядной организацией",
+        "Заказчик: {{ company.name }}",
+        "Подрядчик: {{ data.contractor_name }}",
+        "Объект: {{ site.address }}",
+        "Ответственный от заказчика: {{ ot_responsible }}",
+        "Разграничение зон ответственности: {{ data.responsibility_split }}",
+        header="{{ logo }}",
+        footer="{{ stamp }}",
+    )
+
+
+def _contractor_briefing_log() -> bytes:
+    return _doc(
+        "Журнал инструктажей персонала подрядчика",
+        "Подрядчик: {{ data.contractor_name }}",
+        "Дата: {{ data.session_date }}",
+        "Состав: {{ data.team_members }}",
+        "Опасности объекта: {{ hazards }}",
+        footer="Инструктаж провёл: {{ ot_responsible }}",
+    )
+
+
+def _fire_inspection_checklist() -> bytes:
+    return _doc(
+        "Чек-лист проверки противопожарного состояния объекта",
+        "Объект: {{ site.address }}",
+        "1. Первичные средства пожаротушения: {{ data.extinguishers }}",
+        "2. Пути эвакуации и выходы: {{ data.escape_routes }}",
+        "3. Системы сигнализации и оповещения: {{ data.alarm_systems }}",
+        "4. Противопожарные двери и преграды: {{ data.fire_doors }}",
+        "5. Замечания: {{ data.findings }}",
+        header="{{ logo }}",
+        footer="Проверку провёл: {{ pb_responsible }} · {{ stamp }}",
+    )
+
+
+def _fire_inspection_order() -> bytes:
+    return _doc(
+        "Приказ о противопожарном режиме на объекте",
+        "Компания: {{ company.name }}",
+        "Объект: {{ site.address }}",
+        "Ответственный за пожарную безопасность: {{ pb_responsible }}",
+        "Места курения и порядок огневых работ: {{ data.fire_works_rules }}",
+        "Порядок обесточивания по окончании работ: {{ data.shutdown_rules }}",
+        header="{{ logo }}",
+        footer="{{ stamp }}",
+    )
+
+
+def _fire_inspection_instruction() -> bytes:
+    return _doc(
+        "Инструкция о мерах пожарной безопасности",
+        "Объект: {{ site.address }}",
+        "Порядок содержания территории и помещений: {{ data.housekeeping }}",
+        "Действия при обнаружении пожара: {{ data.fire_actions }}",
+        "Порядок эвакуации людей и материальных ценностей: {{ data.evacuation }}",
+        footer="Ответственный: {{ pb_responsible }}",
+    )
+
+
+def _fire_inspection_drill_program() -> bytes:
+    return _doc(
+        "Программа практической тренировки по эвакуации",
+        "Объект: {{ site.address }}",
+        "Дата тренировки: {{ data.drill_date }}",
+        "Участники: {{ data.team_members }}",
+        "Вводная обстановка: {{ data.scenario }}",
+        "Оценка результатов: {{ data.drill_result }}",
+        footer="Организатор: {{ pb_responsible }}",
+    )
+
+
+def _fire_inspection_journal() -> bytes:
+    return _doc(
+        "Журнал эксплуатации систем противопожарной защиты",
+        "Объект: {{ site.address }}",
+        "Проверяемая система: {{ data.system_name }}",
+        "Результат проверки: {{ data.system_result }}",
+        "Дата следующей проверки: {{ data.next_check_date }}",
+        footer="Отметку внёс: {{ pb_responsible }}",
+    )
+
+
+def _civil_defence_plan() -> bytes:
+    return _doc(
+        "План действий по предупреждению и ликвидации чрезвычайных ситуаций",
+        "Компания: {{ company.name }}",
+        "Объект: {{ site.address }}",
+        "Возможные чрезвычайные ситуации: {{ data.threats }}",
+        "Порядок оповещения: {{ data.notification_order }}",
+        "Силы и средства: {{ data.resources }}",
+        header="{{ logo }}",
+        footer="{{ stamp }}",
+    )
+
+
+def _civil_defence_order() -> bytes:
+    return _doc(
+        "Приказ об организации гражданской обороны",
+        "Компания: {{ company.name }}",
+        "Ответственный за гражданскую оборону: {{ data.gochs_responsible }}",
+        "Категория объекта: {{ data.facility_category }}",
+        "Порядок хранения средств индивидуальной защиты: {{ data.protection_storage }}",
+        header="{{ logo }}",
+        footer="{{ stamp }}",
+    )
+
+
+def _civil_defence_commission() -> bytes:
+    return _doc(
+        "Состав комиссии по предупреждению и ликвидации ЧС",
+        "Председатель комиссии: {{ data.commission_head }}",
+        "Члены комиссии: {{ data.commission_members }}",
+        "Задачи комиссии: {{ data.commission_tasks }}",
+        footer="Утверждаю: {{ data.gochs_responsible }}",
+    )
+
+
+def _civil_defence_drill_program() -> bytes:
+    return _doc(
+        "Программа учений и тренировок по гражданской обороне",
+        "Объект: {{ site.address }}",
+        "Тема учения: {{ data.scenario }}",
+        "Дата проведения: {{ data.drill_date }}",
+        "Привлекаемые работники: {{ data.team_members }}",
+        footer="Организатор: {{ data.gochs_responsible }}",
+    )
+
+
+def _civil_defence_journal() -> bytes:
+    return _doc(
+        "Журнал учёта занятий по гражданской обороне",
+        "Тема занятия: {{ data.lesson_topic }}",
+        "Дата: {{ data.session_date }}",
+        "Присутствовали: {{ data.team_members }}",
+        footer="Занятие провёл: {{ data.gochs_responsible }}",
+    )
+
+
 DEFAULT_PACKS: Sequence[PackDefinition] = (
     PackDefinition(
         code=PACK_CODE_SITE_ACCESS,
@@ -417,6 +665,7 @@ DEFAULT_PACKS: Sequence[PackDefinition] = (
         metadata={
             "logo": build_inline_image_descriptor(DEFAULT_LOGO_BYTES)["data"],
             "stamp": build_inline_image_descriptor(DEFAULT_STAMP_BYTES)["data"],
+            "discipline": "Охрана труда и промышленная безопасность",
         },
     ),
     PackDefinition(
@@ -465,6 +714,7 @@ DEFAULT_PACKS: Sequence[PackDefinition] = (
         metadata={
             "logo": build_inline_image_descriptor(DEFAULT_LOGO_BYTES)["data"],
             "stamp": build_inline_image_descriptor(DEFAULT_STAMP_BYTES)["data"],
+            "discipline": "Охрана труда и пожарная безопасность",
         },
     ),
     PackDefinition(
@@ -505,6 +755,7 @@ DEFAULT_PACKS: Sequence[PackDefinition] = (
         metadata={
             "logo": build_inline_image_descriptor(DEFAULT_LOGO_BYTES)["data"],
             "stamp": build_inline_image_descriptor(DEFAULT_STAMP_BYTES)["data"],
+            "discipline": "Охрана труда",
             "entity": "incident",
             "models": "Incident,IncidentLog",
             "context_keys": "incident_id,company_id,site_id,victim_ids",
@@ -548,6 +799,7 @@ DEFAULT_PACKS: Sequence[PackDefinition] = (
         metadata={
             "logo": build_inline_image_descriptor(DEFAULT_LOGO_BYTES)["data"],
             "stamp": build_inline_image_descriptor(DEFAULT_STAMP_BYTES)["data"],
+            "discipline": "Любая — по типу надзора",
             "entity": "inspection",
             "context_keys": "inspection_id,company_id,site_id",
         },
@@ -590,6 +842,7 @@ DEFAULT_PACKS: Sequence[PackDefinition] = (
         metadata={
             "logo": build_inline_image_descriptor(DEFAULT_LOGO_BYTES)["data"],
             "stamp": build_inline_image_descriptor(DEFAULT_STAMP_BYTES)["data"],
+            "discipline": "Промышленная безопасность",
         },
     ),
     PackDefinition(
@@ -630,6 +883,7 @@ DEFAULT_PACKS: Sequence[PackDefinition] = (
         metadata={
             "logo": build_inline_image_descriptor(DEFAULT_LOGO_BYTES)["data"],
             "stamp": build_inline_image_descriptor(DEFAULT_STAMP_BYTES)["data"],
+            "discipline": "Экология",
         },
     ),
     PackDefinition(
@@ -670,6 +924,227 @@ DEFAULT_PACKS: Sequence[PackDefinition] = (
         metadata={
             "logo": build_inline_image_descriptor(DEFAULT_LOGO_BYTES)["data"],
             "stamp": build_inline_image_descriptor(DEFAULT_STAMP_BYTES)["data"],
+            "discipline": "Общее руководство",
+        },
+    ),
+    PackDefinition(
+        code=PACK_CODE_NEW_EMPLOYEE,
+        name="Приём нового сотрудника",
+        description="Комплект документов на приём работника: инструктажи, медосмотр, СИЗ, ознакомления",
+        scenario=PackScenario.NEW_EMPLOYEE,
+        module=DocumentPackModule.OT,
+        scenario_type=DocumentPackScenario.DOCUMENT_BATCH,
+        templates=(
+            PackTemplateSpec(
+                code="pack_ot_new_employee_intro",
+                name="Вводный инструктаж",
+                description="Протокол вводного инструктажа по охране труда",
+                category="instruction",
+                builder=_new_employee_intro_briefing,
+            ),
+            PackTemplateSpec(
+                code="pack_ot_new_employee_primary",
+                name="Первичный инструктаж",
+                description="Первичный инструктаж на рабочем месте",
+                category="instruction",
+                builder=_new_employee_primary_briefing,
+            ),
+            PackTemplateSpec(
+                code="pack_ot_new_employee_medical",
+                name="Направление на медосмотр",
+                description="Направление на предварительный медицинский осмотр",
+                category="referral",
+                builder=_new_employee_medical_referral,
+            ),
+            PackTemplateSpec(
+                code="pack_ot_new_employee_ppe_card",
+                name="Карточка СИЗ",
+                description="Личная карточка учёта выдачи СИЗ",
+                category="ppe_card",
+                builder=_new_employee_ppe_card,
+            ),
+            PackTemplateSpec(
+                code="pack_ot_new_employee_ack",
+                name="Лист ознакомления",
+                description="Ознакомление с локальными нормативными актами",
+                category="acknowledgement",
+                builder=_new_employee_acknowledgement,
+            ),
+        ),
+        item_order=(
+            "pack_ot_new_employee_intro",
+            "pack_ot_new_employee_primary",
+            "pack_ot_new_employee_medical",
+            "pack_ot_new_employee_ppe_card",
+            "pack_ot_new_employee_ack",
+        ),
+        metadata={
+            "logo": build_inline_image_descriptor(DEFAULT_LOGO_BYTES)["data"],
+            "stamp": build_inline_image_descriptor(DEFAULT_STAMP_BYTES)["data"],
+            "discipline": "Охрана труда",
+        },
+    ),
+    PackDefinition(
+        code=PACK_CODE_CONTRACTOR,
+        name="Новый подрядчик",
+        description="Анкета, проверка готовности, приказ о взаимодействии и инструктажи персонала подрядчика",
+        scenario=PackScenario.CONTRACTOR,
+        module=DocumentPackModule.OT,
+        scenario_type=DocumentPackScenario.DOCUMENT_BATCH,
+        templates=(
+            PackTemplateSpec(
+                code="pack_ot_contractor_questionnaire",
+                name="Анкета подрядчика",
+                description="Сведения о подрядной организации и её работах",
+                category="questionnaire",
+                builder=_contractor_questionnaire,
+            ),
+            PackTemplateSpec(
+                code="pack_ot_contractor_readiness",
+                name="Проверка готовности",
+                description="Контроль обучения, медосмотров, СИЗ и допусков",
+                category="checklist",
+                builder=_contractor_readiness_check,
+            ),
+            PackTemplateSpec(
+                code="pack_ot_contractor_order",
+                name="Приказ о взаимодействии",
+                description="Разграничение зон ответственности заказчика и подрядчика",
+                category="order",
+                builder=_contractor_interaction_order,
+            ),
+            PackTemplateSpec(
+                code="pack_ot_contractor_journal",
+                name="Журнал инструктажей",
+                description="Инструктажи персонала подрядчика на объекте",
+                category="journal",
+                builder=_contractor_briefing_log,
+            ),
+        ),
+        item_order=(
+            "pack_ot_contractor_questionnaire",
+            "pack_ot_contractor_readiness",
+            "pack_ot_contractor_order",
+            "pack_ot_contractor_journal",
+        ),
+        metadata={
+            "logo": build_inline_image_descriptor(DEFAULT_LOGO_BYTES)["data"],
+            "stamp": build_inline_image_descriptor(DEFAULT_STAMP_BYTES)["data"],
+            "discipline": "Охрана труда и промышленная безопасность",
+        },
+    ),
+    PackDefinition(
+        code=PACK_CODE_FIRE_INSPECTION,
+        name="Пожарная проверка объекта",
+        description="Приказы, инструкции, журналы и программа тренировки по пожарной безопасности",
+        scenario=PackScenario.FIRE_INSPECTION,
+        module=DocumentPackModule.FIRE_SAFETY,
+        scenario_type=DocumentPackScenario.DOCUMENT_BATCH,
+        templates=(
+            PackTemplateSpec(
+                code="pack_pb_inspection_checklist",
+                name="Чек-лист проверки",
+                description="Противопожарное состояние объекта",
+                category="checklist",
+                builder=_fire_inspection_checklist,
+            ),
+            PackTemplateSpec(
+                code="pack_pb_inspection_order",
+                name="Приказ о противопожарном режиме",
+                description="Режим на объекте и ответственные",
+                category="order",
+                builder=_fire_inspection_order,
+            ),
+            PackTemplateSpec(
+                code="pack_pb_inspection_instruction",
+                name="Инструкция о мерах ПБ",
+                description="Меры пожарной безопасности и действия при пожаре",
+                category="instruction",
+                builder=_fire_inspection_instruction,
+            ),
+            PackTemplateSpec(
+                code="pack_pb_inspection_drill",
+                name="Программа тренировки",
+                description="Практическая тренировка по эвакуации",
+                category="program",
+                builder=_fire_inspection_drill_program,
+            ),
+            PackTemplateSpec(
+                code="pack_pb_inspection_journal",
+                name="Журнал систем защиты",
+                description="Эксплуатация систем противопожарной защиты",
+                category="journal",
+                builder=_fire_inspection_journal,
+            ),
+        ),
+        item_order=(
+            "pack_pb_inspection_checklist",
+            "pack_pb_inspection_order",
+            "pack_pb_inspection_instruction",
+            "pack_pb_inspection_drill",
+            "pack_pb_inspection_journal",
+        ),
+        metadata={
+            "logo": build_inline_image_descriptor(DEFAULT_LOGO_BYTES)["data"],
+            "stamp": build_inline_image_descriptor(DEFAULT_STAMP_BYTES)["data"],
+            "discipline": "Пожарная безопасность",
+        },
+    ),
+    PackDefinition(
+        code=PACK_CODE_CIVIL_DEFENCE,
+        name="Пакет ГО и ЧС",
+        description="План действий, приказы, состав комиссии, программа учений и журнал занятий",
+        scenario=PackScenario.CIVIL_DEFENCE,
+        module=DocumentPackModule.CUSTOM,
+        scenario_type=DocumentPackScenario.DOCUMENT_BATCH,
+        templates=(
+            PackTemplateSpec(
+                code="pack_gochs_plan",
+                name="План действий при ЧС",
+                description="Предупреждение и ликвидация чрезвычайных ситуаций",
+                category="plan",
+                builder=_civil_defence_plan,
+            ),
+            PackTemplateSpec(
+                code="pack_gochs_order",
+                name="Приказ об организации ГО",
+                description="Ответственные и категория объекта",
+                category="order",
+                builder=_civil_defence_order,
+            ),
+            PackTemplateSpec(
+                code="pack_gochs_commission",
+                name="Состав комиссии",
+                description="Комиссия по предупреждению и ликвидации ЧС",
+                category="commission",
+                builder=_civil_defence_commission,
+            ),
+            PackTemplateSpec(
+                code="pack_gochs_drill",
+                name="Программа учений",
+                description="Учения и тренировки по гражданской обороне",
+                category="program",
+                builder=_civil_defence_drill_program,
+            ),
+            PackTemplateSpec(
+                code="pack_gochs_journal",
+                name="Журнал занятий",
+                description="Учёт занятий по гражданской обороне",
+                category="journal",
+                builder=_civil_defence_journal,
+            ),
+        ),
+        item_order=(
+            "pack_gochs_plan",
+            "pack_gochs_order",
+            "pack_gochs_commission",
+            "pack_gochs_drill",
+            "pack_gochs_journal",
+        ),
+        metadata={
+            "logo": build_inline_image_descriptor(DEFAULT_LOGO_BYTES)["data"],
+            "stamp": build_inline_image_descriptor(DEFAULT_STAMP_BYTES)["data"],
+            "discipline": "Гражданская оборона и ЧС",
         },
     ),
 )

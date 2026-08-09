@@ -6497,6 +6497,7 @@
       "scenario": "string",
       "module": "string",
       "scenario_type": "string",
+      "discipline": "null|string",
       "templates": "array"
     },
     "PackScenarioListResponse": {
