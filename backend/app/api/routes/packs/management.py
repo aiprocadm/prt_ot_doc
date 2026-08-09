@@ -41,6 +41,7 @@ from app.core.response import list_response
 from app.core.tenant_validation import TenantContextValidator
 from app.core.tracing import get_trace_id
 from app.db.session import rearm_session_tenant_context
+from app.domains.packs.fields import questions_for
 from app.models.models import (
     DocumentPack,
 )
@@ -51,6 +52,8 @@ from app.schemas.pack import (
     PackGenerateRequest,
     PackListItem,
     PackListResponse,
+    PackScenarioField,
+    PackScenarioFieldsResponse,
     PackScenarioListResponse,
 )
 from app.schemas.task import TaskAcceptedResponse
@@ -64,6 +67,46 @@ async def list_pack_scenarios(access: PackReadAccess) -> PackScenarioListRespons
     items = [_serialize_definition(definition) for definition in DEFAULT_PACKS]
     payload = [item.model_dump(mode="json") for item in items]
     return PackScenarioListResponse(data=payload)
+
+
+@router.get("/scenarios/{scenario_code}/fields", response_model=PackScenarioFieldsResponse)
+async def get_pack_scenario_fields(
+    scenario_code: str, access: PackReadAccess
+) -> PackScenarioFieldsResponse:
+    """Второй шаг мастера (разд. 50.2): спросить ТОЛЬКО то, чего не хватает.
+
+    Отдаёт вопросы сценария с русскими подписями и признаком обязательности.
+    Сведений о клиенте здесь нет намеренно: организацию, объект и сотрудника
+    платформа уже знает из карточки клиента и подставляет сама — спрашивать их
+    второй раз и есть та «долгая настройка», от которой уходит ТЗ.
+
+    Ничего не создаёт и не меняет: это описание формы, а не её отправка.
+    """
+
+    _ = access
+    definition = PACK_DEFINITIONS_BY_CODE.get(scenario_code)
+    if definition is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=api_problem_detail(
+                code="PACK_SCENARIO_NOT_FOUND",
+                message=f"Сценарий {scenario_code} не найден",
+                error_type="packs",
+            ),
+        )
+    return PackScenarioFieldsResponse(
+        scenario_code=definition.code,
+        scenario_name=definition.name,
+        fields=[
+            PackScenarioField(name=field.name, label=field.label, required=field.required)
+            for field in questions_for(definition.code)
+        ],
+        known_from_client=[
+            "Организация клиента (наименование, ИНН, адрес)",
+            "Объект (наименование и адрес)",
+            "Сотрудник (ФИО, должность, табельный номер)",
+        ],
+    )
 
 
 @router.post(

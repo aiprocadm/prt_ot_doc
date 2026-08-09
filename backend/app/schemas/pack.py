@@ -55,6 +55,28 @@ class PackScenarioDescriptor(BaseSchema):
     templates: list[PackScenarioTemplate]
 
 
+# --- BIZ-50 срез-4: вопросы мастера (разд. 50.2, шаг 2) ---------------------
+class PackScenarioField(BaseSchema):
+    """Один вопрос мастера по сценарию."""
+
+    name: str
+    label: str
+    #: ``True`` — без ответа документ выйдет бессмысленным, а не просто неполным.
+    required: bool
+
+
+class PackScenarioFieldsResponse(BaseSchema):
+    """Что мастер обязан спросить — и чего он спрашивать НЕ будет."""
+
+    ok: bool = True
+    scenario_code: str
+    scenario_name: str
+    fields: list[PackScenarioField]
+    #: Сведения, которые платформа берёт из карточки клиента и не спрашивает
+    #: (разд. 50.2: «система подтягивает всё, что уже знает о клиенте»).
+    known_from_client: list[str] = []
+
+
 class PackScenarioListResponse(BaseSchema):
     ok: bool = True
     data: list[PackScenarioDescriptor]

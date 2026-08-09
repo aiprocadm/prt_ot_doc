@@ -312,6 +312,7 @@
     "GET /api/v1/packs",
     "GET /api/v1/packs/download",
     "GET /api/v1/packs/scenarios",
+    "GET /api/v1/packs/scenarios/{scenario_code}/fields",
     "GET /api/v1/packs/{pack_id}/download-archive",
     "GET /api/v1/packs/{pack_run_id}/safety-summary",
     "GET /api/v1/permits",
@@ -1400,6 +1401,7 @@
     "get_operational_dashboard_api_v1_operational_dashboard_get",
     "get_order_api_v1_orders__order_id__get",
     "get_outbox_entry_api_v1_admin_outbox__outbox_id__get",
+    "get_pack_scenario_fields_api_v1_packs_scenarios__scenario_code__fields_get",
     "get_pdf_run_api_v1_files_pdf_runs__pdf_run_id__get",
     "get_permit_api_v1_permits__permit_id__get",
     "get_person_endpoint_api_v1_persons__person_id__get",
@@ -2439,6 +2441,8 @@
     "PackRunResponse",
     "PackRunTask",
     "PackScenarioDescriptor",
+    "PackScenarioField",
+    "PackScenarioFieldsResponse",
     "PackScenarioListResponse",
     "PackScenarioTemplate",
     "PackagePresetItemCreate",
@@ -6499,6 +6503,18 @@
       "scenario_type": "string",
       "discipline": "null|string",
       "templates": "array"
+    },
+    "PackScenarioField": {
+      "name": "string",
+      "label": "string",
+      "required": "boolean"
+    },
+    "PackScenarioFieldsResponse": {
+      "ok": "boolean",
+      "scenario_code": "string",
+      "scenario_name": "string",
+      "fields": "array",
+      "known_from_client": "array"
     },
     "PackScenarioListResponse": {
       "ok": "boolean",
