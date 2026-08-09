@@ -66,7 +66,7 @@ async def test_rotation_moves_stored_secrets_to_the_active_key(
             tenant_id=str(tenant.id),
             name="rotation-probe",
             url="https://example.test/hook",
-            secret=secret_cipher.encrypt_secret("s3cr3t"),
+            secret=secret_cipher.encrypt_secret("s3cr3t", tenant_id=str(tenant.id)),
             is_enabled=True,
             subscribed_events=[],
             timeout_ms=1000,
@@ -91,7 +91,7 @@ async def test_rotation_moves_stored_secrets_to_the_active_key(
         ).scalar_one()
     assert secret_cipher.key_id_of(stored.secret) == "new"
     # Главное: плейнтекст пережил ротацию — иначе подписи вебхуков перестанут сходиться.
-    assert secret_cipher.decrypt_secret(stored.secret) == "s3cr3t"
+    assert secret_cipher.decrypt_secret(stored.secret, tenant_id=str(stored.tenant_id)) == "s3cr3t"
 
     # Повторный прогон ничего не переписывает.
     _stats2, rewritten2 = await script._rotate(apply=True)
@@ -111,7 +111,7 @@ async def test_check_mode_reports_without_writing(
                 tenant_id=str(tenant.id),
                 name="check-probe",
                 url="https://example.test/hook2",
-                secret=secret_cipher.encrypt_secret("keep-me"),
+                secret=secret_cipher.encrypt_secret("keep-me", tenant_id=str(tenant.id)),
                 is_enabled=True,
                 subscribed_events=[],
                 timeout_ms=1000,

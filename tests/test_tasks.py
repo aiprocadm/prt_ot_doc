@@ -221,7 +221,7 @@ def test_dispatch_outbox_events_signs_with_the_decrypted_secret(monkeypatch) -> 
                         tenant_id=tenant.id,
                         name="Signed webhook",
                         url="https://example.test/webhooks/signed",
-                        secret=encrypt_secret(plaintext_secret),
+                        secret=encrypt_secret(plaintext_secret, tenant_id=str(tenant.id)),
                         is_enabled=True,
                         subscribed_events=[],
                         timeout_ms=1000,

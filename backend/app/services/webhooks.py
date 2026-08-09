@@ -171,7 +171,11 @@ class WebhookDispatcher:
                         headers={
                             str(key): str(value) for key, value in (sub.headers or {}).items()
                         },
-                        secret=decrypt_secret(sub.secret),  # SEC-67: decrypt at use
+                        # Область ключа — арендатор САМОЙ строки (SEC-67 v3): глобальная
+                        # подписка шифруется платформенной областью.
+                        secret=decrypt_secret(
+                            sub.secret, tenant_id=str(sub.tenant_id or "") or None
+                        ),
                     )
                 )
             return destinations
@@ -206,7 +210,11 @@ class WebhookDispatcher:
                         headers={
                             str(key): str(value) for key, value in (sub.headers or {}).items()
                         },
-                        secret=decrypt_secret(sub.secret),  # SEC-67: decrypt at use
+                        # Область ключа — арендатор САМОЙ строки (SEC-67 v3): глобальная
+                        # подписка шифруется платформенной областью.
+                        secret=decrypt_secret(
+                            sub.secret, tenant_id=str(sub.tenant_id or "") or None
+                        ),
                     )
                 )
             return destinations
@@ -279,7 +287,7 @@ class WebhookDispatcher:
                     url=row.url,
                     headers={str(key): str(value) for key, value in (row.headers or {}).items()},
                     endpoint_id=row.id,
-                    secret=decrypt_secret(row.secret),  # SEC-67: decrypt at use
+                    secret=decrypt_secret(row.secret, tenant_id=str(row.tenant_id or "") or None),
                     timeout_ms=row.timeout_ms,
                 )
             )
@@ -369,7 +377,9 @@ class WebhookDispatcher:
                     and self._tenant_ok(sub.tenant_id, tenant_id)
                     and sub.secret
                 ):
-                    return endpoint_id, decrypt_secret(sub.secret)
+                    return endpoint_id, decrypt_secret(
+                        sub.secret, tenant_id=str(sub.tenant_id or "") or None
+                    )
                 legacy = await session.get(WebhookEndpoint, endpoint_id)
                 if (
                     legacy is not None
@@ -377,7 +387,9 @@ class WebhookDispatcher:
                     and legacy.tenant_id == tenant_id  # у легаси-модели tenant_id NOT NULL
                     and legacy.secret
                 ):
-                    return endpoint_id, decrypt_secret(legacy.secret)
+                    return endpoint_id, decrypt_secret(
+                        legacy.secret, tenant_id=str(legacy.tenant_id or "") or None
+                    )
 
             rows = (
                 (
@@ -403,7 +415,9 @@ class WebhookDispatcher:
             )
             for sub in rows:
                 if sub.secret:
-                    return sub.id, decrypt_secret(sub.secret)
+                    return sub.id, decrypt_secret(
+                        sub.secret, tenant_id=str(sub.tenant_id or "") or None
+                    )
         return endpoint_id, None
 
     async def dispatch(
