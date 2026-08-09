@@ -101,6 +101,26 @@ class FeatureCatalogEntry(BaseSchema):
     title: str
 
 
+# --- BIZ-61 срез-1: реестр модулей (разд. 61.1) ------------------------------
+class ModuleRegistryEntry(BaseSchema):
+    """Модуль платформы со всеми атрибутами разд. 61.1."""
+
+    code: str
+    title: str
+    #: Дисциплина или группа — по ней модуль ищут в консоли и в предложении.
+    category: str
+    #: ``True`` — ядро: выключить нельзя, в тарифы не входит.
+    is_core: bool = False
+    depends_on: list[str] = []
+    #: Маршруты фронтенда модуля (разд. 61.3: скрыть навигацию выключенного).
+    ui_routes: list[str] = []
+    permissions: list[str] = []
+
+
+class ModuleRegistryResponse(BaseSchema):
+    modules: list[ModuleRegistryEntry]
+
+
 class SubscriptionPlanRead(BaseSchema):
     code: str
     title: str

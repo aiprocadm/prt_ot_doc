@@ -15,6 +15,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from app.modules.subscription.registry import module_titles
+
 __all__ = [
     "DEFAULT_PLAN_CODE",
     "FEATURE_CATALOG",
@@ -25,19 +27,14 @@ __all__ = [
 ]
 
 # code -> human title. Every code here is a real gate: some router calls
-# is_feature_enabled(<code>) and blocks (404) when the tenant lacks it. Keep this
-# list in sync with the _FEATURE_CODE constants across the gated routers.
-FEATURE_CATALOG: dict[str, str] = {
-    "managed_clients": "Ведение клиентов (аутсорсинг)",
-    "committees": "Комитеты",
-    "contractors": "Подрядчики",
-    "medical": "Медосмотры",
-    "report_builder": "Конструктор отчётов",
-    "budget": "Бюджет безопасности",
-    "sout": "СОУТ",
-    "rules_engine": "Правила автоматизации",
-    "warehouse": "Склад СИЗ",
-}
+# is_feature_enabled(<code>) and blocks (404) when the tenant lacks it.
+#
+# BIZ-61 срез-1: значения больше не набираются здесь руками — они выводятся из
+# реестра модулей (``registry.py``), где у модуля есть ещё и категория, признак
+# ядра, экраны фронтенда и права. Набор кодов при этом НЕ изменился: он
+# участвует в сопоставлении тарифов, и лишняя строка сдвинула бы тариф у
+# существующих арендаторов. Модули ядра в каталог не попадают по построению.
+FEATURE_CATALOG: dict[str, str] = module_titles()
 
 # SEC-63 (разд. 63.3), риск «осиротевшие доступы»: типы событий, которые порождает
 # ТОЛЬКО данный модуль (по фактическим точкам испускания, не по названию). При
