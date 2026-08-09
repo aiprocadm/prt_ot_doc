@@ -28,8 +28,11 @@ from app.modules.subscription import (
     PLANS,
     plan_code_for_features,
 )
+from app.modules.subscription.registry import MODULE_REGISTRY
 from app.schemas.tenant import (
     FeatureCatalogEntry,
+    ModuleRegistryEntry,
+    ModuleRegistryResponse,
     PlanCatalog,
     SubscriptionPlanRead,
     TenantFeatureRead,
@@ -168,6 +171,40 @@ async def list_plans_endpoint(
         features=[
             FeatureCatalogEntry(code=code, title=title) for code, title in FEATURE_CATALOG.items()
         ],
+    )
+
+
+@router.get("/modules", response_model=ModuleRegistryResponse)
+async def list_module_registry(
+    tenant: Tenant = Depends(get_tenant_record),
+    credentials: HTTPAuthorizationCredentials | None = Depends(_optional_bearer),
+) -> ModuleRegistryResponse:
+    """Реестр модулей платформы (разд. 61.1) — источник истины о том, что вообще
+    можно включать и выключать.
+
+    Отдаёт ВСЕ модули, включая ядро: на вопрос «что нельзя выключить» должен
+    отвечать реестр, а не память разработчика. Ядро помечено ``is_core`` и в
+    тарифы не входит.
+
+    ``ui_routes`` нужны фронтенду, чтобы прятать навигацию выключенного модуля
+    (разд. 61.3). Держать эту связь на стороне фронта значило бы описать её
+    второй раз — и однажды разойтись с бэкендом.
+    """
+
+    _require_managing_admin(credentials, tenant)
+    return ModuleRegistryResponse(
+        modules=[
+            ModuleRegistryEntry(
+                code=module.code,
+                title=module.title,
+                category=module.category,
+                is_core=module.is_core,
+                depends_on=list(module.depends_on),
+                ui_routes=list(module.ui_routes),
+                permissions=list(module.permissions),
+            )
+            for module in MODULE_REGISTRY
+        ]
     )
 
 

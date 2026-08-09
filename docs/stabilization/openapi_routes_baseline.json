@@ -325,6 +325,7 @@
     "GET /api/v1/pipelines/runs/{run_id}",
     "GET /api/v1/pipelines/runs/{run_id}/events",
     "GET /api/v1/platform/tenants",
+    "GET /api/v1/platform/tenants/modules",
     "GET /api/v1/platform/tenants/plans",
     "GET /api/v1/portal-requests",
     "GET /api/v1/portal-requests/{request_id}",
@@ -1564,6 +1565,7 @@
     "list_members_api_v1_committees__cid__members_get",
     "list_methodologies_api_v1_risk_advanced_methodologies_get",
     "list_methodologies_api_v1_risk_methodologies_get",
+    "list_module_registry_api_v1_platform_tenants_modules_get",
     "list_norms_api_v1_ppe_norms_get",
     "list_notifications_api_v1_notifications_get",
     "list_npa_api_v1_npa_get",
@@ -2335,6 +2337,8 @@
     "MethodologyIn",
     "MethodologyOut",
     "MethodologyUpdate",
+    "ModuleRegistryEntry",
+    "ModuleRegistryResponse",
     "MyManagedClient",
     "MyManagedClientsResponse",
     "NamedListPage",
@@ -5746,6 +5750,18 @@
       "severity_scale": "array|null",
       "likelihood_scale": "array|null",
       "bands": "array|null"
+    },
+    "ModuleRegistryEntry": {
+      "code": "string",
+      "title": "string",
+      "category": "string",
+      "is_core": "boolean",
+      "depends_on": "array",
+      "ui_routes": "array",
+      "permissions": "array"
+    },
+    "ModuleRegistryResponse": {
+      "modules": "array"
     },
     "MyManagedClient": {
       "client_id": "string",
