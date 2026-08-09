@@ -13,9 +13,13 @@ from app.modules.packs.assets import (
 )
 from app.modules.packs.definitions import (
     PACK_CODE_CEO_SHIELD,
+    PACK_CODE_CIVIL_DEFENCE,
+    PACK_CODE_CONTRACTOR,
+    PACK_CODE_FIRE_INSPECTION,
     PACK_CODE_INCIDENT,
     PACK_CODE_INSPECTION_PREP,
     PACK_CODE_NEW_COMPANY,
+    PACK_CODE_NEW_EMPLOYEE,
     PACK_CODE_OPO,
     PACK_CODE_SITE_ACCESS,
     PACK_CODE_WASTE,
@@ -87,8 +91,53 @@ def _ensure_company_alias(context: dict[str, Any]) -> None:
             company["inn"] = tax_id
 
 
+def _ensure_person_alias(context: dict[str, Any]) -> None:
+    """Собрать ``person.full_name`` из частей имени.
+
+    Конвейер кладёт в контекст ``first_name``/``last_name``/``middle_name``, а
+    шаблоны просят ``full_name`` — и получали ПУСТУЮ строку. В личной карточке
+    учёта СИЗ это выглядит как графа «Работник:» без работника: документ
+    напечатан, подписан и недействителен.
+    """
+
+    person = context.setdefault("person", {})
+    if not isinstance(person, dict) or person.get("full_name"):
+        return
+    parts = [person.get("last_name"), person.get("first_name"), person.get("middle_name")]
+    person["full_name"] = " ".join(str(part).strip() for part in parts if part) or "—"
+
+
+def _ensure_named_block(context: dict[str, Any], key: str, fields: dict[str, Any]) -> None:
+    """Завести блок контекста (``position``, ``journal``), не затирая данные.
+
+    Блок мог прийти от конвейера — тогда заполняем только пустые поля.
+    Прочерк вместо пустоты намеренный: пустая графа читается как брак печати,
+    прочерк — как «не заполнено».
+    """
+
+    block = context.setdefault(key, {})
+    if not isinstance(block, dict):
+        return
+    for field, value in fields.items():
+        if not block.get(field):
+            block[field] = value
+
+
 def _apply_site_access(context: dict[str, Any], data: dict[str, Any]) -> dict[str, Any]:
     _ensure_company_alias(context)
+    _ensure_person_alias(context)
+    # Карточка СИЗ просит должность, лист журнала — название и тип журнала.
+    # Ни того, ни другого конвейер в контекст не кладёт, и обе графы выходили
+    # пустыми у ПЕРВОГО же сценария каталога.
+    _ensure_named_block(context, "position", {"name": _coerce_text(data.get("position"))})
+    _ensure_named_block(
+        context,
+        "journal",
+        {
+            "title": _coerce_text(data.get("journal_title"), "Журнал инструктажей"),
+            "journal_type": _coerce_text(data.get("journal_type"), "Вводный инструктаж"),
+        },
+    )
     ot_resp = _coerce_text(data.get("ot_responsible"), "Ответственный не назначен")
     pb_resp = _coerce_text(data.get("pb_responsible"), "Ответственный не назначен")
     context["logo"] = _decode_image(data.get("logo"), DEFAULT_LOGO_BYTES)
@@ -106,6 +155,15 @@ def _apply_site_access(context: dict[str, Any], data: dict[str, Any]) -> dict[st
     payload.setdefault("ppe_ready", _coerce_text(data.get("ppe_ready"), "да"))
     payload.setdefault("notes", _coerce_text(data.get("notes")))
     payload.setdefault("supervisor", _coerce_text(data.get("supervisor")))
+    # Поля карточки СИЗ и листа журнала. Без умолчаний они выходили ПУСТЫМИ:
+    # «Выданные СИЗ:» без перечня и «Дата:» без даты — это не документ, а бланк,
+    # который уже подшили в папку как заполненный.
+    payload.setdefault("issues", _format_list(data.get("issues")))
+    payload.setdefault("norms", _format_list(data.get("norms")))
+    payload.setdefault("ppe_officer", _coerce_text(data.get("ppe_officer"), ot_resp))
+    payload.setdefault("entry_date", _coerce_text(data.get("entry_date")))
+    payload.setdefault("instructor", _coerce_text(data.get("instructor"), ot_resp))
+    payload.setdefault("person", _coerce_text(data.get("person")))
     payload["ot_responsible"] = ot_resp
     payload["pb_responsible"] = pb_resp
     payload["work_types"] = context["work_types"]
@@ -252,6 +310,130 @@ def _apply_ceo_shield(context: dict[str, Any], data: dict[str, Any]) -> dict[str
     return context
 
 
+# --- Срез-3: контекст сценариев, добавленных срезом-2 -------------------------
+#
+# Пакет без строителя контекста получает только псевдоним ИНН: ни логотипа, ни
+# печати, ни значений ``data.*``. Сгенерированный комплект выходит с пустыми
+# графами — и это видно уже у клиента, а не на проверке. Ниже — по строителю на
+# каждый сценарий; прочерк вместо пустоты означает «не заполнено», а не «сбой».
+
+
+def _apply_new_employee(context: dict[str, Any], data: dict[str, Any]) -> dict[str, Any]:
+    _ensure_company_alias(context)
+    _ensure_person_alias(context)
+    ot_resp = _coerce_text(data.get("ot_responsible"), "Ответственный не назначен")
+    context["logo"] = _decode_image(data.get("logo"), DEFAULT_LOGO_BYTES)
+    context["stamp"] = _decode_image(data.get("stamp"), DEFAULT_STAMP_BYTES)
+    context["ot_responsible"] = ot_resp
+    context["hazards"] = _format_list(data.get("hazards"))
+
+    payload = context.setdefault("data", {})
+    person = context.get("person") if isinstance(context.get("person"), dict) else {}
+    payload.setdefault(
+        "employee_name", _coerce_text(data.get("employee_name") or person.get("full_name"))
+    )
+    payload.setdefault("position", _coerce_text(data.get("position")))
+    payload.setdefault("hire_date", _coerce_text(data.get("hire_date")))
+    payload.setdefault(
+        "program", _coerce_text(data.get("program"), "Программа вводного инструктажа")
+    )
+    payload.setdefault("workplace", _coerce_text(data.get("workplace")))
+    payload.setdefault("instructions", _format_list(data.get("instructions")))
+    payload.setdefault("internship_days", _coerce_text(data.get("internship_days"), "не требуется"))
+    payload.setdefault("medical_org", _coerce_text(data.get("medical_org")))
+    payload.setdefault("ppe_norms", _format_list(data.get("ppe_norms")))
+    payload.setdefault("sizes", _coerce_text(data.get("sizes")))
+    payload.setdefault("documents", _format_list(data.get("documents")))
+    # Подпись работника — графа для ручного заполнения, а не «неизвестно».
+    payload.setdefault("employee_sign", _coerce_text(data.get("employee_sign"), "____________"))
+    return context
+
+
+def _apply_contractor(context: dict[str, Any], data: dict[str, Any]) -> dict[str, Any]:
+    _ensure_company_alias(context)
+    ot_resp = _coerce_text(data.get("ot_responsible"), "Ответственный не назначен")
+    context["logo"] = _decode_image(data.get("logo"), DEFAULT_LOGO_BYTES)
+    context["stamp"] = _decode_image(data.get("stamp"), DEFAULT_STAMP_BYTES)
+    context["ot_responsible"] = ot_resp
+    context["work_types"] = _format_list(data.get("work_types"))
+    context["hazards"] = _format_list(data.get("hazards"))
+
+    payload = context.setdefault("data", {})
+    payload.setdefault("contractor_name", _coerce_text(data.get("contractor_name")))
+    payload.setdefault("contractor_inn", _coerce_text(data.get("contractor_inn")))
+    payload.setdefault("contractor_responsible", _coerce_text(data.get("contractor_responsible")))
+    payload.setdefault("headcount", _coerce_text(data.get("headcount")))
+    payload.setdefault("permits", _format_list(data.get("permits")))
+    # Статусы проверки готовности: умолчание «не подтверждено» — потому что
+    # незаполненная проверка это НЕ пройденная проверка.
+    for field in (
+        "training_status",
+        "medical_status",
+        "ppe_status",
+        "permits_status",
+        "insurance_status",
+    ):
+        payload.setdefault(field, _coerce_text(data.get(field), "не подтверждено"))
+    payload.setdefault("responsibility_split", _coerce_text(data.get("responsibility_split")))
+    payload.setdefault("session_date", _coerce_text(data.get("session_date")))
+    payload.setdefault("team_members", _format_list(data.get("team_members")))
+    return context
+
+
+def _apply_fire_inspection(context: dict[str, Any], data: dict[str, Any]) -> dict[str, Any]:
+    _ensure_company_alias(context)
+    pb_resp = _coerce_text(data.get("pb_responsible"), "Ответственный не назначен")
+    context["logo"] = _decode_image(data.get("logo"), DEFAULT_LOGO_BYTES)
+    context["stamp"] = _decode_image(data.get("stamp"), DEFAULT_STAMP_BYTES)
+    context["pb_responsible"] = pb_resp
+
+    payload = context.setdefault("data", {})
+    for field in ("extinguishers", "escape_routes", "alarm_systems", "fire_doors"):
+        payload.setdefault(field, _coerce_text(data.get(field), "не проверено"))
+    payload.setdefault("findings", _format_list(data.get("findings"), "замечаний нет"))
+    payload.setdefault("fire_works_rules", _coerce_text(data.get("fire_works_rules")))
+    payload.setdefault("shutdown_rules", _coerce_text(data.get("shutdown_rules")))
+    payload.setdefault("housekeeping", _coerce_text(data.get("housekeeping")))
+    payload.setdefault("fire_actions", _coerce_text(data.get("fire_actions")))
+    payload.setdefault("evacuation", _coerce_text(data.get("evacuation")))
+    payload.setdefault("drill_date", _coerce_text(data.get("drill_date")))
+    payload.setdefault("drill_result", _coerce_text(data.get("drill_result"), "не проводилась"))
+    payload.setdefault("scenario", _coerce_text(data.get("scenario")))
+    payload.setdefault("team_members", _format_list(data.get("team_members")))
+    payload.setdefault("system_name", _coerce_text(data.get("system_name")))
+    payload.setdefault("system_result", _coerce_text(data.get("system_result"), "не проверено"))
+    payload.setdefault("next_check_date", _coerce_text(data.get("next_check_date")))
+    return context
+
+
+def _apply_civil_defence(context: dict[str, Any], data: dict[str, Any]) -> dict[str, Any]:
+    _ensure_company_alias(context)
+    context["logo"] = _decode_image(data.get("logo"), DEFAULT_LOGO_BYTES)
+    context["stamp"] = _decode_image(data.get("stamp"), DEFAULT_STAMP_BYTES)
+
+    payload = context.setdefault("data", {})
+    payload.setdefault(
+        "gochs_responsible",
+        _coerce_text(data.get("gochs_responsible"), "Ответственный не назначен"),
+    )
+    payload.setdefault("threats", _format_list(data.get("threats")))
+    payload.setdefault("notification_order", _coerce_text(data.get("notification_order")))
+    payload.setdefault("resources", _format_list(data.get("resources")))
+    payload.setdefault(
+        "facility_category", _coerce_text(data.get("facility_category"), "не отнесён")
+    )
+    payload.setdefault("protection_storage", _coerce_text(data.get("protection_storage")))
+    payload.setdefault("commission_head", _coerce_text(data.get("commission_head")))
+    payload.setdefault("commission_members", _format_list(data.get("commission_members")))
+    payload.setdefault("commission_tasks", _format_list(data.get("commission_tasks")))
+    payload.setdefault("scenario", _coerce_text(data.get("scenario")))
+    payload.setdefault("drill_date", _coerce_text(data.get("drill_date")))
+    payload.setdefault("team_members", _format_list(data.get("team_members")))
+    payload.setdefault("lesson_topic", _coerce_text(data.get("lesson_topic")))
+    payload.setdefault("session_date", _coerce_text(data.get("session_date")))
+    return context
+
+
 _BUILDERS: dict[str, Builder] = {
     PACK_CODE_SITE_ACCESS: _apply_site_access,
     PACK_CODE_NEW_COMPANY: _apply_new_company,
@@ -260,6 +442,10 @@ _BUILDERS: dict[str, Builder] = {
     PACK_CODE_OPO: _apply_opo,
     PACK_CODE_WASTE: _apply_waste,
     PACK_CODE_CEO_SHIELD: _apply_ceo_shield,
+    PACK_CODE_NEW_EMPLOYEE: _apply_new_employee,
+    PACK_CODE_CONTRACTOR: _apply_contractor,
+    PACK_CODE_FIRE_INSPECTION: _apply_fire_inspection,
+    PACK_CODE_CIVIL_DEFENCE: _apply_civil_defence,
 }
 
 
