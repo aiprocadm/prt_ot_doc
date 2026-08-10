@@ -42,8 +42,12 @@ from app.core.tenant_validation import TenantContextValidator
 from app.core.tracing import get_trace_id
 from app.db.session import rearm_session_tenant_context
 from app.domains.packs.fields import questions_for
+from app.domains.packs.scenario_preview import analyze_scenario_readiness
 from app.models.models import (
+    Company,
     DocumentPack,
+    Person,
+    Site,
 )
 from app.modules.packs.definitions import DEFAULT_PACKS, PACK_DEFINITIONS_BY_CODE
 from app.modules.packs.seeder import ensure_pack_by_code
@@ -52,6 +56,10 @@ from app.schemas.pack import (
     PackGenerateRequest,
     PackListItem,
     PackListResponse,
+    PackPreviewDocument,
+    PackPreviewProblem,
+    PackPreviewResponse,
+    PackRunRequest,
     PackScenarioField,
     PackScenarioFieldsResponse,
     PackScenarioListResponse,
@@ -105,6 +113,131 @@ async def get_pack_scenario_fields(
             "Организация клиента (наименование, ИНН, адрес)",
             "Объект (наименование и адрес)",
             "Сотрудник (ФИО, должность, табельный номер)",
+        ],
+    )
+
+
+@router.post("/preview", response_model=PackPreviewResponse)
+async def preview_pack(
+    payload: PackRunRequest,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: PackReadAccess,
+) -> PackPreviewResponse:
+    """Третий шаг мастера (разд. 50.2): что войдёт в комплект и чего не хватает.
+
+    Ничего НЕ создаёт: ни пакета, ни прогона, ни файлов. Поэтому и права нужны
+    только на чтение, и ключ идемпотентности не требуется — «посмотреть, что
+    получится» не должно ничего тратить.
+
+    Причины отдаются СПИСКОМ. Проверки генерации падают на ПЕРВОЙ же (нет
+    организации → 404, чужая площадка → 400, человек из другой организации →
+    400), поэтому пять пропущенных сведений чинились пятью запусками — а узнать
+    о них до запуска было негде.
+    """
+
+    TenantContextValidator.ensure_tenant_context(tenant)
+
+    definition = PACK_DEFINITIONS_BY_CODE.get(payload.pack_code)
+    if definition is None:
+        raise _pack_not_found(
+            code="PACK_SCENARIO_NOT_SUPPORTED", message="Scenario is not supported"
+        )
+
+    tenant_scope = _tenant_scope_values(tenant)
+    company = (
+        await session.execute(
+            select(Company).where(
+                Company.id == payload.company_id,
+                Company.deleted_at.is_(None),
+                Company.tenant_id.in_(tenant_scope),
+            )
+        )
+    ).scalar_one_or_none()
+
+    site_name: str | None = None
+    if payload.site_id:
+        site = (
+            await session.execute(
+                select(Site).where(
+                    Site.id == payload.site_id,
+                    Site.deleted_at.is_(None),
+                    Site.tenant_id.in_(tenant_scope),
+                )
+            )
+        ).scalar_one_or_none()
+        # Чужая площадка — то же, что отсутствующая: показывать её название,
+        # взятое из другой организации, было бы подсказкой о чужих данных.
+        if site is not None and company is not None and site.company_id == company.id:
+            site_name = site.name
+
+    person_names: list[str] = []
+    missing_ids: list[str] = []
+    foreign_names: list[str] = []
+    no_position: list[str] = []
+    requested_ids = [pid for pid in payload.person_ids if pid]
+    if requested_ids:
+        found = (
+            (
+                await session.execute(
+                    select(Person).where(
+                        Person.id.in_(requested_ids),
+                        Person.deleted_at.is_(None),
+                        Person.tenant_id.in_(tenant_scope),
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        indexed = {person.id: person for person in found}
+        for pid in requested_ids:
+            person = indexed.get(pid)
+            if person is None:
+                missing_ids.append(pid)
+                continue
+            name = (
+                " ".join(part for part in (person.last_name, person.first_name) if part).strip()
+                or pid
+            )
+            if company is not None and person.company_id != company.id:
+                foreign_names.append(name)
+                continue
+            person_names.append(name)
+            if not getattr(person, "position_id", None) and not getattr(person, "position", None):
+                no_position.append(name)
+
+    templates = [template.name for template in definition.templates]
+    preview = analyze_scenario_readiness(
+        pack_code=payload.pack_code,
+        templates=templates,
+        answers=payload.data,
+        company_name=company.name if company is not None else None,
+        site_name=site_name,
+        site_required=bool(payload.site_id),
+        person_names=person_names,
+        persons_without_position=no_position,
+        missing_person_ids=missing_ids,
+        foreign_person_names=foreign_names,
+    )
+    return PackPreviewResponse(
+        ready=preview.ready,
+        score=preview.score,
+        documents_total=preview.documents_total,
+        persons_total=preview.persons_total,
+        persons_ready=preview.persons_ready,
+        documents=[
+            PackPreviewDocument(template_name=item.template_name, person_name=item.person_name)
+            for item in preview.documents
+        ],
+        problems=[
+            PackPreviewProblem(
+                code=problem.code,
+                message=problem.message,
+                blocking=problem.blocking,
+                rows_total=problem.rows_total,
+            )
+            for problem in preview.problems
         ],
     )
 
