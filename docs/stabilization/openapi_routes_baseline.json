@@ -36,6 +36,7 @@
     "DELETE /api/v1/package-profiles/{profile_id}",
     "DELETE /api/v1/persons/{person_id}",
     "DELETE /api/v1/pipelines/profiles/{profile_id}",
+    "DELETE /api/v1/platform/tenants/{tenant_id}/modules/{code}/trial",
     "DELETE /api/v1/ppe/budgets/{budget_id}",
     "DELETE /api/v1/ppe/items/{item_id}",
     "DELETE /api/v1/ppe/norms/{norm_id}",
@@ -790,6 +791,7 @@
     "POST /api/v1/pipelines/runs:bulk",
     "POST /api/v1/pipelines/{template_id}/run",
     "POST /api/v1/platform/tenants",
+    "POST /api/v1/platform/tenants/{tenant_id}/modules/{code}/trial",
     "POST /api/v1/portal-requests/{request_id}/messages",
     "POST /api/v1/portal/packages/{run_id}/tickets",
     "POST /api/v1/portal/session",
@@ -1454,6 +1456,7 @@
     "get_workplace_api_v1_workplaces__workplace_id__get",
     "global_search_api_v1_search_get",
     "grant_access_api_v1_managed_clients__mcid__access_post",
+    "grant_module_trial_endpoint_api_v1_platform_tenants__tenant_id__modules__code__trial_post",
     "grant_subject_consent_api_v1_privacy_subjects__person_id__consents_post",
     "history_api_v1_client_portal_history_get",
     "import_apply_api_v1_sout__cid__import_apply_post",
@@ -1784,6 +1787,7 @@
     "revoke_certificate_api_v1_training_certificates__item_id__revoke_post",
     "revoke_client_consent_api_v1_managed_clients__mcid__consents__consent_id__delete",
     "revoke_machine_key_api_v1_machine_keys__item_id__revoke_post",
+    "revoke_module_trial_endpoint_api_v1_platform_tenants__tenant_id__modules__code__trial_delete",
     "revoke_permit_endpoint_api_v1_permits__permit_id__revoke_post",
     "risk_summary_api_v1_risk_advanced_maps__map_id__summary_get",
     "role_workspace_summary_api_v1_workspace_role_summary_get",
@@ -2339,6 +2343,8 @@
     "MethodologyUpdate",
     "ModuleRegistryEntry",
     "ModuleRegistryResponse",
+    "ModuleTrialGrant",
+    "ModuleTrialResult",
     "MyManagedClient",
     "MyManagedClientsResponse",
     "NamedListPage",
@@ -5763,6 +5769,14 @@
     "ModuleRegistryResponse": {
       "modules": "array"
     },
+    "ModuleTrialGrant": {
+      "days": "integer"
+    },
+    "ModuleTrialResult": {
+      "code": "string",
+      "title": "string",
+      "trial_until": "null|string"
+    },
     "MyManagedClient": {
       "client_id": "string",
       "client_name": "string",
@@ -8114,7 +8128,8 @@
     "TenantFeatureRead": {
       "code": "string",
       "title": "string",
-      "on": "boolean"
+      "on": "boolean",
+      "trial_until": "null|string"
     },
     "TenantFleetItem": {
       "tenant": "TenantRead",

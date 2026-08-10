@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Literal
 
 from pydantic import EmailStr, Field
@@ -79,6 +80,11 @@ class TenantFeatureRead(BaseSchema):
     code: str
     title: str
     on: bool
+    #: Дата окончания пробного доступа (BIZ-61 срез-3, разд. 61.2).
+    #: ``None`` — выдано бессрочно либо не выдано вовсе. Консоли этого поля
+    #: недостаточно знать по ``on``: «включено» и «включено до 22 августа» —
+    #: разные ответы клиенту.
+    trial_until: datetime | None = None
 
 
 class TenantFleetItem(BaseSchema):
@@ -135,3 +141,16 @@ class PlanCatalog(BaseSchema):
 
 class TenantPlanPatch(BaseSchema):
     plan: str
+
+
+class ModuleTrialGrant(BaseSchema):
+    """Выдать модуль на срок (разд. 61.2, «временный доступ на N дней»)."""
+
+    days: int = Field(..., ge=1, le=180, description="Длительность пробного доступа в днях")
+
+
+class ModuleTrialResult(BaseSchema):
+    code: str
+    title: str
+    #: ``None`` в ответе на отзыв — доступа больше нет.
+    trial_until: datetime | None = None
