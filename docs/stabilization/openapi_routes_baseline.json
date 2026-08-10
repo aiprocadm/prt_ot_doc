@@ -777,6 +777,7 @@
     "POST /api/v1/packages/runs",
     "POST /api/v1/packages/runs/{run_id}/portal-link",
     "POST /api/v1/packs/generate",
+    "POST /api/v1/packs/preview",
     "POST /api/v1/packs/run",
     "POST /api/v1/packs/scenarios/{scenario_code}",
     "POST /api/v1/permits",
@@ -1710,6 +1711,7 @@
     "prescriptions_summary_api_v1_prescriptions_summary_get",
     "preview_branding_api_v1_branding_preview_post",
     "preview_mapping_api_v1_package_presets__preset_id__preview_mapping_post",
+    "preview_pack_api_v1_packs_preview_post",
     "preview_pack_run_api_v1_pack_runs_preview_post",
     "preview_report_api_v1_report_builder_preview_post",
     "preview_template_version_api_v1_templates__template_id__versions__version_id__preview_post",
@@ -2447,6 +2449,9 @@
     "PackListMeta",
     "PackListResponse",
     "PackNamingConfig",
+    "PackPreviewDocument",
+    "PackPreviewProblem",
+    "PackPreviewResponse",
     "PackRunAccepted",
     "PackRunCreate",
     "PackRunItemRead",
@@ -6474,6 +6479,25 @@
       "version": "integer|null",
       "reference_date": "null|string",
       "flags": "array"
+    },
+    "PackPreviewDocument": {
+      "template_name": "string",
+      "person_name": "null|string"
+    },
+    "PackPreviewProblem": {
+      "code": "string",
+      "message": "string",
+      "blocking": "boolean",
+      "rows_total": "integer"
+    },
+    "PackPreviewResponse": {
+      "ready": "boolean",
+      "score": "integer",
+      "documents_total": "integer",
+      "persons_total": "integer",
+      "persons_ready": "integer",
+      "documents": "array",
+      "problems": "array"
     },
     "PackRunAccepted": {
       "pack_run_id": "string",

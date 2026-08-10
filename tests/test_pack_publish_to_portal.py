@@ -40,7 +40,12 @@ async def _put_archive(sessionmaker, data_factory, key_suffix: str = "result.zip
         tenant = await data_factory.ensure_tenant(session=session)
         slug = tenant.slug
     key = f"{tenant_prefix_path(slug)}/packs/{key_suffix}"
-    FileStorageService.default().put(key, _real_archive(), content_type="application/zip")
+    storage = FileStorageService.default()
+    storage.put(key, _real_archive(), content_type="application/zip")
+    # Хранилище в тестах общее на прогон, и соседний тест может его очистить.
+    # Без этой проверки такой сбой выглядел бы как «ручка выдачи не нашла
+    # архив» — то есть указывал бы на продукт вместо обвязки.
+    assert storage.has(key), "архив не виден в хранилище сразу после записи"
     return slug, key
 
 

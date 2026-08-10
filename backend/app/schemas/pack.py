@@ -128,6 +128,35 @@ class PackGenerateRequest(PackRunRequest):
     include_pdf: bool = True
 
 
+# --- BIZ-50 срез-6: третий шаг мастера для сценариев каталога (разд. 50.2) ---
+class PackPreviewProblem(BaseSchema):
+    code: str
+    #: Человеческим языком: что не так И что с этим делать.
+    message: str
+    #: ``True`` — генерации не будет; ``False`` — выйдет, но с пробелом.
+    blocking: bool
+    #: Сколько объектов затронуто (людей, полей) — включая не названные поимённо.
+    rows_total: int = 0
+
+
+class PackPreviewDocument(BaseSchema):
+    template_name: str
+    #: ``None`` — документ на организацию целиком (приказ, перечень).
+    person_name: str | None = None
+
+
+class PackPreviewResponse(BaseSchema):
+    """Что войдёт в комплект и чего не хватает — ДО генерации."""
+
+    ready: bool
+    score: int
+    documents_total: int
+    persons_total: int
+    persons_ready: int
+    documents: list[PackPreviewDocument] = Field(default_factory=list)
+    problems: list[PackPreviewProblem] = Field(default_factory=list)
+
+
 class PackGeneratedDocument(BaseSchema):
     template_id: str
     template_name: str
