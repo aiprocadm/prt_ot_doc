@@ -92,6 +92,12 @@ export const MAIN_NAV_GROUPS: NavGroup[] = [
         permission: PERMISSIONS.PACK_VIEW,
       },
       {
+        label: "Разовый комплект",
+        to: "/packs/wizard",
+        icon: Package,
+        permission: PERMISSIONS.PACK_VIEW,
+      },
+      {
         label: "Генерация",
         to: "/generation",
         icon: ClipboardCheck,
