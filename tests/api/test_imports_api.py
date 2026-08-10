@@ -22,7 +22,7 @@ from httpx import AsyncClient
 from sqlalchemy import func, select
 
 from app.models.master_data import Person
-from app.models.models import RoleEnum
+from app.models.models import RoleEnum, Tenant
 
 API = "/api/v1/imports"
 
@@ -39,21 +39,15 @@ def _upload(content: bytes, name: str = "staff.csv") -> dict:
 
 @pytest.fixture()
 async def imports_tenant(sessionmaker, data_factory):
-    """Арендатор с включённым флагом ``imports`` и одной организацией."""
+    """Арендатор с одной организацией.
 
-    from app.models.feature import Feature, FeatureEnablement
+    Выдавать модуль больше не нужно: импорт — ядро (решение владельца
+    2026-08-08), он доступен любому арендатору.
+    """
 
     async with sessionmaker() as session:
         tenant = await data_factory.ensure_tenant(session=session)
         await data_factory.create_company(tenant=tenant, name="АКМЕ", session=session)
-        feature = (
-            await session.execute(select(Feature).where(Feature.code == "imports"))
-        ).scalar_one_or_none()
-        if feature is None:
-            feature = Feature(code="imports", title="Импорт данных")
-            session.add(feature)
-            await session.flush()
-        session.add(FeatureEnablement(tenant_id=str(tenant.id), feature_id=feature.id, on=True))
         await session.commit()
         return str(tenant.id)
 
@@ -71,10 +65,68 @@ async def _count_persons(sessionmaker, tenant_id: str) -> int:
 
 @pytest.mark.anyio
 class TestFeatureGate:
-    async def test_targets_are_hidden_while_the_flag_is_off(
+    """Импорт — ядро: доступен без выдачи, но гейт остаётся живым."""
+
+    async def test_import_works_without_any_grant(
         self, async_client: AsyncClient, make_auth_headers
     ) -> None:
+        """Ровно то, что было сломано: модуль отвечал «не найдено» ВСЕМ.
+
+        Строку о выдаче с кодом ``imports`` создать было нечем — кода не было
+        ни в каталоге, ни в тарифах. При этом пункт меню «Импорт данных» видели
+        владелец и админ любого арендатора.
+        """
+
         headers = await make_auth_headers(RoleEnum.ADMIN)
+
+        response = await async_client.get(f"{API}/targets", headers=headers)
+
+        assert response.status_code == 200, response.text
+        assert response.json(), "список видов загрузки пуст — импортировать нечего"
+
+    async def test_explicit_off_row_still_closes_the_module(
+        self, async_client: AsyncClient, make_auth_headers, sessionmaker
+    ) -> None:
+        """Гейт не декорация: явный запрет по-прежнему закрывает доступ.
+
+        Это аварийный выключатель. Без проверки «ядро» однажды прочитали бы как
+        «проверять нечего», и гейт тихо перестал бы работать.
+        """
+
+        from app.models.feature import Feature, FeatureEnablement
+
+        headers = await make_auth_headers(RoleEnum.ADMIN)
+
+        async with sessionmaker() as session:
+            tenant_id = (
+                await session.execute(select(Tenant.id).where(Tenant.slug == "test"))
+            ).scalar_one()
+            feature = (
+                await session.execute(select(Feature).where(Feature.code == "imports"))
+            ).scalar_one_or_none()
+            if feature is None:
+                feature = Feature(code="imports", title="Импорт данных")
+                session.add(feature)
+                await session.flush()
+            row = (
+                await session.execute(
+                    select(FeatureEnablement).where(
+                        FeatureEnablement.tenant_id == str(tenant_id),
+                        FeatureEnablement.feature_id == feature.id,
+                    )
+                )
+            ).scalar_one_or_none()
+            if row is None:
+                # Обновить-или-вставить: вторая строка выдачи ломает
+                # уникальность и делает ответ гейта неопределённым.
+                session.add(
+                    FeatureEnablement(
+                        tenant_id=str(tenant_id), feature_id=feature.id, on=False
+                    )
+                )
+            else:
+                row.on = False
+            await session.commit()
 
         response = await async_client.get(f"{API}/targets", headers=headers)
 

@@ -45,19 +45,9 @@ def _upload(content: bytes, name: str = "staff.csv") -> dict:
 
 @pytest.fixture()
 async def imports_tenant(sessionmaker, data_factory):
-    from app.models.feature import Feature, FeatureEnablement
-
     async with sessionmaker() as session:
         tenant = await data_factory.ensure_tenant(session=session)
         await data_factory.create_company(tenant=tenant, name="АКМЕ", session=session)
-        feature = (
-            await session.execute(select(Feature).where(Feature.code == "imports"))
-        ).scalar_one_or_none()
-        if feature is None:
-            feature = Feature(code="imports", title="Импорт данных")
-            session.add(feature)
-            await session.flush()
-        session.add(FeatureEnablement(tenant_id=str(tenant.id), feature_id=feature.id, on=True))
         await session.commit()
         return tenant
 

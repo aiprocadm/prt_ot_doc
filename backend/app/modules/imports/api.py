@@ -34,7 +34,7 @@ from app.api.dependencies import get_session, get_tenant_record
 from app.api.helpers.upload import reject_oversize_upload
 from app.core.audit_decorator import audit_operation
 from app.core.errors import api_problem_detail
-from app.core.feature_flags import is_feature_enabled
+from app.core.feature_flags import is_module_enabled
 from app.core.security import AccessContext, abac
 from app.models.imports import ImportBatch
 from app.models.tenanting import Tenant
@@ -91,7 +91,20 @@ def _problem(status_code: int, code: str, message: str, **extra: Any) -> HTTPExc
 
 
 async def _require_enabled(session: AsyncSession, tenant: Tenant) -> None:
-    if not await is_feature_enabled(session, str(tenant.id), _FEATURE_CODE, default=False):
+    """Гейт модуля импорта — через реестр (BIZ-61).
+
+    Импорт объявлен ядром (решение владельца 2026-08-08), поэтому умолчание
+    здесь «включено». Гейт оставлен, а не выкинут: он остаётся точкой, где
+    доступ можно отобрать явной записью, и держит модуль в общем страже
+    ``scripts/ci/check_module_gates.py``.
+
+    Раньше тут стояло ``is_feature_enabled(..., default=False)`` с кодом,
+    которого не было ни в каталоге, ни в тарифах: строку о выдаче создать было
+    нечем, и модуль отвечал «не найдено» ВСЕМ арендаторам — при живом пункте
+    меню «Импорт данных».
+    """
+
+    if not await is_module_enabled(session, str(tenant.id), _FEATURE_CODE):
         raise _problem(
             status.HTTP_404_NOT_FOUND,
             "IMPORTS_DISABLED",
