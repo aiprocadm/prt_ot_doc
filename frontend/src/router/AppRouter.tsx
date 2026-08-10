@@ -10,6 +10,7 @@ import {
 import { AuthLayout } from "@/layouts/AuthLayout";
 import { MainLayout } from "@/layouts/MainLayout";
 import { AccessDeniedPage } from "@/pages/access/AccessDeniedPage";
+import { ModuleDisabledPage } from "@/pages/access/ModuleDisabledPage";
 import { AuthRedirectHandler } from "@/router/AuthRedirectHandler";
 import { buildProtectedRouteGroups } from "@/router/routeGroups";
 import { LoginPage } from "@/router/pageRegistry";
@@ -82,6 +83,10 @@ const AppRouter = () => {
             <Route path="login" element={<LoginPage />} />
           </Route>
           <Route path="/no-access" element={<AccessDeniedPage />} />
+          <Route
+            path="/module-unavailable"
+            element={<ModuleDisabledPage />}
+          />
           <Route element={<ProtectedRoute />}>
             <Route element={<MainLayout />}>
               <Route index element={<LandingRedirect />} />
