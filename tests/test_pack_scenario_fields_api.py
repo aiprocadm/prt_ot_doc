@@ -60,9 +60,7 @@ async def test_unknown_scenario_is_404(async_client: AsyncClient, make_auth_head
 
 
 @pytest.mark.anyio
-async def test_every_catalog_scenario_answers(
-    async_client: AsyncClient, make_auth_headers
-) -> None:
+async def test_every_catalog_scenario_answers(async_client: AsyncClient, make_auth_headers) -> None:
     """Сценарий из каталога без вопросов — тупик в мастере."""
 
     headers = {**await make_auth_headers(), **dict(async_client.headers)}

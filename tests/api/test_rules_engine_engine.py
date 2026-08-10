@@ -389,7 +389,7 @@ async def test_engine_error_does_not_break_enqueue(
     async def _boom(*args: Any, **kwargs: Any) -> bool:
         raise RuntimeError("boom")
 
-    monkeypatch.setattr(engine_mod, "is_feature_enabled", _boom)
+    monkeypatch.setattr(engine_mod, "is_module_enabled", _boom)
 
     async with sessionmaker() as session:
         await _make_rule(

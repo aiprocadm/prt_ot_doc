@@ -61,7 +61,25 @@ async def test_reorder_404_when_feature_disabled(
             feature = Feature(code="warehouse", title="Warehouse")
             session.add(feature)
             await session.flush()
-        session.add(FeatureEnablement(tenant_id=tenant.id, feature_id=feature.id, on=False))
+        # Обновляем существующую выдачу, а не добавляем вторую строку: у
+        # тестового арендатора модуль выдан явно (BIZ-61 срез-2). Дубль делал
+        # ответ гейта неопределённым.
+        enablement = (
+            (
+                await session.execute(
+                    select(FeatureEnablement).where(
+                        FeatureEnablement.tenant_id == tenant.id,
+                        FeatureEnablement.feature_id == feature.id,
+                    )
+                )
+            )
+            .scalars()
+            .first()
+        )
+        if enablement is None:
+            session.add(FeatureEnablement(tenant_id=tenant.id, feature_id=feature.id, on=False))
+        else:
+            enablement.on = False
         await session.commit()
     headers = await make_auth_headers(RoleEnum.ADMIN)
     resp = await async_client.get("/api/v1/ppe/stock/reorder", headers=headers)

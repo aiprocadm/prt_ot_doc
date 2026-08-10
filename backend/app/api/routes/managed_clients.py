@@ -23,7 +23,7 @@ from app.api.helpers.etag import (
     compute_list_etag,
 )
 from app.core.errors import api_problem_detail
-from app.core.feature_flags import is_feature_enabled
+from app.core.feature_flags import is_module_enabled
 from app.core.security import AccessContext, AuthContext, abac, get_auth_ctx
 from app.core.tenant_validation import TenantContextValidator
 from app.db.session import AsyncSessionLocal
@@ -161,7 +161,7 @@ def _today() -> date:
 
 
 async def _require_enabled(session: AsyncSession, tenant: Tenant) -> None:
-    enabled = await is_feature_enabled(session, str(tenant.id), _FEATURE_CODE, default=False)
+    enabled = await is_module_enabled(session, str(tenant.id), _FEATURE_CODE)
     if not enabled:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

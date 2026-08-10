@@ -260,7 +260,7 @@ def _tenant():
 async def test_kpi_route_flag_off_returns_404(monkeypatch):
     from fastapi import Response
 
-    monkeypatch.setattr(routes, "is_feature_enabled", AsyncMock(return_value=False))
+    monkeypatch.setattr(routes, "is_module_enabled", AsyncMock(return_value=False))
     with pytest.raises(Exception) as exc:
         await routes.committee_kpi(
             request=SimpleNamespace(headers={}),
@@ -279,7 +279,7 @@ async def test_kpi_route_etag_304(monkeypatch):
 
     from app.schemas.committees import CommitteeKpiDto
 
-    monkeypatch.setattr(routes, "is_feature_enabled", AsyncMock(return_value=True))
+    monkeypatch.setattr(routes, "is_module_enabled", AsyncMock(return_value=True))
     monkeypatch.setattr(
         routes.CommitteeKpiService,
         "compute",
@@ -316,7 +316,7 @@ async def test_kpi_route_etag_304(monkeypatch):
 @pytest.mark.asyncio
 async def test_kpi_rbac_management_vs_worker(async_client, make_auth_headers, monkeypatch):
     # Flag defaults off for committees → force it on so the handler body runs.
-    monkeypatch.setattr(routes, "is_feature_enabled", AsyncMock(return_value=True))
+    monkeypatch.setattr(routes, "is_module_enabled", AsyncMock(return_value=True))
 
     hr_headers = await make_auth_headers(RoleEnum.HR)
     resp_mgmt = await async_client.get("/api/v1/committees/kpi", headers=hr_headers)

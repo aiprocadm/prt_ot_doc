@@ -140,7 +140,7 @@ def test_conversion_survives_force_rls_with_unprivileged_role(monkeypatch) -> No
             _async_url(dbname, user=probe_role, password="probe-pass"), echo=False
         )
 
-        monkeypatch.setattr(routes, "is_feature_enabled", AsyncMock(return_value=True))
+        monkeypatch.setattr(routes, "is_module_enabled", AsyncMock(return_value=True))
         tenant_ns = SimpleNamespace(
             id=outsourcer_id, is_active=True, slug="outsourcer", code="outsourcer"
         )

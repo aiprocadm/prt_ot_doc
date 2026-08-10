@@ -25,7 +25,7 @@ from app.api.helpers.etag import (
 )
 from app.core.audit_decorator import audit_operation
 from app.core.errors import api_problem_detail
-from app.core.feature_flags import is_feature_enabled
+from app.core.feature_flags import is_module_enabled
 from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
 from app.models.models import Person, Position, PPENorm
@@ -925,7 +925,7 @@ _WAREHOUSE_FEATURE_CODE = "warehouse"
 
 
 async def require_warehouse_feature(tenant: TenantDep, session: SessionDep) -> None:
-    if not await is_feature_enabled(session, str(tenant.id), _WAREHOUSE_FEATURE_CODE):
+    if not await is_module_enabled(session, str(tenant.id), _WAREHOUSE_FEATURE_CODE):
         raise HTTPException(
             status.HTTP_404_NOT_FOUND,
             "PPE warehouse feature is not enabled for this tenant",

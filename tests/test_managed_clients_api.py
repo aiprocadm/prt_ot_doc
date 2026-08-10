@@ -31,7 +31,7 @@ def _tenant(tid="tenant-1"):
 
 @pytest.fixture(autouse=True)
 def _flag_on(monkeypatch):
-    monkeypatch.setattr(routes, "is_feature_enabled", AsyncMock(return_value=True))
+    monkeypatch.setattr(routes, "is_module_enabled", AsyncMock(return_value=True))
 
 
 async def _seed(session, tenant_id="tenant-1", **over):
@@ -261,7 +261,7 @@ async def test_portfolio_etag_304(sessionmaker):
 
 @pytest.mark.asyncio
 async def test_feature_flag_off_returns_404(sessionmaker, monkeypatch):
-    monkeypatch.setattr(routes, "is_feature_enabled", AsyncMock(return_value=False))
+    monkeypatch.setattr(routes, "is_module_enabled", AsyncMock(return_value=False))
     async with sessionmaker() as session:
         with pytest.raises(HTTPException) as exc:
             await routes.portfolio(

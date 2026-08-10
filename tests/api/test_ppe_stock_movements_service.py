@@ -204,11 +204,36 @@ async def test_deplete_noop_when_item_has_no_batches(sessionmaker, data_factory:
 async def test_deplete_noop_when_flag_disabled(sessionmaker, data_factory: TestDataFactory):
     async with sessionmaker() as session:
         tenant = await data_factory.ensure_tenant(session=session)
-        # explicit opt-out
-        feature = Feature(code="warehouse", title="Warehouse")
-        session.add(feature)
-        await session.flush()
-        session.add(FeatureEnablement(tenant_id=tenant.id, feature_id=feature.id, on=False))
+        # explicit opt-out. Справочник модулей общий: строка «warehouse» уже
+        # заведена посевом, вторая нарушила бы уникальность кода.
+        feature = (
+            (await session.execute(select(Feature).where(Feature.code == "warehouse")))
+            .scalars()
+            .first()
+        )
+        if feature is None:
+            feature = Feature(code="warehouse", title="Warehouse")
+            session.add(feature)
+            await session.flush()
+        # Обновляем существующую выдачу, а не добавляем вторую строку: у
+        # тестового арендатора модуль выдан явно (BIZ-61 срез-2). Дубль делал
+        # ответ гейта неопределённым.
+        enablement = (
+            (
+                await session.execute(
+                    select(FeatureEnablement).where(
+                        FeatureEnablement.tenant_id == tenant.id,
+                        FeatureEnablement.feature_id == feature.id,
+                    )
+                )
+            )
+            .scalars()
+            .first()
+        )
+        if enablement is None:
+            session.add(FeatureEnablement(tenant_id=tenant.id, feature_id=feature.id, on=False))
+        else:
+            enablement.on = False
         item = PPEItem(tenant_id=tenant.id, name="Каска")
         session.add(item)
         await session.flush()

@@ -60,6 +60,46 @@ def _gated_codes() -> set[str]:
     return codes
 
 
+_MODULE_GATE = re.compile(r"is_module_enabled\(\s*[^,]+,\s*[^,]+,\s*([A-Za-z_][A-Za-z0-9_]*)\s*\)")
+
+#: Гейты на коды ВНЕ реестра, принятые осознанно. Каждая запись — долг с
+#: причиной, а не исключение «чтобы гард молчал».
+_KNOWN_UNREGISTERED = {
+    # OPS-71: импорт-фреймворк гейтится флагом `imports`, которого нет ни в
+    # каталоге, ни в тарифах. Значит включить модуль через консоль НЕЛЬЗЯ —
+    # строку выдачи некому создать. Отнести его к тарифу или к ядру —
+    # коммерческое решение владельца, поэтому здесь долг, а не тихий обход.
+    "imports",
+}
+
+
+def _module_gate_codes() -> set[str]:
+    """Коды, на которые реально поставлен модульный гейт.
+
+    Разбор точный (ищем именно вызов ``is_module_enabled``), поэтому по нему
+    можно проверять ОБРАТНОЕ направление: гейт без записи в реестре.
+    """
+
+    codes: set[str] = set()
+    for path in BACKEND.rglob("*.py"):
+        if path.name == "feature_flags.py":
+            continue
+        text = path.read_text(encoding="utf-8", errors="ignore")
+        if "is_module_enabled" not in text:
+            continue
+        for name in _MODULE_GATE.findall(text):
+            match = re.search(rf"^{name}\s*=\s*[\"']([a-z_]+)[\"']", text, re.MULTILINE)
+            if match:
+                codes.add(match.group(1))
+    return codes
+
+
+def _registered_codes() -> set[str]:
+    from app.modules.subscription.registry import MODULE_REGISTRY
+
+    return {module.code for module in MODULE_REGISTRY}
+
+
 def _catalog_dependencies() -> dict[str, object]:
     """Зависимости между модулями, если их когда-нибудь введут."""
 
@@ -85,6 +125,24 @@ def main(argv: list[str] | None = None) -> int:
             f"модуль остался бы доступен по прямому вызову API: {missing}"
         )
 
+    # Обратное направление (BIZ-61 срез-2): гейт на код, которого нет в
+    # реестре. Такой модуль не попадёт ни в тариф, ни в консоль — включить его
+    # будет нечем, и обнаружится это по жалобе заказчика.
+    unregistered = sorted(_module_gate_codes() - _registered_codes() - _KNOWN_UNREGISTERED)
+    if unregistered:
+        errors.append(
+            "гейт поставлен на модуль вне реестра "
+            f"({unregistered}) — его нельзя выдать через консоль и он не входит "
+            "ни в один тариф; добавьте модуль в app/modules/subscription/registry.py"
+        )
+
+    stale_debt = sorted(_KNOWN_UNREGISTERED & _registered_codes())
+    if stale_debt:
+        errors.append(
+            f"коды {stale_debt} уже в реестре — уберите их из _KNOWN_UNREGISTERED, "
+            "иначе список долгов начнёт врать"
+        )
+
     dependencies = _catalog_dependencies()
     if dependencies:
         errors.append(
@@ -102,7 +160,8 @@ def main(argv: list[str] | None = None) -> int:
 
     print(
         f"Module entitlements guard passed: {len(catalog)} модулей каталога, "
-        "у каждого есть backend-гейт; зависимостей между модулями нет."
+        "у каждого есть backend-гейт; гейтов вне реестра нет "
+        f"(принятый долг: {sorted(_KNOWN_UNREGISTERED)}); зависимостей между модулями нет."
     )
     return 0
 

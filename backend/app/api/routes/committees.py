@@ -18,7 +18,7 @@ from app.api.helpers.etag import (
     compute_list_etag,
 )
 from app.core.errors import api_problem_detail
-from app.core.feature_flags import is_feature_enabled
+from app.core.feature_flags import is_module_enabled
 from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
 from app.domains.committees.kpi import CommitteeKpiService
@@ -117,7 +117,7 @@ def _feature_off() -> HTTPException:
 
 
 async def _require_committees_enabled(session: AsyncSession, tenant: Tenant) -> None:
-    enabled = await is_feature_enabled(session, str(tenant.id), _FEATURE_CODE, default=False)
+    enabled = await is_module_enabled(session, str(tenant.id), _FEATURE_CODE)
     if not enabled:
         raise _feature_off()
 

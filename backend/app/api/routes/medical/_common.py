@@ -15,7 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
-from app.core.feature_flags import is_feature_enabled
+from app.core.feature_flags import is_module_enabled
 from app.core.security import AccessContext, abac
 from app.domains.medical import lifecycle as lc
 from app.models.models import (
@@ -59,7 +59,7 @@ _MEDICAL_FEATURE_CODE = "medical"
 
 
 async def require_medical_feature(tenant: TenantDep, session: SessionDep) -> None:
-    if not await is_feature_enabled(session, str(tenant.id), _MEDICAL_FEATURE_CODE):
+    if not await is_module_enabled(session, str(tenant.id), _MEDICAL_FEATURE_CODE):
         raise HTTPException(
             status.HTTP_404_NOT_FOUND, "Medical feature is not enabled for this tenant"
         )
