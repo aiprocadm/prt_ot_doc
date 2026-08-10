@@ -2,25 +2,37 @@ import type { Permission } from "@/permissions/permissions";
 
 import type { NavGroup } from "@/router/navigationConfig";
 
+/**
+ * Маршруты выключенных модулей (BIZ-61 срез-5, разд. 61.3).
+ *
+ * Приходят с сервера (`/tenants/me/modules`). Пустой набор значит «скрывать
+ * нечего», а не «всё выключено»: настоящий запрет стоит на сервере, и прятать
+ * всё меню из-за неудачного запроса — хуже, чем показать лишний пункт.
+ */
+export type DisabledModuleRoutes = string[];
+
+/** Принадлежит ли экран ``path`` выключенному модулю. */
+export function isRouteOfDisabledModule(
+  path: string,
+  disabledRoutes: DisabledModuleRoutes,
+): boolean {
+  return disabledRoutes.some(
+    // Префикс, а не точное совпадение: вложенные экраны («/committees/kpi»)
+    // принадлежат тому же модулю и обязаны исчезать вместе с ним.
+    (route) => path === route || path.startsWith(`${route}/`),
+  );
+}
+
 export function filterNavGroupsByAccess(
   groups: NavGroup[],
   can: (permission: Permission) => boolean,
-  featureFlags: Record<string, boolean>,
+  disabledRoutes: DisabledModuleRoutes,
 ): NavGroup[] {
   return groups
     .map((group) => ({
       ...group,
       items: group.items.filter((item) => {
-        if (item.to === "/edo" && featureFlags.edo === false) return false;
-        if (item.to === "/committees" && featureFlags.committees === false)
-          return false;
-        if (item.to === "/committees/kpi" && featureFlags.committees === false)
-          return false;
-        if (item.to === "/sout" && featureFlags.sout === false) return false;
-        if (item.to === "/rules" && featureFlags.rules_engine === false)
-          return false;
-        if (item.to === "/budget" && featureFlags.budget === false)
-          return false;
+        if (isRouteOfDisabledModule(item.to, disabledRoutes)) return false;
         return can(item.permission);
       }),
     }))

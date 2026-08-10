@@ -441,6 +441,7 @@
     "GET /api/v1/tenancy/context",
     "GET /api/v1/tenants",
     "GET /api/v1/tenants/me",
+    "GET /api/v1/tenants/me/modules",
     "GET /api/v1/tenants/{tenant_id}",
     "GET /api/v1/training/analytics/overview",
     "GET /api/v1/training/certificates",
@@ -1395,6 +1396,7 @@
     "get_medical_summary_api_v1_medical_summary_get",
     "get_meeting_api_v1_committees_meetings__mid__get",
     "get_methodology_api_v1_risk_methodologies__methodology_id__get",
+    "get_my_modules_endpoint_api_v1_tenants_me_modules_get",
     "get_my_tenant_endpoint_api_v1_tenants_me_get",
     "get_named_list_api_v1_medical_named_list_get",
     "get_norm_api_v1_ppe_norms__norm_id__get",
@@ -2347,6 +2349,8 @@
     "ModuleTrialResult",
     "MyManagedClient",
     "MyManagedClientsResponse",
+    "MyModuleEntry",
+    "MyModulesResponse",
     "NamedListPage",
     "NamedListRow",
     "NewFileVersionRequest",
@@ -5787,6 +5791,18 @@
     "MyManagedClientsResponse": {
       "items": "array",
       "scoped_sections": "array"
+    },
+    "MyModuleEntry": {
+      "code": "string",
+      "title": "string",
+      "category": "string",
+      "is_core": "boolean",
+      "enabled": "boolean",
+      "trial_until": "null|string",
+      "ui_routes": "array"
+    },
+    "MyModulesResponse": {
+      "modules": "array"
     },
     "NamedListPage": {
       "items": "array",

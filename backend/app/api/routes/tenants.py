@@ -20,14 +20,18 @@ from app.db.session import (
     resolve_tenant_schema,
 )
 from app.models.models import RoleEnum, Tenant, TenantQuota, TenantSettings
+from app.modules.subscription.registry import MODULE_REGISTRY
 from app.repository import list_tenants
 from app.schemas.tenant import (
+    MyModuleEntry,
+    MyModulesResponse,
     TenantCreate,
     TenantPage,
     TenantQuotaPatch,
     TenantQuotaRead,
     TenantRead,
 )
+from app.services.tenants.subscription import read_feature_grants
 
 router = APIRouter(prefix="/tenants", tags=["tenants"])
 admin_router = APIRouter(prefix="/admin/tenants", tags=["admin-tenants"])
@@ -167,6 +171,49 @@ async def get_my_tenant_endpoint(
         "tenant": TenantRead.model_validate(tenant),
         "quotas": TenantQuotaRead.model_validate(quota) if quota else None,
     }
+
+
+@router.get("/me/modules", response_model=MyModulesResponse)
+async def get_my_modules_endpoint(
+    session: SessionDep,
+    tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = Depends(rbac()),
+) -> MyModulesResponse:
+    """Модули ЭТОГО арендатора: что включено и какие экраны кому принадлежат.
+
+    Разд. 61.3 требует прятать навигацию и закрывать прямой переход по адресу
+    для выключенного модуля. До этой ручки фронтенду было нечем: единственный
+    источник признаков — `/billing/plan` — отдаёт фичи ТАРИФА БИЛЛИНГА, а
+    фактическая выдача живёт в ``FeatureEnablement``. Два разных хранилища,
+    которые расходятся: клиент, у которого модуль не выдан, всё равно видел
+    пункт меню, если фича числилась в тарифе.
+
+    Доступна любому пользователю арендатора, а не только владельцу: меню рисуют
+    всем. Прежний источник был закрыт ролью owner/admin — у рядового
+    пользователя список признаков всегда оставался пустым, и не скрывалось
+    ничего.
+
+    Отдаём ВСЕ модули, включая выключенные и ядро: «чего у нас нет» — такой же
+    ответ, как «что есть», и по нему строится подсказка «модуль не подключён».
+    """
+
+    grants = await read_feature_grants(tenant)
+    enabled_codes = grants.effective
+    return MyModulesResponse(
+        modules=[
+            MyModuleEntry(
+                code=module.code,
+                title=module.title,
+                category=module.category,
+                is_core=module.is_core,
+                # Ядро включено всегда; продаваемый модуль — только по выдаче.
+                enabled=module.is_core or module.code in enabled_codes,
+                trial_until=grants.trials.get(module.code),
+                ui_routes=list(module.ui_routes),
+            )
+            for module in MODULE_REGISTRY
+        ]
+    )
 
 
 @router.patch("/{tenant_id}/quotas", response_model=TenantQuotaRead)

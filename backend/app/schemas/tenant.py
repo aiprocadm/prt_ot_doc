@@ -127,6 +127,27 @@ class ModuleRegistryResponse(BaseSchema):
     modules: list[ModuleRegistryEntry]
 
 
+# --- BIZ-61 срез-5: «мои модули» для фронтенда (разд. 61.3) ------------------
+class MyModuleEntry(BaseSchema):
+    """Модуль глазами текущего арендатора: включён или нет и какие экраны его."""
+
+    code: str
+    title: str
+    category: str
+    is_core: bool = False
+    #: Выдан ли модуль ЭТОМУ арендатору сейчас (с учётом срока пробного доступа).
+    enabled: bool
+    #: Дата окончания пробного доступа, если модуль выдан на срок.
+    trial_until: datetime | None = None
+    #: Экраны модуля. Фронтенд прячет по ним навигацию и закрывает прямой переход
+    #: по адресу — связь «модуль → экран» живёт на сервере, чтобы не разойтись.
+    ui_routes: list[str] = []
+
+
+class MyModulesResponse(BaseSchema):
+    modules: list[MyModuleEntry]
+
+
 class SubscriptionPlanRead(BaseSchema):
     code: str
     title: str
