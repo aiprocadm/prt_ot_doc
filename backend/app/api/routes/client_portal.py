@@ -23,6 +23,7 @@ from app.core.external_perimeter import (
     record_auth_failure,
 )
 from app.core.security import AccessContext, abac, issue_portal_session_token, verify_token
+from app.core.tenant import tenant_prefix_path
 from app.db.session import rearm_session_tenant_context
 from app.models.models import (
     ClientPackagePreset,
@@ -37,6 +38,7 @@ from app.models.models import (
     PackageRunStatus,
     Tenant,
 )
+from app.modules.packs.definitions import PACK_DEFINITIONS_BY_CODE
 from app.modules.packs.operations import resolve_pipeline_profile
 from app.services.file_storage import FileStorageService
 
@@ -119,12 +121,10 @@ def _resolve_pipeline(preset: ClientPackagePreset) -> dict[str, Any]:
 
 def _write_package_artifacts(
     *, run: ClientPackageRun, preset: ClientPackagePreset, pipeline: dict[str, Any]
-) -> tuple[str, str, str, dict[str, Any]]:
+) -> tuple[str | None, str | None, str, dict[str, Any]]:
     storage = FileStorageService.default()
     prefix = f"packages/{run.id}"
     manifest_key = f"{prefix}/manifest.json"
-    zip_key = f"{prefix}/result.zip"
-    pdf_key = f"{prefix}/result.pdf"
     manifest = {
         "run_id": run.id,
         "preset_code": preset.code,
@@ -142,14 +142,12 @@ def _write_package_artifacts(
         json.dumps(jsonable_encoder(manifest), ensure_ascii=False).encode("utf-8"),
         content_type="application/json",
     )
-    storage.put(
-        zip_key,
-        f"ZIP bundle for {preset.code} / {run.id}".encode("utf-8"),
-        content_type="application/zip",
-    )
-    storage.put(
-        pdf_key, f"PDF summary for {preset.name}".encode("utf-8"), content_type="application/pdf"
-    )
+    # ЗДЕСЬ РАНЬШЕ ПОДДЕЛЫВАЛИСЬ АРХИВ И PDF: в хранилище клалась строка
+    # «ZIP bundle for <код> / <id>» с типом application/zip. Клиент скачивал из
+    # кабинета файл, который не открывается ни одним архиватором, — и это
+    # выглядело как работающая выдача. Файл, которого нет, честнее отсутствия
+    # файла: настоящий архив прикрепляется публикацией результата генерации
+    # (`POST /packages/publish`, разд. 50.2 шаг 4).
     qc_report = {
         "scenario": pipeline["scenario"],
         "steps": [
@@ -157,11 +155,11 @@ def _write_package_artifacts(
             for step in pipeline["steps"]
         ],
         "requirements_total": len(pipeline["required_inputs"]),
-        "artifacts": [zip_key, pdf_key, manifest_key],
+        "artifacts": [manifest_key],
         "status_flow": list(pipeline.get("status_flow") or ["running", "generated", "published"]),
         "pipeline_fingerprint": pipeline.get("pipeline_fingerprint"),
     }
-    return zip_key, pdf_key, manifest_key, qc_report
+    return None, None, manifest_key, qc_report
 
 
 def _artifact_entry(
@@ -208,6 +206,17 @@ class PackagePresetPatch(BaseModel):
 
 class PackageRunCreate(BaseModel):
     preset_code: str
+    client_company_id: str | None = None
+
+
+class PackagePublishRequest(BaseModel):
+    """Отдать клиенту УЖЕ сгенерированный комплект (разд. 50.2 шаг 4)."""
+
+    #: Код сценария. Совпадает с кодом встроенного комплекта (`/packs/generate`)
+    #: либо с кодом портального пресета, заведённого аутсорсером вручную.
+    preset_code: str
+    #: Ключ настоящего архива в хранилище — то, что вернула генерация.
+    zip_storage_key: str = Field(min_length=1)
     client_company_id: str | None = None
 
 
@@ -408,6 +417,128 @@ async def patch_preset(
     await rearm_session_tenant_context(session)
     await session.refresh(record)
     return record
+
+
+async def _preset_for_publish(
+    session: AsyncSession, tenant: Tenant, code: str
+) -> ClientPackagePreset:
+    """Портальный пресет для кода сценария; создаётся из каталога при первой выдаче.
+
+    Модель прогона требует пресет, а рабочая генерация (`/packs/generate`) знает
+    только встроенные коды каталога. Заставлять аутсорсера заводить руками ещё
+    один объект ради того, чтобы отдать клиенту уже готовый архив, — лишний шаг
+    ровно там, где ТЗ обещает «не более 4 шагов».
+
+    Создание идемпотентно по коду и берёт название из каталога: это проекция
+    сценария на кабинет, а не новые данные из воздуха. Код, которого нет ни в
+    портальных пресетах, ни в каталоге, — ошибка, а не повод придумать пресет.
+    """
+
+    existing = (
+        await session.execute(
+            select(ClientPackagePreset).where(
+                ClientPackagePreset.code == code,
+                ClientPackagePreset.tenant_id == tenant.id,
+                ClientPackagePreset.deleted_at.is_(None),
+            )
+        )
+    ).scalar_one_or_none()
+    if existing is not None:
+        return existing
+
+    definition = PACK_DEFINITIONS_BY_CODE.get(code)
+    if definition is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            f"Сценарий '{code}' не найден ни среди пресетов кабинета, ни в каталоге комплектов",
+        )
+    preset = ClientPackagePreset(
+        tenant_id=tenant.id,
+        code=definition.code,
+        name=definition.name,
+        steps_json={"steps": [{"code": "generate"}, {"code": "publish_portal"}]},
+        required_inputs_json=[],
+    )
+    session.add(preset)
+    await session.flush()
+    return preset
+
+
+@internal_router.post("/publish", status_code=status.HTTP_201_CREATED)
+@audit_operation("publish", "package_run")
+async def publish_package(
+    payload: PackagePublishRequest,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    tenant: Annotated[Tenant, Depends(get_tenant_record)],
+    _: AccessContext = StaffWriteAccess,
+):
+    """Отдать клиенту в кабинет УЖЕ сгенерированный комплект (разд. 50.2 шаг 4).
+
+    ТЗ: «результат можно скачать, отправить в ЭДО или в кабинет клиента».
+    Скачивание работало, кабинет — нет: контур генерации и контур кабинета
+    существовали порознь, а кабинет клал в хранилище строку вместо архива.
+
+    Здесь связываются оба: на вход идёт ключ НАСТОЯЩЕГО архива, полученного
+    генерацией, и он же уходит клиенту.
+    """
+
+    key = payload.zip_storage_key.strip()
+    tenant_prefix = f"{tenant_prefix_path(tenant.slug)}/"
+    if not key.startswith(tenant_prefix):
+        # Без этой проверки арендатор опубликовал бы в своём кабинете ЧУЖОЙ
+        # архив, зная его ключ. Проверка та же, что на скачивании.
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Архив не принадлежит этому арендатору")
+
+    storage = FileStorageService.default()
+    try:
+        exists = storage.has(key)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Некорректный ключ архива") from exc
+    if not exists:
+        # Иначе в кабинете появилась бы запись «комплект выдан» со ссылкой в
+        # никуда — то же враньё, только другими словами.
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Архив не найден в хранилище")
+
+    preset = await _preset_for_publish(session, tenant, payload.preset_code.strip())
+    now = _utcnow()
+    run = ClientPackageRun(
+        tenant_id=tenant.id,
+        preset_id=preset.id,
+        client_company_id=payload.client_company_id,
+        status=PackageRunStatus.SUCCESS,
+        started_at=now,
+        finished_at=now,
+        output_zip_s3_key=key,
+        qc_report_json={
+            "scenario": preset.code,
+            "artifacts": [key],
+            "status_flow": ["running", "generated", "published"],
+            "steps": [{"code": "generate"}, {"code": "publish_portal"}],
+        },
+    )
+    session.add(run)
+    await session.flush()
+    session.add_all(
+        [
+            PackageEvent(
+                tenant_id=tenant.id,
+                package_run_id=run.id,
+                type="package_run.generated",
+                payload_json={"artifacts": [key], "source": "packs.generate"},
+            ),
+            PackageEvent(
+                tenant_id=tenant.id,
+                package_run_id=run.id,
+                type="package_run.published",
+                payload_json={"status": "published", "zip_storage_key": key},
+            ),
+        ]
+    )
+    await session.commit()
+    # commit() drops the transaction-local RLS GUCs — re-arm before refresh (SEC-65)
+    await rearm_session_tenant_context(session)
+    await session.refresh(run)
+    return run
 
 
 @internal_router.post("/runs", status_code=status.HTTP_201_CREATED)
