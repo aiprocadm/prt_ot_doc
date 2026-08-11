@@ -366,8 +366,6 @@
       ".github",
       ".hypothesis",
       ".local_storage",
-      ".mypy_cache",
-      ".ruff_cache",
       ".vscode",
       ".zap",
       "app",
