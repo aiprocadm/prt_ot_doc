@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { QuickPackWizardPage } from "@/pages/packs/QuickPackWizardPage";
 import { renderWithRouter } from "@/test-utils/renderWithRouter";
+import { uxBudgetViolations } from "@/test-utils/uxBudget";
 
 /**
  * BIZ-50 срез-7 — экран мастера разового комплекта (ТЗ разд. 50.2).
@@ -242,5 +243,25 @@ describe("мастер разового комплекта", () => {
     await waitFor(() => {
       expect(screen.queryByText(/Выбрано:/)).not.toBeInTheDocument();
     });
+  });
+
+  it("экран укладывается в UX-бюджет (разд. 59.2)", async () => {
+    // Мастер — самый насыщенный из новых экранов: сценарий, организация,
+    // объект, список людей, вопросы. Если бюджет где-то и трещит, то здесь.
+    const user = userEvent.setup();
+    const { container } = renderWithRouter(<QuickPackWizardPage />);
+    await screen.findByRole("option", { name: /Приём нового сотрудника/ });
+    await user.selectOptions(screen.getByLabelText("Сценарий"), SCENARIO.code);
+    await user.selectOptions(screen.getByLabelText("Организация клиента"), COMPANY.id);
+    await screen.findByLabelText("Иванов Иван");
+
+    expect(uxBudgetViolations(container)).toEqual([]);
+
+    await user.click(screen.getByRole("button", { name: "Дальше" }));
+    await screen.findByLabelText(/ФИО работника/);
+
+    // Второй шаг — форма: разд. 59.2 ограничивает видимые поля семью, и
+    // именно поэтому мастер спрашивает только недостающее.
+    expect(uxBudgetViolations(container)).toEqual([]);
   });
 });
