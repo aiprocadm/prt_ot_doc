@@ -1,9 +1,11 @@
 import { render, screen, waitFor } from "@testing-library/react";
+
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PERMISSIONS } from "@/permissions/permissions";
+import { uxBudgetDelta } from "@/test-utils/uxBudget";
 import BriefingsPage from "@/pages/briefings/BriefingsPage";
 import { useAuthStore } from "@/stores/auth";
 
@@ -165,5 +167,28 @@ describe("BriefingsPage", () => {
     expect(createEntryMock.mock.calls[0][0]).toMatchObject({
       person_id: "person-1",
     });
+  });
+
+  it("экран укладывается в UX-бюджет (разд. 59.2)", async () => {
+    // Существующий, насыщенный экран: четыре действия и таблица. Проверка
+    // ставится не только на новые экраны — иначе она зелёная по построению.
+    const { container } = render(
+      <MemoryRouter>
+        <BriefingsPage />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(listTemplatesMock).toHaveBeenCalled();
+    });
+
+    // Экран сегодня НЕ укладывается: три главных действия и одиннадцать полей.
+    // Это записано явным долгом (`uxBudgetDebt.ts`) — ТЗ разд. 59.2 допускает
+    // превышение «только с явным обоснованием и пометкой». Проверка стережёт
+    // обе стороны: экран не должен стать хуже, а починив его, обязаны снять
+    // запись — иначе список долгов перестанет отражать правду.
+    const delta = uxBudgetDelta(container, "BriefingsPage");
+    expect(delta.unexpected).toEqual([]);
+    expect(delta.stale).toEqual([]);
   });
 });
