@@ -12,11 +12,7 @@ from sqlalchemy import select
 
 from app.api.routes import managed_clients as routes
 from app.domains.managed_clients.lifecycle import ContractStatus, ManagedClientMode
-from app.models.managed_clients import (
-    ManagedClient,
-    ManagedClientAccess,
-    ManagedClientConsent,
-)
+from app.models.managed_clients import ManagedClient, ManagedClientAccess
 from app.models.models import AuditLog
 
 _NOW = datetime(2026, 8, 4, 12, 0, tzinfo=timezone.utc)
@@ -54,17 +50,6 @@ async def _client(session, *, name="Ромашка", tenant_id=_TENANT):
         contract_status=ContractStatus.ACTIVE,
     )
     session.add(row)
-    await session.flush()
-    # Срез-12: вход «от имени» требует действующего согласия клиента.
-    session.add(
-        ManagedClientConsent(
-            tenant_id=tenant_id,
-            managed_client_id=row.id,
-            document_ref="Поручение №1",
-            granted_at=_NOW,
-            granted_by_user_id="admin-1",
-        )
-    )
     await session.flush()
     return row
 

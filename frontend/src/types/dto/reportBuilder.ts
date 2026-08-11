@@ -1,10 +1,4 @@
-export type ReportColumnKind =
-  | "string"
-  | "number"
-  | "date"
-  | "datetime"
-  | "enum"
-  | "bool";
+export type ReportColumnKind = "string" | "number" | "date" | "datetime" | "enum" | "bool";
 export type ReportFilterOp = "eq" | "neq" | "contains" | "gte" | "lte" | "in";
 export type ReportExportFormat = "csv" | "xlsx" | "pdf";
 

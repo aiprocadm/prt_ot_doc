@@ -1,41 +1,22 @@
-import {
-  AlertCircle,
-  AlertTriangle,
-  ArrowRight,
-  CheckCircle2,
-  Info,
-  RefreshCw,
-} from "lucide-react";
+import { AlertCircle, AlertTriangle, ArrowRight, CheckCircle2, Info, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
-import {
-  workspaceApi,
-  type ReadinessBlocker,
-  type WorkspaceAttentionDto,
-} from "@/api/workspace";
+import { workspaceApi, type ReadinessBlocker, type WorkspaceAttentionDto } from "@/api/workspace";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  blockerActionLabel,
-  blockerActionPath,
-} from "@/utils/workspaceNavigation";
+import { blockerActionLabel, blockerActionPath } from "@/utils/workspaceNavigation";
 
-const blockerLink = (blocker: ReadinessBlocker) =>
-  blockerActionPath(blocker.code, blocker.entity_type);
+const blockerLink = (blocker: ReadinessBlocker) => blockerActionPath(blocker.code, blocker.entity_type);
 
 const severityIcon = (severity: string) => {
-  if (severity === "critical")
-    return <AlertCircle className="h-4 w-4 text-destructive shrink-0" />;
-  if (severity === "high")
-    return <AlertTriangle className="h-4 w-4 text-orange-500 shrink-0" />;
+  if (severity === "critical") return <AlertCircle className="h-4 w-4 text-destructive shrink-0" />;
+  if (severity === "high") return <AlertTriangle className="h-4 w-4 text-orange-500 shrink-0" />;
   return <Info className="h-4 w-4 text-muted-foreground shrink-0" />;
 };
 
-const severityVariant = (
-  s: string,
-): "default" | "secondary" | "destructive" => {
+const severityVariant = (s: string): "default" | "secondary" | "destructive" => {
   if (s === "critical") return "destructive";
   if (s === "high") return "secondary";
   return "default";
@@ -54,21 +35,13 @@ const BlockerRow = ({ blocker }: BlockerRowProps) => {
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
           <span className="font-medium text-sm">{blocker.title}</span>
-          <Badge
-            variant={severityVariant(blocker.severity)}
-            className="text-xs"
-          >
+          <Badge variant={severityVariant(blocker.severity)} className="text-xs">
             {blocker.count} шт.
           </Badge>
         </div>
         <p className="text-xs text-muted-foreground mt-0.5">{blocker.reason}</p>
-        <p className="text-xs text-blue-600 dark:text-blue-400 mt-0.5">
-          {blocker.action_hint}
-        </p>
-        <Link
-          to={href}
-          className="mt-2 inline-flex text-xs font-medium text-blue-600 hover:underline"
-        >
+        <p className="text-xs text-blue-600 dark:text-blue-400 mt-0.5">{blocker.action_hint}</p>
+        <Link to={href} className="mt-2 inline-flex text-xs font-medium text-blue-600 hover:underline">
           {actionLabel}
         </Link>
       </div>
@@ -92,9 +65,7 @@ interface AttentionPanelProps {
   showOuterTitle?: boolean;
 }
 
-export const AttentionPanel = ({
-  showOuterTitle = true,
-}: AttentionPanelProps) => {
+export const AttentionPanel = ({ showOuterTitle = true }: AttentionPanelProps) => {
   const [data, setData] = useState<WorkspaceAttentionDto | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -114,21 +85,15 @@ export const AttentionPanel = ({
   }, [load]);
 
   const s = data?.summary;
-  const totalCritical =
-    (s?.overdue_tasks ?? 0) +
-    (s?.overdue_deadlines ?? 0) +
-    (s?.failed_sync_batches ?? 0);
-  const allClear =
-    !loading && !error && totalCritical === 0 && !data?.blockers.length;
+  const totalCritical = (s?.overdue_tasks ?? 0) + (s?.overdue_deadlines ?? 0) + (s?.failed_sync_batches ?? 0);
+  const allClear = !loading && !error && totalCritical === 0 && !(data?.blockers.length);
 
   return (
     <Card>
       <CardHeader className="pb-3">
         <div
           className={
-            showOuterTitle
-              ? "flex items-center justify-between"
-              : "flex items-center justify-end gap-2"
+            showOuterTitle ? "flex items-center justify-between" : "flex items-center justify-end gap-2"
           }
         >
           {showOuterTitle ? (
@@ -142,41 +107,32 @@ export const AttentionPanel = ({
             </CardTitle>
           ) : null}
           <Button variant="ghost" size="sm" onClick={load} disabled={loading}>
-            <RefreshCw
-              className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`}
-            />
+            <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
           </Button>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        {error && <p className="text-sm text-destructive">{error}</p>}
+        {error && (
+          <p className="text-sm text-destructive">{error}</p>
+        )}
 
         {/* Summary bar */}
         {s && (
           <div className="flex flex-wrap gap-3 text-sm">
             {s.overdue_tasks > 0 && (
-              <Link
-                to="/tasks?overdue=true"
-                className="flex items-center gap-1 text-destructive hover:underline"
-              >
+              <Link to="/tasks?overdue=true" className="flex items-center gap-1 text-destructive hover:underline">
                 <AlertCircle className="h-3.5 w-3.5" />
                 {s.overdue_tasks} просроченных задач
               </Link>
             )}
             {s.due_soon_tasks > 0 && (
-              <Link
-                to="/tasks"
-                className="flex items-center gap-1 text-orange-500 hover:underline"
-              >
+              <Link to="/tasks" className="flex items-center gap-1 text-orange-500 hover:underline">
                 <AlertTriangle className="h-3.5 w-3.5" />
                 {s.due_soon_tasks} задач — срок скоро
               </Link>
             )}
             {s.overdue_deadlines > 0 && (
-              <Link
-                to="/tasks?overdue=true"
-                className="flex items-center gap-1 text-destructive hover:underline"
-              >
+              <Link to="/tasks?overdue=true" className="flex items-center gap-1 text-destructive hover:underline">
                 <AlertCircle className="h-3.5 w-3.5" />
                 {s.overdue_deadlines} просроченных обязательств
               </Link>
@@ -222,10 +178,7 @@ export const AttentionPanel = ({
             </p>
             <ul className="space-y-1">
               {data.recommendations.map((rec, i) => (
-                <li
-                  key={i}
-                  className="text-xs text-muted-foreground flex gap-2"
-                >
+                <li key={i} className="text-xs text-muted-foreground flex gap-2">
                   <ArrowRight className="h-3 w-3 mt-0.5 shrink-0 text-blue-500" />
                   {rec}
                 </li>

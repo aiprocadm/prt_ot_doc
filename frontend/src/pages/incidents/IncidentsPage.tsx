@@ -10,23 +10,10 @@ import { StatusBadge } from "@/components/common/StatusBadge";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { PERMISSIONS } from "@/permissions/permissions";
 import type { ApiError } from "@/types/dto/common";
@@ -34,15 +21,7 @@ import { formatDate } from "@/utils/datetime";
 import { toast } from "sonner";
 import { useCompaniesStore } from "@/stores/companies";
 
-const INCIDENT_TYPES = [
-  "near_miss",
-  "micro_trauma",
-  "injury",
-  "fatal",
-  "fire",
-  "environmental",
-  "other",
-];
+const INCIDENT_TYPES = ["near_miss", "micro_trauma", "injury", "fatal", "fire", "environmental", "other"];
 const SEVERITY_LEVELS = ["low", "medium", "high", "critical"];
 const INCIDENT_TYPE_LABELS: Record<string, string> = {
   near_miss: "Почти-несчастный случай",
@@ -51,26 +30,24 @@ const INCIDENT_TYPE_LABELS: Record<string, string> = {
   fatal: "Смертельный случай",
   fire: "Пожар",
   environmental: "Экологический инцидент",
-  other: "Прочее",
+  other: "Прочее"
 };
 const INCIDENT_STATUS_LABELS: Record<string, string> = {
   draft: "Черновик",
   investigating: "Расследуется",
-  closed: "Закрыт",
+  closed: "Закрыт"
 };
 const SEVERITY_LABELS: Record<string, string> = {
   low: "Низкая",
   medium: "Средняя",
   high: "Высокая",
-  critical: "Критическая",
+  critical: "Критическая"
 };
 
 const IncidentsPage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const [items, setItems] = useState<Incident[]>([]);
-  const [statusFilter, setStatusFilter] = useState<string>(
-    searchParams.get("status") ?? "",
-  );
+  const [statusFilter, setStatusFilter] = useState<string>(searchParams.get("status") ?? "");
   const { items: companies, list: listCompanies } = useCompaniesStore();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
@@ -78,7 +55,7 @@ const IncidentsPage = () => {
   const focusedEntityId = searchParams.get("entity_id") ?? undefined;
   const focusedIncident =
     focusedEntityType === "incident" && focusedEntityId
-      ? (items.find((incident) => incident.id === focusedEntityId) ?? null)
+      ? items.find((incident) => incident.id === focusedEntityId) ?? null
       : null;
 
   // create dialog state
@@ -91,29 +68,24 @@ const IncidentsPage = () => {
     occurred_at: new Date().toISOString().slice(0, 16),
     company_id: "",
     site_id: "",
-    severity: "medium",
+    severity: "medium"
   });
 
-  const load = useCallback(
-    async (status = statusFilter) => {
-      setLoading(true);
-      setError(null);
-      try {
-        const page = await incidentsApi.list({
-          limit: 100,
-          status_filter: status || undefined,
-        });
-        setItems(page.items);
-      } catch (err) {
-        setError(
-          (err as ApiError) ?? { message: "Не удалось загрузить инциденты" },
-        );
-      } finally {
-        setLoading(false);
-      }
-    },
-    [statusFilter],
-  );
+  const load = useCallback(async (status = statusFilter) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const page = await incidentsApi.list({
+        limit: 100,
+        status_filter: status || undefined
+      });
+      setItems(page.items);
+    } catch (err) {
+      setError((err as ApiError) ?? { message: "Не удалось загрузить инциденты" });
+    } finally {
+      setLoading(false);
+    }
+  }, [statusFilter]);
 
   useEffect(() => {
     void load(statusFilter);
@@ -134,7 +106,7 @@ const IncidentsPage = () => {
         occurred_at: new Date(form.occurred_at).toISOString(),
         company_id: form.company_id,
         site_id: form.site_id || undefined,
-        severity: form.severity,
+        severity: form.severity
       });
       toast.success("Инцидент зарегистрирован");
       setCreateOpen(false);
@@ -145,7 +117,7 @@ const IncidentsPage = () => {
         occurred_at: new Date().toISOString().slice(0, 16),
         company_id: "",
         site_id: "",
-        severity: "medium",
+        severity: "medium"
       });
       const params = new URLSearchParams(searchParams);
       params.set("entity_type", "incident");
@@ -153,9 +125,7 @@ const IncidentsPage = () => {
       setSearchParams(params, { replace: true });
       void load();
     } catch (err) {
-      toast.error(
-        (err as ApiError)?.message ?? "Ошибка при создании инцидента",
-      );
+      toast.error((err as ApiError)?.message ?? "Ошибка при создании инцидента");
     } finally {
       setCreating(false);
     }
@@ -164,12 +134,7 @@ const IncidentsPage = () => {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <Breadcrumb
-          items={[
-            { label: "Главная", to: "/dashboard" },
-            { label: "Инциденты/НС" },
-          ]}
-        />
+        <Breadcrumb items={[{ label: "Главная", to: "/dashboard" }, { label: "Инциденты/НС" }]} />
         <div className="flex items-center gap-2">
           <select
             value={statusFilter}
@@ -190,20 +155,11 @@ const IncidentsPage = () => {
             <option value="investigating">Расследуется</option>
             <option value="closed">Закрыт</option>
           </select>
-          <Button variant="outline" onClick={() => void load()}>
-            Обновить
-          </Button>
+          <Button variant="outline" onClick={() => void load()}>Обновить</Button>
 
           <Can
             permission={PERMISSIONS.INCIDENT_CREATE}
-            fallback={
-              <Button
-                disabled
-                title="Недостаточно прав для регистрации инцидента"
-              >
-                Зарегистрировать инцидент
-              </Button>
-            }
+            fallback={<Button disabled title="Недостаточно прав для регистрации инцидента">Зарегистрировать инцидент</Button>}
           >
             <Dialog open={createOpen} onOpenChange={setCreateOpen}>
               <DialogTrigger asChild>
@@ -219,9 +175,7 @@ const IncidentsPage = () => {
                     <Input
                       id="inc-title"
                       value={form.title}
-                      onChange={(e) =>
-                        setForm((prev) => ({ ...prev, title: e.target.value }))
-                      }
+                      onChange={(e) => setForm((prev) => ({ ...prev, title: e.target.value }))}
                       placeholder="Краткое описание события"
                     />
                   </div>
@@ -232,17 +186,10 @@ const IncidentsPage = () => {
                         id="inc-type"
                         className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
                         value={form.incident_type}
-                        onChange={(e) =>
-                          setForm((prev) => ({
-                            ...prev,
-                            incident_type: e.target.value,
-                          }))
-                        }
+                        onChange={(e) => setForm((prev) => ({ ...prev, incident_type: e.target.value }))}
                       >
                         {INCIDENT_TYPES.map((t) => (
-                          <option key={t} value={t}>
-                            {t}
-                          </option>
+                          <option key={t} value={t}>{t}</option>
                         ))}
                       </select>
                     </div>
@@ -252,17 +199,10 @@ const IncidentsPage = () => {
                         id="inc-severity"
                         className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
                         value={form.severity}
-                        onChange={(e) =>
-                          setForm((prev) => ({
-                            ...prev,
-                            severity: e.target.value,
-                          }))
-                        }
+                        onChange={(e) => setForm((prev) => ({ ...prev, severity: e.target.value }))}
                       >
                         {SEVERITY_LEVELS.map((s) => (
-                          <option key={s} value={s}>
-                            {SEVERITY_LABELS[s] ?? s}
-                          </option>
+                          <option key={s} value={s}>{SEVERITY_LABELS[s] ?? s}</option>
                         ))}
                       </select>
                     </div>
@@ -273,12 +213,7 @@ const IncidentsPage = () => {
                       id="inc-date"
                       type="datetime-local"
                       value={form.occurred_at}
-                      onChange={(e) =>
-                        setForm((prev) => ({
-                          ...prev,
-                          occurred_at: e.target.value,
-                        }))
-                      }
+                      onChange={(e) => setForm((prev) => ({ ...prev, occurred_at: e.target.value }))}
                     />
                   </div>
                   <div className="grid grid-cols-2 gap-3">
@@ -288,18 +223,11 @@ const IncidentsPage = () => {
                         id="inc-company"
                         className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
                         value={form.company_id}
-                        onChange={(e) =>
-                          setForm((prev) => ({
-                            ...prev,
-                            company_id: e.target.value,
-                          }))
-                        }
+                        onChange={(e) => setForm((prev) => ({ ...prev, company_id: e.target.value }))}
                       >
                         <option value="">Выберите компанию</option>
                         {companies.map((company) => (
-                          <option key={company.id} value={company.id}>
-                            {company.name}
-                          </option>
+                          <option key={company.id} value={company.id}>{company.name}</option>
                         ))}
                       </select>
                     </div>
@@ -308,12 +236,7 @@ const IncidentsPage = () => {
                       <Input
                         id="inc-site"
                         value={form.site_id}
-                        onChange={(e) =>
-                          setForm((prev) => ({
-                            ...prev,
-                            site_id: e.target.value,
-                          }))
-                        }
+                        onChange={(e) => setForm((prev) => ({ ...prev, site_id: e.target.value }))}
                         placeholder="UUID площадки (опционально)"
                       />
                     </div>
@@ -323,27 +246,14 @@ const IncidentsPage = () => {
                     <Textarea
                       id="inc-desc"
                       value={form.description}
-                      onChange={(e) =>
-                        setForm((prev) => ({
-                          ...prev,
-                          description: e.target.value,
-                        }))
-                      }
+                      onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
                       placeholder="Подробное описание произошедшего"
                       rows={3}
                     />
                   </div>
                   <div className="flex justify-end gap-2">
-                    <Button
-                      variant="outline"
-                      onClick={() => setCreateOpen(false)}
-                    >
-                      Отмена
-                    </Button>
-                    <Button
-                      disabled={creating}
-                      onClick={() => void handleCreate()}
-                    >
+                    <Button variant="outline" onClick={() => setCreateOpen(false)}>Отмена</Button>
+                    <Button disabled={creating} onClick={() => void handleCreate()}>
                       {creating ? "Сохранение…" : "Зарегистрировать"}
                     </Button>
                   </div>
@@ -358,9 +268,7 @@ const IncidentsPage = () => {
       {focusedEntityId && focusedEntityType === "incident" ? (
         <Card>
           <CardContent className="py-4" data-testid="incident-focus-card">
-            <div className="text-sm font-semibold">
-              Фокус инцидента из рабочего пространства
-            </div>
+            <div className="text-sm font-semibold">Фокус инцидента из рабочего пространства</div>
             <p className="mt-1 text-xs text-muted-foreground">
               {focusedIncident
                 ? `${focusedIncident.title} · ${INCIDENT_STATUS_LABELS[focusedIncident.status] ?? focusedIncident.status}`
@@ -382,10 +290,7 @@ const IncidentsPage = () => {
         </CardHeader>
         <CardContent>
           {!loading && items.length === 0 ? (
-            <EmptyState
-              title="Инциденты не найдены"
-              description="Снимите фильтр или зарегистрируйте новый инцидент."
-            />
+            <EmptyState title="Инциденты не найдены" description="Снимите фильтр или зарегистрируйте новый инцидент." />
           ) : (
             <Table>
               <TableHeader>
@@ -404,25 +309,14 @@ const IncidentsPage = () => {
                   <TableRow key={incident.id}>
                     <TableCell className="font-medium">{incident.id}</TableCell>
                     <TableCell>{incident.title}</TableCell>
-                    <TableCell>
-                      {INCIDENT_TYPE_LABELS[incident.incident_type] ??
-                        incident.incident_type}
-                    </TableCell>
-                    <TableCell>
-                      {incident.severity
-                        ? (SEVERITY_LABELS[incident.severity] ??
-                          incident.severity)
-                        : "—"}
-                    </TableCell>
+                    <TableCell>{INCIDENT_TYPE_LABELS[incident.incident_type] ?? incident.incident_type}</TableCell>
+                    <TableCell>{incident.severity ? SEVERITY_LABELS[incident.severity] ?? incident.severity : "—"}</TableCell>
                     <TableCell>{incident.site_id}</TableCell>
                     <TableCell>{formatDate(incident.occurred_at)}</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
                         <StatusBadge status={incident.status} />
-                        <span className="text-xs text-muted-foreground">
-                          {INCIDENT_STATUS_LABELS[incident.status] ??
-                            incident.status}
-                        </span>
+                        <span className="text-xs text-muted-foreground">{INCIDENT_STATUS_LABELS[incident.status] ?? incident.status}</span>
                       </div>
                     </TableCell>
                   </TableRow>

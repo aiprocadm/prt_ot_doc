@@ -12,23 +12,11 @@ import { Button } from "@/components/ui/button";
 import { WorkPermitFormDialog } from "@/features/work-permits/WorkPermitFormDialog";
 import { useAsyncResource } from "@/hooks/useAsyncResource";
 import { useLocalRegistry } from "@/hooks/useLocalRegistry";
-import {
-  SAFETY_SYSTEM_LABELS,
-  STATUS_LABELS,
-  WORK_TYPE_LABELS,
-  labelOf,
-} from "@/lib/workPermitVocab";
+import { SAFETY_SYSTEM_LABELS, STATUS_LABELS, WORK_TYPE_LABELS, labelOf } from "@/lib/workPermitVocab";
 import { PERMISSIONS } from "@/permissions/permissions";
 import type { WorkPermitDto } from "@/types/dto/workPermits";
 
-const STATUS_FILTERS = [
-  "",
-  "draft",
-  "issued",
-  "suspended",
-  "closed",
-  "cancelled",
-];
+const STATUS_FILTERS = ["", "draft", "issued", "suspended", "closed", "cancelled"];
 
 export default function WorkPermitsPage() {
   const [status, setStatus] = useState("");
@@ -69,8 +57,7 @@ export default function WorkPermitsPage() {
         <div>
           <h1 className="text-xl font-medium">Наряды-допуски</h1>
           <p className="text-sm text-muted-foreground">
-            Черновики: {counts.draft} · Выдан: {counts.issued} · Закрыто:{" "}
-            {counts.closed}
+            Черновики: {counts.draft} · Выдан: {counts.issued} · Закрыто: {counts.closed}
           </p>
         </div>
         <Can permission={PERMISSIONS.WORK_PERMIT_MANAGE}>
@@ -99,10 +86,7 @@ export default function WorkPermitsPage() {
       <ErrorState error={error ?? undefined} onRetry={() => void reload()} />
       {loading ? <LoadingScreen label="Загрузка нарядов-допусков" /> : null}
       {!loading && !error && registry.total === 0 ? (
-        <EmptyState
-          title="Нарядов нет"
-          description="Создайте первый наряд-допуск."
-        />
+        <EmptyState title="Нарядов нет" description="Создайте первый наряд-допуск." />
       ) : null}
       {!loading && !error && registry.total > 0 ? (
         <RegistryTable<WorkPermitDto>
@@ -115,8 +99,7 @@ export default function WorkPermitsPage() {
             {
               id: "work_type",
               header: "Вид работ",
-              cell: ({ row }) =>
-                labelOf(WORK_TYPE_LABELS, row.original.work_type),
+              cell: ({ row }) => labelOf(WORK_TYPE_LABELS, row.original.work_type),
             },
             {
               accessorKey: "zone_text",
@@ -129,9 +112,7 @@ export default function WorkPermitsPage() {
               cell: ({ row }) => {
                 const systems = row.original.safety_systems;
                 if (!systems || systems.length === 0) return "—";
-                return systems
-                  .map((c) => SAFETY_SYSTEM_LABELS[c] ?? c)
-                  .join(", ");
+                return systems.map((c) => SAFETY_SYSTEM_LABELS[c] ?? c).join(", ");
               },
             },
             {
@@ -148,10 +129,7 @@ export default function WorkPermitsPage() {
               id: "open",
               header: "",
               cell: ({ row }) => (
-                <Link
-                  className="text-sm underline"
-                  to={`/work-permits/${row.original.id}`}
-                >
+                <Link className="text-sm underline" to={`/work-permits/${row.original.id}`}>
                   Открыть
                 </Link>
               ),

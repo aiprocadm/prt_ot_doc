@@ -3,22 +3,11 @@ import { useState } from "react";
 import { rulesApi } from "@/api/rules";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { OP_LABELS, eventLabel } from "@/pages/rules/rulesVocab";
-import type {
-  AutomationRuleRead,
-  DryRunOut,
-  EventTypeMeta,
-  RuleConditionOp,
-} from "@/types/dto/rules";
+import type { AutomationRuleRead, DryRunOut, EventTypeMeta, RuleConditionOp } from "@/types/dto/rules";
 
 interface Props {
   eventTypes: EventTypeMeta[];
@@ -41,9 +30,7 @@ export const DryRunPanel = ({ eventTypes, rules }: Props) => {
 
   const payloadSkeleton = (code: string): string => {
     const meta = eventTypes.find((e) => e.event_type === code);
-    const skeleton = Object.fromEntries(
-      (meta?.fields ?? []).map((f) => [f.name, null]),
-    );
+    const skeleton = Object.fromEntries((meta?.fields ?? []).map((f) => [f.name, null]));
     return JSON.stringify(skeleton, null, 2);
   };
 
@@ -79,11 +66,7 @@ export const DryRunPanel = ({ eventTypes, rules }: Props) => {
       setError("Некорректный JSON в payload события");
       return;
     }
-    if (
-      payload === null ||
-      typeof payload !== "object" ||
-      Array.isArray(payload)
-    ) {
+    if (payload === null || typeof payload !== "object" || Array.isArray(payload)) {
       setError("Payload должен быть JSON-объектом");
       return;
     }
@@ -99,13 +82,10 @@ export const DryRunPanel = ({ eventTypes, rules }: Props) => {
             conditions_json: rule.conditions_json,
             actions_json: rule.actions_json,
             priority: rule.priority,
-            is_enabled: rule.is_enabled,
+            is_enabled: rule.is_enabled
           },
-          event: {
-            event_type: eventType,
-            payload: payload as Record<string, unknown>,
-          },
-        }),
+          event: { event_type: eventType, payload: payload as Record<string, unknown> }
+        })
       );
     } catch {
       // Текст ошибки API уже показан глобальным обработчиком — тут только inline-статус.
@@ -121,8 +101,7 @@ export const DryRunPanel = ({ eventTypes, rules }: Props) => {
       <CardHeader>
         <CardTitle>Проверка правила (dry-run)</CardTitle>
         <CardDescription>
-          Подставьте тестовый payload события и проверьте условия правила без
-          выполнения действий.
+          Подставьте тестовый payload события и проверьте условия правила без выполнения действий.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -198,12 +177,8 @@ export const DryRunPanel = ({ eventTypes, rules }: Props) => {
                   <tbody>
                     {result.condition_results.map((cr, idx) => (
                       <tr key={idx} className="border-b last:border-0">
-                        <td className="py-2 pr-4 font-mono text-xs">
-                          {cr.field}
-                        </td>
-                        <td className="py-2 pr-4">
-                          {OP_LABELS[cr.op as RuleConditionOp] ?? cr.op}
-                        </td>
+                        <td className="py-2 pr-4 font-mono text-xs">{cr.field}</td>
+                        <td className="py-2 pr-4">{OP_LABELS[cr.op as RuleConditionOp] ?? cr.op}</td>
                         <td className="py-2 pr-4">{formatValue(cr.value)}</td>
                         <td className="py-2 pr-4">{formatValue(cr.actual)}</td>
                         <td className="py-2">{cr.matched ? "✓" : "✗"}</td>
@@ -213,9 +188,7 @@ export const DryRunPanel = ({ eventTypes, rules }: Props) => {
                 </table>
               </div>
             ) : (
-              <p className="text-xs text-muted-foreground">
-                Условий нет — правило срабатывает на любое событие этого типа.
-              </p>
+              <p className="text-xs text-muted-foreground">Условий нет — правило срабатывает на любое событие этого типа.</p>
             )}
             {result.would_actions.length > 0 ? (
               <div className="space-y-1">

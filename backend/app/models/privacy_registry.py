@@ -126,7 +126,9 @@ class PdnProcessingAgreement(TenantBaseModel):
     """
 
     __tablename__ = "pdn_processing_agreement"
-    __table_args__ = (Index("ix_pdn_processing_agreement_tenant_status", "tenant_id", "status"),)
+    __table_args__ = (
+        Index("ix_pdn_processing_agreement_tenant_status", "tenant_id", "status"),
+    )
 
     kind: Mapped[str] = mapped_column(String(32), nullable=False)
     party_role: Mapped[str] = mapped_column(String(16), nullable=False)

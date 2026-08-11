@@ -433,7 +433,9 @@ def delete_object(*, key: str) -> None:
         raise S3OperationError.from_client_error(
             "delete_object", exc, bucket=settings.s3_bucket, key=key
         ) from exc
-    logger.info("files.s3.object.deleted", extra={"bucket": settings.s3_bucket, "key": key})
+    logger.info(
+        "files.s3.object.deleted", extra={"bucket": settings.s3_bucket, "key": key}
+    )
 
 
 @contextmanager

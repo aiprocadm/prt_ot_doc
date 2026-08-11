@@ -125,9 +125,7 @@ class TestRetryPolicyCalculation:
             )
             assert policy.backoff_seconds is not None
             # Allow for jitter variance (±10% for test stability)
-            assert (
-                expected_base_backoff * 0.9 <= policy.backoff_seconds <= expected_base_backoff * 1.1
-            )
+            assert expected_base_backoff * 0.9 <= policy.backoff_seconds <= expected_base_backoff * 1.1
 
     def test_backoff_respects_max_cap(self):
         """Backoff should never exceed backoff_seconds_max."""

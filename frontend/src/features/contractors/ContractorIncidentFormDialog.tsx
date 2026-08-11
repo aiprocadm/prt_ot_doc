@@ -10,15 +10,12 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
+  DialogTrigger
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  SEVERITY_LABELS,
-  SEVERITY_OPTIONS,
-} from "@/pages/contractors/contractorsVocab";
+import { SEVERITY_LABELS, SEVERITY_OPTIONS } from "@/pages/contractors/contractorsVocab";
 import type { IncidentSeverity } from "@/types/dto/contractors";
 
 interface Props {
@@ -27,11 +24,7 @@ interface Props {
   onSubmitted?: () => void;
 }
 
-export const ContractorIncidentFormDialog = ({
-  trigger,
-  contractorId,
-  onSubmitted,
-}: Props) => {
+export const ContractorIncidentFormDialog = ({ trigger, contractorId, onSubmitted }: Props) => {
   const [open, setOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [incidentType, setIncidentType] = useState("");
@@ -63,16 +56,13 @@ export const ContractorIncidentFormDialog = ({
         incident_type: incidentType.trim(),
         severity,
         occurred_at: new Date(occurredAt).toISOString(),
-        description: description || null,
+        description: description || null
       });
       toast.success("Инцидент зарегистрирован");
       onSubmitted?.();
       setOpen(false);
     } catch (err) {
-      toast.error(
-        (err as { message?: string })?.message ??
-          "Не удалось сохранить инцидент",
-      );
+      toast.error((err as { message?: string })?.message ?? "Не удалось сохранить инцидент");
     } finally {
       setSubmitting(false);
     }
@@ -84,30 +74,17 @@ export const ContractorIncidentFormDialog = ({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Новый инцидент подрядчика</DialogTitle>
-          <DialogDescription>
-            Регистрация инцидента с участием подрядчика.
-          </DialogDescription>
+          <DialogDescription>Регистрация инцидента с участием подрядчика.</DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="inc-type">Тип инцидента</Label>
-            <Input
-              id="inc-type"
-              value={incidentType}
-              onChange={(e) => setIncidentType(e.target.value)}
-            />
+            <Input id="inc-type" value={incidentType} onChange={(e) => setIncidentType(e.target.value)} />
           </div>
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="inc-severity">Тяжесть</Label>
-              <select
-                id="inc-severity"
-                className="h-10 w-full rounded-md border px-3"
-                value={severity}
-                onChange={(e) =>
-                  setSeverity(e.target.value as IncidentSeverity)
-                }
-              >
+              <select id="inc-severity" className="h-10 w-full rounded-md border px-3" value={severity} onChange={(e) => setSeverity(e.target.value as IncidentSeverity)}>
                 {SEVERITY_OPTIONS.map((s) => (
                   <option key={s} value={s}>
                     {SEVERITY_LABELS[s]}
@@ -117,21 +94,12 @@ export const ContractorIncidentFormDialog = ({
             </div>
             <div className="space-y-2">
               <Label htmlFor="inc-date">Дата и время</Label>
-              <Input
-                id="inc-date"
-                type="datetime-local"
-                value={occurredAt}
-                onChange={(e) => setOccurredAt(e.target.value)}
-              />
+              <Input id="inc-date" type="datetime-local" value={occurredAt} onChange={(e) => setOccurredAt(e.target.value)} />
             </div>
           </div>
           <div className="space-y-2">
             <Label htmlFor="inc-desc">Описание</Label>
-            <Textarea
-              id="inc-desc"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-            />
+            <Textarea id="inc-desc" value={description} onChange={(e) => setDescription(e.target.value)} />
           </div>
         </div>
         <DialogFooter>

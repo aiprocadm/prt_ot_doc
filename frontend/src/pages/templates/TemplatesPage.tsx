@@ -16,9 +16,7 @@ import type { TemplateDto } from "@/types/dto/templates";
 
 const TemplatesPage = () => {
   const { list, getById, items, loading, error } = useTemplatesStore();
-  const [selectedTemplate, setSelectedTemplate] = useState<TemplateDto | null>(
-    null,
-  );
+  const [selectedTemplate, setSelectedTemplate] = useState<TemplateDto | null>(null);
   const { can } = useAbility();
   const canView = can(PERMISSIONS.TEMPLATE_VIEW);
   const canCreate = can(PERMISSIONS.TEMPLATE_CREATE);
@@ -38,19 +36,12 @@ const TemplatesPage = () => {
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-2">
-        <Breadcrumb
-          items={[
-            { label: "Главная", to: ROUTES.DASHBOARD },
-            { label: "Шаблоны" },
-          ]}
-        />
+        <Breadcrumb items={[{ label: "Главная", to: ROUTES.DASHBOARD }, { label: "Шаблоны" }]} />
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold">Шаблоны</h1>
           <div className="flex items-center gap-2">
             {readOnly && (
-              <span className="rounded-full border border-dashed px-3 py-1 text-xs text-muted-foreground">
-                Только просмотр
-              </span>
+              <span className="rounded-full border border-dashed px-3 py-1 text-xs text-muted-foreground">Только просмотр</span>
             )}
             {canCreate && (
               <TemplateFormDialog
@@ -75,13 +66,9 @@ const TemplatesPage = () => {
             emptyDescription="Загрузите первый шаблон, чтобы запустить жизненный цикл документов без ручных обходных сценариев."
             onRetry={() => void list()}
           >
-            <TemplateTable
-              onSelect={(template) => {
-                getById(template.id).then((loaded) =>
-                  setSelectedTemplate(loaded ?? template),
-                );
-              }}
-            />
+            <TemplateTable onSelect={(template) => {
+              getById(template.id).then((loaded) => setSelectedTemplate(loaded ?? template));
+            }} />
           </ListStateGuard>
         </CardContent>
       </Card>

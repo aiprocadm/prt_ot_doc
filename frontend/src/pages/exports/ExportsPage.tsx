@@ -6,20 +6,8 @@ import { EmptyState } from "@/components/common/EmptyState";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
-type Collection = {
-  total: number;
-  items?: Array<{
-    id: string;
-    dataset_code?: string;
-    schema_version?: string;
-    anonymized?: boolean;
-    target_type?: string;
-  }>;
-};
-type DatasetCatalog = {
-  total: number;
-  items?: Array<{ code: string; schema_version: string; targets: string[] }>;
-};
+type Collection = { total: number; items?: Array<{ id: string; dataset_code?: string; schema_version?: string; anonymized?: boolean; target_type?: string }> };
+type DatasetCatalog = { total: number; items?: Array<{ code: string; schema_version: string; targets: string[] }> };
 
 const ExportsPage = () => {
   const { t, i18n } = useTranslation();
@@ -30,36 +18,19 @@ const ExportsPage = () => {
   const [datasets, setDatasets] = useState<DatasetCatalog["items"]>([]);
 
   useEffect(() => {
-    void reportsApi
-      .getExports<NonNullable<Collection["items"]>[number]>()
-      .then((data) => {
-        setJobs(data.total);
-        setJobPreview(data.items ?? []);
-      })
-      .catch(() => undefined);
-    void reportsApi
-      .getExportSchedules()
-      .then((data) => setSchedules(data.total))
-      .catch(() => undefined);
-    void reportsApi
-      .getExportKpis()
-      .then((data) => setKpis(data.total))
-      .catch(() => undefined);
-    void reportsApi
-      .getDatasets<NonNullable<DatasetCatalog["items"]>[number]>()
-      .then((data) => setDatasets(data.items ?? []))
-      .catch(() => undefined);
+    void reportsApi.getExports<NonNullable<Collection["items"]>[number]>().then((data) => {
+      setJobs(data.total);
+      setJobPreview(data.items ?? []);
+    }).catch(() => undefined);
+    void reportsApi.getExportSchedules().then((data) => setSchedules(data.total)).catch(() => undefined);
+    void reportsApi.getExportKpis().then((data) => setKpis(data.total)).catch(() => undefined);
+    void reportsApi.getDatasets<NonNullable<DatasetCatalog["items"]>[number]>().then((data) => setDatasets(data.items ?? [])).catch(() => undefined);
   }, []);
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <Breadcrumb
-          items={[
-            { label: t("common.home"), to: "/dashboard" },
-            { label: t("exports.title") },
-          ]}
-        />
+        <Breadcrumb items={[{ label: t("common.home"), to: "/dashboard" }, { label: t("exports.title") }]} />
         <div className="w-full md:w-48">
           <label className="sr-only" htmlFor="exports-language-select">
             {t("common.locale")}
@@ -76,26 +47,9 @@ const ExportsPage = () => {
         </div>
       </div>
       <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardHeader>
-            <CardTitle>{t("exports.jobs")}</CardTitle>
-          </CardHeader>
-          <CardContent className="text-2xl font-semibold">{jobs}</CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>{t("exports.schedules")}</CardTitle>
-          </CardHeader>
-          <CardContent className="text-2xl font-semibold">
-            {schedules}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>{t("exports.kpis")}</CardTitle>
-          </CardHeader>
-          <CardContent className="text-2xl font-semibold">{kpis}</CardContent>
-        </Card>
+        <Card><CardHeader><CardTitle>{t("exports.jobs")}</CardTitle></CardHeader><CardContent className="text-2xl font-semibold">{jobs}</CardContent></Card>
+        <Card><CardHeader><CardTitle>{t("exports.schedules")}</CardTitle></CardHeader><CardContent className="text-2xl font-semibold">{schedules}</CardContent></Card>
+        <Card><CardHeader><CardTitle>{t("exports.kpis")}</CardTitle></CardHeader><CardContent className="text-2xl font-semibold">{kpis}</CardContent></Card>
       </div>
       {jobPreview?.length ? (
         <Card>
@@ -106,14 +60,9 @@ const ExportsPage = () => {
             <ul className="space-y-2 text-sm" aria-live="polite">
               {jobPreview.slice(0, 5).map((job) => (
                 <li key={job.id} className="rounded-md border p-3">
-                  <div className="font-medium">
-                    {job.dataset_code ?? job.id}
-                  </div>
+                  <div className="font-medium">{job.dataset_code ?? job.id}</div>
                   <div className="text-muted-foreground">
-                    {t("exports.schemaVersion")}: {job.schema_version ?? "v1"} ·{" "}
-                    {t("exports.anonymized")}:{" "}
-                    {job.anonymized ? t("common.yes") : t("common.no")} ·{" "}
-                    {t("exports.targetType")}: {job.target_type ?? "file"}
+                    {t("exports.schemaVersion")}: {job.schema_version ?? "v1"} · {t("exports.anonymized")}: {job.anonymized ? t("common.yes") : t("common.no")} · {t("exports.targetType")}: {job.target_type ?? "file"}
                   </div>
                 </li>
               ))}
@@ -121,10 +70,7 @@ const ExportsPage = () => {
           </CardContent>
         </Card>
       ) : (
-        <EmptyState
-          title={t("exports.jobs")}
-          description={t("common.loading")}
-        />
+        <EmptyState title={t("exports.jobs")} description={t("common.loading")} />
       )}
       <Card>
         <CardHeader>
@@ -136,8 +82,7 @@ const ExportsPage = () => {
               <li key={dataset.code} className="rounded-md border p-3">
                 <div className="font-medium">{dataset.code}</div>
                 <div className="text-muted-foreground">
-                  {t("exports.schemaVersion")}: {dataset.schema_version} ·{" "}
-                  {t("exports.supportedTargets")}: {dataset.targets.join(", ")}
+                  {t("exports.schemaVersion")}: {dataset.schema_version} · {t("exports.supportedTargets")}: {dataset.targets.join(", ")}
                 </div>
               </li>
             ))}

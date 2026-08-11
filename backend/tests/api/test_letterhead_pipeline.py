@@ -7,14 +7,15 @@ output has no headers.
 Local execution is blocked (Python 3.14, no pydantic-core wheel) — the test
 file is valid pytest-asyncio; CI on Python 3.12.12 is the source of truth.
 """
-
 from __future__ import annotations
 
+import io
 import zipfile
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from io import BytesIO
 from typing import Any
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
@@ -22,6 +23,8 @@ from sqlalchemy import Column, String, Table
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.db.session import SharedBase, TenantBase
+from app.models.document import Document, DocumentSnapshot, DocumentVersion
+from app.models.job_engine import OutboxEvent
 from app.models.models import (
     Company,
     PipelineRun,
@@ -42,7 +45,6 @@ pytestmark = pytest.mark.asyncio
 # ---------------------------------------------------------------------------
 # Minimal DOCX factory (no docx-template placeholders, just a paragraph)
 # ---------------------------------------------------------------------------
-
 
 def _make_minimal_docx() -> bytes:
     """Return minimal valid DOCX bytes with a sectPr (required by apply_headers_to_docx)."""
@@ -107,7 +109,6 @@ def _bare_docx_bytes() -> bytes:
 # Read header XML helper
 # ---------------------------------------------------------------------------
 
-
 def _read_header_xml(docx_bytes: bytes) -> str:
     """Return concatenated word/header*.xml contents from DOCX, empty string if none."""
     try:
@@ -115,9 +116,7 @@ def _read_header_xml(docx_bytes: bytes) -> str:
             parts = [name for name in zf.namelist() if name.startswith("word/header")]
             if not parts:
                 return ""
-            return "".join(
-                zf.read(name).decode("utf-8", errors="replace") for name in sorted(parts)
-            )
+            return "".join(zf.read(name).decode("utf-8", errors="replace") for name in sorted(parts))
     except Exception:
         return ""
 
@@ -125,7 +124,6 @@ def _read_header_xml(docx_bytes: bytes) -> str:
 # ---------------------------------------------------------------------------
 # DB fixture (SQLite in-memory with all tenant tables)
 # ---------------------------------------------------------------------------
-
 
 @pytest.fixture()
 async def db_engine():
@@ -297,7 +295,6 @@ async def _seed(session, *, preset_enabled: bool = True) -> bytes:
 # Fixture helper class
 # ---------------------------------------------------------------------------
 
-
 class _LetterheadFixture:
     def __init__(self, session, monkeypatch, *, letterhead_auto: bool):
         self._session = session
@@ -318,8 +315,7 @@ class _LetterheadFixture:
 
     async def _snapshot_company_count(self) -> None:
         """Record the current number of Company rows (called once during fixture setup)."""
-        from sqlalchemy import func
-        from sqlalchemy import select as sa_select
+        from sqlalchemy import func, select as sa_select
 
         from app.models.models import Company as _Company
 
@@ -331,8 +327,7 @@ class _LetterheadFixture:
 
         This proves that the adhoc issuer path did NOT insert any Company row.
         """
-        from sqlalchemy import func
-        from sqlalchemy import select as sa_select
+        from sqlalchemy import func, select as sa_select
 
         from app.models.models import Company as _Company
 
@@ -390,7 +385,6 @@ class _LetterheadFixture:
             mock_settings.doc_pipeline_letterhead_auto = auto_flag
             # Forward other settings accesses to real settings
             from app.core.config import get_settings as _get_settings
-
             real = _get_settings()
             mock_settings.secret_key = real.secret_key
             mock_settings.storage_backend = real.storage_backend
@@ -548,6 +542,7 @@ def test_pack_run_request_accepts_letterhead():
     Local execution blocked (Python 3.14 — no pydantic-core wheel).
     CI on Python 3.12.12 is the source of truth.
     """
+    import pydantic
 
     from app.modules.branding.schemas import LetterheadOverride
     from app.schemas.pack import PackRunRequest
@@ -595,9 +590,7 @@ def test_pack_run_request_accepts_letterhead():
 
     # None letterhead also produces None in context (no-override path)
     context_no_lh: dict = {}
-    context_no_lh["letterhead"] = (
-        req_no_lh.letterhead.model_dump(mode="json") if req_no_lh.letterhead else None
-    )
+    context_no_lh["letterhead"] = req_no_lh.letterhead.model_dump(mode="json") if req_no_lh.letterhead else None
     context_no_lh["site_id"] = None
     assert context_no_lh["letterhead"] is None
     assert context_no_lh["site_id"] is None

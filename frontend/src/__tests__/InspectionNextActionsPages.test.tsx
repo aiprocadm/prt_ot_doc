@@ -11,10 +11,8 @@ const getFireTrainingSnapshotMock = vi.fn();
 
 vi.mock("@/api/operations", () => ({
   operationsApi: {
-    getInspectionWorkspaceSnapshot: (...args: unknown[]) =>
-      getInspectionWorkspaceSnapshotMock(...args),
-    getFireTrainingSnapshot: (...args: unknown[]) =>
-      getFireTrainingSnapshotMock(...args),
+    getInspectionWorkspaceSnapshot: (...args: unknown[]) => getInspectionWorkspaceSnapshotMock(...args),
+    getFireTrainingSnapshot: (...args: unknown[]) => getFireTrainingSnapshotMock(...args),
   },
 }));
 
@@ -33,78 +31,58 @@ describe("Inspection/fire next actions", () => {
           status: "scheduled",
           scheduled_at: "2020-01-01T00:00:00Z",
           inspection_type: "fire",
-          purpose: "Плановая",
-        },
+          purpose: "Плановая"
+        }
       ],
-      prescriptions: [
-        { id: "pres-1", status: "open", inspection_id: "insp-1" },
-      ],
-      tasks: [
-        { id: "task-1", status: "open", overdue: true, entity_id: "insp-1" },
-      ],
+      prescriptions: [{ id: "pres-1", status: "open", inspection_id: "insp-1" }],
+      tasks: [{ id: "task-1", status: "open", overdue: true, entity_id: "insp-1" }],
       templates: [],
-      packRuns: [],
+      packRuns: []
     });
 
     render(
       <MemoryRouter>
         <FireInspectionsPage />
-      </MemoryRouter>,
+      </MemoryRouter>
     );
 
-    expect(
-      await screen.findByText(/блокеры и дальнейшие действия/i),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/блокеры и дальнейшие действия/i)).toBeInTheDocument();
   });
 
   it("shows overdue-training next actions on FireTrainingPage", async () => {
     getFireTrainingSnapshotMock.mockResolvedValue({
       templates: [{ id: "tpl-1", title: "Template", status: "active" }],
       journals: [{ id: "jr-1", title: "Journal", status: "active" }],
-      overdueEntries: [
-        { id: "ov-1", briefing_type: "repeat", status: "overdue" },
-      ],
-      programs: [],
+      overdueEntries: [{ id: "ov-1", briefing_type: "repeat", status: "overdue" }],
+      programs: []
     });
 
     render(
       <MemoryRouter>
         <FireTrainingPage />
-      </MemoryRouter>,
+      </MemoryRouter>
     );
 
-    expect(
-      await screen.findByText(/блокеры и дальнейшие действия/i),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(/просроченных записей инструктажей/i),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/блокеры и дальнейшие действия/i)).toBeInTheDocument();
+    expect(screen.getByText(/просроченных записей инструктажей/i)).toBeInTheDocument();
   });
 
   it("shows prep-packages blockers panel", async () => {
     getInspectionWorkspaceSnapshotMock.mockResolvedValue({
-      inspections: [
-        { id: "insp-1", authority: "Ростехнадзор", status: "open" },
-      ],
-      prescriptions: [
-        { id: "pres-1", inspection_id: "insp-1", status: "open" },
-      ],
+      inspections: [{ id: "insp-1", authority: "Ростехнадзор", status: "open" }],
+      prescriptions: [{ id: "pres-1", inspection_id: "insp-1", status: "open" }],
       tasks: [{ id: "task-1", entity_id: "insp-1", status: "open" }],
       templates: [{ id: "tpl-1" }],
-      packRuns: [],
+      packRuns: []
     });
 
     render(
       <MemoryRouter>
         <InspectionPrepPackagesPage />
-      </MemoryRouter>,
+      </MemoryRouter>
     );
 
-    expect(
-      await screen.findByText(/блокеры и дальнейшие действия/i),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(/открытых ограничений по предписаниям/i),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/блокеры и дальнейшие действия/i)).toBeInTheDocument();
+    expect(screen.getByText(/открытых ограничений по предписаниям/i)).toBeInTheDocument();
   });
 });

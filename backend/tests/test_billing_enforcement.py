@@ -17,20 +17,9 @@ from app.services.billing import BillingContext, BillingService
 
 @pytest.mark.asyncio
 async def test_compute_remaining_uses_usage_counters() -> None:
-    usage = BillingUsageCounter(
-        tenant_id="t1",
-        period_yyyymm=202603,
-        docs_generated=12,
-        edo_outgoing=4,
-        s3_bytes_used=3 * 1024**3,
-    )
+    usage = BillingUsageCounter(tenant_id="t1", period_yyyymm=202603, docs_generated=12, edo_outgoing=4, s3_bytes_used=3 * 1024**3)
     remaining = BillingService.compute_remaining(
-        {
-            "max_generations_per_month": 20,
-            "edo_outgoing_per_month": 5,
-            "max_s3_bytes": 10 * 1024**3,
-        },
-        usage,
+        {"max_generations_per_month": 20, "edo_outgoing_per_month": 5, "max_s3_bytes": 10 * 1024**3}, usage
     )
     assert remaining["max_generations_per_month"] == 8
     assert remaining["edo_outgoing_per_month"] == 1
@@ -38,13 +27,9 @@ async def test_compute_remaining_uses_usage_counters() -> None:
 
 
 @pytest.mark.asyncio
-async def test_assert_allowed_blocks_past_due_without_grace(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_assert_allowed_blocks_past_due_without_grace(monkeypatch: pytest.MonkeyPatch) -> None:
     service = BillingService(session=None)  # type: ignore[arg-type]
-    tenant = Tenant(
-        id="tenant-1", slug="tenant-1", name="Tenant 1", code="tenant-1", schema_name="tenant_1"
-    )
+    tenant = Tenant(id="tenant-1", slug="tenant-1", name="Tenant 1", code="tenant-1", schema_name="tenant_1")
     subscription = BillingSubscription(
         tenant_id=tenant.id,
         plan_id="plan-1",
@@ -54,9 +39,7 @@ async def test_assert_allowed_blocks_past_due_without_grace(
         auto_renew=True,
         grace_until=datetime.now(tz=timezone.utc) - timedelta(seconds=1),
     )
-    context = BillingContext(
-        plan=None, subscription=subscription, usage=None, limits={}, features={}
-    )
+    context = BillingContext(plan=None, subscription=subscription, usage=None, limits={}, features={})
 
     async def _get_context(_: Tenant) -> BillingContext:
         return context
@@ -73,20 +56,10 @@ async def test_assert_allowed_blocks_past_due_without_grace(
 @pytest.mark.asyncio
 async def test_assert_allowed_enforces_generation_quota(monkeypatch: pytest.MonkeyPatch) -> None:
     service = BillingService(session=None)  # type: ignore[arg-type]
-    tenant = Tenant(
-        id="tenant-1", slug="tenant-1", name="Tenant 1", code="tenant-1", schema_name="tenant_1"
-    )
-    plan = BillingPlan(
-        code="pro",
-        name="Pro",
-        limits={"max_generations_per_month": 2},
-        features={"edo": True},
-        price={},
-    )
+    tenant = Tenant(id="tenant-1", slug="tenant-1", name="Tenant 1", code="tenant-1", schema_name="tenant_1")
+    plan = BillingPlan(code="pro", name="Pro", limits={"max_generations_per_month": 2}, features={"edo": True}, price={})
     usage = BillingUsageCounter(tenant_id=tenant.id, period_yyyymm=202603, docs_generated=2)
-    context = BillingContext(
-        plan=plan, subscription=None, usage=usage, limits=plan.limits, features=plan.features
-    )
+    context = BillingContext(plan=plan, subscription=None, usage=usage, limits=plan.limits, features=plan.features)
 
     async def _get_context(_: Tenant) -> BillingContext:
         return context

@@ -8,38 +8,37 @@ import type { PackDto } from "@/types/dto/packs";
 import { formatDate } from "@/utils/datetime";
 
 export const PackTable = () => {
-  const { items, pagination, list, setPage, setPageSize, loading } =
-    usePacksStore();
+  const { items, pagination, list, setPage, setPageSize, loading } = usePacksStore();
 
   const columns = useMemo<ColumnDef<PackDto>[]>(
     () => [
       {
         accessorKey: "name",
         header: "Название",
-        cell: ({ row }) => row.original.name,
+        cell: ({ row }) => row.original.name
       },
       {
         accessorKey: "company.name",
         header: "Компания",
-        cell: ({ row }) => row.original.company?.name ?? "—",
+        cell: ({ row }) => row.original.company?.name ?? "—"
       },
       {
         accessorKey: "preset",
         header: "Пресет",
-        cell: ({ row }) => row.original.preset,
+        cell: ({ row }) => row.original.preset
       },
       {
         accessorKey: "status",
         header: "Статус",
-        cell: ({ row }) => <StatusBadge status={row.original.status} />,
+        cell: ({ row }) => <StatusBadge status={row.original.status} />
       },
       {
         accessorKey: "updated_at",
         header: "Обновлено",
-        cell: ({ row }) => formatDate(row.original.updated_at),
-      },
+        cell: ({ row }) => formatDate(row.original.updated_at)
+      }
     ],
-    [],
+    []
   );
 
   return (

@@ -10,24 +10,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAsyncResource } from "@/hooks/useAsyncResource";
-import {
-  BREAKDOWN_DIMENSION_LABELS,
-  BUDGET_DOMAIN_LABELS,
-  formatRub,
-} from "@/pages/budget/budgetVocab";
-import type {
-  BreakdownDimension,
-  BudgetBreakdownDto,
-  BudgetOverviewDto,
-} from "@/types/dto/budget";
+import { BREAKDOWN_DIMENSION_LABELS, BUDGET_DOMAIN_LABELS, formatRub } from "@/pages/budget/budgetVocab";
+import type { BreakdownDimension, BudgetBreakdownDto, BudgetOverviewDto } from "@/types/dto/budget";
 
-const DIMENSIONS: BreakdownDimension[] = [
-  "article",
-  "domain",
-  "company",
-  "branch",
-  "site",
-];
+const DIMENSIONS: BreakdownDimension[] = ["article", "domain", "company", "branch", "site"];
 
 interface Props {
   overview: BudgetOverviewDto;
@@ -47,18 +33,13 @@ export const OverviewTab = ({ overview, onWindowChange }: Props) => {
   }, [overview.date_from, overview.date_to]);
 
   const breakdownLoader = useCallback(
-    () =>
-      budgetApi.getBreakdown({
-        dimension,
-        date_from: overview.date_from,
-        date_to: overview.date_to,
-      }),
-    [dimension, overview.date_from, overview.date_to],
+    () => budgetApi.getBreakdown({ dimension, date_from: overview.date_from, date_to: overview.date_to }),
+    [dimension, overview.date_from, overview.date_to]
   );
   const breakdownRes = useAsyncResource<BudgetBreakdownDto | null>({
     loader: breakdownLoader,
     initialData: null,
-    errorMessage: "Не удалось загрузить разрез бюджета",
+    errorMessage: "Не удалось загрузить разрез бюджета"
   });
 
   // Пустая граница ушла бы на бэкенд как date_from="" (axios отбрасывает только null/undefined)
@@ -74,10 +55,7 @@ export const OverviewTab = ({ overview, onWindowChange }: Props) => {
   };
 
   const breakdown = breakdownRes.data;
-  const maxAmount = Math.max(
-    1,
-    ...(breakdown?.items.map((item) => item.amount) ?? [1]),
-  );
+  const maxAmount = Math.max(1, ...(breakdown?.items.map((item) => item.amount) ?? [1]));
 
   return (
     <div className="space-y-4">
@@ -98,12 +76,7 @@ export const OverviewTab = ({ overview, onWindowChange }: Props) => {
             </div>
             <div className="space-y-1">
               <Label htmlFor="budget-overview-to">По</Label>
-              <Input
-                id="budget-overview-to"
-                type="date"
-                value={dateTo}
-                onChange={(e) => setDateTo(e.target.value)}
-              />
+              <Input id="budget-overview-to" type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
             </div>
             <Button onClick={applyWindow} disabled={!windowComplete}>
               Применить
@@ -114,17 +87,10 @@ export const OverviewTab = ({ overview, onWindowChange }: Props) => {
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {overview.domains.map((domain) => (
-          <Card
-            key={domain.domain}
-            data-testid={`budget-domain-card-${domain.domain}`}
-          >
+          <Card key={domain.domain} data-testid={`budget-domain-card-${domain.domain}`}>
             <CardHeader className="space-y-2">
-              <CardTitle className="text-base">
-                {BUDGET_DOMAIN_LABELS[domain.domain]}
-              </CardTitle>
-              {domain.read_only ? (
-                <Badge variant="secondary">ведётся на складе</Badge>
-              ) : null}
+              <CardTitle className="text-base">{BUDGET_DOMAIN_LABELS[domain.domain]}</CardTitle>
+              {domain.read_only ? <Badge variant="secondary">ведётся на складе</Badge> : null}
             </CardHeader>
             <CardContent className="space-y-3 text-sm">
               <div className="space-y-1">
@@ -138,13 +104,7 @@ export const OverviewTab = ({ overview, onWindowChange }: Props) => {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Остаток</span>
-                  <span
-                    className={
-                      domain.remaining < 0
-                        ? "font-semibold text-destructive"
-                        : ""
-                    }
-                  >
+                  <span className={domain.remaining < 0 ? "font-semibold text-destructive" : ""}>
                     {formatRub(domain.remaining)}
                   </span>
                 </div>
@@ -153,9 +113,7 @@ export const OverviewTab = ({ overview, onWindowChange }: Props) => {
               {domain.read_only ? (
                 <div className="space-y-2">
                   {(domain.warning_unpriced_receipts ?? 0) > 0 ? (
-                    <p className="text-xs text-amber-600">
-                      Приходов без цены: {domain.warning_unpriced_receipts}
-                    </p>
+                    <p className="text-xs text-amber-600">Приходов без цены: {domain.warning_unpriced_receipts}</p>
                   ) : null}
                   <Button asChild variant="outline" size="sm">
                     <Link to="/warehouse">Открыть склад</Link>
@@ -164,9 +122,7 @@ export const OverviewTab = ({ overview, onWindowChange }: Props) => {
               ) : null}
 
               {domain.budgets.length === 0 ? (
-                <p className="text-xs text-muted-foreground">
-                  Бюджеты не заданы
-                </p>
+                <p className="text-xs text-muted-foreground">Бюджеты не заданы</p>
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-xs">
@@ -186,15 +142,9 @@ export const OverviewTab = ({ overview, onWindowChange }: Props) => {
                           <td className="py-1 pr-2">
                             {budget.period_start} – {budget.period_end}
                           </td>
-                          <td className="py-1 pr-2">
-                            {formatRub(budget.planned_amount)}
-                          </td>
-                          <td className="py-1 pr-2">
-                            {formatRub(budget.actual_own_period)}
-                          </td>
-                          <td
-                            className={`py-1 ${budget.remaining < 0 ? "font-semibold text-destructive" : ""}`}
-                          >
+                          <td className="py-1 pr-2">{formatRub(budget.planned_amount)}</td>
+                          <td className="py-1 pr-2">{formatRub(budget.actual_own_period)}</td>
+                          <td className={`py-1 ${budget.remaining < 0 ? "font-semibold text-destructive" : ""}`}>
                             {formatRub(budget.remaining)}
                           </td>
                         </tr>
@@ -229,22 +179,13 @@ export const OverviewTab = ({ overview, onWindowChange }: Props) => {
         </CardHeader>
         <CardContent>
           {breakdownRes.error ? (
-            <ErrorState
-              error={breakdownRes.error}
-              onRetry={() => void breakdownRes.reload().catch(() => undefined)}
-            />
+            <ErrorState error={breakdownRes.error} onRetry={() => void breakdownRes.reload().catch(() => undefined)} />
           ) : breakdownRes.loading && !breakdown ? (
-            <p
-              className="py-6 text-center text-sm text-muted-foreground"
-              role="status"
-            >
+            <p className="py-6 text-center text-sm text-muted-foreground" role="status">
               Загрузка разреза...
             </p>
           ) : !breakdown || breakdown.items.length === 0 ? (
-            <EmptyState
-              title="Нет данных"
-              description="В этом разрезе пока пусто."
-            />
+            <EmptyState title="Нет данных" description="В этом разрезе пока пусто." />
           ) : (
             // При смене разреза таблица гасится и помечается aria-busy, иначе устаревшие
             // строки молча висели бы как актуальные до прихода ответа.
@@ -261,22 +202,15 @@ export const OverviewTab = ({ overview, onWindowChange }: Props) => {
                 </thead>
                 <tbody>
                   {breakdown.items.map((item) => (
-                    <tr
-                      key={item.id || item.name}
-                      className="border-b last:border-0"
-                    >
+                    <tr key={item.id || item.name} className="border-b last:border-0">
                       <td className="py-2 pr-4">{item.name}</td>
                       <td className="py-2">
                         <div className="flex items-center gap-2">
-                          <span className="w-28 shrink-0 text-right">
-                            {formatRub(item.amount)}
-                          </span>
+                          <span className="w-28 shrink-0 text-right">{formatRub(item.amount)}</span>
                           <div className="h-2 flex-1 rounded bg-muted">
                             <div
                               className="h-2 rounded bg-primary"
-                              style={{
-                                width: `${(item.amount / maxAmount) * 100}%`,
-                              }}
+                              style={{ width: `${(item.amount / maxAmount) * 100}%` }}
                             />
                           </div>
                         </div>
@@ -287,9 +221,7 @@ export const OverviewTab = ({ overview, onWindowChange }: Props) => {
               </table>
             </div>
           )}
-          <p className="pt-2 text-xs text-muted-foreground">
-            СИЗ-закупки в разрезе не участвуют.
-          </p>
+          <p className="pt-2 text-xs text-muted-foreground">СИЗ-закупки в разрезе не участвуют.</p>
         </CardContent>
       </Card>
     </div>

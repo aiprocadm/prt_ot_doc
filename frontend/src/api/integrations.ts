@@ -6,9 +6,7 @@ export const integrationsApi = {
     return data;
   },
   getOutboxEvents: async <T>(): Promise<{ items: T[] }> => {
-    const { data } = await apiClient.get<{ items: T[] }>(
-      "/admin/outbox/events",
-    );
+    const { data } = await apiClient.get<{ items: T[] }>("/admin/outbox/events");
     return data;
   },
   getReadiness: async <T>(): Promise<T> => {
@@ -20,5 +18,6 @@ export const integrationsApi = {
   },
   retryOutboxEvent: async (id: string): Promise<void> => {
     await apiClient.post(`/admin/outbox/events/${id}/requeue`);
-  },
+  }
 };
+

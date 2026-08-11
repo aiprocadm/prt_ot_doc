@@ -6,7 +6,7 @@ import type {
   ImportBatchDto,
   ImportBatchRowDto,
   ImportPreviewDto,
-  ImportTargetDto,
+  ImportTargetDto
 } from "@/types/dto/imports";
 import { downloadBlob } from "@/utils/download";
 
@@ -15,9 +15,7 @@ const BASE = "/imports";
 /** Файл не влезает в синхронную ручку — предлагаем фоновую загрузку. */
 export const isTooManyRowsError = (error: unknown): boolean => {
   const e = error as Partial<ApiError> | null;
-  return Boolean(
-    e && e.status === 422 && e.code === "IMPORT_FILE_TOO_MANY_ROWS",
-  );
+  return Boolean(e && e.status === 422 && e.code === "IMPORT_FILE_TOO_MANY_ROWS");
 };
 
 /** Модуль импорта — default-OFF, и выключенный он отвечает 404. */
@@ -30,7 +28,7 @@ const withFile = (
   file: File,
   mapping?: Record<string, string>,
   createMissing?: string[],
-  profile?: string | null,
+  profile?: string | null
 ): FormData => {
   const form = new FormData();
   form.append("file", file);
@@ -54,7 +52,7 @@ export const importsApi = {
   async profiles(target?: string): Promise<ImportProfileDto[]> {
     return (
       await apiClient.get<ImportProfileDto[]>(`${BASE}/profiles`, {
-        params: target ? { target } : {},
+        params: target ? { target } : {}
       })
     ).data;
   },
@@ -64,12 +62,9 @@ export const importsApi = {
   },
 
   async downloadTemplate(targetCode: string): Promise<void> {
-    const { data } = await apiClient.get<Blob>(
-      `${BASE}/targets/${targetCode}/template`,
-      {
-        responseType: "blob",
-      },
-    );
+    const { data } = await apiClient.get<Blob>(`${BASE}/targets/${targetCode}/template`, {
+      responseType: "blob"
+    });
     downloadBlob(data, `import_${targetCode}_template.csv`);
   },
 
@@ -77,12 +72,12 @@ export const importsApi = {
     targetCode: string,
     file: File,
     mapping?: Record<string, string>,
-    profile?: string | null,
+    profile?: string | null
   ): Promise<ImportPreviewDto> {
     return (
       await apiClient.post<ImportPreviewDto>(
         `${BASE}/${targetCode}/dry-run`,
-        withFile(file, mapping, undefined, profile),
+        withFile(file, mapping, undefined, profile)
       )
     ).data;
   },
@@ -92,35 +87,32 @@ export const importsApi = {
     file: File,
     mapping?: Record<string, string>,
     createMissing?: string[],
-    profile?: string | null,
+    profile?: string | null
   ): Promise<ImportApplyDto> {
     return (
       await apiClient.post<ImportApplyDto>(
         `${BASE}/${targetCode}/apply`,
-        withFile(file, mapping, createMissing, profile),
+        withFile(file, mapping, createMissing, profile)
       )
     ).data;
   },
 
   async downloadReport(batchId: string): Promise<void> {
-    const { data } = await apiClient.get<Blob>(
-      `${BASE}/batches/${batchId}/report`,
-      {
-        responseType: "blob",
-      },
-    );
+    const { data } = await apiClient.get<Blob>(`${BASE}/batches/${batchId}/report`, {
+      responseType: "blob"
+    });
     downloadBlob(data, `import_report_${batchId}.csv`);
   },
 
   async dryRunAsync(
     targetCode: string,
     file: File,
-    mapping?: Record<string, string>,
+    mapping?: Record<string, string>
   ): Promise<ImportBatchDto> {
     return (
       await apiClient.post<ImportBatchDto>(
         `${BASE}/${targetCode}/dry-run-async`,
-        withFile(file, mapping),
+        withFile(file, mapping)
       )
     ).data;
   },
@@ -128,56 +120,37 @@ export const importsApi = {
   async applyAsync(
     targetCode: string,
     file: File,
-    mapping?: Record<string, string>,
+    mapping?: Record<string, string>
   ): Promise<ImportBatchDto> {
     return (
       await apiClient.post<ImportBatchDto>(
         `${BASE}/${targetCode}/apply-async`,
-        withFile(file, mapping),
+        withFile(file, mapping)
       )
     ).data;
   },
 
   async batch(batchId: string): Promise<ImportBatchDto> {
-    return (await apiClient.get<ImportBatchDto>(`${BASE}/batches/${batchId}`))
-      .data;
+    return (await apiClient.get<ImportBatchDto>(`${BASE}/batches/${batchId}`)).data;
   },
 
-  async batches(
-    params: { target?: string; limit?: number } = {},
-  ): Promise<ImportBatchDto[]> {
-    return (
-      await apiClient.get<ImportBatchDto[]>(`${BASE}/batches`, { params })
-    ).data;
+  async batches(params: { target?: string; limit?: number } = {}): Promise<ImportBatchDto[]> {
+    return (await apiClient.get<ImportBatchDto[]>(`${BASE}/batches`, { params })).data;
   },
 
-  async batchRows(
-    batchId: string,
-    action?: string,
-  ): Promise<ImportBatchRowDto[]> {
+  async batchRows(batchId: string, action?: string): Promise<ImportBatchRowDto[]> {
     return (
-      await apiClient.get<ImportBatchRowDto[]>(
-        `${BASE}/batches/${batchId}/rows`,
-        {
-          params: action ? { action } : {},
-        },
-      )
+      await apiClient.get<ImportBatchRowDto[]>(`${BASE}/batches/${batchId}/rows`, {
+        params: action ? { action } : {}
+      })
     ).data;
   },
 
   async qualityCheck(batchId: string): Promise<ImportBatchDto> {
-    return (
-      await apiClient.post<ImportBatchDto>(
-        `${BASE}/batches/${batchId}/quality-check`,
-      )
-    ).data;
+    return (await apiClient.post<ImportBatchDto>(`${BASE}/batches/${batchId}/quality-check`)).data;
   },
 
   async rollback(batchId: string): Promise<ImportBatchDto> {
-    return (
-      await apiClient.post<ImportBatchDto>(
-        `${BASE}/batches/${batchId}/rollback`,
-      )
-    ).data;
-  },
+    return (await apiClient.post<ImportBatchDto>(`${BASE}/batches/${batchId}/rollback`)).data;
+  }
 };

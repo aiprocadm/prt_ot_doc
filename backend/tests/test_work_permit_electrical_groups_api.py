@@ -4,7 +4,6 @@
 Person-запрос — через session.execute mock. Паттерн мока: строим мок-объект wp + members
 с нужными атрибутами и патчим зависимости на уровне модуля routes.work_permits.
 """
-
 from __future__ import annotations
 
 import uuid
@@ -14,12 +13,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.schemas.work_permit import WorkPermitRead
+from app.schemas.work_permit import WorkPermitRead, WorkPermitMemberRead
+
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-
 
 def _make_wp(work_type: str = "electrical") -> SimpleNamespace:
     """Фиктивный WorkPermit-объект с минимальным набором атрибутов."""
@@ -162,7 +161,6 @@ async def test_electrical_permit_foreman_group_ii_readiness_fail() -> None:
 # Test: не-электро наряд → electrical_group is None, electrical_group_readiness is None
 # ---------------------------------------------------------------------------
 
-
 @pytest.mark.asyncio
 async def test_non_electrical_permit_no_group_fields() -> None:
     """Не-электро наряд (confined_space) — поля группы отсутствуют (None)."""
@@ -192,14 +190,11 @@ async def test_non_electrical_permit_no_group_fields() -> None:
 # Test: схема QualificationRecord принимает level
 # ---------------------------------------------------------------------------
 
-
 def test_qualification_record_accepts_level() -> None:
     """QualificationRecord.level сохраняется в схеме."""
     from app.schemas.person import QualificationRecord
 
-    q = QualificationRecord(
-        name="Группа по электробезопасности", kind="electrical_safety_group", level="IV"
-    )
+    q = QualificationRecord(name="Группа по электробезопасности", kind="electrical_safety_group", level="IV")
     assert q.level == "IV"
 
 
@@ -223,8 +218,8 @@ def test_qualification_record_level_survives_sanitize() -> None:
 
 def test_person_read_qualification_level_roundtrip() -> None:
     """PersonRead корректно обходит level через sanitize-валидатор."""
-    from app.models.models import EmploymentStatus
     from app.schemas.person import PersonRead
+    from app.models.models import EmploymentStatus
 
     data = {
         "id": "11111111-1111-1111-1111-111111111111",
@@ -233,11 +228,7 @@ def test_person_read_qualification_level_roundtrip() -> None:
         "last_name": "Иванов",
         "employment_status": EmploymentStatus.ACTIVE,
         "qualifications": [
-            {
-                "name": "Группа по электробезопасности",
-                "kind": "electrical_safety_group",
-                "level": "IV",
-            }
+            {"name": "Группа по электробезопасности", "kind": "electrical_safety_group", "level": "IV"}
         ],
         "current_ppe": [],
         "hazardous_factors": [],
@@ -285,9 +276,7 @@ async def test_electrical_gt_1000_foreman_iii_insufficient() -> None:
     assert str(item["person_id"]) == PERSON_ID_FOREMAN_III
     assert item["role"] == "foreman"
     assert item["group"] == "III"
-    assert (
-        item["required"] == "IV"
-    ), f"при gt_1000 форман должен иметь IV, получили required={item['required']!r}"
+    assert item["required"] == "IV", f"при gt_1000 форман должен иметь IV, получили required={item['required']!r}"
 
 
 @pytest.mark.asyncio

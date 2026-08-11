@@ -20,11 +20,11 @@ def test_allowed_transitions():
 
 def test_forbidden_transitions_raise():
     with pytest.raises(lc.WorkPermitTransitionError):
-        lc.validate_transition(lc.STATUS_CLOSED, lc.STATUS_ISSUED)  # terminal
+        lc.validate_transition(lc.STATUS_CLOSED, lc.STATUS_ISSUED)      # terminal
     with pytest.raises(lc.WorkPermitTransitionError):
-        lc.validate_transition(lc.STATUS_DRAFT, lc.STATUS_SUSPENDED)  # not allowed
+        lc.validate_transition(lc.STATUS_DRAFT, lc.STATUS_SUSPENDED)    # not allowed
     with pytest.raises(lc.WorkPermitTransitionError):
-        lc.validate_transition("bogus", lc.STATUS_ISSUED)  # unknown
+        lc.validate_transition("bogus", lc.STATUS_ISSUED)              # unknown
 
 
 def test_value_validators():
@@ -50,6 +50,4 @@ def test_event_types_include_ops_journal():
 
     assert {"admitted", "member_added", "member_removed"}.issubset(lc.EVENT_TYPES)
     # существующие сохранены
-    assert {"issued", "suspended", "resumed", "closed", "cancelled", "extended"}.issubset(
-        lc.EVENT_TYPES
-    )
+    assert {"issued", "suspended", "resumed", "closed", "cancelled", "extended"}.issubset(lc.EVENT_TYPES)

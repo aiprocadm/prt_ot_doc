@@ -22,7 +22,9 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column("webhook_deliveries", sa.Column("outbox_id", sa.String(length=36), nullable=True))
+    op.add_column(
+        "webhook_deliveries", sa.Column("outbox_id", sa.String(length=36), nullable=True)
+    )
 
 
 def downgrade() -> None:

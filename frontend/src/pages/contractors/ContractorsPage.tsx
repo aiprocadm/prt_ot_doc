@@ -39,39 +39,19 @@ const ContractorsPage = () => {
       contractorsApi.listExpiringDocuments().catch((e) => {
         if (isFeatureDisabledError(e)) return { items: [], total: 0 };
         throw e;
-      }),
+      })
     ]);
     const employeeCounts = new Map<string, number>();
-    employees.items.forEach((e) =>
-      employeeCounts.set(
-        e.contractor_id,
-        (employeeCounts.get(e.contractor_id) ?? 0) + 1,
-      ),
-    );
+    employees.items.forEach((e) => employeeCounts.set(e.contractor_id, (employeeCounts.get(e.contractor_id) ?? 0) + 1));
     const incidentCounts = new Map<string, number>();
-    incidents.items.forEach((i) =>
-      incidentCounts.set(
-        i.contractor_id,
-        (incidentCounts.get(i.contractor_id) ?? 0) + 1,
-      ),
-    );
-    return {
-      contractors: registry.items,
-      employeeCounts,
-      incidentCounts,
-      expiringTotal: expiring.total,
-    };
+    incidents.items.forEach((i) => incidentCounts.set(i.contractor_id, (incidentCounts.get(i.contractor_id) ?? 0) + 1));
+    return { contractors: registry.items, employeeCounts, incidentCounts, expiringTotal: expiring.total };
   }, []);
 
   const { data, loading, error, reload } = useAsyncResource<RegistryData>({
     loader,
-    initialData: {
-      contractors: [],
-      employeeCounts: new Map(),
-      incidentCounts: new Map(),
-      expiringTotal: 0,
-    },
-    errorMessage: "Не удалось загрузить реестр подрядчиков",
+    initialData: { contractors: [], employeeCounts: new Map(), incidentCounts: new Map(), expiringTotal: 0 },
+    errorMessage: "Не удалось загрузить реестр подрядчиков"
   });
 
   const rows = useMemo(
@@ -79,19 +59,15 @@ const ContractorsPage = () => {
       data.contractors.map((c) => ({
         ...c,
         employeeCount: data.employeeCounts.get(c.id) ?? 0,
-        incidentCount: data.incidentCounts.get(c.id) ?? 0,
+        incidentCount: data.incidentCounts.get(c.id) ?? 0
       })),
-    [data],
+    [data]
   );
 
   const registry = useLocalRegistry({
     items: rows,
     match: (item, query) =>
-      [item.name, item.status, item.inn, item.contact_person]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase()
-        .includes(query),
+      [item.name, item.status, item.inn, item.contact_person].filter(Boolean).join(" ").toLowerCase().includes(query)
   });
 
   const columns: ColumnDef<(typeof rows)[number], unknown>[] = [
@@ -99,40 +75,20 @@ const ContractorsPage = () => {
       accessorKey: "name",
       header: "Контрагент",
       cell: ({ row }) => (
-        <Link
-          to={`/contractors/${row.original.id}`}
-          className="font-medium text-primary hover:underline"
-        >
+        <Link to={`/contractors/${row.original.id}`} className="font-medium text-primary hover:underline">
           {row.original.name}
         </Link>
-      ),
+      )
     },
-    {
-      accessorKey: "status",
-      header: "Статус",
-      cell: ({ row }) => row.original.status || "—",
-    },
-    {
-      accessorKey: "inn",
-      header: "ИНН",
-      cell: ({ row }) => row.original.inn || "—",
-    },
-    {
-      accessorKey: "employeeCount",
-      header: "Сотрудники",
-      cell: ({ row }) => `${row.original.employeeCount} чел.`,
-    },
-    {
-      accessorKey: "incidentCount",
-      header: "Инциденты",
-      cell: ({ row }) => `${row.original.incidentCount} шт.`,
-    },
+    { accessorKey: "status", header: "Статус", cell: ({ row }) => row.original.status || "—" },
+    { accessorKey: "inn", header: "ИНН", cell: ({ row }) => row.original.inn || "—" },
+    { accessorKey: "employeeCount", header: "Сотрудники", cell: ({ row }) => `${row.original.employeeCount} чел.` },
+    { accessorKey: "incidentCount", header: "Инциденты", cell: ({ row }) => `${row.original.incidentCount} шт.` },
     {
       accessorKey: "contact_person",
       header: "Контакт",
-      cell: ({ row }) =>
-        row.original.contact_person || row.original.contact_phone || "—",
-    },
+      cell: ({ row }) => row.original.contact_person || row.original.contact_phone || "—"
+    }
   ];
 
   return (
@@ -141,27 +97,15 @@ const ContractorsPage = () => {
         title="Контрагенты и подрядчики"
         description="Реестр подрядчиков поверх backend `/contractors/*`: сотрудники, документы, допуски, инциденты."
         actions={
-          <Can
-            permission={PERMISSIONS.CONTRACTOR_MANAGE}
-            fallback={<Button disabled>Новый контрагент</Button>}
-          >
-            <ContractorFormDialog
-              trigger={<Button>Новый контрагент</Button>}
-              onSubmitted={() => void reload()}
-            />
+          <Can permission={PERMISSIONS.CONTRACTOR_MANAGE} fallback={<Button disabled>Новый контрагент</Button>}>
+            <ContractorFormDialog trigger={<Button>Новый контрагент</Button>} onSubmitted={() => void reload()} />
           </Can>
         }
         stats={[
           { label: "Контрагентов", value: data.contractors.length },
-          {
-            label: "Сотрудников",
-            value: [...data.employeeCounts.values()].reduce((a, b) => a + b, 0),
-          },
-          {
-            label: "Инцидентов",
-            value: [...data.incidentCounts.values()].reduce((a, b) => a + b, 0),
-          },
-          { label: "Истекающих документов", value: data.expiringTotal },
+          { label: "Сотрудников", value: [...data.employeeCounts.values()].reduce((a, b) => a + b, 0) },
+          { label: "Инцидентов", value: [...data.incidentCounts.values()].reduce((a, b) => a + b, 0) },
+          { label: "Истекающих документов", value: data.expiringTotal }
         ]}
       />
 
@@ -169,22 +113,14 @@ const ContractorsPage = () => {
         <TabsList>
           <TabsTrigger value="registry">Реестр</TabsTrigger>
           <TabsTrigger value="expiring">Истекающие документы</TabsTrigger>
-          <TabsTrigger value="requirements">
-            Требования к документам
-          </TabsTrigger>
+          <TabsTrigger value="requirements">Требования к документам</TabsTrigger>
         </TabsList>
 
         <TabsContent value="registry" className="space-y-3">
-          <ErrorState
-            error={error ?? undefined}
-            onRetry={() => void reload()}
-          />
+          <ErrorState error={error ?? undefined} onRetry={() => void reload()} />
           {loading ? <LoadingScreen label="Загрузка подрядчиков" /> : null}
           {!loading && !error && registry.total === 0 ? (
-            <EmptyState
-              title="Подрядчики не найдены"
-              description="Добавьте контрагента или измените поиск."
-            />
+            <EmptyState title="Подрядчики не найдены" description="Добавьте контрагента или измените поиск." />
           ) : null}
           {!loading && !error && registry.total > 0 ? (
             <RegistryTable

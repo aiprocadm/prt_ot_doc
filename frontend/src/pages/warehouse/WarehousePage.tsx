@@ -14,7 +14,7 @@ import {
   type StockLevelDto,
   type StockMovementDto,
   type StockTransferDto,
-  type SupplierDto,
+  type SupplierDto
 } from "@/api/warehouse";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
@@ -25,14 +25,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { ApiError } from "@/types/dto/common";
 import { formatDate } from "@/utils/datetime";
 
@@ -49,51 +42,32 @@ const WarehousePage = () => {
   const [batches, setBatches] = useState<StockBatchDto[]>([]);
   const [movements, setMovements] = useState<StockMovementDto[]>([]);
   const [shortages, setShortages] = useState<PPEStockShortageDto[]>([]);
-  const [form, setForm] = useState({
-    batch_id: "",
-    kind: "receipt",
-    quantity: "1",
-    reason: "",
-  });
+  const [form, setForm] = useState({ batch_id: "", kind: "receipt", quantity: "1", reason: "" });
   const [submitting, setSubmitting] = useState(false);
   const [counts, setCounts] = useState<InventoryCountDto[]>([]);
   const [transfers, setTransfers] = useState<StockTransferDto[]>([]);
   const [levelsByLoc, setLevelsByLoc] = useState<StockLevelByLocationDto[]>([]);
-  const [transferForm, setTransferForm] = useState({
-    source_batch_id: "",
-    to_location: "",
-    quantity: "1",
-    reason: "",
-  });
+  const [transferForm, setTransferForm] = useState({ source_batch_id: "", to_location: "", quantity: "1", reason: "" });
   const [transferSubmitting, setTransferSubmitting] = useState(false);
-  const [activeCount, setActiveCount] =
-    useState<InventoryCountDetailDto | null>(null);
-  const [countForm, setCountForm] = useState({
-    scope_item_id: "",
-    scope_location: "",
-    note: "",
-  });
-  const [countedInputs, setCountedInputs] = useState<Record<string, string>>(
-    {},
-  );
+  const [activeCount, setActiveCount] = useState<InventoryCountDetailDto | null>(null);
+  const [countForm, setCountForm] = useState({ scope_item_id: "", scope_location: "", note: "" });
+  const [countedInputs, setCountedInputs] = useState<Record<string, string>>({});
   const [suppliers, setSuppliers] = useState<SupplierDto[]>([]);
   const [supplierForm, setSupplierForm] = useState({
     id: "",
     name: "",
     inn: "",
     contact_email: "",
-    contact_phone: "",
+    contact_phone: ""
   });
-  const [reorderDraft, setReorderDraft] = useState<ReorderDraftDto | null>(
-    null,
-  );
+  const [reorderDraft, setReorderDraft] = useState<ReorderDraftDto | null>(null);
   const [batchForm, setBatchForm] = useState({
     item_id: "",
     batch_no: "",
     quantity: "1",
     location: "",
     supplier_id: "",
-    unit_cost: "",
+    unit_cost: ""
   });
   const [budgets, setBudgets] = useState<BudgetDto[]>([]);
   const [budgetForm, setBudgetForm] = useState({
@@ -101,11 +75,9 @@ const WarehousePage = () => {
     period_start: "",
     period_end: "",
     planned_amount: "",
-    notes: "",
+    notes: ""
   });
-  const [activeBudget, setActiveBudget] = useState<BudgetDetailDto | null>(
-    null,
-  );
+  const [activeBudget, setActiveBudget] = useState<BudgetDetailDto | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -121,7 +93,7 @@ const WarehousePage = () => {
         levelsByLocData,
         suppliersData,
         reorderData,
-        budgetsData,
+        budgetsData
       ] = await Promise.all([
         warehouseApi.listLevels(),
         warehouseApi.listBatches(),
@@ -132,7 +104,7 @@ const WarehousePage = () => {
         warehouseApi.listLevelsByLocation(),
         warehouseApi.listSuppliers(),
         warehouseApi.getReorderDraft(),
-        warehouseApi.listBudgets(),
+        warehouseApi.listBudgets()
       ]);
       setLevels(levelsData);
       setBatches(batchesData);
@@ -145,9 +117,7 @@ const WarehousePage = () => {
       setReorderDraft(reorderData);
       setBudgets(budgetsData);
     } catch (err) {
-      setError(
-        (err as ApiError) ?? { message: "Не удалось загрузить склад СИЗ" },
-      );
+      setError((err as ApiError) ?? { message: "Не удалось загрузить склад СИЗ" });
     } finally {
       setLoading(false);
     }
@@ -161,14 +131,12 @@ const WarehousePage = () => {
         batch_id: form.batch_id,
         kind: form.kind as "receipt" | "writeoff" | "adjustment",
         quantity: Number(form.quantity) || 0,
-        reason: form.reason || null,
+        reason: form.reason || null
       });
       setForm({ batch_id: "", kind: "receipt", quantity: "1", reason: "" });
       await load();
     } catch (err) {
-      setError(
-        (err as ApiError) ?? { message: "Не удалось провести движение" },
-      );
+      setError((err as ApiError) ?? { message: "Не удалось провести движение" });
     } finally {
       setSubmitting(false);
     }
@@ -183,39 +151,28 @@ const WarehousePage = () => {
         source_batch_id: transferForm.source_batch_id.trim(),
         to_location: transferForm.to_location.trim(),
         quantity: Number(transferForm.quantity) || 0,
-        reason: transferForm.reason || null,
+        reason: transferForm.reason || null
       };
       await warehouseApi.createTransfer(body);
-      setTransferForm({
-        source_batch_id: "",
-        to_location: "",
-        quantity: "1",
-        reason: "",
-      });
+      setTransferForm({ source_batch_id: "", to_location: "", quantity: "1", reason: "" });
       await load();
     } catch (err) {
-      setError(
-        (err as ApiError) ?? { message: "Не удалось выполнить перемещение" },
-      );
+      setError((err as ApiError) ?? { message: "Не удалось выполнить перемещение" });
     } finally {
       setTransferSubmitting(false);
     }
   };
 
   const knownLocations = useMemo(
-    () =>
-      Array.from(
-        new Set(levelsByLoc.map((l) => l.location).filter(Boolean)),
-      ) as string[],
-    [levelsByLoc],
+    () => Array.from(new Set(levelsByLoc.map((l) => l.location).filter(Boolean))) as string[],
+    [levelsByLoc]
   );
 
   const openCountDetail = (detail: InventoryCountDetailDto) => {
     setActiveCount(detail);
     const seeded: Record<string, string> = {};
     detail.lines.forEach((line) => {
-      seeded[line.id] =
-        line.counted_qty === null ? "" : String(line.counted_qty);
+      seeded[line.id] = line.counted_qty === null ? "" : String(line.counted_qty);
     });
     setCountedInputs(seeded);
   };
@@ -226,15 +183,13 @@ const WarehousePage = () => {
       const detail = await warehouseApi.createCount({
         scope_item_id: countForm.scope_item_id || null,
         scope_location: countForm.scope_location || null,
-        note: countForm.note || null,
+        note: countForm.note || null
       });
       setCountForm({ scope_item_id: "", scope_location: "", note: "" });
       openCountDetail(detail);
       await load();
     } catch (err) {
-      setError(
-        (err as ApiError) ?? { message: "Не удалось создать инвентаризацию" },
-      );
+      setError((err as ApiError) ?? { message: "Не удалось создать инвентаризацию" });
     } finally {
       setSubmitting(false);
     }
@@ -244,9 +199,7 @@ const WarehousePage = () => {
     try {
       openCountDetail(await warehouseApi.getCount(id));
     } catch (err) {
-      setError(
-        (err as ApiError) ?? { message: "Не удалось открыть инвентаризацию" },
-      );
+      setError((err as ApiError) ?? { message: "Не удалось открыть инвентаризацию" });
     }
   };
 
@@ -259,11 +212,9 @@ const WarehousePage = () => {
         counted_qty:
           countedInputs[line.id] === "" || countedInputs[line.id] === undefined
             ? null
-            : Number(countedInputs[line.id]),
+            : Number(countedInputs[line.id])
       }));
-      openCountDetail(
-        await warehouseApi.patchCountLines(activeCount.id, entries),
-      );
+      openCountDetail(await warehouseApi.patchCountLines(activeCount.id, entries));
     } catch (err) {
       setError((err as ApiError) ?? { message: "Не удалось сохранить факт" });
     } finally {
@@ -278,9 +229,7 @@ const WarehousePage = () => {
       openCountDetail(await warehouseApi.applyCount(activeCount.id));
       await load();
     } catch (err) {
-      setError(
-        (err as ApiError) ?? { message: "Не удалось применить инвентаризацию" },
-      );
+      setError((err as ApiError) ?? { message: "Не удалось применить инвентаризацию" });
     } finally {
       setSubmitting(false);
     }
@@ -293,9 +242,7 @@ const WarehousePage = () => {
       openCountDetail(await warehouseApi.cancelCount(activeCount.id));
       await load();
     } catch (err) {
-      setError(
-        (err as ApiError) ?? { message: "Не удалось отменить инвентаризацию" },
-      );
+      setError((err as ApiError) ?? { message: "Не удалось отменить инвентаризацию" });
     } finally {
       setSubmitting(false);
     }
@@ -310,25 +257,17 @@ const WarehousePage = () => {
         name: supplierForm.name.trim(),
         inn: supplierForm.inn.trim() || null,
         contact_email: supplierForm.contact_email.trim() || null,
-        contact_phone: supplierForm.contact_phone.trim() || null,
+        contact_phone: supplierForm.contact_phone.trim() || null
       };
       if (supplierForm.id) {
         await warehouseApi.updateSupplier(supplierForm.id, payload);
       } else {
         await warehouseApi.createSupplier(payload);
       }
-      setSupplierForm({
-        id: "",
-        name: "",
-        inn: "",
-        contact_email: "",
-        contact_phone: "",
-      });
+      setSupplierForm({ id: "", name: "", inn: "", contact_email: "", contact_phone: "" });
       await load();
     } catch (err) {
-      setError(
-        (err as ApiError) ?? { message: "Не удалось сохранить поставщика" },
-      );
+      setError((err as ApiError) ?? { message: "Не удалось сохранить поставщика" });
     } finally {
       setSubmitting(false);
     }
@@ -340,7 +279,7 @@ const WarehousePage = () => {
       name: supplier.name,
       inn: supplier.inn ?? "",
       contact_email: supplier.contact_email ?? "",
-      contact_phone: supplier.contact_phone ?? "",
+      contact_phone: supplier.contact_phone ?? ""
     });
   };
 
@@ -351,9 +290,7 @@ const WarehousePage = () => {
       await warehouseApi.deleteSupplier(id);
       await load();
     } catch (err) {
-      setError(
-        (err as ApiError) ?? { message: "Не удалось удалить поставщика" },
-      );
+      setError((err as ApiError) ?? { message: "Не удалось удалить поставщика" });
     } finally {
       setSubmitting(false);
     }
@@ -370,10 +307,7 @@ const WarehousePage = () => {
         quantity: Number(batchForm.quantity) || 0,
         location: batchForm.location.trim() || null,
         supplier_id: batchForm.supplier_id || null,
-        unit_cost:
-          batchForm.unit_cost.trim() === ""
-            ? null
-            : Number(batchForm.unit_cost),
+        unit_cost: batchForm.unit_cost.trim() === "" ? null : Number(batchForm.unit_cost)
       });
       setBatchForm({
         item_id: "",
@@ -381,7 +315,7 @@ const WarehousePage = () => {
         quantity: "1",
         location: "",
         supplier_id: "",
-        unit_cost: "",
+        unit_cost: ""
       });
       await load();
     } catch (err) {
@@ -391,10 +325,7 @@ const WarehousePage = () => {
     }
   };
 
-  const changePreferredSupplier = async (
-    itemId: string,
-    supplierId: string | null,
-  ) => {
+  const changePreferredSupplier = async (itemId: string, supplierId: string | null) => {
     setError(null);
     try {
       await warehouseApi.patchItemPreferredSupplier(itemId, supplierId);
@@ -402,26 +333,17 @@ const WarehousePage = () => {
       // resolution, so refresh both to keep them consistent after the change.
       const [freshShortages, freshReorder] = await Promise.all([
         warehouseApi.listShortages(),
-        warehouseApi.getReorderDraft(),
+        warehouseApi.getReorderDraft()
       ]);
       setShortages(freshShortages);
       setReorderDraft(freshReorder);
     } catch (err) {
-      setError(
-        (err as ApiError) ?? {
-          message: "Не удалось задать поставщика позиции",
-        },
-      );
+      setError((err as ApiError) ?? { message: "Не удалось задать поставщика позиции" });
     }
   };
 
   const submitBudget = async () => {
-    if (
-      !budgetForm.name.trim() ||
-      !budgetForm.period_start ||
-      !budgetForm.period_end
-    )
-      return;
+    if (!budgetForm.name.trim() || !budgetForm.period_start || !budgetForm.period_end) return;
     setSubmitting(true);
     setError(null);
     try {
@@ -430,15 +352,9 @@ const WarehousePage = () => {
         period_start: budgetForm.period_start,
         period_end: budgetForm.period_end,
         planned_amount: Number(budgetForm.planned_amount) || 0,
-        notes: budgetForm.notes.trim() || null,
+        notes: budgetForm.notes.trim() || null
       });
-      setBudgetForm({
-        name: "",
-        period_start: "",
-        period_end: "",
-        planned_amount: "",
-        notes: "",
-      });
+      setBudgetForm({ name: "", period_start: "", period_end: "", planned_amount: "", notes: "" });
       const fresh = await warehouseApi.listBudgets();
       setBudgets(fresh);
     } catch (err) {
@@ -469,8 +385,8 @@ const WarehousePage = () => {
             csvCell(group.supplier_inn),
             csvCell(group.supplier_contact),
             csvCell(line.item_name),
-            csvCell(line.deficit),
-          ].join(";"),
+            csvCell(line.deficit)
+          ].join(";")
         );
       });
     });
@@ -488,16 +404,13 @@ const WarehousePage = () => {
 
   const totalQuantity = useMemo(
     () => levels.reduce((sum, level) => sum + level.total_quantity, 0),
-    [levels],
+    [levels]
   );
 
   const rows = useMemo(() => {
     return levels.map((level) => {
       const status = level.total_quantity <= 0 ? "warning" : "ready";
-      const searchBlob = [level.item_name, level.item_id]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
+      const searchBlob = [level.item_name, level.item_id].filter(Boolean).join(" ").toLowerCase();
       return {
         id: level.item_id,
         name: level.item_name,
@@ -505,7 +418,7 @@ const WarehousePage = () => {
         batchCount: level.batch_count,
         nearestExpiry: level.nearest_certificate_expiry ?? null,
         status,
-        searchBlob,
+        searchBlob
       };
     });
   }, [levels]);
@@ -526,33 +439,21 @@ const WarehousePage = () => {
       <div className="grid gap-4 md:grid-cols-3">
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm text-muted-foreground">
-              Позиции на складе
-            </CardTitle>
+            <CardTitle className="text-sm text-muted-foreground">Позиции на складе</CardTitle>
           </CardHeader>
-          <CardContent className="text-3xl font-semibold">
-            {loading ? "—" : levels.length}
-          </CardContent>
+          <CardContent className="text-3xl font-semibold">{loading ? "—" : levels.length}</CardContent>
         </Card>
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm text-muted-foreground">
-              Суммарный остаток
-            </CardTitle>
+            <CardTitle className="text-sm text-muted-foreground">Суммарный остаток</CardTitle>
           </CardHeader>
-          <CardContent className="text-3xl font-semibold">
-            {loading ? "—" : totalQuantity}
-          </CardContent>
+          <CardContent className="text-3xl font-semibold">{loading ? "—" : totalQuantity}</CardContent>
         </Card>
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm text-muted-foreground">
-              Партий всего
-            </CardTitle>
+            <CardTitle className="text-sm text-muted-foreground">Партий всего</CardTitle>
           </CardHeader>
-          <CardContent className="text-3xl font-semibold">
-            {loading ? "—" : batches.length}
-          </CardContent>
+          <CardContent className="text-3xl font-semibold">{loading ? "—" : batches.length}</CardContent>
         </Card>
       </div>
       <Card>
@@ -570,11 +471,7 @@ const WarehousePage = () => {
           {!loading && !error && filtered.length === 0 ? (
             <EmptyState
               title="Позиции не найдены"
-              description={
-                query
-                  ? "Измените запрос поиска."
-                  : "В tenant ещё нет партий СИЗ на складе."
-              }
+              description={query ? "Измените запрос поиска." : "В tenant ещё нет партий СИЗ на складе."}
             />
           ) : null}
           {!loading && !error && filtered.length > 0 ? (
@@ -594,9 +491,7 @@ const WarehousePage = () => {
                     <TableCell className="font-medium">{item.name}</TableCell>
                     <TableCell>{item.quantity}</TableCell>
                     <TableCell>{item.batchCount}</TableCell>
-                    <TableCell>
-                      {formatDate(item.nearestExpiry) || "—"}
-                    </TableCell>
+                    <TableCell>{formatDate(item.nearestExpiry) || "—"}</TableCell>
                     <TableCell>
                       <StatusBadge status={item.status} />
                     </TableCell>
@@ -638,22 +533,15 @@ const WarehousePage = () => {
               value={form.reason}
               onChange={(e) => setForm({ ...form, reason: e.target.value })}
             />
-            <Button
-              onClick={submitMovement}
-              disabled={submitting || !form.batch_id}
-            >
+            <Button onClick={submitMovement} disabled={submitting || !form.batch_id}>
               Провести
             </Button>
           </div>
           <p className="text-xs text-muted-foreground">
-            Для «Корректировки» количество — это фактический остаток партии (не
-            дельта).
+            Для «Корректировки» количество — это фактический остаток партии (не дельта).
           </p>
           {movements.length === 0 ? (
-            <EmptyState
-              title="Движений нет"
-              description="Проведите приход или корректировку по партии."
-            />
+            <EmptyState title="Движений нет" description="Проведите приход или корректировку по партии." />
           ) : (
             <Table>
               <TableHeader>
@@ -680,9 +568,7 @@ const WarehousePage = () => {
       </Card>
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">
-            Перемещения между локациями
-          </CardTitle>
+          <CardTitle className="text-base">Перемещения между локациями</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-3 sm:grid-cols-2">
@@ -690,21 +576,14 @@ const WarehousePage = () => {
               aria-label="Партия-источник"
               placeholder="ID партии-источника"
               value={transferForm.source_batch_id}
-              onChange={(e) =>
-                setTransferForm((f) => ({
-                  ...f,
-                  source_batch_id: e.target.value,
-                }))
-              }
+              onChange={(e) => setTransferForm((f) => ({ ...f, source_batch_id: e.target.value }))}
             />
             <Input
               aria-label="Куда (локация)"
               list="transfer-locations"
               placeholder="Локация назначения"
               value={transferForm.to_location}
-              onChange={(e) =>
-                setTransferForm((f) => ({ ...f, to_location: e.target.value }))
-              }
+              onChange={(e) => setTransferForm((f) => ({ ...f, to_location: e.target.value }))}
             />
             <datalist id="transfer-locations">
               {knownLocations.map((loc) => (
@@ -716,17 +595,13 @@ const WarehousePage = () => {
               type="number"
               min={1}
               value={transferForm.quantity}
-              onChange={(e) =>
-                setTransferForm((f) => ({ ...f, quantity: e.target.value }))
-              }
+              onChange={(e) => setTransferForm((f) => ({ ...f, quantity: e.target.value }))}
             />
             <Input
               aria-label="Причина перемещения"
               placeholder="Причина (опционально)"
               value={transferForm.reason}
-              onChange={(e) =>
-                setTransferForm((f) => ({ ...f, reason: e.target.value }))
-              }
+              onChange={(e) => setTransferForm((f) => ({ ...f, reason: e.target.value }))}
             />
           </div>
           <Button onClick={submitTransfer} disabled={transferSubmitting}>
@@ -747,9 +622,7 @@ const WarehousePage = () => {
                 <TableRow key={t.ref_id}>
                   <TableCell>{t.item_name}</TableCell>
                   <TableCell>{t.batch_no}</TableCell>
-                  <TableCell>
-                    {t.from_location ?? "—"} → {t.to_location}
-                  </TableCell>
+                  <TableCell>{(t.from_location ?? "—")} → {t.to_location}</TableCell>
                   <TableCell>{t.quantity}</TableCell>
                   <TableCell>{formatDate(t.occurred_at)}</TableCell>
                 </TableRow>
@@ -771,58 +644,35 @@ const WarehousePage = () => {
               aria-label="Название поставщика"
               placeholder="Название"
               value={supplierForm.name}
-              onChange={(e) =>
-                setSupplierForm((f) => ({ ...f, name: e.target.value }))
-              }
+              onChange={(e) => setSupplierForm((f) => ({ ...f, name: e.target.value }))}
             />
             <Input
               aria-label="ИНН поставщика"
               placeholder="ИНН"
               value={supplierForm.inn}
-              onChange={(e) =>
-                setSupplierForm((f) => ({ ...f, inn: e.target.value }))
-              }
+              onChange={(e) => setSupplierForm((f) => ({ ...f, inn: e.target.value }))}
             />
             <Input
               aria-label="Email поставщика"
               placeholder="Email"
               value={supplierForm.contact_email}
-              onChange={(e) =>
-                setSupplierForm((f) => ({
-                  ...f,
-                  contact_email: e.target.value,
-                }))
-              }
+              onChange={(e) => setSupplierForm((f) => ({ ...f, contact_email: e.target.value }))}
             />
             <Input
               aria-label="Телефон поставщика"
               placeholder="Телефон"
               value={supplierForm.contact_phone}
-              onChange={(e) =>
-                setSupplierForm((f) => ({
-                  ...f,
-                  contact_phone: e.target.value,
-                }))
-              }
+              onChange={(e) => setSupplierForm((f) => ({ ...f, contact_phone: e.target.value }))}
             />
             <div className="flex gap-2">
-              <Button
-                onClick={submitSupplier}
-                disabled={submitting || !supplierForm.name.trim()}
-              >
+              <Button onClick={submitSupplier} disabled={submitting || !supplierForm.name.trim()}>
                 Сохранить поставщика
               </Button>
               {supplierForm.id ? (
                 <Button
                   variant="ghost"
                   onClick={() =>
-                    setSupplierForm({
-                      id: "",
-                      name: "",
-                      inn: "",
-                      contact_email: "",
-                      contact_phone: "",
-                    })
+                    setSupplierForm({ id: "", name: "", inn: "", contact_email: "", contact_phone: "" })
                   }
                 >
                   Отмена
@@ -831,10 +681,7 @@ const WarehousePage = () => {
             </div>
           </div>
           {suppliers.length === 0 ? (
-            <EmptyState
-              title="Поставщиков нет"
-              description="Добавьте поставщика для дозаказа СИЗ."
-            />
+            <EmptyState title="Поставщиков нет" description="Добавьте поставщика для дозаказа СИЗ." />
           ) : (
             <Table>
               <TableHeader>
@@ -850,15 +697,10 @@ const WarehousePage = () => {
                   <TableRow key={s.id}>
                     <TableCell className="font-medium">{s.name}</TableCell>
                     <TableCell>{s.inn || "—"}</TableCell>
-                    <TableCell>
-                      {s.contact_email || s.contact_phone || "—"}
-                    </TableCell>
+                    <TableCell>{s.contact_email || s.contact_phone || "—"}</TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
-                        <Button
-                          variant="outline"
-                          onClick={() => editSupplier(s)}
-                        >
+                        <Button variant="outline" onClick={() => editSupplier(s)}>
                           Изменить
                         </Button>
                         <Button
@@ -888,42 +730,32 @@ const WarehousePage = () => {
               aria-label="ID позиции партии"
               placeholder="ID позиции"
               value={batchForm.item_id}
-              onChange={(e) =>
-                setBatchForm((f) => ({ ...f, item_id: e.target.value }))
-              }
+              onChange={(e) => setBatchForm((f) => ({ ...f, item_id: e.target.value }))}
             />
             <Input
               aria-label="Номер партии"
               placeholder="Номер партии"
               value={batchForm.batch_no}
-              onChange={(e) =>
-                setBatchForm((f) => ({ ...f, batch_no: e.target.value }))
-              }
+              onChange={(e) => setBatchForm((f) => ({ ...f, batch_no: e.target.value }))}
             />
             <Input
               aria-label="Количество партии"
               type="number"
               min={0}
               value={batchForm.quantity}
-              onChange={(e) =>
-                setBatchForm((f) => ({ ...f, quantity: e.target.value }))
-              }
+              onChange={(e) => setBatchForm((f) => ({ ...f, quantity: e.target.value }))}
             />
             <Input
               aria-label="Локация партии"
               placeholder="Локация (опц.)"
               value={batchForm.location}
-              onChange={(e) =>
-                setBatchForm((f) => ({ ...f, location: e.target.value }))
-              }
+              onChange={(e) => setBatchForm((f) => ({ ...f, location: e.target.value }))}
             />
             <select
               aria-label="Поставщик партии"
               className="h-9 rounded-md border border-input bg-background px-2 text-sm"
               value={batchForm.supplier_id}
-              onChange={(e) =>
-                setBatchForm((f) => ({ ...f, supplier_id: e.target.value }))
-              }
+              onChange={(e) => setBatchForm((f) => ({ ...f, supplier_id: e.target.value }))}
             >
               <option value="">— без поставщика —</option>
               {suppliers.map((s) => (
@@ -939,18 +771,12 @@ const WarehousePage = () => {
               step="0.01"
               placeholder="Цена за единицу"
               value={batchForm.unit_cost}
-              onChange={(e) =>
-                setBatchForm((f) => ({ ...f, unit_cost: e.target.value }))
-              }
+              onChange={(e) => setBatchForm((f) => ({ ...f, unit_cost: e.target.value }))}
             />
           </div>
           <Button
             onClick={submitBatch}
-            disabled={
-              submitting ||
-              !batchForm.item_id.trim() ||
-              !batchForm.batch_no.trim()
-            }
+            disabled={submitting || !batchForm.item_id.trim() || !batchForm.batch_no.trim()}
           >
             Создать партию
           </Button>
@@ -960,9 +786,7 @@ const WarehousePage = () => {
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
             Дефицит / мин-остаток
-            <Badge variant="secondary">
-              {shortages.filter((s) => s.below_threshold).length}
-            </Badge>
+            <Badge variant="secondary">{shortages.filter((s) => s.below_threshold).length}</Badge>
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -990,11 +814,7 @@ const WarehousePage = () => {
                     <TableCell className="font-medium">
                       <div className="flex items-center gap-2">
                         {s.item_name}
-                        <Badge
-                          variant={
-                            s.below_threshold ? "destructive" : "secondary"
-                          }
-                        >
+                        <Badge variant={s.below_threshold ? "destructive" : "secondary"}>
                           {s.below_threshold ? "Дефицит" : "Норма"}
                         </Badge>
                       </div>
@@ -1003,14 +823,10 @@ const WarehousePage = () => {
                     <TableCell>{s.min_stock}</TableCell>
                     <TableCell>{s.deficit}</TableCell>
                     <TableCell>
-                      {s.days_to_depletion !== null
-                        ? Math.round(s.days_to_depletion)
-                        : "—"}
+                      {s.days_to_depletion !== null ? Math.round(s.days_to_depletion) : "—"}
                     </TableCell>
                     <TableCell>
-                      {s.projected_breach_date !== null
-                        ? formatDate(s.projected_breach_date)
-                        : "—"}
+                      {s.projected_breach_date !== null ? formatDate(s.projected_breach_date) : "—"}
                     </TableCell>
                     <TableCell>
                       <div className="space-y-1">
@@ -1029,16 +845,9 @@ const WarehousePage = () => {
                         <select
                           aria-label={`Предпочтительный поставщик ${s.item_name}`}
                           className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm"
-                          value={
-                            s.supplier_source === "explicit"
-                              ? (s.supplier_id ?? "")
-                              : ""
-                          }
+                          value={s.supplier_source === "explicit" ? s.supplier_id ?? "" : ""}
                           onChange={(e) =>
-                            void changePreferredSupplier(
-                              s.item_id,
-                              e.target.value || null,
-                            )
+                            void changePreferredSupplier(s.item_id, e.target.value || null)
                           }
                         >
                           <option value="">— без явного —</option>
@@ -1062,9 +871,7 @@ const WarehousePage = () => {
           <CardTitle className="text-base flex items-center justify-between gap-2">
             <span className="flex items-center gap-2">
               Дозаказ
-              <Badge variant="secondary">
-                {reorderDraft?.total_lines ?? 0}
-              </Badge>
+              <Badge variant="secondary">{reorderDraft?.total_lines ?? 0}</Badge>
             </span>
             <Button
               variant="outline"
@@ -1096,9 +903,7 @@ const WarehousePage = () => {
                       {group.supplier_contact}
                     </span>
                   ) : null}
-                  <Badge variant="secondary">
-                    дефицит: {group.total_deficit}
-                  </Badge>
+                  <Badge variant="secondary">дефицит: {group.total_deficit}</Badge>
                 </div>
                 <Table>
                   <TableHeader>
@@ -1110,9 +915,7 @@ const WarehousePage = () => {
                   <TableBody>
                     {group.lines.map((line) => (
                       <TableRow key={line.item_id}>
-                        <TableCell className="font-medium">
-                          {line.item_name}
-                        </TableCell>
+                        <TableCell className="font-medium">{line.item_name}</TableCell>
                         <TableCell>{line.deficit}</TableCell>
                       </TableRow>
                     ))}
@@ -1135,23 +938,17 @@ const WarehousePage = () => {
             <Input
               placeholder="ID позиции (опц.)"
               value={countForm.scope_item_id}
-              onChange={(e) =>
-                setCountForm({ ...countForm, scope_item_id: e.target.value })
-              }
+              onChange={(e) => setCountForm({ ...countForm, scope_item_id: e.target.value })}
             />
             <Input
               placeholder="Локация (опц.)"
               value={countForm.scope_location}
-              onChange={(e) =>
-                setCountForm({ ...countForm, scope_location: e.target.value })
-              }
+              onChange={(e) => setCountForm({ ...countForm, scope_location: e.target.value })}
             />
             <Input
               placeholder="Заметка (опц.)"
               value={countForm.note}
-              onChange={(e) =>
-                setCountForm({ ...countForm, note: e.target.value })
-              }
+              onChange={(e) => setCountForm({ ...countForm, note: e.target.value })}
             />
             <Button onClick={createCount} disabled={submitting}>
               Создать
@@ -1159,10 +956,7 @@ const WarehousePage = () => {
           </div>
 
           {counts.length === 0 ? (
-            <EmptyState
-              title="Нет инвентаризаций"
-              description="Создайте срез для сверки факта."
-            />
+            <EmptyState title="Нет инвентаризаций" description="Создайте срез для сверки факта." />
           ) : (
             <Table>
               <TableHeader>
@@ -1179,11 +973,7 @@ const WarehousePage = () => {
                 {counts.map((c) => (
                   <TableRow key={c.id}>
                     <TableCell>
-                      <Badge
-                        variant={
-                          c.status === "applied" ? "secondary" : "outline"
-                        }
-                      >
+                      <Badge variant={c.status === "applied" ? "secondary" : "outline"}>
                         {c.status}
                       </Badge>
                     </TableCell>
@@ -1207,9 +997,7 @@ const WarehousePage = () => {
               <div className="flex items-center gap-2">
                 <span className="font-medium">Строки инвентаризации</span>
                 <Badge variant="outline">{activeCount.status}</Badge>
-                <Badge variant="secondary">
-                  расхождений: {activeCount.diff_count}
-                </Badge>
+                <Badge variant="secondary">расхождений: {activeCount.diff_count}</Badge>
               </div>
               <Table>
                 <TableHeader>
@@ -1225,9 +1013,7 @@ const WarehousePage = () => {
                 <TableBody>
                   {activeCount.lines.map((line) => (
                     <TableRow key={line.id}>
-                      <TableCell className="font-medium">
-                        {line.batch_no}
-                      </TableCell>
+                      <TableCell className="font-medium">{line.batch_no}</TableCell>
                       <TableCell>{line.location || "—"}</TableCell>
                       <TableCell>{line.system_qty}</TableCell>
                       <TableCell>{line.on_hand}</TableCell>
@@ -1239,37 +1025,24 @@ const WarehousePage = () => {
                           value={countedInputs[line.id] ?? ""}
                           disabled={activeCount.status !== "draft"}
                           onChange={(e) =>
-                            setCountedInputs({
-                              ...countedInputs,
-                              [line.id]: e.target.value,
-                            })
+                            setCountedInputs({ ...countedInputs, [line.id]: e.target.value })
                           }
                         />
                       </TableCell>
-                      <TableCell>
-                        {line.delta === null ? "—" : line.delta}
-                      </TableCell>
+                      <TableCell>{line.delta === null ? "—" : line.delta}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
               {activeCount.status === "draft" ? (
                 <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    onClick={saveCounts}
-                    disabled={submitting}
-                  >
+                  <Button variant="outline" onClick={saveCounts} disabled={submitting}>
                     Сохранить факт
                   </Button>
                   <Button onClick={applyActiveCount} disabled={submitting}>
                     Применить
                   </Button>
-                  <Button
-                    variant="ghost"
-                    onClick={cancelActiveCount}
-                    disabled={submitting}
-                  >
+                  <Button variant="ghost" onClick={cancelActiveCount} disabled={submitting}>
                     Отменить
                   </Button>
                 </div>
@@ -1291,25 +1064,19 @@ const WarehousePage = () => {
               aria-label="Название"
               placeholder="Название"
               value={budgetForm.name}
-              onChange={(e) =>
-                setBudgetForm((f) => ({ ...f, name: e.target.value }))
-              }
+              onChange={(e) => setBudgetForm((f) => ({ ...f, name: e.target.value }))}
             />
             <Input
               aria-label="Начало периода"
               type="date"
               value={budgetForm.period_start}
-              onChange={(e) =>
-                setBudgetForm((f) => ({ ...f, period_start: e.target.value }))
-              }
+              onChange={(e) => setBudgetForm((f) => ({ ...f, period_start: e.target.value }))}
             />
             <Input
               aria-label="Конец периода"
               type="date"
               value={budgetForm.period_end}
-              onChange={(e) =>
-                setBudgetForm((f) => ({ ...f, period_end: e.target.value }))
-              }
+              onChange={(e) => setBudgetForm((f) => ({ ...f, period_end: e.target.value }))}
             />
             <Input
               aria-label="Плановая сумма"
@@ -1318,17 +1085,13 @@ const WarehousePage = () => {
               step="0.01"
               placeholder="Плановая сумма"
               value={budgetForm.planned_amount}
-              onChange={(e) =>
-                setBudgetForm((f) => ({ ...f, planned_amount: e.target.value }))
-              }
+              onChange={(e) => setBudgetForm((f) => ({ ...f, planned_amount: e.target.value }))}
             />
             <Input
               aria-label="Заметки"
               placeholder="Заметки (опц.)"
               value={budgetForm.notes}
-              onChange={(e) =>
-                setBudgetForm((f) => ({ ...f, notes: e.target.value }))
-              }
+              onChange={(e) => setBudgetForm((f) => ({ ...f, notes: e.target.value }))}
             />
           </div>
           <Button
@@ -1366,10 +1129,7 @@ const WarehousePage = () => {
                     </TableCell>
                     <TableCell>План: {b.planned_amount}</TableCell>
                     <TableCell className="text-right">
-                      <Button
-                        variant="outline"
-                        onClick={() => void openBudget(b.id)}
-                      >
+                      <Button variant="outline" onClick={() => void openBudget(b.id)}>
                         Открыть
                       </Button>
                     </TableCell>
@@ -1383,12 +1143,8 @@ const WarehousePage = () => {
             <div className="space-y-2 border-t pt-3">
               <div className="flex items-center gap-2">
                 <span className="font-medium">{activeBudget.name}</span>
-                <Badge variant="secondary">
-                  Факт: {activeBudget.actual_total}
-                </Badge>
-                <Badge variant="outline">
-                  Остаток: {activeBudget.remaining}
-                </Badge>
+                <Badge variant="secondary">Факт: {activeBudget.actual_total}</Badge>
+                <Badge variant="outline">Остаток: {activeBudget.remaining}</Badge>
               </div>
               {activeBudget.by_category.length > 0 ? (
                 <ul className="space-y-1 text-sm">

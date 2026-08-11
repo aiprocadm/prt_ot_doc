@@ -28,7 +28,3 @@ def apply_test_env_defaults() -> None:
     os.environ.setdefault("DEFAULT_LOCALE", "en-US")
     os.environ.setdefault("APP_ENV", "test")
     os.environ.setdefault("LIBREOFFICE_BIN", sys.executable)
-    # Прод-дефолт 15s на медленных машинах (одноядерный VPS под полным прогоном)
-    # даёт ложные 504 GATEWAY_TIMEOUT в случайных API-тестах; сами таймауты
-    # тестируются точечными monkeypatch.setenv (см. test_files_upload.py).
-    os.environ.setdefault("REQUEST_TIMEOUT_SECONDS", "120")

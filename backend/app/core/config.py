@@ -322,8 +322,12 @@ class Settings(BaseSettings):
     platform_tenant_slug: str = Field("", alias="PLATFORM_TENANT_SLUG")
     webhook_notification_url: str | None = Field(None, alias="WEBHOOK_NOTIFICATION_URL")
     # RC-011 notification delivery (feature-flagged; default OFF -> no external send).
-    notifications_delivery_enabled: bool = Field(False, alias="NOTIFICATIONS_DELIVERY_ENABLED")
-    notifications_max_delivery_attempts: int = Field(3, alias="NOTIFICATIONS_MAX_DELIVERY_ATTEMPTS")
+    notifications_delivery_enabled: bool = Field(
+        False, alias="NOTIFICATIONS_DELIVERY_ENABLED"
+    )
+    notifications_max_delivery_attempts: int = Field(
+        3, alias="NOTIFICATIONS_MAX_DELIVERY_ATTEMPTS"
+    )
     smtp_host: str = Field("", alias="SMTP_HOST")
     smtp_port: int = Field(587, alias="SMTP_PORT")
     smtp_username: str = Field("", alias="SMTP_USERNAME")
@@ -371,7 +375,9 @@ class Settings(BaseSettings):
     # роняют хост по OOM — вместе с соседними контейнерами. Celery перезапускает
     # дочерний процесс, превысивший порог, ПОСЛЕ завершения текущей задачи.
     celery_worker_max_memory_mb: int = Field(1024, alias="CELERY_WORKER_MAX_MEMORY_MB")
-    celery_worker_max_tasks_per_child: int = Field(100, alias="CELERY_WORKER_MAX_TASKS_PER_CHILD")
+    celery_worker_max_tasks_per_child: int = Field(
+        100, alias="CELERY_WORKER_MAX_TASKS_PER_CHILD"
+    )
     celery_task_max_retries: int = Field(5, alias="CELERY_TASK_MAX_RETRIES")
     celery_retry_backoff_seconds: int = Field(5, alias="CELERY_RETRY_BACKOFF_SECONDS")
     celery_retry_backoff_max_seconds: int = Field(300, alias="CELERY_RETRY_BACKOFF_MAX_SECONDS")
@@ -387,7 +393,9 @@ class Settings(BaseSettings):
     # Default OFF on purpose: until now nothing scheduled an outbox drain, so an
     # existing deployment may hold a large backlog. Enabling the beat entry would
     # flush all of it to subscriber endpoints on the first tick.
-    outbox_dispatch_schedule_enabled: bool = Field(False, alias="OUTBOX_DISPATCH_SCHEDULE_ENABLED")
+    outbox_dispatch_schedule_enabled: bool = Field(
+        False, alias="OUTBOX_DISPATCH_SCHEDULE_ENABLED"
+    )
     outbox_dispatch_schedule_minutes: int = Field(5, alias="OUTBOX_DISPATCH_SCHEDULE_MINUTES")
     webhook_document_created_urls: CsvUrlList = Field(
         default_factory=list, alias="WEBHOOK_URLS_DOCUMENT_CREATED"
@@ -460,7 +468,9 @@ class Settings(BaseSettings):
     # Абсолютные лимиты — основной рубеж против zip-бомб; отношение сжатия
     # намеренно высокое, XML легитимно сжимается в десятки раз.
     archive_max_entries: int = Field(2000, alias="ARCHIVE_MAX_ENTRIES")
-    archive_max_uncompressed_bytes: int = Field(209_715_200, alias="ARCHIVE_MAX_UNCOMPRESSED_BYTES")
+    archive_max_uncompressed_bytes: int = Field(
+        209_715_200, alias="ARCHIVE_MAX_UNCOMPRESSED_BYTES"
+    )
     archive_max_entry_bytes: int = Field(104_857_600, alias="ARCHIVE_MAX_ENTRY_BYTES")
     archive_max_compression_ratio: float = Field(500.0, alias="ARCHIVE_MAX_COMPRESSION_RATIO")
     # SEC-64 (разд. 64.2 «Изоляция обработки»): ресурсные лимиты песочницы
@@ -945,7 +955,7 @@ class Settings(BaseSettings):
 
 @lru_cache
 def _load_settings() -> Settings:
-    return Settings()
+    return Settings()  # type: ignore[call-arg]  # pydantic-settings loads fields from env vars
 
 
 def get_settings(*, force_reload: bool = False) -> Settings:

@@ -35,6 +35,7 @@ def test_serialize_finding_exposes_operational_projection_fields() -> None:
     assert payload["created_at"].startswith("2026-03-21T")
 
 
+
 def test_serialize_action_marks_overdue_and_keeps_effectiveness() -> None:
     row = CorrectiveAction(
         id="action-1",

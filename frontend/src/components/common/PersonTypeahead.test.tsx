@@ -10,18 +10,8 @@ describe("PersonTypeahead", () => {
   beforeEach(() => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     searchPersons.mockResolvedValue([
-      {
-        id: "p1",
-        full_name: "Иванов Иван Иванович",
-        first_name: "Иван",
-        last_name: "Иванов",
-      },
-      {
-        id: "p2",
-        full_name: "Иванова Анна",
-        first_name: "Анна",
-        last_name: "Иванова",
-      },
+      { id: "p1", full_name: "Иванов Иван Иванович", first_name: "Иван", last_name: "Иванов" },
+      { id: "p2", full_name: "Иванова Анна", first_name: "Анна", last_name: "Иванова" }
     ]);
   });
 
@@ -34,9 +24,7 @@ describe("PersonTypeahead", () => {
     const onChange = vi.fn();
     render(<PersonTypeahead value={null} onChange={onChange} />);
 
-    fireEvent.change(screen.getByRole("textbox"), {
-      target: { value: "Иван" },
-    });
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "Иван" } });
     expect(searchPersons).not.toHaveBeenCalled(); // до истечения задержки — тихо
 
     vi.advanceTimersByTime(350);
@@ -44,10 +32,7 @@ describe("PersonTypeahead", () => {
 
     const option = await screen.findByText("Иванов Иван Иванович");
     fireEvent.click(option);
-    expect(onChange).toHaveBeenCalledWith({
-      id: "p1",
-      label: "Иванов Иван Иванович",
-    });
+    expect(onChange).toHaveBeenCalledWith({ id: "p1", label: "Иванов Иван Иванович" });
   });
 
   it("короткий запрос (1 символ) не дёргает сервер", () => {
@@ -59,10 +44,7 @@ describe("PersonTypeahead", () => {
 
   it("показывает подпись выбранного значения", () => {
     render(
-      <PersonTypeahead
-        value={{ id: "p1", label: "Иванов Иван" }}
-        onChange={vi.fn()}
-      />,
+      <PersonTypeahead value={{ id: "p1", label: "Иванов Иван" }} onChange={vi.fn()} />
     );
     expect(screen.getByRole("textbox")).toHaveValue("Иванов Иван");
   });

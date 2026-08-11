@@ -12,8 +12,7 @@ interface PersonTableProps {
 }
 
 export const PersonTable = ({ onSelect }: PersonTableProps) => {
-  const { items, pagination, setPage, setPageSize, list, loading } =
-    usePersonsStore();
+  const { items, pagination, setPage, setPageSize, list, loading } = usePersonsStore();
 
   const columns = useMemo<ColumnDef<PersonDto>[]>(
     () => [
@@ -28,25 +27,25 @@ export const PersonTable = ({ onSelect }: PersonTableProps) => {
           >
             {row.original.full_name}
           </button>
-        ),
+        )
       },
       {
         accessorKey: "position",
         header: "Должность",
-        cell: ({ row }) => row.original.position ?? "—",
+        cell: ({ row }) => row.original.position ?? "—"
       },
       {
         accessorKey: "status",
         header: "Статус",
-        cell: ({ row }) => <StatusBadge status={row.original.status} />,
+        cell: ({ row }) => <StatusBadge status={row.original.status} />
       },
       {
         accessorKey: "updated_at",
         header: "Обновлено",
-        cell: ({ row }) => formatDate(row.original.updated_at),
-      },
+        cell: ({ row }) => formatDate(row.original.updated_at)
+      }
     ],
-    [onSelect],
+    [onSelect]
   );
 
   return (

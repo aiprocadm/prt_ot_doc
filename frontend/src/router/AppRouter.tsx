@@ -1,11 +1,5 @@
 import { Suspense, useEffect, useRef, useState } from "react";
-import {
-  BrowserRouter,
-  Navigate,
-  Route,
-  Routes,
-  useLocation,
-} from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 
 import { AuthLayout } from "@/layouts/AuthLayout";
 import { MainLayout } from "@/layouts/MainLayout";
@@ -28,11 +22,7 @@ const LandingRedirect = () => {
   }, [can]);
 
   if (!landingRoute) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        Загрузка...
-      </div>
-    );
+    return <div className="flex min-h-screen items-center justify-center">Загрузка...</div>;
   }
 
   return <Navigate to={landingRoute} replace />;
@@ -50,7 +40,7 @@ const RouteMetricsTracker = () => {
       trackUxMetric("nav_backtrack_rate", {
         from: previousPath,
         to: currentPath,
-        is_backtrack: currentPath === previousPath ? 1 : 0,
+        is_backtrack: currentPath === previousPath ? 1 : 0
       });
     }
     previousPathRef.current = currentPath;
@@ -70,13 +60,7 @@ const AppRouter = () => {
     <BrowserRouter>
       <RouteMetricsTracker />
       <AuthRedirectHandler />
-      <Suspense
-        fallback={
-          <div className="flex min-h-screen items-center justify-center">
-            Загрузка...
-          </div>
-        }
-      >
+      <Suspense fallback={<div className="flex min-h-screen items-center justify-center">Загрузка...</div>}>
         <Routes>
           <Route path="/auth" element={<AuthLayout />}>
             <Route path="login" element={<LoginPage />} />

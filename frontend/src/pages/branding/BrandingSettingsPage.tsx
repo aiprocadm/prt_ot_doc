@@ -12,7 +12,7 @@ import {
   type BrandingPreviewDto,
   type BrandingProfileDto,
   type LayoutPresetDto,
-  type SiteDto,
+  type SiteDto
 } from "@/api/branding";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
@@ -48,12 +48,8 @@ const BrandingSettingsPage = () => {
   const [presets, setPresets] = useState<LayoutPresetDto[]>([]);
   const [profile, setProfile] = useState<BrandingProfileDto | null>(null);
   const [preview, setPreview] = useState<BrandingPreviewDto | null>(null);
-  const [previewHistory, setPreviewHistory] = useState<BrandingPreviewDto[]>(
-    [],
-  );
-  const [generationHistory, setGenerationHistory] = useState<
-    BrandingGenerationHistoryItemDto[]
-  >([]);
+  const [previewHistory, setPreviewHistory] = useState<BrandingPreviewDto[]>([]);
+  const [generationHistory, setGenerationHistory] = useState<BrandingGenerationHistoryItemDto[]>([]);
   const [loading, setLoading] = useState(false);
   const [savedFingerprint, setSavedFingerprint] = useState<string>("");
   const [form, setForm] = useState({
@@ -82,7 +78,7 @@ const BrandingSettingsPage = () => {
     palette_secondary: "",
     palette_accent: "",
     metadata_json: "{}",
-    signatories_json: "[]",
+    signatories_json: "[]"
   });
 
   useEffect(() => {
@@ -117,7 +113,7 @@ const BrandingSettingsPage = () => {
     setLoading(true);
     Promise.all([
       getBrandingProfile(companyId, siteId || undefined),
-      getBrandingHistory(companyId, siteId || undefined, 10).catch(() => []),
+      getBrandingHistory(companyId, siteId || undefined, 10).catch(() => [])
     ])
       .then(([data, history]) => {
         const nextForm = {
@@ -139,9 +135,7 @@ const BrandingSettingsPage = () => {
           watermark_text: data.branding.watermark_text ?? "",
           watermark_enabled: data.branding.watermark_enabled,
           preferred_header_preset_code:
-            data.preferred_header_preset_code ??
-            data.branding.preferred_letterhead_preset ??
-            "",
+            data.preferred_header_preset_code ?? data.branding.preferred_letterhead_preset ?? "",
           logo_file_id: data.branding.images?.logo_file_id ?? "",
           stamp_file_id: data.branding.images?.stamp_file_id ?? "",
           signature_file_id: data.branding.images?.signature_file_id ?? "",
@@ -149,19 +143,13 @@ const BrandingSettingsPage = () => {
           palette_secondary: data.branding.palette?.secondary ?? "",
           palette_accent: data.branding.palette?.accent ?? "",
           metadata_json: JSON.stringify(data.branding.metadata ?? {}, null, 2),
-          signatories_json: JSON.stringify(
-            data.branding.signatories ?? [],
-            null,
-            2,
-          ),
+          signatories_json: JSON.stringify(data.branding.signatories ?? [], null, 2)
         };
         setGenerationHistory(history);
         setProfile(data);
         setPreview(null);
         setForm(nextForm);
-        setSavedFingerprint(
-          JSON.stringify({ companyId, siteId, form: nextForm }),
-        );
+        setSavedFingerprint(JSON.stringify({ companyId, siteId, form: nextForm }));
       })
       .catch(() => toast.error("Не удалось загрузить branding profile"))
       .finally(() => setLoading(false));
@@ -169,18 +157,14 @@ const BrandingSettingsPage = () => {
 
   const currentCompany = useMemo(
     () => companies.find((item) => item.id === companyId),
-    [companies, companyId],
+    [companies, companyId]
   );
-  const currentSite = useMemo(
-    () => sites.find((item) => item.id === siteId),
-    [siteId, sites],
-  );
+  const currentSite = useMemo(() => sites.find((item) => item.id === siteId), [siteId, sites]);
   const currentFingerprint = useMemo(
     () => JSON.stringify({ companyId, siteId, form }),
     [companyId, form, siteId],
   );
-  const hasUnsavedChanges =
-    Boolean(profile) && !loading && currentFingerprint !== savedFingerprint;
+  const hasUnsavedChanges = Boolean(profile) && !loading && currentFingerprint !== savedFingerprint;
 
   useUnsavedChanges(hasUnsavedChanges);
 
@@ -208,43 +192,30 @@ const BrandingSettingsPage = () => {
           footer_details: splitLines(form.footer_details),
           service_notes: splitLines(form.service_notes),
           passport_label: form.passport_label,
-          preferred_letterhead_preset:
-            form.preferred_header_preset_code || null,
+          preferred_letterhead_preset: form.preferred_header_preset_code || null,
           watermark_text: form.watermark_text,
           watermark_enabled: form.watermark_enabled,
           contacts: profile?.branding.contacts ?? [],
           images: {
             logo_file_id: form.logo_file_id || null,
             stamp_file_id: form.stamp_file_id || null,
-            signature_file_id: form.signature_file_id || null,
+            signature_file_id: form.signature_file_id || null
           },
           palette: {
             primary: form.palette_primary || null,
             secondary: form.palette_secondary || null,
-            accent: form.palette_accent || null,
+            accent: form.palette_accent || null
           },
-          metadata: parseJsonSafe<Record<string, unknown>>(
-            form.metadata_json,
-            {},
-          ),
-          signatories: parseJsonSafe<Array<Record<string, unknown>>>(
-            form.signatories_json,
-            [],
-          ),
-        },
+          metadata: parseJsonSafe<Record<string, unknown>>(form.metadata_json, {}),
+          signatories: parseJsonSafe<Array<Record<string, unknown>>>(form.signatories_json, [])
+        }
       };
       const saved = await updateBrandingProfile(companyId, payload);
       setProfile(saved);
       setSavedFingerprint(currentFingerprint);
-      toast.success(
-        siteId
-          ? "Брендинг филиала сохранён"
-          : "Фирменный профиль организации сохранён",
-      );
+      toast.success(siteId ? "Брендинг филиала сохранён" : "Фирменный профиль организации сохранён");
     } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Не удалось сохранить профиль",
-      );
+      toast.error(error instanceof Error ? error.message : "Не удалось сохранить профиль");
     }
   };
 
@@ -256,9 +227,7 @@ const BrandingSettingsPage = () => {
       preset_code: form.preferred_header_preset_code || undefined,
       document_title: "Приказ по охране труда",
       document_number: currentSite ? "OT-BRANCH-2026-001" : "OT-2026-001",
-      watermark_override: form.watermark_enabled
-        ? { text: form.watermark_text || undefined }
-        : { enabled: false },
+      watermark_override: form.watermark_enabled ? { text: form.watermark_text || undefined } : { enabled: false }
     });
     setPreview(result);
     setPreviewHistory((prev) => [result, ...prev].slice(0, 5));
@@ -271,15 +240,14 @@ const BrandingSettingsPage = () => {
         items={[
           { label: "Главная", to: "/dashboard" },
           { label: "Документы", to: "/documents" },
-          { label: "Фирменные бланки" },
+          { label: "Фирменные бланки" }
         ]}
       />
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h1 className="text-2xl font-bold">Брендинг и фирменные бланки</h1>
           <p className="text-sm text-muted-foreground">
-            Профиль организации и филиала в границах тенанта, быстрый
-            предпросмотр колонтитулов и паспорт воспроизводимости.
+            Профиль организации и филиала в границах тенанта, быстрый предпросмотр колонтитулов и паспорт воспроизводимости.
           </p>
         </div>
         <div className="grid w-full gap-4 lg:max-w-3xl lg:grid-cols-2">
@@ -335,9 +303,7 @@ const BrandingSettingsPage = () => {
           </div>
           <div>
             <div className="text-sm text-muted-foreground">Активный preset</div>
-            <div className="font-medium">
-              {profile?.preferred_header_preset_code ?? "—"}
-            </div>
+            <div className="font-medium">{profile?.preferred_header_preset_code ?? "—"}</div>
           </div>
         </CardContent>
       </Card>
@@ -357,15 +323,13 @@ const BrandingSettingsPage = () => {
                 ["ОГРН", "ogrn"],
                 ["Email", "email"],
                 ["Website", "website"],
-                ["Метка филиала", "branch_label"],
+                ["Метка филиала", "branch_label"]
               ].map(([label, key]) => (
                 <div key={key}>
                   <Label>{label}</Label>
                   <Input
                     value={form[key as keyof typeof form] as string}
-                    onChange={(e) =>
-                      setForm((s) => ({ ...s, [key]: e.target.value }))
-                    }
+                    onChange={(e) => setForm((s) => ({ ...s, [key]: e.target.value }))}
                   />
                 </div>
               ))}
@@ -377,9 +341,7 @@ const BrandingSettingsPage = () => {
                 <Textarea
                   rows={3}
                   value={form.legal_address}
-                  onChange={(e) =>
-                    setForm((s) => ({ ...s, legal_address: e.target.value }))
-                  }
+                  onChange={(e) => setForm((s) => ({ ...s, legal_address: e.target.value }))}
                 />
               </div>
               <div>
@@ -387,9 +349,7 @@ const BrandingSettingsPage = () => {
                 <Textarea
                   rows={3}
                   value={form.actual_address}
-                  onChange={(e) =>
-                    setForm((s) => ({ ...s, actual_address: e.target.value }))
-                  }
+                  onChange={(e) => setForm((s) => ({ ...s, actual_address: e.target.value }))}
                 />
               </div>
             </div>
@@ -400,9 +360,7 @@ const BrandingSettingsPage = () => {
                 <Textarea
                   rows={4}
                   value={form.phones}
-                  onChange={(e) =>
-                    setForm((s) => ({ ...s, phones: e.target.value }))
-                  }
+                  onChange={(e) => setForm((s) => ({ ...s, phones: e.target.value }))}
                 />
               </div>
               <div>
@@ -410,9 +368,7 @@ const BrandingSettingsPage = () => {
                 <Textarea
                   rows={4}
                   value={form.header_details}
-                  onChange={(e) =>
-                    setForm((s) => ({ ...s, header_details: e.target.value }))
-                  }
+                  onChange={(e) => setForm((s) => ({ ...s, header_details: e.target.value }))}
                 />
               </div>
             </div>
@@ -423,9 +379,7 @@ const BrandingSettingsPage = () => {
                 <Textarea
                   rows={4}
                   value={form.footer_details}
-                  onChange={(e) =>
-                    setForm((s) => ({ ...s, footer_details: e.target.value }))
-                  }
+                  onChange={(e) => setForm((s) => ({ ...s, footer_details: e.target.value }))}
                 />
               </div>
             </div>
@@ -435,9 +389,7 @@ const BrandingSettingsPage = () => {
               <Textarea
                 rows={3}
                 value={form.service_notes}
-                onChange={(e) =>
-                  setForm((s) => ({ ...s, service_notes: e.target.value }))
-                }
+                onChange={(e) => setForm((s) => ({ ...s, service_notes: e.target.value }))}
               />
             </div>
 
@@ -446,9 +398,7 @@ const BrandingSettingsPage = () => {
                 <Label>Паспорт документа</Label>
                 <Input
                   value={form.passport_label}
-                  onChange={(e) =>
-                    setForm((s) => ({ ...s, passport_label: e.target.value }))
-                  }
+                  onChange={(e) => setForm((s) => ({ ...s, passport_label: e.target.value }))}
                 />
               </div>
               <div>
@@ -457,10 +407,7 @@ const BrandingSettingsPage = () => {
                   className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                   value={form.preferred_header_preset_code}
                   onChange={(e) =>
-                    setForm((s) => ({
-                      ...s,
-                      preferred_header_preset_code: e.target.value,
-                    }))
+                    setForm((s) => ({ ...s, preferred_header_preset_code: e.target.value }))
                   }
                 >
                   <option value="">Использовать preset по умолчанию</option>
@@ -479,30 +426,21 @@ const BrandingSettingsPage = () => {
                 <Label>ID файла логотипа</Label>
                 <Input
                   value={form.logo_file_id}
-                  onChange={(e) =>
-                    setForm((s) => ({ ...s, logo_file_id: e.target.value }))
-                  }
+                  onChange={(e) => setForm((s) => ({ ...s, logo_file_id: e.target.value }))}
                 />
               </div>
               <div>
                 <Label>ID файла печати</Label>
                 <Input
                   value={form.stamp_file_id}
-                  onChange={(e) =>
-                    setForm((s) => ({ ...s, stamp_file_id: e.target.value }))
-                  }
+                  onChange={(e) => setForm((s) => ({ ...s, stamp_file_id: e.target.value }))}
                 />
               </div>
               <div>
                 <Label>ID файла подписи</Label>
                 <Input
                   value={form.signature_file_id}
-                  onChange={(e) =>
-                    setForm((s) => ({
-                      ...s,
-                      signature_file_id: e.target.value,
-                    }))
-                  }
+                  onChange={(e) => setForm((s) => ({ ...s, signature_file_id: e.target.value }))}
                 />
               </div>
             </div>
@@ -512,9 +450,7 @@ const BrandingSettingsPage = () => {
                 <Label>Основной цвет</Label>
                 <Input
                   value={form.palette_primary}
-                  onChange={(e) =>
-                    setForm((s) => ({ ...s, palette_primary: e.target.value }))
-                  }
+                  onChange={(e) => setForm((s) => ({ ...s, palette_primary: e.target.value }))}
                   placeholder="#0055AA"
                 />
               </div>
@@ -522,21 +458,14 @@ const BrandingSettingsPage = () => {
                 <Label>Дополнительный цвет</Label>
                 <Input
                   value={form.palette_secondary}
-                  onChange={(e) =>
-                    setForm((s) => ({
-                      ...s,
-                      palette_secondary: e.target.value,
-                    }))
-                  }
+                  onChange={(e) => setForm((s) => ({ ...s, palette_secondary: e.target.value }))}
                 />
               </div>
               <div>
                 <Label>Акцентный цвет</Label>
                 <Input
                   value={form.palette_accent}
-                  onChange={(e) =>
-                    setForm((s) => ({ ...s, palette_accent: e.target.value }))
-                  }
+                  onChange={(e) => setForm((s) => ({ ...s, palette_accent: e.target.value }))}
                 />
               </div>
             </div>
@@ -545,8 +474,7 @@ const BrandingSettingsPage = () => {
               <div>
                 <div className="font-medium">Водяной знак</div>
                 <div className="text-sm text-muted-foreground">
-                  Черновик / служебный штамп в шапке. Учитывается в превью и
-                  попадает в метаданные воспроизводимости.
+                  Черновик / служебный штамп в шапке. Учитывается в превью и попадает в метаданные воспроизводимости.
                 </div>
               </div>
               <Switch
@@ -560,9 +488,7 @@ const BrandingSettingsPage = () => {
               <Label>Текст водяного знака</Label>
               <Input
                 value={form.watermark_text}
-                onChange={(e) =>
-                  setForm((s) => ({ ...s, watermark_text: e.target.value }))
-                }
+                onChange={(e) => setForm((s) => ({ ...s, watermark_text: e.target.value }))}
                 placeholder="ЧЕРНОВИК / НА СОГЛАСОВАНИЕ"
               />
             </div>
@@ -573,9 +499,7 @@ const BrandingSettingsPage = () => {
                 <Textarea
                   rows={6}
                   value={form.metadata_json}
-                  onChange={(e) =>
-                    setForm((s) => ({ ...s, metadata_json: e.target.value }))
-                  }
+                  onChange={(e) => setForm((s) => ({ ...s, metadata_json: e.target.value }))}
                 />
               </div>
               <div>
@@ -583,33 +507,21 @@ const BrandingSettingsPage = () => {
                 <Textarea
                   rows={6}
                   value={form.signatories_json}
-                  onChange={(e) =>
-                    setForm((s) => ({ ...s, signatories_json: e.target.value }))
-                  }
+                  onChange={(e) => setForm((s) => ({ ...s, signatories_json: e.target.value }))}
                 />
               </div>
             </div>
 
             <div className="flex flex-wrap gap-2">
-              <Button onClick={() => void handleSave()} disabled={loading}>
-                Сохранить профиль
-              </Button>
+              <Button onClick={() => void handleSave()} disabled={loading}>Сохранить профиль</Button>
               <Button
                 variant="outline"
-                onClick={() =>
-                  void handlePreview().catch(() =>
-                    toast.error("Не удалось собрать превью"),
-                  )
-                }
+                onClick={() => void handlePreview().catch(() => toast.error("Не удалось собрать превью"))}
               >
                 Тестовая генерация превью с брендингом
               </Button>
             </div>
-            {loading ? (
-              <div className="text-sm text-muted-foreground">
-                Загрузка профиля…
-              </div>
-            ) : null}
+            {loading ? <div className="text-sm text-muted-foreground">Загрузка профиля…</div> : null}
           </CardContent>
         </Card>
 
@@ -621,52 +533,32 @@ const BrandingSettingsPage = () => {
             <CardContent className="space-y-4">
               <div className="rounded-md border bg-muted/30 p-3 text-sm">
                 <div className="font-medium">Шапка, нечётная страница</div>
-                <div className="mt-2 whitespace-pre-wrap">
-                  {preview?.sections.header_odd ??
-                    "Сначала выполните тестовую генерацию."}
-                </div>
+                <div className="mt-2 whitespace-pre-wrap">{preview?.sections.header_odd ?? "Сначала выполните тестовую генерацию."}</div>
               </div>
               <div className="rounded-md border bg-muted/30 p-3 text-sm">
                 <div className="font-medium">Шапка, чётная / первая</div>
-                <div className="mt-2 whitespace-pre-wrap">
-                  {preview?.sections.header_even ??
-                    preview?.sections.header_first ??
-                    "—"}
-                </div>
+                <div className="mt-2 whitespace-pre-wrap">{preview?.sections.header_even ?? preview?.sections.header_first ?? "—"}</div>
               </div>
               <div className="rounded-md border bg-muted/30 p-3 text-sm">
                 <div className="font-medium">Подвал, нечётная страница</div>
-                <div className="mt-2 whitespace-pre-wrap">
-                  {preview?.sections.footer_odd ?? "—"}
-                </div>
+                <div className="mt-2 whitespace-pre-wrap">{preview?.sections.footer_odd ?? "—"}</div>
               </div>
               <div className="rounded-md border bg-muted/30 p-3 text-sm">
                 <div className="font-medium">Итоговый водяной знак</div>
-                <pre className="mt-2 overflow-x-auto whitespace-pre-wrap text-xs">
-                  {JSON.stringify(preview?.watermark ?? {}, null, 2)}
-                </pre>
+                <pre className="mt-2 overflow-x-auto whitespace-pre-wrap text-xs">{JSON.stringify(preview?.watermark ?? {}, null, 2)}</pre>
               </div>
               <div className="rounded-md border bg-muted/30 p-3 text-sm">
-                <div className="font-medium">
-                  Цепочка разрешения / источник пресета
-                </div>
+                <div className="font-medium">Цепочка разрешения / источник пресета</div>
                 <pre className="mt-2 overflow-x-auto whitespace-pre-wrap text-xs">
-                  {JSON.stringify(
-                    preview?.profile.resolution ?? profile?.resolution ?? {},
-                    null,
-                    2,
-                  )}
+                  {JSON.stringify(preview?.profile.resolution ?? profile?.resolution ?? {}, null, 2)}
                 </pre>
               </div>
               {preview?.unresolved_placeholders?.length ? (
                 <div className="text-sm text-amber-700">
-                  Незаполненные плейсхолдеры:{" "}
-                  {preview.unresolved_placeholders.join(", ")}
+                  Незаполненные плейсхолдеры: {preview.unresolved_placeholders.join(", ")}
                 </div>
               ) : (
-                <div className="text-sm text-green-700">
-                  Все плейсхолдеры разрешены.
-                </div>
+                <div className="text-sm text-green-700">Все плейсхолдеры разрешены.</div>
               )}
             </CardContent>
           </Card>
@@ -677,13 +569,7 @@ const BrandingSettingsPage = () => {
             </CardHeader>
             <CardContent>
               <pre className="overflow-x-auto rounded-md bg-muted/30 p-3 text-xs">
-                {JSON.stringify(
-                  preview?.profile.reproducibility ??
-                    profile?.reproducibility ??
-                    {},
-                  null,
-                  2,
-                )}
+                {JSON.stringify(preview?.profile.reproducibility ?? profile?.reproducibility ?? {}, null, 2)}
               </pre>
             </CardContent>
           </Card>
@@ -694,23 +580,13 @@ const BrandingSettingsPage = () => {
             </CardHeader>
             <CardContent className="space-y-3 text-sm">
               {generationHistory.length === 0 ? (
-                <div className="text-muted-foreground">
-                  Серверная история появится после запуска single pipeline из
-                  document wizard.
-                </div>
+                <div className="text-muted-foreground">Серверная история появится после запуска single pipeline из document wizard.</div>
               ) : (
                 generationHistory.map((item) => (
-                  <div
-                    key={item.pipeline_run_id}
-                    className="rounded-lg border p-3"
-                  >
+                  <div key={item.pipeline_run_id} className="rounded-lg border p-3">
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="font-medium">
-                        {item.document_title ?? "Документ"}
-                      </div>
-                      <div className="text-xs text-muted-foreground">
-                        {item.generated_at ?? "unknown"}
-                      </div>
+                      <div className="font-medium">{item.document_title ?? "Документ"}</div>
+                      <div className="text-xs text-muted-foreground">{item.generated_at ?? "unknown"}</div>
                     </div>
                     <div className="mt-2 grid gap-2 text-xs md:grid-cols-2">
                       <div>pipeline_run_id={item.pipeline_run_id}</div>
@@ -733,28 +609,15 @@ const BrandingSettingsPage = () => {
             </CardHeader>
             <CardContent className="space-y-3">
               {previewHistory.length === 0 ? (
-                <div className="text-sm text-muted-foreground">
-                  История появится после тестовых генераций.
-                </div>
+                <div className="text-sm text-muted-foreground">История появится после тестовых генераций.</div>
               ) : (
                 previewHistory.map((item, index) => (
-                  <div
-                    key={`${item.profile.reproducibility.generated_at}-${index}`}
-                    className="rounded-md border p-3 text-sm"
-                  >
-                    <div className="font-medium">
-                      {String(
-                        item.profile.reproducibility.generated_at ?? "unknown",
-                      )}
-                    </div>
+                  <div key={`${item.profile.reproducibility.generated_at}-${index}`} className="rounded-md border p-3 text-sm">
+                    <div className="font-medium">{String(item.profile.reproducibility.generated_at ?? "unknown")}</div>
                     <div className="text-muted-foreground">
-                      preset={item.preset_code ?? "—"}, scope=
-                      {item.profile.scope}, watermark=
-                      {String(item.watermark.text ?? "off")}
+                      preset={item.preset_code ?? "—"}, scope={item.profile.scope}, watermark={String(item.watermark.text ?? "off")}
                     </div>
-                    <div className="mt-2 whitespace-pre-wrap text-xs">
-                      {item.sections.header_odd ?? "—"}
-                    </div>
+                    <div className="mt-2 whitespace-pre-wrap text-xs">{item.sections.header_odd ?? "—"}</div>
                   </div>
                 ))
               )}

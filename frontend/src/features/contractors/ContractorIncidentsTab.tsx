@@ -15,48 +15,22 @@ import { useLocalRegistry } from "@/hooks/useLocalRegistry";
 import { SEVERITY_LABELS } from "@/pages/contractors/contractorsVocab";
 import { PERMISSIONS } from "@/permissions/permissions";
 import { formatDate } from "@/utils/datetime";
-import type {
-  ContractorIncident,
-  IncidentSeverity,
-} from "@/types/dto/contractors";
+import type { ContractorIncident, IncidentSeverity } from "@/types/dto/contractors";
 
-const severityVariant = (
-  s: IncidentSeverity,
-): "default" | "secondary" | "destructive" =>
-  s === "critical" || s === "high"
-    ? "destructive"
-    : s === "medium"
-      ? "secondary"
-      : "default";
+const severityVariant = (s: IncidentSeverity): "default" | "secondary" | "destructive" =>
+  s === "critical" || s === "high" ? "destructive" : s === "medium" ? "secondary" : "default";
 
-export const ContractorIncidentsTab = ({
-  contractorId,
-}: {
-  contractorId: string;
-}) => {
-  const loader = useCallback(
-    () =>
-      contractorsApi
-        .listIncidents({ contractor_id: contractorId })
-        .then((p) => p.items),
-    [contractorId],
-  );
-  const { data, loading, error, reload } = useAsyncResource<
-    ContractorIncident[]
-  >({
+export const ContractorIncidentsTab = ({ contractorId }: { contractorId: string }) => {
+  const loader = useCallback(() => contractorsApi.listIncidents({ contractor_id: contractorId }).then((p) => p.items), [contractorId]);
+  const { data, loading, error, reload } = useAsyncResource<ContractorIncident[]>({
     loader,
     initialData: [],
-    errorMessage: "Не удалось загрузить инциденты",
+    errorMessage: "Не удалось загрузить инциденты"
   });
 
   const registry = useLocalRegistry({
     items: data,
-    match: (item, query) =>
-      [item.incident_type, item.status]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase()
-        .includes(query),
+    match: (item, query) => [item.incident_type, item.status].filter(Boolean).join(" ").toLowerCase().includes(query)
   });
 
   const columns: ColumnDef<ContractorIncident, unknown>[] = [
@@ -64,22 +38,10 @@ export const ContractorIncidentsTab = ({
     {
       accessorKey: "severity",
       header: "Тяжесть",
-      cell: ({ row }) => (
-        <Badge variant={severityVariant(row.original.severity)}>
-          {SEVERITY_LABELS[row.original.severity]}
-        </Badge>
-      ),
+      cell: ({ row }) => <Badge variant={severityVariant(row.original.severity)}>{SEVERITY_LABELS[row.original.severity]}</Badge>
     },
-    {
-      accessorKey: "status",
-      header: "Статус",
-      cell: ({ row }) => row.original.status || "—",
-    },
-    {
-      accessorKey: "occurred_at",
-      header: "Когда",
-      cell: ({ row }) => formatDate(row.original.occurred_at) || "—",
-    },
+    { accessorKey: "status", header: "Статус", cell: ({ row }) => row.original.status || "—" },
+    { accessorKey: "occurred_at", header: "Когда", cell: ({ row }) => formatDate(row.original.occurred_at) || "—" }
   ];
 
   return (
@@ -96,10 +58,7 @@ export const ContractorIncidentsTab = ({
       <ErrorState error={error ?? undefined} onRetry={() => void reload()} />
       {loading ? <LoadingScreen label="Загрузка инцидентов" /> : null}
       {!loading && !error && registry.total === 0 ? (
-        <EmptyState
-          title="Инцидентов нет"
-          description="Инциденты по этому подрядчику не зарегистрированы."
-        />
+        <EmptyState title="Инцидентов нет" description="Инциденты по этому подрядчику не зарегистрированы." />
       ) : null}
       {!loading && !error && registry.total > 0 ? (
         <RegistryTable

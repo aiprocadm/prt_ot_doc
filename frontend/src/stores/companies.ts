@@ -5,11 +5,7 @@ import { apiClient } from "@/api/client";
 import { defaultPagination } from "@/stores/helpers";
 import type { PaginatedState, PaginationParams } from "@/stores/types";
 import type { ApiError, PaginatedResponse } from "@/types/dto/common";
-import type {
-  CompanyDto,
-  CompanyFiltersDto,
-  UpdateCompanyDto,
-} from "@/types/dto/companies";
+import type { CompanyDto, CompanyFiltersDto, UpdateCompanyDto } from "@/types/dto/companies";
 
 type LegacyCompaniesResponse = {
   items?: unknown;
@@ -24,9 +20,7 @@ type LegacyCompaniesResponse = {
 };
 
 interface CompaniesState extends PaginatedState<CompanyDto, CompanyFiltersDto> {
-  list: (
-    params?: Partial<CompanyFiltersDto> & PaginationParams,
-  ) => Promise<void>;
+  list: (params?: Partial<CompanyFiltersDto> & PaginationParams) => Promise<void>;
   getById: (id: string) => Promise<CompanyDto | null>;
   create: (payload: UpdateCompanyDto) => Promise<CompanyDto>;
   update: (id: string, payload: UpdateCompanyDto) => Promise<CompanyDto>;
@@ -43,23 +37,19 @@ const createInitialState = () => ({
   filters: {} as CompanyFiltersDto,
   pagination: defaultPagination(),
   loading: false,
-  error: null as ApiError | null,
+  error: null as ApiError | null
 });
 
-const isPositiveNumber = (value: unknown): value is number =>
-  typeof value === "number" && Number.isFinite(value) && value > 0;
+const isPositiveNumber = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value) && value > 0;
 
-const isNonNegativeNumber = (value: unknown): value is number =>
-  typeof value === "number" && Number.isFinite(value) && value >= 0;
+const isNonNegativeNumber = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value) && value >= 0;
 
 const normalizeCompaniesResponse = (
   payload: PaginatedResponse<CompanyDto> | LegacyCompaniesResponse,
-  fallback: ReturnType<typeof defaultPagination>,
+  fallback: ReturnType<typeof defaultPagination>
 ) => {
   const items = Array.isArray(payload?.items)
-    ? payload.items.filter((item): item is CompanyDto =>
-        Boolean(item && typeof item === "object" && "id" in item),
-      )
+    ? payload.items.filter((item): item is CompanyDto => Boolean(item && typeof item === "object" && "id" in item))
     : [];
   const pagination = payload.pagination ?? null;
   const legacyLimit = (payload as LegacyCompaniesResponse).limit;
@@ -77,9 +67,7 @@ const normalizeCompaniesResponse = (
   const offset: number = isNonNegativeNumber(legacyOffset)
     ? legacyOffset
     : (fallback.page - 1) * pageSize;
-  const page: number = isPositiveNumber(pageFromPayload)
-    ? pageFromPayload
-    : Math.floor(offset / Math.max(pageSize, 1)) + 1;
+  const page: number = isPositiveNumber(pageFromPayload) ? pageFromPayload : Math.floor(offset / Math.max(pageSize, 1)) + 1;
   const total: number = isNonNegativeNumber(totalFromPayload)
     ? totalFromPayload
     : isNonNegativeNumber(legacyTotal)
@@ -91,8 +79,8 @@ const normalizeCompaniesResponse = (
     pagination: {
       page,
       page_size: pageSize,
-      total,
-    },
+      total
+    }
   };
 };
 
@@ -128,14 +116,10 @@ export const useCompaniesStore = create<CompaniesState>()(
       const offset = (page - 1) * pageSize;
       const query = { ...get().filters, ...params, limit, offset };
       try {
-        const { data } = await apiClient.get<
-          PaginatedResponse<CompanyDto> | LegacyCompaniesResponse
-        >("/companies", { params: query });
+        const { data } = await apiClient.get<PaginatedResponse<CompanyDto> | LegacyCompaniesResponse>("/companies", { params: query });
         const normalized = normalizeCompaniesResponse(data, get().pagination);
         set((state) => {
-          state.items = normalized.items.map((row) =>
-            normalizeCompanyRead(row),
-          );
+          state.items = normalized.items.map((row) => normalizeCompanyRead(row));
           state.pagination = normalized.pagination;
         });
       } catch (error) {
@@ -174,15 +158,10 @@ export const useCompaniesStore = create<CompaniesState>()(
       return row;
     },
     update: async (id, payload) => {
-      const { data } = await apiClient.patch<unknown>(
-        `/companies/${id}`,
-        payload,
-      );
+      const { data } = await apiClient.patch<unknown>(`/companies/${id}`, payload);
       const row = normalizeCompanyRead(data);
       set((state) => {
-        state.items = state.items.map((company) =>
-          company.id === id ? row : company,
-        );
+        state.items = state.items.map((company) => (company.id === id ? row : company));
         if (state.item?.id === id) {
           state.item = row;
         }
@@ -198,6 +177,6 @@ export const useCompaniesStore = create<CompaniesState>()(
           state.item = null;
         }
       });
-    },
-  })),
+    }
+  }))
 );

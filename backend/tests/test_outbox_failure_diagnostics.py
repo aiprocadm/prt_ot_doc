@@ -108,10 +108,7 @@ class TestOutboxProcessorFailureDiagnostics:
         assert payload_attempt_3["next_attempt_in_seconds"] is not None
         # Attempt 3 should have longer or equal backoff than attempt 1
         # (exponential: 2^0 * 5 vs 2^2 * 5 = 5 vs 20)
-        assert (
-            payload_attempt_3["next_attempt_in_seconds"]
-            >= payload_attempt_1["next_attempt_in_seconds"]
-        )
+        assert payload_attempt_3["next_attempt_in_seconds"] >= payload_attempt_1["next_attempt_in_seconds"]
 
     def test_error_payload_at_max_attempts(self, processor):
         """Error payload at max attempts should not be retryable."""

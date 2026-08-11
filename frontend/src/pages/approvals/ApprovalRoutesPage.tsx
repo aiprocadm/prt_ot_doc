@@ -18,7 +18,7 @@ const ApprovalRoutesPage = () => {
     code: "",
     name: "",
     description: "",
-    applies_to: "both",
+    applies_to: "both"
   });
 
   const load = async () => {
@@ -27,12 +27,7 @@ const ApprovalRoutesPage = () => {
     try {
       setItems(await approvalsApi.listRoutes());
     } catch (err) {
-      setLoadError(
-        (err as ApiError) ?? {
-          status: 0,
-          message: "Не удалось загрузить маршруты согласования",
-        },
-      );
+      setLoadError((err as ApiError) ?? { status: 0, message: "Не удалось загрузить маршруты согласования" });
     } finally {
       setLoading(false);
     }
@@ -54,7 +49,7 @@ const ApprovalRoutesPage = () => {
         applies_to: form.applies_to,
         conditions_json: {},
         is_default: false,
-        status: "active",
+        status: "active"
       });
       setForm({ code: "", name: "", description: "", applies_to: "both" });
       await load();
@@ -67,38 +62,19 @@ const ApprovalRoutesPage = () => {
     <div className="space-y-4">
       <h1 className="text-2xl font-semibold">Маршруты согласования</h1>
 
-      <form
-        className="grid gap-3 rounded border p-4 md:grid-cols-2"
-        onSubmit={onCreate}
-      >
-        <Input
-          placeholder="Код маршрута"
-          value={form.code}
-          onChange={(e) =>
-            setForm((prev) => ({ ...prev, code: e.target.value }))
-          }
-        />
-        <Input
-          placeholder="Название"
-          value={form.name}
-          onChange={(e) =>
-            setForm((prev) => ({ ...prev, name: e.target.value }))
-          }
-        />
+      <form className="grid gap-3 rounded border p-4 md:grid-cols-2" onSubmit={onCreate}>
+        <Input placeholder="Код маршрута" value={form.code} onChange={(e) => setForm((prev) => ({ ...prev, code: e.target.value }))} />
+        <Input placeholder="Название" value={form.name} onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))} />
         <Input
           placeholder="Область: документ / пакет / оба (document, pack, both)"
           value={form.applies_to}
-          onChange={(e) =>
-            setForm((prev) => ({ ...prev, applies_to: e.target.value }))
-          }
+          onChange={(e) => setForm((prev) => ({ ...prev, applies_to: e.target.value }))}
         />
         <div className="md:col-span-2">
           <Textarea
             placeholder="Описание"
             value={form.description}
-            onChange={(e) =>
-              setForm((prev) => ({ ...prev, description: e.target.value }))
-            }
+            onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
           />
         </div>
         <div className="md:col-span-2">
@@ -111,24 +87,12 @@ const ApprovalRoutesPage = () => {
       {loading && <LoadingScreen label="Загрузка маршрутов" />}
       <ErrorState error={loadError ?? undefined} onRetry={() => void load()} />
       <div className="space-y-2">
-        {!loading && !loadError && items.length === 0 ? (
-          <EmptyState
-            title="Маршрутов ещё нет"
-            description="Создайте первый маршрут согласования через форму выше."
-          />
-        ) : null}
+        {!loading && !loadError && items.length === 0 ? <EmptyState title="Маршрутов ещё нет" description="Создайте первый маршрут согласования через форму выше." /> : null}
         {items.map((route) => (
           <div key={route.id} className="rounded border p-3 text-sm">
             <div className="font-medium">{route.name}</div>
-            <div className="text-muted-foreground">
-              {route.code} • applies_to={route.applies_to} • status=
-              {route.status}
-            </div>
-            {route.description && (
-              <div className="mt-1 text-muted-foreground">
-                {route.description}
-              </div>
-            )}
+            <div className="text-muted-foreground">{route.code} • applies_to={route.applies_to} • status={route.status}</div>
+            {route.description && <div className="mt-1 text-muted-foreground">{route.description}</div>}
           </div>
         ))}
       </div>

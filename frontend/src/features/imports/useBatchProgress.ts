@@ -21,7 +21,7 @@ export const POLL_INTERVAL_MS = 2000;
  */
 export const useBatchProgress = (
   batches: ImportBatchDto[],
-  options: { onSettled?: () => void; intervalMs?: number } = {},
+  options: { onSettled?: () => void; intervalMs?: number } = {}
 ): ImportBatchDto[] => {
   const { onSettled, intervalMs = POLL_INTERVAL_MS } = options;
   const [live, setLive] = useState<Record<string, ImportBatchDto>>({});
@@ -31,9 +31,7 @@ export const useBatchProgress = (
   onSettledRef.current = onSettled;
 
   const merged = batches.map((batch) => live[batch.id] ?? batch);
-  const activeIds = merged
-    .filter((batch) => !TERMINAL.has(batch.status))
-    .map((batch) => batch.id);
+  const activeIds = merged.filter((batch) => !TERMINAL.has(batch.status)).map((batch) => batch.id);
   // Ключ по составу активных партий: пока он не меняется, эффект не перезапускается.
   const activeKey = activeIds.join(",");
 
@@ -44,7 +42,7 @@ export const useBatchProgress = (
     const tick = async () => {
       const ids = activeKey.split(",");
       const results = await Promise.all(
-        ids.map((id) => importsApi.batch(id).catch(() => null)),
+        ids.map((id) => importsApi.batch(id).catch(() => null))
       );
       if (cancelled) return;
 

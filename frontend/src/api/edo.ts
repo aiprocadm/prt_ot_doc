@@ -1,17 +1,10 @@
 import { apiClient } from "@/api/client";
 
-export type EdoEnvelope = {
-  id: string;
-  status: string;
-  external_id: string | null;
-};
+export type EdoEnvelope = { id: string; status: string; external_id: string | null };
 
 export const edoApi = {
   list: async (status?: string) => {
-    const { data } = await apiClient.get<{ items: EdoEnvelope[] }>(
-      "/edo/messages",
-      { params: { status } },
-    );
+    const { data } = await apiClient.get<{ items: EdoEnvelope[] }>("/edo/messages", { params: { status } });
     return data.items;
   },
   send: async (payload: {

@@ -41,12 +41,7 @@ const toRecord = (params: URLSearchParams) => {
   return result;
 };
 
-export const SavedViewsBar = ({
-  storageKey,
-  currentParams,
-  onApply,
-  title = "Сохранённые представления",
-}: SavedViewsBarProps) => {
+export const SavedViewsBar = ({ storageKey, currentParams, onApply, title = "Сохранённые представления" }: SavedViewsBarProps) => {
   const [views, setViews] = useState<SavedView[]>([]);
   const [name, setName] = useState("");
 
@@ -81,12 +76,7 @@ export const SavedViewsBar = ({
       <div className="rounded-md border bg-card p-3">
         <p className="mb-2 text-sm font-medium">{title}</p>
         <div className="flex flex-wrap items-center gap-2">
-          <Input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Название текущего представления"
-            className="max-w-sm"
-          />
+          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Название текущего представления" className="max-w-sm" />
           <Button size="sm" variant="outline" onClick={saveCurrentView}>
             Сохранить вид
           </Button>
@@ -99,12 +89,7 @@ export const SavedViewsBar = ({
     <div className="rounded-md border bg-card p-3">
       <p className="mb-2 text-sm font-medium">{title}</p>
       <div className="mb-2 flex flex-wrap items-center gap-2">
-        <Input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Название текущего представления"
-          className="max-w-sm"
-        />
+        <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Название текущего представления" className="max-w-sm" />
         <Button size="sm" variant="outline" onClick={saveCurrentView}>
           Сохранить вид
         </Button>
@@ -112,15 +97,8 @@ export const SavedViewsBar = ({
       {views.length ? (
         <div className="flex flex-wrap gap-2">
           {views.map((view) => (
-            <div
-              key={view.id}
-              className="flex items-center gap-1 rounded-full border px-2 py-1"
-            >
-              <button
-                type="button"
-                className="text-xs text-primary underline-offset-4 hover:underline"
-                onClick={() => onApply(view.params)}
-              >
+            <div key={view.id} className="flex items-center gap-1 rounded-full border px-2 py-1">
+              <button type="button" className="text-xs text-primary underline-offset-4 hover:underline" onClick={() => onApply(view.params)}>
                 {view.name}
               </button>
               <button

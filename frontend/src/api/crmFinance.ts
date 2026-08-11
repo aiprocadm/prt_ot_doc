@@ -55,15 +55,11 @@ export type CrmFinanceSnapshot = {
 
 // Тоталы/статусы CRM считаются по ВСЕМ строкам — поэтому листаем до конца, а не берём
 // первые 100 (иначе суммы и статусы оплат молча врут на тенантах с >100 записей).
-async function fetchAllItems<T>(
-  url: string,
-  pageSize = 200,
-  maxPages = 50,
-): Promise<T[]> {
+async function fetchAllItems<T>(url: string, pageSize = 200, maxPages = 50): Promise<T[]> {
   const out: T[] = [];
   for (let page = 0; page < maxPages; page += 1) {
     const { data } = await apiClient.get<{ items: T[] }>(url, {
-      params: { limit: pageSize, offset: page * pageSize },
+      params: { limit: pageSize, offset: page * pageSize }
     });
     const items = data.items ?? [];
     out.push(...items);
@@ -78,16 +74,14 @@ export const crmFinanceApi = {
       fetchAllItems<CrmFinanceContract>("/contracts"),
       fetchAllItems<CrmFinanceOrder>("/orders"),
       fetchAllItems<CrmFinanceInvoice>("/invoices"),
-      apiClient
-        .get<BillingSummary>("/billing/plan")
-        .catch(() => ({ data: null })),
+      apiClient.get<BillingSummary>("/billing/plan").catch(() => ({ data: null }))
     ]);
 
     return {
       contracts,
       orders,
       invoices,
-      billing: billingResponse.data,
+      billing: billingResponse.data
     };
-  },
+  }
 };

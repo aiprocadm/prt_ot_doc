@@ -21,7 +21,7 @@ const renderPage = (initialRoute = "/archive") =>
       <Routes>
         <Route path="/archive" element={<ArchiveSearch />} />
       </Routes>
-    </MemoryRouter>,
+    </MemoryRouter>
   );
 
 describe("ArchiveSearch", () => {
@@ -50,9 +50,7 @@ describe("ArchiveSearch", () => {
     await user.type(screen.getByLabelText("Статус"), "ready");
 
     await waitFor(() => {
-      expect(fetchSearchMock).toHaveBeenLastCalledWith(
-        expect.objectContaining({ status: "ready" }),
-      );
+      expect(fetchSearchMock).toHaveBeenLastCalledWith(expect.objectContaining({ status: "ready" }));
     });
   });
 
@@ -84,10 +82,7 @@ describe("ArchiveSearch", () => {
     await waitFor(() => expect(fetchSearchMock).toHaveBeenCalled());
 
     const user = userEvent.setup();
-    await user.type(
-      screen.getByPlaceholderText("Название текущего представления"),
-      "Готовые документы",
-    );
+    await user.type(screen.getByPlaceholderText("Название текущего представления"), "Готовые документы");
     await user.click(screen.getByRole("button", { name: "Сохранить вид" }));
 
     await user.click(screen.getByRole("button", { name: "Сбросить фильтры" }));
@@ -96,7 +91,7 @@ describe("ArchiveSearch", () => {
 
     await waitFor(() => {
       expect(fetchSearchMock).toHaveBeenLastCalledWith(
-        expect.objectContaining({ status: "ready", types: ["documents"] }),
+        expect.objectContaining({ status: "ready", types: ["documents"] })
       );
     });
   });

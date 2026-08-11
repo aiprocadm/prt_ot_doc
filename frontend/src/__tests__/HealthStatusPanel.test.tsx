@@ -10,28 +10,16 @@ const data: HealthComprehensiveDto = {
   timestamp: "2026-05-31T00:00:00Z",
   tenant_id: "tenant-1",
   checks: {
-    postgres: {
-      name: "postgres",
-      status: "ok",
-      duration_ms: 4.2,
-      error: null,
-      timestamp: "2026-05-31T00:00:00Z",
-    },
-    redis: {
-      name: "redis",
-      status: "ok",
-      duration_ms: 1.8,
-      error: null,
-      timestamp: "2026-05-31T00:00:00Z",
-    },
+    postgres: { name: "postgres", status: "ok", duration_ms: 4.2, error: null, timestamp: "2026-05-31T00:00:00Z" },
+    redis: { name: "redis", status: "ok", duration_ms: 1.8, error: null, timestamp: "2026-05-31T00:00:00Z" },
     "1c_integration": {
       name: "1c_integration",
       status: "failed",
       duration_ms: 120,
       error: "connection refused",
-      timestamp: "2026-05-31T00:00:00Z",
-    },
-  },
+      timestamp: "2026-05-31T00:00:00Z"
+    }
+  }
 };
 
 describe("HealthStatusPanel", () => {
@@ -51,10 +39,7 @@ describe("HealthStatusPanel", () => {
 
     // failed sorts before the healthy checks
     const cards = screen.getAllByTestId(/^health-check-\w+$/);
-    expect(cards[0]).toHaveAttribute(
-      "data-testid",
-      "health-check-1c_integration",
-    );
+    expect(cards[0]).toHaveAttribute("data-testid", "health-check-1c_integration");
   });
 
   it("shows probe duration for healthy checks", () => {
@@ -71,12 +56,8 @@ describe("HealthStatusPanel", () => {
   });
 
   it("renders an error state when the fetch failed", () => {
-    render(
-      <HealthStatusPanel data={null} error={{ message: "Network Error" }} />,
-    );
-    expect(screen.getByTestId("health-status-error")).toHaveTextContent(
-      "Network Error",
-    );
+    render(<HealthStatusPanel data={null} error={{ message: "Network Error" }} />);
+    expect(screen.getByTestId("health-status-error")).toHaveTextContent("Network Error");
   });
 
   it("renders a loading placeholder when there is no data yet", () => {

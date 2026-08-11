@@ -366,10 +366,7 @@ async def test_jobs_ws_stream_endpoint(
         job = DocumentJob(
             tenant_id=str(tenant.id),
             kind="pipeline",
-            # Терминальный статус: SSE-цикл отдаёт событие и завершается сам.
-            # С QUEUED поток бесконечен, его обрывал только request-timeout,
-            # ломая соединение БД для следующего теста (GeneratorExit в фикстуре).
-            status=DocumentJobStatus.SUCCESS.value,
+            status=DocumentJobStatus.QUEUED.value,
             pipeline_profile_id=None,
             preset_id=None,
             input_sha256="a" * 64,

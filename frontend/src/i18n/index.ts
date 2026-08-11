@@ -7,7 +7,7 @@ const resources = {
       auth: {
         login: "Войти",
         email: "E-mail",
-        password: "Пароль",
+        password: "Пароль"
       },
       navigation: {
         companies: "Компании",
@@ -23,7 +23,7 @@ const resources = {
         settings: "Настройки",
         training: "Обучение",
         exports: "Выгрузки",
-        marketplace: "Маркетплейс",
+        marketplace: "Маркетплейс"
       },
       training: {
         title: "Обучение и инструктажи",
@@ -46,7 +46,7 @@ const resources = {
         analytics: "Аналитика обучения",
         retakes: "Пересдачи",
         averageScore: "Средний балл",
-        materialTypes: "Типы материалов",
+        materialTypes: "Типы материалов"
       },
       exports: {
         title: "Экспорт и BI",
@@ -57,7 +57,7 @@ const resources = {
         anonymized: "Анонимизация",
         targetType: "Цель доставки",
         datasets: "Наборы данных",
-        supportedTargets: "Поддерживаемые цели",
+        supportedTargets: "Поддерживаемые цели"
       },
       common: {
         home: "Главная",
@@ -66,16 +66,16 @@ const resources = {
         no: "Нет",
         locale: "Язык",
         localeRu: "Русский",
-        localeEn: "English",
-      },
-    },
+        localeEn: "English"
+      }
+    }
   },
   en: {
     translation: {
       auth: {
         login: "Sign in",
         email: "Email",
-        password: "Password",
+        password: "Password"
       },
       training: {
         title: "Training",
@@ -93,12 +93,11 @@ const resources = {
         materials: "Materials",
         lessonStructure: "Course structure",
         noSchedule: "No schedule",
-        learnerHint:
-          "SCORM/xAPI/proctoring-ready ingestion is reflected in completion statuses and enrollment details.",
+        learnerHint: "SCORM/xAPI/proctoring-ready ingestion is reflected in completion statuses and enrollment details.",
         analytics: "Training analytics",
         retakes: "Retakes",
         averageScore: "Average score",
-        materialTypes: "Material types",
+        materialTypes: "Material types"
       },
       exports: {
         title: "Exports and BI",
@@ -109,7 +108,7 @@ const resources = {
         anonymized: "Anonymized",
         targetType: "Delivery target",
         datasets: "Datasets",
-        supportedTargets: "Supported targets",
+        supportedTargets: "Supported targets"
       },
       common: {
         home: "Home",
@@ -118,10 +117,10 @@ const resources = {
         no: "No",
         locale: "Language",
         localeRu: "Russian",
-        localeEn: "English",
-      },
-    },
-  },
+        localeEn: "English"
+      }
+    }
+  }
 };
 
 i18n.use(initReactI18next).init({
@@ -129,8 +128,8 @@ i18n.use(initReactI18next).init({
   lng: "ru",
   fallbackLng: "ru",
   interpolation: {
-    escapeValue: false,
-  },
+    escapeValue: false
+  }
 });
 
 export default i18n;

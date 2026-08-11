@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { listMock, createMock } = vi.hoisted(() => ({
   listMock: vi.fn(),
-  createMock: vi.fn(),
+  createMock: vi.fn()
 }));
 
 const mockInspection = {
@@ -18,15 +18,15 @@ const mockInspection = {
   purpose: "Плановая проверка условий труда",
   scheduled_at: "2024-07-15T09:00:00Z",
   created_at: "2024-06-01T11:00:00Z",
-  updated_at: "2024-06-01T11:00:00Z",
+  updated_at: "2024-06-01T11:00:00Z"
 };
 
 vi.mock("@/api/inspections", () => ({
   inspectionsApi: {
     list: listMock,
     create: createMock,
-    listResults: vi.fn().mockResolvedValue([]),
-  },
+    listResults: vi.fn().mockResolvedValue([])
+  }
 }));
 
 import { PERMISSIONS } from "@/permissions/permissions";
@@ -41,14 +41,14 @@ const userWithInspectionCreate = {
   full_name: "Inspection Lead",
   roles: ["worker"],
   permissions: [PERMISSIONS.INSPECTION_VIEW, PERMISSIONS.INSPECTION_CREATE],
-  attributes: { tenant_id: "tenant-1" },
+  attributes: { tenant_id: "tenant-1" }
 };
 
 const userWithoutInspectionCreate = {
   ...userWithInspectionCreate,
   id: "user-inspection-view",
   email: "inspection.viewer@example.com",
-  permissions: [PERMISSIONS.INSPECTION_VIEW],
+  permissions: [PERMISSIONS.INSPECTION_VIEW]
 };
 
 describe("InspectionsPage", () => {
@@ -60,7 +60,7 @@ describe("InspectionsPage", () => {
       loading: false,
       error: null,
       isAuthenticated: true,
-      initialized: true,
+      initialized: true
     });
   });
 
@@ -70,7 +70,7 @@ describe("InspectionsPage", () => {
     render(
       <MemoryRouter>
         <InspectionsPage />
-      </MemoryRouter>,
+      </MemoryRouter>
     );
 
     await waitFor(() => {
@@ -87,7 +87,7 @@ describe("InspectionsPage", () => {
     render(
       <MemoryRouter>
         <InspectionsPage />
-      </MemoryRouter>,
+      </MemoryRouter>
     );
 
     await waitFor(() => {
@@ -102,13 +102,11 @@ describe("InspectionsPage", () => {
     render(
       <MemoryRouter>
         <InspectionsPage />
-      </MemoryRouter>,
+      </MemoryRouter>
     );
 
     await waitFor(() => {
-      expect(
-        screen.getByRole("button", { name: /создать проверку/i }),
-      ).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /создать проверку/i })).toBeInTheDocument();
     });
 
     await user.click(screen.getByRole("button", { name: /создать проверку/i }));
@@ -124,18 +122,16 @@ describe("InspectionsPage", () => {
       loading: false,
       error: null,
       isAuthenticated: true,
-      initialized: true,
+      initialized: true
     });
 
     render(
       <MemoryRouter>
         <InspectionsPage />
-      </MemoryRouter>,
+      </MemoryRouter>
     );
 
-    const button = await screen.findByRole("button", {
-      name: /создать проверку/i,
-    });
+    const button = await screen.findByRole("button", { name: /создать проверку/i });
     expect(button).toBeDisabled();
   });
 });

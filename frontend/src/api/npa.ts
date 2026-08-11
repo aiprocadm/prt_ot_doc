@@ -7,5 +7,6 @@ export const npaApi = {
   },
   createImpactTasks: async (id: string): Promise<void> => {
     await apiClient.post(`/npa/${id}/impact/tasks`);
-  },
+  }
 };
+

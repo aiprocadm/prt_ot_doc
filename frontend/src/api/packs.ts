@@ -34,12 +34,10 @@ export const packsApi = {
     packagePresetId: string,
     rows: Array<Record<string, unknown>>,
     dryRun: boolean,
-    idempotencyKey: string,
+    idempotencyKey: string
   ): Promise<{ pack_run_id: string }> => {
     const tenant = tenantStorage.getTenant();
-    const headers: Record<string, string> = {
-      "Idempotency-Key": idempotencyKey,
-    };
+    const headers: Record<string, string> = { "Idempotency-Key": idempotencyKey };
     if (tenant?.slug) headers["X-Tenant"] = tenant.slug;
     const { data } = await apiClient.post<{ pack_run_id: string }>(
       "/pack-runs",
@@ -47,10 +45,11 @@ export const packsApi = {
         package_preset_id: packagePresetId,
         rows,
         selected_rows: rows.map((_, index) => index + 1),
-        dry_run: dryRun,
+        dry_run: dryRun
       },
-      { headers },
+      { headers }
     );
     return data;
-  },
+  }
 };
+

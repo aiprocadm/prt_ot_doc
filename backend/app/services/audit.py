@@ -11,12 +11,12 @@ from typing import Any, Mapping
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+# Fixed key for the global audit hash-chain advisory lock (arbitrary but stable).
+_AUDIT_CHAIN_LOCK_KEY = 6_120_2025
+
 from app.core.config import get_settings
 from app.core.tracing import get_trace_id
 from app.models.models import AuditLog
-
-# Fixed key for the global audit hash-chain advisory lock (arbitrary but stable).
-_AUDIT_CHAIN_LOCK_KEY = 6_120_2025
 
 logger = logging.getLogger(__name__)
 settings = get_settings()

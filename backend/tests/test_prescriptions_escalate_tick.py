@@ -1,5 +1,4 @@
 """Registration/wiring tests for the prescriptions escalation beat task. App-free."""
-
 from __future__ import annotations
 
 from app.services.celery_app import celery_app

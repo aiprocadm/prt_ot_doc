@@ -18,25 +18,18 @@ interface MappingEditorProps {
  * Варианты выбора — заголовки ИЗ ФАЙЛА (сопоставленные и «ничьи»), потому что
  * выбирать можно только из того, что в файле действительно есть.
  */
-export const MappingEditor = ({
-  columns,
-  preview,
-  overrides,
-  onChange,
-}: MappingEditorProps) => {
+export const MappingEditor = ({ columns, preview, overrides, onChange }: MappingEditorProps) => {
   const fileHeaders = Array.from(
-    new Set([...Object.values(preview.mapping), ...preview.unmapped_headers]),
+    new Set([...Object.values(preview.mapping), ...preview.unmapped_headers])
   ).sort((a, b) => a.localeCompare(b, "ru"));
 
-  const effective = (field: string): string =>
-    overrides[field] ?? preview.mapping[field] ?? "";
+  const effective = (field: string): string => overrides[field] ?? preview.mapping[field] ?? "";
 
   return (
     <div className="space-y-3">
       <div className="text-sm text-muted-foreground">
-        Сопоставление подобрано автоматически по заголовкам. Если колонка
-        распознана неверно, выберите нужную вручную — ручной выбор всегда
-        сильнее автоопределения.
+        Сопоставление подобрано автоматически по заголовкам. Если колонка распознана неверно,
+        выберите нужную вручную — ручной выбор всегда сильнее автоопределения.
       </div>
 
       <div className="grid gap-2 sm:grid-cols-2">
@@ -47,9 +40,7 @@ export const MappingEditor = ({
             <div key={column.field} className="space-y-1">
               <Label htmlFor={`map-${column.field}`}>
                 {column.title}
-                {column.required ? (
-                  <span className="text-destructive"> *</span>
-                ) : null}
+                {column.required ? <span className="text-destructive"> *</span> : null}
               </Label>
               <select
                 id={`map-${column.field}`}
@@ -74,8 +65,7 @@ export const MappingEditor = ({
 
       {preview.unmapped_headers.length > 0 ? (
         <p className="text-sm text-muted-foreground">
-          Колонки файла без пары: {preview.unmapped_headers.join(", ")}. Они не
-          будут загружены.
+          Колонки файла без пары: {preview.unmapped_headers.join(", ")}. Они не будут загружены.
         </p>
       ) : null}
     </div>

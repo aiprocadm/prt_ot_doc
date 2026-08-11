@@ -15,46 +15,21 @@ import { useAsyncResource } from "@/hooks/useAsyncResource";
 import { useLocalRegistry } from "@/hooks/useLocalRegistry";
 import { COMPLIANCE_STATUS_LABELS } from "@/pages/contractors/contractorsVocab";
 import { PERMISSIONS } from "@/permissions/permissions";
-import type {
-  ComplianceStatus,
-  ContractorEmployee,
-} from "@/types/dto/contractors";
+import type { ComplianceStatus, ContractorEmployee } from "@/types/dto/contractors";
 
-const statusBadgeVariant = (
-  s: ComplianceStatus,
-): "default" | "secondary" | "destructive" =>
-  s === "valid"
-    ? "default"
-    : s === "blocked" || s === "expired"
-      ? "destructive"
-      : "secondary";
+const statusBadgeVariant = (s: ComplianceStatus): "default" | "secondary" | "destructive" =>
+  s === "valid" ? "default" : s === "blocked" || s === "expired" ? "destructive" : "secondary";
 
 const StatusCell = ({ value }: { value: ComplianceStatus }) => (
-  <Badge variant={statusBadgeVariant(value)}>
-    {COMPLIANCE_STATUS_LABELS[value] ?? value}
-  </Badge>
+  <Badge variant={statusBadgeVariant(value)}>{COMPLIANCE_STATUS_LABELS[value] ?? value}</Badge>
 );
 
-export const ContractorEmployeesTab = ({
-  contractorId,
-  onChanged,
-}: {
-  contractorId: string;
-  onChanged?: () => void;
-}) => {
-  const loader = useCallback(
-    () =>
-      contractorsApi
-        .listEmployees({ contractor_id: contractorId })
-        .then((p) => p.items),
-    [contractorId],
-  );
-  const { data, loading, error, reload } = useAsyncResource<
-    ContractorEmployee[]
-  >({
+export const ContractorEmployeesTab = ({ contractorId, onChanged }: { contractorId: string; onChanged?: () => void }) => {
+  const loader = useCallback(() => contractorsApi.listEmployees({ contractor_id: contractorId }).then((p) => p.items), [contractorId]);
+  const { data, loading, error, reload } = useAsyncResource<ContractorEmployee[]>({
     loader,
     initialData: [],
-    errorMessage: "Не удалось загрузить сотрудников",
+    errorMessage: "Не удалось загрузить сотрудников"
   });
 
   const refresh = () => {
@@ -64,68 +39,36 @@ export const ContractorEmployeesTab = ({
 
   const registry = useLocalRegistry({
     items: data,
-    match: (item, query) =>
-      [item.full_name, item.position]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase()
-        .includes(query),
+    match: (item, query) => [item.full_name, item.position].filter(Boolean).join(" ").toLowerCase().includes(query)
   });
 
   const columns: ColumnDef<ContractorEmployee, unknown>[] = [
     { accessorKey: "full_name", header: "ФИО" },
-    {
-      accessorKey: "position",
-      header: "Должность",
-      cell: ({ row }) => row.original.position || "—",
-    },
-    {
-      accessorKey: "access_status",
-      header: "Допуск",
-      cell: ({ row }) => <StatusCell value={row.original.access_status} />,
-    },
-    {
-      accessorKey: "training_status",
-      header: "Обучение",
-      cell: ({ row }) => <StatusCell value={row.original.training_status} />,
-    },
-    {
-      accessorKey: "medical_status",
-      header: "Медосмотр",
-      cell: ({ row }) => <StatusCell value={row.original.medical_status} />,
-    },
+    { accessorKey: "position", header: "Должность", cell: ({ row }) => row.original.position || "—" },
+    { accessorKey: "access_status", header: "Допуск", cell: ({ row }) => <StatusCell value={row.original.access_status} /> },
+    { accessorKey: "training_status", header: "Обучение", cell: ({ row }) => <StatusCell value={row.original.training_status} /> },
+    { accessorKey: "medical_status", header: "Медосмотр", cell: ({ row }) => <StatusCell value={row.original.medical_status} /> },
     {
       id: "actions",
       header: "Действия",
       cell: ({ row }) => (
-        <Can
-          permission={PERMISSIONS.CONTRACTOR_MANAGE}
-          fallback={<span className="text-muted-foreground">—</span>}
-        >
+        <Can permission={PERMISSIONS.CONTRACTOR_MANAGE} fallback={<span className="text-muted-foreground">—</span>}>
           <div className="flex gap-2">
             <ContractorEmployeeFormDialog
-              trigger={
-                <Button variant="ghost" size="sm">
-                  Изменить
-                </Button>
-              }
+              trigger={<Button variant="ghost" size="sm">Изменить</Button>}
               contractorId={contractorId}
               initialData={row.original}
               onSubmitted={refresh}
             />
             <EmployeeAdmissionDialog
               employee={row.original}
-              trigger={
-                <Button variant="ghost" size="sm">
-                  Допуск
-                </Button>
-              }
+              trigger={<Button variant="ghost" size="sm">Допуск</Button>}
               onAdmitted={refresh}
             />
           </div>
         </Can>
-      ),
-    },
+      )
+    }
   ];
 
   return (
@@ -142,10 +85,7 @@ export const ContractorEmployeesTab = ({
       <ErrorState error={error ?? undefined} onRetry={() => void reload()} />
       {loading ? <LoadingScreen label="Загрузка сотрудников" /> : null}
       {!loading && !error && registry.total === 0 ? (
-        <EmptyState
-          title="Сотрудников нет"
-          description="Добавьте сотрудника подрядчика."
-        />
+        <EmptyState title="Сотрудников нет" description="Добавьте сотрудника подрядчика." />
       ) : null}
       {!loading && !error && registry.total > 0 ? (
         <RegistryTable

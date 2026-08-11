@@ -4,11 +4,11 @@
 - электро (show_member_groups=True) → таблица 3 колонки, шапка «Группа», значение «IV»
 - не-электро (show_member_groups=False) → таблица 2 колонки, «Группа» в шапке НЕТ
 """
-
 from __future__ import annotations
 
 from io import BytesIO
 
+import pytest
 from docx import Document
 
 from app.domains.work_permits.print_form import (

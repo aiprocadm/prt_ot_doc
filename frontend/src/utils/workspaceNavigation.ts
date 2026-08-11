@@ -59,7 +59,7 @@ export const entityContextPath = (entityType: string | null | undefined) => {
 export const entityCardLink = (
   entityType: string | null | undefined,
   entityId: string | null | undefined,
-  view: "summary" | "timeline" = "summary",
+  view: "summary" | "timeline" = "summary"
 ) => {
   if (!entityType || !entityId) return null;
 
@@ -67,29 +67,17 @@ export const entityCardLink = (
     case "document":
     case "document_version":
     case "template_version": {
-      const params = new URLSearchParams({
-        entity_type: entityType,
-        entity_id: entityId,
-        view,
-      });
+      const params = new URLSearchParams({ entity_type: entityType, entity_id: entityId, view });
       return `/documents?${params.toString()}`;
     }
     case "company":
     case "site":
     case "contract": {
-      const params = new URLSearchParams({
-        entity_type: entityType,
-        entity_id: entityId,
-        view,
-      });
+      const params = new URLSearchParams({ entity_type: entityType, entity_id: entityId, view });
       return `/contractors?${params.toString()}`;
     }
     case "inspection": {
-      const params = new URLSearchParams({
-        entity_type: entityType,
-        entity_id: entityId,
-        view,
-      });
+      const params = new URLSearchParams({ entity_type: entityType, entity_id: entityId, view });
       return `/inspections?${params.toString()}`;
     }
     default:

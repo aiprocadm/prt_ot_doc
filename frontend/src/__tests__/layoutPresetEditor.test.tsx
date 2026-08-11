@@ -20,8 +20,7 @@ vi.mock("@/api/client", () => ({
 }));
 
 vi.mock("@/api/branding", () => ({
-  listLayoutPresets: (...args: unknown[]) =>
-    brandingApiMock.listLayoutPresets(...args),
+  listLayoutPresets: (...args: unknown[]) => brandingApiMock.listLayoutPresets(...args),
 }));
 
 vi.mock("sonner", () => ({
@@ -63,16 +62,12 @@ describe("LayoutPresetEditor", () => {
   });
 
   it("shows toast when presets list loading fails", async () => {
-    brandingApiMock.listLayoutPresets.mockRejectedValue(
-      new Error("load failed"),
-    );
+    brandingApiMock.listLayoutPresets.mockRejectedValue(new Error("load failed"));
 
     render(<LayoutPresetEditor />);
 
     expect(await screen.findByText(/токены:/i)).toBeInTheDocument();
-    expect(toast.error).toHaveBeenCalledWith(
-      "Не удалось загрузить список пресетов",
-    );
+    expect(toast.error).toHaveBeenCalledWith("Не удалось загрузить список пресетов");
   });
 
   it("prevents save without required code and name", async () => {
@@ -91,15 +86,7 @@ describe("LayoutPresetEditor", () => {
     const user = userEvent.setup();
     brandingApiMock.listLayoutPresets
       .mockResolvedValueOnce(presetList)
-      .mockResolvedValueOnce([
-        ...presetList,
-        {
-          ...presetList[0],
-          id: "preset-2",
-          code: "branch_brand",
-          name: "Branch brand",
-        },
-      ]);
+      .mockResolvedValueOnce([...presetList, { ...presetList[0], id: "preset-2", code: "branch_brand", name: "Branch brand" }]);
     apiClientMock.post.mockResolvedValue({ data: {} });
 
     render(<LayoutPresetEditor />);
@@ -113,7 +100,7 @@ describe("LayoutPresetEditor", () => {
 
     expect(apiClientMock.post).toHaveBeenCalledWith(
       "/layout-presets",
-      expect.objectContaining({ code: "branch_brand", name: "Branch brand" }),
+      expect.objectContaining({ code: "branch_brand", name: "Branch brand" })
     );
     expect(toast.success).toHaveBeenCalledWith("Пресет создан");
     expect(brandingApiMock.listLayoutPresets).toHaveBeenCalledTimes(2);
@@ -127,11 +114,7 @@ describe("LayoutPresetEditor", () => {
     await user.click(screen.getByRole("button", { name: /проверить токены/i }));
 
     expect(screen.getByText(/Warnings:/i)).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        /Unresolved: .*\{\{company.name\}\}.*\{\{doc.title\}\}/i,
-      ),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/Unresolved: .*\{\{company.name\}\}.*\{\{doc.title\}\}/i)).toBeInTheDocument();
   });
 
   it("shows toast when preset save fails", async () => {

@@ -1,8 +1,4 @@
-import type {
-  BranchDto,
-  CreateBranchDto,
-  UpdateBranchDto,
-} from "@/types/dto/branches";
+import type { BranchDto, CreateBranchDto, UpdateBranchDto } from "@/types/dto/branches";
 import type { BranchFormValues } from "@/types/forms/branches";
 
 const clean = (value: string | undefined): string | undefined => {
@@ -11,13 +7,11 @@ const clean = (value: string | undefined): string | undefined => {
 };
 
 /** Тело для POST /branches (BranchCreate — с company_id). */
-export function buildBranchCreateBody(
-  values: BranchFormValues,
-): CreateBranchDto {
+export function buildBranchCreateBody(values: BranchFormValues): CreateBranchDto {
   const body: CreateBranchDto = {
     company_id: values.company_id.trim(),
     name: values.name.trim(),
-    status: values.status.trim() || "active",
+    status: values.status.trim() || "active"
   };
   const code = clean(values.code);
   if (code) body.code = code;
@@ -33,12 +27,10 @@ export function buildBranchCreateBody(
 }
 
 /** Тело для PATCH /branches/{id} (BranchUpdate — без company_id). */
-export function buildBranchUpdateBody(
-  values: BranchFormValues,
-): UpdateBranchDto {
+export function buildBranchUpdateBody(values: BranchFormValues): UpdateBranchDto {
   const body: UpdateBranchDto = {
     name: values.name.trim(),
-    status: values.status.trim() || "active",
+    status: values.status.trim() || "active"
   };
   const code = clean(values.code);
   if (code) body.code = code;
@@ -68,6 +60,6 @@ export function normalizeBranchRead(raw: unknown): BranchDto {
     contact_name: asString(r.contact_name),
     contact_phone: asString(r.contact_phone),
     contact_email: asString(r.contact_email),
-    status: asString(r.status) ?? "active",
+    status: asString(r.status) ?? "active"
   };
 }

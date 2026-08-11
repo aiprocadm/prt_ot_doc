@@ -11,7 +11,7 @@ import {
   type LearnerDashboardDto,
   type TeacherDashboardDto,
   type TrainingAnalyticsDto,
-  type TrainingProgramDetailDto,
+  type TrainingProgramDetailDto
 } from "@/api/training";
 import { EmptyState } from "@/components/common/EmptyState";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
@@ -22,18 +22,10 @@ import { PERMISSIONS } from "@/permissions/permissions";
 import { useAbility } from "@/permissions/useAbility";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-const StatCard = ({
-  title,
-  value,
-}: {
-  title: string;
-  value: number | string;
-}) => (
+const StatCard = ({ title, value }: { title: string; value: number | string }) => (
   <Card>
     <CardHeader className="pb-2">
-      <CardTitle className="text-sm font-medium text-muted-foreground">
-        {title}
-      </CardTitle>
+      <CardTitle className="text-sm font-medium text-muted-foreground">{title}</CardTitle>
     </CardHeader>
     <CardContent>
       <div className="text-2xl font-semibold">{value}</div>
@@ -46,7 +38,7 @@ const TRAINING_STATUS_LABELS: Record<string, string> = {
   in_progress: "В процессе",
   completed: "Завершено",
   overdue: "Просрочено",
-  cancelled: "Отменено",
+  cancelled: "Отменено"
 };
 
 const MATERIAL_TYPE_LABELS: Record<string, string> = {
@@ -55,7 +47,7 @@ const MATERIAL_TYPE_LABELS: Record<string, string> = {
   quiz: "Тест",
   presentation: "Презентация",
   file: "Файл",
-  link: "Ссылка",
+  link: "Ссылка"
 };
 
 const TrainingPage = () => {
@@ -67,13 +59,9 @@ const TrainingPage = () => {
   const [learner, setLearner] = useState<LearnerDashboardDto | null>(null);
   const [teacherError, setTeacherError] = useState<string | null>(null);
   const [learnerError, setLearnerError] = useState<string | null>(null);
-  const [programDetail, setProgramDetail] =
-    useState<TrainingProgramDetailDto | null>(null);
+  const [programDetail, setProgramDetail] = useState<TrainingProgramDetailDto | null>(null);
   const [analytics, setAnalytics] = useState<TrainingAnalyticsDto | null>(null);
-  const defaultTab = useMemo(
-    () => (canManageTraining ? "teacher" : "learner"),
-    [canManageTraining],
-  );
+  const defaultTab = useMemo(() => (canManageTraining ? "teacher" : "learner"), [canManageTraining]);
   const [activeTab, setActiveTab] = useState<"teacher" | "learner">(defaultTab);
 
   useEffect(() => {
@@ -85,26 +73,16 @@ const TrainingPage = () => {
     setLearnerError(null);
 
     if (canManageTraining) {
-      void getTeacherDashboard()
-        .then((data) => setTeacher(data))
-        .catch(() =>
-          setTeacherError("Не удалось загрузить данные преподавателя"),
-        );
-      void getTrainingAnalytics()
-        .then((data) => setAnalytics(data))
-        .catch(() => undefined);
-      void getTrainingPrograms()
-        .then((data) => {
-          const firstProgram = data.items[0]?.id;
-          if (firstProgram) {
-            return getTrainingProgramDetail(firstProgram).then((detail) =>
-              setProgramDetail(detail),
-            );
-          }
-          setProgramDetail(null);
-          return undefined;
-        })
-        .catch(() => undefined);
+      void getTeacherDashboard().then((data) => setTeacher(data)).catch(() => setTeacherError("Не удалось загрузить данные преподавателя"));
+      void getTrainingAnalytics().then((data) => setAnalytics(data)).catch(() => undefined);
+      void getTrainingPrograms().then((data) => {
+        const firstProgram = data.items[0]?.id;
+        if (firstProgram) {
+          return getTrainingProgramDetail(firstProgram).then((detail) => setProgramDetail(detail));
+        }
+        setProgramDetail(null);
+        return undefined;
+      }).catch(() => undefined);
     } else {
       setTeacher(null);
       setAnalytics(null);
@@ -112,11 +90,7 @@ const TrainingPage = () => {
     }
 
     if (canViewLearnerTraining) {
-      void getLearnerDashboard()
-        .then((data) => setLearner(data))
-        .catch(() =>
-          setLearnerError("Не удалось загрузить данные по обучению сотрудника"),
-        );
+      void getLearnerDashboard().then((data) => setLearner(data)).catch(() => setLearnerError("Не удалось загрузить данные по обучению сотрудника"));
     } else {
       setLearner(null);
     }
@@ -125,12 +99,7 @@ const TrainingPage = () => {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <Breadcrumb
-          items={[
-            { label: t("common.home"), to: "/dashboard" },
-            { label: t("training.title") },
-          ]}
-        />
+        <Breadcrumb items={[{ label: t("common.home"), to: "/dashboard" }, { label: t("training.title") }]} />
         <Can
           permission={PERMISSIONS.TRAINING_ASSIGN}
           fallback={
@@ -144,55 +113,23 @@ const TrainingPage = () => {
           </Button>
         </Can>
       </div>
-      <Tabs
-        value={activeTab}
-        onValueChange={(value) => setActiveTab(value as "teacher" | "learner")}
-        aria-label={t("training.title")}
-      >
+      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as "teacher" | "learner")} aria-label={t("training.title")}>
         <TabsList aria-label={t("training.title")}>
-          {canManageTraining ? (
-            <TabsTrigger value="teacher">
-              {t("training.teacherView")}
-            </TabsTrigger>
-          ) : null}
-          {canViewLearnerTraining ? (
-            <TabsTrigger value="learner">
-              {t("training.learnerView")}
-            </TabsTrigger>
-          ) : null}
+          {canManageTraining ? <TabsTrigger value="teacher">{t("training.teacherView")}</TabsTrigger> : null}
+          {canViewLearnerTraining ? <TabsTrigger value="learner">{t("training.learnerView")}</TabsTrigger> : null}
         </TabsList>
         {canManageTraining ? (
           <TabsContent value="teacher" className="space-y-4">
-            {teacherError ? (
-              <EmptyState title="Модуль обучения" description={teacherError} />
-            ) : null}
+            {teacherError ? <EmptyState title="Модуль обучения" description={teacherError} /> : null}
             <div className="grid gap-4 md:grid-cols-3">
-              <StatCard
-                title={t("training.groups")}
-                value={teacher?.groups_total ?? 0}
-              />
-              <StatCard
-                title={t("training.enrollments")}
-                value={teacher?.enrollments_total ?? 0}
-              />
-              <StatCard
-                title={t("training.averageProgress")}
-                value={`${teacher?.average_progress_percent ?? 0}%`}
-              />
+              <StatCard title={t("training.groups")} value={teacher?.groups_total ?? 0} />
+              <StatCard title={t("training.enrollments")} value={teacher?.enrollments_total ?? 0} />
+              <StatCard title={t("training.averageProgress")} value={`${teacher?.average_progress_percent ?? 0}%`} />
             </div>
             <div className="grid gap-4 md:grid-cols-3" aria-live="polite">
-              <StatCard
-                title={t("training.completed")}
-                value={analytics?.completed_total ?? 0}
-              />
-              <StatCard
-                title={t("training.retakes")}
-                value={analytics?.retake_total ?? 0}
-              />
-              <StatCard
-                title={t("training.averageScore")}
-                value={analytics?.average_attempt_score ?? 0}
-              />
+              <StatCard title={t("training.completed")} value={analytics?.completed_total ?? 0} />
+              <StatCard title={t("training.retakes")} value={analytics?.retake_total ?? 0} />
+              <StatCard title={t("training.averageScore")} value={analytics?.average_attempt_score ?? 0} />
             </div>
             {programDetail?.modules?.length ? (
               <Card>
@@ -201,43 +138,28 @@ const TrainingPage = () => {
                 </CardHeader>
                 <CardContent className="space-y-3">
                   {programDetail.modules.map((entry) => (
-                    <div
-                      key={entry.module.id}
-                      className="rounded-md border p-3"
-                    >
+                    <div key={entry.module.id} className="rounded-md border p-3">
                       <div className="font-medium">{entry.module.title}</div>
                       <ul className="mt-2 list-disc pl-5 text-sm text-muted-foreground">
-                        {entry.lessons.map((lesson) => (
-                          <li key={lesson.id}>{lesson.title}</li>
-                        ))}
+                        {entry.lessons.map((lesson) => <li key={lesson.id}>{lesson.title}</li>)}
                       </ul>
                     </div>
                   ))}
                 </CardContent>
               </Card>
-            ) : (
-              <EmptyState
-                title={t("training.lessonStructure")}
-                description={t("training.noSchedule")}
-              />
-            )}
+            ) : <EmptyState title={t("training.lessonStructure")} description={t("training.noSchedule")} />}
             <Card>
               <CardHeader>
                 <CardTitle>{t("training.materialTypes")}</CardTitle>
               </CardHeader>
               <CardContent>
                 <ul className="space-y-2 text-sm" aria-live="polite">
-                  {Object.entries(analytics?.material_types ?? {}).map(
-                    ([key, value]) => (
-                      <li
-                        key={key}
-                        className="flex items-center justify-between rounded-md border p-3"
-                      >
-                        <span>{MATERIAL_TYPE_LABELS[key] ?? key}</span>
-                        <span className="font-medium">{value}</span>
-                      </li>
-                    ),
-                  )}
+                  {Object.entries(analytics?.material_types ?? {}).map(([key, value]) => (
+                    <li key={key} className="flex items-center justify-between rounded-md border p-3">
+                      <span>{MATERIAL_TYPE_LABELS[key] ?? key}</span>
+                      <span className="font-medium">{value}</span>
+                    </li>
+                  ))}
                 </ul>
               </CardContent>
             </Card>
@@ -245,65 +167,46 @@ const TrainingPage = () => {
         ) : null}
         {canViewLearnerTraining ? (
           <TabsContent value="learner" className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-3">
-              <StatCard
-                title={t("training.assigned")}
-                value={learner?.assigned_total ?? 0}
-              />
-              <StatCard
-                title={t("training.completed")}
-                value={learner?.completed_total ?? 0}
-              />
-              <StatCard
-                title={t("training.overdue")}
-                value={learner?.overdue_total ?? 0}
-              />
-            </div>
-            {learner?.items?.length ? (
-              <Card>
-                <CardHeader>
-                  <CardTitle>{t("training.materials")}</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ul className="space-y-2 text-sm" aria-live="polite">
-                    {learner.items.slice(0, 5).map((item) => (
-                      <li key={item.id} className="rounded-md border p-3">
-                        <div className="font-medium">
-                          {TRAINING_STATUS_LABELS[item.completion_status] ??
-                            item.completion_status}
-                        </div>
-                        <div className="text-muted-foreground">
-                          {item.progress_percent}% ·{" "}
-                          {item.due_at ?? t("training.noSchedule")}
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                </CardContent>
-              </Card>
-            ) : null}
+          <div className="grid gap-4 md:grid-cols-3">
+            <StatCard title={t("training.assigned")} value={learner?.assigned_total ?? 0} />
+            <StatCard title={t("training.completed")} value={learner?.completed_total ?? 0} />
+            <StatCard title={t("training.overdue")} value={learner?.overdue_total ?? 0} />
+          </div>
+          {learner?.items?.length ? (
             <Card>
               <CardHeader>
-                <CardTitle>{t("training.completion")}</CardTitle>
+                <CardTitle>{t("training.materials")}</CardTitle>
               </CardHeader>
-              <CardContent className="text-sm text-muted-foreground">
-                {t("training.learnerHint")}
+              <CardContent>
+                <ul className="space-y-2 text-sm" aria-live="polite">
+                  {learner.items.slice(0, 5).map((item) => (
+                    <li key={item.id} className="rounded-md border p-3">
+                      <div className="font-medium">{TRAINING_STATUS_LABELS[item.completion_status] ?? item.completion_status}</div>
+                      <div className="text-muted-foreground">{item.progress_percent}% · {item.due_at ?? t("training.noSchedule")}</div>
+                    </li>
+                  ))}
+                </ul>
               </CardContent>
             </Card>
-            {learner?.next_due_at ? (
-              <Card>
-                <CardHeader>
-                  <CardTitle>{t("training.nextDue")}</CardTitle>
-                </CardHeader>
-                <CardContent className="text-sm">
-                  {learner.next_due_at}
-                </CardContent>
-              </Card>
-            ) : null}
-            {learnerError ? (
-              <EmptyState title="Модуль обучения" description={learnerError} />
-            ) : null}
-          </TabsContent>
+          ) : null}
+          <Card>
+            <CardHeader>
+              <CardTitle>{t("training.completion")}</CardTitle>
+            </CardHeader>
+            <CardContent className="text-sm text-muted-foreground">
+              {t("training.learnerHint")}
+            </CardContent>
+          </Card>
+          {learner?.next_due_at ? (
+            <Card>
+              <CardHeader>
+                <CardTitle>{t("training.nextDue")}</CardTitle>
+              </CardHeader>
+              <CardContent className="text-sm">{learner.next_due_at}</CardContent>
+            </Card>
+          ) : null}
+          {learnerError ? <EmptyState title="Модуль обучения" description={learnerError} /> : null}
+        </TabsContent>
         ) : null}
       </Tabs>
     </div>

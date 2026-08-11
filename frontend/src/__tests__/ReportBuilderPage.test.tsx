@@ -1,11 +1,4 @@
-import {
-  act,
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-  within,
-} from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -13,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   ReportDatasetDto,
   ReportDefinitionDto,
-  ReportPreviewDto,
+  ReportPreviewDto
 } from "@/types/dto/reportBuilder";
 
 const api = vi.hoisted(() => ({
@@ -25,7 +18,7 @@ const api = vi.hoisted(() => ({
   preview: vi.fn(),
   runDefinition: vi.fn(),
   getExportJob: vi.fn(),
-  downloadReportExport: vi.fn(),
+  downloadReportExport: vi.fn()
 }));
 
 vi.mock("@/api/reportBuilder", () => ({ reportBuilderApi: api }));
@@ -37,32 +30,11 @@ const DATASETS: ReportDatasetDto[] = [
     code: "incidents",
     title: "Инциденты",
     columns: [
-      {
-        key: "title",
-        label: "Название",
-        kind: "string",
-        aggregatable: false,
-        enum_values: null,
-        ops: ["eq", "neq", "contains"],
-      },
-      {
-        key: "status",
-        label: "Статус",
-        kind: "enum",
-        aggregatable: false,
-        enum_values: ["reported", "closed"],
-        ops: ["eq", "in"],
-      },
-      {
-        key: "occurred_at",
-        label: "Дата",
-        kind: "datetime",
-        aggregatable: false,
-        enum_values: null,
-        ops: ["eq", "gte", "lte"],
-      },
-    ],
-  },
+      { key: "title", label: "Название", kind: "string", aggregatable: false, enum_values: null, ops: ["eq", "neq", "contains"] },
+      { key: "status", label: "Статус", kind: "enum", aggregatable: false, enum_values: ["reported", "closed"], ops: ["eq", "in"] },
+      { key: "occurred_at", label: "Дата", kind: "datetime", aggregatable: false, enum_values: null, ops: ["eq", "gte", "lte"] }
+    ]
+  }
 ];
 
 const SYSTEM_DEF: ReportDefinitionDto = {
@@ -73,23 +45,23 @@ const SYSTEM_DEF: ReportDefinitionDto = {
   config_json: { columns: ["title", "status"] },
   is_system: true,
   created_at: "2026-07-10T00:00:00Z",
-  updated_at: "2026-07-10T00:00:00Z",
+  updated_at: "2026-07-10T00:00:00Z"
 };
 
 const PREVIEW: ReportPreviewDto = {
   columns: [
     { key: "title", label: "Название", kind: "string" },
-    { key: "status", label: "Статус", kind: "enum" },
+    { key: "status", label: "Статус", kind: "enum" }
   ],
   rows: [{ title: "Падение с высоты", status: "reported" }],
-  total: 1,
+  total: 1
 };
 
 function renderPage() {
   return render(
     <MemoryRouter>
       <ReportBuilderPage />
-    </MemoryRouter>,
+    </MemoryRouter>
   );
 }
 
@@ -121,7 +93,7 @@ describe("ReportBuilderPage", () => {
     expect(screen.getByText(/Всего: 1/)).toBeInTheDocument();
     expect(api.preview).toHaveBeenCalledWith({
       dataset_code: "incidents",
-      config_json: expect.any(Object),
+      config_json: expect.any(Object)
     });
   });
 
@@ -132,23 +104,17 @@ describe("ReportBuilderPage", () => {
     await user.selectOptions(screen.getByLabelText("Датасет"), "incidents");
     await user.click(screen.getByRole("button", { name: "Добавить фильтр" }));
     const filterRow = screen.getByTestId("filter-row-0");
-    await user.selectOptions(
-      within(filterRow).getByLabelText("Поле"),
-      "status",
-    );
-    await user.selectOptions(
-      within(filterRow).getByLabelText("Значение"),
-      "reported",
-    );
+    await user.selectOptions(within(filterRow).getByLabelText("Поле"), "status");
+    await user.selectOptions(within(filterRow).getByLabelText("Значение"), "reported");
     await user.click(screen.getByRole("button", { name: "Предпросмотр" }));
     await waitFor(() =>
       expect(api.preview).toHaveBeenCalledWith(
         expect.objectContaining({
           config_json: expect.objectContaining({
-            filters: [{ field: "status", op: "eq", value: "reported" }],
-          }),
-        }),
-      ),
+            filters: [{ field: "status", op: "eq", value: "reported" }]
+          })
+        })
+      )
     );
   });
 
@@ -159,10 +125,7 @@ describe("ReportBuilderPage", () => {
     await user.selectOptions(screen.getByLabelText("Датасет"), "incidents");
     await user.click(screen.getByRole("button", { name: "Добавить фильтр" }));
     const filterRow = screen.getByTestId("filter-row-0");
-    await user.selectOptions(
-      within(filterRow).getByLabelText("Поле"),
-      "status",
-    );
+    await user.selectOptions(within(filterRow).getByLabelText("Поле"), "status");
     // значение намеренно не выбираем — пустой фильтр не должен попасть в config
     await user.click(screen.getByRole("button", { name: "Предпросмотр" }));
     await waitFor(() => expect(api.preview).toHaveBeenCalled());
@@ -171,12 +134,7 @@ describe("ReportBuilderPage", () => {
   });
 
   it("saves a new definition", async () => {
-    api.createDefinition.mockResolvedValue({
-      ...SYSTEM_DEF,
-      id: "d2",
-      is_system: false,
-      name: "Мой отчёт",
-    });
+    api.createDefinition.mockResolvedValue({ ...SYSTEM_DEF, id: "d2", is_system: false, name: "Мой отчёт" });
     const user = userEvent.setup();
     renderPage();
     await screen.findByText("Открытые инциденты");
@@ -185,11 +143,8 @@ describe("ReportBuilderPage", () => {
     await user.click(screen.getByRole("button", { name: "Сохранить" }));
     await waitFor(() =>
       expect(api.createDefinition).toHaveBeenCalledWith(
-        expect.objectContaining({
-          name: "Мой отчёт",
-          dataset_code: "incidents",
-        }),
-      ),
+        expect.objectContaining({ name: "Мой отчёт", dataset_code: "incidents" })
+      )
     );
     expect(api.listDefinitions).toHaveBeenCalledTimes(2); // reload после сохранения
   });
@@ -199,9 +154,7 @@ describe("ReportBuilderPage", () => {
     renderPage();
     await screen.findByText("Открытые инциденты");
     await user.click(screen.getByRole("button", { name: "Дублировать" }));
-    expect(screen.getByLabelText("Название отчёта")).toHaveValue(
-      "Открытые инциденты (копия)",
-    );
+    expect(screen.getByLabelText("Название отчёта")).toHaveValue("Открытые инциденты (копия)");
   });
 
   // NOTE: vi.useFakeTimers() must NOT be active while we `await screen.findByText(...)`
@@ -219,20 +172,8 @@ describe("ReportBuilderPage", () => {
     const user = userEvent.setup();
     api.runDefinition.mockResolvedValue({ job_id: "j1", status: "queued" });
     api.getExportJob
-      .mockResolvedValueOnce({
-        id: "j1",
-        status: "running",
-        file_id: null,
-        row_count: null,
-        error_payload: null,
-      })
-      .mockResolvedValueOnce({
-        id: "j1",
-        status: "done",
-        file_id: "f1",
-        row_count: 5,
-        error_payload: null,
-      });
+      .mockResolvedValueOnce({ id: "j1", status: "running", file_id: null, row_count: null, error_payload: null })
+      .mockResolvedValueOnce({ id: "j1", status: "done", file_id: "f1", row_count: 5, error_payload: null });
     renderPage();
     await screen.findByText("Открытые инциденты");
     await user.click(screen.getByRole("button", { name: "Открыть" }));
@@ -249,24 +190,15 @@ describe("ReportBuilderPage", () => {
     });
     expect(screen.getByRole("button", { name: "Скачать" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Скачать" }));
-    expect(api.downloadReportExport).toHaveBeenCalledWith(
-      "j1",
-      "Открытые инциденты.xlsx",
-    );
+    expect(api.downloadReportExport).toHaveBeenCalledWith("j1", "Открытые инциденты.xlsx");
   });
 
   it("shows a readable error when the export job fails", async () => {
     const user = userEvent.setup();
     api.runDefinition.mockResolvedValue({ job_id: "j1", status: "queued" });
     api.getExportJob.mockResolvedValue({
-      id: "j1",
-      status: "failed",
-      file_id: null,
-      row_count: null,
-      error_payload: {
-        code: "pdf_renderer_unavailable",
-        message: "no soffice",
-      },
+      id: "j1", status: "failed", file_id: null, row_count: null,
+      error_payload: { code: "pdf_renderer_unavailable", message: "no soffice" }
     });
     renderPage();
     await screen.findByText("Открытые инциденты");
@@ -278,8 +210,6 @@ describe("ReportBuilderPage", () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(1600);
     });
-    expect(
-      screen.getByText(/PDF-конвертер временно недоступен/),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/PDF-конвертер временно недоступен/)).toBeInTheDocument();
   });
 });

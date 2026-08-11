@@ -26,7 +26,6 @@
     "DELETE /api/v1/managed-clients/context",
     "DELETE /api/v1/managed-clients/{mcid}",
     "DELETE /api/v1/managed-clients/{mcid}/access/{grant_id}",
-    "DELETE /api/v1/managed-clients/{mcid}/consents/{consent_id}",
     "DELETE /api/v1/medical/factors/{factor_id}",
     "DELETE /api/v1/medical/norms/{norm_id}",
     "DELETE /api/v1/medical/psychiatric/activity-types/{activity_id}",
@@ -257,8 +256,6 @@
     "GET /api/v1/managed-clients/workload",
     "GET /api/v1/managed-clients/{mcid}",
     "GET /api/v1/managed-clients/{mcid}/access",
-    "GET /api/v1/managed-clients/{mcid}/consents",
-    "GET /api/v1/managed-clients/{mcid}/transfers",
     "GET /api/v1/marketplace",
     "GET /api/v1/medical/contingent",
     "GET /api/v1/medical/contingent/register",
@@ -735,10 +732,7 @@
     "POST /api/v1/machine-keys/{item_id}/rotate",
     "POST /api/v1/managed-clients",
     "POST /api/v1/managed-clients/{mcid}/access",
-    "POST /api/v1/managed-clients/{mcid}/consents",
     "POST /api/v1/managed-clients/{mcid}/context",
-    "POST /api/v1/managed-clients/{mcid}/convert-to-dedicated",
-    "POST /api/v1/managed-clients/{mcid}/transfer",
     "POST /api/v1/marketplace",
     "POST /api/v1/marketplace/{item_id}/install",
     "POST /api/v1/medical/contingent/generate-referrals",
@@ -1055,7 +1049,6 @@
     "confirm_pep_request_api_v1_sign_pep_requests__request_id__confirm_post",
     "contractor_compliance_summary_api_v1_contractors_compliance_summary_get",
     "convert_file_to_pdf_api_v1_files__file_id__convert_pdf_post",
-    "convert_to_dedicated_api_v1_managed_clients__mcid__convert_to_dedicated_post",
     "create_action_api_v1_corrective_actions_post",
     "create_activity_type_api_v1_medical_psychiatric_activity_types_post",
     "create_admission_endpoint_api_v1_work_permits__wp_id__admissions_post",
@@ -1495,8 +1488,6 @@
     "list_campaigns_api_v1_sout_get",
     "list_certificates_api_v1_training_certificates_get",
     "list_class_history_api_v1_sout_workplaces__wid__class_history_get",
-    "list_client_consents_api_v1_managed_clients__mcid__consents_get",
-    "list_client_transfers_api_v1_managed_clients__mcid__transfers_get",
     "list_committees_api_v1_committees_get",
     "list_companies_endpoint_api_v1_companies_get",
     "list_contractor_documents_api_v1_contractors_documents_get",
@@ -1735,7 +1726,6 @@
     "recalculate_map_api_v1_risk_advanced_maps__map_id__recalculate_post",
     "recompute_api_v1_compliance_deadlines_recompute_post",
     "recompute_dashboard_api_v1_analytics_recompute_post",
-    "record_client_consent_api_v1_managed_clients__mcid__consents_post",
     "record_closing_endpoint_api_v1_work_permits__wp_id__closing_post",
     "refresh_edo_status_api_v1_edo_messages__message_id__refresh_status_post",
     "refresh_sign_status_api_v1_sign_requests__request_id__refresh_status_post",
@@ -1774,7 +1764,6 @@
     "revoke_access_api_v1_managed_clients__mcid__access__grant_id__delete",
     "revoke_api_token_api_v1_api_tokens__token_id__delete",
     "revoke_certificate_api_v1_training_certificates__item_id__revoke_post",
-    "revoke_client_consent_api_v1_managed_clients__mcid__consents__consent_id__delete",
     "revoke_machine_key_api_v1_machine_keys__item_id__revoke_post",
     "revoke_permit_endpoint_api_v1_permits__permit_id__revoke_post",
     "risk_summary_api_v1_risk_advanced_maps__map_id__summary_get",
@@ -1835,7 +1824,6 @@
     "training_analytics_overview_api_v1_training_analytics_overview_get",
     "training_dashboard_api_v1_analytics_dashboard_training_get",
     "trainings_trends_api_v1_analytics_trends_trainings_get",
-    "transfer_client_data_api_v1_managed_clients__mcid__transfer_post",
     "transition_prescription_api_v1_prescriptions__prescription_id__transition_post",
     "transition_referral_api_v1_medical_referrals__referral_id__transition_post",
     "update_activity_type_api_v1_medical_psychiatric_activity_types__activity_id__patch",
@@ -2056,9 +2044,6 @@
     "CompleteUploadRequest",
     "ComplianceStatus",
     "ConditionResult",
-    "ConsentCreate",
-    "ConsentRead",
-    "ConsentRevoke",
     "ContingentItem",
     "ContingentPage",
     "ContingentRegisterPage",
@@ -2076,11 +2061,9 @@
     "ContractorRegistryCreate",
     "ContractorRegistryPatch",
     "ControlIn",
-    "ConversionRead",
     "ConvertPdfAccepted",
     "ConvertPdfOptions",
     "ConvertPdfRequest",
-    "ConvertToDedicated",
     "CorrectiveActionIn",
     "CorrectiveActionVerifyIn",
     "CrossClientAttentionResponse",
@@ -2666,7 +2649,6 @@
     "TrainingSessionCreate",
     "TrainingSessionRead",
     "TrainingSessionStatus",
-    "TransferRead",
     "TriggerPage",
     "TriggerRead",
     "UploadCompleteRequest",
@@ -3854,25 +3836,6 @@
       "actual": "any",
       "matched": "boolean"
     },
-    "ConsentCreate": {
-      "document_ref": "string",
-      "expires_at": "null|string"
-    },
-    "ConsentRead": {
-      "id": "string",
-      "managed_client_id": "string",
-      "document_ref": "string",
-      "granted_by_user_id": "null|string",
-      "granted_at": "string",
-      "expires_at": "null|string",
-      "revoked_at": "null|string",
-      "revoked_by_user_id": "null|string",
-      "revoke_reason": "null|string",
-      "active": "boolean"
-    },
-    "ConsentRevoke": {
-      "reason": "null|string"
-    },
     "ContingentItem": {
       "person_id": "string",
       "exam_kind": "MedicalExamKind",
@@ -4012,12 +3975,6 @@
       "type": "string",
       "description": "null|string"
     },
-    "ConversionRead": {
-      "client": "ManagedClientRead",
-      "tenant_slug": "string",
-      "tenant_created": "array",
-      "history_company_id": "null|string"
-    },
     "ConvertPdfAccepted": {
       "job_id": "string",
       "pdf_run_id": "string",
@@ -4031,12 +3988,6 @@
     "ConvertPdfRequest": {
       "mode": "string",
       "options": "ConvertPdfOptions"
-    },
-    "ConvertToDedicated": {
-      "tenant_slug": "string",
-      "tenant_name": "null|string",
-      "owner_email": "string",
-      "owner_password": "string"
     },
     "CorrectiveActionIn": {
       "source_type": "string",
@@ -8224,16 +8175,6 @@
       "notes": "null|string",
       "created_at": "string",
       "updated_at": "string"
-    },
-    "TransferRead": {
-      "id": "string",
-      "managed_client_id": "string",
-      "target_tenant_slug": "string",
-      "status": "string",
-      "started_at": "string",
-      "finished_at": "null|string",
-      "started_by_user_id": "null|string",
-      "counts": "object"
     },
     "TriggerPage": {
       "items": "array",

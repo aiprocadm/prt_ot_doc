@@ -1,10 +1,7 @@
 import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
 
-import {
-  operationalDashboardApi,
-  type OperationalDashboardDto,
-} from "@/api/operationalDashboard";
+import { operationalDashboardApi, type OperationalDashboardDto } from "@/api/operationalDashboard";
 import type { ApiError } from "@/types/dto/common";
 
 interface OperationalDashboardState {
@@ -42,6 +39,6 @@ export const useOperationalDashboardStore = create<OperationalDashboardState>()(
     },
     reset: () => {
       set(() => ({ data: null, loading: false, error: null }));
-    },
-  })),
+    }
+  }))
 );

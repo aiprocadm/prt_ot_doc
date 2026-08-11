@@ -4,11 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import TenantsPage from "@/pages/admin/TenantsPage";
 import { renderWithRouter } from "@/test-utils/renderWithRouter";
-import type {
-  PlanCatalog,
-  TenantFeatureDto,
-  TenantFleetPage,
-} from "@/types/dto/tenants";
+import type { PlanCatalog, TenantFeatureDto, TenantFleetPage } from "@/types/dto/tenants";
 
 const listMock = vi.fn();
 const setStatusMock = vi.fn();
@@ -24,18 +20,18 @@ vi.mock("@/api/tenants", () => ({
     provision: (...args: unknown[]) => provisionMock(...args),
     plans: (...args: unknown[]) => plansMock(...args),
     setPlan: (...args: unknown[]) => setPlanMock(...args),
-    updateQuotas: (...args: unknown[]) => updateQuotasMock(...args),
+    updateQuotas: (...args: unknown[]) => updateQuotasMock(...args)
   },
   isNotManagingTenantError: (error: unknown) =>
-    Boolean(error && (error as { status?: number }).status === 403),
+    Boolean(error && (error as { status?: number }).status === 403)
 }));
 
 vi.mock("@/permissions/useAbility", () => ({
-  useAbility: () => ({ can: () => true }),
+  useAbility: () => ({ can: () => true })
 }));
 
 vi.mock("sonner", () => ({
-  toast: { success: vi.fn(), error: vi.fn() },
+  toast: { success: vi.fn(), error: vi.fn() }
 }));
 
 const CATALOG: { code: string; title: string }[] = [
@@ -46,15 +42,11 @@ const CATALOG: { code: string; title: string }[] = [
   { code: "budget", title: "Бюджет безопасности" },
   { code: "sout", title: "СОУТ" },
   { code: "rules_engine", title: "Правила автоматизации" },
-  { code: "warehouse", title: "Склад СИЗ" },
+  { code: "warehouse", title: "Склад СИЗ" }
 ];
 
 const features = (onCodes: string[]): TenantFeatureDto[] =>
-  CATALOG.map((f) => ({
-    code: f.code,
-    title: f.title,
-    on: onCodes.includes(f.code),
-  }));
+  CATALOG.map((f) => ({ code: f.code, title: f.title, on: onCodes.includes(f.code) }));
 
 const planCatalog = (): PlanCatalog => ({
   features: CATALOG,
@@ -63,30 +55,15 @@ const planCatalog = (): PlanCatalog => ({
       code: "free",
       title: "Базовый",
       feature_codes: ["committees", "contractors", "medical"],
-      quotas: {
-        max_doc_generations_per_month: 500,
-        max_storage_mb: 5120,
-        max_parallel_jobs: 2,
-      },
+      quotas: { max_doc_generations_per_month: 500, max_storage_mb: 5120, max_parallel_jobs: 2 }
     },
     {
       code: "pro",
       title: "Про",
-      feature_codes: [
-        "committees",
-        "contractors",
-        "medical",
-        "report_builder",
-        "budget",
-        "sout",
-      ],
-      quotas: {
-        max_doc_generations_per_month: 5000,
-        max_storage_mb: 20480,
-        max_parallel_jobs: 4,
-      },
-    },
-  ],
+      feature_codes: ["committees", "contractors", "medical", "report_builder", "budget", "sout"],
+      quotas: { max_doc_generations_per_month: 5000, max_storage_mb: 20480, max_parallel_jobs: 4 }
+    }
+  ]
 });
 
 const fleet = (overrides: Partial<TenantFleetPage> = {}): TenantFleetPage => ({
@@ -100,11 +77,11 @@ const fleet = (overrides: Partial<TenantFleetPage> = {}): TenantFleetPage => ({
         slug: "demo",
         contact_email: "admin@example.com",
         is_active: true,
-        kind: "customer",
+        kind: "customer"
       },
       quotas: null,
       plan: null,
-      features: features(CATALOG.map((f) => f.code)),
+      features: features(CATALOG.map((f) => f.code))
     },
     {
       tenant: {
@@ -113,7 +90,7 @@ const fleet = (overrides: Partial<TenantFleetPage> = {}): TenantFleetPage => ({
         slug: "newco",
         contact_email: "owner@newco.ru",
         is_active: true,
-        kind: "customer",
+        kind: "customer"
       },
       quotas: {
         tenant_id: "t-2",
@@ -121,13 +98,13 @@ const fleet = (overrides: Partial<TenantFleetPage> = {}): TenantFleetPage => ({
         max_doc_generations_per_month: 2500,
         max_storage_mb: 5120,
         monthly_edo_outgoing: 0,
-        enforce_billing_gate: false,
+        enforce_billing_gate: false
       },
       plan: "free",
-      features: features(["committees", "contractors", "medical"]),
-    },
+      features: features(["committees", "contractors", "medical"])
+    }
   ],
-  ...overrides,
+  ...overrides
 });
 
 describe("TenantsPage", () => {
@@ -183,9 +160,7 @@ describe("TenantsPage", () => {
 
     const dialog = await screen.findByRole("dialog");
     await user.selectOptions(within(dialog).getByLabelText("Тариф"), "pro");
-    await user.click(
-      within(dialog).getByRole("button", { name: "Применить тариф" }),
-    );
+    await user.click(within(dialog).getByRole("button", { name: "Применить тариф" }));
 
     await waitFor(() => expect(setPlanMock).toHaveBeenCalledWith("t-2", "pro"));
   });
@@ -199,9 +174,7 @@ describe("TenantsPage", () => {
     const toggle = await screen.findByLabelText("Доступ для ООО Ньюко");
     await user.click(toggle);
 
-    await waitFor(() =>
-      expect(setStatusMock).toHaveBeenCalledWith("t-2", false),
-    );
+    await waitFor(() => expect(setStatusMock).toHaveBeenCalledWith("t-2", false));
   });
 
   it("не даёт отключить сам управляющий тенант", async () => {
@@ -218,7 +191,7 @@ describe("TenantsPage", () => {
     renderWithRouter(<TenantsPage />);
 
     expect(
-      await screen.findByText("Раздел доступен только управляющему тенанту"),
+      await screen.findByText("Раздел доступен только управляющему тенанту")
     ).toBeInTheDocument();
   });
 

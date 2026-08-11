@@ -195,7 +195,9 @@ class Person(TenantBaseModel, SoftDeleteMixin):
     # необратимо вычищены, а связанные записи (обучение, медосмотры, СИЗ) намеренно
     # сохранены обезличенными: их удаления требует субъект, а хранения — закон.
     # Подробности того, что вычищено, лежат в ``pdn_erasure_record``.
-    anonymized_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    anonymized_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     company: Mapped[Company] = relationship(backref="people")
     position: Mapped[Position | None] = relationship(backref="people")

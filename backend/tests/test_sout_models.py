@@ -1,5 +1,4 @@
 """Pin: СОУТ срез-1 model shapes (P10-04 / TZ B.10)."""
-
 from __future__ import annotations
 
 
@@ -9,19 +8,9 @@ def test_campaign_table_and_columns() -> None:
     assert SoutCampaign.__tablename__ == "sout_campaign"
     cols = set(SoutCampaign.__table__.columns.keys())
     assert {
-        "id",
-        "tenant_id",
-        "version",
-        "created_at",
-        "updated_at",
-        "deleted_at",
-        "name",
-        "expert_org_name",
-        "report_number",
-        "report_date",
-        "status",
-        "planned_date",
-        "completed_date",
+        "id", "tenant_id", "version", "created_at", "updated_at", "deleted_at",
+        "name", "expert_org_name", "report_number", "report_date", "status",
+        "planned_date", "completed_date",
     } <= cols
 
 
@@ -31,15 +20,8 @@ def test_workplace_table_and_columns() -> None:
     assert SoutWorkplace.__tablename__ == "sout_workplace"
     cols = set(SoutWorkplace.__table__.columns.keys())
     assert {
-        "id",
-        "tenant_id",
-        "deleted_at",
-        "campaign_id",
-        "workplace_code",
-        "position_name",
-        "person_id",
-        "assessed_class",
-        "assessment_date",
+        "id", "tenant_id", "deleted_at", "campaign_id", "workplace_code",
+        "position_name", "person_id", "assessed_class", "assessment_date",
         "next_assessment_date",
     } <= cols
 
@@ -52,35 +34,24 @@ def test_child_tables_and_columns() -> None:
         SoutFactor.__table__.columns.keys()
     )
     assert SoutGuarantee.__tablename__ == "sout_guarantee"
-    assert {"workplace_id", "kind", "detail"} <= set(SoutGuarantee.__table__.columns.keys())
+    assert {"workplace_id", "kind", "detail"} <= set(
+        SoutGuarantee.__table__.columns.keys()
+    )
 
 
 def test_enums_use_value_labels() -> None:
     from app.models.sout import SoutCampaignStatus, SoutClass, SoutGuaranteeKind
 
     assert {m.value for m in SoutCampaignStatus} == {
-        "planned",
-        "in_progress",
-        "completed",
-        "declared",
-        "cancelled",
+        "planned", "in_progress", "completed", "declared", "cancelled",
     }
     assert {m.value for m in SoutClass} == {
-        "optimal",
-        "acceptable",
-        "harmful_3_1",
-        "harmful_3_2",
-        "harmful_3_3",
-        "harmful_3_4",
-        "dangerous",
+        "optimal", "acceptable", "harmful_3_1", "harmful_3_2", "harmful_3_3",
+        "harmful_3_4", "dangerous",
     }
     assert {m.value for m in SoutGuaranteeKind} == {
-        "additional_leave",
-        "extra_pay",
-        "reduced_hours",
-        "milk",
-        "early_pension",
-        "medical_exam",
+        "additional_leave", "extra_pay", "reduced_hours", "milk",
+        "early_pension", "medical_exam",
     }
 
 

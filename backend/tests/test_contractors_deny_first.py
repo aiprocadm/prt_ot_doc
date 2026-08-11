@@ -30,8 +30,6 @@ def test_contractors_low_privilege_direct_api_denied_without_permission() -> Non
         permissions=(),
         contractor_ids=("ctr-1",),
     )
-    decision = evaluate(
-        subject, "read", Resource(resource_type="contractors", attrs={"contractor_id": "ctr-1"})
-    )
+    decision = evaluate(subject, "read", Resource(resource_type="contractors", attrs={"contractor_id": "ctr-1"}))
     assert decision.allow is False
     assert decision.reason == "missing_permission"

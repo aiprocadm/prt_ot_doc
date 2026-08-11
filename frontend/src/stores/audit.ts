@@ -45,7 +45,7 @@ export const useAuditStore = create<AuditState>()(
         filters: {},
         pagination: defaultPagination(),
         loading: false,
-        error: null,
+        error: null
       }));
     },
     list: async (params) => {
@@ -53,17 +53,9 @@ export const useAuditStore = create<AuditState>()(
         state.loading = true;
         state.error = null;
       });
-      const query = {
-        ...get().filters,
-        ...params,
-        page: get().pagination.page,
-        page_size: get().pagination.page_size,
-      };
+      const query = { ...get().filters, ...params, page: get().pagination.page, page_size: get().pagination.page_size };
       try {
-        const { data } = await apiClient.get<PaginatedResponse<AuditLogDto>>(
-          "/audit",
-          { params: query },
-        );
+        const { data } = await apiClient.get<PaginatedResponse<AuditLogDto>>("/audit", { params: query });
         set((state) => {
           state.items = data.items;
           state.pagination = data.pagination;
@@ -77,6 +69,6 @@ export const useAuditStore = create<AuditState>()(
           state.loading = false;
         });
       }
-    },
-  })),
+    }
+  }))
 );

@@ -1,5 +1,1 @@
-export {
-  NavMenuProvider,
-  useNavMenuData,
-  type NavMenuContextValue,
-} from "@/components/layout/NavMenuProvider";
+export { NavMenuProvider, useNavMenuData, type NavMenuContextValue } from "@/components/layout/NavMenuProvider";

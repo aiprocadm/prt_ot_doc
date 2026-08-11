@@ -9,36 +9,34 @@ import type { FileDto } from "@/types/dto/files";
 import { formatDate } from "@/utils/datetime";
 
 export const FileTable = () => {
-  const { items, pagination, list, setPage, setPageSize, remove, loading } =
-    useFilesStore();
+  const { items, pagination, list, setPage, setPageSize, remove, loading } = useFilesStore();
 
   const columns = useMemo<ColumnDef<FileDto>[]>(
     () => [
       {
         accessorKey: "name",
         header: "Файл",
-        cell: ({ row }) => row.original.name,
+        cell: ({ row }) => row.original.name
       },
       {
         accessorKey: "mime_type",
         header: "Тип",
-        cell: ({ row }) => row.original.mime_type,
+        cell: ({ row }) => row.original.mime_type
       },
       {
         accessorKey: "size",
         header: "Размер",
-        cell: ({ row }) => `${(row.original.size / 1024).toFixed(1)} КБ`,
+        cell: ({ row }) => `${(row.original.size / 1024).toFixed(1)} КБ`
       },
       {
         accessorKey: "status",
         header: "Статус",
-        cell: ({ row }) =>
-          (row.original as FileDto & { status?: string }).status ?? "—",
+        cell: ({ row }) => (row.original as FileDto & { status?: string }).status ?? "—"
       },
       {
         accessorKey: "created_at",
         header: "Загружен",
-        cell: ({ row }) => formatDate(row.original.created_at),
+        cell: ({ row }) => formatDate(row.original.created_at)
       },
       {
         id: "actions",
@@ -48,15 +46,9 @@ export const FileTable = () => {
             <Button
               variant="outline"
               size="sm"
-              disabled={
-                (row.original as FileDto & { status?: string }).status !==
-                "ready"
-              }
+              disabled={(row.original as FileDto & { status?: string }).status !== "ready"}
               onClick={async () => {
-                const url = await getDownloadUrl(
-                  row.original.id,
-                  "files_table_download",
-                );
+                const url = await getDownloadUrl(row.original.id, "files_table_download");
                 window.open(url, "_blank", "noopener,noreferrer");
               }}
             >
@@ -75,10 +67,10 @@ export const FileTable = () => {
               Удалить
             </Button>
           </div>
-        ),
-      },
+        )
+      }
     ],
-    [list, remove],
+    [list, remove]
   );
 
   return (

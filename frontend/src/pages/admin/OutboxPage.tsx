@@ -11,25 +11,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import type { ApiError } from "@/types/dto/common";
 
-type OutboxItem = {
-  id: string;
-  event_type: string;
-  status: string;
-  attempts: number;
-};
-type Endpoint = {
-  id: string;
-  url: string;
-  enabled: boolean;
-  subscribed_events: string[];
-};
-type Delivery = {
-  id: string;
-  endpoint_id: string;
-  event_id: string;
-  status: string;
-  attempts: number;
-};
+type OutboxItem = { id: string; event_type: string; status: string; attempts: number };
+type Endpoint = { id: string; url: string; enabled: boolean; subscribed_events: string[] };
+type Delivery = { id: string; endpoint_id: string; event_id: string; status: string; attempts: number };
 
 const OutboxPage = () => {
   const [items, setItems] = useState<OutboxItem[]>([]);
@@ -37,9 +21,7 @@ const OutboxPage = () => {
   const [deliveries, setDeliveries] = useState<Delivery[]>([]);
   const [url, setUrl] = useState("");
   const [secret, setSecret] = useState("");
-  const [eventTypes, setEventTypes] = useState(
-    "DocumentGenerated,Signed,Exported,RiskAssessed,PPEIssued,TrainingCompleted",
-  );
+  const [eventTypes, setEventTypes] = useState("DocumentGenerated,Signed,Exported,RiskAssessed,PPEIssued,TrainingCompleted");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -56,11 +38,7 @@ const OutboxPage = () => {
       setEndpoints(eps ?? []);
       setDeliveries(dels ?? []);
     } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Не удалось загрузить данные интеграций",
-      );
+      setError(err instanceof Error ? err.message : "Не удалось загрузить данные интеграций");
     } finally {
       setLoading(false);
     }
@@ -74,10 +52,7 @@ const OutboxPage = () => {
         url,
         secret,
         enabled: true,
-        subscribed_events: eventTypes
-          .split(",")
-          .map((s) => s.trim())
-          .filter(Boolean),
+        subscribed_events: eventTypes.split(",").map((s) => s.trim()).filter(Boolean),
         timeout_ms: 8000,
         headers: {},
       });
@@ -85,9 +60,7 @@ const OutboxPage = () => {
       setSecret("");
       await load();
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Не удалось создать точку вебхука",
-      );
+      setError(err instanceof Error ? err.message : "Не удалось создать точку вебхука");
     }
   };
 
@@ -97,11 +70,7 @@ const OutboxPage = () => {
       await webhooksApi.testEndpoint(id);
       await load();
     } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Не удалось выполнить тест точки вебхука",
-      );
+      setError(err instanceof Error ? err.message : "Не удалось выполнить тест точки вебхука");
     }
   };
 
@@ -111,20 +80,11 @@ const OutboxPage = () => {
 
   return (
     <div className="space-y-4">
-      <Breadcrumb
-        items={[
-          { label: "Главная", to: "/dashboard" },
-          { label: "Интеграции и вебхуки" },
-        ]}
-      />
+      <Breadcrumb items={[{ label: "Главная", to: "/dashboard" }, { label: "Интеграции и вебхуки" }]} />
       <ErrorState
         error={
           error
-            ? ({
-                status: 400,
-                code: "integrations_load_error",
-                message: error,
-              } as ApiError)
+            ? ({ status: 400, code: "integrations_load_error", message: error } as ApiError)
             : undefined
         }
         onRetry={() => void load()}
@@ -135,29 +95,11 @@ const OutboxPage = () => {
           <CardTitle>Подписки на вебхуки</CardTitle>
         </CardHeader>
         <CardContent>
-          <form
-            onSubmit={createEndpoint}
-            className="mb-3 grid grid-cols-1 gap-2 md:grid-cols-4"
-          >
-            <Input
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-              placeholder="https://example.com/webhook"
-              required
-            />
-            <Input
-              value={secret}
-              onChange={(e) => setSecret(e.target.value)}
-              placeholder="Секрет"
-            />
-            <Input
-              value={eventTypes}
-              onChange={(e) => setEventTypes(e.target.value)}
-              placeholder="Типы событий через запятую"
-            />
-            <Button type="submit" disabled={loading}>
-              Создать
-            </Button>
+          <form onSubmit={createEndpoint} className="mb-3 grid grid-cols-1 gap-2 md:grid-cols-4">
+            <Input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://example.com/webhook" required />
+            <Input value={secret} onChange={(e) => setSecret(e.target.value)} placeholder="Секрет" />
+            <Input value={eventTypes} onChange={(e) => setEventTypes(e.target.value)} placeholder="Типы событий через запятую" />
+            <Button type="submit" disabled={loading}>Создать</Button>
           </form>
           {endpoints.length === 0 ? (
             <EmptyState
@@ -168,14 +110,8 @@ const OutboxPage = () => {
             <ul className="space-y-1 text-sm">
               {endpoints.map((item) => (
                 <li key={item.id}>
-                  {item.url} — <b>{item.enabled ? "включено" : "отключено"}</b>{" "}
-                  ({item.subscribed_events.join(", ") || "все"})
-                  <Button
-                    size="sm"
-                    className="ml-2"
-                    onClick={() => void runTest(item.id)}
-                    disabled={loading}
-                  >
+                  {item.url} — <b>{item.enabled ? "включено" : "отключено"}</b> ({item.subscribed_events.join(", ") || "все"})
+                  <Button size="sm" className="ml-2" onClick={() => void runTest(item.id)} disabled={loading}>
                     Тест
                   </Button>
                 </li>
@@ -198,8 +134,7 @@ const OutboxPage = () => {
             <ul className="space-y-1 text-sm">
               {deliveries.slice(0, 20).map((item) => (
                 <li key={item.id}>
-                  {item.event_id} → {item.endpoint_id} — <b>{item.status}</b>{" "}
-                  (попыток: {item.attempts})
+                  {item.event_id} → {item.endpoint_id} — <b>{item.status}</b> (попыток: {item.attempts})
                 </li>
               ))}
             </ul>
@@ -220,17 +155,12 @@ const OutboxPage = () => {
             <ul className="space-y-1 text-sm">
               {items.map((item) => (
                 <li key={item.id}>
-                  {item.event_type} — <b>{item.status}</b> (попыток:{" "}
-                  {item.attempts})
+                  {item.event_type} — <b>{item.status}</b> (попыток: {item.attempts})
                 </li>
               ))}
             </ul>
           )}
-          <Button
-            className="mt-3"
-            onClick={() => void load()}
-            disabled={loading}
-          >
+          <Button className="mt-3" onClick={() => void load()} disabled={loading}>
             Обновить
           </Button>
         </CardContent>

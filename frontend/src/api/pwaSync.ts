@@ -20,14 +20,8 @@ export const pwaSyncApi = {
     const response = await apiClient.get<PwaBootstrapDto>("/pwa/bootstrap");
     return response.data;
   },
-  async resolveConflict(
-    batchId: string,
-    strategy: "server_wins" | "client_retry",
-  ) {
-    const response = await apiClient.post(
-      `/pwa/sync/conflicts/${batchId}/resolve`,
-      { strategy },
-    );
+  async resolveConflict(batchId: string, strategy: "server_wins" | "client_retry") {
+    const response = await apiClient.post(`/pwa/sync/conflicts/${batchId}/resolve`, { strategy });
     return response.data;
-  },
+  }
 };

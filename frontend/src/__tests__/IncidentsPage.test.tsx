@@ -6,7 +6,7 @@ import type { ReactNode } from "react";
 
 const { listMock, createMock } = vi.hoisted(() => ({
   listMock: vi.fn(),
-  createMock: vi.fn(),
+  createMock: vi.fn()
 }));
 
 const mockIncident = {
@@ -20,35 +20,25 @@ const mockIncident = {
   site_id: null,
   description: "Рабочий упал со строительных лесов",
   created_at: "2024-06-01T11:00:00Z",
-  updated_at: "2024-06-01T11:00:00Z",
+  updated_at: "2024-06-01T11:00:00Z"
 };
 
 vi.mock("@/api/incidents", () => ({
   incidentsApi: {
     list: listMock,
-    create: createMock,
-  },
+    create: createMock
+  }
 }));
 
 vi.mock("@/components/ui/dialog", () => ({
   Dialog: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-  DialogTrigger: ({ children }: { children: ReactNode }) => (
-    <div>{children}</div>
-  ),
-  DialogContent: ({ children }: { children: ReactNode }) => (
-    <div role="dialog">{children}</div>
-  ),
-  DialogHeader: ({ children }: { children: ReactNode }) => (
-    <div>{children}</div>
-  ),
+  DialogTrigger: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  DialogContent: ({ children }: { children: ReactNode }) => <div role="dialog">{children}</div>,
+  DialogHeader: ({ children }: { children: ReactNode }) => <div>{children}</div>,
   DialogTitle: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-  DialogDescription: ({ children }: { children: ReactNode }) => (
-    <div>{children}</div>
-  ),
-  DialogFooter: ({ children }: { children: ReactNode }) => (
-    <div>{children}</div>
-  ),
-  DialogClose: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  DialogDescription: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  DialogFooter: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  DialogClose: ({ children }: { children: ReactNode }) => <div>{children}</div>
 }));
 
 import { PERMISSIONS } from "@/permissions/permissions";
@@ -63,14 +53,14 @@ const userWithIncidentCreate = {
   full_name: "Incident Lead",
   roles: ["worker"],
   permissions: [PERMISSIONS.INCIDENT_VIEW, PERMISSIONS.INCIDENT_CREATE],
-  attributes: { tenant_id: "tenant-1" },
+  attributes: { tenant_id: "tenant-1" }
 };
 
 const userWithoutIncidentCreate = {
   ...userWithIncidentCreate,
   id: "user-incident-view",
   email: "incident.viewer@example.com",
-  permissions: [PERMISSIONS.INCIDENT_VIEW],
+  permissions: [PERMISSIONS.INCIDENT_VIEW]
 };
 
 describe("IncidentsPage", () => {
@@ -82,7 +72,7 @@ describe("IncidentsPage", () => {
       loading: false,
       error: null,
       isAuthenticated: true,
-      initialized: true,
+      initialized: true
     });
   });
 
@@ -92,7 +82,7 @@ describe("IncidentsPage", () => {
     render(
       <MemoryRouter>
         <IncidentsPage />
-      </MemoryRouter>,
+      </MemoryRouter>
     );
 
     await waitFor(() => {
@@ -108,14 +98,11 @@ describe("IncidentsPage", () => {
     render(
       <MemoryRouter initialEntries={["/incidents?status=closed"]}>
         <IncidentsPage />
-      </MemoryRouter>,
+      </MemoryRouter>
     );
 
     await waitFor(() => {
-      expect(listMock).toHaveBeenCalledWith({
-        limit: 100,
-        status_filter: "closed",
-      });
+      expect(listMock).toHaveBeenCalledWith({ limit: 100, status_filter: "closed" });
     });
   });
 
@@ -125,7 +112,7 @@ describe("IncidentsPage", () => {
     render(
       <MemoryRouter>
         <IncidentsPage />
-      </MemoryRouter>,
+      </MemoryRouter>
     );
 
     await waitFor(() => {
@@ -140,18 +127,14 @@ describe("IncidentsPage", () => {
     render(
       <MemoryRouter>
         <IncidentsPage />
-      </MemoryRouter>,
+      </MemoryRouter>
     );
 
     await waitFor(() => {
-      expect(
-        screen.getByRole("button", { name: /зарегистрировать инцидент/i }),
-      ).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /зарегистрировать инцидент/i })).toBeInTheDocument();
     });
 
-    await user.click(
-      screen.getByRole("button", { name: /зарегистрировать инцидент/i }),
-    );
+    await user.click(screen.getByRole("button", { name: /зарегистрировать инцидент/i }));
 
     expect(screen.getByRole("dialog")).toBeInTheDocument();
     expect(screen.getByLabelText(/заголовок/i)).toBeInTheDocument();
@@ -164,18 +147,16 @@ describe("IncidentsPage", () => {
       loading: false,
       error: null,
       isAuthenticated: true,
-      initialized: true,
+      initialized: true
     });
 
     render(
       <MemoryRouter>
         <IncidentsPage />
-      </MemoryRouter>,
+      </MemoryRouter>
     );
 
-    const button = await screen.findByRole("button", {
-      name: /зарегистрировать инцидент/i,
-    });
+    const button = await screen.findByRole("button", { name: /зарегистрировать инцидент/i });
     expect(button).toBeDisabled();
   });
 });

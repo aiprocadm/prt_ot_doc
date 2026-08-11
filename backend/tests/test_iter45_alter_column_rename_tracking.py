@@ -127,11 +127,9 @@ def test_parse_ignores_downgrade_rename() -> None:
     """Only ``upgrade()`` is parsed (forward-only history). The outbox downgrade
     renames sent_at→processed_at — that reverse op must NOT appear."""
     renames = _rename_columns(OUTBOX_MIGRATION)
-    assert (
-        "outbox",
-        "sent_at",
-        "processed_at",
-    ) not in renames, "downgrade rename leaked into the forward-only parse"
+    assert ("outbox", "sent_at", "processed_at") not in renames, (
+        "downgrade rename leaked into the forward-only parse"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -158,9 +156,9 @@ def test_collect_preserves_table_rename() -> None:
     """Guard: the existing ``rename_table`` handling still collapses the singular
     ``webhook_delivery`` into ``webhook_deliveries`` — the column-rename change
     must not regress it. (Stays green across the change.)"""
-    assert not _collected().get(
-        "webhook_delivery"
-    ), "webhook_delivery (singular) should be empty/absent after table-rename merge"
+    assert not _collected().get("webhook_delivery"), (
+        "webhook_delivery (singular) should be empty/absent after table-rename merge"
+    )
 
 
 # ---------------------------------------------------------------------------

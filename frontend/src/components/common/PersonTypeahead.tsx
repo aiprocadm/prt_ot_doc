@@ -19,10 +19,7 @@ interface PersonTypeaheadProps {
 
 const personToOption = (p: PersonDto): PersonOption => ({
   id: p.id,
-  label:
-    p.full_name ||
-    [p.last_name, p.first_name, p.middle_name].filter(Boolean).join(" ") ||
-    p.id,
+  label: p.full_name || [p.last_name, p.first_name, p.middle_name].filter(Boolean).join(" ") || p.id,
 });
 
 const DEBOUNCE_MS = 300;
@@ -32,12 +29,7 @@ const MIN_QUERY_LEN = 2;
  * Серверный подбор сотрудника (срез-4): вместо ручного ввода person_id —
  * поиск по ФИО / табельному номеру через GET /persons?q=.
  */
-export const PersonTypeahead = ({
-  value,
-  onChange,
-  placeholder,
-  inputId,
-}: PersonTypeaheadProps) => {
+export const PersonTypeahead = ({ value, onChange, placeholder, inputId }: PersonTypeaheadProps) => {
   const [query, setQuery] = useState("");
   const [options, setOptions] = useState<PersonOption[]>([]);
   const [open, setOpen] = useState(false);
@@ -108,9 +100,7 @@ export const PersonTypeahead = ({
             <li className="px-3 py-2 text-sm text-muted-foreground">Поиск…</li>
           ) : null}
           {!searching && options.length === 0 ? (
-            <li className="px-3 py-2 text-sm text-muted-foreground">
-              Никого не найдено
-            </li>
+            <li className="px-3 py-2 text-sm text-muted-foreground">Никого не найдено</li>
           ) : null}
           {options.map((o) => (
             <li key={o.id} role="option" aria-selected={false}>

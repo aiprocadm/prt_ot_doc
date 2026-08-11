@@ -28,9 +28,7 @@ export const GasAnalysisEditor = ({ rows, onAdd, onRemove, onCell }: Props) => (
           onChange={(e) => onCell(i, "parameter", e.target.value)}
         >
           {GAS_PARAMETER_CODES.map((c) => (
-            <option key={c} value={c}>
-              {GAS_PARAMETER_LABELS[c]}
-            </option>
+            <option key={c} value={c}>{GAS_PARAMETER_LABELS[c]}</option>
           ))}
         </select>
         <Input

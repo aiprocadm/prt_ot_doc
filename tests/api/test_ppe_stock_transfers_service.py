@@ -212,7 +212,9 @@ async def test_transfer_unknown_source_raises(sessionmaker, data_factory: TestDa
 
 
 @pytest.mark.asyncio
-async def test_transfer_copies_unit_cost_to_dest_batch(sessionmaker, data_factory: TestDataFactory):
+async def test_transfer_copies_unit_cost_to_dest_batch(
+    sessionmaker, data_factory: TestDataFactory
+):
     """The auto-created dest batch inherits the source's per-unit cost (provenance),
     so a later receipt onto it is priced instead of silently dropped from the safety
     budget's ``actual_total`` as an unpriced receipt."""

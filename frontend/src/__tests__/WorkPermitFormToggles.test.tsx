@@ -1,38 +1,23 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from "vitest";
-import {
-  render,
-  screen,
-  fireEvent,
-  act,
-  waitFor,
-} from "@testing-library/react";
+import { render, screen, fireEvent, act, waitFor } from "@testing-library/react";
 import { WorkPermitFormDialog } from "@/features/work-permits/WorkPermitFormDialog";
 import { workPermitsApi } from "@/api/workPermits";
 
-vi.mock("@/api/workPermits", () => ({
-  workPermitsApi: { create: vi.fn(), update: vi.fn() },
-}));
+vi.mock("@/api/workPermits", () => ({ workPermitsApi: { create: vi.fn(), update: vi.fn() } }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
 const createMock = () => workPermitsApi.create as unknown as Mock;
 
 type SubmittedBody = {
   safety_systems?: string[];
-  type_specific?: {
-    respiratory_ppe?: string[];
-    fire_fighting_means?: string[];
-  } | null;
+  type_specific?: { respiratory_ppe?: string[]; fire_fighting_means?: string[] } | null;
 };
 
 const openWith = (workType: string) => {
   render(<WorkPermitFormDialog trigger={<button>open</button>} />);
   fireEvent.click(screen.getByText("open"));
-  fireEvent.change(screen.getByLabelText("Вид работ"), {
-    target: { value: workType },
-  });
-  fireEvent.change(screen.getByLabelText("Зона работ"), {
-    target: { value: "Колодец К-99" },
-  });
+  fireEvent.change(screen.getByLabelText("Вид работ"), { target: { value: workType } });
+  fireEvent.change(screen.getByLabelText("Зона работ"), { target: { value: "Колодец К-99" } });
 };
 
 const submitAndBody = async (): Promise<SubmittedBody> => {
@@ -48,9 +33,7 @@ describe("WorkPermitFormDialog — поведение тогглеров чек-
   it("газоопасные: два чекбокса СИЗОД, отмеченные в одном батче, оба попадают в type_specific.respiratory_ppe", async () => {
     openWith("gas_hazardous");
     await act(async () => {
-      fireEvent.click(
-        screen.getByLabelText("Шланговый противогаз (ПШ-1/ПШ-2)"),
-      );
+      fireEvent.click(screen.getByLabelText("Шланговый противогаз (ПШ-1/ПШ-2)"));
       fireEvent.click(screen.getByLabelText("Изолирующий противогаз"));
     });
     const body = await submitAndBody();
@@ -68,9 +51,7 @@ describe("WorkPermitFormDialog — поведение тогглеров чек-
     fireEvent.click(cb);
     fireEvent.click(cb);
     const body = await submitAndBody();
-    expect(body.type_specific?.respiratory_ppe ?? []).not.toContain(
-      "filter_mask",
-    );
+    expect(body.type_specific?.respiratory_ppe ?? []).not.toContain("filter_mask");
   });
 
   // #3 для огневых + защита ключа fire_fighting_means.
@@ -96,9 +77,7 @@ describe("WorkPermitFormDialog — поведение тогглеров чек-
       fireEvent.click(screen.getByLabelText("Страховочные системы"));
     });
     const body = await submitAndBody();
-    expect(body.safety_systems).toEqual(
-      expect.arrayContaining(["restraint", "fall_arrest"]),
-    );
+    expect(body.safety_systems).toEqual(expect.arrayContaining(["restraint", "fall_arrest"]));
     expect(body.safety_systems).toHaveLength(2);
   });
 
@@ -109,15 +88,9 @@ describe("WorkPermitFormDialog — поведение тогглеров чек-
     // вид по умолчанию height — отмечаем систему безопасности
     fireEvent.click(screen.getByLabelText("Удерживающие системы"));
     // переключаемся на газоопасные
-    fireEvent.change(screen.getByLabelText("Вид работ"), {
-      target: { value: "gas_hazardous" },
-    });
-    fireEvent.change(screen.getByLabelText("Зона работ"), {
-      target: { value: "ГРП-3" },
-    });
+    fireEvent.change(screen.getByLabelText("Вид работ"), { target: { value: "gas_hazardous" } });
+    fireEvent.change(screen.getByLabelText("Зона работ"), { target: { value: "ГРП-3" } });
     const body = await submitAndBody();
-    expect(
-      body.safety_systems == null || body.safety_systems.length === 0,
-    ).toBe(true);
+    expect(body.safety_systems == null || body.safety_systems.length === 0).toBe(true);
   });
 });

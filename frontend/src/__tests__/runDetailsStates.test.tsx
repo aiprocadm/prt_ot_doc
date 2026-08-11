@@ -24,9 +24,7 @@ vi.mock("@/api/client", () => ({
 }));
 
 vi.mock("@/components/JobTimeline", () => ({
-  JobTimeline: ({ steps }: { steps: Array<{ step_run_id: string }> }) => (
-    <div data-testid="job-timeline">{steps.length}</div>
-  ),
+  JobTimeline: ({ steps }: { steps: Array<{ step_run_id: string }> }) => <div data-testid="job-timeline">{steps.length}</div>,
 }));
 
 vi.mock("@/features/files/FileList", () => ({
@@ -84,10 +82,7 @@ describe("run details operational states", () => {
     let shouldFail = true;
 
     apiClientMock.get.mockImplementation((url: string) => {
-      if (
-        url === "/pack-runs/pack-1/items" ||
-        url === "/pack-runs/pack-1/timeline"
-      ) {
+      if (url === "/pack-runs/pack-1/items" || url === "/pack-runs/pack-1/timeline") {
         if (shouldFail) {
           return Promise.reject({ status: 400, message: "pack load failed" });
         }
@@ -101,18 +96,14 @@ describe("run details operational states", () => {
       render(<PackRunDetailsPage />);
     });
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "pack load failed",
-    );
+    expect(await screen.findByRole("alert")).toHaveTextContent("pack load failed");
 
     shouldFail = false;
     await act(async () => {
       await user.click(screen.getByRole("button", { name: "Повторить" }));
     });
 
-    expect(
-      await screen.findByText(/строк запуска пакета нет/i),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/строк запуска пакета нет/i)).toBeInTheDocument();
     expect(screen.getByText(/хронология пуста/i)).toBeInTheDocument();
   });
 
@@ -137,13 +128,9 @@ describe("run details operational states", () => {
       render(<PipelineRunDetails />);
     });
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "run load failed",
-    );
+    expect(await screen.findByRole("alert")).toHaveTextContent("run load failed");
     await waitFor(() => {
-      expect(
-        screen.queryByText(/загрузка запуска пайплайна/i),
-      ).not.toBeInTheDocument();
+      expect(screen.queryByText(/загрузка запуска пайплайна/i)).not.toBeInTheDocument();
     });
 
     shouldFail = false;

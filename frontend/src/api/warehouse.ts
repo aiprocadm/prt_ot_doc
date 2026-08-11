@@ -130,10 +130,7 @@ export type CreateInventoryCountInput = {
   note?: string | null;
 };
 
-export type InventoryCountLineEntry = {
-  line_id: string;
-  counted_qty: number | null;
-};
+export type InventoryCountLineEntry = { line_id: string; counted_qty: number | null };
 
 export type SupplierDto = {
   id: string;
@@ -150,11 +147,7 @@ export type SupplierInput = {
   contact_phone?: string | null;
 };
 
-export type ReorderLineDto = {
-  item_id: string;
-  item_name: string;
-  deficit: number;
-};
+export type ReorderLineDto = { item_id: string; item_name: string; deficit: number };
 
 export type ReorderGroupDto = {
   supplier_id: string | null;
@@ -214,180 +207,125 @@ export type CreateBatchInput = {
 };
 
 type PageResponse<T> = { items: T[]; total: number };
-type ShortagePageResponse = {
-  items: PPEStockShortageDto[];
-  total: number;
-  window_days: number;
-};
+type ShortagePageResponse = { items: PPEStockShortageDto[]; total: number; window_days: number };
 
 export const warehouseApi = {
   async listBatches(): Promise<StockBatchDto[]> {
-    const response = await apiClient.get<PageResponse<StockBatchDto>>(
-      "/ppe/stock/batches",
-      {
-        params: { limit: 100, offset: 0 },
-      },
-    );
+    const response = await apiClient.get<PageResponse<StockBatchDto>>("/ppe/stock/batches", {
+      params: { limit: 100, offset: 0 }
+    });
     return response.data.items ?? [];
   },
   async listLevels(): Promise<StockLevelDto[]> {
-    const response =
-      await apiClient.get<PageResponse<StockLevelDto>>("/ppe/stock/levels");
+    const response = await apiClient.get<PageResponse<StockLevelDto>>("/ppe/stock/levels");
     return response.data.items ?? [];
   },
   async listMovements(): Promise<StockMovementDto[]> {
-    const response = await apiClient.get<PageResponse<StockMovementDto>>(
-      "/ppe/stock/movements",
-      {
-        params: { limit: 50, offset: 0 },
-      },
-    );
+    const response = await apiClient.get<PageResponse<StockMovementDto>>("/ppe/stock/movements", {
+      params: { limit: 50, offset: 0 }
+    });
     return response.data.items ?? [];
   },
   async createMovement(input: CreateMovementInput): Promise<StockMovementDto> {
-    const response = await apiClient.post<StockMovementDto>(
-      "/ppe/stock/movements",
-      input,
-    );
+    const response = await apiClient.post<StockMovementDto>("/ppe/stock/movements", input);
     return response.data;
   },
-  async listTransfers(params?: {
-    item_id?: string;
-  }): Promise<StockTransferDto[]> {
-    const response = await apiClient.get<PageResponse<StockTransferDto>>(
-      "/ppe/stock/transfers",
-      {
-        params: { limit: 50, offset: 0, ...(params ?? {}) },
-      },
-    );
+  async listTransfers(params?: { item_id?: string }): Promise<StockTransferDto[]> {
+    const response = await apiClient.get<PageResponse<StockTransferDto>>("/ppe/stock/transfers", {
+      params: { limit: 50, offset: 0, ...(params ?? {}) }
+    });
     return response.data.items ?? [];
   },
   async createTransfer(input: CreateTransferInput): Promise<StockTransferDto> {
-    const response = await apiClient.post<StockTransferDto>(
-      "/ppe/stock/transfers",
-      input,
-    );
+    const response = await apiClient.post<StockTransferDto>("/ppe/stock/transfers", input);
     return response.data;
   },
   async listLevelsByLocation(): Promise<StockLevelByLocationDto[]> {
     const response = await apiClient.get<PageResponse<StockLevelByLocationDto>>(
-      "/ppe/stock/levels/by-location",
+      "/ppe/stock/levels/by-location"
     );
     return response.data.items ?? [];
   },
-  async listShortages(params?: {
-    window_days?: number;
-    only_below?: boolean;
-  }): Promise<PPEStockShortageDto[]> {
-    const response = await apiClient.get<ShortagePageResponse>(
-      "/ppe/stock/shortages",
-      { params },
-    );
+  async listShortages(params?: { window_days?: number; only_below?: boolean }): Promise<PPEStockShortageDto[]> {
+    const response = await apiClient.get<ShortagePageResponse>("/ppe/stock/shortages", { params });
     return response.data.items ?? [];
   },
   async listCounts(): Promise<InventoryCountDto[]> {
     const response = await apiClient.get<PageResponse<InventoryCountDto>>(
       "/ppe/stock/inventory/counts",
-      { params: { limit: 50, offset: 0 } },
+      { params: { limit: 50, offset: 0 } }
     );
     return response.data.items ?? [];
   },
-  async createCount(
-    input: CreateInventoryCountInput,
-  ): Promise<InventoryCountDetailDto> {
+  async createCount(input: CreateInventoryCountInput): Promise<InventoryCountDetailDto> {
     const response = await apiClient.post<InventoryCountDetailDto>(
       "/ppe/stock/inventory/counts",
-      input,
+      input
     );
     return response.data;
   },
   async getCount(id: string): Promise<InventoryCountDetailDto> {
     const response = await apiClient.get<InventoryCountDetailDto>(
-      `/ppe/stock/inventory/counts/${id}`,
+      `/ppe/stock/inventory/counts/${id}`
     );
     return response.data;
   },
   async patchCountLines(
     id: string,
-    entries: InventoryCountLineEntry[],
+    entries: InventoryCountLineEntry[]
   ): Promise<InventoryCountDetailDto> {
     const response = await apiClient.patch<InventoryCountDetailDto>(
       `/ppe/stock/inventory/counts/${id}/lines`,
-      { entries },
+      { entries }
     );
     return response.data;
   },
   async applyCount(id: string): Promise<InventoryCountDetailDto> {
     const response = await apiClient.post<InventoryCountDetailDto>(
       `/ppe/stock/inventory/counts/${id}/apply`,
-      {},
+      {}
     );
     return response.data;
   },
   async cancelCount(id: string): Promise<InventoryCountDetailDto> {
     const response = await apiClient.post<InventoryCountDetailDto>(
       `/ppe/stock/inventory/counts/${id}/cancel`,
-      {},
+      {}
     );
     return response.data;
   },
   async createBatch(input: CreateBatchInput): Promise<StockBatchDto> {
-    const response = await apiClient.post<StockBatchDto>(
-      "/ppe/stock/batches",
-      input,
-    );
+    const response = await apiClient.post<StockBatchDto>("/ppe/stock/batches", input);
     return response.data;
   },
   async listSuppliers(): Promise<SupplierDto[]> {
-    const response = await apiClient.get<PageResponse<SupplierDto>>(
-      "/ppe/suppliers",
-      {
-        params: { limit: 200, offset: 0 },
-      },
-    );
+    const response = await apiClient.get<PageResponse<SupplierDto>>("/ppe/suppliers", {
+      params: { limit: 200, offset: 0 }
+    });
     return response.data.items ?? [];
   },
   async createSupplier(input: SupplierInput): Promise<SupplierDto> {
     const response = await apiClient.post<SupplierDto>("/ppe/suppliers", input);
     return response.data;
   },
-  async updateSupplier(
-    id: string,
-    input: Partial<SupplierInput>,
-  ): Promise<SupplierDto> {
-    const response = await apiClient.patch<SupplierDto>(
-      `/ppe/suppliers/${id}`,
-      input,
-    );
+  async updateSupplier(id: string, input: Partial<SupplierInput>): Promise<SupplierDto> {
+    const response = await apiClient.patch<SupplierDto>(`/ppe/suppliers/${id}`, input);
     return response.data;
   },
   async deleteSupplier(id: string): Promise<void> {
     await apiClient.delete(`/ppe/suppliers/${id}`);
   },
-  async getReorderDraft(params?: {
-    window_days?: number;
-  }): Promise<ReorderDraftDto> {
-    const response = await apiClient.get<ReorderDraftDto>(
-      "/ppe/stock/reorder",
-      { params },
-    );
+  async getReorderDraft(params?: { window_days?: number }): Promise<ReorderDraftDto> {
+    const response = await apiClient.get<ReorderDraftDto>("/ppe/stock/reorder", { params });
     return response.data;
   },
-  async patchItemPreferredSupplier(
-    itemId: string,
-    supplierId: string | null,
-  ): Promise<void> {
-    await apiClient.patch(`/ppe/items/${itemId}`, {
-      preferred_supplier_id: supplierId,
-    });
+  async patchItemPreferredSupplier(itemId: string, supplierId: string | null): Promise<void> {
+    await apiClient.patch(`/ppe/items/${itemId}`, { preferred_supplier_id: supplierId });
   },
   async listBudgets(): Promise<BudgetDto[]> {
-    const response = await apiClient.get<PageResponse<BudgetDto>>(
-      "/ppe/budgets",
-      {
-        params: { limit: 100, offset: 0 },
-      },
-    );
+    const response = await apiClient.get<PageResponse<BudgetDto>>("/ppe/budgets", {
+      params: { limit: 100, offset: 0 }
+    });
     return response.data.items ?? [];
   },
   async getBudget(id: string): Promise<BudgetDetailDto> {
@@ -398,17 +336,11 @@ export const warehouseApi = {
     const response = await apiClient.post<BudgetDto>("/ppe/budgets", input);
     return response.data;
   },
-  async updateBudget(
-    id: string,
-    input: Partial<BudgetCreateInput>,
-  ): Promise<BudgetDto> {
-    const response = await apiClient.patch<BudgetDto>(
-      `/ppe/budgets/${id}`,
-      input,
-    );
+  async updateBudget(id: string, input: Partial<BudgetCreateInput>): Promise<BudgetDto> {
+    const response = await apiClient.patch<BudgetDto>(`/ppe/budgets/${id}`, input);
     return response.data;
   },
   async deleteBudget(id: string): Promise<void> {
     await apiClient.delete(`/ppe/budgets/${id}`);
-  },
+  }
 };

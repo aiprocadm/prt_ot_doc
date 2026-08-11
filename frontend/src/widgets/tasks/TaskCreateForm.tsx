@@ -43,7 +43,7 @@ export const TaskCreateForm = ({
   setLinkType,
   setLinkEntityId,
   onSubmit,
-  onCancel,
+  onCancel
 }: Props) => {
   if (!visible) return null;
 
@@ -74,21 +74,13 @@ export const TaskCreateForm = ({
             id="new-task-priority"
             className="h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground"
             value={priority}
-            onChange={(event) =>
-              setPriority(
-                isTaskPriority(event.target.value)
-                  ? event.target.value
-                  : "medium",
-              )
-            }
+            onChange={(event) => setPriority(isTaskPriority(event.target.value) ? event.target.value : "medium")}
           >
-            {priorityOptions
-              .filter((option) => option.value)
-              .map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
+            {priorityOptions.filter((option) => option.value).map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
           </select>
         </FilterField>
         <FilterField label="Описание" htmlFor="new-task-description">
@@ -111,7 +103,7 @@ export const TaskCreateForm = ({
                   event.target.value === "company" ||
                   event.target.value === "task"
                   ? event.target.value
-                  : "",
+                  : ""
               )
             }
           >
@@ -151,3 +143,4 @@ export const TaskCreateForm = ({
     </div>
   );
 };
+

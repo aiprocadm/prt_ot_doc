@@ -1,8 +1,4 @@
-import type {
-  ApiError,
-  PaginatedResponse,
-  PaginationDto,
-} from "@/types/dto/common";
+import type { ApiError, PaginatedResponse, PaginationDto } from "@/types/dto/common";
 
 export interface PaginatedState<T, Filters = Record<string, unknown>> {
   items: T[];
@@ -18,6 +14,4 @@ export interface PaginationParams {
   page_size?: number;
 }
 
-export type PaginatedFetcher<T> = (
-  params?: PaginationParams,
-) => Promise<PaginatedResponse<T>>;
+export type PaginatedFetcher<T> = (params?: PaginationParams) => Promise<PaginatedResponse<T>>;

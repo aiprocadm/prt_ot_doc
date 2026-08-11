@@ -26,45 +26,33 @@ const conditionsLabel = (count: number): string => {
   const mod10 = count % 10;
   const mod100 = count % 100;
   if (mod10 === 1 && mod100 !== 11) return `${count} условие`;
-  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14))
-    return `${count} условия`;
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return `${count} условия`;
   return `${count} условий`;
 };
 
 const RulesPage = () => {
-  const rulesLoader = useCallback(
-    () => rulesApi.list().then((page) => page.items),
-    [],
-  );
-  const eventTypesLoader = useCallback(
-    () => rulesApi.eventTypes().then((page) => page.items),
-    [],
-  );
+  const rulesLoader = useCallback(() => rulesApi.list().then((page) => page.items), []);
+  const eventTypesLoader = useCallback(() => rulesApi.eventTypes().then((page) => page.items), []);
 
   const rulesRes = useAsyncResource<AutomationRuleRead[]>({
     loader: rulesLoader,
     initialData: [],
-    errorMessage: "Не удалось загрузить правила автоматизации",
+    errorMessage: "Не удалось загрузить правила автоматизации"
   });
   const eventTypesRes = useAsyncResource<EventTypeMeta[]>({
     loader: eventTypesLoader,
     initialData: [],
-    errorMessage: "Не удалось загрузить каталог событий",
+    errorMessage: "Не удалось загрузить каталог событий"
   });
 
   const registry = useLocalRegistry({
     items: rulesRes.data,
     match: (rule, query) =>
-      [
-        rule.name,
-        rule.description,
-        rule.event_type,
-        eventLabel(rule.event_type),
-      ]
+      [rule.name, rule.description, rule.event_type, eventLabel(rule.event_type)]
         .filter(Boolean)
         .join(" ")
         .toLowerCase()
-        .includes(query),
+        .includes(query)
   });
 
   const reloadRules = () => void rulesRes.reload().catch(() => undefined);
@@ -82,9 +70,7 @@ const RulesPage = () => {
   const runTest = async (rule: AutomationRuleRead) => {
     try {
       const result = await rulesApi.test(rule.id, {});
-      toast.success(
-        `Совпадений ${result.matched_count} из ${result.events_checked}`,
-      );
+      toast.success(`Совпадений ${result.matched_count} из ${result.events_checked}`);
     } catch {
       // Ошибку уже показал глобальный обработчик API.
     }
@@ -105,20 +91,17 @@ const RulesPage = () => {
     {
       accessorKey: "name",
       header: "Имя",
-      cell: ({ row }) => (
-        <span className="font-medium">{row.original.name}</span>
-      ),
+      cell: ({ row }) => <span className="font-medium">{row.original.name}</span>
     },
     {
       accessorKey: "event_type",
       header: "Событие",
-      cell: ({ row }) => eventLabel(row.original.event_type),
+      cell: ({ row }) => eventLabel(row.original.event_type)
     },
     {
       id: "conditions",
       header: "Условия",
-      cell: ({ row }) =>
-        conditionsLabel(row.original.conditions_json.conditions?.length ?? 0),
+      cell: ({ row }) => conditionsLabel(row.original.conditions_json.conditions?.length ?? 0)
     },
     {
       id: "actions_json",
@@ -131,7 +114,7 @@ const RulesPage = () => {
             </Badge>
           ))}
         </div>
-      ),
+      )
     },
     { accessorKey: "priority", header: "Приоритет" },
     {
@@ -140,11 +123,7 @@ const RulesPage = () => {
       cell: ({ row }) => (
         <Can
           permission={PERMISSIONS.RULES_MANAGE}
-          fallback={
-            <span className="text-sm text-muted-foreground">
-              {row.original.is_enabled ? "Да" : "Нет"}
-            </span>
-          }
+          fallback={<span className="text-sm text-muted-foreground">{row.original.is_enabled ? "Да" : "Нет"}</span>}
         >
           <Switch
             aria-label={`Правило «${row.original.name}» включено`}
@@ -152,7 +131,7 @@ const RulesPage = () => {
             onCheckedChange={(next) => void toggleRule(row.original, next)}
           />
         </Can>
-      ),
+      )
     },
     {
       id: "row-actions",
@@ -170,35 +149,24 @@ const RulesPage = () => {
               initialData={row.original}
               onSubmitted={reloadRules}
             />
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => void runTest(row.original)}
-            >
+            <Button size="sm" variant="outline" onClick={() => void runTest(row.original)}>
               Тест
             </Button>
-            <Button
-              size="sm"
-              variant="destructive"
-              onClick={() => void removeRule(row.original)}
-            >
+            <Button size="sm" variant="destructive" onClick={() => void removeRule(row.original)}>
               Удалить
             </Button>
           </div>
         </Can>
-      ),
-    },
+      )
+    }
   ];
 
   const featureDisabled = [rulesRes.error, eventTypesRes.error].some(
-    (err) => err && isFeatureDisabledError(err),
+    (err) => err && isFeatureDisabledError(err)
   );
   if (featureDisabled) {
     return (
-      <EmptyState
-        title="Функция недоступна"
-        description="Правила автоматизации не включены для этого тенанта."
-      />
+      <EmptyState title="Функция недоступна" description="Правила автоматизации не включены для этого тенанта." />
     );
   }
 
@@ -211,10 +179,7 @@ const RulesPage = () => {
         title="Правила автоматизации"
         description="Событийные правила: условия и автоматические действия (задача, уведомление, webhook)."
         actions={
-          <Can
-            permission={PERMISSIONS.RULES_MANAGE}
-            fallback={<Button disabled>Новое правило</Button>}
-          >
+          <Can permission={PERMISSIONS.RULES_MANAGE} fallback={<Button disabled>Новое правило</Button>}>
             <RuleFormDialog
               trigger={<Button>Новое правило</Button>}
               eventTypes={eventTypesRes.data}
@@ -227,10 +192,7 @@ const RulesPage = () => {
       <ErrorState error={error ?? undefined} onRetry={reloadRules} />
       {loading ? <LoadingScreen label="Загрузка правил" /> : null}
       {!loading && !error && registry.total === 0 ? (
-        <EmptyState
-          title="Правил пока нет"
-          description="Создайте первое правило автоматизации."
-        />
+        <EmptyState title="Правил пока нет" description="Создайте первое правило автоматизации." />
       ) : null}
       {!loading && !error && registry.total > 0 ? (
         <RegistryTable

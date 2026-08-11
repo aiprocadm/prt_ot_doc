@@ -10,7 +10,7 @@ const renderPanel = (props: Parameters<typeof CommandCenterPanel>[0]) =>
   render(
     <MemoryRouter>
       <CommandCenterPanel {...props} />
-    </MemoryRouter>,
+    </MemoryRouter>
   );
 
 const data: OperationalDashboardDto = {
@@ -31,7 +31,7 @@ const data: OperationalDashboardDto = {
       affected_entity_type: null,
       affected_entity_id: null,
       created_at: "2026-06-15T00:00:00Z",
-      expires_at: null,
+      expires_at: null
     },
     {
       id: "a2",
@@ -44,7 +44,7 @@ const data: OperationalDashboardDto = {
       affected_entity_type: null,
       affected_entity_id: null,
       created_at: "2026-06-15T00:00:00Z",
-      expires_at: null,
+      expires_at: null
     },
     {
       id: "a3",
@@ -57,9 +57,9 @@ const data: OperationalDashboardDto = {
       affected_entity_type: null,
       affected_entity_id: null,
       created_at: "2026-06-15T00:00:00Z",
-      expires_at: null,
-    },
-  ],
+      expires_at: null
+    }
+  ]
 };
 
 describe("CommandCenterPanel", () => {
@@ -91,20 +91,14 @@ describe("CommandCenterPanel", () => {
   });
 
   it("renders empty state when there are no alerts", () => {
-    renderPanel({
-      data: { ...data, status: "ok", alerts: [], alert_count: {} },
-    });
-    expect(screen.getByTestId("command-center-empty")).toHaveTextContent(
-      "Нет активных алертов",
-    );
+    renderPanel({ data: { ...data, status: "ok", alerts: [], alert_count: {} } });
+    expect(screen.getByTestId("command-center-empty")).toHaveTextContent("Нет активных алертов");
   });
 
   it("renders error state and calls onRefresh", async () => {
     const onRefresh = vi.fn();
     renderPanel({ data: null, error: { message: "Network Error" }, onRefresh });
-    expect(screen.getByTestId("command-center-error")).toHaveTextContent(
-      "Network Error",
-    );
+    expect(screen.getByTestId("command-center-error")).toHaveTextContent("Network Error");
     await userEvent.click(screen.getByRole("button", { name: /Обновить/ }));
     expect(onRefresh).toHaveBeenCalledTimes(1);
   });
@@ -129,14 +123,12 @@ describe("CommandCenterPanel", () => {
           affected_entity_type: "committee_decision_task",
           affected_entity_id: null,
           created_at: "2026-06-15T00:00:00Z",
-          expires_at: null,
-        },
-      ],
+          expires_at: null
+        }
+      ]
     };
     renderPanel({ data: withCommittee });
     expect(screen.getByText("Задачи комитетов")).toBeInTheDocument();
-    expect(
-      screen.getByTestId("cc-category-committee_task"),
-    ).toBeInTheDocument();
+    expect(screen.getByTestId("cc-category-committee_task")).toBeInTheDocument();
   });
 });

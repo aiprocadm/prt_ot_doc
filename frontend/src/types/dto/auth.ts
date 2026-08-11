@@ -30,6 +30,7 @@ export type LoginResponseDto = AuthTokenPairDto;
 
 export type RefreshResponseDto = AuthTokenPairDto;
 
+
 export interface PermissionsResponseDto {
   roles: string[];
   permissions: string[];

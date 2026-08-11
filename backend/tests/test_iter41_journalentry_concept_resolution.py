@@ -52,13 +52,8 @@ _NEW_SHAPE_COHORT: list[tuple[str, str, bool]] = [
 # Model business cols (subset of _NEW_SHAPE_COHORT, sans mixins) that
 # the closed-loop audit check expects to find credited.
 _MODEL_BUSINESS_COLS = {
-    "journal_id",
-    "person_id",
-    "entry_type",
-    "entry_date",
-    "instructor",
-    "notes",
-    "metadata_json",
+    "journal_id", "person_id", "entry_type", "entry_date",
+    "instructor", "notes", "metadata_json",
 }
 
 # Cols that MUST NOT appear in the upgrade's new create_table (old shape).
@@ -135,9 +130,15 @@ def _column_call_in_create_table(create_call: ast.Call, column: str) -> ast.Call
     for arg in create_call.args[1:]:
         if not isinstance(arg, ast.Call):
             continue
-        if not (isinstance(arg.func, ast.Attribute) and arg.func.attr == "Column"):
+        if not (
+            isinstance(arg.func, ast.Attribute) and arg.func.attr == "Column"
+        ):
             continue
-        if arg.args and isinstance(arg.args[0], ast.Constant) and arg.args[0].value == column:
+        if (
+            arg.args
+            and isinstance(arg.args[0], ast.Constant)
+            and arg.args[0].value == column
+        ):
             return arg
     return None
 
@@ -189,9 +190,9 @@ def test_upgrade_drops_old_journalentry_before_recreating() -> None:
     assert len(drops) == 1, f"expected exactly 1 drop_table({_TABLE!r}), got {len(drops)}"
     assert len(creates) == 1, f"expected exactly 1 create_table({_TABLE!r}), got {len(creates)}"
     # Source-order: drop_table line < create_table line (proxy for ordering).
-    assert (
-        drops[0].lineno < creates[0].lineno
-    ), "drop_table must appear before create_table in upgrade source"
+    assert drops[0].lineno < creates[0].lineno, (
+        "drop_table must appear before create_table in upgrade source"
+    )
 
 
 def test_downgrade_drops_new_shape_then_recreates_old_shape() -> None:
@@ -212,23 +213,21 @@ def test_downgrade_drops_new_shape_then_recreates_old_shape() -> None:
 
 @pytest.mark.parametrize(("column", "_sa_type", "_nullable"), _NEW_SHAPE_COHORT)
 def test_upgrade_create_table_includes_column(
-    column: str,
-    _sa_type: str,
-    _nullable: bool,
+    column: str, _sa_type: str, _nullable: bool,
 ) -> None:
     tree = _migration_tree()
     upgrade = _upgrade_fn(tree)
     create_calls = _create_table_calls(upgrade, _TABLE)
     assert create_calls, f"no create_table({_TABLE!r}) in upgrade"
     col_call = _column_call_in_create_table(create_calls[0], column)
-    assert col_call is not None, f"upgrade create_table missing column {column!r}"
+    assert col_call is not None, (
+        f"upgrade create_table missing column {column!r}"
+    )
 
 
 @pytest.mark.parametrize(("column", "sa_type", "_nullable"), _NEW_SHAPE_COHORT)
 def test_upgrade_create_table_column_has_expected_sa_type(
-    column: str,
-    sa_type: str,
-    _nullable: bool,
+    column: str, sa_type: str, _nullable: bool,
 ) -> None:
     tree = _migration_tree()
     upgrade = _upgrade_fn(tree)
@@ -236,14 +235,14 @@ def test_upgrade_create_table_column_has_expected_sa_type(
     col_call = _column_call_in_create_table(create_calls[0], column)
     assert col_call is not None
     actual = _sa_type_attr_of(col_call)
-    assert actual == sa_type, f"{_TABLE}.{column}: expected sa.{sa_type}, AST shows sa.{actual}"
+    assert actual == sa_type, (
+        f"{_TABLE}.{column}: expected sa.{sa_type}, AST shows sa.{actual}"
+    )
 
 
 @pytest.mark.parametrize(("column", "_sa_type", "nullable"), _NEW_SHAPE_COHORT)
 def test_upgrade_create_table_column_nullable_matches_spec(
-    column: str,
-    _sa_type: str,
-    nullable: bool,
+    column: str, _sa_type: str, nullable: bool,
 ) -> None:
     tree = _migration_tree()
     upgrade = _upgrade_fn(tree)
@@ -254,9 +253,9 @@ def test_upgrade_create_table_column_nullable_matches_spec(
     for kw in col_call.keywords:
         if kw.arg == "nullable" and isinstance(kw.value, ast.Constant):
             nullable_kw = kw.value.value
-    assert (
-        nullable_kw is nullable
-    ), f"{_TABLE}.{column}: expected nullable={nullable}, AST shows {nullable_kw!r}"
+    assert nullable_kw is nullable, (
+        f"{_TABLE}.{column}: expected nullable={nullable}, AST shows {nullable_kw!r}"
+    )
 
 
 @pytest.mark.parametrize("banned_col", sorted(_OLD_SHAPE_BANNED_IN_UPGRADE))
@@ -267,9 +266,9 @@ def test_upgrade_create_table_does_not_carry_old_shape_columns(banned_col: str) 
     upgrade = _upgrade_fn(tree)
     create_calls = _create_table_calls(upgrade, _TABLE)
     assert create_calls
-    assert (
-        _column_call_in_create_table(create_calls[0], banned_col) is None
-    ), f"upgrade create_table must NOT carry old-shape column {banned_col!r}"
+    assert _column_call_in_create_table(create_calls[0], banned_col) is None, (
+        f"upgrade create_table must NOT carry old-shape column {banned_col!r}"
+    )
 
 
 def test_upgrade_entry_type_column_uses_journaltype_enum_create_false() -> None:
@@ -329,19 +328,19 @@ def test_upgrade_foreign_key_present_for_col(col: str, target: str) -> None:
         if not (isinstance(local_cols, ast.List) and isinstance(target_cols, ast.List)):
             continue
         local_names = [
-            elt.value
-            for elt in local_cols.elts
+            elt.value for elt in local_cols.elts
             if isinstance(elt, ast.Constant) and isinstance(elt.value, str)
         ]
         target_names = [
-            elt.value
-            for elt in target_cols.elts
+            elt.value for elt in target_cols.elts
             if isinstance(elt, ast.Constant) and isinstance(elt.value, str)
         ]
         if local_names == [col] and target_names == [target]:
             matched = True
             break
-    assert matched, f"upgrade create_table missing ForeignKeyConstraint([{col}], [{target}])"
+    assert matched, (
+        f"upgrade create_table missing ForeignKeyConstraint([{col}], [{target}])"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -365,7 +364,8 @@ def test_upgrade_unique_constraint_present() -> None:
             continue
         # Args are positional string literals (col names); kwarg name=...
         cols = [
-            a.value for a in arg.args if isinstance(a, ast.Constant) and isinstance(a.value, str)
+            a.value for a in arg.args
+            if isinstance(a, ast.Constant) and isinstance(a.value, str)
         ]
         name_kw = None
         for kw in arg.keywords:
@@ -421,16 +421,15 @@ def test_upgrade_creates_all_expected_indexes() -> None:
         if not isinstance(cols_node, ast.List):
             continue
         col_names = [
-            elt.value
-            for elt in cols_node.elts
+            elt.value for elt in cols_node.elts
             if isinstance(elt, ast.Constant) and isinstance(elt.value, str)
         ]
         found[idx_name] = col_names
     for idx_name, expected_cols in _EXPECTED_INDEXES:
         assert idx_name in found, f"missing create_index({idx_name!r}, {_TABLE!r}, ...)"
-        assert (
-            found[idx_name] == expected_cols
-        ), f"{idx_name}: cols expected {expected_cols}, AST shows {found[idx_name]}"
+        assert found[idx_name] == expected_cols, (
+            f"{idx_name}: cols expected {expected_cols}, AST shows {found[idx_name]}"
+        )
 
 
 # ---------------------------------------------------------------------------

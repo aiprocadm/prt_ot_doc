@@ -11,8 +11,8 @@ import { tokenStorage } from "@/api/tokenStorage";
 vi.mock("sonner", () => ({
   toast: {
     error: vi.fn(),
-    success: vi.fn(),
-  },
+    success: vi.fn()
+  }
 }));
 
 describe("apiClient", () => {
@@ -39,9 +39,7 @@ describe("apiClient", () => {
 
   it("uses актуальный tenant после переключения контура", async () => {
     const mock = new MockAdapter(apiClient);
-    mock
-      .onGet("/documents")
-      .reply((config) => [200, { tenant: config.headers?.["X-Tenant"] }]);
+    mock.onGet("/documents").reply((config) => [200, { tenant: config.headers?.["X-Tenant"] }]);
 
     tenantStorage.setTenant({ slug: "severstroy", site: "Северный кластер" });
     const first = await apiClient.get<{ tenant: string }>("/documents");
@@ -60,7 +58,7 @@ describe("apiClient", () => {
 
     await expect(apiClient.get("/documents")).rejects.toMatchObject({
       status: 0,
-      message: "Выберите контур перед выполнением запроса.",
+      message: "Выберите контур перед выполнением запроса."
     });
 
     mock.restore();
@@ -98,14 +96,12 @@ describe("apiClient", () => {
     tenantStorage.setTenant({ slug: "severstroy", site: "Северный кластер" });
 
     const mock = new MockAdapter(apiClient);
-    mock
-      .onGet("/documents")
-      .reply(409, { message: "Conflict", code: "CONFLICT" });
+    mock.onGet("/documents").reply(409, { message: "Conflict", code: "CONFLICT" });
 
     await expect(apiClient.get("/documents")).rejects.toMatchObject({
       status: 409,
       code: "CONFLICT",
-      message: "Conflict",
+      message: "Conflict"
     });
 
     mock.restore();
@@ -115,11 +111,8 @@ describe("apiClient", () => {
     const refreshUrl = `${appConfig.apiBaseUrl}/auth/refresh`;
     const nextAccessToken = [
       "header",
-      btoa(JSON.stringify({ exp: Math.floor(Date.now() / 1000) + 60 }))
-        .replace(/\+/g, "-")
-        .replace(/\//g, "_")
-        .replace(/=+$/g, ""),
-      "signature",
+      btoa(JSON.stringify({ exp: Math.floor(Date.now() / 1000) + 60 })).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, ""),
+      "signature"
     ].join(".");
 
     tokenStorage.setTokens({ accessToken: "expired-access", expiresIn: 10 });
@@ -128,11 +121,7 @@ describe("apiClient", () => {
     const apiMock = new MockAdapter(apiClient);
     const axiosMock = new MockAdapter(axios);
 
-    apiMock
-      .onGet("/documents")
-      .replyOnce(401)
-      .onGet("/documents")
-      .replyOnce(200, { ok: true });
+    apiMock.onGet("/documents").replyOnce(401).onGet("/documents").replyOnce(200, { ok: true });
     axiosMock.onPost(refreshUrl).reply((config) => {
       expect(config.headers?.["X-Tenant"]).toBe("demo");
       return [200, { access_token: nextAccessToken }];
@@ -155,18 +144,18 @@ describe("apiClient", () => {
     const axiosMock = new MockAdapter(axios);
 
     apiMock.onGet("/documents").replyOnce(401);
-    axiosMock
-      .onPost(refreshUrl)
-      .reply(200, { access_token: "should-not-be-used" });
+    axiosMock.onPost(refreshUrl).reply(200, { access_token: "should-not-be-used" });
 
     await expect(apiClient.get("/documents")).rejects.toMatchObject({
-      status: 401,
+      status: 401
     });
     expect(axiosMock.history.post).toHaveLength(0);
 
     apiMock.restore();
     axiosMock.restore();
   });
+
+
 
   it("normalizes structured backend errors including contract metadata", async () => {
     tenantStorage.setTenant({ slug: "severstroy", site: "Северный кластер" });
@@ -177,11 +166,9 @@ describe("apiClient", () => {
       type: "validation",
       message: "Validation failed",
       details: { entity: "document" },
-      field_errors: [
-        { field: "template_code", message: "Required", code: "required" },
-      ],
+      field_errors: [{ field: "template_code", message: "Required", code: "required" }],
       correlation_id: "corr-123",
-      timestamp: "2026-03-19T00:00:00Z",
+      timestamp: "2026-03-19T00:00:00Z"
     });
 
     await expect(apiClient.get("/documents")).rejects.toMatchObject({
@@ -191,9 +178,7 @@ describe("apiClient", () => {
       message: "Validation failed",
       correlation_id: "corr-123",
       timestamp: "2026-03-19T00:00:00Z",
-      field_errors: [
-        { field: "template_code", message: "Required", code: "required" },
-      ],
+      field_errors: [{ field: "template_code", message: "Required", code: "required" }]
     });
 
     mock.restore();
@@ -272,7 +257,7 @@ describe("apiClient: истёкший контекст клиента (BIZ-49 с
 
     const mock = new MockAdapter(apiClient);
     mock.onGet("/persons").reply(403, {
-      detail: { code: "MANAGED_CLIENT_CONTEXT_EXPIRED", message: "Срок истёк" },
+      detail: { code: "MANAGED_CLIENT_CONTEXT_EXPIRED", message: "Срок истёк" }
     });
 
     await expect(apiClient.get("/persons")).rejects.toBeDefined();
@@ -286,9 +271,7 @@ describe("apiClient: истёкший контекст клиента (BIZ-49 с
     managedClientStorage.set({ clientId: "mc1", clientName: "Ромашка" });
 
     const mock = new MockAdapter(apiClient);
-    mock
-      .onGet("/persons")
-      .reply(403, { detail: { code: "FORBIDDEN", message: "Нет прав" } });
+    mock.onGet("/persons").reply(403, { detail: { code: "FORBIDDEN", message: "Нет прав" } });
 
     await expect(apiClient.get("/persons")).rejects.toBeDefined();
     expect(managedClientStorage.get()).not.toBeNull();

@@ -40,7 +40,9 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 __all__ = ["SecurityHeadersMiddleware", "DEFAULT_API_CSP"]
 
 # Строгая политика для JSON-API: ответы не подгружают ничего и не встраиваются.
-DEFAULT_API_CSP = "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
+DEFAULT_API_CSP = (
+    "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
+)
 
 _STATIC_HEADERS: tuple[tuple[bytes, bytes], ...] = (
     (b"x-content-type-options", b"nosniff"),
@@ -97,7 +99,9 @@ class SecurityHeadersMiddleware:
                 # у ответа может быть осознанно другая политика (например, у
                 # отдаваемого файла).
                 present = {name.lower() for name, _ in headers}
-                headers.extend((name, value) for name, value in extra if name not in present)
+                headers.extend(
+                    (name, value) for name, value in extra if name not in present
+                )
             await send(message)
 
         await self.app(scope, receive, _send)

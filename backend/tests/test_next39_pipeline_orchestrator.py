@@ -123,9 +123,7 @@ async def test_pipeline_full_run_and_retry_failed_step(db_session) -> None:
 
     convert_step = (
         await db_session.execute(
-            select(DocumentJobStep).where(
-                DocumentJobStep.job_id == job.id, DocumentJobStep.step_key == "convert_pdf"
-            )
+            select(DocumentJobStep).where(DocumentJobStep.job_id == job.id, DocumentJobStep.step_key == "convert_pdf")
         )
     ).scalar_one()
     assert convert_step.status == JobStepStatus.FAILED.value
@@ -134,11 +132,7 @@ async def test_pipeline_full_run_and_retry_failed_step(db_session) -> None:
     resumed = await orchestrator.run_job(job_id=job.id)
     assert resumed.status == "success"
 
-    steps = (
-        (await db_session.execute(select(DocumentJobStep).where(DocumentJobStep.job_id == job.id)))
-        .scalars()
-        .all()
-    )
+    steps = (await db_session.execute(select(DocumentJobStep).where(DocumentJobStep.job_id == job.id))).scalars().all()
     assert all(step.status == JobStepStatus.SUCCESS.value for step in steps)
     assert resumed.output_payload_json is not None
 
@@ -160,11 +154,7 @@ async def test_cancel_marks_queued_steps_as_canceled(db_session) -> None:
     canceled = await orchestrator.cancel_job(job_id=job.id)
     assert canceled.status == "canceled"
 
-    steps = (
-        (await db_session.execute(select(DocumentJobStep).where(DocumentJobStep.job_id == job.id)))
-        .scalars()
-        .all()
-    )
+    steps = (await db_session.execute(select(DocumentJobStep).where(DocumentJobStep.job_id == job.id))).scalars().all()
     assert {s.status for s in steps} == {JobStepStatus.CANCELED.value}
 
 
@@ -225,17 +215,7 @@ async def test_run_step_is_skipped_when_job_canceled(db_session) -> None:
         idempotency_key="idem-7",
         request_hash="hash-7",
     )
-    steps = (
-        (
-            await db_session.execute(
-                select(DocumentJobStep)
-                .where(DocumentJobStep.job_id == job.id)
-                .order_by(DocumentJobStep.order.asc())
-            )
-        )
-        .scalars()
-        .all()
-    )
+    steps = (await db_session.execute(select(DocumentJobStep).where(DocumentJobStep.job_id == job.id).order_by(DocumentJobStep.order.asc()))).scalars().all()
     first_step = steps[0]
 
     await orchestrator.cancel_job(job_id=job.id)

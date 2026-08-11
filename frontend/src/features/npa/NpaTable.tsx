@@ -7,8 +7,7 @@ import type { NpaDto } from "@/types/dto/npa";
 import { formatDate } from "@/utils/datetime";
 
 export const NpaTable = () => {
-  const { items, pagination, setPage, setPageSize, list, loading } =
-    useNpaStore();
+  const { items, pagination, setPage, setPageSize, list, loading } = useNpaStore();
 
   const columns = useMemo<ColumnDef<NpaDto>[]>(
     () => [
@@ -16,38 +15,33 @@ export const NpaTable = () => {
         accessorKey: "title",
         header: "Документ",
         cell: ({ row }) => (
-          <a
-            href={row.original.link ?? "#"}
-            className="text-primary hover:underline"
-            target="_blank"
-            rel="noreferrer"
-          >
+          <a href={row.original.link ?? "#"} className="text-primary hover:underline" target="_blank" rel="noreferrer">
             {row.original.title}
           </a>
-        ),
+        )
       },
       {
         accessorKey: "code",
         header: "Номер",
-        cell: ({ row }) => row.original.code ?? "—",
+        cell: ({ row }) => row.original.code ?? "—"
       },
       {
         accessorKey: "issuer",
         header: "Орган",
-        cell: ({ row }) => row.original.issuer ?? "—",
+        cell: ({ row }) => row.original.issuer ?? "—"
       },
       {
         accessorKey: "status",
         header: "Статус",
-        cell: ({ row }) => row.original.status,
+        cell: ({ row }) => row.original.status
       },
       {
         accessorKey: "effective_at",
         header: "Актуально на",
-        cell: ({ row }) => formatDate(row.original.effective_at),
-      },
+        cell: ({ row }) => formatDate(row.original.effective_at)
+      }
     ],
-    [],
+    []
   );
 
   return (

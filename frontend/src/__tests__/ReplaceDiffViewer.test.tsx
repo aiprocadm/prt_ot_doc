@@ -17,10 +17,10 @@ describe("ReplaceDiffViewer", () => {
             before: "ООО Ромашка",
             after: "АО Ромашка",
             context: "ctx",
-            match_count: 3,
-          },
+            match_count: 3
+          }
         ]}
-      />,
+      />
     );
 
     expect(screen.getByText(/совпадений: 3/i)).toBeInTheDocument();

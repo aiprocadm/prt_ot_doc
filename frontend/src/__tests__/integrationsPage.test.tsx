@@ -69,16 +69,7 @@ describe("IntegrationsPage", () => {
         return Promise.resolve({ data: { items: [] } });
       }
       if (url === "/integrations/readiness") {
-        return Promise.resolve({
-          data: {
-            providers: [],
-            webhooks: {
-              configured_total: 0,
-              enabled_total: 0,
-              delivery_failed_total: 1,
-            },
-          },
-        });
+        return Promise.resolve({ data: { providers: [], webhooks: { configured_total: 0, enabled_total: 0, delivery_failed_total: 1 } } });
       }
       throw new Error(`Unexpected GET ${url}`);
     });
@@ -119,16 +110,7 @@ describe("IntegrationsPage", () => {
         });
       }
       if (url === "/integrations/readiness") {
-        return Promise.resolve({
-          data: {
-            providers: [],
-            webhooks: {
-              configured_total: 0,
-              enabled_total: 0,
-              delivery_failed_total: 0,
-            },
-          },
-        });
+        return Promise.resolve({ data: { providers: [], webhooks: { configured_total: 0, enabled_total: 0, delivery_failed_total: 0 } } });
       }
       throw new Error(`Unexpected GET ${url}`);
     });
@@ -139,9 +121,7 @@ describe("IntegrationsPage", () => {
     fireEvent.click(await screen.findByRole("button", { name: /в очередь/i }));
 
     await waitFor(() => {
-      expect(postMock).toHaveBeenCalledWith(
-        "/admin/outbox/events/event-1/requeue",
-      );
+      expect(postMock).toHaveBeenCalledWith("/admin/outbox/events/event-1/requeue");
     });
     await waitFor(() => {
       expect(toast.error).toHaveBeenCalledWith("requeue failed");

@@ -7,23 +7,12 @@ vi.mock("@/api/client", () => ({
 }));
 
 describe("soutApi import methods", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
+  beforeEach(() => { vi.clearAllMocks(); });
 
   it("previewImport posts FormData to the preview endpoint", async () => {
     const { apiClient } = await import("@/api/client");
     (apiClient.post as ReturnType<typeof vi.fn>).mockResolvedValue({
-      data: {
-        campaign_id: "c1",
-        rows: [],
-        new_count: 0,
-        changed_count: 0,
-        unchanged_count: 0,
-        removed_count: 0,
-        error_count: 0,
-        can_apply: true,
-      },
+      data: { campaign_id: "c1", rows: [], new_count: 0, changed_count: 0, unchanged_count: 0, removed_count: 0, error_count: 0, can_apply: true },
     });
     const file = new File(["x"], "r.csv", { type: "text/csv" });
 
@@ -39,14 +28,7 @@ describe("soutApi import methods", () => {
   it("applyImport posts FormData to the apply endpoint", async () => {
     const { apiClient } = await import("@/api/client");
     (apiClient.post as ReturnType<typeof vi.fn>).mockResolvedValue({
-      data: {
-        campaign_id: "c1",
-        created: 1,
-        updated: 0,
-        skipped: 0,
-        removed_detected: 0,
-        errors: [],
-      },
+      data: { campaign_id: "c1", created: 1, updated: 0, skipped: 0, removed_detected: 0, errors: [] },
     });
     const file = new File(["x"], "r.csv", { type: "text/csv" });
 

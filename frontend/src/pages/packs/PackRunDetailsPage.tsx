@@ -20,9 +20,7 @@ interface RunItem {
 const PackRunDetailsPage = () => {
   const { id = "" } = useParams();
   const [items, setItems] = useState<RunItem[]>([]);
-  const [timeline, setTimeline] = useState<
-    Array<{ id: string; level: string; message: string }>
-  >([]);
+  const [timeline, setTimeline] = useState<Array<{ id: string; level: string; message: string }>>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<ApiError | null>(null);
 
@@ -32,9 +30,7 @@ const PackRunDetailsPage = () => {
     try {
       const [itemResp, timelineResp] = await Promise.all([
         packsApi.getRunItems<RunItem>(id),
-        packsApi.getRunTimeline<{ id: string; level: string; message: string }>(
-          id,
-        ),
+        packsApi.getRunTimeline<{ id: string; level: string; message: string }>(id)
       ]);
       setItems(itemResp);
       setTimeline(timelineResp);
@@ -73,9 +69,7 @@ const PackRunDetailsPage = () => {
           <CardTitle>Строки запуска пакета</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2 text-sm">
-          <Button variant="outline" onClick={() => void retryFailed()}>
-            Повторить сбойные
-          </Button>
+          <Button variant="outline" onClick={() => void retryFailed()}>Повторить сбойные</Button>
           {items.length === 0 ? (
             <EmptyState
               title="Строк запуска пакета нет"
@@ -83,9 +77,7 @@ const PackRunDetailsPage = () => {
             />
           ) : (
             items.map((item) => (
-              <div key={item.id}>
-                {item.row_no}. {item.file_name} — {item.status}
-              </div>
+              <div key={item.id}>{item.row_no}. {item.file_name} — {item.status}</div>
             ))
           )}
         </CardContent>
@@ -102,9 +94,7 @@ const PackRunDetailsPage = () => {
             />
           ) : (
             timeline.map((entry) => (
-              <div key={entry.id}>
-                {entry.level}: {entry.message}
-              </div>
+              <div key={entry.id}>{entry.level}: {entry.message}</div>
             ))
           )}
         </CardContent>

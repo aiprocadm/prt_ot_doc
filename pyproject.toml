@@ -39,9 +39,6 @@ ignore = ["E501"]
 # importing the app (settings are read at import time), so its imports cannot
 # sit at the top of the file — E402 there is intentional, not a defect.
 "tests/conftest.py" = ["E402"]
-# Файл целиком skip-нут на уровне модуля (ждёт закрытия Phase 2.1): тесты пишут
-# будущий API, импортов для него ещё нет — F821 там ожидаем.
-"backend/tests/test_operational_dashboard.py" = ["F821", "F841"]
 
 [tool.black]
 line-length = 100
@@ -49,8 +46,6 @@ target-version = ["py312"]
 
 [tool.mypy]
 python_version = "3.12"
-# pydantic-плагин: без него mypy не понимает @computed_field поверх @property.
-plugins = ["pydantic.mypy"]
 ignore_missing_imports = true
 # Основной объём типов: services + schemas. Дополнительный «staged» слой в CI:
 # `scripts/ci/static_gates.sh` — tenant_row_guard + tenant_row_http с --follow-imports=skip.

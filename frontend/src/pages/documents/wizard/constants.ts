@@ -8,7 +8,7 @@ export const wizardSteps = [
   { id: 7, title: "Запуск", description: "Batch/queue/idempotency" },
   { id: 8, title: "Контроль", description: "Предпросмотр и ошибки" },
   { id: 9, title: "Экспорт", description: "ZIP/PDF" },
-  { id: 10, title: "Архив", description: "Архив + ЭДО (MVP)" },
+  { id: 10, title: "Архив", description: "Архив + ЭДО (MVP)" }
 ] as const;
 
 export const previewSectionCards = [
@@ -17,5 +17,5 @@ export const previewSectionCards = [
   { key: "header_even", label: "Header even" },
   { key: "footer_first", label: "Footer first" },
   { key: "footer_odd", label: "Footer odd" },
-  { key: "footer_even", label: "Footer even" },
+  { key: "footer_even", label: "Footer even" }
 ] as const;

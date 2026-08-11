@@ -8,16 +8,16 @@ type RenderWithRouterOptions = {
 
 export const renderWithRouter = (
   ui: ReactElement,
-  options?: RenderWithRouterOptions,
+  options?: RenderWithRouterOptions
 ) =>
   render(
     <MemoryRouter
       future={{
         v7_startTransition: true,
-        v7_relativeSplatPath: true,
+        v7_relativeSplatPath: true
       }}
       {...options?.routerProps}
     >
       {ui}
-    </MemoryRouter>,
+    </MemoryRouter>
   );

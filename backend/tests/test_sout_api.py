@@ -3,7 +3,6 @@
 Follows the repo convention (see test_committees_api.py): patch the route
 module's getters with AsyncMock — no live DB.
 """
-
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -29,18 +28,10 @@ def _tenant():
 def _campaign(status=SoutCampaignStatus.PLANNED):
     now = datetime(2026, 6, 26, tzinfo=timezone.utc)
     return SimpleNamespace(
-        id="c1",
-        tenant_id="tenant-1",
-        name="СОУТ 2026",
-        expert_org_name=None,
-        report_number=None,
-        report_date=None,
-        status=status,
-        planned_date=None,
-        completed_date=None,
-        created_at=now,
-        updated_at=now,
-        deleted_at=None,
+        id="c1", tenant_id="tenant-1", name="СОУТ 2026",
+        expert_org_name=None, report_number=None, report_date=None,
+        status=status, planned_date=None, completed_date=None,
+        created_at=now, updated_at=now, deleted_at=None,
     )
 
 
@@ -122,32 +113,17 @@ async def test_add_workplace_allowed_on_open_campaign(monkeypatch):
 def _workplace():
     now = datetime(2026, 6, 26, tzinfo=timezone.utc)
     return SimpleNamespace(
-        id="w1",
-        tenant_id="tenant-1",
-        campaign_id="c1",
-        workplace_code="РМ-001",
-        position_name="Сварщик",
-        person_id=None,
-        position_id=None,
-        assessed_class=None,
-        assessment_date=None,
-        next_assessment_date=None,
-        created_at=now,
-        updated_at=now,
-        deleted_at=None,
+        id="w1", tenant_id="tenant-1", campaign_id="c1",
+        workplace_code="РМ-001", position_name="Сварщик", person_id=None,
+        position_id=None, assessed_class=None, assessment_date=None,
+        next_assessment_date=None, created_at=now, updated_at=now, deleted_at=None,
     )
 
 
 def _factor():
     return SimpleNamespace(
-        id="f1",
-        tenant_id="tenant-1",
-        workplace_id="w1",
-        hazard_id=None,
-        code="4.50",
-        name="Шум",
-        measured_class=None,
-        note=None,
+        id="f1", tenant_id="tenant-1", workplace_id="w1", hazard_id=None,
+        code="4.50", name="Шум", measured_class=None, note=None,
     )
 
 
@@ -236,13 +212,17 @@ async def test_norm_suggestions_with_position(monkeypatch):
     # A factor linked to a hazard that has no existing PPE norm → expect a ppe suggestion.
     factor = _factor()
     factor.hazard_id = "haz-1"
-    monkeypatch.setattr(routes, "_load_workplace_factors", AsyncMock(return_value=[factor]))
+    monkeypatch.setattr(
+        routes, "_load_workplace_factors", AsyncMock(return_value=[factor])
+    )
     monkeypatch.setattr(
         routes,
         "_load_hazard_meta",
         AsyncMock(return_value={"haz-1": ("Шум", "29")}),
     )
-    monkeypatch.setattr(routes, "_load_existing_ppe_pairs", AsyncMock(return_value=set()))
+    monkeypatch.setattr(
+        routes, "_load_existing_ppe_pairs", AsyncMock(return_value=set())
+    )
     monkeypatch.setattr(
         routes,
         "_load_medical_inputs",

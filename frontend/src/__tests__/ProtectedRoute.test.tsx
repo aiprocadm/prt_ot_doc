@@ -17,7 +17,7 @@ describe("ProtectedRoute", () => {
       loading: false,
       error: null,
       isAuthenticated: false,
-      initialized: false,
+      initialized: false
     });
   });
 
@@ -25,15 +25,13 @@ describe("ProtectedRoute", () => {
     render(
       <MemoryRouter initialEntries={["/secure"]}>
         <Routes>
-          <Route
-            element={<ProtectedRoute permission={PERMISSIONS.DOCUMENT_VIEW} />}
-          >
+          <Route element={<ProtectedRoute permission={PERMISSIONS.DOCUMENT_VIEW} />}>
             <Route path="/secure" element={<PrivatePage />} />
           </Route>
           <Route path="/auth/login" element={<LoginPage />} />
           <Route path="/no-access" element={<AccessDeniedPage />} />
         </Routes>
-      </MemoryRouter>,
+      </MemoryRouter>
     );
 
   it("показывает индикатор загрузки до инициализации", () => {
@@ -58,8 +56,8 @@ describe("ProtectedRoute", () => {
         email: "user@example.com",
         full_name: "User",
         roles: ["ot_specialist"],
-        permissions: [PERMISSIONS.DOCUMENT_VIEW],
-      },
+        permissions: [PERMISSIONS.DOCUMENT_VIEW]
+      }
     });
     renderWithRouter();
     expect(screen.getByText("Приватный контент")).toBeInTheDocument();
@@ -76,8 +74,8 @@ describe("ProtectedRoute", () => {
         email: "user@example.com",
         full_name: "User",
         roles: ["worker"],
-        permissions: [PERMISSIONS.DASHBOARD_VIEW],
-      },
+        permissions: [PERMISSIONS.DASHBOARD_VIEW]
+      }
     });
     renderWithRouter();
     expect(screen.getByText("Доступ ограничен")).toBeInTheDocument();

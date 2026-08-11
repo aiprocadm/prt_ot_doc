@@ -5,20 +5,20 @@ import { describe, expect, it, vi } from "vitest";
 
 const { getSnapshotMock, listCompaniesMock } = vi.hoisted(() => ({
   getSnapshotMock: vi.fn(),
-  listCompaniesMock: vi.fn(),
+  listCompaniesMock: vi.fn()
 }));
 
 vi.mock("@/api/crmFinance", () => ({
   crmFinanceApi: {
-    getSnapshot: getSnapshotMock,
-  },
+    getSnapshot: getSnapshotMock
+  }
 }));
 
 vi.mock("@/stores/companies", () => ({
   useCompaniesStore: () => ({
     items: [{ id: "company-1", name: "АО ТехПром" }],
-    list: listCompaniesMock,
-  }),
+    list: listCompaniesMock
+  })
 }));
 
 import CrmFinancePage from "@/pages/crm-finance/CrmFinancePage";
@@ -36,43 +36,19 @@ describe("CrmFinancePage", () => {
           status: "active",
           total_amount: 1480000,
           currency: "RUB",
-          valid_until: "2026-12-31",
-        },
+          valid_until: "2026-12-31"
+        }
       ],
-      orders: [
-        {
-          id: "order-1",
-          contract_id: "contract-1",
-          order_number: "ORD-10",
-          status: "approved",
-          total_amount: 1480000,
-          currency: "RUB",
-        },
-      ],
-      invoices: [
-        {
-          id: "invoice-1",
-          contract_id: "contract-1",
-          order_id: "order-1",
-          invoice_number: "INV-1",
-          status: "paid",
-          total_amount: 1480000,
-          currency: "RUB",
-          due_at: "2026-04-01",
-          paid_at: "2026-03-20",
-        },
-      ],
-      billing: {
-        subscription_status: "active",
-        plan: { code: "pro", name: "Pro" },
-      },
+      orders: [{ id: "order-1", contract_id: "contract-1", order_number: "ORD-10", status: "approved", total_amount: 1480000, currency: "RUB" }],
+      invoices: [{ id: "invoice-1", contract_id: "contract-1", order_id: "order-1", invoice_number: "INV-1", status: "paid", total_amount: 1480000, currency: "RUB", due_at: "2026-04-01", paid_at: "2026-03-20" }],
+      billing: { subscription_status: "active", plan: { code: "pro", name: "Pro" } }
     });
     listCompaniesMock.mockResolvedValue(undefined);
 
     render(
       <MemoryRouter>
         <CrmFinancePage />
-      </MemoryRouter>,
+      </MemoryRouter>
     );
 
     await waitFor(() => {
@@ -84,18 +60,13 @@ describe("CrmFinancePage", () => {
   });
 
   it("shows empty state when no finance data exists", async () => {
-    getSnapshotMock.mockResolvedValue({
-      contracts: [],
-      orders: [],
-      invoices: [],
-      billing: null,
-    });
+    getSnapshotMock.mockResolvedValue({ contracts: [], orders: [], invoices: [], billing: null });
     listCompaniesMock.mockResolvedValue(undefined);
 
     render(
       <MemoryRouter>
         <CrmFinancePage />
-      </MemoryRouter>,
+      </MemoryRouter>
     );
 
     await waitFor(() => {
@@ -115,7 +86,7 @@ describe("CrmFinancePage", () => {
           status: "active",
           total_amount: 1480000,
           currency: "RUB",
-          valid_until: null,
+          valid_until: null
         },
         {
           id: "contract-2",
@@ -126,12 +97,12 @@ describe("CrmFinancePage", () => {
           status: "draft",
           total_amount: 640000,
           currency: "RUB",
-          valid_until: null,
-        },
+          valid_until: null
+        }
       ],
       orders: [],
       invoices: [],
-      billing: null,
+      billing: null
     });
     listCompaniesMock.mockResolvedValue(undefined);
     const user = userEvent.setup();
@@ -139,14 +110,11 @@ describe("CrmFinancePage", () => {
     render(
       <MemoryRouter>
         <CrmFinancePage />
-      </MemoryRouter>,
+      </MemoryRouter>
     );
 
     await screen.findByText("Пакет Ростехнадзор");
-    await user.type(
-      screen.getByPlaceholderText(/поиск по договору/i),
-      "Экология",
-    );
+    await user.type(screen.getByPlaceholderText(/поиск по договору/i), "Экология");
 
     expect(screen.getByText("Пакет Экология")).toBeInTheDocument();
     expect(screen.queryByText("Пакет Ростехнадзор")).not.toBeInTheDocument();

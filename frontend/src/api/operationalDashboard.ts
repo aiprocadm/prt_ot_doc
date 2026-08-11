@@ -45,9 +45,7 @@ export const operationalDashboardApi = {
    * (same mechanism the health contour relies on).
    */
   getDashboard: async (): Promise<OperationalDashboardDto> => {
-    const response = await apiClient.get<OperationalDashboardDto>(
-      "/operational/dashboard",
-    );
+    const response = await apiClient.get<OperationalDashboardDto>("/operational/dashboard");
     return response.data;
-  },
+  }
 };

@@ -72,20 +72,6 @@ def test_privileged_role_is_fatal_when_enforcing(privileges: DatabaseRolePrivile
     assert "MIGRATION_DATABASE_URL" in str(excinfo.value)
 
 
-@pytest.fixture(autouse=True)
-def _capture_rls_logger(caplog: pytest.LogCaptureFixture):
-    """Цепляем обработчик caplog НАПРЯМУЮ к целевому логгеру: путь через root
-    зависит от состояния, которое оставляют соседние тесты воркера (боевой
-    logging-конфиг, propagate, уровни) — в CI записи терялись."""
-    lg = logging.getLogger("app.db.rls_runtime")
-    prev_disabled = lg.disabled
-    lg.disabled = False
-    lg.addHandler(caplog.handler)
-    yield
-    lg.removeHandler(caplog.handler)
-    lg.disabled = prev_disabled
-
-
 def test_privileged_role_only_warns_when_not_enforcing(
     caplog: pytest.LogCaptureFixture,
 ) -> None:

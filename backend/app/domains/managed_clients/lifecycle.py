@@ -17,7 +17,6 @@
 from __future__ import annotations
 
 import enum
-import re
 from datetime import date
 
 __all__ = [
@@ -27,7 +26,6 @@ __all__ = [
     "contract_days_left",
     "is_contract_expiring",
     "validate_contract_transition",
-    "validate_conversion_to_dedicated",
     "validate_mode_binding",
 ]
 
@@ -110,38 +108,3 @@ def is_contract_expiring(
     if days is None:
         return False
     return days <= horizon_days
-
-
-#: Слаг попадает в имя схемы БД (``tenant_{slug}``) и в заголовок ``X-Tenant`` —
-#: формат обязан быть безопасным для обоих применений.
-_TENANT_SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{1,62}$")
-
-
-def validate_conversion_to_dedicated(
-    *,
-    mode: ManagedClientMode,
-    contract_status: ContractStatus,
-    target_slug: str,
-) -> None:
-    """Правила перевода Lightweight → Dedicated (разд. 49.1).
-
-    * переводится только Lightweight: у Dedicated арендатор уже есть, и второй
-      перевод означал бы ДВА арендатора с непонятно чьей историей;
-    * расторгнутого клиента не переводят: перевод — часть живого ведения,
-      а не операция над архивом;
-    * слаг проверяется до создания арендатора: битое имя схемы БД всплыло бы
-      только при первом обращении к данным клиента.
-    """
-
-    if mode is ManagedClientMode.DEDICATED:
-        raise ManagedClientTransitionError(
-            "Клиент уже ведётся в собственном арендаторе — повторный перевод невозможен"
-        )
-    if contract_status is ContractStatus.TERMINATED:
-        raise ManagedClientTransitionError(
-            "Клиент с расторгнутым договором не переводится: перевод — часть живого ведения"
-        )
-    if not _TENANT_SLUG_RE.fullmatch(target_slug):
-        raise ManagedClientTransitionError(
-            "Слаг арендатора: строчные латинские буквы/цифры/дефис/подчёркивание, 2-63 символа"
-        )

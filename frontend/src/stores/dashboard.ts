@@ -4,10 +4,7 @@ import { immer } from "zustand/middleware/immer";
 import { dashboardApi } from "@/api/dashboard";
 import { apiClient } from "@/api/client";
 import type { ApiError } from "@/types/dto/common";
-import type {
-  DashboardOperationalSnapshotDto,
-  DashboardSummaryDto,
-} from "@/types/dto/dashboard";
+import type { DashboardOperationalSnapshotDto, DashboardSummaryDto } from "@/types/dto/dashboard";
 
 interface DashboardState {
   summary: DashboardSummaryDto | null;
@@ -35,8 +32,7 @@ export const useDashboardStore = create<DashboardState>()(
         state.error = null;
       });
       try {
-        const { data } =
-          await apiClient.get<DashboardSummaryDto>("/dashboard/summary");
+        const { data } = await apiClient.get<DashboardSummaryDto>("/dashboard/summary");
         set((state) => {
           state.summary = data;
         });
@@ -77,8 +73,8 @@ export const useDashboardStore = create<DashboardState>()(
         loading: false,
         operationalLoading: false,
         error: null,
-        operationalError: null,
+        operationalError: null
       }));
-    },
-  })),
+    }
+  }))
 );

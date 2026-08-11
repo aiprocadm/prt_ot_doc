@@ -7,12 +7,12 @@ import { managedClientStorage } from "@/api/managedClientStorage";
 const api = vi.hoisted(() => ({
   my: vi.fn(),
   enterContext: vi.fn(),
-  leaveContext: vi.fn(),
+  leaveContext: vi.fn()
 }));
 
 vi.mock("@/api/managedClients", async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
-  managedClientsApi: api,
+  managedClientsApi: api
 }));
 
 import { ClientContextSwitcher } from "@/components/common/ClientContextSwitcher";
@@ -23,24 +23,21 @@ const CLIENTS = [
     client_name: "ООО Ромашка",
     mode: "lightweight" as const,
     all_modules: true,
-    modules: [],
+    modules: []
   },
   {
     client_id: "mc2",
     client_name: "АО Крупный",
     mode: "dedicated" as const,
     all_modules: false,
-    modules: ["documents"],
-  },
+    modules: ["documents"]
+  }
 ];
 
 beforeEach(() => {
   managedClientStorage.clear();
   Object.values(api).forEach((fn) => fn.mockReset());
-  api.my.mockResolvedValue({
-    items: CLIENTS,
-    scopedSections: ["Люди", "Медосмотры", "СИЗ", "Обучение", "Документы"],
-  });
+  api.my.mockResolvedValue({ items: CLIENTS, scopedSections: ["Люди", "Медосмотры", "СИЗ", "Обучение", "Документы"] });
   api.enterContext.mockResolvedValue({
     client_id: "mc1",
     client_name: "ООО Ромашка",
@@ -49,7 +46,7 @@ beforeEach(() => {
     modules: [],
     audit_recorded: true,
     scoped_sections: ["Люди", "Медосмотры", "СИЗ", "Обучение", "Документы"],
-    expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+    expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString()
   });
   api.leaveContext.mockResolvedValue(undefined);
 });
@@ -57,33 +54,22 @@ beforeEach(() => {
 describe("ClientContextSwitcher", () => {
   it("показывает мои клиенты для выбора", async () => {
     render(<ClientContextSwitcher />);
-    await waitFor(() =>
-      expect(screen.getByTestId("client-context-switcher")).toBeInTheDocument(),
-    );
-    expect(
-      screen.getByRole("option", { name: "ООО Ромашка" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("option", { name: "АО Крупный" }),
-    ).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId("client-context-switcher")).toBeInTheDocument());
+    expect(screen.getByRole("option", { name: "ООО Ромашка" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "АО Крупный" })).toBeInTheDocument();
   });
 
   it("вход в контекст подтверждается сервером до записи локально", async () => {
     const user = userEvent.setup();
     render(<ClientContextSwitcher />);
-    await waitFor(() =>
-      expect(screen.getByTestId("client-context-switcher")).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByTestId("client-context-switcher")).toBeInTheDocument());
 
-    await user.selectOptions(
-      screen.getByLabelText("Работать от имени клиента"),
-      "mc1",
-    );
+    await user.selectOptions(screen.getByLabelText("Работать от имени клиента"), "mc1");
 
     await waitFor(() => expect(api.enterContext).toHaveBeenCalledWith("mc1"));
     expect(managedClientStorage.get()).toMatchObject({
       clientId: "mc1",
-      clientName: "ООО Ромашка",
+      clientName: "ООО Ромашка"
     });
     // Срок приезжает с сервера: считать его на клиенте значит разъехаться
     // с сервером на часовых поясах и подведённых часах.
@@ -91,28 +77,18 @@ describe("ClientContextSwitcher", () => {
   });
 
   it("отказ сервера не оставляет ложный контекст", async () => {
-    api.enterContext.mockRejectedValue({
-      status: 403,
-      message: "Нет доступа к этому клиенту",
-    });
+    api.enterContext.mockRejectedValue({ status: 403, message: "Нет доступа к этому клиенту" });
     const user = userEvent.setup();
     render(<ClientContextSwitcher />);
-    await waitFor(() =>
-      expect(screen.getByTestId("client-context-switcher")).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByTestId("client-context-switcher")).toBeInTheDocument());
 
-    await user.selectOptions(
-      screen.getByLabelText("Работать от имени клиента"),
-      "mc1",
-    );
+    await user.selectOptions(screen.getByLabelText("Работать от имени клиента"), "mc1");
 
     await waitFor(() => expect(api.enterContext).toHaveBeenCalled());
     // локально ничего не записано — интерфейс не показывает работу «от имени»,
     // которой на сервере не случилось
     expect(managedClientStorage.get()).toBeNull();
-    expect(
-      screen.queryByTestId("client-context-banner"),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByTestId("client-context-banner")).not.toBeInTheDocument();
   });
 
   it("активный контекст показан ЗАМЕТНЫМ постоянным индикатором", async () => {
@@ -145,15 +121,11 @@ describe("ClientContextSwitcher", () => {
     managedClientStorage.set({ clientId: "mc1", clientName: "ООО Ромашка" });
     render(<ClientContextSwitcher onContextChange={onChange} />);
 
-    await user.click(
-      await screen.findByRole("button", { name: "Выйти из контекста" }),
-    );
+    await user.click(await screen.findByRole("button", { name: "Выйти из контекста" }));
 
     expect(managedClientStorage.get()).toBeNull();
     expect(onChange).toHaveBeenCalledWith(null);
-    expect(
-      screen.queryByTestId("client-context-banner"),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByTestId("client-context-banner")).not.toBeInTheDocument();
   });
 
   it("без доступных клиентов переключатель не мозолит глаза", async () => {
@@ -176,7 +148,7 @@ describe("ClientContextSwitcher — срок работы «от имени» (�
     managedClientStorage.set({
       clientId: "mc1",
       clientName: "ООО Ромашка",
-      expiresAt: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+      expiresAt: new Date(Date.now() + 30 * 60 * 1000).toISOString()
     });
     render(<ClientContextSwitcher />);
 
@@ -190,15 +162,11 @@ describe("ClientContextSwitcher — срок работы «от имени» (�
     managedClientStorage.set({
       clientId: "mc1",
       clientName: "ООО Ромашка",
-      expiresAt: new Date(Date.now() - 1000).toISOString(),
+      expiresAt: new Date(Date.now() - 1000).toISOString()
     });
     render(<ClientContextSwitcher />);
 
-    await waitFor(() =>
-      expect(
-        screen.queryByTestId("client-context-banner"),
-      ).not.toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.queryByTestId("client-context-banner")).not.toBeInTheDocument());
     expect(managedClientStorage.get()).toBeNull();
   });
 
@@ -207,9 +175,7 @@ describe("ClientContextSwitcher — срок работы «от имени» (�
     managedClientStorage.set({ clientId: "mc1", clientName: "ООО Ромашка" });
     render(<ClientContextSwitcher />);
 
-    await user.click(
-      await screen.findByRole("button", { name: "Выйти из контекста" }),
-    );
+    await user.click(await screen.findByRole("button", { name: "Выйти из контекста" }));
 
     await waitFor(() => expect(api.leaveContext).toHaveBeenCalled());
     expect(managedClientStorage.get()).toBeNull();
@@ -223,13 +189,9 @@ describe("ClientContextSwitcher — срок работы «от имени» (�
     managedClientStorage.set({ clientId: "mc1", clientName: "ООО Ромашка" });
     render(<ClientContextSwitcher />);
 
-    await user.click(
-      await screen.findByRole("button", { name: "Выйти из контекста" }),
-    );
+    await user.click(await screen.findByRole("button", { name: "Выйти из контекста" }));
 
     await waitFor(() => expect(managedClientStorage.get()).toBeNull());
-    expect(
-      screen.queryByTestId("client-context-banner"),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByTestId("client-context-banner")).not.toBeInTheDocument();
   });
 });

@@ -43,7 +43,6 @@ TENANT = "test-tenant"
 def _make_settings() -> Settings:
     """Minimal Settings instance sufficient for OperationalDashboardService."""
     import os
-
     os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
     return Settings()
 
@@ -90,9 +89,9 @@ async def test_lifted_suspension_not_counted(db_session) -> None:
     alerts = await svc._get_overdue_alerts(TENANT, db_session)
 
     medical_susp_alerts = [a for a in alerts if a.affected_entity_type == "medical_suspension"]
-    assert (
-        not medical_susp_alerts
-    ), "LIFTED suspension should not produce a medical_suspension alert"
+    assert not medical_susp_alerts, (
+        "LIFTED suspension should not produce a medical_suspension alert"
+    )
 
 
 @pytest.mark.asyncio
@@ -132,6 +131,6 @@ async def test_full_dashboard_includes_suspension_count(db_session) -> None:
     resp = await svc.get_dashboard(TENANT, db=db_session)
 
     entity_types = {a.affected_entity_type for a in resp.alerts}
-    assert (
-        "medical_suspension" in entity_types
-    ), f"medical_suspension not in full dashboard response; got {entity_types}"
+    assert "medical_suspension" in entity_types, (
+        f"medical_suspension not in full dashboard response; got {entity_types}"
+    )

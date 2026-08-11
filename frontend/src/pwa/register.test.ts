@@ -3,22 +3,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { registerPwa } from "@/pwa/register";
 
 const mocks = vi.hoisted(() => ({
-  registerSW: vi.fn(),
+  registerSW: vi.fn()
 }));
 
 vi.mock("virtual:pwa-register", () => ({
-  registerSW: mocks.registerSW,
+  registerSW: mocks.registerSW
 }));
 
-const getOnRegistered = (): ((
-  registration: ServiceWorkerRegistration | undefined,
-) => void) => {
+const getOnRegistered = (): ((registration: ServiceWorkerRegistration | undefined) => void) => {
   const call = mocks.registerSW.mock.calls.at(-1)?.[0];
-  if (!call?.onRegistered)
-    throw new Error("registerSW не был вызван с onRegistered");
-  return call.onRegistered as (
-    registration: ServiceWorkerRegistration | undefined,
-  ) => void;
+  if (!call?.onRegistered) throw new Error("registerSW не был вызван с onRegistered");
+  return call.onRegistered as (registration: ServiceWorkerRegistration | undefined) => void;
 };
 
 describe("registerPwa: подхват новой версии без ожидания часа", () => {
@@ -47,10 +42,7 @@ describe("registerPwa: подхват новой версии без ожида�
     const registration = { update: vi.fn().mockResolvedValue(undefined) };
     getOnRegistered()(registration as unknown as ServiceWorkerRegistration);
 
-    Object.defineProperty(document, "visibilityState", {
-      value: "visible",
-      configurable: true,
-    });
+    Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true });
     document.dispatchEvent(new Event("visibilitychange"));
     expect(registration.update).toHaveBeenCalledTimes(1);
   });

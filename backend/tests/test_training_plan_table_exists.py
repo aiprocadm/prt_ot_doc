@@ -34,9 +34,9 @@ def test_training_plan_has_required_columns() -> None:
         "updated_at",
         "version",
     }
-    assert required.issubset(
-        columns.keys()
-    ), f"training_plan missing columns: {required - set(columns.keys())}"
+    assert required.issubset(columns.keys()), (
+        f"training_plan missing columns: {required - set(columns.keys())}"
+    )
 
 
 def test_training_plan_company_fk_cascades_on_delete() -> None:

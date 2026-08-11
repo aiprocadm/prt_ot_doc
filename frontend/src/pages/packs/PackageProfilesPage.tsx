@@ -31,11 +31,7 @@ const PackageProfilesPage = () => {
       const response = await packsApi.getProfiles<Profile>();
       setItems(response);
     } catch (nextError) {
-      setError(
-        (nextError as ApiError) ?? {
-          message: "Не удалось загрузить профили пакетов",
-        },
-      );
+      setError((nextError as ApiError) ?? { message: "Не удалось загрузить профили пакетов" });
     } finally {
       setLoading(false);
     }
@@ -56,29 +52,20 @@ const PackageProfilesPage = () => {
         pipeline_steps_json: [
           { step: "render_docx", enabled: true },
           { step: "convert_pdf", enabled: true },
-          { step: "build_zip", enabled: true },
-        ],
+          { step: "build_zip", enabled: true }
+        ]
       });
       setCode("");
       setName("");
       await load();
     } catch (nextError) {
-      setError(
-        (nextError as ApiError) ?? {
-          message: "Не удалось создать профиль пакета",
-        },
-      );
+      setError((nextError as ApiError) ?? { message: "Не удалось создать профиль пакета" });
     }
   };
 
   return (
     <div className="space-y-4">
-      <Breadcrumb
-        items={[
-          { label: "Главная", to: "/dashboard" },
-          { label: "Профили пакетов" },
-        ]}
-      />
+      <Breadcrumb items={[{ label: "Главная", to: "/dashboard" }, { label: "Профили пакетов" }]} />
       <Card>
         <CardHeader>
           <CardTitle>Профили пакетов</CardTitle>
@@ -88,31 +75,18 @@ const PackageProfilesPage = () => {
           {loading ? <LoadingScreen label="Загрузка профилей пакетов" /> : null}
           {!loading ? (
             <div className="flex gap-2">
-              <Input
-                value={code}
-                onChange={(e) => setCode(e.target.value)}
-                placeholder="Код"
-              />
-              <Input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Название"
-              />
+              <Input value={code} onChange={(e) => setCode(e.target.value)} placeholder="Код" />
+              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Название" />
               <Button onClick={() => void createProfile()}>Создать</Button>
             </div>
           ) : null}
           {!loading && !error && items.length === 0 ? (
-            <EmptyState
-              title="Профили пакетов отсутствуют"
-              description="Создайте первый профиль для работы с пресетами пакетов."
-            />
+            <EmptyState title="Профили пакетов отсутствуют" description="Создайте первый профиль для работы с пресетами пакетов." />
           ) : null}
           {!loading && items.length > 0 ? (
             <ul className="space-y-1 text-sm">
               {items.map((item) => (
-                <li key={item.id}>
-                  {item.code} — {item.name} ({item.status})
-                </li>
+                <li key={item.id}>{item.code} — {item.name} ({item.status})</li>
               ))}
             </ul>
           ) : null}

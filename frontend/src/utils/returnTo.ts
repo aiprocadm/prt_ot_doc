@@ -1,8 +1,4 @@
-import {
-  sessionStorageGetItem,
-  sessionStorageRemoveItem,
-  sessionStorageSetItem,
-} from "@/utils/browserStorage";
+import { sessionStorageGetItem, sessionStorageRemoveItem, sessionStorageSetItem } from "@/utils/browserStorage";
 
 const RETURN_TO_KEY = "prt-return-to";
 

@@ -1,5 +1,4 @@
 """Schema contract for stock movements + issue batch_id (P10-06)."""
-
 from __future__ import annotations
 
 import pytest

@@ -16,7 +16,6 @@
 
 from __future__ import annotations
 
-import logging
 from datetime import date
 
 import pytest
@@ -29,21 +28,6 @@ from app.core import metrics as metrics_module
 from app.core.api_deprecation import ApiDeprecation, deprecation_for_path
 from app.middleware import api_deprecation as mw_module
 from app.middleware.api_deprecation import ApiDeprecationMiddleware
-
-
-@pytest.fixture(autouse=True)
-def _capture_deprecation_logger(caplog: pytest.LogCaptureFixture):
-    """Цепляем обработчик caplog НАПРЯМУЮ к целевому логгеру: путь через root
-    зависит от состояния, которое оставляют соседние тесты воркера (боевой
-    logging-конфиг, propagate, уровни) — в CI записи терялись."""
-    lg = logging.getLogger("app.middleware.api_deprecation")
-    prev_disabled = lg.disabled
-    lg.disabled = False
-    lg.addHandler(caplog.handler)
-    yield
-    lg.removeHandler(caplog.handler)
-    lg.disabled = prev_disabled
-
 
 ENTRY = ApiDeprecation(
     path_prefix="/api/v1/files-legacy",

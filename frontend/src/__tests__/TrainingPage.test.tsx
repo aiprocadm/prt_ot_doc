@@ -10,8 +10,8 @@ const getMock = vi.fn();
 
 vi.mock("@/api/client", () => ({
   apiClient: {
-    get: (...args: unknown[]) => getMock(...args),
-  },
+    get: (...args: unknown[]) => getMock(...args)
+  }
 }));
 
 const baseUser = {
@@ -22,7 +22,7 @@ const baseUser = {
   full_name: "Training User",
   roles: ["worker"],
   permissions: [PERMISSIONS.TRAINING_VIEW],
-  attributes: { tenant_id: "tenant-1" },
+  attributes: { tenant_id: "tenant-1" }
 };
 
 describe("TrainingPage", () => {
@@ -36,8 +36,8 @@ describe("TrainingPage", () => {
             completed_total: 1,
             overdue_total: 1,
             next_due_at: null,
-            items: [],
-          },
+            items: []
+          }
         });
       }
       if (url === "/training/teacher/dashboard") {
@@ -46,8 +46,8 @@ describe("TrainingPage", () => {
             groups_total: 2,
             enrollments_total: 12,
             completed_total: 8,
-            average_progress_percent: 87,
-          },
+            average_progress_percent: 87
+          }
         });
       }
       if (url === "/training/analytics/overview") {
@@ -56,8 +56,8 @@ describe("TrainingPage", () => {
             completed_total: 8,
             retake_total: 1,
             average_attempt_score: 92,
-            material_types: { video: 3 },
-          },
+            material_types: { video: 3 }
+          }
         });
       }
       if (url === "/training/programs") {
@@ -66,13 +66,8 @@ describe("TrainingPage", () => {
       if (url === "/training/programs/program-1/detail") {
         return Promise.resolve({
           data: {
-            modules: [
-              {
-                module: { id: "module-1", title: "Модуль 1" },
-                lessons: [{ id: "lesson-1", title: "Урок 1" }],
-              },
-            ],
-          },
+            modules: [{ module: { id: "module-1", title: "Модуль 1" }, lessons: [{ id: "lesson-1", title: "Урок 1" }] }]
+          }
         });
       }
       throw new Error(`Unexpected GET ${url}`);
@@ -85,19 +80,17 @@ describe("TrainingPage", () => {
       loading: false,
       error: null,
       isAuthenticated: true,
-      initialized: true,
+      initialized: true
     });
 
     render(
       <MemoryRouter>
         <TrainingPage />
-      </MemoryRouter>,
+      </MemoryRouter>
     );
 
     await waitFor(() => {
-      expect(getMock).toHaveBeenCalledWith("/training/learner/dashboard", {
-        params: { person_id: "me" },
-      });
+      expect(getMock).toHaveBeenCalledWith("/training/learner/dashboard", { params: { person_id: "me" } });
     });
 
     const requestedUrls = getMock.mock.calls.map(([url]) => url);
@@ -105,27 +98,22 @@ describe("TrainingPage", () => {
     expect(requestedUrls).not.toContain("/training/analytics/overview");
     expect(requestedUrls).not.toContain("/training/programs");
     expect(screen.getAllByRole("tab")).toHaveLength(1);
-    expect(
-      screen.getByRole("button", { name: /назначить обучение/i }),
-    ).toBeDisabled();
+    expect(screen.getByRole("button", { name: /назначить обучение/i })).toBeDisabled();
   });
 
   it("показывает teacher surface и запрашивает teacher endpoints при наличии права назначения", async () => {
     useAuthStore.setState({
-      user: {
-        ...baseUser,
-        permissions: [PERMISSIONS.TRAINING_VIEW, PERMISSIONS.TRAINING_ASSIGN],
-      },
+      user: { ...baseUser, permissions: [PERMISSIONS.TRAINING_VIEW, PERMISSIONS.TRAINING_ASSIGN] },
       loading: false,
       error: null,
       isAuthenticated: true,
-      initialized: true,
+      initialized: true
     });
 
     render(
       <MemoryRouter>
         <TrainingPage />
-      </MemoryRouter>,
+      </MemoryRouter>
     );
 
     await waitFor(() => {
@@ -136,9 +124,7 @@ describe("TrainingPage", () => {
     });
 
     expect(screen.getAllByRole("tab")).toHaveLength(2);
-    expect(
-      screen.getByRole("link", { name: /назначить обучение/i }),
-    ).toHaveAttribute("href", "/tasks?type=training_plan");
+    expect(screen.getByRole("link", { name: /назначить обучение/i })).toHaveAttribute("href", "/tasks?type=training_plan");
     // analytics state propagation is async — wait for the rendered material label.
     await waitFor(() => {
       expect(screen.getByText("Видео")).toBeInTheDocument();

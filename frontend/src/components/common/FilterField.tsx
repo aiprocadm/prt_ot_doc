@@ -7,17 +7,9 @@ interface FilterFieldProps {
   children: ReactNode;
 }
 
-export const FilterField = ({
-  label,
-  htmlFor,
-  hint,
-  children,
-}: FilterFieldProps) => (
+export const FilterField = ({ label, htmlFor, hint, children }: FilterFieldProps) => (
   <div className="flex flex-col gap-1">
-    <label
-      htmlFor={htmlFor}
-      className="text-xs font-medium uppercase tracking-wide text-muted-foreground"
-    >
+    <label htmlFor={htmlFor} className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
       {label}
     </label>
     {children}

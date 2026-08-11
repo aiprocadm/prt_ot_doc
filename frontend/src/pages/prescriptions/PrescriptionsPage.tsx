@@ -18,26 +18,14 @@ import { formatDate } from "@/utils/datetime";
 
 const PrescriptionsPage = () => {
   const loadPrescriptions = useCallback(() => opsApi.getPrescriptions(), []);
-  const {
-    data: items,
-    loading,
-    error,
-    reload,
-  } = useAsyncResource<PrescriptionDto[]>({
+  const { data: items, loading, error, reload } = useAsyncResource<PrescriptionDto[]>({
     loader: loadPrescriptions,
     initialData: [],
-    errorMessage: "Не удалось загрузить предписания",
+    errorMessage: "Не удалось загрузить предписания"
   });
-  const [online, setOnline] = useState(() =>
-    typeof navigator === "undefined" ? true : navigator.onLine,
-  );
+  const [online, setOnline] = useState(() => (typeof navigator === "undefined" ? true : navigator.onLine));
   const [hasConflict, setHasConflict] = useState(false);
-  const syncState = resolveSyncState({
-    online,
-    loading,
-    hasConflict,
-    hasError: Boolean(error),
-  });
+  const syncState = resolveSyncState({ online, loading, hasConflict, hasError: Boolean(error) });
 
   useEffect(() => {
     const onOnline = () => setOnline(true);
@@ -51,34 +39,20 @@ const PrescriptionsPage = () => {
   }, []);
 
   useEffect(() => {
-    emitSyncTelemetry({
-      type: "sync_state_changed",
-      state: syncState,
-      screen: "prescriptions",
-    });
+    emitSyncTelemetry({ type: "sync_state_changed", state: syncState, screen: "prescriptions" });
     if (error?.message) {
-      emitSyncTelemetry({
-        type: "sync_error",
-        screen: "prescriptions",
-        message: error.message,
-      });
+      emitSyncTelemetry({ type: "sync_error", screen: "prescriptions", message: error.message });
     }
   }, [error?.message, syncState]);
 
   const registry = useLocalRegistry({
     items,
     match: (item, query) =>
-      [
-        item.id,
-        item.description,
-        item.status,
-        item.inspection_id,
-        item.incident_id,
-      ]
+      [item.id, item.description, item.status, item.inspection_id, item.incident_id]
         .filter(Boolean)
         .join(" ")
         .toLowerCase()
-        .includes(query),
+        .includes(query)
   });
 
   return (
@@ -98,25 +72,13 @@ const PrescriptionsPage = () => {
       </div>
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">
-            Открытые и закрытые предписания
-          </CardTitle>
+          <CardTitle className="text-base">Открытые и закрытые предписания</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          <ErrorState
-            error={error ?? undefined}
-            onRetry={() => void reload()}
-          />
+          <ErrorState error={error ?? undefined} onRetry={() => void reload()} />
           {loading ? <LoadingScreen label="Загрузка предписаний" /> : null}
           {!loading && !error && registry.total === 0 ? (
-            <EmptyState
-              title="Предписания не найдены"
-              description={
-                registry.query
-                  ? "Измените запрос поиска."
-                  : "В этом tenant пока нет предписаний."
-              }
-            />
+            <EmptyState title="Предписания не найдены" description={registry.query ? "Измените запрос поиска." : "В этом tenant пока нет предписаний."} />
           ) : null}
           {!loading && !error && registry.total > 0 ? (
             <RegistryTable
@@ -124,15 +86,11 @@ const PrescriptionsPage = () => {
                 {
                   accessorKey: "id",
                   header: "ID",
-                  cell: ({ row }) => (
-                    <span className="font-medium">
-                      {row.original.id.slice(0, 8)}
-                    </span>
-                  ),
+                  cell: ({ row }) => <span className="font-medium">{row.original.id.slice(0, 8)}</span>
                 },
                 {
                   accessorKey: "description",
-                  header: "Описание",
+                  header: "Описание"
                 },
                 {
                   id: "source",
@@ -140,20 +98,18 @@ const PrescriptionsPage = () => {
                   cell: ({ row }) =>
                     row.original.incident_id
                       ? `Incident ${row.original.incident_id.slice(0, 8)}`
-                      : `Inspection ${row.original.inspection_id.slice(0, 8)}`,
+                      : `Inspection ${row.original.inspection_id.slice(0, 8)}`
                 },
                 {
                   accessorKey: "due_at",
                   header: "Срок",
-                  cell: ({ row }) => formatDate(row.original.due_at) || "—",
+                  cell: ({ row }) => formatDate(row.original.due_at) || "—"
                 },
                 {
                   accessorKey: "status",
                   header: "Статус",
-                  cell: ({ row }) => (
-                    <StatusBadge status={row.original.status} />
-                  ),
-                },
+                  cell: ({ row }) => <StatusBadge status={row.original.status} />
+                }
               ]}
               data={registry.pagedItems}
               pageIndex={registry.pageIndex}

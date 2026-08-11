@@ -6,9 +6,7 @@ export interface PaginationState {
   total: number;
 }
 
-export const usePagination = (
-  initial: PaginationState = { page: 1, pageSize: 10, total: 0 },
-) => {
+export const usePagination = (initial: PaginationState = { page: 1, pageSize: 10, total: 0 }) => {
   const [pagination, setPagination] = useState(initial);
 
   const setPage = useCallback((page: number) => {
@@ -28,8 +26,8 @@ export const usePagination = (
       pagination,
       setPage,
       setPageSize,
-      setTotal,
+      setTotal
     }),
-    [pagination, setPage, setPageSize, setTotal],
+    [pagination, setPage, setPageSize, setTotal]
   );
 };

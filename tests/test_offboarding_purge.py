@@ -86,7 +86,9 @@ class TestPurgeExecution:
     ) -> None:
         tenant, service = await _purge_service(data_factory, test_db_session, "purge-a")
         company = await data_factory.create_company(tenant=tenant, session=test_db_session)
-        await data_factory.create_person(tenant=tenant, company=company, session=test_db_session)
+        await data_factory.create_person(
+            tenant=tenant, company=company, session=test_db_session
+        )
         # grace_days=0 — законный «удалить сейчас»: срок задаётся заявкой, а не
         # флагом, обходящим проверку.
         await service.lifecycle.request(grace_days=0)
@@ -114,9 +116,7 @@ class TestPurgeExecution:
         которой не лечится ничем."""
 
         victim, service = await _purge_service(data_factory, test_db_session, "purge-b")
-        neighbour = await data_factory.ensure_tenant(
-            slug="purge-b-neighbour", session=test_db_session
-        )
+        neighbour = await data_factory.ensure_tenant(slug="purge-b-neighbour", session=test_db_session)
         await data_factory.create_person(
             tenant=victim, tenant_slug="purge-b", session=test_db_session
         )
@@ -228,7 +228,9 @@ class TestPurgeExecution:
             version_file_key="tenants/purge-g/ok.pdf",
         )
         await test_db_session.execute(
-            text("UPDATE document SET storage_key = :key WHERE tenant_id = :tenant"),
+            text(
+                "UPDATE document SET storage_key = :key WHERE tenant_id = :tenant"
+            ),
             {"key": "tenants/purge-g/broken.pdf", "tenant": str(tenant.id)},
         )
         await service.lifecycle.request(grace_days=0)
@@ -264,7 +266,9 @@ class TestPurgeEndpoint:
         )
         assert response.status_code == 400, response.text
 
-    async def test_purge_without_request_is_conflict(self, async_client, make_auth_headers) -> None:
+    async def test_purge_without_request_is_conflict(
+        self, async_client, make_auth_headers
+    ) -> None:
         response = await async_client.post(
             f"{API_PREFIX}/offboarding/purge",
             json={"confirm_slug": "test"},
@@ -306,7 +310,9 @@ class TestSchemaGraph:
             tables=("child", "parent", "grandparent", "unrelated"),
             links=(
                 ForeignLink(child="child", parent="parent", columns=("p",), nullable=True),
-                ForeignLink(child="parent", parent="grandparent", columns=("g",), nullable=False),
+                ForeignLink(
+                    child="parent", parent="grandparent", columns=("g",), nullable=False
+                ),
             ),
         )
 
@@ -367,9 +373,9 @@ class TestAnonymizationCoverage:
             for column in columns:
                 if not any(marker in column for marker in identifiers):
                     continue
-                assert column in ANONYMIZED_COLUMNS.get(
-                    table, {}
-                ), f"{table}.{column} выглядит идентификатором, но не обезличивается"
+                assert column in ANONYMIZED_COLUMNS.get(table, {}), (
+                    f"{table}.{column} выглядит идентификатором, но не обезличивается"
+                )
 
 
 # Порядок удаления на ЖИВОЙ схеме PostgreSQL (там, где циклы и есть) проверяет

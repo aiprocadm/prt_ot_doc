@@ -1,5 +1,4 @@
 """Pin: PPEStockMovement model + ppe_stock_movement migration shape (P10-06)."""
-
 from __future__ import annotations
 
 import importlib.util

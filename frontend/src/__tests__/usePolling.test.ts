@@ -17,12 +17,9 @@ describe("usePolling", () => {
   it("останавливает интервал при отключении", async () => {
     vi.useFakeTimers();
     const callback = vi.fn();
-    const { rerender } = renderHook(
-      ({ enabled }) => usePolling(callback, 100, enabled),
-      {
-        initialProps: { enabled: true },
-      },
-    );
+    const { rerender } = renderHook(({ enabled }) => usePolling(callback, 100, enabled), {
+      initialProps: { enabled: true }
+    });
 
     await vi.advanceTimersByTimeAsync(250);
     expect(callback).toHaveBeenCalledTimes(2);
@@ -43,7 +40,7 @@ describe("usePolling", () => {
             resolves += 1;
             resolve();
           }, 200);
-        }),
+        })
     );
     renderHook(() => usePolling(callback, 100));
 

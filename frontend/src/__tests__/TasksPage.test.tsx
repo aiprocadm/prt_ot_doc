@@ -20,7 +20,7 @@ const userWithTaskUpdate = {
   full_name: "Task Manager",
   roles: ["line_manager"],
   permissions: [PERMISSIONS.TASK_VIEW, PERMISSIONS.TASK_UPDATE],
-  attributes: { tenant_id: "tenant-1" },
+  attributes: { tenant_id: "tenant-1" }
 };
 
 vi.mock("@/stores/tasks", () => ({
@@ -41,7 +41,7 @@ vi.mock("@/stores/tasks", () => ({
         overdue: false,
         entity_type: "document",
         entity_id: "entity-1",
-      },
+      }
     ],
     item: null,
     getById: vi.fn(),
@@ -49,8 +49,8 @@ vi.mock("@/stores/tasks", () => ({
     pagination: { page: 1, page_size: 10, total: 0 },
     setPage: vi.fn(),
     setPageSize: vi.fn(),
-    patchTask: patchTaskMock,
-  }),
+    patchTask: patchTaskMock
+  })
 }));
 
 describe("TasksPage", () => {
@@ -61,29 +61,21 @@ describe("TasksPage", () => {
       loading: false,
       error: null,
       isAuthenticated: true,
-      initialized: true,
+      initialized: true
     });
 
     const user = userEvent.setup();
     render(
-      <MemoryRouter
-        initialEntries={[
-          "/tasks?task_id=task-focus-1&entity_type=document&entity_id=entity-1",
-        ]}
-      >
+      <MemoryRouter initialEntries={["/tasks?task_id=task-focus-1&entity_type=document&entity_id=entity-1"]}>
         <TasksPage />
-      </MemoryRouter>,
+      </MemoryRouter>
     );
 
-    const closeButton = await screen.findByRole("button", {
-      name: "Закрыть фокусную задачу",
-    });
+    const closeButton = await screen.findByRole("button", { name: "Закрыть фокусную задачу" });
     expect(closeButton).toBeEnabled();
 
     await user.click(closeButton);
-    expect(patchTaskMock).toHaveBeenCalledWith("task-focus-1", {
-      status: "done",
-    });
+    expect(patchTaskMock).toHaveBeenCalledWith("task-focus-1", { status: "done" });
   });
 
   it("shows disabled focused-task close action without update permission", async () => {
@@ -93,27 +85,21 @@ describe("TasksPage", () => {
         ...userWithTaskUpdate,
         id: "task-viewer",
         email: "task.viewer@example.com",
-        permissions: [PERMISSIONS.TASK_VIEW],
+        permissions: [PERMISSIONS.TASK_VIEW]
       },
       loading: false,
       error: null,
       isAuthenticated: true,
-      initialized: true,
+      initialized: true
     });
 
     render(
-      <MemoryRouter
-        initialEntries={[
-          "/tasks?task_id=task-focus-1&entity_type=document&entity_id=entity-1",
-        ]}
-      >
+      <MemoryRouter initialEntries={["/tasks?task_id=task-focus-1&entity_type=document&entity_id=entity-1"]}>
         <TasksPage />
-      </MemoryRouter>,
+      </MemoryRouter>
     );
 
-    const closeButton = await screen.findByRole("button", {
-      name: "Закрыть фокусную задачу",
-    });
+    const closeButton = await screen.findByRole("button", { name: "Закрыть фокусную задачу" });
     expect(closeButton).toBeDisabled();
   });
 
@@ -123,7 +109,7 @@ describe("TasksPage", () => {
     render(
       <MemoryRouter>
         <TasksPage />
-      </MemoryRouter>,
+      </MemoryRouter>
     );
 
     expect(listMock).toHaveBeenCalled();
@@ -134,56 +120,44 @@ describe("TasksPage", () => {
     expect(setFiltersMock).toHaveBeenCalledWith({
       type: "training_plan",
       overdue: undefined,
-      priority: undefined,
+      priority: undefined
     });
     expect(listMock).toHaveBeenCalledWith({
       type: "training_plan",
       overdue: undefined,
-      priority: undefined,
+      priority: undefined
     });
 
     await user.selectOptions(screen.getByLabelText("Срок"), "overdue");
     expect(setFiltersMock).toHaveBeenCalledWith({
       type: "training_plan",
       overdue: true,
-      priority: undefined,
+      priority: undefined
     });
     expect(listMock).toHaveBeenCalledWith({
       type: "training_plan",
       overdue: true,
-      priority: undefined,
+      priority: undefined
     });
   });
 
   it("shows focus card for task context from workspace link", () => {
     render(
-      <MemoryRouter
-        initialEntries={[
-          "/tasks?task_id=task-focus-1&entity_type=document&entity_id=entity-1",
-        ]}
-      >
+      <MemoryRouter initialEntries={["/tasks?task_id=task-focus-1&entity_type=document&entity_id=entity-1"]}>
         <TasksPage />
-      </MemoryRouter>,
+      </MemoryRouter>
     );
 
     expect(screen.getByTestId("task-focus-card")).toBeInTheDocument();
-    expect(
-      screen.getByText("Фокусная задача · open · high"),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("link", { name: "Открыть summary сущности" }),
-    ).toHaveAttribute(
+    expect(screen.getByText("Фокусная задача · open · high")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Открыть summary сущности" })).toHaveAttribute(
       "href",
-      "/documents?entity_type=document&entity_id=entity-1&view=summary",
+      "/documents?entity_type=document&entity_id=entity-1&view=summary"
     );
-    expect(
-      screen.getByRole("link", { name: "Открыть timeline сущности" }),
-    ).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Открыть timeline сущности" })).toHaveAttribute(
       "href",
-      "/documents?entity_type=document&entity_id=entity-1&view=timeline",
+      "/documents?entity_type=document&entity_id=entity-1&view=timeline"
     );
-    expect(
-      screen.getByRole("link", { name: "Открыть контекст сущности" }),
-    ).toHaveAttribute("href", "/documents");
+    expect(screen.getByRole("link", { name: "Открыть контекст сущности" })).toHaveAttribute("href", "/documents");
   });
 });

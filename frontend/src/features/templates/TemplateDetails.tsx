@@ -18,12 +18,8 @@ export const TemplateDetails = ({ template }: { template: TemplateDto }) => {
   const { activateVersion } = useTemplatesStore();
   const [isActivating, setIsActivating] = useState(false);
   const [file, setFile] = useState<File | null>(null);
-  const [versionId, setVersionId] = useState(
-    template.current_version?.id ?? template.versions?.[0]?.id ?? "",
-  );
-  const [previewData, setPreviewData] = useState(
-    '{"employee": {"name": "Иван"}}',
-  );
+  const [versionId, setVersionId] = useState(template.current_version?.id ?? template.versions?.[0]?.id ?? "");
+  const [previewData, setPreviewData] = useState('{"employee": {"name": "Иван"}}');
   const [lintReport, setLintReport] = useState<string>("");
 
   const handleActivate = async (versionId: string) => {
@@ -32,9 +28,7 @@ export const TemplateDetails = ({ template }: { template: TemplateDto }) => {
       await activateVersion(template.id, versionId);
       toast.success("Версия активирована");
     } catch (error) {
-      toast.error(
-        (error as Error)?.message ?? "Не удалось активировать версию",
-      );
+      toast.error((error as Error)?.message ?? "Не удалось активировать версию");
     } finally {
       setIsActivating(false);
     }
@@ -63,11 +57,7 @@ export const TemplateDetails = ({ template }: { template: TemplateDto }) => {
   const handlePreview = async () => {
     try {
       const parsed = JSON.parse(previewData);
-      const data = await templatesApi.previewVersion(
-        template.id,
-        versionId,
-        parsed,
-      );
+      const data = await templatesApi.previewVersion(template.id, versionId, parsed);
       toast.success(`Preview готов: ${data.docx_url}`);
     } catch (error) {
       toast.error((error as Error)?.message ?? "Не удалось построить preview");
@@ -80,31 +70,17 @@ export const TemplateDetails = ({ template }: { template: TemplateDto }) => {
         <CardTitle className="text-xl font-semibold">{template.name}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        <p className="text-sm text-muted-foreground">
-          {template.description ?? "Описание отсутствует"}
-        </p>
+        <p className="text-sm text-muted-foreground">{template.description ?? "Описание отсутствует"}</p>
         <div className="flex flex-wrap gap-2 text-sm">
-          {template.category && (
-            <Badge variant="secondary">{template.category}</Badge>
-          )}
-          {template.status && (
-            <Badge variant="outline">{template.status}</Badge>
-          )}
-          {template.scope?.type && (
-            <Badge variant="outline">scope: {template.scope.type}</Badge>
-          )}
+          {template.category && <Badge variant="secondary">{template.category}</Badge>}
+          {template.status && <Badge variant="outline">{template.status}</Badge>}
+          {template.scope?.type && <Badge variant="outline">scope: {template.scope.type}</Badge>}
           {template.tags?.map((tag) => (
             <Badge key={tag}>{tag}</Badge>
           ))}
-          {template.template_type && (
-            <Badge variant="secondary">{template.template_type}</Badge>
-          )}
-          {template.scope?.company_id && (
-            <Badge variant="outline">org: {template.scope.company_id}</Badge>
-          )}
-          {template.scope?.site_id && (
-            <Badge variant="outline">branch: {template.scope.site_id}</Badge>
-          )}
+          {template.template_type && <Badge variant="secondary">{template.template_type}</Badge>}
+          {template.scope?.company_id && <Badge variant="outline">org: {template.scope.company_id}</Badge>}
+          {template.scope?.site_id && <Badge variant="outline">branch: {template.scope.site_id}</Badge>}
         </div>
         <Tabs defaultValue="versions">
           <TabsList>
@@ -115,69 +91,36 @@ export const TemplateDetails = ({ template }: { template: TemplateDto }) => {
           <TabsContent value="versions" className="space-y-2">
             {template.versions?.length ? (
               template.versions.map((version) => (
-                <div
-                  key={version.id}
-                  className="flex items-center justify-between rounded-md border p-3"
-                >
+                <div key={version.id} className="flex items-center justify-between rounded-md border p-3">
                   <div>
                     <div className="font-medium">Версия {version.version}</div>
                     <div className="text-xs text-muted-foreground">
                       {formatDate(version.created_at)} • {version.status}
                     </div>
-                    {version.document_type && (
-                      <div className="text-xs text-muted-foreground">
-                        Тип: {version.document_type}
-                      </div>
-                    )}
+                    {version.document_type && <div className="text-xs text-muted-foreground">Тип: {version.document_type}</div>}
                   </div>
                   <ActionButton
                     permission={PERMISSIONS.TEMPLATE_ACTIVATE}
-                    abilityResource={{
-                      template: {
-                        current_version: template.current_version ?? undefined,
-                      },
-                      version,
-                    }}
-                    variant={
-                      template.current_version?.id === version.id
-                        ? "secondary"
-                        : "outline"
-                    }
+                    abilityResource={{ template: { current_version: template.current_version ?? undefined }, version }}
+                    variant={template.current_version?.id === version.id ? "secondary" : "outline"}
                     size="sm"
-                    disabled={
-                      template.current_version?.id === version.id ||
-                      isActivating
-                    }
+                    disabled={template.current_version?.id === version.id || isActivating}
                     disabledReason="Версию можно активировать только если она опубликована и не используется"
                     onClick={() => handleActivate(version.id)}
                   >
-                    {template.current_version?.id === version.id
-                      ? "Текущая"
-                      : "Активировать"}
+                    {template.current_version?.id === version.id ? "Текущая" : "Активировать"}
                   </ActionButton>
                 </div>
               ))
             ) : (
-              <p className="text-sm text-muted-foreground">
-                Версии не найдены.
-              </p>
+              <p className="text-sm text-muted-foreground">Версии не найдены.</p>
             )}
           </TabsContent>
           <TabsContent value="tools" className="space-y-3">
-            <Input
-              type="file"
-              accept=".docx"
-              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-            />
+            <Input type="file" accept=".docx" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
             <Button onClick={handleUpload}>Загрузить версию</Button>
-            <select
-              className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-              value={versionId}
-              onChange={(e) => setVersionId(e.target.value)}
-            >
-              <option value="" disabled>
-                Выберите версию шаблона
-              </option>
+            <select className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={versionId} onChange={(e) => setVersionId(e.target.value)}>
+              <option value="" disabled>Выберите версию шаблона</option>
               {(template.versions ?? []).map((version) => (
                 <option key={version.id} value={version.id}>
                   Версия {version.version} · {version.status}
@@ -185,29 +128,11 @@ export const TemplateDetails = ({ template }: { template: TemplateDto }) => {
               ))}
             </select>
             <div className="flex gap-2">
-              <Button
-                variant="outline"
-                disabled={!versionId}
-                onClick={handleLint}
-              >
-                Проверить
-              </Button>
-              <Button
-                variant="outline"
-                disabled={!versionId}
-                onClick={handlePreview}
-              >
-                Предпросмотр
-              </Button>
+              <Button variant="outline" disabled={!versionId} onClick={handleLint}>Проверить</Button>
+              <Button variant="outline" disabled={!versionId} onClick={handlePreview}>Предпросмотр</Button>
             </div>
-            <Textarea
-              rows={8}
-              value={previewData}
-              onChange={(e) => setPreviewData(e.target.value)}
-            />
-            {lintReport && (
-              <pre className="rounded border p-2 text-xs">{lintReport}</pre>
-            )}
+            <Textarea rows={8} value={previewData} onChange={(e) => setPreviewData(e.target.value)} />
+            {lintReport && <pre className="rounded border p-2 text-xs">{lintReport}</pre>}
           </TabsContent>
           <TabsContent value="meta" className="grid gap-2 text-sm">
             <div>Создано: {formatDate(template.created_at)}</div>

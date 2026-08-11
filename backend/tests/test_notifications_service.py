@@ -39,9 +39,7 @@ async def db_session():
 
 @pytest.mark.asyncio
 async def test_list_notifications_counts_unread_and_marks_read(db_session) -> None:
-    tenant = Tenant(
-        id="tenant-1", name="Tenant 1", slug="tenant-1", contact_email="tenant@example.com"
-    )
+    tenant = Tenant(id="tenant-1", name="Tenant 1", slug="tenant-1", contact_email="tenant@example.com")
     db_session.add(tenant)
     db_session.add_all(
         [
@@ -103,9 +101,7 @@ async def test_list_notifications_counts_unread_and_marks_read(db_session) -> No
 
 @pytest.mark.asyncio
 async def test_notifications_service_rejects_unknown_filters(db_session) -> None:
-    tenant = Tenant(
-        id="tenant-1", name="Tenant 1", slug="tenant-1", contact_email="tenant@example.com"
-    )
+    tenant = Tenant(id="tenant-1", name="Tenant 1", slug="tenant-1", contact_email="tenant@example.com")
     db_session.add(tenant)
     await db_session.commit()
 
@@ -128,9 +124,7 @@ async def test_notifications_service_rejects_unknown_filters(db_session) -> None
 
 @pytest.mark.asyncio
 async def test_upsert_template_validates_channel_and_type(db_session) -> None:
-    tenant = Tenant(
-        id="tenant-1", name="Tenant 1", slug="tenant-1", contact_email="tenant@example.com"
-    )
+    tenant = Tenant(id="tenant-1", name="Tenant 1", slug="tenant-1", contact_email="tenant@example.com")
     db_session.add(tenant)
     await db_session.commit()
 

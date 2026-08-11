@@ -9,16 +9,14 @@ type UsePollingOptions = {
 export const usePolling = (
   callback: () => void | Promise<void>,
   interval: number,
-  enabledOrOptions: boolean | UsePollingOptions = true,
+  enabledOrOptions: boolean | UsePollingOptions = true
 ) => {
   const savedCallback = useRef(callback);
   const inFlight = useRef(false);
   const onErrorRef = useRef<UsePollingOptions["onError"]>(undefined);
 
   const options: UsePollingOptions =
-    typeof enabledOrOptions === "boolean"
-      ? { enabled: enabledOrOptions }
-      : enabledOrOptions;
+    typeof enabledOrOptions === "boolean" ? { enabled: enabledOrOptions } : enabledOrOptions;
   const enabled = options.enabled ?? true;
   const runImmediately = options.runImmediately ?? false;
 

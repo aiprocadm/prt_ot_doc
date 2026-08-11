@@ -8,13 +8,7 @@ import type { ApiError } from "@/types/dto/common";
 
 type GraphNode = { id: string; type: string; config?: Record<string, unknown> };
 type GraphEdge = { from: string; to: string; condition?: string };
-type PipelineProfile = {
-  id: string;
-  code: string;
-  name: string;
-  profile_version: number;
-  graph?: { nodes: GraphNode[]; edges: GraphEdge[] };
-};
+type PipelineProfile = { id: string; code: string; name: string; profile_version: number; graph?: { nodes: GraphNode[]; edges: GraphEdge[] } };
 
 const NODE_TYPES = [
   "render_docx",
@@ -30,7 +24,7 @@ const NODE_TYPES = [
   "delay",
   "branch",
   "archive",
-  "noop",
+  "noop"
 ] as const;
 
 const defaultGraph: { nodes: GraphNode[]; edges: GraphEdge[] } = {
@@ -38,13 +32,13 @@ const defaultGraph: { nodes: GraphNode[]; edges: GraphEdge[] } = {
     { id: "render", type: "render_docx", config: { template_code: "default" } },
     { id: "headers", type: "apply_headers" },
     { id: "replace", type: "replace_apply" },
-    { id: "pdf", type: "convert_pdf" },
+    { id: "pdf", type: "convert_pdf" }
   ],
   edges: [
     { from: "render", to: "headers" },
     { from: "headers", to: "replace" },
-    { from: "replace", to: "pdf" },
-  ],
+    { from: "replace", to: "pdf" }
+  ]
 };
 
 const PipelineBuilderPage = () => {
@@ -53,16 +47,9 @@ const PipelineBuilderPage = () => {
   const [profilesError, setProfilesError] = useState<ApiError | null>(null);
   const [code, setCode] = useState("doc-default");
   const [name, setName] = useState("Профиль по умолчанию");
-  const [graph, setGraph] = useState<{
-    nodes: GraphNode[];
-    edges: GraphEdge[];
-  }>(defaultGraph);
-  const [selectedNodeId, setSelectedNodeId] = useState(
-    defaultGraph.nodes[0]?.id ?? "",
-  );
-  const [configText, setConfigText] = useState(
-    JSON.stringify(defaultGraph.nodes[0]?.config ?? {}, null, 2),
-  );
+  const [graph, setGraph] = useState<{ nodes: GraphNode[]; edges: GraphEdge[] }>(defaultGraph);
+  const [selectedNodeId, setSelectedNodeId] = useState(defaultGraph.nodes[0]?.id ?? "");
+  const [configText, setConfigText] = useState(JSON.stringify(defaultGraph.nodes[0]?.config ?? {}, null, 2));
   const [error, setError] = useState<string | null>(null);
 
   const load = async () => {
@@ -89,17 +76,14 @@ const PipelineBuilderPage = () => {
     const ids = parsedGraph.nodes.map((n) => n.id);
     if (new Set(ids).size !== ids.length) return "Есть дубли id нод";
     const idSet = new Set(ids);
-    const badEdge = parsedGraph.edges.find(
-      (e) => !idSet.has(e.from) || !idSet.has(e.to),
-    );
-    if (badEdge)
-      return `Ребро ${badEdge.from} → ${badEdge.to} ссылается на неизвестную ноду`;
+    const badEdge = parsedGraph.edges.find((e) => !idSet.has(e.from) || !idSet.has(e.to));
+    if (badEdge) return `Ребро ${badEdge.from} → ${badEdge.to} ссылается на неизвестную ноду`;
     return null;
   }, [parsedGraph]);
 
   const selectedNode = useMemo(
     () => parsedGraph.nodes.find((node) => node.id === selectedNodeId) ?? null,
-    [parsedGraph.nodes, selectedNodeId],
+    [parsedGraph.nodes, selectedNodeId]
   );
 
   useEffect(() => {
@@ -115,30 +99,21 @@ const PipelineBuilderPage = () => {
 
   const addEdge = () => {
     if (parsedGraph.nodes.length < 2) return;
-    const fallbackFrom =
-      parsedGraph.nodes[parsedGraph.nodes.length - 2]?.id ??
-      parsedGraph.nodes[0].id;
-    const fallbackTo =
-      parsedGraph.nodes[parsedGraph.nodes.length - 1]?.id ??
-      parsedGraph.nodes[0].id;
-    setGraph((prev) => ({
-      ...prev,
-      edges: [...prev.edges, { from: fallbackFrom, to: fallbackTo }],
-    }));
+    const fallbackFrom = parsedGraph.nodes[parsedGraph.nodes.length - 2]?.id ?? parsedGraph.nodes[0].id;
+    const fallbackTo = parsedGraph.nodes[parsedGraph.nodes.length - 1]?.id ?? parsedGraph.nodes[0].id;
+    setGraph((prev) => ({ ...prev, edges: [...prev.edges, { from: fallbackFrom, to: fallbackTo }] }));
   };
 
   const updateNode = (nodeId: string, patch: Partial<GraphNode>) => {
     setGraph((prev) => {
-      const nextNodes = prev.nodes.map((node) =>
-        node.id === nodeId ? { ...node, ...patch } : node,
-      );
+      const nextNodes = prev.nodes.map((node) => (node.id === nodeId ? { ...node, ...patch } : node));
       const nextNodeId = patch.id ?? nodeId;
       const nextEdges =
         patch.id && patch.id !== nodeId
           ? prev.edges.map((edge) => ({
               ...edge,
               from: edge.from === nodeId ? nextNodeId : edge.from,
-              to: edge.to === nodeId ? nextNodeId : edge.to,
+              to: edge.to === nodeId ? nextNodeId : edge.to
             }))
           : prev.edges;
       return { ...prev, nodes: nextNodes, edges: nextEdges };
@@ -151,7 +126,7 @@ const PipelineBuilderPage = () => {
   const removeNode = (nodeId: string) => {
     setGraph((prev) => ({
       nodes: prev.nodes.filter((n) => n.id !== nodeId),
-      edges: prev.edges.filter((e) => e.from !== nodeId && e.to !== nodeId),
+      edges: prev.edges.filter((e) => e.from !== nodeId && e.to !== nodeId)
     }));
     setSelectedNodeId("");
   };
@@ -159,29 +134,19 @@ const PipelineBuilderPage = () => {
   const updateEdge = (idx: number, patch: Partial<GraphEdge>) => {
     setGraph((prev) => ({
       ...prev,
-      edges: prev.edges.map((edge, edgeIdx) =>
-        edgeIdx === idx ? { ...edge, ...patch } : edge,
-      ),
+      edges: prev.edges.map((edge, edgeIdx) => (edgeIdx === idx ? { ...edge, ...patch } : edge))
     }));
   };
 
   const removeEdge = (idx: number) => {
-    setGraph((prev) => ({
-      ...prev,
-      edges: prev.edges.filter((_, edgeIdx) => edgeIdx !== idx),
-    }));
+    setGraph((prev) => ({ ...prev, edges: prev.edges.filter((_, edgeIdx) => edgeIdx !== idx) }));
   };
 
   const save = async () => {
     try {
       setError(null);
       if (validationError) throw new Error(validationError);
-      await pipelineBuilderApi.createProfile({
-        code,
-        name,
-        graph: parsedGraph,
-        is_active: true,
-      });
+      await pipelineBuilderApi.createProfile({ code, name, graph: parsedGraph, is_active: true });
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Ошибка сохранения");
@@ -190,37 +155,19 @@ const PipelineBuilderPage = () => {
 
   return (
     <section className="space-y-4">
-      <h1 className="text-xl font-semibold">
-        Конструктор процессов (low-code)
-      </h1>
+      <h1 className="text-xl font-semibold">Конструктор процессов (low-code)</h1>
       <div className="grid gap-4 md:grid-cols-2">
         <div className="space-y-2 rounded border p-3 text-sm">
-          <input
-            className="w-full rounded border px-2 py-1"
-            value={code}
-            onChange={(e) => setCode(e.target.value)}
-            placeholder="Код профиля"
-          />
-          <input
-            className="w-full rounded border px-2 py-1"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Название"
-          />
+          <input className="w-full rounded border px-2 py-1" value={code} onChange={(e) => setCode(e.target.value)} placeholder="Код профиля" />
+          <input className="w-full rounded border px-2 py-1" value={name} onChange={(e) => setName(e.target.value)} placeholder="Название" />
           <div className="space-y-2 rounded border p-2">
             <div className="flex flex-wrap gap-2">
-              <button className="rounded border px-2 py-1" onClick={addNode}>
-                + Нода
-              </button>
-              <button className="rounded border px-2 py-1" onClick={addEdge}>
-                + Ребро
-              </button>
+              <button className="rounded border px-2 py-1" onClick={addNode}>+ Нода</button>
+              <button className="rounded border px-2 py-1" onClick={addEdge}>+ Ребро</button>
             </div>
             <div className="grid gap-3 lg:grid-cols-[1.3fr_1fr]">
               <div className="space-y-2">
-                <div className="text-xs font-medium text-muted-foreground">
-                  Холст (узлы и связи)
-                </div>
+                <div className="text-xs font-medium text-muted-foreground">Холст (узлы и связи)</div>
                 <div className="max-h-52 space-y-2 overflow-auto rounded border p-2">
                   {parsedGraph.nodes.map((node, nodeIdx) => (
                     <button
@@ -234,86 +181,31 @@ const PipelineBuilderPage = () => {
                     </button>
                   ))}
                 </div>
-                <div className="text-xs font-medium text-muted-foreground">
-                  Рёбра графа
-                </div>
+                <div className="text-xs font-medium text-muted-foreground">Рёбра графа</div>
                 <div className="max-h-52 space-y-2 overflow-auto rounded border p-2">
                   {parsedGraph.edges.map((edge, idx) => (
-                    <div
-                      key={`${edge.from}-${edge.to}-${idx}`}
-                      className="space-y-1 rounded border p-2"
-                    >
+                    <div key={`${edge.from}-${edge.to}-${idx}`} className="space-y-1 rounded border p-2">
                       <div className="grid grid-cols-2 gap-2">
-                        <select
-                          className="rounded border px-1 py-0.5"
-                          value={edge.from}
-                          onChange={(e) =>
-                            updateEdge(idx, { from: e.target.value })
-                          }
-                        >
-                          {parsedGraph.nodes.map((node, nodeIdx) => (
-                            <option key={`${idx}-from-${node.id}-${nodeIdx}`}>
-                              {node.id}
-                            </option>
-                          ))}
+                        <select className="rounded border px-1 py-0.5" value={edge.from} onChange={(e) => updateEdge(idx, { from: e.target.value })}>
+                          {parsedGraph.nodes.map((node, nodeIdx) => <option key={`${idx}-from-${node.id}-${nodeIdx}`}>{node.id}</option>)}
                         </select>
-                        <select
-                          className="rounded border px-1 py-0.5"
-                          value={edge.to}
-                          onChange={(e) =>
-                            updateEdge(idx, { to: e.target.value })
-                          }
-                        >
-                          {parsedGraph.nodes.map((node, nodeIdx) => (
-                            <option key={`${idx}-to-${node.id}-${nodeIdx}`}>
-                              {node.id}
-                            </option>
-                          ))}
+                        <select className="rounded border px-1 py-0.5" value={edge.to} onChange={(e) => updateEdge(idx, { to: e.target.value })}>
+                          {parsedGraph.nodes.map((node, nodeIdx) => <option key={`${idx}-to-${node.id}-${nodeIdx}`}>{node.id}</option>)}
                         </select>
                       </div>
-                      <input
-                        className="w-full rounded border px-1 py-0.5"
-                        value={edge.condition ?? ""}
-                        onChange={(e) =>
-                          updateEdge(idx, {
-                            condition: e.target.value || undefined,
-                          })
-                        }
-                        placeholder="Условие (необязательно)"
-                      />
-                      <button
-                        className="rounded border px-2 py-0.5"
-                        onClick={() => removeEdge(idx)}
-                      >
-                        Удалить ребро
-                      </button>
+                      <input className="w-full rounded border px-1 py-0.5" value={edge.condition ?? ""} onChange={(e) => updateEdge(idx, { condition: e.target.value || undefined })} placeholder="Условие (необязательно)" />
+                      <button className="rounded border px-2 py-0.5" onClick={() => removeEdge(idx)}>Удалить ребро</button>
                     </div>
                   ))}
                 </div>
               </div>
               <div className="space-y-2 rounded border p-2">
-                <div className="text-xs font-medium text-muted-foreground">
-                  Свойства узла
-                </div>
+                <div className="text-xs font-medium text-muted-foreground">Свойства узла</div>
                 {selectedNode ? (
                   <>
-                    <input
-                      className="w-full rounded border px-2 py-1"
-                      value={selectedNode.id}
-                      onChange={(e) =>
-                        updateNode(selectedNode.id, { id: e.target.value })
-                      }
-                    />
-                    <select
-                      className="w-full rounded border px-2 py-1"
-                      value={selectedNode.type}
-                      onChange={(e) =>
-                        updateNode(selectedNode.id, { type: e.target.value })
-                      }
-                    >
-                      {NODE_TYPES.map((kind) => (
-                        <option key={kind}>{kind}</option>
-                      ))}
+                    <input className="w-full rounded border px-2 py-1" value={selectedNode.id} onChange={(e) => updateNode(selectedNode.id, { id: e.target.value })} />
+                    <select className="w-full rounded border px-2 py-1" value={selectedNode.type} onChange={(e) => updateNode(selectedNode.id, { type: e.target.value })}>
+                      {NODE_TYPES.map((kind) => <option key={kind}>{kind}</option>)}
                     </select>
                     <textarea
                       className="h-32 w-full rounded border p-2 font-mono text-xs"
@@ -321,59 +213,31 @@ const PipelineBuilderPage = () => {
                       onChange={(e) => {
                         setConfigText(e.target.value);
                         try {
-                          const nextConfig = JSON.parse(
-                            e.target.value,
-                          ) as Record<string, unknown>;
+                          const nextConfig = JSON.parse(e.target.value) as Record<string, unknown>;
                           updateNode(selectedNode.id, { config: nextConfig });
                         } catch {
                           // keep local text invalid until corrected
                         }
                       }}
                     />
-                    <button
-                      className="rounded border px-2 py-1"
-                      onClick={() => removeNode(selectedNode.id)}
-                    >
-                      Удалить ноду
-                    </button>
+                    <button className="rounded border px-2 py-1" onClick={() => removeNode(selectedNode.id)}>Удалить ноду</button>
                   </>
-                ) : (
-                  <div className="text-xs text-muted-foreground">
-                    Выберите ноду для редактирования.
-                  </div>
-                )}
+                ) : <div className="text-xs text-muted-foreground">Выберите ноду для редактирования.</div>}
               </div>
             </div>
             <details>
-              <summary className="cursor-pointer text-xs text-muted-foreground">
-                Предпросмотр JSON
-              </summary>
-              <pre className="mt-2 max-h-48 overflow-auto rounded border bg-muted/30 p-2 text-[11px]">
-                {JSON.stringify(parsedGraph, null, 2)}
-              </pre>
+              <summary className="cursor-pointer text-xs text-muted-foreground">Предпросмотр JSON</summary>
+              <pre className="mt-2 max-h-48 overflow-auto rounded border bg-muted/30 p-2 text-[11px]">{JSON.stringify(parsedGraph, null, 2)}</pre>
             </details>
           </div>
-          {validationError ? (
-            <p className="text-xs text-amber-700">{validationError}</p>
-          ) : null}
+          {validationError ? <p className="text-xs text-amber-700">{validationError}</p> : null}
           {error ? <p className="text-xs text-red-600">{error}</p> : null}
-          <button
-            className="rounded border px-3 py-1 disabled:opacity-60"
-            disabled={Boolean(validationError)}
-            onClick={() => save().catch(() => undefined)}
-          >
-            Сохранить профиль
-          </button>
+          <button className="rounded border px-3 py-1 disabled:opacity-60" disabled={Boolean(validationError)} onClick={() => save().catch(() => undefined)}>Сохранить профиль</button>
         </div>
         <div className="rounded border p-3 text-sm">
           <h2 className="mb-2 font-medium">Профили</h2>
-          <ErrorState
-            error={profilesError ?? undefined}
-            onRetry={() => void load()}
-          />
-          {profilesLoading ? (
-            <LoadingScreen label="Загрузка профилей пайплайна" />
-          ) : null}
+          <ErrorState error={profilesError ?? undefined} onRetry={() => void load()} />
+          {profilesLoading ? <LoadingScreen label="Загрузка профилей пайплайна" /> : null}
           {!profilesLoading && !profilesError && profiles.length === 0 ? (
             <EmptyState
               title="Профили пайплайна не найдены"
@@ -385,13 +249,8 @@ const PipelineBuilderPage = () => {
               {profiles.map((profile) => (
                 <div key={profile.id} className="rounded border p-2">
                   <div className="font-medium">{profile.code}</div>
-                  <div className="text-xs text-muted-foreground">
-                    v{profile.profile_version} · {profile.name}
-                  </div>
-                  <div className="text-xs">
-                    узлов: {profile.graph?.nodes?.length ?? 0}, рёбер:{" "}
-                    {profile.graph?.edges?.length ?? 0}
-                  </div>
+                  <div className="text-xs text-muted-foreground">v{profile.profile_version} · {profile.name}</div>
+                  <div className="text-xs">узлов: {profile.graph?.nodes?.length ?? 0}, рёбер: {profile.graph?.edges?.length ?? 0}</div>
                 </div>
               ))}
             </div>

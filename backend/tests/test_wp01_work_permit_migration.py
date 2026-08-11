@@ -1,5 +1,4 @@
 """wp01 migration + model shape (mirrors test_sz01/test_prm01 — read file as text)."""
-
 from __future__ import annotations
 
 from pathlib import Path
@@ -8,10 +7,7 @@ from app.models.work_permit import WorkPermit, WorkPermitEvent, WorkPermitMember
 
 MIGRATION = (
     Path(__file__).resolve().parents[1]
-    / "app"
-    / "migrations"
-    / "versions"
-    / "20260616_wp01_work_permit_tables.py"
+    / "app" / "migrations" / "versions" / "20260616_wp01_work_permit_tables.py"
 )
 
 

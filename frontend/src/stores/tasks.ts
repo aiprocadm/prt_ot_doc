@@ -25,10 +25,7 @@ interface TasksState extends PaginatedState<TaskDto, TaskFiltersDto> {
   setFilters: (filters: Partial<TaskFiltersDto>) => void;
   setPage: (page: number) => void;
   setPageSize: (size: number) => void;
-  patchTask: (
-    id: string,
-    payload: Partial<Pick<TaskDto, "status" | "assignee_id" | "due_at">>,
-  ) => Promise<TaskDto | null>;
+  patchTask: (id: string, payload: Partial<Pick<TaskDto, "status" | "assignee_id" | "due_at">>) => Promise<TaskDto | null>;
   updateTask: (task: TaskDto) => void;
   reset: () => void;
 }
@@ -72,7 +69,7 @@ export const useTasksStore = create<TasksState>()(
         filters: {},
         pagination: defaultPagination(),
         loading: false,
-        error: null,
+        error: null
       }));
     },
     list: async (params) => {
@@ -80,17 +77,9 @@ export const useTasksStore = create<TasksState>()(
         state.loading = true;
         state.error = null;
       });
-      const query = {
-        ...get().filters,
-        ...params,
-        page: get().pagination.page,
-        page_size: get().pagination.page_size,
-      };
+      const query = { ...get().filters, ...params, page: get().pagination.page, page_size: get().pagination.page_size };
       try {
-        const { data } = await apiClient.get<PaginatedResponse<TaskDto>>(
-          "/tasks",
-          { params: query },
-        );
+        const { data } = await apiClient.get<PaginatedResponse<TaskDto>>("/tasks", { params: query });
         set((state) => {
           state.items = data.items;
           state.pagination = data.pagination;
@@ -143,10 +132,7 @@ export const useTasksStore = create<TasksState>()(
     },
     patchTask: async (id, payload) => {
       try {
-        const { data } = await apiClient.patch<TaskDto>(
-          `/tasks/${id}`,
-          payload,
-        );
+        const { data } = await apiClient.patch<TaskDto>(`/tasks/${id}`, payload);
         get().updateTask(data);
         return data;
       } catch (error) {
@@ -166,6 +152,6 @@ export const useTasksStore = create<TasksState>()(
         }
         if (state.item?.id === task.id) state.item = task;
       });
-    },
-  })),
+    }
+  }))
 );

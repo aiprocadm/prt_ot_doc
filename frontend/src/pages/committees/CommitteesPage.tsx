@@ -14,10 +14,7 @@ import {
   type VoteChoice,
 } from "@/api/committees";
 import { EmptyState } from "@/components/common/EmptyState";
-import {
-  PersonTypeahead,
-  type PersonOption,
-} from "@/components/common/PersonTypeahead";
+import { PersonTypeahead, type PersonOption } from "@/components/common/PersonTypeahead";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingScreen } from "@/components/common/LoadingScreen";
 import { RegistryPageHeader } from "@/components/common/RegistryPageHeader";
@@ -25,14 +22,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { ApiError } from "@/types/dto/common";
 import { formatDate } from "@/utils/datetime";
 
@@ -81,8 +71,7 @@ const asApiError = (err: unknown, fallback: string): ApiError =>
     ? (err as ApiError)
     : { status: 0, message: fallback };
 
-const personLabel = (m: MemberDetail): string =>
-  m.person_fio?.trim() || m.person_id;
+const personLabel = (m: MemberDetail): string => m.person_fio?.trim() || m.person_id;
 
 // ── Committee list panel + create form ──────────────────────────────────────
 
@@ -146,10 +135,7 @@ const CommitteeList = ({ selected, onSelect }: CommitteeListProps) => {
         <CardTitle className="text-base">Комитеты</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
-        <form
-          className="flex flex-wrap items-end gap-2"
-          onSubmit={handleCreate}
-        >
+        <form className="flex flex-wrap items-end gap-2" onSubmit={handleCreate}>
           <div className="flex-1 min-w-[200px] space-y-1">
             <label className="text-xs text-muted-foreground" htmlFor="cmt-name">
               Название
@@ -179,10 +165,7 @@ const CommitteeList = ({ selected, onSelect }: CommitteeListProps) => {
             </select>
           </div>
           <div className="space-y-1">
-            <label
-              className="text-xs text-muted-foreground"
-              htmlFor="cmt-quorum"
-            >
+            <label className="text-xs text-muted-foreground" htmlFor="cmt-quorum">
               Порог кворума, %
             </label>
             <Input
@@ -205,10 +188,7 @@ const CommitteeList = ({ selected, onSelect }: CommitteeListProps) => {
         <ErrorState error={error ?? undefined} onRetry={load} />
         {loading ? <LoadingScreen label="Загрузка комитетов" /> : null}
         {!loading && !error && items.length === 0 ? (
-          <EmptyState
-            title="Нет данных"
-            description="Комитеты ещё не созданы."
-          />
+          <EmptyState title="Нет данных" description="Комитеты ещё не созданы." />
         ) : null}
         {!loading && !error && items.length > 0 ? (
           <Table>
@@ -227,9 +207,7 @@ const CommitteeList = ({ selected, onSelect }: CommitteeListProps) => {
                   onClick={() => onSelect(c)}
                 >
                   <TableCell className="font-medium">{c.name}</TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {KIND_LABELS[c.kind] ?? c.kind}
-                  </TableCell>
+                  <TableCell className="text-muted-foreground">{KIND_LABELS[c.kind] ?? c.kind}</TableCell>
                   <TableCell>
                     <Badge variant={c.is_active ? "default" : "secondary"}>
                       {c.is_active ? "Активен" : "Неактивен"}
@@ -282,10 +260,7 @@ const MembersPanel = ({ committee }: MembersPanelProps) => {
     setSaving(true);
     setFormError(null);
     try {
-      await committeesApi.addMember(committee.id, {
-        person_id: person.id,
-        role,
-      });
+      await committeesApi.addMember(committee.id, { person_id: person.id, role });
       setPerson(null);
       await load();
     } catch (err) {
@@ -313,23 +288,13 @@ const MembersPanel = ({ committee }: MembersPanelProps) => {
       <CardContent className="space-y-3">
         <form className="flex flex-wrap items-end gap-2" onSubmit={handleAdd}>
           <div className="flex-1 min-w-[200px] space-y-1">
-            <label
-              className="text-xs text-muted-foreground"
-              htmlFor="member-person"
-            >
+            <label className="text-xs text-muted-foreground" htmlFor="member-person">
               Сотрудник
             </label>
-            <PersonTypeahead
-              inputId="member-person"
-              value={person}
-              onChange={setPerson}
-            />
+            <PersonTypeahead inputId="member-person" value={person} onChange={setPerson} />
           </div>
           <div className="space-y-1">
-            <label
-              className="text-xs text-muted-foreground"
-              htmlFor="member-role"
-            >
+            <label className="text-xs text-muted-foreground" htmlFor="member-role">
               Роль
             </label>
             <select
@@ -353,10 +318,7 @@ const MembersPanel = ({ committee }: MembersPanelProps) => {
         <ErrorState error={error ?? undefined} onRetry={load} />
         {loading ? <LoadingScreen label="Загрузка состава" /> : null}
         {!loading && !error && members.length === 0 ? (
-          <EmptyState
-            title="Нет данных"
-            description="В комитет ещё не добавлены члены."
-          />
+          <EmptyState title="Нет данных" description="В комитет ещё не добавлены члены." />
         ) : null}
         {!loading && !error && members.length > 0 ? (
           <Table>
@@ -370,12 +332,8 @@ const MembersPanel = ({ committee }: MembersPanelProps) => {
             <TableBody>
               {members.map((m) => (
                 <TableRow key={m.id}>
-                  <TableCell className="font-medium">
-                    {personLabel(m)}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {ROLE_LABELS[m.role] ?? m.role}
-                  </TableCell>
+                  <TableCell className="font-medium">{personLabel(m)}</TableCell>
+                  <TableCell className="text-muted-foreground">{ROLE_LABELS[m.role] ?? m.role}</TableCell>
                   <TableCell>
                     <Button
                       type="button"
@@ -453,20 +411,12 @@ const MeetingList = ({ committee, selected, onSelect }: MeetingListProps) => {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">
-          Заседания — {committee.name}
-        </CardTitle>
+        <CardTitle className="text-base">Заседания — {committee.name}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
-        <form
-          className="flex flex-wrap items-end gap-2"
-          onSubmit={handleCreate}
-        >
+        <form className="flex flex-wrap items-end gap-2" onSubmit={handleCreate}>
           <div className="space-y-1">
-            <label
-              className="text-xs text-muted-foreground"
-              htmlFor="meeting-date"
-            >
+            <label className="text-xs text-muted-foreground" htmlFor="meeting-date">
               Дата и время
             </label>
             <Input
@@ -477,10 +427,7 @@ const MeetingList = ({ committee, selected, onSelect }: MeetingListProps) => {
             />
           </div>
           <div className="flex-1 min-w-[160px] space-y-1">
-            <label
-              className="text-xs text-muted-foreground"
-              htmlFor="meeting-location"
-            >
+            <label className="text-xs text-muted-foreground" htmlFor="meeting-location">
               Место
             </label>
             <Input
@@ -498,10 +445,7 @@ const MeetingList = ({ committee, selected, onSelect }: MeetingListProps) => {
         <ErrorState error={error ?? undefined} onRetry={load} />
         {loading ? <LoadingScreen label="Загрузка заседаний" /> : null}
         {!loading && !error && items.length === 0 ? (
-          <EmptyState
-            title="Нет данных"
-            description="Заседания ещё не проводились."
-          />
+          <EmptyState title="Нет данных" description="Заседания ещё не проводились." />
         ) : null}
         {!loading && !error && items.length > 0 ? (
           <Table>
@@ -519,16 +463,10 @@ const MeetingList = ({ committee, selected, onSelect }: MeetingListProps) => {
                   className={`cursor-pointer ${selected?.id === m.id ? "bg-muted" : ""}`}
                   onClick={() => onSelect(m)}
                 >
-                  <TableCell className="font-medium">
-                    {formatDate(m.scheduled_at)}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {m.location ?? "—"}
-                  </TableCell>
+                  <TableCell className="font-medium">{formatDate(m.scheduled_at)}</TableCell>
+                  <TableCell className="text-muted-foreground">{m.location ?? "—"}</TableCell>
                   <TableCell>
-                    <Badge variant="outline">
-                      {STATUS_LABELS[m.status] ?? m.status}
-                    </Badge>
+                    <Badge variant="outline">{STATUS_LABELS[m.status] ?? m.status}</Badge>
                   </TableCell>
                 </TableRow>
               ))}
@@ -623,22 +561,12 @@ const InvitationsPanel = ({ meeting }: InvitationsPanelProps) => {
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
-        <form
-          className="flex flex-wrap items-end gap-2"
-          onSubmit={handleInvite}
-        >
+        <form className="flex flex-wrap items-end gap-2" onSubmit={handleInvite}>
           <div className="flex-1 min-w-[220px] space-y-1">
-            <label
-              className="text-xs text-muted-foreground"
-              htmlFor="invite-person"
-            >
+            <label className="text-xs text-muted-foreground" htmlFor="invite-person">
               Пригласить участника
             </label>
-            <PersonTypeahead
-              inputId="invite-person"
-              value={person}
-              onChange={setPerson}
-            />
+            <PersonTypeahead inputId="invite-person" value={person} onChange={setPerson} />
           </div>
           <Button type="submit" disabled={saving || !person}>
             Пригласить
@@ -656,18 +584,13 @@ const InvitationsPanel = ({ meeting }: InvitationsPanelProps) => {
         <ErrorState error={error ?? undefined} onRetry={load} />
         {loading ? <LoadingScreen label="Загрузка приглашений" /> : null}
         {!loading && !error && invitations.length === 0 ? (
-          <EmptyState
-            title="Нет приглашений"
-            description="На заседание пока никто не приглашён."
-          />
+          <EmptyState title="Нет приглашений" description="На заседание пока никто не приглашён." />
         ) : null}
         {!loading && !error && invitations.length > 0 ? (
           <ul className="space-y-1">
             {invitations.map((inv) => (
               <li key={inv.id} className="flex items-center gap-2 text-sm">
-                <span className="flex-1">
-                  {fioByPerson.get(inv.person_id) ?? inv.person_id}
-                </span>
+                <span className="flex-1">{fioByPerson.get(inv.person_id) ?? inv.person_id}</span>
                 <span className="text-xs text-muted-foreground">
                   приглашён(а) {formatDate(inv.invited_at)}
                 </span>
@@ -697,11 +620,7 @@ interface AttendancePanelProps {
   onHeld: (updated: Meeting) => void;
 }
 
-const AttendancePanel = ({
-  meeting,
-  committee,
-  onHeld,
-}: AttendancePanelProps) => {
+const AttendancePanel = ({ meeting, committee, onHeld }: AttendancePanelProps) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
   const [members, setMembers] = useState<MemberDetail[]>([]);
@@ -720,9 +639,7 @@ const AttendancePanel = ({
         committeesApi.getAttendance(meeting.id),
       ]);
       setMembers(mem);
-      const byPerson = new Map<string, Attendance>(
-        att.map((a) => [a.person_id, a]),
-      );
+      const byPerson = new Map<string, Attendance>(att.map((a) => [a.person_id, a]));
       const map: Record<string, boolean> = {};
       mem.forEach((m) => {
         map[m.person_id] = byPerson.get(m.person_id)?.present ?? false;
@@ -759,10 +676,7 @@ const AttendancePanel = ({
     try {
       await committeesApi.putAttendance(
         meeting.id,
-        members.map((m) => ({
-          person_id: m.person_id,
-          present: Boolean(present[m.person_id]),
-        })),
+        members.map((m) => ({ person_id: m.person_id, present: Boolean(present[m.person_id]) })),
       );
       setSavedNote("Присутствие сохранено");
     } catch (err) {
@@ -788,19 +702,14 @@ const AttendancePanel = ({
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">
-          Присутствие — {formatDate(meeting.scheduled_at)}
-        </CardTitle>
+        <CardTitle className="text-base">Присутствие — {formatDate(meeting.scheduled_at)}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
         <ErrorState error={actionError ?? undefined} />
         <ErrorState error={error ?? undefined} onRetry={load} />
         {loading ? <LoadingScreen label="Загрузка присутствия" /> : null}
         {!loading && !error && members.length === 0 ? (
-          <EmptyState
-            title="Нет состава"
-            description="Сначала добавьте членов комитета."
-          />
+          <EmptyState title="Нет состава" description="Сначала добавьте членов комитета." />
         ) : null}
         {!loading && !error && members.length > 0 ? (
           <>
@@ -816,38 +725,23 @@ const AttendancePanel = ({
                   />
                   <label htmlFor={`present-${m.person_id}`} className="text-sm">
                     {personLabel(m)}{" "}
-                    <span className="text-muted-foreground">
-                      ({ROLE_LABELS[m.role] ?? m.role})
-                    </span>
+                    <span className="text-muted-foreground">({ROLE_LABELS[m.role] ?? m.role})</span>
                   </label>
                 </li>
               ))}
             </ul>
             <p className="text-sm" data-testid="quorum-indicator">
               Присутствует {presentCount} из {total} —{" "}
-              <span
-                className={hasQuorum ? "text-emerald-600" : "text-destructive"}
-              >
+              <span className={hasQuorum ? "text-emerald-600" : "text-destructive"}>
                 {hasQuorum ? "кворум есть" : "кворум нет"}
               </span>{" "}
               <span className="text-muted-foreground">
-                (
-                {thresholdPct != null
-                  ? `порог ${thresholdPct}%`
-                  : "простое большинство"}
-                )
+                ({thresholdPct != null ? `порог ${thresholdPct}%` : "простое большинство"})
               </span>
             </p>
-            {savedNote ? (
-              <p className="text-xs text-emerald-600">{savedNote}</p>
-            ) : null}
+            {savedNote ? <p className="text-xs text-emerald-600">{savedNote}</p> : null}
             <div className="flex flex-wrap gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={handleSave}
-                disabled={saving}
-              >
+              <Button type="button" variant="outline" onClick={handleSave} disabled={saving}>
                 Сохранить присутствие
               </Button>
               <Button type="button" onClick={handleHold} disabled={holding}>
@@ -869,11 +763,7 @@ interface DecisionVotingProps {
   onVoted: () => void;
 }
 
-const DecisionVoting = ({
-  decision,
-  presentMembers,
-  onVoted,
-}: DecisionVotingProps) => {
+const DecisionVoting = ({ decision, presentMembers, onVoted }: DecisionVotingProps) => {
   const [voteError, setVoteError] = useState<ApiError | null>(null);
   const [pending, setPending] = useState(false);
   const outcome = decision.outcome ?? null;
@@ -895,8 +785,8 @@ const DecisionVoting = ({
     <div className="space-y-2">
       <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
         <span>
-          За: {decision.votes_for ?? 0} · Против: {decision.votes_against ?? 0}{" "}
-          · Воздержались: {decision.votes_abstain ?? 0}
+          За: {decision.votes_for ?? 0} · Против: {decision.votes_against ?? 0} · Воздержались:{" "}
+          {decision.votes_abstain ?? 0}
         </span>
         {outcome ? (
           <Badge variant={outcome === "carried" ? "default" : "destructive"}>
@@ -906,9 +796,7 @@ const DecisionVoting = ({
       </div>
       <ErrorState error={voteError ?? undefined} />
       {presentMembers.length === 0 ? (
-        <p className="text-xs text-muted-foreground">
-          Нет присутствующих для голосования.
-        </p>
+        <p className="text-xs text-muted-foreground">Нет присутствующих для голосования.</p>
       ) : (
         <ul className="space-y-1">
           {presentMembers.map((m) => (
@@ -942,11 +830,7 @@ interface DecisionTaskFormProps {
   onCreated: () => void;
 }
 
-const DecisionTaskForm = ({
-  decisionId,
-  members,
-  onCreated,
-}: DecisionTaskFormProps) => {
+const DecisionTaskForm = ({ decisionId, members, onCreated }: DecisionTaskFormProps) => {
   const [assignee, setAssignee] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [note, setNote] = useState("");
@@ -977,18 +861,8 @@ const DecisionTaskForm = ({
   return (
     <form className="flex flex-wrap items-end gap-2" onSubmit={handleSubmit}>
       <div className="space-y-1">
-        <label
-          className="text-xs text-muted-foreground"
-          htmlFor={`task-assignee-${decisionId}`}
-        >
-          Ответственный
-        </label>
-        <select
-          id={`task-assignee-${decisionId}`}
-          className={selectClass}
-          value={assignee}
-          onChange={(e) => setAssignee(e.target.value)}
-        >
+        <label className="text-xs text-muted-foreground">Ответственный</label>
+        <select className={selectClass} value={assignee} onChange={(e) => setAssignee(e.target.value)}>
           <option value="">— не назначен —</option>
           {members.map((m) => (
             <option key={m.person_id} value={m.person_id}>
@@ -998,32 +872,12 @@ const DecisionTaskForm = ({
         </select>
       </div>
       <div className="space-y-1">
-        <label
-          className="text-xs text-muted-foreground"
-          htmlFor={`task-due-${decisionId}`}
-        >
-          Срок
-        </label>
-        <Input
-          id={`task-due-${decisionId}`}
-          type="date"
-          value={dueDate}
-          onChange={(e) => setDueDate(e.target.value)}
-        />
+        <label className="text-xs text-muted-foreground">Срок</label>
+        <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
       </div>
       <div className="flex-1 min-w-[160px] space-y-1">
-        <label
-          className="text-xs text-muted-foreground"
-          htmlFor={`task-note-${decisionId}`}
-        >
-          Примечание
-        </label>
-        <Input
-          id={`task-note-${decisionId}`}
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          placeholder="Примечание"
-        />
+        <label className="text-xs text-muted-foreground">Примечание</label>
+        <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Примечание" />
       </div>
       <Button type="submit" size="sm" variant="outline" disabled={saving}>
         Добавить задачу
@@ -1062,9 +916,7 @@ const ProtocolPanel = ({ meeting }: ProtocolPanelProps) => {
       ]);
       setProtocol(proto);
       setMembers(mem);
-      setPresentIds(
-        new Set(att.filter((a) => a.present).map((a) => a.person_id)),
-      );
+      setPresentIds(new Set(att.filter((a) => a.present).map((a) => a.person_id)));
     } catch (err) {
       setError(asApiError(err, "Не удалось загрузить протокол"));
     } finally {
@@ -1107,9 +959,7 @@ const ProtocolPanel = ({ meeting }: ProtocolPanelProps) => {
     setSavingDecision(true);
     setDecisionError(null);
     try {
-      await committeesApi.createDecision(meeting.id, {
-        text: decisionText.trim(),
-      });
+      await committeesApi.createDecision(meeting.id, { text: decisionText.trim() });
       setDecisionText("");
       await load();
     } catch (err) {
@@ -1123,8 +973,7 @@ const ProtocolPanel = ({ meeting }: ProtocolPanelProps) => {
     <Card>
       <CardHeader>
         <CardTitle className="text-base">
-          Протокол{protocolNo ? ` № ${protocolNo}` : ""} —{" "}
-          {formatDate(meeting.scheduled_at)}
+          Протокол{protocolNo ? ` № ${protocolNo}` : ""} — {formatDate(meeting.scheduled_at)}
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -1161,15 +1010,9 @@ const ProtocolPanel = ({ meeting }: ProtocolPanelProps) => {
         {loading ? <LoadingScreen label="Загрузка протокола" /> : null}
 
         {!loading && !error && isHeld ? (
-          <form
-            className="flex flex-wrap items-end gap-2"
-            onSubmit={handleCreateDecision}
-          >
+          <form className="flex flex-wrap items-end gap-2" onSubmit={handleCreateDecision}>
             <div className="flex-1 min-w-[220px] space-y-1">
-              <label
-                className="text-xs text-muted-foreground"
-                htmlFor="decision-text"
-              >
+              <label className="text-xs text-muted-foreground" htmlFor="decision-text">
                 Новое решение
               </label>
               <Input
@@ -1179,10 +1022,7 @@ const ProtocolPanel = ({ meeting }: ProtocolPanelProps) => {
                 placeholder="Формулировка решения"
               />
             </div>
-            <Button
-              type="submit"
-              disabled={savingDecision || !decisionText.trim()}
-            >
+            <Button type="submit" disabled={savingDecision || !decisionText.trim()}>
               Добавить решение
             </Button>
             <ErrorState error={decisionError ?? undefined} />
@@ -1195,27 +1035,14 @@ const ProtocolPanel = ({ meeting }: ProtocolPanelProps) => {
           </p>
         ) : null}
 
-        {!loading &&
-        !error &&
-        protocol !== null &&
-        protocol.decisions.length === 0 &&
-        isHeld ? (
-          <EmptyState
-            title="Нет решений"
-            description="Решения по заседанию ещё не внесены."
-          />
+        {!loading && !error && protocol !== null && protocol.decisions.length === 0 && isHeld ? (
+          <EmptyState title="Нет решений" description="Решения по заседанию ещё не внесены." />
         ) : null}
 
-        {!loading &&
-        !error &&
-        protocol !== null &&
-        protocol.decisions.length > 0 ? (
+        {!loading && !error && protocol !== null && protocol.decisions.length > 0 ? (
           <div className="space-y-4">
             {protocol.decisions.map((pd) => (
-              <div
-                key={pd.decision.id}
-                className="rounded-md border border-border p-4 space-y-3"
-              >
+              <div key={pd.decision.id} className="rounded-md border border-border p-4 space-y-3">
                 <p className="text-sm font-medium">{pd.decision.text}</p>
                 {pd.decision.decided_at ? (
                   <p className="text-xs text-muted-foreground">
@@ -1223,11 +1050,7 @@ const ProtocolPanel = ({ meeting }: ProtocolPanelProps) => {
                   </p>
                 ) : null}
 
-                <DecisionVoting
-                  decision={pd}
-                  presentMembers={presentMembers}
-                  onVoted={load}
-                />
+                <DecisionVoting decision={pd} presentMembers={presentMembers} onVoted={load} />
 
                 {pd.tasks.length > 0 ? (
                   <Table>
@@ -1245,10 +1068,7 @@ const ProtocolPanel = ({ meeting }: ProtocolPanelProps) => {
                             <span className="flex items-center gap-2">
                               {formatDate(task.due_date)}
                               {task.is_overdue ? (
-                                <Badge
-                                  variant="destructive"
-                                  className="text-xs"
-                                >
+                                <Badge variant="destructive" className="text-xs">
                                   Просрочено
                                 </Badge>
                               ) : null}
@@ -1265,16 +1085,10 @@ const ProtocolPanel = ({ meeting }: ProtocolPanelProps) => {
                     </TableBody>
                   </Table>
                 ) : (
-                  <p className="text-xs text-muted-foreground">
-                    Задачи не назначены.
-                  </p>
+                  <p className="text-xs text-muted-foreground">Задачи не назначены.</p>
                 )}
 
-                <DecisionTaskForm
-                  decisionId={pd.decision.id}
-                  members={members}
-                  onCreated={load}
-                />
+                <DecisionTaskForm decisionId={pd.decision.id} members={members} onCreated={load} />
               </div>
             ))}
           </div>
@@ -1321,10 +1135,7 @@ const ProtocolJournalPanel = ({ onSelect }: ProtocolJournalPanelProps) => {
         <ErrorState error={error ?? undefined} onRetry={load} />
         {loading ? <LoadingScreen label="Загрузка журнала" /> : null}
         {!loading && !error && items.length === 0 ? (
-          <EmptyState
-            title="Нет данных"
-            description="Проведённых заседаний пока нет."
-          />
+          <EmptyState title="Нет данных" description="Проведённых заседаний пока нет." />
         ) : null}
         {!loading && !error && items.length > 0 ? (
           <Table>
@@ -1343,13 +1154,9 @@ const ProtocolJournalPanel = ({ onSelect }: ProtocolJournalPanelProps) => {
                   className="cursor-pointer"
                   onClick={() => onSelect(item)}
                 >
-                  <TableCell className="font-medium">
-                    {item.protocol_no}
-                  </TableCell>
+                  <TableCell className="font-medium">{item.protocol_no}</TableCell>
                   <TableCell>{item.committee_name}</TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {formatDate(item.held_at)}
-                  </TableCell>
+                  <TableCell className="text-muted-foreground">{formatDate(item.held_at)}</TableCell>
                   <TableCell>{item.decisions_count}</TableCell>
                 </TableRow>
               ))}
@@ -1376,9 +1183,7 @@ const journalItemToMeeting = (item: ProtocolJournalItem): Meeting => ({
 });
 
 const CommitteesPage = () => {
-  const [selectedCommittee, setSelectedCommittee] = useState<Committee | null>(
-    null,
-  );
+  const [selectedCommittee, setSelectedCommittee] = useState<Committee | null>(null);
   const [selectedMeeting, setSelectedMeeting] = useState<Meeting | null>(null);
 
   const handleSelectCommittee = (c: Committee) => {
@@ -1396,10 +1201,7 @@ const CommitteesPage = () => {
         title="Комитеты"
         description="Комитеты по охране труда: состав, заседания, присутствие, голосование и протоколы решений."
       />
-      <CommitteeList
-        selected={selectedCommittee}
-        onSelect={handleSelectCommittee}
-      />
+      <CommitteeList selected={selectedCommittee} onSelect={handleSelectCommittee} />
       {selectedCommittee !== null ? (
         <>
           <MembersPanel committee={selectedCommittee} />
@@ -1420,9 +1222,7 @@ const CommitteesPage = () => {
           />
         </>
       ) : null}
-      {selectedMeeting !== null ? (
-        <ProtocolPanel meeting={selectedMeeting} />
-      ) : null}
+      {selectedMeeting !== null ? <ProtocolPanel meeting={selectedMeeting} /> : null}
       <ProtocolJournalPanel onSelect={handleSelectProtocol} />
     </div>
   );

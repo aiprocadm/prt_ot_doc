@@ -54,7 +54,9 @@ def test_origin_matching(candidate: str, expected: bool) -> None:
 
 
 def test_allowed_origin_passes() -> None:
-    assert_trusted_origin(_request({"Origin": "https://app.example.com"}), settings=_settings())
+    assert_trusted_origin(
+        _request({"Origin": "https://app.example.com"}), settings=_settings()
+    )
 
 
 def test_foreign_origin_is_rejected() -> None:

@@ -10,17 +10,12 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
+  DialogTrigger
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  ACTION_LABELS,
-  OP_LABELS,
-  eventLabel,
-  kindLabel,
-} from "@/pages/rules/rulesVocab";
+import { ACTION_LABELS, OP_LABELS, eventLabel, kindLabel } from "@/pages/rules/rulesVocab";
 import type {
   AutomationRuleCreate,
   AutomationRuleRead,
@@ -28,7 +23,7 @@ import type {
   RuleAction,
   RuleActionType,
   RuleCondition,
-  RuleConditionOp,
+  RuleConditionOp
 } from "@/types/dto/rules";
 
 interface Props {
@@ -59,7 +54,7 @@ const TASK_PRIORITY_OPTIONS: Array<[string, string]> = [
   ["low", "Низкий"],
   ["medium", "Средний"],
   ["high", "Высокий"],
-  ["critical", "Критический"],
+  ["critical", "Критический"]
 ];
 
 const ROLE_OPTIONS: Array<[string, string]> = [
@@ -67,7 +62,7 @@ const ROLE_OPTIONS: Array<[string, string]> = [
   ["owner", "Владелец"],
   ["ot_specialist", "Специалист по ОТ"],
   ["line_manager", "Линейный руководитель"],
-  ["hr", "HR"],
+  ["hr", "HR"]
 ];
 
 /** Для boolean-полей осмысленны только eq/ne/exists — сравнения и списки скрываем. */
@@ -87,7 +82,7 @@ const emptyAction = (): ActionRow => ({
   recipient_mode: "actor",
   user_id: "",
   roles: [],
-  body_template: "",
+  body_template: ""
 });
 
 const conditionValueToString = (value: unknown): string => {
@@ -101,36 +96,25 @@ const toConditionRows = (rule: AutomationRuleRead): ConditionRow[] =>
   (rule.conditions_json.conditions ?? []).map((c) => ({
     field: c.field,
     op: c.op,
-    value: conditionValueToString(c.value),
+    value: conditionValueToString(c.value)
   }));
 
 const toActionRows = (rule: AutomationRuleRead): ActionRow[] =>
   rule.actions_json.map((a) => ({
     ...emptyAction(),
     type: a.type,
-    title_template:
-      typeof a.title_template === "string" ? a.title_template : "",
-    description_template:
-      typeof a.description_template === "string" ? a.description_template : "",
+    title_template: typeof a.title_template === "string" ? a.title_template : "",
+    description_template: typeof a.description_template === "string" ? a.description_template : "",
     priority: typeof a.priority === "string" ? a.priority : "medium",
-    due_in_days:
-      a.due_in_days === undefined || a.due_in_days === null
-        ? ""
-        : String(a.due_in_days),
+    due_in_days: a.due_in_days === undefined || a.due_in_days === null ? "" : String(a.due_in_days),
     assignee_mode: (a.assignee_mode as ActionRow["assignee_mode"]) ?? "none",
-    recipient_mode:
-      (a.recipient_mode as ActionRow["recipient_mode"]) ?? "actor",
+    recipient_mode: (a.recipient_mode as ActionRow["recipient_mode"]) ?? "actor",
     user_id: typeof a.user_id === "string" ? a.user_id : "",
     roles: Array.isArray(a.roles) ? a.roles.map(String) : [],
-    body_template: typeof a.body_template === "string" ? a.body_template : "",
+    body_template: typeof a.body_template === "string" ? a.body_template : ""
   }));
 
-export const RuleFormDialog = ({
-  trigger,
-  eventTypes,
-  initialData,
-  onSubmitted,
-}: Props) => {
+export const RuleFormDialog = ({ trigger, eventTypes, initialData, onSubmitted }: Props) => {
   const [open, setOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [name, setName] = useState("");
@@ -174,14 +158,10 @@ export const RuleFormDialog = ({
   };
 
   const setCondition = (idx: number, patch: Partial<ConditionRow>) =>
-    setConditions((prev) =>
-      prev.map((row, i) => (i === idx ? { ...row, ...patch } : row)),
-    );
+    setConditions((prev) => prev.map((row, i) => (i === idx ? { ...row, ...patch } : row)));
 
   const setAction = (idx: number, patch: Partial<ActionRow>) =>
-    setActions((prev) =>
-      prev.map((row, i) => (i === idx ? { ...row, ...patch } : row)),
-    );
+    setActions((prev) => prev.map((row, i) => (i === idx ? { ...row, ...patch } : row)));
 
   const buildConditions = (): RuleCondition[] => {
     const built: RuleCondition[] = [];
@@ -190,11 +170,7 @@ export const RuleFormDialog = ({
       if (row.op === "exists" || fieldKind(row.field) === "boolean") {
         // Селект да/нет → настоящий boolean: строка "true" на backend никогда не
         // совпадёт с True (_loose_eq не коэрсит bool). Пустое значение — как true.
-        built.push({
-          field: row.field,
-          op: row.op,
-          value: row.value !== "false",
-        });
+        built.push({ field: row.field, op: row.op, value: row.value !== "false" });
         continue;
       }
       const raw = row.value.trim();
@@ -206,7 +182,7 @@ export const RuleFormDialog = ({
         built.push({
           field: row.field,
           op: row.op,
-          value: fieldKind(row.field) === "number" ? parts.map(Number) : parts,
+          value: fieldKind(row.field) === "number" ? parts.map(Number) : parts
         });
         continue;
       }
@@ -218,7 +194,7 @@ export const RuleFormDialog = ({
       built.push({
         field: row.field,
         op: row.op,
-        value: fieldKind(row.field) === "number" ? Number(raw) : raw,
+        value: fieldKind(row.field) === "number" ? Number(raw) : raw
       });
     }
     return built;
@@ -231,14 +207,11 @@ export const RuleFormDialog = ({
           type: "create_task",
           title_template: row.title_template.trim(),
           priority: row.priority,
-          assignee_mode: row.assignee_mode,
+          assignee_mode: row.assignee_mode
         };
-        if (row.description_template.trim())
-          action.description_template = row.description_template.trim();
-        if (row.due_in_days.trim() !== "")
-          action.due_in_days = Number.parseInt(row.due_in_days, 10);
-        if (row.assignee_mode === "user_id")
-          action.user_id = row.user_id.trim();
+        if (row.description_template.trim()) action.description_template = row.description_template.trim();
+        if (row.due_in_days.trim() !== "") action.due_in_days = Number.parseInt(row.due_in_days, 10);
+        if (row.assignee_mode === "user_id") action.user_id = row.user_id.trim();
         return action;
       }
       if (row.type === "notify") {
@@ -246,10 +219,9 @@ export const RuleFormDialog = ({
           type: "notify",
           recipient_mode: row.recipient_mode,
           title_template: row.title_template.trim(),
-          body_template: row.body_template.trim(),
+          body_template: row.body_template.trim()
         };
-        if (row.recipient_mode === "user_id")
-          action.user_id = row.user_id.trim();
+        if (row.recipient_mode === "user_id") action.user_id = row.user_id.trim();
         if (row.recipient_mode === "role") action.roles = row.roles;
         return action;
       }
@@ -279,7 +251,7 @@ export const RuleFormDialog = ({
         conditions_json: { match, conditions: buildConditions() },
         actions_json: buildActions(),
         priority: Number.isFinite(parsedPriority) ? parsedPriority : 100,
-        is_enabled: initialData?.is_enabled ?? true,
+        is_enabled: initialData?.is_enabled ?? true
       };
       if (initialData) {
         await rulesApi.update(initialData.id, payload);
@@ -306,22 +278,14 @@ export const RuleFormDialog = ({
       <DialogTrigger asChild>{trigger}</DialogTrigger>
       <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-3xl">
         <DialogHeader>
-          <DialogTitle>
-            {isEdit ? "Редактировать правило" : "Новое правило"}
-          </DialogTitle>
-          <DialogDescription>
-            Событие, условия срабатывания и автоматические действия.
-          </DialogDescription>
+          <DialogTitle>{isEdit ? "Редактировать правило" : "Новое правило"}</DialogTitle>
+          <DialogDescription>Событие, условия срабатывания и автоматические действия.</DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="rule-name">Имя</Label>
-              <Input
-                id="rule-name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-              />
+              <Input id="rule-name" value={name} onChange={(e) => setName(e.target.value)} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="rule-priority">Приоритет</Label>
@@ -384,11 +348,8 @@ export const RuleFormDialog = ({
                     {
                       field: firstField?.name ?? "",
                       op: "eq",
-                      value: defaultConditionValue(
-                        firstField?.kind ?? "string",
-                        "eq",
-                      ),
-                    },
+                      value: defaultConditionValue(firstField?.kind ?? "string", "eq")
+                    }
                   ]);
                 }}
               >
@@ -396,17 +357,10 @@ export const RuleFormDialog = ({
               </Button>
             </div>
             {!selectedEvent && conditions.length === 0 ? (
-              <p className="text-xs text-muted-foreground">
-                Выберите событие, чтобы добавить условия. Без условий правило
-                срабатывает на все события.
-              </p>
+              <p className="text-xs text-muted-foreground">Выберите событие, чтобы добавить условия. Без условий правило срабатывает на все события.</p>
             ) : null}
             {conditions.map((row, idx) => (
-              <div
-                key={idx}
-                data-testid={`cond-row-${idx}`}
-                className="flex flex-wrap items-end gap-2"
-              >
+              <div key={idx} data-testid={`cond-row-${idx}`} className="flex flex-wrap items-end gap-2">
                 <div className="space-y-1">
                   <Label htmlFor={`rule-cond-field-${idx}`}>Поле</Label>
                   <select
@@ -418,14 +372,11 @@ export const RuleFormDialog = ({
                       const nextField = e.target.value;
                       const kind = fieldKind(nextField);
                       // Для boolean-поля недопустимый оператор откатываем на eq.
-                      const nextOp =
-                        kind === "boolean" && !BOOLEAN_OPS.includes(row.op)
-                          ? "eq"
-                          : row.op;
+                      const nextOp = kind === "boolean" && !BOOLEAN_OPS.includes(row.op) ? "eq" : row.op;
                       setCondition(idx, {
                         field: nextField,
                         op: nextOp,
-                        value: defaultConditionValue(kind, nextOp),
+                        value: defaultConditionValue(kind, nextOp)
                       });
                     }}
                   >
@@ -449,10 +400,7 @@ export const RuleFormDialog = ({
                       // иначе селект показывал бы «да», а на submit ушло бы false.
                       setCondition(idx, {
                         op: nextOp,
-                        value: defaultConditionValue(
-                          fieldKind(row.field),
-                          nextOp,
-                        ),
+                        value: defaultConditionValue(fieldKind(row.field), nextOp)
                       });
                     }}
                   >
@@ -474,9 +422,7 @@ export const RuleFormDialog = ({
                       aria-label="Значение"
                       className="h-9 rounded-md border border-input bg-background px-2 text-sm"
                       value={row.value || "true"}
-                      onChange={(e) =>
-                        setCondition(idx, { value: e.target.value })
-                      }
+                      onChange={(e) => setCondition(idx, { value: e.target.value })}
                     >
                       <option value="true">да</option>
                       <option value="false">нет</option>
@@ -486,24 +432,16 @@ export const RuleFormDialog = ({
                       id={`rule-cond-value-${idx}`}
                       aria-label="Значение"
                       className="w-56"
-                      placeholder={
-                        row.op === "in" || row.op === "not_in"
-                          ? "значения через запятую"
-                          : ""
-                      }
+                      placeholder={row.op === "in" || row.op === "not_in" ? "значения через запятую" : ""}
                       value={row.value}
-                      onChange={(e) =>
-                        setCondition(idx, { value: e.target.value })
-                      }
+                      onChange={(e) => setCondition(idx, { value: e.target.value })}
                     />
                   )}
                 </div>
                 <Button
                   size="sm"
                   variant="ghost"
-                  onClick={() =>
-                    setConditions((prev) => prev.filter((_, i) => i !== idx))
-                  }
+                  onClick={() => setConditions((prev) => prev.filter((_, i) => i !== idx))}
                 >
                   Убрать
                 </Button>
@@ -514,52 +452,34 @@ export const RuleFormDialog = ({
           <div className="space-y-2">
             <div className="flex items-center gap-2">
               <Label>Действия</Label>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setActions((prev) => [...prev, emptyAction()])}
-              >
+              <Button size="sm" variant="outline" onClick={() => setActions((prev) => [...prev, emptyAction()])}>
                 Добавить действие
               </Button>
             </div>
             {actions.map((row, idx) => (
-              <div
-                key={idx}
-                data-testid={`action-card-${idx}`}
-                className="space-y-3 rounded-md border p-3"
-              >
+              <div key={idx} data-testid={`action-card-${idx}`} className="space-y-3 rounded-md border p-3">
                 <div className="flex flex-wrap items-end gap-2">
                   <div className="space-y-1">
-                    <Label htmlFor={`rule-action-type-${idx}`}>
-                      Тип действия
-                    </Label>
+                    <Label htmlFor={`rule-action-type-${idx}`}>Тип действия</Label>
                     <select
                       id={`rule-action-type-${idx}`}
                       aria-label="Тип действия"
                       className="h-9 rounded-md border border-input bg-background px-2 text-sm"
                       value={row.type}
-                      onChange={(e) =>
-                        setAction(idx, {
-                          type: e.target.value as RuleActionType,
-                        })
-                      }
+                      onChange={(e) => setAction(idx, { type: e.target.value as RuleActionType })}
                     >
-                      {(Object.keys(ACTION_LABELS) as RuleActionType[]).map(
-                        (t) => (
-                          <option key={t} value={t}>
-                            {ACTION_LABELS[t]}
-                          </option>
-                        ),
-                      )}
+                      {(Object.keys(ACTION_LABELS) as RuleActionType[]).map((t) => (
+                        <option key={t} value={t}>
+                          {ACTION_LABELS[t]}
+                        </option>
+                      ))}
                     </select>
                   </div>
                   <Button
                     size="sm"
                     variant="ghost"
                     className="ml-auto"
-                    onClick={() =>
-                      setActions((prev) => prev.filter((_, i) => i !== idx))
-                    }
+                    onClick={() => setActions((prev) => prev.filter((_, i) => i !== idx))}
                   >
                     Убрать действие
                   </Button>
@@ -568,43 +488,29 @@ export const RuleFormDialog = ({
                 {row.type === "create_task" ? (
                   <div className="grid gap-3 md:grid-cols-2">
                     <div className="space-y-1 md:col-span-2">
-                      <Label htmlFor={`rule-action-title-${idx}`}>
-                        Заголовок задачи
-                      </Label>
+                      <Label htmlFor={`rule-action-title-${idx}`}>Заголовок задачи</Label>
                       <Input
                         id={`rule-action-title-${idx}`}
                         value={row.title_template}
-                        onChange={(e) =>
-                          setAction(idx, { title_template: e.target.value })
-                        }
+                        onChange={(e) => setAction(idx, { title_template: e.target.value })}
                       />
                     </div>
                     <div className="space-y-1 md:col-span-2">
-                      <Label htmlFor={`rule-action-descr-${idx}`}>
-                        Описание задачи
-                      </Label>
+                      <Label htmlFor={`rule-action-descr-${idx}`}>Описание задачи</Label>
                       <Textarea
                         id={`rule-action-descr-${idx}`}
                         rows={2}
                         value={row.description_template}
-                        onChange={(e) =>
-                          setAction(idx, {
-                            description_template: e.target.value,
-                          })
-                        }
+                        onChange={(e) => setAction(idx, { description_template: e.target.value })}
                       />
                     </div>
                     <div className="space-y-1">
-                      <Label htmlFor={`rule-action-priority-${idx}`}>
-                        Приоритет задачи
-                      </Label>
+                      <Label htmlFor={`rule-action-priority-${idx}`}>Приоритет задачи</Label>
                       <select
                         id={`rule-action-priority-${idx}`}
                         className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
                         value={row.priority}
-                        onChange={(e) =>
-                          setAction(idx, { priority: e.target.value })
-                        }
+                        onChange={(e) => setAction(idx, { priority: e.target.value })}
                       >
                         {TASK_PRIORITY_OPTIONS.map(([value, label]) => (
                           <option key={value} value={value}>
@@ -614,34 +520,23 @@ export const RuleFormDialog = ({
                       </select>
                     </div>
                     <div className="space-y-1">
-                      <Label htmlFor={`rule-action-due-${idx}`}>
-                        Срок, дней
-                      </Label>
+                      <Label htmlFor={`rule-action-due-${idx}`}>Срок, дней</Label>
                       <Input
                         id={`rule-action-due-${idx}`}
                         type="number"
                         min={0}
                         max={365}
                         value={row.due_in_days}
-                        onChange={(e) =>
-                          setAction(idx, { due_in_days: e.target.value })
-                        }
+                        onChange={(e) => setAction(idx, { due_in_days: e.target.value })}
                       />
                     </div>
                     <div className="space-y-1">
-                      <Label htmlFor={`rule-action-assignee-${idx}`}>
-                        Исполнитель
-                      </Label>
+                      <Label htmlFor={`rule-action-assignee-${idx}`}>Исполнитель</Label>
                       <select
                         id={`rule-action-assignee-${idx}`}
                         className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
                         value={row.assignee_mode}
-                        onChange={(e) =>
-                          setAction(idx, {
-                            assignee_mode: e.target
-                              .value as ActionRow["assignee_mode"],
-                          })
-                        }
+                        onChange={(e) => setAction(idx, { assignee_mode: e.target.value as ActionRow["assignee_mode"] })}
                       >
                         <option value="none">Без исполнителя</option>
                         <option value="actor">Автор события</option>
@@ -650,15 +545,11 @@ export const RuleFormDialog = ({
                     </div>
                     {row.assignee_mode === "user_id" ? (
                       <div className="space-y-1">
-                        <Label htmlFor={`rule-action-user-${idx}`}>
-                          User ID исполнителя
-                        </Label>
+                        <Label htmlFor={`rule-action-user-${idx}`}>User ID исполнителя</Label>
                         <Input
                           id={`rule-action-user-${idx}`}
                           value={row.user_id}
-                          onChange={(e) =>
-                            setAction(idx, { user_id: e.target.value })
-                          }
+                          onChange={(e) => setAction(idx, { user_id: e.target.value })}
                         />
                       </div>
                     ) : null}
@@ -668,18 +559,13 @@ export const RuleFormDialog = ({
                 {row.type === "notify" ? (
                   <div className="grid gap-3 md:grid-cols-2">
                     <div className="space-y-1">
-                      <Label htmlFor={`rule-action-recipient-${idx}`}>
-                        Получатель
-                      </Label>
+                      <Label htmlFor={`rule-action-recipient-${idx}`}>Получатель</Label>
                       <select
                         id={`rule-action-recipient-${idx}`}
                         className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
                         value={row.recipient_mode}
                         onChange={(e) =>
-                          setAction(idx, {
-                            recipient_mode: e.target
-                              .value as ActionRow["recipient_mode"],
-                          })
+                          setAction(idx, { recipient_mode: e.target.value as ActionRow["recipient_mode"] })
                         }
                       >
                         <option value="actor">Автор события</option>
@@ -689,15 +575,11 @@ export const RuleFormDialog = ({
                     </div>
                     {row.recipient_mode === "user_id" ? (
                       <div className="space-y-1">
-                        <Label htmlFor={`rule-action-user-${idx}`}>
-                          User ID получателя
-                        </Label>
+                        <Label htmlFor={`rule-action-user-${idx}`}>User ID получателя</Label>
                         <Input
                           id={`rule-action-user-${idx}`}
                           value={row.user_id}
-                          onChange={(e) =>
-                            setAction(idx, { user_id: e.target.value })
-                          }
+                          onChange={(e) => setAction(idx, { user_id: e.target.value })}
                         />
                       </div>
                     ) : null}
@@ -706,10 +588,7 @@ export const RuleFormDialog = ({
                         <Label>Роли</Label>
                         <div className="flex flex-wrap gap-3">
                           {ROLE_OPTIONS.map(([value, label]) => (
-                            <label
-                              key={value}
-                              className="flex items-center gap-1 text-sm"
-                            >
+                            <label key={value} className="flex items-center gap-1 text-sm">
                               <input
                                 type="checkbox"
                                 aria-label={label}
@@ -718,7 +597,7 @@ export const RuleFormDialog = ({
                                   setAction(idx, {
                                     roles: e.target.checked
                                       ? [...row.roles, value]
-                                      : row.roles.filter((r) => r !== value),
+                                      : row.roles.filter((r) => r !== value)
                                   })
                                 }
                               />
@@ -729,28 +608,20 @@ export const RuleFormDialog = ({
                       </div>
                     ) : null}
                     <div className="space-y-1 md:col-span-2">
-                      <Label htmlFor={`rule-action-title-${idx}`}>
-                        Заголовок уведомления
-                      </Label>
+                      <Label htmlFor={`rule-action-title-${idx}`}>Заголовок уведомления</Label>
                       <Input
                         id={`rule-action-title-${idx}`}
                         value={row.title_template}
-                        onChange={(e) =>
-                          setAction(idx, { title_template: e.target.value })
-                        }
+                        onChange={(e) => setAction(idx, { title_template: e.target.value })}
                       />
                     </div>
                     <div className="space-y-1 md:col-span-2">
-                      <Label htmlFor={`rule-action-body-${idx}`}>
-                        Текст уведомления
-                      </Label>
+                      <Label htmlFor={`rule-action-body-${idx}`}>Текст уведомления</Label>
                       <Textarea
                         id={`rule-action-body-${idx}`}
                         rows={2}
                         value={row.body_template}
-                        onChange={(e) =>
-                          setAction(idx, { body_template: e.target.value })
-                        }
+                        onChange={(e) => setAction(idx, { body_template: e.target.value })}
                       />
                     </div>
                   </div>

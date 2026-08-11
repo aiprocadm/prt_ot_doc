@@ -3,13 +3,7 @@ import { Building2 } from "lucide-react";
 
 import { useNavMenuData } from "@/hooks/useNavMenuData";
 
-const FREQUENT_PATHS = [
-  "/dashboard",
-  "/documents",
-  "/tasks",
-  "/packs",
-  "/persons",
-];
+const FREQUENT_PATHS = ["/dashboard", "/documents", "/tasks", "/packs", "/persons"];
 
 export const SideNav = () => {
   const { visibleGroups, clientPortalOnlyMode } = useNavMenuData();
@@ -19,7 +13,7 @@ export const SideNav = () => {
   const otherGroups = visibleGroups
     .map((group) => ({
       ...group,
-      items: group.items.filter((item) => !FREQUENT_PATHS.includes(item.to)),
+      items: group.items.filter((item) => !FREQUENT_PATHS.includes(item.to))
     }))
     .filter((group) => group.items.length > 0);
 
@@ -32,9 +26,7 @@ export const SideNav = () => {
       <nav className="mt-6 space-y-6 text-sm">
         {frequentItems.length ? (
           <div className="space-y-2">
-            <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Часто
-            </div>
+            <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Часто</div>
             <div className="space-y-1">
               {frequentItems.map((item) => (
                 <NavLink
@@ -42,9 +34,7 @@ export const SideNav = () => {
                   to={item.to}
                   className={({ isActive }) =>
                     `flex items-center gap-3 rounded-md px-3 py-2 transition-colors ${
-                      isActive
-                        ? "bg-primary text-primary-foreground"
-                        : "text-muted-foreground hover:text-foreground"
+                      isActive ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
                     }`
                   }
                 >
@@ -57,9 +47,7 @@ export const SideNav = () => {
         ) : null}
         {otherGroups.map((group) => (
           <div key={group.title} className="space-y-2">
-            <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Остальное · {group.title}
-            </div>
+            <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Остальное · {group.title}</div>
             <div className="space-y-1">
               {group.items.map((item) => (
                 <NavLink
@@ -67,9 +55,7 @@ export const SideNav = () => {
                   to={item.to}
                   className={({ isActive }) =>
                     `flex items-center gap-3 rounded-md px-3 py-2 transition-colors ${
-                      isActive
-                        ? "bg-primary text-primary-foreground"
-                        : "text-muted-foreground hover:text-foreground"
+                      isActive ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
                     }`
                   }
                 >

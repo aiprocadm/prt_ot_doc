@@ -26,7 +26,9 @@ _EXPECTED = {
 
 @pytest.mark.anyio
 async def test_security_headers_present_on_success(async_client, make_auth_headers) -> None:
-    response = await async_client.get(f"{API_PREFIX}/companies", headers=await make_auth_headers())
+    response = await async_client.get(
+        f"{API_PREFIX}/companies", headers=await make_auth_headers()
+    )
     assert response.status_code == 200, response.text
 
     for name, value in _EXPECTED.items():

@@ -1,5 +1,4 @@
 """API contract for PPE stock movements (P10-06)."""
-
 from __future__ import annotations
 
 import pytest
@@ -256,6 +255,4 @@ async def test_issue_explicit_batch_id(
     b2_movements = await async_client.get(
         f"/api/v1/ppe/stock/movements?batch_id={b2}", headers=headers
     )
-    assert any(
-        m["kind"] == "issue" and m["quantity_delta"] == -2 for m in b2_movements.json()["items"]
-    )
+    assert any(m["kind"] == "issue" and m["quantity_delta"] == -2 for m in b2_movements.json()["items"])

@@ -10,16 +10,8 @@ type AsyncResourceOptions<TData> = {
   refetchOnVisibleAfterError?: boolean;
 };
 
-const normalizeApiError = (
-  error: unknown,
-  fallbackMessage: string,
-): ApiError => {
-  if (
-    error &&
-    typeof error === "object" &&
-    "message" in error &&
-    typeof error.message === "string"
-  ) {
+const normalizeApiError = (error: unknown, fallbackMessage: string): ApiError => {
+  if (error && typeof error === "object" && "message" in error && typeof error.message === "string") {
     return error as ApiError;
   }
   return { status: 0, message: fallbackMessage };
@@ -29,7 +21,7 @@ export const useAsyncResource = <TData>({
   loader,
   initialData,
   errorMessage,
-  refetchOnVisibleAfterError = true,
+  refetchOnVisibleAfterError = true
 }: AsyncResourceOptions<TData>) => {
   const [data, setData] = useState<TData>(initialData);
   const [loading, setLoading] = useState(false);

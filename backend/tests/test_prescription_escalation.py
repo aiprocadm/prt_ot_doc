@@ -1,5 +1,4 @@
 """Unit tests for prescription escalation/closure helpers (TZ-3.4-V12-01). App-free."""
-
 from __future__ import annotations
 
 from datetime import date, timedelta
@@ -17,12 +16,12 @@ TODAY = date(2026, 5, 31)
     [
         (TODAY - timedelta(days=1), S.OPEN, True),
         (TODAY - timedelta(days=1), S.IN_PROGRESS, True),
-        (TODAY - timedelta(days=1), S.COMPLETED, True),  # done-but-unverified, past due => overdue
-        (TODAY - timedelta(days=1), S.VERIFIED, False),  # terminal => never overdue
+        (TODAY - timedelta(days=1), S.COMPLETED, True),   # done-but-unverified, past due => overdue
+        (TODAY - timedelta(days=1), S.VERIFIED, False),   # terminal => never overdue
         (TODAY - timedelta(days=1), S.CANCELLED, False),  # terminal => never overdue
-        (TODAY, S.OPEN, False),  # due today is not yet past due
+        (TODAY, S.OPEN, False),                           # due today is not yet past due
         (TODAY + timedelta(days=1), S.OPEN, False),
-        (None, S.OPEN, False),  # no deadline => not overdue
+        (None, S.OPEN, False),                            # no deadline => not overdue
     ],
 )
 def test_is_overdue(due, status, expected) -> None:

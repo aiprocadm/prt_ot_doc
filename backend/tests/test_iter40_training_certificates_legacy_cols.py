@@ -112,10 +112,7 @@ def test_migration_revision_chains_to_iter38() -> None:
 
 @pytest.mark.parametrize(("column", "_nullable", "_fk_target", "_ondelete"), _COHORT)
 def test_cohort_column_present_in_upgrade(
-    column: str,
-    _nullable: bool,
-    _fk_target: str | None,
-    _ondelete: str | None,
+    column: str, _nullable: bool, _fk_target: str | None, _ondelete: str | None,
 ) -> None:
     tree = _migration_tree()
     upgrade = _upgrade_fn(tree)
@@ -124,10 +121,7 @@ def test_cohort_column_present_in_upgrade(
 
 @pytest.mark.parametrize(("column", "nullable", "_fk_target", "_ondelete"), _COHORT)
 def test_cohort_column_nullable_matches_spec(
-    column: str,
-    nullable: bool,
-    _fk_target: str | None,
-    _ondelete: str | None,
+    column: str, nullable: bool, _fk_target: str | None, _ondelete: str | None,
 ) -> None:
     tree = _migration_tree()
     upgrade = _upgrade_fn(tree)
@@ -136,24 +130,20 @@ def test_cohort_column_nullable_matches_spec(
     for kw in col_call.keywords:
         if kw.arg == "nullable" and isinstance(kw.value, ast.Constant):
             nullable_kw = kw.value.value
-    assert (
-        nullable_kw is nullable
-    ), f"{_TABLE}.{column}: expected nullable={nullable}, AST shows {nullable_kw!r}"
+    assert nullable_kw is nullable, (
+        f"{_TABLE}.{column}: expected nullable={nullable}, AST shows {nullable_kw!r}"
+    )
 
 
 @pytest.mark.parametrize(("column", "_n", "fk_target", "_ondelete"), _COHORT)
 def test_cohort_column_fk_target_present_when_expected(
-    column: str,
-    _n: bool,
-    fk_target: str | None,
-    _ondelete: str | None,
+    column: str, _n: bool, fk_target: str | None, _ondelete: str | None,
 ) -> None:
     tree = _migration_tree()
     upgrade = _upgrade_fn(tree)
     col_call = _column_call_for(column, upgrade)
     fk_args = [
-        arg
-        for arg in col_call.args
+        arg for arg in col_call.args
         if isinstance(arg, ast.Call)
         and isinstance(arg.func, ast.Attribute)
         and arg.func.attr == "ForeignKey"
@@ -164,17 +154,14 @@ def test_cohort_column_fk_target_present_when_expected(
         assert fk_args, f"{_TABLE}.{column}: expected ForeignKey({fk_target}.id), AST has none"
         first = fk_args[0].args[0]
         assert isinstance(first, ast.Constant) and isinstance(first.value, str)
-        assert (
-            first.value == f"{fk_target}.id"
-        ), f"{_TABLE}.{column}: FK target expected {fk_target}.id, got {first.value!r}"
+        assert first.value == f"{fk_target}.id", (
+            f"{_TABLE}.{column}: FK target expected {fk_target}.id, got {first.value!r}"
+        )
 
 
 @pytest.mark.parametrize(("column", "_n", "_fk", "ondelete"), _COHORT)
 def test_cohort_column_ondelete_matches_spec(
-    column: str,
-    _n: bool,
-    _fk: str | None,
-    ondelete: str | None,
+    column: str, _n: bool, _fk: str | None, ondelete: str | None,
 ) -> None:
     """For FK cols, verify ondelete behavior matches the model declaration.
 
@@ -187,8 +174,7 @@ def test_cohort_column_ondelete_matches_spec(
     upgrade = _upgrade_fn(tree)
     col_call = _column_call_for(column, upgrade)
     fk_args = [
-        arg
-        for arg in col_call.args
+        arg for arg in col_call.args
         if isinstance(arg, ast.Call)
         and isinstance(arg.func, ast.Attribute)
         and arg.func.attr == "ForeignKey"
@@ -200,9 +186,9 @@ def test_cohort_column_ondelete_matches_spec(
     for kw in fk_args[0].keywords:
         if kw.arg == "ondelete" and isinstance(kw.value, ast.Constant):
             ondelete_kw = kw.value.value
-    assert (
-        ondelete_kw == ondelete
-    ), f"{_TABLE}.{column}: expected ondelete={ondelete}, AST shows {ondelete_kw!r}"
+    assert ondelete_kw == ondelete, (
+        f"{_TABLE}.{column}: expected ondelete={ondelete}, AST shows {ondelete_kw!r}"
+    )
 
 
 def test_indexes_for_fk_columns_present_in_upgrade() -> None:
@@ -223,21 +209,20 @@ def test_indexes_for_fk_columns_present_in_upgrade() -> None:
         table = node.args[1]
         cols = node.args[2]
         if not (
-            isinstance(idx_name, ast.Constant)
-            and isinstance(idx_name.value, str)
-            and isinstance(table, ast.Constant)
-            and isinstance(table.value, str)
+            isinstance(idx_name, ast.Constant) and isinstance(idx_name.value, str)
+            and isinstance(table, ast.Constant) and isinstance(table.value, str)
             and isinstance(cols, ast.List)
         ):
             continue
         col_names = tuple(
-            elt.value
-            for elt in cols.elts
+            elt.value for elt in cols.elts
             if isinstance(elt, ast.Constant) and isinstance(elt.value, str)
         )
         found.add((idx_name.value, table.value, col_names))
     expected = {(name, table, tuple(cols)) for name, table, cols in _EXPECTED_INDEXES}
-    assert expected <= found, f"missing create_index calls: {expected - found}"
+    assert expected <= found, (
+        f"missing create_index calls: {expected - found}"
+    )
 
 
 def test_unique_constraint_present_in_upgrade() -> None:
@@ -257,21 +242,17 @@ def test_unique_constraint_present_in_upgrade() -> None:
         table = node.args[1]
         cols = node.args[2]
         if (
-            isinstance(name, ast.Constant)
-            and name.value == "uq_training_certificate_number"
-            and isinstance(table, ast.Constant)
-            and table.value == _TABLE
+            isinstance(name, ast.Constant) and name.value == "uq_training_certificate_number"
+            and isinstance(table, ast.Constant) and table.value == _TABLE
             and isinstance(cols, ast.List)
         ):
             col_names = [
-                elt.value
-                for elt in cols.elts
+                elt.value for elt in cols.elts
                 if isinstance(elt, ast.Constant) and isinstance(elt.value, str)
             ]
-            assert col_names == [
-                "tenant_id",
-                "number",
-            ], f"uq_training_certificate_number cols: expected [tenant_id, number], got {col_names}"
+            assert col_names == ["tenant_id", "number"], (
+                f"uq_training_certificate_number cols: expected [tenant_id, number], got {col_names}"
+            )
             return
     pytest.fail("create_unique_constraint('uq_training_certificate_number', ...) missing")
 
@@ -341,9 +322,7 @@ def test_upgrade_and_downgrade_symmetric() -> None:
         and node.args[0].value == "uq_training_certificate_number"
         for node in ast.walk(downgrade)
     )
-    assert (
-        has_drop_constraint
-    ), "downgrade missing drop_constraint('uq_training_certificate_number', ...)"
+    assert has_drop_constraint, "downgrade missing drop_constraint('uq_training_certificate_number', ...)"
 
 
 def test_cohort_size_pinned_at_four() -> None:
@@ -406,4 +385,6 @@ def test_audit_drift_training_certificates_cleared_after_iter40() -> None:
     migration_cols = audit.collect_migration_columns()
     drift = audit.compute_drift(models, migration_cols)
     drift_tables = {info.tablename for info, _missing in drift}
-    assert _TABLE not in drift_tables, "training_certificates should be cleared by iter-40"
+    assert _TABLE not in drift_tables, (
+        "training_certificates should be cleared by iter-40"
+    )

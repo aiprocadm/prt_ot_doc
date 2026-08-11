@@ -13,11 +13,7 @@
     "skipLibCheck": false,
     "forceConsistentCasingInFileNames": true,
     "jsx": "react-jsx",
-    "types": [
-      "vitest/globals",
-      "@testing-library/jest-dom/vitest",
-      "vite/client"
-    ],
+    "types": ["vitest/globals", "@testing-library/jest-dom/vitest", "vite/client"],
     "baseUrl": "./src",
     "paths": {
       "@/*": ["./*"]

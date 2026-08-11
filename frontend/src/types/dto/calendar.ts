@@ -21,7 +21,7 @@ export const CALENDAR_SOURCE_TYPES: readonly CalendarSourceType[] = [
   "inspection",
   "compliance_deadline",
   "briefing_entry",
-  "calendar_event",
+  "calendar_event"
 ] as const;
 
 export type CalendarSlaBand = "overdue" | "critical" | "warning" | "ok";
@@ -30,7 +30,7 @@ export const CALENDAR_SLA_BANDS: readonly CalendarSlaBand[] = [
   "overdue",
   "critical",
   "warning",
-  "ok",
+  "ok"
 ] as const;
 
 export interface CalendarEventItemDto {

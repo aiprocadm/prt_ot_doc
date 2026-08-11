@@ -18,18 +18,9 @@ import { useCompaniesStore } from "@/stores/companies";
 import type { CompanyDto } from "@/types/dto/companies";
 
 const CompaniesPage = () => {
-  const {
-    list,
-    getById,
-    items,
-    loading,
-    error,
-    item: storeCompanyDetail,
-  } = useCompaniesStore();
+  const { list, getById, items, loading, error, item: storeCompanyDetail } = useCompaniesStore();
   const { setSidebar } = useSidebar();
-  const [selectedCompany, setSelectedCompany] = useState<CompanyDto | null>(
-    null,
-  );
+  const [selectedCompany, setSelectedCompany] = useState<CompanyDto | null>(null);
 
   useEffect(() => {
     setSidebar(<CompanyFilters />);
@@ -51,18 +42,13 @@ const CompaniesPage = () => {
       const full = await getById(company.id);
       setSelectedCompany(full ?? company);
     },
-    [getById],
+    [getById]
   );
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-2">
-        <Breadcrumb
-          items={[
-            { label: "Главная", to: "/dashboard" },
-            { label: "Компании" },
-          ]}
-        />
+        <Breadcrumb items={[{ label: "Главная", to: "/dashboard" }, { label: "Компании" }]} />
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold">Компании</h1>
           <Can permission={PERMISSIONS.COMPANY_CREATE}>
@@ -71,11 +57,7 @@ const CompaniesPage = () => {
                 trigger={
                   <Button
                     disabled={!allowed}
-                    title={
-                      !allowed
-                        ? "Недостаточно прав для создания компании"
-                        : undefined
-                    }
+                    title={!allowed ? "Недостаточно прав для создания компании" : undefined}
                   >
                     Новая компания
                   </Button>
@@ -83,9 +65,7 @@ const CompaniesPage = () => {
                 onSubmitted={(company) => {
                   setSelectedCompany(company);
                   list();
-                  toast.success(
-                    `Компания "${company.name}" создана и открыта в карточке`,
-                  );
+                  toast.success(`Компания "${company.name}" создана и открыта в карточке`);
                 }}
               />
             )}
@@ -94,22 +74,12 @@ const CompaniesPage = () => {
       </div>
       <Card>
         <CardContent className="py-6">
-          <ErrorState
-            error={error ?? undefined}
-            onRetry={() => void list().catch(() => undefined)}
-          />
-          {loading && items.length === 0 ? (
-            <LoadingScreen label="Загрузка компаний" />
-          ) : null}
+          <ErrorState error={error ?? undefined} onRetry={() => void list().catch(() => undefined)} />
+          {loading && items.length === 0 ? <LoadingScreen label="Загрузка компаний" /> : null}
           {!loading && !error && items.length === 0 ? (
-            <EmptyState
-              title="Компании не найдены"
-              description="Создайте первую компанию или измените фильтры в боковой панели."
-            />
+            <EmptyState title="Компании не найдены" description="Создайте первую компанию или измените фильтры в боковой панели." />
           ) : null}
-          {!loading || items.length > 0 ? (
-            <CompanyTable onSelect={handleSelect} />
-          ) : null}
+          {!loading || items.length > 0 ? <CompanyTable onSelect={handleSelect} /> : null}
         </CardContent>
       </Card>
       {selectedCompany && <CompanyDetails company={selectedCompany} />}

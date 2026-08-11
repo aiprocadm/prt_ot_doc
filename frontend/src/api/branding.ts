@@ -72,6 +72,7 @@ export interface BrandingPreviewDto {
   wizard_defaults: Record<string, unknown>;
 }
 
+
 export interface BrandingGenerationHistoryItemDto {
   pipeline_run_id: string;
   company_id: string;
@@ -97,16 +98,10 @@ export interface BrandingPreviewRequestDto {
   watermark_override?: Record<string, unknown> | null;
 }
 
-export const getBrandingProfile = async (
-  companyId: string,
-  siteId?: string,
-) => {
-  const { data } = await apiClient.get<BrandingProfileDto>(
-    "/branding/profile",
-    {
-      params: { company_id: companyId, site_id: siteId },
-    },
-  );
+export const getBrandingProfile = async (companyId: string, siteId?: string) => {
+  const { data } = await apiClient.get<BrandingProfileDto>("/branding/profile", {
+    params: { company_id: companyId, site_id: siteId }
+  });
   return data;
 };
 
@@ -116,20 +111,14 @@ export const updateBrandingProfile = async (
     preferred_header_preset_code?: string | null;
     site_id?: string | null;
     branding: BrandingProfileDto["branding"];
-  },
+  }
 ) => {
-  const { data } = await apiClient.patch<BrandingProfileDto>(
-    `/branding/profile/${companyId}`,
-    payload,
-  );
+  const { data } = await apiClient.patch<BrandingProfileDto>(`/branding/profile/${companyId}`, payload);
   return data;
 };
 
 export const previewBranding = async (payload: BrandingPreviewRequestDto) => {
-  const { data } = await apiClient.post<BrandingPreviewDto>(
-    "/branding/preview",
-    payload,
-  );
+  const { data } = await apiClient.post<BrandingPreviewDto>("/branding/preview", payload);
   return data;
 };
 
@@ -150,9 +139,7 @@ export interface LayoutPresetDto {
 }
 
 export const listLayoutPresets = async () => {
-  const { data } = await apiClient.get<{ items: LayoutPresetDto[] }>(
-    "/layout-presets",
-  );
+  const { data } = await apiClient.get<{ items: LayoutPresetDto[] }>("/layout-presets");
   return data.items;
 };
 
@@ -166,20 +153,14 @@ export interface SiteDto {
 
 export const listSites = async (companyId: string) => {
   const { data } = await apiClient.get<{ items: SiteDto[] }>("/sites", {
-    params: { company_id: companyId, limit: 200, offset: 0 },
+    params: { company_id: companyId, limit: 200, offset: 0 }
   });
   return data.items;
 };
 
-export const getBrandingHistory = async (
-  companyId: string,
-  siteId?: string,
-  limit = 10,
-) => {
-  const { data } = await apiClient.get<{
-    items: BrandingGenerationHistoryItemDto[];
-  }>("/branding/history", {
-    params: { company_id: companyId, site_id: siteId, limit },
+export const getBrandingHistory = async (companyId: string, siteId?: string, limit = 10) => {
+  const { data } = await apiClient.get<{ items: BrandingGenerationHistoryItemDto[] }>("/branding/history", {
+    params: { company_id: companyId, site_id: siteId, limit }
   });
   return data.items;
 };

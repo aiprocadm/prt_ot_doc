@@ -61,20 +61,10 @@ async def test_integration_readiness_returns_summary_with_provider_modes(monkeyp
         async def health_check(self) -> bool:
             return True
 
-    monkeypatch.setattr(
-        "app.api.routes.integration_readiness.get_accounting_integration", lambda: StubAccounting()
-    )
-    monkeypatch.setattr(
-        "app.api.routes.integration_readiness.get_edo_integration", lambda: DisabledEdo()
-    )
-    monkeypatch.setattr(
-        "app.api.routes.integration_readiness.get_frdo_integration",
-        lambda: ProductionCandidate("kontur-frdo"),
-    )
-    monkeypatch.setattr(
-        "app.api.routes.integration_readiness.get_eisot_integration",
-        lambda: ProductionCandidate("kontur-eisot"),
-    )
+    monkeypatch.setattr("app.api.routes.integration_readiness.get_accounting_integration", lambda: StubAccounting())
+    monkeypatch.setattr("app.api.routes.integration_readiness.get_edo_integration", lambda: DisabledEdo())
+    monkeypatch.setattr("app.api.routes.integration_readiness.get_frdo_integration", lambda: ProductionCandidate("kontur-frdo"))
+    monkeypatch.setattr("app.api.routes.integration_readiness.get_eisot_integration", lambda: ProductionCandidate("kontur-eisot"))
 
     class ScalarRows:
         def __init__(self, values):

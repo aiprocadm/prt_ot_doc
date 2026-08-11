@@ -6,7 +6,9 @@ type JsonKpiGridProps = {
 };
 
 const normalizeLabel = (key: string) =>
-  key.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
+  key
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
 
 export const JsonKpiGrid = ({ payload, loading = false }: JsonKpiGridProps) => {
   const entries = Object.entries(payload ?? {});
@@ -14,9 +16,7 @@ export const JsonKpiGrid = ({ payload, loading = false }: JsonKpiGridProps) => {
   if (!entries.length) {
     return (
       <Card>
-        <CardContent className="py-8 text-sm text-muted-foreground">
-          Нет данных для выбранных фильтров.
-        </CardContent>
+        <CardContent className="py-8 text-sm text-muted-foreground">Нет данных для выбранных фильтров.</CardContent>
       </Card>
     );
   }
@@ -26,14 +26,10 @@ export const JsonKpiGrid = ({ payload, loading = false }: JsonKpiGridProps) => {
       {entries.map(([key, value]) => (
         <Card key={key}>
           <CardHeader>
-            <CardTitle className="text-sm text-muted-foreground">
-              {normalizeLabel(key)}
-            </CardTitle>
+            <CardTitle className="text-sm text-muted-foreground">{normalizeLabel(key)}</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-semibold">
-              {loading ? "—" : String(value)}
-            </div>
+            <div className="text-3xl font-semibold">{loading ? "—" : String(value)}</div>
           </CardContent>
         </Card>
       ))}

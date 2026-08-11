@@ -1,10 +1,6 @@
 """Pure-function tests for the §9.2 factor-driven engine."""
-
 from app.domains.medical.lifecycle import (
-    FactorTuple,
-    factors_for_hazards,
-    required_exams_from_factors,
-    worst_status,
+    FactorTuple, factors_for_hazards, required_exams_from_factors, worst_status,
 )
 from app.models.models import MedicalExamKind as K
 

@@ -26,7 +26,6 @@ from app.core.errors import api_problem_detail
 from app.core.feature_flags import is_feature_enabled
 from app.core.security import AccessContext, AuthContext, abac, get_auth_ctx
 from app.core.tenant_validation import TenantContextValidator
-from app.db.session import AsyncSessionLocal
 from app.domains.managed_clients.access import (
     AccessGrant,
     AccessGrantError,
@@ -37,12 +36,6 @@ from app.domains.managed_clients.attention import AggregationStatus, Severity
 from app.domains.managed_clients.attention_service import collect_portfolio_attention
 from app.domains.managed_clients.calendar import CalendarFilters, DeadlineKind, group_by_date
 from app.domains.managed_clients.calendar_service import collect_portfolio_deadlines
-from app.domains.managed_clients.consent import (
-    ClientConsent,
-    ConsentInvalid,
-    require_active_consent,
-    validate_consent,
-)
 from app.domains.managed_clients.context import (
     ClientContextDenied,
     build_context_audit_meta,
@@ -59,34 +52,16 @@ from app.domains.managed_clients.lifecycle import (
     contract_days_left,
     is_contract_expiring,
     validate_contract_transition,
-    validate_conversion_to_dedicated,
     validate_mode_binding,
 )
 from app.domains.managed_clients.scope import scoped_section_titles
-from app.domains.managed_clients.session_service import (
-    close_open_sessions,
-    close_open_sessions_for_client,
-)
-from app.domains.managed_clients.transfer import (
-    TransferError,
-    validate_transfer_preconditions,
-)
-from app.domains.managed_clients.transfer_service import (
-    copy_client_history,
-    copy_company_with_people,
-    copy_norms,
-    copy_person_domains,
-    copy_training_history,
-    count_left_behind,
-)
+from app.domains.managed_clients.session_service import close_open_sessions
 from app.domains.managed_clients.workload import DEFAULT_THRESHOLDS, OVERLOAD_REASON_TEXT
 from app.domains.managed_clients.workload_service import collect_specialist_workload
 from app.models.managed_clients import (
     ManagedClient,
     ManagedClientAccess,
-    ManagedClientConsent,
     ManagedClientContextSession,
-    ManagedClientTransfer,
 )
 from app.models.tenanting import Tenant
 from app.modules.audit.writer import write_audit_event
@@ -97,11 +72,6 @@ from app.schemas.managed_clients import (
     CalendarSummary,
     ClientAttentionRead,
     ClientContextRead,
-    ConsentCreate,
-    ConsentRead,
-    ConsentRevoke,
-    ConversionRead,
-    ConvertToDedicated,
     CrossClientAttentionResponse,
     CrossClientAttentionSummary,
     CrossClientCalendarResponse,
@@ -118,11 +88,9 @@ from app.schemas.managed_clients import (
     PortfolioSummary,
     SpecialistWorkloadRead,
     SpecialistWorkloadResponse,
-    TransferRead,
     WorkloadSummary,
     WorkloadThresholdsRead,
 )
-from app.services.tenants.bootstrap.service import BootstrapTenantService
 
 router = APIRouter(prefix="/managed-clients", tags=["managed-clients"])
 
@@ -239,96 +207,6 @@ def _grant_read(row: ManagedClientAccess, *, now: datetime) -> AccessGrantRead:
         revoked_by_user_id=row.revoked_by_user_id,
         active=is_grant_active(_as_grant(row), now=now),
     )
-
-
-def _trusted_session() -> AsyncSession:
-    """Доверенная сессия для межарендаторной фазы перевода (SEC-65).
-
-    Перевод пишет в ДВА арендатора: bootstrap нового (tenant, настройки, квота,
-    владелец) и строку клиента в пространстве аутсорсера. Сессия запроса
-    приколота к арендатору аутсорсера, и под FORCE RLS её WITH CHECK отвергает
-    чужие строки — на SQLite это невидимо, на Postgres перевод падал бы.
-    Авторизация проверена ДО вызова (роли Access + флаг модуля) — тот же
-    приём, что у платформенных ручек аренды (platform_tenants).
-    """
-
-    # schema_name="public" ЯВНО: с одним tenant="public" схема выводится как
-    # несуществующая tenant_public, и search_path остаётся пустым — тогда
-    # неквалифицированные enum-касты (INSERT tenant ... ::tenantkind) падают
-    # «type does not exist», хотя тип на месте (поймано PG-тестом перевода).
-    return AsyncSessionLocal(
-        tenant="public",
-        schema_name="public",
-        include_public=False,
-        create_schema=False,
-        rls_bypass=True,
-    )
-
-
-def _as_consent(row: ManagedClientConsent) -> ClientConsent:
-    return ClientConsent(
-        client_id=row.managed_client_id,
-        document_ref=row.document_ref,
-        granted_at=row.granted_at,
-        expires_at=row.expires_at,
-        revoked_at=row.revoked_at,
-    )
-
-
-def _consent_read(row: ManagedClientConsent, *, now: datetime) -> ConsentRead:
-    from app.domains.managed_clients.consent import is_consent_active
-
-    return ConsentRead(
-        id=row.id,
-        managed_client_id=row.managed_client_id,
-        document_ref=row.document_ref,
-        granted_by_user_id=row.granted_by_user_id,
-        granted_at=row.granted_at,
-        expires_at=row.expires_at,
-        revoked_at=row.revoked_at,
-        revoked_by_user_id=row.revoked_by_user_id,
-        revoke_reason=row.revoke_reason,
-        active=is_consent_active(_as_consent(row), now=now),
-    )
-
-
-async def _client_consents(
-    session: AsyncSession, tenant: Tenant, client_id: str
-) -> list[ManagedClientConsent]:
-    return list(
-        (
-            await session.execute(
-                select(ManagedClientConsent)
-                .where(
-                    ManagedClientConsent.tenant_id == tenant.id,
-                    ManagedClientConsent.managed_client_id == client_id,
-                )
-                .order_by(ManagedClientConsent.granted_at.desc())
-            )
-        )
-        .scalars()
-        .all()
-    )
-
-
-async def _require_client_consent(
-    session: AsyncSession, tenant: Tenant, client_id: str, *, now: datetime
-) -> None:
-    """Срез-12: без действующего согласия клиента делегированный доступ закрыт.
-
-    Отдельный код ошибки (как MANAGED_CLIENT_CONTEXT_EXPIRED в срезе-10):
-    интерфейс должен отличать «нет согласия — принесите документ» от
-    «нет доступа» и не отправлять человека выпрашивать грант, который
-    ему не поможет.
-    """
-
-    rows = await _client_consents(session, tenant, client_id)
-    from app.domains.managed_clients.consent import ConsentRequired
-
-    try:
-        require_active_consent([_as_consent(r) for r in rows], now=now)
-    except ConsentRequired as exc:
-        raise _err("MANAGED_CLIENT_CONSENT_REQUIRED", str(exc), status.HTTP_409_CONFLICT) from exc
 
 
 @router.get("", response_model=PortfolioPage)
@@ -763,10 +641,6 @@ async def enter_client_context(
     except ClientContextDenied as exc:
         raise _context_denied(str(exc)) from exc
 
-    # Срез-12: гранты долгоживущие, а согласие клиента может быть отозвано
-    # позже выдачи — вход «от имени» перепроверяет его каждый раз.
-    await _require_client_consent(session, tenant, client.id, now=now)
-
     # Срез-10: вход открывает СЕССИЮ со сроком. Прошлые открытые сессии этого
     # специалиста закрываются: две одновременные работы «от имени» разных
     # клиентов сделали бы журнал доступа невосстановимым — непонятно, к чьим
@@ -896,8 +770,6 @@ async def grant_access(
     TenantContextValidator.ensure_tenant_context(tenant)
     await _require_enabled(session, tenant)
     await _get(session, tenant, mcid)
-    # Срез-12: без действующего согласия клиента грант не выдаётся (разд. 66.3).
-    await _require_client_consent(session, tenant, mcid, now=datetime.now(tz=timezone.utc))
     try:
         validate_grant(all_modules=payload.all_modules, modules=payload.modules)
     except AccessGrantError as exc:
@@ -999,450 +871,6 @@ async def revoke_access(
         after={"revoked_at": now.isoformat(), "user_id": row.user_id},
     )
     return _grant_read(row, now=now)
-
-
-@router.get("/{mcid}/consents", response_model=list[ConsentRead])
-async def list_client_consents(
-    mcid: str, tenant: TenantDep, session: SessionDep, access: Access
-) -> list[ConsentRead]:
-    """Согласия клиента, включая ОТОЗВАННЫЕ и истёкшие.
-
-    Прошлые согласия показываются намеренно: «действовало ли согласие, когда
-    специалист работал в данных клиента» — вопрос аудита, а не истории.
-    """
-
-    TenantContextValidator.ensure_tenant_context(tenant)
-    await _require_enabled(session, tenant)
-    await _get(session, tenant, mcid)
-    now = datetime.now(tz=timezone.utc)
-    rows = await _client_consents(session, tenant, mcid)
-    return [_consent_read(row, now=now) for row in rows]
-
-
-@router.post("/{mcid}/consents", response_model=ConsentRead, status_code=status.HTTP_201_CREATED)
-async def record_client_consent(
-    mcid: str,
-    payload: ConsentCreate,
-    request: Request,
-    tenant: TenantDep,
-    session: SessionDep,
-    access: Access,
-    auth: Annotated[AuthContext, Depends(get_auth_ctx)],
-) -> ConsentRead:
-    """Зафиксировать согласие клиента на делегированный доступ (разд. 66.3).
-
-    Это событие безопасности — идёт в аудит. Один и тот же документ дважды
-    не записывается: даблклик не должен плодить два «основания».
-    """
-
-    TenantContextValidator.ensure_tenant_context(tenant)
-    await _require_enabled(session, tenant)
-    await _get(session, tenant, mcid)
-    now = datetime.now(tz=timezone.utc)
-    try:
-        validate_consent(
-            document_ref=payload.document_ref, granted_at=now, expires_at=payload.expires_at
-        )
-    except ConsentInvalid as exc:
-        raise _err(
-            "MANAGED_CLIENT_CONSENT_INVALID", str(exc), status.HTTP_422_UNPROCESSABLE_ENTITY
-        ) from exc
-
-    from app.domains.managed_clients.consent import is_consent_active
-
-    duplicate = next(
-        (
-            row
-            for row in await _client_consents(session, tenant, mcid)
-            if row.document_ref == payload.document_ref.strip()
-            and is_consent_active(_as_consent(row), now=now)
-        ),
-        None,
-    )
-    if duplicate is not None:
-        raise _err(
-            "MANAGED_CLIENT_CONSENT_EXISTS",
-            "Согласие по этому документу уже действует",
-            status.HTTP_409_CONFLICT,
-        )
-
-    row = ManagedClientConsent(
-        tenant_id=tenant.id,
-        managed_client_id=mcid,
-        document_ref=payload.document_ref.strip(),
-        granted_by_user_id=auth.sub,
-        granted_at=now,
-        expires_at=payload.expires_at,
-    )
-    session.add(row)
-    await session.flush()
-    await write_audit_event(
-        session=session,
-        request=request,
-        tenant_id=str(tenant.id),
-        actor_id=auth.sub,
-        action="managed_client.consent.grant",
-        resource_type="managed_client_consent",
-        resource_id=row.id,
-        before=None,
-        after={
-            "managed_client_id": mcid,
-            "document_ref": row.document_ref,
-            "expires_at": row.expires_at.isoformat() if row.expires_at else None,
-        },
-    )
-    return _consent_read(row, now=now)
-
-
-@router.delete("/{mcid}/consents/{consent_id}", response_model=ConsentRead)
-async def revoke_client_consent(
-    mcid: str,
-    consent_id: str,
-    payload: ConsentRevoke | None,
-    request: Request,
-    tenant: TenantDep,
-    session: SessionDep,
-    access: Access,
-    auth: Annotated[AuthContext, Depends(get_auth_ctx)],
-) -> ConsentRead:
-    """Отозвать согласие клиента — след, а не удаление.
-
-    Отзыв немедленно ЗАКРЫВАЕТ открытые сессии работы «от имени» этого
-    клиента у всех специалистов: отозванное согласие не может продолжать
-    действовать до конца чьей-то сессии.
-    """
-
-    TenantContextValidator.ensure_tenant_context(tenant)
-    await _require_enabled(session, tenant)
-    await _get(session, tenant, mcid)
-    now = datetime.now(tz=timezone.utc)
-    row = (
-        await session.execute(
-            select(ManagedClientConsent).where(
-                ManagedClientConsent.tenant_id == tenant.id,
-                ManagedClientConsent.managed_client_id == mcid,
-                ManagedClientConsent.id == consent_id,
-            )
-        )
-    ).scalar_one_or_none()
-    if row is None:
-        raise _err(
-            "MANAGED_CLIENT_CONSENT_NOT_FOUND", "Согласие не найдено", status.HTTP_404_NOT_FOUND
-        )
-    if row.revoked_at is not None:
-        raise _err(
-            "MANAGED_CLIENT_CONSENT_ALREADY_REVOKED",
-            "Согласие уже отозвано",
-            status.HTTP_409_CONFLICT,
-        )
-
-    row.revoked_at = now
-    row.revoked_by_user_id = auth.sub
-    row.revoke_reason = payload.reason if payload else None
-    closed = await close_open_sessions_for_client(
-        session, tenant_id=str(tenant.id), client_id=mcid, now=now, reason="consent_revoked"
-    )
-    await session.flush()
-    await write_audit_event(
-        session=session,
-        request=request,
-        tenant_id=str(tenant.id),
-        actor_id=auth.sub,
-        action="managed_client.consent.revoke",
-        resource_type="managed_client_consent",
-        resource_id=row.id,
-        before={"document_ref": row.document_ref},
-        after={
-            "revoke_reason": row.revoke_reason,
-            "closed_sessions": len(closed),
-        },
-    )
-    return _consent_read(row, now=now)
-
-
-@router.post("/{mcid}/convert-to-dedicated", response_model=ConversionRead)
-async def convert_to_dedicated(
-    mcid: str,
-    payload: ConvertToDedicated,
-    request: Request,
-    tenant: TenantDep,
-    session: SessionDep,
-    access: Access,
-    auth: Annotated[AuthContext, Depends(get_auth_ctx)],
-) -> ConversionRead:
-    """Перевод Lightweight → Dedicated (разд. 49.1) — без потери истории ядра.
-
-    Под клиента поднимается собственный арендатор (bootstrap: настройки, квота,
-    владелец, каталог прав, стартовый пакет), запись клиента переключается в
-    Dedicated. Вся история ведения (договор, гранты, согласия, сессии, аудит)
-    остаётся на ТОЙ ЖЕ строке клиента, а организация в пространстве аутсорсера
-    остаётся ссылкой на историю (инвариант режима из среза-1). Перенос доменных
-    данных организации в новый арендатор — следующий срез 49.1.
-    """
-
-    TenantContextValidator.ensure_tenant_context(tenant)
-    await _require_enabled(session, tenant)
-    row = await _get(session, tenant, mcid)
-
-    slug = payload.tenant_slug.strip().lower()
-    try:
-        validate_conversion_to_dedicated(
-            mode=row.mode, contract_status=row.contract_status, target_slug=slug
-        )
-    except ManagedClientTransitionError as exc:
-        raise _err("MANAGED_CLIENT_CONVERSION_INVALID", str(exc), status.HTTP_409_CONFLICT) from exc
-
-    # Слаг обязан быть СВОБОДЕН: bootstrap «переиспользует» существующего
-    # арендатора, а перевод в ЧУЖОЙ арендатор пришил бы клиента к чужим данным.
-    taken = (await session.execute(select(Tenant).where(Tenant.slug == slug))).scalar_one_or_none()
-    if taken is not None:
-        raise _err(
-            "MANAGED_CLIENT_TENANT_SLUG_TAKEN",
-            "Арендатор с таким слагом уже существует — перевод возможен только в новый",
-            status.HTTP_409_CONFLICT,
-        )
-
-    # Фаза записи — ОДНА транзакция доверенной сессии (см. _trusted_session):
-    # bootstrap нового арендатора и переключение клиента либо происходят вместе,
-    # либо не происходят вовсе — «арендатор создан, а клиент не переведён»
-    # оставил бы занятый слаг без владельца-клиента.
-    async with _trusted_session() as trusted:
-        summary = await BootstrapTenantService(trusted).run(
-            tenant_slug=slug,
-            tenant_name=payload.tenant_name or row.name,
-            owner_email=payload.owner_email,
-            owner_password=payload.owner_password,
-        )
-        row_t = (
-            await trusted.execute(
-                select(ManagedClient).where(
-                    ManagedClient.id == row.id, ManagedClient.tenant_id == tenant.id
-                )
-            )
-        ).scalar_one()
-        before = {
-            "mode": row_t.mode.value,
-            "dedicated_tenant_slug": row_t.dedicated_tenant_slug,
-        }
-        row_t.mode = ManagedClientMode.DEDICATED
-        row_t.dedicated_tenant_slug = slug
-        # company_id НЕ трогаем: у dedicated он законен как ссылка на историю.
-        validate_mode_binding(
-            row_t.mode, company_id=row_t.company_id, tenant_slug=row_t.dedicated_tenant_slug
-        )
-        await trusted.flush()
-
-        await write_audit_event(
-            session=trusted,
-            request=request,
-            tenant_id=str(tenant.id),
-            actor_id=auth.sub,
-            action="managed_client.converted_to_dedicated",
-            resource_type="managed_client",
-            resource_id=row_t.id,
-            before=before,
-            after={
-                "mode": row_t.mode.value,
-                "dedicated_tenant_slug": slug,
-                "history_company_id": row_t.company_id,
-                "tenant_created": list(summary.created),
-            },
-        )
-        result = ConversionRead(
-            client=ManagedClientRead.model_validate(row_t, from_attributes=True),
-            tenant_slug=slug,
-            tenant_created=list(summary.created),
-            history_company_id=row_t.company_id,
-        )
-        await trusted.commit()
-    return result
-
-
-def _transfer_read(row: ManagedClientTransfer) -> TransferRead:
-    return TransferRead(
-        id=row.id,
-        managed_client_id=row.managed_client_id,
-        target_tenant_slug=row.target_tenant_slug,
-        status=row.status,
-        started_at=row.started_at,
-        finished_at=row.finished_at,
-        started_by_user_id=row.started_by_user_id,
-        counts=dict(row.counts or {}),
-    )
-
-
-@router.get("/{mcid}/transfers", response_model=list[TransferRead])
-async def list_client_transfers(
-    mcid: str, tenant: TenantDep, session: SessionDep, access: Access
-) -> list[TransferRead]:
-    """Журнал переносов клиента — часть истории ведения."""
-
-    TenantContextValidator.ensure_tenant_context(tenant)
-    await _require_enabled(session, tenant)
-    await _get(session, tenant, mcid)
-    rows = (
-        (
-            await session.execute(
-                select(ManagedClientTransfer)
-                .where(
-                    ManagedClientTransfer.tenant_id == tenant.id,
-                    ManagedClientTransfer.managed_client_id == mcid,
-                )
-                .order_by(ManagedClientTransfer.started_at.desc())
-            )
-        )
-        .scalars()
-        .all()
-    )
-    return [_transfer_read(row) for row in rows]
-
-
-@router.post("/{mcid}/transfer", response_model=TransferRead)
-async def transfer_client_data(
-    mcid: str,
-    request: Request,
-    tenant: TenantDep,
-    session: SessionDep,
-    access: Access,
-    auth: Annotated[AuthContext, Depends(get_auth_ctx)],
-) -> TransferRead:
-    """Перенос данных клиента в его арендатор (разд. 49.1, продолжение перевода).
-
-    Копирует организацию и сотрудников; исходные строки остаются историей в
-    пространстве аутсорсера, соответствие старых id новым — в журнале
-    (без него «сохранение timeline» превращается в угадывание). Аудит и
-    timeline не переносятся принципиально: хеш-цепочка аудита живёт в своём
-    арендаторе, и переписать её в чужой значит её сломать.
-    """
-
-    TenantContextValidator.ensure_tenant_context(tenant)
-    await _require_enabled(session, tenant)
-    row = await _get(session, tenant, mcid)
-
-    prior = (
-        (
-            await session.execute(
-                select(ManagedClientTransfer).where(
-                    ManagedClientTransfer.tenant_id == tenant.id,
-                    ManagedClientTransfer.managed_client_id == mcid,
-                    ManagedClientTransfer.status == "completed",
-                )
-            )
-        )
-        .scalars()
-        .first()
-    )
-    try:
-        validate_transfer_preconditions(
-            mode=row.mode,
-            dedicated_tenant_slug=row.dedicated_tenant_slug,
-            company_id=row.company_id,
-            has_completed_transfer=prior is not None,
-        )
-    except TransferError as exc:
-        raise _err("MANAGED_CLIENT_TRANSFER_INVALID", str(exc), status.HTTP_409_CONFLICT) from exc
-
-    now = datetime.now(tz=timezone.utc)
-    # Та же доверенная сессия, что у перевода: копии пишутся в ЧУЖОЙ арендатор,
-    # и под FORCE RLS сессия запроса их не пропустит (урок фикса среза-13).
-    async with _trusted_session() as trusted:
-        target = (
-            await trusted.execute(select(Tenant).where(Tenant.slug == row.dedicated_tenant_slug))
-        ).scalar_one_or_none()
-        if target is None:
-            raise _err(
-                "MANAGED_CLIENT_TRANSFER_TARGET_MISSING",
-                "Арендатор клиента не найден — перевод не завершён или арендатор удалён",
-                status.HTTP_409_CONFLICT,
-            )
-        result = await copy_company_with_people(
-            trusted,
-            source_tenant_id=str(tenant.id),
-            source_company_id=row.company_id,
-            target_tenant_id=str(target.id),
-        )
-        # Срез-15: доменная история людей — в ТОЙ ЖЕ транзакции. Раздельные
-        # операции оставили бы окно, в котором люди у клиента уже есть, а их
-        # медосмотры и СИЗ ещё нет: по такому состоянию клиент увидел бы
-        # «никто не проходил медосмотр» и принял бы решение по пустоте.
-        counts = dict(result.counts)
-        counts.update(
-            await copy_person_domains(
-                trusted,
-                source_tenant_id=str(tenant.id),
-                target_tenant_id=str(target.id),
-                people_map=result.people_map,
-            )
-        )
-        counts.update(
-            await copy_norms(
-                trusted,
-                source_tenant_id=str(tenant.id),
-                target_tenant_id=str(target.id),
-                position_map=result.position_map,
-            )
-        )
-        counts.update(
-            await copy_client_history(
-                trusted,
-                source_tenant_id=str(tenant.id),
-                source_company_id=row.company_id,
-                target_tenant_id=str(target.id),
-                company_map=result.company_map,
-                site_map=result.site_map,
-                position_map=result.position_map,
-                people_map=result.people_map,
-            )
-        )
-        counts.update(
-            await copy_training_history(
-                trusted,
-                source_tenant_id=str(tenant.id),
-                target_tenant_id=str(target.id),
-                people_map=result.people_map,
-            )
-        )
-        # Что осознанно НЕ поехало — числом: молчаливый ноль читался бы как
-        # «этого у клиента не было».
-        counts.update(
-            await count_left_behind(
-                trusted,
-                source_tenant_id=str(tenant.id),
-                source_company_id=row.company_id,
-                people_map=result.people_map,
-            )
-        )
-        journal = ManagedClientTransfer(
-            tenant_id=tenant.id,
-            managed_client_id=mcid,
-            target_tenant_slug=row.dedicated_tenant_slug,
-            status="completed",
-            started_at=now,
-            finished_at=datetime.now(tz=timezone.utc),
-            started_by_user_id=auth.sub,
-            counts=counts,
-            id_map={"company": result.company_map, "people": result.people_map},
-        )
-        trusted.add(journal)
-        await trusted.flush()
-        await write_audit_event(
-            session=trusted,
-            request=request,
-            tenant_id=str(tenant.id),
-            actor_id=auth.sub,
-            action="managed_client.data_transferred",
-            resource_type="managed_client_transfer",
-            resource_id=journal.id,
-            before=None,
-            after={
-                "managed_client_id": mcid,
-                "target_tenant_slug": row.dedicated_tenant_slug,
-                "counts": counts,
-            },
-        )
-        response = _transfer_read(journal)
-        await trusted.commit()
-    return response
 
 
 @router.post("", response_model=ManagedClientRead, status_code=status.HTTP_201_CREATED)

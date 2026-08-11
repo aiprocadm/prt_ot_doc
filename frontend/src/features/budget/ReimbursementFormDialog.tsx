@@ -10,7 +10,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
+  DialogTrigger
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -18,7 +18,7 @@ import { Textarea } from "@/components/ui/textarea";
 import type {
   BudgetReimbursementCreateInput,
   BudgetReimbursementDto,
-  BudgetReimbursementUpdateInput,
+  BudgetReimbursementUpdateInput
 } from "@/types/dto/budget";
 
 interface Props {
@@ -33,14 +33,10 @@ const emptyForm = {
   period_end: "",
   requested_amount: "",
   reference: "",
-  notes: "",
+  notes: ""
 };
 
-export const ReimbursementFormDialog = ({
-  trigger,
-  initialData,
-  onSubmitted,
-}: Props) => {
+export const ReimbursementFormDialog = ({ trigger, initialData, onSubmitted }: Props) => {
   const [open, setOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState(emptyForm);
@@ -56,14 +52,13 @@ export const ReimbursementFormDialog = ({
             period_end: initialData.period_end,
             requested_amount: String(initialData.requested_amount),
             reference: initialData.reference ?? "",
-            notes: initialData.notes ?? "",
+            notes: initialData.notes ?? ""
           }
-        : emptyForm,
+        : emptyForm
     );
   }, [open, initialData]);
 
-  const set = (key: keyof typeof form, value: string) =>
-    setForm((prev) => ({ ...prev, [key]: value }));
+  const set = (key: keyof typeof form, value: string) => setForm((prev) => ({ ...prev, [key]: value }));
 
   const onSubmit = async () => {
     if (!form.title.trim()) {
@@ -85,10 +80,8 @@ export const ReimbursementFormDialog = ({
         const payload: BudgetReimbursementUpdateInput = {};
         const trimmedTitle = form.title.trim();
         if (trimmedTitle !== initialData.title) payload.title = trimmedTitle;
-        if (form.period_start !== initialData.period_start)
-          payload.period_start = form.period_start;
-        if (form.period_end !== initialData.period_end)
-          payload.period_end = form.period_end;
+        if (form.period_start !== initialData.period_start) payload.period_start = form.period_start;
+        if (form.period_end !== initialData.period_end) payload.period_end = form.period_end;
         if (
           form.requested_amount.trim() !== "" &&
           Number(form.requested_amount) !== initialData.requested_amount
@@ -96,11 +89,9 @@ export const ReimbursementFormDialog = ({
           payload.requested_amount = Number(form.requested_amount);
         }
         const normalizedReference = form.reference.trim() || null;
-        if (normalizedReference !== initialData.reference)
-          payload.reference = normalizedReference;
+        if (normalizedReference !== initialData.reference) payload.reference = normalizedReference;
         const normalizedNotes = form.notes.trim() || null;
-        if (normalizedNotes !== initialData.notes)
-          payload.notes = normalizedNotes;
+        if (normalizedNotes !== initialData.notes) payload.notes = normalizedNotes;
         await budgetApi.updateReimbursement(initialData.id, payload);
         toast.success("Заявка обновлена");
       } else {
@@ -110,7 +101,7 @@ export const ReimbursementFormDialog = ({
           period_end: form.period_end,
           requested_amount: Number(form.requested_amount),
           reference: form.reference.trim() || null,
-          notes: form.notes.trim() || null,
+          notes: form.notes.trim() || null
         };
         await budgetApi.createReimbursement(payload);
         toast.success("Заявка создана");
@@ -118,9 +109,7 @@ export const ReimbursementFormDialog = ({
       onSubmitted?.();
       setOpen(false);
     } catch (err) {
-      toast.error(
-        (err as { message?: string })?.message ?? "Не удалось сохранить заявку",
-      );
+      toast.error((err as { message?: string })?.message ?? "Не удалось сохранить заявку");
     } finally {
       setSubmitting(false);
     }
@@ -131,22 +120,15 @@ export const ReimbursementFormDialog = ({
       <DialogTrigger asChild>{trigger}</DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>
-            {isEdit ? "Редактировать заявку" : "Новая заявка"}
-          </DialogTitle>
+          <DialogTitle>{isEdit ? "Редактировать заявку" : "Новая заявка"}</DialogTitle>
           <DialogDescription>
-            Заявка на возмещение расходов на охрану труда из средств СФР.
-            Создаётся черновиком.
+            Заявка на возмещение расходов на охрану труда из средств СФР. Создаётся черновиком.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="r-title">Название</Label>
-            <Input
-              id="r-title"
-              value={form.title}
-              onChange={(e) => set("title", e.target.value)}
-            />
+            <Input id="r-title" value={form.title} onChange={(e) => set("title", e.target.value)} />
           </div>
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
@@ -179,19 +161,11 @@ export const ReimbursementFormDialog = ({
           </div>
           <div className="space-y-2">
             <Label htmlFor="r-reference">Номер в СФР</Label>
-            <Input
-              id="r-reference"
-              value={form.reference}
-              onChange={(e) => set("reference", e.target.value)}
-            />
+            <Input id="r-reference" value={form.reference} onChange={(e) => set("reference", e.target.value)} />
           </div>
           <div className="space-y-2">
             <Label htmlFor="r-notes">Примечания</Label>
-            <Textarea
-              id="r-notes"
-              value={form.notes}
-              onChange={(e) => set("notes", e.target.value)}
-            />
+            <Textarea id="r-notes" value={form.notes} onChange={(e) => set("notes", e.target.value)} />
           </div>
         </div>
         <DialogFooter>

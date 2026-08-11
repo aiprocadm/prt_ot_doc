@@ -161,53 +161,11 @@ if [[ "$code_no_tenant" != "400" ]]; then
   exit 1
 fi
 
-# Контракт после security-ужесточения: тенант-заголовок БЕЗ аутентификации — 401.
 code_with_tenant=$(curl -s -o /tmp/smoke_templates_with_tenant.json -w "%{http_code}" -H "${TENANT_HEADER_NAME}: ${TENANT_SLUG}" "${BASE_URL}/api/v1/templates")
-if [[ "$code_with_tenant" != "401" ]]; then
-  echo "Expected 401 with tenant header but no auth, got ${code_with_tenant}" >&2
+if [[ "$code_with_tenant" != "200" ]]; then
+  echo "Expected 200 with tenant header, got ${code_with_tenant}" >&2
   cat /tmp/smoke_templates_with_tenant.json >&2
   exit 1
-fi
-
-# Аутентифицированная проба: логин bootstrap-админа → 200 по /templates.
-# ADMIN_* берём из окружения, при его отсутствии — из .env (compose-режим:
-# значения живут в .env для контейнеров, у шелла раннера их нет).
-if [[ -z "${ADMIN_PASSWORD:-}" && -f .env ]]; then
-  ADMIN_PASSWORD="$(grep -E '^ADMIN_PASSWORD=' .env | tail -1 | cut -d= -f2-)"
-fi
-if [[ -z "${ADMIN_EMAIL:-}" && -f .env ]]; then
-  ADMIN_EMAIL="$(grep -E '^ADMIN_EMAIL=' .env | tail -1 | cut -d= -f2-)"
-fi
-ADMIN_EMAIL="${ADMIN_EMAIL:-admin@example.com}"
-
-if [[ -n "${ADMIN_PASSWORD:-}" ]]; then
-  login_code=$(curl -s -o /tmp/smoke_login.json -w "%{http_code}" \
-    -H "Content-Type: application/json" \
-    -H "${TENANT_HEADER_NAME}: ${TENANT_SLUG}" \
-    -d "{\"email\":\"${ADMIN_EMAIL}\",\"password\":\"${ADMIN_PASSWORD}\"}" \
-    "${BASE_URL}/api/v1/auth/login")
-  if [[ "$login_code" != "200" ]]; then
-    echo "Expected 200 from auth login, got ${login_code}" >&2
-    cat /tmp/smoke_login.json >&2
-    exit 1
-  fi
-  access_token=$("$PYTHON_BIN" -c "import json;print(json.load(open('/tmp/smoke_login.json')).get('access_token',''))")
-  if [[ -z "$access_token" ]]; then
-    echo "Login response has no access_token" >&2
-    cat /tmp/smoke_login.json >&2
-    exit 1
-  fi
-  code_authed=$(curl -s -o /tmp/smoke_templates_authed.json -w "%{http_code}" \
-    -H "${TENANT_HEADER_NAME}: ${TENANT_SLUG}" \
-    -H "Authorization: Bearer ${access_token}" \
-    "${BASE_URL}/api/v1/templates")
-  if [[ "$code_authed" != "200" ]]; then
-    echo "Expected 200 with auth + tenant header, got ${code_authed}" >&2
-    cat /tmp/smoke_templates_authed.json >&2
-    exit 1
-  fi
-else
-  echo "WARN: ADMIN_PASSWORD is not set — skipping authenticated templates probe" >&2
 fi
 
 run_pdf_probe

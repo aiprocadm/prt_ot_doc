@@ -14,10 +14,7 @@ export const MobileFieldModeCard = () => {
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
-        <p className="text-xs text-muted-foreground">
-          Крупные touch targets, короткая форма и camera-first flow для работы в
-          поле.
-        </p>
+        <p className="text-xs text-muted-foreground">Крупные touch targets, короткая форма и camera-first flow для работы в поле.</p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           <Input className="h-11" placeholder="Краткий комментарий" />
           <Input className="h-11" placeholder="Локация / зона" />
@@ -27,9 +24,7 @@ export const MobileFieldModeCard = () => {
             <Camera className="mr-2 h-4 w-4" />
             Снять evidence
           </Button>
-          <Button variant="outline" className="min-h-11 px-4">
-            Сохранить черновик
-          </Button>
+          <Button variant="outline" className="min-h-11 px-4">Сохранить черновик</Button>
         </div>
       </CardContent>
     </Card>

@@ -19,7 +19,6 @@
 - `npm run e2e:key-scenarios:ps`
 
 This command loads `E2E_*` variables from `e2e.env` and runs:
-
 - `playwright test e2e/key-scenarios.spec.ts`
 
 ## 4) Run smoke suite
@@ -36,12 +35,10 @@ This command loads `E2E_*` variables from `e2e.env` and runs:
 ## 6) Limited-role access checks (optional)
 
 Set these in `e2e.env`:
-
 - `E2E_LIMITED_USER_EMAIL`
 - `E2E_LIMITED_USER_PASSWORD`
 
 Then run smoke:
-
 - `npm run e2e`
 
 ## 7) Troubleshooting

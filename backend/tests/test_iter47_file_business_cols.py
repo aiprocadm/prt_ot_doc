@@ -266,10 +266,7 @@ def test_migration_declares_no_depends_on() -> None:
 
 @pytest.mark.parametrize(("column", "_nullable", "_sd", "_enum"), _COHORT)
 def test_cohort_column_present_in_upgrade(
-    column: str,
-    _nullable: bool,
-    _sd: object,
-    _enum: str | None,
+    column: str, _nullable: bool, _sd: object, _enum: str | None,
 ) -> None:
     upgrade = _upgrade_fn(_migration_tree())
     _column_call_for(column, upgrade)  # raises pytest.fail if missing
@@ -277,10 +274,7 @@ def test_cohort_column_present_in_upgrade(
 
 @pytest.mark.parametrize(("column", "nullable", "_sd", "_enum"), _COHORT)
 def test_cohort_column_nullable_matches_spec(
-    column: str,
-    nullable: bool,
-    _sd: object,
-    _enum: str | None,
+    column: str, nullable: bool, _sd: object, _enum: str | None,
 ) -> None:
     upgrade = _upgrade_fn(_migration_tree())
     col_call = _column_call_for(column, upgrade)
@@ -288,17 +282,14 @@ def test_cohort_column_nullable_matches_spec(
     for kw in col_call.keywords:
         if kw.arg == "nullable" and isinstance(kw.value, ast.Constant):
             nullable_kw = kw.value.value
-    assert (
-        nullable_kw is nullable
-    ), f"{_TABLE}.{column}: expected nullable={nullable}, AST shows {nullable_kw!r}"
+    assert nullable_kw is nullable, (
+        f"{_TABLE}.{column}: expected nullable={nullable}, AST shows {nullable_kw!r}"
+    )
 
 
 @pytest.mark.parametrize(("column", "_nullable", "server_default_spec", "_enum"), _COHORT)
 def test_cohort_column_server_default_matches_spec(
-    column: str,
-    _nullable: bool,
-    server_default_spec: tuple[str, str] | None,
-    _enum: str | None,
+    column: str, _nullable: bool, server_default_spec: tuple[str, str] | None, _enum: str | None,
 ) -> None:
     """NOT NULL cols added to an existing table MUST carry a server_default so
     existing rows satisfy the constraint (iter-42 precedent). Nullable cols
@@ -323,24 +314,21 @@ def test_cohort_column_server_default_matches_spec(
             f"label — RB-002 guard), AST shows {ast.dump(sd_value)}"
         )
     elif kind == "call":
-        assert isinstance(
-            sd_value, ast.Call
-        ), f"{_TABLE}.{column}: expected server_default=sa.{expected}()"
+        assert isinstance(sd_value, ast.Call), (
+            f"{_TABLE}.{column}: expected server_default=sa.{expected}()"
+        )
         fn = sd_value.func
         fn_name = fn.attr if isinstance(fn, ast.Attribute) else getattr(fn, "id", None)
-        assert (
-            fn_name == expected
-        ), f"{_TABLE}.{column}: expected server_default=sa.{expected}(), got sa.{fn_name}()"
+        assert fn_name == expected, (
+            f"{_TABLE}.{column}: expected server_default=sa.{expected}(), got sa.{fn_name}()"
+        )
     else:  # pragma: no cover - guards against a malformed spec
         pytest.fail(f"unknown server_default spec kind {kind!r}")
 
 
 @pytest.mark.parametrize(("column", "_nullable", "_sd", "enum_name"), _COHORT)
 def test_enum_columns_reference_correct_type(
-    column: str,
-    _nullable: bool,
-    _sd: object,
-    enum_name: str | None,
+    column: str, _nullable: bool, _sd: object, enum_name: str | None,
 ) -> None:
     """``kind`` / ``scan_status`` must use ``sa.Enum(*VALUES, name=<enum_name>)``
     as their column type — pinning the PG enum type name."""
@@ -359,9 +347,9 @@ def test_enum_columns_reference_correct_type(
     for kw in type_arg.keywords:
         if kw.arg == "name" and isinstance(kw.value, ast.Constant):
             name_kw = kw.value.value
-    assert (
-        name_kw == enum_name
-    ), f"{_TABLE}.{column}: sa.Enum name must be {enum_name!r}, AST shows {name_kw!r}"
+    assert name_kw == enum_name, (
+        f"{_TABLE}.{column}: sa.Enum name must be {enum_name!r}, AST shows {name_kw!r}"
+    )
 
 
 def test_enum_value_constants_are_uppercase_labels() -> None:
@@ -372,8 +360,12 @@ def test_enum_value_constants_are_uppercase_labels() -> None:
     values = _module_values(_migration_tree())
     for const_name, expected in _ENUM_VALUE_CONSTANTS.items():
         seq = _string_tuple(values.get(const_name))
-        assert seq is not None, f"module constant {const_name} missing or not a string tuple/list"
-        assert seq == expected, f"{const_name}: RB-002 guard — expected {expected}, AST shows {seq}"
+        assert seq is not None, (
+            f"module constant {const_name} missing or not a string tuple/list"
+        )
+        assert seq == expected, (
+            f"{const_name}: RB-002 guard — expected {expected}, AST shows {seq}"
+        )
 
 
 def test_upgrade_explicitly_creates_enum_types_with_checkfirst() -> None:
@@ -402,10 +394,9 @@ def test_enum_types_dropped_in_downgrade_with_checkfirst() -> None:
     exists' (iter-42 downgrade precedent)."""
     downgrade = _downgrade_fn(_migration_tree())
     dropped = _enum_lifecycle_names(downgrade, "drop", require_checkfirst=True)
-    assert {
-        "file_kind",
-        "file_scan_status",
-    } <= dropped, f"downgrade must drop both enum types with checkfirst=True, found {dropped}"
+    assert {"file_kind", "file_scan_status"} <= dropped, (
+        f"downgrade must drop both enum types with checkfirst=True, found {dropped}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -426,16 +417,13 @@ def test_indexes_present_in_upgrade() -> None:
             continue
         idx_name, table, cols = node.args[0], node.args[1], node.args[2]
         if not (
-            isinstance(idx_name, ast.Constant)
-            and isinstance(idx_name.value, str)
-            and isinstance(table, ast.Constant)
-            and isinstance(table.value, str)
+            isinstance(idx_name, ast.Constant) and isinstance(idx_name.value, str)
+            and isinstance(table, ast.Constant) and isinstance(table.value, str)
             and isinstance(cols, ast.List)
         ):
             continue
         col_names = tuple(
-            elt.value
-            for elt in cols.elts
+            elt.value for elt in cols.elts
             if isinstance(elt, ast.Constant) and isinstance(elt.value, str)
         )
         found.add((idx_name.value, table.value, col_names))

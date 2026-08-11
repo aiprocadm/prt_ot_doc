@@ -13,10 +13,7 @@ type DashboardApiPageProps = {
   endpoint: string;
 };
 
-export const DashboardApiPage = ({
-  title,
-  endpoint,
-}: DashboardApiPageProps) => {
+export const DashboardApiPage = ({ title, endpoint }: DashboardApiPageProps) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
   const [payload, setPayload] = useState<Record<string, unknown> | null>(null);
@@ -42,9 +39,7 @@ export const DashboardApiPage = ({
 
   return (
     <div className="space-y-6">
-      <Breadcrumb
-        items={[{ label: "Главная", to: "/dashboard" }, { label: title }]}
-      />
+      <Breadcrumb items={[{ label: "Главная", to: "/dashboard" }, { label: title }]} />
       <ErrorState error={error ?? undefined} onRetry={load} />
       {loading ? <LoadingScreen label="Загрузка дашборда" /> : null}
       {!loading && !error && !hasPayload ? (
@@ -53,9 +48,7 @@ export const DashboardApiPage = ({
           description="После появления операционных событий здесь будут рассчитаны ключевые показатели и индикаторы выполнения."
         />
       ) : null}
-      {!loading && !error && hasPayload ? (
-        <JsonKpiGrid payload={payload} loading={loading} />
-      ) : null}
+      {!loading && !error && hasPayload ? <JsonKpiGrid payload={payload} loading={loading} /> : null}
     </div>
   );
 };

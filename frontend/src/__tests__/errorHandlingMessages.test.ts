@@ -7,28 +7,26 @@ const toastErrorMock = vi.hoisted(() => vi.fn());
 
 vi.mock("sonner", () => ({
   toast: {
-    error: (...args: unknown[]) => toastErrorMock(...args),
-  },
+    error: (...args: unknown[]) => toastErrorMock(...args)
+  }
 }));
 
 const requestAuthRedirectMock = vi.hoisted(() => vi.fn());
 const tokenClearMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@/router/authRedirect", () => ({
-  requestAuthRedirect: (...args: unknown[]) => requestAuthRedirectMock(...args),
+  requestAuthRedirect: (...args: unknown[]) => requestAuthRedirectMock(...args)
 }));
 
 vi.mock("@/api/tokenStorage", () => ({
   tokenStorage: {
-    clear: (...args: unknown[]) => tokenClearMock(...args),
-  },
+    clear: (...args: unknown[]) => tokenClearMock(...args)
+  }
 }));
 
-const baseError = (
-  partial: Partial<ApiError> & Pick<ApiError, "status" | "message">,
-): ApiError => ({
+const baseError = (partial: Partial<ApiError> & Pick<ApiError, "status" | "message">): ApiError => ({
   field_errors: [],
-  ...partial,
+  ...partial
 });
 
 describe("buildToastText", () => {
@@ -44,7 +42,7 @@ describe("buildToastText", () => {
     const err = baseError({
       status: 404,
       message: "n",
-      correlation_id: "corr-uuid-123456",
+      correlation_id: "corr-uuid-123456"
     });
     const out = buildToastText("Not here", err);
     if (import.meta.env.DEV) {
@@ -62,16 +60,14 @@ describe("handleApiError toasts", () => {
 
   it("prefers backend message for 403 when non-empty", () => {
     handleApiError(
-      baseError({ status: 403, message: "Worker cannot view this task" }),
+      baseError({ status: 403, message: "Worker cannot view this task" })
     );
     expect(toastErrorMock).toHaveBeenCalledWith("Worker cannot view this task");
   });
 
   it("uses fallback for 404 when message is empty", () => {
     handleApiError(baseError({ status: 404, message: "   " }));
-    expect(toastErrorMock).toHaveBeenCalledWith(
-      "Запрошенный ресурс недоступен.",
-    );
+    expect(toastErrorMock).toHaveBeenCalledWith("Запрошенный ресурс недоступен.");
   });
 
   it("prefers backend message for 409", () => {
@@ -84,8 +80,8 @@ describe("handleApiError toasts", () => {
       baseError({
         status: 422,
         message: "Payload invalid",
-        field_errors: [],
-      }),
+        field_errors: []
+      })
     );
     expect(toastErrorMock).toHaveBeenCalledWith("Payload invalid");
   });
@@ -95,8 +91,8 @@ describe("handleApiError toasts", () => {
       baseError({
         status: 422,
         message: "ignored when fields",
-        field_errors: [{ field: "title", message: "required" }],
-      }),
+        field_errors: [{ field: "title", message: "required" }]
+      })
     );
     expect(toastErrorMock).toHaveBeenCalledWith("title: required");
   });

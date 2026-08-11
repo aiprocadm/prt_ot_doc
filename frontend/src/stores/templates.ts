@@ -4,11 +4,7 @@ import { apiClient } from "@/api/client";
 import { defaultPagination } from "@/stores/helpers";
 import type { PaginatedState } from "@/stores/types";
 import type { ApiError, PaginatedResponse } from "@/types/dto/common";
-import type {
-  TemplateDto,
-  TemplateStatus,
-  UpdateTemplateDto,
-} from "@/types/dto/templates";
+import type { TemplateDto, TemplateStatus, UpdateTemplateDto } from "@/types/dto/templates";
 
 interface TemplateFilters {
   search?: string;
@@ -24,10 +20,7 @@ interface TemplatesState extends PaginatedState<TemplateDto, TemplateFilters> {
   create: (payload: UpdateTemplateDto) => Promise<TemplateDto>;
   update: (id: string, payload: UpdateTemplateDto) => Promise<TemplateDto>;
   remove: (id: string) => Promise<void>;
-  activateVersion: (
-    templateId: string,
-    versionId: string,
-  ) => Promise<TemplateDto>;
+  activateVersion: (templateId: string, versionId: string) => Promise<TemplateDto>;
   setFilters: (filters: Partial<TemplateFilters>) => void;
   setPage: (page: number) => void;
   setPageSize: (size: number) => void;
@@ -65,7 +58,7 @@ export const useTemplatesStore = create<TemplatesState>()(
         filters: {},
         pagination: defaultPagination(),
         loading: false,
-        error: null,
+        error: null
       }));
     },
     list: async (params) => {
@@ -73,27 +66,14 @@ export const useTemplatesStore = create<TemplatesState>()(
         state.loading = true;
         state.error = null;
       });
-      const query = {
-        ...get().filters,
-        ...params,
-        page: get().pagination.page,
-        page_size: get().pagination.page_size,
-      };
+      const query = { ...get().filters, ...params, page: get().pagination.page, page_size: get().pagination.page_size };
       try {
-        const { data } = await apiClient.get<
-          | PaginatedResponse<TemplateDto>
-          | { items: TemplateDto[]; total: number }
-        >("/templates", { params: query });
+        const { data } = await apiClient.get<PaginatedResponse<TemplateDto> | { items: TemplateDto[]; total: number }>("/templates", { params: query });
         set((state) => {
           state.items = data.items;
-          state.pagination =
-            "pagination" in data
-              ? data.pagination
-              : {
-                  page: get().pagination.page,
-                  page_size: get().pagination.page_size,
-                  total: data.total,
-                };
+          state.pagination = "pagination" in data
+            ? data.pagination
+            : { page: get().pagination.page, page_size: get().pagination.page_size, total: data.total };
         });
       } catch (error) {
         set((state) => {
@@ -120,10 +100,7 @@ export const useTemplatesStore = create<TemplatesState>()(
       }
     },
     create: async (payload) => {
-      const { data } = await apiClient.post<TemplateDto>(
-        "/templates/catalog",
-        payload,
-      );
+      const { data } = await apiClient.post<TemplateDto>("/templates/catalog", payload);
       set((state) => {
         state.items.unshift(data);
         state.pagination.total += 1;
@@ -131,27 +108,17 @@ export const useTemplatesStore = create<TemplatesState>()(
       return data;
     },
     update: async (id, payload) => {
-      const { data } = await apiClient.patch<TemplateDto>(
-        `/templates/${id}`,
-        payload,
-      );
+      const { data } = await apiClient.patch<TemplateDto>(`/templates/${id}`, payload);
       set((state) => {
-        state.items = state.items.map((template) =>
-          template.id === id ? data : template,
-        );
+        state.items = state.items.map((template) => (template.id === id ? data : template));
         if (state.item?.id === id) state.item = data;
       });
       return data;
     },
     activateVersion: async (templateId, versionId) => {
-      const { data } = await apiClient.patch<TemplateDto>(
-        `/templates/${templateId}`,
-        { current_version_id: versionId },
-      );
+      const { data } = await apiClient.patch<TemplateDto>(`/templates/${templateId}`, { current_version_id: versionId });
       set((state) => {
-        state.items = state.items.map((template) =>
-          template.id === templateId ? data : template,
-        );
+        state.items = state.items.map((template) => (template.id === templateId ? data : template));
         if (state.item?.id === templateId) state.item = data;
       });
       return data;
@@ -163,6 +130,6 @@ export const useTemplatesStore = create<TemplatesState>()(
         state.pagination.total = Math.max(0, state.pagination.total - 1);
         if (state.item?.id === id) state.item = null;
       });
-    },
-  })),
+    }
+  }))
 );

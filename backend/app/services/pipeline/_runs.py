@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 from time import perf_counter
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.metrics import (
-    Metrics,
     PipelineStage,
     PipelineType,
     StageResult,
@@ -22,34 +21,6 @@ from app.models.models import PipelineRun, PipelineRunStatus, Template, Template
 
 class RunLifecycleMixin:
     """Pending-run creation / idempotent lookup and error normalization."""
-
-    if TYPE_CHECKING:
-        # Контракт хост-класса (PipelineService): атрибуты и методы,
-        # которыми пользуется миксин, — реализации в service.py и _preparation.py.
-        metrics: Metrics
-
-        def _prepare_parameters(
-            self,
-            *,
-            session: AsyncSession,
-            template: Template,
-            template_version: TemplateVersion,
-            context: dict[str, Any],
-            replacements: dict[str, str] | None,
-            header_text: str | None,
-            footer_text: str | None,
-            output_basename: str | None,
-            tenant_id: str | None,
-        ) -> tuple[str, str | None, dict[str, str], dict[str, Any]]: ...
-
-        @staticmethod
-        def _validate_idempotent_run(
-            run: PipelineRun,
-            *,
-            template_id: str,
-            template_version_id: str,
-            payload: dict[str, Any],
-        ) -> None: ...
 
     async def ensure_pending_run(
         self,

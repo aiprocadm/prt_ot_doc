@@ -17,16 +17,9 @@ export const ReadinessPanel = ({
   report: ReadinessReportDto | null;
   nameOf: (personId: string) => string;
 }) => {
-  if (!report)
-    return (
-      <p className="text-sm text-muted-foreground">Готовность не загружена</p>
-    );
+  if (!report) return <p className="text-sm text-muted-foreground">Готовность не загружена</p>;
   if (report.ok)
-    return (
-      <p className="text-sm text-emerald-600">
-        Бригада готова — все допуски действуют
-      </p>
-    );
+    return <p className="text-sm text-emerald-600">Бригада готова — все допуски действуют</p>;
   return (
     <ul className="space-y-1 text-sm text-destructive">
       {report.violations.map((v, i) => (

@@ -40,7 +40,9 @@ async def test_closed_incident_cannot_be_reopened(
         "description": "desc",
         "victim_ids": [victim.id],
     }
-    created = (await async_client.post("/api/v1/incidents", json=payload, headers=headers)).json()
+    created = (
+        await async_client.post("/api/v1/incidents", json=payload, headers=headers)
+    ).json()
 
     close = await async_client.patch(
         f"/api/v1/incidents/{created['id']}",
@@ -81,7 +83,9 @@ async def test_incident_backward_transition_rejected(
         "description": "desc",
         "victim_ids": [victim.id],
     }
-    created = (await async_client.post("/api/v1/incidents", json=payload, headers=headers)).json()
+    created = (
+        await async_client.post("/api/v1/incidents", json=payload, headers=headers)
+    ).json()
 
     # Forward is allowed: reported -> investigating.
     fwd = await async_client.patch(

@@ -40,9 +40,9 @@ def test_ppeitem_has_required_columns() -> None:
         "updated_at",
         "version",
     }
-    assert required.issubset(
-        columns.keys()
-    ), f"ppeitem missing columns: {required - set(columns.keys())}"
+    assert required.issubset(columns.keys()), (
+        f"ppeitem missing columns: {required - set(columns.keys())}"
+    )
 
 
 def test_ppeitem_category_uses_ppeitemcategory_enum() -> None:
@@ -52,13 +52,8 @@ def test_ppeitem_category_uses_ppeitemcategory_enum() -> None:
         "lose type-safety vs the 7-value taxonomy"
     )
     expected_values = {
-        "head",
-        "hands",
-        "respiratory",
-        "body",
-        "footwear",
-        "fall_protection",
-        "other",
+        "head", "hands", "respiratory", "body",
+        "footwear", "fall_protection", "other",
     }
     actual_values = {member.value for member in PPEItemCategory}
     assert expected_values == actual_values, (
@@ -69,7 +64,9 @@ def test_ppeitem_category_uses_ppeitemcategory_enum() -> None:
 
 
 def test_ppeitem_tenant_scoped_unique_constraints() -> None:
-    constraint_names = {constraint.name for constraint in PPEItem.__table__.constraints}
+    constraint_names = {
+        constraint.name for constraint in PPEItem.__table__.constraints
+    }
     assert "uq_ppe_item_name" in constraint_names, (
         "uq_ppe_item_name unique constraint on (tenant_id, name) required — "
         "duplicate item names within a tenant would break PPEIssue.item_name "
@@ -83,9 +80,9 @@ def test_ppeitem_tenant_scoped_unique_constraints() -> None:
 
 def test_ppeitem_tenant_index_exists() -> None:
     index_names = {idx.name for idx in PPEItem.__table__.indexes}
-    assert (
-        "ix_ppeitem_tenant_id" in index_names
-    ), "ix_ppeitem_tenant_id required for tenant-scoped catalog listing"
+    assert "ix_ppeitem_tenant_id" in index_names, (
+        "ix_ppeitem_tenant_id required for tenant-scoped catalog listing"
+    )
 
 
 def test_iter24_migration_creates_ppeitemcategory_enum() -> None:
@@ -106,4 +103,6 @@ def test_iter24_migration_creates_ppeitemcategory_enum() -> None:
         "iter-24 must declare ppeitemcategory enum name explicitly (default "
         "lowercased classname is fragile under refactor — see iter-19 PR #587)"
     )
-    assert 'name="journaltype"' in src, "iter-24 must declare journaltype enum name explicitly"
+    assert 'name="journaltype"' in src, (
+        "iter-24 must declare journaltype enum name explicitly"
+    )

@@ -858,7 +858,9 @@ class ProjectionOrchestrator:
         contractors_active = int(
             await self.session.scalar(
                 select(
-                    func.coalesce(func.sum(ContractorReadinessReadModel.active_packages_count), 0)
+                    func.coalesce(
+                        func.sum(ContractorReadinessReadModel.active_packages_count), 0
+                    )
                 ).where(ContractorReadinessReadModel.tenant_id == self.tenant_id)
             )
             or 0

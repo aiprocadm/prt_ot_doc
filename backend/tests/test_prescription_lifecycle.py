@@ -1,5 +1,4 @@
 """Unit tests for the prescription status FSM (TZ-3.4-V12-01). App-free."""
-
 from __future__ import annotations
 
 import pytest

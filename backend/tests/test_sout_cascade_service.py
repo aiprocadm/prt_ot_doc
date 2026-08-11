@@ -1,5 +1,4 @@
 """Тесты сервиса каскада СОУТ (in-memory SQLite)."""
-
 import pytest
 from sqlalchemy import Column, String, Table, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
@@ -42,16 +41,10 @@ async def seeded(db_session):
     pos = Position(tenant_id=t.id, company_id=company.id, name="Слесарь")
     db_session.add(pos)
     await db_session.flush()
-    db_session.add(
-        MedicalFactor(
-            tenant_id=t.id,
-            code="4.1",
-            name="Шум",
-            category="factor",
-            exam_kinds=["periodic"],
-            periodicity_months=12,
-        )
-    )
+    db_session.add(MedicalFactor(
+        tenant_id=t.id, code="4.1", name="Шум", category="factor",
+        exam_kinds=["periodic"], periodicity_months=12,
+    ))
     haz = RiskHazard(tenant_id=t.id, code="H-4.1", title="Шум", medical_factor_code="4.1")
     db_session.add(haz)
     await db_session.flush()
@@ -59,25 +52,15 @@ async def seeded(db_session):
     db_session.add(c)
     await db_session.flush()
     wp = SoutWorkplace(
-        tenant_id=t.id,
-        campaign_id=c.id,
-        workplace_code="РМ-01",
-        position_name="Слесарь",
-        position_id=pos.id,
-        assessed_class=SoutClass.HARMFUL_3_1,
+        tenant_id=t.id, campaign_id=c.id, workplace_code="РМ-01",
+        position_name="Слесарь", position_id=pos.id, assessed_class=SoutClass.HARMFUL_3_1,
     )
     db_session.add(wp)
     await db_session.flush()
-    db_session.add(
-        SoutFactor(
-            tenant_id=t.id,
-            workplace_id=wp.id,
-            name="Шум",
-            code="4.1",
-            hazard_id=haz.id,
-            measured_class=SoutClass.HARMFUL_3_1,
-        )
-    )
+    db_session.add(SoutFactor(
+        tenant_id=t.id, workplace_id=wp.id, name="Шум", code="4.1",
+        hazard_id=haz.id, measured_class=SoutClass.HARMFUL_3_1,
+    ))
     await db_session.flush()
     return t, c, wp, pos
 
@@ -104,11 +87,9 @@ async def test_apply_creates_medical_norm_with_class(db_session, seeded):
     result = await apply_cascade(db_session, _Tenant(), wp.id)
     assert result is not None
     assert result.created == 1
-    norms = list(
-        (await db_session.execute(select(MedicalNorm).where(MedicalNorm.position_id == pos.id)))
-        .scalars()
-        .all()
-    )
+    norms = list((await db_session.execute(
+        select(MedicalNorm).where(MedicalNorm.position_id == pos.id)
+    )).scalars().all())
     assert len(norms) == 1
     assert norms[0].exam_kind == MedicalExamKind.PERIODIC
     assert norms[0].working_conditions_class == "harmful_3_1"
@@ -127,22 +108,16 @@ async def test_apply_is_idempotent(db_session, seeded):
 @pytest.mark.asyncio
 async def test_apply_reclass_only_when_empty(db_session, seeded):
     t, c, wp, pos = seeded
-    db_session.add(
-        MedicalNorm(
-            tenant_id=t.id,
-            position_id=pos.id,
-            exam_kind=MedicalExamKind.PERIODIC,
-            hazard_id=None,
-            interval_days=365,
-            working_conditions_class=None,
-        )
-    )
+    db_session.add(MedicalNorm(
+        tenant_id=t.id, position_id=pos.id, exam_kind=MedicalExamKind.PERIODIC,
+        hazard_id=None, interval_days=365, working_conditions_class=None,
+    ))
     await db_session.flush()
     result = await apply_cascade(db_session, _Tenant(), wp.id)
     assert result.reclassified == 1 and result.created == 0
-    norm = (
-        await db_session.execute(select(MedicalNorm).where(MedicalNorm.position_id == pos.id))
-    ).scalar_one()
+    norm = (await db_session.execute(
+        select(MedicalNorm).where(MedicalNorm.position_id == pos.id)
+    )).scalar_one()
     assert norm.working_conditions_class == "harmful_3_1"
 
 
@@ -152,24 +127,16 @@ async def test_apply_reclass_picks_first_when_duplicate_general_norms(db_session
     в unique-constraint). reclass не должен падать (scalars().first()) и проставит класс."""
     t, c, wp, pos = seeded
     for _ in range(2):
-        db_session.add(
-            MedicalNorm(
-                tenant_id=t.id,
-                position_id=pos.id,
-                exam_kind=MedicalExamKind.PERIODIC,
-                hazard_id=None,
-                interval_days=365,
-                working_conditions_class=None,
-            )
-        )
+        db_session.add(MedicalNorm(
+            tenant_id=t.id, position_id=pos.id, exam_kind=MedicalExamKind.PERIODIC,
+            hazard_id=None, interval_days=365, working_conditions_class=None,
+        ))
     await db_session.flush()
     result = await apply_cascade(db_session, _Tenant(), wp.id)
     assert result.reclassified == 1 and result.created == 0
-    norms = list(
-        (await db_session.execute(select(MedicalNorm).where(MedicalNorm.position_id == pos.id)))
-        .scalars()
-        .all()
-    )
+    norms = list((await db_session.execute(
+        select(MedicalNorm).where(MedicalNorm.position_id == pos.id)
+    )).scalars().all())
     assert len(norms) == 2
     assert any(n.working_conditions_class == "harmful_3_1" for n in norms)
 
@@ -177,20 +144,14 @@ async def test_apply_reclass_picks_first_when_duplicate_general_norms(db_session
 @pytest.mark.asyncio
 async def test_apply_conflict_not_overwritten(db_session, seeded):
     t, c, wp, pos = seeded
-    db_session.add(
-        MedicalNorm(
-            tenant_id=t.id,
-            position_id=pos.id,
-            exam_kind=MedicalExamKind.PERIODIC,
-            hazard_id=None,
-            interval_days=365,
-            working_conditions_class="acceptable",
-        )
-    )
+    db_session.add(MedicalNorm(
+        tenant_id=t.id, position_id=pos.id, exam_kind=MedicalExamKind.PERIODIC,
+        hazard_id=None, interval_days=365, working_conditions_class="acceptable",
+    ))
     await db_session.flush()
     result = await apply_cascade(db_session, _Tenant(), wp.id)
     assert result.conflicts == 1 and result.created == 0 and result.reclassified == 0
-    norm = (
-        await db_session.execute(select(MedicalNorm).where(MedicalNorm.position_id == pos.id))
-    ).scalar_one()
+    norm = (await db_session.execute(
+        select(MedicalNorm).where(MedicalNorm.position_id == pos.id)
+    )).scalar_one()
     assert norm.working_conditions_class == "acceptable"  # не перезаписан

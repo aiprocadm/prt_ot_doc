@@ -5,7 +5,7 @@
   "scopes": {
     "core": {
       "floor_line_percent": 81.0,
-      "floor_branch_percent": 67.0,
+      "floor_branch_percent": 68.0,
       "patterns": ["backend/app/core/"]
     },
     "domain": {

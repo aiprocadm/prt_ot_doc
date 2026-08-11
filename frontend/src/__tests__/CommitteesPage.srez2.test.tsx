@@ -1,10 +1,4 @@
-import {
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-  within,
-} from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -61,34 +55,10 @@ const COMMITTEE: Committee = {
 };
 
 const MEMBERS: MemberDetail[] = [
-  {
-    id: "mem1",
-    committee_id: "c1",
-    person_id: "p1",
-    role: "chair",
-    person_fio: "Иванов Иван",
-  },
-  {
-    id: "mem2",
-    committee_id: "c1",
-    person_id: "p2",
-    role: "secretary",
-    person_fio: "Петров Пётр",
-  },
-  {
-    id: "mem3",
-    committee_id: "c1",
-    person_id: "p3",
-    role: "member",
-    person_fio: "Сидоров Сидор",
-  },
-  {
-    id: "mem4",
-    committee_id: "c1",
-    person_id: "p4",
-    role: "member",
-    person_fio: "Кузнецов Кузьма",
-  },
+  { id: "mem1", committee_id: "c1", person_id: "p1", role: "chair", person_fio: "Иванов Иван" },
+  { id: "mem2", committee_id: "c1", person_id: "p2", role: "secretary", person_fio: "Петров Пётр" },
+  { id: "mem3", committee_id: "c1", person_id: "p3", role: "member", person_fio: "Сидоров Сидор" },
+  { id: "mem4", committee_id: "c1", person_id: "p4", role: "member", person_fio: "Кузнецов Кузьма" },
 ];
 
 const PLANNED_MEETING: Meeting = {
@@ -128,11 +98,7 @@ const HELD_PROTOCOL_CARRIED: Protocol = {
   meeting: HELD_MEETING,
   decisions: [
     {
-      decision: {
-        id: "d1",
-        text: "Решение о выдаче СИЗ",
-        decided_at: "2026-07-20T09:35:00Z",
-      },
+      decision: { id: "d1", text: "Решение о выдаче СИЗ", decided_at: "2026-07-20T09:35:00Z" },
       tasks: [],
       votes_for: 2,
       votes_against: 1,
@@ -164,56 +130,23 @@ function renderPage() {
 
 beforeEach(() => {
   Object.values(api).forEach((fn) => fn.mockReset());
-  api.list.mockResolvedValue({
-    items: [COMMITTEE],
-    total: 1,
-    limit: 100,
-    offset: 0,
-  });
+  api.list.mockResolvedValue({ items: [COMMITTEE], total: 1, limit: 100, offset: 0 });
   api.listMembers.mockResolvedValue(MEMBERS);
-  api.listMeetings.mockResolvedValue({
-    items: [PLANNED_MEETING],
-    total: 1,
-    limit: 100,
-    offset: 0,
-  });
+  api.listMeetings.mockResolvedValue({ items: [PLANNED_MEETING], total: 1, limit: 100, offset: 0 });
   api.getAttendance.mockResolvedValue(ATTENDANCE_3);
   api.getInvitations.mockResolvedValue([]);
   api.putInvitations.mockResolvedValue([]);
   api.getProtocol.mockResolvedValue(EMPTY_PROTOCOL);
-  api.listProtocols.mockResolvedValue({
-    items: [JOURNAL_ITEM],
-    total: 1,
-    limit: 100,
-    offset: 0,
-  });
+  api.listProtocols.mockResolvedValue({ items: [JOURNAL_ITEM], total: 1, limit: 100, offset: 0 });
   api.holdMeeting.mockResolvedValue(HELD_MEETING);
   api.putAttendance.mockResolvedValue(ATTENDANCE_3);
   api.createCommittee.mockResolvedValue(COMMITTEE);
-  api.addMember.mockResolvedValue({
-    id: "mem5",
-    committee_id: "c1",
-    person_id: "p5",
-    role: "member",
-  });
+  api.addMember.mockResolvedValue({ id: "mem5", committee_id: "c1", person_id: "p5", role: "member" });
   api.removeMember.mockResolvedValue(undefined);
   api.createMeeting.mockResolvedValue(PLANNED_MEETING);
-  api.createDecision.mockResolvedValue({
-    id: "d1",
-    text: "Решение о выдаче СИЗ",
-  });
-  api.createTask.mockResolvedValue({
-    id: "t1",
-    decision_id: "d1",
-    status: "open",
-    is_overdue: false,
-  });
-  api.castVote.mockResolvedValue({
-    id: "v1",
-    decision_id: "d1",
-    person_id: "p1",
-    choice: "for",
-  });
+  api.createDecision.mockResolvedValue({ id: "d1", text: "Решение о выдаче СИЗ" });
+  api.createTask.mockResolvedValue({ id: "t1", decision_id: "d1", status: "open", is_overdue: false });
+  api.castVote.mockResolvedValue({ id: "v1", decision_id: "d1", person_id: "p1", choice: "for" });
 });
 
 async function selectCommitteeAndMeeting() {
@@ -264,9 +197,7 @@ describe("CommitteesPage срез-2", () => {
   it("calls holdMeeting when «Провести заседание» is clicked", async () => {
     await selectCommitteeAndMeeting();
 
-    fireEvent.click(
-      await screen.findByRole("button", { name: "Провести заседание" }),
-    );
+    fireEvent.click(await screen.findByRole("button", { name: "Провести заседание" }));
 
     await waitFor(() => expect(api.holdMeeting).toHaveBeenCalledWith("m1"));
   });
@@ -280,9 +211,7 @@ describe("CommitteesPage срез-2", () => {
     });
     await selectCommitteeAndMeeting();
 
-    fireEvent.click(
-      await screen.findByRole("button", { name: "Провести заседание" }),
-    );
+    fireEvent.click(await screen.findByRole("button", { name: "Провести заседание" }));
 
     expect(await screen.findByText("Кворум не набран")).toBeInTheDocument();
   });
@@ -293,9 +222,7 @@ describe("CommitteesPage срез-2", () => {
     // Journal renders on mount
     const journalRow = await screen.findByText("Пожарная безопасность — склад");
     expect(journalRow).toBeInTheDocument();
-    expect(
-      within(journalRow.closest("tr") as HTMLElement).getByText("1/2026"),
-    ).toBeInTheDocument();
+    expect(within(journalRow.closest("tr") as HTMLElement).getByText("1/2026")).toBeInTheDocument();
 
     // Clicking a journal row selects that protocol → outcome badge is shown
     api.getProtocol.mockResolvedValue(HELD_PROTOCOL_CARRIED);

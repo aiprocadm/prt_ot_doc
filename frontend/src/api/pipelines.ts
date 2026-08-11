@@ -36,23 +36,14 @@ export type PipelineRun = {
 };
 
 export const listPipelineRuns = async (params?: Record<string, string>) => {
-  const response = await apiClient.get<
-    Array<{
-      run_id: string;
-      status: WizardPipelineStatus;
-      profile_id?: string | null;
-      created_by?: string | null;
-      correlation_id?: string | null;
-      step_runs?: PipelineStepRun[];
-    }>
-  >("/pipelines/runs", { params });
+  const response = await apiClient.get<Array<{ run_id: string; status: WizardPipelineStatus; profile_id?: string | null; created_by?: string | null; correlation_id?: string | null; step_runs?: PipelineStepRun[] }>>("/pipelines/runs", { params });
   return response.data.map((item) => ({
     run_id: item.run_id,
     status: item.status,
     profile_id: item.profile_id,
     created_by: item.created_by,
     correlation_id: item.correlation_id,
-    step_runs: item.step_runs ?? [],
+    step_runs: item.step_runs ?? []
   })) as PipelineRun[];
 };
 
@@ -69,7 +60,7 @@ export const getPipelineRun = async (runId: string) => {
     outputs_json: d.outputs_json,
     step_runs: d.step_runs,
     logs: d.logs,
-    artifacts: d.artifacts,
+    artifacts: d.artifacts
   } as PipelineRun;
 };
 
@@ -83,21 +74,13 @@ export const cancelPipelineRun = async (runId: string) => {
   return getPipelineRun(runId);
 };
 
-export const retryPipelineStepRun = async (
-  runId: string,
-  stepRunId: string,
-) => {
-  const stepId = stepRunId.includes(":")
-    ? stepRunId.split(":").slice(1).join(":")
-    : stepRunId;
+export const retryPipelineStepRun = async (runId: string, stepRunId: string) => {
+  const stepId = stepRunId.includes(":") ? stepRunId.split(":").slice(1).join(":") : stepRunId;
   await apiClient.post(`/pipelines/runs/${runId}/steps/${stepId}:retry`);
   return getPipelineRun(runId);
 };
 
-export const bulkActionPipelineRuns = async (
-  runIds: string[],
-  action: "retry" | "cancel",
-) => {
+export const bulkActionPipelineRuns = async (runIds: string[], action: "retry" | "cancel") => {
   await apiClient.post(`/pipelines/runs:bulk?action=${action}`, runIds);
 };
 
@@ -108,5 +91,5 @@ export const pipelineBuilderApi = {
   },
   createProfile: async (payload: Record<string, unknown>): Promise<void> => {
     await apiClient.post("/pipelines/profiles", payload);
-  },
+  }
 };

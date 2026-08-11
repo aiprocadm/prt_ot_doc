@@ -1,5 +1,4 @@
 """Unit: СОУТ schemas round-trip + reassessment projection (P10-04)."""
-
 from __future__ import annotations
 
 from datetime import date, datetime, timezone
@@ -40,15 +39,10 @@ def test_workplace_create_optional_class():
 
 def test_workplace_read_carries_reassessment_flag():
     w = WorkplaceRead(
-        id="w1",
-        campaign_id="c1",
-        workplace_code="РМ-001",
-        position_name="Сварщик",
-        person_id=None,
-        assessed_class=SoutClass.DANGEROUS,
-        assessment_date=date(2026, 1, 1),
-        next_assessment_date=date(2026, 6, 1),
-        is_reassessment_due=True,
+        id="w1", campaign_id="c1", workplace_code="РМ-001",
+        position_name="Сварщик", person_id=None,
+        assessed_class=SoutClass.DANGEROUS, assessment_date=date(2026, 1, 1),
+        next_assessment_date=date(2026, 6, 1), is_reassessment_due=True,
         created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
         updated_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
     )
@@ -80,20 +74,13 @@ def test_factor_update_accepts_hazard_id() -> None:
 
 def test_norm_suggestions_envelope() -> None:
     ppe = PpeNormSuggestion(
-        position_id="pos-1",
-        hazard_id="haz-1",
-        hazard_title="Шум",
-        factor_name="Шум",
-        factor_code="4.50",
-        measured_class=SoutClass.HARMFUL_3_1,
+        position_id="pos-1", hazard_id="haz-1", hazard_title="Шум",
+        factor_name="Шум", factor_code="4.50", measured_class=SoutClass.HARMFUL_3_1,
         reason="demo",
     )
     med = MedicalExamSuggestion(
-        position_id="pos-1",
-        exam_kind="periodic",
-        periodicity_months=12,
-        factor_codes=["4.4"],
-        reason="demo",
+        position_id="pos-1", exam_kind="periodic", periodicity_months=12,
+        factor_codes=["4.4"], reason="demo",
     )
     env = NormSuggestions(ppe=[ppe], medical=[med])
     assert env.ppe[0].hazard_id == "haz-1"

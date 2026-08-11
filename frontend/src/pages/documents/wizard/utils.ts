@@ -17,7 +17,7 @@ export const buildBatchErrors = (items: DocumentBatchItem[]) =>
 
 export const getArchiveStatusSummary = ({
   batchStatus,
-  pipelineStatus,
+  pipelineStatus
 }: {
   batchStatus?: string | null;
   pipelineStatus?: string | null;
@@ -26,26 +26,19 @@ export const getArchiveStatusSummary = ({
     return {
       tone: "text-green-700",
       title: "Архив готов к публикации",
-      description:
-        "Артефакты сформированы, можно открыть архив, проверить документы и продолжить согласование/отправку.",
+      description: "Артефакты сформированы, можно открыть архив, проверить документы и продолжить согласование/отправку."
     };
   }
-  if (
-    pipelineStatus === "failed" ||
-    pipelineStatus === "error" ||
-    batchStatus === "failed"
-  ) {
+  if (pipelineStatus === "failed" || pipelineStatus === "error" || batchStatus === "failed") {
     return {
       tone: "text-destructive",
       title: "Есть ошибки перед архивированием",
-      description:
-        "Проверьте timeline pipeline или построчные ошибки batch перед передачей документов дальше.",
+      description: "Проверьте timeline pipeline или построчные ошибки batch перед передачей документов дальше."
     };
   }
   return {
     tone: "text-muted-foreground",
     title: "Архив ожидает завершения фоновых задач",
-    description:
-      "Следите за статусом pipeline и batch: после завершения отсюда можно перейти в архив и на экран согласований без ручной перезагрузки.",
+    description: "Следите за статусом pipeline и batch: после завершения отсюда можно перейти в архив и на экран согласований без ручной перезагрузки."
   };
 };

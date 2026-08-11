@@ -33,20 +33,14 @@ export function useMobileIssue() {
       // means "no stock tracking" — degrade silently, issuance still works.
       try {
         const levels = await warehouseApi.listLevels();
-        setOnHand(
-          new Map(levels.map((lvl) => [lvl.item_id, lvl.total_quantity])),
-        );
+        setOnHand(new Map(levels.map((lvl) => [lvl.item_id, lvl.total_quantity])));
         setStockAware(true);
       } catch {
         setOnHand(new Map());
         setStockAware(false);
       }
     } catch (err) {
-      setError(
-        (err as ApiError) ?? {
-          message: "Не удалось загрузить данные выдачи СИЗ",
-        },
-      );
+      setError((err as ApiError) ?? { message: "Не удалось загрузить данные выдачи СИЗ" });
     } finally {
       setLoading(false);
     }
@@ -56,15 +50,11 @@ export function useMobileIssue() {
     void load();
   }, [load]);
 
-  const activePersons = useMemo(
-    () => persons.filter((p) => p.status === "active"),
-    [persons],
-  );
+  const activePersons = useMemo(() => persons.filter((p) => p.status === "active"), [persons]);
 
   const onHandFor = useCallback(
-    (itemId: string): number | null =>
-      stockAware ? (onHand.get(itemId) ?? 0) : null,
-    [stockAware, onHand],
+    (itemId: string): number | null => (stockAware ? onHand.get(itemId) ?? 0 : null),
+    [stockAware, onHand]
   );
 
   const selectWorker = useCallback((person: PersonDto) => {
@@ -86,33 +76,21 @@ export function useMobileIssue() {
         const existing = prev.find((line) => line.item_id === item.id);
         if (existing) {
           return prev.map((line) =>
-            line.item_id === item.id
-              ? { ...line, quantity: line.quantity + 1 }
-              : line,
+            line.item_id === item.id ? { ...line, quantity: line.quantity + 1 } : line
           );
         }
-        return [
-          ...prev,
-          {
-            item_id: item.id,
-            item_name: item.name,
-            quantity: 1,
-            on_hand: onHandFor(item.id),
-          },
-        ];
+        return [...prev, { item_id: item.id, item_name: item.name, quantity: 1, on_hand: onHandFor(item.id) }];
       });
     },
-    [onHandFor],
+    [onHandFor]
   );
 
   const setQty = useCallback((itemId: string, quantity: number) => {
     setResults(null);
     setCart((prev) =>
       prev.map((line) =>
-        line.item_id === itemId
-          ? { ...line, quantity: Math.max(1, Math.floor(quantity) || 1) }
-          : line,
-      ),
+        line.item_id === itemId ? { ...line, quantity: Math.max(1, Math.floor(quantity) || 1) } : line
+      )
     );
   }, []);
 
@@ -129,17 +107,8 @@ export function useMobileIssue() {
       const lineResults: IssueResultLine[] = [];
       for (const line of cart) {
         try {
-          await opsApi.createPpeIssue({
-            person_id: worker.id,
-            item_id: line.item_id,
-            quantity: line.quantity,
-          });
-          lineResults.push({
-            item_id: line.item_id,
-            item_name: line.item_name,
-            quantity: line.quantity,
-            status: "ok",
-          });
+          await opsApi.createPpeIssue({ person_id: worker.id, item_id: line.item_id, quantity: line.quantity });
+          lineResults.push({ item_id: line.item_id, item_name: line.item_name, quantity: line.quantity, status: "ok" });
         } catch (err) {
           const apiErr = err as ApiError;
           lineResults.push({
@@ -147,15 +116,13 @@ export function useMobileIssue() {
             item_name: line.item_name,
             quantity: line.quantity,
             status: "error",
-            error: apiErr?.message || "Не удалось выдать позицию",
+            error: apiErr?.message || "Не удалось выдать позицию"
           });
         }
       }
       // Drop successfully-issued lines so a retry re-sends only failed ones
       // (prevents double-issue without server-side idempotency).
-      const okIds = new Set(
-        lineResults.filter((r) => r.status === "ok").map((r) => r.item_id),
-      );
+      const okIds = new Set(lineResults.filter((r) => r.status === "ok").map((r) => r.item_id));
       setCart((prev) => prev.filter((line) => !okIds.has(line.item_id)));
       setResults(lineResults);
     } finally {
@@ -165,11 +132,8 @@ export function useMobileIssue() {
   }, [worker, cart]);
 
   const allIssued = useMemo(
-    () =>
-      results !== null &&
-      results.length > 0 &&
-      results.every((r) => r.status === "ok"),
-    [results],
+    () => results !== null && results.length > 0 && results.every((r) => r.status === "ok"),
+    [results]
   );
 
   return {
@@ -193,7 +157,7 @@ export function useMobileIssue() {
     submitting,
     results,
     issueAll,
-    allIssued,
+    allIssued
   };
 }
 

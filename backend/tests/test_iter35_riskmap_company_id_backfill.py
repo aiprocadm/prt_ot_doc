@@ -134,8 +134,7 @@ def test_company_id_fk_targets_company_without_ondelete() -> None:
     upgrade = _upgrade_fn(tree)
     col_call = _add_column_for("riskmap", "company_id", upgrade)
     fk_calls = [
-        arg
-        for arg in col_call.args
+        arg for arg in col_call.args
         if isinstance(arg, ast.Call)
         and isinstance(arg.func, ast.Attribute)
         and arg.func.attr == "ForeignKey"
@@ -144,9 +143,9 @@ def test_company_id_fk_targets_company_without_ondelete() -> None:
     fk = fk_calls[0]
     target = fk.args[0] if fk.args else None
     assert isinstance(target, ast.Constant) and target.value == "company.id"
-    assert (
-        _keyword_value(fk, "ondelete") is None
-    ), "model has no ondelete; migration FK shouldn't either"
+    assert _keyword_value(fk, "ondelete") is None, (
+        "model has no ondelete; migration FK shouldn't either"
+    )
 
 
 def test_orphan_rows_deleted_before_not_null_alter() -> None:
@@ -154,14 +153,11 @@ def test_orphan_rows_deleted_before_not_null_alter() -> None:
     upgrade = _upgrade_fn(tree)
     sql_texts: list[str] = []
     for call in _calls_named(upgrade, "execute"):
-        if (
-            call.args
-            and isinstance(call.args[0], ast.Constant)
-            and isinstance(call.args[0].value, str)
-        ):
+        if call.args and isinstance(call.args[0], ast.Constant) and isinstance(call.args[0].value, str):
             sql_texts.append(call.args[0].value)
     assert any(
-        "delete from riskmap" in t.lower() and "company_id is null" in t.lower() for t in sql_texts
+        "delete from riskmap" in t.lower() and "company_id is null" in t.lower()
+        for t in sql_texts
     ), f"expected DELETE FROM riskmap WHERE company_id IS NULL; saw {sql_texts!r}"
 
 
@@ -169,12 +165,13 @@ def test_alter_column_to_not_null_present() -> None:
     tree = _migration_tree()
     upgrade = _upgrade_fn(tree)
     matching = [
-        c
-        for c in _calls_named(upgrade, "alter_column")
+        c for c in _calls_named(upgrade, "alter_column")
         if any(isinstance(a, ast.Constant) and a.value == "company_id" for a in c.args)
         and _keyword_value(c, "nullable") is False
     ]
-    assert matching, "expected alter_column(..., 'company_id', ..., nullable=False)"
+    assert matching, (
+        "expected alter_column(..., 'company_id', ..., nullable=False)"
+    )
 
 
 def test_unique_constraint_matches_model_invariant() -> None:
@@ -200,17 +197,12 @@ def test_unique_constraint_matches_model_invariant() -> None:
         )
         assert cols_arg is not None, "uq_riskmap_scope must list columns"
         col_names = {
-            elt.value
-            for elt in cols_arg.elts
+            elt.value for elt in cols_arg.elts
             if isinstance(elt, ast.Constant) and isinstance(elt.value, str)
         }
-        assert col_names == {
-            "tenant_id",
-            "company_id",
-            "site_id",
-            "position_id",
-            "methodology_id",
-        }, f"uq_riskmap_scope columns mismatch: {col_names}"
+        assert col_names == {"tenant_id", "company_id", "site_id", "position_id", "methodology_id"}, (
+            f"uq_riskmap_scope columns mismatch: {col_names}"
+        )
         found = True
     assert found, "missing create_unique_constraint('uq_riskmap_scope', ...)"
 
@@ -219,9 +211,11 @@ def test_index_created_on_company_id() -> None:
     tree = _migration_tree()
     upgrade = _upgrade_fn(tree)
     matching = [
-        c
-        for c in _calls_named(upgrade, "create_index")
-        if any(isinstance(a, ast.Constant) and a.value == "ix_riskmap_company_id" for a in c.args)
+        c for c in _calls_named(upgrade, "create_index")
+        if any(
+            isinstance(a, ast.Constant) and a.value == "ix_riskmap_company_id"
+            for a in c.args
+        )
     ]
     assert matching, "expected create_index('ix_riskmap_company_id', 'riskmap', ['company_id'])"
 
@@ -230,8 +224,7 @@ def test_downgrade_drops_company_id_column() -> None:
     tree = _migration_tree()
     downgrade = _downgrade_fn(tree)
     matching = [
-        c
-        for c in _calls_named(downgrade, "drop_column")
+        c for c in _calls_named(downgrade, "drop_column")
         if any(isinstance(a, ast.Constant) and a.value == "company_id" for a in c.args)
     ]
     assert matching, "downgrade must drop_column('riskmap', 'company_id')"
@@ -242,22 +235,20 @@ def test_downgrade_drops_unique_constraint_and_index() -> None:
     downgrade = _downgrade_fn(tree)
 
     constraint_names = {
-        c.args[0].value
-        for c in _calls_named(downgrade, "drop_constraint")
+        c.args[0].value for c in _calls_named(downgrade, "drop_constraint")
         if c.args and isinstance(c.args[0], ast.Constant)
     }
-    assert (
-        "uq_riskmap_scope" in constraint_names
-    ), f"downgrade must drop uq_riskmap_scope; saw {constraint_names}"
+    assert "uq_riskmap_scope" in constraint_names, (
+        f"downgrade must drop uq_riskmap_scope; saw {constraint_names}"
+    )
 
     index_names = {
-        c.args[0].value
-        for c in _calls_named(downgrade, "drop_index")
+        c.args[0].value for c in _calls_named(downgrade, "drop_index")
         if c.args and isinstance(c.args[0], ast.Constant)
     }
-    assert (
-        "ix_riskmap_company_id" in index_names
-    ), f"downgrade must drop ix_riskmap_company_id; saw {index_names}"
+    assert "ix_riskmap_company_id" in index_names, (
+        f"downgrade must drop ix_riskmap_company_id; saw {index_names}"
+    )
 
 
 def test_audit_credits_riskmap_company_id_after_iter35() -> None:
@@ -266,13 +257,12 @@ def test_audit_credits_riskmap_company_id_after_iter35() -> None:
     if not audit_path.exists():
         pytest.skip("column_drift_lite.py absent")
     import importlib.util as _ilu
-
     spec = _ilu.spec_from_file_location("column_drift_lite_iter35", audit_path)
     assert spec is not None and spec.loader is not None
     audit = _ilu.module_from_spec(spec)
     spec.loader.exec_module(audit)
 
     migration_cols = audit.collect_migration_columns()
-    assert "company_id" in migration_cols.get(
-        "riskmap", set()
-    ), "audit doesn't credit riskmap.company_id after iter-35 — closed-loop verify broken"
+    assert "company_id" in migration_cols.get("riskmap", set()), (
+        "audit doesn't credit riskmap.company_id after iter-35 — closed-loop verify broken"
+    )

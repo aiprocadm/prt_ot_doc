@@ -9,7 +9,7 @@ import type {
   BranchDto,
   BranchFiltersDto,
   CreateBranchDto,
-  UpdateBranchDto,
+  UpdateBranchDto
 } from "@/types/dto/branches";
 
 /** Ответ GET /branches — плоский { items, total } (BranchPage). */
@@ -19,9 +19,7 @@ interface BranchPageResponse {
 }
 
 interface BranchesState extends PaginatedState<BranchDto, BranchFiltersDto> {
-  list: (
-    params?: Partial<BranchFiltersDto> & PaginationParams,
-  ) => Promise<void>;
+  list: (params?: Partial<BranchFiltersDto> & PaginationParams) => Promise<void>;
   create: (payload: CreateBranchDto) => Promise<BranchDto>;
   update: (id: string, payload: UpdateBranchDto) => Promise<BranchDto>;
   remove: (id: string) => Promise<void>;
@@ -37,7 +35,7 @@ const createInitialState = () => ({
   filters: {} as BranchFiltersDto,
   pagination: defaultPagination(),
   loading: false,
-  error: null as ApiError | null,
+  error: null as ApiError | null
 });
 
 export const useBranchesStore = create<BranchesState>()(
@@ -75,12 +73,9 @@ export const useBranchesStore = create<BranchesState>()(
       const query: Record<string, unknown> = { limit, offset };
       if (companyId) query.company_id = companyId;
       try {
-        const { data } = await apiClient.get<BranchPageResponse>("/branches", {
-          params: query,
-        });
+        const { data } = await apiClient.get<BranchPageResponse>("/branches", { params: query });
         const rawItems = Array.isArray(data?.items) ? data.items : [];
-        const total =
-          typeof data?.total === "number" ? data.total : rawItems.length;
+        const total = typeof data?.total === "number" ? data.total : rawItems.length;
         set((state) => {
           state.items = rawItems.map((row) => normalizeBranchRead(row));
           state.pagination.total = total;
@@ -106,15 +101,10 @@ export const useBranchesStore = create<BranchesState>()(
       return row;
     },
     update: async (id, payload) => {
-      const { data } = await apiClient.patch<unknown>(
-        `/branches/${id}`,
-        payload,
-      );
+      const { data } = await apiClient.patch<unknown>(`/branches/${id}`, payload);
       const row = normalizeBranchRead(data);
       set((state) => {
-        state.items = state.items.map((branch) =>
-          branch.id === id ? row : branch,
-        );
+        state.items = state.items.map((branch) => (branch.id === id ? row : branch));
         if (state.item?.id === id) {
           state.item = row;
         }
@@ -130,6 +120,6 @@ export const useBranchesStore = create<BranchesState>()(
           state.item = null;
         }
       });
-    },
-  })),
+    }
+  }))
 );

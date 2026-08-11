@@ -120,41 +120,14 @@ grep -r "DOCUMENT_NAME" . --include="*.md" --include="*.py" --exclude-dir=".git"
 grep -r "docs/DOCUMENT_NAME" . --include="*.md" --exclude-dir=".git"
 ```
 
-## Root-Level Stale Wave Reports (уборка 2026-08-06)
-
-Отчёты давно закрытых волн стабилизации, лежащие в корне репозитория. На них нет
-ссылок из кода, CI, Makefile и живых доков (проверено rg по всему репо + адверсарная
-перепроверка вторым агентом); содержательно не менялись с границы видимой истории
-(2026-07-16, импорт-коммит). НЕ входят в обязательный список
-`tests/e2e/test_release_candidate_docs.py` и `scripts/repo_audit.py` — в отличие от
-ACCEPTANCE_TEST_MATRIX / GAP_REPORT / RELEASE_READINESS / KNOWN_LIMITATIONS /
-CHANGED_PATHS_AND_RENAMES, которые трогать нельзя.
-
-- `ARCHITECTURE_DECISIONS_STABILIZATION.md` — решения волны стабилизации, влиты в код
-- `CHANGED_MODULES_AND_DECISIONS.md` — журнал изменённых модулей той же волны
-- `CONFIGURATION_HARDENING.md` — отчёт по hardening конфигурации (выполнен)
-- `PHASE_2_WEEK_3_PARTIAL_COMPLETION.md` — промежуточный отчёт Phase 2 Week 3
-- `RB_BLOCKERS_EXECUTION_READY.md` — план снятия RB-блокеров (снятие завершено)
-- `REGRESSION_RISKS_AND_MITIGATIONS.md` — риски регрессии волны стабилизации
-- `REGRESSION_TEST_MATRIX.md` — матрица регрессионных тестов той волны
-- `RUNBOOK_STABILIZATION.md` — runbook волны стабилизации
-- `SESSION_SUMMARY_PHASE_A_COMPLETE.md` — итог сессии Phase A
-- `STABILIZATION_AUDIT.md` — аудит стабилизации (закрыт)
-- `STABILIZATION_PLAN.md` — план стабилизации (выполнен)
-- `TEST_COVERAGE_GAPS.md` — пробелы покрытия на момент той волны (устарели)
-- `wave-37-rb-guide.md` — гайд волны 37
-
-**Status:** кандидаты на удаление решением владельца; до удаления можно перенести в
-`docs/archive/`.
-
 ## Summary
 
-**Total candidates:** ~15 documents + 13 root-level wave reports (2026-08-06)
+**Total candidates:** ~15 documents
 **Safe deletions:** 5 pilot documents
 **Consolidation candidates:** 10 documents
 **Keep as is:** Stabilization docs, spec docs, runbooks/runbook structure
 
 ---
 
-Last updated: 2026-08-06
-Next review: After root-level wave reports decision
+Last updated: 2026-05-01
+Next review: After wave 3 cleanup completion

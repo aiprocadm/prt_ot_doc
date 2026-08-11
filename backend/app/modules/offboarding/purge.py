@@ -90,7 +90,6 @@ ANONYMIZED_COLUMNS: dict[str, dict[str, str]] = {
     "incident_persons": {"fio_text": "NULL"},
 }
 
-
 @dataclass
 class PurgeAct:
     """Акт: что удалено, что обезличено, что разорвано и когда."""
@@ -186,7 +185,8 @@ class TenantPurgeService:
             grace_until = grace_until.replace(tzinfo=timezone.utc)
         if grace_until > _utcnow():
             raise OffboardingStateError(
-                "Grace-период не истёк: удалять данные рано " f"(до {grace_until.isoformat()})"
+                "Grace-период не истёк: удалять данные рано "
+                f"(до {grace_until.isoformat()})"
             )
 
         retained = await self.lifecycle.retained_tables()

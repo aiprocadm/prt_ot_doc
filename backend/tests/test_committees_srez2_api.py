@@ -51,11 +51,6 @@ async def test_hold_without_quorum_409(monkeypatch):
     monkeypatch.setattr(
         routes, "_get_meeting", AsyncMock(return_value=_meeting(MeetingStatus.PLANNED))
     )
-    monkeypatch.setattr(
-        routes,
-        "_get_committee",
-        AsyncMock(return_value=SimpleNamespace(id="c1", quorum_threshold_pct=None)),
-    )
     monkeypatch.setattr(routes, "_count_members", AsyncMock(return_value=4))
     monkeypatch.setattr(routes, "_count_present", AsyncMock(return_value=2))
     with pytest.raises(Exception) as exc:
@@ -144,11 +139,6 @@ async def test_hold_with_quorum_assigns_protocol(monkeypatch):
     session.execute = AsyncMock(return_value=result)
     monkeypatch.setattr(
         routes, "_get_meeting", AsyncMock(return_value=_meeting(MeetingStatus.PLANNED))
-    )
-    monkeypatch.setattr(
-        routes,
-        "_get_committee",
-        AsyncMock(return_value=SimpleNamespace(id="c1", quorum_threshold_pct=None)),
     )
     monkeypatch.setattr(routes, "_count_members", AsyncMock(return_value=3))
     monkeypatch.setattr(routes, "_count_present", AsyncMock(return_value=2))  # 2*2 > 3 → quorum

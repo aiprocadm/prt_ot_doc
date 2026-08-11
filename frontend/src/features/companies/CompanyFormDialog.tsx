@@ -6,15 +6,7 @@ import { toast } from "sonner";
 import { buildCompanyWriteBody } from "@/api/companiesApi";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -33,7 +25,7 @@ const emptyCompanyForm: CompanyFormValues = {
   phone: "",
   website: "",
   status: "draft",
-  tags: [],
+  tags: []
 };
 
 interface CompanyFormDialogProps {
@@ -51,14 +43,10 @@ const COMPANY_API_FIELD_MAP: Record<string, keyof CompanyFormValues> = {
   address: "address",
   email: "email",
   phone_numbers: "phone",
-  tags: "tags",
+  tags: "tags"
 };
 
-export const CompanyFormDialog = ({
-  trigger,
-  initialData,
-  onSubmitted,
-}: CompanyFormDialogProps) => {
+export const CompanyFormDialog = ({ trigger, initialData, onSubmitted }: CompanyFormDialogProps) => {
   const [open, setOpen] = useState(false);
   const form = useForm<CompanyFormValues>({
     resolver: zodResolver(companySchema),
@@ -72,8 +60,8 @@ export const CompanyFormDialog = ({
       phone: initialData?.phone ?? "",
       website: initialData?.website ?? "",
       status: initialData?.status ?? "draft",
-      tags: initialData?.tags ?? [],
-    },
+      tags: initialData?.tags ?? []
+    }
   });
 
   const { create, update } = useCompaniesStore();
@@ -91,7 +79,7 @@ export const CompanyFormDialog = ({
         phone: initialData.phone ?? "",
         website: initialData.website ?? "",
         status: initialData.status,
-        tags: initialData.tags ?? [],
+        tags: initialData.tags ?? []
       });
     } else {
       form.reset(emptyCompanyForm);
@@ -102,9 +90,7 @@ export const CompanyFormDialog = ({
     const payload = buildCompanyWriteBody(values);
 
     try {
-      const result = initialData
-        ? await update(initialData.id, payload)
-        : await create(payload);
+      const result = initialData ? await update(initialData.id, payload) : await create(payload);
       onSubmitted?.(result);
       toast.success(initialData ? "Компания обновлена" : "Компания создана");
       setOpen(false);
@@ -124,12 +110,8 @@ export const CompanyFormDialog = ({
       <DialogTrigger asChild>{trigger}</DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>
-            {initialData ? "Редактировать компанию" : "Новая компания"}
-          </DialogTitle>
-          <DialogDescription>
-            Введите реквизиты компании для генерации документов.
-          </DialogDescription>
+          <DialogTitle>{initialData ? "Редактировать компанию" : "Новая компания"}</DialogTitle>
+          <DialogDescription>Введите реквизиты компании для генерации документов.</DialogDescription>
         </DialogHeader>
         <form
           className="space-y-4"
@@ -145,19 +127,11 @@ export const CompanyFormDialog = ({
             <div className="space-y-2">
               <Label htmlFor="name">Название</Label>
               <Input id="name" {...form.register("name")} required />
-              {form.formState.errors.name && (
-                <p className="text-xs text-destructive">
-                  {form.formState.errors.name.message}
-                </p>
-              )}
+              {form.formState.errors.name && <p className="text-xs text-destructive">{form.formState.errors.name.message}</p>}
             </div>
             <div className="space-y-2">
               <Label htmlFor="status">Статус</Label>
-              <select
-                id="status"
-                className="h-10 rounded-md border px-3"
-                {...form.register("status")}
-              >
+              <select id="status" className="h-10 rounded-md border px-3" {...form.register("status")}>
                 <option value="draft">Черновик</option>
                 <option value="active">Активна</option>
                 <option value="archived">Архив</option>
@@ -165,16 +139,8 @@ export const CompanyFormDialog = ({
             </div>
             <div className="space-y-2">
               <Label htmlFor="inn">ИНН</Label>
-              <Input
-                id="inn"
-                {...form.register("inn")}
-                placeholder="10 или 12 цифр (необязательно)"
-              />
-              {form.formState.errors.inn && (
-                <p className="text-xs text-destructive">
-                  {form.formState.errors.inn.message}
-                </p>
-              )}
+              <Input id="inn" {...form.register("inn")} placeholder="10 или 12 цифр (необязательно)" />
+              {form.formState.errors.inn && <p className="text-xs text-destructive">{form.formState.errors.inn.message}</p>}
             </div>
             <div className="space-y-2">
               <Label htmlFor="kpp">КПП</Label>
@@ -186,26 +152,13 @@ export const CompanyFormDialog = ({
             </div>
             <div className="space-y-2">
               <Label htmlFor="website">Сайт</Label>
-              <Input
-                id="website"
-                type="text"
-                {...form.register("website")}
-                placeholder="https://… (не сохраняется в API)"
-              />
-              {form.formState.errors.website && (
-                <p className="text-xs text-destructive">
-                  {form.formState.errors.website.message}
-                </p>
-              )}
+              <Input id="website" type="text" {...form.register("website")} placeholder="https://… (не сохраняется в API)" />
+              {form.formState.errors.website && <p className="text-xs text-destructive">{form.formState.errors.website.message}</p>}
             </div>
             <div className="space-y-2">
               <Label htmlFor="email">Электронная почта</Label>
               <Input id="email" type="email" {...form.register("email")} />
-              {form.formState.errors.email && (
-                <p className="text-xs text-destructive">
-                  {form.formState.errors.email.message}
-                </p>
-              )}
+              {form.formState.errors.email && <p className="text-xs text-destructive">{form.formState.errors.email.message}</p>}
             </div>
             <div className="space-y-2">
               <Label htmlFor="phone">Телефон</Label>
@@ -220,21 +173,14 @@ export const CompanyFormDialog = ({
             <Label>Теги</Label>
             <div className="flex flex-wrap gap-1 rounded-md border px-3 py-2 min-h-10">
               {(form.watch("tags") ?? []).map((tag, i) => (
-                <Badge
-                  key={i}
-                  variant="secondary"
-                  className="flex items-center gap-1"
-                >
+                <Badge key={i} variant="secondary" className="flex items-center gap-1">
                   {tag}
                   <button
                     type="button"
                     className="ml-1 text-muted-foreground hover:text-foreground"
                     onClick={() => {
                       const tags = form.getValues("tags") ?? [];
-                      form.setValue(
-                        "tags",
-                        tags.filter((_, j) => j !== i),
-                      );
+                      form.setValue("tags", tags.filter((_, j) => j !== i));
                     }}
                     aria-label={`Удалить тег ${tag}`}
                   >
@@ -248,9 +194,7 @@ export const CompanyFormDialog = ({
                 onKeyDown={(e) => {
                   if (e.key === "Enter" || e.key === ",") {
                     e.preventDefault();
-                    const value = e.currentTarget.value
-                      .trim()
-                      .replace(/,$/, "");
+                    const value = e.currentTarget.value.trim().replace(/,$/, "");
                     if (value) {
                       const tags = form.getValues("tags") ?? [];
                       if (!tags.includes(value)) {

@@ -14,7 +14,6 @@ cross-schema FK, который проект уже однажды снимал 
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Any
 
 from sqlalchemy import (
     JSON,
@@ -27,7 +26,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
-from sqlalchemy.ext.mutable import MutableDict, MutableList
+from sqlalchemy.ext.mutable import MutableList
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.domains.managed_clients.lifecycle import ContractStatus, ManagedClientMode
@@ -143,71 +142,4 @@ class ManagedClientContextSession(TenantBaseModel):
             "managed_client_id",
             "started_at",
         ),
-    )
-
-
-class ManagedClientConsent(TenantBaseModel):
-    """BIZ-49 срез-12 (разд. 49.3 + 66.3): согласие клиента на делегированный доступ.
-
-    Аутсорсер обрабатывает ПДн сотрудников клиента — по 152-ФЗ нужны
-    «согласия/поручения по цепочке». Строка фиксирует документ-основание;
-    без действующей строки грант не выдаётся и контекст не открывается.
-
-    Отзыв не удаляет строку — ставит ``revoked_at`` (след, как у грантов):
-    «действовало ли согласие в момент работы специалиста» — вопрос, на который
-    платформа обязана отвечать и после отзыва.
-    """
-
-    __tablename__ = "managed_client_consent"
-
-    managed_client_id: Mapped[str] = mapped_column(
-        String(36),
-        ForeignKey("managed_client.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
-    #: Реквизиты документа-основания (номер поручения обработки / согласия).
-    document_ref: Mapped[str] = mapped_column(String(255), nullable=False)
-    granted_by_user_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
-    granted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    #: Срок из документа. Истёкшее согласие равно отозванному.
-    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    revoked_by_user_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
-    revoke_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
-
-    __table_args__ = (
-        Index("ix_mc_consent_client", "tenant_id", "managed_client_id", "granted_at"),
-    )
-
-
-class ManagedClientTransfer(TenantBaseModel):
-    """BIZ-49 срез-14 (разд. 49.1): журнал переноса данных клиента.
-
-    Фиксирует, что, когда и кем перенесено в арендатор клиента, включая
-    соответствие старых и новых идентификаторов (``id_map``) — без него
-    «сохранение timeline» превращается в угадывание, кто есть кто.
-    Строка не удаляется: перенос — часть истории ведения клиента.
-    """
-
-    __tablename__ = "managed_client_transfer"
-
-    managed_client_id: Mapped[str] = mapped_column(
-        String(36),
-        ForeignKey("managed_client.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
-    target_tenant_slug: Mapped[str] = mapped_column(String(64), nullable=False)
-    status: Mapped[str] = mapped_column(String(16), nullable=False, default="completed")
-    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    started_by_user_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
-    #: Сколько чего скопировано: {"company": 1, "people": N, "people_skipped": M}.
-    counts: Mapped[dict[str, Any]] = mapped_column(
-        MutableDict.as_mutable(JSON), nullable=False, default=dict
-    )
-    #: Соответствие старых id -> новых: {"company": {old: new}, "people": {old: new}}.
-    id_map: Mapped[dict[str, Any]] = mapped_column(
-        MutableDict.as_mutable(JSON), nullable=False, default=dict
     )

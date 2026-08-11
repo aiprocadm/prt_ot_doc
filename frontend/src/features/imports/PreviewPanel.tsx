@@ -5,7 +5,7 @@ const ACTION_LABELS: Record<ImportRowAction, string> = {
   create: "Создать",
   update: "Обновить",
   skip: "Без изменений",
-  error: "Ошибка",
+  error: "Ошибка"
 };
 
 const COUNT_ORDER: ImportRowAction[] = ["create", "update", "skip", "error"];
@@ -22,10 +22,7 @@ interface PreviewPanelProps {
  * Ошибки показываются С НОМЕРОМ СТРОКИ: «файл не загрузился» без указания места
  * заставляет искать проблему глазами по всей выгрузке.
  */
-export const PreviewPanel = ({
-  preview,
-  errorLimit = 50,
-}: PreviewPanelProps) => {
+export const PreviewPanel = ({ preview, errorLimit = 50 }: PreviewPanelProps) => {
   const errorRows = preview.rows.filter((row) => row.action === "error");
   const shown = errorRows.slice(0, errorLimit);
   const unknownRefs = Object.entries(preview.unknown_references);
@@ -34,16 +31,11 @@ export const PreviewPanel = ({
     <div className="space-y-4">
       <div className="flex flex-wrap gap-2">
         {COUNT_ORDER.map((action) => (
-          <Badge
-            key={action}
-            variant={action === "error" ? "destructive" : "secondary"}
-          >
+          <Badge key={action} variant={action === "error" ? "destructive" : "secondary"}>
             {ACTION_LABELS[action]}: {preview.counts[action] ?? 0}
           </Badge>
         ))}
-        <Badge variant="outline">
-          Всего строк: {preview.counts.total ?? 0}
-        </Badge>
+        <Badge variant="outline">Всего строк: {preview.counts.total ?? 0}</Badge>
       </div>
 
       {unknownRefs.length > 0 ? (
@@ -55,8 +47,7 @@ export const PreviewPanel = ({
             </p>
           ))}
           <p className="mt-1 text-muted-foreground">
-            Создайте их заранее — строки с неизвестными значениями не будут
-            загружены.
+            Создайте их заранее — строки с неизвестными значениями не будут загружены.
           </p>
         </div>
       ) : null}
@@ -74,8 +65,8 @@ export const PreviewPanel = ({
           </ul>
           {errorRows.length > shown.length ? (
             <p className="text-sm text-muted-foreground">
-              Показаны первые {shown.length} из {errorRows.length}. Полный
-              список — в отчёте партии после применения.
+              Показаны первые {shown.length} из {errorRows.length}. Полный список — в отчёте партии
+              после применения.
             </p>
           ) : null}
         </div>

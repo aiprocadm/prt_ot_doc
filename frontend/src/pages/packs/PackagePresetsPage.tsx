@@ -36,16 +36,12 @@ const PackagePresetsPage = () => {
     try {
       const [presets, profileRows] = await Promise.all([
         packsApi.getPresets<Preset>(),
-        packsApi.getProfiles<Profile>(),
+        packsApi.getProfiles<Profile>()
       ]);
       setItems(presets);
       setProfiles(profileRows);
     } catch (nextError) {
-      setError(
-        (nextError as ApiError) ?? {
-          message: "Не удалось загрузить пресеты пакетов",
-        },
-      );
+      setError((nextError as ApiError) ?? { message: "Не удалось загрузить пресеты пакетов" });
     } finally {
       setLoading(false);
     }
@@ -66,17 +62,13 @@ const PackagePresetsPage = () => {
         naming_rule: "<doc>_<date>",
         source_type: "json",
         mapping_json: { doc: { type: "literal", value: "pack" } },
-        status: "active",
+        status: "active"
       });
       setCode("");
       setName("");
       await load();
     } catch (nextError) {
-      setError(
-        (nextError as ApiError) ?? {
-          message: "Не удалось создать пресет пакета",
-        },
-      );
+      setError((nextError as ApiError) ?? { message: "Не удалось создать пресет пакета" });
     }
   };
 
@@ -86,22 +78,13 @@ const PackagePresetsPage = () => {
       await packsApi.validatePreset(id);
       await load();
     } catch (nextError) {
-      setError(
-        (nextError as ApiError) ?? {
-          message: "Не удалось проверить пресет пакета",
-        },
-      );
+      setError((nextError as ApiError) ?? { message: "Не удалось проверить пресет пакета" });
     }
   };
 
   return (
     <div className="space-y-4">
-      <Breadcrumb
-        items={[
-          { label: "Главная", to: "/dashboard" },
-          { label: "Пресеты пакетов" },
-        ]}
-      />
+      <Breadcrumb items={[{ label: "Главная", to: "/dashboard" }, { label: "Пресеты пакетов" }]} />
       <Card>
         <CardHeader>
           <CardTitle>Пресеты пакетов</CardTitle>
@@ -111,50 +94,26 @@ const PackagePresetsPage = () => {
           {loading ? <LoadingScreen label="Загрузка пресетов пакетов" /> : null}
           {!loading ? (
             <div className="flex gap-2">
-              <Input
-                value={code}
-                onChange={(e) => setCode(e.target.value)}
-                placeholder="Код"
-              />
-              <Input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Название"
-              />
+              <Input value={code} onChange={(e) => setCode(e.target.value)} placeholder="Код" />
+              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Название" />
               <Button
                 onClick={() => void createPreset()}
                 disabled={!profiles.length || !code.trim() || !name.trim()}
-                title={
-                  !profiles.length ? "Сначала нужен профиль пакета" : undefined
-                }
+                title={!profiles.length ? "Сначала нужен профиль пакета" : undefined}
               >
                 Создать
               </Button>
             </div>
           ) : null}
           {!loading && !error && items.length === 0 ? (
-            <EmptyState
-              title="Пресеты пакетов отсутствуют"
-              description="Создайте первый пресет после настройки профиля пакета."
-            />
+            <EmptyState title="Пресеты пакетов отсутствуют" description="Создайте первый пресет после настройки профиля пакета." />
           ) : null}
           {!loading && items.length > 0 ? (
             <ul className="space-y-1 text-sm">
               {items.map((item) => (
-                <li
-                  key={item.id}
-                  className="flex items-center justify-between gap-2"
-                >
-                  <span>
-                    {item.code} — {item.name} ({item.status})
-                  </span>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => void validatePreset(item.id)}
-                  >
-                    Проверить
-                  </Button>
+                <li key={item.id} className="flex items-center justify-between gap-2">
+                  <span>{item.code} — {item.name} ({item.status})</span>
+                  <Button size="sm" variant="outline" onClick={() => void validatePreset(item.id)}>Проверить</Button>
                 </li>
               ))}
             </ul>

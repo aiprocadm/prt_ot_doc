@@ -6,19 +6,19 @@ import LoginPage from "@/pages/auth/LoginPage";
 
 vi.mock("@/api/tenantStorage", () => ({
   tenantStorage: {
-    getTenant: () => null,
-  },
+    getTenant: () => null
+  }
 }));
 
 const mockAuthState = {
   login: vi.fn(),
   loading: false,
-  isAuthenticated: false,
+  isAuthenticated: false
 };
 
 vi.mock("@/stores/auth", () => ({
   useAuthStore: (selector?: (state: typeof mockAuthState) => unknown) =>
-    typeof selector === "function" ? selector(mockAuthState) : mockAuthState,
+    typeof selector === "function" ? selector(mockAuthState) : mockAuthState
 }));
 
 describe("LoginPage smoke", () => {
@@ -28,12 +28,10 @@ describe("LoginPage smoke", () => {
         <Routes>
           <Route path="/auth/login" element={<LoginPage />} />
         </Routes>
-      </MemoryRouter>,
+      </MemoryRouter>
     );
 
-    expect(
-      screen.getByRole("heading", { name: "Вход в платформу" }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Вход в платформу" })).toBeInTheDocument();
     expect(screen.getByLabelText("Тенант")).toBeInTheDocument();
     expect(screen.getByLabelText("E-mail")).toBeInTheDocument();
     expect(screen.getByLabelText("Пароль")).toBeInTheDocument();

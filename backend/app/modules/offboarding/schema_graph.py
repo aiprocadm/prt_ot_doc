@@ -113,7 +113,9 @@ class SchemaGraph:
             if not cycles:
                 break
             for component in cycles:
-                inner = sorted(key for key in edges if key[0] in component and key[1] in component)
+                inner = sorted(
+                    key for key in edges if key[0] in component and key[1] in component
+                )
                 for key in inner:
                     links = edges[key]
                     if all(link.nullable for link in links):

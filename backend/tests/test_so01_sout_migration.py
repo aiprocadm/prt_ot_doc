@@ -1,5 +1,4 @@
 """Pin: so01 СОУТ migration shape (P10-04)."""
-
 from __future__ import annotations
 
 import importlib.util
@@ -7,10 +6,7 @@ from pathlib import Path
 
 _MIGRATION = (
     Path(__file__).resolve().parents[1]
-    / "app"
-    / "migrations"
-    / "versions"
-    / "20260626_so01_sout.py"
+    / "app" / "migrations" / "versions" / "20260626_so01_sout.py"
 )
 
 

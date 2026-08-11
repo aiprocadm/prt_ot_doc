@@ -1,9 +1,5 @@
 import { managedClientStorage } from "@/api/managedClientStorage";
-import {
-  localStorageGetItem,
-  localStorageRemoveItem,
-  localStorageSetItem,
-} from "@/utils/browserStorage";
+import { localStorageGetItem, localStorageRemoveItem, localStorageSetItem } from "@/utils/browserStorage";
 
 const TENANT_KEY = "prt-tenant";
 
@@ -24,7 +20,7 @@ const parseTenant = (raw: string | null): StoredTenant | null => {
     if (parsed && typeof parsed.slug === "string") {
       return {
         slug: parsed.slug,
-        site: typeof parsed.site === "string" ? parsed.site : null,
+        site: typeof parsed.site === "string" ? parsed.site : null
       };
     }
     return null;
@@ -65,5 +61,5 @@ export const tenantStorage = {
     tenantValue = null;
     persistTenant(null);
     managedClientStorage.clear();
-  },
+  }
 };

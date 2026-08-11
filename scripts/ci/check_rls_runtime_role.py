@@ -63,7 +63,9 @@ def main(argv: list[str] | None = None) -> int:
     from app.db.rls_runtime import verify_runtime_role_for_url
 
     try:
-        privileges = asyncio.run(verify_runtime_role_for_url(url, enforce=False, component="ci"))
+        privileges = asyncio.run(
+            verify_runtime_role_for_url(url, enforce=False, component="ci")
+        )
     except Exception as exc:  # pragma: no cover - unreachable DB is an infra problem
         print(f"SKIP: could not probe the database role ({exc.__class__.__name__}: {exc})")
         return 0

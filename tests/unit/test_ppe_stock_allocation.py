@@ -1,5 +1,4 @@
 """Pure FIFO allocation for the PPE stock ledger (P10-06)."""
-
 from __future__ import annotations
 
 import pytest

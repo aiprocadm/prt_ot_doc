@@ -19,9 +19,7 @@ type LegacyDocumentsResponse = {
   offset?: number;
 };
 
-type DocumentsResponse =
-  | PaginatedResponse<DocumentDto>
-  | LegacyDocumentsResponse;
+type DocumentsResponse = PaginatedResponse<DocumentDto> | LegacyDocumentsResponse;
 
 interface GenerateDocumentPayload {
   template_code: string;
@@ -47,8 +45,7 @@ interface GenerationTaskStatus {
   metadata?: Record<string, unknown> | null;
 }
 
-interface DocumentsState
-  extends PaginatedState<DocumentDto, DocumentFiltersDto> {
+interface DocumentsState extends PaginatedState<DocumentDto, DocumentFiltersDto> {
   list: (params?: Partial<DocumentFiltersDto>) => Promise<void>;
   getById: (id: string) => Promise<DocumentDto | null>;
   setFilters: (filters: Partial<DocumentFiltersDto>) => void;
@@ -58,47 +55,34 @@ interface DocumentsState
   refreshStatus: (id: string) => Promise<DocumentDto | null>;
   generateDocument: (
     payload: GenerateDocumentPayload,
-    idempotencyKey: string,
+    idempotencyKey: string
   ) => Promise<GenerationAcceptedResponse>;
   getGenerationStatus: (taskId: string) => Promise<GenerationTaskStatus>;
   reset: () => void;
 }
 
-const isPositiveNumber = (value: unknown): value is number =>
-  typeof value === "number" && Number.isFinite(value) && value > 0;
+const isPositiveNumber = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value) && value > 0;
 
-const isNonNegativeNumber = (value: unknown): value is number =>
-  typeof value === "number" && Number.isFinite(value) && value >= 0;
+const isNonNegativeNumber = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value) && value >= 0;
 
-const isPaginationRecord = (
-  value: unknown,
-): value is { page?: unknown; page_size?: unknown; total?: unknown } =>
+const isPaginationRecord = (value: unknown): value is { page?: unknown; page_size?: unknown; total?: unknown } =>
   typeof value === "object" && value !== null;
 
-const hasLegacyWindow = (
-  value: DocumentsResponse,
-): value is LegacyDocumentsResponse =>
+const hasLegacyWindow = (value: DocumentsResponse): value is LegacyDocumentsResponse =>
   "limit" in value || "offset" in value || "total" in value;
 
 const normalizeDocumentsResponse = (
   payload: DocumentsResponse,
-  fallback: ReturnType<typeof defaultPagination>,
+  fallback: ReturnType<typeof defaultPagination>
 ) => {
-  const items = Array.isArray(payload?.items)
-    ? (payload.items as DocumentDto[])
-    : [];
-  const pagination = isPaginationRecord(payload.pagination)
-    ? payload.pagination
-    : null;
+  const items = Array.isArray(payload?.items) ? (payload.items as DocumentDto[]) : [];
+  const pagination = isPaginationRecord(payload.pagination) ? payload.pagination : null;
   const pageSize = isPositiveNumber(pagination?.page_size)
     ? pagination.page_size
     : hasLegacyWindow(payload) && isPositiveNumber(payload.limit)
       ? payload.limit
       : fallback.page_size;
-  const offset =
-    hasLegacyWindow(payload) && isNonNegativeNumber(payload.offset)
-      ? payload.offset
-      : (fallback.page - 1) * pageSize;
+  const offset = hasLegacyWindow(payload) && isNonNegativeNumber(payload.offset) ? payload.offset : (fallback.page - 1) * pageSize;
   const page = isPositiveNumber(pagination?.page)
     ? pagination.page
     : Math.floor(offset / Math.max(pageSize, 1)) + 1;
@@ -113,8 +97,8 @@ const normalizeDocumentsResponse = (
     pagination: {
       page,
       page_size: pageSize,
-      total,
-    },
+      total
+    }
   };
 };
 
@@ -149,7 +133,7 @@ export const useDocumentsStore = create<DocumentsState>()(
         filters: {},
         pagination: defaultPagination(),
         loading: false,
-        error: null,
+        error: null
       }));
     },
     list: async (params) => {
@@ -157,16 +141,9 @@ export const useDocumentsStore = create<DocumentsState>()(
         state.loading = true;
         state.error = null;
       });
-      const query = {
-        ...get().filters,
-        ...params,
-        page: get().pagination.page,
-        page_size: get().pagination.page_size,
-      };
+      const query = { ...get().filters, ...params, page: get().pagination.page, page_size: get().pagination.page_size };
       try {
-        const { data } = await apiClient.get<DocumentsResponse>("/documents", {
-          params: query,
-        });
+        const { data } = await apiClient.get<DocumentsResponse>("/documents", { params: query });
         const normalized = normalizeDocumentsResponse(data, get().pagination);
         set((state) => {
           state.items = normalized.items;
@@ -198,15 +175,13 @@ export const useDocumentsStore = create<DocumentsState>()(
     },
     download: async (id) => {
       const { data } = await apiClient.get<Blob>(`/documents/${id}/download`, {
-        responseType: "blob",
+        responseType: "blob"
       });
       return data;
     },
     refreshStatus: async (id) => {
       try {
-        const { data } = await apiClient.get<DocumentDto>(
-          `/documents/${id}/status`,
-        );
+        const { data } = await apiClient.get<DocumentDto>(`/documents/${id}/status`);
         set((state) => {
           state.items = state.items.map((doc) => (doc.id === id ? data : doc));
           if (state.item?.id === id) state.item = data;
@@ -220,22 +195,16 @@ export const useDocumentsStore = create<DocumentsState>()(
       }
     },
     generateDocument: async (payload, idempotencyKey) => {
-      const response = await apiClient.post<GenerationAcceptedResponse>(
-        "/documents/generate",
-        payload,
-        {
-          headers: {
-            "Idempotency-Key": idempotencyKey,
-          },
-        },
-      );
+      const response = await apiClient.post<GenerationAcceptedResponse>("/documents/generate", payload, {
+        headers: {
+          "Idempotency-Key": idempotencyKey
+        }
+      });
       return response.data;
     },
     getGenerationStatus: async (taskId) => {
-      const response = await apiClient.get<GenerationTaskStatus>(
-        `/documents/tasks/${taskId}`,
-      );
+      const response = await apiClient.get<GenerationTaskStatus>(`/documents/tasks/${taskId}`);
       return response.data;
-    },
-  })),
+    }
+  }))
 );

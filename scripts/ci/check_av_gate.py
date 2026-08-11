@@ -32,10 +32,8 @@ def main(argv: list[str] | None = None) -> int:
 
     app_env = (os.getenv("APP_ENV") or "").strip().lower()
     if app_env not in ENFORCED_ENVIRONMENTS:
-        print(
-            f"SKIP: APP_ENV={app_env or '(не задан)'} — gate применяется только к "
-            f"{'/'.join(ENFORCED_ENVIRONMENTS)}"
-        )
+        print(f"SKIP: APP_ENV={app_env or '(не задан)'} — gate применяется только к "
+              f"{'/'.join(ENFORCED_ENVIRONMENTS)}")
         return 0
 
     av_enabled = (os.getenv("AV_ENABLED") or "false").strip().lower() in {"1", "true", "yes"}

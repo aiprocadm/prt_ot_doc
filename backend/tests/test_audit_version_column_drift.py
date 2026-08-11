@@ -20,6 +20,8 @@ import importlib.util
 import textwrap
 from pathlib import Path
 
+import pytest
+
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _AUDIT_PATH = _REPO_ROOT / "scripts" / "audit" / "version_column_drift.py"
 

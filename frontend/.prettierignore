@@ -1,6 +1,0 @@
-package-lock.json
-dist/
-dev-dist/
-coverage/
-playwright-report/
-test-results/

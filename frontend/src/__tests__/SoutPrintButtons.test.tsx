@@ -7,15 +7,11 @@ vi.mock("@/api/client", () => ({
 }));
 
 describe("soutApi print download methods", () => {
-  beforeEach(() => {
-    vi.restoreAllMocks();
-  });
+  beforeEach(() => { vi.restoreAllMocks(); });
 
   it("downloadSummary requests blob with format param", async () => {
     const { apiClient } = await import("@/api/client");
-    (apiClient.get as ReturnType<typeof vi.fn>).mockResolvedValue({
-      data: new Blob(["x"]),
-    });
+    (apiClient.get as ReturnType<typeof vi.fn>).mockResolvedValue({ data: new Blob(["x"]) });
     vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:1");
     vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
 
@@ -23,18 +19,13 @@ describe("soutApi print download methods", () => {
 
     expect(apiClient.get).toHaveBeenCalledWith(
       "/sout/c1/summary/print",
-      expect.objectContaining({
-        params: { format: "pdf" },
-        responseType: "blob",
-      }),
+      expect.objectContaining({ params: { format: "pdf" }, responseType: "blob" }),
     );
   });
 
   it("downloadCard requests blob for workplace", async () => {
     const { apiClient } = await import("@/api/client");
-    (apiClient.get as ReturnType<typeof vi.fn>).mockResolvedValue({
-      data: new Blob(["x"]),
-    });
+    (apiClient.get as ReturnType<typeof vi.fn>).mockResolvedValue({ data: new Blob(["x"]) });
     vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:1");
     vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
 
@@ -42,10 +33,7 @@ describe("soutApi print download methods", () => {
 
     expect(apiClient.get).toHaveBeenCalledWith(
       "/sout/workplaces/w1/card/print",
-      expect.objectContaining({
-        params: { format: "docx" },
-        responseType: "blob",
-      }),
+      expect.objectContaining({ params: { format: "docx" }, responseType: "blob" }),
     );
   });
 });

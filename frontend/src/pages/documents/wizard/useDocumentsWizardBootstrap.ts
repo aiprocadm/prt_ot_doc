@@ -1,12 +1,6 @@
 import { useEffect, useState } from "react";
 
-import {
-  getBrandingProfile,
-  listLayoutPresets,
-  listSites,
-  type LayoutPresetDto,
-  type SiteDto,
-} from "@/api/branding";
+import { getBrandingProfile, listLayoutPresets, listSites, type LayoutPresetDto, type SiteDto } from "@/api/branding";
 import { useDocumentsWizardRuntimePolling } from "./useDocumentsWizardRuntimePolling";
 import { useCompaniesStore } from "@/stores/companies";
 import { useDocumentsWizardStore } from "@/stores/documentsWizard";
@@ -15,26 +9,15 @@ import { useTenantStore } from "@/stores/tenant";
 export const useDocumentsWizardBootstrap = () => {
   const tenant = useTenantStore((s) => s.tenant);
   const { items: companies, list: listCompanies } = useCompaniesStore();
-  const {
-    companyId,
-    siteId,
-    headerPreset,
-    taskId,
-    batch,
-    pipelineRun,
-    setPartial,
-  } = useDocumentsWizardStore();
+  const { companyId, siteId, headerPreset, taskId, batch, pipelineRun, setPartial } = useDocumentsWizardStore();
 
   const [sites, setSites] = useState<SiteDto[]>([]);
   const [layoutPresets, setLayoutPresets] = useState<LayoutPresetDto[]>([]);
-  const [brandingProfileScope, setBrandingProfileScope] =
-    useState<string>("company");
+  const [brandingProfileScope, setBrandingProfileScope] = useState<string>("company");
 
   useEffect(() => {
     listCompanies().catch(() => undefined);
-    listLayoutPresets()
-      .then(setLayoutPresets)
-      .catch(() => undefined);
+    listLayoutPresets().then(setLayoutPresets).catch(() => undefined);
   }, [listCompanies]);
 
   useEffect(() => {
@@ -55,8 +38,7 @@ export const useDocumentsWizardBootstrap = () => {
     getBrandingProfile(companyId, siteId || undefined)
       .then((profile) => {
         setBrandingProfileScope(profile.scope);
-        const nextPreset =
-          headerPreset || profile.preferred_header_preset_code || "";
+        const nextPreset = headerPreset || profile.preferred_header_preset_code || "";
         if (nextPreset !== headerPreset) {
           setPartial({ headerPreset: nextPreset });
         }
@@ -69,9 +51,8 @@ export const useDocumentsWizardBootstrap = () => {
     taskId,
     pipelineRun,
     batch,
-    onPipelineRun: (nextPipelineRun) =>
-      setPartial({ pipelineRun: nextPipelineRun }),
-    onBatch: (nextBatch) => setPartial({ batch: nextBatch }),
+    onPipelineRun: (nextPipelineRun) => setPartial({ pipelineRun: nextPipelineRun }),
+    onBatch: (nextBatch) => setPartial({ batch: nextBatch })
   });
 
   return {
@@ -79,6 +60,6 @@ export const useDocumentsWizardBootstrap = () => {
     companies,
     sites,
     layoutPresets,
-    brandingProfileScope,
+    brandingProfileScope
   };
 };

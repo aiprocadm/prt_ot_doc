@@ -59,9 +59,9 @@ async def test_build_medical_referrals_future_due_at(db_session) -> None:
     resp = await svc.list_events(source_types=["medical_referral"])
 
     ids = [item.id for item in resp.items]
-    assert any(
-        i.startswith("medical_referral:") for i in ids
-    ), f"expected medical_referral:... item, got {ids}"
+    assert any(i.startswith("medical_referral:") for i in ids), (
+        f"expected medical_referral:... item, got {ids}"
+    )
     item = next(i for i in resp.items if i.id.startswith("medical_referral:"))
     assert item.source_type == "medical_referral"
     assert item.status == "active"
@@ -88,11 +88,7 @@ async def test_build_medical_referrals_overdue(db_session) -> None:
     resp = await svc.list_events(source_types=["medical_referral"])
 
     item = next(
-        (
-            i
-            for i in resp.items
-            if i.id.startswith("medical_referral:") and i.person_id == "person-2"
-        ),
+        (i for i in resp.items if i.id.startswith("medical_referral:") and i.person_id == "person-2"),
         None,
     )
     assert item is not None, "overdue referral not found in calendar items"
@@ -117,7 +113,9 @@ async def test_build_medical_referrals_null_due_at_excluded(db_session) -> None:
     resp = await svc.list_events(source_types=["medical_referral"])
 
     person3_items = [i for i in resp.items if i.person_id == "person-3"]
-    assert person3_items == [], "referral with null due_at should not appear in calendar"
+    assert person3_items == [], (
+        "referral with null due_at should not appear in calendar"
+    )
 
 
 @pytest.mark.asyncio
@@ -160,6 +158,6 @@ async def test_medical_referral_appears_in_all_sources_response(db_session) -> N
     resp = await svc.list_events()
 
     source_types_in_by_source = {s.source_type for s in resp.by_source}
-    assert (
-        "medical_referral" in source_types_in_by_source
-    ), "medical_referral not in by_source even though ALL_SOURCES includes it"
+    assert "medical_referral" in source_types_in_by_source, (
+        "medical_referral not in by_source even though ALL_SOURCES includes it"
+    )

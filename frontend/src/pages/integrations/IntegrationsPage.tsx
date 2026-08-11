@@ -11,14 +11,7 @@ import { RegistryPageHeader } from "@/components/common/RegistryPageHeader";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PERMISSIONS } from "@/permissions/permissions";
 import { useAsyncResource } from "@/hooks/useAsyncResource";
 import type { ApiError } from "@/types/dto/common";
@@ -47,31 +40,19 @@ type OutboxEventEntry = {
 };
 
 type ReadinessResponse = {
-  providers: Array<{
-    provider: string;
-    health_status: string;
-    configured: boolean;
-    adapter?: string;
-    reachable?: boolean | null;
-  }>;
-  webhooks: {
-    configured_total: number;
-    enabled_total: number;
-    delivery_failed_total: number;
-  };
+  providers: Array<{ provider: string; health_status: string; configured: boolean; adapter?: string; reachable?: boolean | null }>;
+  webhooks: { configured_total: number; enabled_total: number; delivery_failed_total: number };
 };
 
-const formatDateTime = (value?: string | null) =>
-  value ? new Date(value).toLocaleString() : "—";
+const formatDateTime = (value?: string | null) => (value ? new Date(value).toLocaleString() : "—");
 
 const IntegrationsPage = () => {
   const loadIntegrations = useCallback(async () => {
-    const [outboxResponse, eventResponse, readinessResponse] =
-      await Promise.all([
-        integrationsApi.getOutbox<OutboxEntry>(),
-        integrationsApi.getOutboxEvents<OutboxEventEntry>(),
-        integrationsApi.getReadiness<ReadinessResponse>(),
-      ]);
+    const [outboxResponse, eventResponse, readinessResponse] = await Promise.all([
+      integrationsApi.getOutbox<OutboxEntry>(),
+      integrationsApi.getOutboxEvents<OutboxEventEntry>(),
+      integrationsApi.getReadiness<ReadinessResponse>(),
+    ]);
     return {
       deliveries: outboxResponse.items ?? [],
       events: eventResponse.items ?? [],
@@ -93,28 +74,19 @@ const IntegrationsPage = () => {
   const [statusFilter, setStatusFilter] = useState("all");
 
   const filteredDeliveries = useMemo(
-    () =>
-      statusFilter === "all"
-        ? data.deliveries
-        : data.deliveries.filter((item) => item.status === statusFilter),
-    [data.deliveries, statusFilter],
+    () => (statusFilter === "all" ? data.deliveries : data.deliveries.filter((item) => item.status === statusFilter)),
+    [data.deliveries, statusFilter]
   );
 
   const summary = useMemo(() => {
-    const failedDeliveries = data.deliveries.filter(
-      (item) => item.status === "failed" || item.status === "dead",
-    ).length;
-    const failedEvents = data.events.filter(
-      (item) => item.status === "failed" || item.status === "poisoned",
-    ).length;
-    const sent = data.deliveries.filter(
-      (item) => item.status === "sent",
-    ).length;
+    const failedDeliveries = data.deliveries.filter((item) => item.status === "failed" || item.status === "dead").length;
+    const failedEvents = data.events.filter((item) => item.status === "failed" || item.status === "poisoned").length;
+    const sent = data.deliveries.filter((item) => item.status === "sent").length;
     return {
       deliveries: data.deliveries.length,
       failedDeliveries,
       failedEvents,
-      sent,
+      sent
     };
   }, [data.deliveries, data.events]);
 
@@ -124,9 +96,7 @@ const IntegrationsPage = () => {
       await integrationsApi.retryOutboxDelivery(id);
       await reload();
     } catch (error) {
-      toast.error(
-        (error as ApiError)?.message ?? "Не удалось повторить доставку",
-      );
+      toast.error((error as ApiError)?.message ?? "Не удалось повторить доставку");
     } finally {
       setRetryingId(null);
     }
@@ -138,9 +108,7 @@ const IntegrationsPage = () => {
       await integrationsApi.retryOutboxEvent(id);
       await reload();
     } catch (error) {
-      toast.error(
-        (error as ApiError)?.message ?? "Не удалось вернуть событие в очередь",
-      );
+      toast.error((error as ApiError)?.message ?? "Не удалось вернуть событие в очередь");
     } finally {
       setRetryingId(null);
     }
@@ -154,46 +122,15 @@ const IntegrationsPage = () => {
       />
       <ErrorState error={error ?? undefined} onRetry={() => void reload()} />
       {loading ? <LoadingScreen label="Загрузка интеграций" /> : null}
-      {!loading &&
-      !error &&
-      data.deliveries.length + data.events.length === 0 ? (
-        <EmptyState
-          title="Интеграционные события отсутствуют"
-          description="После первых операций с вебхуками и исходящей очередью здесь появится журнал доставок."
-        />
+      {!loading && !error && data.deliveries.length + data.events.length === 0 ? (
+        <EmptyState title="Интеграционные события отсутствуют" description="После первых операций с вебхуками и исходящей очередью здесь появится журнал доставок." />
       ) : null}
 
       <div className="grid gap-4 md:grid-cols-4">
-        <Card>
-          <CardContent className="py-6">
-            <div className="text-sm text-muted-foreground">Всего доставок</div>
-            <div className="text-2xl font-semibold">{summary.deliveries}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="py-6">
-            <div className="text-sm text-muted-foreground">
-              Успешно отправлено
-            </div>
-            <div className="text-2xl font-semibold">{summary.sent}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="py-6">
-            <div className="text-sm text-muted-foreground">Сбой доставки</div>
-            <div className="text-2xl font-semibold">
-              {summary.failedDeliveries}
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="py-6">
-            <div className="text-sm text-muted-foreground">
-              Проблемные события
-            </div>
-            <div className="text-2xl font-semibold">{summary.failedEvents}</div>
-          </CardContent>
-        </Card>
+        <Card><CardContent className="py-6"><div className="text-sm text-muted-foreground">Всего доставок</div><div className="text-2xl font-semibold">{summary.deliveries}</div></CardContent></Card>
+        <Card><CardContent className="py-6"><div className="text-sm text-muted-foreground">Успешно отправлено</div><div className="text-2xl font-semibold">{summary.sent}</div></CardContent></Card>
+        <Card><CardContent className="py-6"><div className="text-sm text-muted-foreground">Сбой доставки</div><div className="text-2xl font-semibold">{summary.failedDeliveries}</div></CardContent></Card>
+        <Card><CardContent className="py-6"><div className="text-sm text-muted-foreground">Проблемные события</div><div className="text-2xl font-semibold">{summary.failedEvents}</div></CardContent></Card>
       </div>
 
       <Card>
@@ -202,36 +139,9 @@ const IntegrationsPage = () => {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-4 md:grid-cols-3">
-            <Card>
-              <CardContent className="py-4">
-                <div className="text-sm text-muted-foreground">
-                  Точки вебхуков
-                </div>
-                <div className="text-xl font-semibold">
-                  {data.readiness?.webhooks.configured_total ?? 0}
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="py-4">
-                <div className="text-sm text-muted-foreground">
-                  Включённые точки
-                </div>
-                <div className="text-xl font-semibold">
-                  {data.readiness?.webhooks.enabled_total ?? 0}
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="py-4">
-                <div className="text-sm text-muted-foreground">
-                  Сбои доставки
-                </div>
-                <div className="text-xl font-semibold">
-                  {data.readiness?.webhooks.delivery_failed_total ?? 0}
-                </div>
-              </CardContent>
-            </Card>
+            <Card><CardContent className="py-4"><div className="text-sm text-muted-foreground">Точки вебхуков</div><div className="text-xl font-semibold">{data.readiness?.webhooks.configured_total ?? 0}</div></CardContent></Card>
+            <Card><CardContent className="py-4"><div className="text-sm text-muted-foreground">Включённые точки</div><div className="text-xl font-semibold">{data.readiness?.webhooks.enabled_total ?? 0}</div></CardContent></Card>
+            <Card><CardContent className="py-4"><div className="text-sm text-muted-foreground">Сбои доставки</div><div className="text-xl font-semibold">{data.readiness?.webhooks.delivery_failed_total ?? 0}</div></CardContent></Card>
           </div>
           <Table>
             <TableHeader>
@@ -247,9 +157,7 @@ const IntegrationsPage = () => {
                 <TableRow key={item.provider}>
                   <TableCell className="font-medium">{item.provider}</TableCell>
                   <TableCell>{item.adapter ?? "только контракт"}</TableCell>
-                  <TableCell>
-                    <StatusBadge status={item.health_status} />
-                  </TableCell>
+                  <TableCell><StatusBadge status={item.health_status} /></TableCell>
                   <TableCell>{item.configured ? "да" : "нет"}</TableCell>
                 </TableRow>
               )) ?? null}
@@ -261,14 +169,8 @@ const IntegrationsPage = () => {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <div className="flex items-center gap-3">
-            <CardTitle className="text-base">
-              История исходящих доставок
-            </CardTitle>
-            <select
-              className="h-9 rounded-md border px-3 text-sm"
-              value={statusFilter}
-              onChange={(event) => setStatusFilter(event.target.value)}
-            >
+            <CardTitle className="text-base">История исходящих доставок</CardTitle>
+            <select className="h-9 rounded-md border px-3 text-sm" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
               <option value="all">Все статусы</option>
               <option value="pending">ожидание</option>
               <option value="failed">сбой</option>
@@ -276,13 +178,7 @@ const IntegrationsPage = () => {
               <option value="sent">отправлено</option>
             </select>
           </div>
-          <Button
-            variant="outline"
-            onClick={() => void reload()}
-            disabled={loading}
-          >
-            Обновить
-          </Button>
+          <Button variant="outline" onClick={() => void reload()} disabled={loading}>Обновить</Button>
         </CardHeader>
         <CardContent>
           <Table>
@@ -301,30 +197,18 @@ const IntegrationsPage = () => {
                 <TableRow key={item.id}>
                   <TableCell>
                     <div className="font-medium">{item.event_type}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {item.id}
-                    </div>
+                    <div className="text-xs text-muted-foreground">{item.id}</div>
                   </TableCell>
-                  <TableCell className="max-w-[320px] truncate">
-                    {item.destination}
-                  </TableCell>
-                  <TableCell>
-                    <StatusBadge status={item.status} />
-                  </TableCell>
+                  <TableCell className="max-w-[320px] truncate">{item.destination}</TableCell>
+                  <TableCell><StatusBadge status={item.status} /></TableCell>
                   <TableCell>{item.attempts}</TableCell>
                   <TableCell>
-                    <div className="text-sm">
-                      создано: {formatDateTime(item.created_at)}
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      следующая попытка: {formatDateTime(item.next_attempt_at)}
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      отправлено: {formatDateTime(item.sent_at)}
-                    </div>
+                    <div className="text-sm">создано: {formatDateTime(item.created_at)}</div>
+                    <div className="text-xs text-muted-foreground">следующая попытка: {formatDateTime(item.next_attempt_at)}</div>
+                    <div className="text-xs text-muted-foreground">отправлено: {formatDateTime(item.sent_at)}</div>
                   </TableCell>
                   <TableCell className="text-right">
-                    {item.status === "failed" || item.status === "dead" ? (
+                    {(item.status === "failed" || item.status === "dead") ? (
                       <Can permission={PERMISSIONS.ADMIN_OUTBOX_MANAGE}>
                         <Button
                           size="sm"
@@ -336,9 +220,7 @@ const IntegrationsPage = () => {
                         </Button>
                       </Can>
                     ) : (
-                      <span className="text-xs text-muted-foreground">
-                        {item.last_error ? "есть ошибка" : "—"}
-                      </span>
+                      <span className="text-xs text-muted-foreground">{item.last_error ? "есть ошибка" : "—"}</span>
                     )}
                   </TableCell>
                 </TableRow>
@@ -349,11 +231,7 @@ const IntegrationsPage = () => {
       </Card>
 
       <Card>
-        <CardHeader>
-          <CardTitle className="text-base">
-            Конвейер событий интеграций
-          </CardTitle>
-        </CardHeader>
+        <CardHeader><CardTitle className="text-base">Конвейер событий интеграций</CardTitle></CardHeader>
         <CardContent>
           <Table>
             <TableHeader>
@@ -371,20 +249,14 @@ const IntegrationsPage = () => {
                 <TableRow key={item.id}>
                   <TableCell>
                     <div className="font-medium">{item.event_type}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {item.id}
-                    </div>
+                    <div className="text-xs text-muted-foreground">{item.id}</div>
                   </TableCell>
-                  <TableCell>
-                    <StatusBadge status={item.status} />
-                  </TableCell>
+                  <TableCell><StatusBadge status={item.status} /></TableCell>
                   <TableCell>{item.attempts}</TableCell>
                   <TableCell>{formatDateTime(item.created_at)}</TableCell>
-                  <TableCell className="max-w-[280px] truncate text-xs text-muted-foreground">
-                    {item.last_error ?? "—"}
-                  </TableCell>
+                  <TableCell className="max-w-[280px] truncate text-xs text-muted-foreground">{item.last_error ?? "—"}</TableCell>
                   <TableCell className="text-right">
-                    {item.status === "failed" || item.status === "poisoned" ? (
+                    {(item.status === "failed" || item.status === "poisoned") ? (
                       <Can permission={PERMISSIONS.ADMIN_OUTBOX_MANAGE}>
                         <Button
                           size="sm"
@@ -396,9 +268,7 @@ const IntegrationsPage = () => {
                         </Button>
                       </Can>
                     ) : (
-                      <span className="text-xs text-muted-foreground">
-                        {formatDateTime(item.next_attempt_at)}
-                      </span>
+                      <span className="text-xs text-muted-foreground">{formatDateTime(item.next_attempt_at)}</span>
                     )}
                   </TableCell>
                 </TableRow>

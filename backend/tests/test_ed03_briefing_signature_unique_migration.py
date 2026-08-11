@@ -3,7 +3,6 @@
 down_revision намеренно НЕ ассертится: в репо many-heads by design, оркестратор
 может ре-парентнуть миграцию при интеграции параллельных срезов.
 """
-
 from __future__ import annotations
 
 import importlib.util
@@ -47,15 +46,11 @@ def test_upgrade_dedups_before_creating_unique_index(monkeypatch):
     """Порядок обязателен: сначала дедуп, потом unique-индекс."""
     module = _load_module()
     events: list[tuple[str, object]] = []
-    monkeypatch.setattr(
-        module.op, "execute", lambda sql, *a, **k: events.append(("execute", str(sql)))
-    )
+    monkeypatch.setattr(module.op, "execute", lambda sql, *a, **k: events.append(("execute", str(sql))))
     monkeypatch.setattr(
         module.op,
         "create_index",
-        lambda name, table, columns, **kw: events.append(
-            ("create_index", (name, table, tuple(columns), kw))
-        ),
+        lambda name, table, columns, **kw: events.append(("create_index", (name, table, tuple(columns), kw))),
     )
     module.upgrade()
 
@@ -78,9 +73,7 @@ def test_downgrade_drops_only_the_index(monkeypatch):
     dropped: list[tuple[str, str | None]] = []
     deleted: list[str] = []
     monkeypatch.setattr(
-        module.op,
-        "drop_index",
-        lambda name, table_name=None, **k: dropped.append((name, table_name)),
+        module.op, "drop_index", lambda name, table_name=None, **k: dropped.append((name, table_name))
     )
     monkeypatch.setattr(module.op, "execute", lambda *a, **k: deleted.append(str(a)))
     module.downgrade()
@@ -129,7 +122,8 @@ def test_dedup_semantics_on_real_sqlite(monkeypatch):
     conn.commit()
 
     survivors = {
-        row[0] for row in conn.execute("SELECT id FROM briefing_signatures ORDER BY id").fetchall()
+        row[0]
+        for row in conn.execute("SELECT id FROM briefing_signatures ORDER BY id").fetchall()
     }
     assert survivors == {"sig-b", "sig-d", "sig-e"}
 

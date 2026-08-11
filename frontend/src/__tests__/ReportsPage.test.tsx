@@ -13,8 +13,8 @@ const postMock = vi.fn();
 vi.mock("@/api/client", () => ({
   apiClient: {
     get: (...args: unknown[]) => getMock(...args),
-    post: (...args: unknown[]) => postMock(...args),
-  },
+    post: (...args: unknown[]) => postMock(...args)
+  }
 }));
 
 describe("ReportsPage", () => {
@@ -27,8 +27,8 @@ describe("ReportsPage", () => {
         trainings_overdue: 2,
         ppe_issues_month: 3,
         incidents_open: 4,
-        prescriptions_overdue: 5,
-      },
+        prescriptions_overdue: 5
+      }
     });
     postMock.mockResolvedValue({ data: { id: "export-1", status: "queued" } });
 
@@ -41,12 +41,12 @@ describe("ReportsPage", () => {
         full_name: "Reports User",
         roles: ["project_manager"],
         permissions: [PERMISSIONS.REPORTS_VIEW, PERMISSIONS.DOCUMENT_EXPORT],
-        attributes: { tenant_id: "tenant-1" },
+        attributes: { tenant_id: "tenant-1" }
       },
       loading: false,
       error: null,
       isAuthenticated: true,
-      initialized: true,
+      initialized: true
     });
   });
 
@@ -56,7 +56,7 @@ describe("ReportsPage", () => {
     render(
       <MemoryRouter>
         <ReportsPage />
-      </MemoryRouter>,
+      </MemoryRouter>
     );
 
     await waitFor(() => {
@@ -72,7 +72,7 @@ describe("ReportsPage", () => {
       expect(postMock).toHaveBeenCalledWith(
         "/exports",
         expect.objectContaining({ export_type: "reports:xlsx" }),
-        expect.anything(),
+        expect.anything()
       );
     });
   });
@@ -84,16 +84,16 @@ describe("ReportsPage", () => {
         ? {
             ...state.user,
             roles: ["worker"],
-            permissions: [],
+            permissions: []
           }
-        : null,
+        : null
     }));
 
     const user = userEvent.setup();
     render(
       <MemoryRouter>
         <ReportsPage />
-      </MemoryRouter>,
+      </MemoryRouter>
     );
 
     const xlsxButton = await screen.findByRole("button", { name: "XLSX" });
@@ -107,16 +107,14 @@ describe("ReportsPage", () => {
 
   it("initializes date range from query params", async () => {
     render(
-      <MemoryRouter
-        initialEntries={["/reports?date_from=2024-01-10&date_to=2024-01-20"]}
-      >
+      <MemoryRouter initialEntries={["/reports?date_from=2024-01-10&date_to=2024-01-20"]}>
         <ReportsPage />
-      </MemoryRouter>,
+      </MemoryRouter>
     );
 
     await waitFor(() => {
       expect(getMock).toHaveBeenCalledWith("/reports/kpi", {
-        params: { date_from: "2024-01-10", date_to: "2024-01-20" },
+        params: { date_from: "2024-01-10", date_to: "2024-01-20" }
       });
     });
 

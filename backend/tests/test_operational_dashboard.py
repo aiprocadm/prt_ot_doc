@@ -27,7 +27,7 @@ class TestOperationalDashboardService:
         """Test service initialization."""
         service = OperationalDashboardService()
         assert service.max_alerts == 20
-        assert hasattr(service, "get_dashboard")
+        assert hasattr(service, 'get_dashboard')
 
     @pytest.mark.asyncio
     async def test_get_dashboard_empty(self):
@@ -53,25 +53,16 @@ class TestOperationalDashboardService:
 
         alerts = [
             AlertItem(
-                id="1",
-                type="overdue",
-                severity="low",
-                title="Low priority",
-                created_at=datetime.now(timezone.utc),
+                id="1", type="overdue", severity="low",
+                title="Low priority", created_at=datetime.now(timezone.utc)
             ),
             AlertItem(
-                id="2",
-                type="critical_incident",
-                severity="critical",
-                title="Critical issue",
-                created_at=datetime.now(timezone.utc),
+                id="2", type="critical_incident", severity="critical",
+                title="Critical issue", created_at=datetime.now(timezone.utc)
             ),
             AlertItem(
-                id="3",
-                type="approval_blocked",
-                severity="high",
-                title="High priority",
-                created_at=datetime.now(timezone.utc),
+                id="3", type="approval_blocked", severity="high",
+                title="High priority", created_at=datetime.now(timezone.utc)
             ),
         ]
 
@@ -136,7 +127,8 @@ class TestOperationalDashboardEndpoint:
     def test_dashboard_requires_tenant(self, client):
         """Test endpoint requires tenant header."""
         response = client.get(
-            "/api/v1/operational/dashboard", headers={"Authorization": "Bearer fake-token"}
+            "/api/v1/operational/dashboard",
+            headers={"Authorization": "Bearer fake-token"}
         )
         # Should return 400 or tenant-related error
         assert response.status_code >= 400

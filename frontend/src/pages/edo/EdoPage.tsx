@@ -19,12 +19,7 @@ const EdoPage = () => {
     try {
       setItems(await edoApi.list());
     } catch (nextError) {
-      setError(
-        (nextError as ApiError) ?? {
-          status: 0,
-          message: "Не удалось загрузить ЭДО сообщения",
-        },
-      );
+      setError((nextError as ApiError) ?? { status: 0, message: "Не удалось загрузить ЭДО сообщения" });
     } finally {
       setLoading(false);
     }
@@ -36,18 +31,14 @@ const EdoPage = () => {
 
   return (
     <div className="space-y-4">
-      <Breadcrumb
-        items={[{ label: "Главная", to: "/dashboard" }, { label: "ЭДО" }]}
-      />
+      <Breadcrumb items={[{ label: "Главная", to: "/dashboard" }, { label: "ЭДО" }]} />
       <Card>
         <CardHeader>
           <CardTitle className="text-2xl font-semibold">ЭДО</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
-            Provider mode: non-production. Текущий контур использует
-            internal/mock semantics и не должен восприниматься как боевой
-            внешний ЭДО-оператор.
+            Provider mode: non-production. Текущий контур использует internal/mock semantics и не должен восприниматься как боевой внешний ЭДО-оператор.
           </div>
           <ErrorState error={error ?? undefined} onRetry={() => void load()} />
           {loading ? <LoadingScreen label="Загрузка ЭДО сообщений" /> : null}
@@ -57,18 +48,14 @@ const EdoPage = () => {
               description="После отправки документов сюда попадут конверты, статусы и внешние идентификаторы."
             />
           ) : null}
-          {!loading && !error && items.length > 0
-            ? items.map((it) => (
-                <div key={it.id} className="rounded border p-3 text-sm">
-                  <div>
-                    {it.id.slice(0, 8)} — {it.status}
-                  </div>
-                  <div className="text-muted-foreground">
-                    external_id: {it.external_id ?? "—"}
-                  </div>
-                </div>
-              ))
-            : null}
+          {!loading && !error && items.length > 0 ? (
+            items.map((it) => (
+              <div key={it.id} className="rounded border p-3 text-sm">
+                <div>{it.id.slice(0, 8)} — {it.status}</div>
+                <div className="text-muted-foreground">external_id: {it.external_id ?? "—"}</div>
+              </div>
+            ))
+          ) : null}
         </CardContent>
       </Card>
     </div>

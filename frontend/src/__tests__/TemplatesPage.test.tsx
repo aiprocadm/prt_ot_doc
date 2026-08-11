@@ -25,17 +25,11 @@ vi.mock("@/permissions/useAbility", () => ({
 }));
 
 vi.mock("@/features/templates/TemplateFormDialog", () => ({
-  TemplateFormDialog: ({ trigger }: { trigger: React.ReactNode }) => (
-    <div>{trigger}</div>
-  ),
+  TemplateFormDialog: ({ trigger }: { trigger: React.ReactNode }) => <div>{trigger}</div>,
 }));
 
 vi.mock("@/features/templates/TemplateTable", () => ({
-  TemplateTable: ({
-    onSelect,
-  }: {
-    onSelect: (template: { id: string; name: string }) => void;
-  }) => (
+  TemplateTable: ({ onSelect }: { onSelect: (template: { id: string; name: string }) => void }) => (
     <button type="button" onClick={() => onSelect(templateStoreState.items[0])}>
       open template
     </button>
@@ -43,9 +37,7 @@ vi.mock("@/features/templates/TemplateTable", () => ({
 }));
 
 vi.mock("@/features/templates/TemplateDetails", () => ({
-  TemplateDetails: ({ template }: { template: { name: string } }) => (
-    <div>details: {template.name}</div>
-  ),
+  TemplateDetails: ({ template }: { template: { name: string } }) => <div>details: {template.name}</div>,
 }));
 
 describe("TemplatesPage", () => {
@@ -60,14 +52,12 @@ describe("TemplatesPage", () => {
   });
 
   it("shows access denied when template view permission is missing", () => {
-    abilityState.can.mockImplementation(
-      (permission: string) => permission !== "template.view",
-    );
+    abilityState.can.mockImplementation((permission: string) => permission !== "template.view");
 
     render(
       <MemoryRouter>
         <TemplatesPage />
-      </MemoryRouter>,
+      </MemoryRouter>
     );
 
     expect(screen.getByText("Доступ ограничен")).toBeInTheDocument();
@@ -78,7 +68,7 @@ describe("TemplatesPage", () => {
     render(
       <MemoryRouter>
         <TemplatesPage />
-      </MemoryRouter>,
+      </MemoryRouter>
     );
 
     await waitFor(() => {
@@ -94,12 +84,10 @@ describe("TemplatesPage", () => {
     render(
       <MemoryRouter>
         <TemplatesPage />
-      </MemoryRouter>,
+      </MemoryRouter>
     );
 
-    fireEvent.click(
-      await screen.findByRole("button", { name: "open template" }),
-    );
+    fireEvent.click(await screen.findByRole("button", { name: "open template" }));
 
     await waitFor(() => {
       expect(templateStoreState.getById).toHaveBeenCalledWith("tpl-1");

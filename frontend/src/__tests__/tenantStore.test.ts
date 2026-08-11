@@ -29,7 +29,7 @@ describe("tenant store", () => {
       companyId: "company-old",
       siteId: "site-old",
       templateCode: "template-old",
-      step: 6,
+      step: 6
     });
 
     setTenant(TENANT_OPTIONS[0]);
@@ -45,7 +45,7 @@ describe("tenant store", () => {
     useDocumentsWizardStore.setState({
       companyId: "company-old",
       taskId: "task-old",
-      step: 7,
+      step: 7
     });
 
     useTenantStore.getState().clearTenant();

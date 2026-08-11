@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 export const EmptyState = ({
   title = "Данные отсутствуют",
   description = "Попробуйте изменить фильтры",
-  action,
+  action
 }: {
   title?: string;
   description?: string;

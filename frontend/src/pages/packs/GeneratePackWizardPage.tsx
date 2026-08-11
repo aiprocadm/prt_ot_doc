@@ -1,13 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import {
-  CheckCircle,
-  ChevronRight,
-  ClipboardList,
-  Play,
-  Settings2,
-  Upload,
-} from "lucide-react";
+import { CheckCircle, ChevronRight, ClipboardList, Play, Settings2, Upload } from "lucide-react";
 import { toast } from "sonner";
 
 import { packsApi } from "@/api/packs";
@@ -33,7 +26,7 @@ const WIZARD_STEPS = [
   { step: 2, label: "Данные строк", icon: Upload },
   { step: 3, label: "Параметры", icon: Settings2 },
   { step: 4, label: "Запуск", icon: Play },
-  { step: 5, label: "Результат", icon: CheckCircle },
+  { step: 5, label: "Результат", icon: CheckCircle }
 ];
 
 const DEFAULT_ROWS_JSON = '[{"doc":"Акт","employee":"Иванов И.И."}]';
@@ -42,9 +35,7 @@ const GeneratePackWizardPage = () => {
   const { presetId: presetIdParam = "" } = useParams();
   const navigate = useNavigate();
 
-  const [initialIdempotencyKey, setInitialIdempotencyKey] = useState(
-    () => `wizard-${Date.now()}`,
-  );
+  const [initialIdempotencyKey, setInitialIdempotencyKey] = useState(() => `wizard-${Date.now()}`);
   const [step, setStep] = useState(presetIdParam ? 2 : 1);
   const [presets, setPresets] = useState<Preset[]>([]);
   const [presetsLoading, setPresetsLoading] = useState(false);
@@ -75,9 +66,7 @@ const GeneratePackWizardPage = () => {
       const data = await packsApi.getPresets<Preset>();
       setPresets(data);
     } catch (err) {
-      setPresetsError(
-        (err as ApiError) ?? { message: "Не удалось загрузить пресеты" },
-      );
+      setPresetsError((err as ApiError) ?? { message: "Не удалось загрузить пресеты" });
     } finally {
       setPresetsLoading(false);
     }
@@ -94,15 +83,7 @@ const GeneratePackWizardPage = () => {
       idempotencyKey !== draftOrigin.idempotencyKey ||
       dryRun !== draftOrigin.dryRun
     );
-  }, [
-    draftOrigin,
-    dryRun,
-    idempotencyKey,
-    packRunId,
-    rowsDirty,
-    selectedPresetId,
-    step,
-  ]);
+  }, [draftOrigin, dryRun, idempotencyKey, packRunId, rowsDirty, selectedPresetId, step]);
 
   useUnsavedChanges(hasUnsavedChanges);
 
@@ -136,19 +117,12 @@ const GeneratePackWizardPage = () => {
     setRunning(true);
     setRunError(null);
     try {
-      const response = await packsApi.createRun(
-        selectedPresetId,
-        rows,
-        dryRun,
-        idempotencyKey,
-      );
+      const response = await packsApi.createRun(selectedPresetId, rows, dryRun, idempotencyKey);
       setPackRunId(response.pack_run_id);
       toast.success(dryRun ? "Dry-run запущен" : "Пакет поставлен в очередь");
       setStep(5);
     } catch (err) {
-      setRunError(
-        (err as ApiError) ?? { message: "Не удалось запустить генерацию" },
-      );
+      setRunError((err as ApiError) ?? { message: "Не удалось запустить генерацию" });
     } finally {
       setRunning(false);
     }
@@ -162,7 +136,7 @@ const GeneratePackWizardPage = () => {
         items={[
           { label: "Главная", to: "/dashboard" },
           { label: "Пресеты", to: "/package-presets" },
-          { label: "Мастер генерации" },
+          { label: "Мастер генерации" }
         ]}
       />
 
@@ -175,8 +149,8 @@ const GeneratePackWizardPage = () => {
               step === s
                 ? "border-primary bg-primary text-primary-foreground"
                 : step > s
-                  ? "border-green-500 text-green-600"
-                  : "border-muted-foreground/30 text-muted-foreground"
+                ? "border-green-500 text-green-600"
+                : "border-muted-foreground/30 text-muted-foreground"
             }`}
           >
             <Icon className="h-3.5 w-3.5" />
@@ -192,14 +166,9 @@ const GeneratePackWizardPage = () => {
             <CardTitle>Шаг 1 — Выбор пресета</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <ErrorState
-              error={presetsError ?? undefined}
-              onRetry={() => void loadPresets()}
-            />
+            <ErrorState error={presetsError ?? undefined} onRetry={() => void loadPresets()} />
             {presetsLoading ? (
-              <div className="text-sm text-muted-foreground">
-                Загрузка пресетов…
-              </div>
+              <div className="text-sm text-muted-foreground">Загрузка пресетов…</div>
             ) : presets.length === 0 && !presetsError ? (
               <EmptyState
                 title="Пресеты не найдены"
@@ -215,15 +184,11 @@ const GeneratePackWizardPage = () => {
                       type="button"
                       onClick={() => setSelectedPresetId(p.id)}
                       className={`rounded-lg border p-4 text-left transition hover:border-primary ${
-                        selectedPresetId === p.id
-                          ? "border-primary bg-primary/5"
-                          : ""
+                        selectedPresetId === p.id ? "border-primary bg-primary/5" : ""
                       }`}
                     >
                       <div className="font-medium">{p.name}</div>
-                      <div className="text-xs text-muted-foreground">
-                        {p.code}
-                      </div>
+                      <div className="text-xs text-muted-foreground">{p.code}</div>
                     </button>
                   ))}
               </div>
@@ -244,8 +209,7 @@ const GeneratePackWizardPage = () => {
           <CardContent className="space-y-4">
             {selectedPreset && (
               <div className="rounded-md bg-muted/40 px-3 py-2 text-sm">
-                Пресет: <strong>{selectedPreset.name}</strong> (
-                {selectedPreset.code})
+                Пресет: <strong>{selectedPreset.name}</strong> ({selectedPreset.code})
               </div>
             )}
             <div className="space-y-2">
@@ -263,19 +227,15 @@ const GeneratePackWizardPage = () => {
                 }}
                 placeholder='[{"doc": "Инструкция", "employee": "Иванов И.И."}]'
               />
-              {rowsError && (
-                <p className="text-sm text-destructive">{rowsError}</p>
-              )}
+              {rowsError && <p className="text-sm text-destructive">{rowsError}</p>}
               <p className="text-xs text-muted-foreground">
-                Каждый объект массива соответствует одной строке (одному
-                документу). Ключи должны совпадать с полями маппинга пресета.
+                Каждый объект массива соответствует одной строке (одному документу).
+                Ключи должны совпадать с полями маппинга пресета.
               </p>
             </div>
             <div className="flex gap-2">
               {!presetIdParam && (
-                <Button variant="outline" onClick={() => setStep(1)}>
-                  Назад
-                </Button>
+                <Button variant="outline" onClick={() => setStep(1)}>Назад</Button>
               )}
               <Button
                 onClick={() => {
@@ -298,9 +258,7 @@ const GeneratePackWizardPage = () => {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="idempotency-key">
-                Ключ идемпотентности (уникальный запуск)
-              </Label>
+              <Label htmlFor="idempotency-key">Ключ идемпотентности (уникальный запуск)</Label>
               <Input
                 id="idempotency-key"
                 value={idempotencyKey}
@@ -308,8 +266,7 @@ const GeneratePackWizardPage = () => {
                 placeholder="метка-времени мастера"
               />
               <p className="text-xs text-muted-foreground">
-                Повторный запрос с тем же ключом вернёт результат первого
-                запуска.
+                Повторный запрос с тем же ключом вернёт результат первого запуска.
               </p>
             </div>
             <div className="flex items-center gap-3">
@@ -325,13 +282,8 @@ const GeneratePackWizardPage = () => {
               </Label>
             </div>
             <div className="flex gap-2">
-              <Button variant="outline" onClick={() => setStep(2)}>
-                Назад
-              </Button>
-              <Button
-                disabled={!idempotencyKey.trim()}
-                onClick={() => setStep(4)}
-              >
+              <Button variant="outline" onClick={() => setStep(2)}>Назад</Button>
+              <Button disabled={!idempotencyKey.trim()} onClick={() => setStep(4)}>
                 Далее <ChevronRight className="ml-1 h-4 w-4" />
               </Button>
             </div>
@@ -349,53 +301,26 @@ const GeneratePackWizardPage = () => {
             <div className="space-y-2 rounded-lg border bg-muted/30 p-4 text-sm">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Пресет</span>
-                <span className="font-medium">
-                  {selectedPreset?.name ?? selectedPresetId}
-                </span>
+                <span className="font-medium">{selectedPreset?.name ?? selectedPresetId}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">
-                  Строк для генерации
-                </span>
-                <span className="font-medium">
-                  {rowsCount ?? "Проверьте JSON на шаге 2"}
-                </span>
+                <span className="text-muted-foreground">Строк для генерации</span>
+                <span className="font-medium">{rowsCount ?? "Проверьте JSON на шаге 2"}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Режим</span>
-                <span className="font-medium">
-                  {dryRun ? "Dry-run (проверка)" : "Реальный запуск"}
-                </span>
+                <span className="font-medium">{dryRun ? "Dry-run (проверка)" : "Реальный запуск"}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">
-                  Ключ идемпотентности
-                </span>
+                <span className="text-muted-foreground">Ключ идемпотентности</span>
                 <span className="font-mono text-xs">{idempotencyKey}</span>
               </div>
             </div>
-            <ErrorState
-              error={runError ?? undefined}
-              onRetry={() => void runPack()}
-            />
+            <ErrorState error={runError ?? undefined} onRetry={() => void runPack()} />
             <div className="flex gap-2">
-              <Button variant="outline" onClick={() => setStep(3)}>
-                Назад
-              </Button>
-              <Button
-                disabled={
-                  running ||
-                  rowsCount === null ||
-                  !idempotencyKey.trim() ||
-                  !selectedPresetId
-                }
-                onClick={() => void runPack()}
-              >
-                {running
-                  ? "Запуск…"
-                  : dryRun
-                    ? "Запустить Dry-run"
-                    : "Запустить генерацию"}
+              <Button variant="outline" onClick={() => setStep(3)}>Назад</Button>
+              <Button disabled={running || rowsCount === null || !idempotencyKey.trim() || !selectedPresetId} onClick={() => void runPack()}>
+                {running ? "Запуск…" : dryRun ? "Запустить Dry-run" : "Запустить генерацию"}
               </Button>
             </div>
           </CardContent>
@@ -412,9 +337,7 @@ const GeneratePackWizardPage = () => {
             <div className="flex items-center gap-3 text-green-600">
               <CheckCircle className="h-6 w-6" />
               <span className="font-medium">
-                {dryRun
-                  ? "Dry-run запущен."
-                  : "Пакет поставлен в очередь генерации."}
+                {dryRun ? "Dry-run запущен." : "Пакет поставлен в очередь генерации."}
               </span>
             </div>
             {packRunId && (
@@ -428,10 +351,7 @@ const GeneratePackWizardPage = () => {
                   Открыть детали запуска
                 </Button>
               )}
-              <Button
-                variant="outline"
-                onClick={() => navigate("/pipelines/runs")}
-              >
+              <Button variant="outline" onClick={() => navigate("/pipelines/runs")}>
                 История запусков
               </Button>
               <Button

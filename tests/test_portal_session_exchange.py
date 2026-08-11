@@ -24,12 +24,7 @@ from app.core import external_perimeter as ep
 from app.core.security import verify_token
 from app.models.packages import ClientPortalToken
 
-
-# НЕ модульная константа: сбор тестов происходит в начале прогона, а сам тест
-# может стартовать спустя >30 минут — ссылка «на полчаса» от времени импорта
-# к этому моменту уже истекла бы (флейк долгих прогонов).
-def _now() -> datetime:
-    return datetime.now(tz=timezone.utc)
+_NOW = datetime.now(tz=timezone.utc)
 
 
 def _request(ip: str = "203.0.113.10") -> SimpleNamespace:
@@ -49,8 +44,8 @@ async def _seed_link(session, *, plain: str, max_uses=None, expires_in_h=24, rev
         token_hash=routes._hash_token(plain),
         package_run_id=str(uuid.uuid4()),
         scope_json={},
-        expires_at=_now() + timedelta(hours=expires_in_h),
-        revoked_at=_now() if revoked else None,
+        expires_at=_NOW + timedelta(hours=expires_in_h),
+        revoked_at=_NOW if revoked else None,
         max_uses=max_uses,
     )
     session.add(row)
@@ -109,7 +104,7 @@ async def test_revoking_link_kills_session(sessionmaker):
         out = await routes.create_portal_session(
             request=_request(), session=session, x_portal_token="link-token-3", token=None
         )
-        row.revoked_at = _now()
+        row.revoked_at = _NOW
         await session.flush()
         with pytest.raises(HTTPException) as exc:
             await routes._portal_auth(
@@ -132,7 +127,7 @@ async def test_session_expiry_capped_by_link_expiry(sessionmaker):
         )
         claims = verify_token(out.session_token, expected_type="portal_session")
         exp = datetime.fromtimestamp(int(claims["exp"]), tz=timezone.utc)
-        assert exp <= _now() + timedelta(minutes=31)
+        assert exp <= _NOW + timedelta(minutes=31)
 
 
 @pytest.mark.asyncio

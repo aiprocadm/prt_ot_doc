@@ -178,7 +178,9 @@ def test_guard_rejects_the_bootstrap_superuser(scratch_db: str) -> None:
 
     with pytest.raises(UnsafeDatabaseRoleError) as excinfo:
         asyncio.run(
-            verify_runtime_role_for_url(_async_url(scratch_db), enforce=True, component="test")
+            verify_runtime_role_for_url(
+                _async_url(scratch_db), enforce=True, component="test"
+            )
         )
     assert "SUPERUSER" in str(excinfo.value)
     assert "provision_app_role.py" in str(excinfo.value)

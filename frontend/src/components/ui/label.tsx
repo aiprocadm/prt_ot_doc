@@ -2,23 +2,17 @@ import * as React from "react";
 
 import { cn } from "@/utils/cn";
 
-export interface LabelProps
-  extends React.LabelHTMLAttributes<HTMLLabelElement> {}
+export interface LabelProps extends React.LabelHTMLAttributes<HTMLLabelElement> {}
 
-const Label = React.forwardRef<HTMLLabelElement, LabelProps>(
-  ({ className, ...props }, ref) => (
-    // This primitive binds to controls in consuming components.
-    // eslint-disable-next-line jsx-a11y/label-has-associated-control
-    <label
-      ref={ref}
-      className={cn(
-        "text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70",
-        className,
-      )}
-      {...props}
-    />
-  ),
-);
+const Label = React.forwardRef<HTMLLabelElement, LabelProps>(({ className, ...props }, ref) => (
+  // This primitive binds to controls in consuming components.
+  // eslint-disable-next-line jsx-a11y/label-has-associated-control
+  <label
+    ref={ref}
+    className={cn("text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70", className)}
+    {...props}
+  />
+));
 Label.displayName = "Label";
 
 export { Label };

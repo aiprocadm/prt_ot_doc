@@ -5,9 +5,7 @@ import { usePagination } from "@/hooks/usePagination";
 
 describe("usePagination", () => {
   it("меняет страницу и размер страницы", () => {
-    const { result } = renderHook(() =>
-      usePagination({ page: 2, pageSize: 20, total: 100 }),
-    );
+    const { result } = renderHook(() => usePagination({ page: 2, pageSize: 20, total: 100 }));
 
     act(() => result.current.setPage(3));
     expect(result.current.pagination.page).toBe(3);

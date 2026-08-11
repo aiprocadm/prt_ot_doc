@@ -19,7 +19,6 @@ The fix disambiguates every ``"Inspection"`` relationship target with its fully
 module-qualified path (exactly what the error message recommends). This test pins
 that fix so the ambiguity cannot regress.
 """
-
 from __future__ import annotations
 
 import os
@@ -66,7 +65,9 @@ def test_after_configured_installs_cross_base_fk_mirrors() -> None:
 
     configure_mappers()
 
-    mirrors = [t for t in TenantBase.metadata.tables.values() if t.info.get("cross_base_mirror")]
+    mirrors = [
+        t for t in TenantBase.metadata.tables.values() if t.info.get("cross_base_mirror")
+    ]
     assert mirrors, (
         "after_configured did not install cross-base FK mirror tables — "
         "register_cross_base_fk_resolution never ran via the mapper event"
@@ -115,9 +116,9 @@ def test_duplicate_mapped_class_names_match_known_set() -> None:
         "Новые дублирующиеся имена mapped-классов (квалифицируй строковые "
         f"relationship-ссылки полным путём, затем добавь в набор): {dict((n, duplicates[n]) for n in unexpected)}"
     )
-    assert (
-        not missing
-    ), f"Эти дубли исчезли — обнови KNOWN_DUPLICATE_MAPPED_NAMES: {sorted(missing)}"
+    assert not missing, (
+        f"Эти дубли исчезли — обнови KNOWN_DUPLICATE_MAPPED_NAMES: {sorted(missing)}"
+    )
     # Каждый дубль обязан указывать на РАЗНЫЕ таблицы (иначе это настоящая коллизия).
     for name, entries in duplicates.items():
         tables = {e.split(" -> ")[1] for e in entries}

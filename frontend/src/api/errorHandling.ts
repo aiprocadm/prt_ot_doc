@@ -15,9 +15,7 @@ const MAX_TOAST_BODY_LEN = 280;
 export const buildToastText = (primary: string, error: ApiError): string => {
   const trimmed = primary.trim();
   const body =
-    trimmed.length > MAX_TOAST_BODY_LEN
-      ? `${trimmed.slice(0, MAX_TOAST_BODY_LEN)}…`
-      : trimmed;
+    trimmed.length > MAX_TOAST_BODY_LEN ? `${trimmed.slice(0, MAX_TOAST_BODY_LEN)}…` : trimmed;
   if (import.meta.env.DEV && error.correlation_id) {
     const id = error.correlation_id;
     const ref = id.length > 12 ? `${id.slice(0, 8)}…` : id;
@@ -32,10 +30,7 @@ const toastErrorPreferMessage = (error: ApiError, fallback: string) => {
 };
 
 const rememberBillingAlert = (code: string) => {
-  sessionStorageSetItem(
-    BILLING_ALERT_STORAGE_KEY,
-    JSON.stringify({ code, ts: Date.now() }),
-  );
+  sessionStorageSetItem(BILLING_ALERT_STORAGE_KEY, JSON.stringify({ code, ts: Date.now() }));
 };
 
 export { BILLING_ALERT_STORAGE_KEY };
@@ -53,23 +48,15 @@ export const handleApiError = (error: ApiError, requestUrl?: string) => {
     return;
   }
 
-  if (
-    error.code === "BILLING_BLOCKED" ||
-    error.code === "TENANT_SUSPENDED" ||
-    error.code === "TENANT_PAST_DUE"
-  ) {
+  if (error.code === "BILLING_BLOCKED" || error.code === "TENANT_SUSPENDED" || error.code === "TENANT_PAST_DUE") {
     rememberBillingAlert(error.code);
-    toast.error(
-      "Доступ ограничен из-за статуса оплаты. Откройте раздел Администрирование → Биллинг.",
-    );
+    toast.error("Доступ ограничен из-за статуса оплаты. Откройте раздел Администрирование → Биллинг.");
     return;
   }
 
   if (error.code === "QUOTA_EXCEEDED") {
     rememberBillingAlert("QUOTA_EXCEEDED");
-    toast.error(
-      "Превышен лимит тарифа. Проверьте usage и лимиты в разделе Биллинг.",
-    );
+    toast.error("Превышен лимит тарифа. Проверьте usage и лимиты в разделе Биллинг.");
     return;
   }
 
@@ -90,10 +77,7 @@ export const handleApiError = (error: ApiError, requestUrl?: string) => {
   }
 
   if (status === 403) {
-    toastErrorPreferMessage(
-      error,
-      "Недостаточно прав для выполнения операции.",
-    );
+    toastErrorPreferMessage(error, "Недостаточно прав для выполнения операции.");
     return;
   }
 
@@ -103,10 +87,7 @@ export const handleApiError = (error: ApiError, requestUrl?: string) => {
   }
 
   if (status === 409) {
-    toastErrorPreferMessage(
-      error,
-      "Конфликт данных. Обновите страницу и попробуйте снова.",
-    );
+    toastErrorPreferMessage(error, "Конфликт данных. Обновите страницу и попробуйте снова.");
     return;
   }
 
@@ -117,10 +98,7 @@ export const handleApiError = (error: ApiError, requestUrl?: string) => {
       toast.error(buildToastText(joined, error));
       return;
     }
-    toastErrorPreferMessage(
-      error,
-      "Проверьте введённые данные и повторите попытку.",
-    );
+    toastErrorPreferMessage(error, "Проверьте введённые данные и повторите попытку.");
     return;
   }
 

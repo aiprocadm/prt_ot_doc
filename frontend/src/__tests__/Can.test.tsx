@@ -13,7 +13,7 @@ const userWithPermissions = {
   full_name: "Viewer",
   roles: ["worker"],
   permissions: [PERMISSIONS.DOCUMENT_VIEW],
-  attributes: { tenant_id: "tenant-1" },
+  attributes: { tenant_id: "tenant-1" }
 };
 
 describe("Can", () => {
@@ -23,7 +23,7 @@ describe("Can", () => {
       loading: false,
       error: null,
       isAuthenticated: true,
-      initialized: true,
+      initialized: true
     });
   });
 
@@ -31,29 +31,22 @@ describe("Can", () => {
     render(
       <Can permission={PERMISSIONS.DOCUMENT_VIEW}>
         <div>Есть доступ</div>
-      </Can>,
+      </Can>
     );
     expect(screen.getByText("Есть доступ")).toBeInTheDocument();
   });
 
   it("рендерит fallback при отсутствии прав", () => {
     render(
-      <Can
-        permission={PERMISSIONS.ADMIN_MANAGE_ROLES}
-        fallback={<div>Нет доступа</div>}
-      >
+      <Can permission={PERMISSIONS.ADMIN_MANAGE_ROLES} fallback={<div>Нет доступа</div>}>
         <div>Скрыто</div>
-      </Can>,
+      </Can>
     );
     expect(screen.getByText("Нет доступа")).toBeInTheDocument();
   });
 
   it("поддерживает render-prop", () => {
-    render(
-      <Can permission={PERMISSIONS.ADMIN_MANAGE_ROLES}>
-        {(allowed) => <span>{String(allowed)}</span>}
-      </Can>,
-    );
+    render(<Can permission={PERMISSIONS.ADMIN_MANAGE_ROLES}>{(allowed) => <span>{String(allowed)}</span>}</Can>);
     expect(screen.getByText("false")).toBeInTheDocument();
   });
 });

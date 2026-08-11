@@ -26,19 +26,13 @@ export const ListStateGuard = ({
   emptyDescription,
   emptyAction,
   onRetry,
-  children,
+  children
 }: ListStateGuardProps) => (
   <>
     <ErrorState error={error ?? undefined} onRetry={onRetry} />
-    {loading && itemsCount === 0 ? (
-      <LoadingScreen label={loadingLabel} />
-    ) : null}
+    {loading && itemsCount === 0 ? <LoadingScreen label={loadingLabel} /> : null}
     {!loading && !error && itemsCount === 0 ? (
-      <EmptyState
-        title={emptyTitle}
-        description={emptyDescription}
-        action={emptyAction}
-      />
+      <EmptyState title={emptyTitle} description={emptyDescription} action={emptyAction} />
     ) : null}
     {!loading || itemsCount > 0 ? children : null}
   </>

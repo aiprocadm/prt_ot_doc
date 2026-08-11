@@ -28,22 +28,22 @@ def _env_map(service: dict) -> dict[str, str]:
 def test_api_service_does_not_disable_migrations(compose_config: dict) -> None:
     """`api` MUST keep the entrypoint default (RUN_MIGRATIONS=true)."""
     api_env = _env_map(compose_config["services"]["api"])
-    assert (
-        api_env.get("RUN_MIGRATIONS", "true") == "true"
-    ), "api service must run migrations — leave RUN_MIGRATIONS unset or 'true'"
+    assert api_env.get("RUN_MIGRATIONS", "true") == "true", (
+        "api service must run migrations — leave RUN_MIGRATIONS unset or 'true'"
+    )
 
 
 def test_worker_service_disables_migrations(compose_config: dict) -> None:
     """`worker` MUST NOT run migrations (RB-002e race fix)."""
     worker_env = _env_map(compose_config["services"]["worker"])
-    assert (
-        worker_env.get("RUN_MIGRATIONS") == "false"
-    ), "worker service must set RUN_MIGRATIONS=false to avoid alembic race with api"
+    assert worker_env.get("RUN_MIGRATIONS") == "false", (
+        "worker service must set RUN_MIGRATIONS=false to avoid alembic race with api"
+    )
 
 
 def test_beat_service_disables_migrations(compose_config: dict) -> None:
     """`beat` MUST NOT run migrations (RB-002e race fix)."""
     beat_env = _env_map(compose_config["services"]["beat"])
-    assert (
-        beat_env.get("RUN_MIGRATIONS") == "false"
-    ), "beat service must set RUN_MIGRATIONS=false to avoid alembic race with api"
+    assert beat_env.get("RUN_MIGRATIONS") == "false", (
+        "beat service must set RUN_MIGRATIONS=false to avoid alembic race with api"
+    )

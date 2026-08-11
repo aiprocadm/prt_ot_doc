@@ -58,27 +58,19 @@ export const useClientPortalPackages = () => {
       return null;
     }
     try {
-      const detail = await apiClient.get<PortalDetail>(
-        `/client-portal/packages/${runId}`,
-      );
+      const detail = await apiClient.get<PortalDetail>(`/client-portal/packages/${runId}`);
       setSelected(detail.data);
       setError(null);
       return detail.data;
     } catch (err) {
-      const nextError = (err as ApiError) ?? {
-        status: 500,
-        message: "Не удалось загрузить пакет",
-      };
+      const nextError = (err as ApiError) ?? { status: 500, message: "Не удалось загрузить пакет" };
       if (nextError.status === 404) {
         // Список может содержать служебный `id` read-model; не блокируем весь dashboard.
         setSelected(null);
         setError(null);
         return null;
       }
-      setError({
-        status: nextError.status ?? 500,
-        message: nextError.message ?? "Не удалось загрузить пакет",
-      });
+      setError({ status: nextError.status ?? 500, message: nextError.message ?? "Не удалось загрузить пакет" });
       return null;
     }
   }, []);
@@ -87,9 +79,7 @@ export const useClientPortalPackages = () => {
     setLoading(true);
     setError(null);
     try {
-      const { data } = await apiClient.get<PortalRun[]>(
-        "/client-portal/packages",
-      );
+      const { data } = await apiClient.get<PortalRun[]>("/client-portal/packages");
       setItems(data);
       if (data[0]) {
         await selectRun(data[0].package_id ?? data[0].id);
@@ -97,14 +87,8 @@ export const useClientPortalPackages = () => {
         setSelected(null);
       }
     } catch (err) {
-      const nextError = (err as ApiError) ?? {
-        status: 500,
-        message: "Не удалось загрузить список пакетов",
-      };
-      setError({
-        status: nextError.status ?? 500,
-        message: nextError.message ?? "Не удалось загрузить список пакетов",
-      });
+      const nextError = (err as ApiError) ?? { status: 500, message: "Не удалось загрузить список пакетов" };
+      setError({ status: nextError.status ?? 500, message: nextError.message ?? "Не удалось загрузить список пакетов" });
       setItems([]);
       setSelected(null);
     } finally {
@@ -124,7 +108,7 @@ export const useClientPortalPackages = () => {
       requestsTotal: selected?.history.tickets_count ?? 0,
       openRequirements: selected?.history.requirements_missing ?? 0,
       activeRunId: selected?.run.id ?? null,
-      packageStatuses: items.map((item) => item.status),
+      packageStatuses: items.map((item) => item.status)
     };
   }, [items, selected]);
 

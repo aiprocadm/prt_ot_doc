@@ -91,15 +91,13 @@ async def test_queue_summary_reports_current_and_recent_statuses() -> None:
     tenant = SimpleNamespace(id="tenant-1")
     session = _SequenceSession(
         [
-            _AllResult(
-                [
-                    ("queued", 5),
-                    ("running", 2),
-                    ("failed", 4),
-                    ("canceled", 1),
-                    ("success", 12),
-                ]
-            ),
+            _AllResult([
+                ("queued", 5),
+                ("running", 2),
+                ("failed", 4),
+                ("canceled", 1),
+                ("success", 12),
+            ]),
             _ScalarResult(3),
             _ScalarResult(11),
         ]
@@ -154,9 +152,7 @@ async def test_poisoned_events_endpoint_returns_items() -> None:
     ]
     session = _SequenceSession([_ScalarResult(1), _ScalarsResult(rows)])
 
-    payload = await list_poisoned_events(
-        limit=50, offset=0, session=session, tenant=tenant, __=None
-    )
+    payload = await list_poisoned_events(limit=50, offset=0, session=session, tenant=tenant, __=None)
 
     assert payload.total == 1
     assert payload.items[0].event_type == "approval.created"

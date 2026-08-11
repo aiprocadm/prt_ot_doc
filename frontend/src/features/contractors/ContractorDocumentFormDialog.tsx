@@ -10,19 +10,12 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
+  DialogTrigger
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  DOC_TYPE_LABELS,
-  DOC_TYPE_OPTIONS,
-} from "@/pages/contractors/contractorsVocab";
-import type {
-  ContractorDocument,
-  ContractorEmployee,
-  DocType,
-} from "@/types/dto/contractors";
+import { DOC_TYPE_LABELS, DOC_TYPE_OPTIONS } from "@/pages/contractors/contractorsVocab";
+import type { ContractorDocument, ContractorEmployee, DocType } from "@/types/dto/contractors";
 
 interface Props {
   trigger: ReactNode;
@@ -32,13 +25,7 @@ interface Props {
   onSubmitted?: () => void;
 }
 
-export const ContractorDocumentFormDialog = ({
-  trigger,
-  contractorId,
-  employees,
-  initialData,
-  onSubmitted,
-}: Props) => {
+export const ContractorDocumentFormDialog = ({ trigger, contractorId, employees, initialData, onSubmitted }: Props) => {
   const [open, setOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const isEdit = Boolean(initialData);
@@ -77,16 +64,12 @@ export const ContractorDocumentFormDialog = ({
         issuing_org: issuingOrg || null,
         issued_at: issuedAt || null,
         valid_until: validUntil || null,
-        file_id: fileId || null,
+        file_id: fileId || null
       };
       if (initialData) {
         await contractorsApi.updateDocument(initialData.id, common);
       } else {
-        await contractorsApi.createDocument({
-          contractor_id: contractorId,
-          employee_id: employeeId || null,
-          ...common,
-        });
+        await contractorsApi.createDocument({ contractor_id: contractorId, employee_id: employeeId || null, ...common });
       }
       toast.success(isEdit ? "Документ обновлён" : "Документ добавлен");
       onSubmitted?.();
@@ -108,23 +91,14 @@ export const ContractorDocumentFormDialog = ({
       <DialogTrigger asChild>{trigger}</DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>
-            {isEdit ? "Редактировать документ" : "Новый документ"}
-          </DialogTitle>
-          <DialogDescription>
-            Сведения о документе подрядчика и сроки его действия.
-          </DialogDescription>
+          <DialogTitle>{isEdit ? "Редактировать документ" : "Новый документ"}</DialogTitle>
+          <DialogDescription>Сведения о документе подрядчика и сроки его действия.</DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="doc-type">Тип документа</Label>
-              <select
-                id="doc-type"
-                className="h-10 w-full rounded-md border px-3"
-                value={docType}
-                onChange={(e) => setDocType(e.target.value as DocType)}
-              >
+              <select id="doc-type" className="h-10 w-full rounded-md border px-3" value={docType} onChange={(e) => setDocType(e.target.value as DocType)}>
                 {DOC_TYPE_OPTIONS.map((t) => (
                   <option key={t} value={t}>
                     {DOC_TYPE_LABELS[t]}
@@ -152,57 +126,31 @@ export const ContractorDocumentFormDialog = ({
           </div>
           <div className="space-y-2">
             <Label htmlFor="doc-title">Название</Label>
-            <Input
-              id="doc-title"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-            />
+            <Input id="doc-title" value={title} onChange={(e) => setTitle(e.target.value)} />
           </div>
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="doc-number">Номер</Label>
-              <Input
-                id="doc-number"
-                value={number}
-                onChange={(e) => setNumber(e.target.value)}
-              />
+              <Input id="doc-number" value={number} onChange={(e) => setNumber(e.target.value)} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="doc-org">Выдавший орган</Label>
-              <Input
-                id="doc-org"
-                value={issuingOrg}
-                onChange={(e) => setIssuingOrg(e.target.value)}
-              />
+              <Input id="doc-org" value={issuingOrg} onChange={(e) => setIssuingOrg(e.target.value)} />
             </div>
           </div>
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="doc-issued">Выдан</Label>
-              <Input
-                id="doc-issued"
-                type="date"
-                value={issuedAt}
-                onChange={(e) => setIssuedAt(e.target.value)}
-              />
+              <Input id="doc-issued" type="date" value={issuedAt} onChange={(e) => setIssuedAt(e.target.value)} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="doc-valid">Действует до</Label>
-              <Input
-                id="doc-valid"
-                type="date"
-                value={validUntil}
-                onChange={(e) => setValidUntil(e.target.value)}
-              />
+              <Input id="doc-valid" type="date" value={validUntil} onChange={(e) => setValidUntil(e.target.value)} />
             </div>
           </div>
           <div className="space-y-2">
             <Label htmlFor="doc-file">ID файла (необязательно)</Label>
-            <Input
-              id="doc-file"
-              value={fileId}
-              onChange={(e) => setFileId(e.target.value)}
-            />
+            <Input id="doc-file" value={fileId} onChange={(e) => setFileId(e.target.value)} />
           </div>
         </div>
         <DialogFooter>

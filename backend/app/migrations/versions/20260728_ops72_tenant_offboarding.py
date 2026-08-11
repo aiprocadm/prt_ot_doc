@@ -92,5 +92,7 @@ def downgrade() -> None:
     bind = op.get_bind()
     if bind.dialect.name == "postgresql":
         op.execute(f'DROP POLICY IF EXISTS "{_POLICY}" ON "{_TABLE}"')
-    op.drop_index("ix_tenant_offboarding_tenant_status", table_name="tenant_offboarding")
+    op.drop_index(
+        "ix_tenant_offboarding_tenant_status", table_name="tenant_offboarding"
+    )
     op.drop_table("tenant_offboarding")

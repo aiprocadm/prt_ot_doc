@@ -1,5 +1,4 @@
 """so03 guard: single-head chain + bridge column shape (P10-04 срез-3)."""
-
 from __future__ import annotations
 
 from pathlib import Path
@@ -34,10 +33,7 @@ def test_so03_chains_from_so02_and_is_single_head() -> None:
 def test_so03_module_defines_both_bridge_columns() -> None:
     text = (
         Path(__file__).resolve().parents[1]
-        / "app"
-        / "migrations"
-        / "versions"
-        / "20260626_so03_sout_norm_bridges.py"
+        / "app" / "migrations" / "versions" / "20260626_so03_sout_norm_bridges.py"
     ).read_text(encoding="utf-8")
     assert 'add_column("sout_workplace"' in text
     assert 'add_column("sout_factor"' in text

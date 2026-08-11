@@ -24,20 +24,14 @@ export const RecentObjectsSection = ({ taskInbox, operational }: Props) => (
           <ul className="space-y-2">
             {taskInbox.items.slice(0, 5).map((task) => (
               <li key={task.id} className="text-sm">
-                <Link
-                  to={taskInboxLink(task)}
-                  className="font-medium text-blue-600 hover:underline"
-                >
+                <Link to={taskInboxLink(task)} className="font-medium text-blue-600 hover:underline">
                   {task.title}
                 </Link>
                 <div className="text-xs text-muted-foreground">
                   {task.overdue ? "Просрочено" : "В работе"} · {task.priority}
                 </div>
                 {entityContextPath(task.entity_type) ? (
-                  <Link
-                    to={entityContextPath(task.entity_type) ?? "/tasks"}
-                    className="text-xs text-muted-foreground hover:underline"
-                  >
+                  <Link to={entityContextPath(task.entity_type) ?? "/tasks"} className="text-xs text-muted-foreground hover:underline">
                     Контекст: {task.entity_type}
                   </Link>
                 ) : null}
@@ -45,9 +39,7 @@ export const RecentObjectsSection = ({ taskInbox, operational }: Props) => (
             ))}
           </ul>
         ) : (
-          <p className="text-xs text-muted-foreground">
-            Недавние задачи пока не найдены.
-          </p>
+          <p className="text-xs text-muted-foreground">Недавние задачи пока не найдены.</p>
         )}
         <div className="mt-3">
           <Button size="sm" variant="ghost" asChild>
@@ -62,10 +54,7 @@ export const RecentObjectsSection = ({ taskInbox, operational }: Props) => (
           <ul className="space-y-2">
             {operational.documents.slice(0, 5).map((doc) => (
               <li key={doc.id} className="text-sm">
-                <Link
-                  to="/pipelines/runs"
-                  className="font-medium text-blue-600 hover:underline"
-                >
+                <Link to="/pipelines/runs" className="font-medium text-blue-600 hover:underline">
                   {doc.title}
                 </Link>
                 <div className="text-xs text-muted-foreground">
@@ -75,9 +64,7 @@ export const RecentObjectsSection = ({ taskInbox, operational }: Props) => (
             ))}
           </ul>
         ) : (
-          <p className="text-xs text-muted-foreground">
-            Недавние документы пока не найдены.
-          </p>
+          <p className="text-xs text-muted-foreground">Недавние документы пока не найдены.</p>
         )}
         <div className="mt-3">
           <Button size="sm" variant="ghost" asChild>
@@ -88,3 +75,4 @@ export const RecentObjectsSection = ({ taskInbox, operational }: Props) => (
     </CardContent>
   </Card>
 );
+

@@ -53,12 +53,8 @@ describe("RiskAssessmentForm", () => {
 
     render(<RiskAssessmentForm />);
 
-    fireEvent.change(screen.getByLabelText("Компания"), {
-      target: { value: "cmp-1" },
-    });
-    fireEvent.change(screen.getByLabelText("Добавить опасность"), {
-      target: { value: "haz-1" },
-    });
+    fireEvent.change(screen.getByLabelText("Компания"), { target: { value: "cmp-1" } });
+    fireEvent.change(screen.getByLabelText("Добавить опасность"), { target: { value: "haz-1" } });
     fireEvent.click(screen.getByRole("button", { name: "Сохранить расчёт" }));
 
     await waitFor(() => {

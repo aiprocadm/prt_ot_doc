@@ -7,9 +7,7 @@ export function HealthStatusPage() {
   const data = useHealthStore((state) => state.data);
   const loading = useHealthStore((state) => state.loading);
   const error = useHealthStore((state) => state.error);
-  const fetchComprehensive = useHealthStore(
-    (state) => state.fetchComprehensive,
-  );
+  const fetchComprehensive = useHealthStore((state) => state.fetchComprehensive);
 
   useEffect(() => {
     void fetchComprehensive();
@@ -20,8 +18,7 @@ export function HealthStatusPage() {
       <div>
         <h1 className="text-2xl font-semibold">Состояние системы</h1>
         <p className="text-sm text-muted-foreground">
-          Детальная диагностика по зависимостям: БД, кэш, хранилище, воркеры и
-          интеграции.
+          Детальная диагностика по зависимостям: БД, кэш, хранилище, воркеры и интеграции.
         </p>
       </div>
       <HealthStatusPanel

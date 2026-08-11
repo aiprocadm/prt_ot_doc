@@ -2,11 +2,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
 import type { BrandingPreviewDto } from "@/api/branding";
-import type {
-  DocumentBatchRun,
-  MappingValidationResponse,
-  ReplaceDryRunResponse,
-} from "@/api/documents";
+import type { DocumentBatchRun, MappingValidationResponse, ReplaceDryRunResponse } from "@/api/documents";
 import type { PipelineRun } from "@/api/pipelines";
 import type { QualityReport } from "@/types/dto/documentQuality";
 
@@ -25,9 +21,7 @@ type QuickGenerationHistoryItem = {
 };
 
 const getPreviewHistoryKey = (preview: BrandingPreviewDto) => {
-  const generatedAt = String(
-    preview.profile.reproducibility?.generated_at ?? "",
-  );
+  const generatedAt = String(preview.profile.reproducibility?.generated_at ?? "");
   const companyId = preview.profile.company_id;
   const siteId = preview.profile.site_id ?? "";
   const presetCode = preview.preset_code ?? "";
@@ -92,7 +86,7 @@ const baseState = {
   brandingPreviewHistory: [],
   idempotencyKey: createIdempotencyKey(),
   rowStatusFilter: "all" as RowStatusFilter,
-  quickGenerationHistory: [],
+  quickGenerationHistory: []
 };
 
 export const useDocumentsWizardStore = create<DocumentsWizardState>()(
@@ -106,13 +100,10 @@ export const useDocumentsWizardStore = create<DocumentsWizardState>()(
           brandingPreviewHistory: [preview, ...state.brandingPreviewHistory]
             .filter(
               (item, index, items) =>
-                items.findIndex(
-                  (candidate) =>
-                    getPreviewHistoryKey(candidate) ===
-                    getPreviewHistoryKey(item),
-                ) === index,
+                items.findIndex((candidate) => getPreviewHistoryKey(candidate) === getPreviewHistoryKey(item)) ===
+                index
             )
-            .slice(0, 5),
+            .slice(0, 5)
         })),
       pushQuickGenerationHistory: (entry) =>
         set((state) => ({
@@ -120,14 +111,12 @@ export const useDocumentsWizardStore = create<DocumentsWizardState>()(
           quickGenerationHistory: [entry, ...state.quickGenerationHistory]
             .filter(
               (item, index, items) =>
-                items.findIndex((candidate) => candidate.id === item.id) ===
-                index,
+                items.findIndex((candidate) => candidate.id === item.id) === index
             )
             .slice(0, 10),
         })),
       setPartial: (next) => set((state) => ({ ...state, ...next })),
-      reset: () =>
-        set({ ...baseState, idempotencyKey: createIdempotencyKey() }),
+      reset: () => set({ ...baseState, idempotencyKey: createIdempotencyKey() })
     }),
     {
       name: "documents-wizard-v1",
@@ -150,8 +139,8 @@ export const useDocumentsWizardStore = create<DocumentsWizardState>()(
         brandingPreviewHistory: state.brandingPreviewHistory,
         idempotencyKey: state.idempotencyKey,
         rowStatusFilter: state.rowStatusFilter,
-        quickGenerationHistory: state.quickGenerationHistory,
-      }),
-    },
-  ),
+        quickGenerationHistory: state.quickGenerationHistory
+      })
+    }
+  )
 );

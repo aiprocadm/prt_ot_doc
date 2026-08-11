@@ -1,5 +1,4 @@
 """Профиль электроустановок (903н): валидация type_specific и печатная секция."""
-
 from __future__ import annotations
 
 import pytest
@@ -38,10 +37,7 @@ def test_build_section_renders_condition_and_measures():
     section = p.build_structured_section(
         "electrical",
         safety_systems=None,
-        type_specific={
-            "technical_measures": ["disconnect", "grounding"],
-            "voltage_condition": "de_energized",
-        },
+        type_specific={"technical_measures": ["disconnect", "grounding"], "voltage_condition": "de_energized"},
     )
     assert section is not None
     assert section.table is None
@@ -61,7 +57,6 @@ def test_electrical_profile_structured_kind():
 # ---------------------------------------------------------------------------
 # Task 2 — voltage_level в профиле электроустановок
 # ---------------------------------------------------------------------------
-
 
 def test_validate_accepts_gt_1000():
     """voltage_level='gt_1000' допустим в type_specific."""

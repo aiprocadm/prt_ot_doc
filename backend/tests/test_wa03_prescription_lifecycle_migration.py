@@ -1,5 +1,4 @@
 """Pin: wa03 prescription lifecycle migration (TZ-3.4-V12-01). App-free."""
-
 from __future__ import annotations
 
 import importlib.util

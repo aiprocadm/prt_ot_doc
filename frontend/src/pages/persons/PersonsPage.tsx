@@ -18,8 +18,7 @@ import type { PersonDto } from "@/types/dto/persons";
 
 const PersonsPage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
-  const { list, getById, item, pagination, loading, error, items } =
-    usePersonsStore();
+  const { list, getById, item, pagination, loading, error, items } = usePersonsStore();
   const [selectedPerson, setSelectedPerson] = useState<PersonDto | null>(null);
   const focusedPersonId = searchParams.get("person_id") ?? undefined;
 
@@ -27,9 +26,9 @@ const PersonsPage = () => {
     () => ({
       active: "Активен",
       inactive: "Неактивен",
-      dismissed: "Уволен",
+      dismissed: "Уволен"
     }),
-    [],
+    []
   );
 
   useEffect(() => {
@@ -58,12 +57,7 @@ const PersonsPage = () => {
 
   return (
     <div className="space-y-6">
-      <Breadcrumb
-        items={[
-          { label: "Главная", to: ROUTES.DASHBOARD },
-          { label: "Сотрудники" },
-        ]}
-      />
+      <Breadcrumb items={[{ label: "Главная", to: ROUTES.DASHBOARD }, { label: "Сотрудники" }]} />
       <RegistryPageHeader
         title="Сотрудники"
         description="Карточка сотрудника с вкладками по обучению, СИЗ, рискам и медосмотрам."
@@ -75,11 +69,7 @@ const PersonsPage = () => {
                 trigger={
                   <Button
                     disabled={!allowed}
-                    title={
-                      !allowed
-                        ? "Недостаточно прав для добавления сотрудника"
-                        : undefined
-                    }
+                    title={!allowed ? "Недостаточно прав для добавления сотрудника" : undefined}
                   >
                     Добавить
                   </Button>
@@ -89,9 +79,7 @@ const PersonsPage = () => {
                   const next = new URLSearchParams(searchParams);
                   next.set("person_id", person.id);
                   setSearchParams(next, { replace: true });
-                  toast.success(
-                    `Сотрудник "${person.full_name}" добавлен и открыт в карточке`,
-                  );
+                  toast.success(`Сотрудник "${person.full_name}" добавлен и открыт в карточке`);
                   list();
                 }}
               />
@@ -124,17 +112,13 @@ const PersonsPage = () => {
       {selectedPerson && (
         <Card>
           <CardContent className="space-y-4 py-6">
-            <h2 className="text-xl font-semibold">
-              {selectedPerson.full_name}
-            </h2>
+            <h2 className="text-xl font-semibold">{selectedPerson.full_name}</h2>
             <div className="flex flex-wrap gap-2">
               <Can permission={PERMISSIONS.EMPLOYEE_CARD_VIEW}>
                 {(allowed) =>
                   allowed ? (
                     <Button size="sm" asChild>
-                      <Link
-                        to={`/employees/${encodeURIComponent(selectedPerson.id)}`}
-                      >
+                      <Link to={`/employees/${encodeURIComponent(selectedPerson.id)}`}>
                         Открыть карточку
                       </Link>
                     </Button>
@@ -154,9 +138,7 @@ const PersonsPage = () => {
                       }
                       onSubmitted={(person) => {
                         setSelectedPerson(person);
-                        toast.success(
-                          `Сотрудник "${person.full_name}" обновлён`,
-                        );
+                        toast.success(`Сотрудник "${person.full_name}" обновлён`);
                         void list();
                       }}
                     />
@@ -169,9 +151,7 @@ const PersonsPage = () => {
                     <Link to="/persons">Сбросить фокус</Link>
                   </Button>
                   <Button size="sm" variant="outline" asChild>
-                    <Link
-                      to={`/documents/quick-generate?person_id=${encodeURIComponent(selectedPerson.id)}&company_id=${encodeURIComponent(selectedPerson.company_id ?? "")}`}
-                    >
+                    <Link to={`/documents/quick-generate?person_id=${encodeURIComponent(selectedPerson.id)}&company_id=${encodeURIComponent(selectedPerson.company_id ?? "")}`}>
                       Сформировать документы по случаю
                     </Link>
                   </Button>
@@ -182,13 +162,7 @@ const PersonsPage = () => {
               <Info label="Должность" value={selectedPerson.position} />
               <Info label="Электронная почта" value={selectedPerson.email} />
               <Info label="Телефон" value={selectedPerson.phone} />
-              <Info
-                label="Статус"
-                value={
-                  PERSON_STATUS_LABELS[selectedPerson.status] ??
-                  selectedPerson.status
-                }
-              />
+              <Info label="Статус" value={PERSON_STATUS_LABELS[selectedPerson.status] ?? selectedPerson.status} />
             </div>
             <Tabs defaultValue="training">
               <TabsList>
@@ -197,18 +171,10 @@ const PersonsPage = () => {
                 <TabsTrigger value="risks">Риски</TabsTrigger>
                 <TabsTrigger value="medical">Медосмотры</TabsTrigger>
               </TabsList>
-              <TabsContent value="training">
-                Назначения и удостоверения доступны в модуле обучения.
-              </TabsContent>
-              <TabsContent value="ppe">
-                Нормы выдачи и история СИЗ отображаются в модуле СИЗ.
-              </TabsContent>
-              <TabsContent value="risks">
-                Связанные оценки рисков и мероприятия доступны в реестре рисков.
-              </TabsContent>
-              <TabsContent value="medical">
-                План медосмотров и статусы прохождения доступны в мед-модуле.
-              </TabsContent>
+              <TabsContent value="training">Назначения и удостоверения доступны в модуле обучения.</TabsContent>
+              <TabsContent value="ppe">Нормы выдачи и история СИЗ отображаются в модуле СИЗ.</TabsContent>
+              <TabsContent value="risks">Связанные оценки рисков и мероприятия доступны в реестре рисков.</TabsContent>
+              <TabsContent value="medical">План медосмотров и статусы прохождения доступны в мед-модуле.</TabsContent>
             </Tabs>
           </CardContent>
         </Card>

@@ -9,10 +9,9 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
-from sqlalchemy import func, select, update
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
-from starlette.concurrency import run_in_threadpool
 
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.audit_decorator import audit_operation
@@ -185,11 +184,7 @@ async def login(
     if user is None or not user.is_active:
         raise _invalid_credentials()
 
-    # Argon2 — умышленно дорогой CPU-bound верифай (~75+ мс): синхронный вызов
-    # в async-обработчике замораживал event loop на КАЖДЫЙ логин, и всплеск
-    # логинов серийно стопорил все запросы воркера (perf-smoke: p50 4.4s).
-    # argon2-cffi отпускает GIL — в threadpool верифаи идут параллельно.
-    if not await run_in_threadpool(verify_password, payload.password, user.hashed_password):
+    if not verify_password(payload.password, user.hashed_password):
         raise _invalid_credentials()
 
     tenant_slug = tenant.slug
@@ -198,15 +193,7 @@ async def login(
     # GUCs (SEC-65), so the refresh-session INSERT below — which only lands on the
     # commit at the end of this handler — would be evaluated without a tenant context.
     # ``last_login_at`` rides along on that same final commit.
-    #
-    # Core-UPDATE вместо ORM-присваивания: у моделей оптимистичная блокировка
-    # (version_id_col), и ДВА одновременных логина одного пользователя гонялись
-    # за счётчиком версии — проигравший падал StaleDataError → 500 (две вкладки,
-    # даблклик, perf-smoke). Для телеметрийного поля верна семантика
-    # «последняя запись побеждает», версию не трогаем.
-    await session.execute(
-        update(User).where(User.id == user.id).values(last_login_at=datetime.now(timezone.utc))
-    )
+    user.last_login_at = datetime.now(timezone.utc)
 
     role_values = _collect_user_roles(user)
     additional_claims: dict[str, Any] = {"tenant_id": user.tenant_id, "roles": role_values}

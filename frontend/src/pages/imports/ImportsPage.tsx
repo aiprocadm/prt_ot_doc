@@ -1,11 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 
-import {
-  importsApi,
-  isFeatureDisabledError,
-  isTooManyRowsError,
-} from "@/api/imports";
+import { importsApi, isFeatureDisabledError, isTooManyRowsError } from "@/api/imports";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingScreen } from "@/components/common/LoadingScreen";
@@ -20,7 +16,7 @@ import type {
   ImportBatchDto,
   ImportPreviewDto,
   ImportProfileDto,
-  ImportTargetDto,
+  ImportTargetDto
 } from "@/types/dto/imports";
 
 interface ImportsPageData {
@@ -33,7 +29,7 @@ const INITIAL: ImportsPageData = { targets: [], batches: [], profiles: [] };
 
 const LOOKUP_LABELS: Record<string, string> = {
   position: "должности",
-  company: "организации",
+  company: "организации"
 };
 
 /**
@@ -63,7 +59,7 @@ const ImportsPage = () => {
     const [targets, batches, profiles] = await Promise.all([
       importsApi.targets(),
       importsApi.batches({ limit: 20 }),
-      importsApi.profiles(),
+      importsApi.profiles()
     ]);
     return { targets, batches, profiles };
   }, []);
@@ -71,18 +67,17 @@ const ImportsPage = () => {
   const resource = useAsyncResource<ImportsPageData>({
     loader,
     initialData: INITIAL,
-    errorMessage: "Не удалось загрузить настройки импорта",
+    errorMessage: "Не удалось загрузить настройки импорта"
   });
 
   const target = useMemo(
-    () =>
-      resource.data.targets.find((item) => item.code === targetCode) ?? null,
-    [resource.data.targets, targetCode],
+    () => resource.data.targets.find((item) => item.code === targetCode) ?? null,
+    [resource.data.targets, targetCode]
   );
 
   const targetProfiles = useMemo(
     () => resource.data.profiles.filter((p) => p.target === targetCode),
-    [resource.data.profiles, targetCode],
+    [resource.data.profiles, targetCode]
   );
 
   const creatableLookups = useMemo(() => {
@@ -122,7 +117,7 @@ const ImportsPage = () => {
         target.code,
         file,
         preview ? effectiveMapping() : undefined,
-        profileCode || null,
+        profileCode || null
       );
       setPreview(result);
       setOversized(false);
@@ -156,7 +151,7 @@ const ImportsPage = () => {
     if (
       !window.confirm(
         "Загрузить файл в фоне? Если проверку не запускали, результат станет известен только " +
-          "по итогу — загрузку целиком можно будет откатить в истории.",
+          "по итогу — загрузку целиком можно будет откатить в истории."
       )
     ) {
       return;
@@ -176,20 +171,12 @@ const ImportsPage = () => {
 
   const runApply = async () => {
     if (!target || !file || !preview) return;
-    const willWrite =
-      (preview.counts.create ?? 0) + (preview.counts.update ?? 0);
+    const willWrite = (preview.counts.create ?? 0) + (preview.counts.update ?? 0);
     if (willWrite === 0) {
-      toast.info(
-        "Применять нечего: файл не создаёт и не меняет ни одной записи",
-      );
+      toast.info("Применять нечего: файл не создаёт и не меняет ни одной записи");
       return;
     }
-    if (
-      !window.confirm(
-        `Применить импорт? Будет затронуто записей: ${willWrite}.`,
-      )
-    )
-      return;
+    if (!window.confirm(`Применить импорт? Будет затронуто записей: ${willWrite}.`)) return;
 
     setBusy(true);
     try {
@@ -198,10 +185,10 @@ const ImportsPage = () => {
         file,
         effectiveMapping(),
         createMissing,
-        profileCode || null,
+        profileCode || null
       );
       toast.success(
-        `Импорт применён: создано ${result.batch.created_count}, обновлено ${result.batch.updated_count}`,
+        `Импорт применён: создано ${result.batch.created_count}, обновлено ${result.batch.updated_count}`
       );
       setPreview(result.preview);
       await resource.reload();
@@ -221,8 +208,7 @@ const ImportsPage = () => {
     }
   };
 
-  if (resource.loading && resource.data.targets.length === 0)
-    return <LoadingScreen />;
+  if (resource.loading && resource.data.targets.length === 0) return <LoadingScreen />;
 
   if (resource.error) {
     if (isFeatureDisabledError(resource.error)) {
@@ -233,12 +219,7 @@ const ImportsPage = () => {
         />
       );
     }
-    return (
-      <ErrorState
-        error={resource.error}
-        onRetry={() => void resource.reload()}
-      />
-    );
+    return <ErrorState error={resource.error} onRetry={() => void resource.reload()} />;
   }
 
   return (
@@ -270,18 +251,14 @@ const ImportsPage = () => {
               ))}
             </select>
           </div>
-          <Button
-            variant="outline"
-            disabled={!target}
-            onClick={() => void downloadTemplate()}
-          >
+          <Button variant="outline" disabled={!target} onClick={() => void downloadTemplate()}>
             Скачать шаблон
           </Button>
         </div>
         {target ? (
           <p className="text-sm text-muted-foreground">
-            {target.description} Повторная загрузка не создаёт дубли — записи
-            опознаются по ключу: {target.natural_keys.join(" либо ")}.
+            {target.description} Повторная загрузка не создаёт дубли — записи опознаются по ключу:{" "}
+            {target.natural_keys.join(" либо ")}.
           </p>
         ) : null}
       </section>
@@ -318,37 +295,28 @@ const ImportsPage = () => {
         ) : null}
 
         <div>
-          <Button
-            disabled={!target || !file || busy}
-            onClick={() => void runDryRun()}
-          >
+          <Button disabled={!target || !file || busy} onClick={() => void runDryRun()}>
             Проверить без записи
           </Button>
         </div>
         <p className="text-sm text-muted-foreground">
-          Сухой прогон ничего не записывает: он показывает, что будет создано,
-          обновлено и отвергнуто.
+          Сухой прогон ничего не записывает: он показывает, что будет создано, обновлено и
+          отвергнуто.
         </p>
 
         {oversized ? (
           <div className="space-y-2 rounded-md border border-amber-300 bg-amber-50 p-3">
-            <p className="text-sm font-medium">
-              Файл слишком большой для предварительной проверки
-            </p>
+            <p className="text-sm font-medium">Файл слишком большой для предварительной проверки</p>
             <p className="text-sm text-muted-foreground">
-              Такой объём обрабатывается в фоне: файл принимается сразу, а ход
-              работы виден в истории загрузок ниже. Сначала имеет смысл прогнать
-              проверку — она ничего не записывает и покажет, что получится.
+              Такой объём обрабатывается в фоне: файл принимается сразу, а ход работы виден в
+              истории загрузок ниже. Сначала имеет смысл прогнать проверку — она ничего не
+              записывает и покажет, что получится.
             </p>
             <div className="flex flex-wrap gap-2">
               <Button disabled={busy} onClick={() => void runDryRunAsync()}>
                 Проверить в фоне
               </Button>
-              <Button
-                variant="outline"
-                disabled={busy}
-                onClick={() => void runApplyAsync()}
-              >
+              <Button variant="outline" disabled={busy} onClick={() => void runApplyAsync()}>
                 Загрузить в фоне
               </Button>
             </div>
@@ -364,15 +332,9 @@ const ImportsPage = () => {
               columns={target.columns}
               preview={preview}
               overrides={overrides}
-              onChange={(field, header) =>
-                setOverrides((prev) => ({ ...prev, [field]: header }))
-              }
+              onChange={(field, header) => setOverrides((prev) => ({ ...prev, [field]: header }))}
             />
-            <Button
-              variant="outline"
-              disabled={busy}
-              onClick={() => void runDryRun()}
-            >
+            <Button variant="outline" disabled={busy} onClick={() => void runDryRun()}>
               Пересчитать с новым сопоставлением
             </Button>
           </section>
@@ -381,23 +343,16 @@ const ImportsPage = () => {
             <h2 className="text-lg font-medium">4. Результат проверки</h2>
             {preview.detected_profile && !preview.applied_profile ? (
               <div className="rounded-md border border-blue-300 bg-blue-50 p-3 text-sm">
-                Похоже на выгрузку: {profileTitle(preview.detected_profile)}.
-                Выберите её в поле «Откуда файл» и проверьте снова — колонки
-                сопоставятся сами.
+                Похоже на выгрузку: {profileTitle(preview.detected_profile)}. Выберите её в
+                поле «Откуда файл» и проверьте снова — колонки сопоставятся сами.
               </div>
             ) : null}
             <PreviewPanel preview={preview} />
-            {creatableLookups.length > 0 &&
-            Object.keys(preview.unknown_references).length > 0 ? (
+            {creatableLookups.length > 0 && Object.keys(preview.unknown_references).length > 0 ? (
               <div className="space-y-2 rounded-md border p-3">
-                <p className="text-sm font-medium">
-                  Недостающие записи справочников
-                </p>
+                <p className="text-sm font-medium">Недостающие записи справочников</p>
                 {creatableLookups.map((lookup) => (
-                  <label
-                    key={lookup}
-                    className="flex items-center gap-2 text-sm"
-                  >
+                  <label key={lookup} className="flex items-center gap-2 text-sm">
                     <input
                       type="checkbox"
                       checked={createMissing.includes(lookup)}
@@ -405,17 +360,15 @@ const ImportsPage = () => {
                         setCreateMissing((prev) =>
                           event.target.checked
                             ? [...prev, lookup]
-                            : prev.filter((item) => item !== lookup),
+                            : prev.filter((item) => item !== lookup)
                         )
                       }
                     />
-                    Создать недостающие значения:{" "}
-                    {LOOKUP_LABELS[lookup] ?? lookup}
+                    Создать недостающие значения: {LOOKUP_LABELS[lookup] ?? lookup}
                   </label>
                 ))}
                 <p className="text-sm text-muted-foreground">
-                  Созданные записи войдут в эту же загрузку и будут удалены,
-                  если вы её откатите.
+                  Созданные записи войдут в эту же загрузку и будут удалены, если вы её откатите.
                 </p>
               </div>
             ) : null}

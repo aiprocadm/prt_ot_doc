@@ -98,7 +98,7 @@ class MeetingRead(BaseSchema):
     created_at: datetime
     updated_at: datetime
 
-    @computed_field(return_type=str | None)  # type: ignore[prop-decorator]  # mypy не поддерживает декораторы поверх @property
+    @computed_field(return_type=str | None)
     @property
     def protocol_no(self) -> str | None:
         if self.protocol_seq is None or self.protocol_year is None:

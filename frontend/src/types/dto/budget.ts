@@ -5,12 +5,7 @@ export type BudgetDomain = "training" | "medical" | "events";
 /** overview дополнительно возвращает read-only "ppe" псевдо-домен */
 export type BudgetOverviewDomainCode = BudgetDomain | "ppe";
 
-export type BreakdownDimension =
-  | "article"
-  | "domain"
-  | "company"
-  | "branch"
-  | "site";
+export type BreakdownDimension = "article" | "domain" | "company" | "branch" | "site";
 
 export interface SafetyBudgetDto {
   id: string;
@@ -194,12 +189,7 @@ export interface BudgetBreakdownDto {
 }
 
 /** FSM: draft -> submitted -> approved -> paid; submitted -> rejected. rejected/paid терминальны. */
-export type BudgetReimbursementStatus =
-  | "draft"
-  | "submitted"
-  | "approved"
-  | "rejected"
-  | "paid";
+export type BudgetReimbursementStatus = "draft" | "submitted" | "approved" | "rejected" | "paid";
 
 export interface BudgetReimbursementDto {
   id: string;

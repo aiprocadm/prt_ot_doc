@@ -16,7 +16,7 @@ const fetchSavedSearchesMock = vi.fn();
 
 vi.mock("@/api/search", () => ({
   searchGlobal: (...args: unknown[]) => searchGlobalMock(...args),
-  fetchSavedSearches: (...args: unknown[]) => fetchSavedSearchesMock(...args),
+  fetchSavedSearches: (...args: unknown[]) => fetchSavedSearchesMock(...args)
 }));
 
 const hoisted = vi.hoisted(() => {
@@ -28,15 +28,15 @@ const hoisted = vi.hoisted(() => {
           label: "Главная",
           to: "/dashboard",
           icon: DummyNavIcon,
-          permission: "dashboard.view" as Permission,
+          permission: "dashboard.view" as Permission
         },
         {
           label: "Документы",
           to: "/documents",
           icon: DummyNavIcon,
-          permission: "doc.view" as Permission,
-        },
-      ],
+          permission: "doc.view" as Permission
+        }
+      ]
     },
     {
       title: "Задачи",
@@ -45,23 +45,23 @@ const hoisted = vi.hoisted(() => {
           label: "Задачи",
           to: "/tasks",
           icon: DummyNavIcon,
-          permission: "task.view" as Permission,
-        },
-      ],
-    },
+          permission: "task.view" as Permission
+        }
+      ]
+    }
   ];
 
   return {
     makeGroups,
     navData: {
       visibleGroups: makeGroups(),
-      clientPortalOnlyMode: false,
-    },
+      clientPortalOnlyMode: false
+    }
   };
 });
 
 vi.mock("@/hooks/useNavMenuData", () => ({
-  useNavMenuData: () => hoisted.navData,
+  useNavMenuData: () => hoisted.navData
 }));
 
 describe("CommandBar", () => {
@@ -87,35 +87,23 @@ describe("CommandBar", () => {
     const user = userEvent.setup();
     renderWithRouter(<CommandBar />);
 
-    await user.click(
-      screen.getByRole("button", { name: /открыть палитру команд/i }),
-    );
+    await user.click(screen.getByRole("button", { name: /открыть палитру команд/i }));
 
     const dialog = await screen.findByRole("dialog");
-    expect(
-      within(dialog).getByRole("option", { name: /главная/i }),
-    ).toHaveAttribute("href", "/dashboard");
-    expect(
-      within(dialog).getByRole("option", { name: /документы/i }),
-    ).toHaveAttribute("href", "/documents");
+    expect(within(dialog).getByRole("option", { name: /главная/i })).toHaveAttribute("href", "/dashboard");
+    expect(within(dialog).getByRole("option", { name: /документы/i })).toHaveAttribute("href", "/documents");
   });
 
   it("filters commands by query", async () => {
     const user = userEvent.setup();
     renderWithRouter(<CommandBar />);
 
-    await user.click(
-      screen.getByRole("button", { name: /открыть палитру команд/i }),
-    );
+    await user.click(screen.getByRole("button", { name: /открыть палитру команд/i }));
     const dialog = await screen.findByRole("dialog");
     await user.type(screen.getByPlaceholderText(/найти раздел/i), "документы");
 
-    expect(
-      within(dialog).queryByRole("option", { name: /главная/i }),
-    ).not.toBeInTheDocument();
-    expect(
-      within(dialog).getByRole("option", { name: /документы/i }),
-    ).toBeInTheDocument();
+    expect(within(dialog).queryByRole("option", { name: /главная/i })).not.toBeInTheDocument();
+    expect(within(dialog).getByRole("option", { name: /документы/i })).toBeInTheDocument();
   });
 
   it("omits nav items not in visibleGroups", async () => {
@@ -127,22 +115,18 @@ describe("CommandBar", () => {
             label: "Главная",
             to: "/dashboard",
             icon: DummyNavIcon,
-            permission: PERMISSIONS.DASHBOARD_VIEW,
-          },
-        ],
-      },
+            permission: PERMISSIONS.DASHBOARD_VIEW
+          }
+        ]
+      }
     ];
 
     const user = userEvent.setup();
     renderWithRouter(<CommandBar />);
 
-    await user.click(
-      screen.getByRole("button", { name: /открыть палитру команд/i }),
-    );
+    await user.click(screen.getByRole("button", { name: /открыть палитру команд/i }));
     const dialog = await screen.findByRole("dialog");
-    expect(
-      within(dialog).queryByRole("option", { name: /^документы$/i }),
-    ).not.toBeInTheDocument();
+    expect(within(dialog).queryByRole("option", { name: /^документы$/i })).not.toBeInTheDocument();
   });
 
   // --- vNext-SEARCH-01 / Task 4.2: entity search + executable commands ---
@@ -160,7 +144,7 @@ describe("CommandBar", () => {
           entity_id: "p-1",
           title: "Иванов Иван Иванович",
           snippet: "Сотрудник ООО Ромашка",
-          deeplink: "/persons/p-1",
+          deeplink: "/persons/p-1"
         },
         {
           kind: "entity",
@@ -168,15 +152,13 @@ describe("CommandBar", () => {
           entity_id: "doc-1",
           title: "Приказ по Иванову",
           snippet: "Приказ о приёме",
-          deeplink: "/documents/doc-1",
-        },
-      ],
+          deeplink: "/documents/doc-1"
+        }
+      ]
     });
 
     renderWithRouter(<CommandBar />);
-    await user.click(
-      screen.getByRole("button", { name: /открыть палитру команд/i }),
-    );
+    await user.click(screen.getByRole("button", { name: /открыть палитру команд/i }));
     const dialog = await screen.findByRole("dialog");
 
     await user.type(screen.getByPlaceholderText(/найти раздел/i), "иванов");
@@ -188,23 +170,17 @@ describe("CommandBar", () => {
     const entities = await within(dialog).findByTestId("commandbar-entities");
     expect(within(entities).getByText("Сотрудники")).toBeInTheDocument();
     expect(within(entities).getByText("Документы")).toBeInTheDocument();
-    const personLink = within(entities).getByRole("option", {
-      name: /иванов иван иванович/i,
-    });
+    const personLink = within(entities).getByRole("option", { name: /иванов иван иванович/i });
     expect(personLink).toHaveAttribute("href", "/persons/p-1");
     expect(personLink).toHaveAttribute("data-entity-type", "person");
-    const docLink = within(entities).getByRole("option", {
-      name: /приказ по иванову/i,
-    });
+    const docLink = within(entities).getByRole("option", { name: /приказ по иванову/i });
     expect(docLink).toHaveAttribute("href", "/documents/doc-1");
   });
 
   it("does not call /search until the user types something", async () => {
     const user = userEvent.setup();
     renderWithRouter(<CommandBar />);
-    await user.click(
-      screen.getByRole("button", { name: /открыть палитру команд/i }),
-    );
+    await user.click(screen.getByRole("button", { name: /открыть палитру команд/i }));
 
     // Wait a tick to let any synchronous effects flush.
     await screen.findByRole("dialog");
@@ -215,35 +191,21 @@ describe("CommandBar", () => {
     const user = userEvent.setup();
     renderWithRouter(<CommandBar />);
 
-    await user.click(
-      screen.getByRole("button", { name: /открыть палитру команд/i }),
-    );
-    await user.type(
-      screen.getByPlaceholderText(/найти раздел/i),
-      "создать инцидент",
-    );
+    await user.click(screen.getByRole("button", { name: /открыть палитру команд/i }));
+    await user.type(screen.getByPlaceholderText(/найти раздел/i), "создать инцидент");
 
     const actions = await screen.findByTestId("commandbar-actions");
-    const incidentCmd = within(actions).getByRole("option", {
-      name: /зарегистрировать инцидент/i,
-    });
+    const incidentCmd = within(actions).getByRole("option", { name: /зарегистрировать инцидент/i });
     expect(incidentCmd).toHaveAttribute("href", "/incidents?action=create");
     expect(incidentCmd).toHaveAttribute("data-command-id", "create-incident");
   });
 
   it("falls back to «Ничего не найдено» when no nav/entity/command matches", async () => {
     const user = userEvent.setup();
-    searchGlobalMock.mockResolvedValueOnce({
-      q: "zzzzz",
-      total: 0,
-      facets: {},
-      items: [],
-    });
+    searchGlobalMock.mockResolvedValueOnce({ q: "zzzzz", total: 0, facets: {}, items: [] });
 
     renderWithRouter(<CommandBar />);
-    await user.click(
-      screen.getByRole("button", { name: /открыть палитру команд/i }),
-    );
+    await user.click(screen.getByRole("button", { name: /открыть палитру команд/i }));
     await user.type(screen.getByPlaceholderText(/найти раздел/i), "zzzzz");
 
     await waitFor(() => {
@@ -259,9 +221,7 @@ describe("CommandBar", () => {
   it("highlights the first navigable item by default and moves the highlight on ArrowDown/ArrowUp", async () => {
     const user = userEvent.setup();
     renderWithRouter(<CommandBar />);
-    await user.click(
-      screen.getByRole("button", { name: /открыть палитру команд/i }),
-    );
+    await user.click(screen.getByRole("button", { name: /открыть палитру команд/i }));
 
     const dialog = await screen.findByRole("dialog");
     const options = within(dialog).getAllByRole("option");
@@ -286,9 +246,7 @@ describe("CommandBar", () => {
   it("wraps ArrowUp from the first item to the last and ArrowDown from the last to the first", async () => {
     const user = userEvent.setup();
     renderWithRouter(<CommandBar />);
-    await user.click(
-      screen.getByRole("button", { name: /открыть палитру команд/i }),
-    );
+    await user.click(screen.getByRole("button", { name: /открыть палитру команд/i }));
 
     const dialog = await screen.findByRole("dialog");
     const total = within(dialog).getAllByRole("option").length;
@@ -311,9 +269,7 @@ describe("CommandBar", () => {
   it("activates the highlighted item on Enter (navigates and closes palette)", async () => {
     const user = userEvent.setup();
     renderWithRouter(<CommandBar />);
-    await user.click(
-      screen.getByRole("button", { name: /открыть палитру команд/i }),
-    );
+    await user.click(screen.getByRole("button", { name: /открыть палитру команд/i }));
 
     const dialog = await screen.findByRole("dialog");
     const firstOption = within(dialog).getAllByRole("option")[0];
@@ -341,79 +297,65 @@ describe("CommandBar", () => {
         q: "просрочк",
         types: ["incident"],
         filters: { status: "open" },
-        is_shared: false,
+        is_shared: false
       },
       {
         id: "s-2",
         name: "Документы по площадке А",
         q: "договор",
         types: ["documents"],
-        filters: { site_id: "site-A" },
-      },
+        filters: { site_id: "site-A" }
+      }
     ]);
 
     const user = userEvent.setup();
     renderWithRouter(<CommandBar />);
-    await user.click(
-      screen.getByRole("button", { name: /открыть палитру команд/i }),
-    );
+    await user.click(screen.getByRole("button", { name: /открыть палитру команд/i }));
 
     const dialog = await screen.findByRole("dialog");
     const saved = await within(dialog).findByTestId("commandbar-saved");
     expect(within(saved).getByText("Сохранённые запросы")).toBeInTheDocument();
-    const firstSaved = within(saved).getByRole("option", {
-      name: /мои просрочки/i,
-    });
+    const firstSaved = within(saved).getByRole("option", { name: /мои просрочки/i });
     // Saved search applies via the /search page URL contract (q + type + filters).
     expect(firstSaved).toHaveAttribute(
       "href",
-      "/search?q=%D0%BF%D1%80%D0%BE%D1%81%D1%80%D0%BE%D1%87%D0%BA&type=incident&status=open",
+      "/search?q=%D0%BF%D1%80%D0%BE%D1%81%D1%80%D0%BE%D1%87%D0%BA&type=incident&status=open"
     );
     expect(firstSaved).toHaveAttribute("data-saved-id", "s-1");
-    const secondSaved = within(saved).getByRole("option", {
-      name: /документы по площадке а/i,
-    });
+    const secondSaved = within(saved).getByRole("option", { name: /документы по площадке а/i });
     expect(secondSaved).toHaveAttribute(
       "href",
-      "/search?q=%D0%B4%D0%BE%D0%B3%D0%BE%D0%B2%D0%BE%D1%80&type=documents&site_id=site-A",
+      "/search?q=%D0%B4%D0%BE%D0%B3%D0%BE%D0%B2%D0%BE%D1%80&type=documents&site_id=site-A"
     );
   });
 
   it("hides saved searches once the user starts typing (discovery vs search mode)", async () => {
     fetchSavedSearchesMock.mockResolvedValueOnce([
-      { id: "s-1", name: "Мои просрочки", q: "просрочк", types: ["incident"] },
+      { id: "s-1", name: "Мои просрочки", q: "просрочк", types: ["incident"] }
     ]);
 
     const user = userEvent.setup();
     renderWithRouter(<CommandBar />);
-    await user.click(
-      screen.getByRole("button", { name: /открыть палитру команд/i }),
-    );
+    await user.click(screen.getByRole("button", { name: /открыть палитру команд/i }));
 
     const dialog = await screen.findByRole("dialog");
-    expect(
-      await within(dialog).findByTestId("commandbar-saved"),
-    ).toBeInTheDocument();
+    expect(await within(dialog).findByTestId("commandbar-saved")).toBeInTheDocument();
 
     await user.type(screen.getByPlaceholderText(/найти раздел/i), "что-то");
     await waitFor(() => {
-      expect(
-        within(dialog).queryByTestId("commandbar-saved"),
-      ).not.toBeInTheDocument();
+      expect(within(dialog).queryByTestId("commandbar-saved")).not.toBeInTheDocument();
     });
     // Saved-search section is gone; nothing else should crash.
   });
 
   it("does not refetch saved searches on subsequent opens (cached for the session)", async () => {
     fetchSavedSearchesMock.mockResolvedValue([
-      { id: "s-1", name: "Мои просрочки", q: "просрочк", types: ["incident"] },
+      { id: "s-1", name: "Мои просрочки", q: "просрочк", types: ["incident"] }
     ]);
 
     const user = userEvent.setup();
     renderWithRouter(<CommandBar />);
-    await user.click(
-      screen.getByRole("button", { name: /открыть палитру команд/i }),
-    );
+    await user.click(screen.getByRole("button", { name: /открыть палитру команд/i }));
     await screen.findByTestId("commandbar-saved");
     expect(fetchSavedSearchesMock).toHaveBeenCalledTimes(1);
 
@@ -422,9 +364,7 @@ describe("CommandBar", () => {
     await waitFor(() => {
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     });
-    await user.click(
-      screen.getByRole("button", { name: /открыть палитру команд/i }),
-    );
+    await user.click(screen.getByRole("button", { name: /открыть палитру команд/i }));
     await screen.findByTestId("commandbar-saved");
 
     expect(fetchSavedSearchesMock).toHaveBeenCalledTimes(1);
@@ -435,21 +375,15 @@ describe("CommandBar", () => {
 
     const user = userEvent.setup();
     renderWithRouter(<CommandBar />);
-    await user.click(
-      screen.getByRole("button", { name: /открыть палитру команд/i }),
-    );
+    await user.click(screen.getByRole("button", { name: /открыть палитру команд/i }));
 
     const dialog = await screen.findByRole("dialog");
     // Wait one microtask for the rejected promise + state-flush.
     await waitFor(() => {
-      expect(
-        within(dialog).queryByTestId("commandbar-saved"),
-      ).not.toBeInTheDocument();
+      expect(within(dialog).queryByTestId("commandbar-saved")).not.toBeInTheDocument();
     });
     // Nav items still render — palette did not crash.
-    expect(
-      within(dialog).getByRole("option", { name: /главная/i }),
-    ).toBeInTheDocument();
+    expect(within(dialog).getByRole("option", { name: /главная/i })).toBeInTheDocument();
   });
 
   // --- vNext-SEARCH-01 / Task 4.2: recent entities (clicked from search) ---
@@ -465,23 +399,21 @@ describe("CommandBar", () => {
           entity_id: "p-9",
           title: "Иванов Иван Иванович",
           path: "/persons/p-9",
-          opened_at: now - 60 * 1000,
+          opened_at: now - 60 * 1000
         },
         {
           entity_type: "document",
           entity_id: "doc-3",
           title: "Приказ № 5",
           path: "/documents/doc-3",
-          opened_at: now - 5 * 60 * 1000,
-        },
-      ]),
+          opened_at: now - 5 * 60 * 1000
+        }
+      ])
     );
 
     const user = userEvent.setup();
     renderWithRouter(<CommandBar />);
-    await user.click(
-      screen.getByRole("button", { name: /открыть палитру команд/i }),
-    );
+    await user.click(screen.getByRole("button", { name: /открыть палитру команд/i }));
 
     const dialog = await screen.findByRole("dialog");
     const recent = within(dialog).getByTestId("commandbar-recent-entities");
@@ -491,9 +423,7 @@ describe("CommandBar", () => {
     expect(links[0]).toHaveAttribute("href", "/persons/p-9");
     expect(links[0]).toHaveAttribute("data-entity-type", "person");
     expect(links[0]).toHaveAttribute("data-entity-id", "p-9");
-    expect(
-      within(links[0]).getByText("Иванов Иван Иванович"),
-    ).toBeInTheDocument();
+    expect(within(links[0]).getByText("Иванов Иван Иванович")).toBeInTheDocument();
     expect(within(links[0]).getByText("Сотрудники")).toBeInTheDocument();
     expect(links[1]).toHaveAttribute("href", "/documents/doc-3");
   });
@@ -509,28 +439,24 @@ describe("CommandBar", () => {
           entity_id: "fresh",
           title: "Fresh",
           path: "/persons/fresh",
-          opened_at: now - 60 * 1000,
+          opened_at: now - 60 * 1000
         },
         {
           entity_type: "person",
           entity_id: "stale",
           title: "Stale",
           path: "/persons/stale",
-          opened_at: oldTimestamp,
-        },
-      ]),
+          opened_at: oldTimestamp
+        }
+      ])
     );
 
     const user = userEvent.setup();
     renderWithRouter(<CommandBar />);
-    await user.click(
-      screen.getByRole("button", { name: /открыть палитру команд/i }),
-    );
+    await user.click(screen.getByRole("button", { name: /открыть палитру команд/i }));
 
     const dialog = await screen.findByRole("dialog");
-    const recent = await within(dialog).findByTestId(
-      "commandbar-recent-entities",
-    );
+    const recent = await within(dialog).findByTestId("commandbar-recent-entities");
     // Only "Fresh" should render; "Stale" was pruned.
     expect(within(recent).getByText("Fresh")).toBeInTheDocument();
     expect(within(recent).queryByText("Stale")).not.toBeInTheDocument();
@@ -548,21 +474,17 @@ describe("CommandBar", () => {
           entity_type: "person",
           entity_id: "p-42",
           title: "Иванов Сидор",
-          deeplink: "/persons/p-42",
-        },
-      ],
+          deeplink: "/persons/p-42"
+        }
+      ]
     });
 
     renderWithRouter(<CommandBar />);
-    await user.click(
-      screen.getByRole("button", { name: /открыть палитру команд/i }),
-    );
+    await user.click(screen.getByRole("button", { name: /открыть палитру команд/i }));
     await user.type(screen.getByPlaceholderText(/найти раздел/i), "иванов");
 
     const entities = await screen.findByTestId("commandbar-entities");
-    const link = within(entities).getByRole("option", {
-      name: /иванов сидор/i,
-    });
+    const link = within(entities).getByRole("option", { name: /иванов сидор/i });
     await user.click(link);
 
     // Click closes the palette; recent-entities is persisted to localStorage.
@@ -574,7 +496,7 @@ describe("CommandBar", () => {
       entity_type: "person",
       entity_id: "p-42",
       title: "Иванов Сидор",
-      path: "/persons/p-42",
+      path: "/persons/p-42"
     });
     expect(typeof parsed[0].opened_at).toBe("number");
   });
@@ -588,27 +510,21 @@ describe("CommandBar", () => {
           entity_id: "p-1",
           title: "Иванов",
           path: "/persons/p-1",
-          opened_at: Date.now(),
-        },
-      ]),
+          opened_at: Date.now()
+        }
+      ])
     );
 
     const user = userEvent.setup();
     renderWithRouter(<CommandBar />);
-    await user.click(
-      screen.getByRole("button", { name: /открыть палитру команд/i }),
-    );
+    await user.click(screen.getByRole("button", { name: /открыть палитру команд/i }));
 
     const dialog = await screen.findByRole("dialog");
-    expect(
-      within(dialog).getByTestId("commandbar-recent-entities"),
-    ).toBeInTheDocument();
+    expect(within(dialog).getByTestId("commandbar-recent-entities")).toBeInTheDocument();
 
     await user.type(screen.getByPlaceholderText(/найти раздел/i), "что-то");
     await waitFor(() => {
-      expect(
-        within(dialog).queryByTestId("commandbar-recent-entities"),
-      ).not.toBeInTheDocument();
+      expect(within(dialog).queryByTestId("commandbar-recent-entities")).not.toBeInTheDocument();
     });
   });
 
@@ -622,16 +538,16 @@ describe("CommandBar", () => {
           entity_id: "p-1",
           title: "Old title",
           path: "/persons/p-1",
-          opened_at: Date.now() - 60 * 60 * 1000,
+          opened_at: Date.now() - 60 * 60 * 1000
         },
         {
           entity_type: "person",
           entity_id: "p-2",
           title: "Other",
           path: "/persons/p-2",
-          opened_at: Date.now() - 60 * 60 * 1000,
-        },
-      ]),
+          opened_at: Date.now() - 60 * 60 * 1000
+        }
+      ])
     );
     searchGlobalMock.mockResolvedValueOnce({
       q: "и",
@@ -643,22 +559,18 @@ describe("CommandBar", () => {
           entity_type: "person",
           entity_id: "p-1",
           title: "Иванов (renamed)",
-          deeplink: "/persons/p-1",
-        },
-      ],
+          deeplink: "/persons/p-1"
+        }
+      ]
     });
 
     const user = userEvent.setup();
     renderWithRouter(<CommandBar />);
-    await user.click(
-      screen.getByRole("button", { name: /открыть палитру команд/i }),
-    );
+    await user.click(screen.getByRole("button", { name: /открыть палитру команд/i }));
     await user.type(screen.getByPlaceholderText(/найти раздел/i), "и");
 
     const entities = await screen.findByTestId("commandbar-entities");
-    await user.click(
-      within(entities).getByRole("option", { name: /иванов \(renamed\)/i }),
-    );
+    await user.click(within(entities).getByRole("option", { name: /иванов \(renamed\)/i }));
 
     const raw = window.localStorage.getItem("ux.commandbar.recentEntities.v1");
     const parsed = JSON.parse(raw as string);
@@ -667,20 +579,15 @@ describe("CommandBar", () => {
     expect(parsed[0]).toMatchObject({
       entity_type: "person",
       entity_id: "p-1",
-      title: "Иванов (renamed)",
+      title: "Иванов (renamed)"
     });
-    expect(parsed[1]).toMatchObject({
-      entity_type: "person",
-      entity_id: "p-2",
-    });
+    expect(parsed[1]).toMatchObject({ entity_type: "person", entity_id: "p-2" });
   });
 
   it("End jumps to the last navigable item", async () => {
     const user = userEvent.setup();
     renderWithRouter(<CommandBar />);
-    await user.click(
-      screen.getByRole("button", { name: /открыть палитру команд/i }),
-    );
+    await user.click(screen.getByRole("button", { name: /открыть палитру команд/i }));
 
     const dialog = await screen.findByRole("dialog");
     const total = within(dialog).getAllByRole("option").length;

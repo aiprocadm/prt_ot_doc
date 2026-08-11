@@ -1,5 +1,4 @@
 """prm01 migration + model shape: Permit.status is VARCHAR(32), not native enum."""
-
 from __future__ import annotations
 
 import re
@@ -9,10 +8,7 @@ from app.models.models import Permit, PermitStatus
 
 MIGRATION = (
     Path(__file__).resolve().parents[1]
-    / "app"
-    / "migrations"
-    / "versions"
-    / "20260615_prm01_permit_status_varchar.py"
+    / "app" / "migrations" / "versions" / "20260615_prm01_permit_status_varchar.py"
 )
 
 

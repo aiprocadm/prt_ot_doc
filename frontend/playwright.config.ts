@@ -2,8 +2,7 @@ import { defineConfig } from "@playwright/test";
 
 const startServer = process.env.E2E_START_SERVER === "1";
 /** Пустая строка из CI env не должна ломать URL (?? не срабатывает для ""). */
-const baseURL =
-  (process.env.E2E_BASE_URL ?? "").trim() || "http://127.0.0.1:4173";
+const baseURL = (process.env.E2E_BASE_URL ?? "").trim() || "http://127.0.0.1:4173";
 /** По умолчанию dev-сервер: в DEV `registerPwa` снимает SW и нет white-screen при block SW. Для регрессии prod-сборки: E2E_PREVIEW=1. */
 const usePreview = process.env.E2E_PREVIEW === "1";
 
@@ -18,7 +17,7 @@ export default defineConfig({
     baseURL,
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
-    serviceWorkers: usePreview ? "allow" : "block",
+    serviceWorkers: usePreview ? "allow" : "block"
   },
   webServer: startServer
     ? {
@@ -27,7 +26,7 @@ export default defineConfig({
           : "npm run dev -- --host 127.0.0.1 --port 4173 --strictPort",
         url: baseURL,
         reuseExistingServer: !process.env.CI,
-        timeout: usePreview ? 180_000 : 120_000,
+        timeout: usePreview ? 180_000 : 120_000
       }
-    : undefined,
+    : undefined
 });

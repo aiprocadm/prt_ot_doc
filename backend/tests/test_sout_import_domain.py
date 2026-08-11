@@ -1,19 +1,14 @@
 """Юниты чистого домена импорта СОУТ (без БД, без async)."""
-
-from io import BytesIO
-
 import pytest
 
 from app.domains.sout.import_report import (
+    DiffRow,
     ParsedFactor,
     ParsedWorkplace,
     UnsupportedImportFormat,
     diff_campaign,
     parse_class_label,
-    parse_csv,
-    parse_fgis_xml,
     parse_report,
-    parse_xlsx,
     validate_parsed,
 )
 
@@ -35,21 +30,17 @@ def test_parse_class_label_blank_and_garbage():
 
 def _wp(code="РМ-01", pos="Слесарь", cls="acceptable", factors=None, conflict=False):
     return ParsedWorkplace(
-        workplace_code=code,
-        position_name=pos,
-        assessed_class=cls,
-        class_unparsed=None,
-        factors=factors or [],
-        conflict=conflict,
+        workplace_code=code, position_name=pos, assessed_class=cls,
+        class_unparsed=None, factors=factors or [], conflict=conflict,
     )
 
 
 def test_validate_blocking_rules():
     rows = [
-        _wp(code="", pos="X"),  # пустой код
-        _wp(code="РМ-2", pos=""),  # пустая должность
+        _wp(code="", pos="X"),                       # пустой код
+        _wp(code="РМ-2", pos=""),                     # пустая должность
         ParsedWorkplace("РМ-3", "X", None, "мусор", []),  # класс не распознан
-        _wp(code="РМ-4", conflict=True),  # конфликт атрибутов
+        _wp(code="РМ-4", conflict=True),             # конфликт атрибутов
     ]
     issues = validate_parsed(rows)
     assert issues[0].errors and issues[1].errors and issues[2].errors and issues[3].errors
@@ -69,11 +60,7 @@ def test_validate_warning_unparsed_factor_class():
 
 
 def test_diff_campaign_classifies():
-    parsed = [
-        _wp(code="РМ-1", cls="acceptable"),
-        _wp(code="РМ-2", cls="harmful_3_1"),
-        _wp(code="РМ-3", cls="optimal"),
-    ]
+    parsed = [_wp(code="РМ-1", cls="acceptable"), _wp(code="РМ-2", cls="harmful_3_1"), _wp(code="РМ-3", cls="optimal")]
     existing = [("РМ-1", "acceptable"), ("РМ-2", "optimal"), ("РМ-9", "acceptable")]
     by_code = {d.workplace_code: d for d in diff_campaign(parsed, existing)}
     assert by_code["РМ-1"].change == "unchanged"
@@ -92,6 +79,11 @@ def test_validate_no_error_when_class_blank_on_overall_workplace():
     wp = ParsedWorkplace("РМ-7", "Слесарь", None, None, [])
     issues = validate_parsed([wp])
     assert issues[0].errors == []
+
+
+from io import BytesIO
+
+from app.domains.sout.import_report import parse_csv, parse_fgis_xml, parse_xlsx
 
 
 def test_parse_csv_groups_factors_by_code():
@@ -120,7 +112,10 @@ def test_parse_csv_detects_conflict_on_repeated_code():
 
 
 def test_parse_csv_russian_headers():
-    csv_text = ("Код РМ,Должность,Класс\n" "РМ-05,Оператор,допустимый\n").encode("utf-8")
+    csv_text = (
+        "Код РМ,Должность,Класс\n"
+        "РМ-05,Оператор,допустимый\n"
+    ).encode("utf-8")
     wps = parse_csv(csv_text)
     assert wps[0].workplace_code == "РМ-05"
     assert wps[0].position_name == "Оператор"

@@ -68,9 +68,7 @@ async def test_npa_update_tasks_are_deduplicated_and_revision_aware(db_session) 
     act = NpaAct(code="NPA-1", title="Act", edition="2026")
     db_session.add(act)
     await db_session.flush()
-    revision = NpaRevision(
-        act_id=act.id, revision_code="rev-1", title="Revision", effective_from=date(2026, 1, 1)
-    )
+    revision = NpaRevision(act_id=act.id, revision_code="rev-1", title="Revision", effective_from=date(2026, 1, 1))
     db_session.add(revision)
     await db_session.flush()
     db_session.add(

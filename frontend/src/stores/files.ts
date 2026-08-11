@@ -14,10 +14,7 @@ interface FileFilters {
 
 interface FilesState extends PaginatedState<FileDto, FileFilters> {
   list: (params?: Partial<FileFilters>) => Promise<void>;
-  upload: (
-    file: File,
-    meta?: { description?: string; tags?: string[] },
-  ) => Promise<FileDto>;
+  upload: (file: File, meta?: { description?: string; tags?: string[] }) => Promise<FileDto>;
   remove: (id: string) => Promise<void>;
   setFilters: (filters: Partial<FileFilters>) => void;
   setPage: (page: number) => void;
@@ -56,7 +53,7 @@ export const useFilesStore = create<FilesState>()(
         filters: {},
         pagination: defaultPagination(),
         loading: false,
-        error: null,
+        error: null
       }));
     },
     list: async (params) => {
@@ -64,17 +61,9 @@ export const useFilesStore = create<FilesState>()(
         state.loading = true;
         state.error = null;
       });
-      const query = {
-        ...get().filters,
-        ...params,
-        page: get().pagination.page,
-        page_size: get().pagination.page_size,
-      };
+      const query = { ...get().filters, ...params, page: get().pagination.page, page_size: get().pagination.page_size };
       try {
-        const { data } = await apiClient.get<PaginatedResponse<FileDto>>(
-          "/files",
-          { params: query },
-        );
+        const { data } = await apiClient.get<PaginatedResponse<FileDto>>("/files", { params: query });
         set((state) => {
           state.items = data.items;
           state.pagination = data.pagination;
@@ -122,6 +111,6 @@ export const useFilesStore = create<FilesState>()(
         });
         throw error;
       }
-    },
-  })),
+    }
+  }))
 );

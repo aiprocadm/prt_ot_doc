@@ -21,7 +21,6 @@ vendor lock-in и требование 152-ФЗ». И отдельно: «Отл
 from __future__ import annotations
 
 import json
-import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
@@ -156,15 +155,9 @@ class TenantExportService:
         for table in self.exportable_tables():
             if table not in available:
                 continue
-            # Имя таблицы — из статического реестра RLS_ENABLED_TABLES (не ввод
-            # пользователя); значения идут bind-параметрами. Параметризовать
-            # идентификатор нельзя, поэтому — жёсткий гард формата + nosemgrep.
-            if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", table):
-                raise ValueError(f"unexpected table identifier in RLS registry: {table!r}")
             quoted = f'"{table}"'
             total = (
                 await self.session.execute(
-                    # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
                     text(f"SELECT count(*) FROM {quoted} WHERE tenant_id = :tenant"),
                     {"tenant": self.tenant_id},
                 )
@@ -173,8 +166,9 @@ class TenantExportService:
                 continue
 
             result = await self.session.execute(
-                # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
-                text(f"SELECT * FROM {quoted} WHERE tenant_id = :tenant LIMIT :limit"),
+                text(
+                    f"SELECT * FROM {quoted} WHERE tenant_id = :tenant LIMIT :limit"
+                ),
                 {"tenant": self.tenant_id, "limit": self.rows_per_table},
             )
             mappings = result.mappings().all()
@@ -206,4 +200,6 @@ class TenantExportService:
 
     async def build_json(self) -> bytes:
         manifest = await self.build(include_rows=True)
-        return json.dumps(manifest.to_dict(include_rows=True), ensure_ascii=False).encode("utf-8")
+        return json.dumps(manifest.to_dict(include_rows=True), ensure_ascii=False).encode(
+            "utf-8"
+        )

@@ -101,7 +101,9 @@ class TestPurgePlan:
 
         tenant, service = await _service(data_factory, test_db_session, "offb-e")
         company = await data_factory.create_company(tenant=tenant, session=test_db_session)
-        await data_factory.create_person(tenant=tenant, company=company, session=test_db_session)
+        await data_factory.create_person(
+            tenant=tenant, company=company, session=test_db_session
+        )
         # Реестр обработки задаёт срок хранения ВМЕСТЕ со ссылкой на норму.
         await PdnProcessingRegistryService(
             test_db_session, tenant_id=str(tenant.id)
@@ -124,7 +126,9 @@ class TestPurgePlan:
     ) -> None:
         tenant, service = await _service(data_factory, test_db_session, "offb-f")
         company = await data_factory.create_company(tenant=tenant, session=test_db_session)
-        await data_factory.create_person(tenant=tenant, company=company, session=test_db_session)
+        await data_factory.create_person(
+            tenant=tenant, company=company, session=test_db_session
+        )
         await service.request()
         await test_db_session.commit()
 
@@ -160,7 +164,9 @@ class TestPurgePlan:
 
 @pytest.mark.anyio
 class TestOffboardingEndpoints:
-    async def test_request_status_cancel_roundtrip(self, async_client, make_auth_headers) -> None:
+    async def test_request_status_cancel_roundtrip(
+        self, async_client, make_auth_headers
+    ) -> None:
         headers = await make_auth_headers(RoleEnum.ADMIN)
         base = f"{API_PREFIX}/offboarding"
 

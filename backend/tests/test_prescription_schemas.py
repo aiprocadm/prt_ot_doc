@@ -1,5 +1,4 @@
 """Prescription schema contract for the lifecycle (TZ-3.4-V12-01). App-free."""
-
 from __future__ import annotations
 
 import pytest

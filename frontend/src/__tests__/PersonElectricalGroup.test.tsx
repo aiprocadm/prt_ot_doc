@@ -15,8 +15,8 @@ const updateMock = vi.fn();
 vi.mock("@/stores/persons", () => ({
   usePersonsStore: () => ({
     create: createMock,
-    update: updateMock,
-  }),
+    update: updateMock
+  })
 }));
 
 vi.mock("@/stores/companies", () => ({
@@ -24,10 +24,10 @@ vi.mock("@/stores/companies", () => ({
     list: vi.fn().mockResolvedValue(undefined),
     items: [{ id: "company-1", name: "ООО Тест" }],
     getById: vi.fn(),
-    item: null,
+    item: null
   }),
   // zustand static getState
-  useCompaniesStore_getState: undefined,
+  useCompaniesStore_getState: undefined
 }));
 
 // мок getState для useCompaniesStore.getState() внутри onSubmit
@@ -37,7 +37,7 @@ vi.mock("@/stores/companies", () => {
     list: vi.fn().mockResolvedValue(undefined),
     items: [{ id: "company-1", name: "ООО Тест" }],
     getById: vi.fn(),
-    item: null,
+    item: null
   });
   storeFn.getState = getStateMock;
   return { useCompaniesStore: storeFn };
@@ -47,9 +47,7 @@ import { PersonFormDialog } from "@/features/persons/PersonFormDialog";
 import type { PersonDto } from "@/types/dto/persons";
 
 // Минимальная PersonDto с qualifications
-const makeInitialData = (
-  qualifications: Array<Record<string, unknown>>,
-): PersonDto => ({
+const makeInitialData = (qualifications: Array<Record<string, unknown>>): PersonDto => ({
   id: "person-42",
   company_id: "company-1",
   first_name: "Иван",
@@ -58,17 +56,14 @@ const makeInitialData = (
   status: "active",
   created_at: "2025-01-01",
   updated_at: "2025-01-01",
-  qualifications,
+  qualifications
 });
 
 const renderDialog = (initialData?: PersonDto) =>
   render(
     <MemoryRouter>
-      <PersonFormDialog
-        trigger={<button>Открыть</button>}
-        initialData={initialData}
-      />
-    </MemoryRouter>,
+      <PersonFormDialog trigger={<button>Открыть</button>} initialData={initialData} />
+    </MemoryRouter>
   );
 
 describe("PersonFormDialog — группа по электробезопасности", () => {
@@ -83,7 +78,7 @@ describe("PersonFormDialog — группа по электробезопасн�
       status: "active",
       company_id: "company-1",
       created_at: "2025-01-01",
-      updated_at: "2025-01-01",
+      updated_at: "2025-01-01"
     });
     createMock.mockResolvedValue({
       id: "new-person",
@@ -93,15 +88,13 @@ describe("PersonFormDialog — группа по электробезопасн�
       status: "active",
       company_id: "company-1",
       created_at: "2025-01-01",
-      updated_at: "2025-01-01",
+      updated_at: "2025-01-01"
     });
   });
 
   // ─── Тест A: footgun-merge ────────────────────────────────────────────────
   it("Тест A: выбор группы IV сохраняет ОБОИХ — и новую electrical_safety_group, и существующий training", async () => {
-    const initialData = makeInitialData([
-      { kind: "training", name: "Обучение по ОТ" },
-    ]);
+    const initialData = makeInitialData([{ kind: "training", name: "Обучение по ОТ" }]);
 
     renderDialog(initialData);
     fireEvent.click(screen.getByText("Открыть"));
@@ -111,7 +104,7 @@ describe("PersonFormDialog — группа по электробезопасн�
 
     // Выбираем группу IV
     fireEvent.change(screen.getByLabelText(/Группа по электробезопасности/i), {
-      target: { value: "IV" },
+      target: { value: "IV" }
     });
 
     // Сабмит
@@ -121,31 +114,24 @@ describe("PersonFormDialog — группа по электробезопасн�
 
     const [calledId, calledPayload] = (updateMock as Mock).mock.calls[0] as [
       string,
-      Record<string, unknown>,
+      Record<string, unknown>
     ];
     expect(calledId).toBe("person-42");
 
     // qualifications должен быть массивом
     expect(Array.isArray(calledPayload.qualifications)).toBe(true);
-    const quals = calledPayload.qualifications as Array<
-      Record<string, unknown>
-    >;
+    const quals = calledPayload.qualifications as Array<Record<string, unknown>>;
 
     // Тренинг сохранён (merge)
     expect(quals).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ kind: "training", name: "Обучение по ОТ" }),
-      ]),
+      expect.arrayContaining([expect.objectContaining({ kind: "training", name: "Обучение по ОТ" })])
     );
 
     // Электробезопасность добавлена
     expect(quals).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({
-          kind: "electrical_safety_group",
-          level: "IV",
-        }),
-      ]),
+        expect.objectContaining({ kind: "electrical_safety_group", level: "IV" })
+      ])
     );
   });
 
@@ -153,20 +139,13 @@ describe("PersonFormDialog — группа по электробезопасн�
   it("Тест B: initialData с группой III предзаполняет select; сброс на «—» убирает запись из payload", async () => {
     const initialData = makeInitialData([
       { kind: "training", name: "Обучение по ОТ" },
-      {
-        kind: "electrical_safety_group",
-        level: "III",
-        name: "Группа по электробезопасности",
-        valid_until: "2027-01-01",
-      },
+      { kind: "electrical_safety_group", level: "III", name: "Группа по электробезопасности", valid_until: "2027-01-01" }
     ]);
 
     renderDialog(initialData);
     fireEvent.click(screen.getByText("Открыть"));
 
-    const groupSelect = await screen.findByLabelText(
-      /Группа по электробезопасности/i,
-    );
+    const groupSelect = await screen.findByLabelText(/Группа по электробезопасности/i);
 
     // Предзаполнение — значение должно быть III
     expect((groupSelect as HTMLSelectElement).value).toBe("III");
@@ -180,23 +159,19 @@ describe("PersonFormDialog — группа по электробезопасн�
 
     const [, calledPayload] = (updateMock as Mock).mock.calls[0] as [
       string,
-      Record<string, unknown>,
+      Record<string, unknown>
     ];
 
-    const quals = calledPayload.qualifications as Array<
-      Record<string, unknown>
-    >;
+    const quals = calledPayload.qualifications as Array<Record<string, unknown>>;
 
     // Электробезопасность убрана
     expect(quals).not.toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ kind: "electrical_safety_group" }),
-      ]),
+      expect.arrayContaining([expect.objectContaining({ kind: "electrical_safety_group" })])
     );
 
     // Тренинг сохранён
     expect(quals).toEqual(
-      expect.arrayContaining([expect.objectContaining({ kind: "training" })]),
+      expect.arrayContaining([expect.objectContaining({ kind: "training" })])
     );
   });
 
@@ -204,11 +179,7 @@ describe("PersonFormDialog — группа по электробезопасн�
   it("Тест C: редактирование персоны без изменения группы — qualifications в payload не изменены", async () => {
     const existingQuals = [
       { kind: "training", name: "Обучение по ОТ" },
-      {
-        kind: "electrical_safety_group",
-        level: "II",
-        name: "Группа по электробезопасности",
-      },
+      { kind: "electrical_safety_group", level: "II", name: "Группа по электробезопасности" }
     ];
     const initialData = makeInitialData(existingQuals);
 
@@ -224,24 +195,17 @@ describe("PersonFormDialog — группа по электробезопасн�
 
     const [, calledPayload] = (updateMock as Mock).mock.calls[0] as [
       string,
-      Record<string, unknown>,
+      Record<string, unknown>
     ];
 
-    const quals = calledPayload.qualifications as Array<
-      Record<string, unknown>
-    >;
+    const quals = calledPayload.qualifications as Array<Record<string, unknown>>;
 
     // Обе квалификации в payload
     expect(quals).toEqual(
-      expect.arrayContaining([expect.objectContaining({ kind: "training" })]),
+      expect.arrayContaining([expect.objectContaining({ kind: "training" })])
     );
     expect(quals).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          kind: "electrical_safety_group",
-          level: "II",
-        }),
-      ]),
+      expect.arrayContaining([expect.objectContaining({ kind: "electrical_safety_group", level: "II" })])
     );
   });
 });

@@ -25,9 +25,7 @@ RUN apt-get update \
 WORKDIR /srv/app
 
 COPY requirements.txt ./
-# setuptools базового образа (70.3.0) уязвим к CVE-2025-47273 (fix 78.1.1) —
-# поднимаем вместе с pip до установки зависимостей.
-RUN python -m pip install --upgrade pip "setuptools>=78.1.1" \
+RUN python -m pip install --upgrade pip \
     && pip install -r requirements.txt
 
 RUN fc-cache -f

@@ -20,8 +20,8 @@ vi.mock("@/stores/documents", () => ({
     setFilters: setFiltersMock,
     download: vi.fn(),
     refreshStatus: vi.fn(),
-    loading: false,
-  }),
+    loading: false
+  })
 }));
 
 describe("DocumentTable filters", () => {

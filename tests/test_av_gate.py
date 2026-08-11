@@ -58,7 +58,9 @@ def test_disabled_av_uses_the_name_simulator(sample: Path) -> None:
     assert av.scan_file(infected, settings=_settings(False)).status == "infected"
 
 
-def test_enabled_av_calls_the_real_scanner(sample: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_enabled_av_calls_the_real_scanner(
+    sample: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     scanner = _Scanner(ClamAVScanOutcome(status=ClamAVVerdict.CLEAN, raw="OK"))
     monkeypatch.setattr("app.services.clamav.get_clamav_client", lambda: scanner)
 

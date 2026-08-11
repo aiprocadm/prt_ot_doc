@@ -9,8 +9,8 @@ import pytest
 from app.domains.managed_clients.impersonation import (
     CONTEXT_TTL,
     FORBIDDEN_IN_CONTEXT,
-    ForbiddenInContext,
     ImpersonationExpired,
+    ForbiddenInContext,
     ensure_action_allowed,
     ensure_session_active,
     session_expires_at,

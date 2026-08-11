@@ -11,22 +11,19 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
+  DialogTrigger
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  BUDGET_DOMAIN_LABELS,
-  BUDGET_DOMAINS,
-} from "@/pages/budget/budgetVocab";
+import { BUDGET_DOMAIN_LABELS, BUDGET_DOMAINS } from "@/pages/budget/budgetVocab";
 import type { DirectoryItemDto } from "@/types/dto/analytics";
 import type {
   BudgetArticlePageDto,
   BudgetDomain,
   BudgetExpenseCreateInput,
   BudgetExpenseDto,
-  BudgetExpenseUpdateInput,
+  BudgetExpenseUpdateInput
 } from "@/types/dto/budget";
 
 /**
@@ -37,7 +34,7 @@ import type {
 const ENTITY_TYPE_BY_DOMAIN: Record<BudgetDomain, string> = {
   training: "training_session",
   medical: "medical_exam",
-  events: "corrective_action",
+  events: "corrective_action"
 };
 
 interface Props {
@@ -72,15 +69,10 @@ const emptyForm: FormState = {
   site_id: "",
   notes: "",
   linkEntity: false,
-  entity_id: "",
+  entity_id: ""
 };
 
-export const ExpenseFormDialog = ({
-  trigger,
-  initialData,
-  articles,
-  onSubmitted,
-}: Props) => {
+export const ExpenseFormDialog = ({ trigger, initialData, articles, onSubmitted }: Props) => {
   const [open, setOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState<FormState>(emptyForm);
@@ -110,12 +102,10 @@ export const ExpenseFormDialog = ({
             branch_id: initialData.branch_id ?? "",
             site_id: initialData.site_id ?? "",
             notes: initialData.notes ?? "",
-            linkEntity: Boolean(
-              initialData.entity_type && initialData.entity_id,
-            ),
-            entity_id: initialData.entity_id ?? "",
+            linkEntity: Boolean(initialData.entity_type && initialData.entity_id),
+            entity_id: initialData.entity_id ?? ""
           }
-        : emptyForm,
+        : emptyForm
     );
   }, [open, initialData]);
 
@@ -150,7 +140,7 @@ export const ExpenseFormDialog = ({
   // article_domain_mismatch/article_inactive. Универсальные статьи (domain=null) подходят
   // любому домену.
   const availableArticles = articles.items.filter(
-    (a) => a.is_active && (a.domain === null || a.domain === form.domain),
+    (a) => a.is_active && (a.domain === null || a.domain === form.domain)
   );
 
   // Расход мог быть заведён на статью, которую позже отключили/удалили: её нет в
@@ -163,23 +153,16 @@ export const ExpenseFormDialog = ({
           name:
             articles.items.find((a) => a.id === form.article_id)?.name ??
             initialData?.article_name ??
-            "(недоступная статья)",
+            "(недоступная статья)"
         }
       : null;
 
   const onDomainChange = (nextDomain: BudgetDomain) => {
     setForm((prev) => {
       const articleStillValid = articles.items.some(
-        (a) =>
-          a.id === prev.article_id &&
-          a.is_active &&
-          (a.domain === null || a.domain === nextDomain),
+        (a) => a.id === prev.article_id && a.is_active && (a.domain === null || a.domain === nextDomain)
       );
-      return {
-        ...prev,
-        domain: nextDomain,
-        article_id: articleStillValid ? prev.article_id : "",
-      };
+      return { ...prev, domain: nextDomain, article_id: articleStillValid ? prev.article_id : "" };
     });
   };
 
@@ -211,38 +194,25 @@ export const ExpenseFormDialog = ({
         const payload: BudgetExpenseUpdateInput = {};
         const trimmedTitle = form.title.trim();
         if (trimmedTitle !== initialData.title) payload.title = trimmedTitle;
-        if (form.occurred_on !== initialData.occurred_on)
-          payload.occurred_on = form.occurred_on;
-        if (
-          form.amount.trim() !== "" &&
-          Number(form.amount) !== initialData.amount
-        ) {
+        if (form.occurred_on !== initialData.occurred_on) payload.occurred_on = form.occurred_on;
+        if (form.amount.trim() !== "" && Number(form.amount) !== initialData.amount) {
           payload.amount = Number(form.amount);
         }
         const normalizedArticle = form.article_id || null;
-        if (normalizedArticle !== initialData.article_id)
-          payload.article_id = normalizedArticle;
+        if (normalizedArticle !== initialData.article_id) payload.article_id = normalizedArticle;
         const normalizedCompany = form.company_id || null;
-        if (normalizedCompany !== initialData.company_id)
-          payload.company_id = normalizedCompany;
+        if (normalizedCompany !== initialData.company_id) payload.company_id = normalizedCompany;
         const normalizedBranch = form.branch_id || null;
-        if (normalizedBranch !== initialData.branch_id)
-          payload.branch_id = normalizedBranch;
+        if (normalizedBranch !== initialData.branch_id) payload.branch_id = normalizedBranch;
         const normalizedSite = form.site_id || null;
-        if (normalizedSite !== initialData.site_id)
-          payload.site_id = normalizedSite;
+        if (normalizedSite !== initialData.site_id) payload.site_id = normalizedSite;
         const normalizedNotes = form.notes.trim() || null;
-        if (normalizedNotes !== initialData.notes)
-          payload.notes = normalizedNotes;
+        if (normalizedNotes !== initialData.notes) payload.notes = normalizedNotes;
 
-        const nextEntityType = form.linkEntity
-          ? ENTITY_TYPE_BY_DOMAIN[form.domain]
-          : null;
+        const nextEntityType = form.linkEntity ? ENTITY_TYPE_BY_DOMAIN[form.domain] : null;
         const nextEntityId = form.linkEntity ? form.entity_id.trim() : null;
-        if (nextEntityType !== initialData.entity_type)
-          payload.entity_type = nextEntityType;
-        if (nextEntityId !== initialData.entity_id)
-          payload.entity_id = nextEntityId;
+        if (nextEntityType !== initialData.entity_type) payload.entity_type = nextEntityType;
+        if (nextEntityId !== initialData.entity_id) payload.entity_id = nextEntityId;
 
         await budgetApi.updateExpense(initialData.id, payload);
         toast.success("Расход обновлён");
@@ -256,7 +226,7 @@ export const ExpenseFormDialog = ({
           company_id: form.company_id || null,
           branch_id: form.branch_id || null,
           site_id: form.site_id || null,
-          notes: form.notes.trim() || null,
+          notes: form.notes.trim() || null
         };
         // Both-or-neither: entity_type/entity_id либо оба, либо ни одного — иначе бэкенд
         // отклонит 422 invalid_entity_link.
@@ -270,9 +240,7 @@ export const ExpenseFormDialog = ({
       onSubmitted?.();
       setOpen(false);
     } catch (err) {
-      toast.error(
-        (err as { message?: string })?.message ?? "Не удалось сохранить расход",
-      );
+      toast.error((err as { message?: string })?.message ?? "Не удалось сохранить расход");
     } finally {
       setSubmitting(false);
     }
@@ -283,12 +251,8 @@ export const ExpenseFormDialog = ({
       <DialogTrigger asChild>{trigger}</DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>
-            {isEdit ? "Редактировать расход" : "Новый расход"}
-          </DialogTitle>
-          <DialogDescription>
-            Расход по бюджету безопасности — сумма, дата и привязка к статье.
-          </DialogDescription>
+          <DialogTitle>{isEdit ? "Редактировать расход" : "Новый расход"}</DialogTitle>
+          <DialogDescription>Расход по бюджету безопасности — сумма, дата и привязка к статье.</DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
           <div className="space-y-2">
@@ -330,11 +294,7 @@ export const ExpenseFormDialog = ({
           </div>
           <div className="space-y-2">
             <Label htmlFor="e-title">Название</Label>
-            <Input
-              id="e-title"
-              value={form.title}
-              onChange={(e) => setField("title", e.target.value)}
-            />
+            <Input id="e-title" value={form.title} onChange={(e) => setField("title", e.target.value)} />
           </div>
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
@@ -416,11 +376,7 @@ export const ExpenseFormDialog = ({
 
           <div className="space-y-2">
             <Label htmlFor="e-notes">Заметки</Label>
-            <Textarea
-              id="e-notes"
-              value={form.notes}
-              onChange={(e) => setField("notes", e.target.value)}
-            />
+            <Textarea id="e-notes" value={form.notes} onChange={(e) => setField("notes", e.target.value)} />
           </div>
 
           <div className="space-y-3 rounded-md border p-3">
@@ -437,12 +393,7 @@ export const ExpenseFormDialog = ({
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="e-entity-type">Тип записи</Label>
-                  <Input
-                    id="e-entity-type"
-                    value={ENTITY_TYPE_BY_DOMAIN[form.domain]}
-                    readOnly
-                    disabled
-                  />
+                  <Input id="e-entity-type" value={ENTITY_TYPE_BY_DOMAIN[form.domain]} readOnly disabled />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="e-entity-id">ID записи</Label>

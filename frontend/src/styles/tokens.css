@@ -1,10 +1,7 @@
 @layer base {
   :root {
-    --app-font-sans:
-      "Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif;
-    --app-font-mono:
-      "JetBrains Mono", "SFMono-Regular", "Menlo", "Monaco", "Consolas",
-      monospace;
+    --app-font-sans: "Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif;
+    --app-font-mono: "JetBrains Mono", "SFMono-Regular", "Menlo", "Monaco", "Consolas", monospace;
     --app-radius-xs: 6px;
     --app-radius-sm: 8px;
     --app-radius-md: 12px;

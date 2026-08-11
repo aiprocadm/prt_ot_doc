@@ -17,7 +17,7 @@ describe("TenantGate", () => {
     render(
       <TenantGate>
         <div>Контент</div>
-      </TenantGate>,
+      </TenantGate>
     );
 
     expect(screen.getByText("Выберите контур")).toBeInTheDocument();

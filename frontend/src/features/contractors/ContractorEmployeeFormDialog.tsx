@@ -10,18 +10,12 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
+  DialogTrigger
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  COMPLIANCE_STATUS_LABELS,
-  COMPLIANCE_STATUS_OPTIONS,
-} from "@/pages/contractors/contractorsVocab";
-import type {
-  ComplianceStatus,
-  ContractorEmployee,
-} from "@/types/dto/contractors";
+import { COMPLIANCE_STATUS_LABELS, COMPLIANCE_STATUS_OPTIONS } from "@/pages/contractors/contractorsVocab";
+import type { ComplianceStatus, ContractorEmployee } from "@/types/dto/contractors";
 
 interface Props {
   trigger: ReactNode;
@@ -34,7 +28,7 @@ const StatusSelect = ({
   id,
   label,
   value,
-  onChange,
+  onChange
 }: {
   id: string;
   label: string;
@@ -43,12 +37,7 @@ const StatusSelect = ({
 }) => (
   <div className="space-y-2">
     <Label htmlFor={id}>{label}</Label>
-    <select
-      id={id}
-      className="h-10 w-full rounded-md border px-3"
-      value={value}
-      onChange={(e) => onChange(e.target.value as ComplianceStatus)}
-    >
+    <select id={id} className="h-10 w-full rounded-md border px-3" value={value} onChange={(e) => onChange(e.target.value as ComplianceStatus)}>
       {COMPLIANCE_STATUS_OPTIONS.map((s) => (
         <option key={s} value={s}>
           {COMPLIANCE_STATUS_LABELS[s]}
@@ -58,12 +47,7 @@ const StatusSelect = ({
   </div>
 );
 
-export const ContractorEmployeeFormDialog = ({
-  trigger,
-  contractorId,
-  initialData,
-  onSubmitted,
-}: Props) => {
+export const ContractorEmployeeFormDialog = ({ trigger, contractorId, initialData, onSubmitted }: Props) => {
   const [open, setOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const isEdit = Boolean(initialData);
@@ -94,7 +78,7 @@ export const ContractorEmployeeFormDialog = ({
           position: position || null,
           access_status: access,
           training_status: training,
-          medical_status: medical,
+          medical_status: medical
         });
       } else {
         await contractorsApi.createEmployee({
@@ -103,17 +87,14 @@ export const ContractorEmployeeFormDialog = ({
           position: position || null,
           access_status: access,
           training_status: training,
-          medical_status: medical,
+          medical_status: medical
         });
       }
       toast.success(isEdit ? "Сотрудник обновлён" : "Сотрудник добавлен");
       onSubmitted?.();
       setOpen(false);
     } catch (err) {
-      toast.error(
-        (err as { message?: string })?.message ??
-          "Не удалось сохранить сотрудника",
-      );
+      toast.error((err as { message?: string })?.message ?? "Не удалось сохранить сотрудника");
     } finally {
       setSubmitting(false);
     }
@@ -124,51 +105,24 @@ export const ContractorEmployeeFormDialog = ({
       <DialogTrigger asChild>{trigger}</DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>
-            {isEdit ? "Редактировать сотрудника" : "Новый сотрудник подрядчика"}
-          </DialogTitle>
-          <DialogDescription>
-            Данные сотрудника подрядчика и статусы соответствия.
-          </DialogDescription>
+          <DialogTitle>{isEdit ? "Редактировать сотрудника" : "Новый сотрудник подрядчика"}</DialogTitle>
+          <DialogDescription>Данные сотрудника подрядчика и статусы соответствия.</DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
           {!isEdit ? (
             <div className="space-y-2">
               <Label htmlFor="emp-name">ФИО</Label>
-              <Input
-                id="emp-name"
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
-              />
+              <Input id="emp-name" value={fullName} onChange={(e) => setFullName(e.target.value)} />
             </div>
           ) : null}
           <div className="space-y-2">
             <Label htmlFor="emp-position">Должность</Label>
-            <Input
-              id="emp-position"
-              value={position}
-              onChange={(e) => setPosition(e.target.value)}
-            />
+            <Input id="emp-position" value={position} onChange={(e) => setPosition(e.target.value)} />
           </div>
           <div className="grid gap-4 md:grid-cols-3">
-            <StatusSelect
-              id="emp-access"
-              label="Допуск"
-              value={access}
-              onChange={setAccess}
-            />
-            <StatusSelect
-              id="emp-training"
-              label="Обучение"
-              value={training}
-              onChange={setTraining}
-            />
-            <StatusSelect
-              id="emp-medical"
-              label="Медосмотр"
-              value={medical}
-              onChange={setMedical}
-            />
+            <StatusSelect id="emp-access" label="Допуск" value={access} onChange={setAccess} />
+            <StatusSelect id="emp-training" label="Обучение" value={training} onChange={setTraining} />
+            <StatusSelect id="emp-medical" label="Медосмотр" value={medical} onChange={setMedical} />
           </div>
         </div>
         <DialogFooter>

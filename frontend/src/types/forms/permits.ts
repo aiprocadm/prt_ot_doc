@@ -10,7 +10,7 @@ export const permitFormSchema = z.object({
   valid_until: z
     .string()
     .optional()
-    .transform((s) => (s === undefined ? s : s.trim())),
+    .transform((s) => (s === undefined ? s : s.trim()))
 });
 
 export type PermitFormValues = z.infer<typeof permitFormSchema>;

@@ -13,9 +13,7 @@ ROOT = Path(__file__).resolve().parents[2]
 # The perf-smoke env block content is identical in both states, so read
 # whichever file is present rather than coupling the contract to the toggle.
 _WORKFLOWS = ROOT / ".github" / "workflows"
-CI_YAML = (
-    _WORKFLOWS / "ci.yml" if (_WORKFLOWS / "ci.yml").exists() else _WORKFLOWS / "ci.yml.disabled"
-)
+CI_YAML = _WORKFLOWS / "ci.yml" if (_WORKFLOWS / "ci.yml").exists() else _WORKFLOWS / "ci.yml.disabled"
 
 REQUIRED_KEYS = (
     "ADMIN_BOOTSTRAP",
@@ -39,12 +37,16 @@ def perf_smoke_env_block() -> str:
         perf_smoke_block,
         re.DOTALL,
     )
-    assert match is not None, "perf-smoke `cat >> .env <<'EOF' ... EOF` block not found"
+    assert match is not None, (
+        "perf-smoke `cat >> .env <<'EOF' ... EOF` block not found"
+    )
     return match.group(1)
 
 
 @pytest.mark.parametrize("key", REQUIRED_KEYS)
-def test_perf_smoke_env_contains_admin_bootstrap_key(key: str, perf_smoke_env_block: str) -> None:
+def test_perf_smoke_env_contains_admin_bootstrap_key(
+    key: str, perf_smoke_env_block: str
+) -> None:
     """Each required key must appear with a non-empty RHS in the here-doc."""
     pattern = rf"^\s*{re.escape(key)}=\S+"
     assert re.search(pattern, perf_smoke_env_block, re.MULTILINE), (

@@ -44,3 +44,36 @@ export interface DocumentReadinessDto {
   recommended_actions: string[];
   pipeline_stages?: DocumentPipelineStageDto[];
 }
+
+/** GET /documents/{id}/versions/compare */
+export interface DocumentVersionDataDiffDto {
+  field: string;
+  before: unknown;
+  after: unknown;
+  change: string;
+}
+
+export interface DocumentVersionCompareDto {
+  document_id: string;
+  left_version_id: string;
+  right_version_id: string;
+  diffs: DocumentVersionDataDiffDto[];
+  template_version_changed: boolean;
+}
+
+/** GET /documents/{id}/dependency-map */
+export interface DocumentDependencyNpaBindingDto {
+  binding_id: string;
+  npa_id: string;
+  npa_code: string;
+  npa_title: string;
+  ref?: string | null;
+  entity_type: string;
+}
+
+export interface DocumentDependencyMapDto {
+  template: Record<string, unknown> | null;
+  template_version: Record<string, unknown> | null;
+  npa_bindings: DocumentDependencyNpaBindingDto[];
+  pipeline_profile_hint: Record<string, unknown> | null;
+}

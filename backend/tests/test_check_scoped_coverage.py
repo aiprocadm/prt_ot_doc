@@ -3,7 +3,6 @@
 Exercises the pure ``evaluate`` core with synthetic coverage.json dicts so the
 gate logic is verified deterministically without a real (CI-only) coverage run.
 """
-
 from __future__ import annotations
 
 import importlib.util
@@ -63,21 +62,9 @@ _COVERAGE = {
 _BASELINE = {
     "target_line_percent": 85.0,
     "scopes": {
-        "core": {
-            "floor_line_percent": 45.0,
-            "floor_branch_percent": 30.0,
-            "patterns": ["backend/app/core/"],
-        },
-        "domain": {
-            "floor_line_percent": 40.0,
-            "floor_branch_percent": 25.0,
-            "patterns": ["backend/app/domains/"],
-        },
-        "services": {
-            "floor_line_percent": 25.0,
-            "floor_branch_percent": 20.0,
-            "patterns": ["backend/app/services/"],
-        },
+        "core": {"floor_line_percent": 45.0, "floor_branch_percent": 30.0, "patterns": ["backend/app/core/"]},
+        "domain": {"floor_line_percent": 40.0, "floor_branch_percent": 25.0, "patterns": ["backend/app/domains/"]},
+        "services": {"floor_line_percent": 25.0, "floor_branch_percent": 20.0, "patterns": ["backend/app/services/"]},
     },
 }
 
@@ -119,11 +106,7 @@ def test_evaluate_passes_when_all_above_floor():
     baseline = {
         "target_line_percent": 85.0,
         "scopes": {
-            "services": {
-                "floor_line_percent": 10.0,
-                "floor_branch_percent": 10.0,
-                "patterns": ["backend/app/services/"],
-            },
+            "services": {"floor_line_percent": 10.0, "floor_branch_percent": 10.0, "patterns": ["backend/app/services/"]},
         },
     }
     result = mod.evaluate(_COVERAGE, baseline, target=85.0)
@@ -151,11 +134,7 @@ def test_main_returns_0_when_clean(tmp_path):
             {
                 "target_line_percent": 85.0,
                 "scopes": {
-                    "core": {
-                        "floor_line_percent": 10.0,
-                        "floor_branch_percent": 10.0,
-                        "patterns": ["backend/app/core/"],
-                    },
+                    "core": {"floor_line_percent": 10.0, "floor_branch_percent": 10.0, "patterns": ["backend/app/core/"]},
                 },
             }
         ),

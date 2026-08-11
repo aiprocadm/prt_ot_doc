@@ -41,9 +41,7 @@ describe("WorkPermitsPage", () => {
         <WorkPermitsPage />
       </MemoryRouter>,
     );
-    expect(
-      await screen.findByRole("heading", { name: /наряды-допуски/i }),
-    ).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: /наряды-допуски/i })).toBeInTheDocument();
   });
 
   it("скрывает «Новый наряд» без права manage", async () => {
@@ -54,8 +52,6 @@ describe("WorkPermitsPage", () => {
       </MemoryRouter>,
     );
     await screen.findByRole("heading", { name: /наряды-допуски/i });
-    expect(
-      screen.queryByRole("button", { name: /новый наряд/i }),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /новый наряд/i })).not.toBeInTheDocument();
   });
 });

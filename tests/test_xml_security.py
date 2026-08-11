@@ -17,14 +17,13 @@ import io
 import zipfile
 
 import pytest
-from lxml import etree
-
 from app.core.xml_security import (
     XmlSecurityError,
     lxml_fromstring,
     secure_lxml_parser,
     stdlib_fromstring,
 )
+from lxml import etree
 
 W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 

@@ -9,38 +9,30 @@ vi.mock("@/api/client", () => ({
     get: vi.fn(),
     post: vi.fn(),
     patch: vi.fn(),
-    delete: vi.fn(),
-  },
+    delete: vi.fn()
+  }
 }));
 
 beforeEach(() => {
   vi.clearAllMocks();
-  (apiClient.get as ReturnType<typeof vi.fn>).mockResolvedValue({
-    data: { items: [], total: 0 },
-  });
-  (apiClient.post as ReturnType<typeof vi.fn>).mockResolvedValue({
-    data: { id: "x" },
-  });
-  (apiClient.patch as ReturnType<typeof vi.fn>).mockResolvedValue({
-    data: { id: "x" },
-  });
-  (apiClient.delete as ReturnType<typeof vi.fn>).mockResolvedValue({
-    data: null,
-  });
+  (apiClient.get as any).mockResolvedValue({ data: { items: [], total: 0 } });
+  (apiClient.post as any).mockResolvedValue({ data: { id: "x" } });
+  (apiClient.patch as any).mockResolvedValue({ data: { id: "x" } });
+  (apiClient.delete as any).mockResolvedValue({ data: null });
 });
 
 describe("rulesApi", () => {
   it("lists rules with default paging", async () => {
     await rulesApi.list();
     expect(apiClient.get).toHaveBeenCalledWith("/rules", {
-      params: { limit: 100, offset: 0 },
+      params: { limit: 100, offset: 0 }
     });
   });
 
   it("merges paging overrides into list()", async () => {
     await rulesApi.list({ limit: 20, offset: 40 });
     expect(apiClient.get).toHaveBeenCalledWith("/rules", {
-      params: { limit: 20, offset: 40 },
+      params: { limit: 20, offset: 40 }
     });
   });
 
@@ -51,11 +43,9 @@ describe("rulesApi", () => {
       conditions_json: {},
       actions_json: [],
       priority: 100,
-      is_enabled: true,
+      is_enabled: true
     };
-    (apiClient.post as ReturnType<typeof vi.fn>).mockResolvedValue({
-      data: { ...payload, id: "r1", created_at: "now", updated_at: "now" },
-    });
+    (apiClient.post as any).mockResolvedValue({ data: { ...payload, id: "r1", created_at: "now", updated_at: "now" } });
     const created = await rulesApi.create(payload);
     expect(apiClient.post).toHaveBeenCalledWith("/rules", payload);
     expect(created.id).toBe("r1");
@@ -69,9 +59,9 @@ describe("rulesApi", () => {
         conditions_json: {},
         actions_json: [],
         priority: 100,
-        is_enabled: true,
+        is_enabled: true
       },
-      event: { event_type: "IncidentCreated", payload: {} },
+      event: { event_type: "IncidentCreated", payload: {} }
     };
     await rulesApi.dryRun(payload);
     expect(apiClient.post).toHaveBeenCalledWith("/rules/dry-run", payload);
@@ -80,26 +70,16 @@ describe("rulesApi", () => {
   it("lists triggers scoped by rule_id with default paging", async () => {
     await rulesApi.triggers({ rule_id: "r1" });
     expect(apiClient.get).toHaveBeenCalledWith("/rules/triggers", {
-      params: { rule_id: "r1", limit: 50, offset: 0 },
+      params: { rule_id: "r1", limit: 50, offset: 0 }
     });
   });
 
   it("detects the feature-disabled 404", () => {
     expect(
-      isFeatureDisabledError({
-        status: 404,
-        message: "Rules engine feature is not enabled for this tenant",
-      }),
+      isFeatureDisabledError({ status: 404, message: "Rules engine feature is not enabled for this tenant" })
     ).toBe(true);
-    expect(isFeatureDisabledError({ status: 404, message: "Not found" })).toBe(
-      false,
-    );
-    expect(
-      isFeatureDisabledError({
-        status: 403,
-        message: "feature is not enabled",
-      }),
-    ).toBe(false);
+    expect(isFeatureDisabledError({ status: 404, message: "Not found" })).toBe(false);
+    expect(isFeatureDisabledError({ status: 403, message: "feature is not enabled" })).toBe(false);
     expect(isFeatureDisabledError(undefined)).toBe(false);
   });
 });

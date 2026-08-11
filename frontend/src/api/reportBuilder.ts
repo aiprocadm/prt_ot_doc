@@ -6,28 +6,20 @@ import type {
   ReportDefinitionDto,
   ReportExportFormat,
   ReportExportJobDto,
-  ReportPreviewDto,
+  ReportPreviewDto
 } from "@/types/dto/reportBuilder";
 
 export const reportBuilderApi = {
-  listDatasets: async (): Promise<{
-    items: ReportDatasetDto[];
-    total: number;
-  }> => {
-    const { data } = await apiClient.get<{
-      items: ReportDatasetDto[];
-      total: number;
-    }>("/report-builder/datasets");
+  listDatasets: async (): Promise<{ items: ReportDatasetDto[]; total: number }> => {
+    const { data } = await apiClient.get<{ items: ReportDatasetDto[]; total: number }>(
+      "/report-builder/datasets"
+    );
     return data;
   },
-  listDefinitions: async (): Promise<{
-    items: ReportDefinitionDto[];
-    total: number;
-  }> => {
-    const { data } = await apiClient.get<{
-      items: ReportDefinitionDto[];
-      total: number;
-    }>("/report-builder/definitions");
+  listDefinitions: async (): Promise<{ items: ReportDefinitionDto[]; total: number }> => {
+    const { data } = await apiClient.get<{ items: ReportDefinitionDto[]; total: number }>(
+      "/report-builder/definitions"
+    );
     return data;
   },
   createDefinition: async (payload: {
@@ -38,7 +30,7 @@ export const reportBuilderApi = {
   }): Promise<ReportDefinitionDto> => {
     const { data } = await apiClient.post<ReportDefinitionDto>(
       "/report-builder/definitions",
-      payload,
+      payload
     );
     return data;
   },
@@ -49,11 +41,11 @@ export const reportBuilderApi = {
       description: string | null;
       dataset_code: string;
       config_json: ReportConfigDto;
-    }>,
+    }>
   ): Promise<ReportDefinitionDto> => {
     const { data } = await apiClient.patch<ReportDefinitionDto>(
       `/report-builder/definitions/${id}`,
-      payload,
+      payload
     );
     return data;
   },
@@ -64,38 +56,27 @@ export const reportBuilderApi = {
     dataset_code: string;
     config_json: ReportConfigDto;
   }): Promise<ReportPreviewDto> => {
-    const { data } = await apiClient.post<ReportPreviewDto>(
-      "/report-builder/preview",
-      payload,
-    );
+    const { data } = await apiClient.post<ReportPreviewDto>("/report-builder/preview", payload);
     return data;
   },
   runDefinition: async (
     id: string,
-    format: ReportExportFormat,
+    format: ReportExportFormat
   ): Promise<{ job_id: string; status: string }> => {
     const { data } = await apiClient.post<{ job_id: string; status: string }>(
       `/report-builder/definitions/${id}/run`,
-      { format },
+      { format }
     );
     return data;
   },
   getExportJob: async (jobId: string): Promise<ReportExportJobDto> => {
-    const { data } = await apiClient.get<ReportExportJobDto>(
-      `/exports/${jobId}`,
-    );
+    const { data } = await apiClient.get<ReportExportJobDto>(`/exports/${jobId}`);
     return data;
   },
-  downloadReportExport: async (
-    jobId: string,
-    filename: string,
-  ): Promise<void> => {
-    const { data } = await apiClient.get<Blob>(
-      `/report-builder/exports/${jobId}/download`,
-      {
-        responseType: "blob",
-      },
-    );
+  downloadReportExport: async (jobId: string, filename: string): Promise<void> => {
+    const { data } = await apiClient.get<Blob>(`/report-builder/exports/${jobId}/download`, {
+      responseType: "blob"
+    });
     downloadBlob(data, filename);
-  },
+  }
 };

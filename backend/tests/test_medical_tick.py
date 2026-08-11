@@ -1,5 +1,4 @@
 """Smoke tests for the medical.contingent.tick Celery beat task."""
-
 from __future__ import annotations
 
 from app.services.celery_app import celery_app

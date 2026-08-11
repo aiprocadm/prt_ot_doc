@@ -4,36 +4,26 @@ import type {
   DocScope,
   DocType,
   ExpiryStatus,
-  IncidentSeverity,
+  IncidentSeverity
 } from "@/types/dto/contractors";
 
 export const COMPLIANCE_STATUS_LABELS: Record<ComplianceStatus, string> = {
   valid: "Действителен",
   pending: "Ожидает",
   expired: "Просрочен",
-  blocked: "Заблокирован",
+  blocked: "Заблокирован"
 };
 
-export const COMPLIANCE_STATUS_OPTIONS: ComplianceStatus[] = [
-  "pending",
-  "valid",
-  "expired",
-  "blocked",
-];
+export const COMPLIANCE_STATUS_OPTIONS: ComplianceStatus[] = ["pending", "valid", "expired", "blocked"];
 
 export const SEVERITY_LABELS: Record<IncidentSeverity, string> = {
   low: "Низкая",
   medium: "Средняя",
   high: "Высокая",
-  critical: "Критическая",
+  critical: "Критическая"
 };
 
-export const SEVERITY_OPTIONS: IncidentSeverity[] = [
-  "low",
-  "medium",
-  "high",
-  "critical",
-];
+export const SEVERITY_OPTIONS: IncidentSeverity[] = ["low", "medium", "high", "critical"];
 
 export const DOC_TYPE_LABELS: Record<DocType, string> = {
   license: "Лицензия",
@@ -44,7 +34,7 @@ export const DOC_TYPE_LABELS: Record<DocType, string> = {
   medical_cert: "Медицинское заключение",
   access_permit: "Наряд-допуск",
   qualification: "Квалификация",
-  other: "Другое",
+  other: "Другое"
 };
 
 export const DOC_TYPE_OPTIONS: DocType[] = [
@@ -56,12 +46,12 @@ export const DOC_TYPE_OPTIONS: DocType[] = [
   "medical_cert",
   "access_permit",
   "qualification",
-  "other",
+  "other"
 ];
 
 export const SCOPE_LABELS: Record<DocScope, string> = {
   company: "На компанию",
-  employee: "На сотрудника",
+  employee: "На сотрудника"
 };
 
 export const SCOPE_OPTIONS: DocScope[] = ["company", "employee"];
@@ -70,21 +60,18 @@ export const EXPIRY_LABELS: Record<ExpiryStatus, string> = {
   ok: "Действует",
   due_soon: "Истекает",
   overdue: "Просрочен",
-  missing: "Отсутствует",
+  missing: "Отсутствует"
 };
 
-export const EXPIRY_BADGE_VARIANT: Record<
-  ExpiryStatus,
-  "default" | "secondary" | "destructive"
-> = {
+export const EXPIRY_BADGE_VARIANT: Record<ExpiryStatus, "default" | "secondary" | "destructive"> = {
   ok: "default",
   due_soon: "secondary",
   overdue: "destructive",
-  missing: "secondary",
+  missing: "secondary"
 };
 
 export const ADMISSION_STATUS_LABELS: Record<AdmissionStatus, string> = {
   allowed: "Допущен",
   warning: "Допущен с замечаниями",
-  blocked: "Не допущен",
+  blocked: "Не допущен"
 };

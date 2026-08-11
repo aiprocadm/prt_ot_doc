@@ -24,7 +24,9 @@ __all__ = ["FILE_KEY_COLUMN_SUFFIXES", "file_key_columns", "collect_file_keys"]
 FILE_KEY_COLUMN_SUFFIXES: tuple[str, ...] = ("storage_key", "file_key")
 
 
-async def file_key_columns(session: AsyncSession, tables: Iterable[str]) -> dict[str, list[str]]:
+async def file_key_columns(
+    session: AsyncSession, tables: Iterable[str]
+) -> dict[str, list[str]]:
     """Таблица → колонки с ключами хранилища (только реально существующие)."""
 
     wanted = list(dict.fromkeys(str(table) for table in tables))

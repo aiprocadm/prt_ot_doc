@@ -360,9 +360,7 @@ async def print_medical_referral(
     TenantContextValidator.ensure_tenant_context(tenant)
     _ = access
     record = await _get_referral(session, str(tenant.id), referral_id)
-    return await _render_to_response(
-        render_referral(session, tenant=tenant, referral=record, fmt=fmt)
-    )
+    return await _render_to_response(render_referral(session, tenant=tenant, referral=record, fmt=fmt))
 
 
 @router.post(

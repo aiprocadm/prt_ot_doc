@@ -23,19 +23,17 @@ describe("buildProtectedRouteGroups", () => {
   it("preserves critical deep-link routes after route-group extraction", () => {
     const paths = collectPaths(buildProtectedRouteGroups());
 
-    expect(paths).toEqual(
-      expect.arrayContaining([
-        "/dashboard",
-        "/workspace/attention",
-        "/documents/wizard",
-        "/findings",
-        "/corrective-actions",
-        "/audit-prep",
-        "/client-portal/requests",
-        "/pipelines/runs/:id",
-        "/generate-pack/:presetId",
-      ]),
-    );
+    expect(paths).toEqual(expect.arrayContaining([
+      "/dashboard",
+      "/workspace/attention",
+      "/documents/wizard",
+      "/findings",
+      "/corrective-actions",
+      "/audit-prep",
+      "/client-portal/requests",
+      "/pipelines/runs/:id",
+      "/generate-pack/:presetId"
+    ]));
   });
 
   it("keeps a single guarded route entry per permission cluster", () => {

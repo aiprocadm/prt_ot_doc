@@ -22,27 +22,16 @@ import { entityCardLink } from "@/utils/workspaceNavigation";
 const EMPTY_DOCUMENTS: DocumentDto[] = [];
 
 const DocumentsPage = () => {
-  const { list, items, pagination, loading, error, getById } =
-    useDocumentsStore();
-  const [selectedDocument, setSelectedDocument] = useState<DocumentDto | null>(
-    null,
-  );
+  const { list, items, pagination, loading, error, getById } = useDocumentsStore();
+  const [selectedDocument, setSelectedDocument] = useState<DocumentDto | null>(null);
   const [searchParams] = useSearchParams();
   const { can } = useAbility();
   const canView = can(PERMISSIONS.DOCUMENT_VIEW);
   const focusedEntityType = searchParams.get("entity_type") ?? undefined;
   const focusedEntityId = searchParams.get("entity_id") ?? undefined;
-  const focusedView =
-    searchParams.get("view") === "timeline" ? "timeline" : "summary";
-  const safeItems = useMemo(
-    () => (Array.isArray(items) ? items : EMPTY_DOCUMENTS),
-    [items],
-  );
-  const safePagination = pagination ?? {
-    page: 1,
-    page_size: 10,
-    total: safeItems.length,
-  };
+  const focusedView = searchParams.get("view") === "timeline" ? "timeline" : "summary";
+  const safeItems = useMemo(() => (Array.isArray(items) ? items : EMPTY_DOCUMENTS), [items]);
+  const safePagination = pagination ?? { page: 1, page_size: 10, total: safeItems.length };
 
   const statusCounts = safeItems.reduce(
     (acc, document) => {
@@ -52,7 +41,7 @@ const DocumentsPage = () => {
       acc[document.status] = (acc[document.status] ?? 0) + 1;
       return acc;
     },
-    {} as Record<DocumentDto["status"], number>,
+    {} as Record<DocumentDto["status"], number>
   );
 
   useEffect(() => {
@@ -63,28 +52,19 @@ const DocumentsPage = () => {
 
   useEffect(() => {
     if (!canView || !focusedEntityId) return;
-    if (
-      !["document", "document_version", "template_version"].includes(
-        focusedEntityType ?? "",
-      )
-    )
-      return;
+    if (!["document", "document_version", "template_version"].includes(focusedEntityType ?? "")) return;
 
     const existing = safeItems.find((doc) => doc.id === focusedEntityId);
     if (existing) {
       setSelectedDocument((prev) =>
-        prev?.id === existing.id && prev.updated_at === existing.updated_at
-          ? prev
-          : existing,
+        prev?.id === existing.id && prev.updated_at === existing.updated_at ? prev : existing
       );
       return;
     }
     void getById(focusedEntityId).then((doc) => {
       if (doc) {
         setSelectedDocument((prev) =>
-          prev?.id === doc.id && prev.updated_at === doc.updated_at
-            ? prev
-            : doc,
+          prev?.id === doc.id && prev.updated_at === doc.updated_at ? prev : doc
         );
       }
     });
@@ -92,11 +72,11 @@ const DocumentsPage = () => {
 
   const focusSummaryLink = useMemo(
     () => entityCardLink(focusedEntityType, focusedEntityId, "summary"),
-    [focusedEntityId, focusedEntityType],
+    [focusedEntityId, focusedEntityType]
   );
   const focusTimelineLink = useMemo(
     () => entityCardLink(focusedEntityType, focusedEntityId, "timeline"),
-    [focusedEntityId, focusedEntityType],
+    [focusedEntityId, focusedEntityType]
   );
 
   if (!canView) {
@@ -105,12 +85,7 @@ const DocumentsPage = () => {
 
   return (
     <div className="space-y-6">
-      <Breadcrumb
-        items={[
-          { label: "Главная", to: ROUTES.DASHBOARD },
-          { label: "Документы" },
-        ]}
-      />
+      <Breadcrumb items={[{ label: "Главная", to: ROUTES.DASHBOARD }, { label: "Документы" }]} />
       <RegistryPageHeader
         title="Документы"
         description="Все корпоративные документы, шаблоны и версии с контролем статуса и компании."
@@ -135,7 +110,7 @@ const DocumentsPage = () => {
           { label: "Всего документов", value: safePagination.total },
           { label: "Готовые (на странице)", value: statusCounts.ready ?? 0 },
           { label: "Черновики (на странице)", value: statusCounts.draft ?? 0 },
-          { label: "Ошибки (на странице)", value: statusCounts.error ?? 0 },
+          { label: "Ошибки (на странице)", value: statusCounts.error ?? 0 }
         ]}
       />
       <SectionErrorBoundary>
@@ -143,36 +118,21 @@ const DocumentsPage = () => {
           <DocumentCreateWizard />
         </PermissionGate>
       </SectionErrorBoundary>
-      {focusedEntityId &&
-      ["document", "document_version", "template_version"].includes(
-        focusedEntityType ?? "",
-      ) ? (
+      {focusedEntityId && ["document", "document_version", "template_version"].includes(focusedEntityType ?? "") ? (
         <Card>
           <CardContent className="py-4" data-testid="document-focus-card">
-            <div className="text-sm font-semibold">
-              Фокус документа из рабочего пространства
-            </div>
+            <div className="text-sm font-semibold">Фокус документа из рабочего пространства</div>
             <p className="mt-1 text-xs text-muted-foreground">
-              {selectedDocument
-                ? `${selectedDocument.name} · ${selectedDocument.status}`
-                : `Документ ${focusedEntityId.slice(0, 8)} загружается...`}
+              {selectedDocument ? `${selectedDocument.name} · ${selectedDocument.status}` : `Документ ${focusedEntityId.slice(0, 8)} загружается...`}
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
               {focusSummaryLink ? (
-                <Button
-                  size="sm"
-                  variant={focusedView === "summary" ? "default" : "outline"}
-                  asChild
-                >
+                <Button size="sm" variant={focusedView === "summary" ? "default" : "outline"} asChild>
                   <Link to={focusSummaryLink}>Сводка</Link>
                 </Button>
               ) : null}
               {focusTimelineLink ? (
-                <Button
-                  size="sm"
-                  variant={focusedView === "timeline" ? "default" : "outline"}
-                  asChild
-                >
+                <Button size="sm" variant={focusedView === "timeline" ? "default" : "outline"} asChild>
                   <Link to={focusTimelineLink}>Хронология</Link>
                 </Button>
               ) : null}
@@ -202,10 +162,7 @@ const DocumentsPage = () => {
       </SectionErrorBoundary>
       {selectedDocument ? (
         <SectionErrorBoundary>
-          <DocumentPreview
-            document={selectedDocument}
-            initialTab={focusedView === "timeline" ? "timeline" : "preview"}
-          />
+          <DocumentPreview document={selectedDocument} initialTab={focusedView === "timeline" ? "timeline" : "preview"} />
         </SectionErrorBoundary>
       ) : null}
     </div>

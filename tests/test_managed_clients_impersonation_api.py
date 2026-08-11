@@ -17,7 +17,6 @@ from app.domains.managed_clients.lifecycle import ContractStatus, ManagedClientM
 from app.models.managed_clients import (
     ManagedClient,
     ManagedClientAccess,
-    ManagedClientConsent,
     ManagedClientContextSession,
 )
 from app.models.models import Tenant
@@ -74,16 +73,6 @@ async def _client_with_grant(session, tid, *, user_id="u1"):
             all_modules=True,
             modules=[],
             granted_at=_NOW,
-        )
-    )
-    # Срез-12: вход «от имени» требует действующего согласия клиента.
-    session.add(
-        ManagedClientConsent(
-            tenant_id=tid,
-            managed_client_id=client.id,
-            document_ref="Поручение №1",
-            granted_at=_NOW,
-            granted_by_user_id="admin-1",
         )
     )
     await session.flush()
@@ -177,7 +166,9 @@ async def test_expired_session_is_refused_with_its_own_code(sessionmaker):
         tid = await _tenant_id(session)
         client = await _client_with_grant(session, tid)
         await _enter(session, tid, client.id)
-        row = (await session.execute(select(ManagedClientContextSession))).scalars().one()
+        row = (
+            await session.execute(select(ManagedClientContextSession))
+        ).scalars().one()
         row.started_at = datetime.now(tz=timezone.utc) - CONTEXT_TTL - timedelta(minutes=1)
         await session.flush()
 
@@ -263,21 +254,14 @@ async def test_switching_clients_closes_the_previous_session(sessionmaker):
                 granted_at=_NOW,
             )
         )
-        # Срез-12: вход «от имени» требует действующего согласия клиента.
-        session.add(
-            ManagedClientConsent(
-                tenant_id=tid,
-                managed_client_id=second.id,
-                document_ref="Поручение №2",
-                granted_at=_NOW,
-            )
-        )
         await session.flush()
 
         await _enter(session, tid, first.id)
         await _enter(session, tid, second.id)
 
-        rows = (await session.execute(select(ManagedClientContextSession))).scalars().all()
+        rows = (
+            (await session.execute(select(ManagedClientContextSession))).scalars().all()
+        )
         open_rows = [r for r in rows if r.ended_at is None]
 
         with pytest.raises(HTTPException):
@@ -331,5 +315,9 @@ def test_exit_route_is_declared_before_the_client_id_route() -> None:
     """Иначе DELETE /managed-clients/context попадёт в удаление клиента с
     идентификатором «context» — выход из контекста молча стал бы удалением."""
 
-    paths = [r.path for r in routes.router.routes if "DELETE" in getattr(r, "methods", set())]
+    paths = [
+        r.path
+        for r in routes.router.routes
+        if "DELETE" in getattr(r, "methods", set())
+    ]
     assert paths.index("/managed-clients/context") < paths.index("/managed-clients/{mcid}")

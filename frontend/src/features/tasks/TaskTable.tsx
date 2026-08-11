@@ -21,12 +21,11 @@ const TYPE_LABELS: Record<string, string> = {
   attestation: "Аттестации",
   person: "Сотрудник",
   company: "Организация",
-  task: "Задача",
+  task: "Задача"
 };
 
 export const TaskTable = () => {
-  const { items, pagination, list, setPage, setPageSize, loading, patchTask } =
-    useTasksStore();
+  const { items, pagination, list, setPage, setPageSize, loading, patchTask } = useTasksStore();
 
   usePolling(() => list(), 8000, true);
 
@@ -35,12 +34,12 @@ export const TaskTable = () => {
       {
         accessorKey: "title",
         header: "Задача",
-        cell: ({ row }) => row.original.title,
+        cell: ({ row }) => row.original.title
       },
       {
         accessorKey: "status",
         header: "Статус",
-        cell: ({ row }) => <StatusBadge status={row.original.status} />,
+        cell: ({ row }) => <StatusBadge status={row.original.status} />
       },
       {
         accessorKey: "entity_type",
@@ -57,26 +56,22 @@ export const TaskTable = () => {
               {label}
             </Link>
           );
-        },
+        }
       },
       {
         accessorKey: "priority",
         header: "Приоритет",
-        cell: ({ row }) => row.original.priority,
+        cell: ({ row }) => row.original.priority
       },
       {
         accessorKey: "due_at",
         header: "Срок",
         cell: ({ row }) => (
           <div className="flex flex-col">
-            <span>
-              {row.original.due_at ? formatDate(row.original.due_at) : "—"}
-            </span>
-            {row.original.overdue && (
-              <span className="text-xs text-destructive">Просрочено</span>
-            )}
+            <span>{row.original.due_at ? formatDate(row.original.due_at) : "—"}</span>
+            {row.original.overdue && <span className="text-xs text-destructive">Просрочено</span>}
           </div>
-        ),
+        )
       },
       {
         id: "actions",
@@ -91,10 +86,10 @@ export const TaskTable = () => {
           >
             <CheckCheck className="h-4 w-4" />
           </ActionButton>
-        ),
-      },
+        )
+      }
     ],
-    [patchTask],
+    [patchTask]
   );
 
   return (

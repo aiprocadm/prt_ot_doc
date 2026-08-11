@@ -77,26 +77,20 @@ describe("WorkPermitDetailPage", () => {
   it("показывает «Выдать» у черновика при праве manage", async () => {
     setRole([PERMISSIONS.WORK_PERMIT_VIEW, PERMISSIONS.WORK_PERMIT_MANAGE]);
     renderAt();
-    expect(
-      await screen.findByRole("button", { name: /выдать/i }),
-    ).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /выдать/i })).toBeInTheDocument();
   });
 
   it("скрывает действия без права manage", async () => {
     setRole([PERMISSIONS.WORK_PERMIT_VIEW]);
     renderAt();
     await screen.findByText(/монтаж/i);
-    expect(
-      screen.queryByRole("button", { name: /выдать/i }),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /выдать/i })).not.toBeInTheDocument();
   });
 
   it("показывает панель подписей ответственных", async () => {
     setRole([PERMISSIONS.WORK_PERMIT_VIEW, PERMISSIONS.WORK_PERMIT_MANAGE]);
     renderAt();
-    expect(
-      await screen.findByText(/подписи ответственных/i),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/подписи ответственных/i)).toBeInTheDocument();
   });
 
   it("показывает панель ежедневного допуска", async () => {
@@ -114,9 +108,7 @@ describe("WorkPermitDetailPage", () => {
       type_specific: { respiratory_ppe: ["hose_mask"] },
     });
     renderAt();
-    expect(
-      await screen.findByText(/Защита органов дыхания/i),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/Защита органов дыхания/i)).toBeInTheDocument();
     expect(screen.queryByText("Системы безопасности")).not.toBeInTheDocument();
   });
 
@@ -132,9 +124,7 @@ describe("WorkPermitDetailPage", () => {
       },
     });
     renderAt();
-    expect(
-      await screen.findByText(/Меры безопасности в электроустановках/i),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/Меры безопасности в электроустановках/i)).toBeInTheDocument();
     expect(screen.getByText(/Со снятием напряжения/i)).toBeInTheDocument();
     expect(screen.getByText(/Класс напряжения/i)).toBeInTheDocument();
     expect(screen.getByText(/До 1000 В/i)).toBeInTheDocument();
@@ -148,9 +138,7 @@ describe("WorkPermitDetailPage", () => {
       type_specific: { utilities: ["power_cable"], shoring: "shield_bracing" },
     });
     renderAt();
-    expect(
-      await screen.findByText(/Безопасность земляных работ/i),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/Безопасность земляных работ/i)).toBeInTheDocument();
     expect(screen.getByText(/Крепление щитами/i)).toBeInTheDocument();
   });
 });

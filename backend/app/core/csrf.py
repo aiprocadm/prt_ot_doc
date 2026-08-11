@@ -88,9 +88,7 @@ def assert_trusted_origin(request: Request, *, settings=None) -> None:
     origin = request.headers.get("origin") or ""
     if origin:
         if not is_origin_allowed(origin, allowed):
-            raise CsrfOriginError(
-                f"Origin {origin!r} is not allowed for cookie-authenticated requests"
-            )
+            raise CsrfOriginError(f"Origin {origin!r} is not allowed for cookie-authenticated requests")
         return
 
     referer = request.headers.get("referer") or ""

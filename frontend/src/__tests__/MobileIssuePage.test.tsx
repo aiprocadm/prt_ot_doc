@@ -11,36 +11,24 @@ const listLevelsMock = vi.fn();
 vi.mock("@/api/ops", () => ({
   opsApi: {
     getPpeOverview: (...a: unknown[]) => getPpeOverviewMock(...a),
-    createPpeIssue: (...a: unknown[]) => createPpeIssueMock(...a),
-  },
+    createPpeIssue: (...a: unknown[]) => createPpeIssueMock(...a)
+  }
 }));
 vi.mock("@/api/warehouse", () => ({
-  warehouseApi: { listLevels: (...a: unknown[]) => listLevelsMock(...a) },
+  warehouseApi: { listLevels: (...a: unknown[]) => listLevelsMock(...a) }
 }));
 
 const person = (id: string, full_name: string, status = "active") => ({
-  id,
-  created_at: "2024-01-01",
-  updated_at: "2024-01-02",
-  first_name: full_name,
-  last_name: "",
-  full_name,
-  position: "Сварщик",
-  company_id: "c1",
-  status,
+  id, created_at: "2024-01-01", updated_at: "2024-01-02",
+  first_name: full_name, last_name: "", full_name, position: "Сварщик", company_id: "c1", status
 });
-const item = (id: string, name: string) => ({
-  id,
-  name,
-  code: id,
-  category: "head",
-});
+const item = (id: string, name: string) => ({ id, name, code: id, category: "head" });
 
 const renderPage = () =>
   render(
     <MemoryRouter>
       <MobileIssuePage />
-    </MemoryRouter>,
+    </MemoryRouter>
   );
 
 beforeEach(() => {
@@ -48,17 +36,12 @@ beforeEach(() => {
   createPpeIssueMock.mockReset();
   listLevelsMock.mockReset();
   getPpeOverviewMock.mockResolvedValue({
-    persons: [
-      person("p1", "Иван Иванов"),
-      person("p2", "Уволенный Работник", "dismissed"),
-    ],
+    persons: [person("p1", "Иван Иванов"), person("p2", "Уволенный Работник", "dismissed")],
     items: [item("i1", "Каска"), item("i2", "Перчатки")],
     issues: [],
-    expiring: [],
+    expiring: []
   });
-  listLevelsMock.mockResolvedValue([
-    { item_id: "i1", item_name: "Каска", total_quantity: 5, batch_count: 1 },
-  ]);
+  listLevelsMock.mockResolvedValue([{ item_id: "i1", item_name: "Каска", total_quantity: 5, batch_count: 1 }]);
   createPpeIssueMock.mockResolvedValue({ id: "x" });
 });
 
@@ -71,23 +54,17 @@ describe("MobileIssuePage — worker step", () => {
 
     fireEvent.click(screen.getByText("Иван Иванов"));
 
-    await waitFor(() =>
-      expect(screen.getByLabelText("Поиск СИЗ")).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByLabelText("Поиск СИЗ")).toBeInTheDocument());
   });
 
   it("filters workers by query", async () => {
     getPpeOverviewMock.mockResolvedValue({
       persons: [person("p1", "Иван Иванов"), person("p3", "Сидор Сидоров")],
-      items: [],
-      issues: [],
-      expiring: [],
+      items: [], issues: [], expiring: []
     });
     renderPage();
     await screen.findByText("Иван Иванов");
-    fireEvent.change(screen.getByLabelText("Поиск сотрудника"), {
-      target: { value: "сидор" },
-    });
+    fireEvent.change(screen.getByLabelText("Поиск сотрудника"), { target: { value: "сидор" } });
     expect(screen.getByText("Сидор Сидоров")).toBeInTheDocument();
     expect(screen.queryByText("Иван Иванов")).not.toBeInTheDocument();
   });
@@ -137,24 +114,16 @@ describe("MobileIssuePage — review & issue", () => {
     await gotoReviewWithKaska();
     fireEvent.click(screen.getByRole("button", { name: /Выдать всё/ }));
     expect(await screen.findByText(/Выдано позиций: 1/)).toBeInTheDocument();
-    expect(createPpeIssueMock).toHaveBeenCalledWith({
-      person_id: "p1",
-      item_id: "i1",
-      quantity: 1,
-    });
+    expect(createPpeIssueMock).toHaveBeenCalledWith({ person_id: "p1", item_id: "i1", quantity: 1 });
   });
 
   it("on failure shows the error and keeps the failed line for retry", async () => {
-    createPpeIssueMock.mockRejectedValueOnce({
-      message: "Недостаточно остатка",
-    });
+    createPpeIssueMock.mockRejectedValueOnce({ message: "Недостаточно остатка" });
     await gotoReviewWithKaska();
     fireEvent.click(screen.getByRole("button", { name: /Выдать всё/ }));
     expect(await screen.findByText(/Недостаточно остатка/)).toBeInTheDocument();
     // failed line still issuable → button present, not a success panel
-    expect(
-      screen.getByRole("button", { name: /Выдать всё/ }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Выдать всё/ })).toBeInTheDocument();
     expect(screen.queryByText(/Выдано позиций/)).not.toBeInTheDocument();
   });
 });

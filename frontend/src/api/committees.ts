@@ -173,9 +173,7 @@ export interface CommitteeKpi {
 const base = "/committees";
 
 export const committeesApi = {
-  async list(
-    params: { limit?: number; offset?: number } = {},
-  ): Promise<CommitteePage> {
+  async list(params: { limit?: number; offset?: number } = {}): Promise<CommitteePage> {
     const r = await apiClient.get<CommitteePage>(base, {
       params: { limit: 100, offset: 0, ...params },
     });
@@ -186,23 +184,15 @@ export const committeesApi = {
     return (await apiClient.get<Committee>(`${base}/${id}`)).data;
   },
 
-  async listMeetings(
-    committeeId: string,
-    params: { limit?: number; offset?: number } = {},
-  ): Promise<MeetingPage> {
-    const r = await apiClient.get<MeetingPage>(
-      `${base}/${committeeId}/meetings`,
-      {
-        params: { limit: 100, offset: 0, ...params },
-      },
-    );
+  async listMeetings(committeeId: string, params: { limit?: number; offset?: number } = {}): Promise<MeetingPage> {
+    const r = await apiClient.get<MeetingPage>(`${base}/${committeeId}/meetings`, {
+      params: { limit: 100, offset: 0, ...params },
+    });
     return r.data;
   },
 
   async getProtocol(meetingId: string): Promise<Protocol> {
-    return (
-      await apiClient.get<Protocol>(`${base}/meetings/${meetingId}/protocol`)
-    ).data;
+    return (await apiClient.get<Protocol>(`${base}/meetings/${meetingId}/protocol`)).data;
   },
 
   // ── Write helpers (срез-1 create/update) ──────────────────────────────
@@ -233,26 +223,17 @@ export const committeesApi = {
   async addMember(
     committeeId: string,
     payload: { person_id: string; role?: string },
-  ): Promise<{
-    id: string;
-    committee_id: string;
-    person_id: string;
-    role: string;
-  }> {
+  ): Promise<{ id: string; committee_id: string; person_id: string; role: string }> {
     return (
-      await apiClient.post<{
-        id: string;
-        committee_id: string;
-        person_id: string;
-        role: string;
-      }>(`${base}/${committeeId}/members`, payload)
+      await apiClient.post<{ id: string; committee_id: string; person_id: string; role: string }>(
+        `${base}/${committeeId}/members`,
+        payload,
+      )
     ).data;
   },
 
   async listMembers(committeeId: string): Promise<MemberDetail[]> {
-    return (
-      await apiClient.get<MemberDetail[]>(`${base}/${committeeId}/members`)
-    ).data;
+    return (await apiClient.get<MemberDetail[]>(`${base}/${committeeId}/members`)).data;
   },
 
   async removeMember(committeeId: string, memberId: string): Promise<void> {
@@ -263,37 +244,21 @@ export const committeesApi = {
     committeeId: string,
     payload: { scheduled_at: string; location?: string | null },
   ): Promise<Meeting> {
-    return (
-      await apiClient.post<Meeting>(`${base}/${committeeId}/meetings`, payload)
-    ).data;
+    return (await apiClient.post<Meeting>(`${base}/${committeeId}/meetings`, payload)).data;
   },
 
   async createDecision(
     meetingId: string,
     payload: { text: string; agenda_item_id?: string | null },
   ): Promise<Decision> {
-    return (
-      await apiClient.post<Decision>(
-        `${base}/meetings/${meetingId}/decisions`,
-        payload,
-      )
-    ).data;
+    return (await apiClient.post<Decision>(`${base}/meetings/${meetingId}/decisions`, payload)).data;
   },
 
   async createTask(
     decisionId: string,
-    payload: {
-      assignee_person_id?: string | null;
-      due_date?: string | null;
-      evidence_note?: string | null;
-    },
+    payload: { assignee_person_id?: string | null; due_date?: string | null; evidence_note?: string | null },
   ): Promise<DecisionTask> {
-    return (
-      await apiClient.post<DecisionTask>(
-        `${base}/decisions/${decisionId}/tasks`,
-        payload,
-      )
-    ).data;
+    return (await apiClient.post<DecisionTask>(`${base}/decisions/${decisionId}/tasks`, payload)).data;
   },
 
   async updateTask(
@@ -305,19 +270,13 @@ export const committeesApi = {
       evidence_note?: string | null;
     },
   ): Promise<DecisionTask> {
-    return (
-      await apiClient.patch<DecisionTask>(`${base}/tasks/${taskId}`, payload)
-    ).data;
+    return (await apiClient.patch<DecisionTask>(`${base}/tasks/${taskId}`, payload)).data;
   },
 
   // ── Срез-2: attendance, quorum-hold, votes, protocol journal ──────────
 
   async getAttendance(meetingId: string): Promise<Attendance[]> {
-    return (
-      await apiClient.get<Attendance[]>(
-        `${base}/meetings/${meetingId}/attendance`,
-      )
-    ).data;
+    return (await apiClient.get<Attendance[]>(`${base}/meetings/${meetingId}/attendance`)).data;
   },
 
   async putAttendance(
@@ -325,34 +284,21 @@ export const committeesApi = {
     items: { person_id: string; present: boolean }[],
   ): Promise<Attendance[]> {
     return (
-      await apiClient.put<Attendance[]>(
-        `${base}/meetings/${meetingId}/attendance`,
-        { items },
-      )
+      await apiClient.put<Attendance[]>(`${base}/meetings/${meetingId}/attendance`, { items })
     ).data;
   },
 
   // ── Срез-4: приглашения + печатная форма протокола ────────────────────
 
   async getInvitations(meetingId: string): Promise<Invitation[]> {
-    return (
-      await apiClient.get<Invitation[]>(
-        `${base}/meetings/${meetingId}/invitations`,
-      )
-    ).data;
+    return (await apiClient.get<Invitation[]>(`${base}/meetings/${meetingId}/invitations`)).data;
   },
 
-  async putInvitations(
-    meetingId: string,
-    personIds: string[],
-  ): Promise<Invitation[]> {
+  async putInvitations(meetingId: string, personIds: string[]): Promise<Invitation[]> {
     return (
-      await apiClient.put<Invitation[]>(
-        `${base}/meetings/${meetingId}/invitations`,
-        {
-          person_ids: personIds,
-        },
-      )
+      await apiClient.put<Invitation[]>(`${base}/meetings/${meetingId}/invitations`, {
+        person_ids: personIds,
+      })
     ).data;
   },
 
@@ -361,13 +307,10 @@ export const committeesApi = {
     fmt: "docx" | "pdf",
     nameHint?: string,
   ): Promise<void> {
-    const { data } = await apiClient.get<Blob>(
-      `${base}/meetings/${meetingId}/protocol/print`,
-      {
-        params: { format: fmt },
-        responseType: "blob",
-      },
-    );
+    const { data } = await apiClient.get<Blob>(`${base}/meetings/${meetingId}/protocol/print`, {
+      params: { format: fmt },
+      responseType: "blob",
+    });
     const url = URL.createObjectURL(data);
     const a = document.createElement("a");
     a.href = url;
@@ -377,32 +320,17 @@ export const committeesApi = {
   },
 
   async holdMeeting(meetingId: string): Promise<Meeting> {
-    return (
-      await apiClient.patch<Meeting>(`${base}/meetings/${meetingId}`, {
-        status: "held",
-      })
-    ).data;
+    return (await apiClient.patch<Meeting>(`${base}/meetings/${meetingId}`, { status: "held" })).data;
   },
 
-  async castVote(
-    decisionId: string,
-    person_id: string,
-    choice: VoteChoice,
-  ): Promise<Vote> {
+  async castVote(decisionId: string, person_id: string, choice: VoteChoice): Promise<Vote> {
     return (
-      await apiClient.post<Vote>(`${base}/decisions/${decisionId}/votes`, {
-        person_id,
-        choice,
-      })
+      await apiClient.post<Vote>(`${base}/decisions/${decisionId}/votes`, { person_id, choice })
     ).data;
   },
 
   async getVotes(decisionId: string): Promise<DecisionVoteSummary> {
-    return (
-      await apiClient.get<DecisionVoteSummary>(
-        `${base}/decisions/${decisionId}/votes`,
-      )
-    ).data;
+    return (await apiClient.get<DecisionVoteSummary>(`${base}/decisions/${decisionId}/votes`)).data;
   },
 
   async listProtocols(

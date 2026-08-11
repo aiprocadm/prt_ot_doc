@@ -24,8 +24,8 @@ describe("RoutePermissionMatrix", () => {
         email: "u@example.com",
         full_name: "User",
         roles: ["worker"],
-        permissions: [PERMISSIONS.DASHBOARD_VIEW],
-      },
+        permissions: [PERMISSIONS.DASHBOARD_VIEW]
+      }
     });
   });
 
@@ -33,19 +33,12 @@ describe("RoutePermissionMatrix", () => {
     render(
       <MemoryRouter initialEntries={["/client-portal/dashboard"]}>
         <Routes>
-          <Route
-            element={
-              <ProtectedRoute permission={PERMISSIONS.CLIENT_PORTAL_VIEW} />
-            }
-          >
-            <Route
-              path="/client-portal/dashboard"
-              element={<ClientPortalPage />}
-            />
+          <Route element={<ProtectedRoute permission={PERMISSIONS.CLIENT_PORTAL_VIEW} />}>
+            <Route path="/client-portal/dashboard" element={<ClientPortalPage />} />
           </Route>
           <Route path="/no-access" element={<AccessDeniedPage />} />
         </Routes>
-      </MemoryRouter>,
+      </MemoryRouter>
     );
 
     expect(screen.getByText("Доступ ограничен")).toBeInTheDocument();
@@ -57,22 +50,18 @@ describe("RoutePermissionMatrix", () => {
       ...state,
       user: state.user
         ? { ...state.user, permissions: [PERMISSIONS.ADMIN_MANAGE_ROLES] }
-        : null,
+        : null
     }));
 
     render(
       <MemoryRouter initialEntries={["/admin"]}>
         <Routes>
-          <Route
-            element={
-              <ProtectedRoute permission={PERMISSIONS.ADMIN_MANAGE_ROLES} />
-            }
-          >
+          <Route element={<ProtectedRoute permission={PERMISSIONS.ADMIN_MANAGE_ROLES} />}>
             <Route path="/admin" element={<AdminPage />} />
           </Route>
           <Route path="/no-access" element={<AccessDeniedPage />} />
         </Routes>
-      </MemoryRouter>,
+      </MemoryRouter>
     );
 
     expect(screen.getByText("Админ-панель")).toBeInTheDocument();

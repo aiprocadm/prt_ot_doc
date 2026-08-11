@@ -76,8 +76,7 @@ async def test_health_service_check_minio(app_fixture) -> None:
     assert result.name == "minio"
     # Status depends on S3 backend (in-memory or real MinIO)
     assert result.status in ("ok", "degraded")
-    # In-memory backend отвечает быстрее разрешения таймера → бывает ровно 0.
-    assert result.duration_ms >= 0
+    assert result.duration_ms > 0
 
 
 @pytest.mark.anyio

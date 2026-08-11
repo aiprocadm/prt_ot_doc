@@ -9,8 +9,8 @@ import { tenantStorage } from "@/api/tenantStorage";
 vi.mock("sonner", () => ({
   toast: {
     error: vi.fn(),
-    success: vi.fn(),
-  },
+    success: vi.fn()
+  }
 }));
 
 describe("sendUxMetric", () => {
@@ -31,7 +31,7 @@ describe("sendUxMetric", () => {
     mock.onPost("/analytics/ux-events").reply(404, {
       code: "NOT_FOUND",
       type: "not_found",
-      message: "Not Found",
+      message: "Not Found"
     });
 
     await expect(sendUxMetric("nav.landing")).resolves.toBeUndefined();
@@ -42,12 +42,10 @@ describe("sendUxMetric", () => {
     mock.onGet("/documents/missing").reply(404, {
       code: "NOT_FOUND",
       type: "not_found",
-      message: "Not Found",
+      message: "Not Found"
     });
 
-    await expect(apiClient.get("/documents/missing")).rejects.toMatchObject({
-      status: 404,
-    });
+    await expect(apiClient.get("/documents/missing")).rejects.toMatchObject({ status: 404 });
     expect(toast.error).toHaveBeenCalled();
   });
 });

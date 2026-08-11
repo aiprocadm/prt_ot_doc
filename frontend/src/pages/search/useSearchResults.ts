@@ -17,16 +17,7 @@ type Params = {
   onSearchSuccess?: () => void;
 };
 
-export const useSearchResults = ({
-  query,
-  activeTypes,
-  status,
-  companyId,
-  siteId,
-  projectId,
-  riskLevel,
-  onSearchSuccess,
-}: Params) => {
+export const useSearchResults = ({ query, activeTypes, status, companyId, siteId, projectId, riskLevel, onSearchSuccess }: Params) => {
   const [items, setItems] = useState<SearchItem[]>([]);
   const [facets, setFacets] = useState<SearchFacets>({});
   const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -77,16 +68,9 @@ export const useSearchResults = ({
         onSearchSuccessRef.current?.();
       })
       .catch((err) => {
-        if (controller.signal.aborted || searchRequestId.current !== requestId)
-          return;
-        const apiError = (err as ApiError) ?? {
-          status: 500,
-          message: "Не удалось загрузить результаты поиска",
-        };
-        setError({
-          status: apiError.status ?? 500,
-          message: apiError.message ?? "Не удалось загрузить результаты поиска",
-        });
+        if (controller.signal.aborted || searchRequestId.current !== requestId) return;
+        const apiError = (err as ApiError) ?? { status: 500, message: "Не удалось загрузить результаты поиска" };
+        setError({ status: apiError.status ?? 500, message: apiError.message ?? "Не удалось загрузить результаты поиска" });
         setItems([]);
         setFacets({});
         setNextCursor(null);
@@ -99,16 +83,7 @@ export const useSearchResults = ({
     return () => {
       controller.abort();
     };
-  }, [
-    query,
-    activeTypes,
-    status,
-    companyId,
-    siteId,
-    projectId,
-    riskLevel,
-    reloadNonce,
-  ]);
+  }, [query, activeTypes, status, companyId, siteId, projectId, riskLevel, reloadNonce]);
 
   const reload = () => setReloadNonce((prev) => prev + 1);
 
@@ -141,33 +116,16 @@ export const useSearchResults = ({
       setNextCursor(data.next_cursor ?? null);
       setError(null);
     } catch (err) {
-      if (controller.signal.aborted || loadMoreRequestId.current !== requestId)
-        return;
-      const apiError = (err as ApiError) ?? {
-        status: 500,
-        message: "Не удалось загрузить дополнительные результаты",
-      };
-      setError({
-        status: apiError.status ?? 500,
-        message:
-          apiError.message ?? "Не удалось загрузить дополнительные результаты",
-      });
+      if (controller.signal.aborted || loadMoreRequestId.current !== requestId) return;
+      const apiError = (err as ApiError) ?? { status: 500, message: "Не удалось загрузить дополнительные результаты" };
+      setError({ status: apiError.status ?? 500, message: apiError.message ?? "Не удалось загрузить дополнительные результаты" });
     } finally {
       if (loadMoreRequestId.current === requestId) {
         loadMoreInFlight.current = false;
         setLoadingMore(false);
       }
     }
-  }, [
-    activeTypes,
-    companyId,
-    nextCursor,
-    projectId,
-    query,
-    riskLevel,
-    siteId,
-    status,
-  ]);
+  }, [activeTypes, companyId, nextCursor, projectId, query, riskLevel, siteId, status]);
 
   return {
     items,

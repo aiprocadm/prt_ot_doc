@@ -41,9 +41,9 @@ def test_refresh_session_has_required_columns() -> None:
         "updated_at",
         "version",
     }
-    assert required.issubset(
-        columns.keys()
-    ), f"refresh_session missing columns: {required - set(columns.keys())}"
+    assert required.issubset(columns.keys()), (
+        f"refresh_session missing columns: {required - set(columns.keys())}"
+    )
 
 
 def test_refresh_session_user_fk_cascades_on_delete() -> None:
@@ -62,13 +62,13 @@ def test_refresh_session_user_fk_cascades_on_delete() -> None:
 
 def test_refresh_session_token_jti_is_unique_and_indexed() -> None:
     column = inspect(RefreshSession).columns["token_jti"]
-    assert (
-        column.unique is True
-    ), "token_jti must be unique — duplicate jti would defeat rotation revocation"
+    assert column.unique is True, (
+        "token_jti must be unique — duplicate jti would defeat rotation revocation"
+    )
     index_names = {idx.name for idx in RefreshSession.__table__.indexes}
-    assert (
-        "ix_refresh_session_token_jti" in index_names
-    ), "ix_refresh_session_token_jti index required for fast consume lookups"
+    assert "ix_refresh_session_token_jti" in index_names, (
+        "ix_refresh_session_token_jti index required for fast consume lookups"
+    )
 
 
 def test_refresh_session_composite_indexes_for_family_queries() -> None:

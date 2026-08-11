@@ -111,7 +111,9 @@ class TenantFilesArchiveService:
     async def keys(self) -> list[str]:
         from app.core.rls_policy import RLS_ENABLED_TABLES
 
-        return await collect_file_keys(self.session, RLS_ENABLED_TABLES, tenant_id=self.tenant_id)
+        return await collect_file_keys(
+            self.session, RLS_ENABLED_TABLES, tenant_id=self.tenant_id
+        )
 
     async def build(self) -> tuple[bytes, ArchiveReport]:
         """Собрать архив и отчёт о нём. Отчёт лежит и внутри архива."""

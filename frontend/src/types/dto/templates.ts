@@ -1,24 +1,9 @@
 import type { BaseEntityDto } from "./common";
 
-export type TemplateStatus =
-  | "draft"
-  | "active"
-  | "published"
-  | "uploaded"
-  | "linted"
-  | "ready"
-  | "archived"
-  | "deprecated";
+export type TemplateStatus = "draft" | "active" | "published" | "uploaded" | "linted" | "ready" | "archived" | "deprecated";
 
 export interface TemplateScopeDto {
-  type:
-    | "global"
-    | "system"
-    | "tenant"
-    | "legal_entity"
-    | "organization"
-    | "site"
-    | string;
+  type: "global" | "system" | "tenant" | "legal_entity" | "organization" | "site" | string;
   tenant_id?: string | null;
   company_id?: string | null;
   site_id?: string | null;

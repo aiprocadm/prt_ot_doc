@@ -82,10 +82,7 @@ const electricalBase = {
   opened_at: null,
   closed_at: null,
   suspended_at: null,
-  type_specific: {
-    technical_measures: ["disconnect"],
-    voltage_condition: "de_energized",
-  },
+  type_specific: { technical_measures: ["disconnect"], voltage_condition: "de_energized" },
   created_at: "",
   updated_at: "",
 };
@@ -114,9 +111,7 @@ describe("WorkPermitElectricalGroups", () => {
     // Строка про производителя работ с указанием требуемой группы — ищем listitem
     const items = screen.getAllByRole("listitem");
     const hasInsufficient = items.some(
-      (el) =>
-        /Производитель работ/i.test(el.textContent ?? "") &&
-        /требуется/i.test(el.textContent ?? ""),
+      (el) => /Производитель работ/i.test(el.textContent ?? "") && /требуется/i.test(el.textContent ?? ""),
     );
     expect(hasInsufficient).toBe(true);
   });
@@ -129,7 +124,9 @@ describe("WorkPermitElectricalGroups", () => {
     renderAt();
     await screen.findByText(/Замена выключателя/i);
     // Баннер с «группа электробезопасности» или «требуется» не должен появляться
-    expect(screen.queryByText(/требуется/i)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/требуется/i),
+    ).not.toBeInTheDocument();
   });
 
   it("не показывает баннер готовности для не-электро наряда", async () => {

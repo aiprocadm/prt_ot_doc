@@ -4,10 +4,7 @@ export type SignatureRequest = { id: string; status: string; provider: string };
 
 export const signApi = {
   list: async (status?: string) => {
-    const { data } = await apiClient.get<{ items: SignatureRequest[] }>(
-      "/sign/requests",
-      { params: { status } },
-    );
+    const { data } = await apiClient.get<{ items: SignatureRequest[] }>("/sign/requests", { params: { status } });
     return data.items;
   },
   create: async (payload: {
@@ -22,9 +19,7 @@ export const signApi = {
     return data;
   },
   refresh: async (id: string) => {
-    const { data } = await apiClient.post(
-      `/sign/requests/${id}/refresh-status`,
-    );
+    const { data } = await apiClient.post(`/sign/requests/${id}/refresh-status`);
     return data;
   },
   verify: async (id: string) => {

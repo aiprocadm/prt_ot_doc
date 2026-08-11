@@ -1,14 +1,5 @@
-import type {
-  DocumentBatchItem,
-  DocumentBatchRun,
-  MappingValidationResponse,
-  ReplaceDryRunResponse,
-} from "@/api/documents";
-import type {
-  BrandingPreviewDto,
-  LayoutPresetDto,
-  SiteDto,
-} from "@/api/branding";
+import type { DocumentBatchItem, DocumentBatchRun, MappingValidationResponse, ReplaceDryRunResponse } from "@/api/documents";
+import type { BrandingPreviewDto, LayoutPresetDto, SiteDto } from "@/api/branding";
 import type { PipelineRun } from "@/api/pipelines";
 import type { DocumentsWizardState } from "@/stores/documentsWizard";
 import type { QualityReport } from "@/types/dto/documentQuality";

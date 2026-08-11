@@ -9,19 +9,14 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { BudgetFormDialog } from "@/features/budget/BudgetFormDialog";
-import {
-  BUDGET_DOMAIN_LABELS,
-  BUDGET_DOMAINS,
-  formatRub,
-  toApiError,
-} from "@/pages/budget/budgetVocab";
+import { BUDGET_DOMAIN_LABELS, BUDGET_DOMAINS, formatRub, toApiError } from "@/pages/budget/budgetVocab";
 import { PERMISSIONS } from "@/permissions/permissions";
 import type { ApiError } from "@/types/dto/common";
 import type {
   BudgetDomain,
   SafetyBudgetDetailDto,
   SafetyBudgetDto,
-  SafetyBudgetPageDto,
+  SafetyBudgetPageDto
 } from "@/types/dto/budget";
 
 interface Props {
@@ -64,8 +59,7 @@ export const BudgetsTab = ({ budgets, onChanged }: Props) => {
         if (seq === requestSeq.current) setItems(page.items);
       })
       .catch((err) => {
-        if (seq === requestSeq.current)
-          setListError(toApiError(err, "Не удалось загрузить бюджеты"));
+        if (seq === requestSeq.current) setListError(toApiError(err, "Не удалось загрузить бюджеты"));
       })
       .finally(() => {
         if (seq === requestSeq.current) setListLoading(false);
@@ -84,9 +78,7 @@ export const BudgetsTab = ({ budgets, onChanged }: Props) => {
     budgetApi
       .getBudget(id)
       .then(setDetail)
-      .catch((err) =>
-        setDetailError(toApiError(err, "Не удалось загрузить бюджет")),
-      )
+      .catch((err) => setDetailError(toApiError(err, "Не удалось загрузить бюджет")))
       .finally(() => setDetailLoading(false));
   }, []);
 
@@ -118,9 +110,7 @@ export const BudgetsTab = ({ budgets, onChanged }: Props) => {
             id="budget-domain-filter"
             className="h-9 rounded-md border px-3 text-sm"
             value={domainFilter}
-            onChange={(e) =>
-              setDomainFilter(e.target.value as BudgetDomain | "")
-            }
+            onChange={(e) => setDomainFilter(e.target.value as BudgetDomain | "")}
           >
             <option value="">Все домены</option>
             {BUDGET_DOMAINS.map((d) => (
@@ -131,10 +121,7 @@ export const BudgetsTab = ({ budgets, onChanged }: Props) => {
           </select>
         </div>
         <Can permission={PERMISSIONS.BUDGET_MANAGE}>
-          <BudgetFormDialog
-            trigger={<Button>Новый бюджет</Button>}
-            onSubmitted={onChanged}
-          />
+          <BudgetFormDialog trigger={<Button>Новый бюджет</Button>} onSubmitted={onChanged} />
         </Can>
       </div>
 
@@ -142,10 +129,7 @@ export const BudgetsTab = ({ budgets, onChanged }: Props) => {
       {listLoading ? <LoadingScreen label="Загрузка бюджетов" /> : null}
 
       {!listLoading && !listError && items.length === 0 ? (
-        <EmptyState
-          title="Бюджетов нет"
-          description="Создайте первый бюджет."
-        />
+        <EmptyState title="Бюджетов нет" description="Создайте первый бюджет." />
       ) : null}
 
       {!listLoading && !listError && items.length > 0 ? (
@@ -164,22 +148,14 @@ export const BudgetsTab = ({ budgets, onChanged }: Props) => {
               {items.map((budget) => (
                 <tr key={budget.id} className="border-b last:border-0">
                   <td className="py-2 pr-4">{budget.name}</td>
-                  <td className="py-2 pr-4">
-                    {BUDGET_DOMAIN_LABELS[budget.domain]}
-                  </td>
+                  <td className="py-2 pr-4">{BUDGET_DOMAIN_LABELS[budget.domain]}</td>
                   <td className="py-2 pr-4">
                     {budget.period_start} – {budget.period_end}
                   </td>
-                  <td className="py-2 pr-4">
-                    {formatRub(budget.planned_amount)}
-                  </td>
+                  <td className="py-2 pr-4">{formatRub(budget.planned_amount)}</td>
                   <td className="py-2">
                     <div className="flex flex-wrap gap-1">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => openBudget(budget.id)}
-                      >
+                      <Button size="sm" variant="outline" onClick={() => openBudget(budget.id)}>
                         Открыть
                       </Button>
                       <Can permission={PERMISSIONS.BUDGET_MANAGE}>
@@ -192,11 +168,7 @@ export const BudgetsTab = ({ budgets, onChanged }: Props) => {
                           initialData={budget}
                           onSubmitted={afterMutation}
                         />
-                        <Button
-                          size="sm"
-                          variant="destructive"
-                          onClick={() => void removeBudget(budget)}
-                        >
+                        <Button size="sm" variant="destructive" onClick={() => void removeBudget(budget)}>
                           Удалить
                         </Button>
                       </Can>
@@ -215,47 +187,29 @@ export const BudgetsTab = ({ budgets, onChanged }: Props) => {
             <CardTitle>Детали бюджета</CardTitle>
           </CardHeader>
           <CardContent>
-            {detailError ? (
-              <ErrorState
-                error={detailError}
-                onRetry={() => openBudget(selectedId)}
-              />
-            ) : null}
+            {detailError ? <ErrorState error={detailError} onRetry={() => openBudget(selectedId)} /> : null}
             {detailLoading ? <LoadingScreen label="Загрузка бюджета" /> : null}
             {!detailLoading && !detailError && detail ? (
               <div className="space-y-3">
                 <div className="grid gap-2 text-sm md:grid-cols-4">
                   <div>
-                    <span className="text-muted-foreground">План:</span>{" "}
-                    {formatRub(detail.planned_amount)}
+                    <span className="text-muted-foreground">План:</span> {formatRub(detail.planned_amount)}
                   </div>
                   <div>
-                    <span className="text-muted-foreground">Факт:</span>{" "}
-                    {formatRub(detail.actual_total)}
+                    <span className="text-muted-foreground">Факт:</span> {formatRub(detail.actual_total)}
                   </div>
                   <div>
                     <span className="text-muted-foreground">Остаток:</span>{" "}
-                    <span
-                      className={
-                        detail.remaining < 0
-                          ? "font-semibold text-destructive"
-                          : ""
-                      }
-                    >
+                    <span className={detail.remaining < 0 ? "font-semibold text-destructive" : ""}>
                       {formatRub(detail.remaining)}
                     </span>
                   </div>
                   <div data-testid="budget-detail-expense-count">
-                    <span className="text-muted-foreground">
-                      Записей расходов:
-                    </span>{" "}
-                    {detail.expense_count}
+                    <span className="text-muted-foreground">Записей расходов:</span> {detail.expense_count}
                   </div>
                 </div>
                 {detail.by_article.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    Расходов пока нет.
-                  </p>
+                  <p className="text-sm text-muted-foreground">Расходов пока нет.</p>
                 ) : (
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
@@ -267,10 +221,7 @@ export const BudgetsTab = ({ budgets, onChanged }: Props) => {
                       </thead>
                       <tbody>
                         {detail.by_article.map((row) => (
-                          <tr
-                            key={row.article_id ?? "none"}
-                            className="border-b last:border-0"
-                          >
+                          <tr key={row.article_id ?? "none"} className="border-b last:border-0">
                             <td className="py-2 pr-4">{row.article_name}</td>
                             <td className="py-2">{formatRub(row.amount)}</td>
                           </tr>

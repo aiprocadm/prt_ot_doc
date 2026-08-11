@@ -10,11 +10,7 @@ const DebouncedInput = () => {
   const debounced = useDebounce(value, 200);
   return (
     <div>
-      <input
-        aria-label="input"
-        value={value}
-        onChange={(event) => setValue(event.target.value)}
-      />
+      <input aria-label="input" value={value} onChange={(event) => setValue(event.target.value)} />
       <span data-testid="debounced">{debounced}</span>
     </div>
   );

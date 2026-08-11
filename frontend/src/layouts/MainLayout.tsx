@@ -1,11 +1,4 @@
-import {
-  createContext,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-  type ReactNode,
-} from "react";
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
 
 import { Toaster } from "sonner";
@@ -19,18 +12,13 @@ import { NavMenuProvider } from "@/components/layout/NavMenuProvider";
 import { TopNav } from "@/components/layout/TopNav";
 import { TenantGate } from "@/components/tenant/TenantGate";
 import { BILLING_ALERT_STORAGE_KEY } from "@/api/errorHandling";
-import {
-  sessionStorageGetItem,
-  sessionStorageRemoveItem,
-} from "@/utils/browserStorage";
+import { sessionStorageGetItem, sessionStorageRemoveItem } from "@/utils/browserStorage";
 
 interface SidebarContextValue {
   setSidebar: (content: ReactNode) => void;
 }
 
-const SidebarContext = createContext<SidebarContextValue | undefined>(
-  undefined,
-);
+const SidebarContext = createContext<SidebarContextValue | undefined>(undefined);
 
 export const useSidebar = () => {
   const context = useContext(SidebarContext);
@@ -64,43 +52,39 @@ export const MainLayout = () => {
     <SidebarContext.Provider value={contextValue}>
       <TenantGate>
         <NavMenuProvider>
-          <div className="min-h-screen bg-background text-foreground">
+        <div className="min-h-screen bg-background text-foreground">
+          <SectionErrorBoundary>
+            <TopNav />
+          </SectionErrorBoundary>
+          <SectionErrorBoundary>
+            <ConnectivityBanner />
+          </SectionErrorBoundary>
+          {billingAlert && (
+            <div className="border-b border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-900">
+              {billingAlert === "BILLING_BLOCKED" ? "Доступ ограничен из-за статуса оплаты." : "Достигнут лимит тарифа."}{" "}
+              <Link className="font-medium underline" to="/admin/billing">Перейти в биллинг</Link>
+            </div>
+          )}
+          <div className="flex">
             <SectionErrorBoundary>
-              <TopNav />
+              <SideNav />
             </SectionErrorBoundary>
-            <SectionErrorBoundary>
-              <ConnectivityBanner />
-            </SectionErrorBoundary>
-            {billingAlert && (
-              <div className="border-b border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-900">
-                {billingAlert === "BILLING_BLOCKED"
-                  ? "Доступ ограничен из-за статуса оплаты."
-                  : "Достигнут лимит тарифа."}{" "}
-                <Link className="font-medium underline" to="/admin/billing">
-                  Перейти в биллинг
-                </Link>
-              </div>
-            )}
-            <div className="flex">
-              <SectionErrorBoundary>
-                <SideNav />
-              </SectionErrorBoundary>
-              <div className="flex-1">
-                <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-4 px-4 py-6 lg:flex-row">
-                  <Sidebar title="Фильтры">{sidebarContent}</Sidebar>
-                  <SectionErrorBoundary key={location.pathname}>
-                    <main className="flex-1 pb-16">
-                      <Outlet />
-                    </main>
-                  </SectionErrorBoundary>
-                  <SectionErrorBoundary>
-                    <RightDrawer />
-                  </SectionErrorBoundary>
-                </div>
+            <div className="flex-1">
+              <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-4 px-4 py-6 lg:flex-row">
+                <Sidebar title="Фильтры">{sidebarContent}</Sidebar>
+                <SectionErrorBoundary key={location.pathname}>
+                  <main className="flex-1 pb-16">
+                    <Outlet />
+                  </main>
+                </SectionErrorBoundary>
+                <SectionErrorBoundary>
+                  <RightDrawer />
+                </SectionErrorBoundary>
               </div>
             </div>
-            <Toaster richColors position="top-right" closeButton />
           </div>
+          <Toaster richColors position="top-right" closeButton />
+        </div>
         </NavMenuProvider>
       </TenantGate>
     </SidebarContext.Provider>

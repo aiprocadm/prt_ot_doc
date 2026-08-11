@@ -1,12 +1,7 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
-import {
-  approvalsApi,
-  type ApprovalProcess,
-  type ApprovalTask,
-  type ApprovalTimelineItem,
-} from "@/api/approvals";
+import { approvalsApi, type ApprovalProcess, type ApprovalTask, type ApprovalTimelineItem } from "@/api/approvals";
 import { edoApi, type EdoEnvelope } from "@/api/edo";
 import { signApi, type SignatureRequest } from "@/api/sign";
 import ApprovalTaskCard from "@/components/ApprovalTaskCard";
@@ -18,14 +13,7 @@ import { StatusBadge } from "@/components/common/StatusBadge";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { ApiError } from "@/types/dto/common";
 
@@ -37,11 +25,7 @@ const ApprovalsInboxPage = () => {
   const [signatures, setSignatures] = useState<SignatureRequest[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
-  const [timeline, setTimeline] = useState<{
-    id: string;
-    currentStep: number;
-    items: ApprovalTimelineItem[];
-  } | null>(null);
+  const [timeline, setTimeline] = useState<{ id: string; currentStep: number; items: ApprovalTimelineItem[] } | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const showTimeline = async (p: ApprovalProcess) => {
@@ -57,11 +41,7 @@ const ApprovalsInboxPage = () => {
     }
   };
 
-  const runAction = async (
-    id: string,
-    fn: () => Promise<unknown>,
-    okMsg: string,
-  ) => {
+  const runAction = async (id: string, fn: () => Promise<unknown>, okMsg: string) => {
     setBusyId(id);
     try {
       await fn();
@@ -91,11 +71,7 @@ const ApprovalsInboxPage = () => {
       setEdos(edoItems);
       setSignatures(signItems);
     } catch (err) {
-      setError(
-        (err as ApiError) ?? {
-          message: "Не удалось загрузить данные согласований",
-        },
-      );
+      setError((err as ApiError) ?? { message: "Не удалось загрузить данные согласований" });
     } finally {
       setLoading(false);
     }
@@ -108,15 +84,8 @@ const ApprovalsInboxPage = () => {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <Breadcrumb
-          items={[
-            { label: "Главная", to: "/dashboard" },
-            { label: "ЭДО / Согласования" },
-          ]}
-        />
-        <Button variant="outline" onClick={() => void load()}>
-          Обновить
-        </Button>
+        <Breadcrumb items={[{ label: "Главная", to: "/dashboard" }, { label: "ЭДО / Согласования" }]} />
+        <Button variant="outline" onClick={() => void load()}>Обновить</Button>
       </div>
 
       <ErrorState error={error ?? undefined} onRetry={() => void load()} />
@@ -125,19 +94,10 @@ const ApprovalsInboxPage = () => {
       <Tabs defaultValue="my-tasks">
         <TabsList>
           <TabsTrigger value="my-tasks">
-            Мои задачи{" "}
-            {tasks.length > 0 && (
-              <span className="ml-1 rounded-full bg-primary px-1.5 py-0.5 text-xs text-primary-foreground">
-                {tasks.length}
-              </span>
-            )}
+            Мои задачи {tasks.length > 0 && <span className="ml-1 rounded-full bg-primary px-1.5 py-0.5 text-xs text-primary-foreground">{tasks.length}</span>}
           </TabsTrigger>
-          <TabsTrigger value="routes">
-            Маршруты ({processes.length})
-          </TabsTrigger>
-          <TabsTrigger value="signatures">
-            Подписи ({signatures.length})
-          </TabsTrigger>
+          <TabsTrigger value="routes">Маршруты ({processes.length})</TabsTrigger>
+          <TabsTrigger value="signatures">Подписи ({signatures.length})</TabsTrigger>
           <TabsTrigger value="edo">ЭДО ({edos.length})</TabsTrigger>
         </TabsList>
 
@@ -150,11 +110,7 @@ const ApprovalsInboxPage = () => {
           ) : (
             <div className="space-y-3">
               {tasks.map((task) => (
-                <ApprovalTaskCard
-                  key={task.id}
-                  task={task}
-                  onChanged={() => void load()}
-                />
+                <ApprovalTaskCard key={task.id} task={task} onChanged={() => void load()} />
               ))}
             </div>
           )}
@@ -168,20 +124,13 @@ const ApprovalsInboxPage = () => {
               <CardContent>
                 <div className="space-y-2">
                   {doneTasks.slice(0, 5).map((task) => (
-                    <div
-                      key={task.id}
-                      className="flex items-center justify-between rounded border bg-muted/30 p-2 text-sm"
-                    >
-                      <span className="text-muted-foreground">
-                        #{task.id.slice(0, 8)} — задача
-                      </span>
+                    <div key={task.id} className="flex items-center justify-between rounded border bg-muted/30 p-2 text-sm">
+                      <span className="text-muted-foreground">#{task.id.slice(0, 8)} — задача</span>
                       <StatusBadge status={task.status} />
                     </div>
                   ))}
                   {doneTasks.length > 5 && (
-                    <div className="text-xs text-muted-foreground">
-                      …и ещё {doneTasks.length - 5}
-                    </div>
+                    <div className="text-xs text-muted-foreground">…и ещё {doneTasks.length - 5}</div>
                   )}
                 </div>
               </CardContent>
@@ -196,10 +145,7 @@ const ApprovalsInboxPage = () => {
             </CardHeader>
             <CardContent>
               {!loading && processes.length === 0 ? (
-                <EmptyState
-                  title="Активных маршрутов нет"
-                  description="Запустите согласование документа, чтобы создать маршрут."
-                />
+                <EmptyState title="Активных маршрутов нет" description="Запустите согласование документа, чтобы создать маршрут." />
               ) : (
                 <Table>
                   <TableHeader>
@@ -214,20 +160,12 @@ const ApprovalsInboxPage = () => {
                   <TableBody>
                     {processes.map((p) => (
                       <TableRow key={p.id}>
-                        <TableCell className="font-medium">
-                          #{p.id.slice(0, 8)}
-                        </TableCell>
+                        <TableCell className="font-medium">#{p.id.slice(0, 8)}</TableCell>
                         <TableCell>{p.object_id}</TableCell>
                         <TableCell>{p.current_step}</TableCell>
-                        <TableCell>
-                          <StatusBadge status={p.status} />
-                        </TableCell>
+                        <TableCell><StatusBadge status={p.status} /></TableCell>
                         <TableCell className="text-right">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => void showTimeline(p)}
-                          >
+                          <Button variant="outline" size="sm" onClick={() => void showTimeline(p)}>
                             {timeline?.id === p.id ? "Скрыть" : "История"}
                           </Button>
                         </TableCell>
@@ -238,10 +176,7 @@ const ApprovalsInboxPage = () => {
               )}
               {timeline ? (
                 <div className="mt-4">
-                  <ApprovalTimeline
-                    items={timeline.items}
-                    currentStep={timeline.currentStep}
-                  />
+                  <ApprovalTimeline items={timeline.items} currentStep={timeline.currentStep} />
                 </div>
               ) : null}
             </CardContent>
@@ -255,10 +190,7 @@ const ApprovalsInboxPage = () => {
             </CardHeader>
             <CardContent>
               {!loading && signatures.length === 0 ? (
-                <EmptyState
-                  title="Запросов на подпись нет"
-                  description="Активных запросов КЭП/УКЭП нет."
-                />
+                <EmptyState title="Запросов на подпись нет" description="Активных запросов КЭП/УКЭП нет." />
               ) : (
                 <Table>
                   <TableHeader>
@@ -272,43 +204,13 @@ const ApprovalsInboxPage = () => {
                   <TableBody>
                     {signatures.map((s) => (
                       <TableRow key={s.id}>
-                        <TableCell className="font-medium">
-                          #{s.id.slice(0, 8)}
-                        </TableCell>
+                        <TableCell className="font-medium">#{s.id.slice(0, 8)}</TableCell>
                         <TableCell>{s.provider}</TableCell>
-                        <TableCell>
-                          <StatusBadge status={s.status} />
-                        </TableCell>
+                        <TableCell><StatusBadge status={s.status} /></TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-2">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              disabled={busyId === s.id}
-                              onClick={() =>
-                                void runAction(
-                                  s.id,
-                                  () => signApi.refresh(s.id),
-                                  "Статус обновлён",
-                                )
-                              }
-                            >
-                              Обновить
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              disabled={busyId === s.id}
-                              onClick={() =>
-                                void runAction(
-                                  s.id,
-                                  () => signApi.verify(s.id),
-                                  "Проверка выполнена",
-                                )
-                              }
-                            >
-                              Проверить
-                            </Button>
+                            <Button variant="outline" size="sm" disabled={busyId === s.id} onClick={() => void runAction(s.id, () => signApi.refresh(s.id), "Статус обновлён")}>Обновить</Button>
+                            <Button variant="outline" size="sm" disabled={busyId === s.id} onClick={() => void runAction(s.id, () => signApi.verify(s.id), "Проверка выполнена")}>Проверить</Button>
                           </div>
                         </TableCell>
                       </TableRow>
@@ -327,10 +229,7 @@ const ApprovalsInboxPage = () => {
             </CardHeader>
             <CardContent>
               {!loading && edos.length === 0 ? (
-                <EmptyState
-                  title="Конвертов ЭДО нет"
-                  description="Активных конвертов в системе ЭДО нет."
-                />
+                <EmptyState title="Конвертов ЭДО нет" description="Активных конвертов в системе ЭДО нет." />
               ) : (
                 <Table>
                   <TableHeader>
@@ -344,28 +243,11 @@ const ApprovalsInboxPage = () => {
                   <TableBody>
                     {edos.map((e) => (
                       <TableRow key={e.id}>
-                        <TableCell className="font-medium">
-                          #{e.id.slice(0, 8)}
-                        </TableCell>
+                        <TableCell className="font-medium">#{e.id.slice(0, 8)}</TableCell>
                         <TableCell>{e.external_id ?? "—"}</TableCell>
-                        <TableCell>
-                          <StatusBadge status={e.status} />
-                        </TableCell>
+                        <TableCell><StatusBadge status={e.status} /></TableCell>
                         <TableCell className="text-right">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            disabled={busyId === e.id}
-                            onClick={() =>
-                              void runAction(
-                                e.id,
-                                () => edoApi.refreshStatus(e.id),
-                                "Статус обновлён",
-                              )
-                            }
-                          >
-                            Обновить статус
-                          </Button>
+                          <Button variant="outline" size="sm" disabled={busyId === e.id} onClick={() => void runAction(e.id, () => edoApi.refreshStatus(e.id), "Статус обновлён")}>Обновить статус</Button>
                         </TableCell>
                       </TableRow>
                     ))}

@@ -12,14 +12,11 @@ interface ProtectedRouteProps {
   resource?: AbilityResource;
 }
 
-export const ProtectedRoute = ({
-  permission,
-  resource,
-}: ProtectedRouteProps) => {
+export const ProtectedRoute = ({ permission, resource }: ProtectedRouteProps) => {
   const location = useLocation();
   const [isAuthenticated, initialized] = useAuthStore(
     (state) => [state.isAuthenticated, state.initialized],
-    shallow,
+    shallow
   );
   const { can } = useAbility();
 

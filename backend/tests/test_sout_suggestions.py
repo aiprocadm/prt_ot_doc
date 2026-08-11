@@ -1,5 +1,4 @@
 """Pure-function unit tests for СОУТ norm-suggestion engine (срез-3)."""
-
 from __future__ import annotations
 
 from types import SimpleNamespace

@@ -26,7 +26,7 @@ export const personSchema = z.object({
   electrical_group: z.enum(["", "I", "II", "III", "IV", "V"]).optional(),
   electrical_group_valid_until: z.string().optional(),
   /** Все квалификации персоны (merge-safe: хранится как есть, при сабмите патчится electrical_safety_group). */
-  qualifications: z.array(z.record(z.unknown())).optional(),
+  qualifications: z.array(z.record(z.unknown())).optional()
 });
 
 export type PersonFormValues = z.infer<typeof personSchema>;

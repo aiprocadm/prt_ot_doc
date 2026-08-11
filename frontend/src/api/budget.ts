@@ -25,101 +25,64 @@ import type {
   SafetyBudgetDetailDto,
   SafetyBudgetDto,
   SafetyBudgetPageDto,
-  SafetyBudgetUpdateInput,
+  SafetyBudgetUpdateInput
 } from "@/types/dto/budget";
 
 const BASE = "/budget";
 
 export const isFeatureDisabledError = (error: unknown): boolean => {
   const e = error as Partial<ApiError> | null;
-  return Boolean(
-    e && e.status === 404 && /feature is not enabled/i.test(e.message ?? ""),
-  );
+  return Boolean(e && e.status === 404 && /feature is not enabled/i.test(e.message ?? ""));
 };
 
 export const budgetApi = {
-  async getOverview(
-    params: { date_from?: string; date_to?: string } = {},
-  ): Promise<BudgetOverviewDto> {
-    return (
-      await apiClient.get<BudgetOverviewDto>(`${BASE}/overview`, { params })
-    ).data;
+  async getOverview(params: { date_from?: string; date_to?: string } = {}): Promise<BudgetOverviewDto> {
+    return (await apiClient.get<BudgetOverviewDto>(`${BASE}/overview`, { params })).data;
   },
   async getBreakdown(params: {
     dimension: BreakdownDimension;
     date_from?: string;
     date_to?: string;
   }): Promise<BudgetBreakdownDto> {
-    return (
-      await apiClient.get<BudgetBreakdownDto>(`${BASE}/breakdown`, { params })
-    ).data;
+    return (await apiClient.get<BudgetBreakdownDto>(`${BASE}/breakdown`, { params })).data;
   },
   async listBudgets(
-    params: { domain?: BudgetDomain; limit?: number; offset?: number } = {},
+    params: { domain?: BudgetDomain; limit?: number; offset?: number } = {}
   ): Promise<SafetyBudgetPageDto> {
-    const { data } = await apiClient.get<SafetyBudgetPageDto>(
-      `${BASE}/budgets`,
-      {
-        params: { limit: 100, offset: 0, ...params },
-      },
-    );
+    const { data } = await apiClient.get<SafetyBudgetPageDto>(`${BASE}/budgets`, {
+      params: { limit: 100, offset: 0, ...params }
+    });
     return data;
   },
-  async createBudget(
-    payload: SafetyBudgetCreateInput,
-  ): Promise<SafetyBudgetDto> {
-    return (await apiClient.post<SafetyBudgetDto>(`${BASE}/budgets`, payload))
-      .data;
+  async createBudget(payload: SafetyBudgetCreateInput): Promise<SafetyBudgetDto> {
+    return (await apiClient.post<SafetyBudgetDto>(`${BASE}/budgets`, payload)).data;
   },
   async getBudget(id: string): Promise<SafetyBudgetDetailDto> {
-    return (await apiClient.get<SafetyBudgetDetailDto>(`${BASE}/budgets/${id}`))
-      .data;
+    return (await apiClient.get<SafetyBudgetDetailDto>(`${BASE}/budgets/${id}`)).data;
   },
-  async updateBudget(
-    id: string,
-    payload: SafetyBudgetUpdateInput,
-  ): Promise<SafetyBudgetDto> {
-    return (
-      await apiClient.patch<SafetyBudgetDto>(`${BASE}/budgets/${id}`, payload)
-    ).data;
+  async updateBudget(id: string, payload: SafetyBudgetUpdateInput): Promise<SafetyBudgetDto> {
+    return (await apiClient.patch<SafetyBudgetDto>(`${BASE}/budgets/${id}`, payload)).data;
   },
   async deleteBudget(id: string): Promise<void> {
     await apiClient.delete(`${BASE}/budgets/${id}`);
   },
-  async listArticles(
-    params: { limit?: number; offset?: number } = {},
-  ): Promise<BudgetArticlePageDto> {
-    const { data } = await apiClient.get<BudgetArticlePageDto>(
-      `${BASE}/articles`,
-      {
-        params: { limit: 200, offset: 0, ...params },
-      },
-    );
+  async listArticles(params: { limit?: number; offset?: number } = {}): Promise<BudgetArticlePageDto> {
+    const { data } = await apiClient.get<BudgetArticlePageDto>(`${BASE}/articles`, {
+      params: { limit: 200, offset: 0, ...params }
+    });
     return data;
   },
-  async createArticle(
-    payload: BudgetArticleCreateInput,
-  ): Promise<BudgetArticleDto> {
-    return (await apiClient.post<BudgetArticleDto>(`${BASE}/articles`, payload))
-      .data;
+  async createArticle(payload: BudgetArticleCreateInput): Promise<BudgetArticleDto> {
+    return (await apiClient.post<BudgetArticleDto>(`${BASE}/articles`, payload)).data;
   },
-  async updateArticle(
-    id: string,
-    payload: BudgetArticleUpdateInput,
-  ): Promise<BudgetArticleDto> {
-    return (
-      await apiClient.patch<BudgetArticleDto>(`${BASE}/articles/${id}`, payload)
-    ).data;
+  async updateArticle(id: string, payload: BudgetArticleUpdateInput): Promise<BudgetArticleDto> {
+    return (await apiClient.patch<BudgetArticleDto>(`${BASE}/articles/${id}`, payload)).data;
   },
   async deleteArticle(id: string): Promise<void> {
     await apiClient.delete(`${BASE}/articles/${id}`);
   },
   async seedDefaultArticles(): Promise<BudgetSeedResultDto> {
-    return (
-      await apiClient.post<BudgetSeedResultDto>(
-        `${BASE}/articles/seed-defaults`,
-      )
-    ).data;
+    return (await apiClient.post<BudgetSeedResultDto>(`${BASE}/articles/seed-defaults`)).data;
   },
   async listExpenses(
     params: {
@@ -132,83 +95,47 @@ export const budgetApi = {
       site_id?: string;
       limit?: number;
       offset?: number;
-    } = {},
+    } = {}
   ): Promise<BudgetExpensePageDto> {
-    const { data } = await apiClient.get<BudgetExpensePageDto>(
-      `${BASE}/expenses`,
-      {
-        params: { limit: 100, offset: 0, ...params },
-      },
-    );
+    const { data } = await apiClient.get<BudgetExpensePageDto>(`${BASE}/expenses`, {
+      params: { limit: 100, offset: 0, ...params }
+    });
     return data;
   },
-  async createExpense(
-    payload: BudgetExpenseCreateInput,
-  ): Promise<BudgetExpenseDto> {
-    return (await apiClient.post<BudgetExpenseDto>(`${BASE}/expenses`, payload))
-      .data;
+  async createExpense(payload: BudgetExpenseCreateInput): Promise<BudgetExpenseDto> {
+    return (await apiClient.post<BudgetExpenseDto>(`${BASE}/expenses`, payload)).data;
   },
-  async updateExpense(
-    id: string,
-    payload: BudgetExpenseUpdateInput,
-  ): Promise<BudgetExpenseDto> {
-    return (
-      await apiClient.patch<BudgetExpenseDto>(`${BASE}/expenses/${id}`, payload)
-    ).data;
+  async updateExpense(id: string, payload: BudgetExpenseUpdateInput): Promise<BudgetExpenseDto> {
+    return (await apiClient.patch<BudgetExpenseDto>(`${BASE}/expenses/${id}`, payload)).data;
   },
   async deleteExpense(id: string): Promise<void> {
     await apiClient.delete(`${BASE}/expenses/${id}`);
   },
   async listReimbursements(
-    params: {
-      status?: BudgetReimbursementStatus;
-      limit?: number;
-      offset?: number;
-    } = {},
+    params: { status?: BudgetReimbursementStatus; limit?: number; offset?: number } = {}
   ): Promise<BudgetReimbursementPageDto> {
-    const { data } = await apiClient.get<BudgetReimbursementPageDto>(
-      `${BASE}/reimbursements`,
-      {
-        params: { limit: 100, offset: 0, ...params },
-      },
-    );
+    const { data } = await apiClient.get<BudgetReimbursementPageDto>(`${BASE}/reimbursements`, {
+      params: { limit: 100, offset: 0, ...params }
+    });
     return data;
   },
   async getReimbursement(id: string): Promise<BudgetReimbursementDetailDto> {
-    return (
-      await apiClient.get<BudgetReimbursementDetailDto>(
-        `${BASE}/reimbursements/${id}`,
-      )
-    ).data;
+    return (await apiClient.get<BudgetReimbursementDetailDto>(`${BASE}/reimbursements/${id}`)).data;
   },
-  async createReimbursement(
-    payload: BudgetReimbursementCreateInput,
-  ): Promise<BudgetReimbursementDto> {
-    return (
-      await apiClient.post<BudgetReimbursementDto>(
-        `${BASE}/reimbursements`,
-        payload,
-      )
-    ).data;
+  async createReimbursement(payload: BudgetReimbursementCreateInput): Promise<BudgetReimbursementDto> {
+    return (await apiClient.post<BudgetReimbursementDto>(`${BASE}/reimbursements`, payload)).data;
   },
   async updateReimbursement(
     id: string,
-    payload: BudgetReimbursementUpdateInput,
+    payload: BudgetReimbursementUpdateInput
   ): Promise<BudgetReimbursementDto> {
-    return (
-      await apiClient.patch<BudgetReimbursementDto>(
-        `${BASE}/reimbursements/${id}`,
-        payload,
-      )
-    ).data;
+    return (await apiClient.patch<BudgetReimbursementDto>(`${BASE}/reimbursements/${id}`, payload)).data;
   },
   async deleteReimbursement(id: string): Promise<void> {
     await apiClient.delete(`${BASE}/reimbursements/${id}`);
   },
   async addReimbursementItem(id: string, expenseId: string): Promise<void> {
-    await apiClient.post(`${BASE}/reimbursements/${id}/items`, {
-      expense_id: expenseId,
-    });
+    await apiClient.post(`${BASE}/reimbursements/${id}/items`, { expense_id: expenseId });
   },
   async removeReimbursementItem(id: string, expenseId: string): Promise<void> {
     await apiClient.delete(`${BASE}/reimbursements/${id}/items/${expenseId}`);
@@ -220,14 +147,9 @@ export const budgetApi = {
   async reimbursementAction(
     id: string,
     name: "submit" | "approve" | "reject" | "pay",
-    body: { approved_amount?: number; decision_reason?: string } = {},
+    body: { approved_amount?: number; decision_reason?: string } = {}
   ): Promise<BudgetReimbursementDto> {
-    return (
-      await apiClient.post<BudgetReimbursementDto>(
-        `${BASE}/reimbursements/${id}/${name}`,
-        body,
-      )
-    ).data;
+    return (await apiClient.post<BudgetReimbursementDto>(`${BASE}/reimbursements/${id}/${name}`, body)).data;
   },
   /**
    * Лёгкий справочник филиалов для опционального пикера в ExpenseFormDialog.
@@ -236,12 +158,9 @@ export const budgetApi = {
    * поэтому добавлен здесь поверх существующего GET /branches (без нового бэкенд-эндпоинта).
    */
   async listBranchesLite(): Promise<{ items?: DirectoryItemDto[] }> {
-    const { data } = await apiClient.get<{ items?: DirectoryItemDto[] }>(
-      "/branches",
-      {
-        params: { limit: 200 },
-      },
-    );
+    const { data } = await apiClient.get<{ items?: DirectoryItemDto[] }>("/branches", {
+      params: { limit: 200 }
+    });
     return data;
-  },
+  }
 };

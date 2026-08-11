@@ -2,13 +2,12 @@ import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 
-const { listMyTasksMock, listProcessesMock, edoListMock, signListMock } =
-  vi.hoisted(() => ({
-    listMyTasksMock: vi.fn(),
-    listProcessesMock: vi.fn(),
-    edoListMock: vi.fn(),
-    signListMock: vi.fn(),
-  }));
+const { listMyTasksMock, listProcessesMock, edoListMock, signListMock } = vi.hoisted(() => ({
+  listMyTasksMock: vi.fn(),
+  listProcessesMock: vi.fn(),
+  edoListMock: vi.fn(),
+  signListMock: vi.fn()
+}));
 
 const mockTask = {
   id: "task-1",
@@ -18,32 +17,30 @@ const mockTask = {
   status: "open",
   due_at: "2024-07-01T00:00:00Z",
   created_at: "2024-06-01T10:00:00Z",
-  document: { id: "doc-1", name: "Инструкция 001" },
+  document: { id: "doc-1", name: "Инструкция 001" }
 };
 
 vi.mock("@/api/approvals", () => ({
   approvalsApi: {
     listMyTasks: listMyTasksMock,
-    listProcesses: listProcessesMock,
-  },
+    listProcesses: listProcessesMock
+  }
 }));
 
 vi.mock("@/api/edo", () => ({
   edoApi: {
-    list: edoListMock,
-  },
+    list: edoListMock
+  }
 }));
 
 vi.mock("@/api/sign", () => ({
   signApi: {
-    list: signListMock,
-  },
+    list: signListMock
+  }
 }));
 
 vi.mock("@/components/ApprovalTaskCard", () => ({
-  default: ({ task }: { task: { id: string } }) => (
-    <div data-testid="task-card">{task.id}</div>
-  ),
+  default: ({ task }: { task: { id: string } }) => <div data-testid="task-card">{task.id}</div>
 }));
 
 import ApprovalsInboxPage from "@/pages/approvals/ApprovalsInboxPage";
@@ -51,7 +48,7 @@ import ApprovalsInboxPage from "@/pages/approvals/ApprovalsInboxPage";
 describe("ApprovalsInboxPage", () => {
   it("renders tasks tab and shows task cards", async () => {
     listMyTasksMock.mockImplementation((status: string) =>
-      Promise.resolve(status === "open" ? [mockTask] : []),
+      Promise.resolve(status === "open" ? [mockTask] : [])
     );
     listProcessesMock.mockResolvedValue([]);
     edoListMock.mockResolvedValue([]);
@@ -60,7 +57,7 @@ describe("ApprovalsInboxPage", () => {
     render(
       <MemoryRouter>
         <ApprovalsInboxPage />
-      </MemoryRouter>,
+      </MemoryRouter>
     );
 
     await waitFor(() => {
@@ -77,7 +74,7 @@ describe("ApprovalsInboxPage", () => {
     render(
       <MemoryRouter>
         <ApprovalsInboxPage />
-      </MemoryRouter>,
+      </MemoryRouter>
     );
 
     await waitFor(() => {

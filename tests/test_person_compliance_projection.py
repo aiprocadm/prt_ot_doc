@@ -23,7 +23,9 @@ async def test_person_compliance_projection_sets_readiness_ready(
     async with sessionmaker() as session:
         tenant = await data_factory.ensure_tenant(session=session)
         company = await data_factory.create_company(tenant=tenant, session=session)
-        person = await data_factory.create_person(tenant=tenant, company=company, session=session)
+        person = await data_factory.create_person(
+            tenant=tenant, company=company, session=session
+        )
         await session.commit()
         tenant_id = str(tenant.id)
         person_id = person.id
