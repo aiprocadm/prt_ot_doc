@@ -20,6 +20,8 @@ const generatePack = vi.fn();
 const getPackTaskStatus = vi.fn();
 const publishPackToPortal = vi.fn();
 const listCompanies = vi.fn();
+const listCompanyPersons = vi.fn();
+const listCompanySites = vi.fn();
 
 vi.mock("@/api/packWizard", async (importOriginal) => {
   // Чистые помощники (`archiveKeyOf`, `packDownloadUrl`) берём НАСТОЯЩИЕ:
@@ -33,6 +35,8 @@ vi.mock("@/api/packWizard", async (importOriginal) => {
     generatePack: (...args: unknown[]) => generatePack(...args),
     getPackTaskStatus: (...args: unknown[]) => getPackTaskStatus(...args),
     publishPackToPortal: (...args: unknown[]) => publishPackToPortal(...args),
+    listCompanyPersons: (...args: unknown[]) => listCompanyPersons(...args),
+    listCompanySites: (...args: unknown[]) => listCompanySites(...args),
   };
 });
 
@@ -65,6 +69,11 @@ describe("мастер разового комплекта", () => {
     vi.clearAllMocks();
     listPackScenarios.mockResolvedValue([SCENARIO]);
     listCompanies.mockResolvedValue([COMPANY]);
+    listCompanyPersons.mockResolvedValue([
+      { id: "p-1", label: "Иванов Иван" },
+      { id: "p-2", label: "Петров Пётр" },
+    ]);
+    listCompanySites.mockResolvedValue([{ id: "s-1", name: "Площадка №1" }]);
     getPackScenarioFields.mockResolvedValue({
       scenario_code: SCENARIO.code,
       scenario_name: SCENARIO.name,
@@ -189,5 +198,49 @@ describe("мастер разового комплекта", () => {
       });
     });
     expect(await screen.findByRole("button", { name: "Выдан клиенту" })).toBeDisabled();
+  });
+
+  it("состав бригады уходит в предпросмотр — комплект на нескольких сразу", async () => {
+    // ТЗ: «один сценарий → комплект на 50 человек одним запуском». Генерация
+    // это умела с самого начала, интерфейс просто не предлагал выбрать людей.
+    const user = userEvent.setup();
+    renderWithRouter(<QuickPackWizardPage />);
+    await screen.findByRole("option", { name: /Приём нового сотрудника/ });
+    await user.selectOptions(screen.getByLabelText("Сценарий"), SCENARIO.code);
+    await user.selectOptions(screen.getByLabelText("Организация клиента"), COMPANY.id);
+
+    await user.click(await screen.findByLabelText("Иванов Иван"));
+    await user.click(screen.getByLabelText("Петров Пётр"));
+    await user.selectOptions(screen.getByLabelText("Объект"), "s-1");
+
+    await user.click(screen.getByRole("button", { name: "Дальше" }));
+    await screen.findByLabelText(/ФИО работника/);
+    await user.click(screen.getByRole("button", { name: /Показать, что получится/ }));
+
+    await waitFor(() => {
+      expect(previewPack).toHaveBeenCalledWith(
+        expect.objectContaining({ person_ids: ["p-1", "p-2"], site_id: "s-1" }),
+      );
+    });
+  });
+
+  it("смена организации сбрасывает выбранных людей", async () => {
+    // Иначе в запрос уехал бы сотрудник ПРЕЖНЕЙ организации, а генерация
+    // такого отвергает: «комплект оформляется по одной организации».
+    const user = userEvent.setup();
+    listCompanies.mockResolvedValue([COMPANY, { id: "c-2", name: "ООО Вторая" }]);
+    renderWithRouter(<QuickPackWizardPage />);
+    await screen.findByRole("option", { name: /Приём нового сотрудника/ });
+    await user.selectOptions(screen.getByLabelText("Сценарий"), SCENARIO.code);
+    await user.selectOptions(screen.getByLabelText("Организация клиента"), COMPANY.id);
+    await user.click(await screen.findByLabelText("Иванов Иван"));
+    expect(screen.getByText("Выбрано: 1")).toBeInTheDocument();
+
+    listCompanyPersons.mockResolvedValue([{ id: "p-9", label: "Сидоров Сидор" }]);
+    await user.selectOptions(screen.getByLabelText("Организация клиента"), "c-2");
+
+    await waitFor(() => {
+      expect(screen.queryByText(/Выбрано:/)).not.toBeInTheDocument();
+    });
   });
 });

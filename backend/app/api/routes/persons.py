@@ -182,6 +182,13 @@ async def list_persons_endpoint(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     q: str | None = Query(None, max_length=200, description="Поиск по ФИО / таб. номеру"),
+    # Умолчание — обычный ``None``, а не объект ``Query``: этот роут зовут
+    # НАПРЯМУЮ из тестов области видимости, и объект ``Query`` уехал бы в
+    # запрос как значение параметра («type 'Query' is not supported»).
+    company_id: Annotated[
+        str | None,
+        Query(min_length=1, max_length=36, description="Только сотрудники этой организации"),
+    ] = None,
 ) -> PersonPage | Response:
     TenantContextValidator.ensure_tenant_context(tenant)
 
@@ -198,7 +205,10 @@ async def list_persons_endpoint(
             limit=limit,
             offset=offset,
             q=q,
-            company_id=scope_company_id(scope),
+            # Фильтр СУЖАЕТ, но никогда не расширяет: в контексте «от имени
+            # клиента» область уже ограничена его организацией, и запрос с
+            # чужим company_id обязан дать пустой список, а не чужих людей.
+            company_id=_narrow_company(scope_company_id(scope), company_id),
         )
     etag = compute_list_etag(
         tenant_id=str(tenant.id),
@@ -208,6 +218,9 @@ async def list_persons_endpoint(
             ("limit", limit),
             ("offset", offset),
             ("q", q or ""),
+            # Без этого два разных фильтра по организации дали бы ОДИН ETag, и
+            # второй запрос получил бы 304 со списком чужой организации.
+            ("company", company_id or ""),
             # Иначе кэш, набранный вне контекста, вернулся бы 304-м ответом
             # уже внутри контекста клиента — со всем арендатором внутри.
             ("managed_client", scope.client_id if scope else ""),
@@ -220,6 +233,25 @@ async def list_persons_endpoint(
             headers=build_not_modified_headers(etag),
         )
     return PersonPage(items=persons, total=total)
+
+
+def _narrow_company(scope_company: str | None, requested: str | None) -> str | None:
+    """Пересечение области видимости и запрошенного фильтра.
+
+    Мастер комплекта (BIZ-50) выбирает людей ОДНОЙ организации: генерация
+    отвергает сотрудника из другой (400), и предлагать таких в списке значит
+    вести человека в тупик.
+
+    Фильтровать на стороне интерфейса было нельзя: список постраничный, и
+    сотрудники за пределами страницы молча не попали бы в выбор — ровно тот
+    случай, когда экран выглядит рабочим, а данные теряются.
+    """
+
+    if scope_company and requested and scope_company != requested:
+        # Осознанно пустой список, а не «покажем область видимости»: иначе
+        # ответ не соответствовал бы заданному вопросу.
+        return "__none__"
+    return requested or scope_company
 
 
 @router.post("", response_model=PersonRead, status_code=status.HTTP_201_CREATED)
