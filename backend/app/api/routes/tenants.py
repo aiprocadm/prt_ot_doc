@@ -12,12 +12,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.audit_decorator import audit_operation
+from app.core.config import get_settings
+from app.core.errors import api_problem_detail
 from app.core.security import AccessContext, abac, rbac, verify_token
 from app.db.session import (
     AsyncSessionLocal,
     _create_tenant_schema,
     rearm_session_tenant_context,
     resolve_tenant_schema,
+)
+from app.domains.reseller import (
+    CreationPlan,
+    HierarchyViolation,
+    TenantNode,
+    plan_tenant_creation,
 )
 from app.models.models import RoleEnum, Tenant, TenantQuota, TenantSettings
 from app.modules.subscription.registry import MODULE_REGISTRY
@@ -45,6 +53,61 @@ def _tenant_resource_id(
     tenant: Tenant = Depends(get_tenant_record),
 ) -> str | None:  # pragma: no cover - fastapi wiring
     return getattr(tenant, "id", None)
+
+
+def _hierarchy_node(record: Tenant) -> TenantNode:
+    """Свести ORM-строку к тем полям, которые нужны правилам иерархии."""
+
+    return TenantNode(
+        id=record.id,
+        slug=record.slug,
+        kind=record.kind,
+        parent_id=record.parent_id,
+        is_active=bool(record.is_active),
+    )
+
+
+def _hierarchy_denied(exc: HierarchyViolation) -> HTTPException:
+    """Отказ по правилам иерархии (BIZ-52 разд. 52.1).
+
+    Ненайденный родитель — ошибка ЗАПРОСА (400): в теле указан id, которого нет.
+    Всё остальное — отказ в праве (403).
+    """
+
+    status_code = (
+        status.HTTP_400_BAD_REQUEST
+        if exc.code == "TENANT_PARENT_NOT_FOUND"
+        else status.HTTP_403_FORBIDDEN
+    )
+    return HTTPException(
+        status_code=status_code,
+        detail=api_problem_detail(code=exc.code, message=exc.message, error_type="tenants"),
+    )
+
+
+async def _plan_creation(
+    session: AsyncSession, actor: Tenant, payload: TenantCreate
+) -> CreationPlan:
+    """Кто и кому может завести арендатора (Доп. №1 разд. 52.1).
+
+    До BIZ-52 здесь стояла ТОЛЬКО проверка роли, а роль `owner`/`admin` есть у
+    каждого арендатора — то есть админ любого клиента заводил на платформе
+    новых арендаторов со своей схемой в базе и произвольным родителем.
+    """
+
+    parent_record: Tenant | None = None
+    if payload.parent_id:
+        parent_record = await session.get(Tenant, payload.parent_id)
+    try:
+        return plan_tenant_creation(
+            actor=_hierarchy_node(actor),
+            requested_kind=payload.kind,
+            requested_parent_id=payload.parent_id,
+            parent=_hierarchy_node(parent_record) if parent_record is not None else None,
+            managing_slug=get_settings().managing_tenant_slug,
+        )
+    except HierarchyViolation as exc:
+        raise _hierarchy_denied(exc) from exc
 
 
 def _require_admin(credentials: HTTPAuthorizationCredentials | None) -> dict[str, object]:
@@ -94,9 +157,14 @@ async def list_tenants_admin_endpoint(
 async def create_tenant_endpoint(
     payload: TenantCreate,
     session: SessionDep,
+    tenant: Tenant = Depends(get_tenant_record),
     credentials: HTTPAuthorizationCredentials | None = Depends(_optional_bearer),
 ) -> TenantRead:
     _require_admin(credentials)
+    # Роль говорит «этот человек — админ», уровень говорит «этому АРЕНДАТОРУ
+    # вообще можно заводить арендаторов». Без второй проверки первая бесполезна:
+    # владелец есть у каждого арендатора.
+    plan = await _plan_creation(session, tenant, payload)
     schema_name = resolve_tenant_schema(payload.slug)
     # Provisioning writes tenant_settings/tenant_quotas rows for the NEW tenant;
     # the caller's request session is pinned to the caller's tenant, so under
@@ -105,30 +173,35 @@ async def create_tenant_endpoint(
     async with AsyncSessionLocal(
         tenant="public", include_public=False, create_schema=False, rls_bypass=True
     ) as provisioning_session:
-        tenant = Tenant(
+        # `created`, а не `tenant`: `tenant` — это ТОТ, КТО создаёт, и он нужен
+        # правилам иерархии. Прежнее имя перекрывало создателя новой строкой, и
+        # любая будущая проверка уровня ниже по коду молча получила бы не того.
+        created = Tenant(
             slug=payload.slug,
             code=(payload.code or payload.slug),
             name=payload.name,
             contact_email=payload.contact_email,
-            parent_id=payload.parent_id,
-            kind=payload.kind,
+            # Не из тела запроса, а из решения правил: реселлеру подставлен он
+            # сам, владельцу платформы — проверенный родитель.
+            parent_id=plan.parent_id,
+            kind=plan.kind,
             schema_name=schema_name,
             s3_prefix="",
             is_active=True,
         )
-        provisioning_session.add(tenant)
+        provisioning_session.add(created)
         await provisioning_session.flush()
-        tenant.s3_prefix = tenant.id
+        created.s3_prefix = created.id
         provisioning_session.add(
             TenantSettings(
-                tenant_id=tenant.id,
+                tenant_id=created.id,
                 schema_name=schema_name,
-                s3_prefix=tenant.id,
+                s3_prefix=created.id,
             )
         )
         provisioning_session.add(
             TenantQuota(
-                tenant_id=tenant.id,
+                tenant_id=created.id,
                 max_parallel_jobs=4,
                 max_doc_generations_per_month=5000,
                 max_storage_mb=10240,
@@ -142,8 +215,8 @@ async def create_tenant_endpoint(
             await provisioning_session.rollback()
             raise HTTPException(status.HTTP_409_CONFLICT, "Tenant already exists") from exc
 
-        await provisioning_session.refresh(tenant)
-        result = TenantRead.model_validate(tenant)
+        await provisioning_session.refresh(created)
+        result = TenantRead.model_validate(created)
 
     await _create_tenant_schema(schema_name)
     return result
@@ -153,9 +226,10 @@ async def create_tenant_endpoint(
 async def create_tenant_admin_endpoint(
     payload: TenantCreate,
     session: SessionDep,
+    tenant: Tenant = Depends(get_tenant_record),
     credentials: HTTPAuthorizationCredentials | None = Depends(_optional_bearer),
 ) -> TenantRead:
-    return await create_tenant_endpoint(payload, session, credentials)
+    return await create_tenant_endpoint(payload, session, tenant, credentials)
 
 
 @router.get("/me")

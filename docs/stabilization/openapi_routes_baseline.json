@@ -8215,6 +8215,7 @@
       "owner_email": "string",
       "owner_password": "string",
       "kind": "string",
+      "parent_id": "null|string",
       "demo_data": "boolean"
     },
     "TenantProvisionResult": {

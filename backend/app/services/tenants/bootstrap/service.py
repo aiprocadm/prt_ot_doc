@@ -56,6 +56,7 @@ class BootstrapTenantService:
         owner_password: str,
         dry_run: bool = False,
         demo: bool = False,
+        parent_id: str | None = None,
     ) -> BootstrapTenantSummary:
         summary = BootstrapTenantSummary(tenant_slug=tenant_slug, dry_run=dry_run)
 
@@ -65,6 +66,7 @@ class BootstrapTenantService:
             owner_email=owner_email,
             dry_run=dry_run,
             summary=summary,
+            parent_id=parent_id,
         )
         tenant_id = tenant.id if tenant else f"dry-run:{tenant_slug}"
         tenant_schema = tenant.schema_name if tenant else f"tenant_{tenant_slug}"
@@ -114,6 +116,7 @@ class BootstrapTenantService:
         owner_email: str,
         dry_run: bool,
         summary: BootstrapTenantSummary,
+        parent_id: str | None = None,
     ) -> Tenant | None:
         existing = (
             await self.session.execute(select(Tenant).where(Tenant.slug == tenant_slug))
@@ -129,11 +132,15 @@ class BootstrapTenantService:
             summary.mark(entity="tenant", created=True)
             return None
 
+        # `parent_id` — владелец нового арендатора в иерархии (BIZ-52 разд. 52.1).
+        # `None` означает «прямой клиент платформы» и сохраняет прежнее поведение
+        # для dev/demo-бутстрапа.
         tenant = Tenant(
             slug=tenant_slug,
             code=tenant_slug,
             name=tenant_name,
             contact_email=owner_email,
+            parent_id=parent_id,
             schema_name=f"tenant_{tenant_slug}",
             s3_prefix=f"tenants/{tenant_slug}",
         )

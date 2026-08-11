@@ -135,6 +135,7 @@ export const TenantFormDialog = ({
               <option value="customer">Заказчик</option>
               <option value="branch">Филиал</option>
               <option value="contractor">Подрядчик</option>
+              <option value="reseller">Реселлер (партнёр)</option>
             </select>
           </div>
           <div className="space-y-2">

@@ -27,6 +27,7 @@ const KIND_LABELS: Record<string, string> = {
   customer: "Заказчик",
   branch: "Филиал",
   contractor: "Подрядчик",
+  reseller: "Реселлер (партнёр)",
 };
 
 const emptyFleet: TenantFleetPage = {
