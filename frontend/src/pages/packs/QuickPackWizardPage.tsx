@@ -6,6 +6,8 @@ import {
   generatePack,
   getPackScenarioFields,
   getPackTaskStatus,
+  listCompanyPersons,
+  listCompanySites,
   listPackScenarios,
   packDownloadUrl,
   previewPack,
@@ -14,6 +16,8 @@ import {
   type PackScenario,
   type PackScenarioFields,
   type PackTaskStatus,
+  type WizardPerson,
+  type WizardSite,
 } from "@/api/packWizard";
 import { WizardStepper, type WizardStep } from "@/components/wizard/WizardStepper";
 import { Button } from "@/components/ui/button";
@@ -48,6 +52,10 @@ export const QuickPackWizardPage = () => {
   const [companies, setCompanies] = useState<CompanyDto[]>([]);
   const [scenarioCode, setScenarioCode] = useState("");
   const [companyId, setCompanyId] = useState("");
+  const [sites, setSites] = useState<WizardSite[]>([]);
+  const [siteId, setSiteId] = useState("");
+  const [persons, setPersons] = useState<WizardPerson[]>([]);
+  const [personIds, setPersonIds] = useState<string[]>([]);
   const [fields, setFields] = useState<PackScenarioFields | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [preview, setPreview] = useState<PackPreview | null>(null);
@@ -62,14 +70,27 @@ export const QuickPackWizardPage = () => {
     void listCompanies().then(setCompanies).catch(() => undefined);
   }, []);
 
+  // Смена организации обнуляет объект и состав: они принадлежат прежней, и
+  // генерация отвергла бы их (сотрудник другой организации — отказ).
+  useEffect(() => {
+    setSiteId("");
+    setPersonIds([]);
+    setPersons([]);
+    setSites([]);
+    if (!companyId) return;
+    void listCompanySites(companyId).then(setSites).catch(() => undefined);
+    void listCompanyPersons(companyId).then(setPersons).catch(() => undefined);
+  }, [companyId]);
+
   const selection = useMemo(
     () => ({
       pack_code: scenarioCode,
       company_id: companyId,
-      person_ids: [],
+      site_id: siteId || null,
+      person_ids: personIds,
       data: answers,
     }),
-    [scenarioCode, companyId, answers],
+    [scenarioCode, companyId, siteId, personIds, answers],
   );
 
   const archiveKey = archiveKeyOf(taskStatus);
@@ -203,6 +224,66 @@ export const QuickPackWizardPage = () => {
                 ))}
               </select>
             </div>
+
+            {companyId && sites.length > 0 && (
+              <div className="space-y-2">
+                <Label htmlFor="site">Объект (если нужен)</Label>
+                <select
+                  id="site"
+                  aria-label="Объект"
+                  className="w-full rounded border p-2"
+                  value={siteId}
+                  onChange={(event) => setSiteId(event.target.value)}
+                >
+                  <option value="">— без объекта —</option>
+                  {sites.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {companyId && (
+              <fieldset className="space-y-2">
+                <legend className="text-sm font-medium">
+                  Состав: на кого оформляем
+                </legend>
+                {persons.length === 0 && (
+                  <p className="text-sm text-muted-foreground">
+                    У этой организации нет сотрудников. Комплект будет оформлен на
+                    организацию целиком.
+                  </p>
+                )}
+                {/* Один сценарий на несколько человек — это и есть «комплект на
+                    50 человек одним запуском» из ТЗ: генерация уже умеет список,
+                    интерфейс его просто не предлагал. */}
+                <div className="max-h-56 space-y-1 overflow-y-auto rounded border p-2">
+                  {persons.map((person) => (
+                    <label key={person.id} className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={personIds.includes(person.id)}
+                        onChange={(event) =>
+                          setPersonIds((prev) =>
+                            event.target.checked
+                              ? [...prev, person.id]
+                              : prev.filter((id) => id !== person.id),
+                          )
+                        }
+                      />
+                      {person.label}
+                    </label>
+                  ))}
+                </div>
+                {personIds.length > 0 && (
+                  <p className="text-sm text-muted-foreground">
+                    Выбрано: {personIds.length}
+                  </p>
+                )}
+              </fieldset>
+            )}
 
             <Button
               onClick={() => void goToQuestions()}
