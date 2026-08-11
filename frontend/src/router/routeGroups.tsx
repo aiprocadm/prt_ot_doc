@@ -58,6 +58,7 @@ import {
   NpaPage,
   OutboxPage,
   PacksPage,
+  QuickPackWizardPage,
   PersonsPage,
   PortalRequestsPage,
   PpeDashboardPage,
@@ -198,7 +199,16 @@ export const buildProtectedRouteGroups = (): ReactElement[] => {
     },
     {
       permission: PERMISSIONS.PACK_VIEW,
-      routes: [<Route key="/packs" path="/packs" element={<PacksPage />} />],
+      routes: [
+        <Route key="/packs" path="/packs" element={<PacksPage />} />,
+        // Мастер разового комплекта (ТЗ разд. 50.2). Конкретный путь объявлен
+        // ДО «/packs», иначе он был бы съеден маршрутом реестра.
+        <Route
+          key="/packs/wizard"
+          path="/packs/wizard"
+          element={<QuickPackWizardPage />}
+        />,
+      ],
     },
     {
       permission: PERMISSIONS.DOCUMENT_VIEW,

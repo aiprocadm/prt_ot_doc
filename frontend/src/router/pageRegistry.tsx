@@ -19,6 +19,11 @@ export const TemplatesPage = lazy(
   () => import("@/pages/templates/TemplatesPage"),
 );
 export const PacksPage = lazy(() => import("@/pages/packs/PacksPage"));
+export const QuickPackWizardPage = lazy(() =>
+  import("@/pages/packs/QuickPackWizardPage").then((module) => ({
+    default: module.QuickPackWizardPage,
+  })),
+);
 export const TasksPage = lazy(() => import("@/pages/tasks/TasksPage"));
 export const RiskPage = lazy(() => import("@/pages/risk/RiskPage"));
 export const ActivitiesPage = lazy(
