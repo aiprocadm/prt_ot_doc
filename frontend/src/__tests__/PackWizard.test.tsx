@@ -11,16 +11,16 @@ vi.mock("@/stores/companies", () => ({
   useCompaniesStore: () => ({
     items: [
       { id: "c-1", name: "СеверСтрой" },
-      { id: "c-2", name: "ПромСервис" }
+      { id: "c-2", name: "ПромСервис" },
     ],
-    list: listCompaniesMock
-  })
+    list: listCompaniesMock,
+  }),
 }));
 
 vi.mock("@/stores/packs", () => ({
   usePacksStore: () => ({
-    create: createMock
-  })
+    create: createMock,
+  }),
 }));
 
 describe("PackWizard", () => {
@@ -45,18 +45,25 @@ describe("PackWizard", () => {
     await user.click(siteEntryCard!);
     await user.click(screen.getAllByRole("button", { name: "Далее" })[0]);
 
-    await user.type(screen.getByLabelText("Дополнительные параметры"), "Объект №42");
-    await user.click(screen.getByRole("button", { name: "Запустить генерацию" }));
+    await user.type(
+      screen.getByLabelText("Дополнительные параметры"),
+      "Объект №42",
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Запустить генерацию" }),
+    );
 
     await waitFor(() => {
       expect(createMock).toHaveBeenCalledWith({
         company_id: "c-1",
         preset: "site_entry",
-        parameters: { notes: "Объект №42" }
+        parameters: { notes: "Объект №42" },
       });
     });
 
-    expect(await screen.findByText(/Задача создана/, {}, { timeout: 10000 })).toBeInTheDocument();
+    expect(
+      await screen.findByText(/Задача создана/, {}, { timeout: 10000 }),
+    ).toBeInTheDocument();
   });
 
   it("shows api error and keeps wizard on submit step", async () => {
@@ -72,12 +79,26 @@ describe("PackWizard", () => {
     expect(ecologyCard).not.toBeNull();
     await user.click(ecologyCard!);
     await user.click(screen.getAllByRole("button", { name: "Далее" })[0]);
-    await user.click(screen.getByRole("button", { name: "Запустить генерацию" }));
+    await user.click(
+      screen.getByRole("button", { name: "Запустить генерацию" }),
+    );
 
-    expect(await screen.findByText("Сервис генерации недоступен", {}, { timeout: 10000 })).toBeInTheDocument();
-    expect(screen.getByLabelText("Дополнительные параметры")).toBeInTheDocument();
+    expect(
+      await screen.findByText(
+        "Сервис генерации недоступен",
+        {},
+        { timeout: 10000 },
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Дополнительные параметры"),
+    ).toBeInTheDocument();
 
-    const content = within(screen.getByText("Сервис генерации недоступен").parentElement!);
-    expect(content.getByText("Сервис генерации недоступен")).toBeInTheDocument();
+    const content = within(
+      screen.getByText("Сервис генерации недоступен").parentElement!,
+    );
+    expect(
+      content.getByText("Сервис генерации недоступен"),
+    ).toBeInTheDocument();
   });
 });

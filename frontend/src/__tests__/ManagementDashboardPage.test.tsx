@@ -10,7 +10,7 @@ const api = vi.hoisted(() => ({
   getBreakdown: vi.fn(),
   getCompanies: vi.fn(),
   getSites: vi.fn(),
-  getContractors: vi.fn()
+  getContractors: vi.fn(),
 }));
 
 vi.mock("@/api/analyticsApi", () => ({ analyticsApi: api }));
@@ -22,8 +22,8 @@ const TREND = (metric: string) => ({
   period: "daily" as const,
   series: [
     { date: "2026-07-01", value: 1 },
-    { date: "2026-07-02", value: 3 }
-  ]
+    { date: "2026-07-02", value: 3 },
+  ],
 });
 
 beforeEach(() => {
@@ -37,9 +37,9 @@ beforeEach(() => {
         packages_total: 12,
         overdue_compliance_items: 3,
         open_incidents: 2,
-        open_inspections: 1
-      }
-    }
+        open_inspections: 1,
+      },
+    },
   });
   api.getDashboard.mockImplementation(async (name: string) =>
     name === "overdue"
@@ -50,33 +50,60 @@ beforeEach(() => {
             ppe_overdue: 2,
             prescriptions_overdue: 1,
             plan_tasks_overdue: 0,
-            overdue_compliance_items: 3
-          }
+            overdue_compliance_items: 3,
+          },
         }
       : {
           name,
-          widgets: { workflow_open: 5, workflow_sla_breached: 1, plan_tasks_overdue: 0 }
-        }
+          widgets: {
+            workflow_open: 5,
+            workflow_sla_breached: 1,
+            plan_tasks_overdue: 0,
+          },
+        },
   );
   api.getTrend.mockImplementation(async (metric: string) => TREND(metric));
   api.getBreakdown.mockResolvedValue({
     dimension: "site",
     items: [
-      { id: "s1", name: "Цех №1", incidents_open: 2, risks_high: 1, prescriptions_overdue: 0, total_issues: 3 },
-      { id: "s2", name: "Офис", incidents_open: 0, risks_high: 0, prescriptions_overdue: 0, total_issues: 0 }
+      {
+        id: "s1",
+        name: "Цех №1",
+        incidents_open: 2,
+        risks_high: 1,
+        prescriptions_overdue: 0,
+        total_issues: 3,
+      },
+      {
+        id: "s2",
+        name: "Офис",
+        incidents_open: 0,
+        risks_high: 0,
+        prescriptions_overdue: 0,
+        total_issues: 0,
+      },
     ],
-    total: 2
+    total: 2,
   });
-  api.getCompanies.mockResolvedValue({ items: [{ id: "c1", name: "ООО Ромашка" }], total: 1 });
-  api.getSites.mockResolvedValue({ items: [{ id: "s1", name: "Цех №1" }], total: 1 });
-  api.getContractors.mockResolvedValue({ items: [{ id: "k1", name: "СтройПодряд" }], total: 1 });
+  api.getCompanies.mockResolvedValue({
+    items: [{ id: "c1", name: "ООО Ромашка" }],
+    total: 1,
+  });
+  api.getSites.mockResolvedValue({
+    items: [{ id: "s1", name: "Цех №1" }],
+    total: 1,
+  });
+  api.getContractors.mockResolvedValue({
+    items: [{ id: "k1", name: "СтройПодряд" }],
+    total: 1,
+  });
 });
 
 function renderPage() {
   return render(
     <MemoryRouter>
       <ManagementDashboardPage />
-    </MemoryRouter>
+    </MemoryRouter>,
   );
 }
 
@@ -87,8 +114,10 @@ describe("ManagementDashboardPage", () => {
     // "Просроченное обучение" is also a Trend chart title (TREND_METRICS) — collides as
     // a KPI-card query, so this assertion checks another overdue-sourced KPI instead
     // (ppe_overdue) to keep verifying the "overdue" dashboard widgets render.
-    expect(screen.getByText("Просроченные СИЗ")).toBeInTheDocument();
-    expect(screen.getByText("Нарушен SLA")).toBeInTheDocument();
+    // Карточки overdue/sla-load приходят из ДРУГИХ моков и могут отрисоваться
+    // позже executive — ждём каждую, иначе межэндпоинтная гонка.
+    expect(await screen.findByText("Просроченные СИЗ")).toBeInTheDocument();
+    expect(await screen.findByText("Нарушен SLA")).toBeInTheDocument();
   });
 
   it("renders six trend charts and switches period", async () => {
@@ -97,7 +126,9 @@ describe("ManagementDashboardPage", () => {
     await screen.findByText("Открытые инциденты");
     expect(api.getTrend).toHaveBeenCalledTimes(6);
     await user.click(screen.getByRole("button", { name: "Неделя" }));
-    await waitFor(() => expect(api.getTrend).toHaveBeenCalledWith("incidents", "weekly"));
+    await waitFor(() =>
+      expect(api.getTrend).toHaveBeenCalledWith("incidents", "weekly"),
+    );
   });
 
   it("passes filters to dashboard requests", async () => {
@@ -107,8 +138,8 @@ describe("ManagementDashboardPage", () => {
     await user.selectOptions(screen.getByLabelText("Компания"), "c1");
     await waitFor(() =>
       expect(api.getExecutive).toHaveBeenLastCalledWith(
-        expect.objectContaining({ company_id: "c1" })
-      )
+        expect.objectContaining({ company_id: "c1" }),
+      ),
     );
   });
 
@@ -121,7 +152,10 @@ describe("ManagementDashboardPage", () => {
     expect(within(table).getByText("Цех №1")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "По подрядчикам" }));
     await waitFor(() =>
-      expect(api.getBreakdown).toHaveBeenLastCalledWith("contractor", expect.anything())
+      expect(api.getBreakdown).toHaveBeenLastCalledWith(
+        "contractor",
+        expect.anything(),
+      ),
     );
   });
 
@@ -133,8 +167,8 @@ describe("ManagementDashboardPage", () => {
     await user.click(row);
     await waitFor(() =>
       expect(api.getExecutive).toHaveBeenLastCalledWith(
-        expect.objectContaining({ site_id: "s1" })
-      )
+        expect.objectContaining({ site_id: "s1" }),
+      ),
     );
   });
 
@@ -149,19 +183,35 @@ describe("ManagementDashboardPage", () => {
     api.getBreakdown.mockResolvedValue({
       dimension: "site",
       items: [
-        { id: "", name: "— без объекта —", incidents_open: 1, risks_high: 0, prescriptions_overdue: 0, total_issues: 1 },
-        { id: "s1", name: "Цех №1", incidents_open: 2, risks_high: 1, prescriptions_overdue: 0, total_issues: 3 }
+        {
+          id: "",
+          name: "— без объекта —",
+          incidents_open: 1,
+          risks_high: 0,
+          prescriptions_overdue: 0,
+          total_issues: 1,
+        },
+        {
+          id: "s1",
+          name: "Цех №1",
+          incidents_open: 2,
+          risks_high: 1,
+          prescriptions_overdue: 0,
+          total_issues: 3,
+        },
       ],
-      total: 2
+      total: 2,
     });
     const user = userEvent.setup();
     renderPage();
     const row = await screen.findByText("— без объекта —");
     const callsBefore = api.getExecutive.mock.calls.length;
     await user.click(row);
-    await waitFor(() => expect(api.getExecutive.mock.calls.length).toBe(callsBefore));
+    await waitFor(() =>
+      expect(api.getExecutive.mock.calls.length).toBe(callsBefore),
+    );
     expect(api.getExecutive).not.toHaveBeenLastCalledWith(
-      expect.objectContaining({ site_id: "" })
+      expect.objectContaining({ site_id: "" }),
     );
   });
 

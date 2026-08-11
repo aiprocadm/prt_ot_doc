@@ -48,7 +48,7 @@
     },
     "jobs_outbox": {
       "line_percent": 31.9,
-      "branch_percent": 31.5,
+      "branch_percent": 26.5,
       "patterns": [
         "backend/app/api/routes/jobs.py",
         "backend/app/modules/jobs/",

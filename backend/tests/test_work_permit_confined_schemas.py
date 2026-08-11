@@ -1,4 +1,5 @@
 """Валидация type_specific в схемах наряда-допуска (ОЗП 902н)."""
+
 from __future__ import annotations
 
 import pytest
@@ -12,22 +13,29 @@ def _base(**extra):
 
 
 def test_create_accepts_valid_confined_type_specific():
-    m = WorkPermitCreate(**_base(type_specific={
-        "gas_analysis": [{"parameter": "oxygen", "value": "20.9", "norm": "≥ 20"}],
-        "ventilation": "forced",
-    }))
+    m = WorkPermitCreate(
+        **_base(
+            type_specific={
+                "gas_analysis": [{"parameter": "oxygen", "value": "20.9", "norm": "≥ 20"}],
+                "ventilation": "forced",
+            }
+        )
+    )
     assert m.type_specific["ventilation"] == "forced"
 
 
 def test_create_rejects_bad_parameter():
     with pytest.raises(ValidationError):
-        WorkPermitCreate(**_base(type_specific={"gas_analysis": [{"parameter": "xx", "value": "1"}]}))
+        WorkPermitCreate(
+            **_base(type_specific={"gas_analysis": [{"parameter": "xx", "value": "1"}]})
+        )
 
 
 def test_create_rejects_type_specific_on_height():
     with pytest.raises(ValidationError):
-        WorkPermitCreate(work_type="height", zone_text="фасад",
-                         type_specific={"ventilation": "forced"})
+        WorkPermitCreate(
+            work_type="height", zone_text="фасад", type_specific={"ventilation": "forced"}
+        )
 
 
 def test_create_allows_no_type_specific():
@@ -50,7 +58,8 @@ def test_create_accepts_valid_hot_work_type_specific():
 def test_create_rejects_bad_fire_fighting_means():
     with pytest.raises(ValidationError):
         WorkPermitCreate(
-            work_type="hot_work", zone_text="эстакада",
+            work_type="hot_work",
+            zone_text="эстакада",
             type_specific={"fire_fighting_means": ["laser"]},
         )
 
@@ -58,7 +67,8 @@ def test_create_rejects_bad_fire_fighting_means():
 def test_create_rejects_ventilation_on_hot_work():
     with pytest.raises(ValidationError):
         WorkPermitCreate(
-            work_type="hot_work", zone_text="эстакада",
+            work_type="hot_work",
+            zone_text="эстакада",
             type_specific={"ventilation": "forced"},
         )
 
@@ -78,7 +88,8 @@ def test_create_accepts_valid_gas_hazardous_type_specific():
 def test_create_rejects_bad_respiratory_ppe():
     with pytest.raises(ValidationError):
         WorkPermitCreate(
-            work_type="gas_hazardous", zone_text="колодец",
+            work_type="gas_hazardous",
+            zone_text="колодец",
             type_specific={"respiratory_ppe": ["spacesuit"]},
         )
 
@@ -86,7 +97,8 @@ def test_create_rejects_bad_respiratory_ppe():
 def test_create_rejects_fire_means_on_gas_hazardous():
     with pytest.raises(ValidationError):
         WorkPermitCreate(
-            work_type="gas_hazardous", zone_text="колодец",
+            work_type="gas_hazardous",
+            zone_text="колодец",
             type_specific={"fire_fighting_means": ["sand"]},
         )
 
@@ -106,7 +118,8 @@ def test_create_accepts_valid_electrical_type_specific():
 def test_create_rejects_bad_technical_measure():
     with pytest.raises(ValidationError):
         WorkPermitCreate(
-            work_type="electrical", zone_text="РУ",
+            work_type="electrical",
+            zone_text="РУ",
             type_specific={"technical_measures": ["laser"]},
         )
 
@@ -114,7 +127,8 @@ def test_create_rejects_bad_technical_measure():
 def test_create_rejects_gas_analysis_on_electrical():
     with pytest.raises(ValidationError):
         WorkPermitCreate(
-            work_type="electrical", zone_text="РУ",
+            work_type="electrical",
+            zone_text="РУ",
             type_specific={"gas_analysis": [{"parameter": "oxygen", "value": "20"}]},
         )
 
@@ -131,7 +145,8 @@ def test_create_accepts_valid_excavation_type_specific():
 def test_create_rejects_bad_utility():
     with pytest.raises(ValidationError):
         WorkPermitCreate(
-            work_type="excavation", zone_text="траншея",
+            work_type="excavation",
+            zone_text="траншея",
             type_specific={"utilities": ["lava_tube"]},
         )
 
@@ -139,6 +154,7 @@ def test_create_rejects_bad_utility():
 def test_create_rejects_gas_analysis_on_excavation():
     with pytest.raises(ValidationError):
         WorkPermitCreate(
-            work_type="excavation", zone_text="траншея",
+            work_type="excavation",
+            zone_text="траншея",
             type_specific={"gas_analysis": [{"parameter": "oxygen", "value": "20"}]},
         )

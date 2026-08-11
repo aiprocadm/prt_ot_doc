@@ -6,7 +6,7 @@ in test_briefings_service.py and the existing data_quality rule structure.
 
 from __future__ import annotations
 
-from datetime import date, datetime, timezone, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 import pytest
 from sqlalchemy import Column, String, Table
@@ -15,7 +15,6 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from app.db.session import TenantBase
 from app.models.models import (
     MedicalExam,
-    MedicalExamKind,
     MedicalFitness,
     MedicalSuspension,
     MedicalSuspensionReason,
@@ -94,9 +93,9 @@ async def test_unfit_with_active_suspension_no_issue(db_session) -> None:
     await rule.check()
 
     person_issues = [i for i in rule.issues if i.affected_entity_id == person_id]
-    assert not person_issues, (
-        f"person with active suspension should not be flagged, got {person_issues}"
-    )
+    assert (
+        not person_issues
+    ), f"person with active suspension should not be flagged, got {person_issues}"
 
 
 @pytest.mark.asyncio
@@ -128,9 +127,9 @@ async def test_latest_exam_wins(db_session) -> None:
     await rule.check()
 
     person_issues = [i for i in rule.issues if i.affected_entity_id == person_id]
-    assert not person_issues, (
-        f"latest exam is FIT; older UNFIT should not trigger issue, got {person_issues}"
-    )
+    assert (
+        not person_issues
+    ), f"latest exam is FIT; older UNFIT should not trigger issue, got {person_issues}"
 
 
 @pytest.mark.asyncio
@@ -153,9 +152,7 @@ async def test_lifted_suspension_still_flagged(db_session) -> None:
     await rule.check()
 
     person_issues = [i for i in rule.issues if i.affected_entity_id == person_id]
-    assert person_issues, (
-        "LIFTED suspension does not protect — person should still be flagged"
-    )
+    assert person_issues, "LIFTED suspension does not protect — person should still be flagged"
 
 
 @pytest.mark.asyncio

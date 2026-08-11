@@ -71,9 +71,7 @@ class TestFilesArchive:
         self, test_db_session: AsyncSession, data_factory: TestDataFactory
     ) -> None:
         key = "tenants/arch-a/doc.pdf"
-        tenant = await _document_with_files(
-            data_factory, test_db_session, "arch-a", [key]
-        )
+        tenant = await _document_with_files(data_factory, test_db_session, "arch-a", [key])
         service = TenantFilesArchiveService(
             test_db_session,
             tenant_id=str(tenant.id),
@@ -97,9 +95,7 @@ class TestFilesArchive:
         self, test_db_session: AsyncSession, data_factory: TestDataFactory
     ) -> None:
         key = "tenants/arch-b/broken.pdf"
-        tenant = await _document_with_files(
-            data_factory, test_db_session, "arch-b", [key]
-        )
+        tenant = await _document_with_files(data_factory, test_db_session, "arch-b", [key])
         service = TenantFilesArchiveService(
             test_db_session,
             tenant_id=str(tenant.id),
@@ -121,9 +117,7 @@ class TestFilesArchive:
         """Потолок обязателен, но клиент обязан узнать, что получил не всё."""
 
         key = "tenants/arch-c/big.pdf"
-        tenant = await _document_with_files(
-            data_factory, test_db_session, "arch-c", [key]
-        )
+        tenant = await _document_with_files(data_factory, test_db_session, "arch-c", [key])
         service = TenantFilesArchiveService(
             test_db_session,
             tenant_id=str(tenant.id),
@@ -143,12 +137,8 @@ class TestFilesArchive:
     ) -> None:
         mine = "tenants/arch-d/mine.pdf"
         theirs = "tenants/arch-d-next/theirs.pdf"
-        tenant = await _document_with_files(
-            data_factory, test_db_session, "arch-d", [mine]
-        )
-        await _document_with_files(
-            data_factory, test_db_session, "arch-d-next", [theirs]
-        )
+        tenant = await _document_with_files(data_factory, test_db_session, "arch-d", [mine])
+        await _document_with_files(data_factory, test_db_session, "arch-d-next", [theirs])
         service = TenantFilesArchiveService(
             test_db_session,
             tenant_id=str(tenant.id),
@@ -169,9 +159,7 @@ class TestFilesArchive:
         from app.modules.offboarding.file_keys import collect_file_keys
 
         key = "tenants/arch-e/doc.pdf"
-        tenant = await _document_with_files(
-            data_factory, test_db_session, "arch-e", [key]
-        )
+        tenant = await _document_with_files(data_factory, test_db_session, "arch-e", [key])
         service = TenantFilesArchiveService(
             test_db_session,
             tenant_id=str(tenant.id),

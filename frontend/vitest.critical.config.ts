@@ -21,13 +21,13 @@ export default defineConfig({
         "src/router/**/*.tsx",
         "src/pages/documents/DocumentsPage.tsx",
         "src/pages/tasks/TasksPage.tsx",
-        "src/pages/packs/PacksPage.tsx"
+        "src/pages/packs/PacksPage.tsx",
       ],
       thresholds: {
         lines: 70,
         branches: 55,
-        statements: 70
-      }
-    }
-  }
+        statements: 70,
+      },
+    },
+  },
 });

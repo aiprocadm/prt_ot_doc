@@ -8,8 +8,8 @@ const getAttentionMock = vi.fn();
 
 vi.mock("@/api/workspace", () => ({
   workspaceApi: {
-    getAttention: (...args: unknown[]) => getAttentionMock(...args)
-  }
+    getAttention: (...args: unknown[]) => getAttentionMock(...args),
+  },
 }));
 
 describe("AttentionPanel", () => {
@@ -22,7 +22,7 @@ describe("AttentionPanel", () => {
         overdue_deadlines: 1,
         pending_sync_batches: 3,
         failed_sync_batches: 1,
-        readiness_blockers: 2
+        readiness_blockers: 2,
       },
       items: [],
       blockers: [
@@ -33,23 +33,29 @@ describe("AttentionPanel", () => {
           count: 4,
           reason: "Есть сотрудники с истекшим или отсутствующим медосмотром",
           entity_type: "person",
-          action_hint: "Откройте реестр сотрудников и назначьте медосмотр"
-        }
+          action_hint: "Откройте реестр сотрудников и назначьте медосмотр",
+        },
       ],
-      recommendations: ["Закрыть просроченные задачи по обучению"]
+      recommendations: ["Закрыть просроченные задачи по обучению"],
     });
 
     render(
       <MemoryRouter>
         <AttentionPanel />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
 
-    expect(await screen.findByText("Центр внимания")).toBeInTheDocument();
-    expect(screen.getByText("2 просроченных задач")).toBeInTheDocument();
+    // Ждём сами данные из getAttention: заголовок «Центр внимания» статичен
+    // и появляется ДО ответа API — синхронные getBy* давали гонку.
+    expect(await screen.findByText("2 просроченных задач")).toBeInTheDocument();
+    expect(screen.getByText("Центр внимания")).toBeInTheDocument();
     expect(screen.getByText("Сотрудники без медосмотра")).toBeInTheDocument();
-    expect(screen.getByText("Закрыть просроченные задачи по обучению")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Открыть рабочий экран" })).toHaveAttribute("href", "/persons");
+    expect(
+      screen.getByText("Закрыть просроченные задачи по обучению"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Открыть рабочий экран" }),
+    ).toHaveAttribute("href", "/persons");
   });
 
   it("uses explicit CTA for employees_missing_contacts → /persons", async () => {
@@ -61,7 +67,7 @@ describe("AttentionPanel", () => {
         overdue_deadlines: 0,
         pending_sync_batches: 0,
         failed_sync_batches: 0,
-        readiness_blockers: 1
+        readiness_blockers: 1,
       },
       items: [],
       blockers: [
@@ -72,20 +78,24 @@ describe("AttentionPanel", () => {
           count: 3,
           reason: "Нужен email или телефон",
           entity_type: "person",
-          action_hint: "Заполните контакты"
-        }
+          action_hint: "Заполните контакты",
+        },
       ],
-      recommendations: []
+      recommendations: [],
     });
 
     render(
       <MemoryRouter>
         <AttentionPanel />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
 
-    expect(await screen.findByText("Неполные контакты сотрудников")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Открыть реестр сотрудников" })).toHaveAttribute("href", "/persons");
+    expect(
+      await screen.findByText("Неполные контакты сотрудников"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Открыть реестр сотрудников" }),
+    ).toHaveAttribute("href", "/persons");
   });
 
   it("maps blocker code to scenario-aware action screen", async () => {
@@ -97,7 +107,7 @@ describe("AttentionPanel", () => {
         overdue_deadlines: 0,
         pending_sync_batches: 0,
         failed_sync_batches: 0,
-        readiness_blockers: 1
+        readiness_blockers: 1,
       },
       items: [],
       blockers: [
@@ -108,23 +118,25 @@ describe("AttentionPanel", () => {
           count: 2,
           reason: "Просроченные назначения обучения",
           entity_type: "training_enrollment",
-          action_hint: "Закройте просроченные назначения или перепланируйте сроки"
-        }
+          action_hint:
+            "Закройте просроченные назначения или перепланируйте сроки",
+        },
       ],
-      recommendations: []
+      recommendations: [],
     });
 
     render(
       <MemoryRouter>
         <AttentionPanel />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
 
-    expect(await screen.findByText("Просроченные обучения")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Открыть задачи по обучению" })).toHaveAttribute(
-      "href",
-      "/tasks?type=training_plan&overdue=true"
-    );
+    expect(
+      await screen.findByText("Просроченные обучения"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Открыть задачи по обучению" }),
+    ).toHaveAttribute("href", "/tasks?type=training_plan&overdue=true");
   });
 
   it("renders all-clear state", async () => {
@@ -136,19 +148,21 @@ describe("AttentionPanel", () => {
         overdue_deadlines: 0,
         pending_sync_batches: 0,
         failed_sync_batches: 0,
-        readiness_blockers: 0
+        readiness_blockers: 0,
       },
       items: [],
       blockers: [],
-      recommendations: []
+      recommendations: [],
     });
 
     render(
       <MemoryRouter>
         <AttentionPanel />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
 
-    expect(await screen.findByText("Нет критичных нарушений")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Нет критичных нарушений"),
+    ).toBeInTheDocument();
   });
 });

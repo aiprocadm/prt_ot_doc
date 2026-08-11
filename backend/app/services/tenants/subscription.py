@@ -16,9 +16,13 @@ The managing tenant drives this. Two stores are touched:
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
+from datetime import UTC, datetime, timedelta
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.feature_flags import as_utc, grant_expired
 from app.db.session import AsyncSessionLocal
 from app.models.approval_runtime import WebhookEndpoint
 from app.models.feature import Feature, FeatureEnablement
@@ -30,7 +34,43 @@ from app.modules.subscription.plans import (
     SubscriptionPlan,
 )
 
-__all__ = ["apply_plan", "read_enabled_feature_codes"]
+#: Максимальная длина пробного доступа. Не «сколько угодно»: бессрочная выдача
+#: уже есть (тариф и надбавка), а «пробный на три года» — это подарок, который
+#: никто не заметит в отчёте.
+MAX_TRIAL_DAYS = 180
+
+__all__ = [
+    "MAX_TRIAL_DAYS",
+    "FeatureGrants",
+    "apply_plan",
+    "grant_module_trial",
+    "read_enabled_feature_codes",
+    "read_feature_grants",
+    "revoke_module_trial",
+]
+
+
+class TrialError(ValueError):
+    """Пробный доступ выдать нельзя (неизвестный модуль или негодный срок)."""
+
+
+@dataclass(frozen=True)
+class FeatureGrants:
+    """Что арендатору выдано: бессрочно и на срок — раздельно.
+
+    Раздельно, потому что вопросы разные. «Какой тариф у клиента» отвечает
+    только бессрочная часть: подмешай туда пробный доступ — и клиент с тарифом
+    «Базовый» плюс пробный СОУТ перестанет совпадать с любым тарифом и
+    отобразится как «свой набор». «Что клиенту сейчас открыто» отвечает
+    объединение.
+    """
+
+    permanent: set[str] = field(default_factory=set)
+    trials: dict[str, datetime] = field(default_factory=dict)
+
+    @property
+    def effective(self) -> set[str]:
+        return self.permanent | set(self.trials)
 
 
 def _target_session(target: Tenant) -> AsyncSession:
@@ -53,6 +93,12 @@ async def read_enabled_feature_codes(target: Tenant) -> set[str]:
     rather than failing the whole fleet listing.
     """
 
+    return (await read_feature_grants(target)).effective
+
+
+async def read_feature_grants(target: Tenant) -> FeatureGrants:
+    """Разложить выдачи ``target`` на бессрочные и срочные (BIZ-61 срез-3)."""
+
     try:
         async with _target_session(target) as session:
             # Filter ``on`` in Python, not SQL: Boolean-column predicates render
@@ -60,14 +106,25 @@ async def read_enabled_feature_codes(target: Tenant) -> set[str]:
             # test truthiness here.
             rows = (
                 await session.execute(
-                    select(Feature.code, FeatureEnablement.on)
+                    select(Feature.code, FeatureEnablement.on, FeatureEnablement.expires_at)
                     .join(FeatureEnablement, FeatureEnablement.feature_id == Feature.id)
                     .where(FeatureEnablement.tenant_id == target.id)
                 )
             ).all()
-            return {code for code, on in rows if on and code in FEATURE_CATALOG}
     except Exception:  # noqa: BLE001 - a broken/absent tenant schema must not 500 the list
-        return set()
+        return FeatureGrants()
+
+    grants = FeatureGrants()
+    for code, on, expires_at in rows:
+        if not on or code not in FEATURE_CATALOG or grant_expired(expires_at):
+            continue
+        if expires_at is None:
+            grants.permanent.add(code)
+        else:
+            # Осведомлённая дата: значение уходит в ответ API, а «до 24.08 09:00»
+            # без зоны — это вопрос «в чьих часах», а не ответ.
+            grants.trials[code] = as_utc(expires_at)
+    return grants
 
 
 async def _prune_module_webhooks(
@@ -162,8 +219,23 @@ async def apply_plan(session: AsyncSession, target: Tenant, plan: SubscriptionPl
                 target_session.add(
                     FeatureEnablement(tenant_id=target.id, feature_id=feature.id, on=desired)
                 )
-            else:
-                enablement.on = desired
+                continue
+            if desired:
+                # Модуль вошёл в тариф — он продан бессрочно, и пробный срок
+                # на нём поглощается. Иначе клиент оплатил модуль, а тот
+                # погаснет в день окончания давней демонстрации.
+                enablement.on = True
+                enablement.expires_at = None
+                continue
+            if enablement.on and not grant_expired(enablement.expires_at):
+                if enablement.expires_at is not None:
+                    # Действующий пробный доступ тариф НЕ отменяет: срок назначен
+                    # осознанно и обещан клиенту, а смена тарифа — рутинная
+                    # операция, которая не должна тихо забирать обещанное.
+                    # Отозвать пробный доступ можно явно (revoke_module_trial).
+                    continue
+            enablement.on = False
+            enablement.expires_at = None
         await _prune_module_webhooks(target_session, target, plan)
         await target_session.commit()
 
@@ -176,3 +248,99 @@ async def apply_plan(session: AsyncSession, target: Tenant, plan: SubscriptionPl
     else:
         for key, value in plan.quotas.items():
             setattr(quota, key, value)
+
+
+async def _catalogued_feature(session: AsyncSession, code: str) -> Feature:
+    """Строка каталога для ``code``, создаётся при первом обращении."""
+
+    feature = (
+        await session.execute(select(Feature).where(Feature.code == code))
+    ).scalar_one_or_none()
+    if feature is None:
+        feature = Feature(code=code, title=FEATURE_CATALOG[code])
+        session.add(feature)
+        await session.flush()
+    return feature
+
+
+async def grant_module_trial(target: Tenant, code: str, days: int) -> datetime:
+    """Выдать ``target`` модуль ``code`` на ``days`` дней (разд. 61.2, «временный доступ»).
+
+    Возвращает момент окончания. Повторная выдача **переписывает** срок, а не
+    продлевает от старого: «дай ещё на 14 дней» человек говорит, глядя на
+    сегодня, а не на дату, которую он не помнит.
+
+    Модуль вне продаваемого каталога выдать нельзя: ядро и так включено, а
+    незарегистрированный код означал бы строку выдачи, которую нечем показать
+    в консоли.
+    """
+
+    if code not in FEATURE_CATALOG:
+        raise TrialError(
+            f"модуль {code!r} не продаётся: пробный доступ выдаётся только "
+            "модулям каталога (ядро включено всегда)"
+        )
+    if days < 1 or days > MAX_TRIAL_DAYS:
+        raise TrialError(f"срок пробного доступа — от 1 до {MAX_TRIAL_DAYS} дней, получено {days}")
+
+    expires_at = datetime.now(UTC) + timedelta(days=days)
+    async with _target_session(target) as session:
+        feature = await _catalogued_feature(session, code)
+        enablement = (
+            await session.execute(
+                select(FeatureEnablement).where(
+                    FeatureEnablement.tenant_id == target.id,
+                    FeatureEnablement.feature_id == feature.id,
+                )
+            )
+        ).scalar_one_or_none()
+        if enablement is None:
+            session.add(
+                FeatureEnablement(
+                    tenant_id=target.id,
+                    feature_id=feature.id,
+                    on=True,
+                    expires_at=expires_at,
+                )
+            )
+        elif enablement.on and enablement.expires_at is None:
+            # Модуль уже выдан бессрочно (тариф или надбавка). Ставить ему срок
+            # значило бы отобрать оплаченное под видом «пробного доступа».
+            raise TrialError(
+                f"модуль {code!r} уже выдан бессрочно — пробный доступ поверх него "
+                "только ограничил бы оплаченное"
+            )
+        else:
+            enablement.on = True
+            enablement.expires_at = expires_at
+        await session.commit()
+    return expires_at
+
+
+async def revoke_module_trial(target: Tenant, code: str) -> bool:
+    """Отозвать пробный доступ досрочно. ``False`` — отзывать было нечего.
+
+    Бессрочную выдачу не трогает: тариф отзывается сменой тарифа, иначе кнопка
+    «прекратить демонстрацию» однажды снимет модуль, за который платят.
+    """
+
+    async with _target_session(target) as session:
+        feature = (
+            await session.execute(select(Feature).where(Feature.code == code))
+        ).scalar_one_or_none()
+        if feature is None:
+            return False
+        enablement = (
+            await session.execute(
+                select(FeatureEnablement).where(
+                    FeatureEnablement.tenant_id == target.id,
+                    FeatureEnablement.feature_id == feature.id,
+                )
+            )
+        ).scalar_one_or_none()
+        if enablement is None or enablement.expires_at is None:
+            return False
+        enablement.on = False
+        enablement.expires_at = None
+        await session.commit()
+    return True

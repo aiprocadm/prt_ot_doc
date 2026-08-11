@@ -2,7 +2,11 @@ import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
 import { apiClient } from "@/api/client";
 import type { ApiError } from "@/types/dto/common";
-import type { CreateRiskAssessmentDto, HazardDto, RiskAssessmentDto } from "@/types/dto/risk";
+import type {
+  CreateRiskAssessmentDto,
+  HazardDto,
+  RiskAssessmentDto,
+} from "@/types/dto/risk";
 
 type RiskRegistryItem = {
   id: string;
@@ -24,7 +28,9 @@ interface RiskState {
   error: ApiError | null;
   listHazards: () => Promise<void>;
   listAssessments: (companyId?: string) => Promise<void>;
-  createAssessment: (payload: CreateRiskAssessmentDto) => Promise<RiskAssessmentDto>;
+  createAssessment: (
+    payload: CreateRiskAssessmentDto,
+  ) => Promise<RiskAssessmentDto>;
   exportAssessment: (id: string) => Promise<Blob>;
   reset: () => void;
 }
@@ -59,7 +65,7 @@ export const useRiskStore = create<RiskState>()(
             title: item.hazard,
             description: "",
             probability: Number(item.probability ?? 1),
-            severity: Number(item.severity ?? 1)
+            severity: Number(item.severity ?? 1),
           });
         }
         set((state) => {
@@ -94,20 +100,20 @@ export const useRiskStore = create<RiskState>()(
         const mapped: RiskAssessmentDto[] = (data.items ?? []).map((item) => {
           const nowIso = new Date().toISOString();
           return {
-          id: item.id,
-          created_at: nowIso,
-          updated_at: nowIso,
-          company_id: item.company_id,
-          hazards: [
-            {
-              hazard_id: item.hazard,
-              mitigations: "",
-              probability: Number(item.probability ?? 1),
-              severity: Number(item.severity ?? 1),
-            },
-          ],
-          total_score: Number(item.level ?? 0),
-          status: "approved",
+            id: item.id,
+            created_at: nowIso,
+            updated_at: nowIso,
+            company_id: item.company_id,
+            hazards: [
+              {
+                hazard_id: item.hazard,
+                mitigations: "",
+                probability: Number(item.probability ?? 1),
+                severity: Number(item.severity ?? 1),
+              },
+            ],
+            total_score: Number(item.level ?? 0),
+            status: "approved",
           };
         });
         set((state) => {
@@ -131,16 +137,22 @@ export const useRiskStore = create<RiskState>()(
       }
     },
     createAssessment: async (payload) => {
-      const { data } = await apiClient.post<RiskAssessmentDto>("/risk/assessments", payload);
+      const { data } = await apiClient.post<RiskAssessmentDto>(
+        "/risk/assessments",
+        payload,
+      );
       set((state) => {
         state.assessments.unshift(data);
       });
       return data;
     },
     exportAssessment: async (id) => {
-      const { data } = await apiClient.get<Blob>(`/risk/assessments/${id}/export`, {
-        responseType: "blob"
-      });
+      const { data } = await apiClient.get<Blob>(
+        `/risk/assessments/${id}/export`,
+        {
+          responseType: "blob",
+        },
+      );
       return data;
     },
     reset: () => {
@@ -148,8 +160,8 @@ export const useRiskStore = create<RiskState>()(
         hazards: [],
         assessments: [],
         loading: false,
-        error: null
+        error: null,
       }));
-    }
-  }))
+    },
+  })),
 );

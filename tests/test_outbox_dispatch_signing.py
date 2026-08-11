@@ -19,7 +19,6 @@
 from __future__ import annotations
 
 import hmac
-import json
 from hashlib import sha256
 
 import httpx
@@ -88,7 +87,7 @@ async def test_processor_delivery_is_signed_via_endpoint_id(sessionmaker) -> Non
             tenant_id=tenant.id,
             event_type="DocumentExported",
             url="https://example.test/hooks/signed",
-            secret=encrypt_secret(PLAINTEXT),
+            secret=encrypt_secret(PLAINTEXT, tenant_id=str(tenant.id)),
             enabled=True,
         )
         session.add(sub)
@@ -122,7 +121,7 @@ async def test_secret_is_found_by_url_when_headers_have_no_id(sessionmaker) -> N
                 tenant_id=tenant.id,
                 event_type="DocumentExported",
                 url="https://example.test/hooks/by-url",
-                secret=encrypt_secret(PLAINTEXT),
+                secret=encrypt_secret(PLAINTEXT, tenant_id=str(tenant.id)),
                 enabled=True,
             )
         )
@@ -166,7 +165,7 @@ async def test_foreign_tenant_subscription_secret_is_not_used(sessionmaker, data
                 tenant_id=other.id,
                 event_type="DocumentExported",
                 url="https://example.test/hooks/foreign",
-                secret=encrypt_secret("foreign-secret"),
+                secret=encrypt_secret("foreign-secret", tenant_id=str(other.id)),
                 enabled=True,
             )
         )
@@ -198,7 +197,7 @@ async def test_foreign_tenant_endpoint_id_does_not_leak_secret(sessionmaker, dat
             tenant_id=victim.id,
             event_type="DocumentExported",
             url="https://victim.test/hooks/secret",
-            secret=encrypt_secret("victim-secret"),
+            secret=encrypt_secret("victim-secret", tenant_id=str(victim.id)),
             enabled=True,
         )
         session.add(victim_sub)
@@ -230,7 +229,7 @@ async def test_disabled_subscription_does_not_sign(sessionmaker) -> None:
             tenant_id=tenant.id,
             event_type="DocumentExported",
             url="https://example.test/hooks/disabled",
-            secret=encrypt_secret(PLAINTEXT),
+            secret=encrypt_secret(PLAINTEXT, tenant_id=str(tenant.id)),
             enabled=False,
         )
         session.add(sub)
@@ -257,7 +256,7 @@ async def test_wrong_event_type_subscription_does_not_sign(sessionmaker) -> None
             tenant_id=tenant.id,
             event_type="TrainingCompleted",  # не DocumentExported
             url="https://example.test/hooks/othertype",
-            secret=encrypt_secret(PLAINTEXT),
+            secret=encrypt_secret(PLAINTEXT, tenant_id=str(tenant.id)),
             enabled=True,
         )
         session.add(sub)
@@ -284,7 +283,7 @@ async def test_event_type_alias_is_signed(sessionmaker) -> None:
                 tenant_id=tenant.id,
                 event_type="Exported",  # алиас DocumentExported
                 url="https://example.test/hooks/alias",
-                secret=encrypt_secret(PLAINTEXT),
+                secret=encrypt_secret(PLAINTEXT, tenant_id=str(tenant.id)),
                 enabled=True,
             )
         )
@@ -310,7 +309,7 @@ async def test_global_subscription_signs_for_any_tenant(sessionmaker) -> None:
                 tenant_id=None,  # глобальная
                 event_type="DocumentExported",
                 url="https://example.test/hooks/global",
-                secret=encrypt_secret(PLAINTEXT),
+                secret=encrypt_secret(PLAINTEXT, tenant_id=None),
                 enabled=True,
             )
         )
@@ -344,14 +343,14 @@ async def test_signature_uses_the_right_subscription_secret(sessionmaker, data_f
                     tenant_id=other.id,
                     event_type="DocumentExported",
                     url=url,
-                    secret=encrypt_secret("not-my-secret"),
+                    secret=encrypt_secret("not-my-secret", tenant_id=str(other.id)),
                     enabled=True,
                 ),
                 WebhookSubscription(
                     tenant_id=mine.id,
                     event_type="DocumentExported",
                     url=url,
-                    secret=encrypt_secret(PLAINTEXT),
+                    secret=encrypt_secret(PLAINTEXT, tenant_id=str(mine.id)),
                     enabled=True,
                 ),
             ]
@@ -383,7 +382,7 @@ async def test_retired_key_fails_closed_not_unsigned(sessionmaker, monkeypatch) 
                 tenant_id=tenant.id,
                 event_type="DocumentExported",
                 url="https://example.test/hooks/retired",
-                secret=encrypt_secret(PLAINTEXT),
+                secret=encrypt_secret(PLAINTEXT, tenant_id=str(tenant.id)),
                 enabled=True,
             )
         )
@@ -421,8 +420,6 @@ async def test_db_error_in_secret_resolution_does_not_poison_the_batch(
 
     from sqlalchemy.exc import OperationalError
 
-    from app.services import webhooks as webhooks_module
-
     requests: list[httpx.Request] = []
     async with sessionmaker() as session:
         tenant = (await session.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()
@@ -432,14 +429,14 @@ async def test_db_error_in_secret_resolution_does_not_poison_the_batch(
                     tenant_id=tenant.id,
                     event_type="DocumentExported",
                     url="https://example.test/hooks/batch",
-                    secret=encrypt_secret(PLAINTEXT),
+                    secret=encrypt_secret(PLAINTEXT, tenant_id=str(tenant.id)),
                     enabled=True,
                 ),
                 WebhookSubscription(
                     tenant_id=tenant.id,
                     event_type="DocumentExported",
                     url="https://example.test/hooks/healthy",
-                    secret=encrypt_secret(PLAINTEXT),
+                    secret=encrypt_secret(PLAINTEXT, tenant_id=str(tenant.id)),
                     enabled=True,
                 ),
             ]

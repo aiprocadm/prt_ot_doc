@@ -9,7 +9,13 @@ import { LoadingScreen } from "@/components/common/LoadingScreen";
 import { Badge } from "@/components/ui/badge";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
   Table,
@@ -17,7 +23,7 @@ import {
   TableCell,
   TableHead,
   TableHeader,
-  TableRow
+  TableRow,
 } from "@/components/ui/table";
 import type { ApiError } from "@/types/dto/common";
 import {
@@ -30,7 +36,7 @@ import {
   type CalendarSavedViewWriteRequest,
   type CalendarSlaBand,
   type CalendarSourceCountDto,
-  type CalendarSourceType
+  type CalendarSourceType,
 } from "@/types/dto/calendar";
 import { downloadBlob } from "@/utils/download";
 
@@ -41,7 +47,7 @@ const VIEWS: { value: CalendarView; label: string }[] = [
   { value: "week", label: "Неделя" },
   { value: "month", label: "Месяц" },
   { value: "year", label: "Год" },
-  { value: "list", label: "Список" }
+  { value: "list", label: "Список" },
 ];
 
 const SOURCE_LABELS: Record<CalendarSourceType, string> = {
@@ -52,7 +58,7 @@ const SOURCE_LABELS: Record<CalendarSourceType, string> = {
   inspection: "Проверки",
   compliance_deadline: "Контрольные сроки",
   briefing_entry: "Инструктажи",
-  calendar_event: "Прочие события"
+  calendar_event: "Прочие события",
 };
 
 const DRILL_DOWN: Partial<Record<CalendarSourceType, string>> = {
@@ -62,21 +68,21 @@ const DRILL_DOWN: Partial<Record<CalendarSourceType, string>> = {
   training_session: "/training",
   inspection: "/inspections",
   compliance_deadline: "/workspace/data-quality",
-  briefing_entry: "/briefings"
+  briefing_entry: "/briefings",
 };
 
 const SLA_BAND_LABELS: Record<CalendarSlaBand, string> = {
   overdue: "Просрочено",
   critical: "Критично",
   warning: "Внимание",
-  ok: "В норме"
+  ok: "В норме",
 };
 
 type LoadDimension = "person" | "site";
 
 const LOAD_DIM_LABELS: Record<LoadDimension, string> = {
   person: "По людям",
-  site: "По объектам"
+  site: "По объектам",
 };
 
 const isCalendarSource = (value: string): value is CalendarSourceType =>
@@ -86,7 +92,11 @@ const isSlaBand = (value: string): value is CalendarSlaBand =>
   (CALENDAR_SLA_BANDS as readonly string[]).includes(value);
 
 const isView = (value: string | null): value is CalendarView =>
-  value === "day" || value === "week" || value === "month" || value === "year" || value === "list";
+  value === "day" ||
+  value === "week" ||
+  value === "month" ||
+  value === "year" ||
+  value === "list";
 
 const isLoadDim = (value: string | null): value is LoadDimension =>
   value === "person" || value === "site";
@@ -107,7 +117,9 @@ const parseSources = (raw: string | null): CalendarSourceType[] => {
   return raw
     .split(",")
     .map((part) => part.trim())
-    .filter((part) => part.length > 0 && isCalendarSource(part)) as CalendarSourceType[];
+    .filter(
+      (part) => part.length > 0 && isCalendarSource(part),
+    ) as CalendarSourceType[];
 };
 
 const parseSlaBands = (raw: string | null): CalendarSlaBand[] => {
@@ -145,15 +157,25 @@ const startOfYear = (value: Date) => {
 };
 
 const formatBucketLabel = (view: CalendarView, key: string): string => {
-  if (view === "day") return new Date(key).toLocaleDateString("ru-RU", { day: "2-digit", month: "long", year: "numeric" });
+  if (view === "day")
+    return new Date(key).toLocaleDateString("ru-RU", {
+      day: "2-digit",
+      month: "long",
+      year: "numeric",
+    });
   if (view === "week") {
     const start = new Date(key);
     const end = new Date(start);
     end.setDate(end.getDate() + 6);
     return `Неделя ${start.toLocaleDateString("ru-RU", { day: "2-digit", month: "short" })} — ${end.toLocaleDateString("ru-RU", { day: "2-digit", month: "short", year: "numeric" })}`;
   }
-  if (view === "month") return new Date(key).toLocaleDateString("ru-RU", { month: "long", year: "numeric" });
-  if (view === "year") return new Date(key).toLocaleDateString("ru-RU", { year: "numeric" });
+  if (view === "month")
+    return new Date(key).toLocaleDateString("ru-RU", {
+      month: "long",
+      year: "numeric",
+    });
+  if (view === "year")
+    return new Date(key).toLocaleDateString("ru-RU", { year: "numeric" });
   return "Все события";
 };
 
@@ -176,7 +198,7 @@ const formatDateTime = (iso: string | null | undefined): string => {
     month: "2-digit",
     year: "numeric",
     hour: "2-digit",
-    minute: "2-digit"
+    minute: "2-digit",
   });
 };
 
@@ -187,7 +209,7 @@ const formatDateOnly = (iso: string | null | undefined): string => {
   return date.toLocaleDateString("ru-RU", {
     day: "2-digit",
     month: "2-digit",
-    year: "numeric"
+    year: "numeric",
   });
 };
 
@@ -201,7 +223,7 @@ const SourceChip = ({
   source,
   selected,
   onToggle,
-  count
+  count,
 }: {
   source: CalendarSourceCountDto;
   selected: boolean;
@@ -216,7 +238,10 @@ const SourceChip = ({
     className="gap-2"
   >
     <span>{SOURCE_LABELS[source.source_type] ?? source.source_type}</span>
-    <Badge variant={selected ? "secondary" : "outline"} className="px-1.5 text-[11px]">
+    <Badge
+      variant={selected ? "secondary" : "outline"}
+      className="px-1.5 text-[11px]"
+    >
       {count}
     </Badge>
     {source.overdue_count > 0 ? (
@@ -245,11 +270,15 @@ const SLA_BAND_BADGE_CLASS: Record<CalendarSlaBand, string> = {
   overdue: "border-transparent bg-destructive text-destructive-foreground",
   critical: "border-transparent bg-orange-500 text-white",
   warning: "border-transparent bg-amber-400 text-amber-950",
-  ok: "border-transparent bg-emerald-500 text-white"
+  ok: "border-transparent bg-emerald-500 text-white",
 };
 
 const SlaBadge = ({ band }: { band: CalendarSlaBand }) => (
-  <Badge variant="outline" className={SLA_BAND_BADGE_CLASS[band]} data-sla-band={band}>
+  <Badge
+    variant="outline"
+    className={SLA_BAND_BADGE_CLASS[band]}
+    data-sla-band={band}
+  >
     {SLA_BAND_LABELS[band]}
   </Badge>
 );
@@ -271,13 +300,22 @@ const DaysToDueChip = ({ days }: { days: number }) => (
 );
 
 type HeatmapCell = { count: number; overdue: number };
-type HeatmapRow = { entityId: string; cells: HeatmapCell[]; total: number; overdueTotal: number };
-type HeatmapData = { rows: HeatmapRow[]; bucketKeys: string[]; bucketLabels: string[] };
+type HeatmapRow = {
+  entityId: string;
+  cells: HeatmapCell[];
+  total: number;
+  overdueTotal: number;
+};
+type HeatmapData = {
+  rows: HeatmapRow[];
+  bucketKeys: string[];
+  bucketLabels: string[];
+};
 
 const buildHeatmap = (
   items: CalendarEventItemDto[],
   view: CalendarView,
-  dimension: LoadDimension
+  dimension: LoadDimension,
 ): HeatmapData => {
   const rowMap = new Map<string, Map<string, HeatmapCell>>();
   const bucketSet = new Set<string>();
@@ -297,7 +335,9 @@ const buildHeatmap = (
   const bucketLabels = bucketKeys.map((key) => formatBucketLabel(view, key));
   const rows: HeatmapRow[] = [...rowMap.entries()]
     .map(([entityId, cellMap]) => {
-      const cells = bucketKeys.map((key) => cellMap.get(key) ?? { count: 0, overdue: 0 });
+      const cells = bucketKeys.map(
+        (key) => cellMap.get(key) ?? { count: 0, overdue: 0 },
+      );
       const total = cells.reduce((sum, c) => sum + c.count, 0);
       const overdueTotal = cells.reduce((sum, c) => sum + c.overdue, 0);
       return { entityId, cells, total, overdueTotal };
@@ -310,21 +350,26 @@ const ResourceLoadHeatmap = ({
   items,
   view,
   dimension,
-  onChangeDimension
+  onChangeDimension,
 }: {
   items: CalendarEventItemDto[];
   view: CalendarView;
   dimension: LoadDimension;
   onChangeDimension: (dim: LoadDimension) => void;
 }) => {
-  const data = useMemo(() => buildHeatmap(items, view, dimension), [items, view, dimension]);
+  const data = useMemo(
+    () => buildHeatmap(items, view, dimension),
+    [items, view, dimension],
+  );
 
   return (
     <section className="space-y-2" data-testid="resource-load-section">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-1">
         <h3 className="text-sm font-semibold">Загрузка ресурсов</h3>
         <div className="flex items-center gap-2">
-          <span className="text-xs uppercase text-muted-foreground">Группировка:</span>
+          <span className="text-xs uppercase text-muted-foreground">
+            Группировка:
+          </span>
           {(["person", "site"] as LoadDimension[]).map((dim) => (
             <Button
               key={dim}
@@ -416,7 +461,7 @@ const ResourceLoadHeatmap = ({
 const EventRow = ({
   item,
   includeFact,
-  includeSla
+  includeSla,
 }: {
   item: CalendarEventItemDto;
   includeFact: boolean;
@@ -425,10 +470,15 @@ const EventRow = ({
   const link = buildDrillDown(item);
   return (
     <TableRow>
-      <TableCell className="text-sm">{formatDateTime(item.starts_at)}</TableCell>
+      <TableCell className="text-sm">
+        {formatDateTime(item.starts_at)}
+      </TableCell>
       <TableCell className="text-sm font-medium">
         {link ? (
-          <Link to={link} className="text-primary underline-offset-4 hover:underline">
+          <Link
+            to={link}
+            className="text-primary underline-offset-4 hover:underline"
+          >
             {item.title}
           </Link>
         ) : (
@@ -441,8 +491,12 @@ const EventRow = ({
       <TableCell className="text-sm">{item.status ?? "—"}</TableCell>
       {includeFact ? (
         <>
-          <TableCell className="text-sm">{formatDateOnly(item.expected_at)}</TableCell>
-          <TableCell className="text-sm">{formatDateOnly(item.actual_at)}</TableCell>
+          <TableCell className="text-sm">
+            {formatDateOnly(item.expected_at)}
+          </TableCell>
+          <TableCell className="text-sm">
+            {formatDateOnly(item.actual_at)}
+          </TableCell>
           <TableCell>
             {typeof item.variance_days === "number" ? (
               <VarianceBadge days={item.variance_days} />
@@ -455,7 +509,9 @@ const EventRow = ({
       {includeSla ? (
         <TableCell>
           <div className="flex flex-wrap items-center gap-2">
-            {item.sla_band ? <SlaBadge band={item.sla_band} /> : (
+            {item.sla_band ? (
+              <SlaBadge band={item.sla_band} />
+            ) : (
               <span className="text-muted-foreground">—</span>
             )}
             {typeof item.days_to_due === "number" ? (
@@ -477,7 +533,9 @@ const EventRow = ({
 
 const CalendarPage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
-  const initialView = isView(searchParams.get("view")) ? (searchParams.get("view") as CalendarView) : "month";
+  const initialView = isView(searchParams.get("view"))
+    ? (searchParams.get("view") as CalendarView)
+    : "month";
   const initialSources = parseSources(searchParams.get("sources"));
   const initialPersonId = searchParams.get("person_id") ?? "";
   const initialSiteId = searchParams.get("site_id") ?? "";
@@ -490,18 +548,24 @@ const CalendarPage = () => {
     : "person";
 
   const [view, setView] = useState<CalendarView>(initialView);
-  const [selectedSources, setSelectedSources] = useState<CalendarSourceType[]>(initialSources);
+  const [selectedSources, setSelectedSources] =
+    useState<CalendarSourceType[]>(initialSources);
   const [personId, setPersonId] = useState(initialPersonId);
   const [siteId, setSiteId] = useState(initialSiteId);
   const [appliedPersonId, setAppliedPersonId] = useState(initialPersonId);
   const [appliedSiteId, setAppliedSiteId] = useState(initialSiteId);
   const [includeFact, setIncludeFact] = useState(initialIncludeFact);
-  const [includeSla, setIncludeSla] = useState(initialIncludeSla || initialSlaBands.length > 0);
-  const [selectedBands, setSelectedBands] = useState<CalendarSlaBand[]>(initialSlaBands);
+  const [includeSla, setIncludeSla] = useState(
+    initialIncludeSla || initialSlaBands.length > 0,
+  );
+  const [selectedBands, setSelectedBands] =
+    useState<CalendarSlaBand[]>(initialSlaBands);
   const [includeLoad, setIncludeLoad] = useState(initialIncludeLoad);
   const [loadDim, setLoadDim] = useState<LoadDimension>(initialLoadDim);
 
-  const [response, setResponse] = useState<CalendarEventsResponseDto | null>(null);
+  const [response, setResponse] = useState<CalendarEventsResponseDto | null>(
+    null,
+  );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<ApiError | null>(null);
   const [icsLoading, setIcsLoading] = useState(false);
@@ -564,7 +628,7 @@ const CalendarPage = () => {
       }
       setSearchParams(next, { replace: true });
     },
-    [searchParams, setSearchParams]
+    [searchParams, setSearchParams],
   );
 
   const load = useCallback(async () => {
@@ -576,7 +640,7 @@ const CalendarPage = () => {
         person_id: appliedPersonId || undefined,
         site_id: appliedSiteId || undefined,
         include_fact: includeFact || undefined,
-        include_sla: includeSla || undefined
+        include_sla: includeSla || undefined,
       });
       setResponse(data);
     } catch (nextError) {
@@ -584,13 +648,19 @@ const CalendarPage = () => {
         (nextError as ApiError) ?? {
           status: 0,
           message: "Не удалось загрузить календарь",
-          field_errors: []
-        }
+          field_errors: [],
+        },
       );
     } finally {
       setLoading(false);
     }
-  }, [selectedSources, appliedPersonId, appliedSiteId, includeFact, includeSla]);
+  }, [
+    selectedSources,
+    appliedPersonId,
+    appliedSiteId,
+    includeFact,
+    includeSla,
+  ]);
 
   useEffect(() => {
     void load();
@@ -606,7 +676,7 @@ const CalendarPage = () => {
         return next;
       });
     },
-    [updateQueryParams]
+    [updateQueryParams],
   );
 
   const changeView = useCallback(
@@ -614,7 +684,7 @@ const CalendarPage = () => {
       setView(next);
       updateQueryParams({ view: next });
     },
-    [updateQueryParams]
+    [updateQueryParams],
   );
 
   const applyFilters = useCallback(() => {
@@ -622,7 +692,7 @@ const CalendarPage = () => {
     setAppliedSiteId(siteId.trim());
     updateQueryParams({
       person_id: personId.trim(),
-      site_id: siteId.trim()
+      site_id: siteId.trim(),
     });
   }, [personId, siteId, updateQueryParams]);
 
@@ -645,7 +715,7 @@ const CalendarPage = () => {
       include_sla: false,
       sla_bands: [],
       include_load: false,
-      load_dim: "person"
+      load_dim: "person",
     });
   }, [updateQueryParams]);
 
@@ -679,7 +749,7 @@ const CalendarPage = () => {
         return next;
       });
     },
-    [updateQueryParams]
+    [updateQueryParams],
   );
 
   const toggleLoad = useCallback(() => {
@@ -695,7 +765,7 @@ const CalendarPage = () => {
       setLoadDim(dim);
       updateQueryParams({ load_dim: dim });
     },
-    [updateQueryParams]
+    [updateQueryParams],
   );
 
   const handleDownloadIcs = useCallback(async () => {
@@ -707,18 +777,25 @@ const CalendarPage = () => {
         person_id: appliedPersonId || undefined,
         site_id: appliedSiteId || undefined,
         include_fact: includeFact || undefined,
-        include_sla: includeSla || undefined
+        include_sla: includeSla || undefined,
       });
       const today = new Date().toISOString().slice(0, 10);
       downloadBlob(blob, `calendar-${today}.ics`);
     } catch (nextError) {
       const message =
-        (nextError as ApiError | undefined)?.message ?? "Не удалось скачать .ics";
+        (nextError as ApiError | undefined)?.message ??
+        "Не удалось скачать .ics";
       setIcsError(message);
     } finally {
       setIcsLoading(false);
     }
-  }, [selectedSources, appliedPersonId, appliedSiteId, includeFact, includeSla]);
+  }, [
+    selectedSources,
+    appliedPersonId,
+    appliedSiteId,
+    includeFact,
+    includeSla,
+  ]);
 
   // --- Saved views (vNext-CAL-01 / Phase 4.1 — saved filters) ---
 
@@ -732,7 +809,7 @@ const CalendarPage = () => {
       include_sla: includeSla,
       sla_bands: selectedBands,
       include_load: includeLoad,
-      load_dim: includeLoad ? loadDim : null
+      load_dim: includeLoad ? loadDim : null,
     }),
     [
       view,
@@ -743,8 +820,8 @@ const CalendarPage = () => {
       includeSla,
       selectedBands,
       includeLoad,
-      loadDim
-    ]
+      loadDim,
+    ],
   );
 
   const loadSavedViews = useCallback(async () => {
@@ -770,12 +847,14 @@ const CalendarPage = () => {
     (saved: CalendarSavedViewDto) => {
       const payload = saved.payload;
       const nextView: CalendarView =
-        payload.view && isView(payload.view) ? (payload.view as CalendarView) : "month";
+        payload.view && isView(payload.view)
+          ? (payload.view as CalendarView)
+          : "month";
       const nextSources = (payload.sources ?? []).filter((source) =>
-        (CALENDAR_SOURCE_TYPES as readonly string[]).includes(source)
+        (CALENDAR_SOURCE_TYPES as readonly string[]).includes(source),
       ) as CalendarSourceType[];
       const nextBands = (payload.sla_bands ?? []).filter((band) =>
-        (CALENDAR_SLA_BANDS as readonly string[]).includes(band)
+        (CALENDAR_SLA_BANDS as readonly string[]).includes(band),
       ) as CalendarSlaBand[];
       const nextLoadDim: LoadDimension =
         payload.load_dim && isLoadDim(payload.load_dim)
@@ -806,10 +885,10 @@ const CalendarPage = () => {
         include_sla: Boolean(payload.include_sla) || nextBands.length > 0,
         sla_bands: nextBands,
         include_load: Boolean(payload.include_load),
-        load_dim: nextLoadDim
+        load_dim: nextLoadDim,
       });
     },
-    [updateQueryParams]
+    [updateQueryParams],
   );
 
   const handleSaveCurrentView = useCallback(async () => {
@@ -823,7 +902,7 @@ const CalendarPage = () => {
     try {
       const request: CalendarSavedViewWriteRequest = {
         name: trimmed,
-        payload: currentViewPayload
+        payload: currentViewPayload,
       };
       const created = await calendarApi.createSavedView(request);
       setSavedViews((current) => {
@@ -837,38 +916,37 @@ const CalendarPage = () => {
       const message =
         apiError?.status === 409
           ? `Фильтр с именем «${trimmed}» уже существует`
-          : apiError?.message ?? "Не удалось сохранить фильтр";
+          : (apiError?.message ?? "Не удалось сохранить фильтр");
       setSavedViewsError(message);
     } finally {
       setSavingView(false);
     }
   }, [currentViewPayload]);
 
-  const handleDeleteSavedView = useCallback(
-    async (id: string) => {
-      if (typeof window !== "undefined") {
-        const ok = window.confirm("Удалить сохранённый фильтр?");
-        if (!ok) return;
-      }
-      setSavedViewsError(null);
-      try {
-        await calendarApi.deleteSavedView(id);
-        setSavedViews((current) => current.filter((entry) => entry.id !== id));
-        setAppliedViewId((current) => (current === id ? null : current));
-      } catch (nextError) {
-        const message =
-          (nextError as ApiError | undefined)?.message ??
-          "Не удалось удалить фильтр";
-        setSavedViewsError(message);
-      }
-    },
-    []
-  );
+  const handleDeleteSavedView = useCallback(async (id: string) => {
+    if (typeof window !== "undefined") {
+      const ok = window.confirm("Удалить сохранённый фильтр?");
+      if (!ok) return;
+    }
+    setSavedViewsError(null);
+    try {
+      await calendarApi.deleteSavedView(id);
+      setSavedViews((current) => current.filter((entry) => entry.id !== id));
+      setAppliedViewId((current) => (current === id ? null : current));
+    } catch (nextError) {
+      const message =
+        (nextError as ApiError | undefined)?.message ??
+        "Не удалось удалить фильтр";
+      setSavedViewsError(message);
+    }
+  }, []);
 
   const items = useMemo(() => {
     const all = response?.items ?? [];
     if (!includeSla || selectedBands.length === 0) return all;
-    return all.filter((item) => item.sla_band && selectedBands.includes(item.sla_band));
+    return all.filter(
+      (item) => item.sla_band && selectedBands.includes(item.sla_band),
+    );
   }, [response, includeSla, selectedBands]);
 
   const buckets = useMemo(() => {
@@ -886,7 +964,7 @@ const CalendarPage = () => {
         key,
         label: formatBucketLabel(view, key),
         items: list,
-        overdue: list.filter((entry) => entry.is_overdue).length
+        overdue: list.filter((entry) => entry.is_overdue).length,
       }));
   }, [items, view]);
 
@@ -912,18 +990,23 @@ const CalendarPage = () => {
     const empty = { overdue: 0, critical: 0, warning: 0, ok: 0 };
     const all = response?.items ?? [];
     if (!includeSla || all.length === 0) return empty;
-    return all.reduce((acc, item) => {
-      if (item.sla_band && item.sla_band in acc) {
-        acc[item.sla_band] += 1;
-      }
-      return acc;
-    }, { ...empty });
+    return all.reduce(
+      (acc, item) => {
+        if (item.sla_band && item.sla_band in acc) {
+          acc[item.sla_band] += 1;
+        }
+        return acc;
+      },
+      { ...empty },
+    );
   }, [includeSla, response]);
 
   const counts = response?.by_source ?? [];
   const total = response?.total ?? 0;
   const overdueTotal = response?.overdue_count ?? 0;
-  const generatedAtLabel = response?.generated_at ? formatDateTime(response.generated_at) : null;
+  const generatedAtLabel = response?.generated_at
+    ? formatDateTime(response.generated_at)
+    : null;
   const filtersActive =
     selectedSources.length > 0 ||
     appliedPersonId.length > 0 ||
@@ -935,13 +1018,20 @@ const CalendarPage = () => {
 
   return (
     <div className="space-y-4">
-      <Breadcrumb items={[{ label: "Главная", to: "/dashboard" }, { label: "Умный календарь" }]} />
+      <Breadcrumb
+        items={[
+          { label: "Главная", to: "/dashboard" },
+          { label: "Умный календарь" },
+        ]}
+      />
       <Card>
         <CardHeader className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <CardTitle>Умный календарь</CardTitle>
             <CardDescription>
-              Сводный поток медосмотров, СИЗ, допусков, обучений, проверок, контрольных сроков и инструктажей с подсветкой просрочек и сравнением план/факт.
+              Сводный поток медосмотров, СИЗ, допусков, обучений, проверок,
+              контрольных сроков и инструктажей с подсветкой просрочек и
+              сравнением план/факт.
             </CardDescription>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -994,7 +1084,9 @@ const CalendarPage = () => {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs uppercase text-muted-foreground">Вид:</span>
+            <span className="text-xs uppercase text-muted-foreground">
+              Вид:
+            </span>
             {VIEWS.map((option) => (
               <Button
                 key={option.value}
@@ -1011,7 +1103,9 @@ const CalendarPage = () => {
             className="flex flex-wrap items-center gap-2"
             data-testid="saved-views-toolbar"
           >
-            <span className="text-xs uppercase text-muted-foreground">Мои фильтры:</span>
+            <span className="text-xs uppercase text-muted-foreground">
+              Мои фильтры:
+            </span>
             <select
               className="h-9 rounded-md border border-input bg-background px-2 text-sm"
               value={appliedViewId ?? ""}
@@ -1074,12 +1168,13 @@ const CalendarPage = () => {
           </div>
           <div className="flex flex-wrap gap-2">
             {CALENDAR_SOURCE_TYPES.map((sourceType) => {
-              const summary =
-                counts.find((entry) => entry.source_type === sourceType) ?? {
-                  source_type: sourceType,
-                  count: 0,
-                  overdue_count: 0
-                };
+              const summary = counts.find(
+                (entry) => entry.source_type === sourceType,
+              ) ?? {
+                source_type: sourceType,
+                count: 0,
+                overdue_count: 0,
+              };
               return (
                 <SourceChip
                   key={sourceType}
@@ -1092,8 +1187,13 @@ const CalendarPage = () => {
             })}
           </div>
           {includeSla ? (
-            <div className="flex flex-wrap items-center gap-2" data-testid="sla-band-filter">
-              <span className="text-xs uppercase text-muted-foreground">SLA:</span>
+            <div
+              className="flex flex-wrap items-center gap-2"
+              data-testid="sla-band-filter"
+            >
+              <span className="text-xs uppercase text-muted-foreground">
+                SLA:
+              </span>
               {CALENDAR_SLA_BANDS.map((band) => (
                 <Button
                   key={band}
@@ -1114,7 +1214,10 @@ const CalendarPage = () => {
           ) : null}
           <div className="grid gap-3 md:grid-cols-3">
             <div className="space-y-1">
-              <label className="text-xs uppercase text-muted-foreground" htmlFor="calendar-person">
+              <label
+                className="text-xs uppercase text-muted-foreground"
+                htmlFor="calendar-person"
+              >
                 Сотрудник (person_id)
               </label>
               <Input
@@ -1125,7 +1228,10 @@ const CalendarPage = () => {
               />
             </div>
             <div className="space-y-1">
-              <label className="text-xs uppercase text-muted-foreground" htmlFor="calendar-site">
+              <label
+                className="text-xs uppercase text-muted-foreground"
+                htmlFor="calendar-site"
+              >
                 Объект (site_id)
               </label>
               <Input
@@ -1151,29 +1257,53 @@ const CalendarPage = () => {
           </div>
           <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
             <span>
-              Всего событий: <strong className="text-foreground">{total}</strong>
+              Всего событий:{" "}
+              <strong className="text-foreground">{total}</strong>
             </span>
             <span>
               Просрочек:{" "}
-              <strong className={overdueTotal > 0 ? "text-destructive" : "text-foreground"}>
+              <strong
+                className={
+                  overdueTotal > 0 ? "text-destructive" : "text-foreground"
+                }
+              >
                 {overdueTotal}
               </strong>
             </span>
-            {generatedAtLabel ? <span>Сформировано: {generatedAtLabel}</span> : null}
+            {generatedAtLabel ? (
+              <span>Сформировано: {generatedAtLabel}</span>
+            ) : null}
             {includeFact ? (
               <span data-testid="fact-summary">
-                Факт зафиксирован: <strong className="text-foreground">{factSummary.withFact}</strong>{" "}
-                · опозданий: <strong className="text-destructive">{factSummary.late}</strong> ·
-                досрочно: <strong className="text-emerald-600">{factSummary.early}</strong> ·
-                в срок: <strong className="text-foreground">{factSummary.onTime}</strong>
+                Факт зафиксирован:{" "}
+                <strong className="text-foreground">
+                  {factSummary.withFact}
+                </strong>{" "}
+                · опозданий:{" "}
+                <strong className="text-destructive">{factSummary.late}</strong>{" "}
+                · досрочно:{" "}
+                <strong className="text-emerald-600">
+                  {factSummary.early}
+                </strong>{" "}
+                · в срок:{" "}
+                <strong className="text-foreground">
+                  {factSummary.onTime}
+                </strong>
               </span>
             ) : null}
             {includeSla ? (
               <span data-testid="sla-summary">
                 SLA — просрочено:{" "}
-                <strong className="text-destructive">{slaSummary.overdue}</strong> · критично:{" "}
-                <strong className="text-orange-600">{slaSummary.critical}</strong> · внимание:{" "}
-                <strong className="text-amber-600">{slaSummary.warning}</strong> · в норме:{" "}
+                <strong className="text-destructive">
+                  {slaSummary.overdue}
+                </strong>{" "}
+                · критично:{" "}
+                <strong className="text-orange-600">
+                  {slaSummary.critical}
+                </strong>{" "}
+                · внимание:{" "}
+                <strong className="text-amber-600">{slaSummary.warning}</strong>{" "}
+                · в норме:{" "}
                 <strong className="text-emerald-600">{slaSummary.ok}</strong>
               </span>
             ) : null}
@@ -1203,11 +1333,15 @@ const CalendarPage = () => {
             ? buckets.map((bucket) => (
                 <section key={bucket.key} className="space-y-2">
                   <div className="flex items-center justify-between border-b pb-1">
-                    <h3 className="text-sm font-semibold capitalize">{bucket.label}</h3>
+                    <h3 className="text-sm font-semibold capitalize">
+                      {bucket.label}
+                    </h3>
                     <div className="flex items-center gap-2">
                       <Badge variant="secondary">{bucket.items.length}</Badge>
                       {bucket.overdue > 0 ? (
-                        <Badge variant="destructive">Просрочек: {bucket.overdue}</Badge>
+                        <Badge variant="destructive">
+                          Просрочек: {bucket.overdue}
+                        </Badge>
                       ) : null}
                     </div>
                   </div>
@@ -1222,10 +1356,14 @@ const CalendarPage = () => {
                           <>
                             <TableHead className="w-[120px]">План</TableHead>
                             <TableHead className="w-[120px]">Факт</TableHead>
-                            <TableHead className="w-[120px]">Отклонение</TableHead>
+                            <TableHead className="w-[120px]">
+                              Отклонение
+                            </TableHead>
                           </>
                         ) : null}
-                        {includeSla ? <TableHead className="w-[200px]">SLA</TableHead> : null}
+                        {includeSla ? (
+                          <TableHead className="w-[200px]">SLA</TableHead>
+                        ) : null}
                         <TableHead className="w-[120px]">Срок</TableHead>
                       </TableRow>
                     </TableHeader>

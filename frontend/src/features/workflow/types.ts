@@ -1,22 +1,36 @@
 export const defaultWorkflowGraph = {
   nodes: [
     { id: "start", type: "start", name: "Старт" },
-    { id: "approval", type: "approval", name: "Согласование", sla_hours: 24, assignee_role_code: "line_manager" },
-    { id: "notify", type: "notification", name: "Уведомление", destination: "inapp" },
-    { id: "end", type: "end", name: "Завершение" }
+    {
+      id: "approval",
+      type: "approval",
+      name: "Согласование",
+      sla_hours: 24,
+      assignee_role_code: "line_manager",
+    },
+    {
+      id: "notify",
+      type: "notification",
+      name: "Уведомление",
+      destination: "inapp",
+    },
+    { id: "end", type: "end", name: "Завершение" },
   ],
   transitions: [
     { from: "start", to: "approval" },
     { from: "approval", to: "notify" },
-    { from: "notify", to: "end" }
-  ]
+    { from: "notify", to: "end" },
+  ],
 };
 
 export type WorkflowVersion = {
   id: string;
   version_no: number;
   status: string;
-  graph_json: { nodes?: Array<{ id: string; type: string; name?: string }>; transitions?: Array<{ from: string; to: string; when?: string }> };
+  graph_json: {
+    nodes?: Array<{ id: string; type: string; name?: string }>;
+    transitions?: Array<{ from: string; to: string; when?: string }>;
+  };
 };
 
 export type WorkflowDefinition = {
@@ -74,4 +88,3 @@ export type WorkflowInstance = {
   timeline: WorkflowTimelineEvent[];
   tasks: WorkflowTask[];
 };
-

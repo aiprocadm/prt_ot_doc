@@ -41,9 +41,9 @@ def test_journal_has_required_columns() -> None:
         "updated_at",
         "version",
     }
-    assert required.issubset(columns.keys()), (
-        f"journal missing columns: {required - set(columns.keys())}"
-    )
+    assert required.issubset(
+        columns.keys()
+    ), f"journal missing columns: {required - set(columns.keys())}"
 
 
 def test_journal_company_fk_sets_null_on_company_delete() -> None:
@@ -68,8 +68,12 @@ def test_journal_type_uses_journaltype_enum() -> None:
         "lose type-safety and diverge from JournalEntry's intended migration"
     )
     expected_values = {
-        "introductory", "primary", "repeated",
-        "target", "fire_safety", "unscheduled",
+        "introductory",
+        "primary",
+        "repeated",
+        "target",
+        "fire_safety",
+        "unscheduled",
     }
     actual_values = {member.value for member in JournalType}
     assert expected_values == actual_values, (
@@ -111,9 +115,7 @@ def test_iter24_migration_chains_to_iter23_head() -> None:
     # revision would create a parallel branch and break `alembic upgrade head`
     # with "Multiple head revisions" (the lesson from iter-21 PR #589 first
     # attempt — see [[alembic-heads-lesson]]).
-    assert (
-        module.down_revision == "20260527_iter23_refresh_session_securityauditlog"
-    )
+    assert module.down_revision == "20260527_iter23_refresh_session_securityauditlog"
 
 
 def test_iter24_migration_creates_both_journal_and_ppeitem() -> None:
@@ -129,9 +131,7 @@ def test_iter24_migration_creates_both_journal_and_ppeitem() -> None:
         / "20260527_iter24_journal_ppeitem.py"
     )
     src = migration_path.read_text(encoding="utf-8")
-    assert 'op.create_table(\n        "journal"' in src, (
-        "iter-24 must create the journal table"
-    )
-    assert 'op.create_table(\n        "ppeitem"' in src, (
-        "iter-24 must create the ppeitem table (cohort partner)"
-    )
+    assert 'op.create_table(\n        "journal"' in src, "iter-24 must create the journal table"
+    assert (
+        'op.create_table(\n        "ppeitem"' in src
+    ), "iter-24 must create the ppeitem table (cohort partner)"

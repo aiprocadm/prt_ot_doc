@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { managedClientsApi, type MyManagedClient } from "@/api/managedClients";
-import { managedClientStorage, type StoredClientContext } from "@/api/managedClientStorage";
+import {
+  managedClientStorage,
+  type StoredClientContext,
+} from "@/api/managedClientStorage";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ErrorState } from "@/components/common/ErrorState";
@@ -39,7 +42,9 @@ interface ClientContextSwitcherProps {
   onContextChange?: (context: StoredClientContext | null) => void;
 }
 
-export const ClientContextSwitcher = ({ onContextChange }: ClientContextSwitcherProps) => {
+export const ClientContextSwitcher = ({
+  onContextChange,
+}: ClientContextSwitcherProps) => {
   const [clients, setClients] = useState<MyManagedClient[]>([]);
   const [sections, setSections] = useState<string[]>([]);
   const [active, setActive] = useState<StoredClientContext | null>(() => {
@@ -87,7 +92,7 @@ export const ClientContextSwitcher = ({ onContextChange }: ClientContextSwitcher
       const next = {
         clientId: confirmed.client_id,
         clientName: confirmed.client_name,
-        expiresAt: confirmed.expires_at ?? undefined
+        expiresAt: confirmed.expires_at ?? undefined,
       };
       managedClientStorage.set(next);
       setActive(next);
@@ -114,7 +119,7 @@ export const ClientContextSwitcher = ({ onContextChange }: ClientContextSwitcher
         // контекста не выглядел неудавшимся.
       }
     },
-    [onContextChange]
+    [onContextChange],
   );
 
   // Срок работы «от имени» истекает и БЕЗ участия пользователя: вкладка может
@@ -126,7 +131,12 @@ export const ClientContextSwitcher = ({ onContextChange }: ClientContextSwitcher
         void leave(true);
         return;
       }
-      setSecondsLeft(Math.max(0, Math.round((Date.parse(active.expiresAt!) - Date.now()) / 1000)));
+      setSecondsLeft(
+        Math.max(
+          0,
+          Math.round((Date.parse(active.expiresAt!) - Date.now()) / 1000),
+        ),
+      );
     };
     tick();
     const timer = window.setInterval(tick, 1000);
@@ -144,21 +154,34 @@ export const ClientContextSwitcher = ({ onContextChange }: ClientContextSwitcher
         <span className="text-sm">
           Вы работаете от имени: <strong>{active.clientName}</strong>
         </span>
-        <span className="text-xs text-muted-foreground">Действия фиксируются в аудите</span>
+        <span className="text-xs text-muted-foreground">
+          Действия фиксируются в аудите
+        </span>
         {secondsLeft !== null && (
-          <span className="text-xs font-medium" data-testid="client-context-countdown">
+          <span
+            className="text-xs font-medium"
+            data-testid="client-context-countdown"
+          >
             Осталось {formatLeft(secondsLeft)}
           </span>
         )}
         {/* Фильтр применён пока не во всех разделах, и молчать об этом нельзя:
             специалист поверит вывеске и внесёт данные не тому клиенту. */}
         {sections.length > 0 && (
-          <span className="text-xs text-muted-foreground" data-testid="client-context-sections">
-            Данные клиента показываются в разделах: {sections.join(", ")}. В остальных — данные
-            всех клиентов.
+          <span
+            className="text-xs text-muted-foreground"
+            data-testid="client-context-sections"
+          >
+            Данные клиента показываются в разделах: {sections.join(", ")}. В
+            остальных — данные всех клиентов.
           </span>
         )}
-        <Button type="button" size="sm" variant="outline" onClick={() => void leave()}>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          onClick={() => void leave()}
+        >
           Выйти из контекста
         </Button>
       </div>
@@ -170,13 +193,23 @@ export const ClientContextSwitcher = ({ onContextChange }: ClientContextSwitcher
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-2" data-testid="client-context-switcher">
+    <div
+      className="flex flex-wrap items-center gap-2"
+      data-testid="client-context-switcher"
+    >
       {expired && (
-        <span className="text-xs text-amber-700" data-testid="client-context-expired">
-          Время работы от имени клиента вышло — войдите заново, если работа продолжается.
+        <span
+          className="text-xs text-amber-700"
+          data-testid="client-context-expired"
+        >
+          Время работы от имени клиента вышло — войдите заново, если работа
+          продолжается.
         </span>
       )}
-      <label className="text-xs text-muted-foreground" htmlFor="client-context-select">
+      <label
+        className="text-xs text-muted-foreground"
+        htmlFor="client-context-select"
+      >
         Работать от имени клиента
       </label>
       <select

@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.errors import api_problem_detail
 from app.core.security import AccessContext, abac
+from app.domains.packs.readiness import analyze_pack_readiness
 from app.models.models import (
     PackagePresetItem,
     PackRun,
@@ -34,6 +35,7 @@ from app.modules.packs.schemas import (
     PackRunCreate,
     PackRunItemRead,
     PackRunLogRead,
+    PackRunPreviewRead,
     PackRunRead,
     SourcePreviewRead,
 )
@@ -451,6 +453,74 @@ async def preview_mapping(
     validator.validate(preset.mapping_json or {}, columns)
     mapped = [validator.apply(preset.mapping_json or {}, row) for row in rows[: payload.row_limit]]
     return {"source_type": source_type, "preview": mapped}
+
+
+@router.post("/pack-runs:preview", response_model=PackRunPreviewRead)
+async def preview_pack_run(
+    payload: PackRunCreate,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = ReadAccess,
+) -> PackRunPreviewRead:
+    """Третий шаг мастера (разд. 50.2): что войдёт в комплект и чего не хватает.
+
+    Ничего НЕ создаёт: ни прогона, ни ключа идемпотентности, ни файлов. Поэтому
+    и права нужны только на чтение, и заголовок ``Idempotency-Key`` не требуется
+    — «посмотреть, что получится» не должно тратить прогон.
+
+    Проблемы отдаются СПИСКОМ, а не первой попавшейся: запуск генерации падал
+    с 400 на первой же ненайденной колонке, и пять пропущенных колонок чинились
+    пятью прогонами. Блокирующие отделены от предупреждений: нет колонки —
+    генерация невозможна, пусто в отдельной строке — документ выйдет с пробелом.
+    """
+
+    preset = await PackageService(session).get_preset(str(tenant.id), payload.package_preset_id)
+    if preset is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "package preset not found")
+
+    _source_type, columns, rows = await load_source_rows(
+        session, payload.source_file_id, payload.rows, tenant_id=str(tenant.id)
+    )
+    items = (
+        (
+            await session.execute(
+                select(PackagePresetItem).where(
+                    PackagePresetItem.tenant_id == str(tenant.id),
+                    PackagePresetItem.package_preset_id == preset.id,
+                    PackagePresetItem.deleted_at.is_(None),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    status_value = getattr(preset.status, "value", preset.status)
+    readiness = analyze_pack_readiness(
+        mapping=preset.mapping_json or {},
+        columns=list(columns),
+        rows=list(rows),
+        selected_rows=list(payload.selected_rows or []),
+        documents_per_row=len(items),
+        preset_active=str(status_value) == "active",
+    )
+    return PackRunPreviewRead(
+        ready=readiness.ready,
+        score=readiness.score,
+        documents_total=readiness.documents_total,
+        rows_total=readiness.rows_total,
+        rows_selected=readiness.rows_selected,
+        rows_ready=readiness.rows_ready,
+        problems=[
+            {
+                "code": problem.code,
+                "message": problem.message,
+                "blocking": problem.blocking,
+                "rows": list(problem.rows),
+                "rows_total": problem.rows_total,
+            }
+            for problem in readiness.problems
+        ],
+    )
 
 
 @router.post("/pack-runs", response_model=PackRunAccepted, status_code=status.HTTP_202_ACCEPTED)

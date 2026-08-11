@@ -1,9 +1,19 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  type ReactNode,
+} from "react";
 
-import { getBillingSummary } from "@/api/billing";
 import { useAbility } from "@/permissions/useAbility";
+import { useModulesStore } from "@/stores/modules";
 import { filterNavGroupsByAccess } from "@/router/navVisibility";
-import { CLIENT_PORTAL_NAV_GROUPS, MAIN_NAV_GROUPS, type NavGroup } from "@/router/navigationConfig";
+import {
+  CLIENT_PORTAL_NAV_GROUPS,
+  MAIN_NAV_GROUPS,
+  type NavGroup,
+} from "@/router/navigationConfig";
 import { useClientPortalOnlyMode } from "@/router/useNavScope";
 
 export type NavMenuContextValue = {
@@ -11,49 +21,42 @@ export type NavMenuContextValue = {
   clientPortalOnlyMode: boolean;
 };
 
-const NavMenuContext = createContext<NavMenuContextValue | undefined>(undefined);
+const NavMenuContext = createContext<NavMenuContextValue | undefined>(
+  undefined,
+);
 
 export const NavMenuProvider = ({ children }: { children: ReactNode }) => {
   const { can } = useAbility();
   const clientPortalOnlyMode = useClientPortalOnlyMode();
-  const [featureFlags, setFeatureFlags] = useState<Record<string, boolean>>({});
+  // Раньше признаки брались из `/billing/plan` — это фичи ТАРИФА БИЛЛИНГА, а
+  // фактическая выдача модуля живёт в другом хранилище. Они расходятся, и
+  // клиент видел пункт меню модуля, которого у него нет. Плюс та ручка
+  // закрыта ролью owner/admin: у рядового пользователя признаки всегда были
+  // пустыми, и не скрывалось ничего.
+  const disabledRoutes = useModulesStore((state) => state.disabledRoutes);
+  const loadModules = useModulesStore((state) => state.load);
 
   useEffect(() => {
-    let cancelled = false;
-    void getBillingSummary()
-      .then((summary) => {
-        if (cancelled) {
-          return;
-        }
-        const next = summary.features ?? {};
-        setFeatureFlags((prev) => {
-          const pk = Object.keys(prev);
-          const nk = Object.keys(next);
-          if (pk.length === nk.length && pk.every((k) => prev[k] === next[k])) {
-            return prev;
-          }
-          return next;
-        });
-      })
-      .catch(() => undefined);
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    void loadModules();
+  }, [loadModules]);
 
-  const scopedGroups = clientPortalOnlyMode ? CLIENT_PORTAL_NAV_GROUPS : MAIN_NAV_GROUPS;
+  const scopedGroups = clientPortalOnlyMode
+    ? CLIENT_PORTAL_NAV_GROUPS
+    : MAIN_NAV_GROUPS;
 
   const visibleGroups = useMemo(
-    () => filterNavGroupsByAccess(scopedGroups, can, featureFlags),
-    [scopedGroups, can, featureFlags]
+    () => filterNavGroupsByAccess(scopedGroups, can, disabledRoutes),
+    [scopedGroups, can, disabledRoutes],
   );
 
   const value = useMemo(
     () => ({ visibleGroups, clientPortalOnlyMode }),
-    [visibleGroups, clientPortalOnlyMode]
+    [visibleGroups, clientPortalOnlyMode],
   );
 
-  return <NavMenuContext.Provider value={value}>{children}</NavMenuContext.Provider>;
+  return (
+    <NavMenuContext.Provider value={value}>{children}</NavMenuContext.Provider>
+  );
 };
 
 export const useNavMenuData = (): NavMenuContextValue => {

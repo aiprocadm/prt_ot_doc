@@ -2,7 +2,8 @@ import pytest
 from pydantic import ValidationError
 
 from app.core.config import Settings
-from app.modules.branding.schemas import IssuerRef, LetterheadOverride
+from app.modules.branding.letterhead import LetterheadResolver
+from app.modules.branding.schemas import BrandingProfilePayload, IssuerRef, LetterheadOverride
 
 
 def test_letterhead_flag_defaults_off():
@@ -31,9 +32,6 @@ def test_letterhead_override_rejects_unknown_fields():
         LetterheadOverride(unknown=True)
 
 
-from app.modules.branding.schemas import BrandingProfilePayload
-
-
 def test_assemble_header_context_shape():
     from app.modules.branding.service import assemble_header_context
 
@@ -60,16 +58,15 @@ def test_build_adhoc_context_uses_inline_payload():
     assert ctx["company"]["name"] == "ООО Внешняя"
 
 
-import pytest
-
-from app.modules.branding.letterhead import LetterheadResolver, LetterheadDecision
-from app.modules.branding.schemas import IssuerRef, LetterheadOverride
-
-
 class _FakeProfile:
     def __init__(self):
         self.preferred_header_preset_code = "default-letterhead"
-        self.header_context = {"organization": {"legal_name": "ООО Группа"}, "company": {"id": "c-1", "name": "ООО Группа"}, "branch": {}, "doc": {}}
+        self.header_context = {
+            "organization": {"legal_name": "ООО Группа"},
+            "company": {"id": "c-1", "name": "ООО Группа"},
+            "branch": {},
+            "doc": {},
+        }
         self.branding = type("B", (), {"watermark_enabled": False, "watermark_text": None})()
         self.reproducibility = {"branding_payload_hash": "hash-1"}
 
@@ -79,7 +76,15 @@ class _FakeBranding:
         self.tenant = type("T", (), {"id": "t-1"})()
 
     async def get_company(self, company_id):
-        return type("C", (), {"id": company_id, "name": "ООО Группа", "preferred_header_preset_code": "default-letterhead"})()
+        return type(
+            "C",
+            (),
+            {
+                "id": company_id,
+                "name": "ООО Группа",
+                "preferred_header_preset_code": "default-letterhead",
+            },
+        )()
 
     async def get_site(self, site_id):
         return None
@@ -111,7 +116,9 @@ async def test_disabled_override_returns_no_apply():
 @pytest.mark.asyncio
 async def test_company_issuer_resolves_preset_from_chain():
     resolver = LetterheadResolver(_FakeBranding())
-    decision = await resolver.resolve(issuer=IssuerRef(company_id="c-1"), site_id=None, doc={}, override=None)
+    decision = await resolver.resolve(
+        issuer=IssuerRef(company_id="c-1"), site_id=None, doc={}, override=None
+    )
     assert decision.apply is True
     assert decision.preset_code == "default-letterhead"
     assert decision.header_context["company"]["id"] == "c-1"
@@ -122,7 +129,9 @@ async def test_company_issuer_resolves_preset_from_chain():
 async def test_contractor_issuer_not_supported_in_slice_1():
     resolver = LetterheadResolver(_FakeBranding())
     with pytest.raises(NotImplementedError):
-        await resolver.resolve(issuer=IssuerRef(kind="contractor", company_id="x"), site_id=None, doc={}, override=None)
+        await resolver.resolve(
+            issuer=IssuerRef(kind="contractor", company_id="x"), site_id=None, doc={}, override=None
+        )
 
 
 @pytest.mark.asyncio
@@ -145,7 +154,12 @@ async def test_explicit_unknown_preset_raises():
 async def test_adhoc_issuer_builds_inline_context():
     resolver = LetterheadResolver(_FakeBranding())
     issuer = IssuerRef(kind="adhoc", inline={"legal_name": "ООО Внешняя"})
-    decision = await resolver.resolve(issuer=issuer, site_id=None, doc={}, override=LetterheadOverride(preset_code="default-letterhead"))
+    decision = await resolver.resolve(
+        issuer=issuer,
+        site_id=None,
+        doc={},
+        override=LetterheadOverride(preset_code="default-letterhead"),
+    )
     assert decision.apply is True
     assert decision.header_context["organization"]["legal_name"] == "ООО Внешняя"
     assert decision.header_context["company"]["id"] is None

@@ -28,8 +28,13 @@ from app.modules.subscription import (
     PLANS,
     plan_code_for_features,
 )
+from app.modules.subscription.registry import MODULE_REGISTRY
 from app.schemas.tenant import (
     FeatureCatalogEntry,
+    ModuleRegistryEntry,
+    ModuleRegistryResponse,
+    ModuleTrialGrant,
+    ModuleTrialResult,
     PlanCatalog,
     SubscriptionPlanRead,
     TenantFeatureRead,
@@ -44,7 +49,13 @@ from app.schemas.tenant import (
     TenantStatusPatch,
 )
 from app.services.tenants.bootstrap import BootstrapTenantService
-from app.services.tenants.subscription import apply_plan, read_enabled_feature_codes
+from app.services.tenants.subscription import (
+    TrialError,
+    apply_plan,
+    grant_module_trial,
+    read_feature_grants,
+    revoke_module_trial,
+)
 
 router = APIRouter(prefix="/platform/tenants", tags=["platform-tenants"])
 _optional_bearer = HTTPBearer(auto_error=False)
@@ -108,15 +119,24 @@ async def _build_fleet_item(session: AsyncSession, record: Tenant) -> TenantFlee
     """Assemble one fleet row: quota, per-feature on/off, and the derived plan code."""
 
     quota = await _load_quota(session, record.id)
-    enabled = await read_enabled_feature_codes(record)
+    grants = await read_feature_grants(record)
+    effective = grants.effective
     features = [
-        TenantFeatureRead(code=code, title=title, on=code in enabled)
+        TenantFeatureRead(
+            code=code,
+            title=title,
+            on=code in effective,
+            trial_until=grants.trials.get(code),
+        )
         for code, title in FEATURE_CATALOG.items()
     ]
     return TenantFleetItem(
         tenant=TenantRead.model_validate(record),
         quotas=TenantQuotaRead.model_validate(quota) if quota else None,
-        plan=plan_code_for_features(enabled),
+        # Тариф выводится ТОЛЬКО из бессрочной части (BIZ-61 срез-3): подмешай
+        # сюда пробный доступ — и клиент с «Базовым» плюс демонстрация СОУТ
+        # перестанет совпадать с любым тарифом и превратится в «свой набор».
+        plan=plan_code_for_features(grants.permanent),
         features=features,
     )
 
@@ -168,6 +188,40 @@ async def list_plans_endpoint(
         features=[
             FeatureCatalogEntry(code=code, title=title) for code, title in FEATURE_CATALOG.items()
         ],
+    )
+
+
+@router.get("/modules", response_model=ModuleRegistryResponse)
+async def list_module_registry(
+    tenant: Tenant = Depends(get_tenant_record),
+    credentials: HTTPAuthorizationCredentials | None = Depends(_optional_bearer),
+) -> ModuleRegistryResponse:
+    """Реестр модулей платформы (разд. 61.1) — источник истины о том, что вообще
+    можно включать и выключать.
+
+    Отдаёт ВСЕ модули, включая ядро: на вопрос «что нельзя выключить» должен
+    отвечать реестр, а не память разработчика. Ядро помечено ``is_core`` и в
+    тарифы не входит.
+
+    ``ui_routes`` нужны фронтенду, чтобы прятать навигацию выключенного модуля
+    (разд. 61.3). Держать эту связь на стороне фронта значило бы описать её
+    второй раз — и однажды разойтись с бэкендом.
+    """
+
+    _require_managing_admin(credentials, tenant)
+    return ModuleRegistryResponse(
+        modules=[
+            ModuleRegistryEntry(
+                code=module.code,
+                title=module.title,
+                category=module.category,
+                is_core=module.is_core,
+                depends_on=list(module.depends_on),
+                ui_routes=list(module.ui_routes),
+                permissions=list(module.permissions),
+            )
+            for module in MODULE_REGISTRY
+        ]
     )
 
 
@@ -320,3 +374,60 @@ async def patch_tenant_plan_endpoint(
         await fleet_session.commit()
         item = await _build_fleet_item(fleet_session, target)
     return item
+
+
+@router.post("/{tenant_id}/modules/{code}/trial", response_model=ModuleTrialResult)
+@audit_operation("grant_module_trial", "tenant")
+async def grant_module_trial_endpoint(
+    tenant_id: str,
+    code: str,
+    payload: ModuleTrialGrant,
+    session: SessionDep,
+    tenant: Tenant = Depends(get_tenant_record),
+    credentials: HTTPAuthorizationCredentials | None = Depends(_optional_bearer),
+) -> ModuleTrialResult:
+    """Выдать клиенту модуль на срок (разд. 61.2, «временный доступ на N дней»).
+
+    Третий источник включения наравне с тарифом и надбавкой. До него «дать
+    посмотреть на две недели» означало включить модуль и понадеяться на память
+    менеджера — модуль оставался открытым бесплатно.
+    """
+
+    _require_managing_admin(credentials, tenant)
+    target = await session.get(Tenant, tenant_id)
+    if target is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Tenant not found")
+    try:
+        expires_at = await grant_module_trial(target, code, payload.days)
+    except TrialError as error:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(error)) from error
+    return ModuleTrialResult(code=code, title=FEATURE_CATALOG[code], trial_until=expires_at)
+
+
+@router.delete("/{tenant_id}/modules/{code}/trial", response_model=ModuleTrialResult)
+@audit_operation("revoke_module_trial", "tenant")
+async def revoke_module_trial_endpoint(
+    tenant_id: str,
+    code: str,
+    session: SessionDep,
+    tenant: Tenant = Depends(get_tenant_record),
+    credentials: HTTPAuthorizationCredentials | None = Depends(_optional_bearer),
+) -> ModuleTrialResult:
+    """Прекратить пробный доступ досрочно.
+
+    Бессрочную выдачу не трогает: модуль из тарифа снимается сменой тарифа,
+    иначе эта кнопка однажды заберёт оплаченное.
+    """
+
+    _require_managing_admin(credentials, tenant)
+    target = await session.get(Tenant, tenant_id)
+    if target is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Tenant not found")
+    if code not in FEATURE_CATALOG:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown module '{code}'")
+    if not await revoke_module_trial(target, code):
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            f"У арендатора нет пробного доступа к модулю '{code}'",
+        )
+    return ModuleTrialResult(code=code, title=FEATURE_CATALOG[code], trial_until=None)

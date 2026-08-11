@@ -1,20 +1,17 @@
 """Unit: committees schemas round-trip + overdue projection (P10-01)."""
+
 from __future__ import annotations
 
 from datetime import date, datetime, timezone
 
+from app.models.committees import CommitteeKind, DecisionTaskStatus, MeetingStatus
 from app.schemas.committees import (
     CommitteeCreate,
-    CommitteeRead,
-    MeetingCreate,
-    MeetingStatusUpdate,
-    AgendaItemCreate,
-    DecisionCreate,
-    DecisionTaskCreate,
     DecisionTaskRead,
     DecisionTaskUpdate,
+    MeetingCreate,
+    MeetingStatusUpdate,
 )
-from app.models.committees import CommitteeKind, MeetingStatus, DecisionTaskStatus
 
 
 def test_committee_create_defaults():

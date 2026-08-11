@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy.pool import NullPool
 
 from app.core.config import get_settings
 from app.core.tenant import get_current_tenant, tenant_schema
@@ -61,12 +62,16 @@ _DEFAULT_SCHEMA_NAME: str = "public"
 
 def _initialize_engine(url: str, *, echo: bool) -> None:
     global engine, _session_factory, _SUPPORTS_SCHEMAS, _SEARCH_PATH_SUPPORTED, _DEFAULT_SCHEMA_NAME
-    engine = create_async_engine(
-        url,
-        echo=echo,
-        future=True,
-        pool_pre_ping=True,
-    )
+    engine_kwargs: dict[str, object] = {"echo": echo, "future": True, "pool_pre_ping": True}
+    if url.startswith("sqlite"):
+        # aiosqlite держит по нити на соединение; отменённый посреди DB-операции
+        # запрос (request-timeout middleware, обрыв клиента) оставляет соединение
+        # «отравленным», и следующий взявший его из пула запрос виснет намертво
+        # (в тестах — спорадические 504 на тривиальных ручках). NullPool даёт
+        # свежее соединение на каждый checkout — для файлового SQLite это дёшево;
+        # PG-пул (prod) не затрагивается.
+        engine_kwargs["poolclass"] = NullPool
+    engine = create_async_engine(url, **engine_kwargs)
     _SUPPORTS_SCHEMAS = engine.dialect.name == "postgresql"
     _SEARCH_PATH_SUPPORTED = _SUPPORTS_SCHEMAS and engine.dialect.name == "postgresql"
     target_schema = _SHARED_SCHEMA if _SUPPORTS_SCHEMAS else None

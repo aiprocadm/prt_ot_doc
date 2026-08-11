@@ -11,7 +11,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger
+  DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -25,14 +25,35 @@ interface TenantPlanDialogProps {
 }
 
 const QUOTA_FIELDS: { key: string; label: string; hint: string }[] = [
-  { key: "max_doc_generations_per_month", label: "Документов в месяц", hint: "Сколько документов тенант может сгенерировать за месяц" },
-  { key: "max_storage_mb", label: "Хранилище, МБ", hint: "Лимит места под файлы" },
-  { key: "max_parallel_jobs", label: "Параллельных задач", hint: "Сколько тяжёлых операций идут одновременно" },
-  { key: "monthly_edo_outgoing", label: "Исходящих ЭДО в месяц", hint: "0 — без ограничения" }
+  {
+    key: "max_doc_generations_per_month",
+    label: "Документов в месяц",
+    hint: "Сколько документов тенант может сгенерировать за месяц",
+  },
+  {
+    key: "max_storage_mb",
+    label: "Хранилище, МБ",
+    hint: "Лимит места под файлы",
+  },
+  {
+    key: "max_parallel_jobs",
+    label: "Параллельных задач",
+    hint: "Сколько тяжёлых операций идут одновременно",
+  },
+  {
+    key: "monthly_edo_outgoing",
+    label: "Исходящих ЭДО в месяц",
+    hint: "0 — без ограничения",
+  },
 ];
 
 /** Manage a tenant's subscription: pick a plan (features + preset limits) or fine-tune limits. */
-export const TenantPlanDialog = ({ trigger, item, plans, onSubmitted }: TenantPlanDialogProps) => {
+export const TenantPlanDialog = ({
+  trigger,
+  item,
+  plans,
+  onSubmitted,
+}: TenantPlanDialogProps) => {
   const [open, setOpen] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState(item.plan ?? "");
   const [applying, setApplying] = useState(false);
@@ -43,17 +64,18 @@ export const TenantPlanDialog = ({ trigger, item, plans, onSubmitted }: TenantPl
     if (open) {
       setSelectedPlan(item.plan ?? "");
       setQuotas({
-        max_doc_generations_per_month: item.quotas?.max_doc_generations_per_month ?? 0,
+        max_doc_generations_per_month:
+          item.quotas?.max_doc_generations_per_month ?? 0,
         max_storage_mb: item.quotas?.max_storage_mb ?? 0,
         max_parallel_jobs: item.quotas?.max_parallel_jobs ?? 1,
-        monthly_edo_outgoing: item.quotas?.monthly_edo_outgoing ?? 0
+        monthly_edo_outgoing: item.quotas?.monthly_edo_outgoing ?? 0,
       });
     }
   }, [open, item]);
 
   const preview = useMemo(
     () => plans.find((plan) => plan.code === selectedPlan) ?? null,
-    [plans, selectedPlan]
+    [plans, selectedPlan],
   );
 
   const applyPlan = async () => {
@@ -61,7 +83,9 @@ export const TenantPlanDialog = ({ trigger, item, plans, onSubmitted }: TenantPl
     setApplying(true);
     try {
       await tenantsApi.setPlan(item.tenant.id, preview.code);
-      toast.success(`Тенанту «${item.tenant.name}» назначен тариф «${preview.title}»`);
+      toast.success(
+        `Тенанту «${item.tenant.name}» назначен тариф «${preview.title}»`,
+      );
       onSubmitted?.();
       setOpen(false);
     } catch {
@@ -92,8 +116,8 @@ export const TenantPlanDialog = ({ trigger, item, plans, onSubmitted }: TenantPl
         <DialogHeader>
           <DialogTitle>Тариф и лимиты — {item.tenant.name}</DialogTitle>
           <DialogDescription>
-            Тариф включает набор функций и заранее заданные лимиты. Ниже можно донастроить
-            лимиты вручную.
+            Тариф включает набор функций и заранее заданные лимиты. Ниже можно
+            донастроить лимиты вручную.
           </DialogDescription>
         </DialogHeader>
 
@@ -121,7 +145,9 @@ export const TenantPlanDialog = ({ trigger, item, plans, onSubmitted }: TenantPl
                 <p className="font-medium">Функции тарифа «{preview.title}»:</p>
                 <div className="flex flex-wrap gap-1">
                   {item.features.map((feature) => {
-                    const included = preview.feature_codes.includes(feature.code);
+                    const included = preview.feature_codes.includes(
+                      feature.code,
+                    );
                     return (
                       <Badge
                         key={feature.code}
@@ -134,18 +160,23 @@ export const TenantPlanDialog = ({ trigger, item, plans, onSubmitted }: TenantPl
                   })}
                 </div>
                 <p className="text-muted-foreground">
-                  Лимиты: {preview.quotas.max_doc_generations_per_month} док/мес ·{" "}
-                  {preview.quotas.max_storage_mb} МБ · {preview.quotas.max_parallel_jobs} задач
+                  Лимиты: {preview.quotas.max_doc_generations_per_month} док/мес
+                  · {preview.quotas.max_storage_mb} МБ ·{" "}
+                  {preview.quotas.max_parallel_jobs} задач
                 </p>
               </div>
             ) : (
               <p className="text-xs text-muted-foreground">
-                Сейчас у тенанта нестандартный набор функций («Свой набор»). Выберите тариф, чтобы
-                привести к одному из наборов.
+                Сейчас у тенанта нестандартный набор функций («Свой набор»).
+                Выберите тариф, чтобы привести к одному из наборов.
               </p>
             )}
 
-            <Button type="button" onClick={() => void applyPlan()} disabled={!preview || applying}>
+            <Button
+              type="button"
+              onClick={() => void applyPlan()}
+              disabled={!preview || applying}
+            >
               {applying ? "Применение..." : "Применить тариф"}
             </Button>
           </section>
@@ -161,7 +192,10 @@ export const TenantPlanDialog = ({ trigger, item, plans, onSubmitted }: TenantPl
                   min={0}
                   value={quotas[field.key] ?? 0}
                   onChange={(event) =>
-                    setQuotas((prev) => ({ ...prev, [field.key]: Number(event.target.value) }))
+                    setQuotas((prev) => ({
+                      ...prev,
+                      [field.key]: Number(event.target.value),
+                    }))
                   }
                 />
                 <p className="text-xs text-muted-foreground">{field.hint}</p>

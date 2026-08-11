@@ -22,8 +22,8 @@ if (!window.matchMedia) {
       removeEventListener: vi.fn(),
       addListener: vi.fn(),
       removeListener: vi.fn(),
-      dispatchEvent: vi.fn()
-    }))
+      dispatchEvent: vi.fn(),
+    })),
   });
 }
 
@@ -33,5 +33,6 @@ if (!window.ResizeObserver) {
     unobserve() {}
     disconnect() {}
   }
-  window.ResizeObserver = ResizeObserverStub as unknown as typeof ResizeObserver;
+  window.ResizeObserver =
+    ResizeObserverStub as unknown as typeof ResizeObserver;
 }

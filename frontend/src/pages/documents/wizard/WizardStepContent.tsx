@@ -20,7 +20,12 @@ export const WizardStepContent = (props: WizardStepContentProps) => {
     return <PresetStep preset={props.preset} setPartial={props.setPartial} />;
   }
   if (props.step === 2) {
-    return <SourceStep sourceColumns={props.sourceColumns} onSourceChange={actions.handleSourceFileChange} />;
+    return (
+      <SourceStep
+        sourceColumns={props.sourceColumns}
+        onSourceChange={actions.handleSourceFileChange}
+      />
+    );
   }
   if (props.step === 3) {
     return (
@@ -34,10 +39,18 @@ export const WizardStepContent = (props: WizardStepContentProps) => {
     );
   }
   if (props.step === 4) {
-    return <TemplateStep templateCode={props.templateCode} templateVersion={props.templateVersion} setPartial={props.setPartial} />;
+    return (
+      <TemplateStep
+        templateCode={props.templateCode}
+        templateVersion={props.templateVersion}
+        setPartial={props.setPartial}
+      />
+    );
   }
   if (props.step === 5) {
-    return <BrandingStep {...props} onBuildPreview={actions.handleBrandingPreview} />;
+    return (
+      <BrandingStep {...props} onBuildPreview={actions.handleBrandingPreview} />
+    );
   }
   if (props.step === 6) {
     return (
@@ -49,13 +62,30 @@ export const WizardStepContent = (props: WizardStepContentProps) => {
     );
   }
   if (props.step === 7) {
-    return <RunStep {...props} onRunBatch={actions.handleRunBatch} onRunSinglePipeline={actions.handleRunSinglePipeline} />;
+    return (
+      <RunStep
+        {...props}
+        onRunBatch={actions.handleRunBatch}
+        onRunSinglePipeline={actions.handleRunSinglePipeline}
+      />
+    );
   }
   if (props.step === 8) {
     return <BatchResultStep {...props} />;
   }
   if (props.step === 9) {
-    return <ExportStep pipelineRun={props.pipelineRun} onOpenArtifact={actions.handleOpenFirstArtifact} />;
+    return (
+      <ExportStep
+        pipelineRun={props.pipelineRun}
+        onOpenArtifact={actions.handleOpenFirstArtifact}
+      />
+    );
   }
-  return <ArchiveStep archiveStatus={props.archiveStatus} pipelineRun={props.pipelineRun} batch={props.batch} />;
+  return (
+    <ArchiveStep
+      archiveStatus={props.archiveStatus}
+      pipelineRun={props.pipelineRun}
+      batch={props.batch}
+    />
+  );
 };

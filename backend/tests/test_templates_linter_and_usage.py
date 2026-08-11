@@ -25,7 +25,9 @@ def _docx_bytes(text: str) -> bytes:
 
 
 def test_linter_accepts_balanced_nested_if_for() -> None:
-    payload = _docx_bytes("{% if employee.active %}{% for item in employee.items %}{{ item.name }}{% endfor %}{% endif %}")
+    payload = _docx_bytes(
+        "{% if employee.active %}{% for item in employee.items %}{{ item.name }}{% endfor %}{% endif %}"
+    )
 
     report = lint_template(payload)
 
@@ -54,6 +56,7 @@ def test_parse_placeholders_tracks_dotted_fields() -> None:
     assert "employee.name" in names
     assert "employee.position.title" in names
 
+
 def test_parse_placeholders_tracks_locations_in_headers() -> None:
     payload = _docx_bytes("{{ employee.name }}")
 
@@ -71,7 +74,6 @@ def test_linter_reports_required_field_warning() -> None:
 
     assert report["errors"] == []
     assert any("employee.position" in warning for warning in report["warnings"])
-
 
 
 class _Tenant:

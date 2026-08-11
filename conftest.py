@@ -29,6 +29,17 @@ os.environ["APP_TRUSTED_HOSTS"] = "localhost,127.0.0.1,testserver"
 os.environ.setdefault("DEFAULT_LOCALE", "en-US")
 os.environ.setdefault("LIBREOFFICE_BIN", sys.executable)
 os.environ["ENABLE_METRICS"] = "true"
+# Прод-дефолт 15s на медленной машине даёт ложные 504 в случайных API-тестах
+# полного прогона; точечные проверки таймаута ставят свой setenv сами.
+os.environ.setdefault("REQUEST_TIMEOUT_SECONDS", "120")
+# S3/storage-дефолты: локально их маскирует .env, в CI файла нет — без них
+# Settings(...) в тестах берёт прод-значения и падает валидацией
+# (см. test_health_checks: env-источник у pydantic-settings сильнее kwargs).
+os.environ.setdefault("S3_BACKEND", "local")
+os.environ.setdefault("STORAGE_BACKEND", "local")
+os.environ.setdefault("S3_BUCKET", "test-bucket")
+os.environ.setdefault("S3_ACCESS_KEY", "test")
+os.environ.setdefault("S3_SECRET_KEY", "test")
 
 # app.main import runs prepare_runtime → _initialize_sqlite(create_all) at import time.
 # Under xdist every worker would create_all the SAME file concurrently ("table ...

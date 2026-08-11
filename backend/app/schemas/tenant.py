@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Literal
 
 from pydantic import EmailStr, Field
@@ -79,6 +80,11 @@ class TenantFeatureRead(BaseSchema):
     code: str
     title: str
     on: bool
+    #: Дата окончания пробного доступа (BIZ-61 срез-3, разд. 61.2).
+    #: ``None`` — выдано бессрочно либо не выдано вовсе. Консоли этого поля
+    #: недостаточно знать по ``on``: «включено» и «включено до 22 августа» —
+    #: разные ответы клиенту.
+    trial_until: datetime | None = None
 
 
 class TenantFleetItem(BaseSchema):
@@ -101,6 +107,47 @@ class FeatureCatalogEntry(BaseSchema):
     title: str
 
 
+# --- BIZ-61 срез-1: реестр модулей (разд. 61.1) ------------------------------
+class ModuleRegistryEntry(BaseSchema):
+    """Модуль платформы со всеми атрибутами разд. 61.1."""
+
+    code: str
+    title: str
+    #: Дисциплина или группа — по ней модуль ищут в консоли и в предложении.
+    category: str
+    #: ``True`` — ядро: выключить нельзя, в тарифы не входит.
+    is_core: bool = False
+    depends_on: list[str] = []
+    #: Маршруты фронтенда модуля (разд. 61.3: скрыть навигацию выключенного).
+    ui_routes: list[str] = []
+    permissions: list[str] = []
+
+
+class ModuleRegistryResponse(BaseSchema):
+    modules: list[ModuleRegistryEntry]
+
+
+# --- BIZ-61 срез-5: «мои модули» для фронтенда (разд. 61.3) ------------------
+class MyModuleEntry(BaseSchema):
+    """Модуль глазами текущего арендатора: включён или нет и какие экраны его."""
+
+    code: str
+    title: str
+    category: str
+    is_core: bool = False
+    #: Выдан ли модуль ЭТОМУ арендатору сейчас (с учётом срока пробного доступа).
+    enabled: bool
+    #: Дата окончания пробного доступа, если модуль выдан на срок.
+    trial_until: datetime | None = None
+    #: Экраны модуля. Фронтенд прячет по ним навигацию и закрывает прямой переход
+    #: по адресу — связь «модуль → экран» живёт на сервере, чтобы не разойтись.
+    ui_routes: list[str] = []
+
+
+class MyModulesResponse(BaseSchema):
+    modules: list[MyModuleEntry]
+
+
 class SubscriptionPlanRead(BaseSchema):
     code: str
     title: str
@@ -115,3 +162,16 @@ class PlanCatalog(BaseSchema):
 
 class TenantPlanPatch(BaseSchema):
     plan: str
+
+
+class ModuleTrialGrant(BaseSchema):
+    """Выдать модуль на срок (разд. 61.2, «временный доступ на N дней»)."""
+
+    days: int = Field(..., ge=1, le=180, description="Длительность пробного доступа в днях")
+
+
+class ModuleTrialResult(BaseSchema):
+    code: str
+    title: str
+    #: ``None`` в ответе на отзыв — доступа больше нет.
+    trial_until: datetime | None = None

@@ -26,7 +26,11 @@ MIGRATION_PATH = (
 )
 
 _INCIDENT_STATUS_VALUES = (
-    "REPORTED", "INVESTIGATING", "ACTIONS", "CLOSED", "CANCELLED",
+    "REPORTED",
+    "INVESTIGATING",
+    "ACTIONS",
+    "CLOSED",
+    "CANCELLED",
 )
 
 
@@ -113,23 +117,20 @@ def test_incident_status_values_tuple_is_literal_and_correct() -> None:
     """
     tree = _tree()
     for node in tree.body:
-        if (
-            isinstance(node, ast.Assign)
-            and any(
-                isinstance(t, ast.Name) and t.id == "INCIDENT_STATUS_VALUES"
-                for t in node.targets
-            )
+        if isinstance(node, ast.Assign) and any(
+            isinstance(t, ast.Name) and t.id == "INCIDENT_STATUS_VALUES" for t in node.targets
         ):
-            assert isinstance(node.value, ast.Tuple), (
-                "INCIDENT_STATUS_VALUES must be a literal tuple, not an aliased Name"
-            )
+            assert isinstance(
+                node.value, ast.Tuple
+            ), "INCIDENT_STATUS_VALUES must be a literal tuple, not an aliased Name"
             actual = tuple(
-                e.value for e in node.value.elts
+                e.value
+                for e in node.value.elts
                 if isinstance(e, ast.Constant) and isinstance(e.value, str)
             )
-            assert actual == _INCIDENT_STATUS_VALUES, (
-                f"expected {_INCIDENT_STATUS_VALUES}, got {actual}"
-            )
+            assert (
+                actual == _INCIDENT_STATUS_VALUES
+            ), f"expected {_INCIDENT_STATUS_VALUES}, got {actual}"
             return
     pytest.fail("INCIDENT_STATUS_VALUES module constant missing")
 
@@ -158,9 +159,7 @@ def test_upgrade_creates_incidentstatus_enum_before_alter_column() -> None:
                 isinstance(caller, ast.Call)
                 and isinstance(caller.func, ast.Attribute)
                 and caller.func.attr == "Enum"
-            ) or (
-                isinstance(caller, ast.Name)
-            ):
+            ) or (isinstance(caller, ast.Name)):
                 enum_create_lineno = node.lineno
         if (
             isinstance(node, ast.Call)
@@ -168,9 +167,7 @@ def test_upgrade_creates_incidentstatus_enum_before_alter_column() -> None:
             and node.func.attr == "alter_column"
         ):
             alter_lineno = alter_lineno or node.lineno
-    assert enum_create_lineno is not None, (
-        "upgrade missing enum.create(op.get_bind(), ...) call"
-    )
+    assert enum_create_lineno is not None, "upgrade missing enum.create(op.get_bind(), ...) call"
     assert alter_lineno is not None, "upgrade missing alter_column call"
     assert enum_create_lineno < alter_lineno, (
         f"enum.create (line {enum_create_lineno}) must precede "
@@ -183,9 +180,7 @@ def test_upgrade_uses_batch_alter_table_for_incident() -> None:
     tree = _tree()
     upgrade = _upgrade_fn(tree)
     blocks = _batch_alter_calls(upgrade, "incident")
-    assert len(blocks) == 1, (
-        f"expected exactly 1 batch_alter_table('incident'), got {len(blocks)}"
-    )
+    assert len(blocks) == 1, f"expected exactly 1 batch_alter_table('incident'), got {len(blocks)}"
 
 
 def test_upgrade_alter_column_status_changes_type_to_enum() -> None:
@@ -208,17 +203,16 @@ def test_upgrade_alter_column_status_changes_type_to_enum() -> None:
     assert type_ is not None, "alter_column missing type_= kwarg"
     # Accept either inline sa.Enum(...) or Name resolved to one.
     if isinstance(type_, ast.Call):
-        assert (
-            isinstance(type_.func, ast.Attribute) and type_.func.attr in ("Enum", "ENUM")
+        assert isinstance(type_.func, ast.Attribute) and type_.func.attr in (
+            "Enum",
+            "ENUM",
         ), f"type_ expected sa.Enum/postgresql.ENUM, got {ast.dump(type_.func)}"
     elif isinstance(type_, ast.Name):
         # Verify the binding is to sa.Enum(...).
         for stmt in ast.walk(upgrade):
             if (
                 isinstance(stmt, ast.Assign)
-                and any(
-                    isinstance(t, ast.Name) and t.id == type_.id for t in stmt.targets
-                )
+                and any(isinstance(t, ast.Name) and t.id == type_.id for t in stmt.targets)
                 and isinstance(stmt.value, ast.Call)
                 and isinstance(stmt.value.func, ast.Attribute)
                 and stmt.value.func.attr in ("Enum", "ENUM")
@@ -238,9 +232,9 @@ def test_upgrade_alter_column_status_preserves_nullable_false() -> None:
     call = _alter_column_calls(block, "status")[0]
     kw_map = {kw.arg: kw.value for kw in call.keywords}
     existing_nullable = kw_map.get("existing_nullable")
-    assert isinstance(existing_nullable, ast.Constant) and existing_nullable.value is False, (
-        f"existing_nullable expected False, got {ast.dump(existing_nullable) if existing_nullable else 'missing'}"
-    )
+    assert (
+        isinstance(existing_nullable, ast.Constant) and existing_nullable.value is False
+    ), f"existing_nullable expected False, got {ast.dump(existing_nullable) if existing_nullable else 'missing'}"
 
 
 def test_upgrade_alter_column_status_provides_postgresql_using() -> None:
@@ -251,13 +245,13 @@ def test_upgrade_alter_column_status_provides_postgresql_using() -> None:
     call = _alter_column_calls(block, "status")[0]
     kw_map = {kw.arg: kw.value for kw in call.keywords}
     pg_using = kw_map.get("postgresql_using")
-    assert isinstance(pg_using, ast.Constant) and isinstance(pg_using.value, str), (
-        "postgresql_using must be a string constant"
-    )
+    assert isinstance(pg_using, ast.Constant) and isinstance(
+        pg_using.value, str
+    ), "postgresql_using must be a string constant"
     # The text should reference the incidentstatus enum.
-    assert "incidentstatus" in pg_using.value, (
-        f"postgresql_using={pg_using.value!r} must cast to incidentstatus"
-    )
+    assert (
+        "incidentstatus" in pg_using.value
+    ), f"postgresql_using={pg_using.value!r} must cast to incidentstatus"
 
 
 # ---------------------------------------------------------------------------

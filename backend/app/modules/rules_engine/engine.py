@@ -18,7 +18,7 @@ from typing import Any, Mapping
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.feature_flags import is_feature_enabled
+from app.core.feature_flags import is_module_enabled
 from app.models.rules_engine import AutomationRule, AutomationRuleTrigger, RuleTriggerStatus
 from app.modules.rules_engine import actions as actions_mod
 from app.modules.rules_engine import conditions as conditions_mod
@@ -64,7 +64,7 @@ async def _evaluate_event(
 ) -> None:
     if event_type == RULE_TRIGGERED_EVENT:
         return
-    if not await is_feature_enabled(session, tenant_id, FEATURE_CODE, default=False):
+    if not await is_module_enabled(session, tenant_id, FEATURE_CODE):
         return
     stmt = (
         select(AutomationRule)

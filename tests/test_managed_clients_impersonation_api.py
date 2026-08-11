@@ -17,6 +17,7 @@ from app.domains.managed_clients.lifecycle import ContractStatus, ManagedClientM
 from app.models.managed_clients import (
     ManagedClient,
     ManagedClientAccess,
+    ManagedClientConsent,
     ManagedClientContextSession,
 )
 from app.models.models import Tenant
@@ -41,18 +42,21 @@ def _access(sub="u1"):
     return SimpleNamespace(to_auth_context=lambda: _auth(sub))
 
 
-def _request(path="/api/v1/persons"):
+def _request(path="/api/v1/persons", method="GET"):
     return SimpleNamespace(
         headers={"user-agent": "tests"},
         client=SimpleNamespace(host="127.0.0.1"),
         state=SimpleNamespace(trace_id="trace-1"),
         url=SimpleNamespace(path=path),
+        # Метод журналируется наравне с путём: «прочитал» и «изменил» — разные
+        # ответы на вопрос клиента, кто трогал его данные (Доп. №3, 63.2).
+        method=method,
     )
 
 
 @pytest.fixture(autouse=True)
 def _flag_on(monkeypatch):
-    monkeypatch.setattr(routes, "is_feature_enabled", AsyncMock(return_value=True))
+    monkeypatch.setattr(routes, "is_module_enabled", AsyncMock(return_value=True))
 
 
 async def _client_with_grant(session, tid, *, user_id="u1"):
@@ -73,6 +77,16 @@ async def _client_with_grant(session, tid, *, user_id="u1"):
             all_modules=True,
             modules=[],
             granted_at=_NOW,
+        )
+    )
+    # Срез-12: вход «от имени» требует действующего согласия клиента.
+    session.add(
+        ManagedClientConsent(
+            tenant_id=tid,
+            managed_client_id=client.id,
+            document_ref="Поручение №1",
+            granted_at=_NOW,
+            granted_by_user_id="admin-1",
         )
     )
     await session.flush()
@@ -166,9 +180,7 @@ async def test_expired_session_is_refused_with_its_own_code(sessionmaker):
         tid = await _tenant_id(session)
         client = await _client_with_grant(session, tid)
         await _enter(session, tid, client.id)
-        row = (
-            await session.execute(select(ManagedClientContextSession))
-        ).scalars().one()
+        row = (await session.execute(select(ManagedClientContextSession))).scalars().one()
         row.started_at = datetime.now(tz=timezone.utc) - CONTEXT_TTL - timedelta(minutes=1)
         await session.flush()
 
@@ -254,14 +266,21 @@ async def test_switching_clients_closes_the_previous_session(sessionmaker):
                 granted_at=_NOW,
             )
         )
+        # Срез-12: вход «от имени» требует действующего согласия клиента.
+        session.add(
+            ManagedClientConsent(
+                tenant_id=tid,
+                managed_client_id=second.id,
+                document_ref="Поручение №2",
+                granted_at=_NOW,
+            )
+        )
         await session.flush()
 
         await _enter(session, tid, first.id)
         await _enter(session, tid, second.id)
 
-        rows = (
-            (await session.execute(select(ManagedClientContextSession))).scalars().all()
-        )
+        rows = (await session.execute(select(ManagedClientContextSession))).scalars().all()
         open_rows = [r for r in rows if r.ended_at is None]
 
         with pytest.raises(HTTPException):
@@ -315,9 +334,5 @@ def test_exit_route_is_declared_before_the_client_id_route() -> None:
     """Иначе DELETE /managed-clients/context попадёт в удаление клиента с
     идентификатором «context» — выход из контекста молча стал бы удалением."""
 
-    paths = [
-        r.path
-        for r in routes.router.routes
-        if "DELETE" in getattr(r, "methods", set())
-    ]
+    paths = [r.path for r in routes.router.routes if "DELETE" in getattr(r, "methods", set())]
     assert paths.index("/managed-clients/context") < paths.index("/managed-clients/{mcid}")

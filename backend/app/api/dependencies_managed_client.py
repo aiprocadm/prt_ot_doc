@@ -177,6 +177,11 @@ async def require_client_context(
     except ImpersonationExpired as exc:
         raise _expired(str(exc)) from exc
 
+    # Контекст кладётся в состояние ДО записи следа: с этого момента любая
+    # запись аудита в этом запросе — включая след ниже — получает пометку
+    # «X от имени Y» (разд. 63.2), и журнал доступа читается однородно.
+    request.state.managed_client_context = context
+
     # Обязательная пометка: ТЗ требует трассируемости действий аутсорсера
     # в данных клиента. Ошибку записи НЕ глушим — без следа работать нельзя.
     await write_audit_event(
@@ -189,9 +194,8 @@ async def require_client_context(
         resource_id=client.id,
         before=None,
         after=None,
-        meta=build_context_audit_meta(context, action=str(request.url.path)),
+        meta=build_context_audit_meta(context, action=str(request.url.path), method=request.method),
     )
-    request.state.managed_client_context = context
     return context
 
 

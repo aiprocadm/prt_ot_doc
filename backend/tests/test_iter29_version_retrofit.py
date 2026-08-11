@@ -80,9 +80,9 @@ def test_version_column_is_integer_not_null(model, tablename) -> None:
         "every row having an integer to compare against"
     )
     # Type check: Integer subclass (SQLAlchemy may wrap as BigInteger etc.).
-    assert column.type.python_type is int, (
-        f"{tablename}.version must be Integer-typed; got {column.type!r}"
-    )
+    assert (
+        column.type.python_type is int
+    ), f"{tablename}.version must be Integer-typed; got {column.type!r}"
 
 
 @pytest.mark.parametrize(("model", "_tablename"), _COHORT)
@@ -95,8 +95,7 @@ def test_version_id_col_wired_in_mapper(model, _tablename) -> None:
     mapper = inspect(model)
     vid_col = mapper.version_id_col
     assert vid_col is not None, (
-        f"{model.__name__} mapper lost version_id_col binding — "
-        "VersionedMixin contract broken"
+        f"{model.__name__} mapper lost version_id_col binding — " "VersionedMixin contract broken"
     )
     assert vid_col.name == "version"
 
@@ -124,9 +123,7 @@ def _load_iter29_migration():
         / "versions"
         / "20260528_iter29_version_retrofit_approval_edo.py"
     )
-    assert migration_path.exists(), (
-        f"iter-29 migration file missing at {migration_path}"
-    )
+    assert migration_path.exists(), f"iter-29 migration file missing at {migration_path}"
     spec = importlib.util.spec_from_file_location("iter29_migration", migration_path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)

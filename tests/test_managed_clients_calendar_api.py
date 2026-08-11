@@ -30,7 +30,7 @@ def _tenant(tid=_TENANT):
 
 @pytest.fixture(autouse=True)
 def _flag_on(monkeypatch):
-    monkeypatch.setattr(routes, "is_feature_enabled", AsyncMock(return_value=True))
+    monkeypatch.setattr(routes, "is_module_enabled", AsyncMock(return_value=True))
     monkeypatch.setattr(routes, "_today", lambda: _TODAY)
 
 
@@ -378,7 +378,7 @@ async def test_endpoint_etag_differs_per_filter(sessionmaker):
 
 @pytest.mark.asyncio
 async def test_endpoint_respects_feature_flag(sessionmaker, monkeypatch):
-    monkeypatch.setattr(routes, "is_feature_enabled", AsyncMock(return_value=False))
+    monkeypatch.setattr(routes, "is_module_enabled", AsyncMock(return_value=False))
     async with sessionmaker() as session:
         with pytest.raises(HTTPException) as exc:
             await routes.cross_client_calendar(

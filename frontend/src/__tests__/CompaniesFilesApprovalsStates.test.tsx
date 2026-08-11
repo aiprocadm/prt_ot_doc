@@ -13,18 +13,18 @@ const companiesStoreState = vi.hoisted(() => ({
   loading: false,
   error: null as { message: string } | null,
   list: vi.fn().mockResolvedValue(undefined),
-  getById: vi.fn().mockResolvedValue(null)
+  getById: vi.fn().mockResolvedValue(null),
 }));
 
 const filesStoreState = vi.hoisted(() => ({
   items: [] as Array<{ id: string; name: string }>,
   loading: false,
   error: null as { message: string } | null,
-  list: vi.fn().mockResolvedValue(undefined)
+  list: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("@/layouts/MainLayout", () => ({
-  useSidebar: () => ({ setSidebar: vi.fn() })
+  useSidebar: () => ({ setSidebar: vi.fn() }),
 }));
 
 vi.mock("@/stores/companies", () => ({
@@ -34,11 +34,15 @@ vi.mock("@/stores/companies", () => ({
     items: companiesStoreState.items,
     loading: companiesStoreState.loading,
     error: companiesStoreState.error,
-    pagination: { page: 1, page_size: 10, total: companiesStoreState.items.length },
+    pagination: {
+      page: 1,
+      page_size: 10,
+      total: companiesStoreState.items.length,
+    },
     setPage: vi.fn(),
     setPageSize: vi.fn(),
-    remove: vi.fn()
-  })
+    remove: vi.fn(),
+  }),
 }));
 
 vi.mock("@/stores/files", () => ({
@@ -50,15 +54,15 @@ vi.mock("@/stores/files", () => ({
     pagination: { page: 1, page_size: 10, total: filesStoreState.items.length },
     setPage: vi.fn(),
     setPageSize: vi.fn(),
-    remove: vi.fn()
-  })
+    remove: vi.fn(),
+  }),
 }));
 
 vi.mock("@/api/client", () => ({
   apiClient: {
     get: (...args: unknown[]) => apiGetMock(...args),
-    post: vi.fn()
-  }
+    post: vi.fn(),
+  },
 }));
 
 describe("Companies/Files/Approvals operational states", () => {
@@ -75,8 +79,10 @@ describe("Companies/Files/Approvals operational states", () => {
 
     apiGetMock.mockReset();
     apiGetMock.mockImplementation((url: string) => {
-      if (url === "/admin/outbox") return Promise.resolve({ data: { items: [] } });
-      if (url === "/admin/outbox/events") return Promise.resolve({ data: { items: [] } });
+      if (url === "/admin/outbox")
+        return Promise.resolve({ data: { items: [] } });
+      if (url === "/admin/outbox/events")
+        return Promise.resolve({ data: { items: [] } });
       throw new Error(`Unexpected GET ${url}`);
     });
   });
@@ -85,7 +91,7 @@ describe("Companies/Files/Approvals operational states", () => {
     render(
       <MemoryRouter>
         <CompaniesPage />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
 
     expect(await screen.findByText(/компании не найдены/i)).toBeInTheDocument();
@@ -95,7 +101,7 @@ describe("Companies/Files/Approvals operational states", () => {
     render(
       <MemoryRouter>
         <FilesPage />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
 
     expect(await screen.findByText(/файлы не найдены/i)).toBeInTheDocument();
@@ -105,9 +111,11 @@ describe("Companies/Files/Approvals operational states", () => {
     render(
       <MemoryRouter>
         <ApprovalsOutboxPage />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
 
-    expect(await screen.findByText(/исходящие согласования пока отсутствуют/i)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/исходящие согласования пока отсутствуют/i),
+    ).toBeInTheDocument();
   });
 });

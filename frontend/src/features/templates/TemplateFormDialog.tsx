@@ -10,13 +10,16 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger
+  DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useTemplatesStore } from "@/stores/templates";
 import type { TemplateDto } from "@/types/dto/templates";
-import { templateSchema, type TemplateFormValues } from "@/types/forms/templates";
+import {
+  templateSchema,
+  type TemplateFormValues,
+} from "@/types/forms/templates";
 
 interface TemplateFormDialogProps {
   trigger: ReactNode;
@@ -24,13 +27,17 @@ interface TemplateFormDialogProps {
   onSubmitted?: (template: TemplateDto) => void;
 }
 
-const toFormScope = (scope: TemplateDto["scope"] | undefined): TemplateFormValues["scope"] => ({
-  type: (scope?.type === "legal_entity" ? "organization" : (scope?.type ?? "tenant")) as TemplateFormValues["scope"]["type"],
+const toFormScope = (
+  scope: TemplateDto["scope"] | undefined,
+): TemplateFormValues["scope"] => ({
+  type: (scope?.type === "legal_entity"
+    ? "organization"
+    : (scope?.type ?? "tenant")) as TemplateFormValues["scope"]["type"],
   tenant_id: scope?.tenant_id ?? undefined,
   company_id: scope?.company_id ?? undefined,
   site_id: scope?.site_id ?? undefined,
   label: scope?.label ?? undefined,
-  applicability: scope?.applicability ?? undefined
+  applicability: scope?.applicability ?? undefined,
 });
 
 const toFormValues = (template?: TemplateDto): TemplateFormValues => ({
@@ -38,17 +45,26 @@ const toFormValues = (template?: TemplateDto): TemplateFormValues => ({
   name: template?.name ?? "",
   description: template?.description ?? "",
   category: template?.category ?? "",
-  status: template?.status === "archived" ? "archived" : template?.status === "active" ? "active" : "draft",
+  status:
+    template?.status === "archived"
+      ? "archived"
+      : template?.status === "active"
+        ? "active"
+        : "draft",
   scope: toFormScope(template?.scope),
   tags: template?.tags ?? [],
   version_id: undefined,
-  template_type: template?.template_type ?? ""
+  template_type: template?.template_type ?? "",
 });
 
-export const TemplateFormDialog = ({ trigger, initialData, onSubmitted }: TemplateFormDialogProps) => {
+export const TemplateFormDialog = ({
+  trigger,
+  initialData,
+  onSubmitted,
+}: TemplateFormDialogProps) => {
   const form = useForm<TemplateFormValues>({
     resolver: zodResolver(templateSchema),
-    defaultValues: toFormValues(initialData)
+    defaultValues: toFormValues(initialData),
   });
 
   const { create, update } = useTemplatesStore();
@@ -58,7 +74,9 @@ export const TemplateFormDialog = ({ trigger, initialData, onSubmitted }: Templa
   }, [form, initialData]);
 
   const onSubmit = async (values: TemplateFormValues) => {
-    const result = initialData ? await update(initialData.id, values) : await create(values);
+    const result = initialData
+      ? await update(initialData.id, values)
+      : await create(values);
     onSubmitted?.(result);
   };
 
@@ -67,9 +85,12 @@ export const TemplateFormDialog = ({ trigger, initialData, onSubmitted }: Templa
       <DialogTrigger asChild>{trigger}</DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{initialData ? "Редактировать шаблон" : "Новый шаблон"}</DialogTitle>
+          <DialogTitle>
+            {initialData ? "Редактировать шаблон" : "Новый шаблон"}
+          </DialogTitle>
           <DialogDescription>
-            Опишите код, назначение и scope шаблона для tenant / организации / филиала.
+            Опишите код, назначение и scope шаблона для tenant / организации /
+            филиала.
           </DialogDescription>
         </DialogHeader>
         <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)}>
@@ -93,10 +114,17 @@ export const TemplateFormDialog = ({ trigger, initialData, onSubmitted }: Templa
               <label className="text-sm font-medium" htmlFor="template-type">
                 Тип шаблона
               </label>
-              <Input id="template-type" placeholder="заказ / инструкция / протокол" {...form.register("template_type")} />
+              <Input
+                id="template-type"
+                placeholder="заказ / инструкция / протокол"
+                {...form.register("template_type")}
+              />
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium" htmlFor="template-category">
+              <label
+                className="text-sm font-medium"
+                htmlFor="template-category"
+              >
                 Категория
               </label>
               <Input id="template-category" {...form.register("category")} />
@@ -119,7 +147,10 @@ export const TemplateFormDialog = ({ trigger, initialData, onSubmitted }: Templa
 
           <div className="grid gap-4 md:grid-cols-4">
             <div className="space-y-2">
-              <label className="text-sm font-medium" htmlFor="template-scope-type">
+              <label
+                className="text-sm font-medium"
+                htmlFor="template-scope-type"
+              >
                 Область
               </label>
               <select
@@ -134,37 +165,66 @@ export const TemplateFormDialog = ({ trigger, initialData, onSubmitted }: Templa
               </select>
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium" htmlFor="template-company-id">
+              <label
+                className="text-sm font-medium"
+                htmlFor="template-company-id"
+              >
                 ID организации
               </label>
-              <Input id="template-company-id" {...form.register("scope.company_id")} />
+              <Input
+                id="template-company-id"
+                {...form.register("scope.company_id")}
+              />
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium" htmlFor="template-site-id">
                 Site / branch ID
               </label>
-              <Input id="template-site-id" {...form.register("scope.site_id")} />
+              <Input
+                id="template-site-id"
+                {...form.register("scope.site_id")}
+              />
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium" htmlFor="template-scope-label">
+              <label
+                className="text-sm font-medium"
+                htmlFor="template-scope-label"
+              >
                 Label
               </label>
-              <Input id="template-scope-label" {...form.register("scope.label")} />
+              <Input
+                id="template-scope-label"
+                {...form.register("scope.label")}
+              />
             </div>
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-medium" htmlFor="template-description">
+            <label
+              className="text-sm font-medium"
+              htmlFor="template-description"
+            >
               Описание
             </label>
-            <Textarea id="template-description" rows={4} {...form.register("description")} />
+            <Textarea
+              id="template-description"
+              rows={4}
+              {...form.register("description")}
+            />
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-medium" htmlFor="template-applicability">
+            <label
+              className="text-sm font-medium"
+              htmlFor="template-applicability"
+            >
               Область применения / правила использования
             </label>
-            <Textarea id="template-applicability" rows={3} {...form.register("scope.applicability")} />
+            <Textarea
+              id="template-applicability"
+              rows={3}
+              {...form.register("scope.applicability")}
+            />
           </div>
 
           <DialogFooter>

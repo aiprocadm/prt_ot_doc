@@ -1,4 +1,8 @@
-import { localStorageGetItem, localStorageRemoveItem, localStorageSetItem } from "@/utils/browserStorage";
+import {
+  localStorageGetItem,
+  localStorageRemoveItem,
+  localStorageSetItem,
+} from "@/utils/browserStorage";
 
 const CONTEXT_KEY = "prt-managed-client";
 
@@ -27,11 +31,16 @@ const parse = (raw: string | null): StoredClientContext | null => {
   if (!raw) return null;
   try {
     const parsed = JSON.parse(raw);
-    if (parsed && typeof parsed.clientId === "string" && typeof parsed.clientName === "string") {
+    if (
+      parsed &&
+      typeof parsed.clientId === "string" &&
+      typeof parsed.clientName === "string"
+    ) {
       return {
         clientId: parsed.clientId,
         clientName: parsed.clientName,
-        expiresAt: typeof parsed.expiresAt === "string" ? parsed.expiresAt : undefined
+        expiresAt:
+          typeof parsed.expiresAt === "string" ? parsed.expiresAt : undefined,
       };
     }
     return null;
@@ -62,9 +71,12 @@ export const managedClientStorage = {
   },
 
   /** Истёк ли срок работы «от имени» (проверяется на КАЖДОМ чтении в интерфейсе). */
-  isExpired(context: StoredClientContext | null, now: number = Date.now()): boolean {
+  isExpired(
+    context: StoredClientContext | null,
+    now: number = Date.now(),
+  ): boolean {
     if (!context?.expiresAt) return false;
     const at = Date.parse(context.expiresAt);
     return Number.isFinite(at) && at <= now;
-  }
+  },
 };

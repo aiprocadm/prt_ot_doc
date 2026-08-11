@@ -1,4 +1,5 @@
 """Unit: committees lifecycle guards + overdue computation (P10-01)."""
+
 from __future__ import annotations
 
 from datetime import date, timedelta
@@ -7,11 +8,11 @@ import pytest
 
 from app.domains.committees.lifecycle import (
     MeetingTransitionError,
-    validate_meeting_transition,
     ensure_meeting_held,
     is_task_overdue,
+    validate_meeting_transition,
 )
-from app.models.committees import MeetingStatus, DecisionTaskStatus
+from app.models.committees import DecisionTaskStatus, MeetingStatus
 
 TODAY = date(2026, 6, 25)
 

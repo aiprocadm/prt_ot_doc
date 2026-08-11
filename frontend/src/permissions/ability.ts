@@ -1,6 +1,12 @@
 import type { UserDto } from "@/types/dto/auth";
 
-import { ALL_PERMISSIONS, PERMISSIONS, ROLE_PERMISSIONS, type Permission, type Role } from "@/permissions/permissions";
+import {
+  ALL_PERMISSIONS,
+  PERMISSIONS,
+  ROLE_PERMISSIONS,
+  type Permission,
+  type Role,
+} from "@/permissions/permissions";
 
 export interface AbilityResource {
   tenant_id?: string;
@@ -23,7 +29,6 @@ export interface AbilityResult {
   can: (permission: Permission, resource?: AbilityResource) => boolean;
   permissions: Set<Permission>;
 }
-
 
 const PERMISSION_ALIASES: Record<string, Permission> = {
   "documents.read": PERMISSIONS.DOCUMENT_VIEW,
@@ -62,7 +67,7 @@ const PERMISSION_ALIASES: Record<string, Permission> = {
   "employee_card.read": PERMISSIONS.EMPLOYEE_CARD_VIEW,
   "employee_card.view": PERMISSIONS.EMPLOYEE_CARD_VIEW,
   "calendar.read": PERMISSIONS.CALENDAR_VIEW,
-  "calendar.view": PERMISSIONS.CALENDAR_VIEW
+  "calendar.view": PERMISSIONS.CALENDAR_VIEW,
 };
 
 const ROLE_ALIASES: Record<string, Role> = {
@@ -75,11 +80,14 @@ const ROLE_ALIASES: Record<string, Role> = {
   slushatel: "student",
   auditor: "auditor_ro",
   inspector_contractor: "contractor_inspector",
-  ot_pb_lead: "ot_pb_head"
+  ot_pb_lead: "ot_pb_head",
 };
 
 const normalizeRole = (role: string): Role | null => {
-  const normalized = role.trim().toLowerCase().replace(/[\s/]+/g, "_");
+  const normalized = role
+    .trim()
+    .toLowerCase()
+    .replace(/[\s/]+/g, "_");
   const alias = ROLE_ALIASES[normalized];
   const resolved = alias ?? normalized;
   return resolved in ROLE_PERMISSIONS ? (resolved as Role) : null;
@@ -90,7 +98,9 @@ const resolvePermissions = (user: UserDto | null): Set<Permission> => {
   if (user.permissions?.length) {
     const normalized = user.permissions
       .map((permission) => PERMISSION_ALIASES[permission] ?? permission)
-      .filter((permission): permission is Permission => ALL_PERMISSIONS.includes(permission as Permission));
+      .filter((permission): permission is Permission =>
+        ALL_PERMISSIONS.includes(permission as Permission),
+      );
     // Only treat the server permission list as authoritative when at least one entry
     // is recognized; if every entry was filtered out (e.g. renamed/unknown perms with
     // no alias), fall through to the role-based permissions instead of locking the
@@ -103,7 +113,9 @@ const resolvePermissions = (user: UserDto | null): Set<Permission> => {
   user.roles.forEach((role) => {
     const normalized = normalizeRole(role);
     if (!normalized) return;
-    ROLE_PERMISSIONS[normalized].forEach((permission) => permissions.add(permission));
+    ROLE_PERMISSIONS[normalized].forEach((permission) =>
+      permissions.add(permission),
+    );
   });
   return permissions;
 };
@@ -111,38 +123,76 @@ const resolvePermissions = (user: UserDto | null): Set<Permission> => {
 const isAdminUser = (user: UserDto | null) => {
   if (!user) return false;
   if (user.attributes?.is_admin) return true;
-  return user.roles.some((role) => ["admin", "owner"].includes(role.toLowerCase()));
+  return user.roles.some((role) =>
+    ["admin", "owner"].includes(role.toLowerCase()),
+  );
 };
 
 const matchesScope = (user: UserDto, resource?: AbilityResource) => {
   if (!resource) return true;
   const { tenant_id, company_id, site_id } = resource;
-  if (tenant_id && user.attributes?.tenant_id && tenant_id !== user.attributes.tenant_id) return false;
-  if (company_id && user.attributes?.company_ids?.length && !user.attributes.company_ids.includes(company_id)) return false;
-  if (site_id && user.attributes?.site_ids?.length && !user.attributes.site_ids.includes(site_id)) return false;
-  if (resource?.project_id && user.attributes?.project_ids?.length && !user.attributes.project_ids.includes(resource.project_id)) return false;
-  if (resource?.contractor_id && user.attributes?.contractor_ids?.length && !user.attributes.contractor_ids.includes(resource.contractor_id)) return false;
+  if (
+    tenant_id &&
+    user.attributes?.tenant_id &&
+    tenant_id !== user.attributes.tenant_id
+  )
+    return false;
+  if (
+    company_id &&
+    user.attributes?.company_ids?.length &&
+    !user.attributes.company_ids.includes(company_id)
+  )
+    return false;
+  if (
+    site_id &&
+    user.attributes?.site_ids?.length &&
+    !user.attributes.site_ids.includes(site_id)
+  )
+    return false;
+  if (
+    resource?.project_id &&
+    user.attributes?.project_ids?.length &&
+    !user.attributes.project_ids.includes(resource.project_id)
+  )
+    return false;
+  if (
+    resource?.contractor_id &&
+    user.attributes?.contractor_ids?.length &&
+    !user.attributes.contractor_ids.includes(resource.contractor_id)
+  )
+    return false;
   return true;
 };
 
-const ABAC_RULES: Partial<Record<Permission, (user: UserDto, resource?: AbilityResource) => boolean>> = {
-  [PERMISSIONS.DOCUMENT_SIGN]: (_user, resource) => ["ready"].includes(resource?.status ?? ""),
-  [PERMISSIONS.DOCUMENT_EXPORT]: (_user, resource) => ["ready"].includes(resource?.status ?? ""),
-  [PERMISSIONS.RISK_EXPORT]: (_user, resource) => ["approved"].includes(resource?.status ?? ""),
+const ABAC_RULES: Partial<
+  Record<Permission, (user: UserDto, resource?: AbilityResource) => boolean>
+> = {
+  [PERMISSIONS.DOCUMENT_SIGN]: (_user, resource) =>
+    ["ready"].includes(resource?.status ?? ""),
+  [PERMISSIONS.DOCUMENT_EXPORT]: (_user, resource) =>
+    ["ready"].includes(resource?.status ?? ""),
+  [PERMISSIONS.RISK_EXPORT]: (_user, resource) =>
+    ["approved"].includes(resource?.status ?? ""),
   [PERMISSIONS.RISK_EDIT]: (user, resource) => {
     if (resource?.risk_level == null) return true;
     const raw = resource.risk_level;
-    const level = typeof raw === "number" ? raw : ({ low: 1, medium: 2, high: 3, critical: 4 }[String(raw).toLowerCase()] ?? 0);
+    const level =
+      typeof raw === "number"
+        ? raw
+        : ({ low: 1, medium: 2, high: 3, critical: 4 }[
+            String(raw).toLowerCase()
+          ] ?? 0);
     const max = user.attributes?.risk_level_max;
     if (typeof max === "number") return level <= max;
     return level < 3;
   },
-  [PERMISSIONS.TEMPLATE_EDIT]: (_user, resource) => resource?.template?.current_version?.status !== "published",
+  [PERMISSIONS.TEMPLATE_EDIT]: (_user, resource) =>
+    resource?.template?.current_version?.status !== "published",
   [PERMISSIONS.TEMPLATE_ACTIVATE]: (_user, resource) => {
     if (!resource?.version) return false;
     if (resource.version.status !== "published") return false;
     return resource.template?.current_version?.id !== resource.version.id;
-  }
+  },
 };
 
 export const buildAbility = (user: UserDto | null): AbilityResult => {

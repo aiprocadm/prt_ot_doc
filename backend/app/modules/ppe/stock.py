@@ -15,7 +15,7 @@ from uuid import uuid4
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.feature_flags import is_feature_enabled
+from app.core.feature_flags import is_module_enabled
 from app.models.ppe_registry import PPEItem, PPEStockBatch, PPEStockMovement, PPESupplier
 
 KIND_RECEIPT = "receipt"
@@ -345,7 +345,7 @@ async def deplete_for_issue(
     """
     if quantity <= 0:
         return []
-    if not await is_feature_enabled(session, tenant_id, WAREHOUSE_FEATURE_CODE):
+    if not await is_module_enabled(session, tenant_id, WAREHOUSE_FEATURE_CODE):
         return []
 
     if batch_id is not None:

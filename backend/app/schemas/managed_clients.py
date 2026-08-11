@@ -223,6 +223,70 @@ class AccessGrantRead(BaseSchema):
     active: bool
 
 
+class ConvertToDedicated(BaseSchema):
+    """Перевод Lightweight → Dedicated (срез-13, разд. 49.1)."""
+
+    tenant_slug: str
+    #: Имя нового арендатора; по умолчанию — имя клиента.
+    tenant_name: str | None = None
+    owner_email: str
+    owner_password: str
+
+
+class ConversionRead(BaseSchema):
+    """Итог перевода: клиент + что создано в новом арендаторе."""
+
+    client: "ManagedClientRead"
+    tenant_slug: str
+    #: Сущности, созданные bootstrap'ом нового арендатора.
+    tenant_created: list[str]
+    #: Организация клиента остаётся в пространстве аутсорсера ссылкой на
+    #: историю (инвариант режима из среза-1); перенос доменных данных —
+    #: следующий срез 49.1.
+    history_company_id: str | None = None
+
+
+class TransferRead(BaseSchema):
+    """Итог переноса данных клиента в его арендатор (срез-14, разд. 49.1)."""
+
+    id: str
+    managed_client_id: str
+    target_tenant_slug: str
+    status: str
+    started_at: datetime
+    finished_at: datetime | None = None
+    started_by_user_id: str | None = None
+    #: {"company": 1, "people": N, "people_skipped": M} — обезличенные и
+    #: удалённые не переносятся (разд. 66.2), это видно честной цифрой.
+    counts: dict[str, int]
+
+
+class ConsentCreate(BaseSchema):
+    """Согласие клиента на делегированный доступ (срез-12, разд. 66.3)."""
+
+    #: Реквизиты документа-основания — согласие «на словах» не основание.
+    document_ref: str
+    #: Срок из документа; истёкшее согласие равно отозванному.
+    expires_at: datetime | None = None
+
+
+class ConsentRevoke(BaseSchema):
+    reason: str | None = None
+
+
+class ConsentRead(BaseSchema):
+    id: str
+    managed_client_id: str
+    document_ref: str
+    granted_by_user_id: str | None = None
+    granted_at: datetime
+    expires_at: datetime | None = None
+    revoked_at: datetime | None = None
+    revoked_by_user_id: str | None = None
+    revoke_reason: str | None = None
+    active: bool
+
+
 class MyManagedClient(BaseSchema):
     """Клиент, доступный текущему специалисту (основа переключателя, разд. 49.3)."""
 
@@ -260,3 +324,26 @@ class ClientContextRead(BaseSchema):
     #: Сколько секунд осталось — чтобы интерфейс мог показать счётчик, а не
     #: вычислять срок сам и разъезжаться с сервером на часовых поясах.
     seconds_left: int | None = None
+
+
+# --- Журнал доступа к данным клиента (срез-18, Доп. №3 разд. 63.2) ---
+class ClientAccessLogEntry(BaseSchema):
+    """Одно обращение специалиста к данным клиента «от имени» клиента."""
+
+    at: datetime
+    actor_user_id: str | None = None
+    actor_email: str | None = None
+    #: Метод и путь: чтение и правка — разные ответы на вопрос «кто трогал
+    #: мои данные», и одним путём они не различаются.
+    method: str | None = None
+    path: str | None = None
+    ip: str | None = None
+    #: Идентификатор запроса — по нему в общем аудите видны сами изменения.
+    correlation_id: str | None = None
+
+
+class ClientAccessLogPage(BaseSchema):
+    """Страница журнала: всегда с общим числом — «покажите всё» проверяемо."""
+
+    items: list[ClientAccessLogEntry]
+    total: int

@@ -170,7 +170,7 @@ async def create_webhook(
         tenant_id=tenant.id,
         name=payload.name,
         url=payload.url,
-        secret=encrypt_secret(generated_secret),  # SEC-67: at-rest encryption
+        secret=encrypt_secret(generated_secret, tenant_id=str(tenant.id)),  # SEC-67
         is_enabled=payload.enabled,
         subscribed_events=payload.subscribed_events,
         timeout_ms=payload.timeout_ms,
@@ -209,7 +209,11 @@ async def update_webhook(
     row.name = payload.name
     row.url = payload.url
     # Сохраняем существующий секрет, если новый не передан (SEC-67: шифруем новый)
-    row.secret = encrypt_secret(payload.secret) if payload.secret else row.secret
+    row.secret = (
+        encrypt_secret(payload.secret, tenant_id=str(row.tenant_id or "") or None)
+        if payload.secret
+        else row.secret
+    )
     row.is_enabled = payload.enabled
     row.subscribed_events = payload.subscribed_events
     row.timeout_ms = payload.timeout_ms
@@ -270,7 +274,10 @@ async def rotate_webhook_secret(
         detail="webhook_not_found",
     )
     new_secret = secrets.token_urlsafe(32)
-    row.secret = encrypt_secret(new_secret)  # SEC-67: at-rest encryption
+    # Область ключа берём У СТРОКИ, а не у запроса: глобальная подписка
+    # (tenant_id IS NULL) обязана шифроваться платформенной областью, иначе
+    # её секрет перестанет читаться в фоновой доставке.
+    row.secret = encrypt_secret(new_secret, tenant_id=str(row.tenant_id or "") or None)
     row.updated_at = datetime.now(timezone.utc)
     await session.commit()
     # commit() drops the transaction-local RLS GUCs — re-arm before refresh (SEC-65)

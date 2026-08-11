@@ -18,8 +18,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
-
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _SCENARIOS_PATH = _REPO_ROOT / "scripts" / "perf" / "scenarios.json"
 
@@ -95,9 +93,9 @@ def test_pr_smoke_profile_untouched_by_trim() -> None:
     data = _load()
     pr_smoke_names = [s.get("name") for s in data["profiles"]["pr_smoke"]]
     expected = ["health", "dashboard", "templates_list", "search_suggest"]
-    assert pr_smoke_names == expected, (
-        f"pr_smoke shape changed: expected {expected}, got {pr_smoke_names}"
-    )
+    assert (
+        pr_smoke_names == expected
+    ), f"pr_smoke shape changed: expected {expected}, got {pr_smoke_names}"
 
 
 def test_nightly_baseline_has_expected_pure_get_set() -> None:
@@ -105,9 +103,7 @@ def test_nightly_baseline_has_expected_pure_get_set() -> None:
     data = _load()
     names = [s.get("name") for s in data["profiles"]["nightly_baseline"]]
     expected = ["health", "dashboard", "templates_list", "search_suggest", "download_file"]
-    assert names == expected, (
-        f"nightly_baseline shape unexpected: expected {expected}, got {names}"
-    )
+    assert names == expected, f"nightly_baseline shape unexpected: expected {expected}, got {names}"
 
 
 def test_dataset_assumptions_notes_documents_the_trim() -> None:
@@ -117,6 +113,5 @@ def test_dataset_assumptions_notes_documents_the_trim() -> None:
     data = _load()
     notes = data.get("dataset_assumptions", {}).get("notes", "")
     assert "RB-002" in notes or "pure-GET" in notes, (
-        f"dataset_assumptions.notes missing RB-002 / pure-GET reference: "
-        f"{notes!r}"
+        f"dataset_assumptions.notes missing RB-002 / pure-GET reference: " f"{notes!r}"
     )

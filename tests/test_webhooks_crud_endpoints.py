@@ -250,7 +250,7 @@ async def test_patch_webhook_replaces_secret_when_provided(
         assert refreshed is not None
         # SEC-67: stored encrypted at rest; decrypts back to the supplied value.
         assert refreshed.secret != "new-secret"
-        assert decrypt_secret(refreshed.secret) == "new-secret"
+        assert decrypt_secret(refreshed.secret, tenant_id=str(refreshed.tenant_id)) == "new-secret"
 
 
 @pytest.mark.anyio
@@ -362,7 +362,7 @@ async def test_rotate_secret_returns_new_value(
     async with sessionmaker() as session:
         refreshed = await session.get(WebhookEndpoint, endpoint_id)
         assert refreshed.secret != new_secret
-        assert decrypt_secret(refreshed.secret) == new_secret
+        assert decrypt_secret(refreshed.secret, tenant_id=str(refreshed.tenant_id)) == new_secret
 
 
 @pytest.mark.anyio

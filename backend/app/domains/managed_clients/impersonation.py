@@ -149,9 +149,7 @@ def ensure_session_active(
     """Проверить, что контекст ещё действует."""
 
     if ended_at is not None and _as_utc(ended_at) <= _as_utc(now):
-        raise ImpersonationExpired(
-            "Работа от имени клиента завершена. Войдите в контекст заново."
-        )
+        raise ImpersonationExpired("Работа от имени клиента завершена. Войдите в контекст заново.")
     if session_expires_at(started_at) <= _as_utc(now):
         raise ImpersonationExpired(
             "Срок работы от имени клиента истёк (60 минут). "

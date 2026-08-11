@@ -46,7 +46,7 @@ export const useNpaStore = create<NpaState>()(
         filters: {},
         pagination: defaultPagination(),
         loading: false,
-        error: null
+        error: null,
       }));
     },
     list: async (params) => {
@@ -54,9 +54,17 @@ export const useNpaStore = create<NpaState>()(
         state.loading = true;
         state.error = null;
       });
-      const query = { ...get().filters, ...params, page: get().pagination.page, page_size: get().pagination.page_size };
+      const query = {
+        ...get().filters,
+        ...params,
+        page: get().pagination.page,
+        page_size: get().pagination.page_size,
+      };
       try {
-        const { data } = await apiClient.get<PaginatedResponse<NpaDto>>("/npa", { params: query });
+        const { data } = await apiClient.get<PaginatedResponse<NpaDto>>(
+          "/npa",
+          { params: query },
+        );
         set((state) => {
           state.items = data.items;
           state.pagination = data.pagination;
@@ -84,6 +92,6 @@ export const useNpaStore = create<NpaState>()(
         });
         return null;
       }
-    }
-  }))
+    },
+  })),
 );

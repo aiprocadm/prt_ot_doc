@@ -14,7 +14,9 @@ def test_incident_status_transitions() -> None:
     assert IncidentCaseService.can_close(has_open_actions=True, manual_override=False) is False
     assert IncidentCaseService.can_close(has_open_actions=True, manual_override=True) is True
     assert IncidentCaseService.next_status_on_register("draft") == "registered"
-    assert IncidentCaseService.close_status(has_open_actions=False, manual_override=False) == "closed"
+    assert (
+        IncidentCaseService.close_status(has_open_actions=False, manual_override=False) == "closed"
+    )
 
 
 def test_inspection_checklist_snapshot_semantics() -> None:
@@ -46,12 +48,17 @@ def test_corrective_action_overdue_logic() -> None:
     today_utc = datetime.now(tz=timezone.utc).date()
     overdue_date = today_utc - timedelta(days=1)
     assert CorrectiveActionService.is_overdue("open", overdue_date) is True
-    assert CorrectiveActionService.mark_overdue_if_needed(due_date=overdue_date, status="open") == "overdue"
+    assert (
+        CorrectiveActionService.mark_overdue_if_needed(due_date=overdue_date, status="open")
+        == "overdue"
+    )
     assert CorrectiveActionService.is_overdue("verified", overdue_date) is False
 
 
 def test_inspection_prep_gap_detection_logic() -> None:
-    gaps = GapAnalysisService.detect_gaps(missing_documents=2, open_prescriptions=1, overdue_actions=0, high_risks=1)
+    gaps = GapAnalysisService.detect_gaps(
+        missing_documents=2, open_prescriptions=1, overdue_actions=0, high_risks=1
+    )
     assert {gap.gap_type for gap in gaps} == {"missing_doc", "open_prescription", "open_risk"}
 
 

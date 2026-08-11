@@ -7,7 +7,9 @@ import RiskPage from "@/pages/risk/RiskPage";
 const riskState = {
   listHazards: vi.fn(),
   listAssessments: vi.fn(),
-  hazards: [{ id: "haz-1", title: "Скользкий пол", description: "Влажное покрытие" }],
+  hazards: [
+    { id: "haz-1", title: "Скользкий пол", description: "Влажное покрытие" },
+  ],
   assessments: [],
   loading: false,
   error: null,
@@ -52,7 +54,7 @@ describe("RiskPage", () => {
     render(
       <MemoryRouter>
         <RiskPage />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
 
     await waitFor(() => {

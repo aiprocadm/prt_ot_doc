@@ -13,26 +13,44 @@ import { Button } from "@/components/ui/button";
 import { ContractorDocumentFormDialog } from "@/features/contractors/ContractorDocumentFormDialog";
 import { useAsyncResource } from "@/hooks/useAsyncResource";
 import { useLocalRegistry } from "@/hooks/useLocalRegistry";
-import { DOC_TYPE_LABELS, DOC_TYPE_OPTIONS, EXPIRY_BADGE_VARIANT, EXPIRY_LABELS } from "@/pages/contractors/contractorsVocab";
+import {
+  DOC_TYPE_LABELS,
+  DOC_TYPE_OPTIONS,
+  EXPIRY_BADGE_VARIANT,
+  EXPIRY_LABELS,
+} from "@/pages/contractors/contractorsVocab";
 import { PERMISSIONS } from "@/permissions/permissions";
 import { formatDate } from "@/utils/datetime";
-import type { ContractorDocument, ContractorEmployee, DocType } from "@/types/dto/contractors";
+import type {
+  ContractorDocument,
+  ContractorEmployee,
+  DocType,
+} from "@/types/dto/contractors";
 
-export const ContractorDocumentsTab = ({ contractorId }: { contractorId: string }) => {
+export const ContractorDocumentsTab = ({
+  contractorId,
+}: {
+  contractorId: string;
+}) => {
   const [docTypeFilter, setDocTypeFilter] = useState<DocType | "">("");
   const [employees, setEmployees] = useState<ContractorEmployee[]>([]);
 
   const loader = useCallback(
     () =>
       contractorsApi
-        .listDocuments({ contractor_id: contractorId, ...(docTypeFilter ? { doc_type: docTypeFilter } : {}) })
+        .listDocuments({
+          contractor_id: contractorId,
+          ...(docTypeFilter ? { doc_type: docTypeFilter } : {}),
+        })
         .then((p) => p.items),
-    [contractorId, docTypeFilter]
+    [contractorId, docTypeFilter],
   );
-  const { data, loading, error, reload } = useAsyncResource<ContractorDocument[]>({
+  const { data, loading, error, reload } = useAsyncResource<
+    ContractorDocument[]
+  >({
     loader,
     initialData: [],
-    errorMessage: "Не удалось загрузить документы"
+    errorMessage: "Не удалось загрузить документы",
   });
 
   useEffect(() => {
@@ -49,48 +67,85 @@ export const ContractorDocumentsTab = ({ contractorId }: { contractorId: string 
       toast.success("Документ архивирован");
       void reload();
     } catch (err) {
-      toast.error((err as { message?: string })?.message ?? "Не удалось архивировать документ");
+      toast.error(
+        (err as { message?: string })?.message ??
+          "Не удалось архивировать документ",
+      );
     }
   };
 
   const registry = useLocalRegistry({
     items: data,
-    match: (item, query) => [item.title, item.number, item.issuing_org].filter(Boolean).join(" ").toLowerCase().includes(query)
+    match: (item, query) =>
+      [item.title, item.number, item.issuing_org]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(query),
   });
 
   const columns: ColumnDef<ContractorDocument, unknown>[] = [
     { accessorKey: "title", header: "Документ" },
-    { accessorKey: "doc_type", header: "Тип", cell: ({ row }) => DOC_TYPE_LABELS[row.original.doc_type] ?? row.original.doc_type },
-    { accessorKey: "valid_until", header: "Действует до", cell: ({ row }) => formatDate(row.original.valid_until ?? "") || "—" },
+    {
+      accessorKey: "doc_type",
+      header: "Тип",
+      cell: ({ row }) =>
+        DOC_TYPE_LABELS[row.original.doc_type] ?? row.original.doc_type,
+    },
+    {
+      accessorKey: "valid_until",
+      header: "Действует до",
+      cell: ({ row }) => formatDate(row.original.valid_until ?? "") || "—",
+    },
     {
       accessorKey: "expiry_status",
       header: "Состояние",
-      cell: ({ row }) => <Badge variant={EXPIRY_BADGE_VARIANT[row.original.expiry_status]}>{EXPIRY_LABELS[row.original.expiry_status]}</Badge>
+      cell: ({ row }) => (
+        <Badge variant={EXPIRY_BADGE_VARIANT[row.original.expiry_status]}>
+          {EXPIRY_LABELS[row.original.expiry_status]}
+        </Badge>
+      ),
     },
     {
       id: "actions",
       header: "Действия",
       cell: ({ row }) => (
-        <Can permission={PERMISSIONS.CONTRACTOR_MANAGE} fallback={<span className="text-muted-foreground">—</span>}>
+        <Can
+          permission={PERMISSIONS.CONTRACTOR_MANAGE}
+          fallback={<span className="text-muted-foreground">—</span>}
+        >
           <div className="flex gap-2">
             <ContractorDocumentFormDialog
-              trigger={<Button variant="ghost" size="sm">Изменить</Button>}
+              trigger={
+                <Button variant="ghost" size="sm">
+                  Изменить
+                </Button>
+              }
               contractorId={contractorId}
               employees={employees}
               initialData={row.original}
               onSubmitted={() => void reload()}
             />
-            <Button variant="ghost" size="sm" onClick={() => void onArchive(row.original.id)}>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => void onArchive(row.original.id)}
+            >
               Архивировать
             </Button>
           </div>
         </Can>
-      )
-    }
+      ),
+    },
   ];
 
   if (error && isFeatureDisabledError(error)) {
-    return <EmptyState title="Функция недоступна" description="Документы подрядчиков не включены для этого тенанта." />;
+    return (
+      <EmptyState
+        title="Функция недоступна"
+        description="Документы подрядчиков не включены для этого тенанта."
+      />
+    );
   }
 
   return (
@@ -121,7 +176,10 @@ export const ContractorDocumentsTab = ({ contractorId }: { contractorId: string 
       <ErrorState error={error ?? undefined} onRetry={() => void reload()} />
       {loading ? <LoadingScreen label="Загрузка документов" /> : null}
       {!loading && !error && registry.total === 0 ? (
-        <EmptyState title="Документов нет" description="Добавьте документ подрядчика." />
+        <EmptyState
+          title="Документов нет"
+          description="Добавьте документ подрядчика."
+        />
       ) : null}
       {!loading && !error && registry.total > 0 ? (
         <RegistryTable

@@ -141,7 +141,8 @@ def test_hazard_id_fk_targets_risk_hazards_with_cascade() -> None:
     upgrade = _upgrade_fn(tree)
     col_call = _add_column_for("ppenorm", "hazard_id", upgrade)
     fk_calls = [
-        arg for arg in col_call.args
+        arg
+        for arg in col_call.args
         if isinstance(arg, ast.Call)
         and isinstance(arg.func, ast.Attribute)
         and arg.func.attr == "ForeignKey"
@@ -151,9 +152,9 @@ def test_hazard_id_fk_targets_risk_hazards_with_cascade() -> None:
     target = fk.args[0] if fk.args else None
     assert isinstance(target, ast.Constant) and target.value == "risk_hazards.id"
     ondelete = _keyword_value(fk, "ondelete")
-    assert ondelete == "CASCADE", (
-        f"FK ondelete should mirror model ('CASCADE'); AST shows {ondelete!r}"
-    )
+    assert (
+        ondelete == "CASCADE"
+    ), f"FK ondelete should mirror model ('CASCADE'); AST shows {ondelete!r}"
 
 
 def test_orphan_rows_deleted_before_not_null_alter() -> None:
@@ -165,11 +166,14 @@ def test_orphan_rows_deleted_before_not_null_alter() -> None:
     execute_calls = _calls_named(upgrade, "execute")
     sql_texts: list[str] = []
     for call in execute_calls:
-        if call.args and isinstance(call.args[0], ast.Constant) and isinstance(call.args[0].value, str):
+        if (
+            call.args
+            and isinstance(call.args[0], ast.Constant)
+            and isinstance(call.args[0].value, str)
+        ):
             sql_texts.append(call.args[0].value)
     assert any(
-        "delete from ppenorm" in t.lower() and "hazard_id is null" in t.lower()
-        for t in sql_texts
+        "delete from ppenorm" in t.lower() and "hazard_id is null" in t.lower() for t in sql_texts
     ), f"expected DELETE FROM ppenorm WHERE hazard_id IS NULL; saw {sql_texts!r}"
 
 
@@ -178,7 +182,8 @@ def test_alter_column_to_not_null_present() -> None:
     tree = _migration_tree()
     upgrade = _upgrade_fn(tree)
     matching = [
-        c for c in _calls_named(upgrade, "alter_column")
+        c
+        for c in _calls_named(upgrade, "alter_column")
         if any(isinstance(a, ast.Constant) and a.value == "hazard_id" for a in c.args)
         and _keyword_value(c, "nullable") is False
     ]
@@ -202,7 +207,10 @@ def test_unique_constraint_matches_model_invariant() -> None:
         if not call.args:
             continue
         name_arg = call.args[0]
-        if not (isinstance(name_arg, ast.Constant) and name_arg.value == "uq_ppe_norm_position_hazard_item"):
+        if not (
+            isinstance(name_arg, ast.Constant)
+            and name_arg.value == "uq_ppe_norm_position_hazard_item"
+        ):
             continue
         # Columns list — last positional arg is the columns list (when called
         # inside batch_op) OR penultimate when on op.create_unique_constraint.
@@ -212,12 +220,16 @@ def test_unique_constraint_matches_model_invariant() -> None:
         )
         assert cols_arg is not None, "uq_ppe_norm_position_hazard_item must list columns"
         col_names = {
-            elt.value for elt in cols_arg.elts
+            elt.value
+            for elt in cols_arg.elts
             if isinstance(elt, ast.Constant) and isinstance(elt.value, str)
         }
-        assert col_names == {"tenant_id", "position_id", "hazard_id", "item_name"}, (
-            f"unique constraint columns mismatch: {col_names}"
-        )
+        assert col_names == {
+            "tenant_id",
+            "position_id",
+            "hazard_id",
+            "item_name",
+        }, f"unique constraint columns mismatch: {col_names}"
         found = True
     assert found, "missing create_unique_constraint('uq_ppe_norm_position_hazard_item', ...)"
 
@@ -228,11 +240,9 @@ def test_index_created_on_hazard_id() -> None:
     upgrade = _upgrade_fn(tree)
     idx_calls = _calls_named(upgrade, "create_index")
     matching = [
-        c for c in idx_calls
-        if any(
-            isinstance(a, ast.Constant) and a.value == "ix_ppenorm_hazard_id"
-            for a in c.args
-        )
+        c
+        for c in idx_calls
+        if any(isinstance(a, ast.Constant) and a.value == "ix_ppenorm_hazard_id" for a in c.args)
     ]
     assert matching, "expected create_index('ix_ppenorm_hazard_id', 'ppenorm', ['hazard_id'])"
 
@@ -245,7 +255,8 @@ def test_downgrade_drops_hazard_id_column() -> None:
     downgrade = _downgrade_fn(tree)
     drop_columns = _calls_named(downgrade, "drop_column")
     matching = [
-        c for c in drop_columns
+        c
+        for c in drop_columns
         if any(isinstance(a, ast.Constant) and a.value == "hazard_id" for a in c.args)
     ]
     assert matching, "downgrade must drop_column('ppenorm', 'hazard_id')"
@@ -257,21 +268,19 @@ def test_downgrade_drops_unique_constraint_and_index() -> None:
 
     constraint_drops = _calls_named(downgrade, "drop_constraint")
     constraint_names = {
-        c.args[0].value for c in constraint_drops
-        if c.args and isinstance(c.args[0], ast.Constant)
+        c.args[0].value for c in constraint_drops if c.args and isinstance(c.args[0], ast.Constant)
     }
-    assert "uq_ppe_norm_position_hazard_item" in constraint_names, (
-        f"downgrade must drop the unique constraint; saw {constraint_names}"
-    )
+    assert (
+        "uq_ppe_norm_position_hazard_item" in constraint_names
+    ), f"downgrade must drop the unique constraint; saw {constraint_names}"
 
     index_drops = _calls_named(downgrade, "drop_index")
     index_names = {
-        c.args[0].value for c in index_drops
-        if c.args and isinstance(c.args[0], ast.Constant)
+        c.args[0].value for c in index_drops if c.args and isinstance(c.args[0], ast.Constant)
     }
-    assert "ix_ppenorm_hazard_id" in index_names, (
-        f"downgrade must drop ix_ppenorm_hazard_id; saw {index_names}"
-    )
+    assert (
+        "ix_ppenorm_hazard_id" in index_names
+    ), f"downgrade must drop ix_ppenorm_hazard_id; saw {index_names}"
 
 
 def test_audit_credits_ppenorm_hazard_id_after_iter34() -> None:
@@ -283,12 +292,13 @@ def test_audit_credits_ppenorm_hazard_id_after_iter34() -> None:
     if not audit_path.exists():
         pytest.skip("column_drift_lite.py absent — pre-PR-#603 fork")
     import importlib.util as _ilu
+
     spec = _ilu.spec_from_file_location("column_drift_lite_iter34", audit_path)
     assert spec is not None and spec.loader is not None
     audit = _ilu.module_from_spec(spec)
     spec.loader.exec_module(audit)
 
     migration_cols = audit.collect_migration_columns()
-    assert "hazard_id" in migration_cols.get("ppenorm", set()), (
-        "audit doesn't credit ppenorm.hazard_id after iter-34 — closed-loop verify broken"
-    )
+    assert "hazard_id" in migration_cols.get(
+        "ppenorm", set()
+    ), "audit doesn't credit ppenorm.hazard_id after iter-34 — closed-loop verify broken"

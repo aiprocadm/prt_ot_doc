@@ -15,6 +15,7 @@
     iter38-default "queued" на ``status``; у signatures колонки version НЕТ
     (iter29 её не ретрофитил); все 4 индекса восстановлены.
 """
+
 from __future__ import annotations
 
 import ast
@@ -75,7 +76,9 @@ def test_upgrade_drops_exactly_the_two_legacy_tables(monkeypatch):
     monkeypatch.setattr(module.op, "drop_table", lambda name, *a, **k: dropped.append(name))
     monkeypatch.setattr(module.op, "get_bind", lambda: None)
     # enum.drop(bind=None, checkfirst=True) на None-bind упадёт — глушим:
-    monkeypatch.setattr(type(module.signature_type), "drop", lambda self, bind, checkfirst=True: None)
+    monkeypatch.setattr(
+        type(module.signature_type), "drop", lambda self, bind, checkfirst=True: None
+    )
 
     module.upgrade()
 
@@ -100,9 +103,11 @@ def test_upgrade_table_names_are_string_literals():
             and isinstance(node.func, ast.Attribute)
             and node.func.attr == "drop_table"
         ):
-            assert node.args and isinstance(node.args[0], ast.Constant) and isinstance(node.args[0].value, str), (
-                "op.drop_table должен получать имя таблицы строковым литералом"
-            )
+            assert (
+                node.args
+                and isinstance(node.args[0], ast.Constant)
+                and isinstance(node.args[0].value, str)
+            ), "op.drop_table должен получать имя таблицы строковым литералом"
             drop_args.append(node.args[0].value)
     assert set(drop_args) == LEGACY_TABLES
 
@@ -121,7 +126,9 @@ def test_downgrade_recreates_tables_at_ed02_chain_position(monkeypatch):
         module.op, "create_index", lambda idx, table, *a, **k: indexes.append((idx, table))
     )
     monkeypatch.setattr(module.op, "get_bind", lambda: None)
-    monkeypatch.setattr(type(module.signature_type), "create", lambda self, bind, checkfirst=True: None)
+    monkeypatch.setattr(
+        type(module.signature_type), "create", lambda self, bind, checkfirst=True: None
+    )
 
     module.downgrade()
 
@@ -130,16 +137,33 @@ def test_downgrade_recreates_tables_at_ed02_chain_position(monkeypatch):
 
     # signatures — verbatim из mvp-миграции: БЕЗ version (iter29 не ретрофитил)
     assert set(created["signatures"]) == {
-        "document_version_id", "type", "status", "signer_user_id",
-        "cert_info_json", "signed_at", "receipts_s3_key",
-        "id", "tenant_id", "created_at", "updated_at",
+        "document_version_id",
+        "type",
+        "status",
+        "signer_user_id",
+        "cert_info_json",
+        "signed_at",
+        "receipts_s3_key",
+        "id",
+        "tenant_id",
+        "created_at",
+        "updated_at",
     }
     assert "version" not in created["signatures"]
 
     # edo_envelopes — next30 + iter29 version + iter38 default
     assert set(created["edo_envelopes"]) == {
-        "object_type", "object_id", "provider", "status", "external_id",
-        "last_event_at", "id", "tenant_id", "created_at", "updated_at", "version",
+        "object_type",
+        "object_id",
+        "provider",
+        "status",
+        "external_id",
+        "last_event_at",
+        "id",
+        "tenant_id",
+        "created_at",
+        "updated_at",
+        "version",
     }
     version = created["edo_envelopes"]["version"]
     assert version.server_default is not None

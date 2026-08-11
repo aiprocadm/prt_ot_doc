@@ -18,8 +18,7 @@ type Props = {
 
 const isFocusTaskUnavailable = (err: ApiError | null | undefined) =>
   Boolean(
-    err &&
-      (err.status === 404 || err.code === "OBLIGATION_TASK_NOT_FOUND")
+    err && (err.status === 404 || err.code === "OBLIGATION_TASK_NOT_FOUND"),
   );
 
 export const TaskFocusCard = ({
@@ -28,19 +27,34 @@ export const TaskFocusCard = ({
   focusLoadError = null,
   focusedEntityType,
   focusedEntityId,
-  onCloseTask
+  onCloseTask,
 }: Props) => {
   if (!focusedTaskId) return null;
 
   const focusUnavailable = isFocusTaskUnavailable(focusLoadError);
 
-  const summaryLink = entityCardLink(focusedTask?.entity_type ?? focusedEntityType, focusedTask?.entity_id ?? focusedEntityId, "summary");
-  const timelineLink = entityCardLink(focusedTask?.entity_type ?? focusedEntityType, focusedTask?.entity_id ?? focusedEntityId, "timeline");
-  const contextPath = entityContextPath(focusedTask?.entity_type ?? focusedEntityType) ?? "/tasks";
+  const summaryLink = entityCardLink(
+    focusedTask?.entity_type ?? focusedEntityType,
+    focusedTask?.entity_id ?? focusedEntityId,
+    "summary",
+  );
+  const timelineLink = entityCardLink(
+    focusedTask?.entity_type ?? focusedEntityType,
+    focusedTask?.entity_id ?? focusedEntityId,
+    "timeline",
+  );
+  const contextPath =
+    entityContextPath(focusedTask?.entity_type ?? focusedEntityType) ??
+    "/tasks";
 
   return (
-    <div className="mb-4 rounded-md border bg-muted/20 p-4" data-testid="task-focus-card">
-      <div className="text-sm font-semibold">Фокус задачи из рабочего пространства</div>
+    <div
+      className="mb-4 rounded-md border bg-muted/20 p-4"
+      data-testid="task-focus-card"
+    >
+      <div className="text-sm font-semibold">
+        Фокус задачи из рабочего пространства
+      </div>
       <p className="mt-1 text-xs text-muted-foreground">
         {focusedTask
           ? `${focusedTask.title} · ${focusedTask.status} · ${focusedTask.priority}`
@@ -56,7 +70,8 @@ export const TaskFocusCard = ({
         ) : null}
         {focusedTask?.entity_id || focusedEntityId ? (
           <span className="rounded border px-2 py-1">
-            entity_id: {(focusedTask?.entity_id ?? focusedEntityId)?.slice(0, 12)}
+            entity_id:{" "}
+            {(focusedTask?.entity_id ?? focusedEntityId)?.slice(0, 12)}
           </span>
         ) : null}
       </div>
@@ -97,4 +112,3 @@ export const TaskFocusCard = ({
     </div>
   );
 };
-

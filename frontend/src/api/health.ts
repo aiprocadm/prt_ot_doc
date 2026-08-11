@@ -25,12 +25,16 @@ export const healthApi = {
    * (bypasses the backend's 60s TTL); ``skip_slow`` omits the slower optional
    * checks (integrations/email).
    */
-  getComprehensive: async (
-    params?: { skip_cache?: boolean; skip_slow?: boolean }
-  ): Promise<HealthComprehensiveDto> => {
-    const response = await apiClient.get<HealthComprehensiveDto>("/health/comprehensive", {
-      params
-    });
+  getComprehensive: async (params?: {
+    skip_cache?: boolean;
+    skip_slow?: boolean;
+  }): Promise<HealthComprehensiveDto> => {
+    const response = await apiClient.get<HealthComprehensiveDto>(
+      "/health/comprehensive",
+      {
+        params,
+      },
+    );
     return response.data;
-  }
+  },
 };

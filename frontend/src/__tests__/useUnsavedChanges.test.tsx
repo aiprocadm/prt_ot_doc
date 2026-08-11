@@ -1,7 +1,10 @@
 import { render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { DEFAULT_UNSAVED_CHANGES_MESSAGE, useUnsavedChanges } from "@/hooks/useUnsavedChanges";
+import {
+  DEFAULT_UNSAVED_CHANGES_MESSAGE,
+  useUnsavedChanges,
+} from "@/hooks/useUnsavedChanges";
 
 const Probe = ({ dirty }: { dirty: boolean }) => {
   useUnsavedChanges(dirty);
@@ -18,13 +21,21 @@ describe("useUnsavedChanges", () => {
   });
 
   it("регистрирует beforeunload handler для dirty state", () => {
-    const addSpy = vi.spyOn(window, "addEventListener").mockImplementation((() => {}) as typeof window.addEventListener);
-    const removeSpy = vi.spyOn(window, "removeEventListener").mockImplementation((() => {}) as typeof window.removeEventListener);
+    const addSpy = vi
+      .spyOn(window, "addEventListener")
+      .mockImplementation((() => {}) as typeof window.addEventListener);
+    const removeSpy = vi
+      .spyOn(window, "removeEventListener")
+      .mockImplementation((() => {}) as typeof window.removeEventListener);
 
     const { unmount } = render(<Probe dirty />);
 
-    expect(addSpy.mock.calls.some(([type]) => type === "beforeunload")).toBe(true);
-    const handlerCall = addSpy.mock.calls.find(([type]) => type === "beforeunload")?.[1];
+    expect(addSpy.mock.calls.some(([type]) => type === "beforeunload")).toBe(
+      true,
+    );
+    const handlerCall = addSpy.mock.calls.find(
+      ([type]) => type === "beforeunload",
+    )?.[1];
     if (typeof handlerCall !== "function") {
       throw new Error("beforeunload handler was not registered");
     }
@@ -40,7 +51,9 @@ describe("useUnsavedChanges", () => {
 
     unmount();
 
-    expect(removeSpy.mock.calls.some(([type]) => type === "beforeunload")).toBe(true);
+    expect(removeSpy.mock.calls.some(([type]) => type === "beforeunload")).toBe(
+      true,
+    );
   });
 
   it("не регистрирует beforeunload handler для clean state", () => {
@@ -48,6 +61,8 @@ describe("useUnsavedChanges", () => {
 
     render(<Probe dirty={false} />);
 
-    expect(addSpy.mock.calls.filter(([type]) => type === "beforeunload")).toHaveLength(0);
+    expect(
+      addSpy.mock.calls.filter(([type]) => type === "beforeunload"),
+    ).toHaveLength(0);
   });
 });

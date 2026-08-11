@@ -8,6 +8,7 @@ normal (no-Docker) suite catches regressions and gives incremental feedback.
 NOT a universal "every native enum binds .value" rule: 31 Group-B columns have pg
 types created with UPPER member-NAME labels and correctly bind names — adding
 values_callable there would break PG inserts (see spec Appendix)."""
+
 from __future__ import annotations
 
 from sqlalchemy import Enum as SAEnum
@@ -33,35 +34,61 @@ for _md in (SharedBase.metadata, TenantBase.metadata):
 # (20260612_ed02_drop_legacy_signing_tables) → колонок больше не существует.
 DEFECTIVE_COLUMNS = {
     # models.py (27)
-    ("subscriptions", "status"), ("invoices", "status"), ("billing_events", "type"),
-    ("user", "role"), ("user_role", "role"), ("training_session", "status"),
-    ("ppeitem", "category"), ("package_profiles_v2", "status"),
-    ("package_presets_v2", "source_type"), ("package_presets_v2", "status"),
-    ("package_preset_items", "replace_mode"), ("package_preset_items", "output_format"),
-    ("pack_runs", "source_type"), ("pack_runs", "status"), ("pack_run_items", "status"),
-    ("pack_run_logs", "level"), ("package_runs", "status"),
-    ("package_requirements", "type"), ("package_requirements", "status"),
-    ("client_request_tickets", "status"), ("journal", "journal_type"),
-    ("journalentry", "entry_type"), ("regulatory_inspection", "inspection_type"),
-    ("attestation", "status"), ("inspection_prescription", "status"),
-    ("approval_processes", "status"), ("approval_tasks", "status"),
+    ("subscriptions", "status"),
+    ("invoices", "status"),
+    ("billing_events", "type"),
+    ("user", "role"),
+    ("user_role", "role"),
+    ("training_session", "status"),
+    ("ppeitem", "category"),
+    ("package_profiles_v2", "status"),
+    ("package_presets_v2", "source_type"),
+    ("package_presets_v2", "status"),
+    ("package_preset_items", "replace_mode"),
+    ("package_preset_items", "output_format"),
+    ("pack_runs", "source_type"),
+    ("pack_runs", "status"),
+    ("pack_run_items", "status"),
+    ("pack_run_logs", "level"),
+    ("package_runs", "status"),
+    ("package_requirements", "type"),
+    ("package_requirements", "status"),
+    ("client_request_tickets", "status"),
+    ("journal", "journal_type"),
+    ("journalentry", "entry_type"),
+    ("regulatory_inspection", "inspection_type"),
+    ("attestation", "status"),
+    ("inspection_prescription", "status"),
+    ("approval_processes", "status"),
+    ("approval_tasks", "status"),
     # notifications.py (8)
-    ("notification_templates", "channel"), ("notification_templates", "type"),
-    ("notifications", "channel"), ("notifications", "type"),
-    ("notifications", "priority"), ("notifications", "status"),
-    ("reminder_rules", "entity_type"), ("plan_tasks", "status"),
+    ("notification_templates", "channel"),
+    ("notification_templates", "type"),
+    ("notifications", "channel"),
+    ("notifications", "type"),
+    ("notifications", "priority"),
+    ("notifications", "status"),
+    ("reminder_rules", "entity_type"),
+    ("plan_tasks", "status"),
     # approval_workflow.py (3)
     ("approval_requests", "status"),
-    ("edo_messages", "direction"), ("edo_status_history", "status"),
+    ("edo_messages", "direction"),
+    ("edo_status_history", "status"),
     # document.py (3)
-    ("document", "status"), ("document_batch_run", "status"),
+    ("document", "status"),
+    ("document_batch_run", "status"),
     ("document_batch_item", "status"),
     # finance.py (3)
-    ("contract", "status"), ("order", "status"), ("invoice", "status"),
+    ("contract", "status"),
+    ("order", "status"),
+    ("invoice", "status"),
     # obligations.py (3)
-    ("task", "status"), ("task", "priority"), ("task", "reminder_channel"),
+    ("task", "status"),
+    ("task", "priority"),
+    ("task", "reminder_channel"),
     # app/modules/workflow/models.py (3)
-    ("workflow_definition_versions", "status"), ("workflow_instances", "status"),
+    ("workflow_definition_versions", "status"),
+    ("workflow_instances", "status"),
     ("workflow_tasks", "status"),
 }
 
@@ -77,12 +104,16 @@ def test_defective_columns_bind_enum_values_not_names() -> None:
     for table_name, col_name in sorted(DEFECTIVE_COLUMNS):
         col = ALL_TABLES[table_name].columns[col_name]
         t = col.type
-        assert isinstance(t, SAEnum) and t.enum_class is not None, f"{table_name}.{col_name} not a native enum"
+        assert (
+            isinstance(t, SAEnum) and t.enum_class is not None
+        ), f"{table_name}.{col_name} not a native enum"
         if list(t.enums) != [m.value for m in t.enum_class]:
             offenders.append(
                 f"{table_name}.{col_name}: binds {list(t.enums)} not {[m.value for m in t.enum_class]}"
             )
-    assert not offenders, "columns still bind member NAMES (apply native_enum):\n" + "\n".join(offenders)
+    assert not offenders, "columns still bind member NAMES (apply native_enum):\n" + "\n".join(
+        offenders
+    )
 
 
 # --- Сырой инвентарь (values_callable=None), запинен против регресса -----------

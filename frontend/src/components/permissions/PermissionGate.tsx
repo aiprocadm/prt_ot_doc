@@ -11,7 +11,12 @@ interface PermissionGateProps {
   children: ReactNode;
 }
 
-export const PermissionGate = ({ permission, resource, fallback = null, children }: PermissionGateProps) => (
+export const PermissionGate = ({
+  permission,
+  resource,
+  fallback = null,
+  children,
+}: PermissionGateProps) => (
   <Can permission={permission} resource={resource} fallback={fallback}>
     {children}
   </Can>

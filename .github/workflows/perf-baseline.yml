@@ -2,7 +2,10 @@ name: Perf Baseline
 
 on:
   schedule:
-    - cron: "0 3 * * *"
+    # Раз в неделю, а не ежедневно: базовая линия производительности
+    # меняется от релиза к релизу, а не за ночь, и ежедневный прогон
+    # (compose + нагрузка) стоил ~30 прогонов в месяц впустую.
+    - cron: "0 3 * * 1"
   workflow_dispatch:
 
 jobs:
@@ -42,8 +45,12 @@ jobs:
           POSTGRES_PASSWORD=ptd
           S3_ACCESS_KEY=minioadmin
           S3_SECRET_KEY=minioadmin
+          APP_DB_PASSWORD=ci-ptd-app-not-for-production
           ADMIN_PASSWORD=PerfBaseline123!
           EOF
+          # DATABASE_URL в .env.example содержит пароль-заглушку CHANGE_ME —
+          # роль же создаётся initdb с APP_DB_PASSWORD; синхронизируем.
+          sed -i 's|ptd_app:CHANGE_ME|ptd_app:ci-ptd-app-not-for-production|' .env
 
       - name: Enable Redis memory overcommit
         run: sudo sysctl -w vm.overcommit_memory=1

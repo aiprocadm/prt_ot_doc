@@ -22,7 +22,8 @@ describe("OutboxPage", () => {
 
   it("keeps create form values when endpoint creation fails", async () => {
     getMock.mockImplementation((url: string) => {
-      if (url === "/admin/outbox/events") return Promise.resolve({ data: { items: [] } });
+      if (url === "/admin/outbox/events")
+        return Promise.resolve({ data: { items: [] } });
       if (url === "/webhooks/endpoints") return Promise.resolve({ data: [] });
       if (url === "/webhooks/deliveries") return Promise.resolve({ data: [] });
       throw new Error(`Unexpected GET ${url}`);
@@ -32,26 +33,45 @@ describe("OutboxPage", () => {
     render(
       <MemoryRouter>
         <OutboxPage />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
 
     await screen.findByText(/точки вебхуков отсутствуют/i);
-    fireEvent.change(screen.getByPlaceholderText("https://example.com/webhook"), { target: { value: "https://hook.test" } });
-    fireEvent.change(screen.getByPlaceholderText("Секрет"), { target: { value: "secret-1" } });
+    fireEvent.change(
+      screen.getByPlaceholderText("https://example.com/webhook"),
+      { target: { value: "https://hook.test" } },
+    );
+    fireEvent.change(screen.getByPlaceholderText("Секрет"), {
+      target: { value: "secret-1" },
+    });
     fireEvent.click(screen.getByRole("button", { name: "Создать" }));
 
     await waitFor(() => {
-      expect(screen.getByRole("alert")).toHaveTextContent("endpoint create failed");
+      expect(screen.getByRole("alert")).toHaveTextContent(
+        "endpoint create failed",
+      );
     });
-    expect(screen.getByPlaceholderText("https://example.com/webhook")).toHaveValue("https://hook.test");
+    expect(
+      screen.getByPlaceholderText("https://example.com/webhook"),
+    ).toHaveValue("https://hook.test");
     expect(screen.getByPlaceholderText("Секрет")).toHaveValue("secret-1");
   });
 
   it("keeps endpoint list visible when test action fails", async () => {
     getMock.mockImplementation((url: string) => {
-      if (url === "/admin/outbox/events") return Promise.resolve({ data: { items: [] } });
+      if (url === "/admin/outbox/events")
+        return Promise.resolve({ data: { items: [] } });
       if (url === "/webhooks/endpoints") {
-        return Promise.resolve({ data: [{ id: "ep-1", url: "https://hook.test", enabled: true, subscribed_events: ["DocumentGenerated"] }] });
+        return Promise.resolve({
+          data: [
+            {
+              id: "ep-1",
+              url: "https://hook.test",
+              enabled: true,
+              subscribed_events: ["DocumentGenerated"],
+            },
+          ],
+        });
       }
       if (url === "/webhooks/deliveries") return Promise.resolve({ data: [] });
       throw new Error(`Unexpected GET ${url}`);
@@ -61,14 +81,16 @@ describe("OutboxPage", () => {
     render(
       <MemoryRouter>
         <OutboxPage />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
 
     await screen.findByText(/https:\/\/hook\.test/i);
     fireEvent.click(screen.getByRole("button", { name: "Тест" }));
 
     await waitFor(() => {
-      expect(screen.getByRole("alert")).toHaveTextContent("endpoint test failed");
+      expect(screen.getByRole("alert")).toHaveTextContent(
+        "endpoint test failed",
+      );
     });
     expect(screen.getByText(/https:\/\/hook\.test/i)).toBeInTheDocument();
   });

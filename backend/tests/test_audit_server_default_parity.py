@@ -476,9 +476,10 @@ def test_real_codebase_ppenorm_quantity_NOT_flagged() -> None:
     """
     audit = _load_audit()
     drift = audit.run()
-    assert ("ppenorm", "quantity") not in drift, (
-        "ppenorm.quantity has iter-37's server_default — should NOT be in drift"
-    )
+    assert (
+        "ppenorm",
+        "quantity",
+    ) not in drift, "ppenorm.quantity has iter-37's server_default — should NOT be in drift"
 
 
 def test_real_codebase_ppenorm_interval_days_NOT_flagged() -> None:
@@ -489,9 +490,10 @@ def test_real_codebase_ppenorm_interval_days_NOT_flagged() -> None:
     """
     audit = _load_audit()
     drift = audit.run()
-    assert ("ppenorm", "interval_days") not in drift, (
-        "ppenorm.interval_days has iter-37's server_default — should NOT be in drift"
-    )
+    assert (
+        "ppenorm",
+        "interval_days",
+    ) not in drift, "ppenorm.interval_days has iter-37's server_default — should NOT be in drift"
 
 
 def test_real_codebase_ppeissue_quantity_NOT_flagged() -> None:
@@ -500,6 +502,7 @@ def test_real_codebase_ppeissue_quantity_NOT_flagged() -> None:
     """
     audit = _load_audit()
     drift = audit.run()
-    assert ("ppeissue", "quantity") not in drift, (
-        "ppeissue.quantity has iter-32's server_default — should NOT be in drift"
-    )
+    assert (
+        "ppeissue",
+        "quantity",
+    ) not in drift, "ppeissue.quantity has iter-32's server_default — should NOT be in drift"

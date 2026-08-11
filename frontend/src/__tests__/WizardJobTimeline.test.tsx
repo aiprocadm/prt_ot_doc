@@ -22,8 +22,8 @@ describe("WizardJobTimeline", () => {
         started_at: null,
         ended_at: null,
         error_code: null,
-        error_payload: null
-      } as unknown as PipelineStepRun
+        error_payload: null,
+      } as unknown as PipelineStepRun,
     ];
 
     render(<WizardJobTimeline steps={steps} />);
@@ -43,8 +43,8 @@ describe("WizardJobTimeline", () => {
         started_at: "2026-05-01T10:00:00Z",
         ended_at: null,
         error_code: null,
-        error_payload: null
-      } as unknown as PipelineStepRun
+        error_payload: null,
+      } as unknown as PipelineStepRun,
     ];
 
     render(<WizardJobTimeline steps={steps} />);
@@ -63,8 +63,8 @@ describe("WizardJobTimeline", () => {
         started_at: "2026-05-01T10:00:00Z",
         ended_at: "2026-05-01T10:00:10Z",
         error_code: null,
-        error_payload: null
-      } as unknown as PipelineStepRun
+        error_payload: null,
+      } as unknown as PipelineStepRun,
     ];
 
     render(<WizardJobTimeline steps={steps} />);
@@ -84,8 +84,8 @@ describe("WizardJobTimeline", () => {
         started_at: "2026-05-01T10:00:00Z",
         ended_at: "2026-05-01T10:00:05Z",
         error_code: null,
-        error_payload: null
-      } as unknown as PipelineStepRun
+        error_payload: null,
+      } as unknown as PipelineStepRun,
     ];
 
     render(<WizardJobTimeline steps={steps} />);
@@ -104,8 +104,8 @@ describe("WizardJobTimeline", () => {
         started_at: "2026-05-01T10:00:00Z",
         ended_at: "2026-05-01T10:00:02Z",
         error_code: "VALIDATION_ERROR",
-        error_payload: { detail: "Invalid input" }
-      } as unknown as PipelineStepRun
+        error_payload: { detail: "Invalid input" },
+      } as unknown as PipelineStepRun,
     ];
 
     render(<WizardJobTimeline steps={steps} />);
@@ -126,8 +126,8 @@ describe("WizardJobTimeline", () => {
         started_at: "2026-05-01T10:00:00Z",
         ended_at: "2026-05-01T10:00:03Z",
         error_code: "CERT_EXPIRED",
-        error_payload: null
-      } as unknown as PipelineStepRun
+        error_payload: null,
+      } as unknown as PipelineStepRun,
     ];
 
     render(<WizardJobTimeline steps={steps} />);
@@ -147,8 +147,8 @@ describe("WizardJobTimeline", () => {
         started_at: "2026-05-01T10:00:00Z",
         ended_at: "2026-05-01T10:00:01Z",
         error_code: null,
-        error_payload: null
-      } as unknown as PipelineStepRun
+        error_payload: null,
+      } as unknown as PipelineStepRun,
     ];
 
     render(<WizardJobTimeline steps={steps} />);
@@ -167,7 +167,7 @@ describe("WizardJobTimeline", () => {
         started_at: "2026-05-01T10:00:00Z",
         ended_at: "2026-05-01T10:00:05Z",
         error_code: null,
-        error_payload: null
+        error_payload: null,
       },
       {
         step_run_id: "step-2",
@@ -177,7 +177,7 @@ describe("WizardJobTimeline", () => {
         started_at: "2026-05-01T10:00:05Z",
         ended_at: "2026-05-01T10:00:10Z",
         error_code: null,
-        error_payload: null
+        error_payload: null,
       },
       {
         step_run_id: "step-3",
@@ -187,7 +187,7 @@ describe("WizardJobTimeline", () => {
         started_at: "2026-05-01T10:00:10Z",
         ended_at: "2026-05-01T10:00:15Z",
         error_code: null,
-        error_payload: null
+        error_payload: null,
       },
       {
         step_run_id: "step-4",
@@ -197,8 +197,8 @@ describe("WizardJobTimeline", () => {
         started_at: "2026-05-01T10:00:15Z",
         ended_at: null,
         error_code: null,
-        error_payload: null
-      }
+        error_payload: null,
+      },
     ] as unknown as PipelineStepRun[];
 
     render(<WizardJobTimeline steps={steps} />);
@@ -219,8 +219,8 @@ describe("WizardJobTimeline", () => {
         started_at: "2026-05-01T10:00:00Z",
         ended_at: "2026-05-01T10:00:45Z",
         error_code: null,
-        error_payload: null
-      } as unknown as PipelineStepRun
+        error_payload: null,
+      } as unknown as PipelineStepRun,
     ];
 
     render(<WizardJobTimeline steps={steps} />);
@@ -238,8 +238,8 @@ describe("WizardJobTimeline", () => {
         started_at: null,
         ended_at: null,
         error_code: null,
-        error_payload: null
-      } as unknown as PipelineStepRun
+        error_payload: null,
+      } as unknown as PipelineStepRun,
     ];
 
     render(<WizardJobTimeline steps={steps} />);
@@ -257,8 +257,8 @@ describe("WizardJobTimeline", () => {
         started_at: "2026-05-01T10:00:00Z",
         ended_at: "2026-05-01T10:00:05Z",
         error_code: null,
-        error_payload: null
-      } as unknown as PipelineStepRun
+        error_payload: null,
+      } as unknown as PipelineStepRun,
     ];
 
     render(<WizardJobTimeline steps={steps} />);

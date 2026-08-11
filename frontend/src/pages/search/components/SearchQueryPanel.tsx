@@ -15,14 +15,35 @@ type Props = {
   onSaveSearch: () => Promise<void>;
 };
 
-export const SearchQueryPanel = ({ query, type, tabs, facets, onQueryChange, onTypeChange, onSaveSearch }: Props) => (
+export const SearchQueryPanel = ({
+  query,
+  type,
+  tabs,
+  facets,
+  onQueryChange,
+  onTypeChange,
+  onSaveSearch,
+}: Props) => (
   <Card>
     <CardContent className="space-y-4 py-6">
-      <Input value={query} placeholder="Поиск по системе" onChange={(e) => onQueryChange(e.target.value)} />
+      <Input
+        value={query}
+        placeholder="Поиск по системе"
+        onChange={(e) => onQueryChange(e.target.value)}
+      />
       <div className="flex flex-wrap gap-2">
         {tabs.map((tab) => (
-          <Button key={tab} variant={tab === type ? "default" : "outline"} size="sm" onClick={() => onTypeChange(tab)}>
-            {tab} ({facets.type_counts?.[tab] ?? facets.type_counts?.[tab.replace(/s$/, "")] ?? 0})
+          <Button
+            key={tab}
+            variant={tab === type ? "default" : "outline"}
+            size="sm"
+            onClick={() => onTypeChange(tab)}
+          >
+            {tab} (
+            {facets.type_counts?.[tab] ??
+              facets.type_counts?.[tab.replace(/s$/, "")] ??
+              0}
+            )
           </Button>
         ))}
         <Button variant="outline" size="sm" onClick={() => void onSaveSearch()}>

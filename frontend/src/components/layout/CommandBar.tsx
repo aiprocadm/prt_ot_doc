@@ -2,13 +2,30 @@ import { Command, Search } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
-import { fetchSavedSearches, searchGlobal, type SavedSearchItem, type SearchItem } from "@/api/search";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  fetchSavedSearches,
+  searchGlobal,
+  type SavedSearchItem,
+  type SearchItem,
+} from "@/api/search";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { useDebounce } from "@/hooks/useDebounce";
 import { useNavMenuData } from "@/hooks/useNavMenuData";
-import { flattenNavGroups, matchesNavCommandQuery } from "@/router/navVisibility";
-import { localStorageGetItem, localStorageSetItem } from "@/utils/browserStorage";
+import {
+  flattenNavGroups,
+  matchesNavCommandQuery,
+} from "@/router/navVisibility";
+import {
+  localStorageGetItem,
+  localStorageSetItem,
+} from "@/utils/browserStorage";
 import { trackUxMetric } from "@/utils/uxMetrics";
 
 const FAVORITE_PATHS_STORAGE_KEY = "ux.commandbar.favoritePaths.v1";
@@ -41,10 +58,12 @@ const buildSavedSearchPath = (item: SavedSearchItem): string => {
   const firstType = Array.isArray(item.types) ? item.types[0] : undefined;
   if (firstType) params.set("type", firstType);
   const filters = (item.filters ?? {}) as Record<string, unknown>;
-  if (typeof filters.status === "string" && filters.status) params.set("status", filters.status);
+  if (typeof filters.status === "string" && filters.status)
+    params.set("status", filters.status);
   if (typeof filters.company_id === "string" && filters.company_id)
     params.set("company_id", filters.company_id);
-  if (typeof filters.site_id === "string" && filters.site_id) params.set("site_id", filters.site_id);
+  if (typeof filters.site_id === "string" && filters.site_id)
+    params.set("site_id", filters.site_id);
   if (typeof filters.project_id === "string" && filters.project_id)
     params.set("project_id", filters.project_id);
   if (typeof filters.risk_level === "string" && filters.risk_level)
@@ -83,7 +102,7 @@ const ENTITY_TYPE_LABELS: Record<string, string> = {
   workflow_task: "Задачи процесса",
   npa: "НПА",
   contract: "Договоры",
-  order: "Заказы"
+  order: "Заказы",
 };
 
 interface ExecutableCommand {
@@ -99,57 +118,81 @@ const EXECUTABLE_COMMANDS: ExecutableCommand[] = [
     id: "create-document",
     label: "Создать документ",
     description: "Открыть мастер создания документа",
-    triggers: ["создать документ", "новый документ", "create document", "new document"],
-    path: "/documents?action=create"
+    triggers: [
+      "создать документ",
+      "новый документ",
+      "create document",
+      "new document",
+    ],
+    path: "/documents?action=create",
   },
   {
     id: "create-incident",
     label: "Зарегистрировать инцидент",
     description: "Открыть форму регистрации происшествия",
-    triggers: ["создать инцидент", "новый инцидент", "create incident", "new incident", "происшествие"],
-    path: "/incidents?action=create"
+    triggers: [
+      "создать инцидент",
+      "новый инцидент",
+      "create incident",
+      "new incident",
+      "происшествие",
+    ],
+    path: "/incidents?action=create",
   },
   {
     id: "create-inspection",
     label: "Запланировать проверку",
     description: "Открыть форму планирования проверки",
-    triggers: ["создать проверку", "новая проверка", "запланировать проверку", "create inspection", "new inspection"],
-    path: "/inspections?action=create"
+    triggers: [
+      "создать проверку",
+      "новая проверка",
+      "запланировать проверку",
+      "create inspection",
+      "new inspection",
+    ],
+    path: "/inspections?action=create",
   },
   {
     id: "assign-training",
     label: "Назначить обучение",
     description: "Открыть мастер назначения обучения",
-    triggers: ["назначить обучение", "обучить", "assign training", "new training"],
-    path: "/training?action=create"
+    triggers: [
+      "назначить обучение",
+      "обучить",
+      "assign training",
+      "new training",
+    ],
+    path: "/training?action=create",
   },
   {
     id: "issue-ppe",
     label: "Выдать СИЗ",
     description: "Открыть форму выдачи СИЗ",
     triggers: ["выдать сиз", "выдача сиз", "новая выдача сиз", "issue ppe"],
-    path: "/ppe?action=create"
+    path: "/ppe?action=create",
   },
   {
     id: "open-calendar",
     label: "Открыть календарь",
     description: "Перейти в Умный календарь",
     triggers: ["календарь", "calendar", "smart calendar"],
-    path: "/calendar"
+    path: "/calendar",
   },
   {
     id: "open-search",
     label: "Расширенный поиск",
     description: "Открыть страницу глобального поиска",
     triggers: ["поиск", "глобальный поиск", "search"],
-    path: "/search"
-  }
+    path: "/search",
+  },
 ];
 
 const matchesCommand = (command: ExecutableCommand, query: string): boolean => {
   const lower = query.toLowerCase();
   if (command.label.toLowerCase().includes(lower)) return true;
-  return command.triggers.some((trigger) => trigger.includes(lower) || lower.includes(trigger));
+  return command.triggers.some(
+    (trigger) => trigger.includes(lower) || lower.includes(trigger),
+  );
 };
 
 const readPaths = (key: string): string[] => {
@@ -185,7 +228,7 @@ const readRecentEntities = (now: number = Date.now()): RecentEntityRecord[] => {
           typeof item.entity_id === "string" &&
           typeof item.title === "string" &&
           typeof item.path === "string" &&
-          typeof item.opened_at === "number"
+          typeof item.opened_at === "number",
       )
       .filter((item) => now - item.opened_at <= RECENT_ENTITY_TTL_MS)
       .slice(0, MAX_RECENT_ENTITIES);
@@ -212,14 +255,19 @@ export const CommandBar = () => {
   const [entitySearchLoading, setEntitySearchLoading] = useState(false);
   const [savedSearches, setSavedSearches] = useState<SavedSearchItem[]>([]);
   const [savedSearchesLoaded, setSavedSearchesLoaded] = useState(false);
-  const [recentEntities, setRecentEntities] = useState<RecentEntityRecord[]>([]);
+  const [recentEntities, setRecentEntities] = useState<RecentEntityRecord[]>(
+    [],
+  );
   const [selectedIndex, setSelectedIndex] = useState(0);
   const itemRefs = useRef<Array<HTMLAnchorElement | null>>([]);
   const debouncedQuery = useDebounce(query, 300);
   const navigate = useNavigate();
   const { visibleGroups } = useNavMenuData();
 
-  const flatItems = useMemo(() => flattenNavGroups(visibleGroups), [visibleGroups]);
+  const flatItems = useMemo(
+    () => flattenNavGroups(visibleGroups),
+    [visibleGroups],
+  );
 
   useEffect(() => {
     setFavoritePaths(readPaths(FAVORITE_PATHS_STORAGE_KEY));
@@ -284,7 +332,9 @@ export const CommandBar = () => {
     searchGlobal(trimmed)
       .then((result) => {
         if (controller.signal.aborted) return;
-        const items = Array.isArray(result?.items) ? result.items.slice(0, MAX_ENTITY_RESULTS) : [];
+        const items = Array.isArray(result?.items)
+          ? result.items.slice(0, MAX_ENTITY_RESULTS)
+          : [];
         setEntityResults(items);
       })
       .catch(() => {
@@ -300,7 +350,9 @@ export const CommandBar = () => {
   const matchedCommands = useMemo(() => {
     const trimmed = query.trim();
     if (!trimmed) return [];
-    return EXECUTABLE_COMMANDS.filter((command) => matchesCommand(command, trimmed)).slice(0, 4);
+    return EXECUTABLE_COMMANDS.filter((command) =>
+      matchesCommand(command, trimmed),
+    ).slice(0, 4);
   }, [query]);
 
   // Saved searches are a discovery affordance: they're shown only when the
@@ -332,7 +384,7 @@ export const CommandBar = () => {
     return [...groups.entries()].map(([entityType, items]) => ({
       entityType,
       label: ENTITY_TYPE_LABELS[entityType] ?? entityType,
-      items
+      items,
     }));
   }, [entityResults]);
 
@@ -348,7 +400,9 @@ export const CommandBar = () => {
       return [{ title: "Результаты", items: filtered }];
     }
 
-    const favorites = filtered.filter((item) => favoritePaths.includes(item.path));
+    const favorites = filtered.filter((item) =>
+      favoritePaths.includes(item.path),
+    );
     const recent = recentPaths
       .map((path) => filtered.find((item) => item.path === path))
       .filter((item): item is (typeof filtered)[number] => Boolean(item));
@@ -359,17 +413,22 @@ export const CommandBar = () => {
       list.push(item);
       byGroup.set(item.groupTitle, list);
     }
-    const grouped = Array.from(byGroup.entries()).map(([title, items]) => ({ title, items }));
+    const grouped = Array.from(byGroup.entries()).map(([title, items]) => ({
+      title,
+      items,
+    }));
     return [
       ...(favorites.length ? [{ title: "Избранное", items: favorites }] : []),
       ...(recent.length ? [{ title: "Недавние", items: recent }] : []),
-      ...grouped
+      ...grouped,
     ];
   }, [favoritePaths, filtered, query, recentPaths]);
 
   const toggleFavorite = (path: string) => {
     setFavoritePaths((prev) => {
-      const next = prev.includes(path) ? prev.filter((item) => item !== path) : [path, ...prev].slice(0, 20);
+      const next = prev.includes(path)
+        ? prev.filter((item) => item !== path)
+        : [path, ...prev].slice(0, 20);
       localStorageSetItem(FAVORITE_PATHS_STORAGE_KEY, JSON.stringify(next));
       return next;
     });
@@ -377,7 +436,10 @@ export const CommandBar = () => {
 
   const rememberRecent = (path: string) => {
     setRecentPaths((prev) => {
-      const next = [path, ...prev.filter((item) => item !== path)].slice(0, MAX_RECENT);
+      const next = [path, ...prev.filter((item) => item !== path)].slice(
+        0,
+        MAX_RECENT,
+      );
       localStorageSetItem(RECENT_PATHS_STORAGE_KEY, JSON.stringify(next));
       return next;
     });
@@ -394,15 +456,18 @@ export const CommandBar = () => {
       entity_id: item.entity_id,
       title: item.title,
       path,
-      opened_at: Date.now()
+      opened_at: Date.now(),
     };
     setRecentEntities((prev) => {
       const next = [
         record,
         ...prev.filter(
           (existing) =>
-            !(existing.entity_type === record.entity_type && existing.entity_id === record.entity_id)
-        )
+            !(
+              existing.entity_type === record.entity_type &&
+              existing.entity_id === record.entity_id
+            ),
+        ),
       ].slice(0, MAX_RECENT_ENTITIES);
       writeRecentEntities(next);
       return next;
@@ -431,16 +496,17 @@ export const CommandBar = () => {
         activate: () => {
           trackUxMetric("navigation_click", {
             source: "commandbar-action",
-            path: command.path
+            path: command.path,
           });
           navigate(command.path);
           setOpen(false);
-        }
+        },
       });
     });
     entityGroups.forEach((group) => {
       group.items.forEach((item) => {
-        const path = item.deeplink ?? `/search?q=${encodeURIComponent(query.trim())}`;
+        const path =
+          item.deeplink ?? `/search?q=${encodeURIComponent(query.trim())}`;
         items.push({
           key: `entity-${item.entity_type}-${item.entity_id}`,
           path,
@@ -448,12 +514,12 @@ export const CommandBar = () => {
           activate: () => {
             trackUxMetric("navigation_click", {
               source: "commandbar-entity",
-              entity_type: item.entity_type
+              entity_type: item.entity_type,
             });
             rememberRecentEntity(item, path);
             navigate(path);
             setOpen(false);
-          }
+          },
         });
       });
     });
@@ -466,11 +532,11 @@ export const CommandBar = () => {
         activate: () => {
           trackUxMetric("navigation_click", {
             source: "commandbar-saved",
-            path
+            path,
           });
           navigate(path);
           setOpen(false);
-        }
+        },
       });
     });
     visibleRecentEntities.forEach((recent) => {
@@ -481,7 +547,7 @@ export const CommandBar = () => {
         activate: () => {
           trackUxMetric("navigation_click", {
             source: "commandbar-recent-entity",
-            entity_type: recent.entity_type
+            entity_type: recent.entity_type,
           });
           // Re-hoist (refreshes opened_at so a re-opened entity stays at
           // position 0 and doesn't age out as quickly).
@@ -490,13 +556,13 @@ export const CommandBar = () => {
               kind: "entity",
               entity_type: recent.entity_type,
               entity_id: recent.entity_id,
-              title: recent.title
+              title: recent.title,
             } as SearchItem,
-            recent.path
+            recent.path,
           );
           navigate(recent.path);
           setOpen(false);
-        }
+        },
       });
     });
     groupedForDisplay.forEach((section) => {
@@ -509,12 +575,12 @@ export const CommandBar = () => {
             rememberRecent(navItem.path);
             trackUxMetric("navigation_click", {
               source: "commandbar",
-              path: navItem.path
+              path: navItem.path,
             });
             trackUxMetric("time_to_first_action", { source: "commandbar" });
             navigate(navItem.path);
             setOpen(false);
-          }
+          },
         });
       });
     });
@@ -526,7 +592,7 @@ export const CommandBar = () => {
     navigate,
     query,
     visibleRecentEntities,
-    visibleSavedSearches
+    visibleSavedSearches,
   ]);
 
   const indexByKey = useMemo(() => {
@@ -558,7 +624,9 @@ export const CommandBar = () => {
       setSelectedIndex((prev) => (prev + 1) % navigableItems.length);
     } else if (event.key === "ArrowUp") {
       event.preventDefault();
-      setSelectedIndex((prev) => (prev - 1 + navigableItems.length) % navigableItems.length);
+      setSelectedIndex(
+        (prev) => (prev - 1 + navigableItems.length) % navigableItems.length,
+      );
     } else if (event.key === "Enter") {
       const target = navigableItems[selectedIndex] ?? navigableItems[0];
       if (target) {
@@ -584,13 +652,17 @@ export const CommandBar = () => {
       >
         <Command className="h-3.5 w-3.5 shrink-0" />
         <span className="hidden sm:inline">Команды</span>
-        <span className="hidden rounded border px-1.5 py-0.5 text-[10px] lg:inline">Ctrl+K</span>
+        <span className="hidden rounded border px-1.5 py-0.5 text-[10px] lg:inline">
+          Ctrl+K
+        </span>
       </button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Палитра команд</DialogTitle>
-            <DialogDescription>Поиск разделов и быстрый переход по платформе</DialogDescription>
+            <DialogDescription>
+              Поиск разделов и быстрый переход по платформе
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <div className="relative">
@@ -640,7 +712,7 @@ export const CommandBar = () => {
                           onClick={() => {
                             trackUxMetric("navigation_click", {
                               source: "commandbar-action",
-                              path: command.path
+                              path: command.path,
                             });
                             setOpen(false);
                           }}
@@ -658,7 +730,9 @@ export const CommandBar = () => {
                   </div>
                 </div>
               ) : null}
-              {query.trim() && entitySearchLoading && entityResults.length === 0 ? (
+              {query.trim() &&
+              entitySearchLoading &&
+              entityResults.length === 0 ? (
                 <p
                   className="px-2 py-1 text-xs text-muted-foreground"
                   data-testid="commandbar-entity-loading"
@@ -678,7 +752,9 @@ export const CommandBar = () => {
                       </div>
                       <div className="space-y-1">
                         {group.items.map((item) => {
-                          const path = item.deeplink ?? `/search?q=${encodeURIComponent(query.trim())}`;
+                          const path =
+                            item.deeplink ??
+                            `/search?q=${encodeURIComponent(query.trim())}`;
                           const navKey = `entity-${item.entity_type}-${item.entity_id}`;
                           const index = indexByKey.get(navKey) ?? -1;
                           const selected = index === selectedIndex;
@@ -698,7 +774,7 @@ export const CommandBar = () => {
                               onClick={() => {
                                 trackUxMetric("navigation_click", {
                                   source: "commandbar-entity",
-                                  entity_type: item.entity_type
+                                  entity_type: item.entity_type,
                                 });
                                 rememberRecentEntity(item, path);
                                 setOpen(false);
@@ -747,7 +823,7 @@ export const CommandBar = () => {
                           onClick={() => {
                             trackUxMetric("navigation_click", {
                               source: "commandbar-saved",
-                              path
+                              path,
                             });
                             setOpen(false);
                           }}
@@ -755,11 +831,14 @@ export const CommandBar = () => {
                             selected ? "bg-muted ring-1 ring-primary" : ""
                           }`}
                         >
-                          <span className="font-medium">{saved.name || saved.q || "Сохранённый поиск"}</span>
+                          <span className="font-medium">
+                            {saved.name || saved.q || "Сохранённый поиск"}
+                          </span>
                           {saved.q ? (
                             <span className="mt-0.5 block text-xs text-muted-foreground">
                               Запрос: {saved.q}
-                              {Array.isArray(saved.types) && saved.types.length > 0
+                              {Array.isArray(saved.types) &&
+                              saved.types.length > 0
                                 ? ` · ${saved.types.join(", ")}`
                                 : ""}
                             </span>
@@ -781,7 +860,8 @@ export const CommandBar = () => {
                       const index = indexByKey.get(navKey) ?? -1;
                       const selected = index === selectedIndex;
                       const typeLabel =
-                        ENTITY_TYPE_LABELS[recent.entity_type] ?? recent.entity_type;
+                        ENTITY_TYPE_LABELS[recent.entity_type] ??
+                        recent.entity_type;
                       return (
                         <Link
                           key={navKey}
@@ -798,7 +878,7 @@ export const CommandBar = () => {
                           onClick={() => {
                             trackUxMetric("navigation_click", {
                               source: "commandbar-recent-entity",
-                              entity_type: recent.entity_type
+                              entity_type: recent.entity_type,
                             });
                             // Re-hoist on click — re-opened items should stay
                             // fresh at position 0 (and refresh their TTL).
@@ -807,9 +887,9 @@ export const CommandBar = () => {
                                 kind: "entity",
                                 entity_type: recent.entity_type,
                                 entity_id: recent.entity_id,
-                                title: recent.title
+                                title: recent.title,
                               } as SearchItem,
-                              recent.path
+                              recent.path,
                             );
                             setOpen(false);
                           }}
@@ -829,7 +909,9 @@ export const CommandBar = () => {
               ) : null}
               {groupedForDisplay.map((section) => (
                 <div key={section.title}>
-                  <div className="px-2 pb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{section.title}</div>
+                  <div className="px-2 pb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    {section.title}
+                  </div>
                   <div className="space-y-1">
                     {section.items.map((item) => {
                       const navKey = `nav-${item.id}`;
@@ -853,21 +935,32 @@ export const CommandBar = () => {
                             aria-selected={selected}
                             onClick={() => {
                               rememberRecent(item.path);
-                              trackUxMetric("navigation_click", { source: "commandbar", path: item.path });
-                              trackUxMetric("time_to_first_action", { source: "commandbar" });
+                              trackUxMetric("navigation_click", {
+                                source: "commandbar",
+                                path: item.path,
+                              });
+                              trackUxMetric("time_to_first_action", {
+                                source: "commandbar",
+                              });
                               setOpen(false);
                             }}
                             className="min-w-0 flex-1"
                           >
                             <span className="font-medium">{item.label}</span>
                             {query.trim() ? (
-                              <span className="mt-0.5 block text-xs text-muted-foreground">{item.groupTitle}</span>
+                              <span className="mt-0.5 block text-xs text-muted-foreground">
+                                {item.groupTitle}
+                              </span>
                             ) : null}
                           </Link>
                           <button
                             type="button"
                             className="ml-2 rounded px-1 text-xs text-muted-foreground hover:text-foreground"
-                            aria-label={favoritePaths.includes(item.path) ? "Убрать из избранного" : "Добавить в избранное"}
+                            aria-label={
+                              favoritePaths.includes(item.path)
+                                ? "Убрать из избранного"
+                                : "Добавить в избранное"
+                            }
                             onClick={() => toggleFavorite(item.path)}
                           >
                             {favoritePaths.includes(item.path) ? "★" : "☆"}
@@ -882,7 +975,9 @@ export const CommandBar = () => {
               matchedCommands.length === 0 &&
               entityGroups.length === 0 &&
               !entitySearchLoading ? (
-                <p className="px-2 py-3 text-sm text-muted-foreground">Ничего не найдено</p>
+                <p className="px-2 py-3 text-sm text-muted-foreground">
+                  Ничего не найдено
+                </p>
               ) : null}
             </div>
           </div>

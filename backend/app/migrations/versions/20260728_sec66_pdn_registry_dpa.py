@@ -69,9 +69,7 @@ def upgrade() -> None:
         sa.Column("access_roles", sa.JSON(), nullable=False),
         sa.Column("recipients", sa.JSON(), nullable=False),
         sa.Column("storage_location", sa.String(64), nullable=False, server_default="RU"),
-        sa.Column(
-            "cross_border_transfer", sa.Boolean(), nullable=False, server_default=sa.false()
-        ),
+        sa.Column("cross_border_transfer", sa.Boolean(), nullable=False, server_default=sa.false()),
         sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.true()),
         sa.Column("review_at", sa.Date(), nullable=True),
         sa.Column("notes", sa.Text(), nullable=True),
@@ -95,9 +93,7 @@ def upgrade() -> None:
         sa.Column("signed_at", sa.Date(), nullable=True),
         sa.Column("valid_until", sa.Date(), nullable=True),
         sa.Column("status", sa.String(16), nullable=False, server_default="draft"),
-        sa.Column(
-            "subprocessing_allowed", sa.Boolean(), nullable=False, server_default=sa.false()
-        ),
+        sa.Column("subprocessing_allowed", sa.Boolean(), nullable=False, server_default=sa.false()),
         sa.Column("breach_notification_hours", sa.Integer(), nullable=True),
         sa.Column("covered_activity_codes", sa.JSON(), nullable=False),
         sa.Column("notes", sa.Text(), nullable=True),
@@ -132,7 +128,5 @@ def downgrade() -> None:
         "ix_pdn_processing_agreement_tenant_status", table_name="pdn_processing_agreement"
     )
     op.drop_table("pdn_processing_agreement")
-    op.drop_index(
-        "ix_pdn_processing_activity_tenant_active", table_name="pdn_processing_activity"
-    )
+    op.drop_index("ix_pdn_processing_activity_tenant_active", table_name="pdn_processing_activity")
     op.drop_table("pdn_processing_activity")

@@ -182,7 +182,11 @@ async def test_create_run_generates_pipeline_artifacts_and_history(
         "package_run.status_changed",
         "package_run.requirement_registered",
     }
-    assert {item["kind"] for item in payload["files"]} == {"zip", "pdf", "manifest"}
+    # Прогон без генерации отдаёт только состав комплекта. Раньше здесь были
+    # ещё «zip» и «pdf» — подделки: в хранилище лежала строка «ZIP bundle for …»
+    # с типом application/zip, и клиент скачивал файл, который не открывается.
+    # Настоящий архив прикрепляется выдачей (`POST /packages/publish`).
+    assert {item["kind"] for item in payload["files"]} == {"manifest"}
     assert payload["history"]["events_count"] >= 3
     assert payload["history"]["requirements_missing"] == 2
     assert payload["run"]["qc_report_json"]["pipeline_fingerprint"]
@@ -201,7 +205,7 @@ async def test_create_run_generates_pipeline_artifacts_and_history(
     )
     assert files_response.status_code == 200
     files = files_response.json()["files"]
-    assert {item["kind"] for item in files} == {"zip", "pdf", "manifest"}
+    assert {item["kind"] for item in files} == {"manifest"}
     assert all(item["signed_url"] for item in files)
 
     async with sessionmaker() as session:

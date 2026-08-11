@@ -11,12 +11,12 @@ from typing import Any, Mapping
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-# Fixed key for the global audit hash-chain advisory lock (arbitrary but stable).
-_AUDIT_CHAIN_LOCK_KEY = 6_120_2025
-
 from app.core.config import get_settings
 from app.core.tracing import get_trace_id
 from app.models.models import AuditLog
+
+# Fixed key for the global audit hash-chain advisory lock (arbitrary but stable).
+_AUDIT_CHAIN_LOCK_KEY = 6_120_2025
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -58,6 +58,46 @@ def _sanitize_mapping(payload: Mapping[str, Any] | None) -> dict[str, Any]:
         else:
             sanitized[key] = _normalize_value(value)
     return sanitized
+
+
+def _apply_on_behalf_of(payload: dict[str, Any]) -> dict[str, Any]:
+    """Проставить пометку «X от имени Y», если запрос идёт в контексте клиента.
+
+    Доп. №3, разд. 63.2: «каждое действие помечено X от имени Y». Пометка
+    ставится ЗДЕСЬ, а не на вызывающей стороне: у аудита сотни точек вызова, и
+    ручная пометка забудется ровно там, где она важнее всего, — молча, потому
+    что запись всё равно появится, просто без имени клиента.
+
+    Ключ принадлежит пометке целиком: чужое значение с тем же именем стирается,
+    иначе вызывающий код смог бы приписать действие несуществующему клиенту.
+    Значения не санируются — они не из ввода, а из проверенного контекста.
+    """
+
+    from app.domains.managed_clients.context import (  # noqa: PLC0415 - цикл импорта
+        ON_BEHALF_OF_KEY,
+        active_client_context,
+        on_behalf_of_stamp,
+    )
+
+    payload.pop(ON_BEHALF_OF_KEY, None)
+    context = active_client_context()
+    if context is not None:
+        payload[ON_BEHALF_OF_KEY] = on_behalf_of_stamp(context)
+    return payload
+
+
+def _hash_ts(value: datetime) -> str:
+    """Время для подписи записи аудита — всегда UTC и всегда со смещением.
+
+    Подпись считается один раз при записи, а сверяется годы спустя по значению
+    из БД. SQLite хранит время без часового пояса и отдаёт его «голым», поэтому
+    та же самая запись давала при сверке ДРУГУЮ строку — и проверка объявляла
+    подделкой весь журнал. Приведение к UTC делает подпись независимой от того,
+    как время хранится: у записей, сделанных на PostgreSQL, строка не меняется.
+    """
+
+    aware = value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
+    return aware.astimezone(timezone.utc).isoformat()
 
 
 def _mask_value(value: Any) -> Any:
@@ -285,13 +325,18 @@ class AuditService:
                 user_id=user_id,
                 ip=ip or "unknown",
             )
-        payload = _sanitize_mapping(details)
+        payload = _apply_on_behalf_of(_sanitize_mapping(details))
         safe_diff = _sanitize_mapping(changed_fields)
         correlation_id = request_id or get_trace_id(default="unknown")
         # Serialize concurrent appends (PG advisory lock) before reading the previous
         # hash, so two writers can't chain onto the same prev_hash and fork the chain.
         await self._lock_chain(tenant_id)
         prev_hash = await self._prev_hash(tenant_id)
+        # Одно и то же время в подписи и в строке. Раньше здесь было два
+        # отдельных ``datetime.now()`` — в хэш попадало одно значение, в
+        # колонку другое, и проверка цепочки объявляла ПОДДЕЛКОЙ любую запись,
+        # сделанную без явного ``when`` (то есть почти каждую).
+        event_when = when or datetime.now(tz=timezone.utc)
         hash_payload = {
             "tenant_id": tenant_id,
             "actor_type": actor_type,
@@ -302,7 +347,7 @@ class AuditService:
             "correlation_id": correlation_id,
             "diff": safe_diff,
             "meta": payload,
-            "ts": (when or datetime.now(tz=timezone.utc)).isoformat(),
+            "ts": _hash_ts(event_when),
         }
         row_hash = self._canonical_hash_payload(hash_payload, prev_hash)
         entry = AuditLog(
@@ -320,7 +365,7 @@ class AuditService:
             before_json=_sanitize_mapping(before_json),
             after_json=_sanitize_mapping(after_json),
             actor_role_codes=[str(item) for item in (actor_role_codes or [])],
-            when=when or datetime.now(tz=timezone.utc),
+            when=event_when,
             details=payload,
             resource_attrs=_sanitize_mapping(
                 payload.get("resource_attrs") if isinstance(payload, Mapping) else {}
@@ -382,7 +427,7 @@ class AuditService:
                 "correlation_id": row.correlation_id or row.request_id,
                 "diff": row.changed_fields or {},
                 "meta": row.details or {},
-                "ts": row.when.isoformat(),
+                "ts": _hash_ts(row.when),
             }
             expected = self._canonical_hash_payload(check_payload, prev)
             if row.prev_hash != prev or row.hash != expected:

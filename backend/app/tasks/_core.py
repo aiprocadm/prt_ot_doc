@@ -513,7 +513,10 @@ async def _dispatch_outbox_events(
                     # здесь расхождение осталось незамеченным, потому что до
                     # outbox.dispatch_all эту ветку никто не вызывал.
                     signature = hmac.new(
-                        (decrypt_secret(ep.secret) or "").encode("utf-8"),
+                        (
+                            decrypt_secret(ep.secret, tenant_id=str(ep.tenant_id or "") or None)
+                            or ""
+                        ).encode("utf-8"),
                         f"{ts}.".encode("utf-8") + raw_body,
                         hashlib.sha256,
                     ).hexdigest()

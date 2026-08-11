@@ -20,7 +20,9 @@ const FilesPage = () => {
 
   return (
     <div className="space-y-6">
-      <Breadcrumb items={[{ label: "Главная", to: ROUTES.DASHBOARD }, { label: "Файлы" }]} />
+      <Breadcrumb
+        items={[{ label: "Главная", to: ROUTES.DASHBOARD }, { label: "Файлы" }]}
+      />
       <FileUploader />
       <Card>
         <CardContent className="py-6">
@@ -37,8 +39,13 @@ const FilesPage = () => {
                 <Link
                   to="/documents"
                   onClick={() => {
-                    trackUxMetric("empty_state_to_action_rate", { source: "files", action: "open_documents" });
-                    trackUxMetric("time_to_first_action", { source: "files_empty_state" });
+                    trackUxMetric("empty_state_to_action_rate", {
+                      source: "files",
+                      action: "open_documents",
+                    });
+                    trackUxMetric("time_to_first_action", {
+                      source: "files_empty_state",
+                    });
                   }}
                 >
                   Перейти к документам

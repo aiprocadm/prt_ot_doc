@@ -1,4 +1,5 @@
 """Unit: СОУТ lifecycle guards + reassessment-due computation (P10-04)."""
+
 from __future__ import annotations
 
 from datetime import date, timedelta

@@ -14,20 +14,45 @@ const createIdempotencyKey = () =>
     ? crypto.randomUUID()
     : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
-const normalizePipelineState = (status: string): "queued" | "running" | "done" | "error" => {
+const normalizePipelineState = (
+  status: string,
+): "queued" | "running" | "done" | "error" => {
   const normalized = String(status).toLowerCase();
   if (normalized === "queued") return "queued";
-  if (normalized === "running" || normalized === "processing" || normalized === "pending") return "running";
-  if (normalized === "done" || normalized === "success" || normalized === "completed") return "done";
-  if (normalized === "error" || normalized === "failed" || normalized === "failure" || normalized === "canceled") return "error";
+  if (
+    normalized === "running" ||
+    normalized === "processing" ||
+    normalized === "pending"
+  )
+    return "running";
+  if (
+    normalized === "done" ||
+    normalized === "success" ||
+    normalized === "completed"
+  )
+    return "done";
+  if (
+    normalized === "error" ||
+    normalized === "failed" ||
+    normalized === "failure" ||
+    normalized === "canceled"
+  )
+    return "error";
   return "running";
 };
 
 export const DocumentCreateWizard = () => {
   const { items: companies, list: listCompanies } = useCompaniesStore();
-  const { generateDocument, getGenerationStatus, list: listDocuments } = useDocumentsStore();
+  const {
+    generateDocument,
+    getGenerationStatus,
+    list: listDocuments,
+  } = useDocumentsStore();
   const safeCompanies = Array.isArray(companies)
-    ? companies.filter((company): company is NonNullable<(typeof companies)[number]> => Boolean(company?.id && company?.name))
+    ? companies.filter(
+        (company): company is NonNullable<(typeof companies)[number]> =>
+          Boolean(company?.id && company?.name),
+      )
     : [];
 
   const [templateCode, setTemplateCode] = useState("");
@@ -35,7 +60,9 @@ export const DocumentCreateWizard = () => {
   const [companyId, setCompanyId] = useState("");
   const [idempotencyKey, setIdempotencyKey] = useState(createIdempotencyKey());
   const [taskId, setTaskId] = useState<string | null>(null);
-  const [pipelineState, setPipelineState] = useState<"idle" | "queued" | "running" | "done" | "error">("idle");
+  const [pipelineState, setPipelineState] = useState<
+    "idle" | "queued" | "running" | "done" | "error"
+  >("idle");
   const [pipelineError, setPipelineError] = useState<string | null>(null);
   const [requestId, setRequestId] = useState<string | null>(null);
 
@@ -44,7 +71,8 @@ export const DocumentCreateWizard = () => {
   }, [listCompanies]);
 
   useEffect(() => {
-    if (!taskId || (pipelineState !== "queued" && pipelineState !== "running")) return;
+    if (!taskId || (pipelineState !== "queued" && pipelineState !== "running"))
+      return;
     const timer = window.setInterval(async () => {
       try {
         const status = await getGenerationStatus(taskId);
@@ -63,12 +91,16 @@ export const DocumentCreateWizard = () => {
           window.clearInterval(timer);
         }
         if (normalized === "error") {
-          toast.error("Генерация завершилась ошибкой. Можно повторить с тем же ключом.");
+          toast.error(
+            "Генерация завершилась ошибкой. Можно повторить с тем же ключом.",
+          );
           window.clearInterval(timer);
         }
       } catch {
         setPipelineState("error");
-        setPipelineError("Не удалось получить статус генерации. Попробуйте обновить страницу.");
+        setPipelineError(
+          "Не удалось получить статус генерации. Попробуйте обновить страницу.",
+        );
         toast.error("Не удалось обновить статус генерации.");
         window.clearInterval(timer);
       }
@@ -78,8 +110,11 @@ export const DocumentCreateWizard = () => {
   }, [getGenerationStatus, listDocuments, pipelineState, taskId]);
 
   const canSubmit = useMemo(
-    () => Boolean(templateCode.trim()) && Boolean(companyId) && Number(templateVersion) > 0,
-    [companyId, templateCode, templateVersion]
+    () =>
+      Boolean(templateCode.trim()) &&
+      Boolean(companyId) &&
+      Number(templateVersion) > 0,
+    [companyId, templateCode, templateVersion],
   );
 
   return (
@@ -89,7 +124,11 @@ export const DocumentCreateWizard = () => {
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid gap-3 md:grid-cols-3">
-          <Input placeholder="Код шаблона" value={templateCode} onChange={(event) => setTemplateCode(event.target.value)} />
+          <Input
+            placeholder="Код шаблона"
+            value={templateCode}
+            onChange={(event) => setTemplateCode(event.target.value)}
+          />
           <Input
             placeholder="Версия шаблона"
             type="number"
@@ -113,12 +152,21 @@ export const DocumentCreateWizard = () => {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant="secondary">Idempotency-Key: {idempotencyKey}</Badge>
-          <Button type="button" variant="outline" size="sm" onClick={() => setIdempotencyKey(createIdempotencyKey())}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setIdempotencyKey(createIdempotencyKey())}
+          >
             Сгенерировать новый ключ
           </Button>
           <Button
             type="button"
-            disabled={!canSubmit || pipelineState === "queued" || pipelineState === "running"}
+            disabled={
+              !canSubmit ||
+              pipelineState === "queued" ||
+              pipelineState === "running"
+            }
             onClick={async () => {
               setPipelineState("queued");
               setPipelineError(null);
@@ -128,15 +176,20 @@ export const DocumentCreateWizard = () => {
                     template_code: templateCode.trim(),
                     template_version: Number(templateVersion),
                     company_id: companyId,
-                    data: {}
+                    data: {},
                   },
-                  idempotencyKey
+                  idempotencyKey,
                 );
                 setTaskId(task.task_id);
               } catch (error: unknown) {
                 setPipelineState("error");
-                const typed = error as { message?: string; details?: { request_id?: string } };
-                setPipelineError(typed.message ?? "Не удалось создать задачу генерации.");
+                const typed = error as {
+                  message?: string;
+                  details?: { request_id?: string };
+                };
+                setPipelineError(
+                  typed.message ?? "Не удалось создать задачу генерации.",
+                );
                 setRequestId(typed.details?.request_id ?? null);
               }
             }}
@@ -145,17 +198,33 @@ export const DocumentCreateWizard = () => {
           </Button>
         </div>
         <div className="flex items-center gap-2 text-sm">
-          {pipelineState === "idle" && <PlayCircle className="h-4 w-4 text-muted-foreground" />}
-          {pipelineState === "queued" && <Loader2 className="h-4 w-4 animate-spin" />}
-          {pipelineState === "running" && <Loader2 className="h-4 w-4 animate-spin" />}
-          {pipelineState === "done" && <CheckCircle2 className="h-4 w-4 text-green-600" />}
-          {pipelineState === "error" && <AlertCircle className="h-4 w-4 text-destructive" />}
+          {pipelineState === "idle" && (
+            <PlayCircle className="h-4 w-4 text-muted-foreground" />
+          )}
+          {pipelineState === "queued" && (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          )}
+          {pipelineState === "running" && (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          )}
+          {pipelineState === "done" && (
+            <CheckCircle2 className="h-4 w-4 text-green-600" />
+          )}
+          {pipelineState === "error" && (
+            <AlertCircle className="h-4 w-4 text-destructive" />
+          )}
           <span>
             Pipeline status: <strong>{pipelineState}</strong>
           </span>
-          {requestId && <span className="text-muted-foreground">request_id: {requestId}</span>}
+          {requestId && (
+            <span className="text-muted-foreground">
+              request_id: {requestId}
+            </span>
+          )}
         </div>
-        {pipelineError && <p className="text-sm text-destructive">{pipelineError}</p>}
+        {pipelineError && (
+          <p className="text-sm text-destructive">{pipelineError}</p>
+        )}
       </CardContent>
     </Card>
   );

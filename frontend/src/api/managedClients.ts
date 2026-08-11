@@ -123,7 +123,11 @@ export interface CrossClientCalendar {
 }
 
 export interface OverloadReason {
-  code: "too_many_clients" | "too_many_signals" | "too_many_overdue" | "critical_client";
+  code:
+    | "too_many_clients"
+    | "too_many_signals"
+    | "too_many_overdue"
+    | "critical_client";
   text: string;
 }
 
@@ -206,48 +210,63 @@ const silent = { silentApiErrorToast: true } as const;
 export const MANAGED_CLIENTS_DISABLED = "MANAGED_CLIENTS_DISABLED";
 
 export const managedClientsApi = {
-  async portfolio(params: { limit?: number; offset?: number } = {}): Promise<PortfolioPage> {
+  async portfolio(
+    params: { limit?: number; offset?: number } = {},
+  ): Promise<PortfolioPage> {
     const r = await apiClient.get<PortfolioPage>(base, {
       params: { limit: 100, offset: 0, ...params },
-      ...silent
+      ...silent,
     });
     return r.data;
   },
 
   async attention(): Promise<CrossClientAttention> {
-    return (await apiClient.get<CrossClientAttention>(`${base}/attention`, silent)).data;
+    return (
+      await apiClient.get<CrossClientAttention>(`${base}/attention`, silent)
+    ).data;
   },
 
   async calendar(
-    params: { days?: number; client_id?: string; kind?: DeadlineKind[] } = {}
+    params: { days?: number; client_id?: string; kind?: DeadlineKind[] } = {},
   ): Promise<CrossClientCalendar> {
     const r = await apiClient.get<CrossClientCalendar>(`${base}/calendar`, {
       params: { days: 30, ...params },
-      ...silent
+      ...silent,
     });
     return r.data;
   },
 
   async workload(days = 30): Promise<SpecialistWorkloadResponse> {
-    const r = await apiClient.get<SpecialistWorkloadResponse>(`${base}/workload`, {
-      params: { days },
-      ...silent
-    });
+    const r = await apiClient.get<SpecialistWorkloadResponse>(
+      `${base}/workload`,
+      {
+        params: { days },
+        ...silent,
+      },
+    );
     return r.data;
   },
 
   /** Клиенты, к которым У МЕНЯ есть доступ (основа переключателя). */
   async my(): Promise<MyManagedClientsResult> {
-    const r = await apiClient.get<{ items: MyManagedClient[]; scoped_sections?: string[] }>(
-      `${base}/my`,
-      silent
-    );
-    return { items: r.data.items, scopedSections: r.data.scoped_sections ?? [] };
+    const r = await apiClient.get<{
+      items: MyManagedClient[];
+      scoped_sections?: string[];
+    }>(`${base}/my`, silent);
+    return {
+      items: r.data.items,
+      scopedSections: r.data.scoped_sections ?? [],
+    };
   },
 
   /** Войти в контекст клиента: бэкенд проверит грант и запишет след в аудит. */
   async enterContext(clientId: string): Promise<ClientContextResponse> {
-    return (await apiClient.post<ClientContextResponse>(`${base}/${clientId}/context`, {})).data;
+    return (
+      await apiClient.post<ClientContextResponse>(
+        `${base}/${clientId}/context`,
+        {},
+      )
+    ).data;
   },
 
   /**
@@ -282,12 +301,13 @@ export const managedClientsApi = {
       contract_ends_at: string | null;
       responsible_person_id: string | null;
       notes: string | null;
-    }>
+    }>,
   ): Promise<ManagedClient> {
-    return (await apiClient.patch<ManagedClient>(`${base}/${id}`, payload)).data;
+    return (await apiClient.patch<ManagedClient>(`${base}/${id}`, payload))
+      .data;
   },
 
   async remove(id: string): Promise<void> {
     await apiClient.delete(`${base}/${id}`);
-  }
+  },
 };

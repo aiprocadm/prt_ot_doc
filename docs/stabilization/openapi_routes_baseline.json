@@ -26,6 +26,7 @@
     "DELETE /api/v1/managed-clients/context",
     "DELETE /api/v1/managed-clients/{mcid}",
     "DELETE /api/v1/managed-clients/{mcid}/access/{grant_id}",
+    "DELETE /api/v1/managed-clients/{mcid}/consents/{consent_id}",
     "DELETE /api/v1/medical/factors/{factor_id}",
     "DELETE /api/v1/medical/norms/{norm_id}",
     "DELETE /api/v1/medical/psychiatric/activity-types/{activity_id}",
@@ -35,6 +36,7 @@
     "DELETE /api/v1/package-profiles/{profile_id}",
     "DELETE /api/v1/persons/{person_id}",
     "DELETE /api/v1/pipelines/profiles/{profile_id}",
+    "DELETE /api/v1/platform/tenants/{tenant_id}/modules/{code}/trial",
     "DELETE /api/v1/ppe/budgets/{budget_id}",
     "DELETE /api/v1/ppe/items/{item_id}",
     "DELETE /api/v1/ppe/norms/{norm_id}",
@@ -256,6 +258,9 @@
     "GET /api/v1/managed-clients/workload",
     "GET /api/v1/managed-clients/{mcid}",
     "GET /api/v1/managed-clients/{mcid}/access",
+    "GET /api/v1/managed-clients/{mcid}/access-log",
+    "GET /api/v1/managed-clients/{mcid}/consents",
+    "GET /api/v1/managed-clients/{mcid}/transfers",
     "GET /api/v1/marketplace",
     "GET /api/v1/medical/contingent",
     "GET /api/v1/medical/contingent/register",
@@ -308,6 +313,7 @@
     "GET /api/v1/packs",
     "GET /api/v1/packs/download",
     "GET /api/v1/packs/scenarios",
+    "GET /api/v1/packs/scenarios/{scenario_code}/fields",
     "GET /api/v1/packs/{pack_id}/download-archive",
     "GET /api/v1/packs/{pack_run_id}/safety-summary",
     "GET /api/v1/permits",
@@ -320,6 +326,7 @@
     "GET /api/v1/pipelines/runs/{run_id}",
     "GET /api/v1/pipelines/runs/{run_id}/events",
     "GET /api/v1/platform/tenants",
+    "GET /api/v1/platform/tenants/modules",
     "GET /api/v1/platform/tenants/plans",
     "GET /api/v1/portal-requests",
     "GET /api/v1/portal-requests/{request_id}",
@@ -434,6 +441,7 @@
     "GET /api/v1/tenancy/context",
     "GET /api/v1/tenants",
     "GET /api/v1/tenants/me",
+    "GET /api/v1/tenants/me/modules",
     "GET /api/v1/tenants/{tenant_id}",
     "GET /api/v1/training/analytics/overview",
     "GET /api/v1/training/certificates",
@@ -732,7 +740,10 @@
     "POST /api/v1/machine-keys/{item_id}/rotate",
     "POST /api/v1/managed-clients",
     "POST /api/v1/managed-clients/{mcid}/access",
+    "POST /api/v1/managed-clients/{mcid}/consents",
     "POST /api/v1/managed-clients/{mcid}/context",
+    "POST /api/v1/managed-clients/{mcid}/convert-to-dedicated",
+    "POST /api/v1/managed-clients/{mcid}/transfer",
     "POST /api/v1/marketplace",
     "POST /api/v1/marketplace/{item_id}/install",
     "POST /api/v1/medical/contingent/generate-referrals",
@@ -755,15 +766,18 @@
     "POST /api/v1/pack-runs",
     "POST /api/v1/pack-runs/{run_id}:cancel",
     "POST /api/v1/pack-runs/{run_id}:retry-failed",
+    "POST /api/v1/pack-runs:preview",
     "POST /api/v1/package-presets",
     "POST /api/v1/package-presets/{preset_id}/items",
     "POST /api/v1/package-presets/{preset_id}:preview-mapping",
     "POST /api/v1/package-presets/{preset_id}:upload-source",
     "POST /api/v1/package-presets/{preset_id}:validate",
     "POST /api/v1/package-profiles",
+    "POST /api/v1/packages/publish",
     "POST /api/v1/packages/runs",
     "POST /api/v1/packages/runs/{run_id}/portal-link",
     "POST /api/v1/packs/generate",
+    "POST /api/v1/packs/preview",
     "POST /api/v1/packs/run",
     "POST /api/v1/packs/scenarios/{scenario_code}",
     "POST /api/v1/permits",
@@ -780,6 +794,7 @@
     "POST /api/v1/pipelines/runs:bulk",
     "POST /api/v1/pipelines/{template_id}/run",
     "POST /api/v1/platform/tenants",
+    "POST /api/v1/platform/tenants/{tenant_id}/modules/{code}/trial",
     "POST /api/v1/portal-requests/{request_id}/messages",
     "POST /api/v1/portal/packages/{run_id}/tickets",
     "POST /api/v1/portal/session",
@@ -1032,6 +1047,7 @@
     "check_batch_quality_api_v1_imports_batches__batch_id__quality_check_post",
     "check_data_quality_api_v1_data_quality_check_get",
     "check_document_quality_api_v1_documents_quality_check_post",
+    "client_access_log_api_v1_managed_clients__mcid__access_log_get",
     "client_delivery_dashboard_api_v1_analytics_dashboard_client_delivery_get",
     "clone_methodology_api_v1_risk_advanced_methodologies__item_id__clone_post",
     "close_endpoint_api_v1_work_permits__wp_id__close_post",
@@ -1049,6 +1065,7 @@
     "confirm_pep_request_api_v1_sign_pep_requests__request_id__confirm_post",
     "contractor_compliance_summary_api_v1_contractors_compliance_summary_get",
     "convert_file_to_pdf_api_v1_files__file_id__convert_pdf_post",
+    "convert_to_dedicated_api_v1_managed_clients__mcid__convert_to_dedicated_post",
     "create_action_api_v1_corrective_actions_post",
     "create_activity_type_api_v1_medical_psychiatric_activity_types_post",
     "create_admission_endpoint_api_v1_work_permits__wp_id__admissions_post",
@@ -1381,6 +1398,7 @@
     "get_medical_summary_api_v1_medical_summary_get",
     "get_meeting_api_v1_committees_meetings__mid__get",
     "get_methodology_api_v1_risk_methodologies__methodology_id__get",
+    "get_my_modules_endpoint_api_v1_tenants_me_modules_get",
     "get_my_tenant_endpoint_api_v1_tenants_me_get",
     "get_named_list_api_v1_medical_named_list_get",
     "get_norm_api_v1_ppe_norms__norm_id__get",
@@ -1390,6 +1408,7 @@
     "get_operational_dashboard_api_v1_operational_dashboard_get",
     "get_order_api_v1_orders__order_id__get",
     "get_outbox_entry_api_v1_admin_outbox__outbox_id__get",
+    "get_pack_scenario_fields_api_v1_packs_scenarios__scenario_code__fields_get",
     "get_pdf_run_api_v1_files_pdf_runs__pdf_run_id__get",
     "get_permit_api_v1_permits__permit_id__get",
     "get_person_endpoint_api_v1_persons__person_id__get",
@@ -1441,6 +1460,7 @@
     "get_workplace_api_v1_workplaces__workplace_id__get",
     "global_search_api_v1_search_get",
     "grant_access_api_v1_managed_clients__mcid__access_post",
+    "grant_module_trial_endpoint_api_v1_platform_tenants__tenant_id__modules__code__trial_post",
     "grant_subject_consent_api_v1_privacy_subjects__person_id__consents_post",
     "history_api_v1_client_portal_history_get",
     "import_apply_api_v1_sout__cid__import_apply_post",
@@ -1488,6 +1508,8 @@
     "list_campaigns_api_v1_sout_get",
     "list_certificates_api_v1_training_certificates_get",
     "list_class_history_api_v1_sout_workplaces__wid__class_history_get",
+    "list_client_consents_api_v1_managed_clients__mcid__consents_get",
+    "list_client_transfers_api_v1_managed_clients__mcid__transfers_get",
     "list_committees_api_v1_committees_get",
     "list_companies_endpoint_api_v1_companies_get",
     "list_contractor_documents_api_v1_contractors_documents_get",
@@ -1550,6 +1572,7 @@
     "list_members_api_v1_committees__cid__members_get",
     "list_methodologies_api_v1_risk_advanced_methodologies_get",
     "list_methodologies_api_v1_risk_methodologies_get",
+    "list_module_registry_api_v1_platform_tenants_modules_get",
     "list_norms_api_v1_ppe_norms_get",
     "list_notifications_api_v1_notifications_get",
     "list_npa_api_v1_npa_get",
@@ -1688,6 +1711,8 @@
     "prescriptions_summary_api_v1_prescriptions_summary_get",
     "preview_branding_api_v1_branding_preview_post",
     "preview_mapping_api_v1_package_presets__preset_id__preview_mapping_post",
+    "preview_pack_api_v1_packs_preview_post",
+    "preview_pack_run_api_v1_pack_runs_preview_post",
     "preview_report_api_v1_report_builder_preview_post",
     "preview_template_version_api_v1_templates__template_id__versions__version_id__preview_post",
     "print_contingent_register_api_v1_medical_contingent_register_print_get",
@@ -1710,6 +1735,7 @@
     "public_training_api_v1_public_training_get",
     "public_webhooks_api_v1_public_integrations_webhooks_get",
     "publish_marketplace_item_api_v1_marketplace_post",
+    "publish_package_api_v1_packages_publish_post",
     "publish_version_api_v1_workflow_versions__version_id__publish_post",
     "purge_plan_api_v1_offboarding_purge_plan_get",
     "purge_tenant_data_api_v1_offboarding_purge_post",
@@ -1726,6 +1752,7 @@
     "recalculate_map_api_v1_risk_advanced_maps__map_id__recalculate_post",
     "recompute_api_v1_compliance_deadlines_recompute_post",
     "recompute_dashboard_api_v1_analytics_recompute_post",
+    "record_client_consent_api_v1_managed_clients__mcid__consents_post",
     "record_closing_endpoint_api_v1_work_permits__wp_id__closing_post",
     "refresh_edo_status_api_v1_edo_messages__message_id__refresh_status_post",
     "refresh_sign_status_api_v1_sign_requests__request_id__refresh_status_post",
@@ -1764,7 +1791,9 @@
     "revoke_access_api_v1_managed_clients__mcid__access__grant_id__delete",
     "revoke_api_token_api_v1_api_tokens__token_id__delete",
     "revoke_certificate_api_v1_training_certificates__item_id__revoke_post",
+    "revoke_client_consent_api_v1_managed_clients__mcid__consents__consent_id__delete",
     "revoke_machine_key_api_v1_machine_keys__item_id__revoke_post",
+    "revoke_module_trial_endpoint_api_v1_platform_tenants__tenant_id__modules__code__trial_delete",
     "revoke_permit_endpoint_api_v1_permits__permit_id__revoke_post",
     "risk_summary_api_v1_risk_advanced_maps__map_id__summary_get",
     "role_workspace_summary_api_v1_workspace_role_summary_get",
@@ -1824,6 +1853,7 @@
     "training_analytics_overview_api_v1_training_analytics_overview_get",
     "training_dashboard_api_v1_analytics_dashboard_training_get",
     "trainings_trends_api_v1_analytics_trends_trainings_get",
+    "transfer_client_data_api_v1_managed_clients__mcid__transfer_post",
     "transition_prescription_api_v1_prescriptions__prescription_id__transition_post",
     "transition_referral_api_v1_medical_referrals__referral_id__transition_post",
     "update_activity_type_api_v1_medical_psychiatric_activity_types__activity_id__patch",
@@ -2028,6 +2058,8 @@
     "ChannelSettingsIn",
     "ChannelSettingsOut",
     "ClassHistoryRead",
+    "ClientAccessLogEntry",
+    "ClientAccessLogPage",
     "ClientAttentionRead",
     "ClientContextRead",
     "CommitteeCreate",
@@ -2044,6 +2076,9 @@
     "CompleteUploadRequest",
     "ComplianceStatus",
     "ConditionResult",
+    "ConsentCreate",
+    "ConsentRead",
+    "ConsentRevoke",
     "ContingentItem",
     "ContingentPage",
     "ContingentRegisterPage",
@@ -2061,9 +2096,11 @@
     "ContractorRegistryCreate",
     "ContractorRegistryPatch",
     "ControlIn",
+    "ConversionRead",
     "ConvertPdfAccepted",
     "ConvertPdfOptions",
     "ConvertPdfRequest",
+    "ConvertToDedicated",
     "CorrectiveActionIn",
     "CorrectiveActionVerifyIn",
     "CrossClientAttentionResponse",
@@ -2310,8 +2347,14 @@
     "MethodologyIn",
     "MethodologyOut",
     "MethodologyUpdate",
+    "ModuleRegistryEntry",
+    "ModuleRegistryResponse",
+    "ModuleTrialGrant",
+    "ModuleTrialResult",
     "MyManagedClient",
     "MyManagedClientsResponse",
+    "MyModuleEntry",
+    "MyModulesResponse",
     "NamedListPage",
     "NamedListRow",
     "NewFileVersionRequest",
@@ -2406,15 +2449,21 @@
     "PackListMeta",
     "PackListResponse",
     "PackNamingConfig",
+    "PackPreviewDocument",
+    "PackPreviewProblem",
+    "PackPreviewResponse",
     "PackRunAccepted",
     "PackRunCreate",
     "PackRunItemRead",
     "PackRunLogRead",
+    "PackRunPreviewRead",
     "PackRunRead",
     "PackRunRequest",
     "PackRunResponse",
     "PackRunTask",
     "PackScenarioDescriptor",
+    "PackScenarioField",
+    "PackScenarioFieldsResponse",
     "PackScenarioListResponse",
     "PackScenarioTemplate",
     "PackagePresetItemCreate",
@@ -2424,6 +2473,7 @@
     "PackageProfileCreate",
     "PackageProfilePatch",
     "PackageProfileRead",
+    "PackagePublishRequest",
     "PackageRunCreate",
     "PackageTicketCreate",
     "PdfRunRead",
@@ -2518,6 +2568,7 @@
     "QualityReport",
     "QueueSummaryResponse",
     "ReadinessBlocker",
+    "ReadinessProblemRead",
     "ReadinessReportRead",
     "RefreshRequest",
     "ReimbursementCreate",
@@ -2649,6 +2700,7 @@
     "TrainingSessionCreate",
     "TrainingSessionRead",
     "TrainingSessionStatus",
+    "TransferRead",
     "TriggerPage",
     "TriggerRead",
     "UploadCompleteRequest",
@@ -3669,6 +3721,19 @@
       "note": "null|string",
       "is_worsening": "boolean"
     },
+    "ClientAccessLogEntry": {
+      "at": "string",
+      "actor_user_id": "null|string",
+      "actor_email": "null|string",
+      "method": "null|string",
+      "path": "null|string",
+      "ip": "null|string",
+      "correlation_id": "null|string"
+    },
+    "ClientAccessLogPage": {
+      "items": "array",
+      "total": "integer"
+    },
     "ClientAttentionRead": {
       "client_id": "string",
       "client_name": "string",
@@ -3836,6 +3901,25 @@
       "actual": "any",
       "matched": "boolean"
     },
+    "ConsentCreate": {
+      "document_ref": "string",
+      "expires_at": "null|string"
+    },
+    "ConsentRead": {
+      "id": "string",
+      "managed_client_id": "string",
+      "document_ref": "string",
+      "granted_by_user_id": "null|string",
+      "granted_at": "string",
+      "expires_at": "null|string",
+      "revoked_at": "null|string",
+      "revoked_by_user_id": "null|string",
+      "revoke_reason": "null|string",
+      "active": "boolean"
+    },
+    "ConsentRevoke": {
+      "reason": "null|string"
+    },
     "ContingentItem": {
       "person_id": "string",
       "exam_kind": "MedicalExamKind",
@@ -3975,6 +4059,12 @@
       "type": "string",
       "description": "null|string"
     },
+    "ConversionRead": {
+      "client": "ManagedClientRead",
+      "tenant_slug": "string",
+      "tenant_created": "array",
+      "history_company_id": "null|string"
+    },
     "ConvertPdfAccepted": {
       "job_id": "string",
       "pdf_run_id": "string",
@@ -3988,6 +4078,12 @@
     "ConvertPdfRequest": {
       "mode": "string",
       "options": "ConvertPdfOptions"
+    },
+    "ConvertToDedicated": {
+      "tenant_slug": "string",
+      "tenant_name": "null|string",
+      "owner_email": "string",
+      "owner_password": "string"
     },
     "CorrectiveActionIn": {
       "source_type": "string",
@@ -5673,6 +5769,26 @@
       "likelihood_scale": "array|null",
       "bands": "array|null"
     },
+    "ModuleRegistryEntry": {
+      "code": "string",
+      "title": "string",
+      "category": "string",
+      "is_core": "boolean",
+      "depends_on": "array",
+      "ui_routes": "array",
+      "permissions": "array"
+    },
+    "ModuleRegistryResponse": {
+      "modules": "array"
+    },
+    "ModuleTrialGrant": {
+      "days": "integer"
+    },
+    "ModuleTrialResult": {
+      "code": "string",
+      "title": "string",
+      "trial_until": "null|string"
+    },
     "MyManagedClient": {
       "client_id": "string",
       "client_name": "string",
@@ -5683,6 +5799,18 @@
     "MyManagedClientsResponse": {
       "items": "array",
       "scoped_sections": "array"
+    },
+    "MyModuleEntry": {
+      "code": "string",
+      "title": "string",
+      "category": "string",
+      "is_core": "boolean",
+      "enabled": "boolean",
+      "trial_until": "null|string",
+      "ui_routes": "array"
+    },
+    "MyModulesResponse": {
+      "modules": "array"
     },
     "NamedListPage": {
       "items": "array",
@@ -6352,6 +6480,25 @@
       "reference_date": "null|string",
       "flags": "array"
     },
+    "PackPreviewDocument": {
+      "template_name": "string",
+      "person_name": "null|string"
+    },
+    "PackPreviewProblem": {
+      "code": "string",
+      "message": "string",
+      "blocking": "boolean",
+      "rows_total": "integer"
+    },
+    "PackPreviewResponse": {
+      "ready": "boolean",
+      "score": "integer",
+      "documents_total": "integer",
+      "persons_total": "integer",
+      "persons_ready": "integer",
+      "documents": "array",
+      "problems": "array"
+    },
     "PackRunAccepted": {
       "pack_run_id": "string",
       "status": "string"
@@ -6378,6 +6525,15 @@
       "message": "string",
       "payload": "null|object",
       "created_at": "string"
+    },
+    "PackRunPreviewRead": {
+      "ready": "boolean",
+      "score": "integer",
+      "documents_total": "integer",
+      "rows_total": "integer",
+      "rows_selected": "integer",
+      "rows_ready": "integer",
+      "problems": "array"
     },
     "PackRunRead": {
       "id": "string",
@@ -6418,7 +6574,20 @@
       "scenario": "string",
       "module": "string",
       "scenario_type": "string",
+      "discipline": "null|string",
       "templates": "array"
+    },
+    "PackScenarioField": {
+      "name": "string",
+      "label": "string",
+      "required": "boolean"
+    },
+    "PackScenarioFieldsResponse": {
+      "ok": "boolean",
+      "scenario_code": "string",
+      "scenario_name": "string",
+      "fields": "array",
+      "known_from_client": "array"
     },
     "PackScenarioListResponse": {
       "ok": "boolean",
@@ -6496,6 +6665,11 @@
       "pipeline_steps_json": "array",
       "concurrency_limit": "integer|null",
       "status": "string"
+    },
+    "PackagePublishRequest": {
+      "preset_code": "string",
+      "zip_storage_key": "string",
+      "client_company_id": "null|string"
     },
     "PackageRunCreate": {
       "preset_code": "string",
@@ -7233,6 +7407,13 @@
       "reason": "string",
       "entity_type": "string",
       "action_hint": "string"
+    },
+    "ReadinessProblemRead": {
+      "code": "string",
+      "message": "string",
+      "blocking": "boolean",
+      "rows": "array",
+      "rows_total": "integer"
     },
     "ReadinessReportRead": {
       "ok": "boolean",
@@ -7995,7 +8176,8 @@
     "TenantFeatureRead": {
       "code": "string",
       "title": "string",
-      "on": "boolean"
+      "on": "boolean",
+      "trial_until": "null|string"
     },
     "TenantFleetItem": {
       "tenant": "TenantRead",
@@ -8175,6 +8357,16 @@
       "notes": "null|string",
       "created_at": "string",
       "updated_at": "string"
+    },
+    "TransferRead": {
+      "id": "string",
+      "managed_client_id": "string",
+      "target_tenant_slug": "string",
+      "status": "string",
+      "started_at": "string",
+      "finished_at": "null|string",
+      "started_by_user_id": "null|string",
+      "counts": "object"
     },
     "TriggerPage": {
       "items": "array",

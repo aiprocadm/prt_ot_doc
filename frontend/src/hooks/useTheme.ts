@@ -1,5 +1,8 @@
 import { useEffect, useState } from "react";
-import { localStorageGetItem, localStorageSetItem } from "@/utils/browserStorage";
+import {
+  localStorageGetItem,
+  localStorageSetItem,
+} from "@/utils/browserStorage";
 
 type Theme = "light" | "dark";
 const STORAGE_KEY = "prt-theme";
@@ -7,7 +10,9 @@ const STORAGE_KEY = "prt-theme";
 const detectPreferredTheme = (): Theme => {
   if (typeof window === "undefined") return "light";
   try {
-    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    return window.matchMedia("(prefers-color-scheme: dark)").matches
+      ? "dark"
+      : "light";
   } catch {
     return "light";
   }
@@ -27,7 +32,8 @@ export const useTheme = (): [Theme, (theme: Theme) => void, () => void] => {
     localStorageSetItem(STORAGE_KEY, theme);
   }, [theme]);
 
-  const toggle = () => setTheme((prev) => (prev === "light" ? "dark" : "light"));
+  const toggle = () =>
+    setTheme((prev) => (prev === "light" ? "dark" : "light"));
 
   return [theme, setTheme, toggle];
 };

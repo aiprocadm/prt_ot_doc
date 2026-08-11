@@ -19,7 +19,14 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import type { ApiError } from "@/types/dto/common";
 import { formatDate } from "@/utils/datetime";
 
@@ -66,7 +73,9 @@ const CampaignList = ({ selected, onSelect }: CampaignListProps) => {
       const page = await soutApi.list();
       setItems(page.items);
     } catch (err) {
-      setError((err as ApiError) ?? { message: "Не удалось загрузить кампании СОУТ" });
+      setError(
+        (err as ApiError) ?? { message: "Не удалось загрузить кампании СОУТ" },
+      );
     } finally {
       setLoading(false);
     }
@@ -85,7 +94,10 @@ const CampaignList = ({ selected, onSelect }: CampaignListProps) => {
         <ErrorState error={error ?? undefined} onRetry={load} />
         {loading ? <LoadingScreen label="Загрузка кампаний" /> : null}
         {!loading && !error && items.length === 0 ? (
-          <EmptyState title="Нет данных" description="Кампании СОУТ ещё не созданы." />
+          <EmptyState
+            title="Нет данных"
+            description="Кампании СОУТ ещё не созданы."
+          />
         ) : null}
         {!loading && !error && items.length > 0 ? (
           <Table>
@@ -104,7 +116,9 @@ const CampaignList = ({ selected, onSelect }: CampaignListProps) => {
                   onClick={() => onSelect(c)}
                 >
                   <TableCell className="font-medium">{c.name}</TableCell>
-                  <TableCell className="text-muted-foreground">{c.report_number ?? "—"}</TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {c.report_number ?? "—"}
+                  </TableCell>
                   <TableCell>
                     <Badge variant="outline">{c.status}</Badge>
                   </TableCell>
@@ -139,7 +153,11 @@ const ClassHistory = ({ workplaceId }: ClassHistoryProps) => {
       try {
         setEntries(await soutApi.listClassHistory(workplaceId));
       } catch (err) {
-        setError((err as ApiError) ?? { message: "Не удалось загрузить историю класса" });
+        setError(
+          (err as ApiError) ?? {
+            message: "Не удалось загрузить историю класса",
+          },
+        );
       } finally {
         setLoading(false);
       }
@@ -157,16 +175,23 @@ const ClassHistory = ({ workplaceId }: ClassHistoryProps) => {
       </button>
       {open ? (
         <div className="space-y-1">
-          <ErrorState error={error ?? undefined} onRetry={() => void toggle()} />
+          <ErrorState
+            error={error ?? undefined}
+            onRetry={() => void toggle()}
+          />
           {loading ? <LoadingScreen label="Загрузка истории" /> : null}
           {!loading && !error && entries !== null && entries.length === 0 ? (
-            <p className="text-xs text-muted-foreground">Изменений класса не зафиксировано.</p>
+            <p className="text-xs text-muted-foreground">
+              Изменений класса не зафиксировано.
+            </p>
           ) : null}
           {!loading && !error && entries !== null && entries.length > 0 ? (
             <ul className="space-y-1 text-xs">
               {entries.map((e) => (
                 <li key={e.id} className="flex items-center gap-2">
-                  <span className="text-muted-foreground">{formatDate(e.changed_at)}</span>
+                  <span className="text-muted-foreground">
+                    {formatDate(e.changed_at)}
+                  </span>
                   <span>
                     {classLabel(e.old_class)} → {classLabel(e.new_class)}
                   </span>
@@ -206,14 +231,19 @@ const NormSuggestionsSection = ({ workplaceId }: NormSuggestionsProps) => {
       try {
         setData(await soutApi.getNormSuggestions(workplaceId));
       } catch (err) {
-        setError((err as ApiError) ?? { message: "Не удалось загрузить предложения норм" });
+        setError(
+          (err as ApiError) ?? {
+            message: "Не удалось загрузить предложения норм",
+          },
+        );
       } finally {
         setLoading(false);
       }
     }
   };
 
-  const isEmpty = data !== null && data.ppe.length === 0 && data.medical.length === 0;
+  const isEmpty =
+    data !== null && data.ppe.length === 0 && data.medical.length === 0;
 
   return (
     <div className="space-y-2">
@@ -226,18 +256,28 @@ const NormSuggestionsSection = ({ workplaceId }: NormSuggestionsProps) => {
       </button>
       {open ? (
         <div className="space-y-2">
-          <ErrorState error={error ?? undefined} onRetry={() => void toggle()} />
+          <ErrorState
+            error={error ?? undefined}
+            onRetry={() => void toggle()}
+          />
           {loading ? <LoadingScreen label="Загрузка предложений" /> : null}
           {!loading && !error && isEmpty ? (
-            <p className="text-xs text-muted-foreground">Предложений норм нет.</p>
+            <p className="text-xs text-muted-foreground">
+              Предложений норм нет.
+            </p>
           ) : null}
           {!loading && !error && data !== null && data.ppe.length > 0 ? (
             <div className="space-y-1">
               <p className="text-xs font-medium">СИЗ</p>
               <ul className="space-y-1 text-xs">
                 {data.ppe.map((p) => (
-                  <li key={`ppe-${p.hazard_id}`} className="flex flex-wrap items-center gap-2">
-                    <span className="font-medium">{p.hazard_title || p.factor_name}</span>
+                  <li
+                    key={`ppe-${p.hazard_id}`}
+                    className="flex flex-wrap items-center gap-2"
+                  >
+                    <span className="font-medium">
+                      {p.hazard_title || p.factor_name}
+                    </span>
                     <span className="text-muted-foreground">{p.reason}</span>
                   </li>
                 ))}
@@ -249,9 +289,14 @@ const NormSuggestionsSection = ({ workplaceId }: NormSuggestionsProps) => {
               <p className="text-xs font-medium">Медосмотры</p>
               <ul className="space-y-1 text-xs">
                 {data.medical.map((m) => (
-                  <li key={`med-${m.exam_kind}`} className="flex flex-wrap items-center gap-2">
+                  <li
+                    key={`med-${m.exam_kind}`}
+                    className="flex flex-wrap items-center gap-2"
+                  >
                     <span className="font-medium">{m.exam_kind}</span>
-                    <span className="text-muted-foreground">{m.periodicity_months} мес</span>
+                    <span className="text-muted-foreground">
+                      {m.periodicity_months} мес
+                    </span>
                     <span className="text-muted-foreground">{m.reason}</span>
                   </li>
                 ))}
@@ -308,7 +353,9 @@ export const CascadeSection = ({ workplaceId }: CascadeSectionProps) => {
     setDone(null);
     try {
       const res = await soutApi.applyCascade(workplaceId);
-      setDone(`Создано: ${res.created}, переклассифицировано: ${res.reclassified}, конфликтов: ${res.conflicts}`);
+      setDone(
+        `Создано: ${res.created}, переклассифицировано: ${res.reclassified}, конфликтов: ${res.conflicts}`,
+      );
       await loadPreview();
     } catch (err) {
       setError((err as ApiError) ?? { message: "Не удалось применить каскад" });
@@ -318,7 +365,11 @@ export const CascadeSection = ({ workplaceId }: CascadeSectionProps) => {
   };
 
   const opLabel = (op: string) =>
-    op === "create" ? "создать" : op === "reclass" ? "проставить класс" : "конфликт";
+    op === "create"
+      ? "создать"
+      : op === "reclass"
+        ? "проставить класс"
+        : "конфликт";
 
   return (
     <div className="space-y-2">
@@ -331,29 +382,43 @@ export const CascadeSection = ({ workplaceId }: CascadeSectionProps) => {
       </button>
       {open ? (
         <div className="space-y-2">
-          <ErrorState error={error ?? undefined} onRetry={() => void loadPreview()} />
+          <ErrorState
+            error={error ?? undefined}
+            onRetry={() => void loadPreview()}
+          />
           {loading ? <LoadingScreen label="Загрузка каскада" /> : null}
           {!loading && !error && data !== null ? (
             <div className="space-y-2">
               <p className="text-xs text-muted-foreground">
-                Класс СОУТ: <span className="font-medium">{data.assessed_class ?? "—"}</span>
+                Класс СОУТ:{" "}
+                <span className="font-medium">
+                  {data.assessed_class ?? "—"}
+                </span>
               </p>
               {data.medical.length > 0 ? (
                 <ul className="space-y-1 text-xs">
                   {data.medical.map((m) => (
-                    <li key={`casc-${m.exam_kind}`} className="flex flex-wrap items-center gap-2">
+                    <li
+                      key={`casc-${m.exam_kind}`}
+                      className="flex flex-wrap items-center gap-2"
+                    >
                       <span className="font-medium">{m.exam_kind}</span>
-                      <span className="rounded bg-muted px-1">{opLabel(m.op)}</span>
+                      <span className="rounded bg-muted px-1">
+                        {opLabel(m.op)}
+                      </span>
                       <span className="text-muted-foreground">{m.reason}</span>
                     </li>
                   ))}
                 </ul>
               ) : (
-                <p className="text-xs text-muted-foreground">Изменений мед-норм нет.</p>
+                <p className="text-xs text-muted-foreground">
+                  Изменений мед-норм нет.
+                </p>
               )}
               {data.ppe_advisory.length > 0 ? (
                 <p className="text-xs italic text-muted-foreground">
-                  СИЗ: {data.ppe_advisory.length} вредных фактор(ов) без норм — заведите вручную.
+                  СИЗ: {data.ppe_advisory.length} вредных фактор(ов) без норм —
+                  заведите вручную.
                 </p>
               ) : null}
               <button
@@ -410,7 +475,12 @@ const LinkInput = ({ label, buttonLabel, onSubmit }: LinkInputProps) => {
           placeholder={label}
           className="h-8 max-w-xs text-xs"
         />
-        <Button type="button" size="sm" disabled={busy} onClick={() => void submit()}>
+        <Button
+          type="button"
+          size="sm"
+          disabled={busy}
+          onClick={() => void submit()}
+        >
           {buttonLabel}
         </Button>
       </div>
@@ -429,9 +499,13 @@ const ReportPanel = ({ campaign }: ReportPanelProps) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
   const [report, setReport] = useState<SoutCampaignReport | null>(null);
-  const [declaration, setDeclaration] = useState<SoutDeclarationPreview | null>(null);
+  const [declaration, setDeclaration] = useState<SoutDeclarationPreview | null>(
+    null,
+  );
   const [importFile, setImportFile] = useState<File | null>(null);
-  const [importPreview, setImportPreview] = useState<SoutImportPreview | null>(null);
+  const [importPreview, setImportPreview] = useState<SoutImportPreview | null>(
+    null,
+  );
   const [importBusy, setImportBusy] = useState(false);
   const importInputRef = useRef<HTMLInputElement>(null);
 
@@ -441,10 +515,13 @@ const ReportPanel = ({ campaign }: ReportPanelProps) => {
     try {
       setImportPreview(await soutApi.previewImport(campaign.id, importFile));
     } catch (e: unknown) {
-      const status = (e as { response?: { status?: number } })?.response?.status;
-      toast.error(status === 413
-        ? "Файл слишком большой"
-        : "Не удалось разобрать файл (проверьте формат: CSV/XLSX/XML)");
+      const status = (e as { response?: { status?: number } })?.response
+        ?.status;
+      toast.error(
+        status === 413
+          ? "Файл слишком большой"
+          : "Не удалось разобрать файл (проверьте формат: CSV/XLSX/XML)",
+      );
       setImportPreview(null);
     } finally {
       setImportBusy(false);
@@ -456,13 +533,20 @@ const ReportPanel = ({ campaign }: ReportPanelProps) => {
     setImportBusy(true);
     try {
       const res = await soutApi.applyImport(campaign.id, importFile);
-      toast.success(`Импорт применён: создано ${res.created}, обновлено ${res.updated}, пропущено ${res.skipped}`);
+      toast.success(
+        `Импорт применён: создано ${res.created}, обновлено ${res.updated}, пропущено ${res.skipped}`,
+      );
       setImportPreview(null);
       setImportFile(null);
       if (importInputRef.current) importInputRef.current.value = "";
     } catch (e: unknown) {
-      const status = (e as { response?: { status?: number } })?.response?.status;
-      toast.error(status === 409 ? "Кампания закрыта для импорта" : "Исправьте ошибки в файле и повторите");
+      const status = (e as { response?: { status?: number } })?.response
+        ?.status;
+      toast.error(
+        status === 409
+          ? "Кампания закрыта для импорта"
+          : "Исправьте ошибки в файле и повторите",
+      );
     } finally {
       setImportBusy(false);
     }
@@ -472,16 +556,23 @@ const ReportPanel = ({ campaign }: ReportPanelProps) => {
     let active = true;
     void soutApi
       .getDeclaration(campaign.id)
-      .then((d) => { if (active) setDeclaration(d); })
-      .catch(() => { if (active) setDeclaration(null); });
-    return () => { active = false; };
+      .then((d) => {
+        if (active) setDeclaration(d);
+      })
+      .catch(() => {
+        if (active) setDeclaration(null);
+      });
+    return () => {
+      active = false;
+    };
   }, [campaign.id]);
 
   const handleDeclarationDownload = async (fmt: "docx" | "pdf") => {
     try {
       await soutApi.downloadDeclaration(campaign.id, fmt, campaign.name);
     } catch (e: unknown) {
-      const status = (e as { response?: { status?: number } })?.response?.status;
+      const status = (e as { response?: { status?: number } })?.response
+        ?.status;
       toast.error(
         fmt === "pdf" && status === 503
           ? "PDF-конвертер недоступен, скачайте DOCX"
@@ -497,7 +588,9 @@ const ReportPanel = ({ campaign }: ReportPanelProps) => {
       const data = await soutApi.getReport(campaign.id);
       setReport(data);
     } catch (err) {
-      setError((err as ApiError) ?? { message: "Не удалось загрузить отчёт СОУТ" });
+      setError(
+        (err as ApiError) ?? { message: "Не удалось загрузить отчёт СОУТ" },
+      );
     } finally {
       setLoading(false);
     }
@@ -511,7 +604,8 @@ const ReportPanel = ({ campaign }: ReportPanelProps) => {
     try {
       await soutApi.downloadSummary(campaign.id, fmt, campaign.name);
     } catch (e: unknown) {
-      const status = (e as { response?: { status?: number } })?.response?.status;
+      const status = (e as { response?: { status?: number } })?.response
+        ?.status;
       toast.error(
         fmt === "pdf" && status === 503
           ? "PDF-конвертер недоступен, скачайте DOCX"
@@ -520,11 +614,16 @@ const ReportPanel = ({ campaign }: ReportPanelProps) => {
     }
   };
 
-  const handleCardDownload = async (workplaceId: string, code: string, fmt: "docx" | "pdf") => {
+  const handleCardDownload = async (
+    workplaceId: string,
+    code: string,
+    fmt: "docx" | "pdf",
+  ) => {
     try {
       await soutApi.downloadCard(workplaceId, fmt, code);
     } catch (e: unknown) {
-      const status = (e as { response?: { status?: number } })?.response?.status;
+      const status = (e as { response?: { status?: number } })?.response
+        ?.status;
       toast.error(
         fmt === "pdf" && status === 503
           ? "PDF-конвертер недоступен, скачайте DOCX"
@@ -537,22 +636,40 @@ const ReportPanel = ({ campaign }: ReportPanelProps) => {
     <Card>
       <CardHeader>
         <div className="flex items-center justify-between gap-2">
-          <CardTitle className="text-base">Рабочие места — {campaign.name}</CardTitle>
+          <CardTitle className="text-base">
+            Рабочие места — {campaign.name}
+          </CardTitle>
           <span className="flex gap-1">
-            <Button type="button" size="sm" variant="outline"
-              onClick={() => void handleSummaryDownload("docx")}>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => void handleSummaryDownload("docx")}
+            >
               Сводная DOCX
             </Button>
-            <Button type="button" size="sm" variant="outline"
-              onClick={() => void handleSummaryDownload("pdf")}>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => void handleSummaryDownload("pdf")}
+            >
               Сводная PDF
             </Button>
-            <Button type="button" size="sm" variant="outline"
-              onClick={() => void handleDeclarationDownload("docx")}>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => void handleDeclarationDownload("docx")}
+            >
               Декларация DOCX
             </Button>
-            <Button type="button" size="sm" variant="outline"
-              onClick={() => void handleDeclarationDownload("pdf")}>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => void handleDeclarationDownload("pdf")}
+            >
               Декларация PDF
             </Button>
           </span>
@@ -560,55 +677,84 @@ const ReportPanel = ({ campaign }: ReportPanelProps) => {
       </CardHeader>
       <CardContent className="space-y-4">
         {declaration !== null ? (
-          <div className="rounded-md border border-border p-3 text-sm" data-testid="sout-declaration-summary">
+          <div
+            className="rounded-md border border-border p-3 text-sm"
+            data-testid="sout-declaration-summary"
+          >
             <p className="font-medium">Декларация соответствия (класс 1-2)</p>
             <p className="text-muted-foreground">
-              Подлежат декларированию: {declaration.eligible_count} · не подлежат: {declaration.ineligible_count}
+              Подлежат декларированию: {declaration.eligible_count} · не
+              подлежат: {declaration.ineligible_count}
             </p>
             {declaration.ineligible.length > 0 ? (
               <ul className="mt-1 list-disc pl-5 text-xs text-muted-foreground">
                 {declaration.ineligible.map((r, i) => (
                   <li key={`${r.workplace_code}-${i}`}>
-                    {r.workplace_code} · {r.position_name} — {r.ineligible_reason}
+                    {r.workplace_code} · {r.position_name} —{" "}
+                    {r.ineligible_reason}
                   </li>
                 ))}
               </ul>
             ) : null}
           </div>
         ) : null}
-        <div className="rounded-md border border-border p-3 text-sm" data-testid="sout-import">
+        <div
+          className="rounded-md border border-border p-3 text-sm"
+          data-testid="sout-import"
+        >
           <p className="font-medium">Импорт отчёта СОУТ</p>
-          <p className="text-muted-foreground">Поддерживаются CSV, XLSX, ФГИС XML.</p>
+          <p className="text-muted-foreground">
+            Поддерживаются CSV, XLSX, ФГИС XML.
+          </p>
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <input
               ref={importInputRef}
               type="file"
               accept=".csv,.xlsx,.xml"
-              onChange={(e) => { setImportFile(e.target.files?.[0] ?? null); setImportPreview(null); }}
+              onChange={(e) => {
+                setImportFile(e.target.files?.[0] ?? null);
+                setImportPreview(null);
+              }}
             />
-            <Button type="button" size="sm" variant="outline" disabled={!importFile || importBusy}
-              onClick={() => void handleImportPreview()}>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={!importFile || importBusy}
+              onClick={() => void handleImportPreview()}
+            >
               Проверить
             </Button>
-            <Button type="button" size="sm"
-              disabled={!importPreview || !importPreview.can_apply || importBusy}
-              onClick={() => void handleImportApply()}>
+            <Button
+              type="button"
+              size="sm"
+              disabled={
+                !importPreview || !importPreview.can_apply || importBusy
+              }
+              onClick={() => void handleImportApply()}
+            >
               Применить
             </Button>
           </div>
           {importPreview !== null ? (
             <div className="mt-2">
               <p className="text-muted-foreground">
-                Новых: {importPreview.new_count} · изменённых: {importPreview.changed_count} ·
-                без изменений: {importPreview.unchanged_count} · отсутствуют в файле: {importPreview.removed_count} ·
-                ошибок: {importPreview.error_count}
+                Новых: {importPreview.new_count} · изменённых:{" "}
+                {importPreview.changed_count} · без изменений:{" "}
+                {importPreview.unchanged_count} · отсутствуют в файле:{" "}
+                {importPreview.removed_count} · ошибок:{" "}
+                {importPreview.error_count}
               </p>
               <ul className="mt-1 list-disc pl-5 text-xs">
                 {importPreview.rows.map((r) => (
                   <li key={`${r.row_index}-${r.workplace_code}`}>
                     [{r.change}] {r.workplace_code} {r.position_name}
-                    {r.errors.length > 0 ? ` — ОШИБКИ: ${r.errors.join("; ")}` : ""}
-                    {r.warnings.length > 0 ? ` — предупр.: ${r.warnings.join("; ")}` : ""}
+                    {r.errors.length > 0
+                      ? ` — ОШИБКИ: ${r.errors.join("; ")}`
+                      : ""}
+                    {r.warnings.length > 0
+                      ? ` — предупр.: ${r.warnings.join("; ")}`
+                      : ""}
                   </li>
                 ))}
               </ul>
@@ -617,44 +763,82 @@ const ReportPanel = ({ campaign }: ReportPanelProps) => {
         </div>
         <ErrorState error={error ?? undefined} onRetry={load} />
         {loading ? <LoadingScreen label="Загрузка отчёта" /> : null}
-        {!loading && !error && report !== null && report.workplaces.length === 0 ? (
-          <EmptyState title="Нет данных" description="Рабочие места ещё не внесены." />
+        {!loading &&
+        !error &&
+        report !== null &&
+        report.workplaces.length === 0 ? (
+          <EmptyState
+            title="Нет данных"
+            description="Рабочие места ещё не внесены."
+          />
         ) : null}
-        {!loading && !error && report !== null && report.workplaces.length > 0 ? (
+        {!loading &&
+        !error &&
+        report !== null &&
+        report.workplaces.length > 0 ? (
           <div className="space-y-4">
             {report.workplaces.map(({ workplace, factors, guarantees }) => (
-              <div key={workplace.id} className="rounded-md border border-border p-4 space-y-3">
+              <div
+                key={workplace.id}
+                className="rounded-md border border-border p-4 space-y-3"
+              >
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-sm font-medium">
                     {workplace.workplace_code} · {workplace.position_name}
                   </p>
                   <span className="flex items-center gap-2">
-                    <Badge variant="secondary">{classLabel(workplace.assessed_class)}</Badge>
+                    <Badge variant="secondary">
+                      {classLabel(workplace.assessed_class)}
+                    </Badge>
                     {workplace.is_reassessment_due ? (
                       <Badge variant="destructive" className="text-xs">
                         Переоценка просрочена
                       </Badge>
                     ) : null}
-                    <Button type="button" size="sm" variant="outline"
-                      onClick={() => void handleCardDownload(workplace.id, workplace.workplace_code, "docx")}>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() =>
+                        void handleCardDownload(
+                          workplace.id,
+                          workplace.workplace_code,
+                          "docx",
+                        )
+                      }
+                    >
                       Карта DOCX
                     </Button>
-                    <Button type="button" size="sm" variant="outline"
-                      onClick={() => void handleCardDownload(workplace.id, workplace.workplace_code, "pdf")}>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() =>
+                        void handleCardDownload(
+                          workplace.id,
+                          workplace.workplace_code,
+                          "pdf",
+                        )
+                      }
+                    >
                       Карта PDF
                     </Button>
                   </span>
                 </div>
                 {workplace.next_assessment_date ? (
                   <p className="text-xs text-muted-foreground">
-                    Следующая оценка: {formatDate(workplace.next_assessment_date)}
+                    Следующая оценка:{" "}
+                    {formatDate(workplace.next_assessment_date)}
                   </p>
                 ) : null}
                 <LinkInput
                   label="ID должности"
                   buttonLabel="Привязать должность"
                   onSubmit={async (positionId) => {
-                    await soutApi.linkWorkplacePosition(workplace.id, positionId);
+                    await soutApi.linkWorkplacePosition(
+                      workplace.id,
+                      positionId,
+                    );
                     await load();
                   }}
                 />
@@ -670,7 +854,9 @@ const ReportPanel = ({ campaign }: ReportPanelProps) => {
                     <TableBody>
                       {factors.map((f) => (
                         <TableRow key={f.id}>
-                          <TableCell className="font-medium">{f.name}</TableCell>
+                          <TableCell className="font-medium">
+                            {f.name}
+                          </TableCell>
                           <TableCell className="text-muted-foreground">
                             {classLabel(f.measured_class)}
                           </TableCell>
@@ -689,7 +875,9 @@ const ReportPanel = ({ campaign }: ReportPanelProps) => {
                     </TableBody>
                   </Table>
                 ) : (
-                  <p className="text-xs text-muted-foreground">Вредные факторы не выявлены.</p>
+                  <p className="text-xs text-muted-foreground">
+                    Вредные факторы не выявлены.
+                  </p>
                 )}
                 {guarantees.length > 0 ? (
                   <div className="flex flex-wrap gap-2">
@@ -716,7 +904,9 @@ const ReportPanel = ({ campaign }: ReportPanelProps) => {
 // ── Page ────────────────────────────────────────────────────────────────────
 
 const SoutPage = () => {
-  const [selectedCampaign, setSelectedCampaign] = useState<SoutCampaign | null>(null);
+  const [selectedCampaign, setSelectedCampaign] = useState<SoutCampaign | null>(
+    null,
+  );
 
   return (
     <div className="space-y-4">
@@ -724,8 +914,13 @@ const SoutPage = () => {
         title="СОУТ"
         description="Специальная оценка условий труда: кампании, классы условий, гарантии и компенсации."
       />
-      <CampaignList selected={selectedCampaign} onSelect={setSelectedCampaign} />
-      {selectedCampaign !== null ? <ReportPanel key={selectedCampaign.id} campaign={selectedCampaign} /> : null}
+      <CampaignList
+        selected={selectedCampaign}
+        onSelect={setSelectedCampaign}
+      />
+      {selectedCampaign !== null ? (
+        <ReportPanel key={selectedCampaign.id} campaign={selectedCampaign} />
+      ) : null}
     </div>
   );
 };

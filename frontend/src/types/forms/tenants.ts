@@ -10,13 +10,13 @@ export const tenantProvisionSchema = z.object({
     .toLowerCase()
     .regex(
       TENANT_SLUG_PATTERN,
-      "Латиница в нижнем регистре, цифры, - и _; начинается с буквы, от 2 до 31 символа"
+      "Латиница в нижнем регистре, цифры, - и _; начинается с буквы, от 2 до 31 символа",
     ),
   name: z.string().trim().min(1, "Укажите название").max(200),
   owner_email: z.string().trim().email("Некорректный email"),
   owner_password: z.string().min(8, "Минимум 8 символов").max(128),
   kind: z.enum(["customer", "branch", "contractor"]),
-  demo_data: z.boolean()
+  demo_data: z.boolean(),
 });
 
 export type TenantProvisionFormValues = z.infer<typeof tenantProvisionSchema>;

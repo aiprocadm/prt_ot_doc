@@ -4,6 +4,7 @@
 Покрываем: перевод меток (вид осмотра / статус), наличие данных в DOCX-тексте,
 пустой набор строк → не падает.
 """
+
 from __future__ import annotations
 
 from io import BytesIO

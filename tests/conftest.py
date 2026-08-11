@@ -184,6 +184,48 @@ async def app_fixture():
             )
         await seed_session.commit()
 
+        # BIZ-61 срез-2: продаваемый модуль по умолчанию ВЫКЛЮЧЕН (разд. 61.2).
+        # Тестовые арендаторы соответствуют тарифу «Всё включено» — иначе почти
+        # каждый тест API проверял бы не поведение модуля, а его выдачу. Раньше
+        # это работало само: у гейта было умолчание «включено», то есть тесты
+        # опирались ровно на тот дефект, который срез и закрывает.
+        from app.models.feature import Feature, FeatureEnablement  # noqa: PLC0415
+        from app.modules.subscription.registry import SELLABLE_MODULES  # noqa: PLC0415
+
+        # Выдаём ТОЛЬКО те модули, что раньше были доступны по умолчанию из-за
+        # дефекта. Остальные и до среза требовали явной выдачи, и их тесты
+        # проверяют как раз отказ «модуль не выдан» — включить их здесь значило
+        # бы сломать проверку ровно того, что срез и защищает.
+        implicitly_on = {"medical", "contractors", "warehouse"}
+
+        seeded_tenant_ids = [
+            row.id for row in (await seed_session.execute(select(Tenant))).scalars().all()
+        ]
+        for module in SELLABLE_MODULES:
+            if module.code not in implicitly_on:
+                continue
+            feature = (
+                await seed_session.execute(select(Feature).where(Feature.code == module.code))
+            ).scalar_one_or_none()
+            if feature is None:
+                feature = Feature(code=module.code, title=module.title)
+                seed_session.add(feature)
+                await seed_session.flush()
+            for tenant_id in seeded_tenant_ids:
+                exists = (
+                    await seed_session.execute(
+                        select(FeatureEnablement).where(
+                            FeatureEnablement.tenant_id == tenant_id,
+                            FeatureEnablement.feature_id == feature.id,
+                        )
+                    )
+                ).scalar_one_or_none()
+                if exists is None:
+                    seed_session.add(
+                        FeatureEnablement(tenant_id=tenant_id, feature_id=feature.id, on=True)
+                    )
+        await seed_session.commit()
+
     async def override_session() -> AsyncIterator[AsyncSession]:
         # Swap only the engine binding; the transaction contract must stay identical
         # to production (app.api.dependencies.get_session) or the suite silently

@@ -99,6 +99,35 @@ def _table_creating_helpers(functions: dict[str, ast.FunctionDef]) -> set[str]:
     return helpers
 
 
+def _module_string_scalars(tree: ast.Module) -> dict[str, str]:
+    """Module-level ``NAME = "literal"`` string constants.
+
+    Real-world pattern (``20260804_mc01_managed_client.py``)::
+
+        _TABLE = "managed_client"
+        ...
+        op.create_table(_TABLE, sa.Column("id", ...), ...)
+
+    Without resolving the constant the whole table's columns are invisible
+    to the audit and surface as false business-drift.
+    """
+    result: dict[str, str] = {}
+    for node in tree.body:
+        if isinstance(node, ast.Assign):
+            if isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
+                for target in node.targets:
+                    if isinstance(target, ast.Name):
+                        result[target.id] = node.value.value
+        elif isinstance(node, ast.AnnAssign):
+            if (
+                isinstance(node.target, ast.Name)
+                and isinstance(node.value, ast.Constant)
+                and isinstance(node.value.value, str)
+            ):
+                result[node.target.id] = node.value.value
+    return result
+
+
 def _module_string_seqs(tree: ast.Module) -> dict[str, list[str]]:
     result: dict[str, list[str]] = {}
 
@@ -487,6 +516,7 @@ def collect_migration_columns(verbose: bool = False) -> dict[str, set[str]]:
         helpers = _table_creating_helpers(functions)
         helper_cols_map = {h: _helper_injected_columns(functions, h) for h in helpers}
         module_constants = _module_string_seqs(tree)
+        module_scalars = _module_string_scalars(tree)
         parents = _parent_map(upgrade_fn)
         col_vars = _column_var_bindings(upgrade_fn)
 
@@ -502,6 +532,11 @@ def collect_migration_columns(verbose: bool = False) -> dict[str, set[str]]:
                 first = node.args[0]
                 if isinstance(first, ast.Constant) and isinstance(first.value, str):
                     per_table[first.value].update(_columns_in_create_table_call(node, functions))
+                elif isinstance(first, ast.Name) and first.id in module_scalars:
+                    # op.create_table(_TABLE, ...) — mc01/mc02/mc03 pattern.
+                    per_table[module_scalars[first.id]].update(
+                        _columns_in_create_table_call(node, functions)
+                    )
             # ---- Helper-wrapped: <helper>("t", sa.Column("c", ...), ...) ----
             if (
                 isinstance(func, ast.Name)
@@ -539,6 +574,8 @@ def collect_migration_columns(verbose: bool = False) -> dict[str, set[str]]:
                         elif isinstance(tname_arg, ast.Name):
                             bindings = _enclosing_for_bindings(node, parents, module_constants)
                             candidates = bindings.get(tname_arg.id, [])
+                            if not candidates and tname_arg.id in module_scalars:
+                                candidates = [module_scalars[tname_arg.id]]
                         for tn in candidates:
                             per_table[tn].add(col)
             # ---- op.rename_table("old", "new") ----
@@ -623,6 +660,8 @@ def collect_migration_columns(verbose: bool = False) -> dict[str, set[str]]:
                     tnames: list[str] = [first.value]
                 elif isinstance(first, ast.Name):
                     tnames = _resolve_dynamic_name_from_assignments(first.id, upgrade_fn, functions)
+                    if not tnames and first.id in module_scalars:
+                        tnames = [module_scalars[first.id]]
                     if not tnames:
                         continue
                 else:

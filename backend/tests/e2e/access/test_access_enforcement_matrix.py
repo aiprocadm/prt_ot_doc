@@ -1,4 +1,5 @@
 """Backend access matrix enforcement tests for RC-006 (E2E diagnostics)."""
+
 from __future__ import annotations
 
 import pytest

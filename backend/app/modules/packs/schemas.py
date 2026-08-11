@@ -166,3 +166,27 @@ class PackRunLogRead(BaseModel):
 
 class DownloadRead(BaseModel):
     url: str
+
+
+# --- BIZ-50 срез-1: предпросмотр комплекта (разд. 50.2, шаг 3) ---------------
+class ReadinessProblemRead(BaseModel):
+    code: str
+    message: str
+    #: ``True`` — генерация невозможна; ``False`` — выйдет, но с пробелом.
+    blocking: bool
+    #: Номера строк источника; длинные списки урезаны, полное число — в rows_total.
+    rows: list[int] = Field(default_factory=list)
+    rows_total: int = 0
+
+
+class PackRunPreviewRead(BaseModel):
+    """Что войдёт в комплект и чего не хватает — ДО генерации."""
+
+    ready: bool
+    #: Доля строк, которые дадут полный документ, в процентах.
+    score: int
+    documents_total: int
+    rows_total: int
+    rows_selected: int
+    rows_ready: int
+    problems: list[ReadinessProblemRead] = Field(default_factory=list)

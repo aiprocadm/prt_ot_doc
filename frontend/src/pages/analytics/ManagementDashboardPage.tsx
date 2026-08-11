@@ -7,7 +7,13 @@ import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingScreen } from "@/components/common/LoadingScreen";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAsyncResource } from "@/hooks/useAsyncResource";
@@ -17,7 +23,7 @@ import type {
   DashboardWidgetsDto,
   DirectoryItemDto,
   ExecutiveDashboardDto,
-  TrendSeriesDto
+  TrendSeriesDto,
 } from "@/types/dto/analytics";
 
 const TREND_METRICS = [
@@ -26,7 +32,7 @@ const TREND_METRICS = [
   { key: "packages", title: "Пакеты документов" },
   { key: "trainings", title: "Просроченное обучение" },
   { key: "inspections", title: "Проверки" },
-  { key: "ppe", title: "СИЗ" }
+  { key: "ppe", title: "СИЗ" },
 ] as const;
 
 const KPI_LABELS: Record<string, string> = {
@@ -39,7 +45,7 @@ const KPI_LABELS: Record<string, string> = {
   prescriptions_overdue: "Просроченные предписания",
   plan_tasks_overdue: "Просроченные задачи планов",
   workflow_open: "Открытые workflow-задачи",
-  workflow_sla_breached: "Нарушен SLA"
+  workflow_sla_breached: "Нарушен SLA",
 };
 
 const BREAKDOWN_METRIC_LABELS: Record<string, string> = {
@@ -52,19 +58,19 @@ const BREAKDOWN_METRIC_LABELS: Record<string, string> = {
   missing_docs: "Нет документов",
   missing_training: "Нет обучения",
   overdue_items: "Просрочки",
-  active_packages: "Активные пакеты"
+  active_packages: "Активные пакеты",
 };
 
 const DIMENSIONS = [
   { key: "company", label: "По компаниям" },
   { key: "site", label: "По объектам" },
-  { key: "contractor", label: "По подрядчикам" }
+  { key: "contractor", label: "По подрядчикам" },
 ] as const;
 
 const PERIODS = [
   { key: "daily", label: "День" },
   { key: "weekly", label: "Неделя" },
-  { key: "monthly", label: "Месяц" }
+  { key: "monthly", label: "Месяц" },
 ] as const;
 
 const SUB_DASHBOARDS = [
@@ -72,7 +78,7 @@ const SUB_DASHBOARDS = [
   { to: "/dashboard/safety", label: "Безопасность" },
   { to: "/dashboard/training", label: "Обучение" },
   { to: "/dashboard/ppe", label: "СИЗ" },
-  { to: "/dashboard/client-delivery", label: "Клиентская доставка" }
+  { to: "/dashboard/client-delivery", label: "Клиентская доставка" },
 ] as const;
 
 type Period = (typeof PERIODS)[number]["key"];
@@ -86,12 +92,12 @@ export default function ManagementDashboardPage() {
   const companiesRes = useAsyncResource<{ items?: DirectoryItemDto[] }>({
     loader: useCallback(() => analyticsApi.getCompanies(), []),
     initialData: { items: [] },
-    errorMessage: "Не удалось загрузить компании"
+    errorMessage: "Не удалось загрузить компании",
   });
   const sitesRes = useAsyncResource<{ items?: DirectoryItemDto[] }>({
     loader: useCallback(() => analyticsApi.getSites(), []),
     initialData: { items: [] },
-    errorMessage: "Не удалось загрузить объекты"
+    errorMessage: "Не удалось загрузить объекты",
   });
   // /contractors/registry живёт в домене подрядчиков и закрыт своими ролями —
   // для management-ролей (line_manager/hr/ot_specialist) это ожидаемый 403.
@@ -99,50 +105,59 @@ export default function ManagementDashboardPage() {
   const contractorsRes = useAsyncResource<{ items?: DirectoryItemDto[] }>({
     loader: useCallback(() => analyticsApi.getContractors(), []),
     initialData: { items: [] },
-    errorMessage: "Не удалось загрузить подрядчиков"
+    errorMessage: "Не удалось загрузить подрядчиков",
   });
 
   const executiveRes = useAsyncResource<ExecutiveDashboardDto | null>({
     loader: useCallback(() => analyticsApi.getExecutive(filters), [filters]),
     initialData: null,
-    errorMessage: "Не удалось загрузить сводные показатели"
+    errorMessage: "Не удалось загрузить сводные показатели",
   });
   const overdueRes = useAsyncResource<DashboardWidgetsDto | null>({
-    loader: useCallback(() => analyticsApi.getDashboard("overdue", filters), [filters]),
+    loader: useCallback(
+      () => analyticsApi.getDashboard("overdue", filters),
+      [filters],
+    ),
     initialData: null,
-    errorMessage: "Не удалось загрузить просрочки"
+    errorMessage: "Не удалось загрузить просрочки",
   });
   const slaRes = useAsyncResource<DashboardWidgetsDto | null>({
-    loader: useCallback(() => analyticsApi.getDashboard("sla-load", filters), [filters]),
+    loader: useCallback(
+      () => analyticsApi.getDashboard("sla-load", filters),
+      [filters],
+    ),
     initialData: null,
-    errorMessage: "Не удалось загрузить SLA-нагрузку"
+    errorMessage: "Не удалось загрузить SLA-нагрузку",
   });
   const trendsRes = useAsyncResource<TrendSeriesDto[]>({
     loader: useCallback(
-      () => Promise.all(TREND_METRICS.map((m) => analyticsApi.getTrend(m.key, period))),
-      [period]
+      () =>
+        Promise.all(
+          TREND_METRICS.map((m) => analyticsApi.getTrend(m.key, period)),
+        ),
+      [period],
     ),
     initialData: [],
-    errorMessage: "Не удалось загрузить тренды"
+    errorMessage: "Не удалось загрузить тренды",
   });
   const breakdownRes = useAsyncResource<BreakdownDto | null>({
     loader: useCallback(
       () =>
         analyticsApi.getBreakdown(dimension, {
           date_from: filters.date_from,
-          date_to: filters.date_to
+          date_to: filters.date_to,
         }),
-      [dimension, filters.date_from, filters.date_to]
+      [dimension, filters.date_from, filters.date_to],
     ),
     initialData: null,
-    errorMessage: "Не удалось загрузить разрез"
+    errorMessage: "Не удалось загрузить разрез",
   });
 
   const kpiCards = useMemo(() => {
     const widgets: Record<string, number> = {
       ...(executiveRes.data?.dashboard?.widgets ?? {}),
       ...(overdueRes.data?.widgets ?? {}),
-      ...(slaRes.data?.widgets ?? {})
+      ...(slaRes.data?.widgets ?? {}),
     };
     return Object.entries(KPI_LABELS)
       .filter(([key]) => key in widgets)
@@ -153,22 +168,25 @@ export default function ManagementDashboardPage() {
   const metricKeys = useMemo(() => {
     if (!breakdown || breakdown.items.length === 0) return [];
     return Object.keys(breakdown.items[0]).filter(
-      (k) => !["id", "name", "total_issues"].includes(k)
+      (k) => !["id", "name", "total_issues"].includes(k),
     );
   }, [breakdown]);
   const maxIssues = useMemo(
     () => Math.max(1, ...(breakdown?.items.map((i) => i.total_issues) ?? [1])),
-    [breakdown]
+    [breakdown],
   );
 
-  const setFilter = useCallback((key: keyof AnalyticsFiltersDto, value: string) => {
-    setFilters((prev) => {
-      const next = { ...prev };
-      if (value) next[key] = value;
-      else delete next[key];
-      return next;
-    });
-  }, []);
+  const setFilter = useCallback(
+    (key: keyof AnalyticsFiltersDto, value: string) => {
+      setFilters((prev) => {
+        const next = { ...prev };
+        if (value) next[key] = value;
+        else delete next[key];
+        return next;
+      });
+    },
+    [],
+  );
 
   const applyRowFilter = useCallback(
     (rowId: string) => {
@@ -176,7 +194,7 @@ export default function ManagementDashboardPage() {
       else if (dimension === "site") setFilter("site_id", rowId);
       else setFilter("contractor_id", rowId);
     },
-    [dimension, setFilter]
+    [dimension, setFilter],
   );
 
   if (companiesRes.loading || executiveRes.loading) return <LoadingScreen />;
@@ -187,7 +205,8 @@ export default function ManagementDashboardPage() {
         <CardHeader>
           <CardTitle>Управленческая аналитика</CardTitle>
           <CardDescription>
-            KPI, тренды и разрез по компаниям / объектам / подрядчикам (vNext §24.2).
+            KPI, тренды и разрез по компаниям / объектам / подрядчикам (vNext
+            §24.2).
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -202,7 +221,9 @@ export default function ManagementDashboardPage() {
               >
                 <option value="">— все —</option>
                 {(companiesRes.data?.items ?? []).map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
                 ))}
               </select>
             </div>
@@ -216,7 +237,9 @@ export default function ManagementDashboardPage() {
               >
                 <option value="">— все —</option>
                 {(sitesRes.data?.items ?? []).map((s) => (
-                  <option key={s.id} value={s.id}>{s.name}</option>
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
                 ))}
               </select>
             </div>
@@ -231,7 +254,9 @@ export default function ManagementDashboardPage() {
                 >
                   <option value="">— все —</option>
                   {(contractorsRes.data?.items ?? []).map((k) => (
-                    <option key={k.id} value={k.id}>{k.name}</option>
+                    <option key={k.id} value={k.id}>
+                      {k.name}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -254,7 +279,9 @@ export default function ManagementDashboardPage() {
                 onChange={(e) => setFilter("date_to", e.target.value)}
               />
             </div>
-            <Button variant="outline" onClick={() => setFilters({})}>Сбросить</Button>
+            <Button variant="outline" onClick={() => setFilters({})}>
+              Сбросить
+            </Button>
           </div>
         </CardContent>
       </Card>
@@ -328,13 +355,21 @@ export default function ManagementDashboardPage() {
               ))}
             </div>
           </div>
-          <CardDescription>Клик по строке применяет её как фильтр страницы.</CardDescription>
+          <CardDescription>
+            Клик по строке применяет её как фильтр страницы.
+          </CardDescription>
         </CardHeader>
         <CardContent>
           {breakdownRes.error ? (
-            <ErrorState error={breakdownRes.error} onRetry={breakdownRes.reload} />
+            <ErrorState
+              error={breakdownRes.error}
+              onRetry={breakdownRes.reload}
+            />
           ) : !breakdown || breakdown.items.length === 0 ? (
-            <EmptyState title="Нет данных" description="В этом разрезе пока пусто." />
+            <EmptyState
+              title="Нет данных"
+              description="В этом разрезе пока пусто."
+            />
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
@@ -366,15 +401,21 @@ export default function ManagementDashboardPage() {
                       >
                         <td className="py-2 pr-4">{row.name}</td>
                         {metricKeys.map((k) => (
-                          <td key={k} className="py-2 pr-4">{row[k]}</td>
+                          <td key={k} className="py-2 pr-4">
+                            {row[k]}
+                          </td>
                         ))}
                         <td className="py-2">
                           <div className="flex items-center gap-2">
-                            <span className="w-8 text-right">{row.total_issues}</span>
+                            <span className="w-8 text-right">
+                              {row.total_issues}
+                            </span>
                             <div className="h-2 flex-1 rounded bg-muted">
                               <div
                                 className="h-2 rounded bg-primary"
-                                style={{ width: `${(row.total_issues / maxIssues) * 100}%` }}
+                                style={{
+                                  width: `${(row.total_issues / maxIssues) * 100}%`,
+                                }}
                               />
                             </div>
                           </div>

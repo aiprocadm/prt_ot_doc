@@ -37,8 +37,17 @@ async def db_session():
 @pytest.mark.asyncio
 async def test_briefing_sign_is_idempotent_and_complete_sets_valid_until(db_session) -> None:
     tenant_id = "tenant-1"
-    template = BriefingTemplate(tenant_id=tenant_id, code="bt-1", title="Intro", briefing_type="introductory", status="active", validity_days=30)
-    journal = BriefingJournal(tenant_id=tenant_id, code="bj-1", title="Main", journal_type="ot", status="active")
+    template = BriefingTemplate(
+        tenant_id=tenant_id,
+        code="bt-1",
+        title="Intro",
+        briefing_type="introductory",
+        status="active",
+        validity_days=30,
+    )
+    journal = BriefingJournal(
+        tenant_id=tenant_id, code="bj-1", title="Main", journal_type="ot", status="active"
+    )
     db_session.add_all([template, journal])
     await db_session.flush()
     entry = BriefingEntry(
@@ -66,7 +75,9 @@ async def test_briefing_sign_is_idempotent_and_complete_sets_valid_until(db_sess
 @pytest.mark.asyncio
 async def test_briefing_overdue_notifications_enqueue_task_overdue(db_session) -> None:
     tenant_id = "tenant-1"
-    journal = BriefingJournal(tenant_id=tenant_id, code="bj-1", title="Main", journal_type="ot", status="active")
+    journal = BriefingJournal(
+        tenant_id=tenant_id, code="bj-1", title="Main", journal_type="ot", status="active"
+    )
     db_session.add(journal)
     await db_session.flush()
     overdue = BriefingEntry(
@@ -83,7 +94,9 @@ async def test_briefing_overdue_notifications_enqueue_task_overdue(db_session) -
 
     enqueue = AsyncMock()
     with patch("app.modules.briefings.services.OutboxService.enqueue", enqueue):
-        items = await BriefingEntryService().notify_overdue(db_session, tenant_id=tenant_id, actor_id="actor-1")
+        items = await BriefingEntryService().notify_overdue(
+            db_session, tenant_id=tenant_id, actor_id="actor-1"
+        )
 
     assert [item.id for item in items] == [overdue.id]
     enqueue.assert_awaited_once()

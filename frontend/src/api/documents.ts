@@ -1,12 +1,15 @@
 import { apiClient } from "@/api/client";
-import type {
-  DocumentDependencyMapDto,
-  DocumentReadinessDto,
-  DocumentVersionCompareDto
-} from "@/types/dto/documents";
+import type { DocumentReadinessDto } from "@/types/dto/documents";
 import type { QualityReport } from "@/types/dto/documentQuality";
 
-export type WizardPipelineStatus = "queued" | "running" | "success" | "failed" | "canceled" | "done" | "error";
+export type WizardPipelineStatus =
+  | "queued"
+  | "running"
+  | "success"
+  | "failed"
+  | "canceled"
+  | "done"
+  | "error";
 
 export type BatchItemStatus = "pending" | "running" | "success" | "failed";
 
@@ -124,43 +127,40 @@ export type ReplaceReportResponse = {
   total: number;
 };
 
-export const generateDocument = async (payload: GenerateDocumentRequest, idempotencyKey: string) => {
-  const response = await apiClient.post<GenerationAcceptedResponse>("/documents/generate", payload, {
-    headers: { "Idempotency-Key": idempotencyKey }
-  });
-  return response.data;
-};
-
-export const resolveTemplateForQuickGenerate = async (payload: TemplateResolveRequest) => {
-  const response = await apiClient.post<TemplateResolveResponse>("/documents/template:resolve", payload);
-  return response.data;
-};
-
-export const getGenerationTaskStatus = async (taskId: string) => {
-  const response = await apiClient.get<TaskStatusResponse>(`/documents/tasks/${taskId}`);
-  return response.data;
-};
-
-export const getDocumentReadiness = async (documentId: string) => {
-  const response = await apiClient.get<DocumentReadinessDto>(`/documents/${documentId}/readiness`);
-  return response.data;
-};
-
-export const compareDocumentVersions = async (
-  documentId: string,
-  leftVersionId: string,
-  rightVersionId: string
+export const generateDocument = async (
+  payload: GenerateDocumentRequest,
+  idempotencyKey: string,
 ) => {
-  const response = await apiClient.get<DocumentVersionCompareDto>(
-    `/documents/${documentId}/versions/compare`,
-    { params: { left_version_id: leftVersionId, right_version_id: rightVersionId } }
+  const response = await apiClient.post<GenerationAcceptedResponse>(
+    "/documents/generate",
+    payload,
+    {
+      headers: { "Idempotency-Key": idempotencyKey },
+    },
   );
   return response.data;
 };
 
-export const getDocumentDependencyMap = async (documentId: string) => {
-  const response = await apiClient.get<DocumentDependencyMapDto>(
-    `/documents/${documentId}/dependency-map`
+export const resolveTemplateForQuickGenerate = async (
+  payload: TemplateResolveRequest,
+) => {
+  const response = await apiClient.post<TemplateResolveResponse>(
+    "/documents/template:resolve",
+    payload,
+  );
+  return response.data;
+};
+
+export const getGenerationTaskStatus = async (taskId: string) => {
+  const response = await apiClient.get<TaskStatusResponse>(
+    `/documents/tasks/${taskId}`,
+  );
+  return response.data;
+};
+
+export const getDocumentReadiness = async (documentId: string) => {
+  const response = await apiClient.get<DocumentReadinessDto>(
+    `/documents/${documentId}/readiness`,
   );
   return response.data;
 };
@@ -181,12 +181,17 @@ export const generateDocumentsBatch = async (payload: {
     form.append("naming_pattern", payload.namingPattern);
   }
 
-  const response = await apiClient.post<DocumentBatchRun>("/documents/batch", form);
+  const response = await apiClient.post<DocumentBatchRun>(
+    "/documents/batch",
+    form,
+  );
   return response.data;
 };
 
 export const getDocumentBatch = async (batchId: string) => {
-  const response = await apiClient.get<DocumentBatchRun>(`/documents/batch/${batchId}`);
+  const response = await apiClient.get<DocumentBatchRun>(
+    `/documents/batch/${batchId}`,
+  );
   return response.data;
 };
 
@@ -199,17 +204,30 @@ export const replaceDryRun = async (payload: {
   const form = new FormData();
   form.append("docx_file", payload.docxFile);
   form.append("replace_map", payload.replaceMapFile);
-  const response = await apiClient.post<ReplaceDryRunResponse>("/replace/dry-run", form, {
-    headers: {
-      "Idempotency-Key": payload.idempotencyKey,
-      "X-Replace-Options": JSON.stringify({ dry_run: true, ...(payload.options ?? {}) })
-    }
-  });
+  const response = await apiClient.post<ReplaceDryRunResponse>(
+    "/replace/dry-run",
+    form,
+    {
+      headers: {
+        "Idempotency-Key": payload.idempotencyKey,
+        "X-Replace-Options": JSON.stringify({
+          dry_run: true,
+          ...(payload.options ?? {}),
+        }),
+      },
+    },
+  );
   return response.data;
 };
 
-export const getReplaceReport = async (reportId: string, params?: { offset?: number; limit?: number }) => {
-  const response = await apiClient.get<ReplaceReportResponse>(`/replace/reports/${reportId}`, { params });
+export const getReplaceReport = async (
+  reportId: string,
+  params?: { offset?: number; limit?: number },
+) => {
+  const response = await apiClient.get<ReplaceReportResponse>(
+    `/replace/reports/${reportId}`,
+    { params },
+  );
   return response.data;
 };
 
@@ -220,7 +238,10 @@ export const checkDocumentQuality = async (payload: {
   numeric_fields?: string[];
   rendered_text?: string;
 }) => {
-  const response = await apiClient.post<QualityReport>("/documents/quality:check", payload);
+  const response = await apiClient.post<QualityReport>(
+    "/documents/quality:check",
+    payload,
+  );
   return response.data;
 };
 
@@ -229,6 +250,9 @@ export const validateDocumentMapping = async (payload: {
   mapping: Record<string, string>;
   required_template_fields?: string[];
 }) => {
-  const response = await apiClient.post<MappingValidationResponse>("/documents/mapping:validate", payload);
+  const response = await apiClient.post<MappingValidationResponse>(
+    "/documents/mapping:validate",
+    payload,
+  );
   return response.data;
 };

@@ -19,12 +19,16 @@ import { DashboardTabsSection } from "@/widgets/dashboard/DashboardTabsSection";
 const trainingStatusLabels: Record<string, string> = {
   ok: "В норме",
   warning: "Нужны действия",
-  critical: "Критично"
+  critical: "Критично",
 };
 
 export const DashboardPage = () => {
-  const [taskStatusFilter, setTaskStatusFilter] = useState<"all" | "overdue" | "active">("all");
-  const [taskPriorityFilter, setTaskPriorityFilter] = useState<"all" | "critical_high" | "normal">("all");
+  const [taskStatusFilter, setTaskStatusFilter] = useState<
+    "all" | "overdue" | "active"
+  >("all");
+  const [taskPriorityFilter, setTaskPriorityFilter] = useState<
+    "all" | "critical_high" | "normal"
+  >("all");
   const {
     summary,
     operational,
@@ -33,7 +37,7 @@ export const DashboardPage = () => {
     error,
     operationalError,
     fetchSummary,
-    fetchOperational
+    fetchOperational,
   } = useDashboardStore();
 
   const loadTaskInbox = useCallback(() => workspaceApi.getTaskInbox(50, 0), []);
@@ -41,11 +45,11 @@ export const DashboardPage = () => {
     data: taskInbox,
     loading: taskInboxLoading,
     error: taskInboxError,
-    reload: reloadTaskInbox
+    reload: reloadTaskInbox,
   } = useAsyncResource({
     loader: loadTaskInbox,
     initialData: { total: 0, overdue: 0, items: [] },
-    errorMessage: "Не удалось загрузить workspace task inbox"
+    errorMessage: "Не удалось загрузить workspace task inbox",
   });
 
   useEffect(() => {
@@ -62,7 +66,14 @@ export const DashboardPage = () => {
     };
     document.addEventListener("visibilitychange", onVisible);
     return () => document.removeEventListener("visibilitychange", onVisible);
-  }, [error, operationalError, taskInboxError, fetchOperational, fetchSummary, reloadTaskInbox]);
+  }, [
+    error,
+    operationalError,
+    taskInboxError,
+    fetchOperational,
+    fetchSummary,
+    reloadTaskInbox,
+  ]);
 
   const trainingStatus = summary?.training.status ?? "ok";
   const trainingLabel = trainingStatusLabels[trainingStatus] ?? trainingStatus;
@@ -71,8 +82,16 @@ export const DashboardPage = () => {
     return taskInbox.items.filter((task) => {
       if (taskStatusFilter === "overdue" && !task.overdue) return false;
       if (taskStatusFilter === "active" && task.overdue) return false;
-      if (taskPriorityFilter === "critical_high" && !["critical", "high"].includes(task.priority)) return false;
-      if (taskPriorityFilter === "normal" && ["critical", "high"].includes(task.priority)) return false;
+      if (
+        taskPriorityFilter === "critical_high" &&
+        !["critical", "high"].includes(task.priority)
+      )
+        return false;
+      if (
+        taskPriorityFilter === "normal" &&
+        ["critical", "high"].includes(task.priority)
+      )
+        return false;
       return true;
     });
   }, [taskInbox.items, taskPriorityFilter, taskStatusFilter]);
@@ -80,24 +99,26 @@ export const DashboardPage = () => {
   const kpis = [
     {
       label: "Просроченные задачи",
-      value: loading ? "—" : summary?.overdue_tasks ?? 0,
+      value: loading ? "—" : (summary?.overdue_tasks ?? 0),
       trend: `Критичных обязательств: ${summary?.critical_obligations ?? 0}`,
       icon: CalendarClock,
-      href: "/tasks?overdue=true"
+      href: "/tasks?overdue=true",
     },
     {
       label: "Критичные обязательства",
-      value: loading ? "—" : summary?.critical_obligations ?? 0,
+      value: loading ? "—" : (summary?.critical_obligations ?? 0),
       trend: "Приоритет: критичный/высокий",
       icon: Layers,
-      href: "/tasks?priority=critical"
+      href: "/tasks?priority=critical",
     },
     {
       label: "Инциденты и риски",
-      value: loading ? "—" : `${summary?.incidents_open ?? 0} / ${summary?.risks_total ?? 0}`,
+      value: loading
+        ? "—"
+        : `${summary?.incidents_open ?? 0} / ${summary?.risks_total ?? 0}`,
       trend: "Активные инциденты / оценённые риски",
       icon: ShieldAlert,
-      href: "/incidents"
+      href: "/incidents",
     },
     {
       label: "Статус обучения",
@@ -105,8 +126,8 @@ export const DashboardPage = () => {
       trend: `Просрочено: ${summary?.training.overdue ?? 0}, скоро: ${summary?.training.due_soon ?? 0}`,
       icon: Users2,
       href: "/training",
-      helper: trainingLabel
-    }
+      helper: trainingLabel,
+    },
   ];
 
   return (
@@ -117,13 +138,21 @@ export const DashboardPage = () => {
           <div>
             <h1 className="text-2xl font-bold">Единый рабочий стол ОТ/ПБ</h1>
             <p className="text-sm text-muted-foreground">
-              Контроль задач, ЭДО, рисков и готовности к проверкам по текущему тенанту.
+              Контроль задач, ЭДО, рисков и готовности к проверкам по текущему
+              тенанту.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
             <Can
               permission={PERMISSIONS.DOCUMENT_CREATE}
-              fallback={<Button disabled title="Недостаточно прав для создания документа">Создать документ</Button>}
+              fallback={
+                <Button
+                  disabled
+                  title="Недостаточно прав для создания документа"
+                >
+                  Создать документ
+                </Button>
+              }
             >
               <Button asChild>
                 <Link to="/documents/wizard">Создать документ</Link>
@@ -131,7 +160,15 @@ export const DashboardPage = () => {
             </Can>
             <Can
               permission={PERMISSIONS.PACK_VIEW}
-              fallback={<Button variant="outline" disabled title="Недостаточно прав для запуска мастера">Запустить мастер</Button>}
+              fallback={
+                <Button
+                  variant="outline"
+                  disabled
+                  title="Недостаточно прав для запуска мастера"
+                >
+                  Запустить мастер
+                </Button>
+              }
             >
               <Button variant="outline" asChild>
                 <Link to="/packs">Запустить мастер</Link>
@@ -142,14 +179,23 @@ export const DashboardPage = () => {
       </div>
 
       <ErrorState error={error ?? undefined} onRetry={fetchSummary} />
-      <ErrorState error={operationalError ?? undefined} onRetry={fetchOperational} />
-      <ErrorState error={taskInboxError ?? undefined} onRetry={() => void reloadTaskInbox()} />
+      <ErrorState
+        error={operationalError ?? undefined}
+        onRetry={fetchOperational}
+      />
+      <ErrorState
+        error={taskInboxError ?? undefined}
+        onRetry={() => void reloadTaskInbox()}
+      />
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {kpis.map((item) => (
           <Card key={item.label} className="transition hover:shadow-md">
             {item.href ? (
-              <Link to={item.href} className="block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+              <Link
+                to={item.href}
+                className="block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
                 <CardContent className="space-y-3 py-6">
                   <div className="flex items-center justify-between text-sm text-muted-foreground">
                     <span>{item.label}</span>
@@ -157,7 +203,9 @@ export const DashboardPage = () => {
                   </div>
                   <div className="text-2xl font-semibold">{item.value}</div>
                   <div className="text-xs text-muted-foreground">
-                    {item.helper ? `${item.helper} · ${item.trend}` : item.trend}
+                    {item.helper
+                      ? `${item.helper} · ${item.trend}`
+                      : item.trend}
                   </div>
                 </CardContent>
               </Link>
@@ -168,7 +216,9 @@ export const DashboardPage = () => {
                   <item.icon className="h-4 w-4" />
                 </div>
                 <div className="text-2xl font-semibold">{item.value}</div>
-                <div className="text-xs text-muted-foreground">{item.trend}</div>
+                <div className="text-xs text-muted-foreground">
+                  {item.trend}
+                </div>
               </CardContent>
             )}
           </Card>

@@ -12,7 +12,11 @@ from sqlalchemy import select
 
 from app.api.routes import managed_clients as routes
 from app.domains.managed_clients.lifecycle import ContractStatus, ManagedClientMode
-from app.models.managed_clients import ManagedClient, ManagedClientAccess
+from app.models.managed_clients import (
+    ManagedClient,
+    ManagedClientAccess,
+    ManagedClientConsent,
+)
 from app.models.models import AuditLog
 
 _NOW = datetime(2026, 8, 4, 12, 0, tzinfo=timezone.utc)
@@ -27,18 +31,19 @@ def _auth(sub="u1"):
     return SimpleNamespace(sub=sub, tenant_id=_TENANT, roles=["ot_specialist"], company_id=None)
 
 
-def _request(path="/api/v1/managed-clients/x/context"):
+def _request(path="/api/v1/managed-clients/x/context", method="POST"):
     return SimpleNamespace(
         headers={"user-agent": "tests"},
         client=SimpleNamespace(host="127.0.0.1"),
         state=SimpleNamespace(trace_id="trace-1"),
         url=SimpleNamespace(path=path),
+        method=method,
     )
 
 
 @pytest.fixture(autouse=True)
 def _flag_on(monkeypatch):
-    monkeypatch.setattr(routes, "is_feature_enabled", AsyncMock(return_value=True))
+    monkeypatch.setattr(routes, "is_module_enabled", AsyncMock(return_value=True))
 
 
 async def _client(session, *, name="Ромашка", tenant_id=_TENANT):
@@ -50,6 +55,17 @@ async def _client(session, *, name="Ромашка", tenant_id=_TENANT):
         contract_status=ContractStatus.ACTIVE,
     )
     session.add(row)
+    await session.flush()
+    # Срез-12: вход «от имени» требует действующего согласия клиента.
+    session.add(
+        ManagedClientConsent(
+            tenant_id=tenant_id,
+            managed_client_id=row.id,
+            document_ref="Поручение №1",
+            granted_at=_NOW,
+            granted_by_user_id="admin-1",
+        )
+    )
     await session.flush()
     return row
 

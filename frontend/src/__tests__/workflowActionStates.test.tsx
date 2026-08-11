@@ -11,13 +11,15 @@ vi.mock("@/api/client", () => ({
   apiClient: {
     get: (...args: unknown[]) => getMock(...args),
     post: (...args: unknown[]) => postMock(...args),
-  }
+  },
 }));
 
 vi.mock("@/components/permissions/Can", () => ({
-  Can: ({ children }: { children: React.ReactNode | ((allowed: boolean) => React.ReactNode) }) => (
-    <>{typeof children === "function" ? children(true) : children}</>
-  )
+  Can: ({
+    children,
+  }: {
+    children: React.ReactNode | ((allowed: boolean) => React.ReactNode);
+  }) => <>{typeof children === "function" ? children(true) : children}</>,
 }));
 
 describe("workflow action states", () => {
@@ -28,27 +30,42 @@ describe("workflow action states", () => {
 
   it("shows action error and keeps draft form when create workflow definition fails", async () => {
     getMock.mockImplementation((url: string) => {
-      if (["/workflow/definitions", "/workflow/tasks", "/workflow/instances"].includes(url)) {
+      if (
+        [
+          "/workflow/definitions",
+          "/workflow/tasks",
+          "/workflow/instances",
+        ].includes(url)
+      ) {
         return Promise.resolve({ data: [] });
       }
       throw new Error(`Unexpected GET ${url}`);
     });
-    postMock.mockRejectedValueOnce({ status: 400, message: "create workflow failed" });
+    postMock.mockRejectedValueOnce({
+      status: 400,
+      message: "create workflow failed",
+    });
 
     render(
       <MemoryRouter>
         <WorkflowPage />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
 
     await screen.findByText(/нет данных по процессам/i);
-    fireEvent.change(screen.getByPlaceholderText("Код процесса"), { target: { value: "custom-flow" } });
+    fireEvent.change(screen.getByPlaceholderText("Код процесса"), {
+      target: { value: "custom-flow" },
+    });
     fireEvent.click(screen.getByRole("button", { name: "Создать черновик" }));
 
     await waitFor(() => {
-      expect(screen.getByRole("alert")).toHaveTextContent("create workflow failed");
+      expect(screen.getByRole("alert")).toHaveTextContent(
+        "create workflow failed",
+      );
     });
-    expect(screen.getByPlaceholderText("Код процесса")).toHaveValue("custom-flow");
+    expect(screen.getByPlaceholderText("Код процесса")).toHaveValue(
+      "custom-flow",
+    );
   });
 
   it("shows task action error and keeps task list visible when complete fails", async () => {
@@ -81,7 +98,7 @@ describe("workflow action states", () => {
     render(
       <MemoryRouter>
         <WorkflowPage />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
 
     await screen.findByText("Approve document");

@@ -16,13 +16,25 @@ const baseSummary: WorkPermitClosingSummaryDto = {
 };
 
 const baseSigners: SignerRow[] = [
-  { personId: "p1", name: "Иванов Иван Иванович", roleLabel: "Производитель работ" },
-  { personId: "p2", name: "Петров Пётр Петрович", roleLabel: "Ответственный руководитель" },
+  {
+    personId: "p1",
+    name: "Иванов Иван Иванович",
+    roleLabel: "Производитель работ",
+  },
+  {
+    personId: "p2",
+    name: "Петров Пётр Петрович",
+    roleLabel: "Ответственный руководитель",
+  },
 ];
 
 const setWithManage = () =>
   useAuthStore.setState({
-    user: { id: "u1", roles: ["ot_specialist"], permissions: [PERMISSIONS.WORK_PERMIT_MANAGE] } as never,
+    user: {
+      id: "u1",
+      roles: ["ot_specialist"],
+      permissions: [PERMISSIONS.WORK_PERMIT_MANAGE],
+    } as never,
     loading: false,
     error: null,
     isAuthenticated: true,
@@ -56,13 +68,20 @@ describe("ClosingPanel", () => {
     );
     const btn = screen.getByRole("button", { name: /закрыть наряд/i });
     expect(btn).toBeDisabled();
-    expect(screen.getByText(/не оформлен акт окончания работ/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/не оформлен акт окончания работ/i),
+    ).toBeInTheDocument();
   });
 
   it("кнопка «Закрыть» активна при can_close=true", () => {
     render(
       <ClosingPanel
-        summary={{ ...baseSummary, completion_text: "работы окончены", can_close: true, missing: [] }}
+        summary={{
+          ...baseSummary,
+          completion_text: "работы окончены",
+          can_close: true,
+          missing: [],
+        }}
         signers={baseSigners}
         canManage
         onClose={vi.fn()}
@@ -70,7 +89,9 @@ describe("ClosingPanel", () => {
         nameOf={() => "ФИО"}
       />,
     );
-    expect(screen.getByRole("button", { name: /закрыть наряд/i })).toBeEnabled();
+    expect(
+      screen.getByRole("button", { name: /закрыть наряд/i }),
+    ).toBeEnabled();
   });
 
   it("скрывает кнопку «Оформить акт» при canManage=false", () => {
@@ -86,7 +107,9 @@ describe("ClosingPanel", () => {
       />,
     );
     // Кнопка «Оформить акт» не должна быть видна
-    expect(screen.queryByRole("button", { name: /оформить акт/i })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /оформить акт/i }),
+    ).not.toBeInTheDocument();
   });
 
   it("при canManage=true и подписанте без подписи рендерится кнопка «Зафиксировать»", () => {
@@ -101,7 +124,9 @@ describe("ClosingPanel", () => {
       />,
     );
     // SignaturesPanel рендерит кнопки для каждого подписанта без подписи
-    const fixButtons = screen.getAllByRole("button", { name: /зафиксировать/i });
+    const fixButtons = screen.getAllByRole("button", {
+      name: /зафиксировать/i,
+    });
     expect(fixButtons.length).toBe(baseSigners.length);
   });
 
@@ -126,7 +151,13 @@ describe("ClosingPanel", () => {
     render(
       <ClosingPanel
         summary={summary}
-        signers={[{ personId: "p1", name: "Иванов Иван Иванович", roleLabel: "Производитель работ" }]}
+        signers={[
+          {
+            personId: "p1",
+            name: "Иванов Иван Иванович",
+            roleLabel: "Производитель работ",
+          },
+        ]}
         canManage
         onClose={vi.fn()}
         onRefresh={vi.fn()}

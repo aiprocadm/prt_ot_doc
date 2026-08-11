@@ -61,7 +61,10 @@ const buildGroups = (kpi: CommitteeKpi): MetricGroup[] => [
     metrics: [
       { label: "Средняя явка", value: pct(kpi.avg_attendance_pct) },
       { label: "Доля кворума", value: pct(kpi.quorum_rate_pct) },
-      { label: "Проведённых заседаний (база)", value: String(kpi.held_meetings) },
+      {
+        label: "Проведённых заседаний (база)",
+        value: String(kpi.held_meetings),
+      },
     ],
   },
 ];
@@ -74,9 +77,16 @@ const MetricCard = ({ group }: { group: MetricGroup }) => (
     <CardContent>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {group.metrics.map((m) => (
-          <div key={m.label} className="rounded-lg border border-border bg-background p-4 shadow-sm">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">{m.label}</p>
-            <p className="mt-2 text-2xl font-semibold text-foreground">{m.value}</p>
+          <div
+            key={m.label}
+            className="rounded-lg border border-border bg-background p-4 shadow-sm"
+          >
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">
+              {m.label}
+            </p>
+            <p className="mt-2 text-2xl font-semibold text-foreground">
+              {m.value}
+            </p>
           </div>
         ))}
       </div>
@@ -105,7 +115,8 @@ const CommitteeKpiPage = () => {
         if (alive) setKpi(data);
       })
       .catch((err) => {
-        if (alive) setError(asApiError(err, "Не удалось загрузить KPI комитетов."));
+        if (alive)
+          setError(asApiError(err, "Не удалось загрузить KPI комитетов."));
       })
       .finally(() => {
         if (alive) setLoading(false);
@@ -150,7 +161,10 @@ const CommitteeKpiPage = () => {
         actions={backLink}
       />
       {groups.length === 0 ? (
-        <EmptyState title="Данные отсутствуют" description="Пока нет данных для расчёта показателей." />
+        <EmptyState
+          title="Данные отсутствуют"
+          description="Пока нет данных для расчёта показателей."
+        />
       ) : (
         groups.map((group) => <MetricCard key={group.title} group={group} />)
       )}

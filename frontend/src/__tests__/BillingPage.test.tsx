@@ -18,10 +18,13 @@ vi.mock("@/api/billing", () => ({
   getBillingInvoices: (...args: unknown[]) => getBillingInvoicesMock(...args),
   getBillingPlans: (...args: unknown[]) => getBillingPlansMock(...args),
   changeBillingPlan: (...args: unknown[]) => changeBillingPlanMock(...args),
-  markSubscriptionPastDue: (...args: unknown[]) => markSubscriptionPastDueMock(...args),
-  markSubscriptionPaid: (...args: unknown[]) => markSubscriptionPaidMock(...args),
+  markSubscriptionPastDue: (...args: unknown[]) =>
+    markSubscriptionPastDueMock(...args),
+  markSubscriptionPaid: (...args: unknown[]) =>
+    markSubscriptionPaidMock(...args),
   suspendSubscription: (...args: unknown[]) => suspendSubscriptionMock(...args),
-  activateSubscription: (...args: unknown[]) => activateSubscriptionMock(...args),
+  activateSubscription: (...args: unknown[]) =>
+    activateSubscriptionMock(...args),
 }));
 
 describe("BillingPage", () => {
@@ -37,8 +40,19 @@ describe("BillingPage", () => {
 
     getBillingSummaryMock.mockResolvedValue({
       plan: { code: "basic", name: "Basic" },
-      subscription: { status: "active", period_start: "2026-03-01", period_end: "2026-03-31", grace_until: null, auto_renew: true },
-      limits: { max_generations_per_month: 100, edo_outgoing_per_month: 50, max_s3_bytes: 1000, max_integrations: 5 },
+      subscription: {
+        status: "active",
+        period_start: "2026-03-01",
+        period_end: "2026-03-31",
+        grace_until: null,
+        auto_renew: true,
+      },
+      limits: {
+        max_generations_per_month: 100,
+        edo_outgoing_per_month: 50,
+        max_s3_bytes: 1000,
+        max_integrations: 5,
+      },
       features: {},
       usage: { docs_generated: 10, edo_outgoing: 5, s3_bytes_used: 100 },
       remaining: {},
@@ -51,20 +65,22 @@ describe("BillingPage", () => {
   });
 
   it("shows action error and keeps plan cards visible when plan change fails", async () => {
-    changeBillingPlanMock.mockRejectedValueOnce({ status: 400, message: "plan change failed" });
+    changeBillingPlanMock.mockRejectedValueOnce({
+      status: 400,
+      message: "plan change failed",
+    });
 
     render(
       <MemoryRouter>
         <BillingPage />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
 
-    await screen.findByText("Тариф и статус");
-    const switchPlanButtons = screen
-      .getAllByRole("button")
-      .filter((el) => (el.textContent ?? "").trim() === "Сменить");
+    // Кнопки «Сменить» появляются только после ответа getBillingPlans —
+    // заголовок «Тариф и статус» статичен, синхронный getAllByRole давал гонку.
+    const switchPlanButtons = await screen.findAllByText("Сменить");
     expect(switchPlanButtons.length).toBeGreaterThanOrEqual(1);
-    fireEvent.click(switchPlanButtons[0]!);
+    fireEvent.click(switchPlanButtons[0]!.closest("button") as HTMLElement);
 
     await waitFor(() => {
       expect(screen.getByRole("alert")).toHaveTextContent("plan change failed");
@@ -74,19 +90,24 @@ describe("BillingPage", () => {
   });
 
   it("shows action error and keeps current subscription section visible when mark past due fails", async () => {
-    markSubscriptionPastDueMock.mockRejectedValueOnce({ status: 400, message: "mark past due failed" });
+    markSubscriptionPastDueMock.mockRejectedValueOnce({
+      status: 400,
+      message: "mark past due failed",
+    });
 
     render(
       <MemoryRouter>
         <BillingPage />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
 
     await screen.findByText("Тариф и статус");
     fireEvent.click(screen.getByRole("button", { name: "Пометить неоплату" }));
 
     await waitFor(() => {
-      expect(screen.getByRole("alert")).toHaveTextContent("mark past due failed");
+      expect(screen.getByRole("alert")).toHaveTextContent(
+        "mark past due failed",
+      );
     });
     expect(screen.getByText(/Статус:/i)).toBeInTheDocument();
     expect(screen.getByText(/План:/i)).toBeInTheDocument();

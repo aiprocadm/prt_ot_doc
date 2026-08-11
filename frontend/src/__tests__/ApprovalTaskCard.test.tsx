@@ -21,19 +21,36 @@ describe("ApprovalTaskCard — действия по задаче", () => {
 
   it("«Согласовать» вызывает task-эндпоинт decideTask (а не process-уровневый decide)", async () => {
     render(<ApprovalTaskCard task={task} onChanged={() => {}} />);
-    fireEvent.change(screen.getByPlaceholderText("Комментарий"), { target: { value: "ок" } });
+    fireEvent.change(screen.getByPlaceholderText("Комментарий"), {
+      target: { value: "ок" },
+    });
     fireEvent.click(screen.getByText("Согласовать"));
-    await waitFor(() => expect(approvalsApi.decideTask).toHaveBeenCalledWith("task-1234abcd", "approve", "ок"));
+    await waitFor(() =>
+      expect(approvalsApi.decideTask).toHaveBeenCalledWith(
+        "task-1234abcd",
+        "approve",
+        "ок",
+      ),
+    );
     expect(approvalsApi.decide).not.toHaveBeenCalled();
   });
 
   it("«Делегировать» вызывает delegateTask с id пользователя", async () => {
     render(<ApprovalTaskCard task={task} onChanged={() => {}} />);
-    fireEvent.change(screen.getByPlaceholderText("ID пользователя для делегирования"), {
-      target: { value: "user-7" },
-    });
+    fireEvent.change(
+      screen.getByPlaceholderText("ID пользователя для делегирования"),
+      {
+        target: { value: "user-7" },
+      },
+    );
     fireEvent.click(screen.getByText("Делегировать"));
-    await waitFor(() => expect(approvalsApi.delegateTask).toHaveBeenCalledWith("task-1234abcd", "user-7", ""));
+    await waitFor(() =>
+      expect(approvalsApi.delegateTask).toHaveBeenCalledWith(
+        "task-1234abcd",
+        "user-7",
+        "",
+      ),
+    );
     expect(approvalsApi.decide).not.toHaveBeenCalled();
   });
 

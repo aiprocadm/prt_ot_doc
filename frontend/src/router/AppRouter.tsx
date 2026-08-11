@@ -1,9 +1,16 @@
 import { Suspense, useEffect, useRef, useState } from "react";
-import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
+import {
+  BrowserRouter,
+  Navigate,
+  Route,
+  Routes,
+  useLocation,
+} from "react-router-dom";
 
 import { AuthLayout } from "@/layouts/AuthLayout";
 import { MainLayout } from "@/layouts/MainLayout";
 import { AccessDeniedPage } from "@/pages/access/AccessDeniedPage";
+import { ModuleDisabledPage } from "@/pages/access/ModuleDisabledPage";
 import { AuthRedirectHandler } from "@/router/AuthRedirectHandler";
 import { buildProtectedRouteGroups } from "@/router/routeGroups";
 import { LoginPage } from "@/router/pageRegistry";
@@ -22,7 +29,11 @@ const LandingRedirect = () => {
   }, [can]);
 
   if (!landingRoute) {
-    return <div className="flex min-h-screen items-center justify-center">Загрузка...</div>;
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        Загрузка...
+      </div>
+    );
   }
 
   return <Navigate to={landingRoute} replace />;
@@ -40,7 +51,7 @@ const RouteMetricsTracker = () => {
       trackUxMetric("nav_backtrack_rate", {
         from: previousPath,
         to: currentPath,
-        is_backtrack: currentPath === previousPath ? 1 : 0
+        is_backtrack: currentPath === previousPath ? 1 : 0,
       });
     }
     previousPathRef.current = currentPath;
@@ -60,12 +71,22 @@ const AppRouter = () => {
     <BrowserRouter>
       <RouteMetricsTracker />
       <AuthRedirectHandler />
-      <Suspense fallback={<div className="flex min-h-screen items-center justify-center">Загрузка...</div>}>
+      <Suspense
+        fallback={
+          <div className="flex min-h-screen items-center justify-center">
+            Загрузка...
+          </div>
+        }
+      >
         <Routes>
           <Route path="/auth" element={<AuthLayout />}>
             <Route path="login" element={<LoginPage />} />
           </Route>
           <Route path="/no-access" element={<AccessDeniedPage />} />
+          <Route
+            path="/module-unavailable"
+            element={<ModuleDisabledPage />}
+          />
           <Route element={<ProtectedRoute />}>
             <Route element={<MainLayout />}>
               <Route index element={<LandingRedirect />} />

@@ -42,7 +42,9 @@ class _AccessStub:
         self.role = role
         self.company_id = company_id
 
-    def ensure_company_access(self, company_id: str | None, *, action: str = "access company resource") -> None:
+    def ensure_company_access(
+        self, company_id: str | None, *, action: str = "access company resource"
+    ) -> None:
         if self.company_id is None or company_id is None or str(company_id) != str(self.company_id):
             raise HTTPException(status_code=403, detail=f"Company mismatch for {action}")
 
@@ -87,7 +89,9 @@ def test_signed_url_request_rejects_ttl_below_floor() -> None:
 
 
 def test_get_signed_download_url_rejects_cross_tenant_access() -> None:
-    record = SimpleNamespace(id="file-1", tenant_id="tenant-b", status="clean", object_key="tenants/tenant-b/files/a")
+    record = SimpleNamespace(
+        id="file-1", tenant_id="tenant-b", status="clean", object_key="tenants/tenant-b/files/a"
+    )
     svc = FileService(session=_FakeSession(record), tenant_id="tenant-a")
 
     async def _run() -> None:
@@ -172,7 +176,9 @@ def test_delete_file_rejects_cross_company_client_access() -> None:
     asyncio.run(_run())
 
 
-def test_create_upload_session_rejects_dangerous_double_extension(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_create_upload_session_rejects_dangerous_double_extension(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     settings = SimpleNamespace(
         max_upload_size=10 * 1024 * 1024,
         file_allowed_mime={"application/pdf"},
@@ -292,7 +298,9 @@ def test_company_scope_helper_allows_and_denies_by_company(role: str) -> None:
     svc._enforce_client_company_scope(record=record, actor_role=role, actor_company_id="company-a")
 
     with pytest.raises(HTTPException) as exc:
-        svc._enforce_client_company_scope(record=record, actor_role=role, actor_company_id="company-b")
+        svc._enforce_client_company_scope(
+            record=record, actor_role=role, actor_company_id="company-b"
+        )
     assert exc.value.status_code == 403
     assert exc.value.detail == "file_company_forbidden"
 
@@ -400,4 +408,9 @@ def test_link_file_rejects_non_clean_guarded_role_and_emits_audit() -> None:
         assert exc.value.detail == "file_not_clean"
 
     asyncio.run(_run())
-    assert events == [("file.link.denied", {"reason": "file_not_clean", "role": "signature", "status": "infected"})]
+    assert events == [
+        (
+            "file.link.denied",
+            {"reason": "file_not_clean", "role": "signature", "status": "infected"},
+        )
+    ]

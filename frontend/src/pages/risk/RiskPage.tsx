@@ -13,7 +13,8 @@ import { useAbility } from "@/permissions/useAbility";
 import { useRiskStore } from "@/stores/risk";
 
 const RiskPage = () => {
-  const { listHazards, listAssessments, hazards, assessments, loading, error } = useRiskStore();
+  const { listHazards, listAssessments, hazards, assessments, loading, error } =
+    useRiskStore();
   const { can } = useAbility();
   const canView = can(PERMISSIONS.RISK_VIEW);
 
@@ -30,18 +31,25 @@ const RiskPage = () => {
 
   return (
     <div className="space-y-6">
-      <Breadcrumb items={[{ label: "Главная", to: "/dashboard" }, { label: "Риски" }]} />
-      <ErrorState error={error ?? undefined} onRetry={() => {
-        void listHazards();
-        void listAssessments();
-      }} />
+      <Breadcrumb
+        items={[{ label: "Главная", to: "/dashboard" }, { label: "Риски" }]}
+      />
+      <ErrorState
+        error={error ?? undefined}
+        onRetry={() => {
+          void listHazards();
+          void listAssessments();
+        }}
+      />
       {loading && hazards.length === 0 && assessments.length === 0 ? (
         <LoadingScreen label="Загрузка реестра рисков" />
       ) : null}
       <RiskAssessmentForm />
       <Card>
         <CardHeader>
-          <CardTitle className="text-xl font-semibold">Справочник опасностей</CardTitle>
+          <CardTitle className="text-xl font-semibold">
+            Справочник опасностей
+          </CardTitle>
         </CardHeader>
         <CardContent>
           {!loading && !error && hazards.length === 0 ? (
@@ -55,7 +63,9 @@ const RiskPage = () => {
               {hazards.map((hazard) => (
                 <li key={hazard.id} className="rounded-md border p-3">
                   <div className="font-medium">{hazard.title}</div>
-                  <div className="text-xs text-muted-foreground">{hazard.description}</div>
+                  <div className="text-xs text-muted-foreground">
+                    {hazard.description}
+                  </div>
                 </li>
               ))}
             </ul>

@@ -205,9 +205,7 @@ class TestProcessingAgreements:
         tenant = await data_factory.ensure_tenant(slug="pdn-dpa-d", session=test_db_session)
         service = PdnAgreementService(test_db_session, tenant_id=str(tenant.id))
         with pytest.raises(InvalidRegistryValueError):
-            await service.create(
-                kind="franchise", party_role="operator", counterparty_name="X"
-            )
+            await service.create(kind="franchise", party_role="operator", counterparty_name="X")
 
 
 @pytest.mark.anyio
