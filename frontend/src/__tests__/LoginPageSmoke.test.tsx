@@ -7,6 +7,10 @@ import LoginPage from "@/pages/auth/LoginPage";
 vi.mock("@/api/tenantStorage", () => ({
   tenantStorage: {
     getTenant: () => null,
+    // `api/client.ts` зовёт hydrate() при ИМПОРТЕ модуля: страница входа
+    // теперь дотягивается до него через хранилище бренда (BIZ-52 срез-6),
+    // и заглушка без hydrate роняла бы сбор теста, а не проверку.
+    hydrate: () => undefined,
   },
 }));
 

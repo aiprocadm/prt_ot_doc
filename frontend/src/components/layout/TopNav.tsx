@@ -36,6 +36,7 @@ export const TopNav = () => {
   const { tenant, tenants, setTenant } = useTenantStore();
   const [kpi, setKpi] = useState({ tasks: 0, alerts: 0 });
   const appName = useBrandStore((state) => state.brand.app_name);
+  const logoUrl = useBrandStore((state) => state.logoUrl);
 
   useEffect(() => {
     let mounted = true;
@@ -61,8 +62,17 @@ export const TopNav = () => {
       <div className="mx-auto flex h-16 w-full max-w-7xl items-center gap-2 px-4">
         <div className="flex min-w-0 shrink-0 items-center gap-2 sm:gap-3">
           <MobileNavDrawer />
-          {/* Имя приложения — из бренда арендатора (BIZ-52 разд. 52.2).
-              Зашитое здесь название вендора видел бы каждый клиент партнёра. */}
+          {/* Имя и логотип — из бренда арендатора (BIZ-52 разд. 52.2).
+              Зашитое здесь название вендора видел бы каждый клиент партнёра.
+              alt пустой намеренно: рядом стоит текстовое имя, и читалка
+              экрана иначе объявляла бы бренд дважды. */}
+          {logoUrl ? (
+            <img
+              src={logoUrl}
+              alt=""
+              className="h-8 w-8 shrink-0 rounded object-contain"
+            />
+          ) : null}
           <span className="truncate text-base font-semibold sm:text-lg">
             {appName}
           </span>
