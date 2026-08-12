@@ -91,6 +91,10 @@ const planCatalog = (): PlanCatalog => ({
 
 const fleet = (overrides: Partial<TenantFleetPage> = {}): TenantFleetPage => ({
   managing_tenant_slug: "demo",
+  // По умолчанию смотрит владелец платформы — так вели себя все прежние тесты
+  // этой страницы. Партнёрский взгляд проверяется отдельными случаями ниже.
+  viewer_level: "platform",
+  can_manage_commercials: true,
   total: 2,
   items: [
     {
@@ -149,6 +153,53 @@ describe("TenantsPage", () => {
     expect(await screen.findByText("ООО Ньюко")).toBeInTheDocument();
     expect(screen.getByText("Демо")).toBeInTheDocument();
     expect(screen.getByText("управляющий")).toBeInTheDocument();
+  });
+
+  // BIZ-52 срез-2: тот же экран, но глазами партнёра.
+  it("у партнёра экран называется «Мои клиенты»", async () => {
+    listMock.mockResolvedValue(
+      fleet({ viewer_level: "reseller", can_manage_commercials: false }),
+    );
+
+    renderWithRouter(<TenantsPage />);
+
+    expect(await screen.findByText("Мои клиенты")).toBeInTheDocument();
+  });
+
+  it("партнёру не показывают кнопку смены тарифа", async () => {
+    listMock.mockResolvedValue(
+      fleet({ viewer_level: "reseller", can_manage_commercials: false }),
+    );
+
+    renderWithRouter(<TenantsPage />);
+
+    await screen.findByText("ООО Ньюко");
+    // Кнопка, которая всегда отвечает отказом, хуже отсутствующей.
+    expect(
+      screen.queryByRole("button", { name: "Изменить" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("владелец платформы кнопку смены тарифа видит", async () => {
+    listMock.mockResolvedValue(fleet());
+
+    renderWithRouter(<TenantsPage />);
+
+    await screen.findByText("ООО Ньюко");
+    expect(
+      screen.getAllByRole("button", { name: "Изменить" }).length,
+    ).toBeGreaterThan(0);
+  });
+
+  it("партнёру не показывают слаг управляющего арендатора", async () => {
+    listMock.mockResolvedValue(
+      fleet({ viewer_level: "reseller", can_manage_commercials: false }),
+    );
+
+    renderWithRouter(<TenantsPage />);
+
+    await screen.findByText("ООО Ньюко");
+    expect(screen.queryByText("Управляющий")).not.toBeInTheDocument();
   });
 
   it("показывает лимиты подписки", async () => {

@@ -43,10 +43,16 @@ export interface TenantFleetItem {
   features: TenantFeatureDto[];
 }
 
+/** Уровень смотрящего на кабинет арендаторов (ТЗ Доп. №1 разд. 52.1). */
+export type FleetViewerLevel = "platform" | "reseller";
+
 export interface TenantFleetPage {
   items: TenantFleetItem[];
   total: number;
   managing_tenant_slug: string;
+  viewer_level: FleetViewerLevel;
+  /** Приходит С СЕРВЕРА. Вычислять права на фронте — значит завести вторую правду. */
+  can_manage_commercials: boolean;
 }
 
 export interface FeatureCatalogEntry {

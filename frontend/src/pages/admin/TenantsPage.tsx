@@ -34,6 +34,11 @@ const emptyFleet: TenantFleetPage = {
   items: [],
   total: 0,
   managing_tenant_slug: "",
+  // Пока ответ не пришёл, считаем смотрящего партнёром с наименьшими правами:
+  // мигнуть кнопкой смены тарифа и отобрать её — хуже, чем показать её на
+  // полсекунды позже.
+  viewer_level: "reseller",
+  can_manage_commercials: false,
 };
 const emptyPlans: PlanCatalog = { plans: [], features: [] };
 
@@ -73,6 +78,10 @@ const TenantsPage = () => {
   });
 
   const managingSlug = res.data.managing_tenant_slug;
+  // Оба признака — из ответа сервера (BIZ-52 срез-2). Партнёр видит тот же
+  // экран, но про СВОИХ клиентов и без коммерческих кнопок.
+  const canManageCommercials = res.data.can_manage_commercials;
+  const isPlatformOwner = res.data.viewer_level === "platform";
 
   const toggleStatus = async (item: TenantFleetItem, nextActive: boolean) => {
     try {
@@ -143,18 +152,25 @@ const TenantsPage = () => {
             <Badge variant={item.plan ? "default" : "secondary"}>
               {planTitle(item.plan)}
             </Badge>
-            <Can permission={PERMISSIONS.ADMIN_MANAGE_TENANTS}>
-              <TenantPlanDialog
-                item={item}
-                plans={plans}
-                onSubmitted={reload}
-                trigger={
-                  <Button variant="ghost" size="sm">
-                    Изменить
-                  </Button>
-                }
-              />
-            </Can>
+            {/* Смена тарифа — только у владельца платформы (BIZ-52 срез-2):
+                у партнёра пока нет собственного потолка, и сервер такой запрос
+                отвергает. Показывать кнопку, которая всегда отказывает, хуже,
+                чем не показывать её вовсе. Признак берём из ответа сервера, а
+                не выводим из роли: вторая правда о правах однажды разойдётся. */}
+            {canManageCommercials ? (
+              <Can permission={PERMISSIONS.ADMIN_MANAGE_TENANTS}>
+                <TenantPlanDialog
+                  item={item}
+                  plans={plans}
+                  onSubmitted={reload}
+                  trigger={
+                    <Button variant="ghost" size="sm">
+                      Изменить
+                    </Button>
+                  }
+                />
+              </Can>
+            ) : null}
           </div>
         );
       },
@@ -211,8 +227,12 @@ const TenantsPage = () => {
   return (
     <div className="space-y-4">
       <RegistryPageHeader
-        title="Тенанты"
-        description="Площадки платформы: создание, доступ по подписке и лимиты."
+        title={isPlatformOwner ? "Тенанты" : "Мои клиенты"}
+        description={
+          isPlatformOwner
+            ? "Площадки платформы: создание, доступ по подписке и лимиты."
+            : "Клиенты вашей компании: создание и доступ. Тарифы и лимиты задаёт владелец платформы."
+        }
         actions={
           <Can
             permission={PERMISSIONS.ADMIN_MANAGE_TENANTS}
@@ -225,13 +245,21 @@ const TenantsPage = () => {
           </Can>
         }
         stats={[
-          { label: "Всего тенантов", value: res.data.total },
+          {
+            label: isPlatformOwner ? "Всего тенантов" : "Всего клиентов",
+            value: res.data.total,
+          },
           {
             label: "Активных",
             value: res.data.items.filter((item) => item.tenant.is_active)
               .length,
           },
-          { label: "Управляющий", value: managingSlug || "—" },
+          // Слаг управляющего партнёру не показываем: в его кабинете это чужая
+          // служебная подробность, а разд. 52.2 требует убирать упоминания
+          // вендора из интерфейса партнёра.
+          ...(isPlatformOwner
+            ? [{ label: "Управляющий", value: managingSlug || "—" }]
+            : []),
         ]}
       />
       <ErrorState error={res.error ?? undefined} onRetry={reload} />

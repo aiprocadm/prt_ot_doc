@@ -110,6 +110,14 @@ class TenantFleetPage(BaseSchema):
     items: list[TenantFleetItem]
     total: int
     managing_tenant_slug: str
+    #: Уровень СМОТРЯЩЕГО (BIZ-52 срез-2): владелец платформы или партнёр.
+    #: Нужен интерфейсу для формулировок — «весь флот» и «мои клиенты» это
+    #: разные экраны при одном наборе данных.
+    viewer_level: Literal["platform", "reseller"] = "platform"
+    #: Можно ли смотрящему менять тариф, квоты и пробный доступ. Флаг приходит
+    #: С СЕРВЕРА, а не выводится на фронте: вычисли его во второй раз — и
+    #: получишь вторую правду о правах, которая однажды разойдётся с первой.
+    can_manage_commercials: bool = True
 
 
 class FeatureCatalogEntry(BaseSchema):

@@ -1,10 +1,17 @@
-"""Tenant fleet management for the managing ("platform") tenant.
+"""Кабинет арендаторов: владелец платформы и партнёры-реселлеры.
 
-``app.api.routes.tenants`` stays tenant-scoped: every caller only ever sees its own
-record. Subscription management needs the opposite — one designated tenant that
-provisions, suspends and re-quotas everybody else. That privilege is granted here and
-nowhere else: :func:`_require_managing_admin` demands both an admin role *and* that the
-request runs under ``settings.managing_tenant_slug``.
+``app.api.routes.tenants`` остаётся про «свою» запись: каждый видит только себя.
+Управление подпиской — противоположная задача: кто-то заводит, приостанавливает
+и переквотирует ДРУГИХ. Это право выдаётся здесь и больше нигде.
+
+До BIZ-52 среза-2 право было ровно одно и неделимое: «ты управляющий арендатор»
+(`settings.managing_tenant_slug`). Разд. 52.4 требует второй кабинет — партнёра,
+который ведёт СВОИХ клиентов; а разд. 52.1 требует, чтобы партнёр при этом не
+видел ни чужих клиентов, ни данных владельца платформы. Поэтому проверка
+разделена надвое: :func:`_require_fleet_actor` отвечает «кто пришёл», а
+:class:`FleetScope` — «что ему принадлежит». Все выборки и правки сужаются
+областью; чужой арендатор отвечает 404, а не 403, чтобы не подтверждать даже
+факт его существования.
 """
 
 from __future__ import annotations
@@ -18,15 +25,19 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.api.helpers.hierarchy_errors import hierarchy_http_error
 from app.core.audit_decorator import audit_operation
 from app.core.config import get_settings
+from app.core.errors import api_problem_detail
 from app.core.security import verify_token
 from app.db.session import AsyncSessionLocal, rearm_session_tenant_context
 from app.domains.reseller import (
-    RESELLER_KIND,
+    FleetScope,
     HierarchyViolation,
     TenantNode,
-    validate_parent_candidate,
+    is_in_scope,
+    plan_tenant_creation,
+    resolve_fleet_scope,
 )
 from app.models.models import RoleEnum, Tenant, TenantQuota
 from app.modules.subscription import (
@@ -74,15 +85,29 @@ _MANAGEMENT_ROLES = frozenset(
 )
 
 
-def _require_managing_admin(
+def _fleet_node(record: Tenant) -> TenantNode:
+    """Свести ORM-строку к полям, которые нужны правилам иерархии и области."""
+
+    return TenantNode(
+        id=record.id,
+        slug=record.slug,
+        kind=record.kind,
+        parent_id=record.parent_id,
+        is_active=bool(record.is_active),
+    )
+
+
+def _require_fleet_actor(
     credentials: HTTPAuthorizationCredentials | None,
     tenant: Tenant,
-) -> dict[str, object]:
-    """Authorise a fleet operation, or raise 401/403.
+) -> tuple[dict[str, object], FleetScope]:
+    """Авторизовать операцию с флотом и вернуть область пришедшего.
 
-    Three independent checks: a valid access token, an admin role, and the request being
-    scoped to the managing tenant. The last one is what keeps a regular tenant's admin
-    from reaching other tenants' records.
+    Четыре независимые проверки: действующий токен, управляющая роль, совпадение
+    арендатора токена с арендатором запроса и — новое в срезе-2 — уровень
+    арендатора. Раньше третья проверка была «ты управляющий», и она же выполняла
+    роль четвёртой; теперь уровень решает, ЧТО именно доступно, а не только
+    «пускать или нет».
     """
 
     if credentials is None:
@@ -91,48 +116,95 @@ def _require_managing_admin(
     if str(payload.get("role") or "").lower() not in _MANAGEMENT_ROLES:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Forbidden")
 
-    managing_slug = get_settings().managing_tenant_slug
-    if tenant.slug.strip().lower() != managing_slug:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Tenant fleet management is not available")
-    # A token minted for another tenant must not act through the managing tenant's slug.
+    # Токен, выписанный другому арендатору, не должен действовать через чужой
+    # слаг. Сравниваем с арендатором ЗАПРОСА (а не с управляющим, как раньше):
+    # партнёр приходит под своим слагом, и жёсткая привязка к управляющему
+    # закрыла бы ему кабинет.
     token_slug = str(payload.get("tenant") or "").strip().lower()
-    if token_slug and token_slug != managing_slug:
+    if token_slug and token_slug != tenant.slug.strip().lower():
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Tenant scope mismatch")
+
+    try:
+        scope = resolve_fleet_scope(
+            _fleet_node(tenant), managing_slug=get_settings().managing_tenant_slug
+        )
+    except HierarchyViolation as exc:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            detail=api_problem_detail(
+                code=exc.code, message=exc.message, error_type="platform-tenants"
+            ),
+        ) from exc
+    return payload, scope
+
+
+def _require_managing_admin(
+    credentials: HTTPAuthorizationCredentials | None,
+    tenant: Tenant,
+) -> dict[str, object]:
+    """Операция ТОЛЬКО для владельца платформы, партнёру закрыта.
+
+    Осталась для поверхностей, которые смотрят на платформу целиком, а не на
+    свой контур: например, журнал использования устаревших API
+    (`routes/deprecation_admin.py`) — там видно потребление ВСЕХ арендаторов.
+    Открывать такое партнёру нельзя, поэтому уровень проверяется явно.
+    """
+
+    payload, scope = _require_fleet_actor(credentials, tenant)
+    if not scope.sees_everything:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            detail=api_problem_detail(
+                code="PLATFORM_OWNER_ONLY",
+                message="Раздел доступен только владельцу платформы",
+                error_type="platform-tenants",
+            ),
+        )
     return payload
 
 
-def _validated_parent_id(payload: TenantProvisionRequest, *, parent: Tenant | None) -> str | None:
-    """Проверить запрошенного родителя для нового арендатора (BIZ-52 разд. 52.1).
+def _scope_filter(scope: FleetScope):
+    """Условие выборки по области. Для платформы — без сужения.
 
-    Реселлер — прямой партнёр владельца платформы, родителя у него не бывает;
-    обычному арендатору родителем может быть только реселлер.
+    Условие строится ЗДЕСЬ, а не в каждой ручке: разъехавшись, «свой клиент»
+    начал бы означать разное в списке и в правке.
     """
 
-    if payload.kind == RESELLER_KIND:
-        if payload.parent_id:
-            raise HTTPException(
-                status.HTTP_403_FORBIDDEN,
-                "Реселлер подчиняется владельцу платформы напрямую, без родителя",
-            )
+    if scope.sees_everything:
         return None
-    if not payload.parent_id:
-        return None
-    if parent is None:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Родитель не найден")
-    try:
-        validate_parent_candidate(
-            TenantNode(
-                id=parent.id,
-                slug=parent.slug,
-                kind=parent.kind,
-                parent_id=parent.parent_id,
-                is_active=bool(parent.is_active),
+    return Tenant.parent_id == scope.owner_id
+
+
+async def _load_in_scope(session: AsyncSession, tenant_id: str, scope: FleetScope) -> Tenant:
+    """Взять арендатора, если он принадлежит области, иначе 404.
+
+    Именно 404, а не 403: 403 подтвердил бы, что арендатор с таким id
+    существует, — партнёр не должен узнавать даже это о чужом контуре
+    (то же правило, что в BIZ-49 срез-9).
+    """
+
+    target = await session.get(Tenant, tenant_id)
+    if target is None or not is_in_scope(scope, _fleet_node(target)):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Tenant not found")
+    return target
+
+
+def _require_commercial_rights(scope: FleetScope) -> None:
+    """Тариф, квоты и пробный доступ пока меняет только владелец платформы."""
+
+    if scope.may_change_commercials:
+        return
+    raise HTTPException(
+        status.HTTP_403_FORBIDDEN,
+        detail=api_problem_detail(
+            code="FLEET_COMMERCIALS_PLATFORM_ONLY",
+            message=(
+                "Тарифы, квоты и пробный доступ выдаёт владелец платформы: "
+                "у партнёра ещё нет собственного потолка (суб-биллинг, разд. 52.4)"
             ),
-            managing_slug=get_settings().managing_tenant_slug,
-        )
-    except HierarchyViolation as exc:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, exc.message) from exc
-    return parent.id
+            error_type="platform-tenants",
+        ),
+    )
 
 
 def _fleet_session() -> AsyncSession:
@@ -189,14 +261,21 @@ async def list_tenant_fleet_endpoint(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ) -> TenantFleetPage:
-    _require_managing_admin(credentials, tenant)
+    _payload, scope = _require_fleet_actor(credentials, tenant)
 
-    total = await session.scalar(select(func.count()).select_from(Tenant.__table__))
-    rows = (
-        await session.execute(
-            select(Tenant).order_by(Tenant.created_at.asc()).offset(offset).limit(limit)
-        )
-    ).scalars()
+    # Область сужает И выборку, И подсчёт итога. Посчитай итог по всей таблице —
+    # и партнёр увидит «клиентов: 214» над списком из трёх своих: постраничная
+    # навигация уводила бы его на пустые страницы, а число выдавало бы размер
+    # чужого флота.
+    condition = _scope_filter(scope)
+    count_stmt = select(func.count()).select_from(Tenant.__table__)
+    rows_stmt = select(Tenant).order_by(Tenant.created_at.asc())
+    if condition is not None:
+        count_stmt = count_stmt.where(condition)
+        rows_stmt = rows_stmt.where(condition)
+
+    total = await session.scalar(count_stmt)
+    rows = (await session.execute(rows_stmt.offset(offset).limit(limit))).scalars()
 
     async with _fleet_session() as fleet_session:
         items = [await _build_fleet_item(fleet_session, record) for record in rows]
@@ -204,6 +283,8 @@ async def list_tenant_fleet_endpoint(
         items=items,
         total=int(total or 0),
         managing_tenant_slug=get_settings().managing_tenant_slug,
+        viewer_level="platform" if scope.sees_everything else "reseller",
+        can_manage_commercials=scope.may_change_commercials,
     )
 
 
@@ -212,9 +293,14 @@ async def list_plans_endpoint(
     tenant: Tenant = Depends(get_tenant_record),
     credentials: HTTPAuthorizationCredentials | None = Depends(_optional_bearer),
 ) -> PlanCatalog:
-    """The subscription tier catalogue the fleet UI renders its plan picker from."""
+    """The subscription tier catalogue the fleet UI renders its plan picker from.
 
-    _require_managing_admin(credentials, tenant)
+    Справочник открыт и партнёру: без названий тарифов его кабинет показывал бы
+    клиентов с пустой колонкой «тариф». Это только чтение — менять тариф
+    партнёр по-прежнему не может (см. ``_require_commercial_rights``).
+    """
+
+    _require_fleet_actor(credentials, tenant)
     return PlanCatalog(
         plans=[
             SubscriptionPlanRead(
@@ -248,7 +334,7 @@ async def list_module_registry(
     второй раз — и однажды разойтись с бэкендом.
     """
 
-    _require_managing_admin(credentials, tenant)
+    _require_fleet_actor(credentials, tenant)
     return ModuleRegistryResponse(
         modules=[
             ModuleRegistryEntry(
@@ -280,7 +366,7 @@ async def provision_tenant_endpoint(
     it to record the event inside this request's own transaction.
     """
 
-    _require_managing_admin(credentials, tenant)
+    _payload, _scope = _require_fleet_actor(credentials, tenant)
     slug = payload.slug.strip().lower()
     if slug == get_settings().managing_tenant_slug:
         raise HTTPException(status.HTTP_409_CONFLICT, "Tenant already exists")
@@ -300,17 +386,26 @@ async def provision_tenant_endpoint(
         if existing is not None:
             raise HTTPException(status.HTTP_409_CONFLICT, "Tenant already exists")
 
-        # Владелец платформы может сразу отдать нового арендатора реселлеру
-        # (BIZ-52 разд. 52.1). Родитель проверяется ДО создания: подвесить
-        # арендатора к клиенту или к самому себе нельзя.
-        parent_id = _validated_parent_id(
-            payload,
-            parent=(
-                await provisioning_session.get(Tenant, payload.parent_id)
-                if payload.parent_id
-                else None
-            ),
+        # Кто кому может завести арендатора — ТЕ ЖЕ правила, что у второй двери
+        # (`routes/tenants.py`). Владелец платформы может сразу отдать нового
+        # арендатора партнёру; партнёру подставляется он сам, и завести
+        # партнёра он не может. Своя проверка здесь однажды разошлась бы с
+        # соседней, и «чей это клиент» стало бы зависеть от ручки.
+        parent_record = (
+            await provisioning_session.get(Tenant, payload.parent_id)
+            if payload.parent_id
+            else None
         )
+        try:
+            plan = plan_tenant_creation(
+                actor=_fleet_node(tenant),
+                requested_kind=payload.kind,
+                requested_parent_id=payload.parent_id,
+                parent=_fleet_node(parent_record) if parent_record is not None else None,
+                managing_slug=get_settings().managing_tenant_slug,
+            )
+        except HierarchyViolation as exc:
+            raise hierarchy_http_error(exc, error_type="platform-tenants") from exc
 
         service = BootstrapTenantService(provisioning_session)
         try:
@@ -320,13 +415,15 @@ async def provision_tenant_endpoint(
                 owner_email=str(payload.owner_email),
                 owner_password=payload.owner_password,
                 demo=payload.demo_data,
-                parent_id=parent_id,
+                parent_id=plan.parent_id,
             )
             created = (
                 await provisioning_session.execute(select(Tenant).where(Tenant.slug == slug))
             ).scalar_one()
-            if payload.kind != created.kind:
-                created.kind = payload.kind
+            # Вид — тоже из решения правил, а не из тела: партнёр не заведёт
+            # партнёра даже подменой поля в запросе.
+            if plan.kind != created.kind:
+                created.kind = plan.kind
             await provisioning_session.commit()
         except IntegrityError as exc:
             await provisioning_session.rollback()
@@ -355,12 +452,16 @@ async def patch_tenant_status_endpoint(
     tenant: Tenant = Depends(get_tenant_record),
     credentials: HTTPAuthorizationCredentials | None = Depends(_optional_bearer),
 ) -> TenantRead:
-    """Enable or suspend a tenant — the subscription on/off switch."""
+    """Enable or suspend a tenant — the subscription on/off switch.
 
-    _require_managing_admin(credentials, tenant)
-    target = await session.get(Tenant, tenant_id)
-    if target is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Tenant not found")
+    Приостановка клиента — обычная работа партнёра, поэтому она открыта и ему,
+    но только в своём поддереве. Себя партнёр приостановить не может: он не
+    входит в собственную область (см. ``is_in_scope``), иначе одним запросом
+    запер бы собственный кабинет.
+    """
+
+    _payload, scope = _require_fleet_actor(credentials, tenant)
+    target = await _load_in_scope(session, tenant_id, scope)
     # Suspending the managing tenant would lock everyone out of fleet management.
     if target.slug.strip().lower() == get_settings().managing_tenant_slug:
         raise HTTPException(status.HTTP_409_CONFLICT, "Managing tenant cannot be suspended")
@@ -385,9 +486,9 @@ async def patch_fleet_quotas_endpoint(
 ) -> TenantQuotaRead:
     """Adjust another tenant's limits — the subscription plan."""
 
-    _require_managing_admin(credentials, tenant)
-    if await session.get(Tenant, tenant_id) is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Tenant not found")
+    _payload, scope = _require_fleet_actor(credentials, tenant)
+    _require_commercial_rights(scope)
+    await _load_in_scope(session, tenant_id, scope)
     async with _fleet_session() as fleet_session:
         quota = await _load_quota(fleet_session, tenant_id)
         if quota is None:
@@ -411,16 +512,15 @@ async def patch_tenant_plan_endpoint(
 ) -> TenantFleetItem:
     """Move a tenant onto a subscription tier: unlock its features and set its quotas."""
 
-    _require_managing_admin(credentials, tenant)
+    _payload, scope = _require_fleet_actor(credentials, tenant)
+    _require_commercial_rights(scope)
     plan = PLANS.get(payload.plan.strip().lower())
     if plan is None:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_ENTITY,
             f"Unknown plan '{payload.plan}'",
         )
-    target = await session.get(Tenant, tenant_id)
-    if target is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Tenant not found")
+    target = await _load_in_scope(session, tenant_id, scope)
 
     async with _fleet_session() as fleet_session:
         await apply_plan(fleet_session, target, plan)
@@ -446,10 +546,9 @@ async def grant_module_trial_endpoint(
     менеджера — модуль оставался открытым бесплатно.
     """
 
-    _require_managing_admin(credentials, tenant)
-    target = await session.get(Tenant, tenant_id)
-    if target is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Tenant not found")
+    _payload, scope = _require_fleet_actor(credentials, tenant)
+    _require_commercial_rights(scope)
+    target = await _load_in_scope(session, tenant_id, scope)
     try:
         expires_at = await grant_module_trial(target, code, payload.days)
     except TrialError as error:
@@ -472,10 +571,9 @@ async def revoke_module_trial_endpoint(
     иначе эта кнопка однажды заберёт оплаченное.
     """
 
-    _require_managing_admin(credentials, tenant)
-    target = await session.get(Tenant, tenant_id)
-    if target is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Tenant not found")
+    _payload, scope = _require_fleet_actor(credentials, tenant)
+    _require_commercial_rights(scope)
+    target = await _load_in_scope(session, tenant_id, scope)
     if code not in FEATURE_CATALOG:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown module '{code}'")
     if not await revoke_module_trial(target, code):
