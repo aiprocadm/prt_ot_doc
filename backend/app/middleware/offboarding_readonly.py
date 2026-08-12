@@ -27,13 +27,14 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from fastapi import HTTPException, status
+from fastapi import status
 from sqlalchemy import select
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
-from app.api.dependencies import _fetch_tenant_by_identifier, _resolve_tenant_slug
+from app.api.dependencies import _resolve_tenant_slug
+from app.api.helpers.request_tenant import path_is_under, resolve_request_tenant
 from app.db.session import AsyncSessionLocal
 from app.models.offboarding import TenantOffboarding
 
@@ -62,7 +63,10 @@ class OffboardingReadOnlyMiddleware(BaseHTTPMiddleware):
         if (
             request.method.upper() not in _MUTATING_METHODS
             or not path.startswith("/api/v1")
-            or path.startswith(_ALWAYS_WRITABLE_PREFIXES)
+            # Совпадение по ГРАНИЦЕ сегмента, а не по буквам: с обычным
+            # `startswith` будущий `/api/v1/authorizations` молча попал бы в
+            # исключения из-за префикса `/api/v1/auth` (BIZ-52 срез-3).
+            or path_is_under(path, _ALWAYS_WRITABLE_PREFIXES)
         ):
             return await call_next(request)
 
@@ -70,7 +74,7 @@ class OffboardingReadOnlyMiddleware(BaseHTTPMiddleware):
         if not tenant_slug:
             return await call_next(request)
 
-        grace_until = await self._active_grace_until(tenant_slug)
+        grace_until = await self._active_grace_until(request, tenant_slug)
         if grace_until is None:
             return await call_next(request)
 
@@ -91,24 +95,25 @@ class OffboardingReadOnlyMiddleware(BaseHTTPMiddleware):
         )
 
     @staticmethod
-    async def _active_grace_until(tenant_identifier: str) -> datetime | None:
+    async def _active_grace_until(request: Request, tenant_identifier: str) -> datetime | None:
         """Дата окончания активного grace-периода или ``None``.
 
         Арендатор ищется тем же способом, что и во всём приложении
-        (``_fetch_tenant_by_identifier``): в заголовке ``X-Tenant`` может стоять
-        и slug, и код, и UUID. Собственный поиск «только по slug» тихо не нашёл
-        бы арендатора при UUID-заголовке и пропустил бы запись — отказ защиты,
-        выглядящий как разрешение.
+        (``resolve_request_tenant`` поверх ``_fetch_tenant_by_identifier``): в
+        заголовке ``X-Tenant`` может стоять и slug, и код, и UUID. Собственный
+        поиск «только по slug» тихо не нашёл бы арендатора при UUID-заголовке и
+        пропустил бы запись — отказ защиты, выглядящий как разрешение.
+        Поиск общий на весь запрос: соседняя проверка (каскад партнёра,
+        BIZ-52) ходит за той же строкой, и второй запрос был бы лишним.
 
         Сессия под строку офбординга пиннится на арендатора: под FORCE RLS
         (SEC-65) tenant-less сессия не увидела бы её вовсе — тот же тихий провал.
         """
 
-        try:
-            tenant = await _fetch_tenant_by_identifier(tenant_identifier)
-        except HTTPException:
-            # Неизвестный или неактивный арендатор — не наша забота: пусть
-            # обычный обработчик вернёт свой 404/403, а не наш 409.
+        # Неизвестный или неактивный арендатор — не наша забота: пусть обычный
+        # обработчик вернёт свой 404/403, а не наш 409.
+        tenant = await resolve_request_tenant(request, tenant_identifier)
+        if tenant is None:
             return None
 
         async with AsyncSessionLocal(

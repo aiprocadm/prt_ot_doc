@@ -32,6 +32,7 @@ from app.middleware.global_error_handler import GlobalErrorHandlerMiddleware
 from app.middleware.impersonation_guard import ImpersonationGuardMiddleware
 from app.middleware.observability import ObservabilityMiddleware
 from app.middleware.offboarding_readonly import OffboardingReadOnlyMiddleware
+from app.middleware.reseller_suspension import ResellerSuspensionReadOnlyMiddleware
 from app.middleware.security_headers import DEFAULT_API_CSP, SecurityHeadersMiddleware
 from app.middleware.tenant import TenantMiddleware
 from app.modules.files import s3
@@ -100,6 +101,11 @@ def _configure_middlewares(app: FastAPI, settings: Settings) -> None:
     )
     app.add_middleware(TenantMiddleware, metrics_enabled=settings.enable_metrics)
     app.add_middleware(BillingGuardMiddleware)
+    # BIZ-52 срез-3 (разд. 52.1): приостановлен партнёр — его клиенты только на
+    # чтение. Стоит ПЕРЕД биллинг-гейтом (добавлено раньше = выполняется позже):
+    # клиенту, чей партнёр приостановлен, ответ «оплатите подписку» вводит в
+    # заблуждение — должен не он, и заплатить за партнёра он не может.
+    app.add_middleware(ResellerSuspensionReadOnlyMiddleware)
     # OPS-72: grace-период офбординга — данные только на чтение. Starlette
     # выполняет middleware в ОБРАТНОМ порядке добавления, поэтому строка ниже
     # ставит проверку ПЕРЕД биллинг-гейтом сознательно: расторгающемуся
