@@ -86,8 +86,12 @@ class Tenant(SharedModel):
     parent_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("tenant.id"), nullable=True
     )
+    # `reseller` добавлен волной BIZ-52 (разд. 52.1): вид арендатора — это его
+    # уровень в иерархии продажи платформы, а не ярлык. Правила уровней живут в
+    # `app.domains.reseller.hierarchy`; в БД значение доезжает миграцией rs01
+    # (ALTER TYPE ... ADD VALUE, старые строки не трогаются).
     kind: Mapped[str] = mapped_column(
-        Enum("customer", "branch", "contractor", name="tenantkind"),
+        Enum("customer", "branch", "contractor", "reseller", name="tenantkind"),
         nullable=False,
         default="customer",
     )

@@ -40,10 +40,14 @@ PY
 
 TENANT_A="pilot-a"
 TENANT_B="pilot-b"
+# Заводить арендаторов может только владелец платформы (BIZ-52 разд. 52.1):
+# раньше скрипт создавал их «от имени» ещё не существующего арендатора, и это
+# работало ровно потому, что уровень вызывающего не проверялся вовсе.
+MANAGING_TENANT=${MANAGING_TENANT:-"public"}
 
 echo "Creating tenants..."
-request POST "/api/v1/tenants" "$TENANT_A" '{"slug":"pilot-a","name":"Pilot A","contact_email":"pilot-a@example.com"}' > /tmp/tenant_a.json
-request POST "/api/v1/tenants" "$TENANT_B" '{"slug":"pilot-b","name":"Pilot B","contact_email":"pilot-b@example.com"}' > /tmp/tenant_b.json
+request POST "/api/v1/tenants" "$MANAGING_TENANT" '{"slug":"pilot-a","name":"Pilot A","contact_email":"pilot-a@example.com"}' > /tmp/tenant_a.json
+request POST "/api/v1/tenants" "$MANAGING_TENANT" '{"slug":"pilot-b","name":"Pilot B","contact_email":"pilot-b@example.com"}' > /tmp/tenant_b.json
 
 TENANT_A_ID=$(cat /tmp/tenant_a.json | extract_id)
 TENANT_B_ID=$(cat /tmp/tenant_b.json | extract_id)

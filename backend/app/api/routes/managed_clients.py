@@ -22,6 +22,7 @@ from app.api.helpers.etag import (
     build_not_modified_headers,
     compute_list_etag,
 )
+from app.core.config import get_settings
 from app.core.errors import api_problem_detail
 from app.core.feature_flags import is_module_enabled
 from app.core.security import AccessContext, AuthContext, abac, get_auth_ctx
@@ -82,6 +83,7 @@ from app.domains.managed_clients.transfer_service import (
 )
 from app.domains.managed_clients.workload import DEFAULT_THRESHOLDS, OVERLOAD_REASON_TEXT
 from app.domains.managed_clients.workload_service import collect_specialist_workload
+from app.domains.reseller import TenantNode, inherited_parent_for_spawned_tenant
 from app.models.audit_log import AuditLog
 from app.models.identity import User
 from app.models.managed_clients import (
@@ -1296,12 +1298,27 @@ async def convert_to_dedicated(
     # bootstrap нового арендатора и переключение клиента либо происходят вместе,
     # либо не происходят вовсе — «арендатор создан, а клиент не переведён»
     # оставил бы занятый слаг без владельца-клиента.
+    # Новый арендатор рождается ВНУТРИ контура, где нажали кнопку (BIZ-52
+    # разд. 52.1). Без этого клиент партнёра становился бы корневым арендатором —
+    # то есть вставал вровень с самим партнёром и выпадал из его кабинета.
+    spawned_parent_id = inherited_parent_for_spawned_tenant(
+        TenantNode(
+            id=tenant.id,
+            slug=tenant.slug,
+            kind=tenant.kind,
+            parent_id=tenant.parent_id,
+            is_active=bool(tenant.is_active),
+        ),
+        managing_slug=get_settings().managing_tenant_slug,
+    )
+
     async with _trusted_session() as trusted:
         summary = await BootstrapTenantService(trusted).run(
             tenant_slug=slug,
             tenant_name=payload.tenant_name or row.name,
             owner_email=payload.owner_email,
             owner_password=payload.owner_password,
+            parent_id=spawned_parent_id,
         )
         row_t = (
             await trusted.execute(

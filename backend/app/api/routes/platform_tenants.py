@@ -22,6 +22,12 @@ from app.core.audit_decorator import audit_operation
 from app.core.config import get_settings
 from app.core.security import verify_token
 from app.db.session import AsyncSessionLocal, rearm_session_tenant_context
+from app.domains.reseller import (
+    RESELLER_KIND,
+    HierarchyViolation,
+    TenantNode,
+    validate_parent_candidate,
+)
 from app.models.models import RoleEnum, Tenant, TenantQuota
 from app.modules.subscription import (
     FEATURE_CATALOG,
@@ -93,6 +99,40 @@ def _require_managing_admin(
     if token_slug and token_slug != managing_slug:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Tenant scope mismatch")
     return payload
+
+
+def _validated_parent_id(payload: TenantProvisionRequest, *, parent: Tenant | None) -> str | None:
+    """Проверить запрошенного родителя для нового арендатора (BIZ-52 разд. 52.1).
+
+    Реселлер — прямой партнёр владельца платформы, родителя у него не бывает;
+    обычному арендатору родителем может быть только реселлер.
+    """
+
+    if payload.kind == RESELLER_KIND:
+        if payload.parent_id:
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN,
+                "Реселлер подчиняется владельцу платформы напрямую, без родителя",
+            )
+        return None
+    if not payload.parent_id:
+        return None
+    if parent is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Родитель не найден")
+    try:
+        validate_parent_candidate(
+            TenantNode(
+                id=parent.id,
+                slug=parent.slug,
+                kind=parent.kind,
+                parent_id=parent.parent_id,
+                is_active=bool(parent.is_active),
+            ),
+            managing_slug=get_settings().managing_tenant_slug,
+        )
+    except HierarchyViolation as exc:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, exc.message) from exc
+    return parent.id
 
 
 def _fleet_session() -> AsyncSession:
@@ -260,6 +300,18 @@ async def provision_tenant_endpoint(
         if existing is not None:
             raise HTTPException(status.HTTP_409_CONFLICT, "Tenant already exists")
 
+        # Владелец платформы может сразу отдать нового арендатора реселлеру
+        # (BIZ-52 разд. 52.1). Родитель проверяется ДО создания: подвесить
+        # арендатора к клиенту или к самому себе нельзя.
+        parent_id = _validated_parent_id(
+            payload,
+            parent=(
+                await provisioning_session.get(Tenant, payload.parent_id)
+                if payload.parent_id
+                else None
+            ),
+        )
+
         service = BootstrapTenantService(provisioning_session)
         try:
             summary = await service.run(
@@ -268,6 +320,7 @@ async def provision_tenant_endpoint(
                 owner_email=str(payload.owner_email),
                 owner_password=payload.owner_password,
                 demo=payload.demo_data,
+                parent_id=parent_id,
             )
             created = (
                 await provisioning_session.execute(select(Tenant).where(Tenant.slug == slug))

@@ -1,4 +1,12 @@
-export type TenantKind = "customer" | "branch" | "contractor";
+// Вид арендатора = его уровень в иерархии продажи платформы (ТЗ Доп. №1
+// разд. 52.1). `reseller` — партнёр, который ведёт своих клиентов под своим
+// брендом. Список обязан совпадать с `TenantKind` в
+// backend/app/schemas/tenant.py; расхождение стережёт
+// backend/tests/test_tenant_kinds_single_source.py — разъедься они, форма
+// отправила бы вид, который сервер не принимает.
+export const TENANT_KINDS = ["customer", "branch", "contractor", "reseller"] as const;
+
+export type TenantKind = (typeof TENANT_KINDS)[number];
 
 export interface TenantDto {
   id: string;

@@ -7,6 +7,12 @@ from pydantic import EmailStr, Field
 
 from app.schemas.base import BaseSchema
 
+#: Вид арендатора. Это его УРОВЕНЬ в иерархии продажи платформы (Доп. №1
+#: разд. 52.1), а не ярлык: ``reseller`` — партнёр, который ведёт своих клиентов,
+#: остальные значения — клиентские. Объявлен один раз, потому что раньше тот же
+#: список был выписан в трёх схемах и разъехался бы при первом же добавлении.
+TenantKind = Literal["customer", "branch", "contractor", "reseller"]
+
 
 class TenantQuotaRead(BaseSchema):
     tenant_id: str
@@ -25,7 +31,7 @@ class TenantRead(BaseSchema):
     contact_email: str
     is_active: bool
     parent_id: str | None = None
-    kind: Literal["customer", "branch", "contractor"] | None = None
+    kind: TenantKind | None = None
     schema_name: str | None = None
 
 
@@ -39,8 +45,11 @@ class TenantCreate(BaseSchema):
     name: str
     contact_email: str
     code: str | None = None
+    # Запрошенный родитель — ПОЖЕЛАНИЕ, а не команда: что именно запишется,
+    # решают правила иерархии (`domains/reseller/hierarchy.py`). Реселлеру своё
+    # значение подставят принудительно, клиенту создавать вообще нельзя.
     parent_id: str | None = None
-    kind: Literal["customer", "branch", "contractor"] = "customer"
+    kind: TenantKind = "customer"
 
 
 class TenantQuotaPatch(BaseSchema):
@@ -61,7 +70,8 @@ class TenantProvisionRequest(BaseSchema):
     name: str = Field(min_length=1, max_length=200)
     owner_email: EmailStr
     owner_password: str = Field(min_length=8, max_length=128)
-    kind: Literal["customer", "branch", "contractor"] = "customer"
+    kind: TenantKind = "customer"
+    parent_id: str | None = None
     demo_data: bool = False
 
 

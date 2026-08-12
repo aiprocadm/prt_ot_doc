@@ -20,8 +20,12 @@ _NOW = datetime(2026, 8, 7, 12, 0, tzinfo=timezone.utc)
 _TENANT = "tenant-1"
 
 
-def _tenant(tid=_TENANT):
-    return SimpleNamespace(id=tid, is_active=True, slug="t1", code="t1")
+def _tenant(tid=_TENANT, *, kind="customer", parent_id=None):
+    # `kind`/`parent_id` — уровень арендатора в иерархии (BIZ-52 разд. 52.1).
+    # У настоящей строки они есть всегда; без них заглушка врала бы о предмете.
+    return SimpleNamespace(
+        id=tid, is_active=True, slug="t1", code="t1", kind=kind, parent_id=parent_id
+    )
 
 
 def _auth(sub="admin-1"):
@@ -41,9 +45,15 @@ def _flag_on(monkeypatch):
     monkeypatch.setattr(routes, "is_module_enabled", AsyncMock(return_value=True))
 
 
-async def _client(session, *, mode=ManagedClientMode.LIGHTWEIGHT, status=ContractStatus.ACTIVE):
+async def _client(
+    session,
+    *,
+    mode=ManagedClientMode.LIGHTWEIGHT,
+    status=ContractStatus.ACTIVE,
+    tenant_id=_TENANT,
+):
     row = ManagedClient(
-        tenant_id=_TENANT,
+        tenant_id=tenant_id,
         name="ООО Ромашка",
         mode=mode,
         company_id="comp-a" if mode is ManagedClientMode.LIGHTWEIGHT else None,
@@ -75,7 +85,7 @@ class _TrustedWrapper:
         return False
 
 
-async def _convert(session, mcid, *, slug="romashka", email="owner@romashka.ru"):
+async def _convert(session, mcid, *, slug="romashka", email="owner@romashka.ru", tenant=None):
     with patch.object(routes, "_trusted_session", lambda: _TrustedWrapper(session)):
         return await routes.convert_to_dedicated(
             mcid=mcid,
@@ -83,7 +93,7 @@ async def _convert(session, mcid, *, slug="romashka", email="owner@romashka.ru")
                 tenant_slug=slug, owner_email=email, owner_password="Secret123!"
             ),
             request=_request(),
-            tenant=_tenant(),
+            tenant=tenant or _tenant(),
             session=session,
             access=SimpleNamespace(),
             auth=_auth(),
@@ -109,6 +119,39 @@ async def test_conversion_creates_tenant_and_keeps_history(sessionmaker):
             (await session.execute(select(User).where(User.tenant_id == t.id))).scalars().first()
         )
         assert owner is not None and owner.email == "owner@romashka.ru"
+
+
+@pytest.mark.asyncio
+async def test_клиент_реселлера_остаётся_в_его_контуре(sessionmaker):
+    """BIZ-52 разд. 52.1: арендатор, рождённый у партнёра, ложится ПОД партнёра.
+
+    Иначе клиент партнёра стал бы корневым арендатором — вровень с самим
+    партнёром и вне его кабинета.
+    """
+
+    reseller = _tenant("reseller-1", kind="reseller")
+    async with sessionmaker() as session:
+        c = await _client(session, tenant_id="reseller-1")
+        await _convert(session, c.id, tenant=reseller)
+
+        created = (
+            await session.execute(select(Tenant).where(Tenant.slug == "romashka"))
+        ).scalar_one()
+        assert created.parent_id == "reseller-1"
+
+
+@pytest.mark.asyncio
+async def test_клиент_платформы_рождает_корневого_арендатора(sessionmaker):
+    """Прежнее поведение сохранено: у обычного арендатора родителя не появляется."""
+
+    async with sessionmaker() as session:
+        c = await _client(session)
+        await _convert(session, c.id)
+
+        created = (
+            await session.execute(select(Tenant).where(Tenant.slug == "romashka"))
+        ).scalar_one()
+        assert created.parent_id is None
 
 
 @pytest.mark.asyncio
