@@ -39,6 +39,7 @@ from app.api.routes import (
     invoices,
     jobs,
     journals,
+    legal_documents,
     managed_clients,
     medical,
     notifications,
@@ -214,6 +215,10 @@ PLATFORM_EXTENSION_ROUTER_REGISTRATIONS: tuple[RouterRegistration, ...] = (
     # `/public`, потому что бренд нужен ЭКРАНУ ВХОДА — там токена ещё нет.
     (white_label.public_router, {}),
     (white_label.router, {}),
+    # BIZ-52 срез-5 (разд. 52.2): юр. тексты партнёра. Публичные — потому что
+    # оферту и политику ПДн человек обязан прочитать ДО входа.
+    (legal_documents.public_router, {}),
+    (legal_documents.router, {}),
     (api_tokens.router, {}),
     (portal_requests_router, {}),
 )

@@ -8,6 +8,7 @@ import { TENANT_OPTIONS } from "@/config/tenants";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { LegalLinks } from "@/components/common/LegalLinks";
 import { useAuthStore } from "@/stores/auth";
 import { loginSchema, type LoginFormValues } from "@/types/forms/auth";
 import { consumeReturnTo } from "@/utils/returnTo";
@@ -107,6 +108,10 @@ const LoginPage = () => {
           {loading ? "Вход..." : "Войти"}
         </Button>
       </form>
+      {/* Оферта и политика ПДн — до входа, а не после (BIZ-52 разд. 52.2).
+          Блок исчезает целиком, если ничего не опубликовано: пустой заголовок
+          без ссылок читался бы как поломка загрузки. */}
+      <LegalLinks />
     </div>
   );
 };

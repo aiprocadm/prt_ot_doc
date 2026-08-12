@@ -326,6 +326,7 @@
     "GET /api/v1/pipelines/runs/{run_id}",
     "GET /api/v1/pipelines/runs/{run_id}/events",
     "GET /api/v1/platform/branding",
+    "GET /api/v1/platform/legal/{kind}",
     "GET /api/v1/platform/tenants",
     "GET /api/v1/platform/tenants/modules",
     "GET /api/v1/platform/tenants/plans",
@@ -374,6 +375,8 @@
     "GET /api/v1/public/incidents",
     "GET /api/v1/public/inspections",
     "GET /api/v1/public/integrations/webhooks",
+    "GET /api/v1/public/legal",
+    "GET /api/v1/public/legal/{kind}",
     "GET /api/v1/public/notifications",
     "GET /api/v1/public/prescriptions",
     "GET /api/v1/public/reports/exports",
@@ -963,6 +966,7 @@
     "PUT /api/v1/notifications/settings/me",
     "PUT /api/v1/pipelines/profiles/{profile_id}",
     "PUT /api/v1/platform/branding",
+    "PUT /api/v1/platform/legal/{kind}",
     "PUT /api/v1/ppe/employees/{person_id}/sizes",
     "PUT /api/v1/privacy/processing-activities",
     "PUT /api/v1/risk/matrix",
@@ -1606,6 +1610,7 @@
     "list_programs_api_v1_training_programs_get",
     "list_protocols_api_v1_committees_protocols_get",
     "list_protocols_api_v1_training_protocols_get",
+    "list_public_legal_api_v1_public_legal_get",
     "list_recent_searches_api_v1_search_recent_get",
     "list_reimbursements_api_v1_budget_reimbursements_get",
     "list_requests_api_v1_client_portal_requests_get",
@@ -1737,6 +1742,7 @@
     "public_risks_api_v1_public_risks_get",
     "public_training_api_v1_public_training_get",
     "public_webhooks_api_v1_public_integrations_webhooks_get",
+    "publish_legal_api_v1_platform_legal__kind__put",
     "publish_marketplace_item_api_v1_marketplace_post",
     "publish_package_api_v1_packages_publish_post",
     "publish_version_api_v1_workflow_versions__version_id__publish_post",
@@ -1749,7 +1755,9 @@
     "put_settings_alias_api_v1_notifications_notification_settings_me_put",
     "put_settings_api_v1_notifications_settings_me_put",
     "read_own_branding_api_v1_platform_branding_get",
+    "read_own_legal_api_v1_platform_legal__kind__get",
     "read_public_branding_api_v1_public_branding_get",
+    "read_public_legal_api_v1_public_legal__kind__get",
     "read_subject_access_log_api_v1_privacy_subjects__person_id__access_log_get",
     "readiness_api_v1_work_permits__wp_id__readiness_get",
     "reassign_task_api_v1_workflow_tasks__task_id__reassign_post",
@@ -2296,6 +2304,11 @@
     "JournalUpdate",
     "KpiDefinitionCreate",
     "LayoutPresetList",
+    "LegalDocumentKind",
+    "LegalDocumentList",
+    "LegalDocumentPublish",
+    "LegalDocumentRead",
+    "LegalDocumentSummary",
     "LetterheadOverride",
     "LinkFileRequest",
     "LinkFileResponse",
@@ -5414,6 +5427,28 @@
     },
     "LayoutPresetList": {
       "items": "array"
+    },
+    "LegalDocumentList": {
+      "items": "array"
+    },
+    "LegalDocumentPublish": {
+      "title": "string",
+      "body": "string"
+    },
+    "LegalDocumentRead": {
+      "kind": "LegalDocumentKind",
+      "title": "string",
+      "body": "string",
+      "version": "integer",
+      "source": "string",
+      "published_at": "string"
+    },
+    "LegalDocumentSummary": {
+      "kind": "LegalDocumentKind",
+      "title": "string",
+      "version": "integer",
+      "source": "string",
+      "published_at": "string"
     },
     "LetterheadOverride": {
       "issuer": "IssuerRef|null",

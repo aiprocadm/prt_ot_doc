@@ -10,6 +10,12 @@ vi.mock("@/api/tenantStorage", () => ({
   },
 }));
 
+// BIZ-52 срез-5: на экране входа появились ссылки на юр. тексты. Тест про
+// форму, а не про сеть — подменяем список, иначе он тянет настоящий API-клиент.
+vi.mock("@/api/legalDocuments", () => ({
+  listLegalDocuments: async () => [],
+}));
+
 const mockAuthState = {
   login: vi.fn(),
   loading: false,
