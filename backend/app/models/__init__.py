@@ -161,9 +161,11 @@ from app.models.sout import (
     SoutGuaranteeKind,
     SoutWorkplace,
 )
+from app.models.white_label import TenantBranding
 from app.models.work_permit import WorkPermit, WorkPermitEvent, WorkPermitMember
 
 __all__ = [
+    "TenantBranding",
     "ApiDeprecationUsage",
     "Document",
     "DocumentBatchItem",

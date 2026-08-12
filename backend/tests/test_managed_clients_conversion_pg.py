@@ -141,8 +141,16 @@ def test_conversion_survives_force_rls_with_unprivileged_role(monkeypatch) -> No
         )
 
         monkeypatch.setattr(routes, "is_module_enabled", AsyncMock(return_value=True))
+        # `kind`/`parent_id` — уровень арендатора в иерархии (BIZ-52 разд. 52.1).
+        # У настоящей строки они есть всегда; без них заглушка врала бы о предмете,
+        # и перевод в Dedicated падал бы на чтении уровня.
         tenant_ns = SimpleNamespace(
-            id=outsourcer_id, is_active=True, slug="outsourcer", code="outsourcer"
+            id=outsourcer_id,
+            is_active=True,
+            slug="outsourcer",
+            code="outsourcer",
+            kind="customer",
+            parent_id=None,
         )
         auth_ns = SimpleNamespace(
             sub=admin_id, tenant_id=outsourcer_id, roles=["admin"], company_id=None
