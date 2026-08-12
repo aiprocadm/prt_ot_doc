@@ -8188,7 +8188,9 @@
     "TenantFleetPage": {
       "items": "array",
       "total": "integer",
-      "managing_tenant_slug": "string"
+      "managing_tenant_slug": "string",
+      "viewer_level": "string",
+      "can_manage_commercials": "boolean"
     },
     "TenantHealthResponse": {
       "generated_at": "string",

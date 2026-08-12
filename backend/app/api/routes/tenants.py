@@ -11,9 +11,9 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.api.helpers.hierarchy_errors import hierarchy_http_error
 from app.core.audit_decorator import audit_operation
 from app.core.config import get_settings
-from app.core.errors import api_problem_detail
 from app.core.security import AccessContext, abac, rbac, verify_token
 from app.db.session import (
     AsyncSessionLocal,
@@ -67,24 +67,6 @@ def _hierarchy_node(record: Tenant) -> TenantNode:
     )
 
 
-def _hierarchy_denied(exc: HierarchyViolation) -> HTTPException:
-    """Отказ по правилам иерархии (BIZ-52 разд. 52.1).
-
-    Ненайденный родитель — ошибка ЗАПРОСА (400): в теле указан id, которого нет.
-    Всё остальное — отказ в праве (403).
-    """
-
-    status_code = (
-        status.HTTP_400_BAD_REQUEST
-        if exc.code == "TENANT_PARENT_NOT_FOUND"
-        else status.HTTP_403_FORBIDDEN
-    )
-    return HTTPException(
-        status_code=status_code,
-        detail=api_problem_detail(code=exc.code, message=exc.message, error_type="tenants"),
-    )
-
-
 async def _plan_creation(
     session: AsyncSession, actor: Tenant, payload: TenantCreate
 ) -> CreationPlan:
@@ -107,7 +89,7 @@ async def _plan_creation(
             managing_slug=get_settings().managing_tenant_slug,
         )
     except HierarchyViolation as exc:
-        raise _hierarchy_denied(exc) from exc
+        raise hierarchy_http_error(exc, error_type="tenants") from exc
 
 
 def _require_admin(credentials: HTTPAuthorizationCredentials | None) -> dict[str, object]:

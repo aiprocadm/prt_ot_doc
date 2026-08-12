@@ -41,3 +41,33 @@ async def test_overview_requires_managing_admin(sessionmaker):
                 session=session, tenant=_tenant(slug="regular"), credentials=None
             )
     assert exc.value.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_партнёру_платформенный_обзор_закрыт(sessionmaker, monkeypatch):
+    """BIZ-52 срез-2: кабинет партнёра открылся, а этот раздел — нет.
+
+    Здесь видно потребление ВСЕХ арендаторов платформы, поэтому уровень
+    проверяется явно: партнёр получает отказ с кодом `PLATFORM_OWNER_ONLY`.
+    Без этого теста расширение кабинета однажды прихватило бы и эту страницу.
+
+    Подменяем только «кто пришёл» — сам отказ выдаёт НАСТОЯЩИЙ
+    `_require_managing_admin`, иначе тест проверял бы собственную подделку.
+    """
+
+    import app.api.routes.platform_tenants as platform_routes
+    from app.domains.reseller import FleetScope, TenantLevel
+
+    reseller_scope = FleetScope(level=TenantLevel.RESELLER, owner_id="t-1")
+    monkeypatch.setattr(
+        platform_routes,
+        "_require_fleet_actor",
+        lambda credentials, tenant: ({}, reseller_scope),
+    )
+    async with sessionmaker() as session:
+        with pytest.raises(HTTPException) as exc:
+            await routes.deprecation_overview(
+                session=session, tenant=_tenant(slug="partner"), credentials=None
+            )
+    assert exc.value.status_code == 403
+    assert exc.value.detail["code"] == "PLATFORM_OWNER_ONLY"
