@@ -11,6 +11,7 @@ import { AuthLayout } from "@/layouts/AuthLayout";
 import { MainLayout } from "@/layouts/MainLayout";
 import { AccessDeniedPage } from "@/pages/access/AccessDeniedPage";
 import { ModuleDisabledPage } from "@/pages/access/ModuleDisabledPage";
+import { LegalDocumentPage } from "@/pages/legal/LegalDocumentPage";
 import { AuthRedirectHandler } from "@/router/AuthRedirectHandler";
 import { buildProtectedRouteGroups } from "@/router/routeGroups";
 import { LoginPage } from "@/router/pageRegistry";
@@ -82,6 +83,10 @@ const AppRouter = () => {
           <Route path="/auth" element={<AuthLayout />}>
             <Route path="login" element={<LoginPage />} />
           </Route>
+          {/* Юр. тексты ВНЕ защищённого дерева (BIZ-52 разд. 52.2): оферту и
+              политику ПДн человек обязан прочитать до входа. Потребуй здесь
+              авторизацию — и ссылка с экрана входа вела бы обратно на вход. */}
+          <Route path="/legal/:kind" element={<LegalDocumentPage />} />
           <Route path="/no-access" element={<AccessDeniedPage />} />
           <Route
             path="/module-unavailable"
