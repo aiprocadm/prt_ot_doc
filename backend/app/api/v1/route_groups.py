@@ -68,6 +68,7 @@ from app.api.routes import (
     training,
     training_next,
     webhooks,
+    white_label,
     work_permits,
     workspace,
 )
@@ -209,6 +210,10 @@ PLATFORM_EXTENSION_ROUTER_REGISTRATIONS: tuple[RouterRegistration, ...] = (
     (public_api.admin_router, {}),
     (public_api.marketplace_router, {}),
     (public_api.router, {}),
+    # BIZ-52 срез-4 (разд. 52.2): бренд приложения. Публичная ручка лежит под
+    # `/public`, потому что бренд нужен ЭКРАНУ ВХОДА — там токена ещё нет.
+    (white_label.public_router, {}),
+    (white_label.router, {}),
     (api_tokens.router, {}),
     (portal_requests_router, {}),
 )

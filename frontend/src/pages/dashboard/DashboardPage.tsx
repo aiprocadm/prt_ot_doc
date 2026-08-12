@@ -12,6 +12,7 @@ import { StatusBadge } from "@/components/common/StatusBadge";
 import { AttentionPanel } from "@/components/common/AttentionPanel";
 import { useAsyncResource } from "@/hooks/useAsyncResource";
 import { PERMISSIONS } from "@/permissions/permissions";
+import { useBrandStore } from "@/stores/brand";
 import { useDashboardStore } from "@/stores/dashboard";
 import { RecentObjectsSection } from "@/widgets/dashboard/RecentObjectsSection";
 import { DashboardTabsSection } from "@/widgets/dashboard/DashboardTabsSection";
@@ -23,6 +24,7 @@ const trainingStatusLabels: Record<string, string> = {
 };
 
 export const DashboardPage = () => {
+  const appName = useBrandStore((state) => state.brand.app_name);
   const [taskStatusFilter, setTaskStatusFilter] = useState<
     "all" | "overdue" | "active"
   >("all");
@@ -136,7 +138,9 @@ export const DashboardPage = () => {
         <Breadcrumb items={[{ label: "Главная" }]} />
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-bold">Единый рабочий стол ОТ/ПБ</h1>
+            {/* Название — из бренда арендатора (BIZ-52 разд. 52.2): клиент
+                партнёра не должен видеть имя вендора на рабочем столе. */}
+            <h1 className="text-2xl font-bold">{appName}</h1>
             <p className="text-sm text-muted-foreground">
               Контроль задач, ЭДО, рисков и готовности к проверкам по текущему
               тенанту.

@@ -325,6 +325,7 @@
     "GET /api/v1/pipelines/runs",
     "GET /api/v1/pipelines/runs/{run_id}",
     "GET /api/v1/pipelines/runs/{run_id}/events",
+    "GET /api/v1/platform/branding",
     "GET /api/v1/platform/tenants",
     "GET /api/v1/platform/tenants/modules",
     "GET /api/v1/platform/tenants/plans",
@@ -367,6 +368,7 @@
     "GET /api/v1/privacy/subjects/{person_id}/consents",
     "GET /api/v1/privacy/subjects/{person_id}/export",
     "GET /api/v1/public/auth/machine",
+    "GET /api/v1/public/branding",
     "GET /api/v1/public/documents",
     "GET /api/v1/public/employees",
     "GET /api/v1/public/incidents",
@@ -960,6 +962,7 @@
     "PUT /api/v1/notifications/notification-settings/me",
     "PUT /api/v1/notifications/settings/me",
     "PUT /api/v1/pipelines/profiles/{profile_id}",
+    "PUT /api/v1/platform/branding",
     "PUT /api/v1/ppe/employees/{person_id}/sizes",
     "PUT /api/v1/privacy/processing-activities",
     "PUT /api/v1/risk/matrix",
@@ -1745,6 +1748,8 @@
     "put_profile_api_v1_pipelines_profiles__profile_id__put",
     "put_settings_alias_api_v1_notifications_notification_settings_me_put",
     "put_settings_api_v1_notifications_settings_me_put",
+    "read_own_branding_api_v1_platform_branding_get",
+    "read_public_branding_api_v1_public_branding_get",
     "read_subject_access_log_api_v1_privacy_subjects__person_id__access_log_get",
     "readiness_api_v1_work_permits__wp_id__readiness_get",
     "reassign_task_api_v1_workflow_tasks__task_id__reassign_post",
@@ -1892,6 +1897,7 @@
     "update_methodology_api_v1_risk_methodologies__methodology_id__put",
     "update_norm_api_v1_ppe_norms__norm_id__patch",
     "update_order_api_v1_orders__order_id__patch",
+    "update_own_branding_api_v1_platform_branding_put",
     "update_permit_endpoint_api_v1_permits__permit_id__patch",
     "update_person_endpoint_api_v1_persons__person_id__patch",
     "update_prescription_api_v1_prescriptions__prescription_id__patch",
@@ -1943,6 +1949,7 @@
     "ApiTokenCreateRequest",
     "ApiTokenCreateResponse",
     "ApiTokenRead",
+    "AppBrandRead",
     "ApplyHeadersAccepted",
     "ApplyHeadersRequest",
     "ApprovalActionIn",
@@ -2674,6 +2681,8 @@
     "TemplateResolveResponse",
     "TemplateScopeDTO",
     "TemplateVersionDTO",
+    "TenantBrandingPatch",
+    "TenantBrandingRead",
     "TenantCreate",
     "TenantFeatureRead",
     "TenantFleetItem",
@@ -2863,6 +2872,12 @@
       "last_used_at": "null|string",
       "expires_at": "null|string",
       "is_revoked": "boolean"
+    },
+    "AppBrandRead": {
+      "app_name": "string",
+      "primary_color": "string",
+      "support_email": "null|string",
+      "source": "string"
     },
     "ApplyHeadersAccepted": {
       "job_id": "string",
@@ -8164,6 +8179,17 @@
       "applicability_rules": "null|object",
       "output_types": "array|null",
       "profile": "null|object"
+    },
+    "TenantBrandingPatch": {
+      "app_name": "null|string",
+      "primary_color": "null|string",
+      "support_email": "null|string"
+    },
+    "TenantBrandingRead": {
+      "app_name": "null|string",
+      "primary_color": "null|string",
+      "support_email": "null|string",
+      "effective": "AppBrandRead"
     },
     "TenantCreate": {
       "slug": "string",
