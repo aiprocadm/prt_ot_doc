@@ -1,0 +1,117 @@
+"""Разбор эталонного набора (Доп. №1 разд. 52.3, первый пункт).
+
+ТЗ называет тиражирование «главной технической ценностью для продажи»: новый
+клиент должен разворачиваться С СОДЕРЖИМЫМ, а не пустым.
+
+**Что нашла сверка.** Файл эталона существовал и «применялся» так: весь JSON
+клался одним куском в ``tenant.settings["starter_pack"]``, и это поле не читал
+НИКТО. Справочники не появлялись, а выдача при этом рапортовала
+``starter_pack created`` — то есть владелец платформы видел «набор создан» у
+арендатора с пустыми справочниками. Отчёт, который врёт, хуже отсутствующего.
+
+**Что из набора вообще может стать строками.** Половина ключей
+``reference_data`` называет не таблицы, а ПЕРЕЧИСЛЕНИЯ в коде:
+``inspection_types`` → ``models.inspections.InspectionType``, ``incident_types``
+→ ``models.incidents.IncidentType``, виды инструктажей и категории обучения тоже
+живут значениями, а не справочником. Их «посев» невозможен в принципе, и молча
+их проглотить нельзя — иначе мы снова получим ложный успех. Поэтому разбор
+делит ключи на три ясные группы: применимые, заведомо неприменимые (с причиной)
+и незнакомые.
+
+Правила чистые: на входе — словарь из файла, на выходе — план, что именно
+создавать. Никакой базы, никаких сессий: план проверяется на примерах.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+
+#: Ключи `reference_data`, которые ложатся в настоящие таблицы.
+#: Значение — человеческое имя цели, оно попадает в отчёт о применении.
+APPLICABLE_KINDS: dict[str, str] = {
+    "positions": "должности",
+    "hazards": "опасности",
+    "controls": "меры управления риском",
+}
+
+#: Ключи, которые НЕ являются справочниками, и почему. Причина попадает в
+#: отчёт: «пропущено» без объяснения читается как недоработка.
+NON_TABLE_KINDS: dict[str, str] = {
+    "briefing_types": "виды инструктажей заданы значениями в коде, а не справочником",
+    "inspection_types": "InspectionType — перечисление в коде",
+    "incident_types": "IncidentType — перечисление в коде",
+    "training_categories": "категории обучения заданы значениями в коде",
+    "ppe_norm_templates": (
+        "норма СИЗ требует конкретной опасности и должности — "
+        "из одного названия строку не собрать"
+    ),
+}
+
+
+@dataclass(frozen=True)
+class StarterPackPlan:
+    """Что применять и о чём честно отчитаться.
+
+    ``skipped`` и ``unknown`` — не украшение: без них «применили 3 из 8» выглядит
+    как потеря данных, а с ними видно, что остальные пять и не были данными.
+    """
+
+    #: вид → список названий к созданию (в порядке файла, без дублей)
+    apply: dict[str, list[str]] = field(default_factory=dict)
+    #: вид → причина, почему посев невозможен
+    skipped: dict[str, str] = field(default_factory=dict)
+    #: ключи, которых нет ни в одном списке — их появление означает, что файл
+    #: эталона ушёл вперёд кода, и это надо заметить, а не проглотить
+    unknown: list[str] = field(default_factory=list)
+
+
+def plan_starter_pack(payload: dict) -> StarterPackPlan:
+    """Разобрать содержимое файла эталона в план применения."""
+
+    reference = payload.get("reference_data")
+    if not isinstance(reference, dict):
+        return StarterPackPlan()
+
+    apply: dict[str, list[str]] = {}
+    skipped: dict[str, str] = {}
+    unknown: list[str] = []
+
+    for key, value in reference.items():
+        if key in NON_TABLE_KINDS:
+            skipped[key] = NON_TABLE_KINDS[key]
+            continue
+        if key not in APPLICABLE_KINDS:
+            unknown.append(key)
+            continue
+        names = _clean_names(value)
+        if names:
+            apply[key] = names
+
+    return StarterPackPlan(apply=apply, skipped=skipped, unknown=sorted(unknown))
+
+
+def _clean_names(value: object) -> list[str]:
+    """Оставить непустые названия без дублей, сохранив порядок файла.
+
+    Порядок сохраняется намеренно: он задан человеком, который писал эталон, и
+    в списке должностей «Директор» перед «Мастером участка» — не случайность.
+    Дубли убираются с учётом регистра и пробелов: «Пожар» и «пожар » — одна
+    опасность, а две строки сделали бы справочник грязным с первого дня.
+    """
+
+    if not isinstance(value, list):
+        return []
+    seen: set[str] = set()
+    result: list[str] = []
+    for item in value:
+        if not isinstance(item, str):
+            continue
+        name = item.strip()
+        if not name:
+            continue
+        marker = name.casefold()
+        if marker in seen:
+            continue
+        seen.add(marker)
+        result.append(name)
+    return result
