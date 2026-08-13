@@ -333,6 +333,7 @@
     "GET /api/v1/platform/tenants/modules",
     "GET /api/v1/platform/tenants/plans",
     "GET /api/v1/platform/tenants/usage",
+    "GET /api/v1/platform/tenants/{tenant_id}/cascade",
     "GET /api/v1/portal-requests",
     "GET /api/v1/portal-requests/{request_id}",
     "GET /api/v1/portal/packages",
@@ -1727,6 +1728,7 @@
     "prescriptions_dashboard_api_v1_analytics_dashboard_prescriptions_get",
     "prescriptions_summary_api_v1_prescriptions_summary_get",
     "preview_branding_api_v1_branding_preview_post",
+    "preview_cascade_api_v1_platform_tenants__tenant_id__cascade_get",
     "preview_mapping_api_v1_package_presets__preset_id__preview_mapping_post",
     "preview_pack_api_v1_packs_preview_post",
     "preview_pack_run_api_v1_pack_runs_preview_post",
@@ -2713,6 +2715,7 @@
     "TemplateVersionDTO",
     "TenantBrandingPatch",
     "TenantBrandingRead",
+    "TenantCascadePreview",
     "TenantCreate",
     "TenantFeatureRead",
     "TenantFleetItem",
@@ -2726,6 +2729,7 @@
     "TenantQuotaRead",
     "TenantRead",
     "TenantStatusPatch",
+    "TenantStatusResult",
     "TenantUsageRow",
     "TokenPair",
     "TrainingCertificateCreate",
@@ -8259,6 +8263,13 @@
       "has_favicon": "boolean",
       "effective": "AppBrandRead"
     },
+    "TenantCascadePreview": {
+      "tenant_id": "string",
+      "slug": "string",
+      "is_reseller": "boolean",
+      "cascade_affected": "array",
+      "cascade_summary": "string"
+    },
     "TenantCreate": {
       "slug": "string",
       "name": "string",
@@ -8348,6 +8359,19 @@
     },
     "TenantStatusPatch": {
       "is_active": "boolean"
+    },
+    "TenantStatusResult": {
+      "id": "string",
+      "name": "string",
+      "slug": "string",
+      "code": "null|string",
+      "contact_email": "string",
+      "is_active": "boolean",
+      "parent_id": "null|string",
+      "kind": "null|string",
+      "schema_name": "null|string",
+      "cascade_affected": "array",
+      "cascade_summary": "string"
     },
     "TenantUsageRow": {
       "tenant_id": "string",

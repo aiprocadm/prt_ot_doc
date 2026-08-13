@@ -86,6 +86,43 @@ class TenantStatusPatch(BaseSchema):
     is_active: bool
 
 
+class TenantStatusResult(TenantRead):
+    """Итог смены статуса — вместе с КАСКАДОМ (SEC-63.1, четвёртая угроза).
+
+    Раньше ручка возвращала только строку арендатора, и оператор не узнавал,
+    что вместе с партнёром в режим чтения ушли его клиенты. Для угрозы
+    «каскадное отключение как оружие» это и есть недостающая мера: последствие
+    должно быть видно тому, кто нажимает.
+
+    **Наследует `TenantRead`, а не вкладывает его.** Вложение переставило бы
+    `is_active` на уровень ниже — это слом контракта: и фронт (`tenantsApi.
+    setStatus` ждёт `TenantDto`), и контрактный гейт OPS-73 читают поля сверху.
+    Добавление полей рядом — аддитив, снятие или перенос — нет.
+    """
+
+    #: Слаги клиентов, сменивших режим работы. Пустой список у партнёра без
+    #: клиентов — это факт, а не отсутствие данных (см. `cascade_summary`).
+    cascade_affected: list[str] = Field(default_factory=list)
+    #: Человеческая формулировка: «каскада нет» и «каскад пуст» — разные вещи.
+    cascade_summary: str = ""
+
+
+class TenantCascadePreview(BaseSchema):
+    """Кого затронет смена статуса — ДО того, как её сделали.
+
+    Приставка `Tenant` в имени намеренно: короткое `CascadePreview` уже занято
+    модулем СОУТ, и совпадение заставило FastAPI переименовать ОБЕ схемы в
+    `app__schemas__*__CascadePreview` — прежнее имя исчезло бы из контракта и
+    сломало всех, кто на него ссылается. Поймано контрактным гейтом OPS-73.
+    """
+
+    tenant_id: str
+    slug: str
+    is_reseller: bool
+    cascade_affected: list[str] = Field(default_factory=list)
+    cascade_summary: str = ""
+
+
 class TenantFeatureRead(BaseSchema):
     code: str
     title: str

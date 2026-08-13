@@ -40,6 +40,7 @@ from app.domains.reseller import (
     plan_tenant_creation,
     resolve_fleet_scope,
 )
+from app.domains.reseller.cascade import CascadeImpact, plan_suspension_cascade
 from app.domains.reseller.subbilling import check_plan_ceiling, is_ceiling_applicable
 from app.models.models import RoleEnum, Tenant, TenantQuota
 from app.models.tenant_billing import TenantCounter
@@ -58,6 +59,7 @@ from app.schemas.tenant import (
     ModuleTrialResult,
     PlanCatalog,
     SubscriptionPlanRead,
+    TenantCascadePreview,
     TenantFeatureRead,
     TenantFleetItem,
     TenantFleetPage,
@@ -68,8 +70,10 @@ from app.schemas.tenant import (
     TenantQuotaRead,
     TenantRead,
     TenantStatusPatch,
+    TenantStatusResult,
     TenantUsageRow,
 )
+from app.services.audit import AuditService
 from app.services.tenants.bootstrap import BootstrapTenantService
 from app.services.tenants.subscription import (
     TrialError,
@@ -521,7 +525,7 @@ async def provision_tenant_endpoint(
     )
 
 
-@router.patch("/{tenant_id}/status", response_model=TenantRead)
+@router.patch("/{tenant_id}/status", response_model=TenantStatusResult)
 @audit_operation("update_status", "tenant")
 async def patch_tenant_status_endpoint(
     tenant_id: str,
@@ -544,13 +548,110 @@ async def patch_tenant_status_endpoint(
     if target.slug.strip().lower() == get_settings().managing_tenant_slug:
         raise HTTPException(status.HTTP_409_CONFLICT, "Managing tenant cannot be suspended")
 
+    # SEC-63.1, четвёртая угроза («каскадное отключение как оружие»): ТЗ требует
+    # АУДИТ КАСКАДА. Считаем затронутых ДО записи — после неё уже не отличить,
+    # кого задело именно этим действием.
+    impact = await _cascade_impact(session, target)
+
     target.is_active = payload.is_active
     await session.commit()
     # commit() drops the transaction-local RLS GUCs — re-arm before
     # further session work (SEC-65)
     await rearm_session_tenant_context(session)
     await session.refresh(target)
-    return TenantRead.model_validate(target)
+
+    if impact.is_reseller:
+        # Отдельная запись рядом с `update_status`: та отвечает «что стало со
+        # строкой», эта — «кого это задело». Без второй нельзя ни предупредить
+        # заранее, ни доказать потом, что данные клиентов не тронуты.
+        await _log_cascade(
+            session,
+            actor=tenant,
+            target=target,
+            impact=impact,
+            activating=payload.is_active,
+        )
+
+    return TenantStatusResult(
+        **TenantRead.model_validate(target).model_dump(),
+        cascade_affected=list(impact.affected),
+        cascade_summary=impact.summary,
+    )
+
+
+@router.get("/{tenant_id}/cascade", response_model=TenantCascadePreview)
+async def preview_cascade(
+    tenant_id: str,
+    session: SessionDep,
+    tenant: Tenant = Depends(get_tenant_record),
+    credentials: HTTPAuthorizationCredentials | None = Depends(_optional_bearer),
+) -> TenantCascadePreview:
+    """Кого затронет приостановка — ДО того, как её сделали (SEC-63.1).
+
+    ТЗ называет каскад «оружием»: приостановка партнёра тихо переводит его
+    клиентов в режим чтения. Раньше оператор узнавал об этом только по жалобам
+    клиентов. Область та же, что у остальных ручек: чужой арендатор — 404.
+    """
+
+    _payload, scope = _require_fleet_actor(credentials, tenant)
+    target = await _load_in_scope(session, tenant_id, scope)
+    impact = await _cascade_impact(session, target)
+    return TenantCascadePreview(
+        tenant_id=target.id,
+        slug=target.slug,
+        is_reseller=impact.is_reseller,
+        cascade_affected=list(impact.affected),
+        cascade_summary=impact.summary,
+    )
+
+
+async def _cascade_impact(session: AsyncSession, target: Tenant) -> CascadeImpact:
+    """Кого затронет смена статуса. Дети читаются одним запросом."""
+
+    children = [
+        TenantNode(id=row[0], slug=row[1], kind=row[2], parent_id=row[3], is_active=bool(row[4]))
+        for row in (
+            await session.execute(
+                select(Tenant.id, Tenant.slug, Tenant.kind, Tenant.parent_id, Tenant.is_active)
+                .where(Tenant.parent_id == target.id)
+            )
+        ).all()
+    ]
+    return plan_suspension_cascade(
+        _fleet_node(target), children=children, activating=bool(target.is_active)
+    )
+
+
+async def _log_cascade(
+    session: AsyncSession,
+    *,
+    actor: Tenant,
+    target: Tenant,
+    impact: CascadeImpact,
+    activating: bool,
+) -> None:
+    """Записать след каскада.
+
+    Пишется даже когда затронутых НОЛЬ: «партнёр приостановлен, клиентов нет» —
+    такой же факт, как и «задето пятеро», и отсутствие записи в этом случае
+    читалось бы как «мы не считали».
+    """
+
+    await AuditService(session).log_event(
+        tenant_id=actor.id,
+        action="tenant.suspension_cascade",
+        object_type="tenant",
+        object_id=target.id,
+        user_id=None,
+        ip="",
+        details={
+            "target_slug": target.slug,
+            "activating": activating,
+            "affected_count": impact.count,
+            "affected_slugs": list(impact.affected),
+            "summary": impact.summary,
+        },
+    )
 
 
 @router.patch("/{tenant_id}/quotas", response_model=TenantQuotaRead)
