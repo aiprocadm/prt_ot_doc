@@ -16,7 +16,8 @@
 
 from __future__ import annotations
 
-from typing import Annotated
+from datetime import datetime, timezone
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -39,7 +40,9 @@ from app.domains.reseller import (
     plan_tenant_creation,
     resolve_fleet_scope,
 )
+from app.domains.reseller.subbilling import check_plan_ceiling, is_ceiling_applicable
 from app.models.models import RoleEnum, Tenant, TenantQuota
+from app.models.tenant_billing import TenantCounter
 from app.modules.subscription import (
     FEATURE_CATALOG,
     PLANS,
@@ -48,6 +51,7 @@ from app.modules.subscription import (
 from app.modules.subscription.registry import MODULE_REGISTRY
 from app.schemas.tenant import (
     FeatureCatalogEntry,
+    FleetUsageReport,
     ModuleRegistryEntry,
     ModuleRegistryResponse,
     ModuleTrialGrant,
@@ -64,6 +68,7 @@ from app.schemas.tenant import (
     TenantQuotaRead,
     TenantRead,
     TenantStatusPatch,
+    TenantUsageRow,
 )
 from app.services.tenants.bootstrap import BootstrapTenantService
 from app.services.tenants.subscription import (
@@ -189,6 +194,32 @@ async def _load_in_scope(session: AsyncSession, tenant_id: str, scope: FleetScop
     return target
 
 
+async def _enforce_plan_ceiling(scope: FleetScope, actor: Tenant, plan: Any) -> None:
+    """Партнёр не выдаёт клиенту модули, которых нет у него самого (разд. 52.4).
+
+    Набор партнёра берётся ДЕЙСТВУЮЩИЙ, вместе с пробными выдачами: пока модуль
+    у него работает, он вправе показать его клиенту. Кончится проба — следующая
+    смена тарифа уже не пройдёт; это честнее, чем запрещать заранее.
+    """
+
+    if not is_ceiling_applicable(actor_sees_everything=scope.sees_everything):
+        return
+    own = await read_feature_grants(actor)
+    verdict = check_plan_ceiling(
+        plan_features=set(plan.features), reseller_features=own.effective
+    )
+    if verdict.allowed:
+        return
+    raise HTTPException(
+        status.HTTP_403_FORBIDDEN,
+        detail=api_problem_detail(
+            code="RESELLER_PLAN_EXCEEDS_OWN",
+            message=verdict.reason,
+            error_type="platform-tenants",
+        ),
+    )
+
+
 def _require_commercial_rights(scope: FleetScope) -> None:
     """Тариф, квоты и пробный доступ пока меняет только владелец платформы."""
 
@@ -285,6 +316,53 @@ async def list_tenant_fleet_endpoint(
         managing_tenant_slug=get_settings().managing_tenant_slug,
         viewer_level="platform" if scope.sees_everything else "reseller",
         can_manage_commercials=scope.may_change_commercials,
+    )
+
+
+@router.get("/usage", response_model=FleetUsageReport)
+async def read_fleet_usage(
+    session: SessionDep,
+    tenant: Tenant = Depends(get_tenant_record),
+    credentials: HTTPAuthorizationCredentials | None = Depends(_optional_bearer),
+    period: str | None = Query(None, pattern=r"^\d{6}$"),
+) -> FleetUsageReport:
+    """Потребление по области: сколько документов сгенерировали клиенты (разд. 52.4).
+
+    Partner видит расход СВОИХ клиентов, владелец платформы — всего флота: та же
+    область, что и у списка. Считать по всей таблице значило бы показать
+    партнёру чужой оборот.
+
+    Период — месяц `ГГГГММ`; без него берётся текущий. Строки только по тем
+    арендаторам, у кого расход есть: ноль в списке не отличим от «данных нет»,
+    а итог по области и так отвечает на вопрос «сколько всего».
+    """
+
+    _payload, scope = _require_fleet_actor(credentials, tenant)
+    yyyymm = period or datetime.now(tz=timezone.utc).strftime("%Y%m")
+
+    condition = _scope_filter(scope)
+    stmt = (
+        select(Tenant.id, Tenant.slug, Tenant.name, TenantCounter.doc_generations)
+        .join(TenantCounter, TenantCounter.tenant_id == Tenant.id)
+        .where(TenantCounter.yyyymm == yyyymm)
+    )
+    if condition is not None:
+        stmt = stmt.where(condition)
+
+    items = [
+        TenantUsageRow(
+            tenant_id=row[0],
+            slug=row[1],
+            name=row[2],
+            doc_generations=int(row[3] or 0),
+        )
+        for row in (await session.execute(stmt.order_by(Tenant.created_at.asc()))).all()
+        if int(row[3] or 0) > 0
+    ]
+    return FleetUsageReport(
+        period=yyyymm,
+        items=items,
+        total_doc_generations=sum(row.doc_generations for row in items),
     )
 
 
@@ -510,10 +588,16 @@ async def patch_tenant_plan_endpoint(
     tenant: Tenant = Depends(get_tenant_record),
     credentials: HTTPAuthorizationCredentials | None = Depends(_optional_bearer),
 ) -> TenantFleetItem:
-    """Move a tenant onto a subscription tier: unlock its features and set its quotas."""
+    """Move a tenant onto a subscription tier: unlock its features and set its quotas.
+
+    BIZ-52 срез-8: тариф клиента теперь меняет и ПАРТНЁР — в пределах своего
+    набора модулей (разд. 52.4, «reseller тарифицирует своих клиентов»).
+    Ограничение среза-2 (`FLEET_COMMERCIALS_PLATFORM_ONLY`) было временной
+    подпоркой ровно до появления потолка; квоты остались за владельцем
+    платформы — там потолок требует продуктового решения, а не кода.
+    """
 
     _payload, scope = _require_fleet_actor(credentials, tenant)
-    _require_commercial_rights(scope)
     plan = PLANS.get(payload.plan.strip().lower())
     if plan is None:
         raise HTTPException(
@@ -521,6 +605,7 @@ async def patch_tenant_plan_endpoint(
             f"Unknown plan '{payload.plan}'",
         )
     target = await _load_in_scope(session, tenant_id, scope)
+    await _enforce_plan_ceiling(scope, tenant, plan)
 
     async with _fleet_session() as fleet_session:
         await apply_plan(fleet_session, target, plan)
