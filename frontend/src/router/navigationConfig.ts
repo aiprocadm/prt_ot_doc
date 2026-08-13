@@ -6,6 +6,7 @@ import {
   BookOpen,
   Briefcase,
   Building2,
+  Palette,
   ClipboardCheck,
   FileArchive,
   FileText,
@@ -419,6 +420,14 @@ export const MAIN_NAV_GROUPS: NavGroup[] = [
         label: "Клиенты и подписки",
         to: "/admin/tenants",
         icon: Building2,
+        permission: PERMISSIONS.ADMIN_MANAGE_TENANTS,
+      },
+      {
+        // BIZ-52 разд. 52.2: до этого пункта бренд настраивался только
+        // запросом из консоли — партнёр не мог перебрендировать платформу.
+        label: "Бренд",
+        to: "/admin/branding",
+        icon: Palette,
         permission: PERMISSIONS.ADMIN_MANAGE_TENANTS,
       },
       {

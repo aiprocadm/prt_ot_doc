@@ -23,6 +23,9 @@ export interface TenantBrandingDto {
   app_name: string | null;
   primary_color: string | null;
   support_email: string | null;
+  /** СВОИ картинки (не унаследованные): по ним видно, что можно «Убрать». */
+  has_logo: boolean;
+  has_favicon: boolean;
   effective: AppBrand;
 }
 
@@ -63,3 +66,25 @@ export const saveOwnAppBranding = async (payload: {
   support_email: string | null;
 }): Promise<TenantBrandingDto> =>
   (await apiClient.put<TenantBrandingDto>("/platform/branding", payload)).data;
+
+/**
+ * Загрузить логотип или значок вкладки.
+ *
+ * Файл уходит формой, а не JSON-строкой: картинка в base64 раздувается на треть,
+ * и её пришлось бы держать в памяти целиком с обеих сторон. Тип содержимого
+ * заголовком не проставляем — браузер сам добавит границу частей формы, без неё
+ * сервер не разберёт тело.
+ */
+export const uploadOwnBrandImage = async (
+  kind: "logo" | "favicon",
+  file: File,
+): Promise<void> => {
+  const body = new FormData();
+  body.append("file", file);
+  await apiClient.put(`/platform/branding/${kind}`, body);
+};
+
+/** Убрать свою картинку — наследование вернётся само. */
+export const deleteOwnBrandImage = async (kind: "logo" | "favicon"): Promise<void> => {
+  await apiClient.delete(`/platform/branding/${kind}`);
+};
