@@ -79,9 +79,15 @@ python3 --version          # see what's available
 python3.12 --version 2>/dev/null && echo "3.12 ok" || echo "3.12 not found — using fallback"
 ```
 
-## CI status: workflow-файлы включены; канонический gate — local-evidence
+## CI status: ⚠️ ВЫКЛЮЧЕН ВРУЧНУЮ до обновления лимитов; канонический gate — local-evidence
 
-5 workflow'ов были отключены 2026-05-28 (PR #598, переименование в `.yml.disabled`), затем **снова включены** (PR #641 «re-enable GHA (W0)» + PR #656 «workflow_dispatch + canonical baseline re-verify»): в `.github/workflows/` сейчас **5 активных `.yml`** — `ci`, `e2e-smoke`, `final-acceptance`, `perf-baseline`, `restore-drill` (не `.yml.disabled`). При этом **канонический gate — воспроизводимый локальный прогон** (постоянная local-evidence политика, REL-1 вариант (c); см. `docs/stabilization/RELEASE_BLOCKERS_STATUS.md` → «Evidence policy (PERMANENT)»): локальный pytest / `make gate` = источник истины, результаты GHA — дополнительная непрерывная защита. Текущий вердикт релиза и блокеры:
+**13.08.2026 все 6 workflow переведены в `disabled_manually`** (`gh workflow disable`) по решению владельца: бесплатная квота минут GitHub исчерпана. Файлы в `.github/workflows/` НЕ переименовывались, поэтому в git диффа нет — тишину CI легко принять за поломку. Включить обратно: `gh workflow enable <id>` для CI `234511511`, DAST `322926344`, E2E smoke `255902927`, Final Acceptance `283085436`, Perf Baseline `263698872`, Restore Drill `263378523`.
+
+**Как отличить «кончились лимиты» от «сломан код»:** при исчерпанной квоте прогон падает за 2–11 секунд, у заданий ПУСТОЙ список шагов и нет логов (`log not found`) — раннер не стартовал вовсе.
+
+**Бюджет минут (замер 13.08.2026, PR #891).** Считать так: длительность каждого задания × тариф ОС (Linux ×1, Windows ×2, macOS ×10, округление вверх до минуты) — timing-эндпоинт GitHub отдаёт нули. Было: PR 140 минут + push в main 160 = **~300 за один влитый срез**. Стало: push в main больше НЕ перепроверяет то, что только что прошло в PR (**~16 минут**), macOS/Windows и медленные сканеры ушли в еженедельный полный прогон (`schedule`, понедельник 02:00 UTC) и запуск по кнопке. Итог — **~156 минут за срез вместо 300**. Осколки бэкенд-тестов НЕ объединяли намеренно: они существуют ради памяти раннера и коротких заданий (см. комментарий у `backend-tests`), объединение купило бы минуты ценой нестабильности. Если понадобится ужаться ещё — в `ci.yml` у выхода `full` описан однострочный переключатель (бэкенд-тесты уходят с PR в еженедельный прогон, ~1000 минут в месяц); это смена политики гейта, решение владельца.
+
+При этом **канонический gate — воспроизводимый локальный прогон** (постоянная local-evidence политика, REL-1 вариант (c); см. `docs/stabilization/RELEASE_BLOCKERS_STATUS.md` → «Evidence policy (PERMANENT)»): локальный pytest / `make gate` = источник истины, результаты GHA — дополнительная непрерывная защита. Поэтому работа по срезам идёт как обычно: доказательство волны — локальный полный прогон + db-гейт в теле PR. Текущий вердикт релиза и блокеры:
 
 - [RELEASE_READINESS.md](RELEASE_READINESS.md) — вердикт + RC-критерии
 - [docs/stabilization/RELEASE_BLOCKERS_STATUS.md](docs/stabilization/RELEASE_BLOCKERS_STATUS.md) — каноника блокеров
