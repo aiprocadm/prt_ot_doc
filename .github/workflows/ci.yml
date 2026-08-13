@@ -2,6 +2,11 @@ name: CI
 
 on:
   workflow_dispatch:
+  # ПОЛНЫЙ прогон раз в неделю (понедельник, 02:00 UTC). Он же — страховка от
+  # того, что быстрый гейт PR чего-то не поймал: девять осколков бэкенда,
+  # macOS/Windows, медленные сканеры безопасности гоняются здесь.
+  schedule:
+    - cron: "0 2 * * 1"
   push:
     branches: ["main", "work"]
     # Правки только документации не меняют поведение кода. Полный прогон
@@ -31,6 +36,16 @@ jobs:
   # Что изменилось в этом PR. Фронтовый PR не должен оплачивать 105 минут
   # бэкендных тестов, и наоборот. Считаем сами, без сторонних действий:
   # лишняя зависимость в CI — это ещё и лишняя поверхность доверия.
+  #
+  # Здесь же считается `full` — «это полный прогон?». ЗАМЕР (13.08.2026,
+  # длительность каждого задания × тариф ОС; timing-эндпоинт GitHub отдаёт нули):
+  # прогон на PR — 140 оплачиваемых минут, на main — 160, то есть один влитый
+  # срез стоил ~300 минут за ОДИН И ТОТ ЖЕ код. При темпе «несколько срезов в
+  # день» бесплатная квота кончалась за неделю, что и произошло 12.08.
+  #
+  # Поэтому: PR проверяется полностью (это настоящий гейт), а push в main
+  # ПОВТОРНО те же тесты не гоняет — они только что прошли на этом же дереве.
+  # Полный прогон на main остаётся по расписанию раз в неделю и по кнопке.
   changes:
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -38,6 +53,21 @@ jobs:
       backend: ${{ steps.filter.outputs.backend }}
       frontend: ${{ steps.filter.outputs.frontend }}
       infra: ${{ steps.filter.outputs.infra }}
+      # Полный прогон: расписание, ручной запуск и любой PR. Push в main —
+      # НЕ полный: там дерево уже проверено прогоном PR.
+      #
+      # ЕСЛИ НУЖНО УЖАТЬСЯ СИЛЬНЕЕ (не влезаем в бесплатную квоту) — заменить
+      # строку ниже на:
+      #   full: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
+      # Тогда бэкенд-тесты уйдут с PR в еженедельный прогон: срез станет стоить
+      # ~35 минут вместо ~155, месяц — около 1000 минут вместо 3800. Это СМЕНА
+      # ПОЛИТИКИ гейта, а не оптимизация: PR перестанет проверяться тестами в
+      # CI. Она допустима ровно потому, что канон проекта — local-evidence
+      # (docs/stabilization/RELEASE_BLOCKERS_STATUS.md): доказательство волны —
+      # локальный полный прогон + db-гейт, приложенные к телу PR. Решение о
+      # смене политики — за владельцем, поэтому по умолчанию оставлено «PR
+      # проверяется полностью».
+      full: ${{ github.event_name != 'push' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -78,13 +108,17 @@ jobs:
     timeout-minutes: 15
     strategy:
       fail-fast: false
-      # macOS оплачивается по десятикратному тарифу, Windows — по двойному.
-      # Эта проверка занимает секунды, но минимальная единица списания —
-      # минута, поэтому один прогон на macOS стоит как десять на Linux.
-      # На каждый PR гоняем Linux; macOS и Windows — на main и по запросу,
-      # то есть там, где кросс-платформенность действительно проверяется.
+      # macOS оплачивается по десятикратному тарифу, Windows — по двойному, а
+      # минимальная единица списания — минута. ЗАМЕР: эта проверка отработала
+      # на macOS за 15 СЕКУНД и стоила 10 оплачиваемых минут, на Windows — 29
+      # секунд и 2 минуты. То есть кросс-платформенный дым обходился в 12 минут
+      # на КАЖДЫЙ пуш в main — больше, чем весь фронтенд с тестами.
+      #
+      # Теперь macOS и Windows гоняются только в ПОЛНОМ прогоне (еженедельно и
+      # по кнопке). Linux — всегда: он ловит подавляющее большинство поломок
+      # запуска, и он же бесплатнее всех.
       matrix:
-        os: ${{ (github.event_name == 'pull_request' && fromJSON('["ubuntu-latest"]')) || fromJSON('["ubuntu-latest", "macos-latest", "windows-latest"]') }}
+        os: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && fromJSON('["ubuntu-latest", "macos-latest", "windows-latest"]') || fromJSON('["ubuntu-latest"]') }}
     steps:
       - uses: actions/checkout@v4
 
@@ -207,7 +241,12 @@ jobs:
 
   dependency-vulnerability-scan:
     runs-on: ubuntu-latest
-    needs: security-exceptions
+    needs: [changes, security-exceptions]
+    # На PR и в еженедельном прогоне — да; на повторном прогоне main — нет:
+    # зависимости те же, что проверялись час назад. Ratchet-гейт semgrep
+    # (sast-static-analysis) при этом остаётся на КАЖДОМ прогоне: он дешёвый и
+    # закрывает разд. 69.
+    if: needs.changes.outputs.full == 'true'
     steps:
       - uses: actions/checkout@v4
 
@@ -402,7 +441,8 @@ jobs:
 
   container-image-scan:
     runs-on: ubuntu-latest
-    needs: security-exceptions
+    needs: [changes, security-exceptions]
+    if: needs.changes.outputs.full == 'true'
     steps:
       - uses: actions/checkout@v4
 
@@ -432,7 +472,8 @@ jobs:
 
   sbom-generation:
     runs-on: ubuntu-latest
-    needs: security-exceptions
+    needs: [changes, security-exceptions]
+    if: needs.changes.outputs.full == 'true'
     steps:
       - uses: actions/checkout@v4
 
@@ -503,7 +544,10 @@ jobs:
   backend-tests:
     runs-on: ubuntu-latest
     needs: changes
-    if: needs.changes.outputs.backend == 'true'
+    # 9 осколков = 111 оплачиваемых минут, 69 % стоимости всего прогона.
+    # На push в main их НЕ гоняем: то же дерево только что прошло эти же тесты
+    # в прогоне PR, и вторая оплата ничего не проверяет заново.
+    if: needs.changes.outputs.backend == 'true' && needs.changes.outputs.full == 'true'
     # ШАРДЫ: единый прогон 5100+ тестов с branch-coverage копит память по ходу
     # (SQLAlchemy/приложение на каждый тест) и убивает 16-ГБ раннер на ~60-75
     # минуте («runner lost communication … starves it for CPU/Memory») — при
@@ -617,7 +661,9 @@ jobs:
   backend-coverage-gate:
     runs-on: ubuntu-latest
     needs: [changes, backend-tests]
-    if: needs.changes.outputs.backend == 'true'
+    # Гейт склеивает покрытие ВСЕХ осколков. Без них он не просто бесполезен —
+    # он покажет провал покрытия там, где тесты не запускались, то есть соврёт.
+    if: needs.changes.outputs.backend == 'true' && needs.changes.outputs.full == 'true'
     steps:
       - uses: actions/checkout@v4
 
@@ -686,7 +732,8 @@ jobs:
   frontend-tests:
     runs-on: ubuntu-latest
     needs: changes
-    if: needs.changes.outputs.frontend == 'true'
+    # Та же причина, что у бэкенда: на push в main дерево уже проверено.
+    if: needs.changes.outputs.frontend == 'true' && needs.changes.outputs.full == 'true'
     steps:
       - uses: actions/checkout@v4
 
@@ -779,7 +826,13 @@ jobs:
   perf-smoke:
     runs-on: ubuntu-latest
     needs: changes
-    if: needs.changes.outputs.backend == 'true' || needs.changes.outputs.infra == 'true'
+    # ТОЛЬКО в полном прогоне. Задание помечено `continue-on-error` ниже, то
+    # есть НИЧЕГО не охраняет — но стоило 5 оплачиваемых минут на каждом
+    # прогоне. Платить за сигнал, который не может остановить merge, незачем;
+    # производительность и так живёт по local-evidence политике (RB-002).
+    if: >-
+      needs.changes.outputs.full == 'true'
+      && (needs.changes.outputs.backend == 'true' || needs.changes.outputs.infra == 'true')
     # Advisory, not blocking. Throughput/p95 thresholds are flaky on shared
     # GitHub runners (postgres + api + load generator on one host): the app
     # boots and serves (/health 200 @ 184 rps), but a 2nd-burst throughput dip
