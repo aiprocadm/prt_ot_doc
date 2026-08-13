@@ -1,14 +1,18 @@
 from __future__ import annotations
 
 import json
+import uuid
 from dataclasses import asdict, dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import func, insert, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import aensure_tenant_schema
+from app.domains.reseller.starter_pack import plan_starter_pack
+from app.models.master_data import Position
 from app.models.models import (
     Company,
     PackagePreset,
@@ -20,11 +24,36 @@ from app.models.models import (
     User,
     UserRole,
 )
+from app.models.safety_core import Hazard, RiskMeasure
 from app.services.audit import AuditService
 from app.services.auth import hash_password
 from app.services.authz_seed import seed_authz_catalog
 
-ROOT = Path(__file__).resolve().parents[6]
+
+def _find_repo_root() -> Path:
+    """Найти корень репозитория ПО ОРИЕНТИРУ, а не по числу уровней вверх.
+
+    Было `parents[6]` — и это промахивалось мимо корня на один уровень:
+    от `backend/app/services/tenants/bootstrap/service.py` корень находится на
+    `parents[5]`. Из-за промаха файл эталона не находился НИКОГДА (ни в обычной
+    копии, ни в worktree), выдача каждого арендатора молча писала
+    `starter_pack_missing`, и «стартовый набор» не применялся вообще.
+
+    Счёт уровней ломается от любого переноса файла и от запуска из worktree
+    (там путь длиннее). Ориентир `seed/tenant_starter_packs` устойчив к обоим
+    случаям: ищем ближайшего предка, у которого он есть.
+    """
+
+    here = Path(__file__).resolve()
+    for candidate in here.parents:
+        if (candidate / "seed" / "tenant_starter_packs").is_dir():
+            return candidate
+    # Ориентир не найден (обрезанная сборка) — отдаём прежнее поведение:
+    # шаг посева сам сообщит `starter_pack_missing`, а выдача не упадёт.
+    return here.parents[5]
+
+
+ROOT = _find_repo_root()
 STARTER_PACK_ROOT = ROOT / "seed" / "tenant_starter_packs"
 
 
@@ -305,7 +334,135 @@ class BootstrapTenantService:
                     f"tenants/{tenant_slug}/archives",
                 ],
             }
+        # BIZ-52 срез-7: набор становится НАСТОЯЩИМИ справочниками.
+        # До этого он только клался в `settings` целым куском, который не читал
+        # никто, — а отчёт при этом рапортовал «starter_pack created». Новый
+        # клиент получал пустые справочники и уверенность, что они заполнены.
+        await self._apply_reference_data(
+            tenant_id=tenant_id, payload=payload, summary=summary
+        )
         summary.mark(entity="starter_pack", created=True)
+
+    async def _apply_reference_data(
+        self, *, tenant_id: str, payload: dict[str, Any], summary: BootstrapTenantSummary
+    ) -> None:
+        """Создать справочники эталона строками. Идемпотентно по названию.
+
+        Идемпотентность обязательна: выдача арендатора повторяется (ретрай,
+        повторный вызов bootstrap), и второй проход не должен удваивать
+        справочник. Совпадение ищется по названию без учёта регистра — ровно
+        так же, как схлопываются дубли внутри самого файла.
+
+        Пропуски объявляются ЯВНО (`starter_pack_skipped:...`): половина ключей
+        файла называет перечисления в коде, а не таблицы, и молчание об этом
+        читалось бы как потеря данных.
+        """
+
+        plan = plan_starter_pack(payload)
+        for kind, reason in plan.skipped.items():
+            summary.warnings.append(f"starter_pack_skipped:{kind}:{reason}")
+        for kind in plan.unknown:
+            summary.warnings.append(f"starter_pack_unknown_kind:{kind}")
+        if not plan.apply:
+            return
+
+        company_id: str | None = None
+        if "positions" in plan.apply:
+            # Должность требует организацию (FK NOT NULL). Её создаёт шаг
+            # `_ensure_company_profile` прямо перед этим — но если организации
+            # нет (например, она уже была и запрос её не нашёл), должности
+            # молча пропускаются С ПОМЕТКОЙ, а не роняют выдачу арендатора.
+            company_id = await self.session.scalar(
+                select(Company.id).where(Company.tenant_id == tenant_id).limit(1)
+            )
+            if company_id is None:
+                summary.warnings.append(
+                    "starter_pack_skipped:positions:у арендатора нет организации"
+                )
+
+        created_any = False
+        for kind, names in plan.apply.items():
+            if kind == "positions":
+                if company_id is None:
+                    continue
+                created_any |= await self._seed_positions(tenant_id, company_id, names)
+            elif kind == "hazards":
+                created_any |= await self._seed_named(tenant_id, names, Hazard)
+            elif kind == "controls":
+                created_any |= await self._seed_named(tenant_id, names, RiskMeasure)
+        if created_any:
+            await self.session.flush()
+
+    async def _seed_positions(
+        self, tenant_id: str, company_id: str, names: list[str]
+    ) -> bool:
+        existing = {
+            str(name).casefold()
+            for name in (
+                await self.session.execute(
+                    select(Position.name).where(Position.tenant_id == tenant_id)
+                )
+            ).scalars()
+        }
+        created = False
+        for name in names:
+            if name.casefold() in existing:
+                continue
+            self.session.add(
+                Position(tenant_id=tenant_id, company_id=company_id, name=name)
+            )
+            existing.add(name.casefold())
+            created = True
+        return created
+
+    async def _seed_named(self, tenant_id: str, names: list[str], model: Any) -> bool:
+        """Создать строки справочника «одно название — одна строка».
+
+        Одна функция на опасности и меры: у обеих таблиц из обязательного —
+        только `name`, и две почти одинаковые копии разъехались бы при первой
+        же правке.
+
+        **Вставка идёт ЯВНЫМ списком колонок, а не через ORM-объект.** У обеих
+        таблиц есть необязательная колонка-перечисление (`hazards.source_type`,
+        `risk_measures.measure_type`). ORM включает в INSERT ВСЕ колонки, и
+        SQLAlchemy приводит их к типу: `$5::hazardsourcetype`. Выдача арендатора
+        идёт доверенной сессией (`tenant="public"`, `rls_bypass`) — у неё пустой
+        search_path, тип PG по имени не находится, и вставка падает
+        «type hazardsourcetype does not exist». Таблица при этом резолвится:
+        ломается именно приведение типа. Явный список колонок обходит это
+        полностью и не зависит от того, как настроен search_path у вызывающего.
+        Поймано db-гейтом на живом PostgreSQL — на SQLite перечислений нет, и
+        обычный прогон был зелёным.
+        """
+
+        existing = {
+            str(name).casefold()
+            for name in (
+                await self.session.execute(
+                    select(model.name).where(model.tenant_id == tenant_id)
+                )
+            ).scalars()
+        }
+        rows: list[dict[str, Any]] = []
+        now = datetime.now(tz=timezone.utc)
+        for name in names:
+            if name.casefold() in existing:
+                continue
+            existing.add(name.casefold())
+            rows.append(
+                {
+                    "id": str(uuid.uuid4()),
+                    "tenant_id": tenant_id,
+                    "name": name,
+                    "created_at": now,
+                    "updated_at": now,
+                    "version": 1,
+                }
+            )
+        if not rows:
+            return False
+        await self.session.execute(insert(model.__table__), rows)
+        return True
 
     async def _seed_package_presets(
         self, *, tenant_id: str, dry_run: bool, summary: BootstrapTenantSummary
