@@ -332,6 +332,7 @@
     "GET /api/v1/platform/tenants",
     "GET /api/v1/platform/tenants/modules",
     "GET /api/v1/platform/tenants/plans",
+    "GET /api/v1/platform/tenants/usage",
     "GET /api/v1/portal-requests",
     "GET /api/v1/portal-requests/{request_id}",
     "GET /api/v1/portal/packages",
@@ -1762,6 +1763,7 @@
     "put_profile_api_v1_pipelines_profiles__profile_id__put",
     "put_settings_alias_api_v1_notifications_notification_settings_me_put",
     "put_settings_api_v1_notifications_settings_me_put",
+    "read_fleet_usage_api_v1_platform_tenants_usage_get",
     "read_own_branding_api_v1_platform_branding_get",
     "read_own_legal_api_v1_platform_legal__kind__get",
     "read_public_branding_api_v1_public_branding_get",
@@ -2247,6 +2249,7 @@
     "FinalizeUploadResponse",
     "FindingIn",
     "FindingUpdate",
+    "FleetUsageReport",
     "GapRecalcIn",
     "GenerateDataPayload",
     "GeneratePipelinePayload",
@@ -2723,6 +2726,7 @@
     "TenantQuotaRead",
     "TenantRead",
     "TenantStatusPatch",
+    "TenantUsageRow",
     "TokenPair",
     "TrainingCertificateCreate",
     "TrainingCertificatePage",
@@ -4930,6 +4934,11 @@
       "due_date": "null|string",
       "description": "null|string",
       "severity": "null|string"
+    },
+    "FleetUsageReport": {
+      "period": "string",
+      "items": "array",
+      "total_doc_generations": "integer"
     },
     "GapRecalcIn": {
       "missing_documents": "integer",
@@ -8339,6 +8348,12 @@
     },
     "TenantStatusPatch": {
       "is_active": "boolean"
+    },
+    "TenantUsageRow": {
+      "tenant_id": "string",
+      "slug": "string",
+      "name": "string",
+      "doc_generations": "integer"
     },
     "TokenPair": {
       "access_token": "string"

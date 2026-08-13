@@ -120,6 +120,27 @@ class TenantFleetPage(BaseSchema):
     can_manage_commercials: bool = True
 
 
+class TenantUsageRow(BaseSchema):
+    """Расход одного арендатора за месяц (BIZ-52 срез-8, разд. 52.4)."""
+
+    tenant_id: str
+    slug: str
+    name: str
+    doc_generations: int
+
+
+class FleetUsageReport(BaseSchema):
+    """Потребление по области кабинета.
+
+    Итог считается по ТЕМ ЖЕ строкам, что вернулись: партнёр не должен видеть в
+    итоге оборот чужих клиентов, которых нет в его списке.
+    """
+
+    period: str
+    items: list[TenantUsageRow]
+    total_doc_generations: int
+
+
 class FeatureCatalogEntry(BaseSchema):
     code: str
     title: str
