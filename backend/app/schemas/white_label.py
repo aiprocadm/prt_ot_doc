@@ -23,6 +23,11 @@ class AppBrandRead(BaseSchema):
     #: чтобы честно сказать партнёру «сейчас у вас бренд платформы», а не
     #: оставлять его гадать, применилась настройка или нет.
     source: str
+    #: Признаки, а не сами байты: картинки забираются отдельными ручками
+    #: (`/public/branding/logo|favicon`), чтобы JSON бренда оставался лёгким,
+    #: а браузер мог кэшировать картинку по ETag.
+    has_logo: bool = False
+    has_favicon: bool = False
 
 
 class TenantBrandingPatch(BaseSchema):
@@ -40,4 +45,8 @@ class TenantBrandingRead(TenantBrandingPatch):
     увидит пользователь: незаполненные поля берутся выше по цепочке.
     """
 
+    #: Свои картинки (не унаследованные): партнёру нужно видеть, загрузил ли
+    #: он логотип сам, — «есть действующий» об этом не говорит.
+    has_logo: bool = False
+    has_favicon: bool = False
     effective: AppBrandRead

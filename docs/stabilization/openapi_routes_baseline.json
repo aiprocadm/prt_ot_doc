@@ -36,6 +36,8 @@
     "DELETE /api/v1/package-profiles/{profile_id}",
     "DELETE /api/v1/persons/{person_id}",
     "DELETE /api/v1/pipelines/profiles/{profile_id}",
+    "DELETE /api/v1/platform/branding/favicon",
+    "DELETE /api/v1/platform/branding/logo",
     "DELETE /api/v1/platform/tenants/{tenant_id}/modules/{code}/trial",
     "DELETE /api/v1/ppe/budgets/{budget_id}",
     "DELETE /api/v1/ppe/items/{item_id}",
@@ -370,6 +372,8 @@
     "GET /api/v1/privacy/subjects/{person_id}/export",
     "GET /api/v1/public/auth/machine",
     "GET /api/v1/public/branding",
+    "GET /api/v1/public/branding/favicon",
+    "GET /api/v1/public/branding/logo",
     "GET /api/v1/public/documents",
     "GET /api/v1/public/employees",
     "GET /api/v1/public/incidents",
@@ -966,6 +970,8 @@
     "PUT /api/v1/notifications/settings/me",
     "PUT /api/v1/pipelines/profiles/{profile_id}",
     "PUT /api/v1/platform/branding",
+    "PUT /api/v1/platform/branding/favicon",
+    "PUT /api/v1/platform/branding/logo",
     "PUT /api/v1/platform/legal/{kind}",
     "PUT /api/v1/ppe/employees/{person_id}/sizes",
     "PUT /api/v1/privacy/processing-activities",
@@ -1218,11 +1224,13 @@
     "delete_enrollment_api_v1_training_enrollments__item_id__delete",
     "delete_entry_api_v1_journals_entries__entry_id__delete",
     "delete_expense_api_v1_budget_expenses__expense_id__delete",
+    "delete_favicon_api_v1_platform_branding_favicon_delete",
     "delete_group_api_v1_training_groups__item_id__delete",
     "delete_invoice_api_v1_invoices__invoice_id__delete",
     "delete_item_api_v1_ppe_items__item_id__delete",
     "delete_journal_api_v1_journals__journal_id__delete",
     "delete_layout_preset_api_v1_layout_presets__preset_id__delete",
+    "delete_logo_api_v1_platform_branding_logo_delete",
     "delete_managed_client_api_v1_managed_clients__mcid__delete",
     "delete_map_api_v1_replace_maps__replace_map_id__delete",
     "delete_medical_factor_api_v1_medical_factors__factor_id__delete",
@@ -1757,7 +1765,9 @@
     "read_own_branding_api_v1_platform_branding_get",
     "read_own_legal_api_v1_platform_legal__kind__get",
     "read_public_branding_api_v1_public_branding_get",
+    "read_public_favicon_api_v1_public_branding_favicon_get",
     "read_public_legal_api_v1_public_legal__kind__get",
+    "read_public_logo_api_v1_public_branding_logo_get",
     "read_subject_access_log_api_v1_privacy_subjects__person_id__access_log_get",
     "readiness_api_v1_work_permits__wp_id__readiness_get",
     "reassign_task_api_v1_workflow_tasks__task_id__reassign_post",
@@ -1921,7 +1931,9 @@
     "update_work_permit_endpoint_api_v1_work_permits__wp_id__patch",
     "update_workplace_api_v1_sout_workplaces__wid__patch",
     "update_workplace_api_v1_workplaces__workplace_id__patch",
+    "upload_favicon_api_v1_platform_branding_favicon_put",
     "upload_file_api_v1_files_legacy_upload_post",
+    "upload_logo_api_v1_platform_branding_logo_put",
     "upload_source_preview_api_v1_package_presets__preset_id__upload_source_post",
     "upload_template_api_v1_files_legacy_upload_template_post",
     "upload_template_version_api_v1_templates__template_id__versions_upload_post",
@@ -2010,7 +2022,9 @@
     "Body_generate_document_batch_api_v1_documents_batch_post",
     "Body_import_apply_api_v1_sout__cid__import_apply_post",
     "Body_import_preview_api_v1_sout__cid__import_preview_post",
+    "Body_upload_favicon_api_v1_platform_branding_favicon_put",
     "Body_upload_file_api_v1_files_legacy_upload_post",
+    "Body_upload_logo_api_v1_platform_branding_logo_put",
     "Body_upload_template_api_v1_files_legacy_upload_template_post",
     "Body_upload_template_version_api_v1_templates__template_id__versions_upload_post",
     "Body_uploads_api_v1_client_portal_uploads_post",
@@ -2890,7 +2904,9 @@
       "app_name": "string",
       "primary_color": "string",
       "support_email": "null|string",
-      "source": "string"
+      "source": "string",
+      "has_logo": "boolean",
+      "has_favicon": "boolean"
     },
     "ApplyHeadersAccepted": {
       "job_id": "string",
@@ -3221,11 +3237,17 @@
     "Body_import_preview_api_v1_sout__cid__import_preview_post": {
       "file": "string"
     },
+    "Body_upload_favicon_api_v1_platform_branding_favicon_put": {
+      "file": "string"
+    },
     "Body_upload_file_api_v1_files_legacy_upload_post": {
       "file": "string",
       "company_id": "null|string",
       "pack_id": "null|string",
       "kind": "FileKind|null"
+    },
+    "Body_upload_logo_api_v1_platform_branding_logo_put": {
+      "file": "string"
     },
     "Body_upload_template_api_v1_files_legacy_upload_template_post": {
       "file": "string",
@@ -8224,6 +8246,8 @@
       "app_name": "null|string",
       "primary_color": "null|string",
       "support_email": "null|string",
+      "has_logo": "boolean",
+      "has_favicon": "boolean",
       "effective": "AppBrandRead"
     },
     "TenantCreate": {

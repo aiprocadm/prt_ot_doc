@@ -1,9 +1,9 @@
 import { createWithEqualityFn } from "zustand/traditional";
 
-import { getAppBrand, type AppBrand } from "@/api/appBrand";
+import { getAppBrand, getBrandImageUrl, type AppBrand } from "@/api/appBrand";
 
 /**
- * Бренд приложения (BIZ-52 срез-4, ТЗ Доп. №1 разд. 52.2).
+ * Бренд приложения (BIZ-52 срезы 4 и 6, ТЗ Доп. №1 разд. 52.2).
  *
  * Отдельное хранилище, а не контекст: имя и цвет нужны и экрану входа (он вне
  * защищённого дерева), и шапке, и заголовку вкладки. Контекст пришлось бы
@@ -18,10 +18,14 @@ export const PLATFORM_FALLBACK: AppBrand = {
   primary_color: "222.2 47.4% 11.2%",
   support_email: null,
   source: "platform",
+  has_logo: false,
+  has_favicon: false,
 };
 
 interface BrandState {
   brand: AppBrand;
+  /** Адрес логотипа в памяти страницы; `null` — логотипа нет. */
+  logoUrl: string | null;
   loaded: boolean;
   loading: boolean;
   load: () => Promise<void>;
@@ -30,6 +34,7 @@ interface BrandState {
 
 const initial = {
   brand: PLATFORM_FALLBACK,
+  logoUrl: null as string | null,
   loaded: false,
   loading: false,
 };
@@ -42,6 +47,17 @@ export const useBrandStore = createWithEqualityFn<BrandState>((set, get) => ({
     try {
       const brand = await getAppBrand();
       set({ brand, loaded: true, loading: false });
+      // Картинки — после текста и только по признакам: у большинства
+      // арендаторов их нет, и лишние запросы за 404 были бы платой каждого
+      // за возможность немногих.
+      if (brand.has_favicon) {
+        const faviconUrl = await getBrandImageUrl("favicon");
+        if (faviconUrl) applyFavicon(faviconUrl);
+      }
+      if (brand.has_logo) {
+        const logoUrl = await getBrandImageUrl("logo");
+        if (logoUrl) set({ logoUrl });
+      }
     } catch {
       // Не закрываемся при ошибке: приложение под платформенным брендом
       // работоспособно, а пустая шапка — нет. Ошибку уже показал общий
@@ -49,7 +65,17 @@ export const useBrandStore = createWithEqualityFn<BrandState>((set, get) => ({
       set({ loaded: true, loading: false });
     }
   },
-  reset: () => set({ ...initial }),
+  reset: () => {
+    const previous = get().logoUrl;
+    if (previous) {
+      try {
+        URL.revokeObjectURL(previous);
+      } catch {
+        // адрес мог быть уже отозван — не повод ронять сброс
+      }
+    }
+    set({ ...initial });
+  },
 }));
 
 /**
@@ -61,4 +87,16 @@ export const applyBrandTheme = (brand: AppBrand): void => {
   if (typeof document === "undefined") return;
   document.documentElement.style.setProperty("--primary", brand.primary_color);
   document.title = brand.app_name;
+};
+
+/** Поставить favicon партнёра вместо стандартного из `index.html`. */
+export const applyFavicon = (url: string): void => {
+  if (typeof document === "undefined") return;
+  let link = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
+  if (!link) {
+    link = document.createElement("link");
+    link.rel = "icon";
+    document.head.appendChild(link);
+  }
+  link.href = url;
 };

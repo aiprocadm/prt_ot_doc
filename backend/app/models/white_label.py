@@ -13,7 +13,7 @@
 
 from __future__ import annotations
 
-from sqlalchemy import String, UniqueConstraint
+from sqlalchemy import LargeBinary, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import TenantBaseModel
@@ -43,3 +43,16 @@ class TenantBranding(TenantBaseModel):
     #: интерфейсом, и выглядело бы это как «тема не применилась».
     primary_color: Mapped[str | None] = mapped_column(String(32), nullable=True)
     support_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Картинки живут В СТРОКЕ, а не в файловом контуре (BIZ-52 срез-6): общий
+    # контур требует MinIO (в dev-lite выдача отвечает 503) и антивирусный
+    # карантин, а логотип — маленькая публичная картинка с жёстким потолком
+    # размера (`domains/reseller/brand_images.py`), которую надо отдавать
+    # клиентам ЧУЖОГО арендатора (клиент партнёра видит логотип партнёра) —
+    # общая выдача файлов такое запрещает намеренно.
+    logo_image: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    #: Тип — из НАШЕГО распознавания по магическим байтам, не из заголовка
+    #: клиента: заголовку верить нельзя (SVG под видом PNG = скрипт на странице
+    #: входа каждого клиента).
+    logo_media_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    favicon_image: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    favicon_media_type: Mapped[str | None] = mapped_column(String(64), nullable=True)

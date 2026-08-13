@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { LegalLinks } from "@/components/common/LegalLinks";
 import { useAuthStore } from "@/stores/auth";
+import { useBrandStore } from "@/stores/brand";
 import { loginSchema, type LoginFormValues } from "@/types/forms/auth";
 import { consumeReturnTo } from "@/utils/returnTo";
 
@@ -23,6 +24,7 @@ const LoginPage = () => {
     },
   });
   const { login, loading, isAuthenticated } = useAuthStore();
+  const logoUrl = useBrandStore((state) => state.logoUrl);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -48,6 +50,11 @@ const LoginPage = () => {
   return (
     <div className="space-y-6">
       <div>
+        {/* Логотип партнёра — до входа (BIZ-52 разд. 52.2): человек должен
+            видеть, К КОМУ он входит, ещё на этом экране. */}
+        {logoUrl ? (
+          <img src={logoUrl} alt="" className="mb-3 h-12 w-auto object-contain" />
+        ) : null}
         <h1 className="text-2xl font-bold">Вход в платформу</h1>
         <p className="text-sm text-muted-foreground">
           Авторизуйтесь для управления документами

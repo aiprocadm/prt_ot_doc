@@ -1,14 +1,17 @@
 """Бренд приложения: чтение всеми, правка — владельцем платформы и партнёром.
 
-Доп. №1 разд. 52.2. Три ручки:
+Доп. №1 разд. 52.2. Ручки:
 
 * ``GET /public/branding`` — действующий бренд, БЕЗ токена. Так и задумано:
   бренд нужен экрану входа, а на нём токена ещё нет. Отдавать после входа
   значит показать человеку сначала вендора, а потом подменить — то есть ровно
   не выполнить требование «скрытие любых упоминаний исходного вендора».
+* ``GET /public/branding/logo`` и ``/favicon`` — сами картинки, тоже без
+  токена и по той же причине.
 * ``GET /platform/branding`` — своя настройка (что именно задано, а что
   унаследовано).
-* ``PUT /platform/branding`` — правка своей настройки.
+* ``PUT /platform/branding`` — правка текстовых полей; ``PUT``/``DELETE``
+  ``/platform/branding/logo`` и ``/favicon`` — картинки.
 
 Правит только владелец платформы или партнёр: разд. 52.2 — про перебрендирование
 платформы теми, кто её продаёт. Клиентскому арендатору своя настройка не нужна и
@@ -18,16 +21,26 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from hashlib import sha256
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, File, HTTPException, Request, Response, UploadFile, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.audit_decorator import audit_operation
+from app.core.errors import api_problem_detail
 from app.db.session import AsyncSessionLocal
+from app.domains.reseller.brand_images import (
+    FAVICON_MAX_BYTES,
+    FAVICON_MEDIA_TYPES,
+    LOGO_MAX_BYTES,
+    LOGO_MEDIA_TYPES,
+    detect_image_media_type,
+)
 from app.domains.reseller.white_label import (
     AppBrand,
     BrandOverride,
@@ -59,41 +72,141 @@ def _brand_session() -> AsyncSession:
     )
 
 
-async def _load_override(session: AsyncSession, tenant_id: str) -> BrandOverride | None:
+@dataclass(frozen=True)
+class _BrandRowView:
+    """Строка бренда без байтов картинок.
+
+    Байты НЕ выгружаются, когда нужен только признак «картинка есть»: иначе
+    каждый показ страницы входа тянул бы из базы до полумегабайта впустую.
+    """
+
+    override: BrandOverride
+    has_logo: bool
+    has_favicon: bool
+
+
+async def _load_view(session: AsyncSession, tenant_id: str) -> _BrandRowView | None:
     row = (
         await session.execute(
-            select(TenantBranding).where(TenantBranding.tenant_id == tenant_id)
+            select(
+                TenantBranding.app_name,
+                TenantBranding.primary_color,
+                TenantBranding.support_email,
+                TenantBranding.logo_image.isnot(None),
+                TenantBranding.favicon_image.isnot(None),
+            ).where(TenantBranding.tenant_id == tenant_id)
         )
-    ).scalar_one_or_none()
+    ).first()
     if row is None:
         return None
-    return BrandOverride(
-        app_name=row.app_name,
-        primary_color=row.primary_color,
-        support_email=row.support_email,
+    app_name, primary_color, support_email, has_logo, has_favicon = row
+    return _BrandRowView(
+        override=BrandOverride(
+            app_name=app_name, primary_color=primary_color, support_email=support_email
+        ),
+        has_logo=bool(has_logo),
+        has_favicon=bool(has_favicon),
     )
 
 
-async def _effective_brand(tenant: Tenant) -> AppBrand:
+async def _effective_view(tenant: Tenant) -> tuple[AppBrand, bool, bool]:
+    """Действующий бренд + признаки картинок.
+
+    Картинки наследуются ПО ОТДЕЛЬНОСТИ, как имя и цвет: у клиента нет своего
+    логотипа — показывается логотип партнёра, независимо от того, чьё имя
+    победило в текстовых полях.
+    """
+
     async with _brand_session() as session:
-        own = await _load_override(session, tenant.id)
+        own = await _load_view(session, tenant.id)
         reseller = (
-            await _load_override(session, str(tenant.parent_id)) if tenant.parent_id else None
+            await _load_view(session, str(tenant.parent_id)) if tenant.parent_id else None
         )
-    return resolve_app_brand(own=own, reseller=reseller)
+    brand = resolve_app_brand(
+        own=own.override if own else None,
+        reseller=reseller.override if reseller else None,
+    )
+    has_logo = (own.has_logo if own else False) or (reseller.has_logo if reseller else False)
+    has_favicon = (own.has_favicon if own else False) or (
+        reseller.has_favicon if reseller else False
+    )
+    return brand, has_logo, has_favicon
+
+
+def _as_brand_read(brand: AppBrand, has_logo: bool, has_favicon: bool) -> AppBrandRead:
+    return AppBrandRead(
+        app_name=brand.app_name,
+        primary_color=brand.primary_color,
+        support_email=brand.support_email,
+        source=brand.source,
+        has_logo=has_logo,
+        has_favicon=has_favicon,
+    )
 
 
 @public_router.get("", response_model=AppBrandRead)
 async def read_public_branding(tenant: Tenant = Depends(get_tenant_record)) -> AppBrandRead:
     """Бренд, под которым показывать приложение этому арендатору."""
 
-    brand = await _effective_brand(tenant)
-    return AppBrandRead(
-        app_name=brand.app_name,
-        primary_color=brand.primary_color,
-        support_email=brand.support_email,
-        source=brand.source,
+    brand, has_logo, has_favicon = await _effective_view(tenant)
+    return _as_brand_read(brand, has_logo, has_favicon)
+
+
+async def _serve_brand_image(request: Request, tenant: Tenant, *, kind: str) -> Response:
+    """Отдать действующую картинку: своя → партнёра → 404.
+
+    Тип содержимого берётся из НАШЕГО распознавания при загрузке, а не из
+    заголовка загрузившего; ``nosniff`` запрещает браузеру угадывать сверх
+    этого. ETag считается от байтов: favicon запрашивается на каждый заход,
+    и без 304 каждый заход стоил бы полной перекачки.
+    """
+
+    image_col = TenantBranding.logo_image if kind == "logo" else TenantBranding.favicon_image
+    media_col = (
+        TenantBranding.logo_media_type if kind == "logo" else TenantBranding.favicon_media_type
     )
+    candidates = [tenant.id]
+    if tenant.parent_id:
+        candidates.append(str(tenant.parent_id))
+
+    async with _brand_session() as session:
+        for tenant_id in candidates:
+            row = (
+                await session.execute(
+                    select(image_col, media_col).where(TenantBranding.tenant_id == tenant_id)
+                )
+            ).first()
+            if row is None or not row[0]:
+                continue
+            data = bytes(row[0])
+            etag = f'"{sha256(data).hexdigest()[:16]}"'
+            headers = {
+                "ETag": etag,
+                "Cache-Control": "public, max-age=300",
+                "X-Content-Type-Options": "nosniff",
+            }
+            if request.headers.get("if-none-match") == etag:
+                return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers=headers)
+            return Response(
+                content=data,
+                media_type=row[1] or "application/octet-stream",
+                headers=headers,
+            )
+    raise HTTPException(status.HTTP_404_NOT_FOUND, "Картинка не задана")
+
+
+@public_router.get("/logo")
+async def read_public_logo(
+    request: Request, tenant: Tenant = Depends(get_tenant_record)
+) -> Response:
+    return await _serve_brand_image(request, tenant, kind="logo")
+
+
+@public_router.get("/favicon")
+async def read_public_favicon(
+    request: Request, tenant: Tenant = Depends(get_tenant_record)
+) -> Response:
+    return await _serve_brand_image(request, tenant, kind="favicon")
 
 
 def _require_brand_editor(
@@ -118,22 +231,16 @@ async def read_own_branding(
     credentials: HTTPAuthorizationCredentials | None = Depends(_optional_bearer),
 ) -> TenantBrandingRead:
     _require_brand_editor(credentials, tenant)
-    row = (
-        await session.execute(
-            select(TenantBranding).where(TenantBranding.tenant_id == tenant.id)
-        )
-    ).scalar_one_or_none()
-    effective = await _effective_brand(tenant)
+    # Своя строка читается сессией запроса: она видна под RLS без обхода.
+    own = await _load_view(session, tenant.id)
+    brand, has_logo, has_favicon = await _effective_view(tenant)
     return TenantBrandingRead(
-        app_name=row.app_name if row else None,
-        primary_color=row.primary_color if row else None,
-        support_email=row.support_email if row else None,
-        effective=AppBrandRead(
-            app_name=effective.app_name,
-            primary_color=effective.primary_color,
-            support_email=effective.support_email,
-            source=effective.source,
-        ),
+        app_name=own.override.app_name if own else None,
+        primary_color=own.override.primary_color if own else None,
+        support_email=own.override.support_email if own else None,
+        has_logo=own.has_logo if own else False,
+        has_favicon=own.has_favicon if own else False,
+        effective=_as_brand_read(brand, has_logo, has_favicon),
     )
 
 
@@ -168,4 +275,149 @@ async def update_own_branding(
     row.support_email = payload.support_email
     await session.commit()
 
+    return await read_own_branding(session, tenant, credentials)
+
+
+async def _own_row(session: AsyncSession, tenant_id: str) -> TenantBranding | None:
+    return (
+        await session.execute(
+            select(TenantBranding).where(TenantBranding.tenant_id == tenant_id)
+        )
+    ).scalar_one_or_none()
+
+
+async def _read_limited(file: UploadFile, max_bytes: int, *, kind: str) -> bytes:
+    """Прочитать не больше потолка. Потолок проверяется по ФАКТУ чтения.
+
+    Заявленный размер (`Content-Length`) — такая же строка клиента, как и тип:
+    проверка только по нему пропустила бы поток, который врёт о своей длине.
+    Читаем на байт больше потолка — если байт нашёлся, файл велик, сколько бы
+    он ни «заявлял».
+    """
+
+    data = await file.read(max_bytes + 1)
+    if len(data) > max_bytes:
+        raise HTTPException(
+            status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=api_problem_detail(
+                code="BRAND_IMAGE_TOO_LARGE",
+                message=f"Картинка «{kind}» больше потолка в {max_bytes // 1024} КБ",
+                error_type="white-label",
+            ),
+        )
+    return data
+
+
+def _sniff_or_reject(data: bytes, allowed: frozenset[str], *, kind: str) -> str:
+    media_type = detect_image_media_type(data)
+    if media_type is None or media_type not in allowed:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=api_problem_detail(
+                code="BRAND_IMAGE_FORMAT_UNSUPPORTED",
+                message=(
+                    f"Для «{kind}» принимаются только {', '.join(sorted(allowed))}; "
+                    "формат определяется по содержимому файла"
+                ),
+                error_type="white-label",
+            ),
+        )
+    return media_type
+
+
+async def _store_image(
+    session: AsyncSession,
+    tenant: Tenant,
+    file: UploadFile,
+    *,
+    kind: str,
+) -> None:
+    if kind == "logo":
+        data = await _read_limited(file, LOGO_MAX_BYTES, kind=kind)
+        media_type = _sniff_or_reject(data, LOGO_MEDIA_TYPES, kind=kind)
+    else:
+        data = await _read_limited(file, FAVICON_MAX_BYTES, kind=kind)
+        media_type = _sniff_or_reject(data, FAVICON_MEDIA_TYPES, kind=kind)
+
+    row = await _own_row(session, tenant.id)
+    if row is None:
+        # update-or-insert, а не add: вторая строка сделала бы ответ ручки
+        # неопределённым (грабля BIZ-61 срез-2).
+        row = TenantBranding(tenant_id=tenant.id)
+        session.add(row)
+    if kind == "logo":
+        row.logo_image = data
+        row.logo_media_type = media_type
+    else:
+        row.favicon_image = data
+        row.favicon_media_type = media_type
+    await session.commit()
+
+
+async def _drop_image(session: AsyncSession, tenant: Tenant, *, kind: str) -> None:
+    """Убрать свою картинку — вернуться к наследованию, а не «стереть везде».
+
+    Строка не удаляется: в ней могут жить имя и цвет. Чистятся ровно две
+    колонки картинки.
+    """
+
+    row = await _own_row(session, tenant.id)
+    if row is None:
+        return
+    if kind == "logo":
+        row.logo_image = None
+        row.logo_media_type = None
+    else:
+        row.favicon_image = None
+        row.favicon_media_type = None
+    await session.commit()
+
+
+@router.put("/logo", response_model=TenantBrandingRead)
+@audit_operation("update", "tenant_branding")
+async def upload_logo(
+    session: SessionDep,
+    tenant: Tenant = Depends(get_tenant_record),
+    credentials: HTTPAuthorizationCredentials | None = Depends(_optional_bearer),
+    file: UploadFile = File(...),
+) -> TenantBrandingRead:
+    _require_brand_editor(credentials, tenant)
+    await _store_image(session, tenant, file, kind="logo")
+    return await read_own_branding(session, tenant, credentials)
+
+
+@router.delete("/logo", response_model=TenantBrandingRead)
+@audit_operation("update", "tenant_branding")
+async def delete_logo(
+    session: SessionDep,
+    tenant: Tenant = Depends(get_tenant_record),
+    credentials: HTTPAuthorizationCredentials | None = Depends(_optional_bearer),
+) -> TenantBrandingRead:
+    _require_brand_editor(credentials, tenant)
+    await _drop_image(session, tenant, kind="logo")
+    return await read_own_branding(session, tenant, credentials)
+
+
+@router.put("/favicon", response_model=TenantBrandingRead)
+@audit_operation("update", "tenant_branding")
+async def upload_favicon(
+    session: SessionDep,
+    tenant: Tenant = Depends(get_tenant_record),
+    credentials: HTTPAuthorizationCredentials | None = Depends(_optional_bearer),
+    file: UploadFile = File(...),
+) -> TenantBrandingRead:
+    _require_brand_editor(credentials, tenant)
+    await _store_image(session, tenant, file, kind="favicon")
+    return await read_own_branding(session, tenant, credentials)
+
+
+@router.delete("/favicon", response_model=TenantBrandingRead)
+@audit_operation("update", "tenant_branding")
+async def delete_favicon(
+    session: SessionDep,
+    tenant: Tenant = Depends(get_tenant_record),
+    credentials: HTTPAuthorizationCredentials | None = Depends(_optional_bearer),
+) -> TenantBrandingRead:
+    _require_brand_editor(credentials, tenant)
+    await _drop_image(session, tenant, kind="favicon")
     return await read_own_branding(session, tenant, credentials)

@@ -14,6 +14,9 @@ export interface AppBrand {
   support_email: string | null;
   /** Откуда бренд: `self` | `reseller` | `platform`. */
   source: string;
+  /** Признаки, а не байты: картинки забираются отдельными ручками. */
+  has_logo: boolean;
+  has_favicon: boolean;
 }
 
 export interface TenantBrandingDto {
@@ -30,6 +33,26 @@ export interface TenantBrandingDto {
  */
 export const getAppBrand = async (): Promise<AppBrand> =>
   (await apiClient.get<AppBrand>("/public/branding")).data;
+
+/**
+ * Картинка бренда адресом объекта в памяти страницы.
+ *
+ * Через API-клиент, а не `<img src>`: тег не умеет передать заголовок
+ * арендатора, и сервер не узнал бы, ЧЕЙ логотип отдавать. `null` — картинки
+ * нет; это обычное состояние, а не ошибка.
+ */
+export const getBrandImageUrl = async (
+  kind: "logo" | "favicon",
+): Promise<string | null> => {
+  try {
+    const { data } = await apiClient.get<Blob>(`/public/branding/${kind}`, {
+      responseType: "blob",
+    });
+    return URL.createObjectURL(data);
+  } catch {
+    return null;
+  }
+};
 
 export const getOwnAppBranding = async (): Promise<TenantBrandingDto> =>
   (await apiClient.get<TenantBrandingDto>("/platform/branding")).data;
