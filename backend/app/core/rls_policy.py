@@ -258,6 +258,7 @@ RLS_ENABLED_TABLES: frozenset[str] = frozenset(
         "templateversion",
         "tenant_branding",
         "tenant_counters",
+        "tenant_legal_acceptance",
         "tenant_legal_document",
         "tenant_integrations_keys",
         "tenant_limits_override",
