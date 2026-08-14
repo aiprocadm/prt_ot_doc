@@ -331,6 +331,7 @@
     "GET /api/v1/platform/branding",
     "GET /api/v1/platform/legal/{kind}",
     "GET /api/v1/platform/tenants",
+    "GET /api/v1/platform/tenants/industries",
     "GET /api/v1/platform/tenants/modules",
     "GET /api/v1/platform/tenants/plans",
     "GET /api/v1/platform/tenants/usage",
@@ -1770,6 +1771,7 @@
     "put_settings_api_v1_notifications_settings_me_put",
     "read_acceptance_state_api_v1_legal_acceptance_get",
     "read_fleet_usage_api_v1_platform_tenants_usage_get",
+    "read_industries_api_v1_platform_tenants_industries_get",
     "read_own_branding_api_v1_platform_branding_get",
     "read_own_legal_api_v1_platform_legal__kind__get",
     "read_public_branding_api_v1_public_branding_get",
@@ -2294,6 +2296,8 @@
     "IncidentStatus",
     "IncidentType",
     "IncidentUpdate",
+    "IndustryList",
+    "IndustryRead",
     "InspectionCreate",
     "InspectionPage",
     "InspectionRead",
@@ -5221,6 +5225,13 @@
       "location_description": "null|string",
       "pack_id": "null|string",
       "victim_ids": "array|null"
+    },
+    "IndustryList": {
+      "items": "array"
+    },
+    "IndustryRead": {
+      "code": "string",
+      "title": "string"
     },
     "InspectionCreate": {
       "company_id": "string",
@@ -8349,7 +8360,8 @@
       "owner_password": "string",
       "kind": "string",
       "parent_id": "null|string",
-      "demo_data": "boolean"
+      "demo_data": "boolean",
+      "industry": "null|string"
     },
     "TenantProvisionResult": {
       "tenant": "TenantRead",

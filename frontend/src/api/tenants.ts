@@ -1,6 +1,7 @@
 import { apiClient } from "@/api/client";
 import type { ApiError } from "@/types/dto/common";
 import type {
+  IndustryList,
   PlanCatalog,
   TenantDto,
   TenantFleetItem,
@@ -50,6 +51,12 @@ export const tenantsApi = {
   },
   async plans(): Promise<PlanCatalog> {
     return (await apiClient.get<PlanCatalog>(`${BASE}/plans`)).data;
+  },
+  /** Отрасли для выбора при заведении клиента (BIZ-52 срез-12, разд. 52.3).
+   *  Список отдаёт сервер: наборы эталонов живут там, и вторая копия списка
+   *  здесь разошлась бы с ними при первой же новой отрасли. */
+  async industries(): Promise<IndustryList> {
+    return (await apiClient.get<IndustryList>(`${BASE}/industries`)).data;
   },
   async setPlan(id: string, plan: string): Promise<TenantFleetItem> {
     return (

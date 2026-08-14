@@ -11,6 +11,7 @@ from sqlalchemy import func, insert, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import aensure_tenant_schema
+from app.domains.reseller.industries import pack_name_for
 from app.domains.reseller.starter_pack import plan_starter_pack
 from app.models.master_data import Position
 from app.models.models import (
@@ -86,6 +87,7 @@ class BootstrapTenantService:
         dry_run: bool = False,
         demo: bool = False,
         parent_id: str | None = None,
+        industry: str | None = None,
     ) -> BootstrapTenantSummary:
         summary = BootstrapTenantSummary(tenant_slug=tenant_slug, dry_run=dry_run)
 
@@ -126,6 +128,7 @@ class BootstrapTenantService:
             tenant_slug=tenant_slug,
             dry_run=dry_run,
             demo=demo,
+            industry=industry,
             summary=summary,
         )
         await self._seed_package_presets(tenant_id=tenant_id, dry_run=dry_run, summary=summary)
@@ -286,6 +289,13 @@ class BootstrapTenantService:
             summary.mark(entity="company_profile", created=True)
             return
         self.session.add(Company(tenant_id=tenant_id, name=tenant_name, legal_address="TBD"))
+        # Записать СРАЗУ. В сессиях этого приложения `autoflush=False`, поэтому
+        # следующий шаг (посев эталонного набора) искал организацию запросом и
+        # НЕ НАХОДИЛ её — должности молча пропускались с пометкой «у арендатора
+        # нет организации», хотя организация была создана строкой выше. Так
+        # ломался единственный вид эталонных строк, привязанный к организации:
+        # опасности и меры создавались, должности — никогда.
+        await self.session.flush()
         summary.mark(entity="company_profile", created=True)
 
     async def _seed_starter_pack(
@@ -295,9 +305,13 @@ class BootstrapTenantService:
         tenant_slug: str,
         dry_run: bool,
         demo: bool,
+        industry: str | None,
         summary: BootstrapTenantSummary,
     ) -> None:
-        pack = "demo" if demo else "default"
+        # BIZ-52 срез-12: набор выбирается отраслью. Неизвестный код долетает
+        # сюда исключением — ручка переводит его в 400, а не молча выдаёт общий
+        # набор под видом отраслевого.
+        pack = pack_name_for(industry=industry, demo=demo)
         path = STARTER_PACK_ROOT / "v1" / f"{pack}.json"
         if not path.exists():
             summary.warnings.append(f"starter_pack_missing:{path}")
