@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import type { TenantProvisionResult } from "@/types/dto/tenants";
+import type { IndustryDto, TenantProvisionResult } from "@/types/dto/tenants";
 import {
   tenantProvisionSchema,
   type TenantProvisionFormValues,
@@ -30,6 +30,7 @@ const emptyTenantForm: TenantProvisionFormValues = {
   owner_password: "",
   kind: "customer",
   demo_data: false,
+  industry: "general",
 };
 
 const TENANT_API_FIELD_MAP: Record<string, keyof TenantProvisionFormValues> = {
@@ -55,11 +56,24 @@ export const TenantFormDialog = ({
     defaultValues: emptyTenantForm,
   });
 
+  const [industries, setIndustries] = useState<IndustryDto[]>([]);
+
   useEffect(() => {
     if (open) {
       form.reset(emptyTenantForm);
     }
   }, [open, form]);
+
+  useEffect(() => {
+    if (!open) return;
+    // Список берём у сервера: наборы эталонов живут там, и зашитая копия
+    // разошлась бы с ними при первой же новой отрасли — человек выбрал бы
+    // отрасль, для которой набора нет.
+    void tenantsApi
+      .industries()
+      .then((data) => setIndustries(data.items))
+      .catch(() => setIndustries([]));
+  }, [open]);
 
   const onSubmit = async (values: TenantProvisionFormValues) => {
     try {
@@ -169,6 +183,26 @@ export const TenantFormDialog = ({
                 {errors.owner_password.message}
               </p>
             ) : null}
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="tenant-industry">Отрасль</Label>
+            <select
+              id="tenant-industry"
+              className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              {...form.register("industry")}
+            >
+              {industries.map((item) => (
+                <option key={item.code} value={item.code}>
+                  {item.title}
+                </option>
+              ))}
+            </select>
+            {/* Человек должен понимать, на что влияет выбор: иначе поле
+                выглядит анкетным и его заполняют наугад. */}
+            <p className="text-xs text-muted-foreground">
+              Определяет, какие должности, опасности и меры получит новый клиент.
+              Их можно изменить позже.
+            </p>
           </div>
           <div className="flex items-center gap-2">
             <input

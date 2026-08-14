@@ -41,6 +41,11 @@ from app.domains.reseller import (
     resolve_fleet_scope,
 )
 from app.domains.reseller.cascade import CascadeImpact, plan_suspension_cascade
+from app.domains.reseller.industries import (
+    INDUSTRIES,
+    UnknownIndustryError,
+    resolve_industry,
+)
 from app.domains.reseller.subbilling import check_plan_ceiling, is_ceiling_applicable
 from app.models.models import RoleEnum, Tenant, TenantQuota
 from app.models.tenant_billing import TenantCounter
@@ -53,6 +58,8 @@ from app.modules.subscription.registry import MODULE_REGISTRY
 from app.schemas.tenant import (
     FeatureCatalogEntry,
     FleetUsageReport,
+    IndustryList,
+    IndustryRead,
     ModuleRegistryEntry,
     ModuleRegistryResponse,
     ModuleTrialGrant,
@@ -323,6 +330,29 @@ async def list_tenant_fleet_endpoint(
     )
 
 
+@router.get("/industries", response_model=IndustryList)
+async def read_industries(
+    tenant: Tenant = Depends(get_tenant_record),
+    credentials: HTTPAuthorizationCredentials | None = Depends(_optional_bearer),
+) -> IndustryList:
+    """Отрасли, доступные при заведении клиента (разд. 52.3).
+
+    Список отдаёт СЕРВЕР, а не зашивает интерфейс: набор файлов эталонов живёт
+    на сервере, и вторая копия списка на фронте разошлась бы с ним при первой же
+    новой отрасли — человек выбрал бы отрасль, для которой набора нет.
+
+    Объявлена ДО `/{tenant_id}`: иначе слово `industries` попало бы в него как
+    идентификатор.
+    """
+
+    _require_fleet_actor(credentials, tenant)
+    return IndustryList(
+        items=[
+            IndustryRead(code=item.code, title=item.title) for item in INDUSTRIES
+        ]
+    )
+
+
 @router.get("/usage", response_model=FleetUsageReport)
 async def read_fleet_usage(
     session: SessionDep,
@@ -489,6 +519,23 @@ async def provision_tenant_endpoint(
         except HierarchyViolation as exc:
             raise hierarchy_http_error(exc, error_type="platform-tenants") from exc
 
+        # Отрасль проверяется ЗДЕСЬ, до выдачи: неизвестный код на середине
+        # bootstrap оставил бы за собой схему в базе и половину справочников.
+        try:
+            resolve_industry(payload.industry)
+        except UnknownIndustryError as exc:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                detail=api_problem_detail(
+                    code="UNKNOWN_INDUSTRY",
+                    message=(
+                        f"{exc}. Доступные: "
+                        + ", ".join(item.code for item in INDUSTRIES)
+                    ),
+                    error_type="platform-tenants",
+                ),
+            ) from exc
+
         service = BootstrapTenantService(provisioning_session)
         try:
             summary = await service.run(
@@ -498,6 +545,7 @@ async def provision_tenant_endpoint(
                 owner_password=payload.owner_password,
                 demo=payload.demo_data,
                 parent_id=plan.parent_id,
+                industry=payload.industry,
             )
             created = (
                 await provisioning_session.execute(select(Tenant).where(Tenant.slug == slug))

@@ -73,6 +73,12 @@ class TenantProvisionRequest(BaseSchema):
     kind: TenantKind = "customer"
     parent_id: str | None = None
     demo_data: bool = False
+    #: Отрасль клиента (BIZ-52 срез-12, разд. 52.3): от неё зависит, какие
+    #: должности, опасности и меры получит новый арендатор. Пусто — общий
+    #: набор, как было до появления отраслей. Список закрыт в
+    #: `app.domains.reseller.industries`; неизвестный код — отказ, а не тихий
+    #: откат на общий набор.
+    industry: str | None = None
 
 
 class TenantProvisionResult(BaseSchema):
@@ -176,6 +182,17 @@ class FleetUsageReport(BaseSchema):
     period: str
     items: list[TenantUsageRow]
     total_doc_generations: int
+
+
+class IndustryRead(BaseSchema):
+    """Отрасль для выбора при заведении клиента (BIZ-52 срез-12, разд. 52.3)."""
+
+    code: str
+    title: str
+
+
+class IndustryList(BaseSchema):
+    items: list[IndustryRead]
 
 
 class FeatureCatalogEntry(BaseSchema):

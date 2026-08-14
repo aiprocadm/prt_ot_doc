@@ -19,6 +19,10 @@ export const tenantProvisionSchema = z.object({
   owner_password: z.string().min(8, "Минимум 8 символов").max(128),
   kind: z.enum(TENANT_KINDS),
   demo_data: z.boolean(),
+  /** Код отрасли. Список закрыт на сервере, поэтому здесь просто строка:
+   *  повторить перечисление значило бы завести вторую правду о том, какие
+   *  отрасли существуют (BIZ-52 срез-12). */
+  industry: z.string(),
 });
 
 export type TenantProvisionFormValues = z.infer<typeof tenantProvisionSchema>;

@@ -72,6 +72,17 @@ export interface PlanCatalog {
   features: FeatureCatalogEntry[];
 }
 
+/** Отрасль клиента (BIZ-52 срез-12, разд. 52.3): от неё зависит наполнение
+ *  справочников нового арендатора. */
+export interface IndustryDto {
+  code: string;
+  title: string;
+}
+
+export interface IndustryList {
+  items: IndustryDto[];
+}
+
 export interface TenantProvisionRequest {
   slug: string;
   name: string;
@@ -79,6 +90,8 @@ export interface TenantProvisionRequest {
   owner_password: string;
   kind: TenantKind;
   demo_data: boolean;
+  /** Пусто — общий набор, как было до появления отраслей. */
+  industry?: string;
 }
 
 export interface TenantProvisionResult {
