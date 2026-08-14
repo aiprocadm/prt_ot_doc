@@ -37,6 +37,7 @@ from app.models.finance import (
     OrderStatus,
 )
 from app.models.job_engine import InboundWebhookDedup
+from app.models.legal_acceptance import TenantLegalAcceptance
 from app.models.legal_documents import TenantLegalDocument
 from app.models.managed_clients import (
     ManagedClient,
@@ -167,6 +168,7 @@ from app.models.work_permit import WorkPermit, WorkPermitEvent, WorkPermitMember
 
 __all__ = [
     "TenantBranding",
+    "TenantLegalAcceptance",
     "TenantLegalDocument",
     "ApiDeprecationUsage",
     "Document",

@@ -219,6 +219,9 @@ PLATFORM_EXTENSION_ROUTER_REGISTRATIONS: tuple[RouterRegistration, ...] = (
     # оферту и политику ПДн человек обязан прочитать ДО входа.
     (legal_documents.public_router, {}),
     (legal_documents.router, {}),
+    # BIZ-52 срез-11: принятие текстов. Отдельный роутер, потому что принимает
+    # любой сотрудник, а публикует только партнёр.
+    (legal_documents.acceptance_router, {}),
     (api_tokens.router, {}),
     (portal_requests_router, {}),
 )

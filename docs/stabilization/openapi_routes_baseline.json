@@ -252,6 +252,7 @@
     "GET /api/v1/journals/{journal_id}/export",
     "GET /api/v1/layout-presets",
     "GET /api/v1/layout-presets/{preset_id}",
+    "GET /api/v1/legal/acceptance",
     "GET /api/v1/machine-keys",
     "GET /api/v1/managed-clients",
     "GET /api/v1/managed-clients/attention",
@@ -746,6 +747,7 @@
     "POST /api/v1/journals",
     "POST /api/v1/journals/{journal_id}/entries",
     "POST /api/v1/layout-presets",
+    "POST /api/v1/legal/acceptance/{kind}",
     "POST /api/v1/machine-keys",
     "POST /api/v1/machine-keys/{item_id}/revoke",
     "POST /api/v1/machine-keys/{item_id}/rotate",
@@ -981,6 +983,7 @@
     "PUT /api/v1/risk/methodologies/{methodology_id}"
   ],
   "operation_ids": [
+    "accept_legal_api_v1_legal_acceptance__kind__post",
     "activate_api_v1_billing_subscription_activate_post",
     "activate_methodology_api_v1_risk_advanced_methodologies__item_id__activate_post",
     "activate_profile_api_v1_pipelines_profiles__profile_id__activate_post",
@@ -1765,6 +1768,7 @@
     "put_profile_api_v1_pipelines_profiles__profile_id__put",
     "put_settings_alias_api_v1_notifications_notification_settings_me_put",
     "put_settings_api_v1_notifications_settings_me_put",
+    "read_acceptance_state_api_v1_legal_acceptance_get",
     "read_fleet_usage_api_v1_platform_tenants_usage_get",
     "read_own_branding_api_v1_platform_branding_get",
     "read_own_legal_api_v1_platform_legal__kind__get",
@@ -2323,6 +2327,9 @@
     "JournalUpdate",
     "KpiDefinitionCreate",
     "LayoutPresetList",
+    "LegalAcceptanceRead",
+    "LegalAcceptanceState",
+    "LegalAcceptanceStatus",
     "LegalDocumentKind",
     "LegalDocumentList",
     "LegalDocumentPublish",
@@ -5462,6 +5469,25 @@
     },
     "LayoutPresetList": {
       "items": "array"
+    },
+    "LegalAcceptanceRead": {
+      "kind": "LegalDocumentKind",
+      "doc_version": "integer",
+      "source": "string",
+      "accepted_at": "string"
+    },
+    "LegalAcceptanceState": {
+      "items": "array",
+      "pending": "array"
+    },
+    "LegalAcceptanceStatus": {
+      "kind": "LegalDocumentKind",
+      "title": "null|string",
+      "current_version": "integer|null",
+      "accepted_version": "integer|null",
+      "accepted_at": "null|string",
+      "accepted": "boolean",
+      "outdated": "boolean"
     },
     "LegalDocumentList": {
       "items": "array"

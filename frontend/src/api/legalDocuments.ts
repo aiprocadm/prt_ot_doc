@@ -28,3 +28,33 @@ export const getLegalDocument = async (
   kind: LegalDocumentKind,
 ): Promise<LegalDocument> =>
   (await apiClient.get<LegalDocument>(`/public/legal/${kind}`)).data;
+
+/** Состояние принятия одного вида текста текущим пользователем (срез-11). */
+export interface LegalAcceptanceStatus {
+  kind: LegalDocumentKind;
+  title: string | null;
+  current_version: number | null;
+  accepted_version: number | null;
+  accepted_at: string | null;
+  accepted: boolean;
+  /** Принята прежняя редакция, вышла новая — «условия изменились». */
+  outdated: boolean;
+}
+
+export interface LegalAcceptanceState {
+  items: LegalAcceptanceStatus[];
+  /** Что ещё требует подписи. Считает сервер: вычислять на фронте значит
+   *  завести вторую правду о том, подписан ли документ. */
+  pending: LegalDocumentKind[];
+}
+
+/** Что ждёт подписи. С токеном: подписывает конкретный человек. */
+export const getLegalAcceptanceState = async (): Promise<LegalAcceptanceState> =>
+  (await apiClient.get<LegalAcceptanceState>("/legal/acceptance")).data;
+
+/** Принять действующую редакцию. Номер и текст сервер берёт сам. */
+export const acceptLegalDocument = async (
+  kind: LegalDocumentKind,
+): Promise<void> => {
+  await apiClient.post(`/legal/acceptance/${kind}`);
+};

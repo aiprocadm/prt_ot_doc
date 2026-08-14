@@ -11,6 +11,7 @@ import { Link, Outlet, useLocation } from "react-router-dom";
 import { Toaster } from "sonner";
 
 import { ConnectivityBanner } from "@/components/common/ConnectivityBanner";
+import { LegalAcceptanceBanner } from "@/components/common/LegalAcceptanceBanner";
 import { SectionErrorBoundary } from "@/components/common/SectionErrorBoundary";
 import { RightDrawer } from "@/components/layout/RightDrawer";
 import { SideNav } from "@/components/layout/SideNav";
@@ -90,6 +91,11 @@ export const MainLayout = () => {
                   <Sidebar title="Фильтры">{sidebarContent}</Sidebar>
                   <SectionErrorBoundary key={location.pathname}>
                     <main className="flex-1 pb-16">
+                      {/* BIZ-52 срез-11: подпись под офертой нужна на любом
+                          экране — страницу с текстом по своей воле не
+                          открывают. Полоса сама исчезает, когда подписывать
+                          нечего. */}
+                      <LegalAcceptanceBanner />
                       <Outlet />
                     </main>
                   </SectionErrorBoundary>
