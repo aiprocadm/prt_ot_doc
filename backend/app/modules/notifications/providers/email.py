@@ -13,18 +13,19 @@ from __future__ import annotations
 
 import asyncio
 
-from app.domains.reseller.mail_identity import (
-    MailIdentity,
-    apply_signature,
-    build_mail_identity,
-)
-from app.domains.reseller.white_label import PLATFORM_BRAND
 from app.models.notifications import Notification, NotificationChannel
 from app.modules.notifications.providers.base import (
     DeliveryResult,
     NotificationContact,
 )
-from app.services.app_branding import brand_for_tenant_id
+
+# Только через сервис: страж границ (ARCH-3) запрещает модулю ходить в чужой
+# домен напрямую, и правильно — иначе правила бренда расползлись бы по модулям.
+from app.services.app_branding import (
+    MailIdentity,
+    apply_signature,
+    mail_identity_for_tenant_id,
+)
 
 
 class EmailProvider:
@@ -45,29 +46,12 @@ class EmailProvider:
         to_addr = (contact.email or "").strip()
         if not to_addr:
             return DeliveryResult.skip("recipient has no email address")
-        identity = await self._identity(notification)
+        identity = await mail_identity_for_tenant_id(getattr(notification, "tenant_id", None))
         try:
             await asyncio.to_thread(self._send, to_addr, notification, identity)
         except Exception as exc:  # pragma: no cover - network/SMTP failure path
             return DeliveryResult.fail(f"smtp: {exc}")
         return DeliveryResult.ok()
-
-    async def _identity(self, notification: Notification) -> MailIdentity:
-        """Бренд, которым подписать письмо (BIZ-52 срез-10, разд. 52.2).
-
-        Один запрос на письмо: рядом с открытием SMTP-соединения он не заметен, а
-        кэш пришлось бы сбрасывать при каждой правке бренда — и однажды он
-        подписал бы письмо именем, которое партнёр уже сменил.
-
-        Сбой чтения бренда НЕ роняет отправку: письмо без партнёрского имени
-        хуже, чем с ним, но недоставленное письмо хуже обоих.
-        """
-
-        try:
-            brand = await brand_for_tenant_id(str(notification.tenant_id))
-        except Exception:  # pragma: no cover - деградация, а не отказ доставки
-            brand = PLATFORM_BRAND
-        return build_mail_identity(brand)
 
     def _send(self, to_addr: str, notification: Notification, identity: MailIdentity) -> None:
         import smtplib

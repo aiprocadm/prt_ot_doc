@@ -17,9 +17,35 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import AsyncSessionLocal
-from app.domains.reseller.white_label import AppBrand, BrandOverride, resolve_app_brand
+from app.domains.reseller.mail_identity import (
+    MailIdentity,
+    apply_signature,
+    build_mail_identity,
+)
+from app.domains.reseller.white_label import (
+    PLATFORM_BRAND,
+    AppBrand,
+    BrandOverride,
+    resolve_app_brand,
+)
 from app.models.models import Tenant
 from app.models.white_label import TenantBranding
+
+#: Почтовая личность отдаётся отсюда, а не берётся модулем уведомлений прямо из
+#: домена: страж границ (ARCH-3) запрещает модулю ходить в чужой домен напрямую,
+#: и правильно — доступ идёт через сервис. Реэкспорт держит у отправки писем
+#: ровно один источник и по коду, и по типам.
+__all__ = [
+    "AppBrand",
+    "BrandRowView",
+    "MailIdentity",
+    "apply_signature",
+    "brand_for_tenant_id",
+    "brand_session",
+    "load_brand_row",
+    "mail_identity_for_tenant_id",
+    "resolve_effective_brand",
+]
 
 
 def brand_session() -> AsyncSession:
@@ -116,3 +142,19 @@ async def brand_for_tenant_id(tenant_id: str) -> AppBrand:
         ).scalar_one_or_none()
     brand, _, _ = await resolve_effective_brand(tenant_id=tenant_id, parent_id=parent_id)
     return brand
+
+
+async def mail_identity_for_tenant_id(tenant_id: object) -> MailIdentity:
+    """Чем подписать письмо этому арендатору.
+
+    Сбой чтения бренда НЕ роняет отправку: письмо без партнёрского имени хуже,
+    чем с ним, но недоставленное письмо хуже обоих. Поэтому любая ошибка
+    (пропавшая строка, недоступная база, заглушка без арендатора в тестах)
+    сводится к бренду платформы, а не к отказу доставки.
+    """
+
+    try:
+        brand = await brand_for_tenant_id(str(tenant_id))
+    except Exception:  # pragma: no cover - деградация, а не отказ доставки
+        brand = PLATFORM_BRAND
+    return build_mail_identity(brand)
