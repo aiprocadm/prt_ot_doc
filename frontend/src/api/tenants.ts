@@ -1,6 +1,7 @@
 import { apiClient } from "@/api/client";
 import type { ApiError } from "@/types/dto/common";
 import type {
+  FleetUsageReport,
   IndustryList,
   PlanCatalog,
   TenantDto,
@@ -57,6 +58,16 @@ export const tenantsApi = {
    *  здесь разошлась бы с ними при первой же новой отрасли. */
   async industries(): Promise<IndustryList> {
     return (await apiClient.get<IndustryList>(`${BASE}/industries`)).data;
+  },
+  /** Расход клиентов за месяц (BIZ-52 срез-13, разд. 52.4).
+   *  Ручка существует с среза-8, но кабинет её не вызывал — партнёр не видел
+   *  расход вовсе. */
+  async usage(period?: string): Promise<FleetUsageReport> {
+    return (
+      await apiClient.get<FleetUsageReport>(`${BASE}/usage`, {
+        params: period ? { period } : undefined,
+      })
+    ).data;
   },
   async setPlan(id: string, plan: string): Promise<TenantFleetItem> {
     return (

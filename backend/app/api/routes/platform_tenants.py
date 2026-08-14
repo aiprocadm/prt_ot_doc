@@ -41,6 +41,7 @@ from app.domains.reseller import (
     resolve_fleet_scope,
 )
 from app.domains.reseller.cascade import CascadeImpact, plan_suspension_cascade
+from app.domains.reseller.fleet_metrics import NOT_MEASURED_METRICS
 from app.domains.reseller.industries import (
     INDUSTRIES,
     UnknownIndustryError,
@@ -48,7 +49,7 @@ from app.domains.reseller.industries import (
 )
 from app.domains.reseller.subbilling import check_plan_ceiling, is_ceiling_applicable
 from app.models.models import RoleEnum, Tenant, TenantQuota
-from app.models.tenant_billing import TenantCounter
+from app.models.tenant_billing import BillingUsageCounter, TenantCounter
 from app.modules.subscription import (
     FEATURE_CATALOG,
     PLANS,
@@ -360,43 +361,89 @@ async def read_fleet_usage(
     credentials: HTTPAuthorizationCredentials | None = Depends(_optional_bearer),
     period: str | None = Query(None, pattern=r"^\d{6}$"),
 ) -> FleetUsageReport:
-    """Потребление по области: сколько документов сгенерировали клиенты (разд. 52.4).
+    """Потребление по области: чем и сколько пользуются клиенты (разд. 52.4).
 
     Partner видит расход СВОИХ клиентов, владелец платформы — всего флота: та же
     область, что и у списка. Считать по всей таблице значило бы показать
     партнёру чужой оборот.
 
-    Период — месяц `ГГГГММ`; без него берётся текущий. Строки только по тем
-    арендаторам, у кого расход есть: ноль в списке не отличим от «данных нет»,
-    а итог по области и так отвечает на вопрос «сколько всего».
+    **Срез-13 добавил метрики, которые СОБИРАЮТСЯ.** Раньше кабинет показывал
+    только генерации документов, хотя партнёр выставляет клиенту счёт за услугу
+    целиком. Добавлены занятое хранилище и активные сотрудники — их пишут
+    `modules/files/api.py` и задача `billing.recompute_active_workers`.
+
+    **Чего в отчёте НЕТ и почему** (поле `not_measured` говорит это вслух):
+
+    * ЭДО — счётчик `usage_counters.edo_outgoing` существует и даже имеет метод
+      инкремента, но его НЕ ВЫЗЫВАЕТ НИКТО: провайдер отправки ЭДО не реализован
+      (известный остаток BIZ-50). Показать ноль значило бы сказать «клиент не
+      пользуется ЭДО» вместо правды «мы это не считаем».
+    * Вызовы API — колонка есть, писателя нет вовсе.
+
+    Генерации по-прежнему берутся из `tenant_counters`: это работающий источник,
+    проверенный срезом-8, и менять числа на глазах у партнёра ради единообразия
+    таблиц нельзя. **Долг, который стоит назвать:** генерации пишутся в ДВЕ
+    таблицы разными путями (`tenancy_quotas` → `tenant_counters`,
+    `documents/generate` → `usage_counters`), и однажды они разойдутся.
+
+    Период — месяц `ГГГГММ`; без него берётся текущий.
     """
 
     _payload, scope = _require_fleet_actor(credentials, tenant)
     yyyymm = period or datetime.now(tz=timezone.utc).strftime("%Y%m")
 
     condition = _scope_filter(scope)
+    # LEFT JOIN к обеим таблицам: клиент без единой генерации, но с полусотней
+    # сотрудников и гигабайтом файлов расходует услугу, и в отчёте он обязан
+    # быть. Прежнее правило «нулевой расход не показываем» было верным, пока
+    # метрика была ОДНА, и перестало быть верным, когда их стало три.
     stmt = (
-        select(Tenant.id, Tenant.slug, Tenant.name, TenantCounter.doc_generations)
-        .join(TenantCounter, TenantCounter.tenant_id == Tenant.id)
-        .where(TenantCounter.yyyymm == yyyymm)
+        select(
+            Tenant.id,
+            Tenant.slug,
+            Tenant.name,
+            TenantCounter.doc_generations,
+            BillingUsageCounter.s3_bytes_used,
+            BillingUsageCounter.active_workers,
+        )
+        .join(
+            TenantCounter,
+            (TenantCounter.tenant_id == Tenant.id) & (TenantCounter.yyyymm == yyyymm),
+            isouter=True,
+        )
+        .join(
+            BillingUsageCounter,
+            (BillingUsageCounter.tenant_id == Tenant.id)
+            & (BillingUsageCounter.period_yyyymm == int(yyyymm)),
+            isouter=True,
+        )
     )
     if condition is not None:
         stmt = stmt.where(condition)
 
-    items = [
+    rows = [
         TenantUsageRow(
             tenant_id=row[0],
             slug=row[1],
             name=row[2],
             doc_generations=int(row[3] or 0),
+            storage_bytes=int(row[4] or 0),
+            active_workers=int(row[5] or 0),
         )
         for row in (await session.execute(stmt.order_by(Tenant.created_at.asc()))).all()
-        if int(row[3] or 0) > 0
+    ]
+    # Клиент, не пользовавшийся ничем, в отчёте о расходе — шум. Но «ничем»
+    # теперь означает ноль по ВСЕМ трём метрикам, а не по одной.
+    items = [
+        row for row in rows if row.doc_generations or row.storage_bytes or row.active_workers
     ]
     return FleetUsageReport(
         period=yyyymm,
         items=items,
         total_doc_generations=sum(row.doc_generations for row in items),
+        total_storage_bytes=sum(row.storage_bytes for row in items),
+        total_active_workers=sum(row.active_workers for row in items),
+        not_measured=list(NOT_MEASURED_METRICS),
     )
 
 

@@ -12,6 +12,7 @@ import { Can } from "@/components/permissions/Can";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
+import { FleetUsagePanel } from "@/features/tenants/FleetUsagePanel";
 import { TenantFormDialog } from "@/features/tenants/TenantFormDialog";
 import { TenantPlanDialog } from "@/features/tenants/TenantPlanDialog";
 import { useAsyncResource } from "@/hooks/useAsyncResource";
@@ -262,6 +263,9 @@ const TenantsPage = () => {
             : []),
         ]}
       />
+      {/* BIZ-52 срез-13: расход клиентов. Ручка есть с среза-8, но кабинет её
+          не вызывал — партнёр не видел, за что выставлять счёт. */}
+      <FleetUsagePanel />
       <ErrorState error={res.error ?? undefined} onRetry={reload} />
       {res.loading ? <LoadingScreen label="Загрузка тенантов" /> : null}
       {!res.loading && !res.error && registry.total === 0 ? (
