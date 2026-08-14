@@ -21,7 +21,6 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from hashlib import sha256
 from typing import Annotated
 
@@ -33,7 +32,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.audit_decorator import audit_operation
 from app.core.errors import api_problem_detail
-from app.db.session import AsyncSessionLocal
 from app.domains.reseller.brand_images import (
     FAVICON_MAX_BYTES,
     FAVICON_MEDIA_TYPES,
@@ -41,14 +39,15 @@ from app.domains.reseller.brand_images import (
     LOGO_MEDIA_TYPES,
     detect_image_media_type,
 )
-from app.domains.reseller.white_label import (
-    AppBrand,
-    BrandOverride,
-    resolve_app_brand,
-)
+from app.domains.reseller.white_label import AppBrand
 from app.models.models import Tenant
 from app.models.white_label import TenantBranding
 from app.schemas.white_label import AppBrandRead, TenantBrandingPatch, TenantBrandingRead
+from app.services.app_branding import (
+    brand_session,
+    load_brand_row,
+    resolve_effective_brand,
+)
 
 public_router = APIRouter(prefix="/public/branding", tags=["white-label"])
 router = APIRouter(prefix="/platform/branding", tags=["white-label"])
@@ -57,80 +56,19 @@ _optional_bearer = HTTPBearer(auto_error=False)
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
 
-def _brand_session() -> AsyncSession:
-    """Доверенная сессия общей схемы для чтения бренда.
-
-    ``rls_bypass``: клиенту нужен бренд ЕГО ПАРТНЁРА, а это строка другого
-    арендатора — под FORCE RLS (SEC-65) обычная сессия её не увидит, и клиент
-    молча получил бы бренд платформы вместо партнёрского. Это не дыра: наружу
-    уходят только три поля бренда, которые и так показываются каждому, кто
-    открыл страницу входа.
-    """
-
-    return AsyncSessionLocal(
-        tenant="public", include_public=False, create_schema=False, rls_bypass=True
-    )
-
-
-@dataclass(frozen=True)
-class _BrandRowView:
-    """Строка бренда без байтов картинок.
-
-    Байты НЕ выгружаются, когда нужен только признак «картинка есть»: иначе
-    каждый показ страницы входа тянул бы из базы до полумегабайта впустую.
-    """
-
-    override: BrandOverride
-    has_logo: bool
-    has_favicon: bool
-
-
-async def _load_view(session: AsyncSession, tenant_id: str) -> _BrandRowView | None:
-    row = (
-        await session.execute(
-            select(
-                TenantBranding.app_name,
-                TenantBranding.primary_color,
-                TenantBranding.support_email,
-                TenantBranding.logo_image.isnot(None),
-                TenantBranding.favicon_image.isnot(None),
-            ).where(TenantBranding.tenant_id == tenant_id)
-        )
-    ).first()
-    if row is None:
-        return None
-    app_name, primary_color, support_email, has_logo, has_favicon = row
-    return _BrandRowView(
-        override=BrandOverride(
-            app_name=app_name, primary_color=primary_color, support_email=support_email
-        ),
-        has_logo=bool(has_logo),
-        has_favicon=bool(has_favicon),
-    )
+#: Выборка бренда живёт в `services/app_branding.py` и здесь только
+#: переиспользуется: письма (срез-10) обязаны подписываться ТЕМ ЖЕ брендом,
+#: который показывает приложение. Две копии выборки однажды разошлись бы, и
+#: понять, какое из двух имён верное, стало бы невозможно.
+_brand_session = brand_session
+_load_view = load_brand_row
 
 
 async def _effective_view(tenant: Tenant) -> tuple[AppBrand, bool, bool]:
-    """Действующий бренд + признаки картинок.
-
-    Картинки наследуются ПО ОТДЕЛЬНОСТИ, как имя и цвет: у клиента нет своего
-    логотипа — показывается логотип партнёра, независимо от того, чьё имя
-    победило в текстовых полях.
-    """
-
-    async with _brand_session() as session:
-        own = await _load_view(session, tenant.id)
-        reseller = (
-            await _load_view(session, str(tenant.parent_id)) if tenant.parent_id else None
-        )
-    brand = resolve_app_brand(
-        own=own.override if own else None,
-        reseller=reseller.override if reseller else None,
+    return await resolve_effective_brand(
+        tenant_id=tenant.id,
+        parent_id=str(tenant.parent_id) if tenant.parent_id else None,
     )
-    has_logo = (own.has_logo if own else False) or (reseller.has_logo if reseller else False)
-    has_favicon = (own.has_favicon if own else False) or (
-        reseller.has_favicon if reseller else False
-    )
-    return brand, has_logo, has_favicon
 
 
 def _as_brand_read(brand: AppBrand, has_logo: bool, has_favicon: bool) -> AppBrandRead:

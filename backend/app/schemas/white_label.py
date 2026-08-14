@@ -2,9 +2,16 @@
 
 from __future__ import annotations
 
-from pydantic import Field
+import re
+
+from pydantic import Field, field_validator
 
 from app.schemas.base import BaseSchema
+
+#: Управляющие символы и лишние пробелы в полях, которые уезжают в заголовки
+#: письма. Держим правило рядом со схемой — это её инвариант, а не деталь почты.
+_CONTROL = re.compile(r"[\x00-\x1f\x7f]+")
+_SPACES = re.compile(r"\s+")
 
 #: Цвет хранится и отдаётся HSL-триплетом Tailwind (`H S% L%`) — ровно в том
 #: виде, в каком его ждёт CSS-переменная `--primary`. Перевод формата на каждой
@@ -36,6 +43,27 @@ class TenantBrandingPatch(BaseSchema):
     app_name: str | None = Field(default=None, max_length=120)
     primary_color: str | None = Field(default=None, pattern=_HSL_TRIPLET)
     support_email: str | None = Field(default=None, max_length=255)
+
+    @field_validator("app_name", "support_email", mode="before")
+    @classmethod
+    def _no_control_characters(cls, value: object) -> object:
+        """Вычистить переводы строк и прочие управляющие символы.
+
+        BIZ-52 срез-10: эти поля уезжают в ЗАГОЛОВКИ письма, а перевод строки в
+        заголовке — это конец заголовка и начало следующего. Python такую строку
+        отвергает исключением, поэтому имя, скопированное из документа вместе с
+        переносом, лишило бы писем всех клиентов партнёра, и причина никак не
+        связалась бы с настройкой бренда.
+
+        Чистим, а не отказываем: перенос в названии приложения смысла не несёт,
+        а экран бренда перечитывает сохранённое, так что человек сразу видит
+        результат. Почта чистит ещё раз — строки, сохранённые до этой правки,
+        уже лежат в базе.
+        """
+
+        if not isinstance(value, str):
+            return value
+        return _SPACES.sub(" ", _CONTROL.sub(" ", value)).strip() or None
 
 
 class TenantBrandingRead(TenantBrandingPatch):

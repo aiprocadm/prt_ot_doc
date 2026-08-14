@@ -228,6 +228,11 @@ const BrandSettingsPage = () => {
             value={supportEmail}
             onChange={(event) => setSupportEmail(event.target.value)}
           />
+          {/* Пока адрес никуда не влиял, его заполняли наугад. Теперь влияет —
+              и человек должен знать это ДО того, как впишет чужой адрес. */}
+          <p className="text-xs text-muted-foreground">
+            На этот адрес придут ответы на письма приложения.
+          </p>
         </div>
 
         <div className="space-y-2">
