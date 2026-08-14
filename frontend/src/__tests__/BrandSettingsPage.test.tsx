@@ -180,6 +180,14 @@ describe("экран настройки бренда (BIZ-52 разд. 52.2)", (
     expect(screen.getByText(/SVG не принимается/)).toBeInTheDocument();
     expect(screen.getByText(/WebP не подходит/)).toBeInTheDocument();
   });
+
+  it("сказано, зачем нужна почта поддержки", async () => {
+    // BIZ-52 срез-10: адрес стал получателем ответов на письма приложения.
+    // Пока он ни на что не влиял, его заполняли наугад.
+    await renderLoaded();
+
+    expect(screen.getByText(/ответы на письма приложения/)).toBeInTheDocument();
+  });
 });
 
 describe("перевод цвета", () => {
