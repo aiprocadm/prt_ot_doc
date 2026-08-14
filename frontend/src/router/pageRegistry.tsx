@@ -89,6 +89,9 @@ export const HealthStatusPage = lazy(
 );
 export const BillingPage = lazy(() => import("@/pages/admin/BillingPage"));
 export const TenantsPage = lazy(() => import("@/pages/admin/TenantsPage"));
+export const BrandSettingsPage = lazy(
+  () => import("@/pages/admin/BrandSettingsPage"),
+);
 export const AdminLayoutPresetsPage = lazy(
   () => import("@/pages/AdminLayoutPresets/AdminLayoutPresetsPage"),
 );

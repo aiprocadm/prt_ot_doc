@@ -75,6 +75,7 @@ import {
   SyncConflictHelpPage,
   TasksPage,
   TemplatesPage,
+  BrandSettingsPage,
   TenantsPage,
   TrainingDashboardPage,
   TrainingPage,
@@ -460,6 +461,13 @@ export const buildProtectedRouteGroups = (): ReactElement[] => {
           key="/admin/tenants"
           path="/admin/tenants"
           element={<TenantsPage />}
+        />,
+        // BIZ-52 разд. 52.2: настройка бренда партнёром. Право то же, что у
+        // кабинета клиентов: кто ведёт свой контур, тот его и оформляет.
+        <Route
+          key="/admin/branding"
+          path="/admin/branding"
+          element={<BrandSettingsPage />}
         />,
       ],
     },
