@@ -4,6 +4,7 @@ import type { AppBrand } from "@/api/appBrand";
 import {
   applyBrandTheme,
   applyFavicon,
+  applyManifest,
   PLATFORM_FALLBACK,
   useBrandStore,
 } from "@/stores/brand";
@@ -137,5 +138,43 @@ describe("бренд приложения (BIZ-52 срезы 4 и 6)", () => {
 
     const link = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
     expect(link?.getAttribute("href")).toBe("blob:x");
+  });
+
+  // --- манифест PWA (срез-14) ---
+
+  it("манифест указывает на арендатора", () => {
+    // Ярлык на домашнем экране — самое заметное место, где разд. 52.2 требует
+    // подмены вендора. Манифест браузер грузит сам, поэтому слаг идёт в адресе.
+    applyManifest("acme");
+
+    const link = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
+    expect(link?.getAttribute("href")).toBe(
+      "/api/v1/public/manifest.webmanifest?tenant=acme",
+    );
+  });
+
+  it("без арендатора манифест всё равно подключается", () => {
+    // Экран входа до выбора арендатора: ярлык должен быть валидным, просто
+    // платформенным.
+    applyManifest(null);
+
+    const link = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
+    expect(link?.getAttribute("href")).toBe("/api/v1/public/manifest.webmanifest");
+  });
+
+  it("слаг экранируется", () => {
+    applyManifest("под чертой");
+
+    const link = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
+    expect(link?.getAttribute("href")).toContain("%20");
+  });
+
+  it("повторный вызов не плодит ссылок", () => {
+    applyManifest("acme");
+    applyManifest("beta");
+
+    const links = document.querySelectorAll('link[rel="manifest"]');
+    expect(links).toHaveLength(1);
+    expect(links[0].getAttribute("href")).toContain("tenant=beta");
   });
 });

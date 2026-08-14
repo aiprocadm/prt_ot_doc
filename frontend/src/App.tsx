@@ -2,7 +2,8 @@ import { useEffect } from "react";
 
 import AppRouter from "@/router/AppRouter";
 import { AppErrorBoundary } from "@/components/common/AppErrorBoundary";
-import { applyBrandTheme, useBrandStore } from "@/stores/brand";
+import { tenantStorage } from "@/api/tenantStorage";
+import { applyBrandTheme, applyManifest, useBrandStore } from "@/stores/brand";
 
 /**
  * Бренд грузится ЗДЕСЬ, а не внутри защищённого дерева (BIZ-52 разд. 52.2):
@@ -19,6 +20,9 @@ const App = () => {
 
   useEffect(() => {
     applyBrandTheme(brand);
+    // Манифест обновляем вместе с темой: он тоже часть бренда, и обновиться
+    // должен ровно тогда, когда стало известно, чей это арендатор.
+    applyManifest(tenantStorage.getTenant()?.slug ?? null);
   }, [brand]);
 
   return (
