@@ -72,6 +72,28 @@ export interface PlanCatalog {
   features: FeatureCatalogEntry[];
 }
 
+/** Расход одного клиента за месяц (BIZ-52 срез-13, разд. 52.4). */
+export interface TenantUsageRow {
+  tenant_id: string;
+  slug: string;
+  name: string;
+  doc_generations: number;
+  /** Занятое хранилище в байтах — состояние, а не расход за период. */
+  storage_bytes: number;
+  active_workers: number;
+}
+
+export interface FleetUsageReport {
+  period: string;
+  items: TenantUsageRow[];
+  total_doc_generations: number;
+  total_storage_bytes: number;
+  total_active_workers: number;
+  /** Метрики, которых в отчёте нет, с причиной. Показывать обязательно:
+   *  иначе отсутствие ЭДО читается как «им не пользуются». */
+  not_measured: string[];
+}
+
 /** Отрасль клиента (BIZ-52 срез-12, разд. 52.3): от неё зависит наполнение
  *  справочников нового арендатора. */
 export interface IndustryDto {

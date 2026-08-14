@@ -164,12 +164,22 @@ class TenantFleetPage(BaseSchema):
 
 
 class TenantUsageRow(BaseSchema):
-    """Расход одного арендатора за месяц (BIZ-52 срез-8, разд. 52.4)."""
+    """Расход одного арендатора за месяц (BIZ-52 срез-8, разд. 52.4).
+
+    Срез-13 добавил остальные метрики ТЗ. Имя `doc_generations` сохранено:
+    переименование сломало бы кабинет, который его уже читает.
+    """
 
     tenant_id: str
     slug: str
     name: str
     doc_generations: int
+    #: Занятое хранилище. Не «за период», а состояние: место занято, пока файлы
+    #: лежат, и складывать такие значения по месяцам бессмысленно.
+    storage_bytes: int = 0
+    #: Активные сотрудники — тоже состояние, а не поток. Пересчитывается
+    #: фоновой задачей `billing.recompute_active_workers`.
+    active_workers: int = 0
 
 
 class FleetUsageReport(BaseSchema):
@@ -182,6 +192,14 @@ class FleetUsageReport(BaseSchema):
     period: str
     items: list[TenantUsageRow]
     total_doc_generations: int
+    total_storage_bytes: int = 0
+    #: Сумма активных сотрудников по клиентам области. Складывается честно:
+    #: один человек не работает в двух арендаторах одновременно.
+    total_active_workers: int = 0
+    #: Метрики, которых в отчёте НЕТ, и почему. Пустой список — всё считается.
+    #: Без этого поля отсутствие ЭДО в кабинете читалось бы как «ЭДО не
+    #: пользуются», а правда — «мы это пока не считаем».
+    not_measured: list[str] = Field(default_factory=list)
 
 
 class IndustryRead(BaseSchema):
