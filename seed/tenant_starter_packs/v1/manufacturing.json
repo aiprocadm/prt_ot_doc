@@ -1,6 +1,7 @@
 {
   "version": "v1",
   "pack": "manufacturing",
+  "revision": 1,
   "enabled_for": [
     "customer",
     "pilot"

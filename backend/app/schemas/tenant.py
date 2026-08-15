@@ -202,6 +202,27 @@ class FleetUsageReport(BaseSchema):
     not_measured: list[str] = Field(default_factory=list)
 
 
+class PackUpdatePreview(BaseSchema):
+    """Что нового в эталоне (BIZ-52 срез-17, разд. 52.3)."""
+
+    pack: str
+    applied_revision: int
+    current_revision: int
+    #: Вид → названия, которых не было в применённой редакции.
+    additions: dict[str, list[str]]
+    #: Слепка применённого набора нет: предложен весь набор целиком.
+    applied_unknown: bool
+    #: Строка для человека: «обновлений нет» и «сравнивать не с чем» — разное.
+    summary: str
+
+
+class PackUpdateResult(PackUpdatePreview):
+    """Итог приёма обновления."""
+
+    applied: bool = False
+    warnings: list[str] = Field(default_factory=list)
+
+
 class TenantConfigExport(BaseSchema):
     """Снимок настроек арендатора (BIZ-52 срез-16, разд. 52.3).
 

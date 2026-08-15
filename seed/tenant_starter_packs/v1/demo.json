@@ -1,11 +1,23 @@
 {
   "version": "v1",
   "pack": "demo",
-  "enabled_for": ["demo"],
-  "markers": ["DEMO_ONLY", "SYNTHETIC_DATA"],
+  "revision": 1,
+  "enabled_for": [
+    "demo"
+  ],
+  "markers": [
+    "DEMO_ONLY",
+    "SYNTHETIC_DATA"
+  ],
   "reference_data": {
-    "positions": ["Демо руководитель", "Демо инженер ОТ"],
-    "sites": ["Демо площадка Север", "Демо площадка Юг"],
+    "positions": [
+      "Демо руководитель",
+      "Демо инженер ОТ"
+    ],
+    "sites": [
+      "Демо площадка Север",
+      "Демо площадка Юг"
+    ],
     "employees": 25,
     "incidents": 4,
     "inspections": 6,
