@@ -1,6 +1,7 @@
 {
   "version": "v1",
   "pack": "transport",
+  "revision": 1,
   "enabled_for": [
     "customer",
     "pilot"

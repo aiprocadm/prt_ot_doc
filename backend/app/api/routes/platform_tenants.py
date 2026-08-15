@@ -16,6 +16,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 from typing import Annotated, Any
 
@@ -49,6 +50,7 @@ from app.domains.reseller.industries import (
     resolve_industry,
 )
 from app.domains.reseller.own_limits import build_limit_lines
+from app.domains.reseller.pack_updates import PackUpdate, plan_pack_update
 from app.domains.reseller.subbilling import check_plan_ceiling, is_ceiling_applicable
 from app.models.master_data import Position
 from app.models.models import RoleEnum, Tenant, TenantQuota
@@ -71,6 +73,8 @@ from app.schemas.tenant import (
     ModuleTrialResult,
     OwnLimitLine,
     OwnLimitsReport,
+    PackUpdatePreview,
+    PackUpdateResult,
     PlanCatalog,
     SubscriptionPlanRead,
     TenantCascadePreview,
@@ -92,6 +96,7 @@ from app.schemas.tenant import (
 )
 from app.services.audit import AuditService
 from app.services.tenants.bootstrap import BootstrapTenantService
+from app.services.tenants.bootstrap.service import STARTER_PACK_ROOT
 from app.services.tenants.subscription import (
     TrialError,
     apply_plan,
@@ -749,6 +754,120 @@ async def patch_tenant_status_endpoint(
         cascade_affected=list(impact.affected),
         cascade_summary=impact.summary,
     )
+
+
+def _pack_file_for(target: Tenant) -> tuple[str, dict | None]:
+    """Файл эталона, которым разворачивали этого клиента, и его содержимое.
+
+    Имя набора берётся из слепка: клиента могли завести отраслью, и предлагать
+    ему обновления ОБЩЕГО набора значило бы подсунуть чужие строки.
+    """
+
+    applied = None
+    settings_blob = target.settings if isinstance(target.settings, dict) else {}
+    stored = settings_blob.get("starter_pack")
+    if isinstance(stored, dict):
+        applied = stored
+    pack = str((applied or {}).get("pack") or "default")
+    path = STARTER_PACK_ROOT / "v1" / f"{pack}.json"
+    if not path.exists():
+        return pack, None
+    return pack, json.loads(path.read_text(encoding="utf-8"))
+
+
+async def _pack_update_for(target: Tenant) -> tuple[str, PackUpdate, dict | None]:
+    pack, current = _pack_file_for(target)
+    if current is None:
+        # Файла нет — предлагать нечего. Это не ошибка запроса: набор мог быть
+        # снят из репозитория, а клиент продолжает работать.
+        empty = plan_pack_update(applied=None, current={})
+        return pack, empty, None
+    settings_blob = target.settings if isinstance(target.settings, dict) else {}
+    applied = settings_blob.get("starter_pack")
+    update = plan_pack_update(
+        applied=applied if isinstance(applied, dict) else None, current=current
+    )
+    return pack, update, current
+
+
+@router.get("/{tenant_id}/pack-update", response_model=PackUpdatePreview)
+async def preview_pack_update(
+    tenant_id: str,
+    session: SessionDep,
+    tenant: Tenant = Depends(get_tenant_record),
+    credentials: HTTPAuthorizationCredentials | None = Depends(_optional_bearer),
+) -> PackUpdatePreview:
+    """Что нового в эталоне у этого клиента (разд. 52.3).
+
+    Набор применяется ОДИН раз — при выдаче арендатора, — а дальше эталон живёт
+    своей жизнью. Партнёр, добавивший в набор новую опасность, доносил её только
+    до НОВЫХ клиентов; у прежних она не появлялась никогда, и узнать об этом
+    было неоткуда.
+
+    Сравнение идёт с ПРИМЕНЁННЫМ слепком, а не с текущими справочниками: строку,
+    которую клиент осознанно удалил, обновление не воскресит.
+    """
+
+    _payload, scope = _require_fleet_actor(credentials, tenant)
+    target = await _load_in_scope(session, tenant_id, scope)
+    pack, update, _current = await _pack_update_for(target)
+    return PackUpdatePreview(
+        pack=pack,
+        applied_revision=update.applied_revision,
+        current_revision=update.current_revision,
+        additions=dict(update.additions),
+        applied_unknown=update.applied_unknown,
+        summary=update.summary,
+    )
+
+
+@router.post("/{tenant_id}/pack-update", response_model=PackUpdateResult)
+@audit_operation("apply", "tenant_pack_update")
+async def apply_pack_update(
+    tenant_id: str,
+    session: SessionDep,
+    tenant: Tenant = Depends(get_tenant_record),
+    credentials: HTTPAuthorizationCredentials | None = Depends(_optional_bearer),
+) -> PackUpdateResult:
+    """Принять обновление эталона (разд. 52.3).
+
+    Применяются ТОЛЬКО добавления: удаление строк из эталона не превращается в
+    удаление у клиента — он мог построить на них свою работу, а «обновление
+    набора» не то действие, после которого данные исчезают.
+
+    После применения слепок в настройках заменяется текущим: иначе следующий
+    вызов предложил бы то же самое ещё раз.
+    """
+
+    _payload, scope = _require_fleet_actor(credentials, tenant)
+    target = await _load_in_scope(session, tenant_id, scope)
+    pack, update, current = await _pack_update_for(target)
+
+    result = PackUpdateResult(
+        pack=pack,
+        applied_revision=update.applied_revision,
+        current_revision=update.current_revision,
+        additions=dict(update.additions),
+        applied_unknown=update.applied_unknown,
+        summary=update.summary,
+    )
+    if current is None or not update.has_updates:
+        return result
+
+    async with _fleet_session() as provisioning_session:
+        service = BootstrapTenantService(provisioning_session)
+        summary = await service.apply_config(
+            tenant_id=target.id, payload={"reference_data": update.additions}
+        )
+        stored = (
+            await provisioning_session.execute(select(Tenant).where(Tenant.id == target.id))
+        ).scalar_one()
+        stored.settings = {**(stored.settings or {}), "starter_pack": current}
+        await provisioning_session.commit()
+
+    result.warnings = list(summary.warnings)
+    result.applied = True
+    return result
 
 
 @router.get("/{tenant_id}/config", response_model=TenantConfigExport)
