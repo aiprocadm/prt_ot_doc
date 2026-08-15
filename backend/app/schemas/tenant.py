@@ -202,6 +202,28 @@ class FleetUsageReport(BaseSchema):
     not_measured: list[str] = Field(default_factory=list)
 
 
+class OwnLimitLine(BaseSchema):
+    """Строка «сколько можно и сколько занято» (BIZ-52 срез-15, разд. 52.4)."""
+
+    code: str
+    title: str
+    unit: str
+    #: `None` — предела нет.
+    limit: int | None = None
+    #: `None` — расход НЕ СЧИТАЕТСЯ. Это не то же, что ноль.
+    used: int | None = None
+    remaining: int | None = None
+    exhausted: bool = False
+
+
+class OwnLimitsReport(BaseSchema):
+    """Свои лимиты и свой расход за период."""
+
+    period: str
+    tenant_slug: str
+    items: list[OwnLimitLine]
+
+
 class IndustryRead(BaseSchema):
     """Отрасль для выбора при заведении клиента (BIZ-52 срез-12, разд. 52.3)."""
 

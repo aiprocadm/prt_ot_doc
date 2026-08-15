@@ -332,6 +332,7 @@
     "GET /api/v1/platform/legal/{kind}",
     "GET /api/v1/platform/tenants",
     "GET /api/v1/platform/tenants/industries",
+    "GET /api/v1/platform/tenants/me/limits",
     "GET /api/v1/platform/tenants/modules",
     "GET /api/v1/platform/tenants/plans",
     "GET /api/v1/platform/tenants/usage",
@@ -1775,6 +1776,7 @@
     "read_industries_api_v1_platform_tenants_industries_get",
     "read_own_branding_api_v1_platform_branding_get",
     "read_own_legal_api_v1_platform_legal__kind__get",
+    "read_own_limits_api_v1_platform_tenants_me_limits_get",
     "read_public_branding_api_v1_public_branding_get",
     "read_public_favicon_api_v1_public_branding_favicon_get",
     "read_public_legal_api_v1_public_legal__kind__get",
@@ -2436,6 +2438,8 @@
     "OutboxStatus",
     "OverloadReason",
     "OverloadReasonRead",
+    "OwnLimitLine",
+    "OwnLimitsReport",
     "PPEBudgetCategoryActualRead",
     "PPECardRead",
     "PPECardRequiredLine",
@@ -6115,6 +6119,20 @@
     "OverloadReasonRead": {
       "code": "OverloadReason",
       "text": "string"
+    },
+    "OwnLimitLine": {
+      "code": "string",
+      "title": "string",
+      "unit": "string",
+      "limit": "integer|null",
+      "used": "integer|null",
+      "remaining": "integer|null",
+      "exhausted": "boolean"
+    },
+    "OwnLimitsReport": {
+      "period": "string",
+      "tenant_slug": "string",
+      "items": "array"
     },
     "PPEBudgetCategoryActualRead": {
       "category": "string",

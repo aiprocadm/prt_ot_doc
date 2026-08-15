@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { FleetUsagePanel } from "@/features/tenants/FleetUsagePanel";
+import { OwnLimitsPanel } from "@/features/tenants/OwnLimitsPanel";
 import { TenantFormDialog } from "@/features/tenants/TenantFormDialog";
 import { TenantPlanDialog } from "@/features/tenants/TenantPlanDialog";
 import { useAsyncResource } from "@/hooks/useAsyncResource";
@@ -263,6 +264,9 @@ const TenantsPage = () => {
             : []),
         ]}
       />
+      {/* BIZ-52 срез-15: свои лимиты. Партнёр не входит в собственную область,
+          поэтому ни в списке, ни в расходе клиентов его нет. */}
+      <OwnLimitsPanel />
       {/* BIZ-52 срез-13: расход клиентов. Ручка есть с среза-8, но кабинет её
           не вызывал — партнёр не видел, за что выставлять счёт. */}
       <FleetUsagePanel />

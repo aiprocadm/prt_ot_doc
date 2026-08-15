@@ -47,6 +47,7 @@ from app.domains.reseller.industries import (
     UnknownIndustryError,
     resolve_industry,
 )
+from app.domains.reseller.own_limits import build_limit_lines
 from app.domains.reseller.subbilling import check_plan_ceiling, is_ceiling_applicable
 from app.models.models import RoleEnum, Tenant, TenantQuota
 from app.models.tenant_billing import BillingUsageCounter, TenantCounter
@@ -65,6 +66,8 @@ from app.schemas.tenant import (
     ModuleRegistryResponse,
     ModuleTrialGrant,
     ModuleTrialResult,
+    OwnLimitLine,
+    OwnLimitsReport,
     PlanCatalog,
     SubscriptionPlanRead,
     TenantCascadePreview,
@@ -328,6 +331,74 @@ async def list_tenant_fleet_endpoint(
         managing_tenant_slug=get_settings().managing_tenant_slug,
         viewer_level="platform" if scope.sees_everything else "reseller",
         can_manage_commercials=scope.may_change_commercials,
+    )
+
+
+@router.get("/me/limits", response_model=OwnLimitsReport)
+async def read_own_limits(
+    session: SessionDep,
+    tenant: Tenant = Depends(get_tenant_record),
+    credentials: HTTPAuthorizationCredentials | None = Depends(_optional_bearer),
+    period: str | None = Query(None, pattern=r"^\d{6}$"),
+) -> OwnLimitsReport:
+    """Свои лимиты и свой расход (разд. 52.4).
+
+    Партнёр не входит в собственную область (решение среза-2: иначе он мог бы
+    приостановить сам себя), поэтому его строки нет ни в списке клиентов, ни в
+    отчёте о расходе — свои квоты он не видел вовсе. Ручка `GET /tenants/me`
+    лимиты отдаёт, но НЕ показывает расход и фронтом не вызывается нигде.
+
+    Здесь — пара «сколько можно и сколько занято»: лимит без расхода не
+    отвечает на вопрос «хватит ли до конца месяца».
+
+    Объявлена ДО `/{tenant_id}`: иначе `me` попало бы в него как идентификатор.
+    """
+
+    _payload, _scope = _require_fleet_actor(credentials, tenant)
+    yyyymm = period or datetime.now(tz=timezone.utc).strftime("%Y%m")
+
+    quota = (
+        await session.execute(select(TenantQuota).where(TenantQuota.tenant_id == tenant.id))
+    ).scalar_one_or_none()
+    generations = (
+        await session.execute(
+            select(TenantCounter.doc_generations).where(
+                TenantCounter.tenant_id == tenant.id, TenantCounter.yyyymm == yyyymm
+            )
+        )
+    ).scalar_one_or_none()
+    storage = (
+        await session.execute(
+            select(BillingUsageCounter.s3_bytes_used).where(
+                BillingUsageCounter.tenant_id == tenant.id,
+                BillingUsageCounter.period_yyyymm == int(yyyymm),
+            )
+        )
+    ).scalar_one_or_none()
+
+    lines = build_limit_lines(
+        max_doc_generations_per_month=quota.max_doc_generations_per_month if quota else None,
+        max_storage_mb=quota.max_storage_mb if quota else None,
+        monthly_edo_outgoing=quota.monthly_edo_outgoing if quota else None,
+        max_parallel_jobs=quota.max_parallel_jobs if quota else None,
+        doc_generations_used=int(generations or 0),
+        storage_bytes_used=int(storage or 0),
+    )
+    return OwnLimitsReport(
+        period=yyyymm,
+        tenant_slug=tenant.slug,
+        items=[
+            OwnLimitLine(
+                code=line.code,
+                title=line.title,
+                unit=line.unit,
+                limit=line.limit,
+                used=line.used,
+                remaining=line.remaining,
+                exhausted=line.exhausted,
+            )
+            for line in lines
+        ],
     )
 
 
