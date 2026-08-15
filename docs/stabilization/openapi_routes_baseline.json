@@ -337,6 +337,7 @@
     "GET /api/v1/platform/tenants/plans",
     "GET /api/v1/platform/tenants/usage",
     "GET /api/v1/platform/tenants/{tenant_id}/cascade",
+    "GET /api/v1/platform/tenants/{tenant_id}/config",
     "GET /api/v1/portal-requests",
     "GET /api/v1/portal-requests/{request_id}",
     "GET /api/v1/portal/packages",
@@ -810,6 +811,7 @@
     "POST /api/v1/pipelines/runs:bulk",
     "POST /api/v1/pipelines/{template_id}/run",
     "POST /api/v1/platform/tenants",
+    "POST /api/v1/platform/tenants/{tenant_id}/config",
     "POST /api/v1/platform/tenants/{tenant_id}/modules/{code}/trial",
     "POST /api/v1/portal-requests/{request_id}/messages",
     "POST /api/v1/portal/packages/{run_id}/tickets",
@@ -1007,6 +1009,7 @@
     "apply_import_api_v1_imports__target_code__apply_post",
     "apply_import_async_api_v1_imports__target_code__apply_async_post",
     "apply_inventory_count_api_v1_ppe_stock_inventory_counts__count_id__apply_post",
+    "apply_tenant_config_api_v1_platform_tenants__tenant_id__config_post",
     "approval_approve_api_v1_approvals__approval_id__approve_post",
     "approval_cancel_api_v1_approvals__approval_id__cancel_post",
     "approval_cancel_api_v1_v1_approvals_processes__process_id__cancel_post",
@@ -1309,6 +1312,7 @@
     "export_journal_api_v1_journals__journal_id__export_get",
     "export_manifest_api_v1_offboarding_export_manifest_get",
     "export_subject_data_api_v1_privacy_subjects__person_id__export_get",
+    "export_tenant_config_api_v1_platform_tenants__tenant_id__config_get",
     "export_tenant_data_api_v1_offboarding_export_get",
     "export_tenant_files_api_v1_offboarding_export_files_get",
     "extend_endpoint_api_v1_work_permits__wp_id__extend_post",
@@ -2733,6 +2737,9 @@
     "TenantBrandingPatch",
     "TenantBrandingRead",
     "TenantCascadePreview",
+    "TenantConfigApplyRequest",
+    "TenantConfigApplyResult",
+    "TenantConfigExport",
     "TenantCreate",
     "TenantFeatureRead",
     "TenantFleetItem",
@@ -8329,6 +8336,24 @@
       "is_reseller": "boolean",
       "cascade_affected": "array",
       "cascade_summary": "string"
+    },
+    "TenantConfigApplyRequest": {
+      "reference_data": "object",
+      "dry_run": "boolean"
+    },
+    "TenantConfigApplyResult": {
+      "applicable": "object",
+      "skipped": "array",
+      "unknown": "array",
+      "warnings": "array",
+      "applied": "boolean"
+    },
+    "TenantConfigExport": {
+      "version": "string",
+      "pack": "string",
+      "enabled_for": "array",
+      "exported_from": "null|string",
+      "reference_data": "object"
     },
     "TenantCreate": {
       "slug": "string",
