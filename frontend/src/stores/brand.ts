@@ -89,6 +89,29 @@ export const applyBrandTheme = (brand: AppBrand): void => {
   document.title = brand.app_name;
 };
 
+/**
+ * Указать на манифест арендатора вместо собранного на сборке (срез-14).
+ *
+ * До этого манифест зашивался при сборке с именем и иконками вендора, поэтому
+ * клиент партнёра, добавивший приложение на домашний экран, получал ярлык
+ * вендора — самое заметное место, где разд. 52.2 требует обратного.
+ *
+ * Слаг уходит параметром адреса: манифест браузер грузит САМ, заголовок
+ * арендатора в такой запрос не поставить. Без слага сервер вернул бы бренд
+ * не того арендатора.
+ */
+export const applyManifest = (tenantSlug: string | null): void => {
+  if (typeof document === "undefined") return;
+  let link = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
+  if (!link) {
+    link = document.createElement("link");
+    link.rel = "manifest";
+    document.head.appendChild(link);
+  }
+  const query = tenantSlug ? `?tenant=${encodeURIComponent(tenantSlug)}` : "";
+  link.href = `/api/v1/public/manifest.webmanifest${query}`;
+};
+
 /** Поставить favicon партнёра вместо стандартного из `index.html`. */
 export const applyFavicon = (url: string): void => {
   if (typeof document === "undefined") return;

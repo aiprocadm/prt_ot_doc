@@ -385,6 +385,7 @@
     "GET /api/v1/public/integrations/webhooks",
     "GET /api/v1/public/legal",
     "GET /api/v1/public/legal/{kind}",
+    "GET /api/v1/public/manifest.webmanifest",
     "GET /api/v1/public/notifications",
     "GET /api/v1/public/prescriptions",
     "GET /api/v1/public/reports/exports",
@@ -1778,6 +1779,7 @@
     "read_public_favicon_api_v1_public_branding_favicon_get",
     "read_public_legal_api_v1_public_legal__kind__get",
     "read_public_logo_api_v1_public_branding_logo_get",
+    "read_pwa_manifest_api_v1_public_manifest_webmanifest_get",
     "read_subject_access_log_api_v1_privacy_subjects__person_id__access_log_get",
     "readiness_api_v1_work_permits__wp_id__readiness_get",
     "reassign_task_api_v1_workflow_tasks__task_id__reassign_post",
@@ -4953,7 +4955,10 @@
     "FleetUsageReport": {
       "period": "string",
       "items": "array",
-      "total_doc_generations": "integer"
+      "total_doc_generations": "integer",
+      "total_storage_bytes": "integer",
+      "total_active_workers": "integer",
+      "not_measured": "array"
     },
     "GapRecalcIn": {
       "missing_documents": "integer",
@@ -8415,7 +8420,9 @@
       "tenant_id": "string",
       "slug": "string",
       "name": "string",
-      "doc_generations": "integer"
+      "doc_generations": "integer",
+      "storage_bytes": "integer",
+      "active_workers": "integer"
     },
     "TokenPair": {
       "access_token": "string"

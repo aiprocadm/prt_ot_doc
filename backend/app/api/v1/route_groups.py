@@ -109,6 +109,15 @@ ROUTER_GROUP_ORDER = (
 PUBLIC_ROUTER_REGISTRATIONS: tuple[RouterRegistration, ...] = (
     (auth.router, {"prefix": "/auth", "tags": ["auth"]}),
     (client_portal.router, {}),
+    # BIZ-52 срез-14: манифест PWA и картинки бренда. Их браузер грузит САМ —
+    # заголовок арендатора в такой запрос не поставить, а в общей группе стоит
+    # `require_tenant_slug`, который его требует. Слаг приходит параметром
+    # адреса; без него отвечаем платформенным брендом, а не отказом.
+    #
+    # Публичными эти ручки были и раньше «без токена» — но заголовок всё равно
+    # требовался, и потому манифест под брендом партнёра был невозможен.
+    (white_label.manifest_router, {}),
+    (white_label.public_router, {}),
 )
 
 COMPLIANCE_AND_ADMIN_ROUTER_REGISTRATIONS: tuple[RouterRegistration, ...] = (
@@ -213,7 +222,6 @@ PLATFORM_EXTENSION_ROUTER_REGISTRATIONS: tuple[RouterRegistration, ...] = (
     (public_api.router, {}),
     # BIZ-52 срез-4 (разд. 52.2): бренд приложения. Публичная ручка лежит под
     # `/public`, потому что бренд нужен ЭКРАНУ ВХОДА — там токена ещё нет.
-    (white_label.public_router, {}),
     (white_label.router, {}),
     # BIZ-52 срез-5 (разд. 52.2): юр. тексты партнёра. Публичные — потому что
     # оферту и политику ПДн человек обязан прочитать ДО входа.

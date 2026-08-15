@@ -21,10 +21,21 @@
 
 from __future__ import annotations
 
+import json
 from hashlib import sha256
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, HTTPException, Request, Response, UploadFile, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    UploadFile,
+    status,
+)
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -39,7 +50,8 @@ from app.domains.reseller.brand_images import (
     LOGO_MEDIA_TYPES,
     detect_image_media_type,
 )
-from app.domains.reseller.white_label import AppBrand
+from app.domains.reseller.pwa_manifest import build_manifest
+from app.domains.reseller.white_label import PLATFORM_BRAND, AppBrand
 from app.models.models import Tenant
 from app.models.white_label import TenantBranding
 from app.schemas.white_label import AppBrandRead, TenantBrandingPatch, TenantBrandingRead
@@ -50,6 +62,10 @@ from app.services.app_branding import (
 )
 
 public_router = APIRouter(prefix="/public/branding", tags=["white-label"])
+#: Манифест живёт БЕЗ префикса `/public/branding`: браузер ждёт его по адресу,
+#: который выглядит как файл, и вкладывать его в раздел бренда значило бы
+#: смешать «данные о бренде» с «файлом приложения».
+manifest_router = APIRouter(prefix="/public", tags=["white-label"])
 router = APIRouter(prefix="/platform/branding", tags=["white-label"])
 _optional_bearer = HTTPBearer(auto_error=False)
 
@@ -82,11 +98,63 @@ def _as_brand_read(brand: AppBrand, has_logo: bool, has_favicon: bool) -> AppBra
     )
 
 
-@public_router.get("", response_model=AppBrandRead)
-async def read_public_branding(tenant: Tenant = Depends(get_tenant_record)) -> AppBrandRead:
-    """Бренд, под которым показывать приложение этому арендатору."""
+async def optional_tenant_record(request: Request) -> Tenant | None:
+    """Арендатор запроса, если его вообще удалось определить.
 
-    brand, has_logo, has_favicon = await _effective_view(tenant)
+    Обычная зависимость отвечает 400, когда заголовка арендатора нет, — и это
+    верно почти везде. Но манифест и его иконки браузер грузит САМ: заголовков
+    там не будет никогда, а слаг придёт параметром адреса. Обязательная
+    зависимость роняла бы такой запрос ДО того, как обработчик посмотрит адрес.
+    """
+
+    try:
+        return await get_tenant_record(request)
+    except HTTPException:
+        return None
+
+
+async def resolve_public_tenant(slug: str | None, fallback: Tenant | None) -> Tenant | None:
+    """Арендатор для публичной выдачи бренда: по слагу из адреса или обычный.
+
+    BIZ-52 срез-14: манифест PWA и его иконки браузер грузит САМ, без заголовков
+    приложения — заголовок арендатора туда не поставить (та же причина, по
+    которой в срезе-6 картинки забирает API-клиент). Поэтому публичные ручки
+    бренда принимают слаг параметром адреса.
+
+    Это не расширение общего резолвера: слаг из адреса действует ТОЛЬКО здесь,
+    где наружу и так уходит публичный бренд. Неизвестный слаг молча даёт
+    обычного арендатора — манифест обязан остаться валидным, иначе браузер
+    ругается на весь ярлык, а не на одно поле.
+    """
+
+    cleaned = (slug or "").strip().lower()
+    if not cleaned:
+        return fallback
+    async with brand_session() as session:
+        found = (
+            await session.execute(select(Tenant).where(Tenant.slug == cleaned))
+        ).scalar_one_or_none()
+    return found or fallback
+
+
+@public_router.get("", response_model=AppBrandRead)
+async def read_public_branding(
+    tenant: Tenant | None = Depends(optional_tenant_record),
+    tenant_slug: str | None = Query(None, alias="tenant"),
+) -> AppBrandRead:
+    """Бренд, под которым показывать приложение этому арендатору.
+
+    Арендатор необязателен: ручка попала в группу без `require_tenant_slug`
+    вместе с картинками и манифестом (срез-14), а неизвестный арендатор — не
+    ошибка, а обычный случай «зашли по прямой ссылке». Отвечаем платформенным
+    брендом: приложение под ним работоспособно, а отказ оставил бы экран входа
+    без имени вовсе.
+    """
+
+    resolved = await resolve_public_tenant(tenant_slug, tenant)
+    if resolved is None:
+        return _as_brand_read(PLATFORM_BRAND, False, False)
+    brand, has_logo, has_favicon = await _effective_view(resolved)
     return _as_brand_read(brand, has_logo, has_favicon)
 
 
@@ -135,16 +203,62 @@ async def _serve_brand_image(request: Request, tenant: Tenant, *, kind: str) -> 
 
 @public_router.get("/logo")
 async def read_public_logo(
-    request: Request, tenant: Tenant = Depends(get_tenant_record)
+    request: Request,
+    tenant: Tenant | None = Depends(optional_tenant_record),
+    tenant_slug: str | None = Query(None, alias="tenant"),
 ) -> Response:
-    return await _serve_brand_image(request, tenant, kind="logo")
+    resolved = await resolve_public_tenant(tenant_slug, tenant)
+    if resolved is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Картинка не задана")
+    return await _serve_brand_image(request, resolved, kind="logo")
 
 
 @public_router.get("/favicon")
 async def read_public_favicon(
-    request: Request, tenant: Tenant = Depends(get_tenant_record)
+    request: Request,
+    tenant: Tenant | None = Depends(optional_tenant_record),
+    tenant_slug: str | None = Query(None, alias="tenant"),
 ) -> Response:
-    return await _serve_brand_image(request, tenant, kind="favicon")
+    resolved = await resolve_public_tenant(tenant_slug, tenant)
+    if resolved is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Картинка не задана")
+    return await _serve_brand_image(request, resolved, kind="favicon")
+
+
+@manifest_router.get("/manifest.webmanifest")
+async def read_pwa_manifest(
+    tenant: Tenant | None = Depends(optional_tenant_record),
+    tenant_slug: str | None = Query(None, alias="tenant"),
+) -> Response:
+    """Манифест приложения под брендом арендатора (разд. 52.2, срез-14).
+
+    Раньше манифест собирался на сборке с именем и иконками вендора, поэтому
+    клиент партнёра, добавивший приложение на домашний экран, видел на телефоне
+    ярлык вендора — самое заметное место, где 52.2 требует обратного.
+
+    БЕЗ токена и по той же причине, что бренд: манифест браузер грузит сам, до
+    всякого входа. Слаг берётся из адреса — заголовок арендатора браузер сюда не
+    поставит.
+    """
+
+    resolved = await resolve_public_tenant(tenant_slug, tenant)
+    if resolved is None:
+        # Арендатор неизвестен вовсе — отдаём платформенный манифест. Отказ
+        # здесь означал бы ярлык без имени у всех, кто открыл приложение по
+        # прямой ссылке.
+        brand, has_logo = PLATFORM_BRAND, False
+    else:
+        brand, has_logo, _has_favicon = await _effective_view(resolved)
+    manifest = build_manifest(
+        brand, has_logo=has_logo, tenant_slug=resolved.slug if resolved else None
+    )
+    return Response(
+        content=json.dumps(manifest, ensure_ascii=False),
+        # Тип по стандарту манифеста: с `application/json` часть браузеров его
+        # игнорирует и ярлык остаётся безымянным.
+        media_type="application/manifest+json",
+        headers={"Cache-Control": "public, max-age=300"},
+    )
 
 
 def _require_brand_editor(
