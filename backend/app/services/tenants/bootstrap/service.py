@@ -357,6 +357,27 @@ class BootstrapTenantService:
         )
         summary.mark(entity="starter_pack", created=True)
 
+    async def apply_config(
+        self, *, tenant_id: str, payload: dict[str, Any]
+    ) -> BootstrapTenantSummary:
+        """Применить набор к УЖЕ существующему арендатору (BIZ-52 срез-16).
+
+        Перенос конфигурации между клиентами использует ровно тот же посев, что
+        и выдача нового арендатора: своя копия применения разошлась бы с этой
+        при первой же правке, и «перенесённое» начало бы отличаться от
+        «выданного при создании».
+
+        Возвращает тот же отчёт, что и выдача, — с предупреждениями о
+        неприменимых видах.
+        """
+
+        summary = BootstrapTenantSummary(tenant_slug=tenant_id, dry_run=False)
+        await self._apply_reference_data(
+            tenant_id=tenant_id, payload=payload, summary=summary
+        )
+        await self.session.commit()
+        return summary
+
     async def _apply_reference_data(
         self, *, tenant_id: str, payload: dict[str, Any], summary: BootstrapTenantSummary
     ) -> None:

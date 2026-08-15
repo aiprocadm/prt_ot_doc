@@ -41,6 +41,7 @@ from app.domains.reseller import (
     resolve_fleet_scope,
 )
 from app.domains.reseller.cascade import CascadeImpact, plan_suspension_cascade
+from app.domains.reseller.config_transfer import build_config, check_config
 from app.domains.reseller.fleet_metrics import NOT_MEASURED_METRICS
 from app.domains.reseller.industries import (
     INDUSTRIES,
@@ -49,7 +50,9 @@ from app.domains.reseller.industries import (
 )
 from app.domains.reseller.own_limits import build_limit_lines
 from app.domains.reseller.subbilling import check_plan_ceiling, is_ceiling_applicable
+from app.models.master_data import Position
 from app.models.models import RoleEnum, Tenant, TenantQuota
+from app.models.safety_core import Hazard, RiskMeasure
 from app.models.tenant_billing import BillingUsageCounter, TenantCounter
 from app.modules.subscription import (
     FEATURE_CATALOG,
@@ -71,6 +74,9 @@ from app.schemas.tenant import (
     PlanCatalog,
     SubscriptionPlanRead,
     TenantCascadePreview,
+    TenantConfigApplyRequest,
+    TenantConfigApplyResult,
+    TenantConfigExport,
     TenantFeatureRead,
     TenantFleetItem,
     TenantFleetPage,
@@ -743,6 +749,107 @@ async def patch_tenant_status_endpoint(
         cascade_affected=list(impact.affected),
         cascade_summary=impact.summary,
     )
+
+
+@router.get("/{tenant_id}/config", response_model=TenantConfigExport)
+async def export_tenant_config(
+    tenant_id: str,
+    session: SessionDep,
+    tenant: Tenant = Depends(get_tenant_record),
+    credentials: HTTPAuthorizationCredentials | None = Depends(_optional_bearer),
+) -> TenantConfigExport:
+    """Снять слепок настроек клиента (разд. 52.3).
+
+    Срезы 7 и 12 научили РАЗВОРАЧИВАТЬ клиента с наполнением — из файла эталона.
+    Обратной дороги не было: партнёр, донастроивший клиента под свою практику, не
+    мог повторить это на следующем, и каждый новый донастраивался руками заново.
+
+    Выгружаются СПРАВОЧНИКИ, а не данные: должности, опасности, меры. Люди,
+    документы и медосмотры — данные клиента, их перенос называется переводом
+    контура (BIZ-49) и делается совсем иначе.
+
+    Формат тот же, что у эталонного набора: выгрузку можно положить в
+    `seed/tenant_starter_packs/v1/` и получить отраслевой набор.
+    """
+
+    _payload, scope = _require_fleet_actor(credentials, tenant)
+    target = await _load_in_scope(session, tenant_id, scope)
+
+    positions = list(
+        (
+            await session.execute(
+                select(Position.name)
+                .where(Position.tenant_id == target.id, Position.deleted_at.is_(None))
+                .order_by(Position.created_at.asc())
+            )
+        ).scalars()
+    )
+    hazards = list(
+        (
+            await session.execute(
+                select(Hazard.name)
+                .where(Hazard.tenant_id == target.id, Hazard.deleted_at.is_(None))
+                .order_by(Hazard.created_at.asc())
+            )
+        ).scalars()
+    )
+    controls = list(
+        (
+            await session.execute(
+                select(RiskMeasure.name)
+                .where(RiskMeasure.tenant_id == target.id, RiskMeasure.deleted_at.is_(None))
+                .order_by(RiskMeasure.created_at.asc())
+            )
+        ).scalars()
+    )
+
+    config = build_config(
+        positions=positions, hazards=hazards, controls=controls, source_slug=target.slug
+    )
+    return TenantConfigExport.model_validate(config.as_payload(pack=target.slug))
+
+
+@router.post("/{tenant_id}/config", response_model=TenantConfigApplyResult)
+@audit_operation("apply", "tenant_config")
+async def apply_tenant_config(
+    tenant_id: str,
+    payload: TenantConfigApplyRequest,
+    session: SessionDep,
+    tenant: Tenant = Depends(get_tenant_record),
+    credentials: HTTPAuthorizationCredentials | None = Depends(_optional_bearer),
+) -> TenantConfigApplyResult:
+    """Перенести набор на существующего клиента (разд. 52.3).
+
+    **Добавляет, а не заменяет.** Клиент мог завести своё, и «применить
+    конфигурацию» не должно означать «стереть то, что человек уже сделал».
+    Посев идёт тем же кодом, что и выдача нового арендатора, и идемпотентен по
+    названию: повторный перенос ничего не удваивает.
+
+    `dry_run` показывает, что появится, не меняя ничего: перенос вслепую на
+    чужой арендатор — не та операция, которую делают на ощупь.
+    """
+
+    _payload, scope = _require_fleet_actor(credentials, tenant)
+    target = await _load_in_scope(session, tenant_id, scope)
+
+    check = check_config({"reference_data": payload.reference_data})
+    result = TenantConfigApplyResult(
+        applicable={kind: len(values) for kind, values in check.applicable.items()},
+        skipped=list(check.skipped),
+        unknown=list(check.unknown),
+    )
+    if payload.dry_run or check.is_empty:
+        return result
+
+    async with _fleet_session() as provisioning_session:
+        service = BootstrapTenantService(provisioning_session)
+        summary = await service.apply_config(
+            tenant_id=target.id,
+            payload={"reference_data": check.applicable},
+        )
+    result.warnings = list(summary.warnings)
+    result.applied = True
+    return result
 
 
 @router.get("/{tenant_id}/cascade", response_model=TenantCascadePreview)

@@ -202,6 +202,44 @@ class FleetUsageReport(BaseSchema):
     not_measured: list[str] = Field(default_factory=list)
 
 
+class TenantConfigExport(BaseSchema):
+    """Снимок настроек арендатора (BIZ-52 срез-16, разд. 52.3).
+
+    Формат совпадает с файлом эталонного набора: выгрузку можно положить в
+    `seed/tenant_starter_packs/v1/` и получить отраслевой набор. Второй формат
+    означал бы два разбора и однажды — расхождение между «что применяется при
+    выдаче» и «что переносится».
+    """
+
+    version: str
+    pack: str
+    enabled_for: list[str]
+    #: Слаг источника: через месяц человек спросит «откуда этот файл».
+    exported_from: str | None = None
+    reference_data: dict[str, list[str]]
+
+
+class TenantConfigApplyRequest(BaseSchema):
+    """Перенос набора на существующего арендатора."""
+
+    reference_data: dict[str, list[str]]
+    #: Сначала показать, что появится, и ничего не менять. Перенос на чужой
+    #: арендатор вслепую — не та операция, которую делают на ощупь.
+    dry_run: bool = False
+
+
+class TenantConfigApplyResult(BaseSchema):
+    #: Что применимо: вид → сколько названий.
+    applicable: dict[str, int]
+    #: Виды, которые не ложатся в таблицы (перечисления в коде и т.п.).
+    skipped: list[str]
+    #: Незнакомые ключи: файл мог уйти вперёд кода.
+    unknown: list[str]
+    #: Что реально сделано. Пусто при `dry_run`.
+    warnings: list[str] = Field(default_factory=list)
+    applied: bool = False
+
+
 class OwnLimitLine(BaseSchema):
     """Строка «сколько можно и сколько занято» (BIZ-52 срез-15, разд. 52.4)."""
 
