@@ -2,6 +2,7 @@ import { apiClient } from "@/api/client";
 import type { ApiError } from "@/types/dto/common";
 import type {
   FleetUsageReport,
+  OwnLimitsReport,
   IndustryList,
   PlanCatalog,
   TenantDto,
@@ -58,6 +59,16 @@ export const tenantsApi = {
    *  здесь разошлась бы с ними при первой же новой отрасли. */
   async industries(): Promise<IndustryList> {
     return (await apiClient.get<IndustryList>(`${BASE}/industries`)).data;
+  },
+  /** Свои лимиты и свой расход (BIZ-52 срез-15, разд. 52.4).
+   *  Партнёр не входит в собственную область, поэтому в списке клиентов и в
+   *  отчёте о расходе его нет — свои квоты он не видел вовсе. */
+  async ownLimits(period?: string): Promise<OwnLimitsReport> {
+    return (
+      await apiClient.get<OwnLimitsReport>(`${BASE}/me/limits`, {
+        params: period ? { period } : undefined,
+      })
+    ).data;
   },
   /** Расход клиентов за месяц (BIZ-52 срез-13, разд. 52.4).
    *  Ручка существует с среза-8, но кабинет её не вызывал — партнёр не видел

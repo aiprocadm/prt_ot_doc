@@ -72,6 +72,25 @@ export interface PlanCatalog {
   features: FeatureCatalogEntry[];
 }
 
+/** Своя строка «сколько можно и сколько занято» (BIZ-52 срез-15, разд. 52.4). */
+export interface OwnLimitLine {
+  code: string;
+  title: string;
+  unit: string;
+  /** `null` — предела нет. */
+  limit: number | null;
+  /** `null` — расход не считается. Это не то же, что ноль. */
+  used: number | null;
+  remaining: number | null;
+  exhausted: boolean;
+}
+
+export interface OwnLimitsReport {
+  period: string;
+  tenant_slug: string;
+  items: OwnLimitLine[];
+}
+
 /** Расход одного клиента за месяц (BIZ-52 срез-13, разд. 52.4). */
 export interface TenantUsageRow {
   tenant_id: string;
