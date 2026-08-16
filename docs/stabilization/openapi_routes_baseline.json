@@ -285,6 +285,7 @@
     "GET /api/v1/medical/referrals/{referral_id}/print",
     "GET /api/v1/medical/summary",
     "GET /api/v1/medical/suspensions",
+    "GET /api/v1/my-access-log",
     "GET /api/v1/notifications",
     "GET /api/v1/notifications/calendar/events",
     "GET /api/v1/notifications/notification-settings/me",
@@ -1782,6 +1783,7 @@
     "read_acceptance_state_api_v1_legal_acceptance_get",
     "read_fleet_usage_api_v1_platform_tenants_usage_get",
     "read_industries_api_v1_platform_tenants_industries_get",
+    "read_my_access_log_api_v1_my_access_log_get",
     "read_own_branding_api_v1_platform_branding_get",
     "read_own_legal_api_v1_platform_legal__kind__get",
     "read_own_limits_api_v1_platform_tenants_me_limits_get",
@@ -2413,6 +2415,7 @@
     "ModuleRegistryResponse",
     "ModuleTrialGrant",
     "ModuleTrialResult",
+    "MyAccessLogPage",
     "MyManagedClient",
     "MyManagedClientsResponse",
     "MyModuleEntry",
@@ -5932,6 +5935,12 @@
       "code": "string",
       "title": "string",
       "trial_until": "null|string"
+    },
+    "MyAccessLogPage": {
+      "items": "array",
+      "total": "integer",
+      "served_by": "null|string",
+      "summary": "string"
     },
     "MyManagedClient": {
       "client_id": "string",
