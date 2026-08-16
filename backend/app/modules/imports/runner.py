@@ -29,6 +29,7 @@ from app.models.tenanting import Tenant
 from app.modules.files import s3
 from app.modules.imports.parsers import MAX_ASYNC_IMPORT_ROWS, ImportFileError
 from app.modules.imports.quality import run_quality_check_for_batch
+from app.services.client_change_signals import record_client_changes_for_batch
 from app.modules.imports.registry import get_target
 from app.modules.imports.service import ImportMappingError, ImportService
 from app.modules.imports.stream import run_streaming
@@ -171,6 +172,12 @@ async def execute_import_batch(
     # естественное место для этого: пользователь никого не ждёт, а результат
     # ложится в ту же партию. Провал проверки импорт не отменяет.
     await run_quality_check_for_batch(session, batch)
+    await session.commit()
+
+    # Разд. 51.2: та же загрузка — источник сигналов для ленты изменений у
+    # обслуживаемого клиента. Как и проверка качества, провалиться она может
+    # только молча: партия уже применена и откату по этой причине не подлежит.
+    await record_client_changes_for_batch(session, batch)
     await session.commit()
 
     discard_source(batch.source_key)

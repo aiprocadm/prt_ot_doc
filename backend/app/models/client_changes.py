@@ -46,3 +46,13 @@ class ClientChange(TenantBaseModel, SoftDeleteMixin):
         String(36), ForeignKey("user.id", ondelete="SET NULL"), nullable=True
     )
     handled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # BIZ-51 срез-2 (разд. 51.2): откуда узнали об изменении. Специалисту это
+    # видно неспроста — доверие к записи разное: «внёс коллега» и «увидели в
+    # выгрузке 1С» проверяются по-разному, а без пометки лента выглядит так,
+    # будто всё внесено руками.
+    source: Mapped[str] = mapped_column(String(16), nullable=False, default="manual")
+    #: На что ссылается источник: для импорта — id партии. Внешнего ключа нет
+    #: намеренно: источников будет больше одного (Data Quality, правила), и FK
+    #: на «любую таблицу» не бывает — тот же довод, что у ``ImportRow``.
+    source_ref: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)

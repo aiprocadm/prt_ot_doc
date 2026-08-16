@@ -1668,6 +1668,7 @@ def _change_read(row: ClientChange) -> ClientChangeRead:
         status=ChangeStatus(row.status),
         handled_at=row.handled_at,
         suggestions=suggestions_for(kind),
+        source=row.source or "manual",
     )
 
 

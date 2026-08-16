@@ -46,6 +46,7 @@ from app.modules.imports.parsers import (
 from app.modules.imports.planner import template_headers
 from app.modules.imports.profiles import ImportProfile, detect_profile, get_profile, list_profiles
 from app.modules.imports.quality import run_quality_check_for_batch
+from app.services.client_change_signals import record_client_changes_for_batch
 from app.modules.imports.registry import (
     CREATABLE_LOOKUPS,
     ImportTarget,
@@ -552,6 +553,10 @@ async def apply_import(
         raise _mapping_error(exc) from exc
     except ImportLookupNotCreatableError as exc:
         raise _lookup_not_creatable(exc) from exc
+    # Разд. 51.2: загрузка кадровых — источник сигналов об изменениях у клиента.
+    # После apply, но до commit: сигналы попадают в ту же транзакцию, что и сама
+    # партия, иначе бывает лента, ссылающаяся на откатившуюся загрузку.
+    await record_client_changes_for_batch(session, batch)
     await session.commit()
     return ImportApplyOut(
         batch=_batch_out(batch),
