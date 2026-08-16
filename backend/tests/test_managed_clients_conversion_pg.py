@@ -452,8 +452,16 @@ def test_conversion_survives_force_rls_with_unprivileged_role(monkeypatch) -> No
                     .all()
                 )
                 # Ссылка человека перевешена на КОПИЮ должности, а не обнулена.
-                assert len(new_positions) == 1
-                assert copied[0].position_id == new_positions[0].id
+                #
+                # Ищем копию ПО ИМЕНИ, а не берём единственную строку: с BIZ-51
+                # среза-16 у нового арендатора появляются ещё и должности
+                # эталонного набора. Раньше их не было — не потому, что так
+                # задумано, а потому что посев их молча пропускал (`autoflush`
+                # выключен, и только что созданная организация не находилась).
+                # Прежнее «ровно одна должность» закрепляло именно тот дефект.
+                copies = [row for row in new_positions if row.name == "Слесарь"]
+                assert len(copies) == 1
+                assert copied[0].position_id == copies[0].id
                 incidents = (
                     (
                         await s.execute(

@@ -52,6 +52,7 @@ RLS_ENABLED_TABLES: frozenset[str] = frozenset(
         "budget_reimbursement_item",
         "calendar_events",
         "checklist",
+        "client_change",
         "client_portal_read_models",
         "client_portal_tokens",
         "client_request_tickets",

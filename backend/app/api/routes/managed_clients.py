@@ -22,6 +22,7 @@ from app.api.helpers.etag import (
     build_not_modified_headers,
     compute_list_etag,
 )
+from app.core.audit_decorator import audit_operation
 from app.core.config import get_settings
 from app.core.errors import api_problem_detail
 from app.core.feature_flags import is_module_enabled
@@ -38,6 +39,13 @@ from app.domains.managed_clients.attention import AggregationStatus, Severity
 from app.domains.managed_clients.attention_service import collect_portfolio_attention
 from app.domains.managed_clients.calendar import CalendarFilters, DeadlineKind, group_by_date
 from app.domains.managed_clients.calendar_service import collect_portfolio_deadlines
+from app.domains.managed_clients.change_feed import (
+    ChangeStatus,
+    ChangeSummary,
+    ClientChangeKind,
+    suggestions_for,
+    title_for,
+)
 from app.domains.managed_clients.consent import (
     ClientConsent,
     ConsentInvalid,
@@ -85,6 +93,7 @@ from app.domains.managed_clients.workload import DEFAULT_THRESHOLDS, OVERLOAD_RE
 from app.domains.managed_clients.workload_service import collect_specialist_workload
 from app.domains.reseller import TenantNode, inherited_parent_for_spawned_tenant
 from app.models.audit_log import AuditLog
+from app.models.client_changes import ClientChange
 from app.models.identity import User
 from app.models.managed_clients import (
     ManagedClient,
@@ -104,6 +113,10 @@ from app.schemas.managed_clients import (
     ClientAccessLogEntry,
     ClientAccessLogPage,
     ClientAttentionRead,
+    ClientChangeCreate,
+    ClientChangePage,
+    ClientChangeRead,
+    ClientChangeStatusPatch,
     ClientContextRead,
     ConsentCreate,
     ConsentRead,
@@ -1631,6 +1644,199 @@ async def create_managed_client(
         )
     await session.refresh(row)
     return ManagedClientRead.model_validate(row, from_attributes=True)
+
+
+# --- лента изменений у клиента (BIZ-51 срез-1, Доп. №1 разд. 51.1) ---
+
+
+def _change_read(row: ClientChange) -> ClientChangeRead:
+    """Запись ленты вместе с тем, что по ней предлагается сделать.
+
+    Подсказки отдаются РЯДОМ с записью, а не отдельной ручкой: список «что
+    теперь делать» и есть смысл ленты, а второй запрос за ним означал бы, что
+    половина интерфейсов его не сделает.
+    """
+
+    kind = ClientChangeKind(row.kind)
+    return ClientChangeRead(
+        id=row.id,
+        kind=kind,
+        kind_title=title_for(kind),
+        happened_on=row.happened_on,
+        summary=row.summary,
+        details=row.details,
+        status=ChangeStatus(row.status),
+        handled_at=row.handled_at,
+        suggestions=suggestions_for(kind),
+    )
+
+
+@router.post(
+    "/{mcid}/changes", response_model=ClientChangeRead, status_code=status.HTTP_201_CREATED
+)
+@audit_operation("create", "client_change")
+async def record_client_change(
+    mcid: str,
+    payload: ClientChangeCreate,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: Access,
+) -> ClientChangeRead:
+    """Зафиксировать изменение у клиента (разд. 51.1).
+
+    Разд. 51 превращает разовую услугу в подписное сопровождение: аутсорсер
+    обязан отслеживать изменения у заказчика и заранее готовить документы. До
+    этого среза такой ленты не было вовсе — «Центр внимания» (BIZ-49) показывает
+    ПРОСРОЧКИ, то есть состояние, а принятый сотрудник или новая площадка в нём
+    не появятся, пока по ним что-нибудь не просрочится.
+
+    Запись НИЧЕГО не создаёт сама. ТЗ говорит «предложить/сделать
+    автоматически», но начинать с «сделать» нельзя: одна загрузка штатки на сто
+    человек породила бы сотни задач, разгребать которые пришлось бы вручную.
+    Сначала специалист видит подсказки и решает.
+    """
+
+    TenantContextValidator.ensure_tenant_context(tenant)
+    await _require_enabled(session, tenant)
+    await _get(session, tenant, mcid)
+
+    row = ClientChange(
+        tenant_id=tenant.id,
+        managed_client_id=mcid,
+        kind=payload.kind,
+        happened_on=payload.happened_on,
+        summary=payload.summary.strip(),
+        details=payload.details,
+        status=ChangeStatus.NEW,
+    )
+    session.add(row)
+    await session.commit()
+    await session.refresh(row)
+    return _change_read(row)
+
+
+@router.get("/{mcid}/changes", response_model=ClientChangePage)
+async def list_client_changes(
+    mcid: str,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: Access,
+    status_filter: Annotated[ChangeStatus | None, Query(alias="status")] = None,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> ClientChangePage:
+    """Лента изменений клиента: свежие сверху.
+
+    Сводка идёт словами рядом со списком: «пусто» и «всё разобрано» — разные
+    ответы, и различать их по длине списка человек не обязан.
+    """
+
+    TenantContextValidator.ensure_tenant_context(tenant)
+    await _require_enabled(session, tenant)
+    await _get(session, tenant, mcid)
+
+    base = [
+        ClientChange.tenant_id == tenant.id,
+        ClientChange.managed_client_id == mcid,
+        ClientChange.deleted_at.is_(None),
+    ]
+    listed = list(base)
+    if status_filter is not None:
+        listed.append(ClientChange.status == status_filter)
+
+    total = int(
+        (
+            await session.execute(select(func.count()).select_from(ClientChange).where(*listed))
+        ).scalar_one_or_none()
+        or 0
+    )
+    # Счётчик «требуют внимания» считается по ВСЕЙ ленте, а не по странице:
+    # иначе фильтр «разобранные» показывал бы ноль новых и успокаивал зря.
+    new_total = int(
+        (
+            await session.execute(
+                select(func.count())
+                .select_from(ClientChange)
+                .where(*base, ClientChange.status == ChangeStatus.NEW)
+            )
+        ).scalar_one_or_none()
+        or 0
+    )
+    feed_total = int(
+        (
+            await session.execute(select(func.count()).select_from(ClientChange).where(*base))
+        ).scalar_one_or_none()
+        or 0
+    )
+    rows = (
+        (
+            await session.execute(
+                select(ClientChange)
+                .where(*listed)
+                .order_by(ClientChange.happened_on.desc(), ClientChange.created_at.desc())
+                .limit(limit)
+                .offset(offset)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return ClientChangePage(
+        items=[_change_read(row) for row in rows],
+        total=total,
+        summary=ChangeSummary(total=feed_total, new=new_total).text,
+    )
+
+
+@router.patch("/{mcid}/changes/{change_id}", response_model=ClientChangeRead)
+@audit_operation("update", "client_change")
+async def set_client_change_status(
+    mcid: str,
+    change_id: str,
+    payload: ClientChangeStatusPatch,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: Access,
+) -> ClientChangeRead:
+    """Разобрать изменение или отклонить его.
+
+    Отклонение существует намеренно: часть изменений не требует действий
+    (перевод внутри отдела без смены рабочего места), и без него лента копила бы
+    вечные долги, а специалист перестал бы её открывать.
+
+    Возврат в «новое» разрешён: специалист мог закрыть запись по ошибке, и
+    единственным выходом иначе была бы вторая запись о том же изменении.
+    """
+
+    TenantContextValidator.ensure_tenant_context(tenant)
+    await _require_enabled(session, tenant)
+    await _get(session, tenant, mcid)
+
+    row = (
+        await session.execute(
+            select(ClientChange).where(
+                ClientChange.id == change_id,
+                ClientChange.tenant_id == tenant.id,
+                ClientChange.managed_client_id == mcid,
+                ClientChange.deleted_at.is_(None),
+            )
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Change not found")
+
+    row.status = payload.status
+    if payload.status is ChangeStatus.NEW:
+        # Возврат в «новое» стирает и след разбора: иначе запись выглядела бы
+        # разобранной кем-то, хотя ждёт работы.
+        row.handled_by = None
+        row.handled_at = None
+    else:
+        row.handled_by = str(access.user.id)
+        row.handled_at = datetime.now(tz=timezone.utc)
+    await session.commit()
+    await session.refresh(row)
+    return _change_read(row)
 
 
 @router.get("/{mcid}", response_model=ManagedClientRead)
