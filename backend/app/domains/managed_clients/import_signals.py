@@ -167,7 +167,7 @@ def _person_signal(fact: RowFact, applied_on: date) -> ChangeSignal | None:
 
     # Перевод: сменилась должность. Сравниваем и код должности, и её название —
     # в файле может не быть ни справочного идентификатора, ни наоборот.
-    for field_name, label in (("position_id", "должность"), ("position_title", "должность")):
+    for field_name in ("position_id", "position_title"):
         if field_name not in fact.before:
             continue
         was = _clean(fact.before.get(field_name))
@@ -175,7 +175,7 @@ def _person_signal(fact: RowFact, applied_on: date) -> ChangeSignal | None:
         if was == now:
             continue
         new_title = _clean(fact.now.get("position_title")) or now
-        details = f"Изменилась {label}"
+        details = "Изменилась должность"
         if new_title:
             details = f"{details}: теперь «{new_title}»"
         return ChangeSignal(
