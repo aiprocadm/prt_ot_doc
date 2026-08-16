@@ -2,6 +2,7 @@
 
 from app.models.api_deprecation_usage import ApiDeprecationUsage
 from app.models.calendar_views import SavedCalendarView
+from app.models.client_changes import ClientChange
 from app.models.committees import (
     Committee,
     CommitteeAgendaItem,
@@ -168,6 +169,7 @@ from app.models.work_permit import WorkPermit, WorkPermitEvent, WorkPermitMember
 
 __all__ = [
     "TenantBranding",
+    "ClientChange",
     "TenantLegalAcceptance",
     "TenantLegalDocument",
     "ApiDeprecationUsage",

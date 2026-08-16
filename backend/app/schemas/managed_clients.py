@@ -8,6 +8,7 @@ from pydantic import Field, field_validator
 
 from app.domains.managed_clients.attention import AggregationStatus, Severity, SignalKind
 from app.domains.managed_clients.calendar import DeadlineKind
+from app.domains.managed_clients.change_feed import ChangeStatus, ClientChangeKind
 from app.domains.managed_clients.lifecycle import ContractStatus, ManagedClientMode
 from app.domains.managed_clients.workload import OverloadReason
 from app.schemas.base import BaseSchema
@@ -361,3 +362,47 @@ class MyAccessLogPage(ClientAccessLogPage):
     served_by: str | None = None
     #: Строка для человека: пустой список без объяснения читается как поломка.
     summary: str
+
+
+class ClientChangeCreate(BaseSchema):
+    """Запись об изменении у клиента (BIZ-51 срез-1, разд. 51.1)."""
+
+    kind: ClientChangeKind
+    #: Дата САМОГО изменения, а не записи о нём: сотрудника приняли в пятницу,
+    #: а внесли в понедельник — сроки считаются от пятницы.
+    happened_on: date
+    summary: str = Field(min_length=1, max_length=255)
+    details: str | None = None
+
+
+class ClientChangeRead(BaseSchema):
+    id: str
+    kind: ClientChangeKind
+    #: Человеческое название вида: ленту читает специалист, а не машина.
+    kind_title: str
+    happened_on: date
+    summary: str
+    details: str | None = None
+    status: ChangeStatus
+    handled_at: datetime | None = None
+    #: Что предложить по этому изменению (таблица разд. 51.1). Отдаётся вместе
+    #: с записью: список «что теперь делать» и есть смысл ленты.
+    suggestions: list[str]
+
+
+class ClientChangePage(BaseSchema):
+    items: list[ClientChangeRead]
+    total: int
+    #: Сводка словами: «требуют внимания N из M».
+    summary: str
+
+
+class ClientChangeStatusPatch(BaseSchema):
+    """Разобрать изменение или отклонить его.
+
+    `dismissed` существует намеренно: часть изменений не требует действий, и без
+    «отклонить» лента копила бы вечные долги, а специалист перестал бы её
+    открывать.
+    """
+
+    status: ChangeStatus
