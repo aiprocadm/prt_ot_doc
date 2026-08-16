@@ -317,6 +317,12 @@ def _access_log_entry(row: AuditLog) -> ClientAccessLogEntry:
     )
 
 
+#: Публичное имя для кабинета клиента (`routes/client_access_log.py`): он
+#: показывает ТЕ ЖЕ записи у себя, и своя копия преобразования разъехалась бы —
+#: «кто трогал мои данные» начало бы отвечать разное в двух кабинетах.
+access_log_entry = _access_log_entry
+
+
 async def _client_consents(
     session: AsyncSession, tenant: Tenant, client_id: str
 ) -> list[ManagedClientConsent]:

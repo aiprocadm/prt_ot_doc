@@ -19,6 +19,7 @@ from app.api.routes import (
     briefings,
     calendar,
     calendar_views,
+    client_access_log,
     client_portal,
     committees,
     companies,
@@ -174,6 +175,10 @@ OPERATIONS_ROUTER_REGISTRATIONS: tuple[RouterRegistration, ...] = (
     (outbox_admin.router, {"prefix": "/admin/outbox", "tags": ["outbox"]}),
     (deprecation_admin.router, {"prefix": "/admin/deprecations", "tags": ["deprecations"]}),
     (managed_clients.router, {}),
+    # SEC-63 (Доп. №3 разд. 63.2): журнал доступа в кабинете САМОГО клиента.
+    # Отдельно от кабинета аутсорсера: у клиента модуля managed_clients нет,
+    # а право знать, кто трогал его данные, от чужой подписки не зависит.
+    (client_access_log.router, {}),
     (webhooks.router, {}),
     (integration_readiness.router, {}),
     (tenants.router, {}),
