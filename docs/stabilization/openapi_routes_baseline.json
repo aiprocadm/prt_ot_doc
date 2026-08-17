@@ -264,6 +264,7 @@
     "GET /api/v1/managed-clients/{mcid}/access-log",
     "GET /api/v1/managed-clients/{mcid}/changes",
     "GET /api/v1/managed-clients/{mcid}/consents",
+    "GET /api/v1/managed-clients/{mcid}/readiness",
     "GET /api/v1/managed-clients/{mcid}/transfers",
     "GET /api/v1/marketplace",
     "GET /api/v1/medical/contingent",
@@ -1375,6 +1376,7 @@
     "get_budget_endpoint_api_v1_ppe_budgets__budget_id__get",
     "get_campaign_api_v1_sout__cid__get",
     "get_certificate_api_v1_training_certificates__item_id__get",
+    "get_client_readiness_api_v1_managed_clients__mcid__readiness_get",
     "get_closing_endpoint_api_v1_work_permits__wp_id__closing_get",
     "get_committee_api_v1_committees__cid__get",
     "get_company_endpoint_api_v1_companies__company_id__get",
@@ -2129,6 +2131,7 @@
     "ClientChangeRead",
     "ClientChangeStatusPatch",
     "ClientContextRead",
+    "ClientReadinessRead",
     "CommitteeCreate",
     "CommitteeKind",
     "CommitteeKpiDto",
@@ -2200,6 +2203,7 @@
     "DeprecationEntryRead",
     "DeprecationOverview",
     "DeprecationUsageRead",
+    "DirectionReadinessRead",
     "DocGeneratePipelineRequest",
     "DocGenerateRequest",
     "DocumentBatchItemRead",
@@ -3886,6 +3890,14 @@
       "expires_at": "null|string",
       "seconds_left": "integer|null"
     },
+    "ClientReadinessRead": {
+      "client_id": "string",
+      "client_name": "string",
+      "aggregation": "string",
+      "reason": "null|string",
+      "overall": "null|string",
+      "directions": "array"
+    },
     "CommitteeCreate": {
       "kind": "CommitteeKind",
       "name": "string",
@@ -4422,6 +4434,16 @@
       "last_seen_at": "string",
       "hits_2xx": "integer",
       "last_notified_at": "null|string"
+    },
+    "DirectionReadinessRead": {
+      "direction": "string",
+      "title": "string",
+      "light": "string",
+      "reason": "string",
+      "required": "integer",
+      "missing": "integer",
+      "lapsed": "integer",
+      "expiring": "integer"
     },
     "DocGeneratePipelineRequest": {
       "template": "GenerateTemplateRef",
