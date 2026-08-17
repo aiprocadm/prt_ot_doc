@@ -6,6 +6,7 @@ import {
   type ClientAttention,
   type ClientChangePage,
   type ClientChangeStatus,
+  type ClientReadiness,
   type CrossClientAttention,
   type CrossClientCalendar,
   type DeadlineKind,
@@ -14,6 +15,7 @@ import {
   type PortfolioPage,
   type Severity,
   type SpecialistWorkloadResponse,
+  type TrafficLight,
 } from "@/api/managedClients";
 import { ClientContextSwitcher } from "@/components/common/ClientContextSwitcher";
 import { EmptyState } from "@/components/common/EmptyState";
@@ -590,6 +592,143 @@ const ChangeFeedPanel = ({ clients }: ChangeFeedPanelProps) => {
   );
 };
 
+// ── Светофор соответствия (BIZ-51 срез-6, разд. 51.3) ──────────────────────
+
+const LIGHT_LABELS: Record<TrafficLight, string> = {
+  green: "В порядке",
+  yellow: "Истекает",
+  red: "Разрывы",
+  not_measured: "Не измеряется",
+};
+
+const LIGHT_VARIANT: Record<
+  TrafficLight,
+  "default" | "destructive" | "secondary" | "outline"
+> = {
+  red: "destructive",
+  yellow: "default",
+  green: "secondary",
+  not_measured: "outline",
+};
+
+interface ReadinessPanelProps {
+  clients: PortfolioItem[];
+}
+
+const ReadinessPanel = ({ clients }: ReadinessPanelProps) => {
+  const [clientId, setClientId] = useState("");
+  const [data, setData] = useState<ClientReadiness | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<ApiError | null>(null);
+
+  const effectiveClientId = clientId || clients[0]?.id || "";
+
+  const load = useCallback(async () => {
+    if (!effectiveClientId) {
+      setData(null);
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      setData(await managedClientsApi.readiness(effectiveClientId));
+    } catch (err) {
+      setError(asApiError(err, "Не удалось загрузить светофор соответствия"));
+    } finally {
+      setLoading(false);
+    }
+  }, [effectiveClientId]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Соответствие эталону</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="space-y-1">
+          <label
+            className="text-xs text-muted-foreground"
+            htmlFor="readiness-client"
+          >
+            Клиент
+          </label>
+          <select
+            id="readiness-client"
+            data-testid="readiness-client-select"
+            className={selectClass}
+            value={effectiveClientId}
+            onChange={(e) => setClientId(e.target.value)}
+          >
+            {clients.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <ErrorState error={error ?? undefined} onRetry={load} />
+        {loading ? <LoadingScreen label="Загрузка светофора" /> : null}
+        {!loading && !error && clients.length === 0 ? (
+          <EmptyState
+            title="Клиентов пока нет"
+            description="Светофор появится вместе с первым ведомым клиентом."
+          />
+        ) : null}
+        {!loading && !error && data ? (
+          data.aggregation === "not_aggregated" ? (
+            // Честное «не собирается» вместо нулей — данные Dedicated-клиента
+            // живут в его собственном контуре (правило «Центра внимания»).
+            <EmptyState
+              title="Данные не собраны"
+              description={data.reason ?? "Данные ведутся в отдельном контуре клиента"}
+            />
+          ) : (
+            <>
+              {data.overall ? (
+                <div
+                  className="flex items-center gap-2 text-sm"
+                  data-testid="readiness-overall"
+                >
+                  <span>Итог по измеренному:</span>
+                  <Badge variant={LIGHT_VARIANT[data.overall]}>
+                    {LIGHT_LABELS[data.overall]}
+                  </Badge>
+                </div>
+              ) : null}
+              <ul className="space-y-2">
+                {data.directions.map((row) => (
+                  <li
+                    key={row.direction}
+                    className="space-y-0.5"
+                    data-testid="readiness-row"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">{row.title}</span>
+                      <Badge variant={LIGHT_VARIANT[row.light]}>
+                        {LIGHT_LABELS[row.light]}
+                      </Badge>
+                    </div>
+                    {/* Расшифровка обязательна: цвет без слов возвращает
+                        специалиста к гаданию, почему он красный. */}
+                    <div className="text-xs text-muted-foreground">
+                      {row.reason}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )
+        ) : null}
+      </CardContent>
+    </Card>
+  );
+};
+
 // ── Загрузка специалистов ───────────────────────────────────────────────────
 
 interface WorkloadPanelProps {
@@ -1014,6 +1153,9 @@ const ClientCockpitPage = () => {
           {/* Лента — после календаря: сроки говорят «когда», лента — «что
               изменилось и что теперь делать» (разд. 51.1). */}
           <ChangeFeedPanel clients={portfolio?.items ?? []} />
+          {/* Светофор — после ленты: события разобраны, дальше вопрос
+              «а всё ли у клиента есть» (разд. 51.3). */}
+          <ReadinessPanel clients={portfolio?.items ?? []} />
           <PortfolioPanel
             data={portfolio}
             loading={loading}
