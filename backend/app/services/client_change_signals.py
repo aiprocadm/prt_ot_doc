@@ -46,7 +46,7 @@ from app.models.imports import ImportBatch, ImportRow
 from app.models.managed_clients import ManagedClient
 from app.models.master_data import Person, Position, Site
 
-__all__ = ["SIGNAL_SOURCE", "record_client_changes_for_batch"]
+__all__ = ["SIGNAL_SOURCE", "person_title", "record_client_changes_for_batch"]
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +68,7 @@ _MODELS: dict[str, Any] = {
 ROW_ACTIONS: dict[str, str] = {"created": "create", "updated": "update"}
 
 
-def _person_title(entity: Person) -> str:
+def person_title(entity: Person) -> str:
     parts = [entity.last_name or "", entity.first_name or "", entity.middle_name or ""]
     return " ".join(part for part in parts if part).strip()
 
@@ -151,7 +151,7 @@ async def _collect_facts(
         if row is None or not entity.company_id:
             continue
         companies.add(str(entity.company_id))
-        title = _person_title(entity) if target == "persons" else (entity.name or "")
+        title = person_title(entity) if target == "persons" else (entity.name or "")
         facts.append(
             RowFact(
                 target=target,

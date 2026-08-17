@@ -128,6 +128,7 @@ from app.schemas.managed_clients import (
     CrossClientCalendarResponse,
     DeadlineDayRead,
     DeadlineEventRead,
+    DqSignalsRead,
     ManagedClientCreate,
     ManagedClientRead,
     ManagedClientUpdate,
@@ -143,6 +144,7 @@ from app.schemas.managed_clients import (
     WorkloadSummary,
     WorkloadThresholdsRead,
 )
+from app.services.client_dq_signals import DqSignalsOutcome, collect_dq_signals
 from app.services.tenants.bootstrap.service import BootstrapTenantService
 
 router = APIRouter(prefix="/managed-clients", tags=["managed-clients"])
@@ -1838,6 +1840,58 @@ async def set_client_change_status(
     await session.commit()
     await session.refresh(row)
     return _change_read(row)
+
+
+def _dq_summary(outcome: DqSignalsOutcome) -> str:
+    if outcome.found == 0:
+        return "Просрочек не найдено"
+    parts = [f"Найдено просрочек: {outcome.found}", f"записано в ленты: {outcome.recorded}"]
+    if outcome.already_in_feed:
+        parts.append(f"уже в лентах: {outcome.already_in_feed}")
+    if outcome.not_client_related:
+        parts.append(f"не про клиентов: {outcome.not_client_related}")
+    if outcome.unparsed:
+        parts.append(f"не разобрано: {outcome.unparsed}")
+    if outcome.deferred:
+        parts.append(f"отложено до следующего сбора: {outcome.deferred}")
+    return ", ".join(parts)
+
+
+@router.post("/dq-signals", response_model=DqSignalsRead)
+@audit_operation("create", "client_change")
+async def collect_data_quality_signals(
+    tenant: TenantDep,
+    session: SessionDep,
+    access: Access,
+) -> DqSignalsRead:
+    """Собрать просрочки из проверок качества данных в ленты клиентов (51.2).
+
+    ТЗ называет Data Quality третьим источником сигналов: просрочка — тоже
+    «изменение состояния». Проверки просрочки переиспользуются из отчёта
+    качества данных, в ленту попадают только находки по обслуживаемым
+    клиентам, и только один раз: личность находки включает запись и дату
+    истечения, поэтому повторный сбор ленту не удваивает, а продлённая и
+    снова просроченная запись даёт новый сигнал.
+
+    Ключ идемпотентности не нужен: повторное нажатие безвредно по построению
+    (второй сбор запишет ноль).
+    """
+
+    TenantContextValidator.ensure_tenant_context(tenant)
+    await _require_enabled(session, tenant)
+
+    outcome = await collect_dq_signals(session, str(tenant.id))
+    await session.commit()
+    return DqSignalsRead(
+        found=outcome.found,
+        recorded=outcome.recorded,
+        already_in_feed=outcome.already_in_feed,
+        not_client_related=outcome.not_client_related,
+        unparsed=outcome.unparsed,
+        deferred=outcome.deferred,
+        truncated=outcome.truncated,
+        summary=_dq_summary(outcome),
+    )
 
 
 @router.get("/{mcid}", response_model=ManagedClientRead)

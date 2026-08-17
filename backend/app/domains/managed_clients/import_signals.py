@@ -85,7 +85,12 @@ class RowFact:
 
 @dataclass(frozen=True)
 class ChangeSignal:
-    """Предложение записать изменение в ленту клиента."""
+    """Предложение записать изменение в ленту клиента.
+
+    ``source_ref`` — личность сигнала у источника. Импорту она не нужна
+    (личность партии одна на все сигналы, её ставит сервис), а Data Quality
+    (срез-3) различает находки поштучно, поэтому ref едет вместе с сигналом.
+    """
 
     kind: ClientChangeKind
     company_id: str
@@ -93,6 +98,7 @@ class ChangeSignal:
     happened_on: date
     details: str | None = None
     entity_id: str | None = None
+    source_ref: str | None = None
 
 
 def _clean(value: Any) -> str:
