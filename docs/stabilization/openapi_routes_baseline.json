@@ -760,6 +760,7 @@
     "POST /api/v1/machine-keys/{item_id}/revoke",
     "POST /api/v1/machine-keys/{item_id}/rotate",
     "POST /api/v1/managed-clients",
+    "POST /api/v1/managed-clients/dq-signals",
     "POST /api/v1/managed-clients/{mcid}/access",
     "POST /api/v1/managed-clients/{mcid}/changes",
     "POST /api/v1/managed-clients/{mcid}/consents",
@@ -1083,6 +1084,7 @@
     "clone_methodology_api_v1_risk_advanced_methodologies__item_id__clone_post",
     "close_endpoint_api_v1_work_permits__wp_id__close_post",
     "close_obligation_api_v1_obligations__obligation_id__patch",
+    "collect_data_quality_signals_api_v1_managed_clients_dq_signals_post",
     "commit_media_api_v1_pwa_media_commit_post",
     "committee_kpi_api_v1_committees_kpi_get",
     "compare_document_versions_endpoint_api_v1_documents__document_id__versions_compare_get",
@@ -2224,6 +2226,7 @@
     "DownloadURLResponse",
     "DownloadUrlRequest",
     "DownloadUrlResponse",
+    "DqSignalsRead",
     "DryRunEvent",
     "DryRunIn",
     "DryRunOut",
@@ -3866,7 +3869,8 @@
       "details": "null|string",
       "status": "ChangeStatus",
       "handled_at": "null|string",
-      "suggestions": "array"
+      "suggestions": "array",
+      "source": "string"
     },
     "ClientChangeStatusPatch": {
       "status": "ChangeStatus"
@@ -4595,6 +4599,16 @@
     },
     "DownloadUrlResponse": {
       "signed_get_url": "string"
+    },
+    "DqSignalsRead": {
+      "found": "integer",
+      "recorded": "integer",
+      "already_in_feed": "integer",
+      "not_client_related": "integer",
+      "unparsed": "integer",
+      "deferred": "integer",
+      "truncated": "boolean",
+      "summary": "string"
     },
     "DryRunEvent": {
       "event_type": "string",

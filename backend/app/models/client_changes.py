@@ -52,7 +52,8 @@ class ClientChange(TenantBaseModel, SoftDeleteMixin):
     # выгрузке 1С» проверяются по-разному, а без пометки лента выглядит так,
     # будто всё внесено руками.
     source: Mapped[str] = mapped_column(String(16), nullable=False, default="manual")
-    #: На что ссылается источник: для импорта — id партии. Внешнего ключа нет
-    #: намеренно: источников будет больше одного (Data Quality, правила), и FK
-    #: на «любую таблицу» не бывает — тот же довод, что у ``ImportRow``.
-    source_ref: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    #: На что ссылается источник: для импорта — id партии, для Data Quality —
+    #: составная личность находки ``dq:<сущность>:<id>:<дата>`` (срез-3, cf03).
+    #: Внешнего ключа нет намеренно: источников больше одного, и FK на «любую
+    #: таблицу» не бывает — тот же довод, что у ``ImportRow``.
+    source_ref: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
