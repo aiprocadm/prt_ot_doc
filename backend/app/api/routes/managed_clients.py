@@ -36,7 +36,10 @@ from app.domains.managed_clients.access import (
     validate_grant,
 )
 from app.domains.managed_clients.attention import AggregationStatus, Severity
-from app.domains.managed_clients.attention_service import collect_portfolio_attention
+from app.domains.managed_clients.attention_service import (
+    DEDICATED_REASON,
+    collect_portfolio_attention,
+)
 from app.domains.managed_clients.calendar import CalendarFilters, DeadlineKind, group_by_date
 from app.domains.managed_clients.calendar_service import collect_portfolio_deadlines
 from app.domains.managed_clients.change_feed import (
@@ -71,6 +74,8 @@ from app.domains.managed_clients.lifecycle import (
     validate_conversion_to_dedicated,
     validate_mode_binding,
 )
+from app.domains.managed_clients.readiness import build_directions, worst_light
+from app.domains.managed_clients.readiness_service import collect_client_numbers
 from app.domains.managed_clients.scope import scoped_section_titles
 from app.domains.managed_clients.session_service import (
     close_open_sessions,
@@ -118,6 +123,7 @@ from app.schemas.managed_clients import (
     ClientChangeRead,
     ClientChangeStatusPatch,
     ClientContextRead,
+    ClientReadinessRead,
     ConsentCreate,
     ConsentRead,
     ConsentRevoke,
@@ -128,6 +134,7 @@ from app.schemas.managed_clients import (
     CrossClientCalendarResponse,
     DeadlineDayRead,
     DeadlineEventRead,
+    DirectionReadinessRead,
     DqSignalsRead,
     ManagedClientCreate,
     ManagedClientRead,
@@ -1840,6 +1847,62 @@ async def set_client_change_status(
     await session.commit()
     await session.refresh(row)
     return _change_read(row)
+
+
+@router.get("/{mcid}/readiness", response_model=ClientReadinessRead)
+async def get_client_readiness(
+    mcid: str,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: Access,
+) -> ClientReadinessRead:
+    """Светофор соответствия клиента: факт против эталона (разд. 51.3).
+
+    Отличие от «Центра внимания»: тот показывает ПРОСРОЧКИ существующих
+    записей, а эталон — ОТСУТСТВИЕ положенного: сотрудник, которому по норме
+    должности положен медосмотр, а записи нет вовсе, во «внимании» не
+    появится никогда — там нечему просрочиваться.
+    """
+
+    TenantContextValidator.ensure_tenant_context(tenant)
+    await _require_enabled(session, tenant)
+    client = await _get(session, tenant, mcid)
+
+    if client.mode is ManagedClientMode.DEDICATED or not client.company_id:
+        return ClientReadinessRead(
+            client_id=client.id,
+            client_name=client.name,
+            aggregation="not_aggregated",
+            reason=DEDICATED_REASON,
+        )
+
+    numbers = await collect_client_numbers(
+        session, tenant_id=str(tenant.id), company_id=str(client.company_id)
+    )
+    rows = build_directions(
+        medical=numbers.medical,
+        ppe=numbers.ppe,
+        training_overdue=numbers.training_overdue,
+    )
+    return ClientReadinessRead(
+        client_id=client.id,
+        client_name=client.name,
+        aggregation="aggregated",
+        overall=worst_light(rows).value,
+        directions=[
+            DirectionReadinessRead(
+                direction=row.direction.value,
+                title=row.title,
+                light=row.light.value,
+                reason=row.reason,
+                required=row.counts.required,
+                missing=row.counts.missing,
+                lapsed=row.counts.lapsed,
+                expiring=row.counts.expiring,
+            )
+            for row in rows
+        ],
+    )
 
 
 def _dq_summary(outcome: DqSignalsOutcome) -> str:

@@ -412,6 +412,36 @@ class ClientChangeStatusPatch(BaseSchema):
     status: ChangeStatus
 
 
+class DirectionReadinessRead(BaseSchema):
+    """Одно направление светофора (BIZ-51 срез-5, разд. 51.3)."""
+
+    direction: str
+    title: str
+    #: green / yellow / red / not_measured. Последнее — не цвет, а честное
+    #: «эталона нет»: зелёный без эталона продавал бы тишину как благополучие.
+    light: str
+    #: Расшифровка обязательна: цвет без слов возвращает к гаданию.
+    reason: str
+    required: int
+    missing: int
+    lapsed: int
+    expiring: int
+
+
+class ClientReadinessRead(BaseSchema):
+    """Светофор соответствия клиента: факт против эталона."""
+
+    client_id: str
+    client_name: str
+    #: У Dedicated данные в другом арендаторе — честное not_aggregated,
+    #: как в «Центре внимания», а не тихие нули.
+    aggregation: str
+    reason: str | None = None
+    #: Итог по худшему ИЗМЕРЕННОМУ направлению; not_measured в итог не входит.
+    overall: str | None = None
+    directions: list[DirectionReadinessRead] = Field(default_factory=list)
+
+
 class DqSignalsRead(BaseSchema):
     """Итог сбора сигналов Data Quality (BIZ-51 срез-3, разд. 51.2).
 
