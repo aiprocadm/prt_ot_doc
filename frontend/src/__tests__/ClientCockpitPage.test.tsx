@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type {
+  ClientChangePage,
   CrossClientAttention,
   CrossClientCalendar,
   PortfolioPage,
@@ -17,6 +18,9 @@ const api = vi.hoisted(() => ({
   create: vi.fn(),
   update: vi.fn(),
   remove: vi.fn(),
+  changes: vi.fn(),
+  patchChangeStatus: vi.fn(),
+  collectDqSignals: vi.fn(),
 }));
 
 vi.mock("@/api/managedClients", async (importOriginal) => ({
@@ -207,6 +211,37 @@ const WORKLOAD: SpecialistWorkloadResponse = {
   ],
 };
 
+const FEED: ClientChangePage = {
+  items: [
+    {
+      id: "ch1",
+      kind: "employee_hired",
+      kind_title: "Принят новый сотрудник",
+      happened_on: "2026-08-10",
+      summary: "Принят: Петров Пётр",
+      details: "Замечено при загрузке кадровых данных.",
+      status: "new",
+      handled_at: null,
+      suggestions: ["Вводный и первичный инструктаж", "Направление на медосмотр"],
+      source: "import",
+    },
+    {
+      id: "ch2",
+      kind: "deadline_approaching",
+      kind_title: "Наступает срок",
+      happened_on: "2026-08-01",
+      summary: "Просрочен медосмотр: Иванов Иван",
+      details: "Найдено проверкой качества данных.",
+      status: "handled",
+      handled_at: "2026-08-11T00:00:00Z",
+      suggestions: ["Задача на продление"],
+      source: "data_quality",
+    },
+  ],
+  total: 2,
+  summary: "Требуют внимания: 1 из 2",
+};
+
 beforeEach(() => {
   Object.values(api).forEach((fn) => fn.mockReset());
   api.portfolio.mockResolvedValue(PORTFOLIO);
@@ -214,6 +249,19 @@ beforeEach(() => {
   api.calendar.mockResolvedValue(CALENDAR);
   api.workload.mockResolvedValue(WORKLOAD);
   api.create.mockResolvedValue({ id: "mc3" });
+  api.changes.mockResolvedValue(FEED);
+  api.patchChangeStatus.mockResolvedValue(FEED.items[0]);
+  api.collectDqSignals.mockResolvedValue({
+    found: 3,
+    recorded: 1,
+    already_in_feed: 1,
+    not_client_related: 1,
+    unparsed: 0,
+    deferred: 0,
+    truncated: false,
+    summary:
+      "Найдено просрочек: 3, записано в ленты: 1, уже в лентах: 1, не про клиентов: 1",
+  });
 });
 
 describe("ClientCockpitPage", () => {
@@ -412,5 +460,107 @@ describe("ClientCockpitPage", () => {
     expect(screen.getByText("Без ответственного")).toBeInTheDocument();
     expect(screen.getByText(/Без ответственного:/)).toBeInTheDocument();
     expect(screen.getAllByTestId("workload-row")).toHaveLength(2);
+  });
+});
+
+describe("Лента изменений (BIZ-51)", () => {
+  it("лента грузится по первому клиенту сама и показывает записи с подсказками", async () => {
+    render(<ClientCockpitPage />);
+    await waitFor(() =>
+      expect(screen.getByTestId("feed-table")).toBeInTheDocument(),
+    );
+
+    expect(api.changes).toHaveBeenCalledWith("mc1");
+    expect(screen.getByTestId("feed-summary")).toHaveTextContent(
+      "Требуют внимания: 1 из 2",
+    );
+    const table = within(screen.getByTestId("feed-table"));
+    expect(table.getByText("Принят: Петров Пётр")).toBeInTheDocument();
+    // Подсказки «что теперь делать» видны сразу — это смысл ленты.
+    expect(
+      table.getByText(/Вводный и первичный инструктаж/),
+    ).toBeInTheDocument();
+    // Источник подписан по-человечески: доверие к записям разное.
+    expect(table.getByText("Импорт данных")).toBeInTheDocument();
+    expect(table.getByText("Качество данных")).toBeInTheDocument();
+  });
+
+  it("смена клиента перезагружает ленту выбранного", async () => {
+    render(<ClientCockpitPage />);
+    await waitFor(() =>
+      expect(screen.getByTestId("feed-table")).toBeInTheDocument(),
+    );
+
+    await userEvent.selectOptions(
+      screen.getByTestId("feed-client-select"),
+      "mc2",
+    );
+
+    await waitFor(() => expect(api.changes).toHaveBeenCalledWith("mc2"));
+  });
+
+  it("«Разобрано» зовёт сервер и перечитывает ленту", async () => {
+    render(<ClientCockpitPage />);
+    await waitFor(() =>
+      expect(screen.getByTestId("feed-table")).toBeInTheDocument(),
+    );
+    api.changes.mockClear();
+
+    await userEvent.click(screen.getByRole("button", { name: "Разобрано" }));
+
+    await waitFor(() =>
+      expect(api.patchChangeStatus).toHaveBeenCalledWith(
+        "mc1",
+        "ch1",
+        "handled",
+      ),
+    );
+    await waitFor(() => expect(api.changes).toHaveBeenCalled());
+  });
+
+  it("разобранная запись предлагает «Вернуть», а не повторный разбор", async () => {
+    render(<ClientCockpitPage />);
+    await waitFor(() =>
+      expect(screen.getByTestId("feed-table")).toBeInTheDocument(),
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Вернуть" }));
+
+    await waitFor(() =>
+      expect(api.patchChangeStatus).toHaveBeenCalledWith("mc1", "ch2", "new"),
+    );
+  });
+
+  it("сбор сигналов качества показывает честный итог НА ЭКРАНЕ", async () => {
+    render(<ClientCockpitPage />);
+    await waitFor(() =>
+      expect(screen.getByTestId("feed-table")).toBeInTheDocument(),
+    );
+    api.changes.mockClear();
+
+    await userEvent.click(screen.getByTestId("collect-dq-button"));
+
+    await waitFor(() =>
+      expect(screen.getByTestId("dq-collect-result")).toHaveTextContent(
+        "не про клиентов: 1",
+      ),
+    );
+    // После сбора лента перечитывается — новые записи видны без F5.
+    await waitFor(() => expect(api.changes).toHaveBeenCalled());
+  });
+
+  it("пустая лента объяснена словами, а не пустым местом", async () => {
+    api.changes.mockResolvedValue({
+      items: [],
+      total: 0,
+      summary: "Изменений не зафиксировано",
+    });
+    render(<ClientCockpitPage />);
+
+    await waitFor(() =>
+      expect(
+        screen.getAllByText(/Изменений не зафиксировано/).length,
+      ).toBeGreaterThan(0),
+    );
   });
 });

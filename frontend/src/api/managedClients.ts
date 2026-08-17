@@ -163,6 +163,56 @@ export interface SpecialistWorkloadResponse {
   items: SpecialistWorkload[];
 }
 
+// BIZ-51: лента изменений у клиента (разд. 51.1–51.2).
+
+export type ClientChangeKind =
+  | "employee_hired"
+  | "employee_left"
+  | "position_added"
+  | "site_added"
+  | "org_structure_changed"
+  | "activity_changed"
+  | "deadline_approaching"
+  | "regulation_changed";
+
+export type ClientChangeStatus = "new" | "handled" | "dismissed";
+
+/** Откуда узнали об изменении: доверие к записям разное. */
+export type ClientChangeSource = "manual" | "import" | "data_quality";
+
+export interface ClientChange {
+  id: string;
+  kind: ClientChangeKind;
+  /** Человеческое название вида — приходит с сервера, вторую правду не заводим. */
+  kind_title: string;
+  happened_on: string;
+  summary: string;
+  details: string | null;
+  status: ClientChangeStatus;
+  handled_at: string | null;
+  /** «Что теперь делать» из таблицы разд. 51.1 — смысл ленты. */
+  suggestions: string[];
+  source: ClientChangeSource | string;
+}
+
+export interface ClientChangePage {
+  items: ClientChange[];
+  total: number;
+  summary: string;
+}
+
+/** Честный итог сбора сигналов Data Quality: слагаемые сходятся с found. */
+export interface DqSignalsResult {
+  found: number;
+  recorded: number;
+  already_in_feed: number;
+  not_client_related: number;
+  unparsed: number;
+  deferred: number;
+  truncated: boolean;
+  summary: string;
+}
+
 export interface MyManagedClient {
   client_id: string;
   client_name: string;
@@ -309,5 +359,41 @@ export const managedClientsApi = {
 
   async remove(id: string): Promise<void> {
     await apiClient.delete(`${base}/${id}`);
+  },
+
+  /** Лента изменений клиента: свежие сверху (разд. 51.1). */
+  async changes(
+    clientId: string,
+    params: { status?: ClientChangeStatus; limit?: number; offset?: number } = {},
+  ): Promise<ClientChangePage> {
+    const r = await apiClient.get<ClientChangePage>(
+      `${base}/${clientId}/changes`,
+      { params, ...silent },
+    );
+    return r.data;
+  },
+
+  /** Разобрать/отклонить запись или вернуть её в новые. */
+  async patchChangeStatus(
+    clientId: string,
+    changeId: string,
+    status: ClientChangeStatus,
+  ): Promise<ClientChange> {
+    return (
+      await apiClient.patch<ClientChange>(
+        `${base}/${clientId}/changes/${changeId}`,
+        { status },
+      )
+    ).data;
+  },
+
+  /**
+   * Собрать просрочки из проверок качества данных в ленты (разд. 51.2).
+   * Повторный вызов безвреден по построению: личность находки включает дату
+   * истечения, уже записанное сервер отсеивает сам.
+   */
+  async collectDqSignals(): Promise<DqSignalsResult> {
+    return (await apiClient.post<DqSignalsResult>(`${base}/dq-signals`, {}))
+      .data;
   },
 };

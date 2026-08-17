@@ -4,6 +4,8 @@ import {
   MANAGED_CLIENTS_DISABLED,
   managedClientsApi,
   type ClientAttention,
+  type ClientChangePage,
+  type ClientChangeStatus,
   type CrossClientAttention,
   type CrossClientCalendar,
   type DeadlineKind,
@@ -356,6 +358,230 @@ const CalendarPanel = ({ clients }: CalendarPanelProps) => {
                   </div>
                 ))}
               </div>
+            )}
+          </>
+        ) : null}
+      </CardContent>
+    </Card>
+  );
+};
+
+// ── Лента изменений (BIZ-51, разд. 51.1–51.2) ──────────────────────────────
+
+const SOURCE_LABELS: Record<string, string> = {
+  manual: "Внесено вручную",
+  import: "Импорт данных",
+  data_quality: "Качество данных",
+};
+
+const CHANGE_STATUS_LABELS: Record<ClientChangeStatus, string> = {
+  new: "Новое",
+  handled: "Разобрано",
+  dismissed: "Отклонено",
+};
+
+const CHANGE_STATUS_VARIANT: Record<
+  ClientChangeStatus,
+  "default" | "secondary" | "outline"
+> = {
+  new: "default",
+  handled: "secondary",
+  dismissed: "outline",
+};
+
+interface ChangeFeedPanelProps {
+  clients: PortfolioItem[];
+}
+
+const ChangeFeedPanel = ({ clients }: ChangeFeedPanelProps) => {
+  const [clientId, setClientId] = useState("");
+  const [data, setData] = useState<ClientChangePage | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<ApiError | null>(null);
+  const [collecting, setCollecting] = useState(false);
+  const [collectSummary, setCollectSummary] = useState<string | null>(null);
+  const [collectError, setCollectError] = useState<ApiError | null>(null);
+
+  // Автовыбор первого клиента: пустая панель с приказом «выберите клиента»
+  // стоила бы лишний клик каждому открытию окна.
+  const effectiveClientId = clientId || clients[0]?.id || "";
+
+  const load = useCallback(async () => {
+    if (!effectiveClientId) {
+      setData(null);
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      setData(await managedClientsApi.changes(effectiveClientId));
+    } catch (err) {
+      setError(asApiError(err, "Не удалось загрузить ленту изменений"));
+    } finally {
+      setLoading(false);
+    }
+  }, [effectiveClientId]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const setStatus = async (changeId: string, status: ClientChangeStatus) => {
+    // Ошибку покажет глобальный тост; лента просто останется прежней.
+    await managedClientsApi
+      .patchChangeStatus(effectiveClientId, changeId, status)
+      .then(load)
+      .catch(() => undefined);
+  };
+
+  const collect = async () => {
+    setCollecting(true);
+    setCollectSummary(null);
+    setCollectError(null);
+    try {
+      const result = await managedClientsApi.collectDqSignals();
+      // Итог остаётся НА ЭКРАНЕ, а не в тосте: специалист читает слагаемые
+      // («уже в лентах», «не про клиентов») после того, как тост погас бы.
+      setCollectSummary(result.summary);
+      await load();
+    } catch (err) {
+      setCollectError(asApiError(err, "Не удалось собрать сигналы"));
+    } finally {
+      setCollecting(false);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <CardTitle className="text-base">Лента изменений</CardTitle>
+          {/* Вторичная кнопка намеренно: главные действия экрана не здесь
+              (бюджет UX: главных действий ≤ 2). */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void collect()}
+            disabled={collecting}
+            data-testid="collect-dq-button"
+          >
+            {collecting ? "Собираем…" : "Собрать сигналы качества данных"}
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="space-y-1">
+          <label className="text-xs text-muted-foreground" htmlFor="feed-client">
+            Клиент
+          </label>
+          <select
+            id="feed-client"
+            data-testid="feed-client-select"
+            className={selectClass}
+            value={effectiveClientId}
+            onChange={(e) => setClientId(e.target.value)}
+          >
+            {clients.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {collectSummary ? (
+          <p className="text-sm" data-testid="dq-collect-result">
+            {collectSummary}
+          </p>
+        ) : null}
+        <ErrorState error={collectError ?? undefined} onRetry={collect} />
+
+        <ErrorState error={error ?? undefined} onRetry={load} />
+        {loading ? <LoadingScreen label="Загрузка ленты" /> : null}
+        {!loading && !error && clients.length === 0 ? (
+          <EmptyState
+            title="Клиентов пока нет"
+            description="Лента изменений появится вместе с первым ведомым клиентом."
+          />
+        ) : null}
+        {!loading && !error && data ? (
+          <>
+            <p className="text-sm" data-testid="feed-summary">
+              {data.summary}
+            </p>
+            {data.items.length === 0 ? (
+              <EmptyState
+                title="Изменений не зафиксировано"
+                description="Сигналы приходят из импорта кадровых данных и проверок качества; запись руками — через API (экран — отдельным шагом)."
+              />
+            ) : (
+              <Table data-testid="feed-table">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Дата</TableHead>
+                    <TableHead>Изменение</TableHead>
+                    <TableHead>Источник</TableHead>
+                    <TableHead>Статус</TableHead>
+                    <TableHead>Действия</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {data.items.map((change) => (
+                    <TableRow key={change.id} data-testid="feed-row">
+                      <TableCell className="whitespace-nowrap align-top">
+                        {formatDate(change.happened_on)}
+                      </TableCell>
+                      <TableCell className="align-top">
+                        <div>{change.summary}</div>
+                        {/* Подсказки «что теперь делать» — смысл ленты
+                            (таблица разд. 51.1), прятать их в раскрывашку
+                            значило бы вернуть специалиста к гаданию. */}
+                        <div className="text-xs text-muted-foreground">
+                          {change.suggestions.join(" · ")}
+                        </div>
+                      </TableCell>
+                      <TableCell className="align-top text-sm text-muted-foreground">
+                        {SOURCE_LABELS[change.source] ?? change.source}
+                      </TableCell>
+                      <TableCell className="align-top">
+                        <Badge variant={CHANGE_STATUS_VARIANT[change.status]}>
+                          {CHANGE_STATUS_LABELS[change.status]}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="space-x-1 align-top whitespace-nowrap">
+                        {change.status === "new" ? (
+                          <>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => void setStatus(change.id, "handled")}
+                            >
+                              Разобрано
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() =>
+                                void setStatus(change.id, "dismissed")
+                              }
+                            >
+                              Отклонить
+                            </Button>
+                          </>
+                        ) : (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => void setStatus(change.id, "new")}
+                          >
+                            Вернуть
+                          </Button>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             )}
           </>
         ) : null}
@@ -785,6 +1011,9 @@ const ClientCockpitPage = () => {
           {/* Календарь — между «что горит» и портфелем: он про ближайшие
               действия, а список клиентов нужен уже для навигации. */}
           <CalendarPanel clients={portfolio?.items ?? []} />
+          {/* Лента — после календаря: сроки говорят «когда», лента — «что
+              изменилось и что теперь делать» (разд. 51.1). */}
+          <ChangeFeedPanel clients={portfolio?.items ?? []} />
           <PortfolioPanel
             data={portfolio}
             loading={loading}
