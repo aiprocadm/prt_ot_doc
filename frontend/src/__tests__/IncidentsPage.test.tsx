@@ -53,6 +53,7 @@ vi.mock("@/components/ui/dialog", () => ({
 
 import { PERMISSIONS } from "@/permissions/permissions";
 import IncidentsPage from "@/pages/incidents/IncidentsPage";
+import { uxBudgetDelta } from "@/test-utils/uxBudget";
 import { useAuthStore } from "@/stores/auth";
 
 const userWithIncidentCreate = {
@@ -100,6 +101,23 @@ describe("IncidentsPage", () => {
     });
     expect(screen.getByText("Травма")).toBeInTheDocument();
     expect(listMock).toHaveBeenCalledOnce();
+  });
+
+  it("экран в UX-бюджете, или долг записан явно (BIZ-60)", async () => {
+    listMock.mockResolvedValue({ items: [mockIncident], total: 1 });
+
+    render(
+      <MemoryRouter>
+        <IncidentsPage />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(screen.getByText("Падение с высоты")).toBeInTheDocument();
+    });
+
+    const budget = uxBudgetDelta(document.body, "IncidentsPage");
+    expect(budget.unexpected).toEqual([]);
+    expect(budget.stale).toEqual([]);
   });
 
   it("initializes status filter from query params", async () => {

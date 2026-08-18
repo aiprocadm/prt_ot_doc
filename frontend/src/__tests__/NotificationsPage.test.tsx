@@ -4,6 +4,7 @@ import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import NotificationsPage from "@/pages/notifications/NotificationsPage";
+import { uxBudgetDelta } from "@/test-utils/uxBudget";
 
 const getMock = vi.fn();
 const postMock = vi.fn();
@@ -93,6 +94,55 @@ describe("NotificationsPage", () => {
       name: /открыть связанную сущность/i,
     });
     expect(links[0]).toHaveAttribute("href", "/workflow/1");
+  });
+
+  it("экран в UX-бюджете, или долг записан явно (BIZ-60)", async () => {
+    // Моки в этом файле задаются в каждом тесте, не в beforeEach.
+    getMock.mockImplementation((url: string) => {
+      if (url === "/notifications/settings/me") {
+        return Promise.resolve({
+          data: {
+            email_enabled: true,
+            telegram_enabled: false,
+            inapp_enabled: true,
+            digest_mode: "daily",
+          },
+        });
+      }
+      return Promise.resolve({
+        data: {
+          unread_count: 1,
+          items: [
+            {
+              id: "n1",
+              title: "Approval due",
+              body: "Approve document",
+              type: "ApprovalDeadline",
+              status: "queued",
+              channel: "inapp",
+              priority: "critical",
+              is_read: false,
+              deeplink: "/workflow/1",
+            },
+          ],
+        },
+      });
+    });
+    postMock.mockResolvedValue({ data: { updated: 1 } });
+    putMock.mockResolvedValue({ data: {} });
+
+    render(
+      <MemoryRouter>
+        <NotificationsPage />
+      </MemoryRouter>,
+    );
+    await waitFor(() =>
+      expect(screen.getByText("Approval due")).toBeInTheDocument(),
+    );
+
+    const budget = uxBudgetDelta(document.body, "NotificationsPage");
+    expect(budget.unexpected).toEqual([]);
+    expect(budget.stale).toEqual([]);
   });
 
   it("shows action error and keeps notifications list visible when mark-read fails", async () => {

@@ -976,6 +976,7 @@ const PortfolioPanel = ({
   onRetry,
   onCreated,
 }: PortfolioPanelProps) => {
+  const [adding, setAdding] = useState(false);
   const [name, setName] = useState("");
   const [mode, setMode] = useState<ManagedClientMode>("lightweight");
   const [companyId, setCompanyId] = useState("");
@@ -999,6 +1000,7 @@ const PortfolioPanel = ({
       setName("");
       setCompanyId("");
       setTenantSlug("");
+      setAdding(false);
       onCreated();
     } catch (err) {
       setFormError(asApiError(err, "Не удалось добавить клиента"));
@@ -1010,9 +1012,17 @@ const PortfolioPanel = ({
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">Портфель клиентов</CardTitle>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <CardTitle className="text-base">Портфель клиентов</CardTitle>
+          {/* Форма скрыта до клика (BIZ-60): всегда видимые три поля выводили
+              экран из бюджета (8 полей при лимите 7). */}
+          <Button size="sm" onClick={() => setAdding((v) => !v)}>
+            {adding ? "Свернуть форму" : "Добавить клиента"}
+          </Button>
+        </div>
       </CardHeader>
       <CardContent className="space-y-3">
+        {adding ? (
         <form
           className="flex flex-wrap items-end gap-2"
           onSubmit={handleCreate}
@@ -1073,9 +1083,10 @@ const PortfolioPanel = ({
             </div>
           )}
           <Button type="submit" disabled={saving || !name.trim()}>
-            Добавить клиента
+            Сохранить клиента
           </Button>
         </form>
+        ) : null}
         <ErrorState error={formError ?? undefined} />
         <ErrorState error={error ?? undefined} onRetry={onRetry} />
         {loading ? <LoadingScreen label="Загрузка портфеля" /> : null}
