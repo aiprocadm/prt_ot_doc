@@ -155,6 +155,7 @@ from app.schemas.managed_clients import (
     WorkloadSummary,
     WorkloadThresholdsRead,
 )
+from app.services.client_change_signals import enqueue_change_recorded
 from app.services.client_dq_signals import DqSignalsOutcome, collect_dq_signals
 from app.services.tenants.bootstrap.service import BootstrapTenantService
 
@@ -1724,6 +1725,10 @@ async def record_client_change(
         status=ChangeStatus.NEW,
     )
     session.add(row)
+    await session.flush()
+    # Срез-9: запись ленты — событие (rules engine, вебхуки). До commit:
+    # строка и событие о ней — одна транзакция.
+    await enqueue_change_recorded(session, [row])
     await session.commit()
     await session.refresh(row)
     return _change_read(row)

@@ -44,6 +44,10 @@ class EventType(str, enum.Enum):
     # OPS-73 разд. 73.2 «уведомления потребителям API»: арендатор всё ещё
     # ходит в устаревшую поверхность — событие в его вебхуки.
     API_DEPRECATION_NOTICE = "api.deprecation_notice"
+    # BIZ-51 срез-9 (разд. 51.2, четвёртый источник): запись ленты изменений
+    # клиента — событие. Через него rules engine строит «если у клиента X,
+    # то создать задачу Y» в готовом конструкторе правил.
+    CLIENT_CHANGE_RECORDED = "managed_clients.change_recorded"
 
 
 class BaseEventPayload(BaseModel):
@@ -190,6 +194,21 @@ class InternalEventPayload(BaseEventPayload):
     metadata: Mapping[str, Any] = Field(default_factory=dict)
 
 
+class ClientChangeRecordedPayload(BaseEventPayload):
+    """BIZ-51 срез-9: в ленте клиента появилась запись (разд. 51.2).
+
+    Несёт то, на чём строятся условия правила: вид изменения, источник и
+    клиент. Текст сводки — для действий (тема задачи/уведомления).
+    """
+
+    change_id: str
+    managed_client_id: str
+    kind: str
+    summary: str
+    happened_on: str  # ISO-дата САМОГО изменения (правило среза-1)
+    source: str
+
+
 class ApiDeprecationNoticePayload(BaseEventPayload):
     """Разд. 73.2: машинное уведомление «вы на устаревшей поверхности»."""
 
@@ -301,6 +320,7 @@ _PAYLOADS: dict[EventType, type[BaseEventPayload]] = {
     EventType.CONTRACTOR_DOCUMENT_EXPIRED: InternalEventPayload,
     EventType.RULE_TRIGGERED: RuleTriggeredPayload,
     EventType.API_DEPRECATION_NOTICE: ApiDeprecationNoticePayload,
+    EventType.CLIENT_CHANGE_RECORDED: ClientChangeRecordedPayload,
 }
 
 
@@ -373,4 +393,8 @@ def dedupe_key_for(event_type: EventType, payload: BaseEventPayload) -> str:
         return payload.exam_id
     if isinstance(payload, (PersonSuspendedPayload, PersonReinstatedPayload)):
         return payload.suspension_id
+    if isinstance(payload, ClientChangeRecordedPayload):
+        # Запись ленты создаётся один раз (дедуп источников — на их стороне),
+        # поэтому её id и есть личность события.
+        return payload.change_id
     raise ValueError(f"Unsupported event payload for {event_type.value}")
