@@ -262,6 +262,7 @@
     "GET /api/v1/managed-clients/{mcid}",
     "GET /api/v1/managed-clients/{mcid}/access",
     "GET /api/v1/managed-clients/{mcid}/access-log",
+    "GET /api/v1/managed-clients/{mcid}/audit-reports",
     "GET /api/v1/managed-clients/{mcid}/changes",
     "GET /api/v1/managed-clients/{mcid}/consents",
     "GET /api/v1/managed-clients/{mcid}/readiness",
@@ -761,6 +762,7 @@
     "POST /api/v1/machine-keys/{item_id}/revoke",
     "POST /api/v1/machine-keys/{item_id}/rotate",
     "POST /api/v1/managed-clients",
+    "POST /api/v1/managed-clients/audit/run",
     "POST /api/v1/managed-clients/dq-signals",
     "POST /api/v1/managed-clients/{mcid}/access",
     "POST /api/v1/managed-clients/{mcid}/changes",
@@ -1546,6 +1548,7 @@
     "list_campaigns_api_v1_sout_get",
     "list_certificates_api_v1_training_certificates_get",
     "list_class_history_api_v1_sout_workplaces__wid__class_history_get",
+    "list_client_audit_reports_api_v1_managed_clients__mcid__audit_reports_get",
     "list_client_changes_api_v1_managed_clients__mcid__changes_get",
     "list_client_consents_api_v1_managed_clients__mcid__consents_get",
     "list_client_transfers_api_v1_managed_clients__mcid__transfers_get",
@@ -1856,6 +1859,7 @@
     "rollback_batch_api_v1_imports_batches__batch_id__rollback_post",
     "rotate_machine_key_api_v1_machine_keys__item_id__rotate_post",
     "rotate_webhook_secret_api_v1_webhooks_endpoints__webhook_id__rotate_secret_post",
+    "run_client_audit_api_v1_managed_clients_audit_run_post",
     "run_definition_api_v1_report_builder_definitions__definition_id__run_post",
     "run_pack_api_v1_packs_run_post",
     "run_pipeline_api_v1_pipelines__template_id__run_post",
@@ -2031,6 +2035,7 @@
     "AuditExportRead",
     "AuditLogEntry",
     "AuditLogHistory",
+    "AuditRunRead",
     "AutomationRuleBase",
     "AutomationRuleCreate",
     "AutomationRulePage",
@@ -2125,6 +2130,8 @@
     "ClientAccessLogEntry",
     "ClientAccessLogPage",
     "ClientAttentionRead",
+    "ClientAuditReportPage",
+    "ClientAuditReportRead",
     "ClientChangeCreate",
     "ClientChangeKind",
     "ClientChangePage",
@@ -3150,6 +3157,12 @@
       "total": "integer",
       "items": "array"
     },
+    "AuditRunRead": {
+      "created": "integer",
+      "already_current": "integer",
+      "skipped_dedicated": "integer",
+      "summary": "string"
+    },
     "AutomationRuleBase": {
       "name": "string",
       "description": "null|string",
@@ -3852,6 +3865,18 @@
       "total": "integer|null",
       "severity": "Severity|null",
       "reason": "null|string"
+    },
+    "ClientAuditReportPage": {
+      "items": "array",
+      "total": "integer"
+    },
+    "ClientAuditReportRead": {
+      "id": "string",
+      "period_start": "string",
+      "period_end": "string",
+      "overall": "string",
+      "summary": "string",
+      "payload": "object"
     },
     "ClientChangeCreate": {
       "kind": "ClientChangeKind",

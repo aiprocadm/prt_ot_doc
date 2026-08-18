@@ -17,6 +17,7 @@
     "generate_edo_protocol_job",
     "idempotency.cleanup",
     "imports.run_batch",
+    "managed_clients.audit.tick",
     "medical.contingent.tick",
     "notifications.dispatch",
     "notifications.dispatch_pending",

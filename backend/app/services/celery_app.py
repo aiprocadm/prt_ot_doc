@@ -80,6 +80,12 @@ celery_app.conf.beat_schedule = {
         "task": "medical.contingent.tick",
         "schedule": crontab(hour=3, minute=0),
     },
+    # BIZ-51 срез-7: еженедельная сверка «что изменилось, что просрочено,
+    # что нужно сделать» — как в ТЗ (разд. 51.3, «напр. еженедельно»).
+    "managed-clients-audit-weekly": {
+        "task": "managed_clients.audit.tick",
+        "schedule": crontab(hour=5, minute=0, day_of_week="mon"),
+    },
     "contractors-readiness-daily": {
         "task": "contractors.readiness.tick",
         "schedule": crontab(hour=3, minute=30),

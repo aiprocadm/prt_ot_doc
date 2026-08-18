@@ -1,10 +1,12 @@
-"""BIZ-51 срез-1 (Доп. №1 разд. 51.1): лента изменений у клиента."""
+"""BIZ-51 (Доп. №1 разд. 51): лента изменений у клиента и отчёты авто-аудита."""
 
 from __future__ import annotations
 
 from datetime import date, datetime
+from typing import Any
 
-from sqlalchemy import Date, DateTime, ForeignKey, Index, String, Text
+from sqlalchemy import JSON, Date, DateTime, ForeignKey, Index, String, Text
+from sqlalchemy.ext.mutable import MutableDict
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.domains.managed_clients.change_feed import ChangeStatus, ClientChangeKind
@@ -57,3 +59,41 @@ class ClientChange(TenantBaseModel, SoftDeleteMixin):
     #: Внешнего ключа нет намеренно: источников больше одного, и FK на «любую
     #: таблицу» не бывает — тот же довод, что у ``ImportRow``.
     source_ref: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+
+
+class ClientAuditReport(TenantBaseModel):
+    """Отчёт периодического авто-аудита по клиенту (BIZ-51 срез-7, разд. 51.3).
+
+    ТЗ: «регулярная сверка с формированием отчёта: что изменилось, что
+    просрочено, что нужно сделать». Отчёт — ЗАПИСЬ, а не пересчёт на лету:
+    ценность аудита в том, что видно состояние НА ДАТУ и его динамику между
+    неделями; пересчёт задним числом этого не даёт.
+    """
+
+    __tablename__ = "client_audit_report"
+    __table_args__ = (
+        # Отчёты читаются по клиенту, свежие сверху; и по этому же индексу
+        # ищется «отчёт за период уже есть» при дедупликации тика.
+        Index(
+            "ix_client_audit_report_feed",
+            "tenant_id",
+            "managed_client_id",
+            "period_end",
+        ),
+    )
+
+    managed_client_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("managed_client.id", ondelete="CASCADE"), nullable=False
+    )
+    period_start: Mapped[date] = mapped_column(Date, nullable=False)
+    period_end: Mapped[date] = mapped_column(Date, nullable=False)
+    #: Итог светофора на дату отчёта (green/yellow/red/not_measured) —
+    #: строкой, как в API: отдельный enum-тип в БД ради четырёх значений
+    #: означал бы миграцию типа при каждом новом состоянии.
+    overall: Mapped[str] = mapped_column(String(16), nullable=False)
+    #: Человеческий итог: «что изменилось, что просрочено, что нужно сделать».
+    summary: Mapped[str] = mapped_column(Text, nullable=False)
+    #: Структура отчёта (направления, числа, действия) — для экрана и выгрузки.
+    payload: Mapped[dict[str, Any]] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=False, default=dict
+    )

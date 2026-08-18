@@ -100,6 +100,44 @@ async def _medical_contingent_tick() -> int:
 
 
 @celery_app.task(
+    name="managed_clients.audit.tick",
+    autoretry_for=RETRYABLE_EXCEPTIONS,
+    retry_backoff=True,
+    retry_jitter=True,
+    max_retries=5,
+)
+def managed_clients_audit_tick() -> int:
+    """BIZ-51 срез-7: еженедельный авто-аудит клиентов (разд. 51.3)."""
+
+    return _run_coroutine(_managed_clients_audit_tick())
+
+
+async def _managed_clients_audit_tick() -> int:
+    from app.domains.managed_clients.audit_report_service import run_tenant_audit
+
+    today = datetime.now(tz=timezone.utc).date()
+    async with AsyncSessionLocal(tenant=settings.default_tenant_slug) as session:
+        tenants = list(
+            (await session.execute(select(Tenant).where(Tenant.is_active.is_(True))))
+            .scalars()
+            .all()
+        )
+    created = 0
+    # Изоляция арендаторов — как у _medical_contingent_tick: падение одного
+    # арендатора прерывает прогон, autoretry перезапустит; прогон идемпотентен
+    # (отчёт за ту же дату второй раз не пишется).
+    for tenant in tenants:
+        with tenant_context(tenant.slug):
+            ensure_tenant_schema(tenant.slug)
+            async with session_scope(tenant=tenant.slug) as session:
+                tenant_id, _scope = await _resolve_task_tenant_scope(session, tenant.slug)
+                outcome = await run_tenant_audit(session, tenant_id, today=today)
+                await session.commit()
+                created += outcome.created
+    return created
+
+
+@celery_app.task(
     name="contractors.readiness.tick",
     autoretry_for=RETRYABLE_EXCEPTIONS,
     retry_backoff=True,
