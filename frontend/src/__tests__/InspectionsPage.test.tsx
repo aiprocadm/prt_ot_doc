@@ -31,6 +31,7 @@ vi.mock("@/api/inspections", () => ({
 
 import { PERMISSIONS } from "@/permissions/permissions";
 import InspectionsPage from "@/pages/inspections/InspectionsPage";
+import { uxBudgetDelta } from "@/test-utils/uxBudget";
 import { useAuthStore } from "@/stores/auth";
 
 const userWithInspectionCreate = {
@@ -79,6 +80,23 @@ describe("InspectionsPage", () => {
     expect(screen.getByText("Плановая")).toBeInTheDocument();
     expect(screen.getAllByText("Запланирована").length).toBeGreaterThan(0);
     expect(listMock).toHaveBeenCalledOnce();
+  });
+
+  it("экран в UX-бюджете, или долг записан явно (BIZ-60)", async () => {
+    listMock.mockResolvedValue({ items: [mockInspection], total: 1 });
+
+    render(
+      <MemoryRouter>
+        <InspectionsPage />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(screen.getByText("Роструд")).toBeInTheDocument();
+    });
+
+    const budget = uxBudgetDelta(document.body, "InspectionsPage");
+    expect(budget.unexpected).toEqual([]);
+    expect(budget.stale).toEqual([]);
   });
 
   it("shows empty state when no inspections", async () => {

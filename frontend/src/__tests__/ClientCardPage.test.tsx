@@ -20,6 +20,7 @@ vi.mock("@/api/managedClients", async (importOriginal) => ({
 }));
 
 import ClientCardPage from "@/pages/managed-clients/ClientCardPage";
+import { uxBudgetDelta } from "@/test-utils/uxBudget";
 
 const CLIENT: ManagedClient = {
   id: "mc1",
@@ -119,6 +120,17 @@ describe("ClientCardPage (BIZ-51 срез-10)", () => {
     );
     // Список перечитан — свежий отчёт виден без F5.
     await waitFor(() => expect(api.auditReports).toHaveBeenCalled());
+  });
+
+  it("экран в UX-бюджете, или долг записан явно (BIZ-60)", async () => {
+    renderPage();
+    await waitFor(() =>
+      expect(screen.getAllByTestId("audit-report-row").length).toBe(2),
+    );
+
+    const budget = uxBudgetDelta(document.body, "ClientCardPage");
+    expect(budget.unexpected).toEqual([]);
+    expect(budget.stale).toEqual([]);
   });
 
   it("без отчётов объясняет, откуда они возьмутся", async () => {

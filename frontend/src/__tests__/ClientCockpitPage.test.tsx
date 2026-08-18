@@ -33,6 +33,7 @@ vi.mock("@/api/managedClients", async (importOriginal) => ({
 }));
 
 import ClientCockpitPage from "@/pages/managed-clients/ClientCockpitPage";
+import { uxBudgetDelta } from "@/test-utils/uxBudget";
 
 const PORTFOLIO: PortfolioPage = {
   items: [
@@ -349,6 +350,17 @@ describe("ClientCockpitPage", () => {
     ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
   });
 
+  it("экран в UX-бюджете, или долг записан явно (BIZ-60)", async () => {
+    render(<MemoryRouter><ClientCockpitPage /></MemoryRouter>);
+    await waitFor(() =>
+      expect(screen.getByTestId("portfolio-table")).toBeInTheDocument(),
+    );
+
+    const budget = uxBudgetDelta(document.body, "ClientCockpitPage");
+    expect(budget.unexpected).toEqual([]);
+    expect(budget.stale).toEqual([]);
+  });
+
   it("имя клиента в портфеле ведёт в карточку", async () => {
     render(<MemoryRouter><ClientCockpitPage /></MemoryRouter>);
     await waitFor(() =>
@@ -382,9 +394,11 @@ describe("ClientCockpitPage", () => {
       expect(screen.getByTestId("portfolio-summary")).toBeInTheDocument(),
     );
 
+    // Форма скрыта до клика (BIZ-60) — сначала раскрываем.
+    await user.click(screen.getByRole("button", { name: "Добавить клиента" }));
     await user.type(screen.getByLabelText("Название клиента"), "Новый клиент");
     await user.type(screen.getByLabelText("Организация клиента"), "comp-x");
-    await user.click(screen.getByRole("button", { name: "Добавить клиента" }));
+    await user.click(screen.getByRole("button", { name: "Сохранить клиента" }));
 
     await waitFor(() => expect(api.create).toHaveBeenCalled());
     expect(api.create.mock.calls[0][0]).toMatchObject({
@@ -403,6 +417,8 @@ describe("ClientCockpitPage", () => {
       expect(screen.getByTestId("portfolio-summary")).toBeInTheDocument(),
     );
 
+    // Форма скрыта до клика (BIZ-60) — сначала раскрываем.
+    await user.click(screen.getByRole("button", { name: "Добавить клиента" }));
     await user.selectOptions(
       screen.getByLabelText("Режим ведения"),
       "dedicated",

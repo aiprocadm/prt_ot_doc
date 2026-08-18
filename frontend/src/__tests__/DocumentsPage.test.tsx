@@ -65,6 +65,7 @@ vi.mock("@/stores/companies", () => ({
 }));
 
 import DocumentsPage from "@/pages/documents/DocumentsPage";
+import { uxBudgetDelta } from "@/test-utils/uxBudget";
 
 describe("DocumentsPage", () => {
   it("loads documents list and opens document card", async () => {
@@ -107,6 +108,43 @@ describe("DocumentsPage", () => {
     expect(
       screen.getByRole("heading", { name: /инструкция по от/i }),
     ).toBeInTheDocument();
+  });
+
+  it("экран в UX-бюджете, или долг записан явно (BIZ-60)", () => {
+    storeState.items = [mockDocument];
+    storeState.pagination = { page: 1, page_size: 10, total: 1 };
+    storeState.loading = false;
+    storeState.error = null;
+    useAuthStore.setState({
+      user: {
+        id: "user-10",
+        created_at: "2024-01-01",
+        updated_at: "2024-01-02",
+        email: "user@example.com",
+        full_name: "User",
+        roles: ["ot_specialist"],
+        permissions: [
+          PERMISSIONS.DOCUMENT_VIEW,
+          PERMISSIONS.DOCUMENT_EXPORT,
+          PERMISSIONS.DOCUMENT_SIGN,
+          PERMISSIONS.DOCUMENT_CREATE,
+        ],
+      },
+      loading: false,
+      error: null,
+      isAuthenticated: true,
+      initialized: true,
+    });
+    render(
+      <MemoryRouter>
+        <DocumentsPage />
+      </MemoryRouter>,
+    );
+    expect(listMock).toHaveBeenCalled();
+
+    const budget = uxBudgetDelta(document.body, "DocumentsPage");
+    expect(budget.unexpected).toEqual([]);
+    expect(budget.stale).toEqual([]);
   });
 
   it("does not crash when documents store contains malformed items or missing pagination", () => {

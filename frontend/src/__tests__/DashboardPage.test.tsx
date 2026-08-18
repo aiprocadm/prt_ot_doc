@@ -4,6 +4,7 @@ import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import DashboardPage from "@/pages/dashboard/DashboardPage";
+import { uxBudgetDelta } from "@/test-utils/uxBudget";
 import { PERMISSIONS } from "@/permissions/permissions";
 import { useAuthStore } from "@/stores/auth";
 
@@ -206,6 +207,19 @@ describe("DashboardPage", () => {
       within(taskInbox).queryByText("Просроченная задача"),
     ).not.toBeInTheDocument();
     expect(within(taskInbox).getByText("Активная задача")).toBeInTheDocument();
+  });
+
+  it("экран в UX-бюджете, или долг записан явно (BIZ-60)", () => {
+    render(
+      <MemoryRouter>
+        <DashboardPage />
+      </MemoryRouter>,
+    );
+    expect(screen.getByTestId("attention-panel")).toBeInTheDocument();
+
+    const budget = uxBudgetDelta(document.body, "DashboardPage");
+    expect(budget.unexpected).toEqual([]);
+    expect(budget.stale).toEqual([]);
   });
 
   it("shows disabled quick actions without document create permission", () => {
