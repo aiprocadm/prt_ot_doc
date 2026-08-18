@@ -165,4 +165,122 @@ describe("AttentionPanel", () => {
       await screen.findByText("Нет критичных нарушений"),
     ).toBeInTheDocument();
   });
+
+  // ── BIZ-54-57 срез-1: дисциплины и записи внимания (разд. 57.2) ──────────
+
+  const withDisciplines = () => ({
+    generated_at: "2026-08-18T00:00:00Z",
+    summary: {
+      overdue_tasks: 0,
+      due_soon_tasks: 0,
+      overdue_deadlines: 0,
+      pending_sync_batches: 0,
+      failed_sync_batches: 0,
+      readiness_blockers: 0,
+    },
+    items: [
+      {
+        item_type: "medical_exam",
+        id: "medical_exam:e1",
+        severity: "critical",
+        title: "Медосмотр: Иванов И.И.",
+        status: "overdue",
+        due_at: "2026-07-01T00:00:00Z",
+        entity_type: "medical_exam",
+        entity_id: "e1",
+        reason: "Срок прошёл",
+        discipline: "medical",
+      },
+      {
+        item_type: "task",
+        id: "t1",
+        severity: "critical",
+        title: "Просроченная задача",
+        status: "open",
+        due_at: "2026-07-02T00:00:00Z",
+        entity_type: null,
+        entity_id: null,
+        reason: "Задача просрочена",
+        discipline: null,
+      },
+    ],
+    blockers: [],
+    recommendations: [],
+    disciplines: [
+      {
+        code: "medical",
+        title: "Медосмотры",
+        measured: true,
+        overdue: 1,
+        due_soon: 0,
+        reason: null,
+      },
+      {
+        code: "ecology",
+        title: "Экология",
+        measured: false,
+        overdue: 0,
+        due_soon: 0,
+        reason: "Поимённый учёт экологии в системе не ведётся",
+      },
+    ],
+    unclassified_sources: ["Наряд-допуск: вид работ хранится свободной строкой"],
+  });
+
+  it("рисует записи внимания — раньше сервер считал список, который выбрасывался", async () => {
+    getAttentionMock.mockResolvedValueOnce(withDisciplines());
+
+    render(
+      <MemoryRouter>
+        <AttentionPanel />
+      </MemoryRouter>,
+    );
+
+    expect(
+      await screen.findByText("Медосмотр: Иванов И.И."),
+    ).toBeInTheDocument();
+    expect(screen.getAllByTestId("attention-item")).toHaveLength(2);
+    // Запись дисциплины подписана; задача без дисциплины бейджа не получает.
+    expect(screen.getByText("Медосмотры")).toBeInTheDocument();
+  });
+
+  it("неизмеряемая дисциплина говорит «учёт не ведётся», а не показывает ноль", async () => {
+    getAttentionMock.mockResolvedValueOnce(withDisciplines());
+
+    render(
+      <MemoryRouter>
+        <AttentionPanel />
+      </MemoryRouter>,
+    );
+
+    await screen.findByTestId("attention-disciplines");
+    const chips = screen.getAllByTestId("attention-discipline");
+    const ecology = chips.find((chip) => chip.textContent?.includes("Экология"));
+    expect(ecology).toBeDefined();
+    expect(ecology).toHaveTextContent("учёт не ведётся");
+    expect(ecology).not.toHaveTextContent("нарушений нет");
+    // Причина доступна как подсказка, а не спрятана.
+    expect(ecology).toHaveAttribute(
+      "title",
+      "Поимённый учёт экологии в системе не ведётся",
+    );
+  });
+
+  it("старый ответ без дисциплин не ломает панель", async () => {
+    const legacy = withDisciplines();
+    delete (legacy as { disciplines?: unknown }).disciplines;
+    delete (legacy as { unclassified_sources?: unknown }).unclassified_sources;
+    getAttentionMock.mockResolvedValueOnce(legacy);
+
+    render(
+      <MemoryRouter>
+        <AttentionPanel />
+      </MemoryRouter>,
+    );
+
+    expect(
+      await screen.findByText("Медосмотр: Иванов И.И."),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("attention-disciplines")).not.toBeInTheDocument();
+  });
 });

@@ -34,6 +34,13 @@ from __future__ import annotations
 import enum
 from dataclasses import dataclass, field
 
+from app.core.disciplines import (
+    DISCIPLINE_TITLES,
+    MEASURED_DISCIPLINES,
+    UNMEASURED_DISCIPLINES,
+    Discipline,
+)
+
 __all__ = [
     "Direction",
     "DirectionCounts",
@@ -60,45 +67,14 @@ class TrafficLight(str, enum.Enum):
     NOT_MEASURED = "not_measured"
 
 
-class Direction(str, enum.Enum):
-    """Направления светофора: измеримые сегодня + дисциплины ТЗ."""
-
-    MEDICAL = "medical"
-    PPE = "ppe"
-    TRAINING = "training"
-    FIRE_SAFETY = "fire_safety"
-    INDUSTRIAL_SAFETY = "industrial_safety"
-    ECOLOGY = "ecology"
-    CIVIL_DEFENSE = "civil_defense"
-    ROAD_SAFETY = "road_safety"
-
-
-DIRECTION_TITLES: dict[Direction, str] = {
-    Direction.MEDICAL: "Медосмотры",
-    Direction.PPE: "СИЗ",
-    Direction.TRAINING: "Обучение",
-    Direction.FIRE_SAFETY: "Пожарная безопасность",
-    Direction.INDUSTRIAL_SAFETY: "Промышленная безопасность",
-    Direction.ECOLOGY: "Экология",
-    Direction.CIVIL_DEFENSE: "ГО и ЧС",
-    Direction.ROAD_SAFETY: "БДД",
-}
-
-#: Направления, по которым в системе есть поимённые данные.
-MEASURED_DIRECTIONS: tuple[Direction, ...] = (
-    Direction.MEDICAL,
-    Direction.PPE,
-    Direction.TRAINING,
-)
-
-#: Дисциплины без поимённого учёта — отдаются с причиной, не с цветом.
-UNMEASURED_DIRECTIONS: dict[Direction, str] = {
-    Direction.FIRE_SAFETY: "Поимённый учёт пожарной безопасности в системе не ведётся",
-    Direction.INDUSTRIAL_SAFETY: "Поимённый учёт промышленной безопасности в системе не ведётся",
-    Direction.ECOLOGY: "Поимённый учёт экологии в системе не ведётся",
-    Direction.CIVIL_DEFENSE: "Поимённый учёт ГО и ЧС в системе не ведётся",
-    Direction.ROAD_SAFETY: "Поимённый учёт БДД в системе не ведётся",
-}
+#: Направления светофора — это дисциплины ТЗ (Доп. №1 разд. 54–57), и живут
+#: они в ядре: тот же словарь красит Центр внимания (BIZ-54-57 срез-1). Здесь
+#: только псевдонимы под местные имена — второй словарь с теми же словами
+#: разошёлся бы с первым на первой правке.
+Direction = Discipline
+DIRECTION_TITLES = DISCIPLINE_TITLES
+MEASURED_DIRECTIONS = MEASURED_DISCIPLINES
+UNMEASURED_DIRECTIONS = UNMEASURED_DISCIPLINES
 
 
 @dataclass(frozen=True)

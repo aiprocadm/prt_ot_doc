@@ -1,0 +1,96 @@
+"""BIZ-54-57 срез-1: словарь дисциплин Центра внимания (Доп. №1 разд. 57.2).
+
+Правила чистые — проверяются без базы. Закрепляется главное:
+
+* КАЖДЫЙ источник агрегатора календаря либо размечен дисциплиной, либо явно
+  назван неклассифицированным. Молча пропущенных быть не может: незамеченный
+  источник — это записи, которые не попадут ни в один разрез и исчезнут с
+  экрана без следа;
+* словарь дисциплин ЕДИНСТВЕННЫЙ на продукт: коды и названия в Центре внимания
+  и в светофоре клиента (BIZ-51) — один объект, а не две копии;
+* у каждой неизмеряемой дисциплины есть причина, а не ноль.
+"""
+
+from __future__ import annotations
+
+from app.core.disciplines import (
+    ATTENTION_SOURCES,
+    DISCIPLINE_TITLES,
+    MEASURED_DISCIPLINES,
+    PERSON_SCOPED_SOURCES,
+    SOURCE_DISCIPLINE,
+    UNCLASSIFIED_SOURCES,
+    UNMEASURED_DISCIPLINES,
+    Discipline,
+    discipline_of,
+)
+from app.services.calendar_aggregator import ALL_SOURCES
+
+
+class TestCoverage:
+    def test_каждый_источник_агрегатора_разобран(self) -> None:
+        """Ни один источник не пропущен молча."""
+
+        known = set(SOURCE_DISCIPLINE) | set(UNCLASSIFIED_SOURCES)
+        assert set(ALL_SOURCES) == known, (
+            "источник агрегатора не размечен и не назван неклассифицированным: "
+            f"{set(ALL_SOURCES) - known}"
+        )
+
+    def test_размеченное_и_неклассифицированное_не_пересекаются(self) -> None:
+        assert not (set(SOURCE_DISCIPLINE) & set(UNCLASSIFIED_SOURCES))
+
+    def test_у_каждого_неклассифицированного_есть_причина(self) -> None:
+        for source, reason in UNCLASSIFIED_SOURCES.items():
+            assert reason.strip(), f"источник {source} без причины"
+
+    def test_спрашиваем_только_размеченные_источники(self) -> None:
+        assert set(ATTENTION_SOURCES) == set(SOURCE_DISCIPLINE)
+
+    def test_персональное_сужение_объявлено_явно(self) -> None:
+        """Список источников с поимённым учётом — явный.
+
+        У остальных фильтр по человеку не применяется, и рабочая роль увидела
+        бы чужие записи: это утечка персональных данных, а не косметика.
+        """
+
+        assert PERSON_SCOPED_SOURCES <= set(ALL_SOURCES)
+        # Всё, что мы спрашиваем для Центра внимания, обязано уметь сужаться.
+        assert set(ATTENTION_SOURCES) <= PERSON_SCOPED_SOURCES
+
+
+class TestSingleSource:
+    """Словарь дисциплин один на продукт — сторож против копии."""
+
+    def test_светофор_клиента_берёт_те_же_дисциплины(self) -> None:
+        from app.domains.managed_clients import readiness
+
+        assert readiness.Direction is Discipline
+        assert readiness.DIRECTION_TITLES is DISCIPLINE_TITLES
+        assert readiness.UNMEASURED_DIRECTIONS is UNMEASURED_DISCIPLINES
+
+    def test_у_каждой_дисциплины_есть_название(self) -> None:
+        for code in Discipline:
+            assert DISCIPLINE_TITLES[code].strip()
+
+    def test_измеримые_и_неизмеримые_покрывают_все_дисциплины(self) -> None:
+        assert set(MEASURED_DISCIPLINES) | set(UNMEASURED_DISCIPLINES) == set(Discipline)
+        assert not (set(MEASURED_DISCIPLINES) & set(UNMEASURED_DISCIPLINES))
+
+    def test_у_каждой_неизмеримой_есть_причина(self) -> None:
+        for code, reason in UNMEASURED_DISCIPLINES.items():
+            assert "не ведётся" in reason, f"{code}: причина должна объяснять отсутствие"
+
+
+class TestDisciplineOf:
+    def test_размеченный_источник_даёт_дисциплину(self) -> None:
+        assert discipline_of("medical_exam") is Discipline.MEDICAL
+        assert discipline_of("ppe_issue") is Discipline.PPE
+        assert discipline_of("briefing_entry") is Discipline.TRAINING
+
+    def test_неклассифицированный_даёт_none(self) -> None:
+        assert discipline_of("permit") is None
+        assert discipline_of("inspection") is None
+
+    def test_незнакомый_источник_даёт_none(self) -> None:
+        assert discipline_of("что-то-новое") is None
