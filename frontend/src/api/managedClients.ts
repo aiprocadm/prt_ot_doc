@@ -239,6 +239,35 @@ export interface ClientReadiness {
   directions: DirectionReadiness[];
 }
 
+// BIZ-51 срез-7/10: отчёты авто-аудита (разд. 51.3).
+
+export interface ClientAuditReport {
+  id: string;
+  period_start: string;
+  period_end: string;
+  /** Итог светофора на дату отчёта. */
+  overall: TrafficLight | string;
+  /** «Что изменилось, что просрочено, что нужно сделать» — одним текстом. */
+  summary: string;
+  payload: {
+    actions?: string[];
+    [key: string]: unknown;
+  };
+}
+
+export interface ClientAuditReportPage {
+  items: ClientAuditReport[];
+  total: number;
+}
+
+/** Итог ручного прогона аудита — по слагаемым. */
+export interface AuditRunResult {
+  created: number;
+  already_current: number;
+  skipped_dedicated: number;
+  summary: string;
+}
+
 export interface MyManagedClient {
   client_id: string;
   client_name: string;
@@ -446,5 +475,34 @@ export const managedClientsApi = {
         silent,
       )
     ).data;
+  },
+
+  /** Карточка клиента. */
+  async get(clientId: string): Promise<ManagedClient> {
+    return (
+      await apiClient.get<ManagedClient>(`${base}/${clientId}`, silent)
+    ).data;
+  },
+
+  /** Отчёты авто-аудита клиента: свежие сверху (разд. 51.3). */
+  async auditReports(
+    clientId: string,
+    params: { limit?: number; offset?: number } = {},
+  ): Promise<ClientAuditReportPage> {
+    return (
+      await apiClient.get<ClientAuditReportPage>(
+        `${base}/${clientId}/audit-reports`,
+        { params, ...silent },
+      )
+    ).data;
+  },
+
+  /**
+   * Собрать отчёты авто-аудита сейчас (по всем клиентам арендатора).
+   * Повторный запуск в тот же день безвреден: отчёт за дату не пишется
+   * второй раз — сервер честно скажет «уже есть за сегодня».
+   */
+  async runAudit(): Promise<AuditRunResult> {
+    return (await apiClient.post<AuditRunResult>(`${base}/audit/run`, {})).data;
   },
 };

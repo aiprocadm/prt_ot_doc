@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 
 import {
   MANAGED_CLIENTS_DISABLED,
@@ -35,6 +36,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { LIGHT_LABELS, LIGHT_VARIANT } from "@/pages/managed-clients/lights";
 import type { ApiError } from "@/types/dto/common";
 import { formatDate } from "@/utils/datetime";
 
@@ -728,23 +730,6 @@ const ChangeFeedPanel = ({ clients }: ChangeFeedPanelProps) => {
 
 // ── Светофор соответствия (BIZ-51 срез-6, разд. 51.3) ──────────────────────
 
-const LIGHT_LABELS: Record<TrafficLight, string> = {
-  green: "В порядке",
-  yellow: "Истекает",
-  red: "Разрывы",
-  not_measured: "Не измеряется",
-};
-
-const LIGHT_VARIANT: Record<
-  TrafficLight,
-  "default" | "destructive" | "secondary" | "outline"
-> = {
-  red: "destructive",
-  yellow: "default",
-  green: "secondary",
-  not_measured: "outline",
-};
-
 interface ReadinessPanelProps {
   clients: PortfolioItem[];
 }
@@ -1139,7 +1124,16 @@ const PortfolioPanel = ({
                 <TableBody>
                   {data.items.map((item) => (
                     <TableRow key={item.id}>
-                      <TableCell className="font-medium">{item.name}</TableCell>
+                      <TableCell className="font-medium">
+                        {/* Имя ведёт в карточку: отчёты авто-аудита живут
+                            там — кокпит заполнен до предела (срез-6). */}
+                        <Link
+                          to={`/managed-clients/${item.id}`}
+                          className="underline-offset-4 hover:underline"
+                        >
+                          {item.name}
+                        </Link>
+                      </TableCell>
                       <TableCell className="text-muted-foreground">
                         {MODE_LABELS[item.mode] ?? item.mode}
                       </TableCell>
