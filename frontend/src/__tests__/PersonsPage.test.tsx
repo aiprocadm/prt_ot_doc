@@ -62,6 +62,7 @@ vi.mock("@/components/permissions/Can", () => ({
 }));
 
 import PersonsPage from "@/pages/persons/PersonsPage";
+import { uxBudgetDelta } from "@/test-utils/uxBudget";
 
 describe("PersonsPage", () => {
   it("renders employee profile tabs", async () => {
@@ -76,6 +77,19 @@ describe("PersonsPage", () => {
       await screen.findByRole("tab", { name: "Обучение" }),
     ).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "СИЗ" })).toBeInTheDocument();
+  });
+
+  it("экран в UX-бюджете, или долг записан явно (BIZ-60)", async () => {
+    render(
+      <MemoryRouter initialEntries={["/persons?person_id=person-1"]}>
+        <PersonsPage />
+      </MemoryRouter>,
+    );
+    await screen.findByRole("tab", { name: "Обучение" });
+
+    const budget = uxBudgetDelta(document.body, "PersonsPage");
+    expect(budget.unexpected).toEqual([]);
+    expect(budget.stale).toEqual([]);
   });
 
   it("restores focused person from query params", async () => {

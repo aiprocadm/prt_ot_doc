@@ -10,6 +10,7 @@ import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import CalendarPage from "@/pages/calendar/CalendarPage";
+import { uxBudgetDelta } from "@/test-utils/uxBudget";
 import type { CalendarEventsResponseDto } from "@/types/dto/calendar";
 
 const getEventsMock = vi.fn();
@@ -301,6 +302,17 @@ describe("CalendarPage", () => {
       include_fact: undefined,
       include_sla: undefined,
     });
+  });
+
+  it("экран в UX-бюджете, или долг записан явно (BIZ-60)", async () => {
+    getEventsMock.mockResolvedValueOnce(sampleResponse);
+
+    renderPage();
+    await screen.findByText("Медосмотр: Иванов И.И.");
+
+    const budget = uxBudgetDelta(document.body, "CalendarPage");
+    expect(budget.unexpected).toEqual([]);
+    expect(budget.stale).toEqual([]);
   });
 
   it("renders all 5 view toggles and switches view", async () => {

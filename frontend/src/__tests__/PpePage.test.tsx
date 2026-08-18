@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PERMISSIONS } from "@/permissions/permissions";
 import PpePage from "@/pages/ppe/PpePage";
+import { uxBudgetDelta } from "@/test-utils/uxBudget";
 import { useAuthStore } from "@/stores/auth";
 
 const getPpeOverviewMock = vi.fn();
@@ -100,6 +101,29 @@ describe("PpePage", () => {
     expect(
       await screen.findByRole("button", { name: /быстрая выдача/i }),
     ).toBeEnabled();
+  });
+
+  it("экран в UX-бюджете, или долг записан явно (BIZ-60)", async () => {
+    useAuthStore.setState({
+      user: {
+        ...baseUser,
+        permissions: [PERMISSIONS.PPE_VIEW, PERMISSIONS.PPE_ISSUE],
+      },
+      loading: false,
+      error: null,
+      isAuthenticated: true,
+      initialized: true,
+    });
+    render(
+      <MemoryRouter>
+        <PpePage />
+      </MemoryRouter>,
+    );
+    await screen.findByRole("button", { name: /быстрая выдача/i });
+
+    const budget = uxBudgetDelta(document.body, "PpePage");
+    expect(budget.unexpected).toEqual([]);
+    expect(budget.stale).toEqual([]);
   });
 
   it("applies status filter from query params", async () => {

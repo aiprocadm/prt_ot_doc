@@ -9,6 +9,7 @@ import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import WarehousePage from "@/pages/warehouse/WarehousePage";
+import { uxBudgetDelta } from "@/test-utils/uxBudget";
 
 const listLevelsMock = vi.fn();
 const listBatchesMock = vi.fn();
@@ -134,6 +135,29 @@ describe("WarehousePage", () => {
     );
     await waitFor(() => expect(screen.getByText("Каска")).toBeInTheDocument());
     expect(screen.getByText("Партий: 1")).toBeInTheDocument();
+  });
+
+  it("экран в UX-бюджете, или долг записан явно (BIZ-60)", async () => {
+    listLevelsMock.mockResolvedValue([
+      {
+        item_id: "i1",
+        item_name: "Каска",
+        total_quantity: 12,
+        batch_count: 2,
+        nearest_certificate_expiry: null,
+      },
+    ]);
+    listBatchesMock.mockResolvedValue([]);
+    render(
+      <MemoryRouter>
+        <WarehousePage />
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(screen.getByText("Каска")).toBeInTheDocument());
+
+    const budget = uxBudgetDelta(document.body, "WarehousePage");
+    expect(budget.unexpected).toEqual([]);
+    expect(budget.stale).toEqual([]);
   });
 
   it("renders recent movements", async () => {
