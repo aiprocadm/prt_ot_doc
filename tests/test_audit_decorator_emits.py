@@ -70,7 +70,13 @@ def test_every_decorated_handler_can_emit() -> None:
 
 
 async def _enable_warehouse(sessionmaker, data_factory: TestDataFactory) -> None:
-    """Mirrors ``tests/api/test_ppe_persistence_regression.py``."""
+    """Mirrors ``tests/api/test_ppe_persistence_regression.py``.
+
+    Выдача заводится update-or-insert: ``Feature`` — ОБЩИЙ справочник, а строка
+    выдачи у пары (арендатор, фича) одна. Голый ``add`` падал
+    ``UNIQUE constraint failed`` всякий раз, когда выдача уже существовала
+    (её создаёт conftest или соседний тест) — правило проекта из волны BIZ-61.
+    """
 
     async with sessionmaker() as session:
         tenant = await data_factory.ensure_tenant(session=session)
@@ -81,7 +87,20 @@ async def _enable_warehouse(sessionmaker, data_factory: TestDataFactory) -> None
             feature = Feature(code="warehouse", title="Warehouse")
             session.add(feature)
             await session.flush()
-        session.add(FeatureEnablement(tenant_id=tenant.id, feature_id=feature.id, on=True))
+        grant = (
+            await session.execute(
+                select(FeatureEnablement).where(
+                    FeatureEnablement.tenant_id == tenant.id,
+                    FeatureEnablement.feature_id == feature.id,
+                )
+            )
+        ).scalar_one_or_none()
+        if grant is None:
+            session.add(
+                FeatureEnablement(tenant_id=tenant.id, feature_id=feature.id, on=True)
+            )
+        else:
+            grant.on = True
         await session.commit()
 
 

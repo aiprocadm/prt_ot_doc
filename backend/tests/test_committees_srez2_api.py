@@ -18,6 +18,21 @@ from app.schemas.committees import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _flag_on(monkeypatch):
+    """Модуль комитетов включён (канон — tests/test_committees_srez4_api.py).
+
+    Эти тесты проверяют КОНТРАКТ ручек на замоканной сессии, а не гейт модуля
+    (он покрыт отдельно в backend/tests/test_committees_flag_and_isolation.py).
+    Без подмены настоящая ``is_module_enabled`` исполняется на AsyncMock-сессии:
+    после волны BIZ-61 срез-3 она читает ПАРУ ``(on, expires_at)``, и распаковка
+    мока падает ``ValueError: not enough values to unpack`` либо гейт отвечает
+    404 вместо ожидаемого 409.
+    """
+
+    monkeypatch.setattr(routes, "is_module_enabled", AsyncMock(return_value=True))
+
+
 def _tenant():
     return SimpleNamespace(id="tenant-1", is_active=True, slug="t1")
 
