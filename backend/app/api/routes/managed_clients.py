@@ -40,6 +40,7 @@ from app.domains.managed_clients.attention_service import (
     DEDICATED_REASON,
     collect_portfolio_attention,
 )
+from app.domains.managed_clients.audit_report_service import run_tenant_audit
 from app.domains.managed_clients.calendar import CalendarFilters, DeadlineKind, group_by_date
 from app.domains.managed_clients.calendar_service import collect_portfolio_deadlines
 from app.domains.managed_clients.change_feed import (
@@ -98,7 +99,7 @@ from app.domains.managed_clients.workload import DEFAULT_THRESHOLDS, OVERLOAD_RE
 from app.domains.managed_clients.workload_service import collect_specialist_workload
 from app.domains.reseller import TenantNode, inherited_parent_for_spawned_tenant
 from app.models.audit_log import AuditLog
-from app.models.client_changes import ClientChange
+from app.models.client_changes import ClientAuditReport, ClientChange
 from app.models.identity import User
 from app.models.managed_clients import (
     ManagedClient,
@@ -114,10 +115,13 @@ from app.schemas.managed_clients import (
     AccessGrantCreate,
     AccessGrantRead,
     AttentionSignalRead,
+    AuditRunRead,
     CalendarSummary,
     ClientAccessLogEntry,
     ClientAccessLogPage,
     ClientAttentionRead,
+    ClientAuditReportPage,
+    ClientAuditReportRead,
     ClientChangeCreate,
     ClientChangePage,
     ClientChangeRead,
@@ -1902,6 +1906,93 @@ async def get_client_readiness(
             )
             for row in rows
         ],
+    )
+
+
+@router.post("/audit/run", response_model=AuditRunRead)
+@audit_operation("create", "client_audit_report")
+async def run_client_audit(
+    tenant: TenantDep,
+    session: SessionDep,
+    access: Access,
+) -> AuditRunRead:
+    """Собрать отчёты авто-аудита по всем клиентам сейчас (разд. 51.3).
+
+    Регулярно то же самое делает еженедельный тик
+    (``managed_clients.audit.tick``); ручной запуск нужен, чтобы «раз в
+    неделю» было проверяемо человеком, а не предметом веры. Повторный запуск
+    в тот же день безвреден: отчёт за дату не пишется второй раз.
+    """
+
+    TenantContextValidator.ensure_tenant_context(tenant)
+    await _require_enabled(session, tenant)
+
+    outcome = await run_tenant_audit(session, str(tenant.id))
+    await session.commit()
+    parts = [f"Создано отчётов: {outcome.created}"]
+    if outcome.already_current:
+        parts.append(f"уже есть за сегодня: {outcome.already_current}")
+    if outcome.skipped_dedicated:
+        parts.append(f"пропущено (свой контур): {outcome.skipped_dedicated}")
+    return AuditRunRead(
+        created=outcome.created,
+        already_current=outcome.already_current,
+        skipped_dedicated=outcome.skipped_dedicated,
+        summary=", ".join(parts),
+    )
+
+
+@router.get("/{mcid}/audit-reports", response_model=ClientAuditReportPage)
+async def list_client_audit_reports(
+    mcid: str,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: Access,
+    limit: Annotated[int, Query(ge=1, le=50)] = 12,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> ClientAuditReportPage:
+    """Отчёты авто-аудита клиента: свежие сверху (разд. 51.3)."""
+
+    TenantContextValidator.ensure_tenant_context(tenant)
+    await _require_enabled(session, tenant)
+    await _get(session, tenant, mcid)
+
+    where = (
+        ClientAuditReport.tenant_id == tenant.id,
+        ClientAuditReport.managed_client_id == mcid,
+    )
+    total = int(
+        (
+            await session.execute(select(func.count()).where(*where))
+        ).scalar_one()
+        or 0
+    )
+    rows = (
+        (
+            await session.execute(
+                select(ClientAuditReport)
+                .where(*where)
+                .order_by(ClientAuditReport.period_end.desc())
+                .limit(limit)
+                .offset(offset)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return ClientAuditReportPage(
+        items=[
+            ClientAuditReportRead(
+                id=row.id,
+                period_start=row.period_start,
+                period_end=row.period_end,
+                overall=row.overall,
+                summary=row.summary,
+                payload=dict(row.payload or {}),
+            )
+            for row in rows
+        ],
+        total=total,
     )
 
 

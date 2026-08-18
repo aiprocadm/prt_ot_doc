@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+from typing import Any
 
 from pydantic import Field, field_validator
 
@@ -440,6 +441,36 @@ class ClientReadinessRead(BaseSchema):
     #: Итог по худшему ИЗМЕРЕННОМУ направлению; not_measured в итог не входит.
     overall: str | None = None
     directions: list[DirectionReadinessRead] = Field(default_factory=list)
+
+
+class ClientAuditReportRead(BaseSchema):
+    """Отчёт авто-аудита (BIZ-51 срез-7, разд. 51.3): снимок на дату."""
+
+    id: str
+    period_start: date
+    period_end: date
+    #: Итог светофора на дату отчёта (green/yellow/red/not_measured).
+    overall: str
+    #: «Что изменилось, что просрочено, что нужно сделать» — одним текстом.
+    summary: str
+    #: Структура отчёта (направления, числа, действия).
+    payload: dict[str, Any] = Field(default_factory=dict)
+
+
+class ClientAuditReportPage(BaseSchema):
+    items: list[ClientAuditReportRead]
+    total: int
+
+
+class AuditRunRead(BaseSchema):
+    """Итог ручного прогона аудита — по слагаемым, без молчаливых потерь."""
+
+    created: int
+    #: Отчёт за эту дату уже есть — второй раз не пишем (динамика без шума).
+    already_current: int
+    #: Данные Dedicated-клиентов живут в их контурах — пропуск назван числом.
+    skipped_dedicated: int
+    summary: str
 
 
 class DqSignalsRead(BaseSchema):
