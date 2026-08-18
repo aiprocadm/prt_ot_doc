@@ -213,6 +213,32 @@ export interface DqSignalsResult {
   summary: string;
 }
 
+// BIZ-51 срез-5: светофор соответствия (разд. 51.3).
+
+export type TrafficLight = "green" | "yellow" | "red" | "not_measured";
+
+export interface DirectionReadiness {
+  direction: string;
+  title: string;
+  light: TrafficLight;
+  /** Расшифровка обязательна: цвет без слов возвращает к гаданию. */
+  reason: string;
+  required: number;
+  missing: number;
+  lapsed: number;
+  expiring: number;
+}
+
+export interface ClientReadiness {
+  client_id: string;
+  client_name: string;
+  /** У Dedicated данные в другом арендаторе — честное not_aggregated. */
+  aggregation: "aggregated" | "not_aggregated" | string;
+  reason?: string | null;
+  overall?: TrafficLight | null;
+  directions: DirectionReadiness[];
+}
+
 export interface MyManagedClient {
   client_id: string;
   client_name: string;
@@ -395,5 +421,15 @@ export const managedClientsApi = {
   async collectDqSignals(): Promise<DqSignalsResult> {
     return (await apiClient.post<DqSignalsResult>(`${base}/dq-signals`, {}))
       .data;
+  },
+
+  /** Светофор соответствия клиента: факт против эталона (разд. 51.3). */
+  async readiness(clientId: string): Promise<ClientReadiness> {
+    return (
+      await apiClient.get<ClientReadiness>(
+        `${base}/${clientId}/readiness`,
+        silent,
+      )
+    ).data;
   },
 };

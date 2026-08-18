@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type {
   ClientChangePage,
+  ClientReadiness,
   CrossClientAttention,
   CrossClientCalendar,
   PortfolioPage,
@@ -21,6 +22,7 @@ const api = vi.hoisted(() => ({
   changes: vi.fn(),
   patchChangeStatus: vi.fn(),
   collectDqSignals: vi.fn(),
+  readiness: vi.fn(),
 }));
 
 vi.mock("@/api/managedClients", async (importOriginal) => ({
@@ -242,6 +244,45 @@ const FEED: ClientChangePage = {
   summary: "Требуют внимания: 1 из 2",
 };
 
+const READINESS: ClientReadiness = {
+  client_id: "mc1",
+  client_name: "ООО Ромашка",
+  aggregation: "aggregated",
+  overall: "red",
+  directions: [
+    {
+      direction: "medical",
+      title: "Медосмотры",
+      light: "red",
+      reason: "Разрывы с эталоном — не оформлено вовсе: 2",
+      required: 5,
+      missing: 2,
+      lapsed: 0,
+      expiring: 0,
+    },
+    {
+      direction: "ppe",
+      title: "СИЗ",
+      light: "green",
+      reason: "Всё положенное действует (3)",
+      required: 3,
+      missing: 0,
+      lapsed: 0,
+      expiring: 0,
+    },
+    {
+      direction: "ecology",
+      title: "Экология",
+      light: "not_measured",
+      reason: "Поимённый учёт экологии в системе не ведётся",
+      required: 0,
+      missing: 0,
+      lapsed: 0,
+      expiring: 0,
+    },
+  ],
+};
+
 beforeEach(() => {
   Object.values(api).forEach((fn) => fn.mockReset());
   api.portfolio.mockResolvedValue(PORTFOLIO);
@@ -251,6 +292,7 @@ beforeEach(() => {
   api.create.mockResolvedValue({ id: "mc3" });
   api.changes.mockResolvedValue(FEED);
   api.patchChangeStatus.mockResolvedValue(FEED.items[0]);
+  api.readiness.mockResolvedValue(READINESS);
   api.collectDqSignals.mockResolvedValue({
     found: 3,
     recorded: 1,
@@ -562,5 +604,70 @@ describe("Лента изменений (BIZ-51)", () => {
         screen.getAllByText(/Изменений не зафиксировано/).length,
       ).toBeGreaterThan(0),
     );
+  });
+});
+
+describe("Светофор соответствия (BIZ-51 срез-6)", () => {
+  it("светофор грузится по первому клиенту и показывает цвет с расшифровкой", async () => {
+    render(<ClientCockpitPage />);
+    await waitFor(() =>
+      expect(screen.getAllByTestId("readiness-row").length).toBeGreaterThan(0),
+    );
+
+    expect(api.readiness).toHaveBeenCalledWith("mc1");
+    const rows = screen.getAllByTestId("readiness-row");
+    expect(rows).toHaveLength(3);
+    // Красное направление несёт слова, а не только цвет.
+    expect(
+      within(rows[0]).getByText(/не оформлено вовсе: 2/),
+    ).toBeInTheDocument();
+    expect(within(rows[0]).getByText("Разрывы")).toBeInTheDocument();
+    // «Не измеряется» — с причиной, не выкрашено.
+    expect(within(rows[2]).getByText("Не измеряется")).toBeInTheDocument();
+    expect(within(rows[2]).getByText(/не ведётся/)).toBeInTheDocument();
+  });
+
+  it("итог по измеренному виден отдельной строкой", async () => {
+    render(<ClientCockpitPage />);
+    await waitFor(() =>
+      expect(screen.getByTestId("readiness-overall")).toBeInTheDocument(),
+    );
+
+    expect(
+      within(screen.getByTestId("readiness-overall")).getByText("Разрывы"),
+    ).toBeInTheDocument();
+  });
+
+  it("смена клиента перезагружает светофор", async () => {
+    render(<ClientCockpitPage />);
+    await waitFor(() =>
+      expect(screen.getByTestId("readiness-overall")).toBeInTheDocument(),
+    );
+
+    await userEvent.selectOptions(
+      screen.getByTestId("readiness-client-select"),
+      "mc2",
+    );
+
+    await waitFor(() => expect(api.readiness).toHaveBeenCalledWith("mc2"));
+  });
+
+  it("dedicated клиент — «данные не собраны», а не нули", async () => {
+    api.readiness.mockResolvedValue({
+      client_id: "mc2",
+      client_name: "АО Крупный",
+      aggregation: "not_aggregated",
+      reason: "Данные ведутся в отдельном контуре клиента",
+      overall: null,
+      directions: [],
+    });
+    render(<ClientCockpitPage />);
+
+    await waitFor(() =>
+      expect(
+        screen.getAllByText(/Данные ведутся в отдельном контуре/).length,
+      ).toBeGreaterThan(0),
+    );
+    expect(screen.queryByTestId("readiness-overall")).not.toBeInTheDocument();
   });
 });
