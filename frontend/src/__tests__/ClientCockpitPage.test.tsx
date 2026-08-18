@@ -20,6 +20,7 @@ const api = vi.hoisted(() => ({
   update: vi.fn(),
   remove: vi.fn(),
   changes: vi.fn(),
+  createChange: vi.fn(),
   patchChangeStatus: vi.fn(),
   collectDqSignals: vi.fn(),
   readiness: vi.fn(),
@@ -293,6 +294,7 @@ beforeEach(() => {
   api.changes.mockResolvedValue(FEED);
   api.patchChangeStatus.mockResolvedValue(FEED.items[0]);
   api.readiness.mockResolvedValue(READINESS);
+  api.createChange.mockResolvedValue(FEED.items[0]);
   api.collectDqSignals.mockResolvedValue({
     found: 3,
     recorded: 1,
@@ -604,6 +606,60 @@ describe("Лента изменений (BIZ-51)", () => {
         screen.getAllByText(/Изменений не зафиксировано/).length,
       ).toBeGreaterThan(0),
     );
+  });
+});
+
+describe("Ручная запись в ленту (BIZ-51 срез-8)", () => {
+  it("форма скрыта до клика и раскрывается кнопкой", async () => {
+    render(<ClientCockpitPage />);
+    await waitFor(() =>
+      expect(screen.getByTestId("feed-table")).toBeInTheDocument(),
+    );
+
+    expect(screen.queryByTestId("add-change-form")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByTestId("add-change-button"));
+    expect(screen.getByTestId("add-change-form")).toBeInTheDocument();
+  });
+
+  it("запись уходит на сервер с видом, датой и текстом, лента перечитывается", async () => {
+    render(<ClientCockpitPage />);
+    await waitFor(() =>
+      expect(screen.getByTestId("feed-table")).toBeInTheDocument(),
+    );
+    await userEvent.click(screen.getByTestId("add-change-button"));
+    api.changes.mockClear();
+
+    const form = within(screen.getByTestId("add-change-form"));
+    await userEvent.selectOptions(
+      form.getByLabelText("Что изменилось"),
+      "site_added",
+    );
+    await userEvent.type(form.getByLabelText("Что именно"), "Новый цех в Твери");
+    await userEvent.click(form.getByRole("button", { name: "Записать" }));
+
+    await waitFor(() =>
+      expect(api.createChange).toHaveBeenCalledWith(
+        "mc1",
+        expect.objectContaining({
+          kind: "site_added",
+          summary: "Новый цех в Твери",
+        }),
+      ),
+    );
+    await waitFor(() => expect(api.changes).toHaveBeenCalled());
+    // Форма свернулась: запись сделана, экран вернулся к ленте.
+    expect(screen.queryByTestId("add-change-form")).not.toBeInTheDocument();
+  });
+
+  it("без текста запись не уходит", async () => {
+    render(<ClientCockpitPage />);
+    await waitFor(() =>
+      expect(screen.getByTestId("feed-table")).toBeInTheDocument(),
+    );
+    await userEvent.click(screen.getByTestId("add-change-button"));
+
+    const form = within(screen.getByTestId("add-change-form"));
+    expect(form.getByRole("button", { name: "Записать" })).toBeDisabled();
   });
 });
 
