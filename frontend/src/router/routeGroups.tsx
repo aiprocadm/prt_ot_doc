@@ -11,6 +11,7 @@ import { searchAndFilesRoutes } from "@/router/features/searchAndFilesRoutes";
 import {
   ActivitiesPage,
   CommitteeKpiPage,
+  ClientCardPage,
   ClientCockpitPage,
   CommitteesPage,
   SoutPage,
@@ -597,6 +598,11 @@ export const buildProtectedRouteGroups = (): ReactElement[] => {
           key="/managed-clients"
           path="/managed-clients"
           element={<ClientCockpitPage />}
+        />,
+        <Route
+          key="/managed-clients/:clientId"
+          path="/managed-clients/:clientId"
+          element={<ClientCardPage />}
         />,
       ],
     },

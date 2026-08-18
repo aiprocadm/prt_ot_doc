@@ -175,6 +175,9 @@ export const CommitteesPage = lazy(
 export const ClientCockpitPage = lazy(
   () => import("@/pages/managed-clients/ClientCockpitPage"),
 );
+export const ClientCardPage = lazy(
+  () => import("@/pages/managed-clients/ClientCardPage"),
+);
 export const CommitteeKpiPage = lazy(
   () => import("@/pages/committees/CommitteeKpiPage"),
 );

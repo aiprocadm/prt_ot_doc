@@ -1,4 +1,5 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -310,7 +311,7 @@ beforeEach(() => {
 
 describe("ClientCockpitPage", () => {
   it("показывает сводку внимания и сигналы клиента", async () => {
-    render(<ClientCockpitPage />);
+    render(<MemoryRouter><ClientCockpitPage /></MemoryRouter>);
     await waitFor(() =>
       expect(screen.getByTestId("attention-summary")).toBeInTheDocument(),
     );
@@ -320,7 +321,7 @@ describe("ClientCockpitPage", () => {
   });
 
   it("клиент со своим контуром помечен «данные не собраны», а не нулём", async () => {
-    render(<ClientCockpitPage />);
+    render(<MemoryRouter><ClientCockpitPage /></MemoryRouter>);
     await waitFor(() =>
       expect(screen.getByTestId("attention-summary")).toBeInTheDocument(),
     );
@@ -334,7 +335,7 @@ describe("ClientCockpitPage", () => {
   });
 
   it("внимание идёт выше портфеля: окно открывают ради «где горит»", async () => {
-    render(<ClientCockpitPage />);
+    render(<MemoryRouter><ClientCockpitPage /></MemoryRouter>);
     await waitFor(() =>
       expect(screen.getByTestId("attention-summary")).toBeInTheDocument(),
     );
@@ -348,8 +349,21 @@ describe("ClientCockpitPage", () => {
     ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
   });
 
+  it("имя клиента в портфеле ведёт в карточку", async () => {
+    render(<MemoryRouter><ClientCockpitPage /></MemoryRouter>);
+    await waitFor(() =>
+      expect(screen.getByTestId("portfolio-table")).toBeInTheDocument(),
+    );
+
+    const link = within(screen.getByTestId("portfolio-table")).getByRole(
+      "link",
+      { name: "ООО Ромашка" },
+    );
+    expect(link).toHaveAttribute("href", "/managed-clients/mc1");
+  });
+
   it("в портфеле помечен истекающий договор", async () => {
-    render(<ClientCockpitPage />);
+    render(<MemoryRouter><ClientCockpitPage /></MemoryRouter>);
     await waitFor(() =>
       expect(screen.getByTestId("portfolio-summary")).toBeInTheDocument(),
     );
@@ -363,7 +377,7 @@ describe("ClientCockpitPage", () => {
 
   it("создаёт клиента и перезагружает окно", async () => {
     const user = userEvent.setup();
-    render(<ClientCockpitPage />);
+    render(<MemoryRouter><ClientCockpitPage /></MemoryRouter>);
     await waitFor(() =>
       expect(screen.getByTestId("portfolio-summary")).toBeInTheDocument(),
     );
@@ -384,7 +398,7 @@ describe("ClientCockpitPage", () => {
 
   it("для своего контура спрашивает slug, а не организацию", async () => {
     const user = userEvent.setup();
-    render(<ClientCockpitPage />);
+    render(<MemoryRouter><ClientCockpitPage /></MemoryRouter>);
     await waitFor(() =>
       expect(screen.getByTestId("portfolio-summary")).toBeInTheDocument(),
     );
@@ -409,7 +423,7 @@ describe("ClientCockpitPage", () => {
       code: "MANAGED_CLIENTS_DISABLED",
     });
 
-    render(<ClientCockpitPage />);
+    render(<MemoryRouter><ClientCockpitPage /></MemoryRouter>);
     await waitFor(() =>
       expect(screen.getByText("Модуль не подключён")).toBeInTheDocument(),
     );
@@ -422,7 +436,7 @@ describe("ClientCockpitPage", () => {
       message: "Внутренняя ошибка",
     });
 
-    render(<ClientCockpitPage />);
+    render(<MemoryRouter><ClientCockpitPage /></MemoryRouter>);
     await waitFor(() =>
       expect(screen.getByTestId("portfolio-summary")).toBeInTheDocument(),
     );
@@ -433,7 +447,7 @@ describe("ClientCockpitPage", () => {
   });
 
   it("показывает календарь дедлайнов с просрочкой", async () => {
-    render(<ClientCockpitPage />);
+    render(<MemoryRouter><ClientCockpitPage /></MemoryRouter>);
     await waitFor(() =>
       expect(screen.getByTestId("calendar-summary")).toBeInTheDocument(),
     );
@@ -446,7 +460,7 @@ describe("ClientCockpitPage", () => {
 
   it("фильтр по типу перезапрашивает календарь", async () => {
     const user = userEvent.setup();
-    render(<ClientCockpitPage />);
+    render(<MemoryRouter><ClientCockpitPage /></MemoryRouter>);
     await waitFor(() =>
       expect(screen.getByTestId("calendar-summary")).toBeInTheDocument(),
     );
@@ -461,7 +475,7 @@ describe("ClientCockpitPage", () => {
 
   it("фильтр «все типы» не шлёт лишний параметр", async () => {
     const user = userEvent.setup();
-    render(<ClientCockpitPage />);
+    render(<MemoryRouter><ClientCockpitPage /></MemoryRouter>);
     await waitFor(() =>
       expect(screen.getByTestId("calendar-summary")).toBeInTheDocument(),
     );
@@ -474,7 +488,7 @@ describe("ClientCockpitPage", () => {
   });
 
   it("показывает загрузку специалистов с причиной перегруза", async () => {
-    render(<ClientCockpitPage />);
+    render(<MemoryRouter><ClientCockpitPage /></MemoryRouter>);
     await waitFor(() =>
       expect(screen.getByTestId("workload-summary")).toBeInTheDocument(),
     );
@@ -488,7 +502,7 @@ describe("ClientCockpitPage", () => {
   });
 
   it("показывает пороги: «перегружен» без правила — повод для спора", async () => {
-    render(<ClientCockpitPage />);
+    render(<MemoryRouter><ClientCockpitPage /></MemoryRouter>);
     await waitFor(() =>
       expect(screen.getByTestId("workload-summary")).toBeInTheDocument(),
     );
@@ -496,7 +510,7 @@ describe("ClientCockpitPage", () => {
   });
 
   it("клиенты без ответственного видны отдельной строкой", async () => {
-    render(<ClientCockpitPage />);
+    render(<MemoryRouter><ClientCockpitPage /></MemoryRouter>);
     await waitFor(() =>
       expect(screen.getByTestId("workload-summary")).toBeInTheDocument(),
     );
@@ -509,7 +523,7 @@ describe("ClientCockpitPage", () => {
 
 describe("Лента изменений (BIZ-51)", () => {
   it("лента грузится по первому клиенту сама и показывает записи с подсказками", async () => {
-    render(<ClientCockpitPage />);
+    render(<MemoryRouter><ClientCockpitPage /></MemoryRouter>);
     await waitFor(() =>
       expect(screen.getByTestId("feed-table")).toBeInTheDocument(),
     );
@@ -530,7 +544,7 @@ describe("Лента изменений (BIZ-51)", () => {
   });
 
   it("смена клиента перезагружает ленту выбранного", async () => {
-    render(<ClientCockpitPage />);
+    render(<MemoryRouter><ClientCockpitPage /></MemoryRouter>);
     await waitFor(() =>
       expect(screen.getByTestId("feed-table")).toBeInTheDocument(),
     );
@@ -544,7 +558,7 @@ describe("Лента изменений (BIZ-51)", () => {
   });
 
   it("«Разобрано» зовёт сервер и перечитывает ленту", async () => {
-    render(<ClientCockpitPage />);
+    render(<MemoryRouter><ClientCockpitPage /></MemoryRouter>);
     await waitFor(() =>
       expect(screen.getByTestId("feed-table")).toBeInTheDocument(),
     );
@@ -563,7 +577,7 @@ describe("Лента изменений (BIZ-51)", () => {
   });
 
   it("разобранная запись предлагает «Вернуть», а не повторный разбор", async () => {
-    render(<ClientCockpitPage />);
+    render(<MemoryRouter><ClientCockpitPage /></MemoryRouter>);
     await waitFor(() =>
       expect(screen.getByTestId("feed-table")).toBeInTheDocument(),
     );
@@ -576,7 +590,7 @@ describe("Лента изменений (BIZ-51)", () => {
   });
 
   it("сбор сигналов качества показывает честный итог НА ЭКРАНЕ", async () => {
-    render(<ClientCockpitPage />);
+    render(<MemoryRouter><ClientCockpitPage /></MemoryRouter>);
     await waitFor(() =>
       expect(screen.getByTestId("feed-table")).toBeInTheDocument(),
     );
@@ -599,7 +613,7 @@ describe("Лента изменений (BIZ-51)", () => {
       total: 0,
       summary: "Изменений не зафиксировано",
     });
-    render(<ClientCockpitPage />);
+    render(<MemoryRouter><ClientCockpitPage /></MemoryRouter>);
 
     await waitFor(() =>
       expect(
@@ -611,7 +625,7 @@ describe("Лента изменений (BIZ-51)", () => {
 
 describe("Ручная запись в ленту (BIZ-51 срез-8)", () => {
   it("форма скрыта до клика и раскрывается кнопкой", async () => {
-    render(<ClientCockpitPage />);
+    render(<MemoryRouter><ClientCockpitPage /></MemoryRouter>);
     await waitFor(() =>
       expect(screen.getByTestId("feed-table")).toBeInTheDocument(),
     );
@@ -622,7 +636,7 @@ describe("Ручная запись в ленту (BIZ-51 срез-8)", () => {
   });
 
   it("запись уходит на сервер с видом, датой и текстом, лента перечитывается", async () => {
-    render(<ClientCockpitPage />);
+    render(<MemoryRouter><ClientCockpitPage /></MemoryRouter>);
     await waitFor(() =>
       expect(screen.getByTestId("feed-table")).toBeInTheDocument(),
     );
@@ -652,7 +666,7 @@ describe("Ручная запись в ленту (BIZ-51 срез-8)", () => {
   });
 
   it("без текста запись не уходит", async () => {
-    render(<ClientCockpitPage />);
+    render(<MemoryRouter><ClientCockpitPage /></MemoryRouter>);
     await waitFor(() =>
       expect(screen.getByTestId("feed-table")).toBeInTheDocument(),
     );
@@ -665,7 +679,7 @@ describe("Ручная запись в ленту (BIZ-51 срез-8)", () => {
 
 describe("Светофор соответствия (BIZ-51 срез-6)", () => {
   it("светофор грузится по первому клиенту и показывает цвет с расшифровкой", async () => {
-    render(<ClientCockpitPage />);
+    render(<MemoryRouter><ClientCockpitPage /></MemoryRouter>);
     await waitFor(() =>
       expect(screen.getAllByTestId("readiness-row").length).toBeGreaterThan(0),
     );
@@ -684,7 +698,7 @@ describe("Светофор соответствия (BIZ-51 срез-6)", () => 
   });
 
   it("итог по измеренному виден отдельной строкой", async () => {
-    render(<ClientCockpitPage />);
+    render(<MemoryRouter><ClientCockpitPage /></MemoryRouter>);
     await waitFor(() =>
       expect(screen.getByTestId("readiness-overall")).toBeInTheDocument(),
     );
@@ -695,7 +709,7 @@ describe("Светофор соответствия (BIZ-51 срез-6)", () => 
   });
 
   it("смена клиента перезагружает светофор", async () => {
-    render(<ClientCockpitPage />);
+    render(<MemoryRouter><ClientCockpitPage /></MemoryRouter>);
     await waitFor(() =>
       expect(screen.getByTestId("readiness-overall")).toBeInTheDocument(),
     );
@@ -717,7 +731,7 @@ describe("Светофор соответствия (BIZ-51 срез-6)", () => 
       overall: null,
       directions: [],
     });
-    render(<ClientCockpitPage />);
+    render(<MemoryRouter><ClientCockpitPage /></MemoryRouter>);
 
     await waitFor(() =>
       expect(
