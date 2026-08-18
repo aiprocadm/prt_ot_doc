@@ -4,6 +4,7 @@ import {
   MANAGED_CLIENTS_DISABLED,
   managedClientsApi,
   type ClientAttention,
+  type ClientChangeKind,
   type ClientChangePage,
   type ClientChangeStatus,
   type ClientReadiness,
@@ -376,6 +377,20 @@ const SOURCE_LABELS: Record<string, string> = {
   data_quality: "Качество данных",
 };
 
+//: Виды изменений для формы ручной записи (таблица разд. 51.1).
+//: `Record<ClientChangeKind, string>` намеренно: появись девятый вид на
+//: сервере и в типах — компилятор сам потребует подпись, словарь не отстанет.
+const CHANGE_KIND_LABELS: Record<ClientChangeKind, string> = {
+  employee_hired: "Принят новый сотрудник",
+  employee_left: "Уволен или переведён сотрудник",
+  position_added: "Новая должность или рабочее место",
+  site_added: "Новый объект или площадка",
+  org_structure_changed: "Изменение оргструктуры",
+  activity_changed: "Изменение вида деятельности или оборудования",
+  deadline_approaching: "Наступает срок",
+  regulation_changed: "Изменение НПА",
+};
+
 const CHANGE_STATUS_LABELS: Record<ClientChangeStatus, string> = {
   new: "Новое",
   handled: "Разобрано",
@@ -403,6 +418,17 @@ const ChangeFeedPanel = ({ clients }: ChangeFeedPanelProps) => {
   const [collecting, setCollecting] = useState(false);
   const [collectSummary, setCollectSummary] = useState<string | null>(null);
   const [collectError, setCollectError] = useState<ApiError | null>(null);
+  // Форма ручной записи — первый источник разд. 51.2. Скрыта до клика:
+  // всегда видимые четыре поля съели бы бюджет экрана (полей ≤ 7).
+  const [adding, setAdding] = useState(false);
+  const [newKind, setNewKind] = useState<ClientChangeKind>("employee_hired");
+  const [newDate, setNewDate] = useState(
+    () => new Date().toISOString().slice(0, 10),
+  );
+  const [newSummary, setNewSummary] = useState("");
+  const [newDetails, setNewDetails] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState<ApiError | null>(null);
 
   // Автовыбор первого клиента: пустая панель с приказом «выберите клиента»
   // стоила бы лишний клик каждому открытию окна.
@@ -453,22 +479,55 @@ const ChangeFeedPanel = ({ clients }: ChangeFeedPanelProps) => {
     }
   };
 
+  const handleAdd = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newSummary.trim() || !effectiveClientId) return;
+    setSaving(true);
+    setFormError(null);
+    try {
+      await managedClientsApi.createChange(effectiveClientId, {
+        kind: newKind,
+        happened_on: newDate,
+        summary: newSummary.trim(),
+        details: newDetails.trim() || null,
+      });
+      setNewSummary("");
+      setNewDetails("");
+      setAdding(false);
+      await load();
+    } catch (err) {
+      setFormError(asApiError(err, "Не удалось записать изменение"));
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <Card>
       <CardHeader>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <CardTitle className="text-base">Лента изменений</CardTitle>
-          {/* Вторичная кнопка намеренно: главные действия экрана не здесь
-              (бюджет UX: главных действий ≤ 2). */}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => void collect()}
-            disabled={collecting}
-            data-testid="collect-dq-button"
-          >
-            {collecting ? "Собираем…" : "Собрать сигналы качества данных"}
-          </Button>
+          {/* Обе кнопки вторичные намеренно: главные действия экрана не
+              здесь (бюджет UX: главных действий ≤ 2). */}
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setAdding((v) => !v)}
+              data-testid="add-change-button"
+            >
+              {adding ? "Свернуть форму" : "Добавить запись"}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void collect()}
+              disabled={collecting}
+              data-testid="collect-dq-button"
+            >
+              {collecting ? "Собираем…" : "Собрать сигналы качества данных"}
+            </Button>
+          </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -490,6 +549,81 @@ const ChangeFeedPanel = ({ clients }: ChangeFeedPanelProps) => {
             ))}
           </select>
         </div>
+
+        {adding ? (
+          <form
+            className="flex flex-wrap items-end gap-2"
+            onSubmit={handleAdd}
+            data-testid="add-change-form"
+          >
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground" htmlFor="chg-kind">
+                Что изменилось
+              </label>
+              <select
+                id="chg-kind"
+                className={selectClass}
+                value={newKind}
+                onChange={(e) => setNewKind(e.target.value as ClientChangeKind)}
+              >
+                {Object.entries(CHANGE_KIND_LABELS).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground" htmlFor="chg-date">
+                Дата изменения
+              </label>
+              {/* Дата САМОГО изменения, не записи: сроки считаются от неё
+                  (правило среза-1). */}
+              <Input
+                id="chg-date"
+                type="date"
+                value={newDate}
+                onChange={(e) => setNewDate(e.target.value)}
+              />
+            </div>
+            <div className="flex-1 min-w-[200px] space-y-1">
+              <label
+                className="text-xs text-muted-foreground"
+                htmlFor="chg-summary"
+              >
+                Что именно
+              </label>
+              <Input
+                id="chg-summary"
+                value={newSummary}
+                onChange={(e) => setNewSummary(e.target.value)}
+                placeholder="Принят слесарь Иванов"
+              />
+            </div>
+            <div className="flex-1 min-w-[200px] space-y-1">
+              <label
+                className="text-xs text-muted-foreground"
+                htmlFor="chg-details"
+              >
+                Подробности (необязательно)
+              </label>
+              <Input
+                id="chg-details"
+                value={newDetails}
+                onChange={(e) => setNewDetails(e.target.value)}
+              />
+            </div>
+            <Button
+              type="submit"
+              variant="outline"
+              size="sm"
+              disabled={saving || !newSummary.trim()}
+            >
+              Записать
+            </Button>
+          </form>
+        ) : null}
+        <ErrorState error={formError ?? undefined} />
 
         {collectSummary ? (
           <p className="text-sm" data-testid="dq-collect-result">

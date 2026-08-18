@@ -399,6 +399,21 @@ export const managedClientsApi = {
     return r.data;
   },
 
+  /** Зафиксировать изменение руками (разд. 51.1): первый источник ленты. */
+  async createChange(
+    clientId: string,
+    payload: {
+      kind: ClientChangeKind;
+      happened_on: string;
+      summary: string;
+      details?: string | null;
+    },
+  ): Promise<ClientChange> {
+    return (
+      await apiClient.post<ClientChange>(`${base}/${clientId}/changes`, payload)
+    ).data;
+  },
+
   /** Разобрать/отклонить запись или вернуть её в новые. */
   async patchChangeStatus(
     clientId: string,
