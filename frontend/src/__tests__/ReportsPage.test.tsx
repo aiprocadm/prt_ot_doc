@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PERMISSIONS } from "@/permissions/permissions";
 import ReportsPage from "@/pages/reports/ReportsPage";
+import { uxBudgetDelta } from "@/test-utils/uxBudget";
 import { useAuthStore } from "@/stores/auth";
 
 const getMock = vi.fn();
@@ -75,6 +76,22 @@ describe("ReportsPage", () => {
         expect.anything(),
       );
     });
+  });
+
+  it("экран в UX-бюджете, или долг записан явно (BIZ-60)", async () => {
+    render(
+      <MemoryRouter>
+        <ReportsPage />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(getMock).toHaveBeenCalledWith("/reports/kpi", expect.anything());
+    });
+    await screen.findByRole("button", { name: "XLSX" });
+
+    const budget = uxBudgetDelta(document.body, "ReportsPage");
+    expect(budget.unexpected).toEqual([]);
+    expect(budget.stale).toEqual([]);
   });
 
   it("shows disabled export actions without reports/export permissions", async () => {

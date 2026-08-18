@@ -87,6 +87,10 @@ describe("TemplatesPage", () => {
     expect(screen.getByText("Шаблоны не найдены")).toBeInTheDocument();
   });
 
+  // Приёмка UX-бюджета (BIZ-60) здесь НЕ живёт: таблица и карточка шаблонов
+  // в этом файле замоканы целиком, замер мерил бы моки, а не экран — такая
+  // проверка хуже отсутствующей. Экрану нужен настоящий рендер-тест.
+
   it("falls back to selected row when getById returns null", async () => {
     templateStoreState.items = [{ id: "tpl-1", name: "Приказ" }];
     templateStoreState.getById.mockResolvedValue(null);

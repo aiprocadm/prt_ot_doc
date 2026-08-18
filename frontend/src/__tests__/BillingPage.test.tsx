@@ -3,6 +3,7 @@ import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import BillingPage from "@/pages/admin/BillingPage";
+import { uxBudgetDelta } from "@/test-utils/uxBudget";
 
 const getBillingSummaryMock = vi.fn();
 const getBillingInvoicesMock = vi.fn();
@@ -87,6 +88,19 @@ describe("BillingPage", () => {
     });
     expect(screen.getByText("Тарифы")).toBeInTheDocument();
     expect(screen.getByText("Pro")).toBeInTheDocument();
+  });
+
+  it("экран в UX-бюджете, или долг записан явно (BIZ-60)", async () => {
+    render(
+      <MemoryRouter>
+        <BillingPage />
+      </MemoryRouter>,
+    );
+    await screen.findAllByText("Сменить");
+
+    const budget = uxBudgetDelta(document.body, "BillingPage");
+    expect(budget.unexpected).toEqual([]);
+    expect(budget.stale).toEqual([]);
   });
 
   it("shows action error and keeps current subscription section visible when mark past due fails", async () => {

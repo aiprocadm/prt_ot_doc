@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PERMISSIONS } from "@/permissions/permissions";
 import PermitsPage from "@/pages/permits/PermitsPage";
+import { uxBudgetDelta } from "@/test-utils/uxBudget";
 import { useAuthStore } from "@/stores/auth";
 
 const listPermitsMock = vi.fn();
@@ -89,6 +90,36 @@ describe("PermitsPage", () => {
     );
     expect(await screen.findByText("Иванов И. И.")).toBeInTheDocument();
     expect(screen.getByText("Просрочен")).toBeInTheDocument();
+  });
+
+  it("экран в UX-бюджете, или долг записан явно (BIZ-60)", async () => {
+    listPermitsMock.mockResolvedValue({
+      items: [
+        {
+          id: "perm1",
+          person_id: "p1",
+          permit_type: "Работа на высоте",
+          issued_at: "2025-01-01",
+          valid_until: "2025-12-01",
+          status: "active",
+          is_expired: true,
+          created_at: "2025-01-01T00:00:00Z",
+          updated_at: "2025-01-01T00:00:00Z",
+        },
+      ],
+      total: 1,
+    });
+    setUser([PERMISSIONS.PERMIT_VIEW, PERMISSIONS.PERMIT_MANAGE]);
+    render(
+      <MemoryRouter>
+        <PermitsPage />
+      </MemoryRouter>,
+    );
+    await screen.findByText("Работа на высоте");
+
+    const budget = uxBudgetDelta(document.body, "PermitsPage");
+    expect(budget.unexpected).toEqual([]);
+    expect(budget.stale).toEqual([]);
   });
 
   it("disables the create button without permit.manage permission", async () => {

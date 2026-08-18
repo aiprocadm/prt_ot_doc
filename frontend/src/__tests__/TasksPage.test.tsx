@@ -5,6 +5,7 @@ import { MemoryRouter } from "react-router-dom";
 
 import { PERMISSIONS } from "@/permissions/permissions";
 import TasksPage from "@/pages/tasks/TasksPage";
+import { uxBudgetDelta } from "@/test-utils/uxBudget";
 import { useAuthStore } from "@/stores/auth";
 
 const listMock = vi.fn();
@@ -84,6 +85,30 @@ describe("TasksPage", () => {
     expect(patchTaskMock).toHaveBeenCalledWith("task-focus-1", {
       status: "done",
     });
+  });
+
+  it("экран в UX-бюджете, или долг записан явно (BIZ-60)", async () => {
+    useAuthStore.setState({
+      user: userWithTaskUpdate,
+      loading: false,
+      error: null,
+      isAuthenticated: true,
+      initialized: true,
+    });
+    render(
+      <MemoryRouter
+        initialEntries={[
+          "/tasks?task_id=task-focus-1&entity_type=document&entity_id=entity-1",
+        ]}
+      >
+        <TasksPage />
+      </MemoryRouter>,
+    );
+    await screen.findByRole("button", { name: "Закрыть фокусную задачу" });
+
+    const budget = uxBudgetDelta(document.body, "TasksPage");
+    expect(budget.unexpected).toEqual([]);
+    expect(budget.stale).toEqual([]);
   });
 
   it("shows disabled focused-task close action without update permission", async () => {
