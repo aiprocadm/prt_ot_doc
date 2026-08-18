@@ -45,8 +45,15 @@ from app.models.client_changes import ClientChange
 from app.models.imports import ImportBatch, ImportRow
 from app.models.managed_clients import ManagedClient
 from app.models.master_data import Person, Position, Site
+from app.services.events import EventType
+from app.services.outbox import OutboxService
 
-__all__ = ["SIGNAL_SOURCE", "person_title", "record_client_changes_for_batch"]
+__all__ = [
+    "SIGNAL_SOURCE",
+    "enqueue_change_recorded",
+    "person_title",
+    "record_client_changes_for_batch",
+]
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +78,37 @@ ROW_ACTIONS: dict[str, str] = {"created": "create", "updated": "update"}
 def person_title(entity: Person) -> str:
     parts = [entity.last_name or "", entity.first_name or "", entity.middle_name or ""]
     return " ".join(part for part in parts if part).strip()
+
+
+async def enqueue_change_recorded(
+    session: AsyncSession, rows: Sequence[ClientChange]
+) -> None:
+    """BIZ-51 срез-9: каждая новая запись ленты — событие в outbox.
+
+    Через событие запись видят rules engine (правила «если у клиента X, то
+    создать задачу Y» — четвёртый источник разд. 51.2 в готовом конструкторе)
+    и вебхуки подписчиков. Зовётся ДО commit: строка ленты и событие о ней —
+    одна транзакция, иначе сбой между ними дал бы запись без правила или
+    правило без записи.
+    """
+
+    if not rows:
+        return
+    svc = OutboxService(session)
+    for row in rows:
+        await svc.enqueue(
+            tenant_id=str(row.tenant_id),
+            event_type=EventType.CLIENT_CHANGE_RECORDED.value,
+            payload={
+                "tenant_id": str(row.tenant_id),
+                "change_id": str(row.id),
+                "managed_client_id": str(row.managed_client_id),
+                "kind": getattr(row.kind, "value", str(row.kind)),
+                "summary": row.summary,
+                "happened_on": row.happened_on.isoformat(),
+                "source": row.source or "manual",
+            },
+        )
 
 
 def _now_values(target: str, entity: Any) -> dict[str, Any]:
@@ -243,20 +281,24 @@ async def record_client_changes_for_batch(
             applied_on=_applied_on(batch),
             initial_load_companies=initial,
         )
+        created_rows: list[ClientChange] = []
         for signal in signals:
-            session.add(
-                ClientChange(
-                    tenant_id=batch.tenant_id,
-                    managed_client_id=clients[signal.company_id],
-                    kind=signal.kind,
-                    happened_on=signal.happened_on,
-                    summary=signal.summary,
-                    details=signal.details,
-                    source=SIGNAL_SOURCE,
-                    source_ref=batch.id,
-                )
+            row = ClientChange(
+                tenant_id=batch.tenant_id,
+                managed_client_id=clients[signal.company_id],
+                kind=signal.kind,
+                happened_on=signal.happened_on,
+                summary=signal.summary,
+                details=signal.details,
+                source=SIGNAL_SOURCE,
+                source_ref=batch.id,
             )
+            session.add(row)
+            created_rows.append(row)
         await session.flush()
+        # Срез-9: записи ленты — события (в той же транзакции и в том же
+        # try: событие не должно провалить импорт, как и сам сигнал).
+        await enqueue_change_recorded(session, created_rows)
     except Exception:  # noqa: BLE001 — разбор трогает половину master-data
         logger.exception("imports.client_changes_failed", extra={"batch_id": batch.id})
         return ()

@@ -50,7 +50,7 @@ from app.modules.data_quality.rules import (
     ExpiredRecordsRule,
 )
 from app.modules.data_quality.schemas import DataQualityIssue
-from app.services.client_change_signals import person_title
+from app.services.client_change_signals import enqueue_change_recorded, person_title
 
 __all__ = ["MAX_NEW_PER_RUN", "SIGNAL_SOURCE", "DqSignalsOutcome", "collect_dq_signals"]
 
@@ -224,21 +224,24 @@ async def collect_dq_signals(session: AsyncSession, tenant_id: str) -> DqSignals
     truncated = len(fresh) > MAX_NEW_PER_RUN
     to_record = fresh[:MAX_NEW_PER_RUN]
 
+    created_rows: list[ClientChange] = []
     for signal in to_record:
-        session.add(
-            ClientChange(
-                tenant_id=tenant_id,
-                managed_client_id=clients[signal.company_id],
-                kind=signal.kind,
-                happened_on=signal.happened_on,
-                summary=signal.summary,
-                details=signal.details,
-                source=SIGNAL_SOURCE,
-                source_ref=signal.source_ref,
-            )
+        row = ClientChange(
+            tenant_id=tenant_id,
+            managed_client_id=clients[signal.company_id],
+            kind=signal.kind,
+            happened_on=signal.happened_on,
+            summary=signal.summary,
+            details=signal.details,
+            source=SIGNAL_SOURCE,
+            source_ref=signal.source_ref,
         )
-    if to_record:
+        session.add(row)
+        created_rows.append(row)
+    if created_rows:
         await session.flush()
+        # Срез-9: записи ленты — события, в той же транзакции.
+        await enqueue_change_recorded(session, created_rows)
 
     return DqSignalsOutcome(
         found=len(issues),
