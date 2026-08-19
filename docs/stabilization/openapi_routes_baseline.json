@@ -2211,6 +2211,7 @@
     "DeprecationOverview",
     "DeprecationUsageRead",
     "DirectionReadinessRead",
+    "DisciplineAttention",
     "DocGeneratePipelineRequest",
     "DocGenerateRequest",
     "DocumentBatchItemRead",
@@ -3067,7 +3068,8 @@
       "due_at": "null|string",
       "entity_type": "null|string",
       "entity_id": "null|string",
-      "reason": "string"
+      "reason": "string",
+      "discipline": "null|string"
     },
     "AttentionSignalRead": {
       "kind": "SignalKind",
@@ -4469,6 +4471,14 @@
       "missing": "integer",
       "lapsed": "integer",
       "expiring": "integer"
+    },
+    "DisciplineAttention": {
+      "code": "string",
+      "title": "string",
+      "measured": "boolean",
+      "overdue": "integer",
+      "due_soon": "integer",
+      "reason": "null|string"
     },
     "DocGeneratePipelineRequest": {
       "template": "GenerateTemplateRef",
@@ -9184,7 +9194,10 @@
       "summary": "AttentionSummary",
       "items": "array",
       "blockers": "array",
-      "recommendations": "array"
+      "recommendations": "array",
+      "disciplines": "array",
+      "unclassified_sources": "array",
+      "items_truncated": "boolean"
     },
     "WorkspaceConfig": {
       "role": "string",

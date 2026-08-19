@@ -9,6 +9,15 @@ from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.core.disciplines import (
+    ATTENTION_SOURCES,
+    DISCIPLINE_TITLES,
+    MEASURED_DISCIPLINES,
+    UNCLASSIFIED_SOURCES,
+    UNMEASURED_DISCIPLINES,
+    Discipline,
+    discipline_of,
+)
 from app.core.security import AccessContext, rbac
 from app.core.tenant_validation import TenantContextValidator
 from app.models.finance import Contract, ContractStatus
@@ -28,6 +37,9 @@ from app.models.models import (
     TrainingEnrollment,
 )
 from app.models.obligations import Task, TaskStatus
+from app.schemas.calendar import CalendarEventItem
+from app.services.calendar_aggregator import CalendarAggregatorService
+from app.services.person_link import resolve_person_id
 
 router = APIRouter(prefix="/workspace", tags=["workspace"])
 
@@ -65,6 +77,25 @@ class AttentionItem(BaseModel):
     entity_type: str | None = None
     entity_id: str | None = None
     reason: str
+    #: Дисциплина записи (BIZ-54-57 срез-1, разд. 57.2). ``None`` у задач и у
+    #: источников, которые дисциплину не хранят, — см. ``core/disciplines.py``.
+    discipline: str | None = None
+
+
+class DisciplineAttention(BaseModel):
+    """Строка сводки по дисциплине (разд. 57.2).
+
+    ``measured=False`` — не «ноль нарушений», а «мы это не считаем»: показать
+    по неизмеряемой дисциплине ноль значило бы объявить благополучие там, где
+    данных нет (то же правило, что у светофора клиента в BIZ-51).
+    """
+
+    code: str
+    title: str
+    measured: bool
+    overdue: int = 0
+    due_soon: int = 0
+    reason: str | None = None
 
 
 class WorkspaceAttentionResponse(BaseModel):
@@ -73,6 +104,15 @@ class WorkspaceAttentionResponse(BaseModel):
     items: list[AttentionItem] = Field(default_factory=list)
     blockers: list[ReadinessBlocker] = Field(default_factory=list)
     recommendations: list[str] = Field(default_factory=list)
+    #: Разрез по дисциплинам ТЗ. Поле необязательное: старые клиенты его просто
+    #: не читают.
+    disciplines: list[DisciplineAttention] = Field(default_factory=list)
+    #: Источники, у которых дисциплина не хранится, — названы с причиной, а не
+    #: спрятаны: «источника нет» и «источник намеренно не размечен» — разное.
+    unclassified_sources: list[str] = Field(default_factory=list)
+    #: Показаны не все записи (сработал лимит). Молча обрезанный список читался
+    #: бы как полный, а «скоро срок» тогда занижен.
+    items_truncated: bool = False
 
 
 class TaskInboxItem(BaseModel):
@@ -103,6 +143,99 @@ def _as_utc(value: datetime | None) -> datetime | None:
     if value.tzinfo is None:
         return value.replace(tzinfo=timezone.utc)
     return value.astimezone(timezone.utc)
+
+
+#: Насколько глубоко в прошлое смотрит Центр внимания. Просрочку двухлетней
+#: давности он не покажет: это уже не «внимание», а разбор архива, и такой
+#: запрос стоил бы посадочной странице лишних строк на каждый источник.
+_DISCIPLINE_LOOKBACK = timedelta(days=180)
+
+#: Полосы SLA, которые агрегатор считает поводом для внимания. ``warning`` и
+#: ``ok`` сюда не входят — иначе список превратился бы в копию календаря.
+_ATTENTION_BANDS = {"overdue", "critical"}
+
+#: Роли, которым видны ЧУЖИЕ записи дисциплин. Список копирует
+#: ``_CALENDAR_READ_ROLES`` календаря намеренно: медосмотры, направления, СИЗ,
+#: обучение и инструктажи — поимённый учёт, и Центр внимания не имеет права
+#: показывать их шире, чем профильные экраны. Иначе «центр внимания» стал бы
+#: боковым каналом к данным, которые в модуле СИЗ отдаются одному админу.
+#: Всем прочим ролям подмешиваются ТОЛЬКО их собственные записи.
+_DISCIPLINE_TENANT_WIDE_ROLES = frozenset(
+    {
+        "admin",
+        "owner",
+        "hr",
+        "line_manager",
+        "ot_pb_lead",
+        "ot_specialist",
+        "pb_engineer",
+        "ecologist",
+    }
+)
+
+
+class _DisciplineFacts:
+    """События внимания и ЧЕСТНЫЕ итоги по дисциплинам.
+
+    Список и счётчики разделены намеренно: ``items`` обрезаются лимитом (экран
+    не читает тысячу строк), а числа берутся из ``by_source`` — это те же
+    ``COUNT``, что агрегатор уже посчитал. Считать «просрочено» по обрезанному
+    списку значило бы показать размер страницы вместо количества: при
+    тридцати семи просроченных медосмотрах и лимите 30 экран написал бы «29»,
+    а целая дисциплина, чьи строки не влезли, ушла бы в зелёный ноль.
+    """
+
+    def __init__(
+        self, events: list[CalendarEventItem], overdue: dict[Discipline, int], shown: int
+    ) -> None:
+        self.events = events
+        self.overdue = overdue
+        self.truncated = shown > len(events)
+
+
+async def _discipline_events(
+    *,
+    session: AsyncSession,
+    tenant: Tenant,
+    person_id: str | None,
+    now: datetime,
+    limit: int,
+) -> _DisciplineFacts:
+    """Просрочки и близкие сроки по дисциплинам — из общего агрегатора.
+
+    Свои SQL-запросы здесь не пишутся намеренно: что считается просрочкой
+    медосмотра или выдачи СИЗ, уже решено в ``CalendarAggregatorService`` и
+    покрыто его тестами. Вторая формула рядом разошлась бы с календарём, и два
+    экрана показывали бы про одного человека разное.
+
+    Запрашиваются ТОЛЬКО размеченные источники (``ATTENTION_SOURCES``):
+    у остальных дисциплина не хранится, и их строки некуда отнести.
+    """
+
+    service = CalendarAggregatorService(tenant_id=str(tenant.id), db=session)
+    response = await service.list_events(
+        from_at=now - _DISCIPLINE_LOOKBACK,
+        to_at=now + timedelta(days=3),
+        source_types=ATTENTION_SOURCES,
+        person_id=person_id,
+        include_sla=True,
+    )
+
+    # Честные итоги: сумма COUNT'ов источников, а не длина показанного списка.
+    overdue: dict[Discipline, int] = {}
+    for source in response.by_source:
+        discipline = discipline_of(source.source_type)
+        if discipline is None:
+            continue
+        overdue[discipline] = overdue.get(discipline, 0) + int(source.overdue_count or 0)
+
+    events = [item for item in response.items if item.sla_band in _ATTENTION_BANDS]
+    # Просроченное вперёд: с него начинают работу, а близкий срок подождёт.
+    # Признак берём у самого события (``is_overdue``), а не у полосы SLA: полоса
+    # говорит лишь «дата в прошлом», поэтому возвращённый СИЗ и завершённое
+    # обучение с прошедшим сроком попадали бы в просрочку, хотя закрыты.
+    events.sort(key=lambda item: (not item.is_overdue, item.starts_at))
+    return _DisciplineFacts(events[:limit], overdue, shown=len(events))
 
 
 async def _readiness_blockers(
@@ -268,7 +401,10 @@ async def workspace_attention(
     tenant: TenantDep,
     session: SessionDep,
     access: AccessDep,
-    limit: int = Query(30, ge=1, le=100),
+    # Annotated-форма обязательна: тесты зовут обработчик НАПРЯМУЮ, и при
+    # `limit: int = Query(30)` внутрь приезжает объект Query вместо числа
+    # (грабля репо, стоившая волне BIZ-50 трёх падений регресса).
+    limit: Annotated[int, Query(ge=1, le=100)] = 30,
 ) -> WorkspaceAttentionResponse:
     TenantContextValidator.ensure_tenant_context(tenant)
 
@@ -385,6 +521,37 @@ async def workspace_attention(
 
     blockers = await _readiness_blockers(session=session, tenant=tenant, now=now)
 
+    # Дисциплины (BIZ-54-57 срез-1, разд. 57.2). Рабочей роли показываем ТОЛЬКО
+    # её собственные записи: у медосмотров и выдач СИЗ поимённый учёт, и чужая
+    # строка на экране — это утечка персональных данных, а не косметика.
+    # Связи User→Person в моделях нет, она ищется по e-mail; нет совпадения —
+    # персональных записей нет, и подмешивать общий список НЕЛЬЗЯ.
+    role = access.user.role.value
+    # Чужие записи видят ТОЛЬКО роли, которым они и так открыты на профильных
+    # экранах. Остальным (сотрудник, ученик, бухгалтер, инспектор подрядчика,
+    # админ клиента…) подмешиваются лишь их собственные, найденные по e-mail;
+    # нет кадровой записи — не подмешиваем ничего. Роль с привязкой к компании
+    # тоже идёт по личной ветке: агрегатор не умеет сужать по компании, и в
+    # арендаторе-аутсорсере админ одного клиента увидел бы записи другого.
+    tenant_wide = role in _DISCIPLINE_TENANT_WIDE_ROLES and not getattr(
+        access, "company_id", None
+    )
+    facts = _DisciplineFacts([], {}, shown=0)
+    person_id: str | None = None
+    if not tenant_wide:
+        person_id = await resolve_person_id(
+            session, tenant.id, getattr(access.user, "email", None)
+        )
+    if tenant_wide or person_id:
+        facts = await _discipline_events(
+            session=session,
+            tenant=tenant,
+            person_id=person_id,
+            now=now,
+            limit=limit,
+        )
+    discipline_events = facts.events
+
     items: list[AttentionItem] = []
     for task in candidate_tasks:
         due_at = task.due_at.astimezone(timezone.utc) if task.due_at else None
@@ -411,11 +578,59 @@ async def workspace_attention(
             )
         )
 
+    # Записи дисциплин идут в тот же список, что задачи: у специалиста один
+    # вопрос «что горит», а не два по разным вкладкам.
+    # Просрочки — из честных COUNT'ов агрегатора; «скоро срок» считается по
+    # показанному списку и потому помечается ``truncated``, когда показано не
+    # всё: занизить молча хуже, чем сказать «показаны не все».
+    counts: dict[Discipline, dict[str, int]] = {
+        code: {"overdue": facts.overdue.get(code, 0), "due_soon": 0}
+        for code in MEASURED_DISCIPLINES
+    }
+    for event in discipline_events:
+        discipline = discipline_of(event.source_type)
+        overdue = event.is_overdue
+        if discipline is not None and not overdue:
+            counts.setdefault(discipline, {"overdue": 0, "due_soon": 0})
+            counts[discipline]["due_soon"] += 1
+        items.append(
+            AttentionItem(
+                item_type=event.source_type,
+                id=event.id,
+                severity="critical" if overdue else "high",
+                title=event.title,
+                status=event.status or ("overdue" if overdue else "due_soon"),
+                due_at=event.starts_at,
+                entity_type=event.source_type,
+                entity_id=event.source_id,
+                reason="Срок прошёл" if overdue else "Срок подходит",
+                discipline=discipline.value if discipline else None,
+            )
+        )
+
+    disciplines = [
+        DisciplineAttention(
+            code=code.value,
+            title=DISCIPLINE_TITLES[code],
+            measured=code in MEASURED_DISCIPLINES,
+            overdue=counts.get(code, {}).get("overdue", 0),
+            due_soon=counts.get(code, {}).get("due_soon", 0),
+            reason=UNMEASURED_DISCIPLINES.get(code),
+        )
+        for code in Discipline
+    ]
+    items_truncated = facts.truncated
+
     recs: list[str] = []
     if overdue_task_total > 0:
         recs.append("Сначала закройте просроченные задачи")
     if overdue_deadline_total > 0:
         recs.append("Разберите просроченные обязательства соответствия")
+    overdue_disciplines = [
+        DISCIPLINE_TITLES[code] for code, nums in counts.items() if nums["overdue"] > 0
+    ]
+    if overdue_disciplines:
+        recs.append("Просрочено по дисциплинам: " + ", ".join(overdue_disciplines))
     if failed_sync > 0:
         recs.append("Проверьте неудачные пакеты offline-синхронизации перед следующей выгрузкой")
     if blockers:
@@ -436,6 +651,14 @@ async def workspace_attention(
         items=items,
         blockers=blockers,
         recommendations=recs,
+        disciplines=disciplines,
+        items_truncated=items_truncated,
+        unclassified_sources=[
+            f"{DISCIPLINE_TITLES.get(discipline_of(source), source)}: {reason}"
+            if discipline_of(source)
+            else reason
+            for source, reason in UNCLASSIFIED_SOURCES.items()
+        ],
     )
 
 

@@ -10,6 +10,19 @@ export interface AttentionItem {
   entity_type: string | null;
   entity_id: string | null;
   reason: string;
+  /** Дисциплина записи (BIZ-54-57). null у задач и у неразмеченных источников. */
+  discipline?: string | null;
+}
+
+/** Строка разреза по дисциплине (разд. 57.2). */
+export interface DisciplineAttention {
+  code: string;
+  title: string;
+  /** false — «мы это не считаем», а НЕ «ноль нарушений». */
+  measured: boolean;
+  overdue: number;
+  due_soon: number;
+  reason: string | null;
 }
 
 export interface ReadinessBlocker {
@@ -37,6 +50,11 @@ export interface WorkspaceAttentionDto {
   items: AttentionItem[];
   blockers: ReadinessBlocker[];
   recommendations: string[];
+  /** Поля необязательные: старые ответы (и моки тестов) их не содержат. */
+  disciplines?: DisciplineAttention[];
+  unclassified_sources?: string[];
+  /** Показаны не все записи — сработал лимит. */
+  items_truncated?: boolean;
 }
 
 export interface TaskInboxItem {

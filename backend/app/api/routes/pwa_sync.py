@@ -23,11 +23,11 @@ from app.models.models import (
     ComplianceDeadline,
     OfflineMediaQueue,
     OfflineSyncBatch,
-    Person,
     Tenant,
     TrainingEnrollment,
 )
 from app.modules.pwa_sync.services import OfflineSyncService
+from app.services.person_link import resolve_person_id
 
 router = APIRouter(prefix="/pwa", tags=["pwa"])
 logger = logging.getLogger(__name__)
@@ -511,27 +511,15 @@ async def _resolve_person_id(session: AsyncSession, tenant_id: Any, user_email: 
     """Resolve the Person record linked to the authenticated user, or None.
 
     The bootstrap is the caller's *own* offline dataset, so per-person projections
-    (training assignments, compliance deadlines) are scoped to this person. The
-    Person↔User link is resolved by case-insensitive email match — the same
-    convention already used to surface a person's login account in
-    ``EmployeeCardService`` (``backend/app/services/employee_card.py``). A user with
-    no matching Person (e.g. an admin without a personnel record) legitimately has
-    no personal assignments — callers must NOT fall back to the tenant-wide list,
-    which would over-expose every person's data.
+    (training assignments, compliance deadlines) are scoped to this person. A user
+    with no matching Person (e.g. an admin without a personnel record) legitimately
+    has no personal assignments — callers must NOT fall back to the tenant-wide
+    list, which would over-expose every person's data.
+
+    Сам поиск переехал в ``app.services.person_link``: с BIZ-54-57 среза-1 у
+    приёма три потребителя, и третья копия того же SQL разошлась бы с первыми.
     """
-    if not user_email:
-        return None
-    return (
-        await session.execute(
-            select(Person.id)
-            .where(
-                Person.tenant_id == tenant_id,
-                func.lower(Person.email) == str(user_email).lower(),
-                Person.deleted_at.is_(None),
-            )
-            .limit(1)
-        )
-    ).scalar_one_or_none()
+    return await resolve_person_id(session, tenant_id, user_email)
 
 
 @router.get("/bootstrap", response_model=PwaBootstrapResponse)

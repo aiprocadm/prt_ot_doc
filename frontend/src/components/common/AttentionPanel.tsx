@@ -11,6 +11,7 @@ import { Link } from "react-router-dom";
 
 import {
   workspaceApi,
+  type DisciplineAttention,
   type ReadinessBlocker,
   type WorkspaceAttentionDto,
 } from "@/api/workspace";
@@ -24,6 +25,13 @@ import {
 
 const blockerLink = (blocker: ReadinessBlocker) =>
   blockerActionPath(blocker.code, blocker.entity_type);
+
+/** Название дисциплины берём из ответа сервера: вторая правда о названиях
+ *  разошлась бы с бэкендом (там словарь один на продукт). */
+const disciplineTitle = (
+  code: string,
+  disciplines: DisciplineAttention[],
+): string => disciplines.find((d) => d.code === code)?.title ?? code;
 
 const severityIcon = (severity: string) => {
   if (severity === "critical")
@@ -113,6 +121,9 @@ export const AttentionPanel = ({
     load();
   }, [load]);
 
+  // Поля необязательные: старый ответ (и моки прежних тестов) их не содержат.
+  const disciplines = data?.disciplines ?? [];
+  const items = data?.items ?? [];
   const s = data?.summary;
   const totalCritical =
     (s?.overdue_tasks ?? 0) +
@@ -199,6 +210,84 @@ export const AttentionPanel = ({
                 Нет критичных нарушений
               </span>
             )}
+          </div>
+        )}
+
+        {/* Дисциплины (BIZ-54-57 срез-1, разд. 57.2). Полоса внутри
+            существующей карточки: новый блок верхнего уровня покрасил бы
+            приёмку UX-бюджета на дашборде (BIZ-60). */}
+        {disciplines.length > 0 && (
+          <div className="space-y-1" data-testid="attention-disciplines">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+              По дисциплинам
+            </p>
+            <div className="flex flex-wrap gap-2 text-xs">
+              {disciplines.map((d) => (
+                <span
+                  key={d.code}
+                  data-testid="attention-discipline"
+                  title={d.reason ?? undefined}
+                  className={
+                    d.measured
+                      ? "rounded-md border px-2 py-1"
+                      : "rounded-md border border-dashed px-2 py-1 text-muted-foreground"
+                  }
+                >
+                  {d.title}:{" "}
+                  {d.measured ? (
+                    <strong className={d.overdue > 0 ? "text-destructive" : undefined}>
+                      {d.overdue > 0
+                        ? `просрочено ${d.overdue}`
+                        : d.due_soon > 0
+                          ? `срок скоро ${d.due_soon}`
+                          : "нарушений нет"}
+                    </strong>
+                  ) : (
+                    /* Не «ноль», а честное «не считаем»: ноль читался бы как
+                       благополучие там, где данных нет вовсе. */
+                    "учёт не ведётся"
+                  )}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Записи внимания. До BIZ-54-57 среза-1 массив items приходил с
+            сервера и НЕ рисовался ни одним экраном — сервер считал список,
+            который выбрасывался. */}
+        {items.length > 0 && (
+          <div className="space-y-2" data-testid="attention-items">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+              Требует внимания ({items.length})
+              {data?.items_truncated ? (
+                /* Обрезанный список обязан назвать себя обрезанным: молча
+                   усечённый читается как полный. */
+                <span className="ml-2 normal-case font-normal">
+                  — показаны не все
+                </span>
+              ) : null}
+            </p>
+            <ul className="space-y-1">
+              {items.map((item) => (
+                <li
+                  key={`${item.item_type}:${item.id}`}
+                  data-testid="attention-item"
+                  className="flex items-start gap-2 text-sm"
+                >
+                  {severityIcon(item.severity)}
+                  <span className="flex-1 min-w-0">
+                    <span className="font-medium">{item.title}</span>{" "}
+                    <span className="text-muted-foreground">— {item.reason}</span>
+                  </span>
+                  {item.discipline ? (
+                    <Badge variant="outline" className="text-xs shrink-0">
+                      {disciplineTitle(item.discipline, disciplines)}
+                    </Badge>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
           </div>
         )}
 
