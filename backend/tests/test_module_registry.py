@@ -33,9 +33,30 @@ _SELLABLE_AT_INTRODUCTION = {
     "warehouse",
 }
 
+#: Что добавлялось в каталог ПОСЛЕ введения реестра — по одной записи на
+#: осознанное решение. Список ведётся вручную не из формальности: каждая
+#: строка здесь сдвигает тариф «Всё включено» (его набор равен всему
+#: каталогу), а значит требует миграции, которая выдаст модуль тем, кто уже
+#: купил «всё». Пустая правка этого списка без такой миграции превратила бы
+#: живых enterprise-арендаторов в «свой набор».
+_SELLABLE_ADDED_LATER = {
+    # BIZ-54-57 срез-2 (решение владельца 19.08.2026): дисциплина стала
+    # продаваемой. Сдвиг тарифа компенсирует миграция
+    # 20260819_fs01_fire_safety_module_grant.
+    "fire_safety",
+}
 
-def test_sellable_set_did_not_change() -> None:
-    assert set(FEATURE_CATALOG) == _SELLABLE_AT_INTRODUCTION
+
+def test_sellable_set_changes_only_deliberately() -> None:
+    """Каталог = исходный набор плюс ЯВНО объявленные добавления.
+
+    Тест не запрещает расширение — он требует, чтобы расширение было
+    записано решением, а не приехало молча вместе с новым модулем.
+    """
+
+    assert set(FEATURE_CATALOG) == _SELLABLE_AT_INTRODUCTION | _SELLABLE_ADDED_LATER
+    # Пересечение означало бы, что модуль числится и исходным, и добавленным.
+    assert not (_SELLABLE_AT_INTRODUCTION & _SELLABLE_ADDED_LATER)
 
 
 def test_core_modules_are_never_sold() -> None:
