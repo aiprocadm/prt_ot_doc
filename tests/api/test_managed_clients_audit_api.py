@@ -204,3 +204,61 @@ class TestClientAudit:
         response = await async_client.post(f"{BASE}/audit/run", headers=headers)
 
         assert response.status_code == 404, response.text
+
+@pytest.mark.anyio
+class TestReportDelivery:
+    """BIZ-51 срез-11: адрес и согласие клиента, отправка отчёта (разд. 51.3)."""
+
+    async def test_адрес_и_согласие_сохраняются_в_карточке(
+        self, async_client: AsyncClient, make_auth_headers, served_client
+    ) -> None:
+        _tenant, _person, mcid = served_client
+        headers = await make_auth_headers(RoleEnum.ADMIN)
+
+        response = await async_client.patch(
+            f"{BASE}/{mcid}",
+            json={"report_email": "client@example.com", "report_opt_in": True},
+            headers=headers,
+        )
+
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["report_email"] == "client@example.com"
+        assert body["report_opt_in"] is True
+
+    async def test_без_согласия_отправка_отказывает_словами(
+        self, async_client: AsyncClient, make_auth_headers, served_client
+    ) -> None:
+        """Адрес есть, согласия нет — отказ с причиной, а не молчаливый успех."""
+
+        _tenant, _person, mcid = served_client
+        headers = await make_auth_headers(RoleEnum.ADMIN)
+        await async_client.patch(
+            f"{BASE}/{mcid}",
+            json={"report_email": "client@example.com", "report_opt_in": False},
+            headers=headers,
+        )
+        await _run(async_client, headers)
+        report_id = (await _reports(async_client, headers, mcid))["items"][0]["id"]
+
+        response = await async_client.post(
+            f"{BASE}/{mcid}/audit-reports/{report_id}/send", headers=headers
+        )
+
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["status"] == "no_consent"
+        assert "согласия" in body["reason"]
+
+    async def test_чужой_отчёт_не_отправить(
+        self, async_client: AsyncClient, make_auth_headers, served_client
+    ) -> None:
+        _tenant, _person, mcid = served_client
+        headers = await make_auth_headers(RoleEnum.ADMIN)
+
+        response = await async_client.post(
+            f"{BASE}/{mcid}/audit-reports/00000000-0000-0000-0000-000000000000/send",
+            headers=headers,
+        )
+
+        assert response.status_code == 404, response.text

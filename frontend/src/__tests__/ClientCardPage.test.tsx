@@ -12,6 +12,8 @@ const api = vi.hoisted(() => ({
   get: vi.fn(),
   auditReports: vi.fn(),
   runAudit: vi.fn(),
+  update: vi.fn(),
+  sendReport: vi.fn(),
 }));
 
 vi.mock("@/api/managedClients", async (importOriginal) => ({
@@ -77,6 +79,12 @@ beforeEach(() => {
   Object.values(api).forEach((fn) => fn.mockReset());
   api.get.mockResolvedValue(CLIENT);
   api.auditReports.mockResolvedValue(REPORTS);
+  api.update.mockResolvedValue(CLIENT);
+  api.sendReport.mockResolvedValue({
+    status: "no_consent",
+    reason: "Клиент не давал согласия на получение отчётов — включите его в карточке",
+    recipient: "client@example.com",
+  });
   api.runAudit.mockResolvedValue({
     created: 1,
     already_current: 0,
@@ -159,5 +167,58 @@ describe("ClientCardPage (BIZ-51 срез-10)", () => {
     await waitFor(() =>
       expect(screen.getByText("Модуль не подключён")).toBeInTheDocument(),
     );
+  });
+});
+
+describe("Отчёт клиенту (BIZ-51 срез-11)", () => {
+  it("показывает, что адрес не указан, пока его не задали", async () => {
+    renderPage();
+    await waitFor(() =>
+      expect(screen.getByTestId("report-email-state")).toBeInTheDocument(),
+    );
+
+    expect(screen.getByTestId("report-email-state")).toHaveTextContent(
+      "адрес не указан",
+    );
+    // Форма скрыта до клика — бюджет экрана (BIZ-60).
+    expect(screen.queryByTestId("report-email-form")).not.toBeInTheDocument();
+  });
+
+  it("сохраняет адрес и согласие", async () => {
+    renderPage();
+    await waitFor(() =>
+      expect(screen.getByTestId("edit-report-email")).toBeInTheDocument(),
+    );
+
+    await userEvent.click(screen.getByTestId("edit-report-email"));
+    await userEvent.type(
+      screen.getByLabelText("Адрес клиента для отчётов"),
+      "client@example.com",
+    );
+    await userEvent.click(screen.getByTestId("report-opt-in"));
+    await userEvent.click(screen.getByRole("button", { name: "Сохранить" }));
+
+    await waitFor(() =>
+      expect(api.update).toHaveBeenCalledWith("mc1", {
+        report_email: "client@example.com",
+        report_opt_in: true,
+      }),
+    );
+  });
+
+  it("причина отказа отправки остаётся на экране", async () => {
+    renderPage();
+    await waitFor(() =>
+      expect(screen.getAllByTestId("send-report").length).toBeGreaterThan(0),
+    );
+
+    await userEvent.click(screen.getAllByTestId("send-report")[0]);
+
+    await waitFor(() =>
+      expect(screen.getByTestId("send-report-result")).toHaveTextContent(
+        "согласия",
+      ),
+    );
+    expect(api.sendReport).toHaveBeenCalledWith("mc1", "r2");
   });
 });

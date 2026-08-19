@@ -765,6 +765,7 @@
     "POST /api/v1/managed-clients/audit/run",
     "POST /api/v1/managed-clients/dq-signals",
     "POST /api/v1/managed-clients/{mcid}/access",
+    "POST /api/v1/managed-clients/{mcid}/audit-reports/{report_id}/send",
     "POST /api/v1/managed-clients/{mcid}/changes",
     "POST /api/v1/managed-clients/{mcid}/consents",
     "POST /api/v1/managed-clients/{mcid}/context",
@@ -1876,6 +1877,7 @@
     "seed_default_articles_api_v1_budget_articles_seed_defaults_post",
     "seed_default_processing_activities_api_v1_privacy_processing_activities_seed_defaults_post",
     "send_certificate_registry_api_v1_training_certificates__item_id__send_registry_post",
+    "send_client_audit_report_api_v1_managed_clients__mcid__audit_reports__report_id__send_post",
     "send_protocol_registry_api_v1_training_protocols__item_id__send_registry_post",
     "send_to_edo_api_v1_edo_send_post",
     "set_client_change_status_api_v1_managed_clients__mcid__changes__change_id__patch",
@@ -2697,6 +2699,7 @@
     "ReportPreviewOut",
     "ReportRunIn",
     "ReportRunOut",
+    "ReportSendRead",
     "RequestCreate",
     "RequestMessageCreate",
     "RequestPatch",
@@ -5703,7 +5706,9 @@
       "contract_starts_at": "null|string",
       "contract_ends_at": "null|string",
       "responsible_person_id": "null|string",
-      "notes": "null|string"
+      "notes": "null|string",
+      "report_email": "null|string",
+      "report_opt_in": "boolean"
     },
     "ManagedClientRead": {
       "id": "string",
@@ -5717,6 +5722,8 @@
       "contract_ends_at": "null|string",
       "responsible_person_id": "null|string",
       "notes": "null|string",
+      "report_email": "null|string",
+      "report_opt_in": "boolean",
       "created_at": "string",
       "updated_at": "string"
     },
@@ -5730,7 +5737,9 @@
       "contract_starts_at": "null|string",
       "contract_ends_at": "null|string",
       "responsible_person_id": "null|string",
-      "notes": "null|string"
+      "notes": "null|string",
+      "report_email": "null|string",
+      "report_opt_in": "boolean|null"
     },
     "MapItemUpsert": {
       "hazard_id": "string",
@@ -7423,6 +7432,8 @@
       "contract_ends_at": "null|string",
       "responsible_person_id": "null|string",
       "notes": "null|string",
+      "report_email": "null|string",
+      "report_opt_in": "boolean",
       "created_at": "string",
       "updated_at": "string",
       "contract_days_left": "integer|null",
@@ -7925,6 +7936,11 @@
     "ReportRunOut": {
       "job_id": "string",
       "status": "string"
+    },
+    "ReportSendRead": {
+      "status": "string",
+      "reason": "string",
+      "recipient": "null|string"
     },
     "RequestCreate": {
       "title": "string",

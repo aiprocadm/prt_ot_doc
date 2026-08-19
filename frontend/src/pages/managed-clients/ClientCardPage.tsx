@@ -8,6 +8,7 @@ import {
   type ManagedClient,
   type ManagedClientMode,
 } from "@/api/managedClients";
+import { Input } from "@/components/ui/input";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingScreen } from "@/components/common/LoadingScreen";
@@ -58,6 +59,13 @@ const ClientCardPage = () => {
   const [error, setError] = useState<ApiError | null>(null);
   const [moduleDisabled, setModuleDisabled] = useState(false);
   const [running, setRunning] = useState(false);
+  // Настройка адреса скрыта до клика: два всегда видимых поля съели бы бюджет
+  // экрана, а сама настройка нужна раз в жизни клиента.
+  const [editingEmail, setEditingEmail] = useState(false);
+  const [email, setEmail] = useState("");
+  const [optIn, setOptIn] = useState(false);
+  const [savingEmail, setSavingEmail] = useState(false);
+  const [sendResult, setSendResult] = useState<string | null>(null);
   const [runSummary, setRunSummary] = useState<string | null>(null);
   const [runError, setRunError] = useState<ApiError | null>(null);
 
@@ -73,6 +81,8 @@ const ClientCardPage = () => {
       ]);
       setClient(clientData);
       setReports(reportsData);
+      setEmail(clientData.report_email ?? "");
+      setOptIn(Boolean(clientData.report_opt_in));
     } catch (err) {
       if (isModuleDisabled(err)) {
         setModuleDisabled(true);
@@ -102,6 +112,37 @@ const ClientCardPage = () => {
       setRunError(asApiError(err, "Не удалось собрать отчёт"));
     } finally {
       setRunning(false);
+    }
+  };
+
+  const saveEmail = async () => {
+    setSavingEmail(true);
+    try {
+      await managedClientsApi.update(clientId, {
+        // Пусто → null: пустая строка означала бы «адрес есть, но пустой».
+        report_email: email.trim() || null,
+        report_opt_in: optIn,
+      });
+      setEditingEmail(false);
+      await load();
+    } catch (err) {
+      setError(asApiError(err, "Не удалось сохранить адрес"));
+    } finally {
+      setSavingEmail(false);
+    }
+  };
+
+  const sendReport = async (reportId: string) => {
+    setSendResult(null);
+    try {
+      const result = await managedClientsApi.sendReport(clientId, reportId);
+      // Причина остаётся на экране: «не отправлено» без объяснения одинаково
+      // выглядит и когда нет согласия, и когда не настроена почта.
+      setSendResult(result.reason);
+    } catch (err) {
+      setSendResult(
+        asApiError(err, "Не удалось отправить отчёт").message ?? "Ошибка",
+      );
     }
   };
 
@@ -158,7 +199,71 @@ const ClientCardPage = () => {
                       <strong>{formatDate(client.contract_ends_at)}</strong>
                     </span>
                   ) : null}
+                  <span data-testid="report-email-state">
+                    Отчёты:{" "}
+                    <strong>
+                      {client.report_email
+                        ? client.report_opt_in
+                          ? client.report_email
+                          : `${client.report_email} (согласия нет)`
+                        : "адрес не указан"}
+                    </strong>
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setEditingEmail((v) => !v)}
+                    data-testid="edit-report-email"
+                  >
+                    {editingEmail ? "Отмена" : "Настроить отчёты"}
+                  </Button>
                 </div>
+
+                {editingEmail ? (
+                  <form
+                    className="mt-3 flex flex-wrap items-end gap-2"
+                    data-testid="report-email-form"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      void saveEmail();
+                    }}
+                  >
+                    <div className="flex-1 min-w-[220px] space-y-1">
+                      <label
+                        className="text-xs text-muted-foreground"
+                        htmlFor="report-email"
+                      >
+                        Адрес клиента для отчётов
+                      </label>
+                      <Input
+                        id="report-email"
+                        type="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        placeholder="client@example.com"
+                      />
+                    </div>
+                    <label className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={optIn}
+                        onChange={(e) => setOptIn(e.target.checked)}
+                        data-testid="report-opt-in"
+                      />
+                      {/* Согласие — отдельное условие: знать адрес и иметь
+                          право писать на него это разные вещи. */}
+                      Клиент согласен получать отчёты
+                    </label>
+                    <Button
+                      type="submit"
+                      variant="outline"
+                      size="sm"
+                      disabled={savingEmail}
+                    >
+                      Сохранить
+                    </Button>
+                  </form>
+                ) : null}
               </CardContent>
             </Card>
           ) : null}
@@ -190,6 +295,11 @@ const ClientCardPage = () => {
                   </p>
                 ) : null}
                 <ErrorState error={runError ?? undefined} onRetry={runNow} />
+                {sendResult ? (
+                  <p className="text-sm" data-testid="send-report-result">
+                    {sendResult}
+                  </p>
+                ) : null}
 
                 {reports && reports.items.length === 0 ? (
                   <EmptyState
@@ -219,6 +329,14 @@ const ClientCardPage = () => {
                         <p className="text-sm text-muted-foreground">
                           {report.summary}
                         </p>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => void sendReport(report.id)}
+                          data-testid="send-report"
+                        >
+                          Отправить клиенту
+                        </Button>
                       </li>
                     ))}
                   </ul>

@@ -149,6 +149,7 @@ from app.schemas.managed_clients import (
     PortfolioItem,
     PortfolioPage,
     PortfolioSummary,
+    ReportSendRead,
     SpecialistWorkloadRead,
     SpecialistWorkloadResponse,
     TransferRead,
@@ -157,6 +158,7 @@ from app.schemas.managed_clients import (
 )
 from app.services.client_change_signals import enqueue_change_recorded
 from app.services.client_dq_signals import DqSignalsOutcome, collect_dq_signals
+from app.services.client_report_mail import send_report_to_client
 from app.services.tenants.bootstrap.service import BootstrapTenantService
 
 router = APIRouter(prefix="/managed-clients", tags=["managed-clients"])
@@ -1645,6 +1647,8 @@ async def create_managed_client(
         contract_ends_at=payload.contract_ends_at,
         responsible_person_id=payload.responsible_person_id,
         notes=payload.notes,
+        report_email=payload.report_email,
+        report_opt_in=payload.report_opt_in,
     )
     session.add(row)
     try:
@@ -1944,6 +1948,49 @@ async def run_client_audit(
         already_current=outcome.already_current,
         skipped_dedicated=outcome.skipped_dedicated,
         summary=", ".join(parts),
+    )
+
+
+@router.post(
+    "/{mcid}/audit-reports/{report_id}/send", response_model=ReportSendRead
+)
+@audit_operation("update", "client_audit_report")
+async def send_client_audit_report(
+    mcid: str,
+    report_id: str,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: Access,
+) -> ReportSendRead:
+    """Отправить отчёт аудита клиенту письмом (разд. 51.3, последний пункт).
+
+    Отправка требует ДВУХ условий: адреса и согласия. Знать e-mail и иметь
+    право на него писать — разные вещи, и без согласия ручка отказывает
+    словами, а не молчит.
+
+    Итог отдаётся причиной, а не голым «не получилось»: «клиент не давал
+    согласия» чинит специалист, а «почта не настроена» — администратор.
+    """
+
+    TenantContextValidator.ensure_tenant_context(tenant)
+    await _require_enabled(session, tenant)
+    client = await _get(session, tenant, mcid)
+
+    report = (
+        await session.execute(
+            select(ClientAuditReport).where(
+                ClientAuditReport.tenant_id == tenant.id,
+                ClientAuditReport.managed_client_id == mcid,
+                ClientAuditReport.id == report_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if report is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Report not found")
+
+    outcome = await send_report_to_client(client, report)
+    return ReportSendRead(
+        status=outcome.status.value, reason=outcome.reason, recipient=outcome.recipient
     )
 
 
