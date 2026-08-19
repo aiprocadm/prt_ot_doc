@@ -63,6 +63,7 @@ from app.models.models import Company, RoleEnum, Tenant, User
 from app.modules.files import s3
 from app.services.clamav import reset_quarantine_publisher
 from app.services.file_storage import FileStorageService
+from tests.utils.engine_cleanup import release_mapper_query_caches
 from tests.utils.factories import TestDataFactory
 
 configure_engine(database_url=os.environ["DATABASE_URL"], echo=False)
@@ -278,6 +279,12 @@ async def app_fixture():
     yield app
 
     await engine.dispose()
+    # dispose() закрывает только соединения: сам движок с диалектом остаётся жить,
+    # пока на него ссылаются кэши скомпилированных запросов у ORM-мапперов. Без
+    # этой очистки каждый тест оставлял в памяти два диалекта со своим кэшем типов
+    # (~120 Enum), и полный прогон разрастался до 8-11 ГБ на воркер. Сторож —
+    # tests/test_engine_memory.py.
+    release_mapper_query_caches()
     if os.path.exists(db_file):
         os.remove(db_file)
 

@@ -200,12 +200,17 @@ def _register_metrics_endpoint(app: FastAPI, settings: Settings) -> None:
     if not settings.enable_metrics:
         return
 
+    # Приложение и настройки берём из запроса, а НЕ из замыкания. FastAPI 0.141
+    # кэширует признаки обработчика в вечном lru_cache, ключ которого — сама
+    # функция; замкни она на себя `app`, и приложение уже не освободится никогда.
+    # В проде это незаметно (приложение одно), а в тестах `app_fixture` создаёт
+    # его на каждый тест — прогон удерживал их все и съедал память гигабайтами.
+    # Сторож — tests/test_app_memory.py.
     @app.get("/metrics", include_in_schema=False)
-    async def metrics() -> Response:
-        redis_client = getattr(app.state, "redis_client", None)
+    async def metrics(request: Request) -> Response:
         payload, content_type = await render_metrics(
-            settings=settings,
-            redis_client=redis_client,
+            settings=request.app.state.settings,
+            redis_client=getattr(request.app.state, "redis_client", None),
         )
         return Response(content=payload, media_type=content_type)
 
