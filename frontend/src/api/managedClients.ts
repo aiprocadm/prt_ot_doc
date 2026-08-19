@@ -17,6 +17,10 @@ export interface ManagedClient {
   contract_ends_at?: string | null;
   responsible_person_id?: string | null;
   notes?: string | null;
+  /** Куда слать отчёт клиенту (BIZ-51 срез-11). */
+  report_email?: string | null;
+  /** Согласие клиента на рассылку: адрес без согласия — не основание писать. */
+  report_opt_in?: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -260,6 +264,13 @@ export interface ClientAuditReportPage {
   total: number;
 }
 
+/** Итог отправки отчёта клиенту: причина обязательна. */
+export interface ReportSendResult {
+  status: "sent" | "no_email" | "no_consent" | "mail_disabled" | "failed" | string;
+  reason: string;
+  recipient?: string | null;
+}
+
 /** Итог ручного прогона аудита — по слагаемым. */
 export interface AuditRunResult {
   created: number;
@@ -406,6 +417,8 @@ export const managedClientsApi = {
       contract_ends_at: string | null;
       responsible_person_id: string | null;
       notes: string | null;
+      report_email: string | null;
+      report_opt_in: boolean;
     }>,
   ): Promise<ManagedClient> {
     return (await apiClient.patch<ManagedClient>(`${base}/${id}`, payload))
@@ -481,6 +494,19 @@ export const managedClientsApi = {
   async get(clientId: string): Promise<ManagedClient> {
     return (
       await apiClient.get<ManagedClient>(`${base}/${clientId}`, silent)
+    ).data;
+  },
+
+  /** Отправить отчёт клиенту письмом (разд. 51.3). */
+  async sendReport(
+    clientId: string,
+    reportId: string,
+  ): Promise<ReportSendResult> {
+    return (
+      await apiClient.post<ReportSendResult>(
+        `${base}/${clientId}/audit-reports/${reportId}/send`,
+        {},
+      )
     ).data;
   },
 

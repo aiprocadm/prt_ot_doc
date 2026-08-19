@@ -63,6 +63,16 @@ class ManagedClient(TenantBaseModel, SoftDeleteMixin):
     )
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    # BIZ-51 срез-11 (разд. 51.3, «отчёт клиенту»): куда слать периодический
+    # отчёт о состоянии соответствия. Адрес и СОГЛАСИЕ — два разных поля, и
+    # это не формальность: знать адрес и иметь право писать на него — разные
+    # вещи, а рассылка без основания бьёт и по закону, и по репутации
+    # аутсорсера. Без согласия отправка отказывается словами, а не молча.
+    report_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    report_opt_in: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="0"
+    )
+
     __table_args__ = (
         UniqueConstraint("tenant_id", "name", name="uq_managed_client_name"),
         Index("ix_managed_client_tenant_status", "tenant_id", "contract_status"),

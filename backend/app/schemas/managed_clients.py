@@ -32,6 +32,11 @@ class ManagedClientCreate(BaseSchema):
     contract_ends_at: date | None = None
     responsible_person_id: str | None = None
     notes: str | None = None
+    #: Куда слать отчёт о состоянии соответствия (BIZ-51 срез-11, разд. 51.3).
+    report_email: str | None = Field(default=None, max_length=320)
+    #: Согласие клиента на рассылку. Адрес без согласия — не основание писать,
+    #: поэтому поля два, а не одно.
+    report_opt_in: bool = False
 
     _name_not_blank = field_validator("name")(_strip_required)
 
@@ -47,6 +52,8 @@ class ManagedClientUpdate(BaseSchema):
     contract_ends_at: date | None = None
     responsible_person_id: str | None = None
     notes: str | None = None
+    report_email: str | None = Field(default=None, max_length=320)
+    report_opt_in: bool | None = None
 
     @field_validator("name")
     @classmethod
@@ -66,6 +73,10 @@ class ManagedClientRead(BaseSchema):
     contract_ends_at: date | None
     responsible_person_id: str | None
     notes: str | None
+    #: Адрес и согласие на отчёт (BIZ-51 срез-11). Показываются в карточке,
+    #: чтобы специалист видел, можно ли вообще отправлять.
+    report_email: str | None = None
+    report_opt_in: bool = False
     created_at: datetime
     updated_at: datetime
 
@@ -471,6 +482,19 @@ class AuditRunRead(BaseSchema):
     #: Данные Dedicated-клиентов живут в их контурах — пропуск назван числом.
     skipped_dedicated: int
     summary: str
+
+
+class ReportSendRead(BaseSchema):
+    """Итог отправки отчёта клиенту (BIZ-51 срез-11, разд. 51.3).
+
+    Причина обязательна: «не отправлено» одинаково выглядит и когда клиент не
+    давал согласия, и когда на сервере не настроена почта, а чинят это разные
+    люди.
+    """
+
+    status: str
+    reason: str
+    recipient: str | None = None
 
 
 class DqSignalsRead(BaseSchema):
