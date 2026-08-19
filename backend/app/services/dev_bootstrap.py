@@ -10,7 +10,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import Settings
 from app.db import ensure_tenant_schema, session_scope
 from app.models.models import RoleEnum, Tenant, User
+from app.modules.subscription.plans import PLANS
 from app.services.auth import hash_password
+from app.services.tenants.subscription import provision_plan
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +82,14 @@ async def bootstrap_admin_user(settings: Settings) -> None:
             await session.flush()
         tenant_id = tenant.id
         tenant_schema_name = str(tenant.schema_name or f"tenant_{tenant_slug}")
+
+        # Тариф разработческого арендатора — «всё включено» (BIZ-53 срез-1).
+        # Без выдачи он рождался БЕЗ единой строки, а умолчание продаваемого
+        # модуля «выключен»: разработчик поднимал стенд, видел все пункты меню
+        # (у роли админа есть все права) и получал 404 на девяти модулях,
+        # которые сам же и пишет. Это не продажа: функция целиком работает
+        # только при `app_env=dev` — в проде она выходит выше по коду.
+        await provision_plan(session, tenant_id=tenant_id, plan=PLANS["enterprise"])
 
     ensure_tenant_schema(tenant_slug, schema_name=tenant_schema_name)
 

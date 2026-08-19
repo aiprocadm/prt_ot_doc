@@ -32,7 +32,7 @@ async def _bootstrap(session, monkeypatch, slug: str):
     )
     service = BootstrapTenantService(session)
     monkeypatch.setattr(service, "_ensure_tenant_settings", _noop)
-    monkeypatch.setattr(service, "_ensure_quota", _noop)
+    monkeypatch.setattr(service, "_ensure_plan", _noop)
     monkeypatch.setattr(service, "_ensure_owner", _noop)
     monkeypatch.setattr(service, "_log_bootstrap_event", _noop)
     summary = await service.run(

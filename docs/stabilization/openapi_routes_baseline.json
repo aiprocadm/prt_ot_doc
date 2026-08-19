@@ -8550,7 +8550,8 @@
       "kind": "string",
       "parent_id": "null|string",
       "demo_data": "boolean",
-      "industry": "null|string"
+      "industry": "null|string",
+      "plan": "null|string"
     },
     "TenantProvisionResult": {
       "tenant": "TenantRead",

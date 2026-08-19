@@ -665,6 +665,20 @@ async def provision_tenant_endpoint(
                 ),
             ) from exc
 
+        # Тариф — тоже до выдачи и по тому же доводу (BIZ-53 разд. 53.1).
+        if payload.plan is not None and payload.plan not in PLANS:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                detail=api_problem_detail(
+                    code="UNKNOWN_PLAN",
+                    message=(
+                        f"Неизвестный тариф {payload.plan!r}. Доступные: "
+                        + ", ".join(PLANS)
+                    ),
+                    error_type="platform-tenants",
+                ),
+            )
+
         service = BootstrapTenantService(provisioning_session)
         try:
             summary = await service.run(
@@ -675,6 +689,7 @@ async def provision_tenant_endpoint(
                 demo=payload.demo_data,
                 parent_id=plan.parent_id,
                 industry=payload.industry,
+                plan_code=payload.plan,
             )
             created = (
                 await provisioning_session.execute(select(Tenant).where(Tenant.slug == slug))

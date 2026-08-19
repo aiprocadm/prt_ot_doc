@@ -26,9 +26,11 @@ from app.models.models import (
     UserRole,
 )
 from app.models.safety_core import Hazard, RiskMeasure
+from app.modules.subscription.plans import DEFAULT_PLAN_CODE, PLANS
 from app.services.audit import AuditService
 from app.services.auth import hash_password
 from app.services.authz_seed import seed_authz_catalog
+from app.services.tenants.subscription import provision_plan
 
 
 def _find_repo_root() -> Path:
@@ -88,6 +90,7 @@ class BootstrapTenantService:
         demo: bool = False,
         parent_id: str | None = None,
         industry: str | None = None,
+        plan_code: str | None = None,
     ) -> BootstrapTenantSummary:
         summary = BootstrapTenantSummary(tenant_slug=tenant_slug, dry_run=dry_run)
 
@@ -109,7 +112,9 @@ class BootstrapTenantService:
             dry_run=dry_run,
             summary=summary,
         )
-        await self._ensure_quota(tenant_id=tenant_id, dry_run=dry_run, summary=summary)
+        await self._ensure_plan(
+            tenant_id=tenant_id, plan_code=plan_code, dry_run=dry_run, summary=summary
+        )
         await self._ensure_owner(
             tenant_id=tenant_id,
             owner_email=owner_email,
@@ -212,30 +217,49 @@ class BootstrapTenantService:
         )
         summary.mark(entity="tenant_settings", created=True)
 
-    async def _ensure_quota(
-        self, *, tenant_id: str, dry_run: bool, summary: BootstrapTenantSummary
+    async def _ensure_plan(
+        self,
+        *,
+        tenant_id: str,
+        plan_code: str | None,
+        dry_run: bool,
+        summary: BootstrapTenantSummary,
     ) -> None:
+        """Выдать новому арендатору тариф: модули и квоты (BIZ-53 разд. 53.1).
+
+        **До этого среза арендатор рождался БЕЗ тарифа вовсе.** Строк выдачи не
+        писалось ни одной, а умолчание продаваемого модуля — «выключен»
+        (BIZ-61 срез-2), поэтому новый клиент получал 404 на всех девяти
+        продаваемых модулях, при том что пункты меню владелец и админ видят
+        всегда (у этих ролей есть все права). Квоты при этом ставились числами
+        (4 / 2500 / 5120), не совпадающими НИ С ОДНИМ тарифом, и консоль
+        показывала такого арендатора как «Свой набор».
+
+        Умолчание — самый простой тариф (решение владельца, 19.08.2026):
+        ``DEFAULT_PLAN_CODE``. Константа существовала с самого начала и не
+        читалась ни одной строкой кода — теперь она наконец работает.
+
+        Квоты берутся из пресета тарифа, а не сохраняются прежними: «Базовый»
+        с квотами уровня «Про» — это неверная подпись в консоли и в счёте.
+        Существующих арендаторов это не касается: ветка работает только при
+        заведении, у арендатора с квотой шаг идемпотентен.
+        """
+
         existing = (
             await self.session.execute(
                 select(TenantQuota).where(TenantQuota.tenant_id == tenant_id)
             )
         ).scalar_one_or_none()
         if existing:
-            summary.mark(entity="tenant_quota", created=False)
+            summary.mark(entity="tenant_plan", created=False)
             return
         if dry_run:
-            summary.mark(entity="tenant_quota", created=True)
+            summary.mark(entity="tenant_plan", created=True)
             return
-        self.session.add(
-            TenantQuota(
-                tenant_id=tenant_id,
-                max_parallel_jobs=4,
-                max_doc_generations_per_month=2500,
-                max_storage_mb=5120,
-                enforce_billing_gate=False,
-            )
-        )
-        summary.mark(entity="tenant_quota", created=True)
+
+        plan = PLANS[plan_code or DEFAULT_PLAN_CODE]
+        await provision_plan(self.session, tenant_id=tenant_id, plan=plan)
+        summary.mark(entity="tenant_plan", created=True)
 
     async def _ensure_owner(
         self,

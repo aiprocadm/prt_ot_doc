@@ -43,6 +43,7 @@ __all__ = [
     "MAX_TRIAL_DAYS",
     "FeatureGrants",
     "apply_plan",
+    "provision_plan",
     "grant_module_trial",
     "read_enabled_feature_codes",
     "read_feature_grants",
@@ -344,3 +345,66 @@ async def revoke_module_trial(target: Tenant, code: str) -> bool:
         enablement.expires_at = None
         await session.commit()
     return True
+
+
+async def provision_plan(
+    session: AsyncSession, *, tenant_id: str, plan: SubscriptionPlan
+) -> None:
+    """Первичная выдача тарифа НОВОМУ арендатору (BIZ-53 разд. 53.1).
+
+    Отдельная функция рядом с :func:`apply_plan` нужна из-за транзакции, а не
+    из-за логики. ``apply_plan`` открывает СВОЮ сессию к схеме арендатора и
+    коммитит её: для смены тарифа у живого клиента это правильно, а при
+    заведении арендатор ещё не закоммичен, и вторая сессия его не увидит.
+    Здесь всё пишется той же доверенной сессией, что создаёт самого
+    арендатора, — либо оба шага произойдут, либо ни одного.
+
+    Правда о тарифах одна: набор модулей и квоты берутся из того же
+    ``SubscriptionPlan``, что и при смене тарифа. Ничего «для новичка»
+    отдельно не настраивается — иначе консоль показывала бы тариф, которого у
+    арендатора на самом деле нет.
+    """
+
+    for code, title in FEATURE_CATALOG.items():
+        feature = (
+            await session.execute(select(Feature).where(Feature.code == code))
+        ).scalar_one_or_none()
+        if feature is None:
+            feature = Feature(code=code, title=title)
+            session.add(feature)
+            await session.flush()
+        existing = (
+            await session.execute(
+                select(FeatureEnablement).where(
+                    FeatureEnablement.tenant_id == tenant_id,
+                    FeatureEnablement.feature_id == feature.id,
+                )
+            )
+        ).scalar_one_or_none()
+        desired = code in plan.features
+        if existing is None:
+            # Строка пишется и для ВЫКЛЮЧЕННОГО модуля: «продано и выключено»
+            # и «никогда не выдавалось» — разные состояния, и консоль обязана
+            # показывать первое, а не пустоту.
+            session.add(
+                FeatureEnablement(
+                    tenant_id=tenant_id, feature_id=feature.id, on=desired
+                )
+            )
+        else:
+            existing.on = desired
+            existing.expires_at = None
+
+    quota = (
+        await session.execute(
+            select(TenantQuota).where(TenantQuota.tenant_id == tenant_id)
+        )
+    ).scalar_one_or_none()
+    if quota is None:
+        session.add(
+            TenantQuota(tenant_id=tenant_id, enforce_billing_gate=False, **plan.quotas)
+        )
+    else:
+        for key, value in plan.quotas.items():
+            setattr(quota, key, value)
+    await session.flush()
