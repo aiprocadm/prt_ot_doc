@@ -356,7 +356,7 @@ async def test_tenant_bootstrap_service_uses_recorded_schema_name_for_existing_t
     async with sessionmaker() as session:
         service = BootstrapTenantService(session)
         monkeypatch.setattr(service, "_ensure_tenant_settings", _noop)
-        monkeypatch.setattr(service, "_ensure_quota", _noop)
+        monkeypatch.setattr(service, "_ensure_plan", _noop)
         monkeypatch.setattr(service, "_ensure_owner", _noop)
         monkeypatch.setattr(service, "_ensure_company_profile", _noop)
         monkeypatch.setattr(service, "_seed_starter_pack", _noop)

@@ -79,6 +79,11 @@ class TenantProvisionRequest(BaseSchema):
     #: `app.domains.reseller.industries`; неизвестный код — отказ, а не тихий
     #: откат на общий набор.
     industry: str | None = None
+    #: Тариф нового арендатора (BIZ-53 разд. 53.1). Пусто — самый простой
+    #: (`DEFAULT_PLAN_CODE`): решение владельца 19.08.2026. Неизвестный код —
+    #: отказ 400 ДО создания, а не тихий откат на умолчание: «завёл клиента на
+    #: Про» и «завёл на Базовом» различаются деньгами.
+    plan: str | None = None
 
 
 class TenantProvisionResult(BaseSchema):
