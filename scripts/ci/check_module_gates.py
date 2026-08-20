@@ -46,17 +46,47 @@ def _catalog() -> dict[str, str]:
     return dict(FEATURE_CATALOG)
 
 
+#: Вызов гейта целиком — вместе с аргументами (вложенные скобки допускаются).
+_GATE_CALL = re.compile(r"is_(?:module|feature)_enabled\((?:[^()]|\([^()]*\))*\)", re.S)
+
+#: Модули БЕЗ backend-гейта — с причиной. Пустой список означал бы «у всех
+#: гейт есть», и однажды это прочитали бы как факт.
+MODULES_WITHOUT_BACKEND_GATE: dict[str, str] = {
+    "fire_safety": (
+        "BIZ-54-57 срез-2: у дисциплины нет СВОИХ ручек — три экрана-сводки "
+        "собираются из общих (площадки, проверки, задачи, инструктажи), и "
+        "закрыть общие ручки нельзя. Модуль управляет доступностью ЭКРАНОВ "
+        "(ui_routes + ProtectedRoute), а не изоляцией данных; данные продаются "
+        "своими модулями. Появится собственный роутер ПБ — гейт обязателен."
+    ),
+}
+
+
 def _gated_codes() -> set[str]:
-    """Коды модулей, встречающиеся в файлах, где вызывается is_feature_enabled."""
+    """Коды модулей, стоящие АРГУМЕНТОМ вызова гейта.
+
+    Раньше проверялось наличие кода где угодно в файле, где встречается
+    ``is_feature_enabled``. Этого достаточно, чтобы страж «увидел» гейт у
+    модуля, который лишь упомянут рядом в докстроке — ровно так новый модуль
+    прошёл бы проверку, не имея гейта вовсе. Проверка, создающая ложную
+    уверенность, хуже отсутствующей, поэтому разбор точный: код обязан стоять
+    внутри самого вызова — литералом или через константу этого же файла.
+    """
 
     codes: set[str] = set()
     for path in BACKEND.rglob("*.py"):
         if path.name == "feature_flags.py":
             continue
         text = path.read_text(encoding="utf-8", errors="ignore")
-        if "is_feature_enabled" not in text:
+        if "is_feature_enabled" not in text and "is_module_enabled" not in text:
             continue
-        codes.update(_CODE_LITERAL.findall(text))
+        constants = dict(re.findall(r"""([A-Z_][A-Z0-9_]*)\s*=\s*["']([a-z_]+)["']""", text))
+        for call in _GATE_CALL.finditer(text):
+            fragment = call.group(0)
+            codes.update(_CODE_LITERAL.findall(fragment))
+            for name, value in constants.items():
+                if re.search(rf"\b{name}\b", fragment):
+                    codes.add(value)
     return codes
 
 
@@ -116,7 +146,11 @@ def main(argv: list[str] | None = None) -> int:
 
     errors: list[str] = []
 
-    missing = sorted(code for code in catalog if code not in gated)
+    missing = sorted(
+        code
+        for code in catalog
+        if code not in gated and code not in MODULES_WITHOUT_BACKEND_GATE
+    )
     if missing:
         errors.append(
             "модули каталога без backend-гейта (is_feature_enabled) — выключённый "
@@ -126,6 +160,15 @@ def main(argv: list[str] | None = None) -> int:
     # Обратное направление (BIZ-61 срез-2): гейт на код, которого нет в
     # реестре. Такой модуль не попадёт ни в тариф, ни в консоль — включить его
     # будет нечем, и обнаружится это по жалобе заказчика.
+    # Протухшая запись долга: у модуля появился гейт, а он всё ещё числится
+    # «без гейта». Без этой проверки список стал бы кладбищем неверных строк.
+    stale_gate_debt = sorted(set(MODULES_WITHOUT_BACKEND_GATE) & gated)
+    if stale_gate_debt:
+        errors.append(
+            f"модули {stale_gate_debt} уже имеют backend-гейт — уберите их из "
+            "MODULES_WITHOUT_BACKEND_GATE"
+        )
+
     unregistered = sorted(_module_gate_codes() - _registered_codes() - _KNOWN_UNREGISTERED)
     if unregistered:
         errors.append(
@@ -158,8 +201,10 @@ def main(argv: list[str] | None = None) -> int:
 
     print(
         f"Module entitlements guard passed: {len(catalog)} модулей каталога, "
-        "у каждого есть backend-гейт; гейтов вне реестра нет "
-        f"(принятый долг: {sorted(_KNOWN_UNREGISTERED)}); зависимостей между модулями нет."
+        "гейтов вне реестра нет "
+        f"(принятый долг: {sorted(_KNOWN_UNREGISTERED)}); "
+        f"без backend-гейта по объявленной причине: {sorted(MODULES_WITHOUT_BACKEND_GATE)}; "
+        "зависимостей между модулями нет."
     )
     return 0
 

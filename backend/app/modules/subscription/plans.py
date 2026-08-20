@@ -66,6 +66,9 @@ MODULE_EVENT_TYPES: dict[str, frozenset[str]] = {
     "budget": frozenset(),
     "sout": frozenset(),
     "rules_engine": frozenset({"rule.triggered"}),
+    # BIZ-54-57 срез-2: сводки ПБ строятся из общих данных и своих событий не
+    # испускают — пустая запись обязательна, её требует страж полноты.
+    "fire_safety": frozenset(),
     "warehouse": frozenset(),
 }
 
