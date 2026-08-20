@@ -9,6 +9,7 @@ from typing import Callable, Sequence
 
 from docx import Document
 
+from app.core.disciplines import Discipline
 from app.models.models import DocumentPackModule, DocumentPackScenario
 from app.modules.packs.assets import (
     DEFAULT_LOGO_BYTES,
@@ -33,6 +34,10 @@ __all__ = [
     "PACK_CODE_CONTRACTOR",
     "PACK_CODE_FIRE_INSPECTION",
     "PACK_CODE_CIVIL_DEFENCE",
+    "PACK_CODE_ROAD_SAFETY",
+    "PACKS_WITHOUT_DISCIPLINE",
+    "discipline_pack_coverage",
+    "packs_for",
 ]
 
 
@@ -52,6 +57,9 @@ PACK_CODE_NEW_EMPLOYEE = "OT_NEW_EMPLOYEE"
 PACK_CODE_CONTRACTOR = "OT_NEW_CONTRACTOR"
 PACK_CODE_FIRE_INSPECTION = "PB_SITE_INSPECTION"
 PACK_CODE_CIVIL_DEFENCE = "GOCHS_BASE"
+# Срез-5: БДД была ЕДИНСТВЕННОЙ дисциплиной словаря без сценарного комплекта —
+# в таблице разд. 50.1 её нет, а приёмка §58.3 требует комплект для КАЖДОЙ.
+PACK_CODE_ROAD_SAFETY = "BDD_BASE"
 
 
 class PackScenario(str, Enum):
@@ -66,6 +74,7 @@ class PackScenario(str, Enum):
     CONTRACTOR = "contractor_onboarding"
     FIRE_INSPECTION = "fire_inspection"
     CIVIL_DEFENCE = "civil_defence"
+    ROAD_SAFETY = "road_safety"
 
 
 @dataclass(slots=True, frozen=True)
@@ -88,6 +97,20 @@ class PackDefinition:
     templates: Sequence[PackTemplateSpec]
     item_order: Sequence[str]
     metadata: dict[str, str]
+    #: Дисциплины комплекта КОДАМИ из общего словаря (BIZ-54-57 срез-5).
+    #:
+    #: Раньше дисциплина была только свободной строкой в ``metadata``
+    #: («Охрана труда и промышленная безопасность», «Любая — по типу надзора»),
+    #: и требование приёмки §58.3 «для каждой дисциплины есть комплект» нельзя
+    #: было ни проверить, ни заметить пропажу. Строка осталась подписью для
+    #: человека, а разметка кодами — для проверки.
+    #:
+    #: Пустой набор ДОПУСТИМ и означает «общая охрана труда»: отдельной
+    #: дисциплины для неё в словаре нет (она разложена на медосмотры, СИЗ и
+    #: обучение), и приписать комплект к любой из трёх ради заполненной клетки
+    #: значило бы подменить дисциплину — тот же довод, что у нарядов-допусков
+    #: в срезе-3. Такие комплекты названы в ``PACKS_WITHOUT_DISCIPLINE``.
+    disciplines: tuple[Discipline, ...] = ()
 
 
 def _doc(*paragraphs: str, header: str | None = None, footer: str | None = None) -> bytes:
@@ -610,6 +633,52 @@ def _civil_defence_journal() -> bytes:
     )
 
 
+def _road_safety_order() -> bytes:
+    return _doc(
+        "Приказ о назначении ответственного за обеспечение безопасности дорожного движения",
+        "Компания: {{ company.name }}",
+        "Ответственный за БДД: {{ data.bdd_responsible }}",
+        "Основание: аттестация по БДД от {{ data.bdd_attestation_date }}",
+        "Зона ответственности: {{ data.bdd_fleet_scope }}",
+        header="{{ logo }}",
+        footer="{{ stamp }}",
+    )
+
+
+def _road_safety_instruction() -> bytes:
+    return _doc(
+        "Инструкция по обеспечению безопасности дорожного движения",
+        "Компания: {{ company.name }}",
+        "Порядок выпуска транспорта на линию: {{ data.bdd_dispatch_order }}",
+        "Предрейсовый медицинский осмотр: {{ data.bdd_medical_check_order }}",
+        "Предрейсовый контроль технического состояния: {{ data.bdd_tech_check_order }}",
+        "Режим труда и отдыха водителей: {{ data.bdd_driver_schedule }}",
+        header="{{ logo }}",
+        footer="{{ stamp }}",
+    )
+
+
+def _road_safety_action_plan() -> bytes:
+    return _doc(
+        "План мероприятий по предупреждению дорожно-транспортных происшествий",
+        "Период: {{ data.bdd_plan_period }}",
+        "Мероприятия: {{ data.bdd_measures }}",
+        "Ответственные: {{ data.bdd_responsible }}",
+        "Отметка о выполнении: {{ data.bdd_completion_note }}",
+        footer="Утверждаю: {{ data.bdd_director }}",
+    )
+
+
+def _road_safety_briefing_program() -> bytes:
+    return _doc(
+        "Программа инструктажа водителей по безопасности дорожного движения",
+        "Вид инструктажа: {{ data.bdd_briefing_kind }}",
+        "Темы: {{ data.bdd_briefing_topics }}",
+        "Продолжительность: {{ data.bdd_briefing_hours }}",
+        "Инструктаж провёл: {{ data.bdd_responsible }}",
+        footer="Отметка о проведении: {{ data.bdd_briefing_date }}",
+    )
+
 DEFAULT_PACKS: Sequence[PackDefinition] = (
     PackDefinition(
         code=PACK_CODE_SITE_ACCESS,
@@ -667,6 +736,7 @@ DEFAULT_PACKS: Sequence[PackDefinition] = (
             "stamp": build_inline_image_descriptor(DEFAULT_STAMP_BYTES)["data"],
             "discipline": "Охрана труда и промышленная безопасность",
         },
+        disciplines=(),
     ),
     PackDefinition(
         code=PACK_CODE_NEW_COMPANY,
@@ -716,6 +786,7 @@ DEFAULT_PACKS: Sequence[PackDefinition] = (
             "stamp": build_inline_image_descriptor(DEFAULT_STAMP_BYTES)["data"],
             "discipline": "Охрана труда и пожарная безопасность",
         },
+        disciplines=(Discipline.FIRE_SAFETY,),
     ),
     PackDefinition(
         code=PACK_CODE_INCIDENT,
@@ -760,6 +831,7 @@ DEFAULT_PACKS: Sequence[PackDefinition] = (
             "models": "Incident,IncidentLog",
             "context_keys": "incident_id,company_id,site_id,victim_ids",
         },
+        disciplines=(),
     ),
     PackDefinition(
         code=PACK_CODE_INSPECTION_PREP,
@@ -803,6 +875,7 @@ DEFAULT_PACKS: Sequence[PackDefinition] = (
             "entity": "inspection",
             "context_keys": "inspection_id,company_id,site_id",
         },
+        disciplines=(),
     ),
     PackDefinition(
         code=PACK_CODE_OPO,
@@ -844,6 +917,7 @@ DEFAULT_PACKS: Sequence[PackDefinition] = (
             "stamp": build_inline_image_descriptor(DEFAULT_STAMP_BYTES)["data"],
             "discipline": "Промышленная безопасность",
         },
+        disciplines=(Discipline.INDUSTRIAL_SAFETY,),
     ),
     PackDefinition(
         code=PACK_CODE_WASTE,
@@ -885,6 +959,7 @@ DEFAULT_PACKS: Sequence[PackDefinition] = (
             "stamp": build_inline_image_descriptor(DEFAULT_STAMP_BYTES)["data"],
             "discipline": "Экология",
         },
+        disciplines=(Discipline.ECOLOGY,),
     ),
     PackDefinition(
         code=PACK_CODE_CEO_SHIELD,
@@ -926,6 +1001,7 @@ DEFAULT_PACKS: Sequence[PackDefinition] = (
             "stamp": build_inline_image_descriptor(DEFAULT_STAMP_BYTES)["data"],
             "discipline": "Общее руководство",
         },
+        disciplines=(),
     ),
     PackDefinition(
         code=PACK_CODE_NEW_EMPLOYEE,
@@ -983,6 +1059,7 @@ DEFAULT_PACKS: Sequence[PackDefinition] = (
             "stamp": build_inline_image_descriptor(DEFAULT_STAMP_BYTES)["data"],
             "discipline": "Охрана труда",
         },
+        disciplines=(Discipline.MEDICAL, Discipline.PPE, Discipline.TRAINING),
     ),
     PackDefinition(
         code=PACK_CODE_CONTRACTOR,
@@ -1032,6 +1109,7 @@ DEFAULT_PACKS: Sequence[PackDefinition] = (
             "stamp": build_inline_image_descriptor(DEFAULT_STAMP_BYTES)["data"],
             "discipline": "Охрана труда и промышленная безопасность",
         },
+        disciplines=(),
     ),
     PackDefinition(
         code=PACK_CODE_FIRE_INSPECTION,
@@ -1089,6 +1167,7 @@ DEFAULT_PACKS: Sequence[PackDefinition] = (
             "stamp": build_inline_image_descriptor(DEFAULT_STAMP_BYTES)["data"],
             "discipline": "Пожарная безопасность",
         },
+        disciplines=(Discipline.FIRE_SAFETY,),
     ),
     PackDefinition(
         code=PACK_CODE_CIVIL_DEFENCE,
@@ -1146,7 +1225,109 @@ DEFAULT_PACKS: Sequence[PackDefinition] = (
             "stamp": build_inline_image_descriptor(DEFAULT_STAMP_BYTES)["data"],
             "discipline": "Гражданская оборона и ЧС",
         },
+        disciplines=(Discipline.CIVIL_DEFENSE,),
+    ),
+    PackDefinition(
+        code=PACK_CODE_ROAD_SAFETY,
+        name="Безопасность дорожного движения",
+        description="Базовый комплект БДД: ответственный, инструкция, план мероприятий, инструктаж водителей",
+        scenario=PackScenario.ROAD_SAFETY,
+        module=DocumentPackModule.OT,
+        scenario_type=DocumentPackScenario.DOCUMENT_BATCH,
+        templates=(
+            PackTemplateSpec(
+                code="pack_bdd_order",
+                name="Приказ об ответственном за БДД",
+                description="Назначение ответственного за безопасность дорожного движения",
+                category="order",
+                builder=_road_safety_order,
+            ),
+            PackTemplateSpec(
+                code="pack_bdd_instruction",
+                name="Инструкция по БДД",
+                description="Порядок выпуска транспорта, предрейсовые осмотры и контроль",
+                category="instruction",
+                builder=_road_safety_instruction,
+            ),
+            PackTemplateSpec(
+                code="pack_bdd_action_plan",
+                name="План мероприятий по предупреждению ДТП",
+                description="Профилактика аварийности с ответственными и сроками",
+                category="plan",
+                builder=_road_safety_action_plan,
+            ),
+            PackTemplateSpec(
+                code="pack_bdd_briefing",
+                name="Программа инструктажа водителей",
+                description="Темы и продолжительность инструктажа по БДД",
+                category="training",
+                builder=_road_safety_briefing_program,
+            ),
+        ),
+        item_order=(
+            "pack_bdd_order",
+            "pack_bdd_instruction",
+            "pack_bdd_action_plan",
+            "pack_bdd_briefing",
+        ),
+        metadata={
+            "logo": build_inline_image_descriptor(DEFAULT_LOGO_BYTES)["data"],
+            "stamp": build_inline_image_descriptor(DEFAULT_STAMP_BYTES)["data"],
+            "discipline": "Безопасность дорожного движения",
+        },
+        disciplines=(Discipline.ROAD_SAFETY,),
     ),
 )
 
 PACK_DEFINITIONS_BY_CODE: dict[str, PackDefinition] = {pack.code: pack for pack in DEFAULT_PACKS}
+
+#: Комплекты БЕЗ дисциплины словаря — с причиной у каждого. Пустая разметка и
+#: забытая разметка выглядят одинаково, а стоят разного: первое — решение,
+#: второе — дыра в приёмке §58.3, которую никто не заметит.
+PACKS_WITHOUT_DISCIPLINE: dict[str, str] = {
+    PACK_CODE_SITE_ACCESS: (
+        "общая охрана труда: допуск бригады нужен на любом объекте, "
+        "а промышленная безопасность следует из признака ОПО у площадки, "
+        "а не из самого комплекта"
+    ),
+    PACK_CODE_INCIDENT: (
+        "общая охрана труда: расследование несчастного случая ведётся "
+        "одинаково независимо от дисциплины"
+    ),
+    PACK_CODE_INSPECTION_PREP: (
+        "дисциплина задаётся НАДЗОРНЫМ ОРГАНОМ конкретной проверки, а он "
+        "хранится свободной строкой — приписать комплекту одну дисциплину "
+        "значило бы выбрать её за специалиста"
+    ),
+    PACK_CODE_CEO_SHIELD: (
+        "комплект руководителя: распределение ответственности не относится "
+        "к одной дисциплине"
+    ),
+    PACK_CODE_CONTRACTOR: (
+        "общая охрана труда: допуск подрядчика одинаков для всех дисциплин, "
+        "конкретные требования приходят из его работ"
+    ),
+}
+
+
+def packs_for(discipline: Discipline) -> tuple[PackDefinition, ...]:
+    """Комплекты одной дисциплины (в объявленном порядке каталога)."""
+
+    return tuple(pack for pack in DEFAULT_PACKS if discipline in pack.disciplines)
+
+
+def discipline_pack_coverage() -> list[dict[str, object]]:
+    """Покрытие ВСЕХ дисциплин ТЗ сценарными комплектами (приёмка §58.3).
+
+    Возвращает по строке на дисциплину: сколько комплектов и какие. Требование
+    «минимум один комплект на дисциплину» проверяется по этому списку, а не по
+    словам в описании.
+    """
+
+    return [
+        {
+            "discipline": discipline.value,
+            "packs": [pack.code for pack in packs_for(discipline)],
+        }
+        for discipline in Discipline
+    ]

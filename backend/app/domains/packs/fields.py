@@ -40,6 +40,7 @@ from app.modules.packs.definitions import (
     PACK_CODE_NEW_COMPANY,
     PACK_CODE_NEW_EMPLOYEE,
     PACK_CODE_OPO,
+    PACK_CODE_ROAD_SAFETY,
     PACK_CODE_SITE_ACCESS,
     PACK_CODE_WASTE,
 )
@@ -210,6 +211,22 @@ FIELD_LABELS: dict[str, str] = {
     "commission_members": "Члены комиссии",
     "commission_tasks": "Задачи комиссии",
     "lesson_topic": "Тема занятия",
+    # БДД (BIZ-54-57 срез-5)
+    "bdd_responsible": "Ответственный за безопасность дорожного движения",
+    "bdd_attestation_date": "Дата аттестации по БДД",
+    "bdd_fleet_scope": "Зона ответственности (транспорт, маршруты)",
+    "bdd_dispatch_order": "Порядок выпуска транспорта на линию",
+    "bdd_medical_check_order": "Порядок предрейсового медосмотра",
+    "bdd_tech_check_order": "Порядок предрейсового техконтроля",
+    "bdd_driver_schedule": "Режим труда и отдыха водителей",
+    "bdd_plan_period": "Период плана мероприятий",
+    "bdd_measures": "Мероприятия по предупреждению ДТП",
+    "bdd_completion_note": "Отметка о выполнении",
+    "bdd_director": "Утверждающий (руководитель)",
+    "bdd_briefing_kind": "Вид инструктажа водителей",
+    "bdd_briefing_topics": "Темы инструктажа",
+    "bdd_briefing_hours": "Продолжительность инструктажа",
+    "bdd_briefing_date": "Дата проведения инструктажа",
 }
 
 
@@ -381,6 +398,26 @@ SCENARIO_FIELDS: dict[str, tuple[PackField, ...]] = {
             "team_members",
             "lesson_topic",
             "session_date",
+        ),
+    ),
+    # BIZ-54-57 срез-5: БДД была единственной дисциплиной без комплекта.
+    # Обязательны те четыре ответа, без которых документы теряют смысл:
+    # кто отвечает, как выпускают транспорт, что за мероприятия и какой
+    # инструктаж. Остальное — уточнения.
+    PACK_CODE_ROAD_SAFETY: _fields(
+        ("bdd_responsible", "bdd_dispatch_order", "bdd_measures", "bdd_briefing_kind"),
+        (
+            "bdd_attestation_date",
+            "bdd_fleet_scope",
+            "bdd_medical_check_order",
+            "bdd_tech_check_order",
+            "bdd_driver_schedule",
+            "bdd_plan_period",
+            "bdd_completion_note",
+            "bdd_director",
+            "bdd_briefing_topics",
+            "bdd_briefing_hours",
+            "bdd_briefing_date",
         ),
     ),
 }
