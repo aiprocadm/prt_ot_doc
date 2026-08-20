@@ -8,6 +8,7 @@ import type {
   DryRunIn,
   DryRunOut,
   EventTypePage,
+  RuleLibraryPage,
   RuleTestOut,
   TriggerPage,
 } from "@/types/dto/rules";
@@ -24,6 +25,10 @@ export const isFeatureDisabledError = (error: unknown): boolean => {
 export const rulesApi = {
   async eventTypes(): Promise<EventTypePage> {
     return (await apiClient.get<EventTypePage>(`${BASE}/event-types`)).data;
+  },
+  /** Библиотека предустановленных правил по дисциплинам (BIZ-54-57 срез-4). */
+  async library(): Promise<RuleLibraryPage> {
+    return (await apiClient.get<RuleLibraryPage>(`${BASE}/library`)).data;
   },
   async list(
     params: { limit?: number; offset?: number } = {},

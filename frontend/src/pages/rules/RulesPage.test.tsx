@@ -31,6 +31,7 @@ vi.mock("@/api/rules", async (importOriginal) => {
       dryRun: vi.fn(),
       test: vi.fn(),
       triggers: vi.fn(),
+      library: vi.fn(),
     },
   };
 });
@@ -99,6 +100,23 @@ const FEATURE_OFF_ERROR = {
   message: "Rules engine feature is not enabled for this tenant",
 };
 
+// BIZ-54-57 срез-4: библиотека по дисциплинам. В наборе намеренно есть и
+// дисциплина с правилами, и дисциплина без них — вторая обязана объясняться
+// словами, а не нулём.
+const LIBRARY = {
+  total: 6,
+  installed: 6,
+  items: [
+    { discipline: "fire_safety", title: "Пожарная безопасность", rules: 1, reason: "" },
+    {
+      discipline: "ecology",
+      title: "Экология",
+      rules: 0,
+      reason: "в системе нет ни одного события экологии",
+    },
+  ],
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(rulesApi.list).mockResolvedValue({
@@ -117,6 +135,7 @@ beforeEach(() => {
     limit: 50,
     offset: 0,
   });
+  vi.mocked(rulesApi.library).mockResolvedValue(LIBRARY);
 });
 
 const renderPage = () =>
@@ -317,5 +336,38 @@ describe("RulesPage", () => {
     renderPage();
     expect(await screen.findByText("Успех")).toBeInTheDocument();
     expect(screen.getByText("Уведомление: создано")).toBeInTheDocument();
+  });
+
+  it("показывает библиотеку по дисциплинам и объясняет пустые (BIZ-54-57)", async () => {
+    renderPage();
+
+    const library = await screen.findByTestId("rule-library");
+    expect(within(library).getByText(/Пожарная безопасность/)).toBeInTheDocument();
+    // Ноль без причины прочитали бы как недоделку, а не как решение.
+    expect(
+      within(library).getByText(/правил нет — в системе нет ни одного события экологии/),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/выдано 6 из 6/)).toBeInTheDocument();
+  });
+
+  it("ошибка библиотеки не гасит реестр правил", async () => {
+    vi.mocked(rulesApi.library).mockRejectedValue({ status: 500, message: "boom" });
+    renderPage();
+
+    expect(
+      (await screen.findAllByText("Критичные инциденты")).length,
+    ).toBeGreaterThan(0);
+    expect(screen.queryByTestId("rule-library")).not.toBeInTheDocument();
+  });
+
+  it("экран в UX-бюджете, или долг записан явно (BIZ-60)", async () => {
+    // Срез добавил экрану блок — приёмка бюджета обязана пройти вместе с ним.
+    renderPage();
+    await screen.findByTestId("rule-library");
+
+    const { uxBudgetDelta } = await import("@/test-utils/uxBudget");
+    const budget = uxBudgetDelta(document.body, "RulesPage");
+    expect(budget.unexpected).toEqual([]);
+    expect(budget.stale).toEqual([]);
   });
 });

@@ -57,6 +57,28 @@ class EventTypeMeta(BaseModel):
     fields: list[EventFieldMeta]
 
 
+class RuleLibraryDiscipline(BaseModel):
+    """Покрытие одной дисциплины библиотекой (BIZ-54-57 срез-4, разд. 57.3)."""
+
+    discipline: str
+    title: str
+    #: Сколько правил библиотеки относится к дисциплине.
+    rules: int
+    #: ПОЧЕМУ правил нет. Пустая строка у дисциплин, где правила есть. Ноль без
+    #: причины прочитали бы как «забыли завести», а не как решение.
+    reason: str = ""
+
+
+class RuleLibraryPage(BaseModel):
+    """Библиотека целиком: покрытие по дисциплинам + сколько уже выдано."""
+
+    items: list[RuleLibraryDiscipline]
+    #: Всего правил в библиотеке продукта.
+    total: int
+    #: Сколько из них уже заведено у этого арендатора (по имени).
+    installed: int
+
+
 class EventTypePage(BaseModel):
     items: list[EventTypeMeta]
     total: int

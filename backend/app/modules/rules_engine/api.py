@@ -9,6 +9,7 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
@@ -23,6 +24,7 @@ from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
 from app.db.session import rearm_session_tenant_context
 from app.models.models import Tenant
+from app.models.rules_engine import AutomationRule
 from app.modules.rules_engine.actions import ActionsError
 from app.modules.rules_engine.catalog import event_catalog
 from app.modules.rules_engine.conditions import ConditionsError
@@ -36,6 +38,8 @@ from app.modules.rules_engine.schemas import (
     EventFieldMeta,
     EventTypeMeta,
     EventTypePage,
+    RuleLibraryDiscipline,
+    RuleLibraryPage,
     RuleTestIn,
     RuleTestOut,
     TriggerPage,
@@ -48,6 +52,11 @@ from app.modules.rules_engine.service import (
     RulesEngineService,
 )
 from app.services.audit import AuditService
+from app.services.rules_library_seed import (
+    library_coverage,
+    library_rule_names,
+    library_size,
+)
 
 router = APIRouter(prefix="/rules", tags=["rules-engine"])
 
@@ -148,6 +157,42 @@ async def list_event_types(tenant: TenantDep, access: Access) -> EventTypePage:
         for entry in event_catalog()
     ]
     return EventTypePage(items=items, total=len(items))
+
+
+@router.get("/library", response_model=RuleLibraryPage, dependencies=[FeatureGate])
+async def rule_library(
+    tenant: TenantDep, session: SessionDep, access: Access
+) -> RuleLibraryPage:
+    """Библиотека предустановленных правил по дисциплинам (разд. 57.3).
+
+    Показывает и то, что есть, и то, чего НЕТ с причиной: у экологии, ГО-ЧС и
+    БДД в продукте нет ни одного события, и правило для них пришлось бы вешать
+    на свободный текст — то есть на угадайку. Ноль без объяснения прочитали бы
+    как недоделку, а не как решение.
+    """
+
+    TenantContextValidator.ensure_tenant_context(tenant)
+    _ = access
+    names = library_rule_names()
+    installed = int(
+        (
+            await session.execute(
+                select(func.count())
+                .select_from(AutomationRule)
+                .where(
+                    AutomationRule.tenant_id == str(tenant.id),
+                    AutomationRule.deleted_at.is_(None),
+                    AutomationRule.name.in_(names),
+                )
+            )
+        ).scalar_one()
+        or 0
+    )
+    return RuleLibraryPage(
+        items=[RuleLibraryDiscipline(**row) for row in library_coverage()],
+        total=library_size(),
+        installed=installed,
+    )
 
 
 @router.get("", response_model=AutomationRulePage, dependencies=[FeatureGate])
