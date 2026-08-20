@@ -17,6 +17,7 @@ from app.core.audit_decorator import audit_operation
 from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
 from app.db.session import rearm_session_tenant_context
+from app.domains.sites.overview import collect_site_overview
 from app.models.models import (
     Branch,
     Company,
@@ -28,7 +29,12 @@ from app.models.models import (
 from app.models.risk import RiskHazard
 from app.schemas.site import (
     SiteCreate,
+    SiteDisciplineRead,
+    SiteFactsRead,
+    SiteNotCountedRead,
+    SiteOverviewRead,
     SitePage,
+    SitePermitFactsRead,
     SiteRead,
     SiteUpdate,
     WorkplaceCreate,
@@ -188,6 +194,81 @@ async def get_site(
 
     site = await _get_site(session, tenant, site_id)
     return SiteRead.model_validate(site)
+
+
+@router.get("/sites/{site_id}/overview", response_model=SiteOverviewRead)
+async def get_site_overview(
+    site_id: str,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: ManagerAccess,
+) -> SiteOverviewRead:
+    """Карточка площадки 360° (BIZ-54-57 срез-3, Доп. №1 разд. 57.1).
+
+    **Круг читателей тот же, что у самой площадки** (``ManagerAccess``).
+    Карточка агрегирует медосмотры, СИЗ и обучение людей площадки — это
+    персональные данные, и расширять круг читателей мимоходом, «раз уж экран
+    новый», нельзя: в срезе-1 ручка без ролевого правила показала бы сотруднику
+    медосмотры всего арендатора. Понадобится специалисту без прав админа —
+    это отдельное решение о доступе к ПДн, а не побочный эффект новой ручки.
+
+    **Читатель, привязанный к компании, видит только её площадки.** Тот же урок
+    среза-1: в арендаторе-аутсорсере админ одного клиента иначе прочитал бы
+    сводку по людям другого. Отвечаем 404, а не 403: 403 подтвердил бы, что
+    такая площадка существует.
+    """
+
+    TenantContextValidator.ensure_tenant_context(tenant)
+
+    site = await _get_site(session, tenant, site_id)
+    scoped_company = getattr(access, "company_id", None)
+    if scoped_company and str(site.company_id) != str(scoped_company):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Site not found")
+    overview = await collect_site_overview(session, tenant_id=str(tenant.id), site=site)
+    return SiteOverviewRead(
+        site_id=overview.site_id,
+        name=overview.name,
+        company_id=overview.company_id,
+        address=overview.address,
+        hazard_class=overview.hazard_class,
+        is_hazardous_production_facility=overview.is_hazardous_production_facility,
+        opo_register_number=overview.opo_register_number,
+        overall=overview.overall.value,
+        disciplines=[
+            SiteDisciplineRead(
+                discipline=row.discipline.value,
+                title=row.title,
+                light=row.light.value,
+                reason=row.reason,
+                required=row.counts.required,
+                missing=row.counts.missing,
+                lapsed=row.counts.lapsed,
+                expiring=row.counts.expiring,
+            )
+            for row in overview.disciplines
+        ],
+        facts=SiteFactsRead(
+            workplaces=overview.facts.workplaces,
+            people=overview.facts.people,
+            people_without_workplace=overview.facts.people_without_workplace,
+            permits=SitePermitFactsRead(
+                total=overview.facts.permits.total,
+                by_discipline={
+                    discipline.value: count
+                    for discipline, count in overview.facts.permits.by_discipline.items()
+                },
+                without_discipline=overview.facts.permits.without_discipline,
+                without_discipline_titles=list(
+                    overview.facts.permits.without_discipline_titles
+                ),
+                without_discipline_reason=overview.facts.permits.without_discipline_reason,
+            ),
+        ),
+        not_counted=[
+            SiteNotCountedRead(title=title, reason=reason)
+            for title, reason in overview.not_counted
+        ],
+    )
 
 
 @router.patch("/sites/{site_id}", response_model=SiteRead)

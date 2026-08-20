@@ -10,6 +10,7 @@ import {
   ClipboardCheck,
   FileArchive,
   FileText,
+  Factory,
   Flame,
   Gauge,
   GraduationCap,
@@ -397,6 +398,15 @@ export const MAIN_NAV_GROUPS: NavGroup[] = [
         label: "Опасности, нормы, чек-листы",
         to: "/reference",
         icon: Archive,
+        permission: PERMISSIONS.REFERENCE_VIEW,
+      },
+      {
+        // BIZ-54-57 срез-3: вход в карточку площадки 360°. Пункт меню, а не
+        // только ссылка в хабе: экран, до которого надо догадаться дойти,
+        // на практике не существует.
+        label: "Площадки",
+        to: "/sites",
+        icon: Factory,
         permission: PERMISSIONS.REFERENCE_VIEW,
       },
       {

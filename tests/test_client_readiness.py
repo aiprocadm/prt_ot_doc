@@ -24,7 +24,9 @@ from app.domains.managed_clients.readiness import (
     training_readiness,
     worst_light,
 )
-from app.domains.managed_clients.readiness_service import _medical_counts, _ppe_counts
+# Правила счёта переехали в общий сервис (BIZ-54-57 срез-3): тот же счёт
+# ведёт карточка площадки, поэтому проверяются они там, где живут.
+from app.services.discipline_numbers import _medical_counts, _ppe_counts
 
 TODAY = date(2026, 8, 17)
 NOW = datetime(2026, 8, 17, 12, 0, tzinfo=timezone.utc)
@@ -101,7 +103,7 @@ class TestBuildDirections:
             ppe=DirectionCounts(),
             training_overdue=0,
         )
-        assert [r.direction for r in rows] == [
+        assert [r.discipline for r in rows] == [
             Direction.MEDICAL,
             Direction.PPE,
             Direction.TRAINING,
@@ -118,7 +120,7 @@ class TestBuildDirections:
             ppe=DirectionCounts(),
             training_overdue=0,
         )
-        unmeasured = [r for r in rows if r.direction is Direction.ECOLOGY]
+        unmeasured = [r for r in rows if r.discipline is Direction.ECOLOGY]
         assert unmeasured[0].light is TrafficLight.NOT_MEASURED
         assert "не ведётся" in unmeasured[0].reason
 

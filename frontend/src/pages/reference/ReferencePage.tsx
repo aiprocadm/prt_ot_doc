@@ -54,6 +54,14 @@ const ReferencePage = () => {
       hint: "Журналы и mobile flows",
       to: "/briefings",
     },
+    {
+      // BIZ-54-57 срез-3: вход в карточку площадки 360°. Числа НЕТ намеренно:
+      // площадки читает только администратор, и «0» на месте отказа в доступе
+      // прочитали бы как «площадок нет».
+      title: "Площадки",
+      hint: "Статус объекта по всем дисциплинам",
+      to: "/sites",
+    },
   ];
 
   return (
@@ -69,7 +77,9 @@ const ReferencePage = () => {
       />
       <ErrorState error={error ?? undefined} onRetry={() => void reload()} />
       {loading ? <LoadingScreen label="Загрузка справочников" /> : null}
-      {!loading && !error && cards.every((item) => item.count === 0) ? (
+      {!loading &&
+      !error &&
+      cards.every((item) => item.count === undefined || item.count === 0) ? (
         <EmptyState
           title="Справочники пока пусты"
           description="Импортируйте справочники или загрузите первые записи."
@@ -82,7 +92,7 @@ const ReferencePage = () => {
               <CardHeader>
                 <CardTitle className="flex items-center justify-between text-base">
                   <span>{item.title}</span>
-                  <span>{item.count}</span>
+                  {item.count === undefined ? null : <span>{item.count}</span>}
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3 text-sm text-muted-foreground">

@@ -1904,7 +1904,7 @@ async def get_client_readiness(
         overall=worst_light(rows).value,
         directions=[
             DirectionReadinessRead(
-                direction=row.direction.value,
+                direction=row.discipline.value,
                 title=row.title,
                 light=row.light.value,
                 reason=row.reason,

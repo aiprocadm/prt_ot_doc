@@ -105,7 +105,7 @@ def build_report(
         },
         "directions": [
             {
-                "direction": row.direction.value,
+                "direction": row.discipline.value,
                 "title": row.title,
                 "light": row.light.value,
                 "reason": row.reason,

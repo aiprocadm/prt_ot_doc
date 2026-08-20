@@ -438,6 +438,7 @@
     "GET /api/v1/signatures",
     "GET /api/v1/sites",
     "GET /api/v1/sites/{site_id}",
+    "GET /api/v1/sites/{site_id}/overview",
     "GET /api/v1/sout",
     "GET /api/v1/sout/workplaces/{wid}",
     "GET /api/v1/sout/workplaces/{wid}/card/print",
@@ -1481,6 +1482,7 @@
     "get_settings_api_v1_notifications_settings_me_get",
     "get_sign_request_api_v1_sign_requests__request_id__get",
     "get_site_api_v1_sites__site_id__get",
+    "get_site_overview_api_v1_sites__site_id__overview_get",
     "get_step_logs_api_v1_jobs__job_id__steps__step_id__logs_get",
     "get_stock_batch_api_v1_ppe_stock_batches__batch_id__get",
     "get_supplier_endpoint_api_v1_ppe_suppliers__supplier_id__get",
@@ -2743,7 +2745,12 @@
     "SignedUrlRequest",
     "SignedUrlResponse",
     "SiteCreate",
+    "SiteDisciplineRead",
+    "SiteFactsRead",
+    "SiteNotCountedRead",
+    "SiteOverviewRead",
     "SitePage",
+    "SitePermitFactsRead",
     "SiteRead",
     "SiteUpdate",
     "SourcePreviewRead",
@@ -8216,9 +8223,49 @@
       "opo_register_number": "null|string",
       "branding_payload": "object"
     },
+    "SiteDisciplineRead": {
+      "discipline": "string",
+      "title": "string",
+      "light": "string",
+      "reason": "string",
+      "required": "integer",
+      "missing": "integer",
+      "lapsed": "integer",
+      "expiring": "integer"
+    },
+    "SiteFactsRead": {
+      "workplaces": "integer",
+      "people": "integer",
+      "people_without_workplace": "integer",
+      "permits": "SitePermitFactsRead"
+    },
+    "SiteNotCountedRead": {
+      "title": "string",
+      "reason": "string"
+    },
+    "SiteOverviewRead": {
+      "site_id": "string",
+      "name": "string",
+      "company_id": "string",
+      "address": "null|string",
+      "hazard_class": "null|string",
+      "is_hazardous_production_facility": "boolean",
+      "opo_register_number": "null|string",
+      "overall": "string",
+      "disciplines": "array",
+      "facts": "SiteFactsRead",
+      "not_counted": "array"
+    },
     "SitePage": {
       "items": "array",
       "total": "integer"
+    },
+    "SitePermitFactsRead": {
+      "total": "integer",
+      "by_discipline": "object",
+      "without_discipline": "integer",
+      "without_discipline_titles": "array",
+      "without_discipline_reason": "string"
     },
     "SiteRead": {
       "company_id": "string",
