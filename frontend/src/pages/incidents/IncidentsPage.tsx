@@ -303,36 +303,47 @@ const IncidentsPage = () => {
                         ))}
                       </select>
                     </div>
-                    <div className="space-y-1.5">
-                      <Label htmlFor="inc-site">ID площадки</Label>
-                      <Input
-                        id="inc-site"
-                        value={form.site_id}
-                        onChange={(e) =>
-                          setForm((prev) => ({
-                            ...prev,
-                            site_id: e.target.value,
-                          }))
-                        }
-                        placeholder="UUID площадки (опционально)"
-                      />
+                  </div>
+                  {/* BIZ-59 (разд. 59.3, три уровня раскрытия): необязательные
+                      поля уходят на второй уровень. При регистрации инцидента
+                      важна скорость — площадку и подробности дописывают потом,
+                      а требовать их сразу значит задержать саму регистрацию. */}
+                  <details className="space-y-1.5">
+                    <summary className="cursor-pointer text-sm text-muted-foreground">
+                      Дополнительно
+                    </summary>
+                    <div className="space-y-4 pt-3">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="inc-site">ID площадки</Label>
+                        <Input
+                          id="inc-site"
+                          value={form.site_id}
+                          onChange={(e) =>
+                            setForm((prev) => ({
+                              ...prev,
+                              site_id: e.target.value,
+                            }))
+                          }
+                          placeholder="UUID площадки (опционально)"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="inc-desc">Описание</Label>
+                        <Textarea
+                          id="inc-desc"
+                          value={form.description}
+                          onChange={(e) =>
+                            setForm((prev) => ({
+                              ...prev,
+                              description: e.target.value,
+                            }))
+                          }
+                          placeholder="Подробное описание произошедшего"
+                          rows={3}
+                        />
+                      </div>
                     </div>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="inc-desc">Описание</Label>
-                    <Textarea
-                      id="inc-desc"
-                      value={form.description}
-                      onChange={(e) =>
-                        setForm((prev) => ({
-                          ...prev,
-                          description: e.target.value,
-                        }))
-                      }
-                      placeholder="Подробное описание произошедшего"
-                      rows={3}
-                    />
-                  </div>
+                  </details>
                   <div className="flex justify-end gap-2">
                     <Button
                       variant="outline"

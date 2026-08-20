@@ -103,6 +103,32 @@ describe("BillingPage", () => {
     expect(budget.stale).toEqual([]);
   });
 
+  it("бюджет не зависит от ЧИСЛА тарифов (BIZ-59)", async () => {
+    // Сторож против ловушки, из-за которой экран и попал в долг: кнопка жила
+    // внутри повторяющейся карточки, и «главных действий» становилось больше с
+    // каждым новым тарифом. На фикстуре из двух это выглядело мелким
+    // превышением, на боевых данных превращалось бы в любое число. Проверка
+    // мерит тот же экран на впятеро большем списке.
+    getBillingPlansMock.mockResolvedValue([
+      { code: "basic", name: "Basic", limits: {}, features: {} },
+      { code: "pro", name: "Pro", limits: {}, features: {} },
+      { code: "team", name: "Team", limits: {}, features: {} },
+      { code: "business", name: "Business", limits: {}, features: {} },
+      { code: "enterprise", name: "Enterprise", limits: {}, features: {} },
+    ]);
+    render(
+      <MemoryRouter>
+        <BillingPage />
+      </MemoryRouter>,
+    );
+    // Четыре «Сменить» и один «Текущий»: у действующего тарифа кнопка занята.
+    await waitFor(() => expect(screen.getAllByText("Сменить").length).toBe(4));
+
+    const budget = uxBudgetDelta(document.body, "BillingPage");
+    expect(budget.unexpected).toEqual([]);
+    expect(budget.stale).toEqual([]);
+  });
+
   it("shows action error and keeps current subscription section visible when mark past due fails", async () => {
     markSubscriptionPastDueMock.mockRejectedValueOnce({
       status: 400,
