@@ -21,6 +21,7 @@ from app.modules.packs.definitions import (
     PACK_CODE_NEW_COMPANY,
     PACK_CODE_NEW_EMPLOYEE,
     PACK_CODE_OPO,
+    PACK_CODE_ROAD_SAFETY,
     PACK_CODE_SITE_ACCESS,
     PACK_CODE_WASTE,
 )
@@ -434,6 +435,41 @@ def _apply_civil_defence(context: dict[str, Any], data: dict[str, Any]) -> dict[
     return context
 
 
+def _apply_road_safety(context: dict[str, Any], data: dict[str, Any]) -> dict[str, Any]:
+    """БДД (BIZ-54-57 срез-5): подстановки базового комплекта.
+
+    Умолчания намеренно ГОВОРЯЩИЕ, а не пустые: документ с прочерком на месте
+    ответственного за БДД выглядит оформленным, хотя ответственного нет.
+    """
+
+    _ensure_company_alias(context)
+    context["logo"] = _decode_image(data.get("logo"), DEFAULT_LOGO_BYTES)
+    context["stamp"] = _decode_image(data.get("stamp"), DEFAULT_STAMP_BYTES)
+
+    payload = context.setdefault("data", {})
+    payload.setdefault(
+        "bdd_responsible",
+        _coerce_text(data.get("bdd_responsible"), "Ответственный не назначен"),
+    )
+    payload.setdefault(
+        "bdd_attestation_date", _coerce_text(data.get("bdd_attestation_date"), "не проходил")
+    )
+    payload.setdefault("bdd_fleet_scope", _coerce_text(data.get("bdd_fleet_scope")))
+    payload.setdefault("bdd_dispatch_order", _coerce_text(data.get("bdd_dispatch_order")))
+    payload.setdefault("bdd_medical_check_order", _coerce_text(data.get("bdd_medical_check_order")))
+    payload.setdefault("bdd_tech_check_order", _coerce_text(data.get("bdd_tech_check_order")))
+    payload.setdefault("bdd_driver_schedule", _coerce_text(data.get("bdd_driver_schedule")))
+    payload.setdefault("bdd_plan_period", _coerce_text(data.get("bdd_plan_period")))
+    payload.setdefault("bdd_measures", _format_list(data.get("bdd_measures")))
+    payload.setdefault("bdd_completion_note", _coerce_text(data.get("bdd_completion_note")))
+    payload.setdefault("bdd_director", _coerce_text(data.get("bdd_director")))
+    payload.setdefault("bdd_briefing_kind", _coerce_text(data.get("bdd_briefing_kind")))
+    payload.setdefault("bdd_briefing_topics", _format_list(data.get("bdd_briefing_topics")))
+    payload.setdefault("bdd_briefing_hours", _coerce_text(data.get("bdd_briefing_hours")))
+    payload.setdefault("bdd_briefing_date", _coerce_text(data.get("bdd_briefing_date")))
+    return context
+
+
 _BUILDERS: dict[str, Builder] = {
     PACK_CODE_SITE_ACCESS: _apply_site_access,
     PACK_CODE_NEW_COMPANY: _apply_new_company,
@@ -446,6 +482,7 @@ _BUILDERS: dict[str, Builder] = {
     PACK_CODE_CONTRACTOR: _apply_contractor,
     PACK_CODE_FIRE_INSPECTION: _apply_fire_inspection,
     PACK_CODE_CIVIL_DEFENCE: _apply_civil_defence,
+    PACK_CODE_ROAD_SAFETY: _apply_road_safety,
 }
 
 
