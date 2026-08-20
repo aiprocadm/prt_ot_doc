@@ -17,7 +17,6 @@ import {
   type PortfolioPage,
   type Severity,
   type SpecialistWorkloadResponse,
-  type TrafficLight,
 } from "@/api/managedClients";
 import { ClientContextSwitcher } from "@/components/common/ClientContextSwitcher";
 import { EmptyState } from "@/components/common/EmptyState";
@@ -36,7 +35,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { LIGHT_LABELS, LIGHT_VARIANT } from "@/pages/managed-clients/lights";
+import { LIGHT_LABELS, LIGHT_VARIANT } from "@/lib/lights";
 import type { ApiError } from "@/types/dto/common";
 import { formatDate } from "@/utils/datetime";
 

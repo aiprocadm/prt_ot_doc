@@ -67,6 +67,8 @@ import {
   PermitsPage,
   PrescriptionsPage,
   ReferencePage,
+  SiteCardPage,
+  SitesPage,
   ReportBuilderPage,
   ReportsPage,
   RiskPage,
@@ -396,6 +398,15 @@ export const buildProtectedRouteGroups = (): ReactElement[] => {
           key="/reference"
           path="/reference"
           element={<ReferencePage />}
+        />,
+        // Площадки — справочник предприятия, поэтому право то же. Карточка
+        // 360° живёт ЗДЕСЬ, а не в модуле дисциплины: она про все дисциплины
+        // сразу, и выключение «Пожарной безопасности» не должно её прятать.
+        <Route key="/sites" path="/sites" element={<SitesPage />} />,
+        <Route
+          key="/sites/:siteId"
+          path="/sites/:siteId"
+          element={<SiteCardPage />}
         />,
       ],
     },

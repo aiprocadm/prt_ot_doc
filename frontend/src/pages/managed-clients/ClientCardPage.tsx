@@ -16,7 +16,7 @@ import { RegistryPageHeader } from "@/components/common/RegistryPageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { lightLabel, lightVariant } from "@/pages/managed-clients/lights";
+import { lightLabel, lightVariant } from "@/lib/lights";
 import type { ApiError } from "@/types/dto/common";
 import { formatDate } from "@/utils/datetime";
 
