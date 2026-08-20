@@ -27,6 +27,11 @@ class EventType(str, enum.Enum):
     EDO_SENT = "edo.sent"
     EDO_STATUS_CHANGED = "edo.status_changed"
     INCIDENT_CREATED = "IncidentCreated"
+    # BIZ-54-57 срез-4: наряд-допуск выдан. До этого среза наряды не порождали
+    # НИ ОДНОГО события, и правила по ним написать было не на чем — а вид работ
+    # у наряда закрытый, и у двух видов дисциплина следует из закона (огневые →
+    # ПБ, газоопасные → ПромБез). Это единственные события этих двух дисциплин.
+    WORK_PERMIT_ISSUED = "WorkPermitIssued"
     INSPECTION_CREATED = "InspectionCreated"
     PRESCRIPTION_OVERDUE = "PrescriptionOverdue"
     MEDICAL_EXAM_RECORDED = "MedicalExamRecorded"
@@ -247,6 +252,21 @@ class PrescriptionOverduePayload(BaseEventPayload):
     due_at: date | None = None
 
 
+class WorkPermitIssuedPayload(BaseEventPayload):
+    """Наряд-допуск выдан (BIZ-54-57 срез-4).
+
+    ``work_type`` — ЗАКРЫТЫЙ список из шести значений
+    (``domains/work_permits/lifecycle.py``), поэтому условие правила по нему
+    точное, а не догадка по свободному тексту.
+    """
+
+    work_permit_id: str
+    work_type: str
+    site_id: str | None = None
+    number: str | None = None
+    zone_text: str | None = None
+
+
 class TaskDuePayload(BaseEventPayload):
     task_id: str
     title: str
@@ -309,6 +329,7 @@ _PAYLOADS: dict[EventType, type[BaseEventPayload]] = {
     EventType.EDO_SENT: InternalEventPayload,
     EventType.EDO_STATUS_CHANGED: InternalEventPayload,
     EventType.INCIDENT_CREATED: IncidentCreatedPayload,
+    EventType.WORK_PERMIT_ISSUED: WorkPermitIssuedPayload,
     EventType.INSPECTION_CREATED: InspectionCreatedPayload,
     EventType.PRESCRIPTION_OVERDUE: PrescriptionOverduePayload,
     EventType.MEDICAL_EXAM_RECORDED: MedicalExamRecordedPayload,
@@ -393,6 +414,10 @@ def dedupe_key_for(event_type: EventType, payload: BaseEventPayload) -> str:
         return payload.exam_id
     if isinstance(payload, (PersonSuspendedPayload, PersonReinstatedPayload)):
         return payload.suspension_id
+    if isinstance(payload, WorkPermitIssuedPayload):
+        # Наряд выдаётся один раз: возобновление после приостановки идёт другой
+        # ручкой и события не порождает — работа там не начинается заново.
+        return f"{payload.work_permit_id}:issued"
     if isinstance(payload, ClientChangeRecordedPayload):
         # Запись ленты создаётся один раз (дедуп источников — на их стороне),
         # поэтому её id и есть личность события.

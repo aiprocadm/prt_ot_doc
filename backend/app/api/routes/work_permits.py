@@ -70,6 +70,8 @@ from app.schemas.work_permit import (
     WorkPermitSignatureRead,
     WorkPermitUpdate,
 )
+from app.services.events import EventType
+from app.services.outbox import OutboxService
 from app.services.pep_signing import PepConflict, PepNotFound
 from app.services.work_permit_admission import WorkPermitBlocked, check_brigade_readiness
 from app.services.work_permit_print import PdfRendererUnavailable, render_work_permit
@@ -547,7 +549,7 @@ async def issue_endpoint(
     TenantContextValidator.ensure_tenant_context(tenant)
     if payload.photo_file_id:
         await _ensure_file(session, tenant, payload.photo_file_id)
-    return await _action(
+    result = await _action(
         session,
         tenant,
         wp_id,
@@ -560,6 +562,25 @@ async def issue_endpoint(
             note=payload.note,
         ),
     )
+    # BIZ-54-57 срез-4: наряды не порождали НИ ОДНОГО события, поэтому у
+    # пожарной и промышленной безопасности не было ни одного правила — писать
+    # их было не на чем. Событие испускается ТОЛЬКО на выдаче: черновик ещё не
+    # работа, а закрытие и отмена работы уже не начинают.
+    permit = await _get_or_404(session, tenant, wp_id)
+    await OutboxService(session).enqueue(
+        tenant_id=str(tenant.id),
+        event_type=EventType.WORK_PERMIT_ISSUED.value,
+        payload={
+            "tenant_id": str(tenant.id),
+            "work_permit_id": str(permit.id),
+            "work_type": permit.work_type,
+            "site_id": permit.site_id,
+            "number": permit.number,
+            "zone_text": permit.zone_text,
+            "actor_id": getattr(access.user, "id", None) if access else None,
+        },
+    )
+    return result
 
 
 @router.post("/{wp_id}/suspend", response_model=WorkPermitRead)

@@ -69,6 +69,22 @@ export interface EventTypePage {
   total: number;
 }
 
+/** Покрытие одной дисциплины библиотекой правил (BIZ-54-57 срез-4). */
+export interface RuleLibraryDiscipline {
+  discipline: string;
+  title: string;
+  rules: number;
+  /** Почему правил нет. Пусто у дисциплин, где правила есть. */
+  reason: string;
+}
+
+export interface RuleLibraryPage {
+  items: RuleLibraryDiscipline[];
+  total: number;
+  /** Сколько правил библиотеки уже заведено у арендатора. */
+  installed: number;
+}
+
 export interface DryRunEvent {
   event_type: string;
   payload: Record<string, unknown>;

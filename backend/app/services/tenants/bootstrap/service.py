@@ -30,6 +30,7 @@ from app.modules.subscription.plans import DEFAULT_PLAN_CODE, PLANS
 from app.services.audit import AuditService
 from app.services.auth import hash_password
 from app.services.authz_seed import seed_authz_catalog
+from app.services.rules_library_seed import seed_rule_library
 from app.services.tenants.subscription import provision_plan
 
 
@@ -137,6 +138,7 @@ class BootstrapTenantService:
             summary=summary,
         )
         await self._seed_package_presets(tenant_id=tenant_id, dry_run=dry_run, summary=summary)
+        await self._seed_rule_library(tenant_id=tenant_id, dry_run=dry_run, summary=summary)
         await self._log_bootstrap_event(
             tenant_id=tenant_id, tenant_slug=tenant_slug, dry_run=dry_run, summary=summary
         )
@@ -522,6 +524,27 @@ class BootstrapTenantService:
             return False
         await self.session.execute(insert(model.__table__), rows)
         return True
+
+    async def _seed_rule_library(
+        self, *, tenant_id: str, dry_run: bool, summary: BootstrapTenantSummary
+    ) -> None:
+        """Библиотека правил по дисциплинам (BIZ-54-57 срез-4, разд. 57.3).
+
+        Сверка нашла: движок правил был, а предустановленных правил — ни одного.
+        Два правила существовали только у демо-арендатора, прямо в коде демо-
+        посева; настоящий новый клиент получал пустой движок и должен был
+        придумывать экспертизу сам.
+
+        Выдаётся ВСЕМ, включая арендаторов без купленного модуля: движок сам
+        проверяет модуль перед срабатыванием, поэтому у них правила лежат и
+        молчат. Иначе купивший модуль позже получил бы пустой движок.
+        """
+
+        if dry_run:
+            summary.mark(entity="rule_library", created=True)
+            return
+        created = await seed_rule_library(self.session, tenant_id=tenant_id)
+        summary.mark(entity="rule_library", created=bool(created))
 
     async def _seed_package_presets(
         self, *, tenant_id: str, dry_run: bool, summary: BootstrapTenantSummary

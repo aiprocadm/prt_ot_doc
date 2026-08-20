@@ -422,6 +422,7 @@
     "GET /api/v1/risks",
     "GET /api/v1/rules",
     "GET /api/v1/rules/event-types",
+    "GET /api/v1/rules/library",
     "GET /api/v1/rules/triggers",
     "GET /api/v1/rules/{rule_id}",
     "GET /api/v1/safety-ops/prescriptions",
@@ -1862,6 +1863,7 @@
     "rollback_batch_api_v1_imports_batches__batch_id__rollback_post",
     "rotate_machine_key_api_v1_machine_keys__item_id__rotate_post",
     "rotate_webhook_secret_api_v1_webhooks_endpoints__webhook_id__rotate_secret_post",
+    "rule_library_api_v1_rules_library_get",
     "run_client_audit_api_v1_managed_clients_audit_run_post",
     "run_definition_api_v1_report_builder_definitions__definition_id__run_post",
     "run_pack_api_v1_packs_run_post",
@@ -2722,6 +2724,8 @@
     "RolePayload",
     "RoleWorkspaceSummary",
     "RowErrorOut",
+    "RuleLibraryDiscipline",
+    "RuleLibraryPage",
     "RuleTestIn",
     "RuleTestOut",
     "RuleTestResultItem",
@@ -8089,6 +8093,17 @@
       "code": "string",
       "field": "null|string",
       "message": "string"
+    },
+    "RuleLibraryDiscipline": {
+      "discipline": "string",
+      "title": "string",
+      "rules": "integer",
+      "reason": "string"
+    },
+    "RuleLibraryPage": {
+      "items": "array",
+      "total": "integer",
+      "installed": "integer"
     },
     "RuleTestIn": {
       "limit": "integer"

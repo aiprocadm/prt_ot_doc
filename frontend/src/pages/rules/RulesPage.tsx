@@ -13,13 +13,18 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { DryRunPanel } from "@/features/rules/DryRunPanel";
+import { RuleLibraryPanel } from "@/features/rules/RuleLibraryPanel";
 import { RuleFormDialog } from "@/features/rules/RuleFormDialog";
 import { TriggerLogPanel } from "@/features/rules/TriggerLogPanel";
 import { useAsyncResource } from "@/hooks/useAsyncResource";
 import { useLocalRegistry } from "@/hooks/useLocalRegistry";
 import { PERMISSIONS } from "@/permissions/permissions";
 import { ACTION_LABELS, eventLabel } from "@/pages/rules/rulesVocab";
-import type { AutomationRuleRead, EventTypeMeta } from "@/types/dto/rules";
+import type {
+  AutomationRuleRead,
+  EventTypeMeta,
+  RuleLibraryPage,
+} from "@/types/dto/rules";
 
 const conditionsLabel = (count: number): string => {
   if (count === 0) return "все события";
@@ -40,6 +45,7 @@ const RulesPage = () => {
     () => rulesApi.eventTypes().then((page) => page.items),
     [],
   );
+  const libraryLoader = useCallback(() => rulesApi.library(), []);
 
   const rulesRes = useAsyncResource<AutomationRuleRead[]>({
     loader: rulesLoader,
@@ -50,6 +56,13 @@ const RulesPage = () => {
     loader: eventTypesLoader,
     initialData: [],
     errorMessage: "Не удалось загрузить каталог событий",
+  });
+  // Библиотека грузится отдельно и её ошибка НЕ гасит экран: правила арендатора
+  // важнее справки о том, что поставляется из коробки.
+  const libraryRes = useAsyncResource<RuleLibraryPage | null>({
+    loader: libraryLoader,
+    initialData: null,
+    errorMessage: "Не удалось загрузить библиотеку правил",
   });
 
   const registry = useLocalRegistry({
@@ -248,6 +261,7 @@ const RulesPage = () => {
       ) : null}
 
       {/* Панели не гейтим на loading: перемонтирование TriggerLogPanel дублировало бы запрос триггеров. */}
+      <RuleLibraryPanel library={libraryRes.data} />
       <DryRunPanel eventTypes={eventTypesRes.data} rules={rulesRes.data} />
       <TriggerLogPanel rules={rulesRes.data} />
     </div>
