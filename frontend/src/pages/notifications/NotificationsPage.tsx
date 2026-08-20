@@ -375,9 +375,15 @@ const NotificationsPage = () => {
       </Card>
 
       <Card>
-        <CardHeader>
-          <CardTitle>Предпочтения и тихие часы</CardTitle>
-        </CardHeader>
+        {/* BIZ-59 (разд. 59.1 «одна задача — один экран»): настройка каналов и
+            тихих часов — отдельная задача от чтения уведомлений. Шесть её полей
+            висели рядом с фильтрами списка и давали десять видимых полей на
+            экране. Настройку меняют редко, поэтому она на втором уровне
+            раскрытия (разд. 59.3), а не перед глазами каждый раз. */}
+        <details>
+          <summary className="cursor-pointer px-6 py-4 text-sm font-semibold">
+            Предпочтения и тихие часы
+          </summary>
         <CardContent className="grid gap-3 md:grid-cols-2">
           <label className="flex items-center gap-2 text-sm">
             <input
@@ -497,6 +503,7 @@ const NotificationsPage = () => {
             Сохранить настройки
           </Button>
         </CardContent>
+        </details>
       </Card>
 
       <Card>

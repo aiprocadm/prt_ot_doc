@@ -28,6 +28,12 @@ const BriefingsPage = () => {
   const [entries, setEntries] = useState<BriefingEntryDto[]>([]);
   const [overdue, setOverdue] = useState<BriefingEntryDto[]>([]);
   const [loading, setLoading] = useState(false);
+  // BIZ-59 (разд. 59.1 «одна задача — один экран»): три формы висели на экране
+  // одновременно — одиннадцать полей и три главных действия сразу. Открыта
+  // всегда ОДНА: специалист приходит сюда с одной задачей, а не с тремя.
+  const [openForm, setOpenForm] = useState<
+    "template" | "journal" | "assign" | null
+  >(null);
   const [loadError, setLoadError] = useState<ApiError | null>(null);
   const [persons, setPersons] = useState<PersonDto[]>([]);
   const [templateForm, setTemplateForm] = useState({
@@ -175,7 +181,28 @@ const BriefingsPage = () => {
         </CardContent>
       </Card>
 
-      <div className="grid gap-6 xl:grid-cols-3">
+      <div className="flex flex-wrap gap-2" data-testid="briefing-form-switch">
+        {(
+          [
+            ["template", "Новый шаблон"],
+            ["journal", "Новый журнал"],
+            ["assign", "Назначить инструктаж"],
+          ] as const
+        ).map(([key, label]) => (
+          <Button
+            key={key}
+            variant={openForm === key ? "secondary" : "outline"}
+            size="sm"
+            disabled={!canManageBriefings}
+            onClick={() => setOpenForm(openForm === key ? null : key)}
+          >
+            {label}
+          </Button>
+        ))}
+      </div>
+
+      <div className="grid gap-6">
+        {openForm === "template" ? (
         <Card>
           <CardHeader>
             <CardTitle>Новый шаблон</CardTitle>
@@ -246,7 +273,9 @@ const BriefingsPage = () => {
             </Button>
           </CardContent>
         </Card>
+        ) : null}
 
+        {openForm === "journal" ? (
         <Card>
           <CardHeader>
             <CardTitle>Новый журнал</CardTitle>
@@ -303,7 +332,9 @@ const BriefingsPage = () => {
             </Button>
           </CardContent>
         </Card>
+        ) : null}
 
+        {openForm === "assign" ? (
         <Card>
           <CardHeader>
             <CardTitle>Назначить инструктаж</CardTitle>
@@ -403,6 +434,7 @@ const BriefingsPage = () => {
             </Button>
           </CardContent>
         </Card>
+        ) : null}
       </div>
 
       <Card>

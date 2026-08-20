@@ -87,13 +87,17 @@ describe("BriefingsPage", () => {
     expect(
       screen.getByRole("button", { name: "Напомнить о просрочке" }),
     ).toBeDisabled();
+    // BIZ-59: формы раскрываются по выбору, поэтому переключатели тоже обязаны
+    // быть заблокированы без права — иначе человек нажимал бы их впустую.
     expect(
-      screen.getByRole("button", { name: "Создать шаблон" }),
+      screen.getByRole("button", { name: "Новый шаблон" }),
     ).toBeDisabled();
     expect(
-      screen.getByRole("button", { name: "Создать журнал" }),
+      screen.getByRole("button", { name: "Новый журнал" }),
     ).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Назначить" })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Назначить инструктаж" }),
+    ).toBeDisabled();
   });
 
   it("enables management actions and allows reminders with assign permission", async () => {
@@ -156,8 +160,12 @@ describe("BriefingsPage", () => {
       </MemoryRouter>,
     );
 
-    // Label и <select> рендерятся безусловно, а опции строятся из ответа
-    // fetchAllPersons — ждём саму опцию из мока, selectOptions не ретраит.
+    // BIZ-59: форма назначения раскрывается по выбору — сначала открываем её.
+    await user.click(
+      screen.getByRole("button", { name: "Назначить инструктаж" }),
+    );
+    // Опции строятся из ответа fetchAllPersons — ждём саму опцию из мока,
+    // selectOptions не ретраит.
     await screen.findByRole("option", { name: "Иванов Иван Иванович" });
     const personSelect = screen.getByLabelText("Сотрудник");
     await user.selectOptions(personSelect, "person-1");
@@ -182,11 +190,10 @@ describe("BriefingsPage", () => {
       expect(listTemplatesMock).toHaveBeenCalled();
     });
 
-    // Экран сегодня НЕ укладывается: три главных действия и одиннадцать полей.
-    // Это записано явным долгом (`uxBudgetDebt.ts`) — ТЗ разд. 59.2 допускает
-    // превышение «только с явным обоснованием и пометкой». Проверка стережёт
-    // обе стороны: экран не должен стать хуже, а починив его, обязаны снять
-    // запись — иначе список долгов перестанет отражать правду.
+    // BIZ-59: экран ПОЧИНЕН — три формы больше не висят одновременно, они
+    // раскрываются по выбору (разд. 59.1 «одна задача — один экран»). Долг
+    // снят, и проверка теперь стережёт обе стороны: экран не должен стать
+    // хуже, а вернувшаяся запись долга покраснеет как протухшая.
     const delta = uxBudgetDelta(container, "BriefingsPage");
     expect(delta.unexpected).toEqual([]);
     expect(delta.stale).toEqual([]);
