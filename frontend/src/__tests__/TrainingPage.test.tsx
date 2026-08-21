@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { PERMISSIONS } from "@/permissions/permissions";
 import TrainingPage from "@/pages/training/TrainingPage";
 import { useAuthStore } from "@/stores/auth";
+import { uxBudgetDelta } from "@/test-utils/uxBudget";
 
 const getMock = vi.fn();
 
@@ -143,5 +144,35 @@ describe("TrainingPage", () => {
     await waitFor(() => {
       expect(screen.getByText("Видео")).toBeInTheDocument();
     });
+  });
+
+  it("экран в UX-бюджете, или долг записан явно (BIZ-60)", async () => {
+    // Меряем самое богатое состояние: teacher surface + аналитика. Замер
+    // пустого экрана — самообман (урок NotificationsPage), поэтому ждём
+    // отрисованные данные фикстур, а не только первый запрос.
+    useAuthStore.setState({
+      user: {
+        ...baseUser,
+        permissions: [PERMISSIONS.TRAINING_VIEW, PERMISSIONS.TRAINING_ASSIGN],
+      },
+      loading: false,
+      error: null,
+      isAuthenticated: true,
+      initialized: true,
+    });
+
+    render(
+      <MemoryRouter>
+        <TrainingPage />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Видео")).toBeInTheDocument();
+    });
+
+    const budget = uxBudgetDelta(document.body, "TrainingPage");
+    expect(budget.unexpected).toEqual([]);
+    expect(budget.stale).toEqual([]);
   });
 });

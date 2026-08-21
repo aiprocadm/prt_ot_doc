@@ -10,6 +10,7 @@ import type {
 } from "@/types/dto/imports";
 
 import ImportsPage from "./ImportsPage";
+import { uxBudgetDelta } from "@/test-utils/uxBudget";
 
 vi.mock("@/api/imports", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/api/imports")>();
@@ -742,5 +743,27 @@ describe("ImportsPage", () => {
       expect(screen.getByText("Создать: 2")).toBeInTheDocument(),
     );
     expect(screen.queryByText(/Похоже на выгрузку/)).toBeNull();
+  });
+
+  it("экран в UX-бюджете, или долг записан явно (BIZ-60)", async () => {
+    // Меряем самое нагруженное честное состояние мастера: цель и файл выбраны,
+    // сухой прогон показал сопоставление, результат проверки и кнопку
+    // применения, история загрузок наполнена. Замер пустого экрана — самообман.
+    renderPage();
+    await selectTargetAndFile();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Проверить без записи" }),
+    );
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Применить импорт" }),
+      ).toBeInTheDocument(),
+    );
+    expect(screen.getByText("Создать: 2")).toBeInTheDocument();
+    expect(screen.getByText("staff.csv")).toBeInTheDocument();
+
+    const budget = uxBudgetDelta(document.body, "ImportsPage");
+    expect(budget.unexpected).toEqual([]);
+    expect(budget.stale).toEqual([]);
   });
 });

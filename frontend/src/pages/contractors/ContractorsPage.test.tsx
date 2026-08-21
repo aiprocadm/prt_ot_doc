@@ -4,6 +4,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 import ContractorsPage from "./ContractorsPage";
 import { contractorsApi } from "@/api/contractors";
+import { uxBudgetDelta } from "@/test-utils/uxBudget";
 
 vi.mock("@/api/contractors", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/api/contractors")>();
@@ -107,5 +108,15 @@ describe("ContractorsPage registry tab", () => {
     // The ungated registry must survive a feature-disabled expiring-docs call
     // (not collapse the whole page into an error state).
     expect(await screen.findByText("ООО Подрядчик")).toBeInTheDocument();
+  });
+  it("экран в UX-бюджете, или долг записан явно (BIZ-60)", async () => {
+    renderPage();
+    // Наполненное состояние: строка реестра из фикстуры видна в таблице.
+    // Мерить пустой/загрузочный экран — самообман (урок NotificationsPage).
+    expect(await screen.findByText("ООО Подрядчик")).toBeInTheDocument();
+
+    const budget = uxBudgetDelta(document.body, "ContractorsPage");
+    expect(budget.unexpected).toEqual([]);
+    expect(budget.stale).toEqual([]);
   });
 });

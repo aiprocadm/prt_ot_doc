@@ -9,6 +9,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 import MedicalPage from "./MedicalPage";
 import { operationsApi } from "@/api/operations";
+import { uxBudgetDelta } from "@/test-utils/uxBudget";
 
 vi.mock("@/api/operations", () => ({
   operationsApi: {
@@ -519,5 +520,42 @@ describe("MedicalPage suspensions section", () => {
         undefined,
       ),
     );
+  });
+
+  it("экран в UX-бюджете, или долг записан явно (BIZ-60)", async () => {
+    // Мерим НАПОЛНЕННЫЙ экран: направления и отстранения по умолчанию пусты
+    // в beforeEach, поэтому даём тесту свои моки — замер пустого экрана
+    // это самообман (урок NotificationsPage).
+    vi.mocked(operationsApi.listMedicalReferrals).mockResolvedValue([
+      {
+        id: "r1",
+        person_id: "p1",
+        exam_kind: "periodic",
+        due_at: "2026-08-01",
+        status: "issued",
+        medical_org_name: "Клиника",
+        result_exam_id: null,
+        is_overdue: false,
+      },
+    ]);
+    vi.mocked(operationsApi.listMedicalSuspensions).mockResolvedValue([
+      {
+        id: "s1",
+        person_id: "p1",
+        reason: "unfit",
+        status: "active",
+        source_exam_id: "e1",
+      },
+    ]);
+    render(<MedicalPage />);
+    // Каждая секция экрана дождалась своих данных из фикстур.
+    expect(await screen.findByText(/Работы на высоте/)).toBeInTheDocument();
+    expect(await screen.findByText("Электромонтёр")).toBeInTheDocument();
+    expect(await screen.findByText("Выдан")).toBeInTheDocument();
+    expect(await screen.findByText("Негоден")).toBeInTheDocument();
+
+    const budget = uxBudgetDelta(document.body, "MedicalPage");
+    expect(budget.unexpected).toEqual([]);
+    expect(budget.stale).toEqual([]);
   });
 });

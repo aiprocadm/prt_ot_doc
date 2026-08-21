@@ -259,8 +259,10 @@ const CrmFinancePage = () => {
                   <TableHead>Клиент</TableHead>
                   <TableHead>Пакет / договор</TableHead>
                   <TableHead>Сумма</TableHead>
-                  <TableHead>Счета</TableHead>
-                  <TableHead>Заказы</TableHead>
+                  {/* BIZ-60 волна 3: два узких счётчика в одной колонке —
+                      восьмая колонка выводила экран за лимит разд. 59.2, а
+                      оба числа читаются вместе: это объём документов сделки. */}
+                  <TableHead>Счета / заказы</TableHead>
                   <TableHead>Оплата</TableHead>
                   <TableHead>Срок действия</TableHead>
                 </TableRow>
@@ -288,8 +290,9 @@ const CrmFinancePage = () => {
                         </div>
                       </div>
                     </TableCell>
-                    <TableCell>{row.invoicesCount}</TableCell>
-                    <TableCell>{row.ordersCount}</TableCell>
+                    <TableCell>
+                      {row.invoicesCount} / {row.ordersCount}
+                    </TableCell>
                     <TableCell>
                       <StatusBadge status={row.paymentStatus} />
                     </TableCell>

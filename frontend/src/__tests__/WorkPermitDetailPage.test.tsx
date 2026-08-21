@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { PERMISSIONS } from "@/permissions/permissions";
 import WorkPermitDetailPage from "@/pages/work-permits/WorkPermitDetailPage";
 import { useAuthStore } from "@/stores/auth";
+import { uxBudgetDelta } from "@/test-utils/uxBudget";
 
 const getMock = vi.fn();
 
@@ -152,5 +153,19 @@ describe("WorkPermitDetailPage", () => {
       await screen.findByText(/Безопасность земляных работ/i),
     ).toBeInTheDocument();
     expect(screen.getByText(/Крепление щитами/i)).toBeInTheDocument();
+  });
+
+  it("экран в UX-бюджете, или долг записан явно (BIZ-60)", async () => {
+    // Самое наполненное состояние: право manage показывает кнопки действий и
+    // панели подписей/допуска — замер пустого экрана был бы самообманом.
+    setRole([PERMISSIONS.WORK_PERMIT_VIEW, PERMISSIONS.WORK_PERMIT_MANAGE]);
+    renderAt();
+    await screen.findByText(/монтаж/i);
+    await screen.findByText(/подписи ответственных/i);
+    await screen.findByText(/ежедневный допуск/i);
+
+    const budget = uxBudgetDelta(document.body, "WorkPermitDetailPage");
+    expect(budget.unexpected).toEqual([]);
+    expect(budget.stale).toEqual([]);
   });
 });
