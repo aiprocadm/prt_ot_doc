@@ -42,6 +42,25 @@ class BillingPlanRead(BaseModel):
     features: dict[str, Any]
 
 
+class BillingEditionRead(BaseModel):
+    """Редакция под размер заказчика (BIZ-53 срез-2, Доп. №1 разд. 53.1).
+
+    Отличается от тарифа тем, что говорит КОМУ подходит, а не из каких флагов
+    состоит: «Базовый / Про / Всё включено» этого сказать не могут.
+    """
+
+    code: str
+    title: str
+    #: Профиль заказчика из таблицы ТЗ.
+    audience: str
+    #: Технический тариф под редакцией.
+    plan_code: str
+    includes: str
+    #: Чем редакция отличается СВЕРХ набора модулей (SSO, on-prem, SLA…).
+    #: Пусто там, где тариф у редакции свой.
+    beyond_modules: str = ""
+
+
 class BillingStatusMutationRequest(BaseModel):
     grace_days: int = 7
 

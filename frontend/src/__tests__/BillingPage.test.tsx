@@ -8,6 +8,7 @@ import { uxBudgetDelta } from "@/test-utils/uxBudget";
 const getBillingSummaryMock = vi.fn();
 const getBillingInvoicesMock = vi.fn();
 const getBillingPlansMock = vi.fn();
+const getBillingEditionsMock = vi.fn();
 const changeBillingPlanMock = vi.fn();
 const markSubscriptionPastDueMock = vi.fn();
 const markSubscriptionPaidMock = vi.fn();
@@ -18,6 +19,7 @@ vi.mock("@/api/billing", () => ({
   getBillingSummary: (...args: unknown[]) => getBillingSummaryMock(...args),
   getBillingInvoices: (...args: unknown[]) => getBillingInvoicesMock(...args),
   getBillingPlans: (...args: unknown[]) => getBillingPlansMock(...args),
+  getBillingEditions: (...args: unknown[]) => getBillingEditionsMock(...args),
   changeBillingPlan: (...args: unknown[]) => changeBillingPlanMock(...args),
   markSubscriptionPastDue: (...args: unknown[]) =>
     markSubscriptionPastDueMock(...args),
@@ -33,6 +35,7 @@ describe("BillingPage", () => {
     getBillingSummaryMock.mockReset();
     getBillingInvoicesMock.mockReset();
     getBillingPlansMock.mockReset();
+    getBillingEditionsMock.mockReset();
     changeBillingPlanMock.mockReset();
     markSubscriptionPastDueMock.mockReset();
     markSubscriptionPaidMock.mockReset();
@@ -63,6 +66,35 @@ describe("BillingPage", () => {
       { code: "basic", name: "Basic", limits: {}, features: {} },
       { code: "pro", name: "Pro", limits: {}, features: {} },
     ]);
+    // BIZ-53 срез-2: редакции — продуктовая упаковка тарифов. В наборе
+    // намеренно есть ДВЕ редакции на одном тарифе: так проверяется, что экран
+    // показывает обе и не выдаёт их за один вариант.
+    getBillingEditionsMock.mockResolvedValue([
+      {
+        code: "start_ot",
+        title: "Start OT",
+        audience: "Микро и малый бизнес: одно юрлицо, примерно до 50 человек",
+        plan_code: "basic",
+        includes: "Документы, инструктажи, карточки СИЗ",
+        beyond_modules: "",
+      },
+      {
+        code: "safety_suite",
+        title: "Safety Suite",
+        audience: "Крупный и многопрофильный бизнес",
+        plan_code: "pro",
+        includes: "Полный контур",
+        beyond_modules: "",
+      },
+      {
+        code: "enterprise_holding",
+        title: "Enterprise Holding",
+        audience: "Холдинг с филиалами",
+        plan_code: "pro",
+        includes: "Всё из Safety Suite.",
+        beyond_modules: "SSO и LDAP, on-prem, выделенный SLA",
+      },
+    ]);
   });
 
   it("shows action error and keeps plan cards visible when plan change fails", async () => {
@@ -87,7 +119,15 @@ describe("BillingPage", () => {
       expect(screen.getByRole("alert")).toHaveTextContent("plan change failed");
     });
     expect(screen.getByText("Тарифы")).toBeInTheDocument();
-    expect(screen.getByText("Pro")).toBeInTheDocument();
+    // BIZ-53 срез-2: у тарифа показывается РЕДАКЦИЯ, а не техническое имя.
+    // Обе редакции одного тарифа названы — иначе вторая была бы невидимой.
+    expect(
+      screen.getByText("Safety Suite · Enterprise Holding"),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Холдинг с филиалами/)).toBeInTheDocument();
+    // Отличие «сверх модулей» видно на экране: без него две редакции на одном
+    // тарифе выглядели бы двумя именами одного и того же.
+    expect(screen.getByText(/выделенный SLA/)).toBeInTheDocument();
   });
 
   it("экран в UX-бюджете, или долг записан явно (BIZ-60)", async () => {
