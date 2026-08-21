@@ -14,7 +14,7 @@ import { ModuleDisabledPage } from "@/pages/access/ModuleDisabledPage";
 import { LegalDocumentPage } from "@/pages/legal/LegalDocumentPage";
 import { AuthRedirectHandler } from "@/router/AuthRedirectHandler";
 import { buildProtectedRouteGroups } from "@/router/routeGroups";
-import { LoginPage } from "@/router/pageRegistry";
+import { LoginPage, SignupPage } from "@/router/pageRegistry";
 import { ProtectedRoute } from "@/router/ProtectedRoute";
 import { getLandingRoute } from "@/router/landing";
 import { useAbility } from "@/permissions/useAbility";
@@ -82,6 +82,10 @@ const AppRouter = () => {
         <Routes>
           <Route path="/auth" element={<AuthLayout />}>
             <Route path="login" element={<LoginPage />} />
+            {/* BIZ-53 срез-3 (разд. 53.2): самостоятельная регистрация. Она
+                ВНЕ защищённого дерева по построению — у регистрирующегося ещё
+                нет ни арендатора, ни входа. */}
+            <Route path="signup" element={<SignupPage />} />
           </Route>
           {/* Юр. тексты ВНЕ защищённого дерева (BIZ-52 разд. 52.2): оферту и
               политику ПДн человек обязан прочитать до входа. Потребуй здесь

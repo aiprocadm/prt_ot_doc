@@ -21,6 +21,7 @@ from app.api.routes import (
     calendar_views,
     client_access_log,
     client_portal,
+    public_signup,
     committees,
     companies,
     compliance,
@@ -109,6 +110,10 @@ ROUTER_GROUP_ORDER = (
 
 PUBLIC_ROUTER_REGISTRATIONS: tuple[RouterRegistration, ...] = (
     (auth.router, {"prefix": "/auth", "tags": ["auth"]}),
+    # BIZ-53 срез-3 (разд. 53.2): самостоятельная регистрация. Публичная по
+    # смыслу — у регистрирующегося ещё нет арендатора, поэтому заголовок
+    # арендатора он поставить не может. Сама ручка выключена по умолчанию.
+    (public_signup.router, {}),
     (client_portal.router, {}),
     # BIZ-52 срез-14: манифест PWA и картинки бренда. Их браузер грузит САМ —
     # заголовок арендатора в такой запрос не поставить, а в общей группе стоит

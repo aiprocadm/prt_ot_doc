@@ -855,6 +855,7 @@
     "POST /api/v1/privacy/subjects/{person_id}/consents",
     "POST /api/v1/privacy/subjects/{person_id}/consents/withdraw",
     "POST /api/v1/public/integrations/webhooks/subscriptions",
+    "POST /api/v1/public/signup",
     "POST /api/v1/pwa/media/commit",
     "POST /api/v1/pwa/sync/batch",
     "POST /api/v1/pwa/sync/conflicts/{batch_id}/resolve",
@@ -1783,6 +1784,7 @@
     "public_notifications_api_v1_public_notifications_get",
     "public_prescriptions_api_v1_public_prescriptions_get",
     "public_risks_api_v1_public_risks_get",
+    "public_signup_api_v1_public_signup_post",
     "public_training_api_v1_public_training_get",
     "public_webhooks_api_v1_public_integrations_webhooks_get",
     "publish_legal_api_v1_platform_legal__kind__put",
@@ -2751,6 +2753,8 @@
     "SignatureType",
     "SignedUrlRequest",
     "SignedUrlResponse",
+    "SignupRequest",
+    "SignupResult",
     "SiteCreate",
     "SiteDisciplineRead",
     "SiteFactsRead",
@@ -8233,6 +8237,19 @@
     },
     "SignedUrlResponse": {
       "signed_url": "string"
+    },
+    "SignupRequest": {
+      "slug": "string",
+      "company_name": "string",
+      "owner_email": "string",
+      "owner_password": "string",
+      "industry": "null|string"
+    },
+    "SignupResult": {
+      "tenant_slug": "string",
+      "owner_email": "string",
+      "plan_code": "string",
+      "warnings": "array"
     },
     "SiteCreate": {
       "company_id": "string",

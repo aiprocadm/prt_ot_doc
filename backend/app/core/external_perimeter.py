@@ -38,6 +38,7 @@ logger = logging.getLogger(__name__)
 
 _TRAFFIC_PREFIX = "portal:traffic"
 _FAILURE_PREFIX = "portal:auth-fail"
+_SIGNUP_PREFIX = "public:signup"
 
 
 @dataclass
@@ -45,6 +46,10 @@ class _Guard:
     storage_uri: str
     traffic: RateLimitItem
     failures: RateLimitItem
+    #: BIZ-53 срез-3: свой счётчик для самостоятельной регистрации. Создание
+    #: арендатора несопоставимо дороже обычного запроса, поэтому общий
+    #: портальный лимит для него слишком мягкий.
+    signup: RateLimitItem
     limiter: FixedWindowRateLimiter
 
 
@@ -62,6 +67,7 @@ def _build_guard(settings) -> _Guard:
         storage_uri=uri,
         traffic=parse(getattr(settings, "portal_rate_limit_per_ip", "60/minute")),
         failures=parse(getattr(settings, "portal_auth_failures_per_ip", "10/hour")),
+        signup=parse(getattr(settings, "self_service_signup_per_ip", "3/hour")),
         limiter=FixedWindowRateLimiter(storage),
     )
 
@@ -115,6 +121,28 @@ def enforce_portal_traffic(request: Request | None, *, settings=None) -> None:
         logger.warning("portal.anti_abuse.rate_limited", extra={"ip": ip})
         raise _too_many(
             "PORTAL_RATE_LIMITED", "Too many requests to the client portal from this address"
+        )
+
+
+def enforce_signup_attempts(request: Request | None, *, settings=None) -> None:
+    """Лимит попыток самостоятельной регистрации по IP (BIZ-53 срез-3).
+
+    Отдельный и строгий: каждая успешная регистрация создаёт СХЕМУ в базе.
+    Считается ДО создания, поэтому перебор не стоит нам развёрнутых арендаторов.
+
+    Работает независимо от общего выключателя внешнего контура: регистрация
+    может быть открыта и там, где клиентский портал не используется.
+    """
+
+    from app.core.config import get_settings
+
+    current = settings or get_settings()
+    guard = _get_guard(current)
+    ip = _client_ip(request)
+    if not guard.limiter.hit(guard.signup, _SIGNUP_PREFIX, ip):
+        logger.warning("signup.anti_abuse.rate_limited", extra={"ip": ip})
+        raise _too_many(
+            "SIGNUP_RATE_LIMITED", "Too many registration attempts from this address"
         )
 
 

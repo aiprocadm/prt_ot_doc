@@ -178,6 +178,7 @@ export const ClientCockpitPage = lazy(
 export const ClientCardPage = lazy(
   () => import("@/pages/managed-clients/ClientCardPage"),
 );
+export const SignupPage = lazy(() => import("@/pages/auth/SignupPage"));
 export const SitesPage = lazy(() => import("@/pages/sites/SitesPage"));
 export const SiteCardPage = lazy(() => import("@/pages/sites/SiteCardPage"));
 export const CommitteeKpiPage = lazy(
