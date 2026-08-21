@@ -114,6 +114,7 @@
     "GET /api/v1/auth/admin/ping",
     "GET /api/v1/auth/me",
     "GET /api/v1/auth/me/permissions",
+    "GET /api/v1/billing/editions",
     "GET /api/v1/billing/events",
     "GET /api/v1/billing/invoices",
     "GET /api/v1/billing/limits",
@@ -1058,6 +1059,7 @@
     "audit_tenant_templates_api_v1_templates_audit_get",
     "backward_export_api_v1_audit_export_get",
     "backward_list_api_v1_audit_get",
+    "billing_editions_api_v1_billing_editions_get",
     "billing_events_api_v1_billing_events_get",
     "billing_invoices_api_v1_billing_invoices_get",
     "billing_limits_api_v1_billing_limits_get",
@@ -2049,6 +2051,7 @@
     "AutomationRuleUpdate",
     "BandDef",
     "BillingChangePlanRequest",
+    "BillingEditionRead",
     "BillingEventRead",
     "BillingInvoiceRead",
     "BillingPlanRead",
@@ -3230,6 +3233,14 @@
     },
     "BillingChangePlanRequest": {
       "plan_code": "string"
+    },
+    "BillingEditionRead": {
+      "code": "string",
+      "title": "string",
+      "audience": "string",
+      "plan_code": "string",
+      "includes": "string",
+      "beyond_modules": "string"
     },
     "BillingEventRead": {
       "id": "string",

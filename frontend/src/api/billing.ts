@@ -22,6 +22,18 @@ export type BillingPlan = {
   features: Record<string, boolean>;
 };
 
+/** Редакция под размер заказчика (BIZ-53 срез-2, разд. 53.1). */
+export type BillingEdition = {
+  code: string;
+  title: string;
+  /** Кому подходит — то, чего технические имена тарифов сказать не могут. */
+  audience: string;
+  plan_code: string;
+  includes: string;
+  /** Отличия СВЕРХ набора модулей (SSO, on-prem, SLA). Пусто у своих тарифов. */
+  beyond_modules: string;
+};
+
 export type BillingInvoice = {
   id: string;
   period_yyyymm: number;
@@ -45,6 +57,11 @@ export const getBillingInvoices = async (period?: number) => {
 
 export const getBillingPlans = async () => {
   const { data } = await apiClient.get<BillingPlan[]>("/billing/plans");
+  return data;
+};
+
+export const getBillingEditions = async () => {
+  const { data } = await apiClient.get<BillingEdition[]>("/billing/editions");
   return data;
 };
 

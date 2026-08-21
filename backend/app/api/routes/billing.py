@@ -12,8 +12,10 @@ from app.core.audit_decorator import audit_operation
 from app.core.errors import api_problem_detail
 from app.core.security import AccessContext, abac
 from app.models.models import BillingSubscription, BillingSubscriptionStatus, Tenant
+from app.modules.subscription.editions import EDITIONS
 from app.schemas.billing import (
     BillingChangePlanRequest,
+    BillingEditionRead,
     BillingEventRead,
     BillingInvoiceRead,
     BillingPlanRead,
@@ -182,6 +184,32 @@ async def billing_plans(
             code=item.code, name=item.name, limits=item.limits or {}, features=item.features or {}
         )
         for item in plans
+    ]
+
+
+@router.get("/editions", response_model=list[BillingEditionRead])
+async def billing_editions(
+    access: OwnerAdminAccess, tenant: Tenant = Depends(get_tenant_record)
+) -> list[BillingEditionRead]:
+    """Редакции под размер заказчика (разд. 53.1).
+
+    Список статический: это продуктовая упаковка тарифов, а не данные
+    арендатора. Две редакции могут ссылаться на ОДИН тариф — тогда та, что
+    делит его с другой, объясняет отличие словами (SSO, on-prem, SLA), потому
+    что модулями они не различаются.
+    """
+
+    _ = (tenant, access)
+    return [
+        BillingEditionRead(
+            code=item.code,
+            title=item.title,
+            audience=item.audience,
+            plan_code=item.plan_code,
+            includes=item.includes,
+            beyond_modules=item.beyond_modules,
+        )
+        for item in EDITIONS
     ]
 
 

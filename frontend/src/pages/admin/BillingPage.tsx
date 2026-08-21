@@ -4,11 +4,13 @@ import {
   activateSubscription,
   changeBillingPlan,
   getBillingInvoices,
+  getBillingEditions,
   getBillingPlans,
   getBillingSummary,
   markSubscriptionPaid,
   markSubscriptionPastDue,
   suspendSubscription,
+  type BillingEdition,
   type BillingInvoice,
   type BillingPlan,
   type BillingSummary,
@@ -56,15 +58,20 @@ const BillingPage = () => {
   const [actionError, setActionError] = useState<ApiError | null>(null);
 
   const loadBilling = useCallback(async () => {
-    const [summary, invoiceItems, planItems] = await Promise.all([
+    const [summary, invoiceItems, planItems, editionItems] = await Promise.all([
       getBillingSummary(),
       getBillingInvoices(),
       getBillingPlans(),
+      // BIZ-53 срез-2: редакции — продуктовая упаковка тарифов. Технические
+      // имена «Базовый / Про / Всё включено» не говорят заказчику, кому что
+      // подходит; редакция говорит профилем («до 50 человек», «холдинг»).
+      getBillingEditions(),
     ]);
     return {
       summary,
       invoices: invoiceItems,
       plans: planItems,
+      editions: editionItems,
     };
   }, []);
 
@@ -74,6 +81,7 @@ const BillingPage = () => {
       summary: null as BillingSummary | null,
       invoices: [] as BillingInvoice[],
       plans: [] as BillingPlan[],
+      editions: [] as BillingEdition[],
     },
     errorMessage: "Не удалось загрузить биллинг",
   });
@@ -246,8 +254,33 @@ const BillingPage = () => {
               key={plan.code}
               className="space-y-2 rounded border p-3 text-sm"
             >
-              <div className="flex items-center justify-between">
-                <div>{plan.name}</div>
+              <div className="flex items-center justify-between gap-3">
+                <div className="space-y-0.5">
+                  {/* BIZ-53 срез-2 (разд. 53.1): у тарифа показываем РЕДАКЦИЮ и
+                      профиль заказчика. «Базовый / Про / Всё включено» говорят
+                      о наборе флагов, а не о том, кому подходят, — по ним
+                      выбрать нельзя. Редакций на тарифе может быть больше
+                      одной: они различаются условиями, а не модулями. */}
+                  <div className="font-medium">
+                    {data.editions
+                      .filter((edition) => edition.plan_code === plan.code)
+                      .map((edition) => edition.title)
+                      .join(" · ") || plan.name}
+                  </div>
+                  {data.editions
+                    .filter((edition) => edition.plan_code === plan.code)
+                    .map((edition) => (
+                      <div
+                        key={edition.code}
+                        className="text-xs text-muted-foreground"
+                      >
+                        {edition.audience}
+                        {edition.beyond_modules
+                          ? ` — ${edition.beyond_modules}`
+                          : ""}
+                      </div>
+                    ))}
+                </div>
                 <Button
                   size="sm"
                   // BIZ-59: кнопка внутри ПОВТОРЯЮЩЕЙСЯ строки не может быть
