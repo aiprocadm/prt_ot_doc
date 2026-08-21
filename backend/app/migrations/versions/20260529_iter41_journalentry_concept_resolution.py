@@ -67,6 +67,15 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 
+# OPS-74 (разд. 74.2, expand-contract): это шаг CONTRACT — удаление
+# того, чем уже никто не пользуется. Объявление обязательно: без него
+# страж `tests/test_migrations_expand_contract.py` не отличит осознанный
+# contract от удаления, которое сломает старый код во время раската.
+EXPAND_CONTRACT_STEP = "contract"
+EXPAND_CONTRACT_REASON = (
+    "старая форма journalentry (entry_type/payload) осталась без единого писателя после переезда модели в доменную запись инструктажа"
+)
+
 revision: str = "20260529_iter41_journalentry_concept"
 down_revision: str | Sequence[str] | None = "20260529_iter38_server_default_c"
 branch_labels: str | Sequence[str] | None = None

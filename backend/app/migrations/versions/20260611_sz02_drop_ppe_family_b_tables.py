@@ -31,6 +31,15 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
+# OPS-74 (разд. 74.2, expand-contract): это шаг CONTRACT — удаление
+# того, чем уже никто не пользуется. Объявление обязательно: без него
+# страж `tests/test_migrations_expand_contract.py` не отличит осознанный
+# contract от удаления, которое сломает старый код во время раската.
+EXPAND_CONTRACT_STEP = "contract"
+EXPAND_CONTRACT_REASON = (
+    "семейство B таблиц СИЗ удалено из моделей отдельным PR #647; живой контур (семейство A) не затрагивается"
+)
+
 revision = "20260611_sz02_drop_ppe_family_b_tables"
 down_revision = "20260610_sz01_ppe_norms_card_766n"
 branch_labels = None
