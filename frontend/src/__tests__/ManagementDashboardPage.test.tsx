@@ -16,6 +16,7 @@ const api = vi.hoisted(() => ({
 vi.mock("@/api/analyticsApi", () => ({ analyticsApi: api }));
 
 import ManagementDashboardPage from "@/pages/analytics/ManagementDashboardPage";
+import { uxBudgetDelta } from "@/test-utils/uxBudget";
 
 const TREND = (metric: string) => ({
   metric,
@@ -213,6 +214,21 @@ describe("ManagementDashboardPage", () => {
     expect(api.getExecutive).not.toHaveBeenLastCalledWith(
       expect.objectContaining({ site_id: "" }),
     );
+  });
+
+  it("экран в UX-бюджете, или долг записан явно (BIZ-60)", async () => {
+    renderPage();
+    // Наполненное состояние: KPI-карточки из executive/overdue/sla-load и
+    // таблица разбивки со строкой из фикстуры — замер пустого экрана был бы
+    // самообманом (урок NotificationsPage).
+    expect(await screen.findByText("Открытые инциденты")).toBeInTheDocument();
+    expect(await screen.findByText("Нарушен SLA")).toBeInTheDocument();
+    const table = await screen.findByRole("table");
+    expect(within(table).getByText("Цех №1")).toBeInTheDocument();
+
+    const budget = uxBudgetDelta(document.body, "ManagementDashboardPage");
+    expect(budget.unexpected).toEqual([]);
+    expect(budget.stale).toEqual([]);
   });
 
   it("hides the contractor filter when /contractors/registry is forbidden (403)", async () => {

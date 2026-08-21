@@ -11,6 +11,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { budgetApi } from "@/api/budget";
 import { formatRub } from "@/pages/budget/budgetVocab";
+import { uxBudgetDelta } from "@/test-utils/uxBudget";
 import type {
   BudgetArticlePageDto,
   BudgetBreakdownDto,
@@ -1213,5 +1214,17 @@ describe("BudgetPage", () => {
 
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getByLabelText("Код")).toBeDisabled();
+  });
+
+  it("экран в UX-бюджете, или долг записан явно (BIZ-60)", async () => {
+    renderPage();
+    // Наполненное состояние, не пустой каркас: карточки доменов из OVERVIEW
+    // и строки таблицы разбивки из BREAKDOWN_BY_DIMENSION (моки beforeEach).
+    await screen.findByText("Обучение");
+    await screen.findByText("Обучение по ОТ");
+
+    const budget = uxBudgetDelta(document.body, "BudgetPage");
+    expect(budget.unexpected).toEqual([]);
+    expect(budget.stale).toEqual([]);
   });
 });

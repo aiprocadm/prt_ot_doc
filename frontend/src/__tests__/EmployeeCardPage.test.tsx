@@ -4,6 +4,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import EmployeeCardPage from "@/pages/employees/EmployeeCardPage";
+import { uxBudgetDelta } from "@/test-utils/uxBudget";
 import type { EmployeeCardDto } from "@/types/dto/employee";
 
 const getCardMock = vi.fn();
@@ -421,6 +422,26 @@ describe("EmployeeCardPage", () => {
       name: "Падение с лестницы",
     });
     expect(incidentLink).toHaveAttribute("href", "/incidents?focus=inc-1");
+  });
+
+  it("экран в UX-бюджете, или долг записан явно (BIZ-60)", async () => {
+    getCardMock.mockResolvedValueOnce(sampleCard);
+
+    renderPage();
+
+    // Наполненное состояние: шапка с ФИО и должностью отрисована из фикстуры.
+    // Замер пустого/загружающегося экрана — самообман (урок NotificationsPage).
+    await screen.findByRole("heading", {
+      level: 1,
+      name: "Иванов Иван Иванович",
+    });
+    expect(
+      screen.getByText(/Инженер ОТ · ООО Ромашка · Цех №3/),
+    ).toBeInTheDocument();
+
+    const budget = uxBudgetDelta(document.body, "EmployeeCardPage");
+    expect(budget.unexpected).toEqual([]);
+    expect(budget.stale).toEqual([]);
   });
 
   it("renders error state and allows retry", async () => {

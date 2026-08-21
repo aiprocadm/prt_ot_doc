@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import TenantsPage from "@/pages/admin/TenantsPage";
 import { renderWithRouter } from "@/test-utils/renderWithRouter";
+import { uxBudgetDelta } from "@/test-utils/uxBudget";
 import type {
   PlanCatalog,
   TenantFeatureDto,
@@ -279,5 +280,19 @@ describe("TenantsPage", () => {
     renderWithRouter(<TenantsPage />);
 
     expect(await screen.findByText("Тенантов пока нет")).toBeInTheDocument();
+  });
+
+  it("экран в UX-бюджете, или долг записан явно (BIZ-60)", async () => {
+    // Замер только НАПОЛНЕННОГО экрана: пустой список карточек прошёл бы
+    // любой бюджет, и проверка мерила бы пустоту (урок NotificationsPage).
+    listMock.mockResolvedValue(fleet());
+
+    renderWithRouter(<TenantsPage />);
+    await screen.findByText("ООО Ньюко");
+    await screen.findByText("Базовый");
+
+    const budget = uxBudgetDelta(document.body, "TenantsPage");
+    expect(budget.unexpected).toEqual([]);
+    expect(budget.stale).toEqual([]);
   });
 });

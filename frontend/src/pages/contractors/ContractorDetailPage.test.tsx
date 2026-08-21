@@ -4,6 +4,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 import ContractorDetailPage from "./ContractorDetailPage";
 import { contractorsApi } from "@/api/contractors";
+import { uxBudgetDelta } from "@/test-utils/uxBudget";
 
 vi.mock("@/api/contractors", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/api/contractors")>();
@@ -80,5 +81,19 @@ describe("ContractorDetailPage", () => {
     expect(screen.getByRole("tab", { name: "Сотрудники" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Документы" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Инциденты" })).toBeInTheDocument();
+  });
+
+  it("экран в UX-бюджете, или долг записан явно (BIZ-60)", async () => {
+    renderPage();
+    // Наполненное состояние: шапка подрядчика + сводка соответствия из фикстур
+    // (замер пустого/загрузочного экрана — самообман).
+    expect(
+      await screen.findByRole("heading", { name: /ООО Подрядчик/ }),
+    ).toBeInTheDocument();
+    expect(await screen.findByText("Сотрудников: 3")).toBeInTheDocument();
+
+    const budget = uxBudgetDelta(document.body, "ContractorDetailPage");
+    expect(budget.unexpected).toEqual([]);
+    expect(budget.stale).toEqual([]);
   });
 });
