@@ -35,6 +35,15 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
+# OPS-74 (разд. 74.2, expand-contract): это шаг CONTRACT — удаление
+# того, чем уже никто не пользуется. Объявление обязательно: без него
+# страж `tests/test_migrations_expand_contract.py` не отличит осознанный
+# contract от удаления, которое сломает старый код во время раската.
+EXPAND_CONTRACT_STEP = "contract"
+EXPAND_CONTRACT_REASON = (
+    "у signatures и edo_envelopes не осталось ни писателей, ни читателей: код переведён на SignatureRequest, ORM-классы удалены тем же срезом"
+)
+
 revision = "20260612_ed02_drop_legacy_signing_tables"
 down_revision = "20260611_ed01_pep_signing_columns"
 branch_labels = None
