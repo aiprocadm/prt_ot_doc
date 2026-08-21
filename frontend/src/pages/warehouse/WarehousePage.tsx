@@ -56,6 +56,13 @@ const WarehousePage = () => {
     reason: "",
   });
   const [submitting, setSubmitting] = useState(false);
+  // BIZ-59 (разд. 59.1 «одна задача — один экран»): шесть рабочих форм
+  // висели на экране одновременно — 27 полей и шесть главных действий.
+  // Открыт всегда ОДИН раздел: кладовщик приходит с одной задачей.
+  // Обзор (остатки, дефицит, дозаказ) — чтение, он виден всегда.
+  const [openSection, setOpenSection] = useState<
+    "movement" | "transfer" | "supplier" | "batch" | "inventory" | "budget" | null
+  >(null);
   const [counts, setCounts] = useState<InventoryCountDto[]>([]);
   const [transfers, setTransfers] = useState<StockTransferDto[]>([]);
   const [levelsByLoc, setLevelsByLoc] = useState<StockLevelByLocationDto[]>([]);
@@ -607,6 +614,28 @@ const WarehousePage = () => {
           ) : null}
         </CardContent>
       </Card>
+      <div className="flex flex-wrap gap-2" data-testid="warehouse-section-switch">
+        {(
+          [
+            ["movement", "Движения"],
+            ["transfer", "Перемещение"],
+            ["batch", "Приёмка партии"],
+            ["inventory", "Инвентаризация"],
+            ["supplier", "Поставщики"],
+            ["budget", "Бюджет"],
+          ] as const
+        ).map(([key, label]) => (
+          <Button
+            key={key}
+            size="sm"
+            variant={openSection === key ? "secondary" : "outline"}
+            onClick={() => setOpenSection(openSection === key ? null : key)}
+          >
+            {label}
+          </Button>
+        ))}
+      </div>
+      {openSection === "movement" ? (
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Движения</CardTitle>
@@ -678,6 +707,8 @@ const WarehousePage = () => {
           )}
         </CardContent>
       </Card>
+      ) : null}
+      {openSection === "transfer" ? (
       <Card>
         <CardHeader>
           <CardTitle className="text-base">
@@ -758,6 +789,8 @@ const WarehousePage = () => {
           </Table>
         </CardContent>
       </Card>
+      ) : null}
+      {openSection === "supplier" ? (
       <Card>
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
@@ -878,12 +911,14 @@ const WarehousePage = () => {
           )}
         </CardContent>
       </Card>
+      ) : null}
+      {openSection === "batch" ? (
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Новая партия (приёмка)</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          <div className="grid gap-2 md:grid-cols-5">
+          <div className="grid gap-2 md:grid-cols-3">
             <Input
               aria-label="ID позиции партии"
               placeholder="ID позиции"
@@ -909,6 +944,15 @@ const WarehousePage = () => {
                 setBatchForm((f) => ({ ...f, quantity: e.target.value }))
               }
             />
+          </div>
+          {/* BIZ-59 (разд. 59.3): необязательные реквизиты приёмки — на втором
+              уровне. Партию принимают по позиции, номеру и количеству; локация,
+              поставщик и цена дописываются, когда они вообще известны. */}
+          <details className="space-y-2">
+            <summary className="cursor-pointer text-sm text-muted-foreground">
+              Дополнительно (локация, поставщик, цена)
+            </summary>
+            <div className="grid gap-2 pt-2 md:grid-cols-3">
             <Input
               aria-label="Локация партии"
               placeholder="Локация (опц.)"
@@ -943,7 +987,8 @@ const WarehousePage = () => {
                 setBatchForm((f) => ({ ...f, unit_cost: e.target.value }))
               }
             />
-          </div>
+            </div>
+          </details>
           <Button
             onClick={submitBatch}
             disabled={
@@ -956,6 +1001,7 @@ const WarehousePage = () => {
           </Button>
         </CardContent>
       </Card>
+      ) : null}
       <Card>
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
@@ -1123,6 +1169,7 @@ const WarehousePage = () => {
           )}
         </CardContent>
       </Card>
+      {openSection === "inventory" ? (
       <Card>
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
@@ -1278,6 +1325,8 @@ const WarehousePage = () => {
           ) : null}
         </CardContent>
       </Card>
+      ) : null}
+      {openSection === "budget" ? (
       <Card>
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
@@ -1408,6 +1457,7 @@ const WarehousePage = () => {
           ) : null}
         </CardContent>
       </Card>
+      ) : null}
     </div>
   );
 };

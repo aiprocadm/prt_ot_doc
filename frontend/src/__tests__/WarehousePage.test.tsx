@@ -160,6 +160,35 @@ describe("WarehousePage", () => {
     expect(budget.stale).toEqual([]);
   });
 
+  it("бюджет держится с ЛЮБЫМ открытым разделом (BIZ-59)", async () => {
+    // Главный сторож среза. Экран вышел из долга ПЕРЕКРОЕМ, а не подгонкой
+    // мерки: шесть рабочих форм открываются по одной. Замер только закрытого
+    // состояния был бы самообманом — кладовщик работает с открытым разделом,
+    // и именно открытый обязан помещаться в бюджет. Худший раздел до перекроя
+    // давал 27 полей; теперь каждый проверяется отдельно.
+    listLevelsMock.mockResolvedValue([]);
+    listBatchesMock.mockResolvedValue([]);
+    render(
+      <MemoryRouter>
+        <WarehousePage />
+      </MemoryRouter>,
+    );
+    for (const label of [
+      "Движения",
+      "Перемещение",
+      "Приёмка партии",
+      "Инвентаризация",
+      "Поставщики",
+      "Бюджет",
+    ]) {
+      fireEvent.click(await screen.findByRole("button", { name: label }));
+      const budget = uxBudgetDelta(document.body, "WarehousePage");
+      expect(budget.unexpected, `открыт раздел «${label}»`).toEqual([]);
+      // Разделы взаимоисключающие: повторный клик закрывает текущий.
+      fireEvent.click(screen.getByRole("button", { name: label }));
+    }
+  });
+
   it("renders recent movements", async () => {
     listLevelsMock.mockResolvedValue([]);
     listBatchesMock.mockResolvedValue([]);
@@ -183,6 +212,8 @@ describe("WarehousePage", () => {
         <WarehousePage />
       </MemoryRouter>,
     );
+    // BIZ-59: раздел открывается переключателем — одна задача за раз.
+    fireEvent.click(await screen.findByRole("button", { name: "Движения" }));
     // Ждём именно строку движения: заголовок «Движения» статичен и появляется
     // ДО завершения загрузки — ожидание по нему давало гонку на медленном CI.
     await waitFor(() =>
@@ -225,8 +256,10 @@ describe("WarehousePage", () => {
         <WarehousePage />
       </MemoryRouter>,
     );
+    // BIZ-59: раздел открывается переключателем — одна задача за раз.
+    fireEvent.click(await screen.findByRole("button", { name: "Движения" }));
     await waitFor(() =>
-      expect(screen.getByText("Движения")).toBeInTheDocument(),
+      expect(screen.getAllByText("Движения").length).toBeGreaterThan(1),
     );
 
     fireEvent.change(screen.getByPlaceholderText("ID партии"), {
@@ -304,10 +337,12 @@ describe("WarehousePage", () => {
         <WarehousePage />
       </MemoryRouter>,
     );
+    // BIZ-59: раздел открывается переключателем — одна задача за раз.
+    fireEvent.click(await screen.findByRole("button", { name: "Инвентаризация" }));
     // Ждём именно строку инвентаризации: заголовок «Инвентаризация» статичен
     // и появляется ДО ответа listCounts — синхронные getBy* давали гонку.
     expect(await screen.findByText("июль")).toBeInTheDocument();
-    expect(screen.getByText("Инвентаризация")).toBeInTheDocument();
+    expect(screen.getAllByText("Инвентаризация").length).toBeGreaterThan(1);
     expect(screen.getByRole("button", { name: "Открыть" })).toBeInTheDocument();
   });
 
@@ -348,8 +383,10 @@ describe("WarehousePage", () => {
         <WarehousePage />
       </MemoryRouter>,
     );
+    // BIZ-59: раздел открывается переключателем — одна задача за раз.
+    fireEvent.click(await screen.findByRole("button", { name: "Инвентаризация" }));
     await waitFor(() =>
-      expect(screen.getByText("Инвентаризация")).toBeInTheDocument(),
+      expect(screen.getAllByText("Инвентаризация").length).toBeGreaterThan(1),
     );
     fireEvent.click(screen.getByRole("button", { name: "Создать" }));
 
@@ -400,6 +437,8 @@ describe("WarehousePage", () => {
         <WarehousePage />
       </MemoryRouter>,
     );
+    // BIZ-59: раздел открывается переключателем — одна задача за раз.
+    fireEvent.click(await screen.findByRole("button", { name: "Перемещение" }));
     await screen.findByText(/Перемещения между локациями/i);
 
     fireEvent.change(screen.getByLabelText(/Партия-источник/i), {
@@ -441,10 +480,12 @@ describe("WarehousePage", () => {
         <WarehousePage />
       </MemoryRouter>,
     );
+    // BIZ-59: раздел открывается переключателем — одна задача за раз.
+    fireEvent.click(await screen.findByRole("button", { name: "Поставщики" }));
     // Ждём именно строку поставщика: заголовок «Поставщики» статичен
     // и появляется ДО ответа listSuppliers — синхронные getBy* давали гонку.
     expect((await screen.findAllByText("Alpha")).length).toBeGreaterThan(0);
-    expect(screen.getByText("Поставщики")).toBeInTheDocument();
+    expect(screen.getAllByText("Поставщики").length).toBeGreaterThan(1);
     expect(screen.getByText("7701234567")).toBeInTheDocument();
   });
 
@@ -465,8 +506,10 @@ describe("WarehousePage", () => {
         <WarehousePage />
       </MemoryRouter>,
     );
+    // BIZ-59: раздел открывается переключателем — одна задача за раз.
+    fireEvent.click(await screen.findByRole("button", { name: "Поставщики" }));
     await waitFor(() =>
-      expect(screen.getByText("Поставщики")).toBeInTheDocument(),
+      expect(screen.getAllByText("Поставщики").length).toBeGreaterThan(1),
     );
 
     fireEvent.change(screen.getByLabelText(/Название поставщика/i), {
@@ -629,6 +672,8 @@ describe("WarehousePage", () => {
         <WarehousePage />
       </MemoryRouter>,
     );
+    // BIZ-59: раздел открывается переключателем — одна задача за раз.
+    fireEvent.click(await screen.findByRole("button", { name: "Бюджет" }));
     expect(await screen.findByText("Бюджет безопасности")).toBeInTheDocument();
     expect(await screen.findByText("Бюджет 2026")).toBeInTheDocument();
   });
@@ -668,6 +713,8 @@ describe("WarehousePage", () => {
         <WarehousePage />
       </MemoryRouter>,
     );
+    // BIZ-59: раздел открывается переключателем — одна задача за раз.
+    fireEvent.click(await screen.findByRole("button", { name: "Бюджет" }));
     fireEvent.click(await screen.findByRole("button", { name: /Открыть/ }));
     expect(await screen.findByText(/Приходов без цены: 1/)).toBeInTheDocument();
   });
