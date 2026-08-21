@@ -13,6 +13,7 @@ vi.mock("@/api/client", () => ({
 }));
 
 import ClientPortalPackagesPage from "@/pages/client-portal/ClientPortalPackagesPage";
+import { uxBudgetDelta } from "@/test-utils/uxBudget";
 
 describe("ClientPortalPackagesPage", () => {
   it("loads packages and renders selected package details", async () => {
@@ -150,5 +151,66 @@ describe("ClientPortalPackagesPage", () => {
     const runTwo = await screen.findByText("run-2");
     fireEvent.click(runTwo.closest("button") as HTMLElement);
     expect(await screen.findByText(/RUN2_MARKER_EVENT/i)).toBeInTheDocument();
+  });
+
+  it("экран в UX-бюджете, или долг записан явно (BIZ-60)", async () => {
+    // Моки в этом файле per-test, поэтому тест бюджета несёт свои
+    // НАПОЛНЕННЫЕ данные: список пакетов + детали с файлами и событиями,
+    // чтобы мерить экран в самом «богатом» состоянии, а не пустышку.
+    getMock.mockImplementation((url: string) => {
+      if (url === "/client-portal/packages") {
+        return Promise.resolve({
+          data: [
+            {
+              id: "run-1",
+              status: "published",
+              started_at: "2026-03-18T10:00:00Z",
+            },
+          ],
+        });
+      }
+      return Promise.resolve({
+        data: {
+          run: { id: "run-1", status: "published" },
+          history: {
+            status_flow: ["running", "published"],
+            events_count: 2,
+            tickets_count: 1,
+            requirements_total: 3,
+            requirements_missing: 1,
+          },
+          files: [
+            {
+              kind: "zip",
+              signed_url: "memory://signed/file",
+              sha256: "abc",
+              size: 128,
+            },
+          ],
+          events: [
+            {
+              id: "evt-1",
+              type: "package_run.published",
+              created_at: "2026-03-18T11:00:00Z",
+            },
+          ],
+          tickets: [],
+        },
+      });
+    });
+
+    render(
+      <MemoryRouter>
+        <ClientPortalPackagesPage />
+      </MemoryRouter>,
+    );
+
+    // Дожидаемся деталей пакета (события пришли из API) — значит экран
+    // отрисован в наполненном состоянии, и замер честный.
+    await screen.findByText(/package_run.published/i);
+
+    const budget = uxBudgetDelta(document.body, "ClientPortalPackagesPage");
+    expect(budget.unexpected).toEqual([]);
+    expect(budget.stale).toEqual([]);
   });
 });

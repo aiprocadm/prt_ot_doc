@@ -7,6 +7,8 @@ import {
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import { uxBudgetDelta } from "@/test-utils/uxBudget";
 import { MemoryRouter } from "react-router-dom";
 
 const brandingApiMock = vi.hoisted(() => ({
@@ -150,6 +152,27 @@ describe("BrandingSettingsPage", () => {
     brandingApiMock.getBrandingHistory.mockResolvedValue([]);
     brandingApiMock.previewBranding.mockResolvedValue(previewResponse);
     brandingApiMock.updateBrandingProfile.mockResolvedValue(baseProfile);
+  });
+
+  it("экран в UX-бюджете, или долг записан явно (BIZ-60)", async () => {
+    // Волна 4 нашла 27 видимых полей — записано долгом в uxBudgetDebt.ts:
+    // перекрой брендинга (разделы по одному, как у склада) — отдельная работа.
+    // Приёмка стережёт обе стороны: хуже стать нельзя, а починка обязана снять
+    // запись долга.
+    await act(async () => {
+      render(
+        <MemoryRouter>
+          <BrandingSettingsPage />
+        </MemoryRouter>,
+      );
+    });
+    expect(
+      (await screen.findAllByDisplayValue("АО Тест")).length,
+    ).toBeGreaterThan(0);
+
+    const budget = uxBudgetDelta(document.body, "BrandingSettingsPage");
+    expect(budget.unexpected).toEqual([]);
+    expect(budget.stale).toEqual([]);
   });
 
   it("loads branding profile and renders current scope data", async () => {

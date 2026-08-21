@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { QuickPackWizardPage } from "@/pages/packs/QuickPackWizardPage";
 import { renderWithRouter } from "@/test-utils/renderWithRouter";
-import { uxBudgetViolations } from "@/test-utils/uxBudget";
+import { uxBudgetDelta, uxBudgetViolations } from "@/test-utils/uxBudget";
 
 /**
  * BIZ-50 срез-7 — экран мастера разового комплекта (ТЗ разд. 50.2).
@@ -263,5 +263,20 @@ describe("мастер разового комплекта", () => {
     // Второй шаг — форма: разд. 59.2 ограничивает видимые поля семью, и
     // именно поэтому мастер спрашивает только недостающее.
     expect(uxBudgetViolations(container)).toEqual([]);
+  });
+
+  it("экран в UX-бюджете, или долг записан явно (BIZ-60)", async () => {
+    // У мастера мерится ПЕРВЫЙ шаг в наполненном состоянии: сценарий и
+    // организация выбраны, списки людей и объектов подгружены.
+    const user = userEvent.setup();
+    renderWithRouter(<QuickPackWizardPage />);
+    await screen.findByRole("option", { name: /Приём нового сотрудника/ });
+    await user.selectOptions(screen.getByLabelText("Сценарий"), SCENARIO.code);
+    await user.selectOptions(screen.getByLabelText("Организация клиента"), COMPANY.id);
+    await screen.findByLabelText("Иванов Иван");
+
+    const budget = uxBudgetDelta(document.body, "QuickPackWizardPage");
+    expect(budget.unexpected).toEqual([]);
+    expect(budget.stale).toEqual([]);
   });
 });

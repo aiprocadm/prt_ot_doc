@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { uxBudgetDelta } from "@/test-utils/uxBudget";
 import OutboxPage from "@/pages/admin/OutboxPage";
 
 const getMock = vi.fn();
@@ -93,5 +94,38 @@ describe("OutboxPage", () => {
       );
     });
     expect(screen.getByText(/https:\/\/hook\.test/i)).toBeInTheDocument();
+  });
+
+  it("экран в UX-бюджете, или долг записан явно (BIZ-60)", async () => {
+    // Волна 4 нашла здесь три главные кнопки; «Тест» в повторяющейся строке и
+    // служебное «Обновить» сделаны вторичными — приёмка стережёт возврат.
+    getMock.mockImplementation((url: string) => {
+      if (url === "/admin/outbox/events")
+        return Promise.resolve({ data: { items: [] } });
+      if (url === "/webhooks/endpoints") {
+        return Promise.resolve({
+          data: [
+            {
+              id: "ep-1",
+              url: "https://hook.test",
+              enabled: true,
+              subscribed_events: ["DocumentGenerated"],
+            },
+          ],
+        });
+      }
+      if (url === "/webhooks/deliveries") return Promise.resolve({ data: [] });
+      throw new Error(`Unexpected GET ${url}`);
+    });
+    render(
+      <MemoryRouter>
+        <OutboxPage />
+      </MemoryRouter>,
+    );
+    await screen.findByText(/https:\/\/hook\.test/i);
+
+    const budget = uxBudgetDelta(document.body, "OutboxPage");
+    expect(budget.unexpected).toEqual([]);
+    expect(budget.stale).toEqual([]);
   });
 });

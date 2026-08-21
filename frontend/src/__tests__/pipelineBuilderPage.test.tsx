@@ -16,10 +16,42 @@ vi.mock("@/api/client", () => ({
 
 import PipelineBuilderPage from "@/pages/PipelineBuilderPage";
 
+import { uxBudgetDelta } from "@/test-utils/uxBudget";
+
 describe("PipelineBuilderPage", () => {
   beforeEach(() => {
     apiClientMock.get.mockReset();
     apiClientMock.post.mockReset();
+  });
+
+  it("экран в UX-бюджете, или долг записан явно (BIZ-60)", async () => {
+    // Волна 4 нашла 14 видимых полей (профиль + рёбра графа + свойства узла) —
+    // записано долгом: честный перекрой конструктора — отдельная работа.
+    apiClientMock.get.mockImplementation((url: string) => {
+      if (url !== "/pipelines/profiles") throw new Error(`Unexpected GET ${url}`);
+      return Promise.resolve({
+        data: [
+          {
+            id: "profile-1",
+            code: "ot-default",
+            name: "OT pipeline",
+            profile_version: 3,
+            graph: {
+              nodes: [{ id: "render", type: "render_docx" }],
+              edges: [],
+            },
+          },
+        ],
+      });
+    });
+    await act(async () => {
+      render(<PipelineBuilderPage />);
+    });
+    expect(await screen.findByText("ot-default")).toBeInTheDocument();
+
+    const budget = uxBudgetDelta(document.body, "PipelineBuilderPage");
+    expect(budget.unexpected).toEqual([]);
+    expect(budget.stale).toEqual([]);
   });
 
   it("shows load error for profiles and retries successfully", async () => {

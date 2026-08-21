@@ -3,6 +3,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { LegalDocumentPage } from "@/pages/legal/LegalDocumentPage";
+import { uxBudgetDelta } from "@/test-utils/uxBudget";
 
 const getMock = vi.fn();
 
@@ -44,6 +45,24 @@ describe("страница юр. текста (BIZ-52 срез-5)", () => {
     // Без редакции и даты юридический текст не отвечает на вопрос
     // «что действовало на такую-то дату».
     expect(screen.getByText(/Редакция 3 от/)).toBeInTheDocument();
+  });
+
+  it("экран в UX-бюджете, или долг записан явно (BIZ-60)", async () => {
+    getMock.mockResolvedValue({
+      kind: "offer",
+      title: "Публичная оферта",
+      body: "Условия оказания услуг.",
+      version: 3,
+      source: "reseller",
+      published_at: "2026-08-12T10:00:00Z",
+    });
+
+    renderAt("/legal/offer");
+    await screen.findByRole("heading", { name: "Публичная оферта" });
+
+    const budget = uxBudgetDelta(document.body, "LegalDocumentPage");
+    expect(budget.unexpected).toEqual([]);
+    expect(budget.stale).toEqual([]);
   });
 
   it("неопубликованный документ объясняется, а не показывает пустоту", async () => {

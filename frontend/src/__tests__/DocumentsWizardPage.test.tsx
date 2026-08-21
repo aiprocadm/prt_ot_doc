@@ -1,4 +1,4 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
@@ -86,6 +86,7 @@ vi.mock("sonner", () => ({
 
 import DocumentsWizardPage from "@/pages/documents/DocumentsWizardPage";
 import { useCompaniesStore } from "@/stores/companies";
+import { uxBudgetDelta } from "@/test-utils/uxBudget";
 
 describe("DocumentsWizardPage", () => {
   afterEach(() => {
@@ -462,5 +463,43 @@ describe("DocumentsWizardPage", () => {
     expect(toast.error).toHaveBeenCalledWith(
       "Не удалось обновить batch статус.",
     );
+  });
+
+  it("экран в UX-бюджете, или долг записан явно (BIZ-60)", async () => {
+    // У мастера мерится ПЕРВЫЙ шаг после загрузки: stepper на 10 шагов,
+    // форма шага 1 и навигация «Назад/Далее» — то, что человек видит, войдя.
+    useDocumentsWizardStore.getState().reset();
+    useDocumentsWizardStore.setState({ step: 1 });
+    useTenantStore.setState({
+      tenant: { slug: "demo", name: "Demo tenant" } as never,
+      tenants: [],
+      setTenant: vi.fn(),
+      clearTenant: vi.fn(),
+    });
+    useCompaniesStore.setState({
+      items: [{ id: "company-1", name: "АО Тест" }],
+      list: vi.fn(async () => undefined),
+    } as never);
+
+    render(
+      <MemoryRouter>
+        <DocumentsWizardPage />
+      </MemoryRouter>,
+    );
+
+    // Дождаться НАПОЛНЕННОГО состояния, а не замерить пустой экран:
+    // заголовок первого шага отрисован, bootstrap дотянул фикстуры
+    // (компания выбрана из стора, площадки запрошены по ней).
+    expect(
+      await screen.findByRole("heading", { name: /шаг 1: пресет/i }),
+    ).toBeInTheDocument();
+    await waitFor(() => {
+      expect(useDocumentsWizardStore.getState().companyId).toBe("company-1");
+      expect(brandingApiMock.listSites).toHaveBeenCalledWith("company-1");
+    });
+
+    const budget = uxBudgetDelta(document.body, "DocumentsWizardPage");
+    expect(budget.unexpected).toEqual([]);
+    expect(budget.stale).toEqual([]);
   });
 });
