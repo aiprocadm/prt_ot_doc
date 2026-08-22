@@ -154,11 +154,12 @@ describe("BrandingSettingsPage", () => {
     brandingApiMock.updateBrandingProfile.mockResolvedValue(baseProfile);
   });
 
-  it("экран в UX-бюджете, или долг записан явно (BIZ-60)", async () => {
-    // Волна 4 нашла 27 видимых полей — записано долгом в uxBudgetDebt.ts:
-    // перекрой брендинга (разделы по одному, как у склада) — отдельная работа.
-    // Приёмка стережёт обе стороны: хуже стать нельзя, а починка обязана снять
-    // запись долга.
+  it("экран в UX-бюджете с ЛЮБЫМ открытым разделом (BIZ-59)", async () => {
+    // Волна 4 нашла 27 видимых полей одним полотном (было записано долгом);
+    // перекрой BIZ-59 разложил их на пять секций-задач по одной, как у склада.
+    // Замер закрытого состояния ничего не доказал бы — меряем КАЖДУЮ секцию
+    // открытой: вместе с постоянным селектором филиала каждая обязана
+    // помещаться в лимит.
     await act(async () => {
       render(
         <MemoryRouter>
@@ -170,9 +171,25 @@ describe("BrandingSettingsPage", () => {
       (await screen.findAllByDisplayValue("АО Тест")).length,
     ).toBeGreaterThan(0);
 
-    const budget = uxBudgetDelta(document.body, "BrandingSettingsPage");
-    expect(budget.unexpected).toEqual([]);
-    expect(budget.stale).toEqual([]);
+    const closed = uxBudgetDelta(document.body, "BrandingSettingsPage");
+    expect(closed.unexpected).toEqual([]);
+    expect(closed.stale).toEqual([]);
+
+    for (const label of [
+      "Организация",
+      "Контакты и адреса",
+      "Тексты бланка",
+      "Файлы бланка",
+      "Цвета и водяной знак",
+      "Служебные (JSON)",
+    ]) {
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: label }));
+      });
+      const budget = uxBudgetDelta(document.body, "BrandingSettingsPage");
+      expect(budget.unexpected, label).toEqual([]);
+      expect(budget.stale, label).toEqual([]);
+    }
   });
 
   it("loads branding profile and renders current scope data", async () => {
@@ -251,6 +268,12 @@ describe("BrandingSettingsPage", () => {
       (await screen.findAllByDisplayValue("АО Тест")).length,
     ).toBeGreaterThan(0);
 
+    // BIZ-59: поле живёт в секции «Служебные (JSON)» — открываем её.
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole("button", { name: "Служебные (JSON)" }),
+      );
+    });
     const metadataTextarea = getLabeledTextarea("Метаданные (JSON)");
     await act(async () => {
       fireEvent.change(metadataTextarea, { target: { value: "{" } });
