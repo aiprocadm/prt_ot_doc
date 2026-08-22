@@ -260,20 +260,12 @@ async def test_portfolio_etag_304(sessionmaker):
 
 
 @pytest.mark.asyncio
-async def test_feature_flag_off_returns_404(sessionmaker, monkeypatch):
-    monkeypatch.setattr(routes, "is_module_enabled", AsyncMock(return_value=False))
-    async with sessionmaker() as session:
-        with pytest.raises(HTTPException) as exc:
-            await routes.portfolio(
-                request=SimpleNamespace(headers={}),
-                response=Response(),
-                tenant=_tenant(),
-                session=session,
-                access=SimpleNamespace(),
-                limit=50,
-                offset=0,
-            )
-    assert exc.value.status_code == 404
+async def test_feature_flag_off_covered_by_router_gate():
+    # BIZ-61 срез-6: гейт — роутерная зависимость на КАЖДОМ роуте (в теле
+    # эндпоинта его больше нет); исходы гейта доказаны живым клиентом в
+    # tests/test_biz61_module_readonly.py.
+    deps = [d.dependency for d in routes.router.dependencies]
+    assert routes._require_enabled in deps
 
 
 @pytest.mark.asyncio
