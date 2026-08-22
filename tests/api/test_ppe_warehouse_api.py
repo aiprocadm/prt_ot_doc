@@ -195,27 +195,26 @@ async def test_stock_endpoints_default_on_without_flag(
 
 
 @pytest.mark.asyncio
-async def test_stock_endpoints_404_when_feature_disabled(
+async def test_stock_endpoints_readonly_when_feature_disabled(
     async_client: AsyncClient, make_auth_headers, sessionmaker, data_factory: TestDataFactory
 ) -> None:
     await _set_warehouse_flag(sessionmaker, data_factory, on=False)
     headers = await make_auth_headers(RoleEnum.ADMIN)
 
-    # Read routes that normally return 200 now 404 -> proves the gate fired.
+    # BIZ-61 срез-6 (разд. 61.2): выдан и отключён — чтение открыто…
     listed = await async_client.get("/api/v1/ppe/stock/batches", headers=headers)
-    assert listed.status_code == status.HTTP_404_NOT_FOUND
-    assert "warehouse" in listed.text.lower()
+    assert listed.status_code == status.HTTP_200_OK, listed.text
     levels = await async_client.get("/api/v1/ppe/stock/levels", headers=headers)
-    assert levels.status_code == status.HTTP_404_NOT_FOUND
+    assert levels.status_code == status.HTTP_200_OK, levels.text
 
-    # Write route is gated before the handler body (item lookup) runs.
+    # …а мутация гейтится ДО тела (item lookup не успевает) и объяснена словами.
     created = await async_client.post(
         "/api/v1/ppe/stock/batches",
         json={"item_id": "irrelevant", "batch_no": "B-1", "quantity": 1},
         headers=headers,
     )
-    assert created.status_code == status.HTTP_404_NOT_FOUND
-    assert "warehouse" in created.text.lower()
+    assert created.status_code == status.HTTP_403_FORBIDDEN, created.text
+    assert "MODULE_READ_ONLY" in created.text
 
 
 @pytest.mark.asyncio

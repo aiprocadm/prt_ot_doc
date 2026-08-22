@@ -14,7 +14,7 @@ from app.api.helpers.etag import (
     build_not_modified_headers,
     compute_list_etag,
 )
-from app.core.feature_flags import is_module_enabled
+from app.core.feature_flags import is_module_enabled, raise_for_disabled_module
 from app.core.security import AccessContext, abac
 from app.db.session import rearm_session_tenant_context
 from app.domains.shared import ContingentItemStatus
@@ -72,10 +72,20 @@ WriterAccess = Annotated[
 ]
 
 
-async def require_contractors_feature(tenant: TenantDep, session: SessionDep) -> None:
+async def require_contractors_feature(
+    request: Request, tenant: TenantDep, session: SessionDep
+) -> None:
+    # BIZ-61 разд. 61.2 «безопасное выключение»: отключённый (но выдававшийся)
+    # модуль читается, мутации — 403 словами; никогда не выдававшийся — 404.
     if not await is_module_enabled(session, str(tenant.id), _CONTRACTORS_FEATURE_CODE):
-        raise HTTPException(
-            status.HTTP_404_NOT_FOUND, "Contractors feature is not enabled for this tenant"
+        await raise_for_disabled_module(
+            session,
+            str(tenant.id),
+            _CONTRACTORS_FEATURE_CODE,
+            request.method,
+            error_type="contractors",
+            disabled_code="CONTRACTORS_DISABLED",
+            disabled_message="Contractors feature is not enabled for this tenant",
         )
 
 

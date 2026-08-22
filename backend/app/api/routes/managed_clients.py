@@ -25,8 +25,8 @@ from app.api.helpers.etag import (
 from app.core.audit_decorator import audit_operation
 from app.core.config import get_settings
 from app.core.errors import api_problem_detail
-from app.core.feature_flags import is_module_enabled
-from app.core.security import AccessContext, AuthContext, abac, get_auth_ctx
+from app.core.feature_flags import is_module_enabled, raise_for_disabled_module
+from app.core.security import AccessContext, AuthContext, abac, get_auth_ctx, rbac
 from app.core.tenant_validation import TenantContextValidator
 from app.db.session import AsyncSessionLocal
 from app.domains.managed_clients.access import (
@@ -191,17 +191,36 @@ def _today() -> date:
     return datetime.now(tz=timezone.utc).date()
 
 
-async def _require_enabled(session: AsyncSession, tenant: Tenant) -> None:
+async def _require_enabled(
+    request: Request,
+    session: SessionDep,
+    tenant: TenantDep,
+    # Аутентификация РАНЬШЕ гейта: без токена ответ обязан быть 401 (редирект
+    # на вход), а не 404 модуля — прежний порядок «auth в эндпоинте, гейт в
+    # теле» давал именно это, роутерная зависимость обязана его сохранить.
+    _access: AccessContext = Depends(rbac(None)),
+) -> None:
+    """Гейт модуля — роутерная зависимость (каждый эндпоинт роутера).
+
+    BIZ-61 разд. 61.2 «безопасное выключение»: отключённый (но выдававшийся)
+    модуль читается, мутации — 403 словами; никогда не выдававшийся — 404.
+    """
+
     enabled = await is_module_enabled(session, str(tenant.id), _FEATURE_CODE)
     if not enabled:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=api_problem_detail(
-                code="MANAGED_CLIENTS_DISABLED",
-                message="Managed clients module is not enabled for this tenant",
-                error_type="managed_clients",
-            ),
+        await raise_for_disabled_module(
+            session,
+            str(tenant.id),
+            _FEATURE_CODE,
+            request.method,
+            error_type="managed_clients",
+            disabled_code="MANAGED_CLIENTS_DISABLED",
+            disabled_message="Managed clients module is not enabled for this tenant",
         )
+
+
+# Зависимость роутера регистрируется ДО объявления эндпоинтов ниже по файлу.
+router.dependencies.append(Depends(_require_enabled))
 
 
 def _err(code: str, message: str, status_code: int) -> HTTPException:
@@ -404,7 +423,6 @@ async def portfolio(
     """Портфель клиентов со сводкой (разд. 49.2, блок «Портфель клиентов»)."""
 
     TenantContextValidator.ensure_tenant_context(tenant)
-    await _require_enabled(session, tenant)
     today = _today()
 
     base = select(ManagedClient).where(
@@ -481,7 +499,6 @@ async def cross_client_attention(
     """
 
     TenantContextValidator.ensure_tenant_context(tenant)
-    await _require_enabled(session, tenant)
     now = datetime.now(tz=timezone.utc)
     today = _today()
 
@@ -568,7 +585,6 @@ async def cross_client_calendar(
     """
 
     TenantContextValidator.ensure_tenant_context(tenant)
-    await _require_enabled(session, tenant)
     now = datetime.now(tz=timezone.utc)
     today = _today()
 
@@ -654,7 +670,6 @@ async def specialist_workload(
     """
 
     TenantContextValidator.ensure_tenant_context(tenant)
-    await _require_enabled(session, tenant)
     now = datetime.now(tz=timezone.utc)
     today = _today()
 
@@ -736,7 +751,6 @@ async def my_managed_clients(
     """
 
     TenantContextValidator.ensure_tenant_context(tenant)
-    await _require_enabled(session, tenant)
     now = datetime.now(tz=timezone.utc)
 
     rows = list(
@@ -784,7 +798,6 @@ async def enter_client_context(
     """
 
     TenantContextValidator.ensure_tenant_context(tenant)
-    await _require_enabled(session, tenant)
     now = datetime.now(tz=timezone.utc)
 
     client = (
@@ -889,7 +902,6 @@ async def leave_client_context(
     """
 
     TenantContextValidator.ensure_tenant_context(tenant)
-    await _require_enabled(session, tenant)
     now = datetime.now(tz=timezone.utc)
 
     closed = await close_open_sessions(
@@ -923,7 +935,6 @@ async def list_access_grants(
     """
 
     TenantContextValidator.ensure_tenant_context(tenant)
-    await _require_enabled(session, tenant)
     await _get(session, tenant, mcid)
     now = datetime.now(tz=timezone.utc)
     rows = list(
@@ -956,7 +967,6 @@ async def grant_access(
     """Выдать специалисту доступ к клиенту — событие безопасности, идёт в аудит."""
 
     TenantContextValidator.ensure_tenant_context(tenant)
-    await _require_enabled(session, tenant)
     await _get(session, tenant, mcid)
     # Срез-12: без действующего согласия клиента грант не выдаётся (разд. 66.3).
     await _require_client_consent(session, tenant, mcid, now=datetime.now(tz=timezone.utc))
@@ -1026,7 +1036,6 @@ async def revoke_access(
     """Отозвать доступ. Строка НЕ удаляется — остаётся след «имел до»."""
 
     TenantContextValidator.ensure_tenant_context(tenant)
-    await _require_enabled(session, tenant)
     row = (
         await session.execute(
             select(ManagedClientAccess).where(
@@ -1092,7 +1101,6 @@ async def client_access_log(
     """
 
     TenantContextValidator.ensure_tenant_context(tenant)
-    await _require_enabled(session, tenant)
     await _get(session, tenant, mcid)
 
     conditions = [
@@ -1139,7 +1147,6 @@ async def list_client_consents(
     """
 
     TenantContextValidator.ensure_tenant_context(tenant)
-    await _require_enabled(session, tenant)
     await _get(session, tenant, mcid)
     now = datetime.now(tz=timezone.utc)
     rows = await _client_consents(session, tenant, mcid)
@@ -1163,7 +1170,6 @@ async def record_client_consent(
     """
 
     TenantContextValidator.ensure_tenant_context(tenant)
-    await _require_enabled(session, tenant)
     await _get(session, tenant, mcid)
     now = datetime.now(tz=timezone.utc)
     try:
@@ -1240,7 +1246,6 @@ async def revoke_client_consent(
     """
 
     TenantContextValidator.ensure_tenant_context(tenant)
-    await _require_enabled(session, tenant)
     await _get(session, tenant, mcid)
     now = datetime.now(tz=timezone.utc)
     row = (
@@ -1308,7 +1313,6 @@ async def convert_to_dedicated(
     """
 
     TenantContextValidator.ensure_tenant_context(tenant)
-    await _require_enabled(session, tenant)
     row = await _get(session, tenant, mcid)
 
     slug = payload.tenant_slug.strip().lower()
@@ -1420,7 +1424,6 @@ async def list_client_transfers(
     """Журнал переносов клиента — часть истории ведения."""
 
     TenantContextValidator.ensure_tenant_context(tenant)
-    await _require_enabled(session, tenant)
     await _get(session, tenant, mcid)
     rows = (
         (
@@ -1458,7 +1461,6 @@ async def transfer_client_data(
     """
 
     TenantContextValidator.ensure_tenant_context(tenant)
-    await _require_enabled(session, tenant)
     row = await _get(session, tenant, mcid)
 
     prior = (
@@ -1625,7 +1627,6 @@ async def create_managed_client(
     payload: ManagedClientCreate, tenant: TenantDep, session: SessionDep, access: Access
 ) -> ManagedClientRead:
     TenantContextValidator.ensure_tenant_context(tenant)
-    await _require_enabled(session, tenant)
     try:
         validate_mode_binding(
             payload.mode,
@@ -1716,7 +1717,6 @@ async def record_client_change(
     """
 
     TenantContextValidator.ensure_tenant_context(tenant)
-    await _require_enabled(session, tenant)
     await _get(session, tenant, mcid)
 
     row = ClientChange(
@@ -1755,7 +1755,6 @@ async def list_client_changes(
     """
 
     TenantContextValidator.ensure_tenant_context(tenant)
-    await _require_enabled(session, tenant)
     await _get(session, tenant, mcid)
 
     base = [
@@ -1832,7 +1831,6 @@ async def set_client_change_status(
     """
 
     TenantContextValidator.ensure_tenant_context(tenant)
-    await _require_enabled(session, tenant)
     await _get(session, tenant, mcid)
 
     row = (
@@ -1878,7 +1876,6 @@ async def get_client_readiness(
     """
 
     TenantContextValidator.ensure_tenant_context(tenant)
-    await _require_enabled(session, tenant)
     client = await _get(session, tenant, mcid)
 
     if client.mode is ManagedClientMode.DEDICATED or not client.company_id:
@@ -1934,7 +1931,6 @@ async def run_client_audit(
     """
 
     TenantContextValidator.ensure_tenant_context(tenant)
-    await _require_enabled(session, tenant)
 
     outcome = await run_tenant_audit(session, str(tenant.id))
     await session.commit()
@@ -1973,7 +1969,6 @@ async def send_client_audit_report(
     """
 
     TenantContextValidator.ensure_tenant_context(tenant)
-    await _require_enabled(session, tenant)
     client = await _get(session, tenant, mcid)
 
     report = (
@@ -2006,7 +2001,6 @@ async def list_client_audit_reports(
     """Отчёты авто-аудита клиента: свежие сверху (разд. 51.3)."""
 
     TenantContextValidator.ensure_tenant_context(tenant)
-    await _require_enabled(session, tenant)
     await _get(session, tenant, mcid)
 
     where = (
@@ -2084,7 +2078,6 @@ async def collect_data_quality_signals(
     """
 
     TenantContextValidator.ensure_tenant_context(tenant)
-    await _require_enabled(session, tenant)
 
     outcome = await collect_dq_signals(session, str(tenant.id))
     await session.commit()
@@ -2105,7 +2098,6 @@ async def get_managed_client(
     mcid: str, tenant: TenantDep, session: SessionDep, access: Access
 ) -> ManagedClientRead:
     TenantContextValidator.ensure_tenant_context(tenant)
-    await _require_enabled(session, tenant)
     row = await _get(session, tenant, mcid)
     return ManagedClientRead.model_validate(row, from_attributes=True)
 
@@ -2119,7 +2111,6 @@ async def update_managed_client(
     access: Access,
 ) -> ManagedClientRead:
     TenantContextValidator.ensure_tenant_context(tenant)
-    await _require_enabled(session, tenant)
     row = await _get(session, tenant, mcid)
     fields = payload.model_dump(exclude_unset=True)
 
@@ -2172,7 +2163,6 @@ async def delete_managed_client(
     """Мягкое удаление: история ведения клиента остаётся (разд. 49.1)."""
 
     TenantContextValidator.ensure_tenant_context(tenant)
-    await _require_enabled(session, tenant)
     row = await _get(session, tenant, mcid)
     row.deleted_at = datetime.now(tz=timezone.utc)
     await session.flush()

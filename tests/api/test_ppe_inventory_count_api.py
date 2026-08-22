@@ -120,14 +120,23 @@ async def test_list_etag_304(
 
 
 @pytest.mark.asyncio
-async def test_counts_gated_by_warehouse_flag(
+async def test_counts_readonly_when_warehouse_disabled(
     async_client: AsyncClient, make_auth_headers, sessionmaker, data_factory: TestDataFactory
 ):
+    """BIZ-61 срез-6 (разд. 61.2, безопасное выключение): модуль БЫЛ выдан и
+    отключён (строка on=False) — чтение остаётся открытым, а мутация
+    объясняется словами, не маскируется под 404."""
+
     await _set_warehouse_flag(sessionmaker, data_factory, on=False)
     headers = await make_auth_headers(RoleEnum.ADMIN)
     resp = await async_client.get("/api/v1/ppe/stock/inventory/counts", headers=headers)
-    assert resp.status_code == status.HTTP_404_NOT_FOUND
-    assert "warehouse" in resp.text.lower()
+    assert resp.status_code == status.HTTP_200_OK, resp.text
+
+    write = await async_client.post(
+        "/api/v1/ppe/stock/inventory/counts", json={}, headers=headers
+    )
+    assert write.status_code == status.HTTP_403_FORBIDDEN, write.text
+    assert "MODULE_READ_ONLY" in write.text
 
 
 @pytest.mark.asyncio

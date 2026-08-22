@@ -20,7 +20,7 @@ from app.api.helpers.etag import (
     compute_list_etag,
 )
 from app.core.errors import api_problem_detail
-from app.core.feature_flags import is_module_enabled
+from app.core.feature_flags import is_module_enabled, raise_for_disabled_module
 from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
 from app.db.session import rearm_session_tenant_context
@@ -66,18 +66,22 @@ _FEATURE_CODE = "budget"
 
 
 async def _require_feature(
+    request: Request,
     session: SessionDep,
     tenant: TenantDep,
 ) -> None:
+    # BIZ-61 разд. 61.2 «безопасное выключение»: отключённый (но выдававшийся)
+    # модуль читается, мутации — 403 словами; никогда не выдававшийся — 404.
     enabled = await is_module_enabled(session, str(tenant.id), _FEATURE_CODE)
     if not enabled:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=api_problem_detail(
-                code="BUDGET_DISABLED",
-                message="Budget feature is not enabled for this tenant",
-                error_type="budget",
-            ),
+        await raise_for_disabled_module(
+            session,
+            str(tenant.id),
+            _FEATURE_CODE,
+            request.method,
+            error_type="budget",
+            disabled_code="BUDGET_DISABLED",
+            disabled_message="Budget feature is not enabled for this tenant",
         )
 
 

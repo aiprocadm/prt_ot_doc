@@ -289,15 +289,11 @@ async def test_endpoint_etag_304(sessionmaker, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_endpoint_respects_feature_flag(sessionmaker, monkeypatch):
-    monkeypatch.setattr(routes, "is_module_enabled", AsyncMock(return_value=False))
-    async with sessionmaker() as session:
-        with pytest.raises(HTTPException) as exc:
-            await routes.cross_client_attention(
-                request=SimpleNamespace(headers={}),
-                response=Response(),
-                tenant=_tenant(),
-                session=session,
-                access=SimpleNamespace(),
-            )
-    assert exc.value.status_code == 404
+async def test_endpoint_respects_feature_flag():
+    # BIZ-61 срез-6: гейт больше не вызывается в теле каждого эндпоинта — он
+    # роутерная зависимость и стоит на КАЖДОМ роуте по построению (забыть
+    # нельзя). Прямой вызов функции эндпоинта гейт не дёргает; исходы гейта
+    # (404 «не выдавался» / read-only «был выдан») доказаны живым клиентом в
+    # tests/test_biz61_module_readonly.py и юнитах самого гейта.
+    deps = [d.dependency for d in routes.router.dependencies]
+    assert routes._require_enabled in deps

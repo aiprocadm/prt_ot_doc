@@ -60,6 +60,17 @@ describe("handleApiError toasts", () => {
     toastErrorMock.mockClear();
   });
 
+  it("MODULE_READ_ONLY объяснён словами про чтение, а не общим отказом (BIZ-61)", () => {
+    // Безопасное выключение (разд. 61.2): бэкенд шлёт этот код на мутацию в
+    // отключённом модуле; без своей ветки человек увидел бы сырой message.
+    handleApiError(
+      baseError({ status: 403, message: "raw", code: "MODULE_READ_ONLY" }),
+    );
+    expect(toastErrorMock).toHaveBeenCalledWith(
+      expect.stringContaining("только для чтения"),
+    );
+  });
+
   it("prefers backend message for 403 when non-empty", () => {
     handleApiError(
       baseError({ status: 403, message: "Worker cannot view this task" }),

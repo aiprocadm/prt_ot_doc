@@ -28,8 +28,8 @@ from app.api.helpers.etag import (
 from app.api.helpers.upload import reject_oversize_upload
 from app.core.archive_safety import ArchiveSafetyError
 from app.core.errors import api_problem_detail
-from app.core.feature_flags import is_module_enabled
-from app.core.security import AccessContext, abac
+from app.core.feature_flags import is_module_enabled, raise_for_disabled_module
+from app.core.security import AccessContext, abac, rbac
 from app.core.tenant_validation import TenantContextValidator
 from app.domains.medical.service import _load_factor_catalog
 from app.domains.sout.import_report import UnsupportedImportFormat
@@ -128,10 +128,36 @@ def _feature_off() -> HTTPException:
     )
 
 
-async def _require_sout_enabled(session: AsyncSession, tenant: Tenant) -> None:
+async def _require_sout_enabled(
+    request: Request,
+    session: SessionDep,
+    tenant: TenantDep,
+    # Аутентификация РАНЬШЕ гейта: без токена ответ обязан быть 401 (редирект
+    # на вход), а не 404 модуля — прежний порядок «auth в эндпоинте, гейт в
+    # теле» давал именно это, роутерная зависимость обязана его сохранить.
+    _access: AccessContext = Depends(rbac(None)),
+) -> None:
+    """Гейт модуля — роутерная зависимость (каждый эндпоинт роутера).
+
+    BIZ-61 разд. 61.2 «безопасное выключение»: отключённый (но выдававшийся)
+    модуль читается, мутации — 403 словами; никогда не выдававшийся — 404.
+    """
+
     enabled = await is_module_enabled(session, str(tenant.id), _FEATURE_CODE)
     if not enabled:
-        raise _feature_off()
+        await raise_for_disabled_module(
+            session,
+            str(tenant.id),
+            _FEATURE_CODE,
+            request.method,
+            error_type="sout",
+            disabled_code="SOUT_DISABLED",
+            disabled_message="SOUT module is not enabled for this tenant",
+        )
+
+
+# Зависимость роутера регистрируется ДО объявления эндпоинтов ниже по файлу.
+router.dependencies.append(Depends(_require_sout_enabled))
 
 
 def _conflict(exc: CampaignTransitionError) -> HTTPException:
@@ -319,7 +345,6 @@ async def list_campaigns(
     offset: int = Query(0, ge=0),
 ) -> CampaignPage | Response:
     TenantContextValidator.ensure_tenant_context(tenant)
-    await _require_sout_enabled(session, tenant)
     stmt = (
         select(SoutCampaign)
         .where(SoutCampaign.tenant_id == tenant.id, SoutCampaign.deleted_at.is_(None))
@@ -358,7 +383,6 @@ async def create_campaign(
     payload: CampaignCreate, tenant: TenantDep, session: SessionDep, access: Access
 ) -> CampaignRead:
     TenantContextValidator.ensure_tenant_context(tenant)
-    await _require_sout_enabled(session, tenant)
     row = SoutCampaign(
         tenant_id=tenant.id,
         name=payload.name,
@@ -378,7 +402,6 @@ async def get_campaign(
     cid: str, tenant: TenantDep, session: SessionDep, access: Access
 ) -> CampaignRead:
     TenantContextValidator.ensure_tenant_context(tenant)
-    await _require_sout_enabled(session, tenant)
     row = await _get_campaign(session, tenant, cid)
     return CampaignRead.model_validate(row, from_attributes=True)
 
@@ -388,7 +411,6 @@ async def update_campaign(
     cid: str, payload: CampaignUpdate, tenant: TenantDep, session: SessionDep, access: Access
 ) -> CampaignRead:
     TenantContextValidator.ensure_tenant_context(tenant)
-    await _require_sout_enabled(session, tenant)
     row = await _get_campaign(session, tenant, cid)
     for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(row, field, value)
@@ -402,7 +424,6 @@ async def update_campaign_status(
     cid: str, payload: CampaignStatusUpdate, tenant: TenantDep, session: SessionDep, access: Access
 ) -> CampaignRead:
     TenantContextValidator.ensure_tenant_context(tenant)
-    await _require_sout_enabled(session, tenant)
     row = await _get_campaign(session, tenant, cid)
     try:
         validate_campaign_transition(row.status, payload.status)
@@ -427,7 +448,6 @@ async def list_workplaces(
     offset: int = Query(0, ge=0),
 ) -> WorkplacePage | Response:
     TenantContextValidator.ensure_tenant_context(tenant)
-    await _require_sout_enabled(session, tenant)
     await _get_campaign(session, tenant, cid)
     stmt = (
         select(SoutWorkplace)
@@ -473,7 +493,6 @@ async def add_workplace(
     cid: str, payload: WorkplaceCreate, tenant: TenantDep, session: SessionDep, access: Access
 ) -> WorkplaceRead:
     TenantContextValidator.ensure_tenant_context(tenant)
-    await _require_sout_enabled(session, tenant)
     campaign = await _get_campaign(session, tenant, cid)
     try:
         ensure_campaign_open(campaign.status)
@@ -513,7 +532,6 @@ async def get_workplace(
     wid: str, tenant: TenantDep, session: SessionDep, access: Access
 ) -> WorkplaceRead:
     TenantContextValidator.ensure_tenant_context(tenant)
-    await _require_sout_enabled(session, tenant)
     row = await _get_workplace(session, tenant, wid)
     return workplace_to_read(row)
 
@@ -534,7 +552,6 @@ async def update_workplace(
     wid: str, payload: WorkplaceUpdate, tenant: TenantDep, session: SessionDep, access: Access
 ) -> WorkplaceRead:
     TenantContextValidator.ensure_tenant_context(tenant)
-    await _require_sout_enabled(session, tenant)
     row = await _get_workplace(session, tenant, wid)
     await _ensure_workplace_editable(session, tenant, row)
     changes = payload.model_dump(exclude_unset=True)
@@ -562,7 +579,6 @@ async def list_class_history(
     wid: str, tenant: TenantDep, session: SessionDep, access: Access
 ) -> list[ClassHistoryRead]:
     TenantContextValidator.ensure_tenant_context(tenant)
-    await _require_sout_enabled(session, tenant)
     await _get_workplace(session, tenant, wid)
     rows = list(
         (
@@ -586,7 +602,6 @@ async def get_norm_suggestions(
     wid: str, tenant: TenantDep, session: SessionDep, access: Access
 ) -> NormSuggestions:
     TenantContextValidator.ensure_tenant_context(tenant)
-    await _require_sout_enabled(session, tenant)
     wp = await _get_workplace(session, tenant, wid)
     if wp.position_id is None:
         return NormSuggestions(ppe=[], medical=[])
@@ -617,7 +632,6 @@ async def cascade_preview(
     wid: str, tenant: TenantDep, session: SessionDep, access: Access
 ) -> CascadePreview:
     TenantContextValidator.ensure_tenant_context(tenant)
-    await _require_sout_enabled(session, tenant)
     preview = await preview_cascade(session, tenant, wid)
     if preview is None:
         raise _not_found("Workplace")
@@ -629,7 +643,6 @@ async def cascade_apply(
     wid: str, tenant: TenantDep, session: SessionDep, access: Access
 ) -> CascadeResult:
     TenantContextValidator.ensure_tenant_context(tenant)
-    await _require_sout_enabled(session, tenant)
     try:
         result = await apply_cascade(session, tenant, wid)
     except CampaignTransitionError as exc:
@@ -647,7 +660,6 @@ async def add_factor(
     wid: str, payload: FactorCreate, tenant: TenantDep, session: SessionDep, access: Access
 ) -> FactorRead:
     TenantContextValidator.ensure_tenant_context(tenant)
-    await _require_sout_enabled(session, tenant)
     wp = await _get_workplace(session, tenant, wid)
     await _ensure_workplace_editable(session, tenant, wp)
     if payload.hazard_id is not None:
@@ -672,7 +684,6 @@ async def update_factor(
     fid: str, payload: FactorUpdate, tenant: TenantDep, session: SessionDep, access: Access
 ) -> FactorRead:
     TenantContextValidator.ensure_tenant_context(tenant)
-    await _require_sout_enabled(session, tenant)
     row = await _get_factor(session, tenant, fid)
     wp = await _get_workplace(session, tenant, row.workplace_id)
     await _ensure_workplace_editable(session, tenant, wp)
@@ -696,7 +707,6 @@ async def add_guarantee(
     wid: str, payload: GuaranteeCreate, tenant: TenantDep, session: SessionDep, access: Access
 ) -> GuaranteeRead:
     TenantContextValidator.ensure_tenant_context(tenant)
-    await _require_sout_enabled(session, tenant)
     wp = await _get_workplace(session, tenant, wid)
     await _ensure_workplace_editable(session, tenant, wp)
     row = SoutGuarantee(
@@ -717,7 +727,6 @@ async def get_report(
     cid: str, tenant: TenantDep, session: SessionDep, access: Access
 ) -> CampaignReport:
     TenantContextValidator.ensure_tenant_context(tenant)
-    await _require_sout_enabled(session, tenant)
     campaign = await _get_campaign(session, tenant, cid)
     workplaces = list(
         (
@@ -794,7 +803,6 @@ async def print_sout_card(
     fmt: Literal["docx", "pdf"] = Query("docx", alias="format"),
 ) -> Response:
     TenantContextValidator.ensure_tenant_context(tenant)
-    await _require_sout_enabled(session, tenant)
     try:
         rendered = await render_sout_card(session, tenant=tenant, workplace_id=wid, fmt=fmt)
     except PdfRendererUnavailable as exc:
@@ -813,7 +821,6 @@ async def print_summary_sheet(
     fmt: Literal["docx", "pdf"] = Query("docx", alias="format"),
 ) -> Response:
     TenantContextValidator.ensure_tenant_context(tenant)
-    await _require_sout_enabled(session, tenant)
     try:
         rendered = await render_summary_sheet(session, tenant=tenant, campaign_id=cid, fmt=fmt)
     except PdfRendererUnavailable as exc:
@@ -828,7 +835,6 @@ async def get_declaration(
     cid: str, tenant: TenantDep, session: SessionDep, access: Access
 ) -> DeclarationPreview:
     TenantContextValidator.ensure_tenant_context(tenant)
-    await _require_sout_enabled(session, tenant)
     campaign = await _get_campaign(session, tenant, cid)
     pairs = await _load_declaration_pairs(session, tenant, cid)
     rows = build_declaration_projection(campaign=campaign, workplaces_with_factors=pairs)
@@ -857,7 +863,6 @@ async def print_declaration(
     fmt: Literal["docx", "pdf"] = Query("docx", alias="format"),
 ) -> Response:
     TenantContextValidator.ensure_tenant_context(tenant)
-    await _require_sout_enabled(session, tenant)
     try:
         rendered = await render_declaration(session, tenant=tenant, campaign_id=cid, fmt=fmt)
     except PdfRendererUnavailable as exc:
@@ -910,7 +915,6 @@ async def import_preview(
 ) -> ImportPreview:
     _reject_oversize(file)
     TenantContextValidator.ensure_tenant_context(tenant)
-    await _require_sout_enabled(session, tenant)
     content = await file.read()
     try:
         outcome = await preview_import(
@@ -935,7 +939,6 @@ async def import_apply(
 ) -> ImportResult:
     _reject_oversize(file)
     TenantContextValidator.ensure_tenant_context(tenant)
-    await _require_sout_enabled(session, tenant)
     campaign = await _get_campaign(session, tenant, cid)
     try:
         ensure_campaign_open(campaign.status)

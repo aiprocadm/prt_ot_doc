@@ -25,7 +25,7 @@ from app.api.helpers.etag import (
 )
 from app.core.audit_decorator import audit_operation
 from app.core.errors import api_problem_detail
-from app.core.feature_flags import is_module_enabled
+from app.core.feature_flags import is_module_enabled, raise_for_disabled_module
 from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
 from app.models.models import Person, Position, PPENorm
@@ -924,11 +924,20 @@ async def update_issue(
 _WAREHOUSE_FEATURE_CODE = "warehouse"
 
 
-async def require_warehouse_feature(tenant: TenantDep, session: SessionDep) -> None:
+async def require_warehouse_feature(
+    request: Request, tenant: TenantDep, session: SessionDep
+) -> None:
+    # BIZ-61 разд. 61.2 «безопасное выключение»: отключённый (но выдававшийся)
+    # модуль читается, мутации — 403 словами; никогда не выдававшийся — 404.
     if not await is_module_enabled(session, str(tenant.id), _WAREHOUSE_FEATURE_CODE):
-        raise HTTPException(
-            status.HTTP_404_NOT_FOUND,
-            "PPE warehouse feature is not enabled for this tenant",
+        await raise_for_disabled_module(
+            session,
+            str(tenant.id),
+            _WAREHOUSE_FEATURE_CODE,
+            request.method,
+            error_type="ppe",
+            disabled_code="WAREHOUSE_DISABLED",
+            disabled_message="PPE warehouse feature is not enabled for this tenant",
         )
 
 

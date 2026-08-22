@@ -18,7 +18,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.feature import Feature, FeatureEnablement
 
-__all__ = ["as_utc", "grant_expired", "is_feature_enabled", "is_module_enabled"]
+__all__ = [
+    "as_utc",
+    "grant_expired",
+    "is_feature_enabled",
+    "is_module_enabled",
+    "raise_for_disabled_module",
+]
 
 
 def as_utc(moment: datetime | None) -> datetime | None:
@@ -127,3 +133,94 @@ async def is_module_enabled(session: AsyncSession, tenant_id: str, code: str) ->
             "не попадёт ни в тариф, ни в консоль"
         )
     return await is_feature_enabled(session, tenant_id, code, default=module.is_core)
+
+
+#: Методы, не меняющие данных, — им разрешено чтение отключённого модуля.
+_SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
+
+
+async def _was_module_granted(session: AsyncSession, tenant_id: str, code: str) -> bool:
+    """Была ли у арендатора ХОТЬ КАКАЯ-ТО строка выдачи модуля.
+
+    Учитываются и ``on=False``, и истёкший срок: строка выдачи означает «модуль
+    у арендатора БЫЛ» — а «был и отключён» и «никогда не выдавался» обязаны
+    вести себя по-разному (то же различение, что в консоли, BIZ-53 срез-1).
+    """
+
+    stmt = (
+        select(FeatureEnablement.id)
+        .join(Feature, Feature.id == FeatureEnablement.feature_id)
+        .where(
+            FeatureEnablement.tenant_id == tenant_id,
+            Feature.code == code,
+        )
+        .limit(1)
+    )
+    return (await session.execute(stmt)).first() is not None
+
+
+async def raise_for_disabled_module(
+    session: AsyncSession,
+    tenant_id: str,
+    code: str,
+    method: str,
+    *,
+    error_type: str,
+    disabled_code: str,
+    disabled_message: str,
+) -> None:
+    """Безопасное выключение (BIZ-61, разд. 61.2) — вызывать, когда
+    :func:`is_module_enabled` вернула ``False``.
+
+    ТЗ: «отключение модуля не удаляет данные — они переходят в read-only …;
+    при повторном включении всё возвращается». До этого среза выключенный
+    модуль отдавал 404 на ВСЁ — заказчик, переставший платить за модуль,
+    терял доступ к СВОИМ накопленным данным (журналы медосмотров и выдач СИЗ
+    нужны при проверке ГИТ независимо от подписки).
+
+    Три исхода:
+
+    * модуль **был выдан** (есть строка выдачи — отключён или истёк) и метод
+      безопасный → молча вернуться: чтение разрешено;
+    * был выдан, но метод меняет данные → **403 MODULE_READ_ONLY словами** —
+      это объяснение, а не маскировка;
+    * строки выдачи **никогда не было** → прежний 404: несуществование модуля
+      у арендатора не подтверждается (принцип 404-не-403, SEC-63).
+
+    Модули ядра сюда не доходят содержательно: ядро выключается только
+    аварийной записью ``on=False``, и аварийное «закрыто» обязано закрывать
+    целиком — для них сохраняется прежний 404 без read-only.
+    """
+
+    from fastapi import HTTPException, status  # noqa: PLC0415 - лёгкий импорт, цикл-безопасно
+
+    from app.core.errors import api_problem_detail  # noqa: PLC0415 - цикл
+    from app.modules.subscription.registry import MODULE_REGISTRY  # noqa: PLC0415 - цикл
+
+    module = next((item for item in MODULE_REGISTRY if item.code == code), None)
+    is_sellable = module is not None and not module.is_core
+
+    if is_sellable and await _was_module_granted(session, tenant_id, code):
+        if method.upper() in _SAFE_METHODS:
+            return
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=api_problem_detail(
+                code="MODULE_READ_ONLY",
+                message=(
+                    "Модуль отключён: данные доступны только для чтения. "
+                    "Включите модуль, чтобы изменять их."
+                ),
+                error_type=error_type,
+                details={"module": code},
+            ),
+        )
+
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail=api_problem_detail(
+            code=disabled_code,
+            message=disabled_message,
+            error_type=error_type,
+        ),
+    )

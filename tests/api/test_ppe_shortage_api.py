@@ -128,11 +128,12 @@ async def test_shortages_window_days_clamped(
 
 
 @pytest.mark.asyncio
-async def test_shortages_gated_by_warehouse_flag(
+async def test_shortages_readable_when_warehouse_disabled(
     async_client: AsyncClient, make_auth_headers, sessionmaker, data_factory: TestDataFactory
 ):
+    # BIZ-61 срез-6 (разд. 61.2): модуль был выдан и отключён — чтение
+    # остаётся открытым (read-only); 404 отвечает только «никогда не выдан».
     await _set_warehouse_flag(sessionmaker, data_factory, on=False)
     headers = await make_auth_headers(RoleEnum.ADMIN)
     resp = await async_client.get("/api/v1/ppe/stock/shortages", headers=headers)
-    assert resp.status_code == status.HTTP_404_NOT_FOUND
-    assert "warehouse" in resp.text.lower()
+    assert resp.status_code == status.HTTP_200_OK, resp.text
