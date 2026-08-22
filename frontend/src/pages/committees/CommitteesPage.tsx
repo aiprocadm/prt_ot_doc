@@ -178,25 +178,32 @@ const CommitteeList = ({ selected, onSelect }: CommitteeListProps) => {
               ))}
             </select>
           </div>
-          <div className="space-y-1">
-            <label
-              className="text-xs text-muted-foreground"
-              htmlFor="cmt-quorum"
-            >
-              Порог кворума, %
-            </label>
-            <Input
-              id="cmt-quorum"
-              type="number"
-              min={1}
-              max={100}
-              className="w-32"
-              value={quorumPct}
-              onChange={(e) => setQuorumPct(e.target.value)}
-              placeholder="больш-во"
-              title="Пусто — простое большинство"
-            />
-          </div>
+          {/* Поле необязательное (пусто — простое большинство), поэтому по
+              UX-бюджету живёт под «Дополнительно», а не в основной форме. */}
+          <details className="space-y-1">
+            <summary className="cursor-pointer text-xs text-muted-foreground">
+              Дополнительно
+            </summary>
+            <div className="space-y-1">
+              <label
+                className="text-xs text-muted-foreground"
+                htmlFor="cmt-quorum"
+              >
+                Порог кворума, %
+              </label>
+              <Input
+                id="cmt-quorum"
+                type="number"
+                min={1}
+                max={100}
+                className="w-32"
+                value={quorumPct}
+                onChange={(e) => setQuorumPct(e.target.value)}
+                placeholder="больш-во"
+                title="Пусто — простое большинство"
+              />
+            </div>
+          </details>
           <Button type="submit" disabled={saving || !name.trim()}>
             Создать комитет
           </Button>
@@ -345,7 +352,9 @@ const MembersPanel = ({ committee }: MembersPanelProps) => {
               ))}
             </select>
           </div>
-          <Button type="submit" disabled={saving || !person}>
+          {/* Вторичное действие: главные на экране — «Создать комитет» и шаг
+              заседания, иначе primary-кнопок больше UX-бюджета. */}
+          <Button type="submit" variant="outline" disabled={saving || !person}>
             Добавить
           </Button>
         </form>
@@ -490,7 +499,12 @@ const MeetingList = ({ committee, selected, onSelect }: MeetingListProps) => {
               placeholder="Место проведения"
             />
           </div>
-          <Button type="submit" disabled={saving || !scheduledAt}>
+          {/* Вторичное действие — см. комментарий у кнопки «Добавить». */}
+          <Button
+            type="submit"
+            variant="outline"
+            disabled={saving || !scheduledAt}
+          >
             Создать заседание
           </Button>
         </form>
@@ -640,7 +654,8 @@ const InvitationsPanel = ({ meeting }: InvitationsPanelProps) => {
               onChange={setPerson}
             />
           </div>
-          <Button type="submit" disabled={saving || !person}>
+          {/* Вторичное действие — см. комментарий у кнопки «Добавить». */}
+          <Button type="submit" variant="outline" disabled={saving || !person}>
             Пригласить
           </Button>
           <Button
@@ -974,62 +989,69 @@ const DecisionTaskForm = ({
     }
   };
 
+  // Форма повторяется под КАЖДЫМ решением, поэтому её поля живут свёрнутыми:
+  // раскрытая у всех решений сразу, она множит видимые поля сверх UX-бюджета.
   return (
-    <form className="flex flex-wrap items-end gap-2" onSubmit={handleSubmit}>
-      <div className="space-y-1">
-        <label
-          className="text-xs text-muted-foreground"
-          htmlFor={`task-assignee-${decisionId}`}
-        >
-          Ответственный
-        </label>
-        <select
-          id={`task-assignee-${decisionId}`}
-          className={selectClass}
-          value={assignee}
-          onChange={(e) => setAssignee(e.target.value)}
-        >
-          <option value="">— не назначен —</option>
-          {members.map((m) => (
-            <option key={m.person_id} value={m.person_id}>
-              {personLabel(m)}
-            </option>
-          ))}
-        </select>
-      </div>
-      <div className="space-y-1">
-        <label
-          className="text-xs text-muted-foreground"
-          htmlFor={`task-due-${decisionId}`}
-        >
-          Срок
-        </label>
-        <Input
-          id={`task-due-${decisionId}`}
-          type="date"
-          value={dueDate}
-          onChange={(e) => setDueDate(e.target.value)}
-        />
-      </div>
-      <div className="flex-1 min-w-[160px] space-y-1">
-        <label
-          className="text-xs text-muted-foreground"
-          htmlFor={`task-note-${decisionId}`}
-        >
-          Примечание
-        </label>
-        <Input
-          id={`task-note-${decisionId}`}
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          placeholder="Примечание"
-        />
-      </div>
-      <Button type="submit" size="sm" variant="outline" disabled={saving}>
-        Добавить задачу
-      </Button>
-      <ErrorState error={error ?? undefined} />
-    </form>
+    <details className="space-y-2">
+      <summary className="cursor-pointer text-xs text-muted-foreground">
+        Назначить задачу
+      </summary>
+      <form className="flex flex-wrap items-end gap-2" onSubmit={handleSubmit}>
+        <div className="space-y-1">
+          <label
+            className="text-xs text-muted-foreground"
+            htmlFor={`task-assignee-${decisionId}`}
+          >
+            Ответственный
+          </label>
+          <select
+            id={`task-assignee-${decisionId}`}
+            className={selectClass}
+            value={assignee}
+            onChange={(e) => setAssignee(e.target.value)}
+          >
+            <option value="">— не назначен —</option>
+            {members.map((m) => (
+              <option key={m.person_id} value={m.person_id}>
+                {personLabel(m)}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="space-y-1">
+          <label
+            className="text-xs text-muted-foreground"
+            htmlFor={`task-due-${decisionId}`}
+          >
+            Срок
+          </label>
+          <Input
+            id={`task-due-${decisionId}`}
+            type="date"
+            value={dueDate}
+            onChange={(e) => setDueDate(e.target.value)}
+          />
+        </div>
+        <div className="flex-1 min-w-[160px] space-y-1">
+          <label
+            className="text-xs text-muted-foreground"
+            htmlFor={`task-note-${decisionId}`}
+          >
+            Примечание
+          </label>
+          <Input
+            id={`task-note-${decisionId}`}
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="Примечание"
+          />
+        </div>
+        <Button type="submit" size="sm" variant="outline" disabled={saving}>
+          Добавить задачу
+        </Button>
+        <ErrorState error={error ?? undefined} />
+      </form>
+    </details>
   );
 };
 

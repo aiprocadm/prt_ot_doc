@@ -81,8 +81,12 @@ export const ConflictInboxCard = ({
               >
                 Server wins
               </Button>
+              {/* Кнопка живёт в ПОВТОРЯЮЩЕЙСЯ строке конфликта: primary здесь
+                  означало бы «основных действий столько, сколько конфликтов»
+                  (прецедент BillingPage/OutboxPage). */}
               <Button
                 size="sm"
+                variant="outline"
                 className="min-h-11 px-4"
                 onClick={() => void resolve(item.id, "client_retry")}
               >

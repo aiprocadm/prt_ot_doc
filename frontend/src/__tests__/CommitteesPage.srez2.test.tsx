@@ -16,6 +16,7 @@ import type {
   Protocol,
   ProtocolJournalItem,
 } from "@/api/committees";
+import { uxBudgetDelta } from "@/test-utils/uxBudget";
 
 const api = vi.hoisted(() => ({
   list: vi.fn(),
@@ -325,5 +326,42 @@ describe("CommitteesPage срез-2", () => {
     fireEvent.click(await screen.findByText("Пожарная безопасность — склад"));
 
     expect(await screen.findByText("Отклонено")).toBeInTheDocument();
+  });
+
+  it("экран в UX-бюджете во всех насыщенных состояниях (BIZ-60 волна 5)", async () => {
+    // Экран раскрывается ступенями (комитет → заседание → протокол), поэтому
+    // замер одного состояния ничего не доказал бы — меряем каждую ступень
+    // НАПОЛНЕННОЙ данными из моков.
+    renderPage();
+
+    // Ступень 1: только список комитетов и журнал протоколов.
+    await screen.findByText("Охрана труда — цех 1");
+    await screen.findByText("Пожарная безопасность — склад");
+    const initial = uxBudgetDelta(document.body, "CommitteesPage");
+    expect(initial.unexpected).toEqual([]);
+    expect(initial.stale).toEqual([]);
+
+    // Ступень 2 (самая насыщенная): комитет + запланированное заседание —
+    // состав, заседания, приглашения, присутствие и заглушка протокола разом.
+    fireEvent.click(screen.getByText("Охрана труда — цех 1"));
+    fireEvent.click(await screen.findByText("Каб. 1"));
+    expect(await screen.findAllByRole("checkbox")).toHaveLength(MEMBERS.length);
+    await screen.findByText("На заседание пока никто не приглашён.");
+    await screen.findByText(
+      "Решения и голосование доступны после проведения заседания.",
+    );
+    const planned = uxBudgetDelta(document.body, "CommitteesPage");
+    expect(planned.unexpected).toEqual([]);
+    expect(planned.stale).toEqual([]);
+
+    // Ступень 3: протокол проведённого заседания с решением, голосованием
+    // и формой задачи (панели состава и заседаний остаются на экране).
+    api.getProtocol.mockResolvedValue(HELD_PROTOCOL_CARRIED);
+    fireEvent.click(screen.getByText("Пожарная безопасность — склад"));
+    await screen.findByText("Решение о выдаче СИЗ");
+    await screen.findByText("Задачи не назначены.");
+    const held = uxBudgetDelta(document.body, "CommitteesPage");
+    expect(held.unexpected).toEqual([]);
+    expect(held.stale).toEqual([]);
   });
 });

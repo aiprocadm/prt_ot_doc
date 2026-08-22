@@ -1,8 +1,9 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 
 import LoginPage from "@/pages/auth/LoginPage";
+import { uxBudgetDelta } from "@/test-utils/uxBudget";
 
 vi.mock("@/api/tenantStorage", () => ({
   tenantStorage: {
@@ -48,5 +49,23 @@ describe("LoginPage smoke", () => {
     expect(screen.getByLabelText("E-mail")).toBeInTheDocument();
     expect(screen.getByLabelText("Пароль")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Войти" })).toBeInTheDocument();
+  });
+
+  it("экран в UX-бюджете (BIZ-60 волна 5)", async () => {
+    // act(async …): LegalLinks грузит юр. тексты эффектом — даём промису
+    // завершиться, чтобы мерить устоявшийся экран, а не полукадр отрисовки.
+    await act(async () => {
+      render(
+        <MemoryRouter initialEntries={["/auth/login"]}>
+          <Routes>
+            <Route path="/auth/login" element={<LoginPage />} />
+          </Routes>
+        </MemoryRouter>,
+      );
+    });
+
+    const budget = uxBudgetDelta(document.body, "LoginPage");
+    expect(budget.unexpected).toEqual([]);
+    expect(budget.stale).toEqual([]);
   });
 });

@@ -6,6 +6,8 @@ import AdminPage from "@/pages/admin/AdminPage";
 import MedicalPage from "@/pages/medical/MedicalPage";
 import SettingsPage from "@/pages/settings/SettingsPage";
 
+import { uxBudgetDelta } from "@/test-utils/uxBudget";
+
 const operationsApiMock = vi.hoisted(() => ({
   getSettingsSnapshot: vi.fn(),
   getMedicalSnapshot: vi.fn(),
@@ -75,6 +77,11 @@ describe("real-data operational pages", () => {
     expect(await screen.findAllByText("demo")).toHaveLength(2);
     expect(screen.getByText("corr-1")).toBeInTheDocument();
     expect(screen.getByText("Включен")).toBeInTheDocument();
+
+    // BIZ-60 волна 5: последний экран реестра без приёмки бюджета.
+    const budget = uxBudgetDelta(document.body, "SettingsPage");
+    expect(budget.unexpected).toEqual([]);
+    expect(budget.stale).toEqual([]);
   });
 
   it("renders medical registry from backend medical exams endpoint", async () => {

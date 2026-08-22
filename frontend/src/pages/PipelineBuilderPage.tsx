@@ -57,9 +57,13 @@ const PipelineBuilderPage = () => {
     nodes: GraphNode[];
     edges: GraphEdge[];
   }>(defaultGraph);
-  const [selectedNodeId, setSelectedNodeId] = useState(
-    defaultGraph.nodes[0]?.id ?? "",
-  );
+  // BIZ-59: раньше КАЖДОЕ ребро несло три поля прямо в списке — лимит полей
+  // зависел от данных (ловушка BillingPage). Теперь редактор один: свойства
+  // ВЫБРАННОГО — узла или ребра; списки только выбирают.
+  const [selection, setSelection] = useState<
+    { kind: "node"; id: string } | { kind: "edge"; idx: number } | null
+  >(defaultGraph.nodes[0] ? { kind: "node", id: defaultGraph.nodes[0].id } : null);
+  const selectedNodeId = selection?.kind === "node" ? selection.id : "";
   const [configText, setConfigText] = useState(
     JSON.stringify(defaultGraph.nodes[0]?.config ?? {}, null, 2),
   );
@@ -102,6 +106,11 @@ const PipelineBuilderPage = () => {
     [parsedGraph.nodes, selectedNodeId],
   );
 
+  const selectedEdge =
+    selection?.kind === "edge"
+      ? (parsedGraph.edges[selection.idx] ?? null)
+      : null;
+
   useEffect(() => {
     setConfigText(JSON.stringify(selectedNode?.config ?? {}, null, 2));
   }, [selectedNode]);
@@ -110,7 +119,7 @@ const PipelineBuilderPage = () => {
     const nextIdx = parsedGraph.nodes.length + 1;
     const node: GraphNode = { id: `node_${nextIdx}`, type: "noop", config: {} };
     setGraph((prev) => ({ ...prev, nodes: [...prev.nodes, node] }));
-    setSelectedNodeId(node.id);
+    setSelection({ kind: "node", id: node.id });
   };
 
   const addEdge = () => {
@@ -121,10 +130,12 @@ const PipelineBuilderPage = () => {
     const fallbackTo =
       parsedGraph.nodes[parsedGraph.nodes.length - 1]?.id ??
       parsedGraph.nodes[0].id;
+    const nextIdx = parsedGraph.edges.length;
     setGraph((prev) => ({
       ...prev,
       edges: [...prev.edges, { from: fallbackFrom, to: fallbackTo }],
     }));
+    setSelection({ kind: "edge", idx: nextIdx });
   };
 
   const updateNode = (nodeId: string, patch: Partial<GraphNode>) => {
@@ -144,7 +155,7 @@ const PipelineBuilderPage = () => {
       return { ...prev, nodes: nextNodes, edges: nextEdges };
     });
     if (patch.id) {
-      setSelectedNodeId(patch.id);
+      setSelection({ kind: "node", id: patch.id });
     }
   };
 
@@ -153,7 +164,8 @@ const PipelineBuilderPage = () => {
       nodes: prev.nodes.filter((n) => n.id !== nodeId),
       edges: prev.edges.filter((e) => e.from !== nodeId && e.to !== nodeId),
     }));
-    setSelectedNodeId("");
+    // Вместе с узлом уходят его рёбра — индексы сдвигаются, выбор сбрасываем.
+    setSelection(null);
   };
 
   const updateEdge = (idx: number, patch: Partial<GraphEdge>) => {
@@ -170,6 +182,7 @@ const PipelineBuilderPage = () => {
       ...prev,
       edges: prev.edges.filter((_, edgeIdx) => edgeIdx !== idx),
     }));
+    setSelection(null);
   };
 
   const save = async () => {
@@ -227,7 +240,7 @@ const PipelineBuilderPage = () => {
                       key={`${node.id}-${nodeIdx}`}
                       type="button"
                       className={`w-full rounded border p-2 text-left text-xs ${selectedNodeId === node.id ? "border-blue-500 bg-blue-50" : ""}`}
-                      onClick={() => setSelectedNodeId(node.id)}
+                      onClick={() => setSelection({ kind: "node", id: node.id })}
                     >
                       <div className="font-medium">{node.id}</div>
                       <div className="text-muted-foreground">{node.type}</div>
@@ -239,63 +252,76 @@ const PipelineBuilderPage = () => {
                 </div>
                 <div className="max-h-52 space-y-2 overflow-auto rounded border p-2">
                   {parsedGraph.edges.map((edge, idx) => (
-                    <div
+                    <button
                       key={`${edge.from}-${edge.to}-${idx}`}
-                      className="space-y-1 rounded border p-2"
+                      type="button"
+                      className={`w-full rounded border p-2 text-left text-xs ${selection?.kind === "edge" && selection.idx === idx ? "border-blue-500 bg-blue-50" : ""}`}
+                      onClick={() => setSelection({ kind: "edge", idx })}
                     >
-                      <div className="grid grid-cols-2 gap-2">
-                        <select
-                          className="rounded border px-1 py-0.5"
-                          value={edge.from}
-                          onChange={(e) =>
-                            updateEdge(idx, { from: e.target.value })
-                          }
-                        >
-                          {parsedGraph.nodes.map((node, nodeIdx) => (
-                            <option key={`${idx}-from-${node.id}-${nodeIdx}`}>
-                              {node.id}
-                            </option>
-                          ))}
-                        </select>
-                        <select
-                          className="rounded border px-1 py-0.5"
-                          value={edge.to}
-                          onChange={(e) =>
-                            updateEdge(idx, { to: e.target.value })
-                          }
-                        >
-                          {parsedGraph.nodes.map((node, nodeIdx) => (
-                            <option key={`${idx}-to-${node.id}-${nodeIdx}`}>
-                              {node.id}
-                            </option>
-                          ))}
-                        </select>
+                      <div className="font-medium">
+                        {edge.from} → {edge.to}
                       </div>
-                      <input
-                        className="w-full rounded border px-1 py-0.5"
-                        value={edge.condition ?? ""}
-                        onChange={(e) =>
-                          updateEdge(idx, {
-                            condition: e.target.value || undefined,
-                          })
-                        }
-                        placeholder="Условие (необязательно)"
-                      />
-                      <button
-                        className="rounded border px-2 py-0.5"
-                        onClick={() => removeEdge(idx)}
-                      >
-                        Удалить ребро
-                      </button>
-                    </div>
+                      {edge.condition ? (
+                        <div className="text-muted-foreground">
+                          условие: {edge.condition}
+                        </div>
+                      ) : null}
+                    </button>
                   ))}
                 </div>
               </div>
               <div className="space-y-2 rounded border p-2">
                 <div className="text-xs font-medium text-muted-foreground">
-                  Свойства узла
+                  Свойства выбранного
                 </div>
-                {selectedNode ? (
+                {selectedEdge && selection?.kind === "edge" ? (
+                  <>
+                    <div className="grid grid-cols-2 gap-2">
+                      <select
+                        className="rounded border px-1 py-0.5"
+                        value={selectedEdge.from}
+                        onChange={(e) =>
+                          updateEdge(selection.idx, { from: e.target.value })
+                        }
+                      >
+                        {parsedGraph.nodes.map((node, nodeIdx) => (
+                          <option key={`from-${node.id}-${nodeIdx}`}>
+                            {node.id}
+                          </option>
+                        ))}
+                      </select>
+                      <select
+                        className="rounded border px-1 py-0.5"
+                        value={selectedEdge.to}
+                        onChange={(e) =>
+                          updateEdge(selection.idx, { to: e.target.value })
+                        }
+                      >
+                        {parsedGraph.nodes.map((node, nodeIdx) => (
+                          <option key={`to-${node.id}-${nodeIdx}`}>
+                            {node.id}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <input
+                      className="w-full rounded border px-1 py-0.5"
+                      value={selectedEdge.condition ?? ""}
+                      onChange={(e) =>
+                        updateEdge(selection.idx, {
+                          condition: e.target.value || undefined,
+                        })
+                      }
+                      placeholder="Условие (необязательно)"
+                    />
+                    <button
+                      className="rounded border px-2 py-0.5"
+                      onClick={() => removeEdge(selection.idx)}
+                    >
+                      Удалить ребро
+                    </button>
+                  </>
+                ) : selectedNode ? (
                   <>
                     <input
                       className="w-full rounded border px-2 py-1"
@@ -339,7 +365,7 @@ const PipelineBuilderPage = () => {
                   </>
                 ) : (
                   <div className="text-xs text-muted-foreground">
-                    Выберите ноду для редактирования.
+                    Выберите узел или ребро для редактирования.
                   </div>
                 )}
               </div>

@@ -5,14 +5,29 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import PackagePresetsPage from "@/pages/packs/PackagePresetsPage";
 import PackageProfilesPage from "@/pages/packs/PackageProfilesPage";
 import PacksPage from "@/pages/packs/PacksPage";
+import { uxBudgetDelta } from "@/test-utils/uxBudget";
 
 const getMock = vi.fn();
 
+type PackRow = {
+  id: string;
+  name: string;
+  preset?: string;
+  status?: string;
+  updated_at?: string;
+  company?: { id: string; name: string };
+};
+
 const packsStoreState = vi.hoisted(() => ({
-  items: [] as Array<{ id: string; name: string }>,
+  items: [] as PackRow[],
   loading: false,
   error: null as { status: number; message: string } | null,
   list: vi.fn().mockResolvedValue(undefined),
+}));
+
+const companiesStoreState = vi.hoisted(() => ({
+  items: [{ id: "company-1", name: "АО Тест" }],
+  list: vi.fn(),
 }));
 
 vi.mock("@/api/client", () => ({
@@ -40,12 +55,14 @@ vi.mock("@/stores/packs", () => ({
   }),
 }));
 
-vi.mock("@/features/packs/PackWizard", () => ({
-  PackWizard: () => <div data-testid="pack-wizard" />,
-}));
-
-vi.mock("@/features/packs/PackTable", () => ({
-  PackTable: () => <div data-testid="pack-table" />,
+// Мастер и таблицу НЕ мокаем: UX-бюджет ниже меряет отрисованный экран, и
+// пустышки вместо них спрятали бы от замера все кнопки, поля и колонки.
+// Мастеру нужен стор компаний — даём управляемый мок.
+vi.mock("@/stores/companies", () => ({
+  useCompaniesStore: () => ({
+    items: companiesStoreState.items,
+    list: companiesStoreState.list,
+  }),
 }));
 
 describe("Packs pages operational states", () => {
@@ -55,6 +72,42 @@ describe("Packs pages operational states", () => {
     packsStoreState.loading = false;
     packsStoreState.error = null;
     packsStoreState.list.mockClear();
+  });
+
+  it("наполненный экран PacksPage в UX-бюджете (BIZ-60)", async () => {
+    // Меряем экран С ДАННЫМИ: шапка со статистикой, мастер на первом шаге и
+    // таблица с строками — пустое состояние показало бы бюджет «в норме»
+    // ровно потому, что на экране ничего нет.
+    packsStoreState.items = [
+      {
+        id: "pack-1",
+        name: "Пакет допуска",
+        preset: "site_entry",
+        status: "ready",
+        updated_at: "2026-08-01T10:00:00Z",
+        company: { id: "company-1", name: "АО Тест" },
+      },
+      {
+        id: "pack-2",
+        name: "Пакет расследования",
+        preset: "incident_response",
+        status: "processing",
+        updated_at: "2026-08-02T12:00:00Z",
+        company: { id: "company-1", name: "АО Тест" },
+      },
+    ];
+
+    render(
+      <MemoryRouter>
+        <PacksPage />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("Пакет допуска")).toBeInTheDocument();
+
+    const budget = uxBudgetDelta(document.body, "PacksPage");
+    expect(budget.unexpected).toEqual([]);
+    expect(budget.stale).toEqual([]);
   });
 
   it("shows empty state on PacksPage", async () => {

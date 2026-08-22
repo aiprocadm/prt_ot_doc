@@ -125,7 +125,13 @@ export const WorkflowRuntimePanel = ({
             ) : null}
             <div className="mt-3 flex flex-wrap gap-2">
               <Can permission={PERMISSIONS.WORKFLOW_MANAGE}>
-                <Button size="sm" onClick={() => onCompleteTask(task.id)}>
+                {/* Кнопка в повторяющейся строке задачи — вторичная
+                    (UX-бюджет: primary на экране одна, у композера). */}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => onCompleteTask(task.id)}
+                >
                   Завершить
                 </Button>
                 <Button
