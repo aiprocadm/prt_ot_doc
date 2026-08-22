@@ -475,9 +475,13 @@ const LinkInput = ({ label, buttonLabel, onSubmit }: LinkInputProps) => {
           placeholder={label}
           className="h-8 max-w-xs text-xs"
         />
+        {/* UX-бюджет: кнопка повторяется на каждое РМ/фактор — обязана быть
+            вторичной, иначе primary-действий на экране столько же, сколько
+            строк (прецедент BillingPage/OutboxPage). */}
         <Button
           type="button"
           size="sm"
+          variant="outline"
           disabled={busy}
           onClick={() => void submit()}
         >

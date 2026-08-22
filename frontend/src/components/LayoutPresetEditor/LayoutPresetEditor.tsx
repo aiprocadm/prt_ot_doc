@@ -214,26 +214,6 @@ export const LayoutPresetEditor = () => {
 
       <div className="grid gap-3 md:grid-cols-2">
         <div>
-          <Label>Шапка (первая)</Label>
-          <Textarea
-            value={form.header_first_xml}
-            onChange={(e) =>
-              setForm((s) => ({ ...s, header_first_xml: e.target.value }))
-            }
-            rows={4}
-          />
-        </div>
-        <div>
-          <Label>Подвал (первая)</Label>
-          <Textarea
-            value={form.footer_first_xml}
-            onChange={(e) =>
-              setForm((s) => ({ ...s, footer_first_xml: e.target.value }))
-            }
-            rows={4}
-          />
-        </div>
-        <div>
           <Label>Шапка (нечётная/по умолчанию)</Label>
           <Textarea
             value={form.header_odd_xml}
@@ -253,67 +233,109 @@ export const LayoutPresetEditor = () => {
             rows={5}
           />
         </div>
-        <div>
-          <Label>Шапка (чётная)</Label>
-          <Textarea
-            value={form.header_even_xml}
-            onChange={(e) =>
-              setForm((s) => ({ ...s, header_even_xml: e.target.value }))
-            }
-            rows={4}
-          />
-        </div>
-        <div>
-          <Label>Подвал (чётная)</Label>
-          <Textarea
-            value={form.footer_even_xml}
-            onChange={(e) =>
-              setForm((s) => ({ ...s, footer_even_xml: e.target.value }))
-            }
-            rows={4}
-          />
-        </div>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-4">
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={form.different_first}
-            onChange={(e) =>
-              setForm((s) => ({ ...s, different_first: e.target.checked }))
-            }
-          />
-          different first page
-        </label>
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={form.different_odd_even}
-            onChange={(e) =>
-              setForm((s) => ({ ...s, different_odd_even: e.target.checked }))
-            }
-          />
-          different odd/even
-        </label>
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={form.watermark_enabled}
-            onChange={(e) =>
-              setForm((s) => ({ ...s, watermark_enabled: e.target.checked }))
-            }
-          />
-          watermark enabled
-        </label>
-        <Input
-          value={form.watermark_text}
-          onChange={(e) =>
-            setForm((s) => ({ ...s, watermark_text: e.target.value }))
-          }
-          placeholder="ЧЕРНОВИК"
-        />
-      </div>
+      {/* UX-бюджет (ТЗ разд. 59.2): пресету достаточно кода, имени и пары
+          шапка/подвал по умолчанию. Отдельные варианты первой и чётной
+          страницы имеют смысл только при включённых different first /
+          different odd/even, водяной знак — тоже опция, поэтому весь этот
+          хвост живёт под «Дополнительно», как в форме инцидента. */}
+      <details className="space-y-1.5">
+        <summary className="cursor-pointer text-sm text-muted-foreground">
+          Дополнительно
+        </summary>
+        <div className="space-y-3 pt-3">
+          <div className="grid gap-3 md:grid-cols-2">
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={form.different_first}
+                onChange={(e) =>
+                  setForm((s) => ({ ...s, different_first: e.target.checked }))
+                }
+              />
+              different first page
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={form.different_odd_even}
+                onChange={(e) =>
+                  setForm((s) => ({
+                    ...s,
+                    different_odd_even: e.target.checked,
+                  }))
+                }
+              />
+              different odd/even
+            </label>
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            <div>
+              <Label>Шапка (первая)</Label>
+              <Textarea
+                value={form.header_first_xml}
+                onChange={(e) =>
+                  setForm((s) => ({ ...s, header_first_xml: e.target.value }))
+                }
+                rows={4}
+              />
+            </div>
+            <div>
+              <Label>Подвал (первая)</Label>
+              <Textarea
+                value={form.footer_first_xml}
+                onChange={(e) =>
+                  setForm((s) => ({ ...s, footer_first_xml: e.target.value }))
+                }
+                rows={4}
+              />
+            </div>
+            <div>
+              <Label>Шапка (чётная)</Label>
+              <Textarea
+                value={form.header_even_xml}
+                onChange={(e) =>
+                  setForm((s) => ({ ...s, header_even_xml: e.target.value }))
+                }
+                rows={4}
+              />
+            </div>
+            <div>
+              <Label>Подвал (чётная)</Label>
+              <Textarea
+                value={form.footer_even_xml}
+                onChange={(e) =>
+                  setForm((s) => ({ ...s, footer_even_xml: e.target.value }))
+                }
+                rows={4}
+              />
+            </div>
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={form.watermark_enabled}
+                onChange={(e) =>
+                  setForm((s) => ({
+                    ...s,
+                    watermark_enabled: e.target.checked,
+                  }))
+                }
+              />
+              watermark enabled
+            </label>
+            <Input
+              value={form.watermark_text}
+              onChange={(e) =>
+                setForm((s) => ({ ...s, watermark_text: e.target.value }))
+              }
+              placeholder="ЧЕРНОВИК"
+            />
+          </div>
+        </div>
+      </details>
 
       <TokenHelp />
       <div className="flex gap-2">

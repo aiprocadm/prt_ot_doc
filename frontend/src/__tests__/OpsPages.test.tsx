@@ -8,6 +8,7 @@ import CorrectiveActionsPage from "@/pages/corrective-actions/CorrectiveActionsP
 import FindingsPage from "@/pages/findings/FindingsPage";
 import PrescriptionsPage from "@/pages/prescriptions/PrescriptionsPage";
 import WarehousePage from "@/pages/warehouse/WarehousePage";
+import { uxBudgetDelta } from "@/test-utils/uxBudget";
 
 const getPrescriptionsMock = vi.fn();
 const getFindingsMock = vi.fn();
@@ -253,5 +254,118 @@ describe("operational pages converted from static to real data", () => {
 
     expect(await screen.findByText("Ростехнадзор")).toBeInTheDocument();
     expect(screen.getByText(/1 предписаний/)).toBeInTheDocument();
+  });
+
+  // Приёмка UX-бюджета (ТЗ разд. 59.2, BIZ-60 волна 5): меряем ОТРИСОВАННЫЙ
+  // наполненный экран — после ожидания данных из моков, как остальные тесты
+  // файла. Пустой экран ничего не доказал бы: колонки и кнопки живут в ветке
+  // registry.total > 0.
+
+  it("PrescriptionsPage в UX-бюджете (BIZ-60)", async () => {
+    getPrescriptionsMock.mockResolvedValue([
+      {
+        id: "pr-1",
+        inspection_id: "insp-1",
+        description: "Закрыть замечание по вентиляции",
+        status: "open",
+        due_at: "2026-04-10",
+      },
+    ]);
+
+    render(<PrescriptionsPage />);
+    expect(
+      await screen.findByText(/Закрыть замечание по вентиляции/),
+    ).toBeInTheDocument();
+
+    const budget = uxBudgetDelta(document.body, "PrescriptionsPage");
+    expect(budget.unexpected).toEqual([]);
+    expect(budget.stale).toEqual([]);
+  });
+
+  it("FindingsPage в UX-бюджете (BIZ-60)", async () => {
+    getFindingsMock.mockResolvedValue([
+      {
+        id: "f-1",
+        title: "Нет ограждения",
+        status: "open",
+        severity: "critical",
+        source_type: "inspection",
+        source_id: "insp-1",
+        finding_type: "nonconformity",
+        due_date: "2026-04-15",
+      },
+    ]);
+
+    render(<FindingsPage />);
+    expect(await screen.findByText("Нет ограждения")).toBeInTheDocument();
+
+    const budget = uxBudgetDelta(document.body, "FindingsPage");
+    expect(budget.unexpected).toEqual([]);
+    expect(budget.stale).toEqual([]);
+  });
+
+  it("CorrectiveActionsPage в UX-бюджете (BIZ-60)", async () => {
+    getCorrectiveActionsMock.mockResolvedValue([
+      {
+        id: "ca-1",
+        title: "Поменять СИЗ",
+        status: "overdue",
+        source_type: "prescription",
+        source_id: "pr-1",
+        action_type: "corrective",
+        due_date: "2026-04-10",
+        effectiveness_status: "effective",
+      },
+    ]);
+
+    render(<CorrectiveActionsPage />);
+    expect(await screen.findByText("Поменять СИЗ")).toBeInTheDocument();
+
+    const budget = uxBudgetDelta(document.body, "CorrectiveActionsPage");
+    expect(budget.unexpected).toEqual([]);
+    expect(budget.stale).toEqual([]);
+  });
+
+  it("AuditPrepPage в UX-бюджете (BIZ-60)", async () => {
+    getAuditPrepSnapshotMock.mockResolvedValue({
+      inspections: [
+        {
+          id: "insp-1",
+          authority: "Ростехнадзор",
+          scheduled_at: "2026-05-01",
+          status: "scheduled",
+          inspection_type: "planned",
+        },
+      ],
+      prescriptions: [
+        {
+          id: "pr-1",
+          inspection_id: "insp-1",
+          description: "Исправить пробел",
+          status: "open",
+          due_at: "2026-04-12",
+        },
+      ],
+      overdueTasks: [
+        {
+          id: "tsk-1",
+          title: "Собрать пакет",
+          status: "open",
+          priority: "high",
+          overdue: true,
+        },
+      ],
+    });
+
+    render(
+      <MemoryRouter>
+        <AuditPrepPage />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByText("Ростехнадзор")).toBeInTheDocument();
+
+    const budget = uxBudgetDelta(document.body, "AuditPrepPage");
+    expect(budget.unexpected).toEqual([]);
+    expect(budget.stale).toEqual([]);
   });
 });
