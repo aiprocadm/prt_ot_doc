@@ -3,6 +3,7 @@ import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import MobileIssuePage from "@/pages/ppe/MobileIssuePage";
+import { uxBudgetDelta } from "@/test-utils/uxBudget";
 
 const getPpeOverviewMock = vi.fn();
 const createPpeIssueMock = vi.fn();
@@ -74,6 +75,16 @@ describe("MobileIssuePage — worker step", () => {
     await waitFor(() =>
       expect(screen.getByLabelText("Поиск СИЗ")).toBeInTheDocument(),
     );
+  });
+
+  it("экран в UX-бюджете, или долг записан явно (BIZ-60)", async () => {
+    renderPage();
+    await screen.findByText("Мобильная выдача СИЗ");
+    await screen.findByText("Иван Иванов");
+
+    const budget = uxBudgetDelta(document.body, "MobileIssuePage");
+    expect(budget.unexpected).toEqual([]);
+    expect(budget.stale).toEqual([]);
   });
 
   it("filters workers by query", async () => {

@@ -6,6 +6,7 @@ import BrandSettingsPage, {
   hexToHslTriplet,
   hslTripletToHex,
 } from "@/pages/admin/BrandSettingsPage";
+import { uxBudgetDelta } from "@/test-utils/uxBudget";
 
 const getOwnMock = vi.fn();
 const saveOwnMock = vi.fn();
@@ -179,6 +180,14 @@ describe("экран настройки бренда (BIZ-52 разд. 52.2)", (
 
     expect(screen.getByText(/SVG не принимается/)).toBeInTheDocument();
     expect(screen.getByText(/WebP не подходит/)).toBeInTheDocument();
+  });
+
+  it("экран в UX-бюджете, или долг записан явно (BIZ-60)", async () => {
+    await renderLoaded();
+
+    const budget = uxBudgetDelta(document.body, "BrandSettingsPage");
+    expect(budget.unexpected).toEqual([]);
+    expect(budget.stale).toEqual([]);
   });
 
   it("сказано, зачем нужна почта поддержки", async () => {

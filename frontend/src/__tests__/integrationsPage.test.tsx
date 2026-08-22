@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import IntegrationsPage from "@/pages/integrations/IntegrationsPage";
 import { PERMISSIONS } from "@/permissions/permissions";
 import { useAuthStore } from "@/stores/auth";
+import { uxBudgetDelta } from "@/test-utils/uxBudget";
 
 const getMock = vi.fn();
 const postMock = vi.fn();
@@ -147,5 +148,84 @@ describe("IntegrationsPage", () => {
       expect(toast.error).toHaveBeenCalledWith("requeue failed");
       expect(screen.getByRole("button", { name: /в очередь/i })).toBeEnabled();
     });
+  });
+
+  it("экран в UX-бюджете, или долг записан явно (BIZ-60)", async () => {
+    getMock.mockImplementation((url: string) => {
+      if (url === "/admin/outbox") {
+        return Promise.resolve({
+          data: {
+            items: [
+              {
+                id: "delivery-1",
+                event_type: "approval.started",
+                destination: "webhook://approval",
+                status: "failed",
+                attempts: 2,
+                created_at: "2026-03-24T10:00:00Z",
+                updated_at: "2026-03-24T10:01:00Z",
+              },
+              {
+                id: "delivery-2",
+                event_type: "approval.completed",
+                destination: "webhook://approval",
+                status: "sent",
+                attempts: 1,
+                created_at: "2026-03-24T10:02:00Z",
+                updated_at: "2026-03-24T10:03:00Z",
+                sent_at: "2026-03-24T10:03:00Z",
+              },
+            ],
+          },
+        });
+      }
+      if (url === "/admin/outbox/events") {
+        return Promise.resolve({
+          data: {
+            items: [
+              {
+                id: "event-1",
+                event_type: "approval.completed",
+                status: "poisoned",
+                attempts: 3,
+                created_at: "2026-03-24T10:01:00Z",
+                next_attempt_at: null,
+              },
+            ],
+          },
+        });
+      }
+      if (url === "/integrations/readiness") {
+        return Promise.resolve({
+          data: {
+            providers: [
+              {
+                provider: "diadoc",
+                health_status: "ready",
+                configured: true,
+                adapter: "diadoc-http",
+                reachable: true,
+              },
+            ],
+            webhooks: {
+              configured_total: 2,
+              enabled_total: 1,
+              delivery_failed_total: 1,
+            },
+          },
+        });
+      }
+      throw new Error(`Unexpected GET ${url}`);
+    });
+
+    render(<IntegrationsPage />);
+
+    await screen.findByText("diadoc");
+    await screen.findByRole("button", { name: /повторить/i });
+    await screen.findByRole("button", { name: /в очередь/i });
+
+    const budget = uxBudgetDelta(document.body, "IntegrationsPage");
+    expect(budget.unexpected).toEqual([]);
+    expect(budget.stale).toEqual([]);
   });
 });

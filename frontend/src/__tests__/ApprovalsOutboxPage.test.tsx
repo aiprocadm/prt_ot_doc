@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import ApprovalsOutboxPage from "@/pages/approvals/ApprovalsOutboxPage";
 import { PERMISSIONS } from "@/permissions/permissions";
 import { useAuthStore } from "@/stores/auth";
+import { uxBudgetDelta } from "@/test-utils/uxBudget";
 
 const getMock = vi.fn();
 const postMock = vi.fn();
@@ -134,6 +135,66 @@ describe("ApprovalsOutboxPage", () => {
         "/admin/outbox/events/event-1/requeue",
       );
     });
+  });
+
+  it("экран в UX-бюджете, или долг записан явно (BIZ-60)", async () => {
+    // Моки в файле per-test, поэтому тест бюджета несёт свои наполненные
+    // данные: замер пустого экрана был бы самообманом.
+    getMock.mockImplementation((url: string) => {
+      if (url === "/admin/outbox") {
+        return Promise.resolve({
+          data: {
+            items: [
+              {
+                id: "delivery-1",
+                event_type: "approval.started",
+                destination: "webhook://approval",
+                status: "failed",
+                attempts: 2,
+                created_at: "2026-03-24T10:00:00Z",
+              },
+            ],
+          },
+        });
+      }
+      if (url === "/admin/outbox/events") {
+        return Promise.resolve({
+          data: {
+            items: [
+              {
+                id: "event-1",
+                event_type: "approval.completed",
+                status: "poisoned",
+                attempts: 3,
+                created_at: "2026-03-24T10:01:00Z",
+              },
+            ],
+          },
+        });
+      }
+      throw new Error(`Unexpected GET ${url}`);
+    });
+
+    render(
+      <MemoryRouter>
+        <ApprovalsOutboxPage />
+      </MemoryRouter>,
+    );
+
+    // Наполненное состояние: обе карточки с рядами и кнопками действий.
+    expect(
+      await screen.findByText(/доставки согласований/i),
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByRole("button", { name: /повторить/i }),
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByRole("button", { name: /в очередь/i }),
+    ).toBeInTheDocument();
+
+    const budget = uxBudgetDelta(document.body, "ApprovalsOutboxPage");
+    expect(budget.unexpected).toEqual([]);
+    expect(budget.stale).toEqual([]);
   });
 
   it("shows error state when load fails", async () => {

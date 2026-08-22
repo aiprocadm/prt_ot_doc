@@ -4,6 +4,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import GeneratePackWizardPage from "@/pages/packs/GeneratePackWizardPage";
+import { uxBudgetDelta } from "@/test-utils/uxBudget";
 
 const getMock = vi.fn();
 const postMock = vi.fn();
@@ -96,5 +97,25 @@ describe("GeneratePackWizardPage", () => {
       await screen.findByRole("button", { name: /Базовый/i }),
     ).toBeInTheDocument();
     expect(getMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("экран в UX-бюджете, или долг записан явно (BIZ-60)", async () => {
+    getMock.mockResolvedValue({
+      data: [{ id: "p-1", code: "P1", name: "Базовый", status: "active" }],
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/generate-pack"]}>
+        <Routes>
+          <Route path="/generate-pack" element={<GeneratePackWizardPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await screen.findByRole("button", { name: /Базовый/i });
+
+    const budget = uxBudgetDelta(document.body, "GeneratePackWizardPage");
+    expect(budget.unexpected).toEqual([]);
+    expect(budget.stale).toEqual([]);
   });
 });

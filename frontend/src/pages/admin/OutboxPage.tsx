@@ -172,6 +172,11 @@ const OutboxPage = () => {
                   ({item.subscribed_events.join(", ") || "все"})
                   <Button
                     size="sm"
+                    // BIZ-60 волна 4: кнопка в ПОВТОРЯЮЩЕЙСЯ строке списка не
+                    // может быть главной — её экземпляров столько, сколько
+                    // эндпоинтов (ловушка BillingPage: лимит не должен зависеть
+                    // от данных). Проверка доставки — вторичное действие.
+                    variant="outline"
                     className="ml-2"
                     onClick={() => void runTest(item.id)}
                     disabled={loading}
@@ -227,6 +232,8 @@ const OutboxPage = () => {
             </ul>
           )}
           <Button
+            // Служебное обновление списка — не главное действие экрана.
+            variant="outline"
             className="mt-3"
             onClick={() => void load()}
             disabled={loading}

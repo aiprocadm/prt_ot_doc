@@ -9,6 +9,7 @@ import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import WorkspaceDataQualityPage from "@/pages/workspace/WorkspaceDataQualityPage";
+import { uxBudgetDelta } from "@/test-utils/uxBudget";
 import type { DataQualityReportDto } from "@/types/dto/dataQuality";
 
 const getReportMock = vi.fn();
@@ -203,5 +204,17 @@ describe("WorkspaceDataQualityPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Повторить" }));
 
     expect(await screen.findByText("Истёк медосмотр")).toBeInTheDocument();
+  });
+
+  it("экран в UX-бюджете, или долг записан явно (BIZ-60)", async () => {
+    getReportMock.mockResolvedValueOnce(sampleReport);
+
+    renderPage();
+
+    expect(await screen.findByText("Истёк медосмотр")).toBeInTheDocument();
+
+    const budget = uxBudgetDelta(document.body, "WorkspaceDataQualityPage");
+    expect(budget.unexpected).toEqual([]);
+    expect(budget.stale).toEqual([]);
   });
 });

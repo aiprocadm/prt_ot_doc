@@ -11,6 +11,7 @@ vi.mock("@/api/committees", () => ({
 }));
 
 import CommitteeKpiPage from "@/pages/committees/CommitteeKpiPage";
+import { uxBudgetDelta } from "@/test-utils/uxBudget";
 
 const sampleKpi = {
   committees_total: 2,
@@ -79,5 +80,18 @@ describe("CommitteeKpiPage", () => {
     // Title still renders; the KPI groups do not.
     expect(screen.getByText("KPI комитетов")).toBeInTheDocument();
     expect(screen.queryByText("Явка и кворум")).not.toBeInTheDocument();
+  });
+
+  it("экран в UX-бюджете, или долг записан явно (BIZ-60)", async () => {
+    getKpiMock.mockResolvedValue(sampleKpi);
+
+    renderPage();
+    await waitFor(() =>
+      expect(screen.getByText("Явка и кворум")).toBeInTheDocument(),
+    );
+
+    const budget = uxBudgetDelta(document.body, "CommitteeKpiPage");
+    expect(budget.unexpected).toEqual([]);
+    expect(budget.stale).toEqual([]);
   });
 });

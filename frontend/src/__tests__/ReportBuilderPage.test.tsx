@@ -31,6 +31,7 @@ const api = vi.hoisted(() => ({
 vi.mock("@/api/reportBuilder", () => ({ reportBuilderApi: api }));
 
 import ReportBuilderPage from "@/pages/reports/ReportBuilderPage";
+import { uxBudgetDelta } from "@/test-utils/uxBudget";
 
 const DATASETS: ReportDatasetDto[] = [
   {
@@ -202,6 +203,15 @@ describe("ReportBuilderPage", () => {
     expect(screen.getByLabelText("Название отчёта")).toHaveValue(
       "Открытые инциденты (копия)",
     );
+  });
+
+  it("экран в UX-бюджете, или долг записан явно (BIZ-60)", async () => {
+    renderPage();
+    await screen.findByText("Открытые инциденты");
+
+    const budget = uxBudgetDelta(document.body, "ReportBuilderPage");
+    expect(budget.unexpected).toEqual([]);
+    expect(budget.stale).toEqual([]);
   });
 
   // NOTE: vi.useFakeTimers() must NOT be active while we `await screen.findByText(...)`
