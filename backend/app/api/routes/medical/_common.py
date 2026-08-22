@@ -10,12 +10,12 @@ from typing import Annotated
 from urllib.parse import quote
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
-from app.core.feature_flags import is_module_enabled
+from app.core.feature_flags import is_module_enabled, raise_for_disabled_module
 from app.core.security import AccessContext, abac
 from app.domains.medical import lifecycle as lc
 from app.models.models import (
@@ -58,10 +58,20 @@ MedicalReadAccess = Annotated[
 _MEDICAL_FEATURE_CODE = "medical"
 
 
-async def require_medical_feature(tenant: TenantDep, session: SessionDep) -> None:
+async def require_medical_feature(
+    request: Request, tenant: TenantDep, session: SessionDep
+) -> None:
+    # BIZ-61 разд. 61.2 «безопасное выключение»: отключённый (но выдававшийся)
+    # модуль читается, мутации — 403 словами; никогда не выдававшийся — 404.
     if not await is_module_enabled(session, str(tenant.id), _MEDICAL_FEATURE_CODE):
-        raise HTTPException(
-            status.HTTP_404_NOT_FOUND, "Medical feature is not enabled for this tenant"
+        await raise_for_disabled_module(
+            session,
+            str(tenant.id),
+            _MEDICAL_FEATURE_CODE,
+            request.method,
+            error_type="medical",
+            disabled_code="MEDICAL_DISABLED",
+            disabled_message="Medical feature is not enabled for this tenant",
         )
 
 

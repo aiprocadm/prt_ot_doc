@@ -358,11 +358,9 @@ async def test_my_clients_are_tenant_scoped(sessionmaker):
 
 
 @pytest.mark.asyncio
-async def test_my_clients_respects_feature_flag(sessionmaker, monkeypatch):
-    monkeypatch.setattr(routes, "is_module_enabled", AsyncMock(return_value=False))
-    async with sessionmaker() as session:
-        with pytest.raises(HTTPException) as exc:
-            await routes.my_managed_clients(
-                tenant=_tenant(), session=session, access=SimpleNamespace(), auth=_auth("u1")
-            )
-    assert exc.value.status_code == 404
+async def test_my_clients_respects_feature_flag():
+    # BIZ-61 срез-6: гейт — роутерная зависимость на КАЖДОМ роуте (в теле
+    # эндпоинта его больше нет); исходы гейта доказаны живым клиентом в
+    # tests/test_biz61_module_readonly.py.
+    deps = [d.dependency for d in routes.router.dependencies]
+    assert routes._require_enabled in deps

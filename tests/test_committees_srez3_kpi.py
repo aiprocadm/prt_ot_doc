@@ -257,20 +257,13 @@ def _tenant():
 
 
 @pytest.mark.asyncio
-async def test_kpi_route_flag_off_returns_404(monkeypatch):
-    from fastapi import Response
-
-    monkeypatch.setattr(routes, "is_module_enabled", AsyncMock(return_value=False))
-    with pytest.raises(Exception) as exc:
-        await routes.committee_kpi(
-            request=SimpleNamespace(headers={}),
-            response=Response(),
-            tenant=_tenant(),
-            session=AsyncMock(),
-            access=SimpleNamespace(),
-            committee_id=None,
-        )
-    assert getattr(exc.value, "status_code", None) == 404
+async def test_kpi_route_covered_by_router_gate():
+    # BIZ-61 срез-6: гейт — роутерная зависимость на КАЖДОМ роуте (в теле
+    # эндпоинта его больше нет); исходы гейта доказаны юнитами самого гейта
+    # (test_committees_flag_and_isolation) и живым клиентом
+    # (tests/test_biz61_module_readonly.py).
+    deps = [d.dependency for d in routes.router.dependencies]
+    assert routes._require_committees_enabled in deps
 
 
 @pytest.mark.asyncio

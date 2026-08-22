@@ -18,26 +18,38 @@ def _tenant(tid="tenant-1"):
     return SimpleNamespace(id=tid)
 
 
+def _request(method="GET"):
+    return SimpleNamespace(method=method)
+
+
 @pytest.mark.asyncio
 async def test_require_enabled_raises_when_flag_off(monkeypatch):
+    # BIZ-61 разд. 61.2: при выключенном модуле решение (404 «не выдавался» /
+    # read-only «был выдан») принимает raise_for_disabled_module — гейт обязан
+    # его вызвать, а не пропустить запрос молча.
     monkeypatch.setattr(routes, "is_module_enabled", AsyncMock(return_value=False))
-    with pytest.raises(Exception) as exc:
-        await routes._require_sout_enabled(AsyncMock(), _tenant())
-    assert getattr(exc.value, "status_code", None) == 404
+    guard = AsyncMock()
+    monkeypatch.setattr(routes, "raise_for_disabled_module", guard)
+    await routes._require_sout_enabled(_request("POST"), AsyncMock(), _tenant())
+    assert guard.await_count == 1
+    assert guard.await_args.args[3] == "POST"
 
 
 @pytest.mark.asyncio
 async def test_require_enabled_passes_when_flag_on(monkeypatch):
     monkeypatch.setattr(routes, "is_module_enabled", AsyncMock(return_value=True))
-    await routes._require_sout_enabled(AsyncMock(), _tenant())
+    guard = AsyncMock()
+    monkeypatch.setattr(routes, "raise_for_disabled_module", guard)
+    await routes._require_sout_enabled(_request(), AsyncMock(), _tenant())
+    assert guard.await_count == 0
 
 
 @pytest.mark.asyncio
 async def test_require_enabled_passes_default_false_arg(monkeypatch):
     spy = AsyncMock(return_value=False)
     monkeypatch.setattr(routes, "is_module_enabled", spy)
-    with pytest.raises(Exception):
-        await routes._require_sout_enabled(AsyncMock(), _tenant())
+    monkeypatch.setattr(routes, "raise_for_disabled_module", AsyncMock())
+    await routes._require_sout_enabled(_request(), AsyncMock(), _tenant())
     # BIZ-61 срез-2: умолчание системное (из реестра), а не аргумент вызова.
     assert spy.await_args.args[2] == "sout"
 

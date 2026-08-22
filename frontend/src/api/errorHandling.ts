@@ -78,6 +78,16 @@ export const handleApiError = (error: ApiError, requestUrl?: string) => {
     return;
   }
 
+  // BIZ-61 (разд. 61.2, безопасное выключение): модуль отключён, данные
+  // остались читаемыми — а попытка изменить их объясняется словами, той же
+  // фразой, что отдаёт бэкенд, не общим «Доступ запрещён».
+  if (error.code === "MODULE_READ_ONLY") {
+    toast.error(
+      "Модуль отключён: данные доступны только для чтения. Включите модуль, чтобы изменять их.",
+    );
+    return;
+  }
+
   if (status === 401 && !isAuthPath(requestUrl)) {
     tokenStorage.clear();
     requestAuthRedirect("unauthorized");

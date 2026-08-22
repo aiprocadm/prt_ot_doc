@@ -45,7 +45,7 @@ async def test_reorder_groups_below_threshold_by_supplier(
 
 
 @pytest.mark.asyncio
-async def test_reorder_404_when_feature_disabled(
+async def test_reorder_readable_when_feature_disabled(
     async_client, make_auth_headers, sessionmaker, data_factory: TestDataFactory
 ):
     from sqlalchemy import select
@@ -82,5 +82,7 @@ async def test_reorder_404_when_feature_disabled(
             enablement.on = False
         await session.commit()
     headers = await make_auth_headers(RoleEnum.ADMIN)
+    # BIZ-61 срез-6 (разд. 61.2): модуль был выдан и отключён — чтение
+    # остаётся открытым (read-only), 404 отвечает только «никогда не выдан».
     resp = await async_client.get("/api/v1/ppe/stock/reorder", headers=headers)
-    assert resp.status_code == status.HTTP_404_NOT_FOUND
+    assert resp.status_code == status.HTTP_200_OK, resp.text

@@ -105,10 +105,17 @@ async def test_supplier_empty_name_returns_422(
 
 
 @pytest.mark.asyncio
-async def test_suppliers_404_when_feature_disabled(
+async def test_suppliers_readonly_when_feature_disabled(
     async_client, make_auth_headers, sessionmaker, data_factory: TestDataFactory
 ):
+    # BIZ-61 срез-6 (разд. 61.2): выдан и отключён — чтение открыто,
+    # мутация объяснена словами.
     await _set_warehouse_flag(sessionmaker, data_factory, on=False)
     headers = await make_auth_headers(RoleEnum.ADMIN)
     listed = await async_client.get("/api/v1/ppe/suppliers", headers=headers)
-    assert listed.status_code == status.HTTP_404_NOT_FOUND
+    assert listed.status_code == status.HTTP_200_OK, listed.text
+    created = await async_client.post(
+        "/api/v1/ppe/suppliers", json={"name": "Поставщик"}, headers=headers
+    )
+    assert created.status_code == status.HTTP_403_FORBIDDEN, created.text
+    assert "MODULE_READ_ONLY" in created.text
