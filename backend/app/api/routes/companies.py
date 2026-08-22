@@ -81,6 +81,60 @@ async def _get_company_or_404(session: AsyncSession, tenant: Tenant, company_id:
     return company
 
 
+# BIZ-53 (разд. 53.3): предохранитель обхода цепочки родителей. Данные глубже
+# не бывают (группа → компания → филиал), а без предела повреждённые данные
+# зациклили бы запрос навсегда.
+_PARENT_CHAIN_LIMIT = 20
+
+
+async def _validate_parent_company(
+    session: AsyncSession,
+    tenant: Tenant,
+    *,
+    company_id: str | None,
+    parent_id: str,
+) -> None:
+    """Проверки связи «дочка → головная» (разд. 53.3).
+
+    Колонка ``parent_company_id`` — app-level reference без DB FK (грабля wa02),
+    поэтому существование, самоссылку и циклы обязан держать этот слой.
+    """
+
+    if company_id is not None and parent_id == company_id:
+        raise _company_unprocessable("Компания не может быть головной для самой себя")
+
+    stmt = select(Company).where(
+        Company.id == parent_id,
+        Company.tenant_id == tenant.id,
+        Company.deleted_at.is_(None),
+    )
+    parent = (await session.execute(stmt)).scalar_one_or_none()
+    if parent is None:
+        raise _company_unprocessable("Головная компания не найдена")
+
+    # Цикл: поднимаемся от родителя вверх; встретили саму компанию — отказ.
+    current = parent
+    for _ in range(_PARENT_CHAIN_LIMIT):
+        if current.parent_company_id is None:
+            return
+        if company_id is not None and current.parent_company_id == company_id:
+            raise _company_unprocessable(
+                "Так получится круг: выбранная головная компания сама подчинена этой"
+            )
+        stmt = select(Company).where(
+            Company.id == current.parent_company_id,
+            Company.tenant_id == tenant.id,
+            Company.deleted_at.is_(None),
+        )
+        nxt = (await session.execute(stmt)).scalar_one_or_none()
+        if nxt is None:
+            # Родитель ссылается на удалённую/чужую запись — выше подниматься
+            # некуда, но сама запрошенная связь корректна.
+            return
+        current = nxt
+    raise _company_unprocessable("Цепочка головных компаний слишком длинная")
+
+
 def _clean_string(value: str | None) -> str | None:
     if value is None:
         return None
@@ -143,6 +197,9 @@ def _apply_company_updates(company: Company, payload: CompanyUpdate) -> None:
         company.contact_person = _clean_string(data["contact_person"]) or None
     if "contact_phone" in data:
         company.contact_phone = _clean_string(data["contact_phone"]) or None
+    if "parent_company_id" in data:
+        # Существование/циклы проверены в endpoint ДО применения (нужна сессия).
+        company.parent_company_id = _clean_string(data["parent_company_id"])
     if "status" in data:
         # status NOT NULL — пустое значение трактуем как «active», а не как NULL
         company.status = _clean_string(data["status"]) or "active"
@@ -197,6 +254,11 @@ async def create_company_endpoint(
     access: EditorAccess,
 ) -> CompanyRead:
     TenantContextValidator.ensure_tenant_context(tenant)
+
+    if payload.parent_company_id is not None and payload.parent_company_id.strip():
+        await _validate_parent_company(
+            session, tenant, company_id=None, parent_id=payload.parent_company_id.strip()
+        )
 
     try:
         company = await create_company(session, tenant.id, payload)
@@ -270,6 +332,12 @@ async def update_company_endpoint(
     TenantContextValidator.ensure_tenant_context(tenant)
 
     company = await _get_company_or_404(session, tenant, company_id)
+    data = payload.model_dump(exclude_unset=True)
+    new_parent = data.get("parent_company_id")
+    if isinstance(new_parent, str) and new_parent.strip():
+        await _validate_parent_company(
+            session, tenant, company_id=company.id, parent_id=new_parent.strip()
+        )
     before = CompanyRead.model_validate(company).model_dump()
     _apply_company_updates(company, payload)
     try:
@@ -318,6 +386,27 @@ async def archive_company_endpoint(
 
     company = await _get_company_or_404(session, tenant, company_id)
     if company.deleted_at is None:
+        # BIZ-53 (разд. 53.3): архив головной компании при живых дочках оставил
+        # бы их сиротами с висячей ссылкой (FK в базе нет — грабля wa02).
+        children_stmt = select(Company.id).where(
+            Company.parent_company_id == company.id,
+            Company.tenant_id == tenant.id,
+            Company.deleted_at.is_(None),
+        )
+        children = (await session.execute(children_stmt)).scalars().all()
+        if children:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                detail=api_problem_detail(
+                    code="COMPANY_HAS_CHILDREN",
+                    message=(
+                        "У компании есть дочерние в группе — сначала переподчините "
+                        "или архивируйте их"
+                    ),
+                    error_type="companies",
+                    details={"children_count": len(children)},
+                ),
+            )
         before = {"deleted_at": None}
         company.deleted_at = datetime.now(timezone.utc)
         await AuditService(session).log_event(

@@ -34,6 +34,7 @@ const emptyCompanyForm: CompanyFormValues = {
   website: "",
   status: "draft",
   tags: [],
+  parent_company_id: "",
 };
 
 interface CompanyFormDialogProps {
@@ -52,6 +53,7 @@ const COMPANY_API_FIELD_MAP: Record<string, keyof CompanyFormValues> = {
   email: "email",
   phone_numbers: "phone",
   tags: "tags",
+  parent_company_id: "parent_company_id",
 };
 
 export const CompanyFormDialog = ({
@@ -73,10 +75,14 @@ export const CompanyFormDialog = ({
       website: initialData?.website ?? "",
       status: initialData?.status ?? "draft",
       tags: initialData?.tags ?? [],
+      parent_company_id: initialData?.parent_company_id ?? "",
     },
   });
 
-  const { create, update } = useCompaniesStore();
+  const { create, update, items: companies } = useCompaniesStore();
+  // BIZ-53 (разд. 53.3): кандидаты в головные — все компании арендатора, кроме
+  // самой себя (самоссылку и циклы окончательно отвергает бэкенд).
+  const parentCandidates = companies.filter((c) => c.id !== initialData?.id);
 
   useEffect(() => {
     if (!open) return;
@@ -92,6 +98,7 @@ export const CompanyFormDialog = ({
         website: initialData.website ?? "",
         status: initialData.status,
         tags: initialData.tags ?? [],
+        parent_company_id: initialData.parent_company_id ?? "",
       });
     } else {
       form.reset(emptyCompanyForm);
@@ -210,6 +217,26 @@ export const CompanyFormDialog = ({
             <div className="space-y-2">
               <Label htmlFor="phone">Телефон</Label>
               <Input id="phone" {...form.register("phone")} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="parent_company_id">Головная компания</Label>
+              <select
+                id="parent_company_id"
+                className="h-10 w-full rounded-md border px-3"
+                {...form.register("parent_company_id")}
+              >
+                <option value="">Без группы</option>
+                {parentCandidates.map((candidate) => (
+                  <option key={candidate.id} value={candidate.id}>
+                    {candidate.name}
+                  </option>
+                ))}
+              </select>
+              {form.formState.errors.parent_company_id && (
+                <p className="text-xs text-destructive">
+                  {form.formState.errors.parent_company_id.message}
+                </p>
+              )}
             </div>
           </div>
           <div className="space-y-2">

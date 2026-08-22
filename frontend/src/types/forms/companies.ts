@@ -42,6 +42,8 @@ export const companySchema = z.object({
   /** В UI для справки; в API компании поля website пока нет — не отправляется на бэкенд. */
   website: optionalWebsite,
   status: z.enum(["draft", "active", "archived"]),
+  /** BIZ-53 (разд. 53.3): id головной компании группы; "" = без группы. */
+  parent_company_id: z.string().optional(),
   tags: z.array(z.string()).optional(),
   person_ids: z.array(z.string()).optional(),
 });

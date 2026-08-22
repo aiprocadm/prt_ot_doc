@@ -39,6 +39,10 @@ export function buildCompanyWriteBody(
   const phone = values.phone?.trim() ?? "";
   if (phone) body.phone_numbers = [phone];
   if (values.status) body.status = values.status;
+  // BIZ-53 (разд. 53.3): пустой выбор = «без группы» → null снимает привязку.
+  if (values.parent_company_id !== undefined) {
+    body.parent_company_id = values.parent_company_id || null;
+  }
   body.tags = (values.tags ?? []).map((t) => t.trim()).filter(Boolean);
   return body;
 }
@@ -81,6 +85,8 @@ export function normalizeCompanyRead(raw: unknown): CompanyDto {
     phone: phoneFirst,
     website: typeof r.website === "string" ? r.website : undefined,
     status: asStatus(r.status),
+    parent_company_id:
+      typeof r.parent_company_id === "string" ? r.parent_company_id : null,
     tags: Array.isArray(r.tags) ? (r.tags as string[]) : undefined,
     documents: Array.isArray(r.documents)
       ? (r.documents as DocumentDto[])

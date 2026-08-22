@@ -11,6 +11,7 @@ import { fetchPersonsForCompany } from "@/api/personsApi";
 import { usePersonsStore } from "@/stores/persons";
 import { formatDate } from "@/utils/datetime";
 import { usePacksStore } from "@/stores/packs";
+import { useCompaniesStore } from "@/stores/companies";
 import type { CompanyDto } from "@/types/dto/companies";
 import type { PersonDto } from "@/types/dto/persons";
 import type { PackPreset } from "@/types/dto/packs";
@@ -33,6 +34,13 @@ export const CompanyDetails = ({ company }: { company: CompanyDto }) => {
   const [peopleLoading, setPeopleLoading] = useState(false);
 
   const tags = useMemo(() => company.tags ?? [], [company.tags]);
+
+  // BIZ-53 (разд. 53.3): имя головной компании группы — по списку из стора.
+  const companiesList = useCompaniesStore((s) => s.items);
+  const parentName = company.parent_company_id
+    ? (companiesList.find((c) => c.id === company.parent_company_id)?.name ??
+      company.parent_company_id)
+    : null;
 
   useEffect(() => {
     let cancelled = false;
@@ -72,6 +80,7 @@ export const CompanyDetails = ({ company }: { company: CompanyDto }) => {
             <StatusBadge status={company.status} />
             <span>ИНН {company.inn}</span>
             {company.kpp && <span>КПП {company.kpp}</span>}
+            {parentName && <span>Группа: {parentName}</span>}
             <span>Обновлено {formatDate(company.updated_at)}</span>
           </div>
         </div>
