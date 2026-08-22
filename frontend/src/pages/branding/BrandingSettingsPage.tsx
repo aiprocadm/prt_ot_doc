@@ -19,7 +19,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
@@ -46,6 +45,12 @@ const BrandingSettingsPage = () => {
   const [siteId, setSiteId] = useState<string>("");
   const [sites, setSites] = useState<SiteDto[]>([]);
   const [presets, setPresets] = useState<LayoutPresetDto[]>([]);
+  // BIZ-59 (разд. 59.1): профиль держал 27 видимых полей одним полотном.
+  // Секции-задачи открываются ПО ОДНОЙ (прецедент WarehousePage); вместе с
+  // постоянным селектором филиала любая открытая секция помещается в лимит.
+  const [openSection, setOpenSection] = useState<
+    "org" | "contacts" | "texts" | "files" | "look" | "json" | null
+  >(null);
   const [profile, setProfile] = useState<BrandingProfileDto | null>(null);
   const [preview, setPreview] = useState<BrandingPreviewDto | null>(null);
   const [previewHistory, setPreviewHistory] = useState<BrandingPreviewDto[]>(
@@ -348,6 +353,31 @@ const BrandingSettingsPage = () => {
             <CardTitle>Профиль брендинга и реквизитов</CardTitle>
           </CardHeader>
           <CardContent className="space-y-5">
+            {/* BIZ-59: секции-задачи по одной. Выбор ничего не теряет — форма
+                хранит весь профиль, сохранение пишет его целиком. */}
+            <div className="flex flex-wrap gap-2" data-testid="branding-section-switch">
+              {(
+                [
+                  ["org", "Организация"],
+                  ["contacts", "Контакты и адреса"],
+                  ["texts", "Тексты бланка"],
+                  ["files", "Файлы бланка"],
+                  ["look", "Цвета и водяной знак"],
+                  ["json", "Служебные (JSON)"],
+                ] as const
+              ).map(([key, label]) => (
+                <Button
+                  key={key}
+                  size="sm"
+                  variant={openSection === key ? "secondary" : "outline"}
+                  onClick={() => setOpenSection(openSection === key ? null : key)}
+                >
+                  {label}
+                </Button>
+              ))}
+            </div>
+
+            {openSection === "org" ? (
             <div className="grid gap-4 md:grid-cols-2">
               {[
                 ["Полное название", "legal_name"],
@@ -355,9 +385,6 @@ const BrandingSettingsPage = () => {
                 ["ИНН", "inn"],
                 ["КПП", "kpp"],
                 ["ОГРН", "ogrn"],
-                ["Email", "email"],
-                ["Website", "website"],
-                ["Метка филиала", "branch_label"],
               ].map(([label, key]) => (
                 <div key={key}>
                   <Label>{label}</Label>
@@ -370,7 +397,26 @@ const BrandingSettingsPage = () => {
                 </div>
               ))}
             </div>
+            ) : null}
 
+            {openSection === "contacts" ? (
+            <>
+            <div className="grid gap-4 md:grid-cols-2">
+              {[
+                ["Email", "email"],
+                ["Website", "website"],
+              ].map(([label, key]) => (
+                <div key={key}>
+                  <Label>{label}</Label>
+                  <Input
+                    value={form[key as keyof typeof form] as string}
+                    onChange={(e) =>
+                      setForm((s) => ({ ...s, [key]: e.target.value }))
+                    }
+                  />
+                </div>
+              ))}
+            </div>
             <div className="grid gap-4 md:grid-cols-2">
               <div>
                 <Label>Юридический адрес</Label>
@@ -393,18 +439,22 @@ const BrandingSettingsPage = () => {
                 />
               </div>
             </div>
+            <div>
+              <Label>Телефоны</Label>
+              <Textarea
+                rows={4}
+                value={form.phones}
+                onChange={(e) =>
+                  setForm((s) => ({ ...s, phones: e.target.value }))
+                }
+              />
+            </div>
+            </>
+            ) : null}
 
+            {openSection === "texts" ? (
+            <>
             <div className="grid gap-4 md:grid-cols-2">
-              <div>
-                <Label>Телефоны</Label>
-                <Textarea
-                  rows={4}
-                  value={form.phones}
-                  onChange={(e) =>
-                    setForm((s) => ({ ...s, phones: e.target.value }))
-                  }
-                />
-              </div>
               <div>
                 <Label>Реквизиты в шапке</Label>
                 <Textarea
@@ -415,9 +465,6 @@ const BrandingSettingsPage = () => {
                   }
                 />
               </div>
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-2">
               <div>
                 <Label>Реквизиты в подвале</Label>
                 <Textarea
@@ -429,51 +476,70 @@ const BrandingSettingsPage = () => {
                 />
               </div>
             </div>
-
             <div>
-              <Label>Служебные надписи / примечания по ветке</Label>
-              <Textarea
-                rows={3}
-                value={form.service_notes}
+              <Label>Метка филиала</Label>
+              <Input
+                value={form.branch_label}
                 onChange={(e) =>
-                  setForm((s) => ({ ...s, service_notes: e.target.value }))
+                  setForm((s) => ({ ...s, branch_label: e.target.value }))
                 }
               />
             </div>
-
-            <div className="grid gap-4 md:grid-cols-2">
-              <div>
-                <Label>Паспорт документа</Label>
-                <Input
-                  value={form.passport_label}
-                  onChange={(e) =>
-                    setForm((s) => ({ ...s, passport_label: e.target.value }))
-                  }
-                />
+            {/* Разд. 59.3: служебные надписи и паспорт — редкие настройки,
+                видимыми они выводили бы секцию за лимит. */}
+            <details className="rounded-md border p-3">
+              <summary className="cursor-pointer text-sm font-medium">
+                Дополнительно
+              </summary>
+              <div className="space-y-3 pt-3">
+                <div>
+                  <Label>Служебные надписи / примечания по ветке</Label>
+                  <Textarea
+                    rows={3}
+                    value={form.service_notes}
+                    onChange={(e) =>
+                      setForm((s) => ({ ...s, service_notes: e.target.value }))
+                    }
+                  />
+                </div>
+                <div>
+                  <Label>Паспорт документа</Label>
+                  <Input
+                    value={form.passport_label}
+                    onChange={(e) =>
+                      setForm((s) => ({
+                        ...s,
+                        passport_label: e.target.value,
+                      }))
+                    }
+                  />
+                </div>
               </div>
-              <div>
-                <Label>Preset колонтитулов</Label>
-                <select
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                  value={form.preferred_header_preset_code}
-                  onChange={(e) =>
-                    setForm((s) => ({
-                      ...s,
-                      preferred_header_preset_code: e.target.value,
-                    }))
-                  }
-                >
-                  <option value="">Использовать preset по умолчанию</option>
-                  {presets.map((preset) => (
-                    <option key={preset.id} value={preset.code}>
-                      {preset.code} — {preset.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+            </details>
+            <div>
+              <Label>Preset колонтитулов</Label>
+              <select
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                value={form.preferred_header_preset_code}
+                onChange={(e) =>
+                  setForm((s) => ({
+                    ...s,
+                    preferred_header_preset_code: e.target.value,
+                  }))
+                }
+              >
+                <option value="">Использовать preset по умолчанию</option>
+                {presets.map((preset) => (
+                  <option key={preset.id} value={preset.code}>
+                    {preset.code} — {preset.name}
+                  </option>
+                ))}
+              </select>
             </div>
+            </>
+            ) : null}
 
-            <Separator />
+            {openSection === "files" ? (
             <div className="grid gap-4 md:grid-cols-3">
               <div>
                 <Label>ID файла логотипа</Label>
@@ -506,7 +572,10 @@ const BrandingSettingsPage = () => {
                 />
               </div>
             </div>
+            ) : null}
 
+            {openSection === "look" ? (
+            <>
             <div className="grid gap-4 md:grid-cols-3">
               <div>
                 <Label>Основной цвет</Label>
@@ -540,33 +609,41 @@ const BrandingSettingsPage = () => {
                 />
               </div>
             </div>
-
-            <div className="flex items-center justify-between rounded-md border p-3">
-              <div>
-                <div className="font-medium">Водяной знак</div>
-                <div className="text-sm text-muted-foreground">
-                  Черновик / служебный штамп в шапке. Учитывается в превью и
-                  попадает в метаданные воспроизводимости.
+            {/* Водяной знак — второй уровень: настройка редкая, а его текстовое поле
+                вывело бы открытую секцию за лимит вместе с селектором филиала. */}
+            <details className="rounded-md border p-3">
+              <summary className="cursor-pointer text-sm font-medium">
+                Водяной знак
+              </summary>
+              <div className="space-y-3 pt-3">
+                <div className="flex items-center justify-between">
+                  <div className="text-sm text-muted-foreground">
+                    Черновик / служебный штамп в шапке. Учитывается в превью и
+                    попадает в метаданные воспроизводимости.
+                  </div>
+                  <Switch
+                    checked={form.watermark_enabled}
+                    onCheckedChange={(checked) =>
+                      setForm((s) => ({ ...s, watermark_enabled: checked }))
+                    }
+                  />
+                </div>
+                <div>
+                  <Label>Текст водяного знака</Label>
+                  <Input
+                    value={form.watermark_text}
+                    onChange={(e) =>
+                      setForm((s) => ({ ...s, watermark_text: e.target.value }))
+                    }
+                    placeholder="ЧЕРНОВИК / НА СОГЛАСОВАНИЕ"
+                  />
                 </div>
               </div>
-              <Switch
-                checked={form.watermark_enabled}
-                onCheckedChange={(checked) =>
-                  setForm((s) => ({ ...s, watermark_enabled: checked }))
-                }
-              />
-            </div>
-            <div>
-              <Label>Текст водяного знака</Label>
-              <Input
-                value={form.watermark_text}
-                onChange={(e) =>
-                  setForm((s) => ({ ...s, watermark_text: e.target.value }))
-                }
-                placeholder="ЧЕРНОВИК / НА СОГЛАСОВАНИЕ"
-              />
-            </div>
+            </details>
+            </>
+            ) : null}
 
+            {openSection === "json" ? (
             <div className="grid gap-4 md:grid-cols-2">
               <div>
                 <Label>Метаданные (JSON)</Label>
@@ -589,6 +666,7 @@ const BrandingSettingsPage = () => {
                 />
               </div>
             </div>
+            ) : null}
 
             <div className="flex flex-wrap gap-2">
               <Button onClick={() => void handleSave()} disabled={loading}>
