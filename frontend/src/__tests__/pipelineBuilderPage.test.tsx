@@ -24,9 +24,12 @@ describe("PipelineBuilderPage", () => {
     apiClientMock.post.mockReset();
   });
 
-  it("экран в UX-бюджете, или долг записан явно (BIZ-60)", async () => {
-    // Волна 4 нашла 14 видимых полей (профиль + рёбра графа + свойства узла) —
-    // записано долгом: честный перекрой конструктора — отдельная работа.
+  it("экран в UX-бюджете и с узлом, и с ребром в редакторе (BIZ-59)", async () => {
+    // Волна 4 нашла 14 видимых полей: каждое ребро несло три поля прямо в
+    // списке — лимит зависел от данных (ловушка BillingPage). Перекрой BIZ-59:
+    // редактор один, свойства ВЫБРАННОГО — узла или ребра. Замер только
+    // дефолтного состояния (выбран узел) ничего не сказал бы про панель
+    // ребра — меряем ОБЕ.
     apiClientMock.get.mockImplementation((url: string) => {
       if (url !== "/pipelines/profiles") throw new Error(`Unexpected GET ${url}`);
       return Promise.resolve({
@@ -49,9 +52,18 @@ describe("PipelineBuilderPage", () => {
     });
     expect(await screen.findByText("ot-default")).toBeInTheDocument();
 
-    const budget = uxBudgetDelta(document.body, "PipelineBuilderPage");
-    expect(budget.unexpected).toEqual([]);
-    expect(budget.stale).toEqual([]);
+    // Дефолт: выбран первый узел, у графа-заготовки ТРИ ребра в списке —
+    // будь у каждого свои поля, замер бы это поймал.
+    const withNode = uxBudgetDelta(document.body, "PipelineBuilderPage");
+    expect(withNode.unexpected).toEqual([]);
+    expect(withNode.stale).toEqual([]);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /render → headers/ }),
+    );
+    const withEdge = uxBudgetDelta(document.body, "PipelineBuilderPage");
+    expect(withEdge.unexpected).toEqual([]);
+    expect(withEdge.stale).toEqual([]);
   });
 
   it("shows load error for profiles and retries successfully", async () => {
