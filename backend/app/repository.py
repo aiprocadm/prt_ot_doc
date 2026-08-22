@@ -151,6 +151,7 @@ async def create_company(session: AsyncSession, tenant_id: str, payload: Company
     company = Company(
         tenant_id=normalized_tenant,
         name=payload.name.strip(),
+        parent_company_id=_clean(payload.parent_company_id),
         inn=_clean(payload.inn),
         kpp=_clean(payload.kpp),
         ogrn=_clean(payload.ogrn),

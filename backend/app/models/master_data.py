@@ -46,6 +46,11 @@ if TYPE_CHECKING:  # pragma: no cover - type-checker only; SA resolves via regis
 
 class Company(TenantBaseModel, SoftDeleteMixin):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
+    # BIZ-53 (разд. 53.3): группа компаний внутри одного enterprise-tenant —
+    # головная компания холдинга. App-level reference БЕЗ DB FK: add_column с FK
+    # на существующую таблицу — класс миграционных граблей wa02 (прецедент
+    # Site.branch_id). Существование, запрет самоссылки и циклов держит API-слой.
+    parent_company_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     inn: Mapped[str | None] = mapped_column("tax_id", String(32), nullable=True)
     kpp: Mapped[str | None] = mapped_column(String(32), nullable=True)
     ogrn: Mapped[str | None] = mapped_column(String(32), nullable=True)

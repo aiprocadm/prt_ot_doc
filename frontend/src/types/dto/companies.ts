@@ -14,6 +14,8 @@ export interface CompanyDto extends BaseEntityDto {
   phone?: string;
   website?: string;
   status: CompanyStatus;
+  /** BIZ-53 (разд. 53.3): головная компания группы внутри арендатора. */
+  parent_company_id?: string | null;
   updated_by?: string;
   logo?: FileLinkDto | null;
   contacts?: {
@@ -34,6 +36,8 @@ export interface CompanyFiltersDto {
 
 export interface UpdateCompanyDto {
   name: string;
+  /** null — снять привязку к группе. */
+  parent_company_id?: string | null;
   /** Необязательно: бэкенд принимает пустое значение */
   inn?: string;
   kpp?: string;

@@ -9,6 +9,9 @@ from app.schemas.base import BaseSchema
 
 class CompanyCreate(BaseSchema):
     name: str = Field(min_length=1, max_length=255)
+    # BIZ-53 (разд. 53.3): головная компания группы. Существование/циклы
+    # проверяет API-слой — схема держит только форму значения.
+    parent_company_id: str | None = Field(default=None, min_length=1, max_length=36)
     inn: str | None = Field(
         default=None,
         max_length=32,
@@ -50,6 +53,7 @@ class CompanyCreate(BaseSchema):
 class CompanyRead(BaseSchema):
     id: str
     name: str
+    parent_company_id: str | None = None
     inn: str | None = Field(default=None, serialization_alias="inn")
     kpp: str | None = None
     ogrn: str | None = None
@@ -97,6 +101,8 @@ class CompanyPage(BaseSchema):
 
 class CompanyUpdate(BaseSchema):
     name: str | None = Field(default=None, min_length=1, max_length=255)
+    # None в exclude_unset-режиме означает «снять привязку к группе».
+    parent_company_id: str | None = Field(default=None, max_length=36)
     inn: str | None = Field(
         default=None,
         max_length=32,
