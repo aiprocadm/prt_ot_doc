@@ -43,7 +43,13 @@ export const WorkflowDefinitionsCard = ({
               </div>
             </div>
             <Can permission={PERMISSIONS.WORKFLOW_MANAGE}>
-              <Button size="sm" onClick={() => onStart(definition.code)}>
+              {/* Кнопка в повторяющейся строке — вторичная (UX-бюджет:
+                  primary на экране одна, у композера). */}
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => onStart(definition.code)}
+              >
                 Запустить
               </Button>
             </Can>

@@ -2,6 +2,8 @@ import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 
+import { uxBudgetDelta } from "@/test-utils/uxBudget";
+
 const { getMock } = vi.hoisted(() => ({
   getMock: vi.fn(),
 }));
@@ -14,9 +16,20 @@ vi.mock("@/api/client", () => ({
 
 import ClientPortalHistoryPage from "@/pages/client-portal/ClientPortalHistoryPage";
 import ClientPortalRequestsPage from "@/pages/client-portal/ClientPortalRequestsPage";
+import PortalRequestsPage from "@/pages/portal-requests/PortalRequestsPage";
 
 const setupApi = () => {
   getMock.mockImplementation((url: string) => {
+    if (url === "/portal-requests") {
+      // Дашборд заявок портала: плоские KPI-числа, как отдаёт бэкенд.
+      return Promise.resolve({
+        data: {
+          total_requests: 4,
+          open_requests: 2,
+          overdue_requests: 1,
+        },
+      });
+    }
     if (url === "/client-portal/packages") {
       return Promise.resolve({
         data: [
@@ -89,5 +102,54 @@ describe("client portal pages", () => {
     expect(
       await screen.findByText(/Нужна уточняющая справка/i),
     ).toBeInTheDocument();
+  });
+
+  // BIZ-60 волна 5: приёмка UX-бюджета. Меряем НАПОЛНЕННЫЙ экран — после
+  // ожидания данных из мока, иначе замер видит пустой каркас и врёт «в бюджете».
+  it("ClientPortalHistoryPage в UX-бюджете (BIZ-60)", async () => {
+    setupApi();
+    render(
+      <MemoryRouter>
+        <ClientPortalHistoryPage />
+      </MemoryRouter>,
+    );
+    expect(
+      await screen.findByText(/package_run.published/i),
+    ).toBeInTheDocument();
+
+    const budget = uxBudgetDelta(document.body, "ClientPortalHistoryPage");
+    expect(budget.unexpected).toEqual([]);
+    expect(budget.stale).toEqual([]);
+  });
+
+  it("ClientPortalRequestsPage в UX-бюджете (BIZ-60)", async () => {
+    setupApi();
+    render(
+      <MemoryRouter>
+        <ClientPortalRequestsPage />
+      </MemoryRouter>,
+    );
+    expect(
+      await screen.findByText(/Нужна уточняющая справка/i),
+    ).toBeInTheDocument();
+
+    const budget = uxBudgetDelta(document.body, "ClientPortalRequestsPage");
+    expect(budget.unexpected).toEqual([]);
+    expect(budget.stale).toEqual([]);
+  });
+
+  it("PortalRequestsPage в UX-бюджете (BIZ-60)", async () => {
+    setupApi();
+    render(
+      <MemoryRouter>
+        <PortalRequestsPage />
+      </MemoryRouter>,
+    );
+    // Ждём KPI-карточку из данных мока: заголовок собирается из ключа ответа.
+    expect(await screen.findByText("Total Requests")).toBeInTheDocument();
+
+    const budget = uxBudgetDelta(document.body, "PortalRequestsPage");
+    expect(budget.unexpected).toEqual([]);
+    expect(budget.stale).toEqual([]);
   });
 });

@@ -5,11 +5,18 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import ApprovalsOutboxPage from "@/pages/approvals/ApprovalsOutboxPage";
 import CompaniesPage from "@/pages/companies/CompaniesPage";
 import FilesPage from "@/pages/files/FilesPage";
+import { uxBudgetDelta } from "@/test-utils/uxBudget";
 
 const apiGetMock = vi.fn();
 
 const companiesStoreState = vi.hoisted(() => ({
-  items: [] as Array<{ id: string; name: string }>,
+  items: [] as Array<{
+    id: string;
+    name: string;
+    inn?: string;
+    status?: string;
+    updated_at?: string;
+  }>,
   loading: false,
   error: null as { message: string } | null,
   list: vi.fn().mockResolvedValue(undefined),
@@ -95,6 +102,38 @@ describe("Companies/Files/Approvals operational states", () => {
     );
 
     expect(await screen.findByText(/компании не найдены/i)).toBeInTheDocument();
+  });
+
+  it("наполненный экран компаний в UX-бюджете (BIZ-60)", async () => {
+    companiesStoreState.items = [
+      {
+        id: "company-1",
+        name: "АО Ромашка",
+        inn: "7701234567",
+        status: "active",
+        updated_at: "2026-08-01T10:00:00Z",
+      },
+      {
+        id: "company-2",
+        name: "ООО Василёк",
+        inn: "7707654321",
+        status: "draft",
+        updated_at: "2026-08-02T10:00:00Z",
+      },
+    ];
+
+    render(
+      <MemoryRouter>
+        <CompaniesPage />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("АО Ромашка")).toBeInTheDocument();
+    expect(screen.getByText("ООО Василёк")).toBeInTheDocument();
+
+    const budget = uxBudgetDelta(document.body, "CompaniesPage");
+    expect(budget.unexpected).toEqual([]);
+    expect(budget.stale).toEqual([]);
   });
 
   it("shows files empty state", async () => {
