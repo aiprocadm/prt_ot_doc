@@ -15,7 +15,7 @@ from app.api.helpers.etag import (
     compute_list_etag,
 )
 from app.core.feature_flags import is_module_enabled, raise_for_disabled_module
-from app.core.security import AccessContext, abac
+from app.core.security import AccessContext, abac, rbac
 from app.db.session import rearm_session_tenant_context
 from app.domains.shared import ContingentItemStatus
 from app.models.models import Tenant
@@ -73,7 +73,10 @@ WriterAccess = Annotated[
 
 
 async def require_contractors_feature(
-    request: Request, tenant: TenantDep, session: SessionDep
+    request: Request,
+    tenant: TenantDep,
+    session: SessionDep,
+    _access: AccessContext = Depends(rbac(None)),
 ) -> None:
     # BIZ-61 разд. 61.2 «безопасное выключение»: отключённый (но выдававшийся)
     # модуль читается, мутации — 403 словами; никогда не выдававшийся — 404.
@@ -89,7 +92,12 @@ async def require_contractors_feature(
         )
 
 
-ContractorsFeatureGate = Depends(require_contractors_feature)
+# SEC-63/BIZ-61 (разд. 61.3): гейт — роутерная зависимость на КАЖДОМ роуте.
+# До этого гейт стоял точечно (documents/допуски), а реестр подрядчиков, их
+# работники, инциденты и сводка соответствия — 11 роутов, включая мутации —
+# были открыты арендатору БЕЗ выданного модуля: ровно «обход через прямой
+# API» из разд. 63.3. Аутентификация идёт раньше гейта (401 без токена).
+router.dependencies.append(Depends(require_contractors_feature))
 
 
 class ContractorRegistryCreate(BaseModel):
@@ -509,7 +517,6 @@ def _verdict_body(verdict) -> dict:
 
 @router.get(
     "/employees/{employee_id}/readiness",
-    dependencies=[ContractorsFeatureGate],
 )
 async def get_employee_readiness(
     employee_id: str,
@@ -526,7 +533,6 @@ async def get_employee_readiness(
 
 @router.get(
     "/employees/{employee_id}/document-checklist",
-    dependencies=[ContractorsFeatureGate],
 )
 async def get_employee_document_checklist(
     employee_id: str,
@@ -543,7 +549,6 @@ async def get_employee_document_checklist(
 
 @router.post(
     "/employees/{employee_id}/admit",
-    dependencies=[ContractorsFeatureGate],
 )
 async def admit_contractor_employee(
     employee_id: str,
@@ -651,7 +656,7 @@ async def _validate_employee_belongs(
         )
 
 
-@router.get("/documents", dependencies=[ContractorsFeatureGate])
+@router.get("/documents")
 async def list_contractor_documents(
     tenant: TenantDep,
     session: SessionDep,
@@ -686,7 +691,7 @@ async def list_contractor_documents(
 
 
 @router.post(
-    "/documents", status_code=status.HTTP_201_CREATED, dependencies=[ContractorsFeatureGate]
+    "/documents", status_code=status.HTTP_201_CREATED
 )
 async def create_contractor_document(
     payload: ContractorDocumentCreate,
@@ -709,7 +714,7 @@ async def create_contractor_document(
     return _document_body(row)
 
 
-@router.get("/documents/expiring", dependencies=[ContractorsFeatureGate])
+@router.get("/documents/expiring")
 async def list_expiring_contractor_documents(
     tenant: TenantDep,
     session: SessionDep,
@@ -742,7 +747,7 @@ async def list_expiring_contractor_documents(
     return {"items": flagged, "total": len(flagged)}
 
 
-@router.get("/documents/{document_id}", dependencies=[ContractorsFeatureGate])
+@router.get("/documents/{document_id}")
 async def get_contractor_document(
     document_id: str, tenant: TenantDep, session: SessionDep, access: ReaderAccess
 ) -> dict:
@@ -751,7 +756,7 @@ async def get_contractor_document(
     return _document_body(row)
 
 
-@router.patch("/documents/{document_id}", dependencies=[ContractorsFeatureGate])
+@router.patch("/documents/{document_id}")
 async def patch_contractor_document(
     document_id: str,
     payload: ContractorDocumentPatch,
@@ -775,7 +780,6 @@ async def patch_contractor_document(
     "/documents/{document_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     response_model=None,
-    dependencies=[ContractorsFeatureGate],
 )
 async def archive_contractor_document(
     document_id: str, tenant: TenantDep, session: SessionDep, access: WriterAccess
@@ -801,7 +805,7 @@ def _requirement_body(req: ContractorDocumentRequirement) -> dict:
     }
 
 
-@router.get("/document-requirements", dependencies=[ContractorsFeatureGate])
+@router.get("/document-requirements")
 async def list_document_requirements(
     tenant: TenantDep, session: SessionDep, access: ReaderAccess
 ) -> dict:
@@ -825,7 +829,6 @@ async def list_document_requirements(
 @router.post(
     "/document-requirements",
     status_code=status.HTTP_201_CREATED,
-    dependencies=[ContractorsFeatureGate],
 )
 async def create_document_requirement(
     payload: DocumentRequirementCreate,
@@ -865,7 +868,6 @@ async def create_document_requirement(
     "/document-requirements/{requirement_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     response_model=None,
-    dependencies=[ContractorsFeatureGate],
 )
 async def delete_document_requirement(
     requirement_id: str,

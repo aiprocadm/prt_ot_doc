@@ -98,6 +98,15 @@ class TestБезопасноеВыключение:
         response = await async_client.get(_LIST, headers=headers)
         assert response.status_code == 404
 
+        # SEC-63 срез (разд. 61.3): бывшие дыры «обход через прямой API»
+        # закрыты роутерными гейтами — без выдачи модуля невидимы и они.
+        exams = await async_client.get("/api/v1/medical/exams", headers=headers)
+        assert exams.status_code == 404, exams.text
+
+        await _drop_grant(sessionmaker, "test", "contractors")
+        registry = await async_client.get("/api/v1/contractors/registry", headers=headers)
+        assert registry.status_code == 404, registry.text
+
     async def test_отключённый_читается_а_мутация_объяснена_словами(
         self, async_client, make_auth_headers, sessionmaker, data_factory
     ) -> None:
