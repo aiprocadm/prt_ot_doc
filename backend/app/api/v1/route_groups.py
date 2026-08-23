@@ -80,6 +80,7 @@ from app.core.config import get_settings
 from app.modules.analytics.api import router as analytics_router
 from app.modules.branding.api import router as branding_router
 from app.modules.budget.api import router as budget_router
+from app.modules.fire_safety.api import router as fire_safety_router
 from app.modules.budget.reimbursement_api import router as budget_reimbursement_router
 from app.modules.client_portal.api import internal_router as portal_requests_router
 from app.modules.client_portal.api import router as client_portal_v1_router
@@ -221,6 +222,7 @@ DOCUMENT_CORE_ROUTER_REGISTRATIONS: tuple[RouterRegistration, ...] = (
     (imports_router, {"tags": ["imports"]}),
     (rules_engine_router, {"tags": ["rules-engine"]}),
     (budget_router, {"tags": ["budget"]}),
+    (fire_safety_router, {"tags": ["fire-safety"]}),
     (budget_reimbursement_router, {"tags": ["budget"]}),
     (privacy_router, {"tags": ["privacy"]}),
 )
