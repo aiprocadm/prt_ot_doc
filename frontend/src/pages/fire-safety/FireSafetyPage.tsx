@@ -53,6 +53,7 @@ const FireSafetyPage = () => {
         overdue_inspection: 0,
         due_soon: 0,
         due_soon_days: 30,
+        overdue_fire_briefings: 0,
       },
     },
     errorMessage: "Не удалось загрузить средства пожаротушения",
@@ -113,6 +114,12 @@ const FireSafetyPage = () => {
           {
             label: `Истекает за ${readiness.due_soon_days} дн.`,
             value: readiness.due_soon,
+          },
+          // Разд. 54.1 «контроль сроков»: просроченный противопожарный
+          // инструктаж — такое же нарушение, как непроверенный огнетушитель.
+          {
+            label: "Просроченных инструктажей ПБ",
+            value: readiness.overdue_fire_briefings,
           },
         ]}
       />

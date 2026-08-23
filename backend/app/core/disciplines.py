@@ -40,6 +40,10 @@ import enum
 
 __all__ = [
     "ATTENTION_SOURCES",
+    "BRIEFING_TYPES",
+    "BRIEFING_TYPE_DISCIPLINE",
+    "BRIEFING_TYPE_TITLES",
+    "discipline_of_briefing",
     "PERMIT_WORK_TYPE_DISCIPLINE",
     "UNMAPPED_PERMIT_WORK_TYPES",
     "discipline_of_permit",
@@ -102,9 +106,11 @@ SOURCE_DISCIPLINE: dict[str, Discipline] = {
     "medical_referral": Discipline.MEDICAL,
     "ppe_issue": Discipline.PPE,
     "training_session": Discipline.TRAINING,
-    # Инструктажи — часть обучения по охране труда: виды в системе закрытые
-    # (вводный, первичный, повторный, целевой, внеплановый), «пожарного» вида
-    # среди них нет. Появится — разметку пересмотреть.
+    # Инструктаж БОЛЬШЕ не размечается одной дисциплиной: с разд. 54.1 виды
+    # разделились — противопожарный инструктаж и ПТМ относятся к пожарной
+    # безопасности, остальные к обучению. Дисциплину конкретной записи даёт
+    # ``discipline_of_briefing(entry.briefing_type)``; значение здесь —
+    # умолчание для источников, у которых вида под рукой нет.
     "briefing_entry": Discipline.TRAINING,
 }
 
@@ -178,6 +184,59 @@ PERMIT_WORK_TYPE_DISCIPLINE: dict[str, Discipline] = {
 UNMAPPED_PERMIT_WORK_TYPES: str = (
     "общая охрана труда: отдельной дисциплины для неё в словаре нет"
 )
+
+
+#: Виды инструктажа — закрытый словарь (Доп. №1 разд. 54.1 называет пожарные
+#: виды поимённо: «вводный/первичный/повторный/внеплановый/целевой,
+#: пожарно-технический минимум»).
+#:
+#: **Зачем словарь вообще.** До этого ``briefing_type`` был свободной строкой:
+#: записать можно было что угодно, а значит нельзя было ни отличить
+#: противопожарный инструктаж от инструктажа по охране труда, ни посчитать по
+#: нему сроки — «контроль сроков» из 54.1 был невыполним по построению.
+BRIEFING_TYPE_DISCIPLINE: dict[str, Discipline] = {
+    # охрана труда (обучение)
+    "introductory": Discipline.TRAINING,
+    "primary": Discipline.TRAINING,
+    "repeat": Discipline.TRAINING,
+    "unscheduled": Discipline.TRAINING,
+    "targeted": Discipline.TRAINING,
+    # пожарная безопасность (разд. 54.1)
+    "fire_introductory": Discipline.FIRE_SAFETY,
+    "fire_primary": Discipline.FIRE_SAFETY,
+    "fire_repeat": Discipline.FIRE_SAFETY,
+    "fire_unscheduled": Discipline.FIRE_SAFETY,
+    "fire_targeted": Discipline.FIRE_SAFETY,
+    "fire_ptm": Discipline.FIRE_SAFETY,
+}
+
+#: Подписи видов — словами: они уходят в журналы и на экран.
+BRIEFING_TYPE_TITLES: dict[str, str] = {
+    "introductory": "Вводный",
+    "primary": "Первичный на рабочем месте",
+    "repeat": "Повторный",
+    "unscheduled": "Внеплановый",
+    "targeted": "Целевой",
+    "fire_introductory": "Противопожарный вводный",
+    "fire_primary": "Противопожарный первичный",
+    "fire_repeat": "Противопожарный повторный",
+    "fire_unscheduled": "Противопожарный внеплановый",
+    "fire_targeted": "Противопожарный целевой",
+    "fire_ptm": "Пожарно-технический минимум (ПТМ)",
+}
+
+BRIEFING_TYPES: tuple[str, ...] = tuple(BRIEFING_TYPE_DISCIPLINE)
+
+
+def discipline_of_briefing(briefing_type: str) -> Discipline | None:
+    """Дисциплина инструктажа по его виду или ``None`` — вид неизвестен.
+
+    ``None`` здесь — не «общая охрана труда», а «такого вида в словаре нет»:
+    выдумывать дисциплину для незнакомой строки значило бы приписать записи
+    принадлежность, которой в данных нет.
+    """
+
+    return BRIEFING_TYPE_DISCIPLINE.get(briefing_type)
 
 
 def discipline_of_permit(work_type: str) -> Discipline | None:

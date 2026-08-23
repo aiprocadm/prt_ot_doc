@@ -5162,7 +5162,8 @@
       "overdue_recharge": "integer",
       "overdue_inspection": "integer",
       "due_soon": "integer",
-      "due_soon_days": "integer"
+      "due_soon_days": "integer",
+      "overdue_fire_briefings": "integer"
     },
     "FleetUsageReport": {
       "period": "string",
