@@ -83,7 +83,9 @@ async def test_briefing_overdue_notifications_enqueue_task_overdue(db_session) -
     overdue = BriefingEntry(
         tenant_id=tenant_id,
         briefing_journal_id=journal.id,
-        briefing_type="periodic",
+        # Разд. 54.1: вид из закрытого словаря; "periodic" в нём нет — это
+        # и была дыра свободной строки, которую закрыл словарь.
+        briefing_type="repeat",
         briefing_date=datetime.now(timezone.utc) - timedelta(days=90),
         valid_until=datetime.now(timezone.utc) - timedelta(days=1),
         person_id="person-1",

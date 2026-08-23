@@ -42,6 +42,8 @@ export type FireReadinessDto = {
   overdue_inspection: number;
   due_soon: number;
   due_soon_days: number;
+  /** Разд. 54.1 «контроль сроков»: просроченные противопожарные инструктажи. */
+  overdue_fire_briefings: number;
 };
 
 export const fireSafetyApi = {

@@ -54,6 +54,7 @@ const populatedReadiness = {
   overdue_inspection: 0,
   due_soon: 1,
   due_soon_days: 30,
+  overdue_fire_briefings: 2,
 };
 
 /** Наполненный снимок: статистика шапки и реестр площадок на экране. */
@@ -128,6 +129,10 @@ describe("FireSafetyPage", () => {
     // таблицы, куда надо долистать.
     expect(await screen.findByText(/просрочено сроков/i)).toBeInTheDocument();
     expect(screen.getByText(/истекает за 30 дн\./i)).toBeInTheDocument();
+    // Разд. 54.1: контроль сроков инструктажей ПБ — в той же сводке.
+    expect(
+      screen.getByText(/просроченных инструктажей пб/i),
+    ).toBeInTheDocument();
   });
 
   it("реестр средств открывается второй секцией и называет просроченный срок", async () => {

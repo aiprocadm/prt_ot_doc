@@ -29,6 +29,7 @@ from app.modules.briefings.services import (
     BriefingSignatureConflict,
     NoPendingCodeRequest,
 )
+from app.core.disciplines import BRIEFING_TYPES
 from app.modules.rbac_abac import require_permission
 from app.services.audit import AuditService
 from app.services.pep_signing import PepConflict
@@ -41,6 +42,31 @@ router = APIRouter(prefix="/briefings", tags=["briefings"], dependencies=[Depend
 _PermReadDep = Depends(require_permission(_BRIEFINGS_READ_PERMISSION))
 _PermWriteDep = Depends(require_permission(_BRIEFINGS_WRITE_PERMISSION))
 _PermCreateDep = Depends(require_permission(_BRIEFINGS_CREATE_PERMISSION))
+
+
+def _validated_briefing_type(value: str) -> str:
+    """Вид инструктажа — из закрытого словаря (Доп. №1 разд. 54.1).
+
+    До этого поле было свободной строкой: записать можно было что угодно, и
+    отличить противопожарный инструктаж от инструктажа по охране труда —
+    а значит и посчитать по нему сроки — было нечем. Валидация стоит на
+    ЗАПИСИ: существующие записи с прежними значениями читаются как прежде,
+    новая запись обязана назвать вид из словаря.
+    """
+
+    if value not in BRIEFING_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=api_problem_detail(
+                code="BRIEFING_TYPE_UNKNOWN",
+                message=(
+                    f"Неизвестный вид инструктажа {value!r}; допустимые: "
+                    + ", ".join(BRIEFING_TYPES)
+                ),
+                error_type="briefings",
+            ),
+        )
+    return value
 
 
 class BriefingTemplatePayload(BaseModel):
@@ -234,6 +260,7 @@ async def create_template(
     session: AsyncSession = Depends(get_session),
     __: Any = _PermCreateDep,
 ):
+    _validated_briefing_type(payload.briefing_type)
     item = BriefingTemplate(tenant_id=tenant.id, **payload.model_dump())
     session.add(item)
     await session.flush()
@@ -378,6 +405,7 @@ async def create_entry(
     session: AsyncSession = Depends(get_session),
     __: Any = _PermCreateDep,
 ):
+    _validated_briefing_type(payload.briefing_type)
     item = BriefingEntry(tenant_id=tenant.id, **payload.model_dump())
     session.add(item)
     await session.flush()

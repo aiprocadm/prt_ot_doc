@@ -27,6 +27,8 @@ from app.core.errors import api_problem_detail
 from app.core.feature_flags import is_module_enabled, raise_for_disabled_module
 from app.core.security import AccessContext, abac, rbac
 from app.core.tenant_validation import TenantContextValidator
+from app.core.disciplines import BRIEFING_TYPE_DISCIPLINE, Discipline
+from app.models.briefings import BriefingEntry
 from app.models.fire_safety import FIRE_EQUIPMENT_KINDS, FireSafetyEquipment
 from app.models.master_data import Site
 from app.models.models import Tenant
@@ -283,10 +285,32 @@ async def fire_readiness(
         if (r.recharge_due is not None and today <= r.recharge_due <= soon)
         or (r.inspection_due is not None and today <= r.inspection_due <= soon)
     )
+    # Разд. 54.1 «контроль сроков»: просроченный противопожарный инструктаж —
+    # такое же нарушение к приходу МЧС, как непроверенный огнетушитель.
+    fire_types = [
+        code
+        for code, discipline in BRIEFING_TYPE_DISCIPLINE.items()
+        if discipline is Discipline.FIRE_SAFETY
+    ]
+    overdue_briefings = int(
+        await session.scalar(
+            select(func.count())
+            .select_from(BriefingEntry)
+            .where(
+                BriefingEntry.tenant_id == tenant.id,
+                BriefingEntry.briefing_type.in_(fire_types),
+                BriefingEntry.valid_until.is_not(None),
+                BriefingEntry.valid_until < func.now(),
+            )
+        )
+        or 0
+    )
+
     return FireReadinessRead(
         total_units=len(rows),
         overdue_recharge=overdue_recharge,
         overdue_inspection=overdue_inspection,
         due_soon=due_soon,
         due_soon_days=_DUE_SOON_DAYS,
+        overdue_fire_briefings=overdue_briefings,
     )
