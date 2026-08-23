@@ -35,6 +35,10 @@ MODULE_ROUTER_FILES: dict[str, tuple[str | None, tuple[str, ...]]] = {
     "backend/app/api/routes/medical/catalog.py": ("_common", ()),
     "backend/app/api/routes/medical/contingent.py": ("_common", ()),
     "backend/app/api/routes/medical/psychiatric.py": ("_common", ()),
+    "backend/app/modules/fire_safety/api.py": (
+        "router.dependencies.append(Depends(_require_fire_safety))",
+        (),
+    ),
     "backend/app/api/routes/contractors.py": (
         "router.dependencies.append(Depends(require_contractors_feature))",
         (),

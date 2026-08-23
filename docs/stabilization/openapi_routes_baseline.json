@@ -217,6 +217,8 @@
     "GET /api/v1/files/{file_id}/versions",
     "GET /api/v1/files/{file_id}/versions/{version_id}:download-url",
     "GET /api/v1/findings",
+    "GET /api/v1/fire-safety/equipment",
+    "GET /api/v1/fire-safety/readiness",
     "GET /api/v1/imports/batches",
     "GET /api/v1/imports/batches/{batch_id}",
     "GET /api/v1/imports/batches/{batch_id}/report",
@@ -554,6 +556,7 @@
     "PATCH /api/v1/departments/{department_id}",
     "PATCH /api/v1/documents/{document_id}/status",
     "PATCH /api/v1/findings/{finding_id}",
+    "PATCH /api/v1/fire-safety/equipment/{unit_id}",
     "PATCH /api/v1/incidents/{incident_id}",
     "PATCH /api/v1/inspections/{inspection_id}",
     "PATCH /api/v1/invoices/{invoice_id}",
@@ -736,6 +739,7 @@
     "POST /api/v1/findings",
     "POST /api/v1/findings/{finding_id}/resolve",
     "POST /api/v1/findings/{finding_id}/verify",
+    "POST /api/v1/fire-safety/equipment",
     "POST /api/v1/imports/batches/{batch_id}/quality-check",
     "POST /api/v1/imports/batches/{batch_id}/rollback",
     "POST /api/v1/imports/{target_code}/apply",
@@ -1145,6 +1149,7 @@
     "create_enrollment_api_v1_training_enrollments_post",
     "create_entry_api_v1_briefings_entries_post",
     "create_entry_api_v1_journals__journal_id__entries_post",
+    "create_equipment_api_v1_fire_safety_equipment_post",
     "create_expense_api_v1_budget_expenses_post",
     "create_export_api_v1_audit_exports_post",
     "create_export_api_v1_exports_post",
@@ -1361,6 +1366,7 @@
     "files_upload_init",
     "files_upload_multipart",
     "files_version_download_url",
+    "fire_readiness_api_v1_fire_safety_readiness_get",
     "frdo_webhook_api_v1_external_registry_webhooks_frdo_post",
     "generate_document_api_v1_documents_documents_generate_post",
     "generate_document_api_v1_documents_generate_post",
@@ -1581,6 +1587,7 @@
     "list_enrollments_api_v1_training_enrollments_get",
     "list_entries_api_v1_briefings_entries_get",
     "list_entries_api_v1_journals__journal_id__entries_get",
+    "list_equipment_api_v1_fire_safety_equipment_get",
     "list_event_types_api_v1_rules_event_types_get",
     "list_events_api_v1_calendar_events_get",
     "list_expenses_api_v1_budget_expenses_get",
@@ -1948,6 +1955,7 @@
     "update_document_status_api_v1_documents__document_id__status_patch",
     "update_enrollment_progress_api_v1_training_enrollments__item_id__progress_post",
     "update_entry_api_v1_journals_entries__entry_id__patch",
+    "update_equipment_api_v1_fire_safety_equipment__unit_id__patch",
     "update_expense_api_v1_budget_expenses__expense_id__patch",
     "update_factor_api_v1_sout_factors__fid__patch",
     "update_inventory_count_lines_api_v1_ppe_stock_inventory_counts__count_id__lines_patch",
@@ -2309,6 +2317,11 @@
     "FinalizeUploadResponse",
     "FindingIn",
     "FindingUpdate",
+    "FireEquipmentCreate",
+    "FireEquipmentPage",
+    "FireEquipmentRead",
+    "FireEquipmentUpdate",
+    "FireReadinessRead",
     "FleetUsageReport",
     "GapRecalcIn",
     "GenerateDataPayload",
@@ -4001,6 +4014,7 @@
     },
     "CompanyCreate": {
       "name": "string",
+      "parent_company_id": "null|string",
       "inn": "null|string",
       "kpp": "null|string",
       "ogrn": "null|string",
@@ -4035,6 +4049,7 @@
     "CompanyRead": {
       "id": "string",
       "name": "string",
+      "parent_company_id": "null|string",
       "inn": "null|string",
       "kpp": "null|string",
       "ogrn": "null|string",
@@ -4064,6 +4079,7 @@
     },
     "CompanyUpdate": {
       "name": "null|string",
+      "parent_company_id": "null|string",
       "inn": "null|string",
       "kpp": "null|string",
       "ogrn": "null|string",
@@ -5108,6 +5124,45 @@
       "due_date": "null|string",
       "description": "null|string",
       "severity": "null|string"
+    },
+    "FireEquipmentCreate": {
+      "kind": "string",
+      "label": "string",
+      "site_id": "null|string",
+      "location": "null|string",
+      "recharge_due": "null|string",
+      "inspection_due": "null|string",
+      "status": "string"
+    },
+    "FireEquipmentPage": {
+      "items": "array",
+      "total": "integer"
+    },
+    "FireEquipmentRead": {
+      "id": "string",
+      "kind": "string",
+      "label": "string",
+      "site_id": "null|string",
+      "location": "null|string",
+      "recharge_due": "null|string",
+      "inspection_due": "null|string",
+      "status": "string"
+    },
+    "FireEquipmentUpdate": {
+      "kind": "null|string",
+      "label": "null|string",
+      "site_id": "null|string",
+      "location": "null|string",
+      "recharge_due": "null|string",
+      "inspection_due": "null|string",
+      "status": "null|string"
+    },
+    "FireReadinessRead": {
+      "total_units": "integer",
+      "overdue_recharge": "integer",
+      "overdue_inspection": "integer",
+      "due_soon": "integer",
+      "due_soon_days": "integer"
     },
     "FleetUsageReport": {
       "period": "string",

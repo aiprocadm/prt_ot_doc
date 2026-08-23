@@ -60,6 +60,9 @@ from app.models.audit_log import (
 # importable from app.models.models; canonical home is app.models.base.
 from app.models.base import SharedModel, TenantBaseModel
 
+# Разд. 54.1: предметные модели контура ПБ.
+from app.models.fire_safety import FireSafetyEquipment  # noqa: E402,F401
+
 # ARCH-2: re-export briefings-domain models moved to app.models.briefings.
 from app.models.briefings import (
     BriefingEntry,
