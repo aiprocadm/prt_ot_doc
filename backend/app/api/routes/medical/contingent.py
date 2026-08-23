@@ -10,7 +10,6 @@ from sqlalchemy import select
 
 from app.api.routes.medical._common import (
     MedicalAccess,
-    MedicalFeatureGate,
     MedicalReadAccess,
     SessionDep,
     TenantDep,
@@ -58,7 +57,6 @@ def _mapping_read(hazard: RiskHazard, factor_name: str | None) -> HazardFactorMa
 @router.get(
     "/medical/hazard-factors",
     response_model=HazardFactorMappingPage,
-    dependencies=[MedicalFeatureGate],
 )
 async def list_hazard_factor_mappings(
     tenant: TenantDep,
@@ -102,7 +100,6 @@ async def list_hazard_factor_mappings(
 @router.put(
     "/medical/hazards/{hazard_id}/factor",
     response_model=HazardFactorMappingRead,
-    dependencies=[MedicalFeatureGate],
 )
 async def set_hazard_factor(
     request: Request,
@@ -158,7 +155,6 @@ async def set_hazard_factor(
 @router.get(
     "/medical/contingent/register",
     response_model=ContingentRegisterPage,
-    dependencies=[MedicalFeatureGate],
 )
 async def get_contingent_register(
     tenant: TenantDep,
@@ -175,7 +171,7 @@ async def get_contingent_register(
     )
 
 
-@router.get("/medical/named-list", response_model=NamedListPage, dependencies=[MedicalFeatureGate])
+@router.get("/medical/named-list", response_model=NamedListPage)
 async def get_named_list(
     tenant: TenantDep,
     session: SessionDep,
@@ -188,7 +184,7 @@ async def get_named_list(
     return NamedListPage(items=[NamedListRow(**r) for r in rows], total=len(rows))
 
 
-@router.get("/medical/contingent/register/print", dependencies=[MedicalFeatureGate])
+@router.get("/medical/contingent/register/print")
 async def print_contingent_register(
     tenant: TenantDep,
     session: SessionDep,
@@ -200,7 +196,7 @@ async def print_contingent_register(
     return await _render_to_response(render_contingent_register(session, tenant=tenant, fmt=fmt))
 
 
-@router.get("/medical/named-list/print", dependencies=[MedicalFeatureGate])
+@router.get("/medical/named-list/print")
 async def print_named_list(
     tenant: TenantDep,
     session: SessionDep,
@@ -217,7 +213,7 @@ async def print_named_list(
 # ---------------------------------------------------------------------------
 
 
-@router.get("/medical/contingent", response_model=ContingentPage, dependencies=[MedicalFeatureGate])
+@router.get("/medical/contingent", response_model=ContingentPage)
 async def get_medical_contingent(
     tenant: TenantDep,
     session: SessionDep,
@@ -242,7 +238,7 @@ async def get_medical_contingent(
     )
 
 
-@router.post("/medical/contingent/generate-referrals", dependencies=[MedicalFeatureGate])
+@router.post("/medical/contingent/generate-referrals")
 async def generate_referrals(
     request: Request,
     tenant: TenantDep,
@@ -274,7 +270,7 @@ async def generate_referrals(
     return {"count": count}
 
 
-@router.get("/medical/summary", response_model=MedicalSummary, dependencies=[MedicalFeatureGate])
+@router.get("/medical/summary", response_model=MedicalSummary)
 async def get_medical_summary(
     tenant: TenantDep,
     session: SessionDep,

@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.feature_flags import is_module_enabled, raise_for_disabled_module
-from app.core.security import AccessContext, abac
+from app.core.security import AccessContext, abac, rbac
 from app.domains.medical import lifecycle as lc
 from app.models.models import (
     MedicalFactor,
@@ -59,7 +59,10 @@ _MEDICAL_FEATURE_CODE = "medical"
 
 
 async def require_medical_feature(
-    request: Request, tenant: TenantDep, session: SessionDep
+    request: Request,
+    tenant: TenantDep,
+    session: SessionDep,
+    _access: AccessContext = Depends(rbac(None)),
 ) -> None:
     # BIZ-61 разд. 61.2 «безопасное выключение»: отключённый (но выдававшийся)
     # модуль читается, мутации — 403 словами; никогда не выдававшийся — 404.
@@ -75,7 +78,12 @@ async def require_medical_feature(
         )
 
 
-MedicalFeatureGate = Depends(require_medical_feature)
+# SEC-63/BIZ-61 (разд. 61.3): гейт — роутерная зависимость на КАЖДОМ роуте
+# медицины (exams/catalog/contingent/psychiatric висят на этом общем router).
+# До этого гейт стоял per-route и его дважды забыли: GET /medical/exams
+# (список осмотров был виден без выданного модуля) и POST /medical/requirements
+# (мутация!). Аутентификация идёт раньше гейта (401 без токена).
+router.dependencies.append(Depends(require_medical_feature))
 
 
 def _error(code: str, message: str) -> dict[str, str]:

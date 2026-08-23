@@ -16,7 +16,6 @@ from app.api.helpers.etag import (
 )
 from app.api.routes.medical._common import (
     MedicalAccess,
-    MedicalFeatureGate,
     MedicalReadAccess,
     SessionDep,
     TenantDep,
@@ -175,7 +174,6 @@ async def create_medical_requirement(
     "/medical/exams",
     response_model=MedicalExamRead,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[MedicalFeatureGate],
 )
 async def create_medical_exam(
     payload: MedicalExamCreate,
@@ -214,7 +212,7 @@ async def create_medical_exam(
 
 
 @router.get(
-    "/medical/exams/{exam_id}", response_model=MedicalExamRead, dependencies=[MedicalFeatureGate]
+    "/medical/exams/{exam_id}", response_model=MedicalExamRead
 )
 async def get_medical_exam(
     exam_id: str,
@@ -242,7 +240,7 @@ async def get_medical_exam(
 
 
 @router.patch(
-    "/medical/exams/{exam_id}", response_model=MedicalExamRead, dependencies=[MedicalFeatureGate]
+    "/medical/exams/{exam_id}", response_model=MedicalExamRead
 )
 async def update_medical_exam(
     exam_id: str,
@@ -272,7 +270,7 @@ async def update_medical_exam(
 
 
 @router.get(
-    "/medical/suspensions", response_model=MedicalSuspensionPage, dependencies=[MedicalFeatureGate]
+    "/medical/suspensions", response_model=MedicalSuspensionPage
 )
 async def list_suspensions(
     request: Request,
@@ -321,7 +319,6 @@ async def list_suspensions(
 @router.post(
     "/medical/suspensions/{suspension_id}/lift",
     response_model=MedicalSuspensionRead,
-    dependencies=[MedicalFeatureGate],
 )
 async def lift_suspension(
     request: Request,

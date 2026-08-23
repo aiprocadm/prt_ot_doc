@@ -8,7 +8,6 @@ from sqlalchemy import delete, func, select
 
 from app.api.routes.medical._common import (
     MedicalAccess,
-    MedicalFeatureGate,
     MedicalReadAccess,
     SessionDep,
     TenantDep,
@@ -46,7 +45,6 @@ def _audit_ip(request: Request) -> str:
 @router.get(
     "/medical/psychiatric/activity-types",
     response_model=PsychiatricActivityTypePage,
-    dependencies=[MedicalFeatureGate],
 )
 async def list_activity_types(
     tenant: TenantDep,
@@ -78,7 +76,6 @@ async def list_activity_types(
     "/medical/psychiatric/activity-types",
     response_model=PsychiatricActivityTypeRead,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[MedicalFeatureGate],
 )
 async def create_activity_type(
     request: Request,
@@ -125,7 +122,6 @@ async def create_activity_type(
 
 @router.post(
     "/medical/psychiatric/activity-types/seed-defaults",
-    dependencies=[MedicalFeatureGate],
 )
 async def seed_activity_type_defaults(
     request: Request,
@@ -154,7 +150,6 @@ async def seed_activity_type_defaults(
 @router.get(
     "/medical/psychiatric/activity-types/{activity_id}",
     response_model=PsychiatricActivityTypeRead,
-    dependencies=[MedicalFeatureGate],
 )
 async def get_activity_type(
     activity_id: str,
@@ -172,7 +167,6 @@ async def get_activity_type(
 @router.patch(
     "/medical/psychiatric/activity-types/{activity_id}",
     response_model=PsychiatricActivityTypeRead,
-    dependencies=[MedicalFeatureGate],
 )
 async def update_activity_type(
     request: Request,
@@ -208,7 +202,6 @@ async def update_activity_type(
 @router.delete(
     "/medical/psychiatric/activity-types/{activity_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    dependencies=[MedicalFeatureGate],
 )
 async def delete_activity_type(
     request: Request,
@@ -253,7 +246,6 @@ async def _position_codes(session, tenant_id: str, position_id: str) -> list[str
 @router.get(
     "/medical/psychiatric/position-activities",
     response_model=PositionActivitiesPage,
-    dependencies=[MedicalFeatureGate],
 )
 async def list_position_activities(
     tenant: TenantDep,
@@ -283,7 +275,6 @@ async def list_position_activities(
 @router.put(
     "/medical/psychiatric/positions/{position_id}/activities",
     response_model=PositionActivitiesRead,
-    dependencies=[MedicalFeatureGate],
 )
 async def set_position_activities(
     request: Request,

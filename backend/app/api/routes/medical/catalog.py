@@ -15,7 +15,6 @@ from app.api.helpers.etag import (
 )
 from app.api.routes.medical._common import (
     MedicalAccess,
-    MedicalFeatureGate,
     MedicalReadAccess,
     SessionDep,
     TenantDep,
@@ -57,7 +56,7 @@ from app.services.audit import AuditService
 from app.services.medical_print import render_referral
 
 
-@router.get("/medical/norms", response_model=MedicalNormPage, dependencies=[MedicalFeatureGate])
+@router.get("/medical/norms", response_model=MedicalNormPage)
 async def list_medical_norms(
     request: Request,
     response: Response,
@@ -103,7 +102,6 @@ async def list_medical_norms(
     "/medical/norms",
     response_model=MedicalNormRead,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[MedicalFeatureGate],
 )
 async def create_medical_norm(
     request: Request,
@@ -137,7 +135,7 @@ async def create_medical_norm(
 
 
 @router.get(
-    "/medical/norms/{norm_id}", response_model=MedicalNormRead, dependencies=[MedicalFeatureGate]
+    "/medical/norms/{norm_id}", response_model=MedicalNormRead
 )
 async def get_medical_norm(
     norm_id: str,
@@ -152,7 +150,7 @@ async def get_medical_norm(
 
 
 @router.patch(
-    "/medical/norms/{norm_id}", response_model=MedicalNormRead, dependencies=[MedicalFeatureGate]
+    "/medical/norms/{norm_id}", response_model=MedicalNormRead
 )
 async def update_medical_norm(
     request: Request,
@@ -189,7 +187,6 @@ async def update_medical_norm(
 @router.delete(
     "/medical/norms/{norm_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    dependencies=[MedicalFeatureGate],
 )
 async def delete_medical_norm(
     request: Request,
@@ -223,7 +220,7 @@ async def delete_medical_norm(
 
 
 @router.get(
-    "/medical/referrals", response_model=MedicalReferralPage, dependencies=[MedicalFeatureGate]
+    "/medical/referrals", response_model=MedicalReferralPage
 )
 async def list_medical_referrals(
     request: Request,
@@ -278,7 +275,6 @@ async def list_medical_referrals(
     "/medical/referrals",
     response_model=MedicalReferralRead,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[MedicalFeatureGate],
 )
 async def create_medical_referral(
     request: Request,
@@ -335,7 +331,6 @@ async def create_medical_referral(
 @router.get(
     "/medical/referrals/{referral_id}",
     response_model=MedicalReferralRead,
-    dependencies=[MedicalFeatureGate],
 )
 async def get_medical_referral(
     referral_id: str,
@@ -349,7 +344,7 @@ async def get_medical_referral(
     return _to_referral_read(record, today=datetime.now(timezone.utc).date())
 
 
-@router.get("/medical/referrals/{referral_id}/print", dependencies=[MedicalFeatureGate])
+@router.get("/medical/referrals/{referral_id}/print")
 async def print_medical_referral(
     referral_id: str,
     tenant: TenantDep,
@@ -368,7 +363,6 @@ async def print_medical_referral(
 @router.post(
     "/medical/referrals/{referral_id}/transition",
     response_model=MedicalReferralRead,
-    dependencies=[MedicalFeatureGate],
 )
 async def transition_referral(
     request: Request,
@@ -449,7 +443,7 @@ async def transition_referral(
 # ---------------------------------------------------------------------------
 
 
-@router.get("/medical/factors", response_model=MedicalFactorPage, dependencies=[MedicalFeatureGate])
+@router.get("/medical/factors", response_model=MedicalFactorPage)
 async def list_medical_factors(
     tenant: TenantDep,
     session: SessionDep,
@@ -479,7 +473,6 @@ async def list_medical_factors(
     "/medical/factors",
     response_model=MedicalFactorRead,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[MedicalFeatureGate],
 )
 async def create_medical_factor(
     request: Request,
@@ -530,7 +523,6 @@ async def create_medical_factor(
 @router.get(
     "/medical/factors/{factor_id}",
     response_model=MedicalFactorRead,
-    dependencies=[MedicalFeatureGate],
 )
 async def get_medical_factor(
     factor_id: str,
@@ -546,7 +538,6 @@ async def get_medical_factor(
 @router.patch(
     "/medical/factors/{factor_id}",
     response_model=MedicalFactorRead,
-    dependencies=[MedicalFeatureGate],
 )
 async def update_medical_factor(
     request: Request,
@@ -586,7 +577,6 @@ async def update_medical_factor(
 @router.delete(
     "/medical/factors/{factor_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    dependencies=[MedicalFeatureGate],
 )
 async def delete_medical_factor(
     request: Request,
