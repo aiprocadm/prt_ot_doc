@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from sqlalchemy import Date, ForeignKey, Index, String
+from sqlalchemy import Date, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import SoftDeleteMixin, TenantBaseModel
@@ -56,4 +56,60 @@ class FireSafetyEquipment(TenantBaseModel, SoftDeleteMixin):
 
     __table_args__ = (
         Index("ix_fire_equipment_tenant_kind", "tenant_id", "kind"),
+    )
+
+
+#: Виды тренировок и учений (Доп. №1 разд. 54.1 «Тренировки и учения»).
+#: ЗАКРЫТЫЙ словарь по тому же доводу, что у видов инструктажа (срез-3):
+#: свободная строка («эвакуация», «Эвакуация», «evac») делает требуемый
+#: «анализ» невозможным — считать было бы нечего.
+FIRE_DRILL_KINDS: dict[str, str] = {
+    "evacuation": "Тренировка по эвакуации",
+    "fire_fighting": "Тренировка по применению первичных средств пожаротушения",
+    "joint": "Совместное учение с подразделениями пожарной охраны",
+}
+
+#: Результат проведённой тренировки — тоже закрытый словарь: «анализ» это
+#: сравнимая оценка, а не пересказ своими словами (пересказ живёт в findings).
+FIRE_DRILL_OUTCOMES: dict[str, str] = {
+    "passed": "Проведена, задачи выполнены",
+    "with_remarks": "Проведена с замечаниями",
+    "failed": "Задачи не выполнены",
+}
+
+
+class FireDrill(TenantBaseModel, SoftDeleteMixin):
+    """Тренировка/учение по ПБ: план-график, протокол проведения, анализ.
+
+    До этой таблицы дисциплина умела ВЫПУСТИТЬ программу тренировки документом
+    (комплект ПБ, «Программа практической тренировки по эвакуации»), но не
+    умела её УЧЕСТЬ: вопрос «когда была последняя и не просрочена ли
+    запланированная» не имел ответа в данных.
+    """
+
+    __tablename__ = "fire_drill"
+
+    site_id: Mapped[str | None] = mapped_column(
+        ForeignKey("site.id"), nullable=True, index=True
+    )
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    #: план-график: дата, на которую тренировка назначена (обязательна —
+    #: тренировка рождается ЗАПЛАНИРОВАННОЙ, иначе плана-графика нет)
+    planned_on: Mapped[date] = mapped_column(Date, nullable=False)
+    #: протокол: дата фактического проведения; NULL — ещё не проводилась
+    held_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    #: вводная обстановка по сценарию
+    scenario: Mapped[str | None] = mapped_column(Text)
+    #: число участников (для протокола)
+    participants: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    #: оценка из FIRE_DRILL_OUTCOMES; заполняется вместе с held_on
+    outcome: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    #: анализ: замечания, время эвакуации, выводы и меры
+    findings: Mapped[str | None] = mapped_column(Text)
+
+    site: Mapped[Site | None] = relationship(backref="fire_drills")
+
+    __table_args__ = (
+        Index("ix_fire_drill_tenant_planned", "tenant_id", "planned_on"),
     )

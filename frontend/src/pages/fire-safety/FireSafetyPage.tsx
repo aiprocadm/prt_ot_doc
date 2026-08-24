@@ -54,6 +54,12 @@ const FireSafetyPage = () => {
         due_soon: 0,
         due_soon_days: 30,
         overdue_fire_briefings: 0,
+        // Тренировки живут на своём экране (/fire-training); здесь они только
+        // часть той же сводки готовности, поэтому в заглушке нули.
+        overdue_drills: 0,
+        planned_drills: 0,
+        last_drill_on: null,
+        days_since_last_drill: null,
       },
     },
     errorMessage: "Не удалось загрузить средства пожаротушения",
@@ -144,7 +150,10 @@ const FireSafetyPage = () => {
 
       {section === "sites" ? (
         <>
-          <ErrorState error={error ?? undefined} onRetry={() => void reload()} />
+          <ErrorState
+            error={error ?? undefined}
+            onRetry={() => void reload()}
+          />
           {loading ? <LoadingScreen label="Загрузка объектов защиты" /> : null}
           {!loading && !error && registry.total === 0 ? (
             <EmptyState

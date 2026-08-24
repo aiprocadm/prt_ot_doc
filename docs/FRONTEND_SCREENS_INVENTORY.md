@@ -146,7 +146,7 @@ This document provides a comprehensive inventory of all **MVP frontend screens**
 | Route | Component | File | Permission | Status | Notes |
 |-------|-----------|------|-----------|--------|-------|
 | `/fire-safety` | FireSafetyPage | `pages/fire-safety/FireSafetyPage.tsx` | FIRE_SAFETY_VIEW | ✅ | Fire safety measures |
-| `/fire-training` | FireTrainingPage | `pages/fire-training/FireTrainingPage.tsx` | FIRE_TRAINING_VIEW | ✅ | Fire safety training |
+| `/fire-training` | FireTrainingPage | `pages/fire-training/FireTrainingPage.tsx` | FIRE_TRAINING_VIEW | ✅ | Тренировки и учения ПБ (план-график, протоколы) + инструктажи |
 | `/fire-inspections` | FireInspectionsPage | `pages/fire-inspections/FireInspectionsPage.tsx` | FIRE_INSPECTIONS_VIEW | ✅ | Fire inspection records |
 | `/medical` | MedicalPage | `pages/medical/MedicalPage.tsx` | MEDICAL_VIEW | ✅ | Medical examinations |
 

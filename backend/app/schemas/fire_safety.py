@@ -45,6 +45,54 @@ class FireEquipmentPage(BaseSchema):
     total: int
 
 
+class FireDrillCreate(BaseSchema):
+    kind: str = Field(min_length=1, max_length=32)
+    title: str = Field(min_length=1, max_length=255)
+    planned_on: date
+    site_id: str | None = Field(default=None, min_length=1, max_length=36)
+    scenario: str | None = None
+    held_on: date | None = None
+    participants: int | None = Field(default=None, ge=0, le=100000)
+    outcome: str | None = Field(default=None, max_length=32)
+    findings: str | None = None
+
+
+class FireDrillUpdate(BaseSchema):
+    kind: str | None = Field(default=None, min_length=1, max_length=32)
+    title: str | None = Field(default=None, min_length=1, max_length=255)
+    planned_on: date | None = None
+    site_id: str | None = Field(default=None, max_length=36)
+    scenario: str | None = None
+    held_on: date | None = None
+    participants: int | None = Field(default=None, ge=0, le=100000)
+    outcome: str | None = Field(default=None, max_length=32)
+    findings: str | None = None
+
+
+class FireDrillRead(BaseSchema):
+    id: str
+    kind: str
+    #: вид словами — экран не должен переводить коды сам (прецедент среза-3)
+    kind_label: str
+    title: str
+    planned_on: date
+    held_on: date | None = None
+    site_id: str | None = None
+    scenario: str | None = None
+    participants: int | None = None
+    outcome: str | None = None
+    outcome_label: str | None = None
+    findings: str | None = None
+    #: planned / held / overdue — считается ПРИ ЧТЕНИИ, полем не хранится
+    #: (хранимый статус разъезжается с календарём в первый же день)
+    status: str
+
+
+class FireDrillPage(BaseSchema):
+    items: list[FireDrillRead]
+    total: int
+
+
 class FireReadinessRead(BaseSchema):
     """Готовность к проверке МЧС: сроки, которые уже горят или скоро сгорят."""
 
@@ -57,3 +105,15 @@ class FireReadinessRead(BaseSchema):
     #: разд. 54.1 «контроль сроков»: просроченные ПРОТИВОПОЖАРНЫЕ инструктажи
     #: (виды fire_* и ПТМ) — вторая половина готовности к проверке МЧС
     overdue_fire_briefings: int
+    #: разд. 54.1 «Тренировки и учения»: план прошёл, факта нет
+    overdue_drills: int = 0
+    #: назначенные вперёд — не просрочка, но показывать надо (иначе пустой
+    #: план-график и заполненный выглядят на экране одинаково)
+    planned_drills: int = 0
+    #: дата последней ПРОВЕДЁННОЙ тренировки; None — не проводилась ни разу
+    last_drill_on: date | None = None
+    #: сколько дней прошло с последней тренировки. ГРАНИЦА: интервал «не реже
+    #: раза в полгода» (ППР РФ) сводка НЕ судит — норма обязательна для
+    #: объектов с массовым пребыванием людей, а признака массового пребывания
+    #: у площадки в данных нет. Отдаём факт, вывод делает специалист.
+    days_since_last_drill: int | None = None

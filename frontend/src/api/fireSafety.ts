@@ -44,12 +44,50 @@ export type FireReadinessDto = {
   due_soon_days: number;
   /** Разд. 54.1 «контроль сроков»: просроченные противопожарные инструктажи. */
   overdue_fire_briefings: number;
+  /** Разд. 54.1 «Тренировки и учения»: план прошёл, факта нет. */
+  overdue_drills: number;
+  /** Назначено вперёд — не просрочка, но пустой план-график видно. */
+  planned_drills: number;
+  last_drill_on?: string | null;
+  /**
+   * Сколько дней с последней тренировки. ГРАНИЦА: интервал «не реже раза в
+   * полгода» (ППР РФ) обязателен для объектов с массовым пребыванием людей, а
+   * признака массового пребывания в данных нет — экран показывает факт и НЕ
+   * называет это нарушением.
+   */
+  days_since_last_drill?: number | null;
+};
+
+export type FireDrillDto = {
+  id: string;
+  kind: string;
+  /** Вид словами — перевод делает сервер, экран его не дублирует. */
+  kind_label: string;
+  title: string;
+  planned_on: string;
+  held_on?: string | null;
+  site_id?: string | null;
+  scenario?: string | null;
+  participants?: number | null;
+  outcome?: string | null;
+  outcome_label?: string | null;
+  findings?: string | null;
+  /** planned | held | overdue — считается сервером при чтении. */
+  status: string;
 };
 
 export const fireSafetyApi = {
   listEquipment: async (): Promise<FireEquipmentDto[]> => {
     const { data } = await apiClient.get<{ items?: FireEquipmentDto[] }>(
       "/fire-safety/equipment",
+      { params: { limit: 200, offset: 0 } },
+    );
+    return Array.isArray(data?.items) ? data.items : [];
+  },
+
+  listDrills: async (): Promise<FireDrillDto[]> => {
+    const { data } = await apiClient.get<{ items?: FireDrillDto[] }>(
+      "/fire-safety/drills",
       { params: { limit: 200, offset: 0 } },
     );
     return Array.isArray(data?.items) ? data.items : [];
