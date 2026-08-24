@@ -51,6 +51,24 @@ export type FireEquipmentDto = {
   last_maintenance_result?: string | null;
 };
 
+export type FireDocumentDto = {
+  id: string;
+  kind: string;
+  kind_label: string;
+  title: string;
+  site_id?: string | null;
+  number?: string | null;
+  location?: string | null;
+  approved_on?: string | null;
+  review_due?: string | null;
+  responsible?: string | null;
+  document_id?: string | null;
+  notes?: string | null;
+  /** ok | due_soon | overdue — считает сервер ядровым классификатором. */
+  status: string;
+  status_label: string;
+};
+
 export type FireMaintenanceDto = {
   id: string;
   equipment_id: string;
@@ -74,6 +92,13 @@ export type FireReadinessDto = {
   due_soon_days: number;
   /** Разд. 54.1 «контроль сроков»: просроченные противопожарные инструктажи. */
   overdue_fire_briefings: number;
+  /**
+   * Разд. 54.1 «Документы ПБ»: сколько карточек заведено и у скольких
+   * просрочен пересмотр. ГРАНИЦА: сколько документов ОБЯЗАТЕЛЬНО, платформа
+   * не судит — применимость нормы из данных не следует.
+   */
+  fire_documents: number;
+  overdue_documents: number;
   /** Разд. 54.1 «регламентные работы»: средства без единой записи о работе. */
   units_without_maintenance: number;
   /** Разд. 54.1 «Тренировки и учения»: план прошёл, факта нет. */
@@ -112,6 +137,14 @@ export const fireSafetyApi = {
   listEquipment: async (): Promise<FireEquipmentDto[]> => {
     const { data } = await apiClient.get<{ items?: FireEquipmentDto[] }>(
       "/fire-safety/equipment",
+      { params: { limit: 200, offset: 0 } },
+    );
+    return Array.isArray(data?.items) ? data.items : [];
+  },
+
+  listDocuments: async (): Promise<FireDocumentDto[]> => {
+    const { data } = await apiClient.get<{ items?: FireDocumentDto[] }>(
+      "/fire-safety/documents",
       { params: { limit: 200, offset: 0 } },
     );
     return Array.isArray(data?.items) ? data.items : [];

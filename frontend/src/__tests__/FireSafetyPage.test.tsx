@@ -16,15 +16,51 @@ vi.mock("@/api/operations", () => ({
 }));
 
 const listEquipmentMock = vi.fn();
+const listDocumentsMock = vi.fn();
 const readinessMock = vi.fn();
 
 vi.mock("@/api/fireSafety", async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   fireSafetyApi: {
     listEquipment: (...args: unknown[]) => listEquipmentMock(...args),
+    listDocuments: (...args: unknown[]) => listDocumentsMock(...args),
     readiness: (...args: unknown[]) => readinessMock(...args),
   },
 }));
+
+/** Документы ПБ: один с просроченным пересмотром, один бессрочный. */
+const populatedDocuments = [
+  {
+    id: "doc-1",
+    kind: "instruction_general",
+    kind_label: "Инструкция о мерах ПБ (общеобъектовая)",
+    title: "Инструкция о мерах пожарной безопасности",
+    number: "12-ПБ",
+    location: null,
+    approved_on: "2019-01-01",
+    review_due: "2020-01-01",
+    responsible: "Смирнов",
+    document_id: null,
+    notes: null,
+    status: "overdue",
+    status_label: "Просрочен пересмотр",
+  },
+  {
+    id: "doc-2",
+    kind: "journal",
+    kind_label: "Журнал",
+    title: "Журнал эксплуатации систем ПБ",
+    number: null,
+    location: null,
+    approved_on: null,
+    review_due: null,
+    responsible: null,
+    document_id: null,
+    notes: null,
+    status: "ok",
+    status_label: "Действует",
+  },
+];
 
 /** Средства ПБ: один срок просрочен, один истекает скоро (разд. 54.1). */
 const populatedEquipment = [
@@ -61,6 +97,8 @@ const populatedReadiness = {
   due_soon_days: 30,
   overdue_fire_briefings: 2,
   units_without_maintenance: 1,
+  fire_documents: 2,
+  overdue_documents: 1,
 };
 
 /** Наполненный снимок: статистика шапки и реестр площадок на экране. */
@@ -98,7 +136,9 @@ describe("FireSafetyPage", () => {
     getFireSafetySnapshotMock.mockReset();
     listEquipmentMock.mockReset();
     readinessMock.mockReset();
+    listDocumentsMock.mockReset();
     listEquipmentMock.mockResolvedValue(populatedEquipment);
+    listDocumentsMock.mockResolvedValue(populatedDocuments);
     readinessMock.mockResolvedValue(populatedReadiness);
   });
 
@@ -204,7 +244,56 @@ describe("FireSafetyPage", () => {
     ).toBeInTheDocument();
   });
 
-  it("FireSafetyPage в UX-бюджете в ОБЕИХ секциях", async () => {
+  // Доп. №1 разд. 54.1 «Документы ПБ». Ядровой Document для этого не годится
+  // по построению: template_id NOT NULL, поэтому документ, который платформа
+  // не выпускала (декларация из МЧС, план эвакуации от подрядчика), в реестр
+  // ядра не заводится вовсе.
+  it("реестр документов ПБ открывается третьей секцией", async () => {
+    getFireSafetySnapshotMock.mockResolvedValue(populatedFireSafetySnapshot);
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter>
+        <FireSafetyPage />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("Цех сборки №1")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Документы ПБ" }));
+
+    expect(
+      await screen.findByText("Инструкция о мерах пожарной безопасности"),
+    ).toBeInTheDocument();
+    // Вид и состояние — словами, а не кодами.
+    expect(
+      screen.getByText("Инструкция о мерах ПБ (общеобъектовая)"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Просрочен пересмотр")).toBeInTheDocument();
+    // Пустой срок пересмотра назван «бессрочный», а не пустой ячейкой.
+    expect(screen.getByText("бессрочный")).toBeInTheDocument();
+  });
+
+  it("экран не выдаёт перечень обязательных документов за свой", async () => {
+    // ГРАНИЦА названа НА ЭКРАНЕ: применимость декларации и планов эвакуации
+    // зависит от характеристик объекта, которых в данных нет.
+    getFireSafetySnapshotMock.mockResolvedValue(populatedFireSafetySnapshot);
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter>
+        <FireSafetyPage />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("Цех сборки №1")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Документы ПБ" }));
+
+    expect(
+      await screen.findByText(/определяет специалист/i),
+    ).toBeInTheDocument();
+  });
+
+  it("FireSafetyPage в UX-бюджете во ВСЕХ ТРЁХ секциях", async () => {
     getFireSafetySnapshotMock.mockResolvedValue(populatedFireSafetySnapshot);
     const user = userEvent.setup();
 
@@ -224,7 +313,16 @@ describe("FireSafetyPage", () => {
     );
     expect(await screen.findByText("ОП-5 №1")).toBeInTheDocument();
     const equipment = uxBudgetDelta(document.body, "FireSafetyPage");
+    expect(equipment.stale).toEqual([]);
     expect(equipment.unexpected).toEqual([]);
+
+    await user.click(screen.getByRole("button", { name: "Документы ПБ" }));
+    expect(
+      await screen.findByText("Инструкция о мерах пожарной безопасности"),
+    ).toBeInTheDocument();
+    const documents = uxBudgetDelta(document.body, "FireSafetyPage");
+    expect(documents.unexpected).toEqual([]);
+    expect(documents.stale).toEqual([]);
     expect(equipment.stale).toEqual([]);
   });
 });
