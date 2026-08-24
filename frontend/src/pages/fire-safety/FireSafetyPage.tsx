@@ -28,9 +28,12 @@ const dueLabel = (value?: string | null): string => {
 };
 
 const FireSafetyPage = () => {
-  // Разд. 59.1: две задачи — «объекты защиты» и «средства и системы» —
-  // показываются ПО ОДНОЙ (прецедент склада), иначе экран растёт таблицами.
-  const [section, setSection] = useState<"sites" | "equipment">("sites");
+  // Разд. 59.1: три задачи — «объекты защиты», «средства и системы» и
+  // «документы» — показываются ПО ОДНОЙ (прецедент склада), иначе экран
+  // растёт таблицами.
+  const [section, setSection] = useState<"sites" | "equipment" | "documents">(
+    "sites",
+  );
 
   const { data, loading, error, reload } = useAsyncResource({
     loader: useCallback(() => operationsApi.getFireSafetySnapshot(), []),
@@ -42,12 +45,14 @@ const FireSafetyPage = () => {
     loader: useCallback(
       async () => ({
         equipment: await fireSafetyApi.listEquipment(),
+        documents: await fireSafetyApi.listDocuments(),
         readiness: await fireSafetyApi.readiness(),
       }),
       [],
     ),
     initialData: {
       equipment: [],
+      documents: [],
       readiness: {
         total_units: 0,
         overdue_recharge: 0,
@@ -55,6 +60,8 @@ const FireSafetyPage = () => {
         due_soon: 0,
         due_soon_days: 30,
         overdue_fire_briefings: 0,
+        fire_documents: 0,
+        overdue_documents: 0,
         units_without_maintenance: 0,
         // Тренировки живут на своём экране (/fire-training); здесь они только
         // часть той же сводки готовности, поэтому в заглушке нули.
@@ -100,6 +107,22 @@ const FireSafetyPage = () => {
         .includes(query),
   });
 
+  const documentRegistry = useLocalRegistry({
+    items: fire.data.documents,
+    match: (item, query) =>
+      [
+        item.title,
+        item.kind_label,
+        item.number,
+        item.location,
+        item.responsible,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(query),
+  });
+
   const { readiness } = fire.data;
   const overdueTotal =
     readiness.overdue_recharge + readiness.overdue_inspection;
@@ -136,6 +159,13 @@ const FireSafetyPage = () => {
             label: "Без подтверждения ТО",
             value: readiness.units_without_maintenance,
           },
+          // Разд. 54.1 «Документы ПБ»: просроченный пересмотр инструкции —
+          // такое же нарушение, как непроверенный огнетушитель. Сколько
+          // документов ОБЯЗАТЕЛЬНО, платформа не судит — см. подпись секции.
+          {
+            label: "Просрочен пересмотр документов",
+            value: readiness.overdue_documents,
+          },
         ]}
       />
 
@@ -144,6 +174,7 @@ const FireSafetyPage = () => {
           [
             ["sites", "Объекты защиты"],
             ["equipment", "Средства и системы"],
+            ["documents", "Документы ПБ"],
           ] as const
         ).map(([key, label]) => (
           <Button
@@ -204,6 +235,82 @@ const FireSafetyPage = () => {
               onSearchChange={registry.onSearchChange}
               searchPlaceholder="Поиск по площадке, адресу, категории"
               caption="Реестр объектов защиты"
+            />
+          ) : null}
+        </>
+      ) : section === "documents" ? (
+        <>
+          <ErrorState
+            error={fire.error ?? undefined}
+            onRetry={() => void fire.reload()}
+          />
+          {fire.loading ? (
+            <LoadingScreen label="Загрузка документов ПБ" />
+          ) : null}
+          {/*
+            ГРАНИЦА, названная НА ЭКРАНЕ (прецедент интервала тренировок):
+            платформа НЕ объявляет, какие документы объекту обязательны —
+            декларация нужна не всем объектам, план эвакуации не всем этажам,
+            а признаков применимости в данных нет. Показываем, что заведено и
+            что просрочено по пересмотру; перечень обязательного — за
+            специалистом.
+          */}
+          {!fire.loading && !fire.error ? (
+            <p className="text-sm text-muted-foreground">
+              Реестр показывает документы, которые вы завели, и их срок
+              пересмотра. Какие из них обязательны именно для вашего объекта,
+              определяет специалист: применимость декларации ПБ и планов
+              эвакуации зависит от характеристик объекта, которых в данных нет.
+            </p>
+          ) : null}
+          {!fire.loading && !fire.error && documentRegistry.total === 0 ? (
+            <EmptyState
+              title="Документы ПБ не заведены"
+              description="Внесите приказы, инструкции о мерах ПБ, планы эвакуации, регламенты, декларацию и журналы — срок пересмотра попадёт в готовность к проверке."
+            />
+          ) : null}
+          {!fire.loading && !fire.error && documentRegistry.total > 0 ? (
+            <RegistryTable
+              columns={[
+                { accessorKey: "title", header: "Документ" },
+                {
+                  accessorKey: "kind_label",
+                  header: "Вид",
+                  cell: ({ row }) => row.original.kind_label,
+                },
+                {
+                  accessorKey: "number",
+                  header: "Номер",
+                  cell: ({ row }) => row.original.number || "—",
+                },
+                {
+                  accessorKey: "location",
+                  header: "Помещение",
+                  cell: ({ row }) => row.original.location || "—",
+                },
+                {
+                  accessorKey: "review_due",
+                  header: "Пересмотр",
+                  cell: ({ row }) =>
+                    row.original.review_due
+                      ? formatDate(row.original.review_due)
+                      : "бессрочный",
+                },
+                {
+                  accessorKey: "status_label",
+                  header: "Состояние",
+                  cell: ({ row }) => row.original.status_label,
+                },
+              ]}
+              data={documentRegistry.pagedItems}
+              pageIndex={documentRegistry.pageIndex}
+              pageSize={documentRegistry.pageSize}
+              total={documentRegistry.total}
+              onPageChange={documentRegistry.onPageChange}
+              onPageSizeChange={documentRegistry.onPageSizeChange}
+              onSearchChange={documentRegistry.onSearchChange}
+              searchPlaceholder="Поиск по названию, виду, номеру, помещению"
+              caption="Документы пожарной безопасности"
             />
           ) : null}
         </>

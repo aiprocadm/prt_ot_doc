@@ -179,3 +179,73 @@ class FireMaintenanceRecord(TenantBaseModel, SoftDeleteMixin):
     __table_args__ = (
         Index("ix_fire_maintenance_tenant_performed", "tenant_id", "performed_on"),
     )
+
+
+#: Виды документов ПБ — ровно перечень ТЗ (разд. 54.1 «Документы ПБ»):
+#: приказы, инструкции о мерах ПБ ОБЩЕОБЪЕКТОВЫЕ И ПО ПОМЕЩЕНИЯМ (это разные
+#: виды: общеобъектовая одна на объект, по помещениям их столько, сколько
+#: пожароопасных помещений), планы эвакуации, регламенты, декларация, журналы.
+FIRE_DOCUMENT_KINDS: dict[str, str] = {
+    "order": "Приказ",
+    "instruction_general": "Инструкция о мерах ПБ (общеобъектовая)",
+    "instruction_room": "Инструкция о мерах ПБ (по помещению)",
+    "evacuation_plan": "План эвакуации",
+    "regulation": "Регламент",
+    "declaration": "Декларация пожарной безопасности",
+    "journal": "Журнал",
+}
+
+#: Состояние документа словами. Значения — дословно ядровые
+#: (``app.domains.shared.ContingentItemStatus``), чтобы словарь состояний в
+#: продукте был один; сам импорт запрещён гардом границ контекстов (ARCH-3),
+#: см. ``_document_status`` в ручках контура.
+FIRE_DOCUMENT_STATUS_TITLES: dict[str, str] = {
+    "ok": "Действует",
+    "due_soon": "Скоро пересмотр",
+    "overdue": "Просрочен пересмотр",
+}
+
+
+class FireSafetyDocument(TenantBaseModel, SoftDeleteMixin):
+    """Учётная карточка документа ПБ: что есть у объекта и не пора ли пересмотр.
+
+    Почему НЕ ядровой ``Document``: у того ``template_id`` NOT NULL, поэтому
+    документ, который платформа не выпускала (декларация, поданная в МЧС; план
+    эвакуации, нарисованный подрядчиком), в реестр ядра не заводится вовсе.
+    Плюс у ядра нет ни вида документа (тип выводится из свободной строки
+    ``Template.domain``), ни срока пересмотра. Ядро переиспользуется там, где
+    оно есть: ссылка ``document_id`` на выпущенный фабрикой документ и
+    ЕДИНЫЙ СЛОВАРЬ состояний срока (``ContingentItemStatus``); сам импорт
+    классификатора запрещён гардом ARCH-3 — см. ``_document_status``.
+    """
+
+    __tablename__ = "fire_document"
+
+    site_id: Mapped[str | None] = mapped_column(
+        ForeignKey("site.id"), nullable=True, index=True
+    )
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    #: номер приказа/декларации — как в оригинале
+    number: Mapped[str | None] = mapped_column(String(64))
+    #: помещение для инструкции по помещению — свободный текст
+    #: (реестра помещений в ядре нет, тот же довод, что у средств ПБ)
+    location: Mapped[str | None] = mapped_column(String(255))
+    approved_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    #: срок пересмотра/актуализации; NULL — документ бессрочный
+    #: (прецедент реестра документов подрядчиков)
+    review_due: Mapped[date | None] = mapped_column(Date, nullable=True)
+    responsible: Mapped[str | None] = mapped_column(String(255))
+    #: если документ выпущен документной фабрикой — ссылка на него; иначе NULL
+    #: (бумага из МЧС или от подрядчика существует вне платформы)
+    document_id: Mapped[str | None] = mapped_column(
+        ForeignKey("document.id"), nullable=True
+    )
+    notes: Mapped[str | None] = mapped_column(Text)
+
+    site: Mapped[Site | None] = relationship(backref="fire_documents")
+
+    __table_args__ = (
+        Index("ix_fire_document_tenant_kind", "tenant_id", "kind"),
+        Index("ix_fire_document_tenant_review", "tenant_id", "review_due"),
+    )

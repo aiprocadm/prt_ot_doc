@@ -63,6 +63,8 @@ const FireTrainingPage = () => {
         due_soon: 0,
         due_soon_days: 30,
         overdue_fire_briefings: 0,
+        fire_documents: 0,
+        overdue_documents: 0,
         units_without_maintenance: 0,
         overdue_drills: 0,
         planned_drills: 0,

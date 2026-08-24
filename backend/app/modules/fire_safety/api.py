@@ -30,6 +30,8 @@ from app.core.security import AccessContext, abac, rbac
 from app.core.tenant_validation import TenantContextValidator
 from app.models.briefings import BriefingEntry
 from app.models.fire_safety import (
+    FIRE_DOCUMENT_KINDS,
+    FIRE_DOCUMENT_STATUS_TITLES,
     FIRE_DRILL_KINDS,
     FIRE_DRILL_OUTCOMES,
     FIRE_EQUIPMENT_KINDS,
@@ -39,11 +41,16 @@ from app.models.fire_safety import (
     FIRE_MAINTENANCE_RESULTS,
     FireDrill,
     FireMaintenanceRecord,
+    FireSafetyDocument,
     FireSafetyEquipment,
 )
 from app.models.master_data import Site
 from app.models.models import Tenant
 from app.schemas.fire_safety import (
+    FireDocumentCreate,
+    FireDocumentPage,
+    FireDocumentRead,
+    FireDocumentUpdate,
     FireDrillCreate,
     FireDrillPage,
     FireDrillRead,
@@ -326,6 +333,218 @@ async def update_equipment(
     await session.commit()
     await session.refresh(unit)
     return FireEquipmentRead.model_validate(unit)
+
+
+def _document_status(review_due: date | None, today: date) -> str:
+    """Состояние документа: ok / due_soon / overdue — считается ПРИ ЧТЕНИИ.
+
+    СЛОВАРЬ ЗНАЧЕНИЙ — ядровой (``app.domains.shared.ContingentItemStatus``),
+    а вот ИМПОРТИРОВАТЬ его отсюда нельзя: гард границ контекстов (ARCH-3)
+    запрещает ``app.modules.* -> app.domains.*``, и три таких импорта у
+    подрядчиков и СИЗ числятся в списке ДОЛГА, а не образцом. Заводить
+    четвёртую запись долга ради четырёх строк — плохой размен; переезд общего
+    ядра сроков объявлен отдельным срезом в самом гарде. Правило совпадает с
+    ядровым дословно, включая горизонт «скоро» — тот же, что у остальной
+    готовности к проверке.
+
+    Отличие от ядрового ``classify`` названо явно: там пустая дата означает
+    MISSING, а здесь пустой срок пересмотра означает БЕССРОЧНЫЙ — приказ без
+    даты пересмотра не «отсутствующий документ», он есть и лежит в реестре
+    (тот же выбор сделан у документов подрядчиков).
+    """
+
+    if review_due is None:
+        return "ok"
+    if review_due < today:
+        return "overdue"
+    if review_due <= today + timedelta(days=_DUE_SOON_DAYS):
+        return "due_soon"
+    return "ok"
+
+
+def _fire_document_read(doc: FireSafetyDocument, today: date) -> FireDocumentRead:
+    status_value = _document_status(doc.review_due, today)
+    return FireDocumentRead(
+        id=doc.id,
+        kind=doc.kind,
+        kind_label=FIRE_DOCUMENT_KINDS.get(doc.kind, doc.kind),
+        title=doc.title,
+        site_id=doc.site_id,
+        number=doc.number,
+        location=doc.location,
+        approved_on=doc.approved_on,
+        review_due=doc.review_due,
+        responsible=doc.responsible,
+        document_id=doc.document_id,
+        notes=doc.notes,
+        status=status_value,
+        status_label=FIRE_DOCUMENT_STATUS_TITLES.get(status_value, status_value),
+    )
+
+
+async def _get_fire_document_or_404(
+    session: AsyncSession, tenant: Tenant, document_id: str
+) -> FireSafetyDocument:
+    stmt = select(FireSafetyDocument).where(
+        FireSafetyDocument.id == document_id,
+        FireSafetyDocument.tenant_id == tenant.id,
+        FireSafetyDocument.deleted_at.is_(None),
+    )
+    doc = (await session.execute(stmt)).scalar_one_or_none()
+    if doc is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            detail=api_problem_detail(
+                code="FIRE_DOCUMENT_NOT_FOUND",
+                message="Fire safety document not found",
+                error_type="fire_safety",
+            ),
+        )
+    return doc
+
+
+@router.get("/documents", response_model=FireDocumentPage)
+async def list_fire_documents(
+    tenant: TenantDep,
+    session: SessionDep,
+    access: Access,
+    kind: str | None = Query(default=None),
+    site_id: str | None = Query(default=None),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+) -> FireDocumentPage:
+    """Какие документы ПБ у объекта есть и не пора ли их пересматривать."""
+
+    TenantContextValidator.ensure_tenant_context(tenant)
+    today = date.today()
+    stmt = select(FireSafetyDocument).where(
+        FireSafetyDocument.tenant_id == tenant.id,
+        FireSafetyDocument.deleted_at.is_(None),
+    )
+    if kind:
+        stmt = stmt.where(FireSafetyDocument.kind == kind)
+    if site_id:
+        stmt = stmt.where(FireSafetyDocument.site_id == site_id)
+    total = int(await session.scalar(select(func.count()).select_from(stmt.subquery())) or 0)
+    rows = (
+        (
+            await session.execute(
+                stmt.order_by(FireSafetyDocument.created_at.desc())
+                .offset(offset)
+                .limit(limit)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return FireDocumentPage(
+        items=[_fire_document_read(r, today) for r in rows], total=total
+    )
+
+
+@router.post(
+    "/documents", response_model=FireDocumentRead, status_code=status.HTTP_201_CREATED
+)
+async def create_fire_document(
+    request: Request,
+    payload: FireDocumentCreate,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: Access,
+) -> FireDocumentRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    await _validate_payload(session, tenant, kind=None, site_id=payload.site_id)
+    if payload.kind not in FIRE_DOCUMENT_KINDS:
+        raise _unprocessable(
+            f"Неизвестный вид документа {payload.kind!r}; допустимые: "
+            f"{', '.join(FIRE_DOCUMENT_KINDS)}"
+        )
+    doc = FireSafetyDocument(
+        tenant_id=str(tenant.id),
+        kind=payload.kind,
+        title=payload.title.strip(),
+        site_id=payload.site_id,
+        number=(payload.number or None),
+        location=(payload.location or None),
+        approved_on=payload.approved_on,
+        review_due=payload.review_due,
+        responsible=(payload.responsible or None),
+        document_id=payload.document_id,
+        notes=(payload.notes or None),
+    )
+    session.add(doc)
+    await session.flush()
+    await AuditService(session).log_event(
+        tenant_id=str(tenant.id),
+        action="create",
+        object_type="FireSafetyDocument",
+        object_id=doc.id,
+        user_id=access.user.id,
+        ip=request.client.host if request.client else "unknown",
+        request_id=getattr(request.state, "trace_id", None),
+        user_agent=request.headers.get("user-agent"),
+        changed_fields={"fields": {"id": {"before": None, "after": doc.id}}},
+        details={"entity": "FireSafetyDocument", "kind": doc.kind},
+    )
+    await session.commit()
+    await session.refresh(doc)
+    return _fire_document_read(doc, date.today())
+
+
+@router.patch("/documents/{document_id}", response_model=FireDocumentRead)
+async def update_fire_document(
+    request: Request,
+    document_id: str,
+    payload: FireDocumentUpdate,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: Access,
+) -> FireDocumentRead:
+    """Пересмотрели документ → переносится срок; заменили — правится карточка."""
+
+    TenantContextValidator.ensure_tenant_context(tenant)
+    doc = await _get_fire_document_or_404(session, tenant, document_id)
+    data = payload.model_dump(exclude_unset=True)
+    await _validate_payload(session, tenant, kind=None, site_id=data.get("site_id"))
+    if "kind" in data and data["kind"] not in FIRE_DOCUMENT_KINDS:
+        raise _unprocessable(
+            f"Неизвестный вид документа {data['kind']!r}; допустимые: "
+            f"{', '.join(FIRE_DOCUMENT_KINDS)}"
+        )
+    before = _fire_document_read(doc, date.today()).model_dump()
+    for field in (
+        "kind",
+        "title",
+        "site_id",
+        "number",
+        "location",
+        "approved_on",
+        "review_due",
+        "responsible",
+        "document_id",
+        "notes",
+    ):
+        if field in data:
+            value = data[field]
+            if field == "title" and (value is None or not str(value).strip()):
+                raise _unprocessable("title cannot be empty")
+            setattr(doc, field, value.strip() if isinstance(value, str) else value)
+    after = _fire_document_read(doc, date.today()).model_dump()
+    await AuditService(session).log_event(
+        tenant_id=str(tenant.id),
+        action="update",
+        object_type="FireSafetyDocument",
+        object_id=doc.id,
+        user_id=access.user.id,
+        ip=request.client.host if request.client else "unknown",
+        request_id=getattr(request.state, "trace_id", None),
+        user_agent=request.headers.get("user-agent"),
+        changed_fields=field_level_diff(before, after),
+        details={"entity": "FireSafetyDocument"},
+    )
+    await session.commit()
+    await session.refresh(doc)
+    return _fire_document_read(doc, date.today())
 
 
 def _maintenance_read(record: FireMaintenanceRecord, *, shifted: bool) -> FireMaintenanceRead:
@@ -766,6 +985,36 @@ async def fire_readiness(
         or 0
     )
 
+    # Разд. 54.1 «Документы ПБ»: просроченный пересмотр инструкции или приказа —
+    # такое же нарушение к приходу инспектора, как непроверенный огнетушитель.
+    # ГРАНИЦА: сколько документов ОБЯЗАТЕЛЬНО, платформа не судит — декларация
+    # нужна не всем объектам, план эвакуации — не всем этажам, а признаков
+    # применимости в данных нет (тот же довод, что у интервала тренировок).
+    fire_documents = int(
+        await session.scalar(
+            select(func.count())
+            .select_from(FireSafetyDocument)
+            .where(
+                FireSafetyDocument.tenant_id == tenant.id,
+                FireSafetyDocument.deleted_at.is_(None),
+            )
+        )
+        or 0
+    )
+    overdue_documents = int(
+        await session.scalar(
+            select(func.count())
+            .select_from(FireSafetyDocument)
+            .where(
+                FireSafetyDocument.tenant_id == tenant.id,
+                FireSafetyDocument.deleted_at.is_(None),
+                FireSafetyDocument.review_due.is_not(None),
+                FireSafetyDocument.review_due < today,
+            )
+        )
+        or 0
+    )
+
     # Разд. 54.1 «регламентные работы»: срок без единой записи о работе — это
     # обещание, а не доказательство. Инспектор спрашивает не «когда следующая
     # поверка», а «покажите, что предыдущая была», поэтому число средств без
@@ -825,6 +1074,8 @@ async def fire_readiness(
         )
     )
     return FireReadinessRead(
+        fire_documents=fire_documents,
+        overdue_documents=overdue_documents,
         units_without_maintenance=units_without_maintenance,
         overdue_drills=overdue_drills,
         planned_drills=planned_drills,

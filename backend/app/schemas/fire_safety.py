@@ -49,6 +49,56 @@ class FireEquipmentPage(BaseSchema):
     total: int
 
 
+class FireDocumentCreate(BaseSchema):
+    kind: str = Field(min_length=1, max_length=32)
+    title: str = Field(min_length=1, max_length=255)
+    site_id: str | None = Field(default=None, min_length=1, max_length=36)
+    number: str | None = Field(default=None, max_length=64)
+    location: str | None = Field(default=None, max_length=255)
+    approved_on: date | None = None
+    review_due: date | None = None
+    responsible: str | None = Field(default=None, max_length=255)
+    document_id: str | None = Field(default=None, min_length=1, max_length=36)
+    notes: str | None = None
+
+
+class FireDocumentUpdate(BaseSchema):
+    kind: str | None = Field(default=None, min_length=1, max_length=32)
+    title: str | None = Field(default=None, min_length=1, max_length=255)
+    site_id: str | None = Field(default=None, max_length=36)
+    number: str | None = Field(default=None, max_length=64)
+    location: str | None = Field(default=None, max_length=255)
+    approved_on: date | None = None
+    review_due: date | None = None
+    responsible: str | None = Field(default=None, max_length=255)
+    document_id: str | None = Field(default=None, max_length=36)
+    notes: str | None = None
+
+
+class FireDocumentRead(BaseSchema):
+    id: str
+    kind: str
+    #: вид и состояние словами — перевод делает сервер (прецедент тренировок)
+    kind_label: str
+    title: str
+    site_id: str | None = None
+    number: str | None = None
+    location: str | None = None
+    approved_on: date | None = None
+    review_due: date | None = None
+    responsible: str | None = None
+    document_id: str | None = None
+    notes: str | None = None
+    #: ok / due_soon / overdue — считается ПРИ ЧТЕНИИ ядровым классификатором
+    status: str
+    status_label: str
+
+
+class FireDocumentPage(BaseSchema):
+    items: list[FireDocumentRead]
+    total: int
+
+
 class FireMaintenanceCreate(BaseSchema):
     equipment_id: str = Field(min_length=1, max_length=36)
     kind: str = Field(min_length=1, max_length=32)
@@ -140,6 +190,12 @@ class FireReadinessRead(BaseSchema):
     #: разд. 54.1 «контроль сроков»: просроченные ПРОТИВОПОЖАРНЫЕ инструктажи
     #: (виды fire_* и ПТМ) — вторая половина готовности к проверке МЧС
     overdue_fire_briefings: int
+    #: разд. 54.1 «Документы ПБ»: сколько карточек документов заведено и у
+    #: скольких просрочен пересмотр. ГРАНИЦА: сколько документов ОБЯЗАТЕЛЬНО —
+    #: платформа не судит (декларация нужна не всем объектам, план эвакуации —
+    #: не всем этажам, признаков применимости в данных нет).
+    fire_documents: int = 0
+    overdue_documents: int = 0
     #: разд. 54.1 «регламентные работы»: средства, у которых нет НИ ОДНОЙ
     #: записи о выполненной работе — срок стоит, а подтвердить его нечем
     units_without_maintenance: int = 0
