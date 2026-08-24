@@ -73,6 +73,9 @@ export const FireTrainingPage = lazy(
 export const FireInspectionsPage = lazy(
   () => import("@/pages/fire-inspections/FireInspectionsPage"),
 );
+export const IndustrialSafetyPage = lazy(
+  () => import("@/pages/industrial-safety/IndustrialSafetyPage"),
+);
 export const ReferencePage = lazy(
   () => import("@/pages/reference/ReferencePage"),
 );

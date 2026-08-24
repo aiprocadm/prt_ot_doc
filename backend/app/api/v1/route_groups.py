@@ -21,7 +21,6 @@ from app.api.routes import (
     calendar_views,
     client_access_log,
     client_portal,
-    public_signup,
     committees,
     companies,
     compliance,
@@ -58,6 +57,7 @@ from app.api.routes import (
     ppe,
     prescriptions,
     public_api,
+    public_signup,
     pwa_sync,
     reports,
     risk,
@@ -80,14 +80,15 @@ from app.core.config import get_settings
 from app.modules.analytics.api import router as analytics_router
 from app.modules.branding.api import router as branding_router
 from app.modules.budget.api import router as budget_router
-from app.modules.fire_safety.api import router as fire_safety_router
 from app.modules.budget.reimbursement_api import router as budget_reimbursement_router
 from app.modules.client_portal.api import internal_router as portal_requests_router
 from app.modules.client_portal.api import router as client_portal_v1_router
 from app.modules.export_center.api import router as export_center_router
 from app.modules.files.api import router as files_v1_router
+from app.modules.fire_safety.api import router as fire_safety_router
 from app.modules.headers import api as headers_api
 from app.modules.imports.api import router as imports_router
+from app.modules.industrial_safety.api import router as industrial_safety_router
 from app.modules.offboarding.api import router as offboarding_router
 from app.modules.packs import api as packs_v2_api
 from app.modules.pdf import api as pdf_api
@@ -223,6 +224,7 @@ DOCUMENT_CORE_ROUTER_REGISTRATIONS: tuple[RouterRegistration, ...] = (
     (rules_engine_router, {"tags": ["rules-engine"]}),
     (budget_router, {"tags": ["budget"]}),
     (fire_safety_router, {"tags": ["fire-safety"]}),
+    (industrial_safety_router, {"tags": ["industrial-safety"]}),
     (budget_reimbursement_router, {"tags": ["budget"]}),
     (privacy_router, {"tags": ["privacy"]}),
 )

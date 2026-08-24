@@ -60,9 +60,6 @@ from app.models.audit_log import (
 # importable from app.models.models; canonical home is app.models.base.
 from app.models.base import SharedModel, TenantBaseModel
 
-# Разд. 54.1: предметные модели контура ПБ.
-from app.models.fire_safety import FireSafetyEquipment  # noqa: E402,F401
-
 # ARCH-2: re-export briefings-domain models moved to app.models.briefings.
 from app.models.briefings import (
     BriefingEntry,
@@ -94,6 +91,9 @@ from app.models.field_ops import (
 # Re-export File (kept in __all__ so ruff F401 keeps it; some callers do
 # ``from app.models.models import File``).
 from app.models.file import File
+
+# Разд. 54.1: предметные модели контура ПБ.
+from app.models.fire_safety import FireSafetyEquipment  # noqa: E402,F401
 
 # ARCH-2: re-export idempotency models moved to app.models.idempotency.
 from app.models.idempotency import (
@@ -127,6 +127,9 @@ from app.models.incidents import (
     IncidentStatus,
     IncidentType,
 )
+
+# Разд. 54.2: предметные модели контура ПромБеза.
+from app.models.industrial_safety import HazardousFacility  # noqa: E402,F401
 
 # ARCH-2: re-export inspections-domain models moved to app.models.inspections.
 from app.models.inspections import (

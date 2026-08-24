@@ -44,6 +44,7 @@ import {
   FindingsPage,
   FireInspectionsPage,
   FireSafetyPage,
+  IndustrialSafetyPage,
   FireTrainingPage,
   IncidentsPage,
   InspectionChecklistsPage,
@@ -368,6 +369,17 @@ export const buildProtectedRouteGroups = (): ReactElement[] => {
           key="/fire-safety"
           path="/fire-safety"
           element={<FireSafetyPage />}
+        />,
+      ],
+    },
+    {
+      // Доп. №1 разд. 54.2: реестр ОПО — первый экран контура ПромБеза.
+      permission: PERMISSIONS.INDUSTRIAL_SAFETY_VIEW,
+      routes: [
+        <Route
+          key="/industrial-safety"
+          path="/industrial-safety"
+          element={<IndustrialSafetyPage />}
         />,
       ],
     },
