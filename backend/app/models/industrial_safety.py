@@ -85,3 +85,77 @@ class HazardousFacility(TenantBaseModel, SoftDeleteMixin):
         ),
         Index("ix_hazardous_facility_tenant_class", "tenant_id", "hazard_class"),
     )
+
+
+#: Типы технических устройств, применяемых на ОПО — ЗАКРЫТЫЙ словарь по группам
+#: федеральных норм и правил (ФНП). Свободная строка снова сделала бы разрезы
+#: и отчётность невозможными, как это случилось с классом опасности площадки.
+OPO_DEVICE_KINDS: dict[str, str] = {
+    "pressure_vessel": "Сосуд, работающий под давлением",
+    "boiler": "Котёл",
+    "pipeline": "Трубопровод пара и горячей воды",
+    "lifting": "Подъёмное сооружение",
+    "gas_equipment": "Газовое оборудование",
+    "other": "Иное техническое устройство",
+}
+
+#: Состояние устройства. Вывод из эксплуатации — это состояние, а НЕ удаление:
+#: история устройства нужна и после списания.
+OPO_DEVICE_STATUSES: dict[str, str] = {
+    "in_operation": "В эксплуатации",
+    "suspended": "Эксплуатация приостановлена",
+    "decommissioned": "Выведено из эксплуатации",
+}
+
+#: Состояние заключения экспертизы промышленной безопасности.
+#: «Заключения нет» — ОТДЕЛЬНОЕ состояние, а не разновидность просрочки: слить
+#: их значило бы либо обвинить исправное новое устройство, либо спрятать то,
+#: что отработало срок службы без экспертизы.
+OPO_EPB_STATUS_TITLES: dict[str, str] = {
+    "ok": "Заключение действует",
+    "due_soon": "Заключение скоро истекает",
+    "overdue": "Заключение просрочено",
+    "absent": "Заключения нет",
+}
+
+
+class TechnicalDevice(TenantBaseModel, SoftDeleteMixin):
+    """Техническое устройство на ОПО: учёт, назначенный срок службы, ЭПБ.
+
+    ПОЧЕМУ СВОЯ СУЩНОСТЬ. Ядровые ``Asset``/``Equipment`` — это две и три
+    колонки (имя, категория; серийный номер, статус) без единой ручки API и
+    без единого поля срока; учитывать по ним экспертизу нечем. «Оборудование»
+    не входит и в перечень общего ядра из преамбулы разд. 54, а ТЗ 54.2 прямо
+    относит технические устройства к содержанию дисциплины.
+
+    Привязка — к ОПО, а не к площадке: экспертиза и надзор идут по
+    зарегистрированному объекту, а объектов на площадке бывает несколько.
+    """
+
+    __tablename__ = "opo_technical_device"
+
+    facility_id: Mapped[str] = mapped_column(
+        ForeignKey("hazardous_facility.id"), nullable=False, index=True
+    )
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    #: заводской/учётный номер
+    serial_number: Mapped[str | None] = mapped_column(String(64))
+    commissioned_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    #: назначенный срок службы (из паспорта устройства)
+    lifetime_until: Mapped[date | None] = mapped_column(Date, nullable=True)
+    #: номер заключения ЭПБ, внесённого в реестр Ростехнадзора
+    epb_conclusion_number: Mapped[str | None] = mapped_column(String(64))
+    epb_registered_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    #: срок дальнейшей безопасной эксплуатации, установленный заключением
+    epb_valid_until: Mapped[date | None] = mapped_column(Date, nullable=True)
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="in_operation", server_default="in_operation"
+    )
+    notes: Mapped[str | None] = mapped_column(Text)
+
+    facility: Mapped[HazardousFacility] = relationship(backref="technical_devices")
+
+    __table_args__ = (
+        Index("ix_opo_device_tenant_epb", "tenant_id", "epb_valid_until"),
+    )

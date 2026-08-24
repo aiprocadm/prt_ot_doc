@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -6,15 +7,59 @@ import IndustrialSafetyPage from "@/pages/industrial-safety/IndustrialSafetyPage
 import { uxBudgetDelta } from "@/test-utils/uxBudget";
 
 const listFacilitiesMock = vi.fn();
+const listDevicesMock = vi.fn();
 const readinessMock = vi.fn();
 
 vi.mock("@/api/industrialSafety", async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   industrialSafetyApi: {
     listFacilities: (...args: unknown[]) => listFacilitiesMock(...args),
+    listDevices: (...args: unknown[]) => listDevicesMock(...args),
     readiness: (...args: unknown[]) => readinessMock(...args),
   },
 }));
+
+/** Устройства: одно отработало срок службы, у другого просрочено заключение. */
+const populatedDevices = [
+  {
+    id: "dev-1",
+    facility_id: "opo-1",
+    kind: "pressure_vessel",
+    kind_label: "Сосуд, работающий под давлением",
+    name: "Ресивер воздушный Р-1",
+    serial_number: "12345",
+    commissioned_on: "2009-05-20",
+    lifetime_until: "2024-05-20",
+    epb_conclusion_number: null,
+    epb_registered_on: null,
+    epb_valid_until: null,
+    status: "in_operation",
+    status_label: "В эксплуатации",
+    notes: null,
+    epb_status: "absent",
+    epb_status_label: "Заключения нет",
+    past_lifetime: true,
+  },
+  {
+    id: "dev-2",
+    facility_id: "opo-1",
+    kind: "boiler",
+    kind_label: "Котёл",
+    name: "Котёл ДКВР-10",
+    serial_number: null,
+    commissioned_on: null,
+    lifetime_until: null,
+    epb_conclusion_number: "ДЭ-03-00001-2018",
+    epb_registered_on: "2018-03-01",
+    epb_valid_until: "2020-03-01",
+    status: "in_operation",
+    status_label: "В эксплуатации",
+    notes: null,
+    epb_status: "overdue",
+    epb_status_label: "Заключение просрочено",
+    past_lifetime: false,
+  },
+];
 
 /** Два ОПО на одной площадке — то, чего полями площадки не выразить. */
 const populatedFacilities = [
@@ -52,13 +97,19 @@ const populatedReadiness = {
   total_facilities: 2,
   by_class: { I: 0, II: 0, III: 1, IV: 1 },
   excluded_facilities: 1,
+  total_devices: 2,
+  epb_overdue: 1,
+  epb_due_soon: 0,
+  devices_past_lifetime_without_epb: 1,
 };
 
 describe("IndustrialSafetyPage", () => {
   beforeEach(() => {
     listFacilitiesMock.mockReset();
+    listDevicesMock.mockReset();
     readinessMock.mockReset();
     listFacilitiesMock.mockResolvedValue(populatedFacilities);
+    listDevicesMock.mockResolvedValue(populatedDevices);
     readinessMock.mockResolvedValue(populatedReadiness);
   });
 
@@ -113,6 +164,61 @@ describe("IndustrialSafetyPage", () => {
     // Подсказка называет и источник сведений, и то, что объектов бывает много.
     expect(
       screen.getByText(/свидетельства о регистрации/i),
+    ).toBeInTheDocument();
+  });
+
+  // Доп. №1 разд. 54.2 срез-2: технические устройства и ЭПБ. Ядровые
+  // Asset/Equipment — две и три колонки без ручек и без сроков, учитывать по
+  // ним экспертизу нечем.
+  it("устройства открываются второй секцией с состоянием экспертизы", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter>
+        <IndustrialSafetyPage />
+      </MemoryRouter>,
+    );
+
+    expect(
+      await screen.findByText("Сеть газопотребления котельной"),
+    ).toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: "Технические устройства" }),
+    );
+
+    expect(
+      await screen.findByText("Ресивер воздушный Р-1"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Сосуд, работающий под давлением"),
+    ).toBeInTheDocument();
+    // «Заключения нет» — отдельное состояние, а не «просрочено».
+    expect(screen.getByText("Заключения нет")).toBeInTheDocument();
+    expect(screen.getByText("Заключение просрочено")).toBeInTheDocument();
+    // Истёкший срок службы назван истёкшим, а не просто датой в прошлом.
+    expect(screen.getByText(/· истёк$/)).toBeInTheDocument();
+  });
+
+  it("экран не выдаёт требование ЭПБ за своё суждение", async () => {
+    // ГРАНИЦА названа НА ЭКРАНЕ: нужна ли экспертиза конкретному устройству,
+    // из данных не следует — это зависит от типа устройства и норм ФНП.
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter>
+        <IndustrialSafetyPage />
+      </MemoryRouter>,
+    );
+
+    expect(
+      await screen.findByText("Сеть газопотребления котельной"),
+    ).toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: "Технические устройства" }),
+    );
+
+    expect(
+      await screen.findByText(/определяет специалист/i),
     ).toBeInTheDocument();
   });
 
