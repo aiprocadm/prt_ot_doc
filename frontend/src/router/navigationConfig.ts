@@ -315,6 +315,20 @@ export const MAIN_NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
+    // Доп. №1 разд. 54.2: своя секция, а не пункт внутри «ПБ» — это разные
+    // дисциплины с разными надзорными органами (МЧС и Ростехнадзор) и
+    // отдельными модулями подписки.
+    title: "ПромБез",
+    items: [
+      {
+        label: "Реестр ОПО",
+        to: "/industrial-safety",
+        icon: Factory,
+        permission: PERMISSIONS.INDUSTRIAL_SAFETY_VIEW,
+      },
+    ],
+  },
+  {
     title: "Бизнес и аналитика",
     items: [
       {
