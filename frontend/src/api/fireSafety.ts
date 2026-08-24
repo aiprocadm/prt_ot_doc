@@ -13,7 +13,9 @@ export type FireEquipmentKind =
   | "shield"
   | "alarm_system"
   | "suppression_system"
-  | "warning_system";
+  | "warning_system"
+  | "fire_escape"
+  | "water_supply";
 
 /** Подписи видов — словами, а не кодами: экран читает человек. */
 export const FIRE_EQUIPMENT_TITLES: Record<FireEquipmentKind, string> = {
@@ -23,6 +25,16 @@ export const FIRE_EQUIPMENT_TITLES: Record<FireEquipmentKind, string> = {
   alarm_system: "Сигнализация (АУПС)",
   suppression_system: "Пожаротушение (АУПТ)",
   warning_system: "Оповещение (СОУЭ)",
+  // Разд. 54.1 «испытания (напр., пожарные лестницы, водопровод)».
+  fire_escape: "Пожарная лестница",
+  water_supply: "Противопожарный водопровод",
+};
+
+/** Подписи результатов работ — словами, перевод делает сервер, это запас. */
+export const FIRE_MAINTENANCE_RESULT_TITLES: Record<string, string> = {
+  passed: "Исправно",
+  with_remarks: "Исправно с замечаниями",
+  failed: "Неисправно",
 };
 
 export type FireEquipmentDto = {
@@ -34,6 +46,24 @@ export type FireEquipmentDto = {
   recharge_due?: string | null;
   inspection_due?: string | null;
   status: string;
+  /** Последняя подтверждённая работа: срок без неё — обещание, не доказательство. */
+  last_maintenance_on?: string | null;
+  last_maintenance_result?: string | null;
+};
+
+export type FireMaintenanceDto = {
+  id: string;
+  equipment_id: string;
+  kind: string;
+  kind_label: string;
+  performed_on: string;
+  result: string;
+  result_label: string;
+  performer?: string | null;
+  notes?: string | null;
+  next_due?: string | null;
+  /** Перенесла ли работа срок; «неисправно» не переносит. */
+  shifted_due: boolean;
 };
 
 export type FireReadinessDto = {
@@ -44,6 +74,8 @@ export type FireReadinessDto = {
   due_soon_days: number;
   /** Разд. 54.1 «контроль сроков»: просроченные противопожарные инструктажи. */
   overdue_fire_briefings: number;
+  /** Разд. 54.1 «регламентные работы»: средства без единой записи о работе. */
+  units_without_maintenance: number;
   /** Разд. 54.1 «Тренировки и учения»: план прошёл, факта нет. */
   overdue_drills: number;
   /** Назначено вперёд — не просрочка, но пустой план-график видно. */
@@ -81,6 +113,22 @@ export const fireSafetyApi = {
     const { data } = await apiClient.get<{ items?: FireEquipmentDto[] }>(
       "/fire-safety/equipment",
       { params: { limit: 200, offset: 0 } },
+    );
+    return Array.isArray(data?.items) ? data.items : [];
+  },
+
+  listMaintenance: async (
+    equipmentId?: string,
+  ): Promise<FireMaintenanceDto[]> => {
+    const { data } = await apiClient.get<{ items?: FireMaintenanceDto[] }>(
+      "/fire-safety/maintenance",
+      {
+        params: {
+          limit: 200,
+          offset: 0,
+          ...(equipmentId ? { equipment_id: equipmentId } : {}),
+        },
+      },
     );
     return Array.isArray(data?.items) ? data.items : [];
   },

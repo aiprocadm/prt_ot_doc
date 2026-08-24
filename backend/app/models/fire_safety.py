@@ -28,6 +28,10 @@ FIRE_EQUIPMENT_KINDS: tuple[str, ...] = (
     "alarm_system",  # АУПС — сигнализация
     "suppression_system",  # АУПТ — пожаротушение
     "warning_system",  # СОУЭ — оповещение и эвакуация
+    # Разд. 54.1 «испытания (напр., пожарные лестницы, водопровод)»: у работы
+    # должен быть объект, иначе испытание некуда записать.
+    "fire_escape",  # наружная пожарная лестница, ограждение кровли
+    "water_supply",  # противопожарный водопровод (водоотдача)
 )
 
 
@@ -112,4 +116,66 @@ class FireDrill(TenantBaseModel, SoftDeleteMixin):
 
     __table_args__ = (
         Index("ix_fire_drill_tenant_planned", "tenant_id", "planned_on"),
+    )
+
+
+#: Виды регламентных работ (разд. 54.1 «ТО систем ПБ, испытания… устранение»).
+FIRE_MAINTENANCE_KINDS: dict[str, str] = {
+    "recharge": "Перезарядка",
+    "inspection": "Техническое обслуживание и поверка",
+    "test": "Испытание",
+    "repair": "Ремонт и устранение замечаний",
+}
+
+#: Результат работы. Закрытый словарь: «исправно» и «неисправно» должны
+#: считаться, а не пересказываться — пересказ живёт в notes.
+FIRE_MAINTENANCE_RESULTS: dict[str, str] = {
+    "passed": "Исправно",
+    "with_remarks": "Исправно с замечаниями",
+    "failed": "Неисправно",
+}
+
+#: Результаты, при которых средство считается пригодным к дальнейшей работе, а
+#: значит следующий срок можно переносить. «Неисправно» срок НЕ двигает —
+#: иначе просрочка исчезла бы с экрана, а неисправность осталась.
+FIRE_MAINTENANCE_PASSING_RESULTS: frozenset[str] = frozenset({"passed", "with_remarks"})
+
+#: Какой срок средства переносит работа этого вида.
+FIRE_MAINTENANCE_DUE_FIELD: dict[str, str] = {
+    "recharge": "recharge_due",
+    "inspection": "inspection_due",
+    "test": "inspection_due",
+    "repair": "inspection_due",
+}
+
+
+class FireMaintenanceRecord(TenantBaseModel, SoftDeleteMixin):
+    """Выполненная работа по средству ПБ: ТО, поверка, испытание, ремонт.
+
+    ДО этой таблицы у средства хранился только СЛЕДУЮЩИЙ срок, и отметить
+    выполненную работу можно было единственным способом — затереть срок; от
+    самой работы не оставалось следа. Инспектор спрашивает не «когда следующая
+    поверка», а «покажите, что предыдущая была».
+    """
+
+    __tablename__ = "fire_maintenance"
+
+    equipment_id: Mapped[str] = mapped_column(
+        ForeignKey("fire_safety_equipment.id"), nullable=False, index=True
+    )
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    #: дата ФАКТИЧЕСКОГО выполнения — запись о работе это свидетельство, не план
+    performed_on: Mapped[date] = mapped_column(Date, nullable=False)
+    #: кто выполнил: подрядчик с реквизитами акта или свой работник
+    performer: Mapped[str | None] = mapped_column(String(255))
+    result: Mapped[str] = mapped_column(String(32), nullable=False)
+    #: замечания и что устранено
+    notes: Mapped[str | None] = mapped_column(Text)
+    #: срок следующей такой же работы; им же двигается срок у средства
+    next_due: Mapped[date | None] = mapped_column(Date, nullable=True)
+
+    equipment: Mapped[FireSafetyEquipment] = relationship(backref="maintenance_records")
+
+    __table_args__ = (
+        Index("ix_fire_maintenance_tenant_performed", "tenant_id", "performed_on"),
     )

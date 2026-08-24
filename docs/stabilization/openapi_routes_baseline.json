@@ -219,6 +219,7 @@
     "GET /api/v1/findings",
     "GET /api/v1/fire-safety/drills",
     "GET /api/v1/fire-safety/equipment",
+    "GET /api/v1/fire-safety/maintenance",
     "GET /api/v1/fire-safety/readiness",
     "GET /api/v1/imports/batches",
     "GET /api/v1/imports/batches/{batch_id}",
@@ -743,6 +744,7 @@
     "POST /api/v1/findings/{finding_id}/verify",
     "POST /api/v1/fire-safety/drills",
     "POST /api/v1/fire-safety/equipment",
+    "POST /api/v1/fire-safety/maintenance",
     "POST /api/v1/imports/batches/{batch_id}/quality-check",
     "POST /api/v1/imports/batches/{batch_id}/rollback",
     "POST /api/v1/imports/{target_code}/apply",
@@ -1623,6 +1625,7 @@
     "list_kpis_api_v1_exports_kpis_get",
     "list_layout_presets_api_v1_layout_presets_get",
     "list_machine_keys_api_v1_machine_keys_get",
+    "list_maintenance_api_v1_fire_safety_maintenance_get",
     "list_maps_api_v1_risk_advanced_maps_get",
     "list_marketplace_api_v1_marketplace_get",
     "list_medical_exams_api_v1_medical_exams_get",
@@ -1833,6 +1836,7 @@
     "record_client_change_api_v1_managed_clients__mcid__changes_post",
     "record_client_consent_api_v1_managed_clients__mcid__consents_post",
     "record_closing_endpoint_api_v1_work_permits__wp_id__closing_post",
+    "record_maintenance_api_v1_fire_safety_maintenance_post",
     "refresh_edo_status_api_v1_edo_messages__message_id__refresh_status_post",
     "refresh_sign_status_api_v1_sign_requests__request_id__refresh_status_post",
     "refresh_tokens_api_v1_auth_refresh_post",
@@ -2331,6 +2335,9 @@
     "FireEquipmentPage",
     "FireEquipmentRead",
     "FireEquipmentUpdate",
+    "FireMaintenanceCreate",
+    "FireMaintenancePage",
+    "FireMaintenanceRead",
     "FireReadinessRead",
     "FleetUsageReport",
     "GapRecalcIn",
@@ -5197,7 +5204,9 @@
       "location": "null|string",
       "recharge_due": "null|string",
       "inspection_due": "null|string",
-      "status": "string"
+      "status": "string",
+      "last_maintenance_on": "null|string",
+      "last_maintenance_result": "null|string"
     },
     "FireEquipmentUpdate": {
       "kind": "null|string",
@@ -5208,6 +5217,32 @@
       "inspection_due": "null|string",
       "status": "null|string"
     },
+    "FireMaintenanceCreate": {
+      "equipment_id": "string",
+      "kind": "string",
+      "performed_on": "string",
+      "result": "string",
+      "performer": "null|string",
+      "notes": "null|string",
+      "next_due": "null|string"
+    },
+    "FireMaintenancePage": {
+      "items": "array",
+      "total": "integer"
+    },
+    "FireMaintenanceRead": {
+      "id": "string",
+      "equipment_id": "string",
+      "kind": "string",
+      "kind_label": "string",
+      "performed_on": "string",
+      "result": "string",
+      "result_label": "string",
+      "performer": "null|string",
+      "notes": "null|string",
+      "next_due": "null|string",
+      "shifted_due": "boolean"
+    },
     "FireReadinessRead": {
       "total_units": "integer",
       "overdue_recharge": "integer",
@@ -5215,6 +5250,7 @@
       "due_soon": "integer",
       "due_soon_days": "integer",
       "overdue_fire_briefings": "integer",
+      "units_without_maintenance": "integer",
       "overdue_drills": "integer",
       "planned_drills": "integer",
       "last_drill_on": "null|string",

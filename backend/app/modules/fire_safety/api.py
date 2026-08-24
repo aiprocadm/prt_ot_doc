@@ -33,7 +33,12 @@ from app.models.fire_safety import (
     FIRE_DRILL_KINDS,
     FIRE_DRILL_OUTCOMES,
     FIRE_EQUIPMENT_KINDS,
+    FIRE_MAINTENANCE_DUE_FIELD,
+    FIRE_MAINTENANCE_KINDS,
+    FIRE_MAINTENANCE_PASSING_RESULTS,
+    FIRE_MAINTENANCE_RESULTS,
     FireDrill,
+    FireMaintenanceRecord,
     FireSafetyEquipment,
 )
 from app.models.master_data import Site
@@ -47,6 +52,9 @@ from app.schemas.fire_safety import (
     FireEquipmentPage,
     FireEquipmentRead,
     FireEquipmentUpdate,
+    FireMaintenanceCreate,
+    FireMaintenancePage,
+    FireMaintenanceRead,
     FireReadinessRead,
 )
 from app.services.audit import AuditService, field_level_diff
@@ -145,6 +153,65 @@ async def _validate_payload(
             raise _unprocessable("Площадка не найдена")
 
 
+async def _last_maintenance_map(
+    session: AsyncSession, tenant: Tenant, unit_ids: list[str]
+) -> dict[str, tuple[date, str]]:
+    """Последняя работа по каждому средству — одним запросом, а не N+1.
+
+    «Последняя» — по ДАТЕ РАБОТЫ, а не по порядку внесения: задним числом
+    вносят чаще, чем кажется, и «последней» тогда оказалась бы позавчерашняя
+    запись, внесённая сегодня.
+    """
+
+    if not unit_ids:
+        return {}
+    ranked = (
+        select(
+            FireMaintenanceRecord.equipment_id.label("equipment_id"),
+            FireMaintenanceRecord.performed_on.label("performed_on"),
+            FireMaintenanceRecord.result.label("result"),
+            func.row_number()
+            .over(
+                partition_by=FireMaintenanceRecord.equipment_id,
+                order_by=(
+                    FireMaintenanceRecord.performed_on.desc(),
+                    FireMaintenanceRecord.created_at.desc(),
+                ),
+            )
+            .label("rn"),
+        )
+        .where(
+            FireMaintenanceRecord.tenant_id == tenant.id,
+            FireMaintenanceRecord.deleted_at.is_(None),
+            FireMaintenanceRecord.equipment_id.in_(unit_ids),
+        )
+        .subquery()
+    )
+    rows = await session.execute(
+        select(ranked.c.equipment_id, ranked.c.performed_on, ranked.c.result).where(
+            ranked.c.rn == 1
+        )
+    )
+    return {row.equipment_id: (row.performed_on, row.result) for row in rows}
+
+
+def _equipment_read(
+    unit: FireSafetyEquipment, last: tuple[date, str] | None
+) -> FireEquipmentRead:
+    return FireEquipmentRead(
+        id=unit.id,
+        kind=unit.kind,
+        label=unit.label,
+        site_id=unit.site_id,
+        location=unit.location,
+        recharge_due=unit.recharge_due,
+        inspection_due=unit.inspection_due,
+        status=unit.status,
+        last_maintenance_on=last[0] if last else None,
+        last_maintenance_result=last[1] if last else None,
+    )
+
+
 @router.get("/equipment", response_model=FireEquipmentPage)
 async def list_equipment(
     tenant: TenantDep,
@@ -174,8 +241,9 @@ async def list_equipment(
         .scalars()
         .all()
     )
+    last_map = await _last_maintenance_map(session, tenant, [r.id for r in rows])
     return FireEquipmentPage(
-        items=[FireEquipmentRead.model_validate(r) for r in rows], total=total
+        items=[_equipment_read(r, last_map.get(r.id)) for r in rows], total=total
     )
 
 
@@ -258,6 +326,147 @@ async def update_equipment(
     await session.commit()
     await session.refresh(unit)
     return FireEquipmentRead.model_validate(unit)
+
+
+def _maintenance_read(record: FireMaintenanceRecord, *, shifted: bool) -> FireMaintenanceRead:
+    return FireMaintenanceRead(
+        id=record.id,
+        equipment_id=record.equipment_id,
+        kind=record.kind,
+        kind_label=FIRE_MAINTENANCE_KINDS.get(record.kind, record.kind),
+        performed_on=record.performed_on,
+        result=record.result,
+        result_label=FIRE_MAINTENANCE_RESULTS.get(record.result, record.result),
+        performer=record.performer,
+        notes=record.notes,
+        next_due=record.next_due,
+        shifted_due=shifted,
+    )
+
+
+@router.get("/maintenance", response_model=FireMaintenancePage)
+async def list_maintenance(
+    tenant: TenantDep,
+    session: SessionDep,
+    access: Access,
+    equipment_id: str | None = Query(default=None),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+) -> FireMaintenancePage:
+    """История работ: то самое доказательство, которого не было до среза."""
+
+    TenantContextValidator.ensure_tenant_context(tenant)
+    stmt = select(FireMaintenanceRecord).where(
+        FireMaintenanceRecord.tenant_id == tenant.id,
+        FireMaintenanceRecord.deleted_at.is_(None),
+    )
+    if equipment_id:
+        stmt = stmt.where(FireMaintenanceRecord.equipment_id == equipment_id)
+    total = int(await session.scalar(select(func.count()).select_from(stmt.subquery())) or 0)
+    rows = (
+        (
+            await session.execute(
+                stmt.order_by(
+                    FireMaintenanceRecord.performed_on.desc(),
+                    FireMaintenanceRecord.created_at.desc(),
+                )
+                .offset(offset)
+                .limit(limit)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return FireMaintenancePage(
+        items=[
+            _maintenance_read(
+                r,
+                shifted=r.next_due is not None
+                and r.result in FIRE_MAINTENANCE_PASSING_RESULTS,
+            )
+            for r in rows
+        ],
+        total=total,
+    )
+
+
+@router.post(
+    "/maintenance", response_model=FireMaintenanceRead, status_code=status.HTTP_201_CREATED
+)
+async def record_maintenance(
+    request: Request,
+    payload: FireMaintenanceCreate,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: Access,
+) -> FireMaintenanceRead:
+    """Запись о выполненной работе — и ЕДИНСТВЕННЫЙ обоснованный перенос срока.
+
+    Срок у средства двигает сама работа: до этого среза срок можно было
+    сдвинуть голой правкой поля, и «ТО проведено» ничем не отличалось от
+    «ТО не проводили, но дату поправили».
+    """
+
+    TenantContextValidator.ensure_tenant_context(tenant)
+    unit = await _get_unit_or_404(session, tenant, payload.equipment_id)
+    if payload.kind not in FIRE_MAINTENANCE_KINDS:
+        raise _unprocessable(
+            f"Неизвестный вид работы {payload.kind!r}; допустимые: "
+            f"{', '.join(FIRE_MAINTENANCE_KINDS)}"
+        )
+    if payload.result not in FIRE_MAINTENANCE_RESULTS:
+        raise _unprocessable(
+            f"Неизвестный результат {payload.result!r}; допустимые: "
+            f"{', '.join(FIRE_MAINTENANCE_RESULTS)}"
+        )
+    if payload.performed_on > date.today():
+        raise _unprocessable(
+            "Дата работы не может быть в будущем — запись о работе это "
+            "свидетельство, а не план"
+        )
+
+    record = FireMaintenanceRecord(
+        tenant_id=str(tenant.id),
+        equipment_id=unit.id,
+        kind=payload.kind,
+        performed_on=payload.performed_on,
+        performer=(payload.performer or None),
+        result=payload.result,
+        notes=(payload.notes or None),
+        next_due=payload.next_due,
+    )
+    session.add(record)
+
+    # Проваленная работа срок НЕ двигает: перенос означал бы «исправно до
+    # следующего раза» — просрочка ушла бы с экрана, а неисправность осталась.
+    shifted = (
+        payload.next_due is not None
+        and payload.result in FIRE_MAINTENANCE_PASSING_RESULTS
+    )
+    if shifted:
+        setattr(unit, FIRE_MAINTENANCE_DUE_FIELD[payload.kind], payload.next_due)
+
+    await session.flush()
+    await AuditService(session).log_event(
+        tenant_id=str(tenant.id),
+        action="create",
+        object_type="FireMaintenanceRecord",
+        object_id=record.id,
+        user_id=access.user.id,
+        ip=request.client.host if request.client else "unknown",
+        request_id=getattr(request.state, "trace_id", None),
+        user_agent=request.headers.get("user-agent"),
+        changed_fields={"fields": {"id": {"before": None, "after": record.id}}},
+        details={
+            "entity": "FireMaintenanceRecord",
+            "kind": record.kind,
+            "equipment_id": unit.id,
+            "shifted_due": shifted,
+        },
+    )
+    await session.commit()
+    await session.refresh(record)
+    return _maintenance_read(record, shifted=shifted)
 
 
 def _drill_status(drill: FireDrill, today: date) -> str:
@@ -557,6 +766,24 @@ async def fire_readiness(
         or 0
     )
 
+    # Разд. 54.1 «регламентные работы»: срок без единой записи о работе — это
+    # обещание, а не доказательство. Инспектор спрашивает не «когда следующая
+    # поверка», а «покажите, что предыдущая была», поэтому число средств без
+    # подтверждения стоит в сводке рядом с просрочками.
+    confirmed_ids = set(
+        (
+            await session.execute(
+                select(FireMaintenanceRecord.equipment_id.distinct()).where(
+                    FireMaintenanceRecord.tenant_id == tenant.id,
+                    FireMaintenanceRecord.deleted_at.is_(None),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    units_without_maintenance = sum(1 for r in rows if r.id not in confirmed_ids)
+
     # Разд. 54.1 «Тренировки и учения»: просроченный план тренировки — такое же
     # нарушение к приходу инспектора, как непроверенный огнетушитель.
     # ГРАНИЦА: интервал «не реже раза в полгода» (ППР РФ) здесь НЕ судится —
@@ -598,6 +825,7 @@ async def fire_readiness(
         )
     )
     return FireReadinessRead(
+        units_without_maintenance=units_without_maintenance,
         overdue_drills=overdue_drills,
         planned_drills=planned_drills,
         last_drill_on=last_drill_on,
