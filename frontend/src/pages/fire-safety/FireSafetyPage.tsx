@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from "react";
 
 import {
   FIRE_EQUIPMENT_TITLES,
+  FIRE_MAINTENANCE_RESULT_TITLES,
   fireSafetyApi,
   type FireEquipmentKind,
 } from "@/api/fireSafety";
@@ -54,6 +55,7 @@ const FireSafetyPage = () => {
         due_soon: 0,
         due_soon_days: 30,
         overdue_fire_briefings: 0,
+        units_without_maintenance: 0,
         // Тренировки живут на своём экране (/fire-training); здесь они только
         // часть той же сводки готовности, поэтому в заглушке нули.
         overdue_drills: 0,
@@ -126,6 +128,13 @@ const FireSafetyPage = () => {
           {
             label: "Просроченных инструктажей ПБ",
             value: readiness.overdue_fire_briefings,
+          },
+          // Разд. 54.1 «регламентные работы»: срок без единой записи о работе —
+          // обещание, а не доказательство; инспектор просит показать предыдущее
+          // ТО, а не назвать дату следующего.
+          {
+            label: "Без подтверждения ТО",
+            value: readiness.units_without_maintenance,
           },
         ]}
       />
@@ -239,6 +248,21 @@ const FireSafetyPage = () => {
                   accessorKey: "inspection_due",
                   header: "Поверка / ТО",
                   cell: ({ row }) => dueLabel(row.original.inspection_due),
+                },
+                {
+                  // Разд. 54.1: последняя ПОДТВЕРЖДЁННАЯ работа. Отсутствие
+                  // записей названо словами — пустая ячейка читалась бы как
+                  // «данные не подгрузились», а это другое.
+                  accessorKey: "last_maintenance_on",
+                  header: "Последнее ТО",
+                  cell: ({ row }) =>
+                    row.original.last_maintenance_on
+                      ? `${formatDate(row.original.last_maintenance_on)} · ${
+                          FIRE_MAINTENANCE_RESULT_TITLES[
+                            row.original.last_maintenance_result ?? ""
+                          ] ?? "—"
+                        }`
+                      : "нет записей",
                 },
               ]}
               data={equipmentRegistry.pagedItems}

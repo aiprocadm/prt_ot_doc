@@ -38,10 +38,45 @@ class FireEquipmentRead(BaseSchema):
     recharge_due: date | None = None
     inspection_due: date | None = None
     status: str
+    #: разд. 54.1 «регламентные работы»: последняя ПОДТВЕРЖДЁННАЯ работа —
+    #: срок без неё это обещание, а не доказательство. Считается при чтении.
+    last_maintenance_on: date | None = None
+    last_maintenance_result: str | None = None
 
 
 class FireEquipmentPage(BaseSchema):
     items: list[FireEquipmentRead]
+    total: int
+
+
+class FireMaintenanceCreate(BaseSchema):
+    equipment_id: str = Field(min_length=1, max_length=36)
+    kind: str = Field(min_length=1, max_length=32)
+    performed_on: date
+    result: str = Field(min_length=1, max_length=32)
+    performer: str | None = Field(default=None, max_length=255)
+    notes: str | None = None
+    next_due: date | None = None
+
+
+class FireMaintenanceRead(BaseSchema):
+    id: str
+    equipment_id: str
+    kind: str
+    #: вид и результат словами — перевод делает сервер (прецедент тренировок)
+    kind_label: str
+    performed_on: date
+    result: str
+    result_label: str
+    performer: str | None = None
+    notes: str | None = None
+    next_due: date | None = None
+    #: перенесла ли эта запись срок у средства; «неисправно» не переносит
+    shifted_due: bool = False
+
+
+class FireMaintenancePage(BaseSchema):
+    items: list[FireMaintenanceRead]
     total: int
 
 
@@ -105,6 +140,9 @@ class FireReadinessRead(BaseSchema):
     #: разд. 54.1 «контроль сроков»: просроченные ПРОТИВОПОЖАРНЫЕ инструктажи
     #: (виды fire_* и ПТМ) — вторая половина готовности к проверке МЧС
     overdue_fire_briefings: int
+    #: разд. 54.1 «регламентные работы»: средства, у которых нет НИ ОДНОЙ
+    #: записи о выполненной работе — срок стоит, а подтвердить его нечем
+    units_without_maintenance: int = 0
     #: разд. 54.1 «Тренировки и учения»: план прошёл, факта нет
     overdue_drills: int = 0
     #: назначенные вперёд — не просрочка, но показывать надо (иначе пустой

@@ -36,6 +36,8 @@ const populatedEquipment = [
     recharge_due: "2020-01-01",
     inspection_due: null,
     status: "active",
+    last_maintenance_on: "2026-08-01",
+    last_maintenance_result: "with_remarks",
   },
   {
     id: "eq-2",
@@ -45,6 +47,9 @@ const populatedEquipment = [
     recharge_due: null,
     inspection_due: "2099-01-01",
     status: "active",
+    // Работ по этому средству не было ни разу — срок есть, подтверждения нет.
+    last_maintenance_on: null,
+    last_maintenance_result: null,
   },
 ];
 
@@ -55,6 +60,7 @@ const populatedReadiness = {
   due_soon: 1,
   due_soon_days: 30,
   overdue_fire_briefings: 2,
+  units_without_maintenance: 1,
 };
 
 /** Наполненный снимок: статистика шапки и реестр площадок на экране. */
@@ -146,7 +152,9 @@ describe("FireSafetyPage", () => {
     );
 
     expect(await screen.findByText("Цех сборки №1")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Средства и системы" }));
+    await user.click(
+      screen.getByRole("button", { name: "Средства и системы" }),
+    );
 
     expect(await screen.findByText("ОП-5 №1")).toBeInTheDocument();
     // Вид — словами, а не кодом; просроченный срок назван просроченным.
@@ -154,6 +162,46 @@ describe("FireSafetyPage", () => {
     // Не просто «дата в прошлом» — ячейка прямо называет срок просроченным
     // (в шапке слово тоже есть, поэтому матчим ячейку с датой).
     expect(screen.getByText(/·\s*просрочен$/i)).toBeInTheDocument();
+  });
+
+  // Доп. №1 разд. 54.1 «регламентные работы». До этого среза у средства был
+  // только СЛЕДУЮЩИЙ срок: отметить выполненное ТО можно было единственным
+  // способом — затереть срок, и от работы не оставалось следа.
+  it("показывает последнее подтверждённое ТО и называет его отсутствие", async () => {
+    getFireSafetySnapshotMock.mockResolvedValue(populatedFireSafetySnapshot);
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter>
+        <FireSafetyPage />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("Цех сборки №1")).toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: "Средства и системы" }),
+    );
+
+    expect(await screen.findByText("ОП-5 №1")).toBeInTheDocument();
+    // Результат — словами, а не кодом «with_remarks».
+    expect(screen.getByText(/Исправно с замечаниями/)).toBeInTheDocument();
+    // Отсутствие записей названо словами: пустая ячейка читалась бы как
+    // «данные не подгрузились», а это другое.
+    expect(screen.getByText("нет записей")).toBeInTheDocument();
+  });
+
+  it("средства без подтверждения ТО названы числом в шапке", async () => {
+    getFireSafetySnapshotMock.mockResolvedValue(populatedFireSafetySnapshot);
+
+    render(
+      <MemoryRouter>
+        <FireSafetyPage />
+      </MemoryRouter>,
+    );
+
+    expect(
+      await screen.findByText(/без подтверждения ТО/i),
+    ).toBeInTheDocument();
   });
 
   it("FireSafetyPage в UX-бюджете в ОБЕИХ секциях", async () => {
@@ -171,7 +219,9 @@ describe("FireSafetyPage", () => {
     expect(sites.unexpected).toEqual([]);
     expect(sites.stale).toEqual([]);
 
-    await user.click(screen.getByRole("button", { name: "Средства и системы" }));
+    await user.click(
+      screen.getByRole("button", { name: "Средства и системы" }),
+    );
     expect(await screen.findByText("ОП-5 №1")).toBeInTheDocument();
     const equipment = uxBudgetDelta(document.body, "FireSafetyPage");
     expect(equipment.unexpected).toEqual([]);
