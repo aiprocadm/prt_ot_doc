@@ -152,6 +152,33 @@ class DeviceWorkPage(BaseSchema):
     total: int
 
 
+class OpoAttestationRead(BaseSchema):
+    """Аттестация по промбезопасности глазами дисциплины.
+
+    Сама запись живёт в ЯДРЕ (``Attestation``) — дисциплина её не дублирует, а
+    показывает свои записи (те, у которых заполнена область из справочника) и
+    добавляет то, чего у ядра нет: имя человека рядом и состояние срока
+    словами.
+    """
+
+    id: str
+    person_id: str
+    person_name: str
+    name: str
+    area_code: str
+    area_label: str
+    issued_at: date | None = None
+    expires_at: date | None = None
+    #: ok / due_soon / overdue / absent — считается ПРИ ЧТЕНИИ
+    validity_status: str
+    validity_status_label: str
+
+
+class OpoAttestationPage(BaseSchema):
+    items: list[OpoAttestationRead]
+    total: int
+
+
 class IndustrialReadinessRead(BaseSchema):
     """Сводка ПромБеза: сколько объектов и какого класса опасности.
 
@@ -182,3 +209,9 @@ class IndustrialReadinessRead(BaseSchema):
     #: разд. 54.2 «история работ»: устройства, по которым нет НИ ОДНОЙ записи о
     #: работах — срок стоит, а подтвердить его нечем
     devices_without_work_record: int = 0
+    #: разд. 54.2 «аттестация персонала»: считаются ТОЛЬКО записи с областью из
+    #: справочника — сводка дисциплины показывает свои записи, а не все
+    #: аттестации арендатора
+    attestations_total: int = 0
+    attestations_overdue: int = 0
+    attestations_due_soon: int = 0

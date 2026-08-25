@@ -192,6 +192,17 @@ OPO_WORK_RESULTS: dict[str, str] = {
 OPO_WORK_PASSING_RESULTS: frozenset[str] = frozenset({"passed", "with_remarks"})
 
 
+#: Состояние срока аттестации словами. «Срока нет» — отдельное состояние, а не
+#: «всё в порядке»: аттестация действует пять лет, и запись без даты окончания
+#: означает неполные сведения, а не бессрочный допуск.
+OPO_ATTESTATION_STATUS_TITLES: dict[str, str] = {
+    "ok": "Действует",
+    "due_soon": "Скоро истекает",
+    "overdue": "Просрочена",
+    "absent": "Срок не указан",
+}
+
+
 class DeviceWorkRecord(TenantBaseModel, SoftDeleteMixin):
     """Выполненная работа по техническому устройству: диагностика, ЭПБ, ремонт.
 

@@ -9,6 +9,8 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.core.disciplines import ATTESTATION_AREA_TITLES
+from app.core.errors import api_problem_detail
 from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
 from app.db.session import rearm_session_tenant_context
@@ -53,6 +55,41 @@ EditorAccess = Annotated[
         )
     ),
 ]
+
+
+def _validate_attestation_area(area_code: str | None) -> None:
+    """Область аттестации — из ЗАКРЫТОГО справочника (Доп. №1 разд. 54.2).
+
+    Проверяется НА ЗАПИСИ, а не на чтении: прежние записи (у них области нет
+    вовсе) читаются как раньше. Пустая область допустима — у аттестаций других
+    дисциплин её и не должно быть.
+    """
+
+    if area_code is None:
+        return
+    if area_code not in ATTESTATION_AREA_TITLES:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=api_problem_detail(
+                code="ATTESTATION_AREA_UNKNOWN",
+                message=(
+                    f"Неизвестная область аттестации {area_code!r}; допустимые: "
+                    f"{', '.join(ATTESTATION_AREA_TITLES)}"
+                ),
+                error_type="attestations",
+            ),
+        )
+
+
+def _attestation_read(record: Attestation) -> AttestationRead:
+    """Ответ с областью СЛОВАМИ: код «Б.9» человеку ничего не говорит."""
+
+    data = AttestationRead.model_validate(record)
+    if record.area_code:
+        data = data.model_copy(
+            update={"area_label": ATTESTATION_AREA_TITLES.get(record.area_code)}
+        )
+    return data
 
 
 async def _get_person(session: AsyncSession, tenant_id: str, person_id: str) -> Person:
@@ -125,7 +162,7 @@ async def list_attestations(
     items = list((await session.execute(stmt)).scalars().all())
     total = await session.scalar(total_stmt)
     return AttestationPage(
-        items=[AttestationRead.model_validate(item) for item in items], total=int(total or 0)
+        items=[_attestation_read(item) for item in items], total=int(total or 0)
     )
 
 
@@ -145,11 +182,14 @@ async def create_attestation(
     if payload.responsible_id:
         await _get_user(session, str(tenant.id), payload.responsible_id)
 
+    _validate_attestation_area(payload.area_code)
+
     record = Attestation(
         tenant_id=str(tenant.id),
         person_id=person.id,
         position_id=payload.position_id,
         name=payload.name,
+        area_code=payload.area_code,
         issued_at=payload.issued_at,
         expires_at=payload.expires_at,
         status=payload.status,
@@ -182,7 +222,7 @@ async def create_attestation(
     # further session work (SEC-65)
     await rearm_session_tenant_context(session)
     await session.refresh(record)
-    return AttestationRead.model_validate(record)
+    return _attestation_read(record)
 
 
 @router.get("/attestations/{attestation_id}", response_model=AttestationRead)
@@ -195,7 +235,7 @@ async def get_attestation(
     TenantContextValidator.ensure_tenant_context(tenant)
 
     attestation = await _get_attestation(session, str(tenant.id), attestation_id)
-    return AttestationRead.model_validate(attestation)
+    return _attestation_read(attestation)
 
 
 @router.patch("/attestations/{attestation_id}", response_model=AttestationRead)
@@ -217,6 +257,8 @@ async def update_attestation(
         await _get_position(session, str(tenant.id), str(updates["position_id"]))
     if "responsible_id" in updates and updates["responsible_id"]:
         await _get_user(session, str(tenant.id), str(updates["responsible_id"]))
+    if "area_code" in updates:
+        _validate_attestation_area(updates["area_code"])
 
     for key, value in updates.items():
         setattr(record, key, value)
@@ -245,4 +287,4 @@ async def update_attestation(
     # further session work (SEC-65)
     await rearm_session_tenant_context(session)
     await session.refresh(record)
-    return AttestationRead.model_validate(record)
+    return _attestation_read(record)

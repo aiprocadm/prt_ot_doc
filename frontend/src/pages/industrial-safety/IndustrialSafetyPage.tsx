@@ -29,15 +29,16 @@ import { formatDate } from "@/utils/datetime";
 const IndustrialSafetyPage = () => {
   // Секции ПО ОДНОЙ (прецедент экрана ПБ): объекты и устройства — разные
   // задачи, и показывать обе таблицы сразу значит растить экран.
-  const [section, setSection] = useState<"facilities" | "devices">(
-    "facilities",
-  );
+  const [section, setSection] = useState<
+    "facilities" | "devices" | "attestations"
+  >("facilities");
 
   const { data, loading, error, reload } = useAsyncResource({
     loader: useCallback(
       async () => ({
         facilities: await industrialSafetyApi.listFacilities(),
         devices: await industrialSafetyApi.listDevices(),
+        attestations: await industrialSafetyApi.listAttestations(),
         readiness: await industrialSafetyApi.readiness(),
       }),
       [],
@@ -45,6 +46,7 @@ const IndustrialSafetyPage = () => {
     initialData: {
       facilities: [],
       devices: [],
+      attestations: [],
       readiness: {
         total_facilities: 0,
         by_class: { I: 0, II: 0, III: 0, IV: 0 },
@@ -54,6 +56,9 @@ const IndustrialSafetyPage = () => {
         epb_due_soon: 0,
         devices_past_lifetime_without_epb: 0,
         devices_without_work_record: 0,
+        attestations_total: 0,
+        attestations_overdue: 0,
+        attestations_due_soon: 0,
       },
     },
     errorMessage: "Не удалось загрузить реестр ОПО",
@@ -83,6 +88,16 @@ const IndustrialSafetyPage = () => {
         item.serial_number,
         item.epb_conclusion_number,
       ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(query),
+  });
+
+  const attestationRegistry = useLocalRegistry({
+    items: data.attestations,
+    match: (item, query) =>
+      [item.person_name, item.area_label, item.name]
         .filter(Boolean)
         .join(" ")
         .toLowerCase()
@@ -121,6 +136,12 @@ const IndustrialSafetyPage = () => {
             label: "Без записей о работах",
             value: readiness.devices_without_work_record,
           },
+          // Разд. 54.2 «аттестация персонала»: просроченная аттестация — это
+          // нарушение допуска человека к работам на ОПО.
+          {
+            label: "Просрочено аттестаций",
+            value: readiness.attestations_overdue,
+          },
         ]}
       />
 
@@ -129,6 +150,7 @@ const IndustrialSafetyPage = () => {
           [
             ["facilities", "Объекты (ОПО)"],
             ["devices", "Технические устройства"],
+            ["attestations", "Аттестация персонала"],
           ] as const
         ).map(([key, label]) => (
           <Button
@@ -144,6 +166,59 @@ const IndustrialSafetyPage = () => {
 
       <ErrorState error={error ?? undefined} onRetry={() => void reload()} />
       {loading ? <LoadingScreen label="Загрузка реестра ОПО" /> : null}
+      {section === "attestations" ? (
+        <>
+          {!loading && !error && attestationRegistry.total === 0 ? (
+            <EmptyState
+              title="Аттестации по промышленной безопасности не заведены"
+              description="Внесите аттестации работников с областью из справочника (А.1, Б.1–Б.12): без области запись относится к другой дисциплине и в этот реестр не попадает."
+            />
+          ) : null}
+          {!loading && !error && attestationRegistry.total > 0 ? (
+            <RegistryTable
+              columns={[
+                { accessorKey: "person_name", header: "Работник" },
+                {
+                  // Область словами: код «Б.9» человеку ничего не говорит.
+                  accessorKey: "area_label",
+                  header: "Область аттестации",
+                  cell: ({ row }) => row.original.area_label,
+                },
+                {
+                  accessorKey: "issued_at",
+                  header: "Аттестован",
+                  cell: ({ row }) =>
+                    row.original.issued_at
+                      ? formatDate(row.original.issued_at)
+                      : "—",
+                },
+                {
+                  accessorKey: "expires_at",
+                  header: "Действует до",
+                  cell: ({ row }) =>
+                    row.original.expires_at
+                      ? formatDate(row.original.expires_at)
+                      : "не указан",
+                },
+                {
+                  accessorKey: "validity_status_label",
+                  header: "Состояние",
+                  cell: ({ row }) => row.original.validity_status_label,
+                },
+              ]}
+              data={attestationRegistry.pagedItems}
+              pageIndex={attestationRegistry.pageIndex}
+              pageSize={attestationRegistry.pageSize}
+              total={attestationRegistry.total}
+              onPageChange={attestationRegistry.onPageChange}
+              onPageSizeChange={attestationRegistry.onPageSizeChange}
+              onSearchChange={attestationRegistry.onSearchChange}
+              searchPlaceholder="Поиск по работнику и области аттестации"
+              caption="Аттестация по промышленной безопасности"
+            />
+          ) : null}
+        </>
+      ) : null}
       {section === "devices" ? (
         <>
           {/*

@@ -8,6 +8,7 @@ import { uxBudgetDelta } from "@/test-utils/uxBudget";
 
 const listFacilitiesMock = vi.fn();
 const listDevicesMock = vi.fn();
+const listAttestationsMock = vi.fn();
 const readinessMock = vi.fn();
 
 vi.mock("@/api/industrialSafety", async (importOriginal) => ({
@@ -15,6 +16,7 @@ vi.mock("@/api/industrialSafety", async (importOriginal) => ({
   industrialSafetyApi: {
     listFacilities: (...args: unknown[]) => listFacilitiesMock(...args),
     listDevices: (...args: unknown[]) => listDevicesMock(...args),
+    listAttestations: (...args: unknown[]) => listAttestationsMock(...args),
     readiness: (...args: unknown[]) => readinessMock(...args),
   },
 }));
@@ -98,6 +100,34 @@ const populatedFacilities = [
   },
 ];
 
+/** Аттестация: одна действует, одна просрочена. */
+const populatedAttestations = [
+  {
+    id: "att-1",
+    person_id: "p-1",
+    person_name: "Петров Пётр",
+    name: "Аттестация по промышленной безопасности",
+    area_code: "Б.9",
+    area_label: "Б.9 — подъёмные сооружения",
+    issued_at: "2024-02-01",
+    expires_at: "2029-02-01",
+    validity_status: "ok",
+    validity_status_label: "Действует",
+  },
+  {
+    id: "att-2",
+    person_id: "p-2",
+    person_name: "Сидоров Сидор",
+    name: "Аттестация по промышленной безопасности",
+    area_code: "Б.8",
+    area_label: "Б.8 — оборудование, работающее под избыточным давлением",
+    issued_at: "2015-05-05",
+    expires_at: "2020-05-05",
+    validity_status: "overdue",
+    validity_status_label: "Просрочена",
+  },
+];
+
 const populatedReadiness = {
   total_facilities: 2,
   by_class: { I: 0, II: 0, III: 1, IV: 1 },
@@ -107,15 +137,20 @@ const populatedReadiness = {
   epb_due_soon: 0,
   devices_past_lifetime_without_epb: 1,
   devices_without_work_record: 1,
+  attestations_total: 2,
+  attestations_overdue: 1,
+  attestations_due_soon: 0,
 };
 
 describe("IndustrialSafetyPage", () => {
   beforeEach(() => {
     listFacilitiesMock.mockReset();
     listDevicesMock.mockReset();
+    listAttestationsMock.mockReset();
     readinessMock.mockReset();
     listFacilitiesMock.mockResolvedValue(populatedFacilities);
     listDevicesMock.mockResolvedValue(populatedDevices);
+    listAttestationsMock.mockResolvedValue(populatedAttestations);
     readinessMock.mockResolvedValue(populatedReadiness);
   });
 
@@ -255,6 +290,33 @@ describe("IndustrialSafetyPage", () => {
     expect(
       await screen.findByText(/определяет специалист/i),
     ).toBeInTheDocument();
+  });
+
+  // Доп. №1 разд. 54.2 срез-4: аттестация. Область жила в свободной строке
+  // `name`, а экрана у ядровых аттестаций не было ни одного.
+  it("аттестация открывается третьей секцией с областью словами", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter>
+        <IndustrialSafetyPage />
+      </MemoryRouter>,
+    );
+
+    expect(
+      await screen.findByText("Сеть газопотребления котельной"),
+    ).toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: "Аттестация персонала" }),
+    );
+
+    expect(await screen.findByText("Петров Пётр")).toBeInTheDocument();
+    // Область — словами, а не кодом «Б.9».
+    expect(screen.getByText("Б.9 — подъёмные сооружения")).toBeInTheDocument();
+    // Просроченная аттестация названа просроченной.
+    expect(screen.getByText("Просрочена")).toBeInTheDocument();
+    // И то же самое числом в шапке.
+    expect(screen.getByText(/просрочено аттестаций/i)).toBeInTheDocument();
   });
 
   it("IndustrialSafetyPage в UX-бюджете", async () => {

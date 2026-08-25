@@ -14,6 +14,9 @@ class AttestationCreate(BaseSchema):
     person_id: str = Field(min_length=1, max_length=36)
     position_id: str | None = Field(default=None, min_length=1, max_length=36)
     name: str = Field(min_length=1, max_length=255)
+    #: Доп. №1 разд. 54.2: область аттестации из закрытого справочника.
+    #: Необязательна — у аттестаций других дисциплин её нет.
+    area_code: str | None = Field(default=None, max_length=16)
     issued_at: date | None = None
     expires_at: date | None = None
     status: AttestationStatus = AttestationStatus.ACTIVE
@@ -25,6 +28,7 @@ class AttestationUpdate(BaseSchema):
     person_id: str | None = Field(default=None, min_length=1, max_length=36)
     position_id: str | None = Field(default=None, min_length=1, max_length=36)
     name: str | None = Field(default=None, min_length=1, max_length=255)
+    area_code: str | None = Field(default=None, max_length=16)
     issued_at: date | None = None
     expires_at: date | None = None
     status: AttestationStatus | None = None
@@ -37,6 +41,9 @@ class AttestationRead(BaseSchema):
     person_id: str
     position_id: str | None
     name: str
+    area_code: str | None = None
+    #: область словами — перевод делает сервер, экран его не дублирует
+    area_label: str | None = None
     issued_at: date | None
     expires_at: date | None
     status: AttestationStatus

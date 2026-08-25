@@ -144,6 +144,13 @@ class Attestation(TenantBaseModel, SoftDeleteMixin):
         ForeignKey("position.id", ondelete="SET NULL"), nullable=True, index=True
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
+    #: Доп. №1 разд. 54.2: область аттестации из ЗАКРЫТОГО справочника
+    #: (``app.core.disciplines.ATTESTATION_AREA_TITLES``). НЕОБЯЗАТЕЛЬНА: у
+    #: аттестаций других дисциплин области нет, а требовать её значило бы
+    #: сломать существующие записи и объявить всякую аттестацию промбезовской.
+    #: До неё область жила в свободной строке ``name``, и вопрос «кто
+    #: аттестован по Б.9» не имел ответа.
+    area_code: Mapped[str | None] = mapped_column(String(16), nullable=True)
     issued_at: Mapped[date | None] = mapped_column(Date)
     expires_at: Mapped[date | None] = mapped_column(Date)
     status: Mapped[AttestationStatus] = mapped_column(
@@ -164,6 +171,7 @@ class Attestation(TenantBaseModel, SoftDeleteMixin):
         Index("ix_attestation_person", "tenant_id", "person_id"),
         Index("ix_attestation_status", "tenant_id", "status"),
         Index("ix_attestation_expires", "tenant_id", "expires_at"),
+        Index("ix_attestation_area", "tenant_id", "area_code"),
     )
 
 
