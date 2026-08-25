@@ -132,6 +132,8 @@ from app.models.incidents import (
 from app.models.industrial_safety import (  # noqa: E402,F401
     DeviceWorkRecord,
     HazardousFacility,
+    ProductionControlMeasure,
+    ProductionControlPlan,
     TechnicalDevice,
 )
 

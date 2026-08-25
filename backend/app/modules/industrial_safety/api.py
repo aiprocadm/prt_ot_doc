@@ -36,8 +36,14 @@ from app.models.industrial_safety import (
     OPO_WORK_KINDS,
     OPO_WORK_PASSING_RESULTS,
     OPO_WORK_RESULTS,
+    PC_MEASURE_SECTIONS,
+    PC_MEASURE_STATUS_TITLES,
+    PC_MEASURE_WRITABLE_STATUSES,
+    PC_PLAN_STATUSES,
     DeviceWorkRecord,
     HazardousFacility,
+    ProductionControlMeasure,
+    ProductionControlPlan,
     TechnicalDevice,
 )
 from app.models.master_data import Person, Site
@@ -53,6 +59,14 @@ from app.schemas.industrial_safety import (
     IndustrialReadinessRead,
     OpoAttestationPage,
     OpoAttestationRead,
+    PcMeasureCreate,
+    PcMeasurePage,
+    PcMeasureRead,
+    PcMeasureUpdate,
+    PcPlanCreate,
+    PcPlanPage,
+    PcPlanRead,
+    PcPlanUpdate,
     TechnicalDeviceCreate,
     TechnicalDevicePage,
     TechnicalDeviceRead,
@@ -908,6 +922,443 @@ async def list_attestations(
     return OpoAttestationPage(items=items, total=total)
 
 
+def _measure_status(measure: ProductionControlMeasure, today: date) -> str:
+    """planned / overdue / done / cancelled — «просрочено» СЧИТАЕТСЯ при чтении.
+
+    Хранить просрочку полем нельзя: срок наступает сам, без запроса на
+    изменение, и хранимая метка разъехалась бы с календарём в первую же ночь
+    (тот же довод, что у состояния тренировок в контуре ПБ).
+    """
+
+    if measure.status in {"done", "cancelled"}:
+        return measure.status
+    return "overdue" if measure.due_on < today else "planned"
+
+
+def _measure_read(measure: ProductionControlMeasure, today: date) -> PcMeasureRead:
+    status_value = _measure_status(measure, today)
+    return PcMeasureRead(
+        id=measure.id,
+        plan_id=measure.plan_id,
+        section=measure.section,
+        section_label=PC_MEASURE_SECTIONS.get(measure.section, measure.section),
+        title=measure.title,
+        due_on=measure.due_on,
+        responsible=measure.responsible,
+        status=status_value,
+        status_label=PC_MEASURE_STATUS_TITLES.get(status_value, status_value),
+        completed_on=measure.completed_on,
+        result=measure.result,
+    )
+
+
+async def _get_plan_or_404(
+    session: AsyncSession, tenant: Tenant, plan_id: str
+) -> ProductionControlPlan:
+    stmt = select(ProductionControlPlan).where(
+        ProductionControlPlan.id == plan_id,
+        ProductionControlPlan.tenant_id == tenant.id,
+        ProductionControlPlan.deleted_at.is_(None),
+    )
+    plan = (await session.execute(stmt)).scalar_one_or_none()
+    if plan is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            detail=api_problem_detail(
+                code="PC_PLAN_NOT_FOUND",
+                message="Production control plan not found",
+                error_type="industrial_safety",
+            ),
+        )
+    return plan
+
+
+async def _get_measure_or_404(
+    session: AsyncSession, tenant: Tenant, measure_id: str
+) -> ProductionControlMeasure:
+    stmt = select(ProductionControlMeasure).where(
+        ProductionControlMeasure.id == measure_id,
+        ProductionControlMeasure.tenant_id == tenant.id,
+        ProductionControlMeasure.deleted_at.is_(None),
+    )
+    measure = (await session.execute(stmt)).scalar_one_or_none()
+    if measure is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            detail=api_problem_detail(
+                code="PC_MEASURE_NOT_FOUND",
+                message="Production control measure not found",
+                error_type="industrial_safety",
+            ),
+        )
+    return measure
+
+
+async def _ensure_plan_year_free(
+    session: AsyncSession, tenant: Tenant, year: int, *, exclude_id: str | None = None
+) -> None:
+    """План ПК — годовой документ: второй на тот же год это дубль."""
+
+    stmt = select(ProductionControlPlan.id).where(
+        ProductionControlPlan.tenant_id == tenant.id,
+        ProductionControlPlan.year == year,
+        ProductionControlPlan.deleted_at.is_(None),
+    )
+    if exclude_id:
+        stmt = stmt.where(ProductionControlPlan.id != exclude_id)
+    if (await session.execute(stmt)).scalar_one_or_none() is not None:
+        raise _unprocessable(f"План производственного контроля на {year} год уже заведён")
+
+
+async def _plan_read(
+    session: AsyncSession, tenant: Tenant, plan: ProductionControlPlan, today: date
+) -> PcPlanRead:
+    measures = (
+        (
+            await session.execute(
+                select(ProductionControlMeasure).where(
+                    ProductionControlMeasure.tenant_id == tenant.id,
+                    ProductionControlMeasure.plan_id == plan.id,
+                    ProductionControlMeasure.deleted_at.is_(None),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return PcPlanRead(
+        id=plan.id,
+        year=plan.year,
+        title=plan.title,
+        responsible=plan.responsible,
+        approved_on=plan.approved_on,
+        status=plan.status,
+        status_label=PC_PLAN_STATUSES.get(plan.status, plan.status),
+        notes=plan.notes,
+        measures_total=len(measures),
+        measures_overdue=sum(
+            1 for m in measures if _measure_status(m, today) == "overdue"
+        ),
+    )
+
+
+@router.get("/pc-plans", response_model=PcPlanPage)
+async def list_pc_plans(
+    tenant: TenantDep,
+    session: SessionDep,
+    access: Access,
+    year: int | None = Query(default=None),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+) -> PcPlanPage:
+    """Планы производственного контроля по годам."""
+
+    TenantContextValidator.ensure_tenant_context(tenant)
+    today = date.today()
+    stmt = select(ProductionControlPlan).where(
+        ProductionControlPlan.tenant_id == tenant.id,
+        ProductionControlPlan.deleted_at.is_(None),
+    )
+    if year:
+        stmt = stmt.where(ProductionControlPlan.year == year)
+    total = int(await session.scalar(select(func.count()).select_from(stmt.subquery())) or 0)
+    rows = (
+        (
+            await session.execute(
+                stmt.order_by(ProductionControlPlan.year.desc()).offset(offset).limit(limit)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return PcPlanPage(
+        items=[await _plan_read(session, tenant, plan, today) for plan in rows],
+        total=total,
+    )
+
+
+@router.post("/pc-plans", response_model=PcPlanRead, status_code=status.HTTP_201_CREATED)
+async def create_pc_plan(
+    request: Request,
+    payload: PcPlanCreate,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: Access,
+) -> PcPlanRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    if payload.status not in PC_PLAN_STATUSES:
+        raise _unprocessable(
+            f"Неизвестное состояние {payload.status!r}; допустимые: "
+            f"{', '.join(PC_PLAN_STATUSES)}"
+        )
+    await _ensure_plan_year_free(session, tenant, payload.year)
+
+    plan = ProductionControlPlan(
+        tenant_id=str(tenant.id),
+        year=payload.year,
+        title=payload.title.strip(),
+        responsible=(payload.responsible or None),
+        approved_on=payload.approved_on,
+        status=payload.status or "draft",
+        notes=(payload.notes or None),
+    )
+    session.add(plan)
+    await session.flush()
+    await AuditService(session).log_event(
+        tenant_id=str(tenant.id),
+        action="create",
+        object_type="ProductionControlPlan",
+        object_id=plan.id,
+        user_id=access.user.id,
+        ip=request.client.host if request.client else "unknown",
+        request_id=getattr(request.state, "trace_id", None),
+        user_agent=request.headers.get("user-agent"),
+        changed_fields={"fields": {"id": {"before": None, "after": plan.id}}},
+        details={"entity": "ProductionControlPlan", "year": plan.year},
+    )
+    await session.commit()
+    await session.refresh(plan)
+    return await _plan_read(session, tenant, plan, date.today())
+
+
+@router.patch("/pc-plans/{plan_id}", response_model=PcPlanRead)
+async def update_pc_plan(
+    request: Request,
+    plan_id: str,
+    payload: PcPlanUpdate,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: Access,
+) -> PcPlanRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    plan = await _get_plan_or_404(session, tenant, plan_id)
+    data = payload.model_dump(exclude_unset=True)
+    if "status" in data and data["status"] not in PC_PLAN_STATUSES:
+        raise _unprocessable(
+            f"Неизвестное состояние {data['status']!r}; допустимые: "
+            f"{', '.join(PC_PLAN_STATUSES)}"
+        )
+    if "year" in data and data["year"]:
+        await _ensure_plan_year_free(session, tenant, int(data["year"]), exclude_id=plan.id)
+
+    today = date.today()
+    before = (await _plan_read(session, tenant, plan, today)).model_dump()
+    for field in ("year", "title", "responsible", "approved_on", "status", "notes"):
+        if field in data:
+            value = data[field]
+            if field == "title" and (value is None or not str(value).strip()):
+                raise _unprocessable("title cannot be empty")
+            setattr(plan, field, value.strip() if isinstance(value, str) else value)
+    after = (await _plan_read(session, tenant, plan, today)).model_dump()
+    await AuditService(session).log_event(
+        tenant_id=str(tenant.id),
+        action="update",
+        object_type="ProductionControlPlan",
+        object_id=plan.id,
+        user_id=access.user.id,
+        ip=request.client.host if request.client else "unknown",
+        request_id=getattr(request.state, "trace_id", None),
+        user_agent=request.headers.get("user-agent"),
+        changed_fields=field_level_diff(before, after),
+        details={"entity": "ProductionControlPlan"},
+    )
+    await session.commit()
+    await session.refresh(plan)
+    return await _plan_read(session, tenant, plan, date.today())
+
+
+def _validate_measure(
+    *, section: str | None, status_value: str | None, completed_on: date | None, is_done: bool
+) -> None:
+    if section is not None and section not in PC_MEASURE_SECTIONS:
+        raise _unprocessable(
+            f"Неизвестный раздел {section!r}; допустимые: {', '.join(PC_MEASURE_SECTIONS)}"
+        )
+    if status_value is not None and status_value not in PC_MEASURE_WRITABLE_STATUSES:
+        raise _unprocessable(
+            f"Неизвестное состояние {status_value!r}; допустимые: "
+            f"{', '.join(PC_MEASURE_WRITABLE_STATUSES)}"
+        )
+    if completed_on is not None and completed_on > date.today():
+        raise _unprocessable(
+            "Дата выполнения не может быть в будущем — это план, а не отчёт"
+        )
+    if is_done and completed_on is None:
+        raise _unprocessable(
+            "У выполненного мероприятия обязательна дата выполнения: именно она "
+            "предъявляется надзору как доказательство исполнения плана"
+        )
+
+
+@router.get("/pc-measures", response_model=PcMeasurePage)
+async def list_pc_measures(
+    tenant: TenantDep,
+    session: SessionDep,
+    access: Access,
+    plan_id: str | None = Query(default=None),
+    section: str | None = Query(default=None),
+    limit: int = Query(100, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+) -> PcMeasurePage:
+    """Мероприятия плана: что, к какому сроку, кто и с каким результатом."""
+
+    TenantContextValidator.ensure_tenant_context(tenant)
+    today = date.today()
+    stmt = select(ProductionControlMeasure).where(
+        ProductionControlMeasure.tenant_id == tenant.id,
+        ProductionControlMeasure.deleted_at.is_(None),
+    )
+    if plan_id:
+        stmt = stmt.where(ProductionControlMeasure.plan_id == plan_id)
+    if section:
+        stmt = stmt.where(ProductionControlMeasure.section == section)
+    total = int(await session.scalar(select(func.count()).select_from(stmt.subquery())) or 0)
+    rows = (
+        (
+            await session.execute(
+                stmt.order_by(ProductionControlMeasure.due_on).offset(offset).limit(limit)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return PcMeasurePage(items=[_measure_read(r, today) for r in rows], total=total)
+
+
+@router.post(
+    "/pc-measures", response_model=PcMeasureRead, status_code=status.HTTP_201_CREATED
+)
+async def create_pc_measure(
+    request: Request,
+    payload: PcMeasureCreate,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: Access,
+) -> PcMeasureRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    plan = (
+        await session.execute(
+            select(ProductionControlPlan.id).where(
+                ProductionControlPlan.id == payload.plan_id,
+                ProductionControlPlan.tenant_id == tenant.id,
+                ProductionControlPlan.deleted_at.is_(None),
+            )
+        )
+    ).scalar_one_or_none()
+    if plan is None:
+        raise _unprocessable("План не найден")
+    _validate_measure(
+        section=payload.section,
+        status_value=payload.status,
+        completed_on=payload.completed_on,
+        is_done=payload.status == "done",
+    )
+
+    measure = ProductionControlMeasure(
+        tenant_id=str(tenant.id),
+        plan_id=payload.plan_id,
+        section=payload.section,
+        title=payload.title.strip(),
+        due_on=payload.due_on,
+        responsible=(payload.responsible or None),
+        status=payload.status or "planned",
+        completed_on=payload.completed_on,
+        result=(payload.result or None),
+    )
+    session.add(measure)
+    await session.flush()
+    await AuditService(session).log_event(
+        tenant_id=str(tenant.id),
+        action="create",
+        object_type="ProductionControlMeasure",
+        object_id=measure.id,
+        user_id=access.user.id,
+        ip=request.client.host if request.client else "unknown",
+        request_id=getattr(request.state, "trace_id", None),
+        user_agent=request.headers.get("user-agent"),
+        changed_fields={"fields": {"id": {"before": None, "after": measure.id}}},
+        details={"entity": "ProductionControlMeasure", "section": measure.section},
+    )
+    await session.commit()
+    await session.refresh(measure)
+    return _measure_read(measure, date.today())
+
+
+@router.patch("/pc-measures/{measure_id}", response_model=PcMeasureRead)
+async def update_pc_measure(
+    request: Request,
+    measure_id: str,
+    payload: PcMeasureUpdate,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: Access,
+) -> PcMeasureRead:
+    """Отметка выполнения и правка мероприятия."""
+
+    TenantContextValidator.ensure_tenant_context(tenant)
+    measure = await _get_measure_or_404(session, tenant, measure_id)
+    data = payload.model_dump(exclude_unset=True)
+    if "plan_id" in data and data["plan_id"]:
+        plan = (
+            await session.execute(
+                select(ProductionControlPlan.id).where(
+                    ProductionControlPlan.id == data["plan_id"],
+                    ProductionControlPlan.tenant_id == tenant.id,
+                    ProductionControlPlan.deleted_at.is_(None),
+                )
+            )
+        ).scalar_one_or_none()
+        if plan is None:
+            raise _unprocessable("План не найден")
+    # Проверяем ИТОГОВОЕ состояние записи, а не только присланные поля: иначе
+    # «выполнено» одним запросом и дата другим прошли бы оба, оставив запись
+    # без свидетельства (прецедент тренировок контура ПБ).
+    next_status = data["status"] if "status" in data else measure.status
+    next_completed = (
+        data["completed_on"] if "completed_on" in data else measure.completed_on
+    )
+    _validate_measure(
+        section=data.get("section"),
+        status_value=data.get("status"),
+        completed_on=next_completed,
+        is_done=next_status == "done",
+    )
+
+    today = date.today()
+    before = _measure_read(measure, today).model_dump()
+    for field in (
+        "plan_id",
+        "section",
+        "title",
+        "due_on",
+        "responsible",
+        "status",
+        "completed_on",
+        "result",
+    ):
+        if field in data:
+            value = data[field]
+            if field == "title" and (value is None or not str(value).strip()):
+                raise _unprocessable("title cannot be empty")
+            setattr(measure, field, value.strip() if isinstance(value, str) else value)
+    after = _measure_read(measure, today).model_dump()
+    await AuditService(session).log_event(
+        tenant_id=str(tenant.id),
+        action="update",
+        object_type="ProductionControlMeasure",
+        object_id=measure.id,
+        user_id=access.user.id,
+        ip=request.client.host if request.client else "unknown",
+        request_id=getattr(request.state, "trace_id", None),
+        user_agent=request.headers.get("user-agent"),
+        changed_fields=field_level_diff(before, after),
+        details={"entity": "ProductionControlMeasure"},
+    )
+    await session.commit()
+    await session.refresh(measure)
+    return _measure_read(measure, date.today())
+
+
 @router.get("/readiness", response_model=IndustrialReadinessRead)
 async def industrial_readiness(
     tenant: TenantDep,
@@ -1011,7 +1462,38 @@ async def industrial_readiness(
         1 for a in attestations if _validity_status(a.expires_at, today) == "due_soon"
     )
 
+    # Разд. 54.2 «производственный контроль». ГРАНИЦА: отдаём ФАКТ наличия
+    # плана на текущий год, а не приговор — обязанность вести ПК зависит от
+    # того, эксплуатирует ли организация ОПО, и полноту сведений определяет
+    # специалист (тот же довод, что у интервала тренировок и требования ЭПБ).
+    current_plan = (
+        await session.execute(
+            select(ProductionControlPlan.id).where(
+                ProductionControlPlan.tenant_id == tenant.id,
+                ProductionControlPlan.deleted_at.is_(None),
+                ProductionControlPlan.year == today.year,
+            )
+        )
+    ).scalar_one_or_none()
+    measures = (
+        (
+            await session.execute(
+                select(ProductionControlMeasure).where(
+                    ProductionControlMeasure.tenant_id == tenant.id,
+                    ProductionControlMeasure.deleted_at.is_(None),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    pc_overdue = sum(1 for m in measures if _measure_status(m, today) == "overdue")
+    pc_planned = sum(1 for m in measures if _measure_status(m, today) == "planned")
+
     return IndustrialReadinessRead(
+        current_year_plan_exists=current_plan is not None,
+        pc_measures_overdue=pc_overdue,
+        pc_measures_planned=pc_planned,
         attestations_total=len(attestations),
         attestations_overdue=attestations_overdue,
         attestations_due_soon=attestations_due_soon,

@@ -30,7 +30,7 @@ const IndustrialSafetyPage = () => {
   // Секции ПО ОДНОЙ (прецедент экрана ПБ): объекты и устройства — разные
   // задачи, и показывать обе таблицы сразу значит растить экран.
   const [section, setSection] = useState<
-    "facilities" | "devices" | "attestations"
+    "facilities" | "devices" | "attestations" | "control"
   >("facilities");
 
   const { data, loading, error, reload } = useAsyncResource({
@@ -39,6 +39,7 @@ const IndustrialSafetyPage = () => {
         facilities: await industrialSafetyApi.listFacilities(),
         devices: await industrialSafetyApi.listDevices(),
         attestations: await industrialSafetyApi.listAttestations(),
+        pcMeasures: await industrialSafetyApi.listPcMeasures(),
         readiness: await industrialSafetyApi.readiness(),
       }),
       [],
@@ -47,6 +48,7 @@ const IndustrialSafetyPage = () => {
       facilities: [],
       devices: [],
       attestations: [],
+      pcMeasures: [],
       readiness: {
         total_facilities: 0,
         by_class: { I: 0, II: 0, III: 0, IV: 0 },
@@ -59,6 +61,9 @@ const IndustrialSafetyPage = () => {
         attestations_total: 0,
         attestations_overdue: 0,
         attestations_due_soon: 0,
+        current_year_plan_exists: false,
+        pc_measures_overdue: 0,
+        pc_measures_planned: 0,
       },
     },
     errorMessage: "Не удалось загрузить реестр ОПО",
@@ -104,6 +109,16 @@ const IndustrialSafetyPage = () => {
         .includes(query),
   });
 
+  const measureRegistry = useLocalRegistry({
+    items: data.pcMeasures,
+    match: (item, query) =>
+      [item.title, item.section_label, item.responsible]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(query),
+  });
+
   const { readiness } = data;
 
   return (
@@ -142,6 +157,12 @@ const IndustrialSafetyPage = () => {
             label: "Просрочено аттестаций",
             value: readiness.attestations_overdue,
           },
+          // Разд. 54.2 «производственный контроль»: просроченное мероприятие
+          // плана — это невыполненный план, который предъявляется надзору.
+          {
+            label: "Просрочено мероприятий ПК",
+            value: readiness.pc_measures_overdue,
+          },
         ]}
       />
 
@@ -151,6 +172,7 @@ const IndustrialSafetyPage = () => {
             ["facilities", "Объекты (ОПО)"],
             ["devices", "Технические устройства"],
             ["attestations", "Аттестация персонала"],
+            ["control", "Производственный контроль"],
           ] as const
         ).map(([key, label]) => (
           <Button
@@ -166,6 +188,77 @@ const IndustrialSafetyPage = () => {
 
       <ErrorState error={error ?? undefined} onRetry={() => void reload()} />
       {loading ? <LoadingScreen label="Загрузка реестра ОПО" /> : null}
+      {section === "control" ? (
+        <>
+          {/*
+            ГРАНИЦА, названная НА ЭКРАНЕ: платформа сообщает ФАКТ наличия плана
+            на текущий год, но не объявляет его отсутствие нарушением —
+            обязанность вести производственный контроль зависит от того,
+            эксплуатирует ли организация ОПО, и полноту сведений определяет
+            специалист (прецедент интервала тренировок и требования ЭПБ).
+          */}
+          {!loading && !error ? (
+            <p className="text-sm text-muted-foreground">
+              {readiness.current_year_plan_exists
+                ? "План производственного контроля на текущий год заведён."
+                : "Плана производственного контроля на текущий год в системе нет."}{" "}
+              Обязанность вести производственный контроль зависит от того,
+              эксплуатирует ли организация опасные производственные объекты, —
+              применимость определяет специалист.
+            </p>
+          ) : null}
+          {!loading && !error && measureRegistry.total === 0 ? (
+            <EmptyState
+              title="Мероприятия производственного контроля не заведены"
+              description="Заведите план на год и его мероприятия по разделам: обследования, экспертиза и диагностирование, обучение и аттестация, готовность к авариям, устранение нарушений, отчётность."
+            />
+          ) : null}
+          {!loading && !error && measureRegistry.total > 0 ? (
+            <RegistryTable
+              columns={[
+                { accessorKey: "title", header: "Мероприятие" },
+                {
+                  accessorKey: "section_label",
+                  header: "Раздел плана",
+                  cell: ({ row }) => row.original.section_label,
+                },
+                {
+                  accessorKey: "due_on",
+                  header: "Срок",
+                  cell: ({ row }) => formatDate(row.original.due_on),
+                },
+                {
+                  accessorKey: "responsible",
+                  header: "Ответственный",
+                  cell: ({ row }) => row.original.responsible || "—",
+                },
+                {
+                  accessorKey: "status_label",
+                  header: "Состояние",
+                  cell: ({ row }) => row.original.status_label,
+                },
+                {
+                  accessorKey: "completed_on",
+                  header: "Выполнено",
+                  cell: ({ row }) =>
+                    row.original.completed_on
+                      ? formatDate(row.original.completed_on)
+                      : "—",
+                },
+              ]}
+              data={measureRegistry.pagedItems}
+              pageIndex={measureRegistry.pageIndex}
+              pageSize={measureRegistry.pageSize}
+              total={measureRegistry.total}
+              onPageChange={measureRegistry.onPageChange}
+              onPageSizeChange={measureRegistry.onPageSizeChange}
+              onSearchChange={measureRegistry.onSearchChange}
+              searchPlaceholder="Поиск по мероприятию, разделу, ответственному"
+              caption="Мероприятия производственного контроля"
+            />
+          ) : null}
+        </>
+      ) : null}
       {section === "attestations" ? (
         <>
           {!loading && !error && attestationRegistry.total === 0 ? (
