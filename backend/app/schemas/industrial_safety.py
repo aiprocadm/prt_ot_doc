@@ -107,10 +107,48 @@ class TechnicalDeviceRead(BaseSchema):
     #: назначенный срок службы истёк — факт из данных, не суждение о том,
     #: обязана ли экспертиза быть проведена
     past_lifetime: bool = False
+    #: разд. 54.2 «история работ»: последняя ПОДТВЕРЖДЁННАЯ работа — срок без
+    #: неё это обещание, а не доказательство. Считается при чтении
+    last_work_on: date | None = None
+    last_work_result: str | None = None
 
 
 class TechnicalDevicePage(BaseSchema):
     items: list[TechnicalDeviceRead]
+    total: int
+
+
+class DeviceWorkCreate(BaseSchema):
+    device_id: str = Field(min_length=1, max_length=36)
+    kind: str = Field(min_length=1, max_length=32)
+    performed_on: date
+    result: str = Field(min_length=1, max_length=32)
+    performer: str | None = Field(default=None, max_length=255)
+    #: обязателен для вида ``epb`` — см. валидацию в ручке
+    conclusion_number: str | None = Field(default=None, max_length=64)
+    notes: str | None = None
+    next_due: date | None = None
+
+
+class DeviceWorkRead(BaseSchema):
+    id: str
+    device_id: str
+    kind: str
+    kind_label: str
+    performed_on: date
+    result: str
+    result_label: str
+    performer: str | None = None
+    conclusion_number: str | None = None
+    notes: str | None = None
+    next_due: date | None = None
+    #: перенесла ли эта работа срок эксплуатации устройства; переносит только
+    #: положительная ЭПБ
+    shifted_due: bool = False
+
+
+class DeviceWorkPage(BaseSchema):
+    items: list[DeviceWorkRead]
     total: int
 
 
@@ -141,3 +179,6 @@ class IndustrialReadinessRead(BaseSchema):
     #: проведена — это зависит от типа устройства, документации и норм ФНП,
     #: которых в данных нет. Поэтому поля «устройств без ЭПБ» здесь НЕТ.
     devices_past_lifetime_without_epb: int = 0
+    #: разд. 54.2 «история работ»: устройства, по которым нет НИ ОДНОЙ записи о
+    #: работах — срок стоит, а подтвердить его нечем
+    devices_without_work_record: int = 0

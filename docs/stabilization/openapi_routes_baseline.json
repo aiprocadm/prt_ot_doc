@@ -232,6 +232,7 @@
     "GET /api/v1/incidents",
     "GET /api/v1/incidents/{incident_id}",
     "GET /api/v1/incidents/{incident_id}/logs",
+    "GET /api/v1/industrial-safety/device-works",
     "GET /api/v1/industrial-safety/devices",
     "GET /api/v1/industrial-safety/facilities",
     "GET /api/v1/industrial-safety/readiness",
@@ -761,6 +762,7 @@
     "POST /api/v1/imports/{target_code}/dry-run-async",
     "POST /api/v1/incidents",
     "POST /api/v1/incidents/{incident_id}/logs",
+    "POST /api/v1/industrial-safety/device-works",
     "POST /api/v1/industrial-safety/devices",
     "POST /api/v1/industrial-safety/facilities",
     "POST /api/v1/inspection-prep/packages",
@@ -1599,6 +1601,7 @@
     "list_definitions_api_v1_workflow_definitions_get",
     "list_deliveries_api_v1_webhooks_deliveries_get",
     "list_departments_api_v1_departments_get",
+    "list_device_works_api_v1_industrial_safety_device_works_get",
     "list_devices_api_v1_industrial_safety_devices_get",
     "list_document_requirements_api_v1_contractors_document_requirements_get",
     "list_documents_api_v1_documents_get",
@@ -1853,6 +1856,7 @@
     "record_client_change_api_v1_managed_clients__mcid__changes_post",
     "record_client_consent_api_v1_managed_clients__mcid__consents_post",
     "record_closing_endpoint_api_v1_work_permits__wp_id__closing_post",
+    "record_device_work_api_v1_industrial_safety_device_works_post",
     "record_maintenance_api_v1_fire_safety_maintenance_post",
     "refresh_edo_status_api_v1_edo_messages__message_id__refresh_status_post",
     "refresh_sign_status_api_v1_sign_requests__request_id__refresh_status_post",
@@ -2259,6 +2263,9 @@
     "DeprecationEntryRead",
     "DeprecationOverview",
     "DeprecationUsageRead",
+    "DeviceWorkCreate",
+    "DeviceWorkPage",
+    "DeviceWorkRead",
     "DirectionReadinessRead",
     "DisciplineAttention",
     "DocGeneratePipelineRequest",
@@ -4557,6 +4564,34 @@
       "hits_2xx": "integer",
       "last_notified_at": "null|string"
     },
+    "DeviceWorkCreate": {
+      "device_id": "string",
+      "kind": "string",
+      "performed_on": "string",
+      "result": "string",
+      "performer": "null|string",
+      "conclusion_number": "null|string",
+      "notes": "null|string",
+      "next_due": "null|string"
+    },
+    "DeviceWorkPage": {
+      "items": "array",
+      "total": "integer"
+    },
+    "DeviceWorkRead": {
+      "id": "string",
+      "device_id": "string",
+      "kind": "string",
+      "kind_label": "string",
+      "performed_on": "string",
+      "result": "string",
+      "result_label": "string",
+      "performer": "null|string",
+      "conclusion_number": "null|string",
+      "notes": "null|string",
+      "next_due": "null|string",
+      "shifted_due": "boolean"
+    },
     "DirectionReadinessRead": {
       "direction": "string",
       "title": "string",
@@ -5661,7 +5696,8 @@
       "total_devices": "integer",
       "epb_overdue": "integer",
       "epb_due_soon": "integer",
-      "devices_past_lifetime_without_epb": "integer"
+      "devices_past_lifetime_without_epb": "integer",
+      "devices_without_work_record": "integer"
     },
     "IndustryList": {
       "items": "array"
@@ -8750,7 +8786,9 @@
       "notes": "null|string",
       "epb_status": "string",
       "epb_status_label": "string",
-      "past_lifetime": "boolean"
+      "past_lifetime": "boolean",
+      "last_work_on": "null|string",
+      "last_work_result": "null|string"
     },
     "TechnicalDeviceUpdate": {
       "facility_id": "null|string",

@@ -159,3 +159,69 @@ class TechnicalDevice(TenantBaseModel, SoftDeleteMixin):
     __table_args__ = (
         Index("ix_opo_device_tenant_epb", "tenant_id", "epb_valid_until"),
     )
+
+
+#: Виды работ по техническому устройству (разд. 54.2 «диагностика, история
+#: работ»). ЗАКРЫТЫЙ словарь: свободная строка сделала бы историю
+#: непересчитываемой, а отличить экспертизу от протирки — невозможным.
+OPO_WORK_KINDS: dict[str, str] = {
+    "diagnostics": "Техническое диагностирование",
+    "technical_survey": "Техническое освидетельствование",
+    "epb": "Экспертиза промышленной безопасности",
+    "maintenance": "Техническое обслуживание",
+    "repair": "Ремонт",
+}
+
+#: Вид работы, который ОДИН МОЖЕТ продлить эксплуатацию. Заключение о
+#: возможности дальнейшей безопасной эксплуатации даёт только экспертиза;
+#: если бы срок двигала любая работа, «протёрли и записали ТО» продлевало бы
+#: жизнь устройству на бумаге.
+OPO_WORK_KIND_EXTENDING_EPB = "epb"
+
+#: Результат работы. Слова из области промышленной безопасности: экспертиза
+#: отвечает на вопрос о ПРИГОДНОСТИ устройства к дальнейшей эксплуатации.
+OPO_WORK_RESULTS: dict[str, str] = {
+    "passed": "Пригодно к эксплуатации",
+    "with_remarks": "Пригодно с условиями",
+    "failed": "Не пригодно",
+}
+
+#: Результаты, при которых заключение продлевает эксплуатацию. «Не пригодно»
+#: срок НЕ двигает: перенос означал бы «неисправно, но эксплуатировать ещё
+#: пять лет» — это не вывод экспертизы (прецедент журнала работ контура ПБ).
+OPO_WORK_PASSING_RESULTS: frozenset[str] = frozenset({"passed", "with_remarks"})
+
+
+class DeviceWorkRecord(TenantBaseModel, SoftDeleteMixin):
+    """Выполненная работа по техническому устройству: диагностика, ЭПБ, ремонт.
+
+    До этой таблицы у устройства были только СРОКИ и ни одной записи о том, что
+    с ним делали: отметить проведённую экспертизу можно было единственным
+    способом — затереть срок правкой поля. Инспектор же спрашивает не «когда
+    следующая экспертиза», а «покажите заключение по предыдущей».
+    """
+
+    __tablename__ = "opo_device_work"
+
+    device_id: Mapped[str] = mapped_column(
+        ForeignKey("opo_technical_device.id"), nullable=False, index=True
+    )
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    #: дата ФАКТИЧЕСКОГО выполнения — запись о работе это свидетельство, не план
+    performed_on: Mapped[date] = mapped_column(Date, nullable=False)
+    #: кто выполнил: экспертная организация с реквизитами аттестата, подрядчик
+    #: или свой персонал
+    performer: Mapped[str | None] = mapped_column(String(255))
+    result: Mapped[str] = mapped_column(String(32), nullable=False)
+    #: номер заключения ЭПБ — обязателен для вида ``epb``: именно он вносится в
+    #: реестр Ростехнадзора и предъявляется проверяющему
+    conclusion_number: Mapped[str | None] = mapped_column(String(64))
+    notes: Mapped[str | None] = mapped_column(Text)
+    #: срок, установленный работой; у ЭПБ им переносится срок эксплуатации
+    next_due: Mapped[date | None] = mapped_column(Date, nullable=True)
+
+    device: Mapped[TechnicalDevice] = relationship(backref="work_records")
+
+    __table_args__ = (
+        Index("ix_opo_device_work_tenant_performed", "tenant_id", "performed_on"),
+    )

@@ -30,12 +30,20 @@ from app.models.industrial_safety import (
     OPO_EPB_STATUS_TITLES,
     OPO_HAZARD_CLASSES,
     OPO_STATUSES,
+    OPO_WORK_KIND_EXTENDING_EPB,
+    OPO_WORK_KINDS,
+    OPO_WORK_PASSING_RESULTS,
+    OPO_WORK_RESULTS,
+    DeviceWorkRecord,
     HazardousFacility,
     TechnicalDevice,
 )
 from app.models.master_data import Site
 from app.models.models import Tenant
 from app.schemas.industrial_safety import (
+    DeviceWorkCreate,
+    DeviceWorkPage,
+    DeviceWorkRead,
     HazardousFacilityCreate,
     HazardousFacilityPage,
     HazardousFacilityRead,
@@ -374,7 +382,11 @@ def _epb_status(device: TechnicalDevice, today: date) -> str:
     return "ok"
 
 
-def _device_read(device: TechnicalDevice, today: date) -> TechnicalDeviceRead:
+def _device_read(
+    device: TechnicalDevice,
+    today: date,
+    last_work: tuple[date, str] | None = None,
+) -> TechnicalDeviceRead:
     epb = _epb_status(device, today)
     return TechnicalDeviceRead(
         id=device.id,
@@ -396,6 +408,8 @@ def _device_read(device: TechnicalDevice, today: date) -> TechnicalDeviceRead:
         past_lifetime=(
             device.lifetime_until is not None and device.lifetime_until < today
         ),
+        last_work_on=last_work[0] if last_work else None,
+        last_work_result=last_work[1] if last_work else None,
     )
 
 
@@ -484,8 +498,10 @@ async def list_devices(
         .scalars()
         .all()
     )
+    last_works = await _last_work_map(session, tenant, [r.id for r in rows])
     return TechnicalDevicePage(
-        items=[_device_read(r, today) for r in rows], total=total
+        items=[_device_read(r, today, last_works.get(r.id)) for r in rows],
+        total=total,
     )
 
 
@@ -598,6 +614,214 @@ async def update_device(
     return _device_read(device, date.today())
 
 
+async def _last_work_map(
+    session: AsyncSession, tenant: Tenant, device_ids: list[str]
+) -> dict[str, tuple[date, str]]:
+    """Последняя работа по каждому устройству — одним запросом, а не N+1.
+
+    «Последняя» — по ДАТЕ РАБОТЫ, а не по порядку внесения: заключения вносят
+    задним числом чаще, чем кажется (прецедент журнала работ контура ПБ).
+    """
+
+    if not device_ids:
+        return {}
+    ranked = (
+        select(
+            DeviceWorkRecord.device_id.label("device_id"),
+            DeviceWorkRecord.performed_on.label("performed_on"),
+            DeviceWorkRecord.result.label("result"),
+            func.row_number()
+            .over(
+                partition_by=DeviceWorkRecord.device_id,
+                order_by=(
+                    DeviceWorkRecord.performed_on.desc(),
+                    DeviceWorkRecord.created_at.desc(),
+                ),
+            )
+            .label("rn"),
+        )
+        .where(
+            DeviceWorkRecord.tenant_id == tenant.id,
+            DeviceWorkRecord.deleted_at.is_(None),
+            DeviceWorkRecord.device_id.in_(device_ids),
+        )
+        .subquery()
+    )
+    rows = await session.execute(
+        select(ranked.c.device_id, ranked.c.performed_on, ranked.c.result).where(
+            ranked.c.rn == 1
+        )
+    )
+    return {row.device_id: (row.performed_on, row.result) for row in rows}
+
+
+def _work_read(record: DeviceWorkRecord, *, shifted: bool) -> DeviceWorkRead:
+    return DeviceWorkRead(
+        id=record.id,
+        device_id=record.device_id,
+        kind=record.kind,
+        kind_label=OPO_WORK_KINDS.get(record.kind, record.kind),
+        performed_on=record.performed_on,
+        result=record.result,
+        result_label=OPO_WORK_RESULTS.get(record.result, record.result),
+        performer=record.performer,
+        conclusion_number=record.conclusion_number,
+        notes=record.notes,
+        next_due=record.next_due,
+        shifted_due=shifted,
+    )
+
+
+def _work_shifts_due(kind: str, result: str, next_due: date | None) -> bool:
+    """Продлевает ли работа эксплуатацию устройства.
+
+    Только положительная ЭПБ: заключение о возможности дальнейшей безопасной
+    эксплуатации даёт именно она. Диагностирование, освидетельствование, ТО и
+    ремонт срок НЕ двигают — иначе «протёрли и записали ТО» продлевало бы
+    жизнь устройству на бумаге. Отрицательный результат не двигает срок ни у
+    какого вида: «не пригодно, но эксплуатировать ещё пять лет» — не вывод
+    экспертизы.
+    """
+
+    return (
+        kind == OPO_WORK_KIND_EXTENDING_EPB
+        and result in OPO_WORK_PASSING_RESULTS
+        and next_due is not None
+    )
+
+
+@router.get("/device-works", response_model=DeviceWorkPage)
+async def list_device_works(
+    tenant: TenantDep,
+    session: SessionDep,
+    access: Access,
+    device_id: str | None = Query(default=None),
+    kind: str | None = Query(default=None),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+) -> DeviceWorkPage:
+    """История работ: то самое доказательство, которого не было до среза."""
+
+    TenantContextValidator.ensure_tenant_context(tenant)
+    stmt = select(DeviceWorkRecord).where(
+        DeviceWorkRecord.tenant_id == tenant.id,
+        DeviceWorkRecord.deleted_at.is_(None),
+    )
+    if device_id:
+        stmt = stmt.where(DeviceWorkRecord.device_id == device_id)
+    if kind:
+        stmt = stmt.where(DeviceWorkRecord.kind == kind)
+    total = int(await session.scalar(select(func.count()).select_from(stmt.subquery())) or 0)
+    rows = (
+        (
+            await session.execute(
+                stmt.order_by(
+                    DeviceWorkRecord.performed_on.desc(),
+                    DeviceWorkRecord.created_at.desc(),
+                )
+                .offset(offset)
+                .limit(limit)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return DeviceWorkPage(
+        items=[
+            _work_read(
+                r, shifted=_work_shifts_due(r.kind, r.result, r.next_due)
+            )
+            for r in rows
+        ],
+        total=total,
+    )
+
+
+@router.post(
+    "/device-works", response_model=DeviceWorkRead, status_code=status.HTTP_201_CREATED
+)
+async def record_device_work(
+    request: Request,
+    payload: DeviceWorkCreate,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: Access,
+) -> DeviceWorkRead:
+    """Запись о выполненной работе — и единственный обоснованный перенос срока.
+
+    Заключение ЭПБ вносится ЗДЕСЬ и само переносит срок дальнейшей безопасной
+    эксплуатации вместе с реквизитами заключения: до этого среза срок можно
+    было сдвинуть голой правкой поля, и «экспертиза проведена» ничем не
+    отличалось от «экспертизы не было, но дату поправили».
+    """
+
+    TenantContextValidator.ensure_tenant_context(tenant)
+    device = await _get_device_or_404(session, tenant, payload.device_id)
+    if payload.kind not in OPO_WORK_KINDS:
+        raise _unprocessable(
+            f"Неизвестный вид работы {payload.kind!r}; допустимые: "
+            f"{', '.join(OPO_WORK_KINDS)}"
+        )
+    if payload.result not in OPO_WORK_RESULTS:
+        raise _unprocessable(
+            f"Неизвестный результат {payload.result!r}; допустимые: "
+            f"{', '.join(OPO_WORK_RESULTS)}"
+        )
+    if payload.performed_on > date.today():
+        raise _unprocessable(
+            "Дата работы не может быть в будущем — запись о работе это "
+            "свидетельство, а не план"
+        )
+    if payload.kind == OPO_WORK_KIND_EXTENDING_EPB and not (
+        payload.conclusion_number and payload.conclusion_number.strip()
+    ):
+        raise _unprocessable(
+            "Для экспертизы обязателен номер заключения: именно он вносится в "
+            "реестр Ростехнадзора и предъявляется проверяющему"
+        )
+
+    record = DeviceWorkRecord(
+        tenant_id=str(tenant.id),
+        device_id=device.id,
+        kind=payload.kind,
+        performed_on=payload.performed_on,
+        performer=(payload.performer or None),
+        result=payload.result,
+        conclusion_number=(payload.conclusion_number or None),
+        notes=(payload.notes or None),
+        next_due=payload.next_due,
+    )
+    session.add(record)
+
+    shifted = _work_shifts_due(payload.kind, payload.result, payload.next_due)
+    if shifted:
+        device.epb_valid_until = payload.next_due
+        device.epb_conclusion_number = record.conclusion_number
+        device.epb_registered_on = payload.performed_on
+
+    await session.flush()
+    await AuditService(session).log_event(
+        tenant_id=str(tenant.id),
+        action="create",
+        object_type="DeviceWorkRecord",
+        object_id=record.id,
+        user_id=access.user.id,
+        ip=request.client.host if request.client else "unknown",
+        request_id=getattr(request.state, "trace_id", None),
+        user_agent=request.headers.get("user-agent"),
+        changed_fields={"fields": {"id": {"before": None, "after": record.id}}},
+        details={
+            "entity": "DeviceWorkRecord",
+            "kind": record.kind,
+            "device_id": device.id,
+            "shifted_due": shifted,
+        },
+    )
+    await session.commit()
+    await session.refresh(record)
+    return _work_read(record, shifted=shifted)
+
+
 @router.get("/readiness", response_model=IndustrialReadinessRead)
 async def industrial_readiness(
     tenant: TenantDep,
@@ -661,7 +885,25 @@ async def industrial_readiness(
         and _epb_status(d, today) in {"absent", "overdue"}
     )
 
+    # Разд. 54.2 «история работ»: срок без единой записи о работах — обещание,
+    # а не доказательство. Инспектор просит показать заключение по предыдущей
+    # экспертизе, а не назвать дату следующей.
+    confirmed_ids = set(
+        (
+            await session.execute(
+                select(DeviceWorkRecord.device_id.distinct()).where(
+                    DeviceWorkRecord.tenant_id == tenant.id,
+                    DeviceWorkRecord.deleted_at.is_(None),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    devices_without_work = sum(1 for d in devices if d.id not in confirmed_ids)
+
     return IndustrialReadinessRead(
+        devices_without_work_record=devices_without_work,
         total_facilities=len(active),
         by_class=by_class,
         excluded_facilities=len(rows) - len(active),
