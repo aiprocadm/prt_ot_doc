@@ -51,6 +51,31 @@ export type IndustrialReadinessDto = {
    * это зависит от типа устройства, документации и норм ФНП.
    */
   devices_past_lifetime_without_epb: number;
+  /** Разд. 54.2 «история работ»: устройства без единой записи о работах. */
+  devices_without_work_record: number;
+};
+
+/** Подписи результатов работ — запас; перевод делает сервер. */
+export const OPO_WORK_RESULT_TITLES: Record<string, string> = {
+  passed: "Пригодно к эксплуатации",
+  with_remarks: "Пригодно с условиями",
+  failed: "Не пригодно",
+};
+
+export type DeviceWorkDto = {
+  id: string;
+  device_id: string;
+  kind: string;
+  kind_label: string;
+  performed_on: string;
+  result: string;
+  result_label: string;
+  performer?: string | null;
+  conclusion_number?: string | null;
+  notes?: string | null;
+  next_due?: string | null;
+  /** Перенесла ли работа срок эксплуатации; переносит только положительная ЭПБ. */
+  shifted_due: boolean;
 };
 
 export type TechnicalDeviceDto = {
@@ -72,6 +97,9 @@ export type TechnicalDeviceDto = {
   epb_status: string;
   epb_status_label: string;
   past_lifetime: boolean;
+  /** Последняя подтверждённая работа: срок без неё — обещание, не доказательство. */
+  last_work_on?: string | null;
+  last_work_result?: string | null;
 };
 
 export const industrialSafetyApi = {

@@ -39,6 +39,9 @@ const populatedDevices = [
     epb_status: "absent",
     epb_status_label: "Заключения нет",
     past_lifetime: true,
+    // Работ по устройству не было ни разу.
+    last_work_on: null,
+    last_work_result: null,
   },
   {
     id: "dev-2",
@@ -58,6 +61,8 @@ const populatedDevices = [
     epb_status: "overdue",
     epb_status_label: "Заключение просрочено",
     past_lifetime: false,
+    last_work_on: "2018-03-01",
+    last_work_result: "with_remarks",
   },
 ];
 
@@ -101,6 +106,7 @@ const populatedReadiness = {
   epb_overdue: 1,
   epb_due_soon: 0,
   devices_past_lifetime_without_epb: 1,
+  devices_without_work_record: 1,
 };
 
 describe("IndustrialSafetyPage", () => {
@@ -197,6 +203,35 @@ describe("IndustrialSafetyPage", () => {
     expect(screen.getByText("Заключение просрочено")).toBeInTheDocument();
     // Истёкший срок службы назван истёкшим, а не просто датой в прошлом.
     expect(screen.getByText(/· истёк$/)).toBeInTheDocument();
+  });
+
+  // Доп. №1 разд. 54.2 срез-3: история работ. До неё отметить проведённую
+  // экспертизу можно было единственным способом — затереть срок правкой поля.
+  it("показывает последнюю работу и называет её отсутствие", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter>
+        <IndustrialSafetyPage />
+      </MemoryRouter>,
+    );
+
+    expect(
+      await screen.findByText("Сеть газопотребления котельной"),
+    ).toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: "Технические устройства" }),
+    );
+
+    expect(
+      await screen.findByText("Ресивер воздушный Р-1"),
+    ).toBeInTheDocument();
+    // Результат — словами, а не кодом «with_remarks».
+    expect(screen.getByText(/Пригодно с условиями/)).toBeInTheDocument();
+    // Отсутствие записей названо словами, а не пустой ячейкой.
+    expect(screen.getByText("нет записей")).toBeInTheDocument();
+    // И то же самое числом в шапке.
+    expect(screen.getByText(/без записей о работах/i)).toBeInTheDocument();
   });
 
   it("экран не выдаёт требование ЭПБ за своё суждение", async () => {

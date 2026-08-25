@@ -130,6 +130,7 @@ from app.models.incidents import (
 
 # Разд. 54.2: предметные модели контура ПромБеза.
 from app.models.industrial_safety import (  # noqa: E402,F401
+    DeviceWorkRecord,
     HazardousFacility,
     TechnicalDevice,
 )

@@ -1,6 +1,9 @@
 import { useCallback, useState } from "react";
 
-import { industrialSafetyApi } from "@/api/industrialSafety";
+import {
+  industrialSafetyApi,
+  OPO_WORK_RESULT_TITLES,
+} from "@/api/industrialSafety";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingScreen } from "@/components/common/LoadingScreen";
@@ -50,6 +53,7 @@ const IndustrialSafetyPage = () => {
         epb_overdue: 0,
         epb_due_soon: 0,
         devices_past_lifetime_without_epb: 0,
+        devices_without_work_record: 0,
       },
     },
     errorMessage: "Не удалось загрузить реестр ОПО",
@@ -110,6 +114,12 @@ const IndustrialSafetyPage = () => {
           {
             label: "Отработали срок без ЭПБ",
             value: readiness.devices_past_lifetime_without_epb,
+          },
+          // Разд. 54.2 «история работ»: срок без единой записи о работах —
+          // обещание, а не доказательство.
+          {
+            label: "Без записей о работах",
+            value: readiness.devices_without_work_record,
           },
         ]}
       />
@@ -193,6 +203,21 @@ const IndustrialSafetyPage = () => {
                   accessorKey: "epb_status_label",
                   header: "Экспертиза",
                   cell: ({ row }) => row.original.epb_status_label,
+                },
+                {
+                  // Разд. 54.2 «история работ»: последняя ПОДТВЕРЖДЁННАЯ
+                  // работа. Отсутствие записей названо словами — пустая ячейка
+                  // читалась бы как «данные не подгрузились».
+                  accessorKey: "last_work_on",
+                  header: "Последняя работа",
+                  cell: ({ row }) =>
+                    row.original.last_work_on
+                      ? `${formatDate(row.original.last_work_on)} · ${
+                          OPO_WORK_RESULT_TITLES[
+                            row.original.last_work_result ?? ""
+                          ] ?? "—"
+                        }`
+                      : "нет записей",
                 },
               ]}
               data={deviceRegistry.pagedItems}
