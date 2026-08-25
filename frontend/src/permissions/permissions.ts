@@ -41,6 +41,8 @@ export const PERMISSIONS = {
   FIRE_INSPECTIONS_VIEW: "fire_inspections.view",
   // Доп. №1 разд. 54.2: право модуля «Промышленная безопасность».
   INDUSTRIAL_SAFETY_VIEW: "industrial_safety.view",
+  // Доп. №1 разд. 55: право модуля «Экология».
+  ECOLOGY_VIEW: "ecology.view",
   REFERENCE_VIEW: "reference.view",
   CONTRACTOR_VIEW: "contractor.view",
   CONTRACTOR_MANAGE: "contractor.manage",

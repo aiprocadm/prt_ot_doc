@@ -18,6 +18,7 @@ import {
   History,
   Link2,
   LayoutDashboard,
+  Leaf,
   Network,
   Package,
   Search,
@@ -325,6 +326,19 @@ export const MAIN_NAV_GROUPS: NavGroup[] = [
         to: "/industrial-safety",
         icon: Factory,
         permission: PERMISSIONS.INDUSTRIAL_SAFETY_VIEW,
+      },
+    ],
+  },
+  {
+    // Доп. №1 разд. 55: своя секция — у экологии свой надзор (Росприроднадзор)
+    // и свой модуль подписки, как у ПБ и ПромБеза.
+    title: "Экология",
+    items: [
+      {
+        label: "Объекты НВОС",
+        to: "/ecology",
+        icon: Leaf,
+        permission: PERMISSIONS.ECOLOGY_VIEW,
       },
     ],
   },

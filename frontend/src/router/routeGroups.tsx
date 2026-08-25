@@ -44,6 +44,7 @@ import {
   FindingsPage,
   FireInspectionsPage,
   FireSafetyPage,
+  EcologyPage,
   IndustrialSafetyPage,
   FireTrainingPage,
   IncidentsPage,
@@ -370,6 +371,13 @@ export const buildProtectedRouteGroups = (): ReactElement[] => {
           path="/fire-safety"
           element={<FireSafetyPage />}
         />,
+      ],
+    },
+    {
+      // Доп. №1 разд. 55: реестр объектов НВОС — первый экран контура экологии.
+      permission: PERMISSIONS.ECOLOGY_VIEW,
+      routes: [
+        <Route key="/ecology" path="/ecology" element={<EcologyPage />} />,
       ],
     },
     {

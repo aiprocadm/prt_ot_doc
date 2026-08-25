@@ -216,6 +216,21 @@ SELLABLE_MODULES: tuple[ModuleDescriptor, ...] = (
         ui_routes=("/industrial-safety",),
         permissions=("industrial_safety.view",),
     ),
+    # Доп. №1 разд. 55, срез-1: дисциплина экологии получила содержание —
+    # собственный реестр объектов НВОС с закрытой категорией I–IV и своими
+    # ручками. До него заводить модуль было нельзя по правилу «модуль без
+    # функциональности — продажа пустоты».
+    #
+    # ЛОВУШКА ТАРИФА (прецеденты fs01 и is02): пресет «Всё включено» по
+    # построению равен ВСЕМУ каталогу, и новая строка сдвигает его сама собой.
+    # Компенсирует миграция 20260825_eco02_ecology_module_grant.
+    ModuleDescriptor(
+        code="ecology",
+        title="Экология",
+        category="Экология",
+        ui_routes=("/ecology",),
+        permissions=("ecology.view",),
+    ),
 )
 
 MODULE_REGISTRY: tuple[ModuleDescriptor, ...] = CORE_MODULES + SELLABLE_MODULES

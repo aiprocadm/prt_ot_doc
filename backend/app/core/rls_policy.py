@@ -67,6 +67,7 @@ RLS_ENABLED_TABLES: frozenset[str] = frozenset(
         "committee_meeting_invitation",
         "fire_document",
         "hazardous_facility",
+        "nvos_facility",
         "opo_device_work",
         "opo_production_control_measure",
         "opo_production_control_plan",
