@@ -57,6 +57,42 @@ export type IndustrialReadinessDto = {
   attestations_total: number;
   attestations_overdue: number;
   attestations_due_soon: number;
+  /**
+   * Разд. 54.2 «производственный контроль». ГРАНИЦА: это ФАКТ наличия плана на
+   * текущий год, а не приговор — обязанность вести ПК зависит от того,
+   * эксплуатирует ли организация ОПО.
+   */
+  current_year_plan_exists: boolean;
+  pc_measures_overdue: number;
+  pc_measures_planned: number;
+};
+
+export type PcPlanDto = {
+  id: string;
+  year: number;
+  title: string;
+  responsible?: string | null;
+  approved_on?: string | null;
+  status: string;
+  status_label: string;
+  notes?: string | null;
+  measures_total: number;
+  measures_overdue: number;
+};
+
+export type PcMeasureDto = {
+  id: string;
+  plan_id: string;
+  section: string;
+  section_label: string;
+  title: string;
+  due_on: string;
+  responsible?: string | null;
+  /** planned | overdue | done | cancelled — «просрочено» считает сервер. */
+  status: string;
+  status_label: string;
+  completed_on?: string | null;
+  result?: string | null;
 };
 
 export type OpoAttestationDto = {
@@ -140,6 +176,22 @@ export const industrialSafetyApi = {
   listAttestations: async (): Promise<OpoAttestationDto[]> => {
     const { data } = await apiClient.get<{ items?: OpoAttestationDto[] }>(
       "/industrial-safety/attestations",
+      { params: { limit: 200, offset: 0 } },
+    );
+    return Array.isArray(data?.items) ? data.items : [];
+  },
+
+  listPcPlans: async (): Promise<PcPlanDto[]> => {
+    const { data } = await apiClient.get<{ items?: PcPlanDto[] }>(
+      "/industrial-safety/pc-plans",
+      { params: { limit: 50, offset: 0 } },
+    );
+    return Array.isArray(data?.items) ? data.items : [];
+  },
+
+  listPcMeasures: async (): Promise<PcMeasureDto[]> => {
+    const { data } = await apiClient.get<{ items?: PcMeasureDto[] }>(
+      "/industrial-safety/pc-measures",
       { params: { limit: 200, offset: 0 } },
     );
     return Array.isArray(data?.items) ? data.items : [];

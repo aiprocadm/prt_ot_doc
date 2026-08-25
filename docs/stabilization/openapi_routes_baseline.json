@@ -236,6 +236,8 @@
     "GET /api/v1/industrial-safety/device-works",
     "GET /api/v1/industrial-safety/devices",
     "GET /api/v1/industrial-safety/facilities",
+    "GET /api/v1/industrial-safety/pc-measures",
+    "GET /api/v1/industrial-safety/pc-plans",
     "GET /api/v1/industrial-safety/readiness",
     "GET /api/v1/inspection-prep/packages",
     "GET /api/v1/inspection-prep/packages/{package_id}/gaps",
@@ -570,6 +572,8 @@
     "PATCH /api/v1/incidents/{incident_id}",
     "PATCH /api/v1/industrial-safety/devices/{device_id}",
     "PATCH /api/v1/industrial-safety/facilities/{facility_id}",
+    "PATCH /api/v1/industrial-safety/pc-measures/{measure_id}",
+    "PATCH /api/v1/industrial-safety/pc-plans/{plan_id}",
     "PATCH /api/v1/inspections/{inspection_id}",
     "PATCH /api/v1/invoices/{invoice_id}",
     "PATCH /api/v1/journals/entries/{entry_id}",
@@ -766,6 +770,8 @@
     "POST /api/v1/industrial-safety/device-works",
     "POST /api/v1/industrial-safety/devices",
     "POST /api/v1/industrial-safety/facilities",
+    "POST /api/v1/industrial-safety/pc-measures",
+    "POST /api/v1/industrial-safety/pc-plans",
     "POST /api/v1/inspection-prep/packages",
     "POST /api/v1/inspection-prep/packages/{package_id}/recalculate-gaps",
     "POST /api/v1/inspections",
@@ -1204,6 +1210,8 @@
     "create_order_api_v1_orders_post",
     "create_pack_from_scenario_api_v1_packs_scenarios__scenario_code__post",
     "create_pack_run_api_v1_pack_runs_post",
+    "create_pc_measure_api_v1_industrial_safety_pc_measures_post",
+    "create_pc_plan_api_v1_industrial_safety_pc_plans_post",
     "create_pdn_agreement_api_v1_privacy_agreements_post",
     "create_pep_request_api_v1_sign_pep_requests_post",
     "create_permit_endpoint_api_v1_permits_post",
@@ -1670,6 +1678,8 @@
     "list_overdue_prescriptions_api_v1_prescriptions_overdue_get",
     "list_pack_scenarios_api_v1_packs_scenarios_get",
     "list_packs_api_v1_packs_get",
+    "list_pc_measures_api_v1_industrial_safety_pc_measures_get",
+    "list_pc_plans_api_v1_industrial_safety_pc_plans_get",
     "list_pdn_agreements_api_v1_privacy_agreements_get",
     "list_pep_requests_api_v1_sign_pep_requests_get",
     "list_permits_api_v1_permits_get",
@@ -2008,6 +2018,8 @@
     "update_norm_api_v1_ppe_norms__norm_id__patch",
     "update_order_api_v1_orders__order_id__patch",
     "update_own_branding_api_v1_platform_branding_put",
+    "update_pc_measure_api_v1_industrial_safety_pc_measures__measure_id__patch",
+    "update_pc_plan_api_v1_industrial_safety_pc_plans__plan_id__patch",
     "update_permit_endpoint_api_v1_permits__permit_id__patch",
     "update_person_endpoint_api_v1_persons__person_id__patch",
     "update_prescription_api_v1_prescriptions__prescription_id__patch",
@@ -2653,6 +2665,14 @@
     "PackagePublishRequest",
     "PackageRunCreate",
     "PackageTicketCreate",
+    "PcMeasureCreate",
+    "PcMeasurePage",
+    "PcMeasureRead",
+    "PcMeasureUpdate",
+    "PcPlanCreate",
+    "PcPlanPage",
+    "PcPlanRead",
+    "PcPlanUpdate",
     "PdfRunRead",
     "PdnAccessLogEntry",
     "PdnAccessLogPage",
@@ -5708,7 +5728,10 @@
       "devices_without_work_record": "integer",
       "attestations_total": "integer",
       "attestations_overdue": "integer",
-      "attestations_due_soon": "integer"
+      "attestations_due_soon": "integer",
+      "current_year_plan_exists": "boolean",
+      "pc_measures_overdue": "integer",
+      "pc_measures_planned": "integer"
     },
     "IndustryList": {
       "items": "array"
@@ -7344,6 +7367,75 @@
     "PackageTicketCreate": {
       "title": "string",
       "message": "string"
+    },
+    "PcMeasureCreate": {
+      "plan_id": "string",
+      "section": "string",
+      "title": "string",
+      "due_on": "string",
+      "responsible": "null|string",
+      "status": "string",
+      "completed_on": "null|string",
+      "result": "null|string"
+    },
+    "PcMeasurePage": {
+      "items": "array",
+      "total": "integer"
+    },
+    "PcMeasureRead": {
+      "id": "string",
+      "plan_id": "string",
+      "section": "string",
+      "section_label": "string",
+      "title": "string",
+      "due_on": "string",
+      "responsible": "null|string",
+      "status": "string",
+      "status_label": "string",
+      "completed_on": "null|string",
+      "result": "null|string"
+    },
+    "PcMeasureUpdate": {
+      "plan_id": "null|string",
+      "section": "null|string",
+      "title": "null|string",
+      "due_on": "null|string",
+      "responsible": "null|string",
+      "status": "null|string",
+      "completed_on": "null|string",
+      "result": "null|string"
+    },
+    "PcPlanCreate": {
+      "year": "integer",
+      "title": "string",
+      "responsible": "null|string",
+      "approved_on": "null|string",
+      "status": "string",
+      "notes": "null|string"
+    },
+    "PcPlanPage": {
+      "items": "array",
+      "total": "integer"
+    },
+    "PcPlanRead": {
+      "id": "string",
+      "year": "integer",
+      "title": "string",
+      "responsible": "null|string",
+      "approved_on": "null|string",
+      "status": "string",
+      "status_label": "string",
+      "notes": "null|string",
+      "measures_total": "integer",
+      "measures_overdue": "integer"
+    },
+    "PcPlanUpdate": {
+      "year": "integer|null",
+      "title": "null|string",
+      "responsible": "null|string",
+      "approved_on": "null|string",
+      "status": "null|string",
+      "notes": "null|string"
     },
     "PdfRunRead": {
       "id": "string",

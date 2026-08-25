@@ -9,6 +9,7 @@ import { uxBudgetDelta } from "@/test-utils/uxBudget";
 const listFacilitiesMock = vi.fn();
 const listDevicesMock = vi.fn();
 const listAttestationsMock = vi.fn();
+const listPcMeasuresMock = vi.fn();
 const readinessMock = vi.fn();
 
 vi.mock("@/api/industrialSafety", async (importOriginal) => ({
@@ -17,6 +18,7 @@ vi.mock("@/api/industrialSafety", async (importOriginal) => ({
     listFacilities: (...args: unknown[]) => listFacilitiesMock(...args),
     listDevices: (...args: unknown[]) => listDevicesMock(...args),
     listAttestations: (...args: unknown[]) => listAttestationsMock(...args),
+    listPcMeasures: (...args: unknown[]) => listPcMeasuresMock(...args),
     readiness: (...args: unknown[]) => readinessMock(...args),
   },
 }));
@@ -128,6 +130,36 @@ const populatedAttestations = [
   },
 ];
 
+/** Мероприятия ПК: одно просрочено, одно выполнено. */
+const populatedMeasures = [
+  {
+    id: "m-1",
+    plan_id: "plan-1",
+    section: "violations",
+    section_label: "Устранение выявленных нарушений",
+    title: "Устранение замечаний прошлой проверки",
+    due_on: "2026-08-01",
+    responsible: "Механик Сидоров",
+    status: "overdue",
+    status_label: "Просрочено",
+    completed_on: null,
+    result: null,
+  },
+  {
+    id: "m-2",
+    plan_id: "plan-1",
+    section: "reporting",
+    section_label: "Отчётность в надзорные органы",
+    title: "Отчёт в Ростехнадзор",
+    due_on: "2026-04-01",
+    responsible: null,
+    status: "done",
+    status_label: "Выполнено",
+    completed_on: "2026-03-30",
+    result: "Отчёт направлен",
+  },
+];
+
 const populatedReadiness = {
   total_facilities: 2,
   by_class: { I: 0, II: 0, III: 1, IV: 1 },
@@ -140,6 +172,9 @@ const populatedReadiness = {
   attestations_total: 2,
   attestations_overdue: 1,
   attestations_due_soon: 0,
+  current_year_plan_exists: true,
+  pc_measures_overdue: 1,
+  pc_measures_planned: 0,
 };
 
 describe("IndustrialSafetyPage", () => {
@@ -147,10 +182,12 @@ describe("IndustrialSafetyPage", () => {
     listFacilitiesMock.mockReset();
     listDevicesMock.mockReset();
     listAttestationsMock.mockReset();
+    listPcMeasuresMock.mockReset();
     readinessMock.mockReset();
     listFacilitiesMock.mockResolvedValue(populatedFacilities);
     listDevicesMock.mockResolvedValue(populatedDevices);
     listAttestationsMock.mockResolvedValue(populatedAttestations);
+    listPcMeasuresMock.mockResolvedValue(populatedMeasures);
     readinessMock.mockResolvedValue(populatedReadiness);
   });
 
@@ -317,6 +354,68 @@ describe("IndustrialSafetyPage", () => {
     expect(screen.getByText("Просрочена")).toBeInTheDocument();
     // И то же самое числом в шапке.
     expect(screen.getByText(/просрочено аттестаций/i)).toBeInTheDocument();
+  });
+
+  // Доп. №1 разд. 54.2 срез-5: производственный контроль. В коде не было
+  // ничего — `production_control` встречался лишь подписью поля в
+  // экологическом комплекте документов.
+  it("производственный контроль открывается четвёртой секцией", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter>
+        <IndustrialSafetyPage />
+      </MemoryRouter>,
+    );
+
+    expect(
+      await screen.findByText("Сеть газопотребления котельной"),
+    ).toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: "Производственный контроль" }),
+    );
+
+    expect(
+      await screen.findByText("Устранение замечаний прошлой проверки"),
+    ).toBeInTheDocument();
+    // Раздел плана и состояние — словами.
+    expect(
+      screen.getByText("Устранение выявленных нарушений"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Просрочено")).toBeInTheDocument();
+    // «Выполнено» — и заголовок колонки, и состояние мероприятия: проверяем
+    // именно состояние, поэтому смотрим на второе мероприятие целиком.
+    expect(screen.getByText("Отчёт в Ростехнадзор")).toBeInTheDocument();
+    expect(screen.getAllByText("Выполнено").length).toBeGreaterThan(1);
+  });
+
+  it("экран не объявляет отсутствие плана ПК нарушением", async () => {
+    // ГРАНИЦА названа НА ЭКРАНЕ: обязанность вести производственный контроль
+    // зависит от того, эксплуатирует ли организация ОПО.
+    listPcMeasuresMock.mockResolvedValue([]);
+    readinessMock.mockResolvedValue({
+      ...populatedReadiness,
+      current_year_plan_exists: false,
+      pc_measures_overdue: 0,
+    });
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter>
+        <IndustrialSafetyPage />
+      </MemoryRouter>,
+    );
+
+    expect(
+      await screen.findByText("Сеть газопотребления котельной"),
+    ).toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: "Производственный контроль" }),
+    );
+
+    expect(
+      await screen.findByText(/применимость определяет специалист/i),
+    ).toBeInTheDocument();
   });
 
   it("IndustrialSafetyPage в UX-бюджете", async () => {

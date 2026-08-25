@@ -152,6 +152,86 @@ class DeviceWorkPage(BaseSchema):
     total: int
 
 
+class PcPlanCreate(BaseSchema):
+    year: int = Field(ge=2000, le=2100)
+    title: str = Field(min_length=1, max_length=255)
+    responsible: str | None = Field(default=None, max_length=255)
+    approved_on: date | None = None
+    status: str = Field(default="draft", max_length=16)
+    notes: str | None = None
+
+
+class PcPlanUpdate(BaseSchema):
+    year: int | None = Field(default=None, ge=2000, le=2100)
+    title: str | None = Field(default=None, min_length=1, max_length=255)
+    responsible: str | None = Field(default=None, max_length=255)
+    approved_on: date | None = None
+    status: str | None = Field(default=None, max_length=16)
+    notes: str | None = None
+
+
+class PcPlanRead(BaseSchema):
+    id: str
+    year: int
+    title: str
+    responsible: str | None = None
+    approved_on: date | None = None
+    status: str
+    status_label: str
+    notes: str | None = None
+    #: сколько мероприятий в плане и сколько из них просрочено — считается
+    #: при чтении, чтобы план был виден одной строкой
+    measures_total: int = 0
+    measures_overdue: int = 0
+
+
+class PcPlanPage(BaseSchema):
+    items: list[PcPlanRead]
+    total: int
+
+
+class PcMeasureCreate(BaseSchema):
+    plan_id: str = Field(min_length=1, max_length=36)
+    section: str = Field(min_length=1, max_length=32)
+    title: str = Field(min_length=1, max_length=255)
+    due_on: date
+    responsible: str | None = Field(default=None, max_length=255)
+    status: str = Field(default="planned", max_length=16)
+    completed_on: date | None = None
+    result: str | None = None
+
+
+class PcMeasureUpdate(BaseSchema):
+    plan_id: str | None = Field(default=None, min_length=1, max_length=36)
+    section: str | None = Field(default=None, min_length=1, max_length=32)
+    title: str | None = Field(default=None, min_length=1, max_length=255)
+    due_on: date | None = None
+    responsible: str | None = Field(default=None, max_length=255)
+    status: str | None = Field(default=None, max_length=16)
+    completed_on: date | None = None
+    result: str | None = None
+
+
+class PcMeasureRead(BaseSchema):
+    id: str
+    plan_id: str
+    section: str
+    section_label: str
+    title: str
+    due_on: date
+    responsible: str | None = None
+    #: planned / overdue / done / cancelled — «просрочено» СЧИТАЕТСЯ при чтении
+    status: str
+    status_label: str
+    completed_on: date | None = None
+    result: str | None = None
+
+
+class PcMeasurePage(BaseSchema):
+    items: list[PcMeasureRead]
+    total: int
+
+
 class OpoAttestationRead(BaseSchema):
     """Аттестация по промбезопасности глазами дисциплины.
 
@@ -215,3 +295,10 @@ class IndustrialReadinessRead(BaseSchema):
     attestations_total: int = 0
     attestations_overdue: int = 0
     attestations_due_soon: int = 0
+    #: разд. 54.2 «производственный контроль». ГРАНИЦА: платформа сообщает
+    #: ФАКТ наличия плана на текущий год, но не объявляет его отсутствие
+    #: нарушением — обязанность вести ПК зависит от того, эксплуатирует ли
+    #: организация ОПО, и полноту сведений определяет специалист.
+    current_year_plan_exists: bool = False
+    pc_measures_overdue: int = 0
+    pc_measures_planned: int = 0

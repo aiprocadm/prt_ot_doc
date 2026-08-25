@@ -26,7 +26,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from sqlalchemy import Date, ForeignKey, Index, String, Text, UniqueConstraint
+from sqlalchemy import Date, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import SoftDeleteMixin, TenantBaseModel
@@ -190,6 +190,94 @@ OPO_WORK_RESULTS: dict[str, str] = {
 #: срок НЕ двигает: перенос означал бы «неисправно, но эксплуатировать ещё
 #: пять лет» — это не вывод экспертизы (прецедент журнала работ контура ПБ).
 OPO_WORK_PASSING_RESULTS: frozenset[str] = frozenset({"passed", "with_remarks"})
+
+
+#: Состояние плана производственного контроля (разд. 54.2 «план ПК»).
+PC_PLAN_STATUSES: dict[str, str] = {
+    "draft": "Проект",
+    "approved": "Утверждён",
+    "archived": "Архивный",
+}
+
+#: Разделы плана ПК — ЗАКРЫТЫЙ словарь по составу производственного контроля
+#: (ФЗ-116 ст. 11 и Правила организации ПК). Свободная строка сделала бы
+#: отчётность непересчитываемой: «обучение», «Обучение персонала» и «учёба»
+#: стали бы тремя разными разделами.
+PC_MEASURE_SECTIONS: dict[str, str] = {
+    "inspections": "Обследования и проверки состояния ОПО",
+    "epb": "Экспертиза и диагностирование технических устройств",
+    "training": "Обучение и аттестация персонала",
+    "emergency": "Готовность к действиям при авариях",
+    "violations": "Устранение выявленных нарушений",
+    "reporting": "Отчётность в надзорные органы",
+}
+
+#: Состояние мероприятия. «Просрочено» — не хранится, а считается при чтении:
+#: срок наступает сам, без запроса на изменение.
+PC_MEASURE_STATUS_TITLES: dict[str, str] = {
+    "planned": "Запланировано",
+    "overdue": "Просрочено",
+    "done": "Выполнено",
+    "cancelled": "Отменено",
+}
+
+#: Состояния, которые МОЖНО выставить руками. «Просрочено» среди них нет — это
+#: вычисляемое состояние, а не решение человека.
+PC_MEASURE_WRITABLE_STATUSES: tuple[str, ...] = ("planned", "done", "cancelled")
+
+
+class ProductionControlPlan(TenantBaseModel, SoftDeleteMixin):
+    """План производственного контроля на год (разд. 54.2).
+
+    Своя сущность, а не ядровая задача: план — это ДОКУМЕНТ организации,
+    эксплуатирующей ОПО, со своим утверждением и ответственным за осуществление
+    производственного контроля, и именно он предъявляется надзору. В ядре
+    такого нет: там есть задачи (поручения), а не годовой документ.
+    """
+
+    __tablename__ = "opo_production_control_plan"
+
+    year: Mapped[int] = mapped_column(Integer, nullable=False)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    #: ответственный за осуществление производственного контроля
+    responsible: Mapped[str | None] = mapped_column(String(255))
+    approved_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="draft", server_default="draft"
+    )
+    notes: Mapped[str | None] = mapped_column(Text)
+
+    __table_args__ = (
+        # План ПК — ГОДОВОЙ документ: второй план на тот же год это дубль, от
+        # которого вопрос «есть ли план на 2026 год» теряет смысл.
+        UniqueConstraint("tenant_id", "year", name="uq_pc_plan_year"),
+    )
+
+
+class ProductionControlMeasure(TenantBaseModel, SoftDeleteMixin):
+    """Мероприятие плана ПК: что, к какому сроку, кто и с каким результатом."""
+
+    __tablename__ = "opo_production_control_measure"
+
+    plan_id: Mapped[str] = mapped_column(
+        ForeignKey("opo_production_control_plan.id"), nullable=False, index=True
+    )
+    section: Mapped[str] = mapped_column(String(32), nullable=False)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    due_on: Mapped[date] = mapped_column(Date, nullable=False)
+    responsible: Mapped[str | None] = mapped_column(String(255))
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="planned", server_default="planned"
+    )
+    completed_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    #: что именно сделано — предъявляется надзору вместе с планом
+    result: Mapped[str | None] = mapped_column(Text)
+
+    plan: Mapped[ProductionControlPlan] = relationship(backref="measures")
+
+    __table_args__ = (
+        Index("ix_pc_measure_tenant_due", "tenant_id", "due_on"),
+    )
 
 
 #: Состояние срока аттестации словами. «Срока нет» — отдельное состояние, а не
