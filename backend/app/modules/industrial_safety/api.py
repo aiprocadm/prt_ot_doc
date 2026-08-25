@@ -20,11 +20,13 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.core.disciplines import ATTESTATION_AREA_TITLES
 from app.core.errors import api_problem_detail
 from app.core.feature_flags import is_module_enabled, raise_for_disabled_module
 from app.core.security import AccessContext, abac, rbac
 from app.core.tenant_validation import TenantContextValidator
 from app.models.industrial_safety import (
+    OPO_ATTESTATION_STATUS_TITLES,
     OPO_DEVICE_KINDS,
     OPO_DEVICE_STATUSES,
     OPO_EPB_STATUS_TITLES,
@@ -38,8 +40,8 @@ from app.models.industrial_safety import (
     HazardousFacility,
     TechnicalDevice,
 )
-from app.models.master_data import Site
-from app.models.models import Tenant
+from app.models.master_data import Person, Site
+from app.models.models import Attestation, Tenant
 from app.schemas.industrial_safety import (
     DeviceWorkCreate,
     DeviceWorkPage,
@@ -49,6 +51,8 @@ from app.schemas.industrial_safety import (
     HazardousFacilityRead,
     HazardousFacilityUpdate,
     IndustrialReadinessRead,
+    OpoAttestationPage,
+    OpoAttestationRead,
     TechnicalDeviceCreate,
     TechnicalDevicePage,
     TechnicalDeviceRead,
@@ -822,6 +826,88 @@ async def record_device_work(
     return _work_read(record, shifted=shifted)
 
 
+def _validity_status(expires_at: date | None, today: date) -> str:
+    """Состояние срока аттестации — считается ПРИ ЧТЕНИИ.
+
+    «Срока нет» — отдельное состояние (``absent``), а не «всё в порядке»:
+    аттестация действует пять лет, и запись без даты окончания означает, что
+    сведения неполны, а не что допуск бессрочный.
+    """
+
+    if expires_at is None:
+        return "absent"
+    if expires_at < today:
+        return "overdue"
+    if expires_at <= today + timedelta(days=_DUE_SOON_DAYS):
+        return "due_soon"
+    return "ok"
+
+
+@router.get("/attestations", response_model=OpoAttestationPage)
+async def list_attestations(
+    tenant: TenantDep,
+    session: SessionDep,
+    access: Access,
+    area_code: str | None = Query(default=None),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+) -> OpoAttestationPage:
+    """Аттестация по промбезопасности: СВОИ записи ядрового реестра.
+
+    Дисциплина не заводит своей таблицы — запись живёт в ядре
+    (``Attestation``). Показываются только записи с областью из справочника:
+    аттестация без области принадлежит другой дисциплине.
+
+    Экрана у ядровых аттестаций нет ни одного (в интерфейсе есть лишь тип
+    задачи «Аттестации»), поэтому до этого среза их не было видно нигде.
+    """
+
+    TenantContextValidator.ensure_tenant_context(tenant)
+    today = date.today()
+    stmt = (
+        select(Attestation, Person.last_name, Person.first_name, Person.middle_name)
+        .join(Person, Person.id == Attestation.person_id)
+        .where(
+            Attestation.tenant_id == tenant.id,
+            Attestation.deleted_at.is_(None),
+            Attestation.area_code.is_not(None),
+        )
+    )
+    if area_code:
+        stmt = stmt.where(Attestation.area_code == area_code)
+    total = int(await session.scalar(select(func.count()).select_from(stmt.subquery())) or 0)
+    rows = (
+        await session.execute(
+            stmt.order_by(Attestation.expires_at.asc().nullslast()).offset(offset).limit(limit)
+        )
+    ).all()
+    items = [
+        OpoAttestationRead(
+            id=record.id,
+            person_id=record.person_id,
+            # ФИО собирается здесь: у Person нет готового поля с полным именем,
+            # а показывать человека идентификатором на экране нельзя.
+            person_name=" ".join(
+                part for part in (last_name, first_name, middle_name) if part
+            ),
+            name=record.name,
+            area_code=record.area_code or "",
+            area_label=ATTESTATION_AREA_TITLES.get(
+                record.area_code or "", record.area_code or ""
+            ),
+            issued_at=record.issued_at,
+            expires_at=record.expires_at,
+            validity_status=_validity_status(record.expires_at, today),
+            validity_status_label=OPO_ATTESTATION_STATUS_TITLES.get(
+                _validity_status(record.expires_at, today),
+                _validity_status(record.expires_at, today),
+            ),
+        )
+        for record, last_name, first_name, middle_name in rows
+    ]
+    return OpoAttestationPage(items=items, total=total)
+
+
 @router.get("/readiness", response_model=IndustrialReadinessRead)
 async def industrial_readiness(
     tenant: TenantDep,
@@ -902,7 +988,33 @@ async def industrial_readiness(
     )
     devices_without_work = sum(1 for d in devices if d.id not in confirmed_ids)
 
+    # Разд. 54.2 «аттестация персонала»: считаем ТОЛЬКО записи с областью из
+    # справочника — сводка дисциплины показывает свои записи, а не все
+    # аттестации арендатора (у аттестаций других дисциплин области нет).
+    attestations = (
+        (
+            await session.execute(
+                select(Attestation).where(
+                    Attestation.tenant_id == tenant.id,
+                    Attestation.deleted_at.is_(None),
+                    Attestation.area_code.is_not(None),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    attestations_overdue = sum(
+        1 for a in attestations if _validity_status(a.expires_at, today) == "overdue"
+    )
+    attestations_due_soon = sum(
+        1 for a in attestations if _validity_status(a.expires_at, today) == "due_soon"
+    )
+
     return IndustrialReadinessRead(
+        attestations_total=len(attestations),
+        attestations_overdue=attestations_overdue,
+        attestations_due_soon=attestations_due_soon,
         devices_without_work_record=devices_without_work,
         total_facilities=len(active),
         by_class=by_class,

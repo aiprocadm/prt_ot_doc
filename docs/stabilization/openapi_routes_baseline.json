@@ -232,6 +232,7 @@
     "GET /api/v1/incidents",
     "GET /api/v1/incidents/{incident_id}",
     "GET /api/v1/incidents/{incident_id}/logs",
+    "GET /api/v1/industrial-safety/attestations",
     "GET /api/v1/industrial-safety/device-works",
     "GET /api/v1/industrial-safety/devices",
     "GET /api/v1/industrial-safety/facilities",
@@ -1574,6 +1575,7 @@
     "list_approvals_api_v1_approvals_get",
     "list_articles_api_v1_budget_articles_get",
     "list_attestations_api_v1_attestations_get",
+    "list_attestations_api_v1_industrial_safety_attestations_get",
     "list_batches_api_v1_imports_batches_get",
     "list_branches_api_v1_branches_get",
     "list_briefings_endpoint_api_v1_work_permits__wp_id__briefing_get",
@@ -2541,6 +2543,8 @@
     "OffboardingCancel",
     "OffboardingPurge",
     "OffboardingRequest",
+    "OpoAttestationPage",
+    "OpoAttestationRead",
     "OrderCreate",
     "OrderPage",
     "OrderRead",
@@ -3181,6 +3185,7 @@
       "person_id": "string",
       "position_id": "null|string",
       "name": "string",
+      "area_code": "null|string",
       "issued_at": "null|string",
       "expires_at": "null|string",
       "status": "AttestationStatus",
@@ -3196,6 +3201,8 @@
       "person_id": "string",
       "position_id": "null|string",
       "name": "string",
+      "area_code": "null|string",
+      "area_label": "null|string",
       "issued_at": "null|string",
       "expires_at": "null|string",
       "status": "AttestationStatus",
@@ -3208,6 +3215,7 @@
       "person_id": "null|string",
       "position_id": "null|string",
       "name": "null|string",
+      "area_code": "null|string",
       "issued_at": "null|string",
       "expires_at": "null|string",
       "status": "AttestationStatus|null",
@@ -5697,7 +5705,10 @@
       "epb_overdue": "integer",
       "epb_due_soon": "integer",
       "devices_past_lifetime_without_epb": "integer",
-      "devices_without_work_record": "integer"
+      "devices_without_work_record": "integer",
+      "attestations_total": "integer",
+      "attestations_overdue": "integer",
+      "attestations_due_soon": "integer"
     },
     "IndustryList": {
       "items": "array"
@@ -6529,6 +6540,22 @@
     "OffboardingRequest": {
       "reason": "null|string",
       "grace_days": "integer"
+    },
+    "OpoAttestationPage": {
+      "items": "array",
+      "total": "integer"
+    },
+    "OpoAttestationRead": {
+      "id": "string",
+      "person_id": "string",
+      "person_name": "string",
+      "name": "string",
+      "area_code": "string",
+      "area_label": "string",
+      "issued_at": "null|string",
+      "expires_at": "null|string",
+      "validity_status": "string",
+      "validity_status_label": "string"
     },
     "OrderCreate": {
       "contract_id": "string",

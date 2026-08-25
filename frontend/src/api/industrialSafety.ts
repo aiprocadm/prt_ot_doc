@@ -53,6 +53,24 @@ export type IndustrialReadinessDto = {
   devices_past_lifetime_without_epb: number;
   /** Разд. 54.2 «история работ»: устройства без единой записи о работах. */
   devices_without_work_record: number;
+  /** Разд. 54.2 «аттестация»: считаются только записи с областью из справочника. */
+  attestations_total: number;
+  attestations_overdue: number;
+  attestations_due_soon: number;
+};
+
+export type OpoAttestationDto = {
+  id: string;
+  person_id: string;
+  person_name: string;
+  name: string;
+  area_code: string;
+  area_label: string;
+  issued_at?: string | null;
+  expires_at?: string | null;
+  /** ok | due_soon | overdue | absent — «срок не указан» отдельно. */
+  validity_status: string;
+  validity_status_label: string;
 };
 
 /** Подписи результатов работ — запас; перевод делает сервер. */
@@ -114,6 +132,14 @@ export const industrialSafetyApi = {
   listDevices: async (): Promise<TechnicalDeviceDto[]> => {
     const { data } = await apiClient.get<{ items?: TechnicalDeviceDto[] }>(
       "/industrial-safety/devices",
+      { params: { limit: 200, offset: 0 } },
+    );
+    return Array.isArray(data?.items) ? data.items : [];
+  },
+
+  listAttestations: async (): Promise<OpoAttestationDto[]> => {
+    const { data } = await apiClient.get<{ items?: OpoAttestationDto[] }>(
+      "/industrial-safety/attestations",
       { params: { limit: 200, offset: 0 } },
     );
     return Array.isArray(data?.items) ? data.items : [];
