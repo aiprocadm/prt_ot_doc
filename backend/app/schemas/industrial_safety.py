@@ -55,6 +55,65 @@ class HazardousFacilityPage(BaseSchema):
     total: int
 
 
+class TechnicalDeviceCreate(BaseSchema):
+    #: обязателен: экспертиза и надзор идут по зарегистрированному объекту,
+    #: устройство «ничьё» невозможно предъявить проверяющему
+    facility_id: str = Field(min_length=1, max_length=36)
+    kind: str = Field(min_length=1, max_length=32)
+    name: str = Field(min_length=1, max_length=255)
+    serial_number: str | None = Field(default=None, max_length=64)
+    commissioned_on: date | None = None
+    lifetime_until: date | None = None
+    epb_conclusion_number: str | None = Field(default=None, max_length=64)
+    epb_registered_on: date | None = None
+    epb_valid_until: date | None = None
+    status: str = Field(default="in_operation", max_length=16)
+    notes: str | None = None
+
+
+class TechnicalDeviceUpdate(BaseSchema):
+    facility_id: str | None = Field(default=None, min_length=1, max_length=36)
+    kind: str | None = Field(default=None, min_length=1, max_length=32)
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    serial_number: str | None = Field(default=None, max_length=64)
+    commissioned_on: date | None = None
+    lifetime_until: date | None = None
+    epb_conclusion_number: str | None = Field(default=None, max_length=64)
+    epb_registered_on: date | None = None
+    epb_valid_until: date | None = None
+    status: str | None = Field(default=None, max_length=16)
+    notes: str | None = None
+
+
+class TechnicalDeviceRead(BaseSchema):
+    id: str
+    facility_id: str
+    kind: str
+    kind_label: str
+    name: str
+    serial_number: str | None = None
+    commissioned_on: date | None = None
+    lifetime_until: date | None = None
+    epb_conclusion_number: str | None = None
+    epb_registered_on: date | None = None
+    epb_valid_until: date | None = None
+    status: str
+    status_label: str
+    notes: str | None = None
+    #: ok / due_soon / overdue / absent — считается ПРИ ЧТЕНИИ.
+    #: «absent» — отдельное состояние, а не разновидность просрочки
+    epb_status: str
+    epb_status_label: str
+    #: назначенный срок службы истёк — факт из данных, не суждение о том,
+    #: обязана ли экспертиза быть проведена
+    past_lifetime: bool = False
+
+
+class TechnicalDevicePage(BaseSchema):
+    items: list[TechnicalDeviceRead]
+    total: int
+
+
 class IndustrialReadinessRead(BaseSchema):
     """Сводка ПромБеза: сколько объектов и какого класса опасности.
 
@@ -72,3 +131,13 @@ class IndustrialReadinessRead(BaseSchema):
     #: «ноль объектов I класса» отличался от «поле не пришло»
     by_class: dict[str, int]
     excluded_facilities: int
+    #: разд. 54.2 «технические устройства… ЭПБ, сроки»: считаются только
+    #: эксплуатируемые устройства — списанное просрочкой быть не может
+    total_devices: int = 0
+    epb_overdue: int = 0
+    epb_due_soon: int = 0
+    #: ФАКТ из данных: назначенный срок службы истёк, а действующего заключения
+    #: ЭПБ нет. ГРАНИЦА: платформа НЕ решает, обязана ли экспертиза быть
+    #: проведена — это зависит от типа устройства, документации и норм ФНП,
+    #: которых в данных нет. Поэтому поля «устройств без ЭПБ» здесь НЕТ.
+    devices_past_lifetime_without_epb: int = 0
