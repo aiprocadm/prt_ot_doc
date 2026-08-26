@@ -301,6 +301,8 @@ RLS_ENABLED_TABLES: frozenset[str] = frozenset(
         "user_attribute",
         "user_role",
         "violation",
+        "waste_movement",
+        "waste_passport",
         "webhook_deliveries",
         "webhook_endpoints",
         "webhook_subscription",

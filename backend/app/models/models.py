@@ -78,7 +78,11 @@ from app.models.budget import (  # noqa: E402
 )
 
 # Разд. 55: предметные модели контура экологии.
-from app.models.ecology import EnvironmentalFacility  # noqa: E402,F401
+from app.models.ecology import (  # noqa: E402,F401
+    EnvironmentalFacility,
+    WasteMovement,
+    WastePassport,
+)
 
 # ARCH-2: re-export field_ops-domain models moved to app.models.field_ops.
 from app.models.field_ops import (

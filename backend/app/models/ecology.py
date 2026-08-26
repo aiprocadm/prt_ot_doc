@@ -21,8 +21,17 @@
 from __future__ import annotations
 
 from datetime import date
+from decimal import Decimal
 
-from sqlalchemy import Date, ForeignKey, Index, String, Text, UniqueConstraint
+from sqlalchemy import (
+    Date,
+    ForeignKey,
+    Index,
+    Numeric,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import SoftDeleteMixin, TenantBaseModel
@@ -82,4 +91,99 @@ class EnvironmentalFacility(TenantBaseModel, SoftDeleteMixin):
         # дважды, и любой счёт по категориям стал бы враньём.
         UniqueConstraint("tenant_id", "register_number", name="uq_nvos_facility_register"),
         Index("ix_nvos_facility_tenant_category", "tenant_id", "category"),
+    )
+
+
+#: Классы опасности отходов, подлежащих ПАСПОРТИЗАЦИИ (разд. 55.2).
+#: ЗАКРЫТЫЙ словарь из ЧЕТЫРЁХ значений — и это не описка ТЗ: отходы V класса
+#: (практически неопасные) паспортизации не подлежат, паспорт составляется на
+#: отходы I–IV класса.
+WASTE_HAZARD_CLASSES: dict[str, str] = {
+    "I": "I класс — чрезвычайно опасные",
+    "II": "II класс — высокоопасные",
+    "III": "III класс — умеренно опасные",
+    "IV": "IV класс — малоопасные",
+}
+
+#: Виды движения отходов (разд. 55.2 «учёт образования/движения/передачи»).
+#: Свободная строка сделала бы учёт непересчитываемым, а отчётность 2-ТП —
+#: невозможной.
+WASTE_MOVEMENT_KINDS: dict[str, str] = {
+    "generated": "Образование",
+    "accumulated": "Накопление",
+    "transferred": "Передача оператору",
+    "disposed": "Размещение (захоронение)",
+    "neutralized": "Обезвреживание",
+    "utilized": "Утилизация",
+}
+
+
+class WastePassport(TenantBaseModel, SoftDeleteMixin):
+    """Паспорт отхода I–IV класса: вид отхода, код ФККО, годовой лимит.
+
+    Паспорт — удостоверение ВИДА отхода, а не отдельной партии: он один на код
+    ФККО, и по нему ведётся весь учёт движения.
+    """
+
+    __tablename__ = "waste_passport"
+
+    facility_id: Mapped[str | None] = mapped_column(
+        ForeignKey("nvos_facility.id"), nullable=True, index=True
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    #: код по федеральному классификационному каталогу отходов
+    fkko_code: Mapped[str] = mapped_column(String(16), nullable=False)
+    hazard_class: Mapped[str] = mapped_column(String(8), nullable=False)
+    approved_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    #: годовой лимит образования/размещения в тоннах — ИЗ ДОКУМЕНТА (НООЛР или
+    #: декларации). Платформа лимит НЕ РАССЧИТЫВАЕТ: без внесённого значения
+    #: никакого суждения о превышении быть не может.
+    annual_limit_tons: Mapped[Decimal | None] = mapped_column(
+        Numeric(14, 3), nullable=True
+    )
+    notes: Mapped[str | None] = mapped_column(Text)
+
+    facility: Mapped[EnvironmentalFacility | None] = relationship(
+        backref="waste_passports"
+    )
+
+    __table_args__ = (
+        # Один код ФККО — один паспорт: два паспорта на один код это один вид
+        # отхода, заведённый дважды, и учёт по нему стал бы враньём.
+        UniqueConstraint("tenant_id", "fkko_code", name="uq_waste_passport_fkko"),
+    )
+
+
+class WasteMovement(TenantBaseModel, SoftDeleteMixin):
+    """Запись журнала учёта отходов: что, когда, сколько и кому.
+
+    ПОЧЕМУ НЕ ЯДРОВОЙ ``Journal``: у ядровой записи журнала ``person_id``
+    NOT NULL, а движение отходов к человеку не привязано вовсе — класть его
+    туда значило бы ломать схему ради названия. Журнал учёта отходов и есть
+    список этих записей по паспорту.
+
+    ДОГОВОР С ОПЕРАТОРОМ НЕ ДУБЛИРУЕТСЯ: в ядре есть ``Contract`` (контрагент,
+    номер, срок, сумма), и запись ссылается на него.
+    """
+
+    __tablename__ = "waste_movement"
+
+    passport_id: Mapped[str] = mapped_column(
+        ForeignKey("waste_passport.id"), nullable=False, index=True
+    )
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    happened_on: Mapped[date] = mapped_column(Date, nullable=False)
+    quantity_tons: Mapped[Decimal] = mapped_column(Numeric(14, 3), nullable=False)
+    #: договор с оператором по обращению с отходами — ссылка на ядро
+    contract_id: Mapped[str | None] = mapped_column(
+        ForeignKey("contract.id"), nullable=True
+    )
+    #: контрагент строкой, когда договор в системе не заведён
+    counterparty: Mapped[str | None] = mapped_column(String(255))
+    notes: Mapped[str | None] = mapped_column(Text)
+
+    passport: Mapped[WastePassport] = relationship(backref="movements")
+
+    __table_args__ = (
+        Index("ix_waste_movement_tenant_date", "tenant_id", "happened_on"),
     )

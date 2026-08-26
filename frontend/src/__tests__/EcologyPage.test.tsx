@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -6,12 +7,16 @@ import EcologyPage from "@/pages/ecology/EcologyPage";
 import { uxBudgetDelta } from "@/test-utils/uxBudget";
 
 const listFacilitiesMock = vi.fn();
+const listPassportsMock = vi.fn();
+const listMovementsMock = vi.fn();
 const readinessMock = vi.fn();
 
 vi.mock("@/api/ecology", async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   ecologyApi: {
     listFacilities: (...args: unknown[]) => listFacilitiesMock(...args),
+    listWastePassports: (...args: unknown[]) => listPassportsMock(...args),
+    listWasteMovements: (...args: unknown[]) => listMovementsMock(...args),
     readiness: (...args: unknown[]) => readinessMock(...args),
   },
 }));
@@ -50,18 +55,81 @@ const populatedFacilities = [
   },
 ];
 
+/** Паспорта: у одного лимит превышен, у другого лимита нет вовсе. */
+const populatedPassports = [
+  {
+    id: "wp-1",
+    name: "Отходы минеральных масел моторных",
+    fkko_code: "40611001313",
+    hazard_class: "III",
+    hazard_class_label: "III класс — умеренно опасные",
+    facility_id: null,
+    approved_on: "2025-03-01",
+    annual_limit_tons: "2.000",
+    notes: null,
+    generated_this_year_tons: "2.500",
+    over_limit: true,
+  },
+  {
+    id: "wp-2",
+    name: "Лом чёрных металлов",
+    fkko_code: "46101001513",
+    hazard_class: "IV",
+    hazard_class_label: "IV класс — малоопасные",
+    facility_id: null,
+    approved_on: null,
+    annual_limit_tons: null,
+    notes: null,
+    generated_this_year_tons: "10.000",
+    over_limit: false,
+  },
+];
+
+/** Журнал учёта: образование и передача оператору по договору. */
+const populatedMovements = [
+  {
+    id: "wm-1",
+    passport_id: "wp-1",
+    kind: "transferred",
+    kind_label: "Передача оператору",
+    happened_on: "2026-08-01",
+    quantity_tons: "2.000",
+    contract_id: "contract-1",
+    counterparty: "ООО «Экооператор»",
+    notes: null,
+  },
+  {
+    id: "wm-2",
+    passport_id: "wp-1",
+    kind: "generated",
+    kind_label: "Образование",
+    happened_on: "2026-07-15",
+    quantity_tons: "2.500",
+    contract_id: null,
+    counterparty: null,
+    notes: null,
+  },
+];
+
 const populatedReadiness = {
   total_facilities: 2,
   by_category: { I: 0, II: 1, III: 0, IV: 1 },
   excluded_facilities: 1,
   never_actualized: 1,
+  waste_passports: 2,
+  waste_movements: 2,
+  waste_over_limit: 1,
 };
 
 describe("EcologyPage", () => {
   beforeEach(() => {
     listFacilitiesMock.mockReset();
+    listPassportsMock.mockReset();
+    listMovementsMock.mockReset();
     readinessMock.mockReset();
     listFacilitiesMock.mockResolvedValue(populatedFacilities);
+    listPassportsMock.mockResolvedValue(populatedPassports);
+    listMovementsMock.mockResolvedValue(populatedMovements);
     readinessMock.mockResolvedValue(populatedReadiness);
   });
 
@@ -136,6 +204,61 @@ describe("EcologyPage", () => {
     expect(
       screen.getByText(/код объекта в реестре и категорию/i),
     ).toBeInTheDocument();
+  });
+
+  // Доп. №1 разд. 55.2 срез-2: отходы. Паспорт — только I–IV класса; лимит
+  // берётся из документа, платформа его не рассчитывает.
+  it("паспорта отходов открываются второй секцией", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter>
+        <EcologyPage />
+      </MemoryRouter>,
+    );
+
+    expect(
+      await screen.findByText("Производственная площадка №1"),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Паспорта отходов" }));
+
+    expect(
+      await screen.findByText("Отходы минеральных масел моторных"),
+    ).toBeInTheDocument();
+    // Класс — словами; превышение лимита названо словом.
+    expect(
+      screen.getByText("III класс — умеренно опасные"),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/· превышен$/)).toBeInTheDocument();
+    // Отсутствие лимита названо словами, а не пустой ячейкой.
+    expect(screen.getByText("не установлен")).toBeInTheDocument();
+    // И граница названа на экране.
+    expect(
+      screen.getByText(/платформа его не рассчитывает/i),
+    ).toBeInTheDocument();
+  });
+
+  it("журнал учёта отходов открывается третьей секцией", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter>
+        <EcologyPage />
+      </MemoryRouter>,
+    );
+
+    expect(
+      await screen.findByText("Производственная площадка №1"),
+    ).toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: "Журнал учёта отходов" }),
+    );
+
+    expect(await screen.findByText("Передача оператору")).toBeInTheDocument();
+    expect(screen.getByText("Образование")).toBeInTheDocument();
+    expect(screen.getByText("ООО «Экооператор»")).toBeInTheDocument();
+    // Движение по договору помечено — договор живёт в ядре, здесь только ссылка.
+    expect(screen.getByText("по договору")).toBeInTheDocument();
   });
 
   it("EcologyPage в UX-бюджете", async () => {
