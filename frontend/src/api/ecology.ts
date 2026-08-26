@@ -76,6 +76,42 @@ export type EcologyReadinessDto = {
   water_intake_cubic_meters: string;
   water_discharge_cubic_meters: string;
   water_over_limit: number;
+  /**
+   * Разд. 55.3 «плата за НВОС» за текущий год. Строка без ставки НЕ прибавляет
+   * ноль к итогу — иначе итог выглядел бы полным.
+   */
+  fee_lines: number;
+  fee_lines_without_rate: number;
+  fee_total_rubles: string;
+};
+
+export type FeeRateDto = {
+  id: string;
+  year: number;
+  impact_kind: string;
+  impact_kind_label: string;
+  subject: string;
+  rate_per_ton: string;
+  source_document?: string | null;
+  notes?: string | null;
+};
+
+export type FeeLineDto = {
+  id: string;
+  year: number;
+  quarter: number;
+  impact_kind: string;
+  impact_kind_label: string;
+  subject: string;
+  mass_tons: string;
+  coefficient: string;
+  notes?: string | null;
+  /** found | missing — ставка ищется по ГОДУ строки. */
+  rate_status: string;
+  rate_status_label: string;
+  rate_per_ton?: string | null;
+  /** null, а НЕ ноль, когда ставка не внесена. */
+  amount_rubles?: string | null;
 };
 
 export type WaterPointDto = {
@@ -274,6 +310,22 @@ export const ecologyApi = {
   listWaterRecords: async (): Promise<WaterRecordDto[]> => {
     const { data } = await apiClient.get<{ items?: WaterRecordDto[] }>(
       "/ecology/water-records",
+      { params: { limit: 200, offset: 0 } },
+    );
+    return Array.isArray(data?.items) ? data.items : [];
+  },
+
+  listFeeRates: async (): Promise<FeeRateDto[]> => {
+    const { data } = await apiClient.get<{ items?: FeeRateDto[] }>(
+      "/ecology/fee-rates",
+      { params: { limit: 200, offset: 0 } },
+    );
+    return Array.isArray(data?.items) ? data.items : [];
+  },
+
+  listFeeLines: async (): Promise<FeeLineDto[]> => {
+    const { data } = await apiClient.get<{ items?: FeeLineDto[] }>(
+      "/ecology/fee-lines",
       { params: { limit: 200, offset: 0 } },
     );
     return Array.isArray(data?.items) ? data.items : [];

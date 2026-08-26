@@ -510,3 +510,97 @@ class WaterUsageRecord(TenantBaseModel, SoftDeleteMixin):
         ),
         Index("ix_water_record_tenant_year", "tenant_id", "period_year"),
     )
+
+
+#: Виды негативного воздействия, за которые вносится плата — ЗАКРЫТЫЙ словарь
+#: (ФЗ-7 ст. 16). Их ровно три, и список этот не расширяется по желанию: шум,
+#: вибрация и прочие воздействия платой не облагаются.
+FEE_IMPACT_KINDS: dict[str, str] = {
+    "emission": "Выбросы в атмосферу",
+    "discharge": "Сбросы в водные объекты",
+    "waste": "Размещение отходов",
+}
+
+#: Нашлась ли ставка для строки расчёта. «Не внесена» — отдельное значение
+#: НАМЕРЕННО: сумма при этом не считается ВООБЩЕ, а не считается нулём. Ноль
+#: читался бы как «платить нечего», и это было бы враньём.
+FEE_RATE_STATUS_TITLES: dict[str, str] = {
+    "found": "Ставка внесена",
+    "missing": "Ставка не внесена",
+}
+
+
+class NvosFeeRate(TenantBaseModel, SoftDeleteMixin):
+    """Ставка платы за НВОС на год по виду воздействия и предмету.
+
+    ПОЧЕМУ ВНОСИТСЯ, А НЕ ЗАШИТА В КОД: ставки устанавливает Правительство и
+    меняет ежегодно постановлением; зашитый справочник гарантированно отстанет
+    — тот же довод, что и у перечня загрязняющих веществ.
+
+    Отдельная сущность, а не копия ставки в каждой строке расчёта: одна ставка
+    используется во многих строках и кварталах, и опечатку иначе пришлось бы
+    исправлять во всех сразу.
+    """
+
+    __tablename__ = "nvos_fee_rate"
+
+    year: Mapped[int] = mapped_column(Integer, nullable=False)
+    impact_kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    #: вещество или класс отходов — свободная строка по тому же доводу
+    subject: Mapped[str] = mapped_column(String(255), nullable=False)
+    #: рублей за тонну
+    rate_per_ton: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
+    #: чем установлена ставка — реквизиты постановления
+    source_document: Mapped[str | None] = mapped_column(String(255))
+    notes: Mapped[str | None] = mapped_column(Text)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id", "year", "impact_kind", "subject", name="uq_fee_rate_subject"
+        ),
+        Index("ix_fee_rate_tenant_year", "tenant_id", "year"),
+    )
+
+
+class NvosFeeLine(TenantBaseModel, SoftDeleteMixin):
+    """Строка расчёта платы за квартал: масса и коэффициент.
+
+    Кварталы — это и есть авансовые платежи: плата вносится ежеквартально, а
+    декларация подводит итог года.
+
+    Сумма НЕ ХРАНИТСЯ: ставку правят задним числом чаще, чем кажется, и
+    сохранённая сумма пережила бы исправление. Считаем при чтении.
+
+    Массу вносят руками: автоматический перенос из журналов невозможен без
+    подмены смысла — замер ПЭК даёт г/с, отходы считаются в тоннах за период, а
+    масса для платы берётся за отчётный квартал по своим правилам.
+
+    ГРАНИЦА: платформа НЕ назначает повышающий коэффициент (за превышение
+    норматива, за отсутствие ПЭК) и не решает, возникает ли обязанность платы.
+    """
+
+    __tablename__ = "nvos_fee_line"
+
+    year: Mapped[int] = mapped_column(Integer, nullable=False)
+    #: 1..4 — квартал, он же авансовый платёж
+    quarter: Mapped[int] = mapped_column(Integer, nullable=False)
+    impact_kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    subject: Mapped[str] = mapped_column(String(255), nullable=False)
+    mass_tons: Mapped[Decimal] = mapped_column(Numeric(16, 3), nullable=False)
+    #: повышающий или понижающий коэффициент — ВНЕСЁННЫЙ, не вычисленный
+    coefficient: Mapped[Decimal] = mapped_column(
+        Numeric(6, 2), nullable=False, default=Decimal("1.00")
+    )
+    notes: Mapped[str | None] = mapped_column(Text)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id",
+            "year",
+            "quarter",
+            "impact_kind",
+            "subject",
+            name="uq_fee_line_period",
+        ),
+        Index("ix_fee_line_tenant_year", "tenant_id", "year"),
+    )

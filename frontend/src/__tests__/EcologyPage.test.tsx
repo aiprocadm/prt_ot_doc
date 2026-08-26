@@ -15,6 +15,8 @@ const listPlanMock = vi.fn();
 const listMeasurementsMock = vi.fn();
 const listWaterPointsMock = vi.fn();
 const listWaterRecordsMock = vi.fn();
+const listFeeRatesMock = vi.fn();
+const listFeeLinesMock = vi.fn();
 const readinessMock = vi.fn();
 
 vi.mock("@/api/ecology", async (importOriginal) => ({
@@ -30,6 +32,8 @@ vi.mock("@/api/ecology", async (importOriginal) => ({
       listMeasurementsMock(...args),
     listWaterPoints: (...args: unknown[]) => listWaterPointsMock(...args),
     listWaterRecords: (...args: unknown[]) => listWaterRecordsMock(...args),
+    listFeeRates: (...args: unknown[]) => listFeeRatesMock(...args),
+    listFeeLines: (...args: unknown[]) => listFeeLinesMock(...args),
     readiness: (...args: unknown[]) => readinessMock(...args),
   },
 }));
@@ -310,6 +314,54 @@ const populatedWaterRecords = [
   },
 ];
 
+/** Ставки платы: внесена только одна. */
+const populatedFeeRates = [
+  {
+    id: "fr-1",
+    year: 2026,
+    impact_kind: "emission",
+    impact_kind_label: "Выбросы в атмосферу",
+    subject: "Азота диоксид",
+    rate_per_ton: "138.80",
+    source_document: "Постановление Правительства РФ",
+    notes: null,
+  },
+];
+
+/** Строки расчёта: одна посчитана, вторая без ставки. */
+const populatedFeeLines = [
+  {
+    id: "fl-1",
+    year: 2026,
+    quarter: 1,
+    impact_kind: "emission",
+    impact_kind_label: "Выбросы в атмосферу",
+    subject: "Азота диоксид",
+    mass_tons: "2.000",
+    coefficient: "1.00",
+    notes: null,
+    rate_status: "found",
+    rate_status_label: "Ставка внесена",
+    rate_per_ton: "138.80",
+    amount_rubles: "277.60",
+  },
+  {
+    id: "fl-2",
+    year: 2026,
+    quarter: 2,
+    impact_kind: "waste",
+    impact_kind_label: "Размещение отходов",
+    subject: "Отходы IV класса опасности",
+    mass_tons: "5.000",
+    coefficient: "1.00",
+    notes: null,
+    rate_status: "missing",
+    rate_status_label: "Ставка не внесена",
+    rate_per_ton: null,
+    amount_rubles: null,
+  },
+];
+
 const populatedReadiness = {
   total_facilities: 2,
   by_category: { I: 0, II: 1, III: 0, IV: 1 },
@@ -331,6 +383,9 @@ const populatedReadiness = {
   water_intake_cubic_meters: "700.000",
   water_discharge_cubic_meters: "400.000",
   water_over_limit: 1,
+  fee_lines: 2,
+  fee_lines_without_rate: 1,
+  fee_total_rubles: "277.60",
 };
 
 describe("EcologyPage", () => {
@@ -344,6 +399,8 @@ describe("EcologyPage", () => {
     listMeasurementsMock.mockReset();
     listWaterPointsMock.mockReset();
     listWaterRecordsMock.mockReset();
+    listFeeRatesMock.mockReset();
+    listFeeLinesMock.mockReset();
     readinessMock.mockReset();
     listFacilitiesMock.mockResolvedValue(populatedFacilities);
     listPassportsMock.mockResolvedValue(populatedPassports);
@@ -354,6 +411,8 @@ describe("EcologyPage", () => {
     listMeasurementsMock.mockResolvedValue(populatedMeasurements);
     listWaterPointsMock.mockResolvedValue(populatedWaterPoints);
     listWaterRecordsMock.mockResolvedValue(populatedWaterRecords);
+    listFeeRatesMock.mockResolvedValue(populatedFeeRates);
+    listFeeLinesMock.mockResolvedValue(populatedFeeLines);
     readinessMock.mockResolvedValue(populatedReadiness);
   });
 
@@ -578,6 +637,37 @@ describe("EcologyPage", () => {
     expect(screen.getByText("Расчётный метод")).toBeInTheDocument();
     // Забор и сброс показаны раздельно, а не одной суммой.
     expect(screen.getByText(/Забор за год: 700.000/)).toBeInTheDocument();
+  });
+
+  // Доп. №1 разд. 55.3 срез-6: плата за НВОС. Без ставки сумма не считается
+  // вовсе — в клетке стоит причина, а не ноль.
+  it("плата за НВОС открывается седьмой секцией", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter>
+        <EcologyPage />
+      </MemoryRouter>,
+    );
+
+    expect(
+      await screen.findByText("Производственная площадка №1"),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Плата за НВОС" }));
+
+    // Посчитанная строка показывает сумму.
+    expect(await screen.findByText("277.60")).toBeInTheDocument();
+    // Строка без ставки показывает ПРИЧИНУ, а не ноль.
+    expect(screen.getByText("Ставка не внесена")).toBeInTheDocument();
+    // Вид воздействия — словами.
+    expect(screen.getAllByText("Выбросы в атмосферу").length).toBeGreaterThan(
+      0,
+    );
+    expect(screen.getByText("Размещение отходов")).toBeInTheDocument();
+    // Граница названа на экране.
+    expect(
+      screen.getByText(/сумма не считается вовсе — это не ноль/i),
+    ).toBeInTheDocument();
   });
 
   it("EcologyPage в UX-бюджете", async () => {
