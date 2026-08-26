@@ -10,12 +10,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.disciplines import (
-    ATTENTION_SOURCES,
     DISCIPLINE_TITLES,
     MEASURED_DISCIPLINES,
     UNCLASSIFIED_SOURCES,
     UNMEASURED_DISCIPLINES,
     Discipline,
+    attention_sources,
     discipline_of,
 )
 from app.core.security import AccessContext, rbac
@@ -216,7 +216,7 @@ async def _discipline_events(
     response = await service.list_events(
         from_at=now - _DISCIPLINE_LOOKBACK,
         to_at=now + timedelta(days=3),
-        source_types=ATTENTION_SOURCES,
+        source_types=attention_sources(person_id=person_id),
         person_id=person_id,
         include_sla=True,
     )
