@@ -9,6 +9,8 @@ import { uxBudgetDelta } from "@/test-utils/uxBudget";
 const listFacilitiesMock = vi.fn();
 const listPassportsMock = vi.fn();
 const listMovementsMock = vi.fn();
+const listSourcesMock = vi.fn();
+const listNormsMock = vi.fn();
 const readinessMock = vi.fn();
 
 vi.mock("@/api/ecology", async (importOriginal) => ({
@@ -17,6 +19,8 @@ vi.mock("@/api/ecology", async (importOriginal) => ({
     listFacilities: (...args: unknown[]) => listFacilitiesMock(...args),
     listWastePassports: (...args: unknown[]) => listPassportsMock(...args),
     listWasteMovements: (...args: unknown[]) => listMovementsMock(...args),
+    listEmissionSources: (...args: unknown[]) => listSourcesMock(...args),
+    listEmissionNorms: (...args: unknown[]) => listNormsMock(...args),
     readiness: (...args: unknown[]) => readinessMock(...args),
   },
 }));
@@ -111,6 +115,62 @@ const populatedMovements = [
   },
 ];
 
+/** Источники выбросов: один с нормативами, один без. */
+const populatedSources = [
+  {
+    id: "es-1",
+    facility_id: "nvos-1",
+    source_number: "0001",
+    name: "Труба котельной",
+    kind: "organized",
+    kind_label: "Организованный источник",
+    location: "Котельная, ось А",
+    inventoried_on: "2025-06-01",
+    notes: null,
+    norms_count: 2,
+  },
+  {
+    id: "es-2",
+    facility_id: "nvos-1",
+    source_number: "0002",
+    name: "Открытый склад сыпучих",
+    kind: "unorganized",
+    kind_label: "Неорганизованный источник",
+    location: null,
+    inventoried_on: null,
+    notes: null,
+    norms_count: 0,
+  },
+];
+
+/** Нормативы: один действует, у второго разрешение просрочено. */
+const populatedNorms = [
+  {
+    id: "en-1",
+    source_id: "es-1",
+    substance: "Азота диоксид",
+    limit_grams_per_second: "0.025000",
+    limit_tons_per_year: "0.780",
+    permit_number: "РВ-77-000123",
+    valid_until: "2029-01-01",
+    notes: null,
+    validity_status: "ok",
+    validity_status_label: "Действует",
+  },
+  {
+    id: "en-2",
+    source_id: "es-1",
+    substance: "Углерода оксид",
+    limit_grams_per_second: null,
+    limit_tons_per_year: "1.200",
+    permit_number: null,
+    valid_until: "2020-01-01",
+    notes: null,
+    validity_status: "overdue",
+    validity_status_label: "Разрешение просрочено",
+  },
+];
+
 const populatedReadiness = {
   total_facilities: 2,
   by_category: { I: 0, II: 1, III: 0, IV: 1 },
@@ -119,6 +179,10 @@ const populatedReadiness = {
   waste_passports: 2,
   waste_movements: 2,
   waste_over_limit: 1,
+  emission_sources: 2,
+  emission_sources_without_norms: 1,
+  emission_norms: 2,
+  emission_permits_overdue: 1,
 };
 
 describe("EcologyPage", () => {
@@ -126,10 +190,14 @@ describe("EcologyPage", () => {
     listFacilitiesMock.mockReset();
     listPassportsMock.mockReset();
     listMovementsMock.mockReset();
+    listSourcesMock.mockReset();
+    listNormsMock.mockReset();
     readinessMock.mockReset();
     listFacilitiesMock.mockResolvedValue(populatedFacilities);
     listPassportsMock.mockResolvedValue(populatedPassports);
     listMovementsMock.mockResolvedValue(populatedMovements);
+    listSourcesMock.mockResolvedValue(populatedSources);
+    listNormsMock.mockResolvedValue(populatedNorms);
     readinessMock.mockResolvedValue(populatedReadiness);
   });
 
@@ -259,6 +327,38 @@ describe("EcologyPage", () => {
     expect(screen.getByText("ООО «Экооператор»")).toBeInTheDocument();
     // Движение по договору помечено — договор живёт в ядре, здесь только ссылка.
     expect(screen.getByText("по договору")).toBeInTheDocument();
+  });
+
+  // Доп. №1 разд. 55.2 срез-3: выбросы. Инвентаризация источников и нормативы
+  // по веществам; ПДВ платформа не рассчитывает.
+  it("выбросы открываются четвёртой секцией", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter>
+        <EcologyPage />
+      </MemoryRouter>,
+    );
+
+    expect(
+      await screen.findByText("Производственная площадка №1"),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Выбросы" }));
+
+    expect(await screen.findByText("Труба котельной")).toBeInTheDocument();
+    // Тип источника — словами.
+    expect(screen.getByText("Организованный источник")).toBeInTheDocument();
+    expect(screen.getByText("Неорганизованный источник")).toBeInTheDocument();
+    // Отсутствие инвентаризации и нормативов названо словами.
+    expect(screen.getByText("не проводилась")).toBeInTheDocument();
+    expect(screen.getByText("нет")).toBeInTheDocument();
+    // Нормативы по веществам с состоянием разрешения.
+    expect(screen.getByText("Азота диоксид")).toBeInTheDocument();
+    expect(screen.getByText("Разрешение просрочено")).toBeInTheDocument();
+    // Пустой срок разрешения — «бессрочно», а не «просрочено».
+    expect(
+      screen.getByText(/платформа их не рассчитывает/i),
+    ).toBeInTheDocument();
   });
 
   it("EcologyPage в UX-бюджете", async () => {

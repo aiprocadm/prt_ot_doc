@@ -192,6 +192,8 @@
     "GET /api/v1/documents/{document_id}/readiness",
     "GET /api/v1/documents/{document_id}/status",
     "GET /api/v1/documents/{document_id}/versions/compare",
+    "GET /api/v1/ecology/emission-norms",
+    "GET /api/v1/ecology/emission-sources",
     "GET /api/v1/ecology/facilities",
     "GET /api/v1/ecology/readiness",
     "GET /api/v1/ecology/waste-movements",
@@ -569,6 +571,8 @@
     "PATCH /api/v1/contracts/{contract_id}",
     "PATCH /api/v1/departments/{department_id}",
     "PATCH /api/v1/documents/{document_id}/status",
+    "PATCH /api/v1/ecology/emission-norms/{norm_id}",
+    "PATCH /api/v1/ecology/emission-sources/{source_id}",
     "PATCH /api/v1/ecology/facilities/{facility_id}",
     "PATCH /api/v1/ecology/waste-movements/{movement_id}",
     "PATCH /api/v1/ecology/waste-passports/{passport_id}",
@@ -725,6 +729,8 @@
     "POST /api/v1/documents/{document_version_id}/replace:dry-run",
     "POST /api/v1/docx/headers",
     "POST /api/v1/docx/mass-replace",
+    "POST /api/v1/ecology/emission-norms",
+    "POST /api/v1/ecology/emission-sources",
     "POST /api/v1/ecology/facilities",
     "POST /api/v1/ecology/waste-movements",
     "POST /api/v1/ecology/waste-passports",
@@ -1182,6 +1188,8 @@
     "create_document_requirement_api_v1_contractors_document_requirements_post",
     "create_drill_api_v1_fire_safety_drills_post",
     "create_edo_message_api_v1_edo_messages_post",
+    "create_emission_norm_api_v1_ecology_emission_norms_post",
+    "create_emission_source_api_v1_ecology_emission_sources_post",
     "create_enrollment_api_v1_training_enrollments_post",
     "create_entry_api_v1_briefings_entries_post",
     "create_entry_api_v1_journals__journal_id__entries_post",
@@ -1632,6 +1640,8 @@
     "list_drills_api_v1_fire_safety_drills_get",
     "list_edo_events_api_v1_edo_messages__message_id__events_get",
     "list_edo_messages_api_v1_edo_messages_get",
+    "list_emission_norms_api_v1_ecology_emission_norms_get",
+    "list_emission_sources_api_v1_ecology_emission_sources_get",
     "list_endpoint_deliveries_api_v1_webhooks_endpoints__webhook_id__deliveries_get",
     "list_enrollments_api_v1_training_enrollments_get",
     "list_entries_api_v1_briefings_entries_get",
@@ -2014,6 +2024,8 @@
     "update_device_api_v1_industrial_safety_devices__device_id__patch",
     "update_document_status_api_v1_documents__document_id__status_patch",
     "update_drill_api_v1_fire_safety_drills__drill_id__patch",
+    "update_emission_norm_api_v1_ecology_emission_norms__norm_id__patch",
+    "update_emission_source_api_v1_ecology_emission_sources__source_id__patch",
     "update_enrollment_progress_api_v1_training_enrollments__item_id__progress_post",
     "update_entry_api_v1_journals_entries__entry_id__patch",
     "update_equipment_api_v1_fire_safety_equipment__unit_id__patch",
@@ -2339,6 +2351,14 @@
     "EdoStatus",
     "EdoWebhookPayload",
     "ElectricalGroupReadiness",
+    "EmissionNormCreate",
+    "EmissionNormPage",
+    "EmissionNormRead",
+    "EmissionNormUpdate",
+    "EmissionSourceCreate",
+    "EmissionSourcePage",
+    "EmissionSourceRead",
+    "EmissionSourceUpdate",
     "EmployeeAuditItem",
     "EmployeeAuditSection",
     "EmployeeBriefingItem",
@@ -4878,7 +4898,11 @@
       "never_actualized": "integer",
       "waste_passports": "integer",
       "waste_movements": "integer",
-      "waste_over_limit": "integer"
+      "waste_over_limit": "integer",
+      "emission_sources": "integer",
+      "emission_sources_without_norms": "integer",
+      "emission_norms": "integer",
+      "emission_permits_overdue": "integer"
     },
     "EdoMessageIn": {
       "entity_type": "string",
@@ -4910,6 +4934,74 @@
     "ElectricalGroupReadiness": {
       "ok": "boolean",
       "insufficient": "array"
+    },
+    "EmissionNormCreate": {
+      "source_id": "string",
+      "substance": "string",
+      "limit_grams_per_second": "null|number|string",
+      "limit_tons_per_year": "null|number|string",
+      "permit_number": "null|string",
+      "valid_until": "null|string",
+      "notes": "null|string"
+    },
+    "EmissionNormPage": {
+      "items": "array",
+      "total": "integer"
+    },
+    "EmissionNormRead": {
+      "id": "string",
+      "source_id": "string",
+      "substance": "string",
+      "limit_grams_per_second": "null|string",
+      "limit_tons_per_year": "null|string",
+      "permit_number": "null|string",
+      "valid_until": "null|string",
+      "notes": "null|string",
+      "validity_status": "string",
+      "validity_status_label": "string"
+    },
+    "EmissionNormUpdate": {
+      "source_id": "null|string",
+      "substance": "null|string",
+      "limit_grams_per_second": "null|number|string",
+      "limit_tons_per_year": "null|number|string",
+      "permit_number": "null|string",
+      "valid_until": "null|string",
+      "notes": "null|string"
+    },
+    "EmissionSourceCreate": {
+      "facility_id": "string",
+      "source_number": "string",
+      "name": "string",
+      "kind": "string",
+      "location": "null|string",
+      "inventoried_on": "null|string",
+      "notes": "null|string"
+    },
+    "EmissionSourcePage": {
+      "items": "array",
+      "total": "integer"
+    },
+    "EmissionSourceRead": {
+      "id": "string",
+      "facility_id": "string",
+      "source_number": "string",
+      "name": "string",
+      "kind": "string",
+      "kind_label": "string",
+      "location": "null|string",
+      "inventoried_on": "null|string",
+      "notes": "null|string",
+      "norms_count": "integer"
+    },
+    "EmissionSourceUpdate": {
+      "facility_id": "null|string",
+      "source_number": "null|string",
+      "name": "null|string",
+      "kind": "null|string",
+      "location": "null|string",
+      "inventoried_on": "null|string",
+      "notes": "null|string"
     },
     "EmployeeAuditItem": {
       "id": "string",

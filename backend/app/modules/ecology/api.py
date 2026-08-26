@@ -12,7 +12,7 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 from typing import Annotated
 
@@ -26,10 +26,14 @@ from app.core.feature_flags import is_module_enabled, raise_for_disabled_module
 from app.core.security import AccessContext, abac, rbac
 from app.core.tenant_validation import TenantContextValidator
 from app.models.ecology import (
+    EMISSION_NORM_STATUS_TITLES,
+    EMISSION_SOURCE_KINDS,
     NVOS_CATEGORIES,
     NVOS_STATUSES,
     WASTE_HAZARD_CLASSES,
     WASTE_MOVEMENT_KINDS,
+    EmissionNorm,
+    EmissionSource,
     EnvironmentalFacility,
     WasteMovement,
     WastePassport,
@@ -39,6 +43,14 @@ from app.models.master_data import Site
 from app.models.models import Tenant
 from app.schemas.ecology import (
     EcologyReadinessRead,
+    EmissionNormCreate,
+    EmissionNormPage,
+    EmissionNormRead,
+    EmissionNormUpdate,
+    EmissionSourceCreate,
+    EmissionSourcePage,
+    EmissionSourceRead,
+    EmissionSourceUpdate,
     EnvironmentalFacilityCreate,
     EnvironmentalFacilityPage,
     EnvironmentalFacilityRead,
@@ -809,6 +821,448 @@ async def update_waste_movement(
     return _movement_read(movement)
 
 
+#: горизонт «скоро истекает» для разрешений — тот же, что у остальных сводок
+_DUE_SOON_DAYS = 30
+
+
+def _norm_status(valid_until: date | None, today: date) -> str:
+    """Состояние разрешения — считается ПРИ ЧТЕНИИ.
+
+    Пустой срок означает БЕССРОЧНО, а не «просрочено»: для объектов III
+    категории нормативы могут действовать без срока (прецедент срока
+    пересмотра документов ПБ).
+    """
+
+    if valid_until is None:
+        return "ok"
+    if valid_until < today:
+        return "overdue"
+    if valid_until <= today + timedelta(days=_DUE_SOON_DAYS):
+        return "due_soon"
+    return "ok"
+
+
+def _source_read(source: EmissionSource, norms_count: int) -> EmissionSourceRead:
+    return EmissionSourceRead(
+        id=source.id,
+        facility_id=source.facility_id,
+        source_number=source.source_number,
+        name=source.name,
+        kind=source.kind,
+        kind_label=EMISSION_SOURCE_KINDS.get(source.kind, source.kind),
+        location=source.location,
+        inventoried_on=source.inventoried_on,
+        notes=source.notes,
+        norms_count=norms_count,
+    )
+
+
+def _norm_read(norm: EmissionNorm, today: date) -> EmissionNormRead:
+    status_value = _norm_status(norm.valid_until, today)
+    return EmissionNormRead(
+        id=norm.id,
+        source_id=norm.source_id,
+        substance=norm.substance,
+        limit_grams_per_second=norm.limit_grams_per_second,
+        limit_tons_per_year=norm.limit_tons_per_year,
+        permit_number=norm.permit_number,
+        valid_until=norm.valid_until,
+        notes=norm.notes,
+        validity_status=status_value,
+        validity_status_label=EMISSION_NORM_STATUS_TITLES.get(
+            status_value, status_value
+        ),
+    )
+
+
+async def _norms_count_map(
+    session: AsyncSession, tenant: Tenant, source_ids: list[str]
+) -> dict[str, int]:
+    """Сколько нормативов у каждого источника — одним запросом, а не N+1."""
+
+    if not source_ids:
+        return {}
+    rows = await session.execute(
+        select(EmissionNorm.source_id, func.count())
+        .where(
+            EmissionNorm.tenant_id == tenant.id,
+            EmissionNorm.deleted_at.is_(None),
+            EmissionNorm.source_id.in_(source_ids),
+        )
+        .group_by(EmissionNorm.source_id)
+    )
+    return {row[0]: int(row[1]) for row in rows}
+
+
+async def _get_source_or_404(
+    session: AsyncSession, tenant: Tenant, source_id: str
+) -> EmissionSource:
+    stmt = select(EmissionSource).where(
+        EmissionSource.id == source_id,
+        EmissionSource.tenant_id == tenant.id,
+        EmissionSource.deleted_at.is_(None),
+    )
+    source = (await session.execute(stmt)).scalar_one_or_none()
+    if source is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            detail=api_problem_detail(
+                code="EMISSION_SOURCE_NOT_FOUND",
+                message="Emission source not found",
+                error_type="ecology",
+            ),
+        )
+    return source
+
+
+async def _get_norm_or_404(
+    session: AsyncSession, tenant: Tenant, norm_id: str
+) -> EmissionNorm:
+    stmt = select(EmissionNorm).where(
+        EmissionNorm.id == norm_id,
+        EmissionNorm.tenant_id == tenant.id,
+        EmissionNorm.deleted_at.is_(None),
+    )
+    norm = (await session.execute(stmt)).scalar_one_or_none()
+    if norm is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            detail=api_problem_detail(
+                code="EMISSION_NORM_NOT_FOUND",
+                message="Emission norm not found",
+                error_type="ecology",
+            ),
+        )
+    return norm
+
+
+async def _ensure_source_number_free(
+    session: AsyncSession,
+    tenant: Tenant,
+    facility_id: str,
+    source_number: str,
+    *,
+    exclude_id: str | None = None,
+) -> None:
+    """Номер уникален В ПРЕДЕЛАХ ОБЪЕКТА: «источник №1» есть у каждого."""
+
+    stmt = select(EmissionSource.id).where(
+        EmissionSource.tenant_id == tenant.id,
+        EmissionSource.facility_id == facility_id,
+        EmissionSource.source_number == source_number,
+        EmissionSource.deleted_at.is_(None),
+    )
+    if exclude_id:
+        stmt = stmt.where(EmissionSource.id != exclude_id)
+    if (await session.execute(stmt)).scalar_one_or_none() is not None:
+        raise _unprocessable(
+            f"Источник с номером {source_number!r} на этом объекте уже заведён"
+        )
+
+
+@router.get("/emission-sources", response_model=EmissionSourcePage)
+async def list_emission_sources(
+    tenant: TenantDep,
+    session: SessionDep,
+    access: Access,
+    facility_id: str | None = Query(default=None),
+    kind: str | None = Query(default=None),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+) -> EmissionSourcePage:
+    """Инвентаризация стационарных источников выбросов."""
+
+    TenantContextValidator.ensure_tenant_context(tenant)
+    stmt = select(EmissionSource).where(
+        EmissionSource.tenant_id == tenant.id,
+        EmissionSource.deleted_at.is_(None),
+    )
+    if facility_id:
+        stmt = stmt.where(EmissionSource.facility_id == facility_id)
+    if kind:
+        stmt = stmt.where(EmissionSource.kind == kind)
+    total = int(await session.scalar(select(func.count()).select_from(stmt.subquery())) or 0)
+    rows = (
+        (
+            await session.execute(
+                stmt.order_by(EmissionSource.source_number).offset(offset).limit(limit)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    counts = await _norms_count_map(session, tenant, [r.id for r in rows])
+    return EmissionSourcePage(
+        items=[_source_read(r, counts.get(r.id, 0)) for r in rows], total=total
+    )
+
+
+@router.post(
+    "/emission-sources",
+    response_model=EmissionSourceRead,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_emission_source(
+    request: Request,
+    payload: EmissionSourceCreate,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: Access,
+) -> EmissionSourceRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    await _validate_facility(session, tenant, payload.facility_id)
+    if payload.kind not in EMISSION_SOURCE_KINDS:
+        raise _unprocessable(
+            f"Неизвестный тип источника {payload.kind!r}; допустимые: "
+            f"{', '.join(EMISSION_SOURCE_KINDS)}"
+        )
+    source_number = payload.source_number.strip()
+    await _ensure_source_number_free(
+        session, tenant, payload.facility_id, source_number
+    )
+
+    source = EmissionSource(
+        tenant_id=str(tenant.id),
+        facility_id=payload.facility_id,
+        source_number=source_number,
+        name=payload.name.strip(),
+        kind=payload.kind,
+        location=(payload.location or None),
+        inventoried_on=payload.inventoried_on,
+        notes=(payload.notes or None),
+    )
+    session.add(source)
+    await session.flush()
+    await AuditService(session).log_event(
+        tenant_id=str(tenant.id),
+        action="create",
+        object_type="EmissionSource",
+        object_id=source.id,
+        user_id=access.user.id,
+        ip=request.client.host if request.client else "unknown",
+        request_id=getattr(request.state, "trace_id", None),
+        user_agent=request.headers.get("user-agent"),
+        changed_fields={"fields": {"id": {"before": None, "after": source.id}}},
+        details={"entity": "EmissionSource", "source_number": source.source_number},
+    )
+    await session.commit()
+    await session.refresh(source)
+    return _source_read(source, 0)
+
+
+@router.patch("/emission-sources/{source_id}", response_model=EmissionSourceRead)
+async def update_emission_source(
+    request: Request,
+    source_id: str,
+    payload: EmissionSourceUpdate,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: Access,
+) -> EmissionSourceRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    source = await _get_source_or_404(session, tenant, source_id)
+    data = payload.model_dump(exclude_unset=True)
+    await _validate_facility(session, tenant, data.get("facility_id"))
+    if "kind" in data and data["kind"] not in EMISSION_SOURCE_KINDS:
+        raise _unprocessable(
+            f"Неизвестный тип источника {data['kind']!r}; допустимые: "
+            f"{', '.join(EMISSION_SOURCE_KINDS)}"
+        )
+    next_facility = data.get("facility_id") or source.facility_id
+    if "source_number" in data or "facility_id" in data:
+        number = str(data.get("source_number") or source.source_number).strip()
+        await _ensure_source_number_free(
+            session, tenant, next_facility, number, exclude_id=source.id
+        )
+
+    counts = await _norms_count_map(session, tenant, [source.id])
+    before = _source_read(source, counts.get(source.id, 0)).model_dump()
+    for field in (
+        "facility_id",
+        "source_number",
+        "name",
+        "kind",
+        "location",
+        "inventoried_on",
+        "notes",
+    ):
+        if field in data:
+            value = data[field]
+            if field in {"name", "source_number"} and (
+                value is None or not str(value).strip()
+            ):
+                raise _unprocessable(f"{field} cannot be empty")
+            setattr(source, field, value.strip() if isinstance(value, str) else value)
+    after = _source_read(source, counts.get(source.id, 0)).model_dump()
+    await AuditService(session).log_event(
+        tenant_id=str(tenant.id),
+        action="update",
+        object_type="EmissionSource",
+        object_id=source.id,
+        user_id=access.user.id,
+        ip=request.client.host if request.client else "unknown",
+        request_id=getattr(request.state, "trace_id", None),
+        user_agent=request.headers.get("user-agent"),
+        changed_fields=field_level_diff(before, after),
+        details={"entity": "EmissionSource"},
+    )
+    await session.commit()
+    await session.refresh(source)
+    return _source_read(source, counts.get(source.id, 0))
+
+
+@router.get("/emission-norms", response_model=EmissionNormPage)
+async def list_emission_norms(
+    tenant: TenantDep,
+    session: SessionDep,
+    access: Access,
+    source_id: str | None = Query(default=None),
+    limit: int = Query(100, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+) -> EmissionNormPage:
+    """Нормативы выбросов по веществам с состоянием разрешения."""
+
+    TenantContextValidator.ensure_tenant_context(tenant)
+    today = date.today()
+    stmt = select(EmissionNorm).where(
+        EmissionNorm.tenant_id == tenant.id,
+        EmissionNorm.deleted_at.is_(None),
+    )
+    if source_id:
+        stmt = stmt.where(EmissionNorm.source_id == source_id)
+    total = int(await session.scalar(select(func.count()).select_from(stmt.subquery())) or 0)
+    rows = (
+        (
+            await session.execute(
+                stmt.order_by(EmissionNorm.substance).offset(offset).limit(limit)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return EmissionNormPage(items=[_norm_read(r, today) for r in rows], total=total)
+
+
+@router.post(
+    "/emission-norms", response_model=EmissionNormRead, status_code=status.HTTP_201_CREATED
+)
+async def create_emission_norm(
+    request: Request,
+    payload: EmissionNormCreate,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: Access,
+) -> EmissionNormRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    await _get_source_or_404(session, tenant, payload.source_id)
+    if (
+        payload.limit_grams_per_second is None
+        and payload.limit_tons_per_year is None
+    ):
+        raise _unprocessable(
+            "Нужно хотя бы одно значение норматива: разовый (г/с) или валовый "
+            "(т/год) — норматив без значений ничего не нормирует"
+        )
+    substance = payload.substance.strip()
+    duplicate = (
+        await session.execute(
+            select(EmissionNorm.id).where(
+                EmissionNorm.tenant_id == tenant.id,
+                EmissionNorm.source_id == payload.source_id,
+                EmissionNorm.substance == substance,
+                EmissionNorm.deleted_at.is_(None),
+            )
+        )
+    ).scalar_one_or_none()
+    if duplicate is not None:
+        raise _unprocessable(
+            f"Норматив по веществу {substance!r} для этого источника уже задан"
+        )
+
+    norm = EmissionNorm(
+        tenant_id=str(tenant.id),
+        source_id=payload.source_id,
+        substance=substance,
+        limit_grams_per_second=payload.limit_grams_per_second,
+        limit_tons_per_year=payload.limit_tons_per_year,
+        permit_number=(payload.permit_number or None),
+        valid_until=payload.valid_until,
+        notes=(payload.notes or None),
+    )
+    session.add(norm)
+    await session.flush()
+    await AuditService(session).log_event(
+        tenant_id=str(tenant.id),
+        action="create",
+        object_type="EmissionNorm",
+        object_id=norm.id,
+        user_id=access.user.id,
+        ip=request.client.host if request.client else "unknown",
+        request_id=getattr(request.state, "trace_id", None),
+        user_agent=request.headers.get("user-agent"),
+        changed_fields={"fields": {"id": {"before": None, "after": norm.id}}},
+        details={"entity": "EmissionNorm", "substance": norm.substance},
+    )
+    await session.commit()
+    await session.refresh(norm)
+    return _norm_read(norm, date.today())
+
+
+@router.patch("/emission-norms/{norm_id}", response_model=EmissionNormRead)
+async def update_emission_norm(
+    request: Request,
+    norm_id: str,
+    payload: EmissionNormUpdate,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: Access,
+) -> EmissionNormRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    norm = await _get_norm_or_404(session, tenant, norm_id)
+    data = payload.model_dump(exclude_unset=True)
+    if "source_id" in data and data["source_id"]:
+        await _get_source_or_404(session, tenant, str(data["source_id"]))
+
+    today = date.today()
+    before = _norm_read(norm, today).model_dump()
+    for field in (
+        "source_id",
+        "substance",
+        "limit_grams_per_second",
+        "limit_tons_per_year",
+        "permit_number",
+        "valid_until",
+        "notes",
+    ):
+        if field in data:
+            value = data[field]
+            if field == "substance" and (value is None or not str(value).strip()):
+                raise _unprocessable("substance cannot be empty")
+            setattr(norm, field, value.strip() if isinstance(value, str) else value)
+    # Проверяем ИТОГОВОЕ состояние: норматив не должен остаться без значений.
+    if norm.limit_grams_per_second is None and norm.limit_tons_per_year is None:
+        raise _unprocessable(
+            "Нужно хотя бы одно значение норматива: разовый (г/с) или валовый "
+            "(т/год)"
+        )
+    after = _norm_read(norm, today).model_dump()
+    await AuditService(session).log_event(
+        tenant_id=str(tenant.id),
+        action="update",
+        object_type="EmissionNorm",
+        object_id=norm.id,
+        user_id=access.user.id,
+        ip=request.client.host if request.client else "unknown",
+        request_id=getattr(request.state, "trace_id", None),
+        user_agent=request.headers.get("user-agent"),
+        changed_fields=field_level_diff(before, after),
+        details={"entity": "EmissionNorm"},
+    )
+    await session.commit()
+    await session.refresh(norm)
+    return _norm_read(norm, date.today())
+
+
 @router.get("/readiness", response_model=EcologyReadinessRead)
 async def ecology_readiness(
     tenant: TenantDep,
@@ -880,7 +1334,43 @@ async def ecology_readiness(
         and generated.get(p.id, Decimal("0.000")) > p.annual_limit_tons
     )
 
+    # Разд. 55.2 «выбросы»: инвентаризация и нормативы.
+    sources = (
+        (
+            await session.execute(
+                select(EmissionSource).where(
+                    EmissionSource.tenant_id == tenant.id,
+                    EmissionSource.deleted_at.is_(None),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    norms = (
+        (
+            await session.execute(
+                select(EmissionNorm).where(
+                    EmissionNorm.tenant_id == tenant.id,
+                    EmissionNorm.deleted_at.is_(None),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    sources_with_norms = {n.source_id for n in norms}
+    permits_overdue = sum(
+        1 for n in norms if _norm_status(n.valid_until, date.today()) == "overdue"
+    )
+
     return EcologyReadinessRead(
+        emission_sources=len(sources),
+        emission_sources_without_norms=sum(
+            1 for s in sources if s.id not in sources_with_norms
+        ),
+        emission_norms=len(norms),
+        emission_permits_overdue=permits_overdue,
         waste_passports=len(passports),
         waste_movements=movements_total,
         waste_over_limit=over_limit,

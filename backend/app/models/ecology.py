@@ -187,3 +187,97 @@ class WasteMovement(TenantBaseModel, SoftDeleteMixin):
     __table_args__ = (
         Index("ix_waste_movement_tenant_date", "tenant_id", "happened_on"),
     )
+
+
+#: Типы стационарных источников выбросов (разд. 55.2 «инвентаризация»).
+#: Деление на организованные и неорганизованные — основа инвентаризации: у
+#: организованного есть устье (труба, аэрационный фонарь), у неорганизованного
+#: его нет (открытые склады, площадки), и нормируются они по-разному.
+EMISSION_SOURCE_KINDS: dict[str, str] = {
+    "organized": "Организованный источник",
+    "unorganized": "Неорганизованный источник",
+}
+
+#: Состояние разрешения по нормативу выброса. Пустой срок — БЕССРОЧНО, а не
+#: «просрочено» (для объектов III категории нормативы могут действовать без
+#: срока): тот же выбор, что у срока пересмотра документов ПБ.
+EMISSION_NORM_STATUS_TITLES: dict[str, str] = {
+    "ok": "Действует",
+    "due_soon": "Разрешение скоро истекает",
+    "overdue": "Разрешение просрочено",
+}
+
+
+class EmissionSource(TenantBaseModel, SoftDeleteMixin):
+    """Стационарный источник выбросов: инвентаризационный номер и тип.
+
+    Принадлежит ОБЪЕКТУ НВОС, а не площадке: инвентаризация и разрешения
+    оформляются по зарегистрированному объекту, а объектов на площадке бывает
+    несколько.
+    """
+
+    __tablename__ = "emission_source"
+
+    facility_id: Mapped[str] = mapped_column(
+        ForeignKey("nvos_facility.id"), nullable=False, index=True
+    )
+    #: номер источника по инвентаризации — нумерация ведётся ПО ОБЪЕКТУ
+    source_number: Mapped[str] = mapped_column(String(32), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    location: Mapped[str | None] = mapped_column(String(255))
+    inventoried_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text)
+
+    facility: Mapped[EnvironmentalFacility] = relationship(backref="emission_sources")
+
+    __table_args__ = (
+        # Номер уникален В ПРЕДЕЛАХ ОБЪЕКТА, а не арендатора: «источник №1»
+        # есть у каждого объекта, и запрет на уровне арендатора был бы ложным.
+        UniqueConstraint(
+            "tenant_id", "facility_id", "source_number", name="uq_emission_source_number"
+        ),
+    )
+
+
+class EmissionNorm(TenantBaseModel, SoftDeleteMixin):
+    """Норматив выброса (ПДВ) по паре «источник + вещество».
+
+    ПДВ устанавливается по КАЖДОМУ загрязняющему веществу отдельно — одним
+    числом на источник его не выразить.
+
+    ГРАНИЦА: платформа норматив НЕ РАССЧИТЫВАЕТ. Он определяется расчётом
+    рассеивания в проекте нормативов и утверждается разрешением; исходных
+    данных (параметры выброса, метеоусловия, фоновые концентрации) в системе
+    нет.
+    """
+
+    __tablename__ = "emission_norm"
+
+    source_id: Mapped[str] = mapped_column(
+        ForeignKey("emission_source.id"), nullable=False, index=True
+    )
+    #: наименование загрязняющего вещества — свободная строка НАМЕРЕННО:
+    #: перечень веществ ведётся государством и насчитывает сотни позиций,
+    #: закрывать его словарём в коде значило бы гарантированно отстать
+    substance: Mapped[str] = mapped_column(String(255), nullable=False)
+    #: разовый норматив, г/с
+    limit_grams_per_second: Mapped[Decimal | None] = mapped_column(
+        Numeric(14, 6), nullable=True
+    )
+    #: валовый норматив, т/год
+    limit_tons_per_year: Mapped[Decimal | None] = mapped_column(
+        Numeric(14, 3), nullable=True
+    )
+    permit_number: Mapped[str | None] = mapped_column(String(64))
+    valid_until: Mapped[date | None] = mapped_column(Date, nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text)
+
+    source: Mapped[EmissionSource] = relationship(backref="norms")
+
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id", "source_id", "substance", name="uq_emission_norm_substance"
+        ),
+        Index("ix_emission_norm_tenant_valid", "tenant_id", "valid_until"),
+    )
