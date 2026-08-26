@@ -21,9 +21,9 @@ import { formatDate } from "@/utils/datetime";
 const EcologyPage = () => {
   // Секции ПО ОДНОЙ (прецедент экранов ПБ и ПромБеза): объекты, паспорта и
   // журнал учёта — разные задачи, три таблицы сразу растят экран.
-  const [section, setSection] = useState<"facilities" | "waste" | "journal">(
-    "facilities",
-  );
+  const [section, setSection] = useState<
+    "facilities" | "waste" | "journal" | "emissions"
+  >("facilities");
 
   const { data, loading, error, reload } = useAsyncResource({
     loader: useCallback(
@@ -31,6 +31,8 @@ const EcologyPage = () => {
         facilities: await ecologyApi.listFacilities(),
         passports: await ecologyApi.listWastePassports(),
         movements: await ecologyApi.listWasteMovements(),
+        sources: await ecologyApi.listEmissionSources(),
+        norms: await ecologyApi.listEmissionNorms(),
         readiness: await ecologyApi.readiness(),
       }),
       [],
@@ -39,6 +41,8 @@ const EcologyPage = () => {
       facilities: [],
       passports: [],
       movements: [],
+      sources: [],
+      norms: [],
       readiness: {
         total_facilities: 0,
         by_category: { I: 0, II: 0, III: 0, IV: 0 },
@@ -47,6 +51,10 @@ const EcologyPage = () => {
         waste_passports: 0,
         waste_movements: 0,
         waste_over_limit: 0,
+        emission_sources: 0,
+        emission_sources_without_norms: 0,
+        emission_norms: 0,
+        emission_permits_overdue: 0,
       },
     },
     errorMessage: "Не удалось загрузить реестр объектов НВОС",
@@ -76,6 +84,26 @@ const EcologyPage = () => {
     items: data.movements,
     match: (item, query) =>
       [item.kind_label, item.counterparty, item.notes]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(query),
+  });
+
+  const sourceRegistry = useLocalRegistry({
+    items: data.sources,
+    match: (item, query) =>
+      [item.name, item.source_number, item.kind_label, item.location]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(query),
+  });
+
+  const normRegistry = useLocalRegistry({
+    items: data.norms,
+    match: (item, query) =>
+      [item.substance, item.permit_number]
         .filter(Boolean)
         .join(" ")
         .toLowerCase()
@@ -113,6 +141,12 @@ const EcologyPage = () => {
             label: "Превышен лимит",
             value: readiness.waste_over_limit,
           },
+          // Разд. 55.2 «выбросы».
+          { label: "Источников выбросов", value: readiness.emission_sources },
+          {
+            label: "Разрешения просрочены",
+            value: readiness.emission_permits_overdue,
+          },
         ]}
       />
 
@@ -122,6 +156,7 @@ const EcologyPage = () => {
             ["facilities", "Объекты НВОС"],
             ["waste", "Паспорта отходов"],
             ["journal", "Журнал учёта отходов"],
+            ["emissions", "Выбросы"],
           ] as const
         ).map(([key, label]) => (
           <Button
@@ -318,6 +353,107 @@ const EcologyPage = () => {
               caption="Журнал учёта отходов"
             />
           )}
+        </>
+      ) : null}
+      {section === "emissions" && !loading && !error ? (
+        <>
+          {/*
+            ГРАНИЦА, названная НА ЭКРАНЕ: норматив (ПДВ) устанавливается
+            расчётом рассеивания в проекте нормативов и утверждается
+            разрешением — платформа его не рассчитывает и по нему не судит.
+          */}
+          <p className="text-sm text-muted-foreground">
+            Нормативы выброса устанавливаются проектом нормативов и утверждаются
+            разрешением: платформа их не рассчитывает и хранит как внесённые.
+            Пустой срок разрешения означает «бессрочно», а не «просрочено».
+          </p>
+          {sourceRegistry.total === 0 ? (
+            <EmptyState
+              title="Источники выбросов не заведены"
+              description="Внесите стационарные источники по инвентаризации: номер, наименование и тип — организованный (труба, аэрационный фонарь) или неорганизованный."
+            />
+          ) : (
+            <RegistryTable
+              columns={[
+                { accessorKey: "source_number", header: "№ источника" },
+                { accessorKey: "name", header: "Наименование" },
+                {
+                  accessorKey: "kind_label",
+                  header: "Тип",
+                  cell: ({ row }) => row.original.kind_label,
+                },
+                {
+                  accessorKey: "location",
+                  header: "Место",
+                  cell: ({ row }) => row.original.location || "—",
+                },
+                {
+                  accessorKey: "inventoried_on",
+                  header: "Инвентаризация",
+                  cell: ({ row }) =>
+                    row.original.inventoried_on
+                      ? formatDate(row.original.inventoried_on)
+                      : "не проводилась",
+                },
+                {
+                  accessorKey: "norms_count",
+                  header: "Нормативов",
+                  cell: ({ row }) =>
+                    row.original.norms_count > 0
+                      ? `${row.original.norms_count}`
+                      : "нет",
+                },
+              ]}
+              data={sourceRegistry.pagedItems}
+              pageIndex={sourceRegistry.pageIndex}
+              pageSize={sourceRegistry.pageSize}
+              total={sourceRegistry.total}
+              onPageChange={sourceRegistry.onPageChange}
+              onPageSizeChange={sourceRegistry.onPageSizeChange}
+              onSearchChange={sourceRegistry.onSearchChange}
+              searchPlaceholder="Поиск по номеру, наименованию, типу"
+              caption="Инвентаризация источников выбросов"
+            />
+          )}
+          {normRegistry.total > 0 ? (
+            <RegistryTable
+              columns={[
+                { accessorKey: "substance", header: "Вещество" },
+                {
+                  accessorKey: "limit_grams_per_second",
+                  header: "ПДВ, г/с",
+                  cell: ({ row }) => row.original.limit_grams_per_second ?? "—",
+                },
+                {
+                  accessorKey: "limit_tons_per_year",
+                  header: "ПДВ, т/год",
+                  cell: ({ row }) => row.original.limit_tons_per_year ?? "—",
+                },
+                {
+                  accessorKey: "valid_until",
+                  header: "Разрешение до",
+                  cell: ({ row }) =>
+                    row.original.valid_until
+                      ? formatDate(row.original.valid_until)
+                      : "бессрочно",
+                },
+                {
+                  accessorKey: "validity_status_label",
+                  header: "Состояние",
+                  cell: ({ row }) => row.original.validity_status_label,
+                },
+              ]}
+              data={normRegistry.pagedItems}
+              pageIndex={normRegistry.pageIndex}
+              pageSize={normRegistry.pageSize}
+              total={normRegistry.total}
+              onPageChange={normRegistry.onPageChange}
+              onPageSizeChange={normRegistry.onPageSizeChange}
+              onSearchChange={normRegistry.onSearchChange}
+              searchPlaceholder="Поиск по веществу и номеру разрешения"
+              caption="Нормативы выбросов по веществам"
+            />
+          ) : null}
         </>
       ) : null}
     </div>

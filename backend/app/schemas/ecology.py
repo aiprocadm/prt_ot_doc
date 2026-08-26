@@ -143,6 +143,84 @@ class WasteMovementPage(BaseSchema):
     total: int
 
 
+class EmissionSourceCreate(BaseSchema):
+    facility_id: str = Field(min_length=1, max_length=36)
+    source_number: str = Field(min_length=1, max_length=32)
+    name: str = Field(min_length=1, max_length=255)
+    kind: str = Field(min_length=1, max_length=16)
+    location: str | None = Field(default=None, max_length=255)
+    inventoried_on: date | None = None
+    notes: str | None = None
+
+
+class EmissionSourceUpdate(BaseSchema):
+    facility_id: str | None = Field(default=None, min_length=1, max_length=36)
+    source_number: str | None = Field(default=None, min_length=1, max_length=32)
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    kind: str | None = Field(default=None, min_length=1, max_length=16)
+    location: str | None = Field(default=None, max_length=255)
+    inventoried_on: date | None = None
+    notes: str | None = None
+
+
+class EmissionSourceRead(BaseSchema):
+    id: str
+    facility_id: str
+    source_number: str
+    name: str
+    kind: str
+    kind_label: str
+    location: str | None = None
+    inventoried_on: date | None = None
+    notes: str | None = None
+    #: сколько нормативов задано по этому источнику — считается при чтении
+    norms_count: int = 0
+
+
+class EmissionSourcePage(BaseSchema):
+    items: list[EmissionSourceRead]
+    total: int
+
+
+class EmissionNormCreate(BaseSchema):
+    source_id: str = Field(min_length=1, max_length=36)
+    substance: str = Field(min_length=1, max_length=255)
+    limit_grams_per_second: Decimal | None = Field(default=None, ge=0)
+    limit_tons_per_year: Decimal | None = Field(default=None, ge=0)
+    permit_number: str | None = Field(default=None, max_length=64)
+    valid_until: date | None = None
+    notes: str | None = None
+
+
+class EmissionNormUpdate(BaseSchema):
+    source_id: str | None = Field(default=None, min_length=1, max_length=36)
+    substance: str | None = Field(default=None, min_length=1, max_length=255)
+    limit_grams_per_second: Decimal | None = Field(default=None, ge=0)
+    limit_tons_per_year: Decimal | None = Field(default=None, ge=0)
+    permit_number: str | None = Field(default=None, max_length=64)
+    valid_until: date | None = None
+    notes: str | None = None
+
+
+class EmissionNormRead(BaseSchema):
+    id: str
+    source_id: str
+    substance: str
+    limit_grams_per_second: Decimal | None = None
+    limit_tons_per_year: Decimal | None = None
+    permit_number: str | None = None
+    valid_until: date | None = None
+    notes: str | None = None
+    #: ok / due_soon / overdue — считается ПРИ ЧТЕНИИ; пустой срок = бессрочно
+    validity_status: str
+    validity_status_label: str
+
+
+class EmissionNormPage(BaseSchema):
+    items: list[EmissionNormRead]
+    total: int
+
+
 class EcologyReadinessRead(BaseSchema):
     """Сводка экологии: сколько объектов НВОС и какой категории.
 
@@ -171,3 +249,11 @@ class EcologyReadinessRead(BaseSchema):
     waste_passports: int = 0
     waste_movements: int = 0
     waste_over_limit: int = 0
+    #: разд. 55.2 «выбросы»: инвентаризация источников и нормативы.
+    #: ГРАНИЦА: полей «предлагаемый норматив» и «превышение норматива» здесь
+    #: НЕТ — ПДВ устанавливается проектом нормативов, а факт выброса меряется
+    #: замерами ПЭК (следующий срез)
+    emission_sources: int = 0
+    emission_sources_without_norms: int = 0
+    emission_norms: int = 0
+    emission_permits_overdue: int = 0

@@ -79,6 +79,8 @@ from app.models.budget import (  # noqa: E402
 
 # Разд. 55: предметные модели контура экологии.
 from app.models.ecology import (  # noqa: E402,F401
+    EmissionNorm,
+    EmissionSource,
     EnvironmentalFacility,
     WasteMovement,
     WastePassport,

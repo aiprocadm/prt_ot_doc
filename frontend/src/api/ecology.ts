@@ -49,6 +49,42 @@ export type EcologyReadinessDto = {
   waste_passports: number;
   waste_movements: number;
   waste_over_limit: number;
+  /**
+   * Разд. 55.2 «выбросы»: инвентаризация и нормативы. Полей «предлагаемый
+   * норматив» и «превышение» здесь НЕТ — ПДВ устанавливается проектом
+   * нормативов, а факт выброса меряется замерами ПЭК.
+   */
+  emission_sources: number;
+  emission_sources_without_norms: number;
+  emission_norms: number;
+  emission_permits_overdue: number;
+};
+
+export type EmissionSourceDto = {
+  id: string;
+  facility_id: string;
+  source_number: string;
+  name: string;
+  kind: string;
+  kind_label: string;
+  location?: string | null;
+  inventoried_on?: string | null;
+  notes?: string | null;
+  norms_count: number;
+};
+
+export type EmissionNormDto = {
+  id: string;
+  source_id: string;
+  substance: string;
+  limit_grams_per_second?: string | null;
+  limit_tons_per_year?: string | null;
+  permit_number?: string | null;
+  valid_until?: string | null;
+  notes?: string | null;
+  /** ok | due_soon | overdue — пустой срок означает «бессрочно». */
+  validity_status: string;
+  validity_status_label: string;
 };
 
 /** Подписи классов отходов — запас; готовую подпись отдаёт сервер. */
@@ -105,6 +141,22 @@ export const ecologyApi = {
   listWasteMovements: async (): Promise<WasteMovementDto[]> => {
     const { data } = await apiClient.get<{ items?: WasteMovementDto[] }>(
       "/ecology/waste-movements",
+      { params: { limit: 200, offset: 0 } },
+    );
+    return Array.isArray(data?.items) ? data.items : [];
+  },
+
+  listEmissionSources: async (): Promise<EmissionSourceDto[]> => {
+    const { data } = await apiClient.get<{ items?: EmissionSourceDto[] }>(
+      "/ecology/emission-sources",
+      { params: { limit: 200, offset: 0 } },
+    );
+    return Array.isArray(data?.items) ? data.items : [];
+  },
+
+  listEmissionNorms: async (): Promise<EmissionNormDto[]> => {
+    const { data } = await apiClient.get<{ items?: EmissionNormDto[] }>(
+      "/ecology/emission-norms",
       { params: { limit: 200, offset: 0 } },
     );
     return Array.isArray(data?.items) ? data.items : [];
