@@ -12,6 +12,7 @@
 
 from __future__ import annotations
 
+import calendar
 from datetime import date, timedelta
 from decimal import Decimal
 from typing import Annotated
@@ -28,10 +29,15 @@ from app.core.tenant_validation import TenantContextValidator
 from app.models.ecology import (
     EMISSION_NORM_STATUS_TITLES,
     EMISSION_SOURCE_KINDS,
+    MEASUREMENT_COMPARISON_TITLES,
+    MONITORING_STATUS_TITLES,
     NVOS_CATEGORIES,
     NVOS_STATUSES,
+    PERIODICITY_LABELS,
     WASTE_HAZARD_CLASSES,
     WASTE_MOVEMENT_KINDS,
+    EmissionMeasurement,
+    EmissionMonitoringPlanItem,
     EmissionNorm,
     EmissionSource,
     EnvironmentalFacility,
@@ -43,6 +49,10 @@ from app.models.master_data import Site
 from app.models.models import Tenant
 from app.schemas.ecology import (
     EcologyReadinessRead,
+    EmissionMeasurementCreate,
+    EmissionMeasurementPage,
+    EmissionMeasurementRead,
+    EmissionMeasurementUpdate,
     EmissionNormCreate,
     EmissionNormPage,
     EmissionNormRead,
@@ -55,6 +65,10 @@ from app.schemas.ecology import (
     EnvironmentalFacilityPage,
     EnvironmentalFacilityRead,
     EnvironmentalFacilityUpdate,
+    MonitoringPlanItemCreate,
+    MonitoringPlanItemPage,
+    MonitoringPlanItemRead,
+    MonitoringPlanItemUpdate,
     WasteMovementCreate,
     WasteMovementPage,
     WasteMovementRead,
@@ -1263,6 +1277,548 @@ async def update_emission_norm(
     return _norm_read(norm, date.today())
 
 
+# --- ПЭК: план-график замеров и сами замеры (разд. 55.2) --------------------
+
+
+def _add_months(value: date, months: int) -> date:
+    """Прибавить месяцы, не выпав за край короткого месяца (31.01 + 1 = 28.02).
+
+    Свой четырёхстрочник вместо импорта из контура обучения: ходить за
+    арифметикой в чужой модуль — это связь, которую потом нечем оправдать
+    (тот же довод, что и в контуре пожарной безопасности).
+    """
+
+    target = value.month - 1 + months
+    year = value.year + target // 12
+    month = target % 12 + 1
+    return value.replace(
+        year=year, month=month, day=min(value.day, calendar.monthrange(year, month)[1])
+    )
+
+
+def _periodicity_label(months: int) -> str:
+    """«раз в квартал» для привычных сроков, «раз в N месяцев» — для прочих."""
+
+    known = PERIODICITY_LABELS.get(months)
+    if known:
+        return known
+    return f"раз в {months} месяца" if 2 <= months <= 4 else f"раз в {months} месяцев"
+
+
+def _monitoring_status(next_due_on: date, today: date) -> str:
+    """Состояние строки плана — считается ПРИ ЧТЕНИИ по плановой дате."""
+
+    if next_due_on < today:
+        return "overdue"
+    if next_due_on <= today + timedelta(days=_DUE_SOON_DAYS):
+        return "due_soon"
+    return "ok"
+
+
+def _plan_read(
+    item: EmissionMonitoringPlanItem, last_measured_on: date | None, today: date
+) -> MonitoringPlanItemRead:
+    status_value = _monitoring_status(item.next_due_on, today)
+    return MonitoringPlanItemRead(
+        id=item.id,
+        source_id=item.source_id,
+        substance=item.substance,
+        periodicity_months=item.periodicity_months,
+        periodicity_label=_periodicity_label(item.periodicity_months),
+        next_due_on=item.next_due_on,
+        method=item.method,
+        laboratory=item.laboratory,
+        notes=item.notes,
+        status=status_value,
+        status_label=MONITORING_STATUS_TITLES.get(status_value, status_value),
+        last_measured_on=last_measured_on,
+    )
+
+
+async def _last_measured_map(
+    session: AsyncSession, tenant: Tenant, plan_ids: list[str]
+) -> dict[str, date]:
+    """Дата последнего замера по каждой строке плана — одним запросом."""
+
+    if not plan_ids:
+        return {}
+    rows = await session.execute(
+        select(EmissionMeasurement.plan_id, func.max(EmissionMeasurement.measured_on))
+        .where(
+            EmissionMeasurement.tenant_id == tenant.id,
+            EmissionMeasurement.deleted_at.is_(None),
+            EmissionMeasurement.plan_id.in_(plan_ids),
+        )
+        .group_by(EmissionMeasurement.plan_id)
+    )
+    return {row[0]: row[1] for row in rows if row[0] and row[1]}
+
+
+async def _norm_for_pair(
+    session: AsyncSession, tenant: Tenant, source_id: str, substance: str
+) -> EmissionNorm | None:
+    stmt = select(EmissionNorm).where(
+        EmissionNorm.tenant_id == tenant.id,
+        EmissionNorm.source_id == source_id,
+        EmissionNorm.substance == substance,
+        EmissionNorm.deleted_at.is_(None),
+    )
+    return (await session.execute(stmt)).scalar_one_or_none()
+
+
+async def _norms_by_pair(
+    session: AsyncSession, tenant: Tenant
+) -> dict[tuple[str, str], EmissionNorm]:
+    """Нормативы по парам «источник + вещество» — одним запросом, а не N+1."""
+
+    rows = (
+        (
+            await session.execute(
+                select(EmissionNorm).where(
+                    EmissionNorm.tenant_id == tenant.id,
+                    EmissionNorm.deleted_at.is_(None),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return {(n.source_id, n.substance): n for n in rows}
+
+
+def _comparison(value: Decimal, norm: EmissionNorm | None) -> tuple[str, Decimal | None]:
+    """Сравнение замера с разовым нормативом — ФАКТ по двум внесённым числам.
+
+    Нет норматива — «норматив не внесён», а НЕ «превышение»: молчание о
+    нормативе нельзя выдавать за нарушение. Валовый норматив (т/год) с разовым
+    замером (г/с) несопоставим, и делать вид, что сопоставим, нельзя: это
+    разные величины, а не разные единицы одной.
+    """
+
+    if norm is None:
+        return "no_norm", None
+    if norm.limit_grams_per_second is None:
+        return "no_single_limit", None
+    if value > norm.limit_grams_per_second:
+        return "exceeded", norm.limit_grams_per_second
+    return "within", norm.limit_grams_per_second
+
+
+def _measurement_read(
+    measurement: EmissionMeasurement, norm: EmissionNorm | None
+) -> EmissionMeasurementRead:
+    verdict, limit = _comparison(measurement.value_grams_per_second, norm)
+    return EmissionMeasurementRead(
+        id=measurement.id,
+        plan_id=measurement.plan_id,
+        source_id=measurement.source_id,
+        substance=measurement.substance,
+        measured_on=measurement.measured_on,
+        value_grams_per_second=measurement.value_grams_per_second,
+        protocol_number=measurement.protocol_number,
+        laboratory=measurement.laboratory,
+        notes=measurement.notes,
+        norm_grams_per_second=limit,
+        comparison=verdict,
+        comparison_label=MEASUREMENT_COMPARISON_TITLES.get(verdict, verdict),
+    )
+
+
+async def _get_plan_or_404(
+    session: AsyncSession, tenant: Tenant, plan_id: str
+) -> EmissionMonitoringPlanItem:
+    stmt = select(EmissionMonitoringPlanItem).where(
+        EmissionMonitoringPlanItem.id == plan_id,
+        EmissionMonitoringPlanItem.tenant_id == tenant.id,
+        EmissionMonitoringPlanItem.deleted_at.is_(None),
+    )
+    item = (await session.execute(stmt)).scalar_one_or_none()
+    if item is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            detail=api_problem_detail(
+                code="MONITORING_PLAN_ITEM_NOT_FOUND",
+                message="Monitoring plan item not found",
+                error_type="ecology",
+            ),
+        )
+    return item
+
+
+async def _get_measurement_or_404(
+    session: AsyncSession, tenant: Tenant, measurement_id: str
+) -> EmissionMeasurement:
+    stmt = select(EmissionMeasurement).where(
+        EmissionMeasurement.id == measurement_id,
+        EmissionMeasurement.tenant_id == tenant.id,
+        EmissionMeasurement.deleted_at.is_(None),
+    )
+    measurement = (await session.execute(stmt)).scalar_one_or_none()
+    if measurement is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            detail=api_problem_detail(
+                code="EMISSION_MEASUREMENT_NOT_FOUND",
+                message="Emission measurement not found",
+                error_type="ecology",
+            ),
+        )
+    return measurement
+
+
+async def _ensure_plan_pair_free(
+    session: AsyncSession,
+    tenant: Tenant,
+    source_id: str,
+    substance: str,
+    *,
+    exclude_id: str | None = None,
+) -> None:
+    """Одна строка графика на пару «источник + вещество».
+
+    Две строки означали бы два разных графика на одно и то же вещество, и по
+    какому из них считать просрочку — было бы неизвестно.
+    """
+
+    stmt = select(EmissionMonitoringPlanItem.id).where(
+        EmissionMonitoringPlanItem.tenant_id == tenant.id,
+        EmissionMonitoringPlanItem.source_id == source_id,
+        EmissionMonitoringPlanItem.substance == substance,
+        EmissionMonitoringPlanItem.deleted_at.is_(None),
+    )
+    if exclude_id:
+        stmt = stmt.where(EmissionMonitoringPlanItem.id != exclude_id)
+    if (await session.execute(stmt)).scalar_one_or_none() is not None:
+        raise _unprocessable(
+            f"Строка графика по веществу {substance!r} на этом источнике уже заведена"
+        )
+
+
+def _advance_plan_due(item: EmissionMonitoringPlanItem, measured_on: date) -> None:
+    """Сдвинуть плановую дату: замер закрыл текущий цикл графика.
+
+    Сдвиг идёт ПО СЕТКЕ (от прежней плановой даты, а не от даты замера):
+    календарная сетка ПЭК не должна сбиваться из-за одного опоздания.
+
+    Первый шаг делается ВСЕГДА, а не только когда срок уже прошёл: замер,
+    сделанный на неделю раньше плана, тоже закрывает цикл — иначе график
+    продолжал бы требовать замер, который уже лежит в системе.
+
+    Замер ЗАДНИМ ЧИСЛОМ (раньше начала текущего цикла) график не двигает: это
+    внесение старых данных, а не выполнение ближайшего замера.
+    """
+
+    cycle_start = _add_months(item.next_due_on, -item.periodicity_months)
+    if measured_on < cycle_start:
+        return
+    due = _add_months(item.next_due_on, item.periodicity_months)
+    while due <= measured_on:
+        due = _add_months(due, item.periodicity_months)
+    item.next_due_on = due
+
+
+@router.get("/monitoring-plan", response_model=MonitoringPlanItemPage)
+async def list_monitoring_plan(
+    tenant: TenantDep,
+    session: SessionDep,
+    access: Access,
+    source_id: str | None = Query(default=None),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+) -> MonitoringPlanItemPage:
+    """План-график замеров ПЭК: пары «источник + вещество» и сроки."""
+
+    TenantContextValidator.ensure_tenant_context(tenant)
+    stmt = select(EmissionMonitoringPlanItem).where(
+        EmissionMonitoringPlanItem.tenant_id == tenant.id,
+        EmissionMonitoringPlanItem.deleted_at.is_(None),
+    )
+    if source_id:
+        stmt = stmt.where(EmissionMonitoringPlanItem.source_id == source_id)
+    total = int(
+        await session.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+    )
+    rows = (
+        (
+            await session.execute(
+                stmt.order_by(EmissionMonitoringPlanItem.next_due_on)
+                .offset(offset)
+                .limit(limit)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    measured = await _last_measured_map(session, tenant, [r.id for r in rows])
+    today = date.today()
+    return MonitoringPlanItemPage(
+        items=[_plan_read(r, measured.get(r.id), today) for r in rows], total=total
+    )
+
+
+@router.post(
+    "/monitoring-plan",
+    response_model=MonitoringPlanItemRead,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_monitoring_plan_item(
+    request: Request,
+    payload: MonitoringPlanItemCreate,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: Access,
+) -> MonitoringPlanItemRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    await _get_source_or_404(session, tenant, payload.source_id)
+    substance = payload.substance.strip()
+    await _ensure_plan_pair_free(session, tenant, payload.source_id, substance)
+
+    item = EmissionMonitoringPlanItem(
+        tenant_id=str(tenant.id),
+        source_id=payload.source_id,
+        substance=substance,
+        periodicity_months=payload.periodicity_months,
+        next_due_on=payload.next_due_on,
+        method=(payload.method or None),
+        laboratory=(payload.laboratory or None),
+        notes=(payload.notes or None),
+    )
+    session.add(item)
+    await session.flush()
+    await AuditService(session).log_event(
+        tenant_id=str(tenant.id),
+        action="create",
+        object_type="EmissionMonitoringPlanItem",
+        object_id=item.id,
+        user_id=access.user.id,
+        ip=request.client.host if request.client else "unknown",
+        request_id=getattr(request.state, "trace_id", None),
+        user_agent=request.headers.get("user-agent"),
+        changed_fields={"fields": {"id": {"before": None, "after": item.id}}},
+        details={"entity": "EmissionMonitoringPlanItem", "substance": item.substance},
+    )
+    await session.commit()
+    await session.refresh(item)
+    return _plan_read(item, None, date.today())
+
+
+@router.patch("/monitoring-plan/{item_id}", response_model=MonitoringPlanItemRead)
+async def update_monitoring_plan_item(
+    request: Request,
+    item_id: str,
+    payload: MonitoringPlanItemUpdate,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: Access,
+) -> MonitoringPlanItemRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    item = await _get_plan_or_404(session, tenant, item_id)
+    before = {
+        "substance": item.substance,
+        "periodicity_months": item.periodicity_months,
+        "next_due_on": str(item.next_due_on),
+        "method": item.method,
+        "laboratory": item.laboratory,
+        "notes": item.notes,
+    }
+    data = payload.model_dump(exclude_unset=True)
+    if data.get("substance"):
+        substance = str(data["substance"]).strip()
+        await _ensure_plan_pair_free(
+            session, tenant, item.source_id, substance, exclude_id=item.id
+        )
+        item.substance = substance
+    if data.get("periodicity_months") is not None:
+        item.periodicity_months = int(data["periodicity_months"])
+    if data.get("next_due_on") is not None:
+        item.next_due_on = data["next_due_on"]
+    for field in ("method", "laboratory", "notes"):
+        if field in data:
+            setattr(item, field, data[field] or None)
+    await session.flush()
+    after = {
+        "substance": item.substance,
+        "periodicity_months": item.periodicity_months,
+        "next_due_on": str(item.next_due_on),
+        "method": item.method,
+        "laboratory": item.laboratory,
+        "notes": item.notes,
+    }
+    await AuditService(session).log_event(
+        tenant_id=str(tenant.id),
+        action="update",
+        object_type="EmissionMonitoringPlanItem",
+        object_id=item.id,
+        user_id=access.user.id,
+        ip=request.client.host if request.client else "unknown",
+        request_id=getattr(request.state, "trace_id", None),
+        user_agent=request.headers.get("user-agent"),
+        changed_fields=field_level_diff(before, after),
+        details={"entity": "EmissionMonitoringPlanItem"},
+    )
+    await session.commit()
+    await session.refresh(item)
+    measured = await _last_measured_map(session, tenant, [item.id])
+    return _plan_read(item, measured.get(item.id), date.today())
+
+
+@router.get("/emission-measurements", response_model=EmissionMeasurementPage)
+async def list_emission_measurements(
+    tenant: TenantDep,
+    session: SessionDep,
+    access: Access,
+    source_id: str | None = Query(default=None),
+    plan_id: str | None = Query(default=None),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+) -> EmissionMeasurementPage:
+    """Замеры ПЭК вместе с итогом сравнения с нормативом."""
+
+    TenantContextValidator.ensure_tenant_context(tenant)
+    stmt = select(EmissionMeasurement).where(
+        EmissionMeasurement.tenant_id == tenant.id,
+        EmissionMeasurement.deleted_at.is_(None),
+    )
+    if source_id:
+        stmt = stmt.where(EmissionMeasurement.source_id == source_id)
+    if plan_id:
+        stmt = stmt.where(EmissionMeasurement.plan_id == plan_id)
+    total = int(
+        await session.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+    )
+    rows = (
+        (
+            await session.execute(
+                stmt.order_by(EmissionMeasurement.measured_on.desc())
+                .offset(offset)
+                .limit(limit)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    norms = await _norms_by_pair(session, tenant)
+    return EmissionMeasurementPage(
+        items=[
+            _measurement_read(r, norms.get((r.source_id, r.substance))) for r in rows
+        ],
+        total=total,
+    )
+
+
+@router.post(
+    "/emission-measurements",
+    response_model=EmissionMeasurementRead,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_emission_measurement(
+    request: Request,
+    payload: EmissionMeasurementCreate,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: Access,
+) -> EmissionMeasurementRead:
+    """Внести замер. Строка плана необязательна — замер бывает внеплановым."""
+
+    TenantContextValidator.ensure_tenant_context(tenant)
+    await _get_source_or_404(session, tenant, payload.source_id)
+    plan_item = None
+    if payload.plan_id:
+        plan_item = await _get_plan_or_404(session, tenant, payload.plan_id)
+    substance = payload.substance.strip()
+
+    measurement = EmissionMeasurement(
+        tenant_id=str(tenant.id),
+        plan_id=payload.plan_id or None,
+        source_id=payload.source_id,
+        substance=substance,
+        measured_on=payload.measured_on,
+        value_grams_per_second=payload.value_grams_per_second,
+        protocol_number=(payload.protocol_number or None),
+        laboratory=(payload.laboratory or None),
+        notes=(payload.notes or None),
+    )
+    session.add(measurement)
+    # Внесение замера ДВИГАЕТ плановую дату вперёд по календарной сетке. Без
+    # этого строка плана навсегда осталась бы просроченной: заводить данные
+    # система умела бы, а исправлять уже заведённое — нет.
+    if plan_item is not None:
+        _advance_plan_due(plan_item, payload.measured_on)
+    await session.flush()
+    await AuditService(session).log_event(
+        tenant_id=str(tenant.id),
+        action="create",
+        object_type="EmissionMeasurement",
+        object_id=measurement.id,
+        user_id=access.user.id,
+        ip=request.client.host if request.client else "unknown",
+        request_id=getattr(request.state, "trace_id", None),
+        user_agent=request.headers.get("user-agent"),
+        changed_fields={"fields": {"id": {"before": None, "after": measurement.id}}},
+        details={"entity": "EmissionMeasurement", "substance": measurement.substance},
+    )
+    await session.commit()
+    await session.refresh(measurement)
+    norm = await _norm_for_pair(session, tenant, measurement.source_id, substance)
+    return _measurement_read(measurement, norm)
+
+
+@router.patch(
+    "/emission-measurements/{measurement_id}", response_model=EmissionMeasurementRead
+)
+async def update_emission_measurement(
+    request: Request,
+    measurement_id: str,
+    payload: EmissionMeasurementUpdate,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: Access,
+) -> EmissionMeasurementRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    measurement = await _get_measurement_or_404(session, tenant, measurement_id)
+    before = {
+        "measured_on": str(measurement.measured_on),
+        "value_grams_per_second": str(measurement.value_grams_per_second),
+        "protocol_number": measurement.protocol_number,
+        "laboratory": measurement.laboratory,
+        "notes": measurement.notes,
+    }
+    data = payload.model_dump(exclude_unset=True)
+    if data.get("measured_on") is not None:
+        measurement.measured_on = data["measured_on"]
+    if data.get("value_grams_per_second") is not None:
+        measurement.value_grams_per_second = data["value_grams_per_second"]
+    for field in ("protocol_number", "laboratory", "notes"):
+        if field in data:
+            setattr(measurement, field, data[field] or None)
+    await session.flush()
+    after = {
+        "measured_on": str(measurement.measured_on),
+        "value_grams_per_second": str(measurement.value_grams_per_second),
+        "protocol_number": measurement.protocol_number,
+        "laboratory": measurement.laboratory,
+        "notes": measurement.notes,
+    }
+    await AuditService(session).log_event(
+        tenant_id=str(tenant.id),
+        action="update",
+        object_type="EmissionMeasurement",
+        object_id=measurement.id,
+        user_id=access.user.id,
+        ip=request.client.host if request.client else "unknown",
+        request_id=getattr(request.state, "trace_id", None),
+        user_agent=request.headers.get("user-agent"),
+        changed_fields=field_level_diff(before, after),
+        details={"entity": "EmissionMeasurement"},
+    )
+    await session.commit()
+    await session.refresh(measurement)
+    norm = await _norm_for_pair(
+        session, tenant, measurement.source_id, measurement.substance
+    )
+    return _measurement_read(measurement, norm)
+
+
 @router.get("/readiness", response_model=EcologyReadinessRead)
 async def ecology_readiness(
     tenant: TenantDep,
@@ -1360,11 +1916,57 @@ async def ecology_readiness(
         .all()
     )
     sources_with_norms = {n.source_id for n in norms}
+    today = date.today()
     permits_overdue = sum(
-        1 for n in norms if _norm_status(n.valid_until, date.today()) == "overdue"
+        1 for n in norms if _norm_status(n.valid_until, today) == "overdue"
+    )
+
+    # Разд. 55.2 «ПЭК»: график, просрочки и превышения по ЗАМЕРАМ. Превышение
+    # здесь — сравнение двух внесённых чисел, а не вывод платформы о нормативе.
+    plan_items = (
+        (
+            await session.execute(
+                select(EmissionMonitoringPlanItem).where(
+                    EmissionMonitoringPlanItem.tenant_id == tenant.id,
+                    EmissionMonitoringPlanItem.deleted_at.is_(None),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    measurements = (
+        (
+            await session.execute(
+                select(EmissionMeasurement).where(
+                    EmissionMeasurement.tenant_id == tenant.id,
+                    EmissionMeasurement.deleted_at.is_(None),
+                    EmissionMeasurement.measured_on >= date(year, 1, 1),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    norm_by_pair = {(n.source_id, n.substance): n for n in norms}
+    exceeded = sum(
+        1
+        for m in measurements
+        if _comparison(
+            m.value_grams_per_second, norm_by_pair.get((m.source_id, m.substance))
+        )[0]
+        == "exceeded"
     )
 
     return EcologyReadinessRead(
+        monitoring_plan_items=len(plan_items),
+        monitoring_overdue=sum(
+            1
+            for i in plan_items
+            if _monitoring_status(i.next_due_on, today) == "overdue"
+        ),
+        measurements_this_year=len(measurements),
+        measurements_exceeded=exceeded,
         emission_sources=len(sources),
         emission_sources_without_norms=sum(
             1 for s in sources if s.id not in sources_with_norms

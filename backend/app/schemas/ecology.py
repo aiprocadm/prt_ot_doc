@@ -250,10 +250,114 @@ class EcologyReadinessRead(BaseSchema):
     waste_movements: int = 0
     waste_over_limit: int = 0
     #: разд. 55.2 «выбросы»: инвентаризация источников и нормативы.
-    #: ГРАНИЦА: полей «предлагаемый норматив» и «превышение норматива» здесь
-    #: НЕТ — ПДВ устанавливается проектом нормативов, а факт выброса меряется
-    #: замерами ПЭК (следующий срез)
+    #: ГРАНИЦА: поля «предлагаемый норматив» здесь НЕТ — ПДВ устанавливается
+    #: проектом нормативов. Превышение появилось только со срезом ПЭК и
+    #: считается по ЗАМЕРУ: это сравнение двух внесённых чисел, а не вывод
+    #: платформы о самом нормативе
     emission_sources: int = 0
     emission_sources_without_norms: int = 0
     emission_norms: int = 0
     emission_permits_overdue: int = 0
+    #: разд. 55.2 «ПЭК и план-график замеров»
+    monitoring_plan_items: int = 0
+    monitoring_overdue: int = 0
+    measurements_this_year: int = 0
+    measurements_exceeded: int = 0
+
+
+class MonitoringPlanItemCreate(BaseSchema):
+    source_id: str = Field(min_length=1, max_length=36)
+    substance: str = Field(min_length=1, max_length=255)
+    #: 1..60 месяцев: ноль означал бы «никогда», а пять лет — предел, за
+    #: которым строка графика перестаёт быть графиком
+    periodicity_months: int = Field(ge=1, le=60)
+    next_due_on: date
+    method: str | None = Field(default=None, max_length=255)
+    laboratory: str | None = Field(default=None, max_length=255)
+    notes: str | None = None
+
+
+class MonitoringPlanItemUpdate(BaseSchema):
+    substance: str | None = Field(default=None, min_length=1, max_length=255)
+    periodicity_months: int | None = Field(default=None, ge=1, le=60)
+    next_due_on: date | None = None
+    method: str | None = Field(default=None, max_length=255)
+    laboratory: str | None = Field(default=None, max_length=255)
+    notes: str | None = None
+
+
+class MonitoringPlanItemRead(BaseSchema):
+    """Строка плана-графика ПЭК.
+
+    ГРАНИЦА: полей «требуемая периодичность» и «нужен ли ПЭК» здесь НЕТ —
+    периодичность берётся из утверждённой программы ПЭК.
+    """
+
+    id: str
+    source_id: str
+    substance: str
+    periodicity_months: int
+    #: «раз в квартал» и подобное; нетиповой срок — «раз в N месяцев»
+    periodicity_label: str
+    next_due_on: date
+    method: str | None = None
+    laboratory: str | None = None
+    notes: str | None = None
+    #: ok / due_soon / overdue — считается ПРИ ЧТЕНИИ по плановой дате
+    status: str
+    status_label: str
+    #: дата последнего внесённого замера по этой строке
+    last_measured_on: date | None = None
+
+
+class MonitoringPlanItemPage(BaseSchema):
+    items: list[MonitoringPlanItemRead]
+    total: int
+
+
+class EmissionMeasurementCreate(BaseSchema):
+    #: строка плана НЕОБЯЗАТЕЛЬНА: замер по предписанию делают вне графика
+    plan_id: str | None = Field(default=None, max_length=36)
+    source_id: str = Field(min_length=1, max_length=36)
+    substance: str = Field(min_length=1, max_length=255)
+    measured_on: date
+    value_grams_per_second: Decimal = Field(ge=0)
+    protocol_number: str | None = Field(default=None, max_length=64)
+    laboratory: str | None = Field(default=None, max_length=255)
+    notes: str | None = None
+
+
+class EmissionMeasurementUpdate(BaseSchema):
+    measured_on: date | None = None
+    value_grams_per_second: Decimal | None = Field(default=None, ge=0)
+    protocol_number: str | None = Field(default=None, max_length=64)
+    laboratory: str | None = Field(default=None, max_length=255)
+    notes: str | None = None
+
+
+class EmissionMeasurementRead(BaseSchema):
+    """Замер ПЭК вместе с итогом сравнения.
+
+    Итог НЕ ХРАНИТСЯ в базе: норматив со временем меняется, и сохранённый
+    вывод пережил бы новый норматив.
+    """
+
+    id: str
+    plan_id: str | None = None
+    source_id: str
+    substance: str
+    measured_on: date
+    value_grams_per_second: Decimal
+    protocol_number: str | None = None
+    laboratory: str | None = None
+    notes: str | None = None
+    #: норматив, с которым сравнивали (если он внесён)
+    norm_grams_per_second: Decimal | None = None
+    #: within / exceeded / no_norm / no_single_limit
+    comparison: str
+    comparison_label: str
+
+
+class EmissionMeasurementPage(BaseSchema):
+    items: list[EmissionMeasurementRead]
+    total: int

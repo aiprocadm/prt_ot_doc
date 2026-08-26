@@ -11,6 +11,8 @@ const listPassportsMock = vi.fn();
 const listMovementsMock = vi.fn();
 const listSourcesMock = vi.fn();
 const listNormsMock = vi.fn();
+const listPlanMock = vi.fn();
+const listMeasurementsMock = vi.fn();
 const readinessMock = vi.fn();
 
 vi.mock("@/api/ecology", async (importOriginal) => ({
@@ -21,6 +23,9 @@ vi.mock("@/api/ecology", async (importOriginal) => ({
     listWasteMovements: (...args: unknown[]) => listMovementsMock(...args),
     listEmissionSources: (...args: unknown[]) => listSourcesMock(...args),
     listEmissionNorms: (...args: unknown[]) => listNormsMock(...args),
+    listMonitoringPlan: (...args: unknown[]) => listPlanMock(...args),
+    listEmissionMeasurements: (...args: unknown[]) =>
+      listMeasurementsMock(...args),
     readiness: (...args: unknown[]) => readinessMock(...args),
   },
 }));
@@ -171,6 +176,70 @@ const populatedNorms = [
   },
 ];
 
+/** План-график ПЭК: одна строка просрочена, вторая идёт по графику. */
+const populatedPlan = [
+  {
+    id: "mp-1",
+    source_id: "es-1",
+    substance: "Азота диоксид",
+    periodicity_months: 3,
+    periodicity_label: "раз в квартал",
+    next_due_on: "2026-08-01",
+    method: "ПНД Ф 13.1:2:3.25-99",
+    laboratory: "ИЛЦ «Эковоздух»",
+    notes: null,
+    status: "overdue",
+    status_label: "Замер просрочен",
+    last_measured_on: "2026-05-05",
+  },
+  {
+    id: "mp-2",
+    source_id: "es-1",
+    substance: "Углерода оксид",
+    periodicity_months: 12,
+    periodicity_label: "ежегодно",
+    next_due_on: "2027-03-01",
+    method: null,
+    laboratory: null,
+    notes: null,
+    status: "ok",
+    status_label: "По графику",
+    last_measured_on: null,
+  },
+];
+
+/** Замеры: один с превышением, один без внесённого норматива. */
+const populatedMeasurements = [
+  {
+    id: "em-1",
+    plan_id: "mp-1",
+    source_id: "es-1",
+    substance: "Азота диоксид",
+    measured_on: "2026-05-05",
+    value_grams_per_second: "0.031000",
+    protocol_number: "П-2026-014",
+    laboratory: "ИЛЦ «Эковоздух»",
+    notes: null,
+    norm_grams_per_second: "0.025000",
+    comparison: "exceeded",
+    comparison_label: "Превышение норматива",
+  },
+  {
+    id: "em-2",
+    plan_id: null,
+    source_id: "es-2",
+    substance: "Взвешенные вещества",
+    measured_on: "2026-04-01",
+    value_grams_per_second: "9.500000",
+    protocol_number: null,
+    laboratory: null,
+    notes: null,
+    norm_grams_per_second: null,
+    comparison: "no_norm",
+    comparison_label: "Норматив не внесён",
+  },
+];
+
 const populatedReadiness = {
   total_facilities: 2,
   by_category: { I: 0, II: 1, III: 0, IV: 1 },
@@ -183,6 +252,10 @@ const populatedReadiness = {
   emission_sources_without_norms: 1,
   emission_norms: 2,
   emission_permits_overdue: 1,
+  monitoring_plan_items: 2,
+  monitoring_overdue: 1,
+  measurements_this_year: 2,
+  measurements_exceeded: 1,
 };
 
 describe("EcologyPage", () => {
@@ -192,12 +265,16 @@ describe("EcologyPage", () => {
     listMovementsMock.mockReset();
     listSourcesMock.mockReset();
     listNormsMock.mockReset();
+    listPlanMock.mockReset();
+    listMeasurementsMock.mockReset();
     readinessMock.mockReset();
     listFacilitiesMock.mockResolvedValue(populatedFacilities);
     listPassportsMock.mockResolvedValue(populatedPassports);
     listMovementsMock.mockResolvedValue(populatedMovements);
     listSourcesMock.mockResolvedValue(populatedSources);
     listNormsMock.mockResolvedValue(populatedNorms);
+    listPlanMock.mockResolvedValue(populatedPlan);
+    listMeasurementsMock.mockResolvedValue(populatedMeasurements);
     readinessMock.mockResolvedValue(populatedReadiness);
   });
 
@@ -358,6 +435,39 @@ describe("EcologyPage", () => {
     // Пустой срок разрешения — «бессрочно», а не «просрочено».
     expect(
       screen.getByText(/платформа их не рассчитывает/i),
+    ).toBeInTheDocument();
+  });
+
+  // Доп. №1 разд. 55.2 срез-4: ПЭК. График замеров и сами замеры; превышение
+  // здесь — сравнение замера с внесённым нормативом, а не суждение платформы.
+  it("ПЭК открывается пятой секцией", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter>
+        <EcologyPage />
+      </MemoryRouter>,
+    );
+
+    expect(
+      await screen.findByText("Производственная площадка №1"),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "ПЭК и замеры" }));
+
+    // Периодичность — словами, а не числом месяцев.
+    expect(await screen.findByText("раз в квартал")).toBeInTheDocument();
+    expect(screen.getByText("ежегодно")).toBeInTheDocument();
+    // Состояние строки графика названо словами.
+    expect(screen.getByText("Замер просрочен")).toBeInTheDocument();
+    expect(screen.getByText("По графику")).toBeInTheDocument();
+    // Пустая клетка запрещена: «замеров не было» вместо прочерка.
+    expect(screen.getByText("замеров не было")).toBeInTheDocument();
+    // Итог сравнения — и превышение, и честное «норматива нет».
+    expect(screen.getByText("Превышение норматива")).toBeInTheDocument();
+    expect(screen.getByText("Норматив не внесён")).toBeInTheDocument();
+    // Граница названа на экране.
+    expect(
+      screen.getByText(/платформа её не назначает/i),
     ).toBeInTheDocument();
   });
 

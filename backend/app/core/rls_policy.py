@@ -109,6 +109,8 @@ RLS_ENABLED_TABLES: frozenset[str] = frozenset(
         "edo_status_events",
         "edo_status_history",
         "edo_webhook_inbox",
+        "emission_measurement",
+        "emission_monitoring_plan",
         "emission_norm",
         "emission_source",
         "equipment",
