@@ -40,6 +40,7 @@ import enum
 
 __all__ = [
     "ATTENTION_SOURCES",
+    "attention_sources",
     "BRIEFING_TYPES",
     "BRIEFING_TYPE_DISCIPLINE",
     "BRIEFING_TYPE_TITLES",
@@ -112,6 +113,10 @@ SOURCE_DISCIPLINE: dict[str, Discipline] = {
     # ``discipline_of_briefing(entry.briefing_type)``; значение здесь —
     # умолчание для источников, у которых вида под рукой нет.
     "briefing_entry": Discipline.TRAINING,
+    # Доп. №1 разд. 55.3: сроки продления разрешений и плановые замеры ПЭК —
+    # оба источника целиком экологические, гадать не о чем.
+    "ecology_permit": Discipline.ECOLOGY,
+    "ecology_measurement": Discipline.ECOLOGY,
 }
 
 #: Источники БЕЗ дисциплины — каждый с причиной. Причина уходит в ответ API:
@@ -154,6 +159,25 @@ PERSON_SCOPED_SOURCES: frozenset[str] = frozenset(
 #: запрашиваются вовсе: их строки всё равно не к чему отнести, а каждый лишний
 #: источник — это лишние запросы на посадочной странице.
 ATTENTION_SOURCES: tuple[str, ...] = tuple(SOURCE_DISCIPLINE)
+
+
+def attention_sources(*, person_id: str | None) -> tuple[str, ...]:
+    """Источники Центра внимания с учётом того, сужаем ли мы список до человека.
+
+    Разд. 55.3 добавил источники, у которых человека НЕТ ВООБЩЕ: срок действия
+    разрешения и плановый замер ПЭК — задача организации, а не сотрудника.
+    Раньше правило было «спрашиваем всё размеченное», и оно молча
+    предполагало, что каждый размеченный источник умеет сузиться до человека.
+
+    Поэтому: когда список сужается до человека (рабочая роль), спрашиваем
+    ТОЛЬКО те источники, которые это умеют — иначе агрегатор молча вернул бы
+    чужие записи. Когда сужения нет (роли, которым записи арендатора и так
+    открыты), спрашиваем всё размеченное, включая общеорганизационные сроки.
+    """
+
+    if person_id is None:
+        return ATTENTION_SOURCES
+    return tuple(code for code in ATTENTION_SOURCES if code in PERSON_SCOPED_SOURCES)
 
 
 def discipline_of(source_type: str) -> Discipline | None:

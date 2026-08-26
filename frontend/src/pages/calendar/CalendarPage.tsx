@@ -52,6 +52,9 @@ const VIEWS: { value: CalendarView; label: string }[] = [
 
 const SOURCE_LABELS: Record<CalendarSourceType, string> = {
   medical_exam: "Медосмотры",
+  // Подписи не было вовсе: источник отдавался бэкендом, но отсутствовал в
+  // CalendarSourceType, поэтому строка направления рисовалась без названия.
+  medical_referral: "Направления на медосмотр",
   ppe_issue: "СИЗ",
   permit: "Допуски",
   training_session: "Обучение",
@@ -59,6 +62,9 @@ const SOURCE_LABELS: Record<CalendarSourceType, string> = {
   compliance_deadline: "Контрольные сроки",
   briefing_entry: "Инструктажи",
   calendar_event: "Прочие события",
+  // Доп. №1 разд. 55.3 «экологический календарь».
+  ecology_permit: "Экология: разрешения",
+  ecology_measurement: "Экология: замеры ПЭК",
 };
 
 const DRILL_DOWN: Partial<Record<CalendarSourceType, string>> = {
@@ -68,6 +74,8 @@ const DRILL_DOWN: Partial<Record<CalendarSourceType, string>> = {
   training_session: "/training",
   inspection: "/inspections",
   compliance_deadline: "/workspace/data-quality",
+  ecology_permit: "/ecology",
+  ecology_measurement: "/ecology",
   briefing_entry: "/briefings",
 };
 

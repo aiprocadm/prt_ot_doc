@@ -22,6 +22,7 @@ from app.core.disciplines import (
     UNCLASSIFIED_SOURCES,
     UNMEASURED_DISCIPLINES,
     Discipline,
+    attention_sources,
     discipline_of,
 )
 from app.services.calendar_aggregator import ALL_SOURCES
@@ -52,11 +53,30 @@ class TestCoverage:
 
         У остальных фильтр по человеку не применяется, и рабочая роль увидела
         бы чужие записи: это утечка персональных данных, а не косметика.
+
+        Правило уточнено разд. 55.3: у сроков разрешений и плановых замеров ПЭК
+        человека НЕТ ВООБЩЕ — это задача организации. Поэтому «уметь сузиться»
+        обязаны не все размеченные источники, а ровно те, которые мы
+        спрашиваем ПРИ сужении.
         """
 
         assert PERSON_SCOPED_SOURCES <= set(ALL_SOURCES)
-        # Всё, что мы спрашиваем для Центра внимания, обязано уметь сужаться.
-        assert set(ATTENTION_SOURCES) <= PERSON_SCOPED_SOURCES
+        # При сужении до человека спрашиваем только то, что умеет сузиться.
+        assert set(attention_sources(person_id="person-1")) <= PERSON_SCOPED_SOURCES
+        # Без сужения — всё размеченное, включая общеорганизационные сроки.
+        assert set(attention_sources(person_id=None)) == set(SOURCE_DISCIPLINE)
+
+    def test_общеорганизационные_сроки_не_идут_в_личный_список(self) -> None:
+        """Сторож против возврата к прежнему правилу.
+
+        Экологические сроки размечены дисциплиной, но человека в них нет:
+        попади они в личный список, рабочая роль увидела бы записи, которые
+        агрегатор не сумел бы сузить.
+        """
+
+        personal = set(attention_sources(person_id="person-1"))
+        assert "ecology_permit" not in personal
+        assert "ecology_measurement" not in personal
 
 
 class TestSingleSource:

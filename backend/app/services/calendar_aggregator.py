@@ -34,6 +34,11 @@ from typing import Any, Iterable
 from sqlalchemy import Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.ecology import (
+    EmissionMonitoringPlanItem,
+    EmissionNorm,
+    WaterUsagePoint,
+)
 from app.models.models import (
     BriefingEntry,
     BriefingTemplate,
@@ -75,6 +80,11 @@ ALL_SOURCES: tuple[str, ...] = (
     "compliance_deadline",
     "briefing_entry",
     "calendar_event",
+    # Доп. №1 разд. 55.3 «экологический календарь». Два источника, а не один:
+    # продлить разрешение и заказать замер — разные задачи эколога, и смешать
+    # их значило бы отнять возможность отфильтровать.
+    "ecology_permit",
+    "ecology_measurement",
 )
 
 _CLOSED_DEADLINE_STATUSES = frozenset({"closed", "completed", "cancelled"})
@@ -95,6 +105,10 @@ _SLA_THRESHOLDS: dict[str, tuple[int, int]] = {
     "compliance_deadline": (3, 14),
     "briefing_entry": (7, 30),
     "calendar_event": (1, 7),
+    # Разрешение продлевают заранее: переоформление занимает месяцы, поэтому
+    # окно шире, чем у медосмотра.
+    "ecology_permit": (30, 90),
+    "ecology_measurement": (7, 30),
 }
 
 
@@ -177,6 +191,36 @@ class CalendarAggregatorService:
         items: list[CalendarEventItem] = []
         by_source: list[CalendarSourceCount] = []
         now = _utcnow()
+
+        if "ecology_permit" in sources:
+            collected, total, overdue = await self._build_ecology_permits(
+                from_at=from_at,
+                to_at=to_at,
+                now=now,
+                include_fact=include_fact,
+                include_sla=include_sla,
+            )
+            items.extend(collected)
+            by_source.append(
+                CalendarSourceCount(
+                    source_type="ecology_permit", count=total, overdue_count=overdue
+                )
+            )
+
+        if "ecology_measurement" in sources:
+            collected, total, overdue = await self._build_ecology_measurements(
+                from_at=from_at,
+                to_at=to_at,
+                now=now,
+                include_fact=include_fact,
+                include_sla=include_sla,
+            )
+            items.extend(collected)
+            by_source.append(
+                CalendarSourceCount(
+                    source_type="ecology_measurement", count=total, overdue_count=overdue
+                )
+            )
 
         if "medical_exam" in sources:
             collected, total, overdue = await self._build_medicals(
@@ -501,6 +545,230 @@ class CalendarAggregatorService:
         )
         total = await self._count(base_count)
         overdue = await self._count(base_count.where(MedicalReferral.due_at < today))
+        return items, total, overdue
+
+    async def _build_ecology_permits(
+        self,
+        *,
+        from_at: datetime | None,
+        to_at: datetime | None,
+        now: datetime,
+        include_fact: bool = False,
+        include_sla: bool = False,
+    ) -> tuple[list[CalendarEventItem], int, int]:
+        """Сроки продления разрешений: нормативы выброса и водопользование.
+
+        Оба вида в ОДНОМ источнике: для эколога это один вопрос «что
+        продлевать», и оба срока живут по одному правилу.
+
+        БЕССРОЧНОЕ разрешение в календарь не попадает: события без даты не
+        бывает, а придумывать дату — враньё. Пустой срок означает «бессрочно»
+        (так решено на срезе-3), и календарь обязан это уважать.
+        """
+
+        today = now.date()
+        lo = from_at.date() if from_at is not None else None
+        hi = to_at.date() if to_at is not None else None
+
+        norms_stmt = (
+            select(EmissionNorm)
+            .where(
+                EmissionNorm.tenant_id == self.tenant_id,
+                EmissionNorm.deleted_at.is_(None),
+                EmissionNorm.valid_until.is_not(None),
+            )
+            .order_by(EmissionNorm.valid_until.asc())
+            .limit(MAX_ITEMS_PER_SOURCE)
+        )
+        points_stmt = (
+            select(WaterUsagePoint)
+            .where(
+                WaterUsagePoint.tenant_id == self.tenant_id,
+                WaterUsagePoint.deleted_at.is_(None),
+                WaterUsagePoint.permit_valid_until.is_not(None),
+            )
+            .order_by(WaterUsagePoint.permit_valid_until.asc())
+            .limit(MAX_ITEMS_PER_SOURCE)
+        )
+        if lo is not None:
+            norms_stmt = norms_stmt.where(EmissionNorm.valid_until >= lo)
+            points_stmt = points_stmt.where(WaterUsagePoint.permit_valid_until >= lo)
+        if hi is not None:
+            norms_stmt = norms_stmt.where(EmissionNorm.valid_until <= hi)
+            points_stmt = points_stmt.where(WaterUsagePoint.permit_valid_until <= hi)
+
+        items: list[CalendarEventItem] = []
+        for norm in (await self.db.execute(norms_stmt)).scalars().all():
+            anchor = _coerce_dt(norm.valid_until)
+            if anchor is None:
+                continue
+            items.append(
+                self._ecology_permit_item(
+                    entity_id=str(norm.id),
+                    title=f"Разрешение на выброс: {norm.substance}",
+                    anchor=anchor,
+                    now=now,
+                    include_fact=include_fact,
+                    include_sla=include_sla,
+                    extra={
+                        "kind": "emission_norm",
+                        "permit_number": norm.permit_number,
+                        "valid_until": norm.valid_until.isoformat(),
+                    },
+                )
+            )
+        for point in (await self.db.execute(points_stmt)).scalars().all():
+            anchor = _coerce_dt(point.permit_valid_until)
+            if anchor is None:
+                continue
+            items.append(
+                self._ecology_permit_item(
+                    entity_id=str(point.id),
+                    title=f"Разрешение водопользования: {point.name}",
+                    anchor=anchor,
+                    now=now,
+                    include_fact=include_fact,
+                    include_sla=include_sla,
+                    extra={
+                        "kind": "water_permit",
+                        "permit_number": point.permit_number,
+                        "valid_until": point.permit_valid_until.isoformat(),
+                    },
+                )
+            )
+        items.sort(key=lambda item: item.starts_at)
+        items = items[:MAX_ITEMS_PER_SOURCE]
+
+        total = 0
+        overdue = 0
+        for model, column in (
+            (EmissionNorm, EmissionNorm.valid_until),
+            (WaterUsagePoint, WaterUsagePoint.permit_valid_until),
+        ):
+            base = self._apply_window(
+                self._scoped_count(model).where(column.is_not(None)),
+                column,
+                from_at,
+                to_at,
+                as_date=True,
+            )
+            total += await self._count(base)
+            overdue += await self._count(base.where(column < today))
+        return items, total, overdue
+
+    def _ecology_permit_item(
+        self,
+        *,
+        entity_id: str,
+        title: str,
+        anchor: datetime,
+        now: datetime,
+        include_fact: bool,
+        include_sla: bool,
+        extra: dict[str, Any],
+    ) -> CalendarEventItem:
+        is_overdue = anchor < now
+        days_to_due = _days_to_due(anchor, now) if include_sla else None
+        return CalendarEventItem(
+            id=f"ecology_permit:{entity_id}",
+            source_type="ecology_permit",
+            source_id=entity_id,
+            title=title,
+            starts_at=anchor,
+            ends_at=None,
+            status="expired" if is_overdue else "valid",
+            is_overdue=is_overdue,
+            expected_at=anchor if include_fact else None,
+            actual_at=None,
+            variance_days=None,
+            days_to_due=days_to_due,
+            sla_band=(
+                _sla_band("ecology_permit", days_to_due=days_to_due, is_overdue=is_overdue)
+                if include_sla
+                else None
+            ),
+            extra=extra,
+        )
+
+    async def _build_ecology_measurements(
+        self,
+        *,
+        from_at: datetime | None,
+        to_at: datetime | None,
+        now: datetime,
+        include_fact: bool = False,
+        include_sla: bool = False,
+    ) -> tuple[list[CalendarEventItem], int, int]:
+        """Плановые даты замеров ПЭК из плана-графика.
+
+        Периодичность платформа не назначает (граница среза-4) — календарь
+        показывает ту дату, которая уже внесена в строке графика.
+        """
+
+        today = now.date()
+        stmt = (
+            select(EmissionMonitoringPlanItem)
+            .where(
+                EmissionMonitoringPlanItem.tenant_id == self.tenant_id,
+                EmissionMonitoringPlanItem.deleted_at.is_(None),
+            )
+            .order_by(EmissionMonitoringPlanItem.next_due_on.asc())
+            .limit(MAX_ITEMS_PER_SOURCE)
+        )
+        if from_at is not None:
+            stmt = stmt.where(EmissionMonitoringPlanItem.next_due_on >= from_at.date())
+        if to_at is not None:
+            stmt = stmt.where(EmissionMonitoringPlanItem.next_due_on <= to_at.date())
+
+        items: list[CalendarEventItem] = []
+        for plan in (await self.db.execute(stmt)).scalars().all():
+            anchor = _coerce_dt(plan.next_due_on)
+            if anchor is None:
+                continue
+            is_overdue = anchor < now
+            days_to_due = _days_to_due(anchor, now) if include_sla else None
+            items.append(
+                CalendarEventItem(
+                    id=f"ecology_measurement:{plan.id}",
+                    source_type="ecology_measurement",
+                    source_id=str(plan.id),
+                    title=f"Замер ПЭК: {plan.substance}",
+                    starts_at=anchor,
+                    ends_at=None,
+                    status="overdue" if is_overdue else "planned",
+                    is_overdue=is_overdue,
+                    expected_at=anchor if include_fact else None,
+                    actual_at=None,
+                    variance_days=None,
+                    days_to_due=days_to_due,
+                    sla_band=(
+                        _sla_band(
+                            "ecology_measurement",
+                            days_to_due=days_to_due,
+                            is_overdue=is_overdue,
+                        )
+                        if include_sla
+                        else None
+                    ),
+                    extra={
+                        "substance": plan.substance,
+                        "periodicity_months": plan.periodicity_months,
+                        "next_due_on": plan.next_due_on.isoformat(),
+                    },
+                )
+            )
+
+        base = self._apply_window(
+            self._scoped_count(EmissionMonitoringPlanItem),
+            EmissionMonitoringPlanItem.next_due_on,
+            from_at,
+            to_at,
+            as_date=True,
+        )
+        total = await self._count(base)
+        overdue = await self._count(
+            base.where(EmissionMonitoringPlanItem.next_due_on < today)
+        )
         return items, total, overdue
 
     async def _build_ppe(

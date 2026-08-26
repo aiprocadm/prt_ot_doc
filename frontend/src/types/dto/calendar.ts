@@ -5,16 +5,24 @@
 
 export type CalendarSourceType =
   | "medical_exam"
+  // medical_referral отдавался бэкендом с самого начала, а в этом списке его
+  // не было: список написан руками, и сверять его с ALL_SOURCES было нечем.
+  // Теперь сверяет тест tests/test_ecology_calendar.py.
+  | "medical_referral"
   | "ppe_issue"
   | "permit"
   | "training_session"
   | "inspection"
   | "compliance_deadline"
   | "briefing_entry"
-  | "calendar_event";
+  | "calendar_event"
+  // Доп. №1 разд. 55.3 «экологический календарь».
+  | "ecology_permit"
+  | "ecology_measurement";
 
 export const CALENDAR_SOURCE_TYPES: readonly CalendarSourceType[] = [
   "medical_exam",
+  "medical_referral",
   "ppe_issue",
   "permit",
   "training_session",
@@ -22,6 +30,8 @@ export const CALENDAR_SOURCE_TYPES: readonly CalendarSourceType[] = [
   "compliance_deadline",
   "briefing_entry",
   "calendar_event",
+  "ecology_permit",
+  "ecology_measurement",
 ] as const;
 
 export type CalendarSlaBand = "overdue" | "critical" | "warning" | "ok";
