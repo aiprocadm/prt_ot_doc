@@ -22,7 +22,7 @@ const EcologyPage = () => {
   // Секции ПО ОДНОЙ (прецедент экранов ПБ и ПромБеза): объекты, паспорта и
   // журнал учёта — разные задачи, три таблицы сразу растят экран.
   const [section, setSection] = useState<
-    "facilities" | "waste" | "journal" | "emissions" | "pek" | "water"
+    "facilities" | "waste" | "journal" | "emissions" | "pek" | "water" | "fee"
   >("facilities");
 
   const { data, loading, error, reload } = useAsyncResource({
@@ -37,6 +37,8 @@ const EcologyPage = () => {
         measurements: await ecologyApi.listEmissionMeasurements(),
         waterPoints: await ecologyApi.listWaterPoints(),
         waterRecords: await ecologyApi.listWaterRecords(),
+        feeRates: await ecologyApi.listFeeRates(),
+        feeLines: await ecologyApi.listFeeLines(),
         readiness: await ecologyApi.readiness(),
       }),
       [],
@@ -51,6 +53,8 @@ const EcologyPage = () => {
       measurements: [],
       waterPoints: [],
       waterRecords: [],
+      feeRates: [],
+      feeLines: [],
       readiness: {
         total_facilities: 0,
         by_category: { I: 0, II: 0, III: 0, IV: 0 },
@@ -72,6 +76,9 @@ const EcologyPage = () => {
         water_intake_cubic_meters: "0.000",
         water_discharge_cubic_meters: "0.000",
         water_over_limit: 0,
+        fee_lines: 0,
+        fee_lines_without_rate: 0,
+        fee_total_rubles: "0.00",
       },
     },
     errorMessage: "Не удалось загрузить реестр объектов НВОС",
@@ -167,6 +174,26 @@ const EcologyPage = () => {
         .includes(query),
   });
 
+  const feeRateRegistry = useLocalRegistry({
+    items: data.feeRates,
+    match: (item, query) =>
+      [item.subject, item.impact_kind_label, item.source_document]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(query),
+  });
+
+  const feeLineRegistry = useLocalRegistry({
+    items: data.feeLines,
+    match: (item, query) =>
+      [item.subject, item.impact_kind_label, item.rate_status_label]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(query),
+  });
+
   const { readiness } = data;
 
   return (
@@ -214,6 +241,12 @@ const EcologyPage = () => {
           // Разд. 55.2 «водопользование»: забор и сброс — РАЗНЫЕ величины,
           // в одну цифру их не складываем.
           { label: "Точек водопользования", value: readiness.water_points },
+          // Разд. 55.3: плата за текущий год. Строки без ставки в итог не
+          // попадают — про них отдельная цифра.
+          {
+            label: "Строк без ставки",
+            value: readiness.fee_lines_without_rate,
+          },
         ]}
       />
 
@@ -226,6 +259,7 @@ const EcologyPage = () => {
             ["emissions", "Выбросы"],
             ["pek", "ПЭК и замеры"],
             ["water", "Водопользование"],
+            ["fee", "Плата за НВОС"],
           ] as const
         ).map(([key, label]) => (
           <Button
@@ -723,6 +757,95 @@ const EcologyPage = () => {
               onSearchChange={waterRecordRegistry.onSearchChange}
               searchPlaceholder="Поиск по периоду, основанию, прибору"
               caption="Помесячный учёт объёмов"
+            />
+          ) : null}
+        </>
+      ) : null}
+      {section === "fee" && !loading && !error ? (
+        <>
+          {/*
+            ГРАНИЦА, названная НА ЭКРАНЕ: ставки устанавливает Правительство и
+            меняет ежегодно, коэффициенты определяются законом и решением
+            органа. Платформа умножает внесённое, а не догадывается.
+          */}
+          <p className="text-sm text-muted-foreground">
+            Ставки и коэффициенты вносятся: ставку устанавливает Правительство
+            ежегодно, а повышающий коэффициент определяют закон и решение
+            органа. Платформа перемножает внесённое. Если ставки за нужный год
+            нет, сумма не считается вовсе — это не ноль.
+          </p>
+          <p className="text-sm">
+            Плата за {new Date().getFullYear()} год по посчитанным строкам:{" "}
+            {readiness.fee_total_rubles} ₽
+          </p>
+          {feeLineRegistry.total === 0 ? (
+            <EmptyState
+              title="Расчёт платы не заведён"
+              description="Внесите строки расчёта по кварталам: вид воздействия, вещество или класс отходов, массу за квартал и коэффициент. Кварталы — это и есть авансовые платежи."
+            />
+          ) : (
+            <RegistryTable
+              columns={[
+                {
+                  accessorKey: "quarter",
+                  header: "Период",
+                  cell: ({ row }) =>
+                    `${row.original.quarter} кв. ${row.original.year}`,
+                },
+                {
+                  accessorKey: "impact_kind_label",
+                  header: "Вид воздействия",
+                  cell: ({ row }) => row.original.impact_kind_label,
+                },
+                { accessorKey: "subject", header: "Вещество / отход" },
+                { accessorKey: "mass_tons", header: "Масса, т" },
+                { accessorKey: "coefficient", header: "Коэффициент" },
+                {
+                  accessorKey: "amount_rubles",
+                  header: "Сумма, ₽",
+                  cell: ({ row }) =>
+                    row.original.amount_rubles ??
+                    row.original.rate_status_label,
+                },
+              ]}
+              data={feeLineRegistry.pagedItems}
+              pageIndex={feeLineRegistry.pageIndex}
+              pageSize={feeLineRegistry.pageSize}
+              total={feeLineRegistry.total}
+              onPageChange={feeLineRegistry.onPageChange}
+              onPageSizeChange={feeLineRegistry.onPageSizeChange}
+              onSearchChange={feeLineRegistry.onSearchChange}
+              searchPlaceholder="Поиск по веществу и виду воздействия"
+              caption="Расчёт платы по кварталам"
+            />
+          )}
+          {feeRateRegistry.total > 0 ? (
+            <RegistryTable
+              columns={[
+                { accessorKey: "year", header: "Год" },
+                {
+                  accessorKey: "impact_kind_label",
+                  header: "Вид воздействия",
+                  cell: ({ row }) => row.original.impact_kind_label,
+                },
+                { accessorKey: "subject", header: "Вещество / отход" },
+                { accessorKey: "rate_per_ton", header: "Ставка, ₽/т" },
+                {
+                  accessorKey: "source_document",
+                  header: "Чем установлена",
+                  cell: ({ row }) =>
+                    row.original.source_document || "не указано",
+                },
+              ]}
+              data={feeRateRegistry.pagedItems}
+              pageIndex={feeRateRegistry.pageIndex}
+              pageSize={feeRateRegistry.pageSize}
+              total={feeRateRegistry.total}
+              onPageChange={feeRateRegistry.onPageChange}
+              onPageSizeChange={feeRateRegistry.onPageSizeChange}
+              onSearchChange={feeRateRegistry.onSearchChange}
+              searchPlaceholder="Поиск по веществу и постановлению"
+              caption="Справочник ставок платы"
             />
           ) : null}
         </>

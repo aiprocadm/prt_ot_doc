@@ -29,6 +29,8 @@ from app.core.tenant_validation import TenantContextValidator
 from app.models.ecology import (
     EMISSION_NORM_STATUS_TITLES,
     EMISSION_SOURCE_KINDS,
+    FEE_IMPACT_KINDS,
+    FEE_RATE_STATUS_TITLES,
     MEASUREMENT_COMPARISON_TITLES,
     MONITORING_STATUS_TITLES,
     MONTH_TITLES,
@@ -45,6 +47,8 @@ from app.models.ecology import (
     EmissionNorm,
     EmissionSource,
     EnvironmentalFacility,
+    NvosFeeLine,
+    NvosFeeRate,
     WasteMovement,
     WastePassport,
     WaterUsagePoint,
@@ -75,6 +79,14 @@ from app.schemas.ecology import (
     MonitoringPlanItemPage,
     MonitoringPlanItemRead,
     MonitoringPlanItemUpdate,
+    NvosFeeLineCreate,
+    NvosFeeLinePage,
+    NvosFeeLineRead,
+    NvosFeeLineUpdate,
+    NvosFeeRateCreate,
+    NvosFeeRatePage,
+    NvosFeeRateRead,
+    NvosFeeRateUpdate,
     WasteMovementCreate,
     WasteMovementPage,
     WasteMovementRead,
@@ -2320,6 +2332,421 @@ async def update_water_record(
     return _water_record_read(record)
 
 
+# --- Плата за НВОС: справочник ставок и строки расчёта (разд. 55.3) ---------
+
+#: рубли считаем до копеек — это денежная сумма, а не приблизительная оценка
+_KOPECKS = Decimal("0.01")
+
+
+def _rate_read(rate: NvosFeeRate) -> NvosFeeRateRead:
+    return NvosFeeRateRead(
+        id=rate.id,
+        year=rate.year,
+        impact_kind=rate.impact_kind,
+        impact_kind_label=FEE_IMPACT_KINDS.get(rate.impact_kind, rate.impact_kind),
+        subject=rate.subject,
+        rate_per_ton=rate.rate_per_ton,
+        source_document=rate.source_document,
+        notes=rate.notes,
+    )
+
+
+def _fee_line_read(line: NvosFeeLine, rate: NvosFeeRate | None) -> NvosFeeLineRead:
+    """Строка расчёта вместе с суммой.
+
+    Нет ставки — сумма НЕ СЧИТАЕТСЯ ВООБЩЕ, а не считается нулём: ноль читался
+    бы как «платить нечего», и это было бы враньём. Тот же довод, что и у
+    «норматив не внесён» в замерах ПЭК.
+    """
+
+    status_value = "found" if rate is not None else "missing"
+    amount = (
+        (line.mass_tons * rate.rate_per_ton * line.coefficient).quantize(_KOPECKS)
+        if rate is not None
+        else None
+    )
+    return NvosFeeLineRead(
+        id=line.id,
+        year=line.year,
+        quarter=line.quarter,
+        impact_kind=line.impact_kind,
+        impact_kind_label=FEE_IMPACT_KINDS.get(line.impact_kind, line.impact_kind),
+        subject=line.subject,
+        mass_tons=line.mass_tons,
+        coefficient=line.coefficient,
+        notes=line.notes,
+        rate_status=status_value,
+        rate_status_label=FEE_RATE_STATUS_TITLES.get(status_value, status_value),
+        rate_per_ton=rate.rate_per_ton if rate is not None else None,
+        amount_rubles=amount,
+    )
+
+
+async def _rates_by_key(
+    session: AsyncSession, tenant: Tenant
+) -> dict[tuple[int, str, str], NvosFeeRate]:
+    """Ставки по ключу «год + вид + предмет» — одним запросом, а не N+1.
+
+    Год входит в ключ НАМЕРЕННО: расчёт за этот год не имеет права взять
+    прошлогоднюю ставку — это разные постановления.
+    """
+
+    rows = (
+        (
+            await session.execute(
+                select(NvosFeeRate).where(
+                    NvosFeeRate.tenant_id == tenant.id,
+                    NvosFeeRate.deleted_at.is_(None),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return {(r.year, r.impact_kind, r.subject): r for r in rows}
+
+
+async def _get_rate_or_404(
+    session: AsyncSession, tenant: Tenant, rate_id: str
+) -> NvosFeeRate:
+    stmt = select(NvosFeeRate).where(
+        NvosFeeRate.id == rate_id,
+        NvosFeeRate.tenant_id == tenant.id,
+        NvosFeeRate.deleted_at.is_(None),
+    )
+    rate = (await session.execute(stmt)).scalar_one_or_none()
+    if rate is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            detail=api_problem_detail(
+                code="NVOS_FEE_RATE_NOT_FOUND",
+                message="Fee rate not found",
+                error_type="ecology",
+            ),
+        )
+    return rate
+
+
+async def _get_fee_line_or_404(
+    session: AsyncSession, tenant: Tenant, line_id: str
+) -> NvosFeeLine:
+    stmt = select(NvosFeeLine).where(
+        NvosFeeLine.id == line_id,
+        NvosFeeLine.tenant_id == tenant.id,
+        NvosFeeLine.deleted_at.is_(None),
+    )
+    line = (await session.execute(stmt)).scalar_one_or_none()
+    if line is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            detail=api_problem_detail(
+                code="NVOS_FEE_LINE_NOT_FOUND",
+                message="Fee line not found",
+                error_type="ecology",
+            ),
+        )
+    return line
+
+
+def _validate_impact_kind(value: str) -> None:
+    if value not in FEE_IMPACT_KINDS:
+        raise _unprocessable(
+            f"Неизвестный вид воздействия {value!r}; допустимые: "
+            f"{', '.join(FEE_IMPACT_KINDS)}"
+        )
+
+
+@router.get("/fee-rates", response_model=NvosFeeRatePage)
+async def list_fee_rates(
+    tenant: TenantDep,
+    session: SessionDep,
+    access: Access,
+    year: int | None = Query(default=None),
+    impact_kind: str | None = Query(default=None),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+) -> NvosFeeRatePage:
+    """Справочник ставок платы за НВОС по годам."""
+
+    TenantContextValidator.ensure_tenant_context(tenant)
+    stmt = select(NvosFeeRate).where(
+        NvosFeeRate.tenant_id == tenant.id,
+        NvosFeeRate.deleted_at.is_(None),
+    )
+    if year:
+        stmt = stmt.where(NvosFeeRate.year == year)
+    if impact_kind:
+        stmt = stmt.where(NvosFeeRate.impact_kind == impact_kind)
+    total = int(
+        await session.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+    )
+    rows = (
+        (
+            await session.execute(
+                stmt.order_by(NvosFeeRate.year.desc(), NvosFeeRate.subject)
+                .offset(offset)
+                .limit(limit)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return NvosFeeRatePage(items=[_rate_read(r) for r in rows], total=total)
+
+
+@router.post(
+    "/fee-rates", response_model=NvosFeeRateRead, status_code=status.HTTP_201_CREATED
+)
+async def create_fee_rate(
+    request: Request,
+    payload: NvosFeeRateCreate,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: Access,
+) -> NvosFeeRateRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    _validate_impact_kind(payload.impact_kind)
+    subject = payload.subject.strip()
+    existing = await session.execute(
+        select(NvosFeeRate.id).where(
+            NvosFeeRate.tenant_id == tenant.id,
+            NvosFeeRate.year == payload.year,
+            NvosFeeRate.impact_kind == payload.impact_kind,
+            NvosFeeRate.subject == subject,
+            NvosFeeRate.deleted_at.is_(None),
+        )
+    )
+    if existing.scalar_one_or_none() is not None:
+        raise _unprocessable(
+            f"Ставка на {payload.year} год по {subject!r} уже внесена"
+        )
+
+    rate = NvosFeeRate(
+        tenant_id=str(tenant.id),
+        year=payload.year,
+        impact_kind=payload.impact_kind,
+        subject=subject,
+        rate_per_ton=payload.rate_per_ton,
+        source_document=(payload.source_document or None),
+        notes=(payload.notes or None),
+    )
+    session.add(rate)
+    await session.flush()
+    await AuditService(session).log_event(
+        tenant_id=str(tenant.id),
+        action="create",
+        object_type="NvosFeeRate",
+        object_id=rate.id,
+        user_id=access.user.id,
+        ip=request.client.host if request.client else "unknown",
+        request_id=getattr(request.state, "trace_id", None),
+        user_agent=request.headers.get("user-agent"),
+        changed_fields={"fields": {"id": {"before": None, "after": rate.id}}},
+        details={"entity": "NvosFeeRate", "subject": rate.subject},
+    )
+    await session.commit()
+    await session.refresh(rate)
+    return _rate_read(rate)
+
+
+@router.patch("/fee-rates/{rate_id}", response_model=NvosFeeRateRead)
+async def update_fee_rate(
+    request: Request,
+    rate_id: str,
+    payload: NvosFeeRateUpdate,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: Access,
+) -> NvosFeeRateRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    rate = await _get_rate_or_404(session, tenant, rate_id)
+    before = {
+        "rate_per_ton": str(rate.rate_per_ton),
+        "source_document": rate.source_document,
+        "notes": rate.notes,
+    }
+    data = payload.model_dump(exclude_unset=True)
+    if data.get("rate_per_ton") is not None:
+        rate.rate_per_ton = data["rate_per_ton"]
+    for field in ("source_document", "notes"):
+        if field in data:
+            setattr(rate, field, data[field] or None)
+    await session.flush()
+    after = {
+        "rate_per_ton": str(rate.rate_per_ton),
+        "source_document": rate.source_document,
+        "notes": rate.notes,
+    }
+    await AuditService(session).log_event(
+        tenant_id=str(tenant.id),
+        action="update",
+        object_type="NvosFeeRate",
+        object_id=rate.id,
+        user_id=access.user.id,
+        ip=request.client.host if request.client else "unknown",
+        request_id=getattr(request.state, "trace_id", None),
+        user_agent=request.headers.get("user-agent"),
+        changed_fields=field_level_diff(before, after),
+        details={"entity": "NvosFeeRate"},
+    )
+    await session.commit()
+    await session.refresh(rate)
+    return _rate_read(rate)
+
+
+@router.get("/fee-lines", response_model=NvosFeeLinePage)
+async def list_fee_lines(
+    tenant: TenantDep,
+    session: SessionDep,
+    access: Access,
+    year: int | None = Query(default=None),
+    quarter: int | None = Query(default=None, ge=1, le=4),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+) -> NvosFeeLinePage:
+    """Строки расчёта платы: кварталы — это и есть авансовые платежи."""
+
+    TenantContextValidator.ensure_tenant_context(tenant)
+    stmt = select(NvosFeeLine).where(
+        NvosFeeLine.tenant_id == tenant.id,
+        NvosFeeLine.deleted_at.is_(None),
+    )
+    if year:
+        stmt = stmt.where(NvosFeeLine.year == year)
+    if quarter:
+        stmt = stmt.where(NvosFeeLine.quarter == quarter)
+    total = int(
+        await session.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+    )
+    rows = (
+        (
+            await session.execute(
+                stmt.order_by(
+                    NvosFeeLine.year.desc(), NvosFeeLine.quarter, NvosFeeLine.subject
+                )
+                .offset(offset)
+                .limit(limit)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    rates = await _rates_by_key(session, tenant)
+    return NvosFeeLinePage(
+        items=[
+            _fee_line_read(r, rates.get((r.year, r.impact_kind, r.subject)))
+            for r in rows
+        ],
+        total=total,
+    )
+
+
+@router.post(
+    "/fee-lines", response_model=NvosFeeLineRead, status_code=status.HTTP_201_CREATED
+)
+async def create_fee_line(
+    request: Request,
+    payload: NvosFeeLineCreate,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: Access,
+) -> NvosFeeLineRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    _validate_impact_kind(payload.impact_kind)
+    subject = payload.subject.strip()
+    existing = await session.execute(
+        select(NvosFeeLine.id).where(
+            NvosFeeLine.tenant_id == tenant.id,
+            NvosFeeLine.year == payload.year,
+            NvosFeeLine.quarter == payload.quarter,
+            NvosFeeLine.impact_kind == payload.impact_kind,
+            NvosFeeLine.subject == subject,
+            NvosFeeLine.deleted_at.is_(None),
+        )
+    )
+    if existing.scalar_one_or_none() is not None:
+        raise _unprocessable(
+            f"Строка расчёта за {payload.quarter} квартал {payload.year} года "
+            f"по {subject!r} уже внесена"
+        )
+
+    line = NvosFeeLine(
+        tenant_id=str(tenant.id),
+        year=payload.year,
+        quarter=payload.quarter,
+        impact_kind=payload.impact_kind,
+        subject=subject,
+        mass_tons=payload.mass_tons,
+        coefficient=payload.coefficient,
+        notes=(payload.notes or None),
+    )
+    session.add(line)
+    await session.flush()
+    await AuditService(session).log_event(
+        tenant_id=str(tenant.id),
+        action="create",
+        object_type="NvosFeeLine",
+        object_id=line.id,
+        user_id=access.user.id,
+        ip=request.client.host if request.client else "unknown",
+        request_id=getattr(request.state, "trace_id", None),
+        user_agent=request.headers.get("user-agent"),
+        changed_fields={"fields": {"id": {"before": None, "after": line.id}}},
+        details={"entity": "NvosFeeLine", "subject": line.subject},
+    )
+    await session.commit()
+    await session.refresh(line)
+    rates = await _rates_by_key(session, tenant)
+    return _fee_line_read(line, rates.get((line.year, line.impact_kind, line.subject)))
+
+
+@router.patch("/fee-lines/{line_id}", response_model=NvosFeeLineRead)
+async def update_fee_line(
+    request: Request,
+    line_id: str,
+    payload: NvosFeeLineUpdate,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: Access,
+) -> NvosFeeLineRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    line = await _get_fee_line_or_404(session, tenant, line_id)
+    before = {
+        "mass_tons": str(line.mass_tons),
+        "coefficient": str(line.coefficient),
+        "notes": line.notes,
+    }
+    data = payload.model_dump(exclude_unset=True)
+    if data.get("mass_tons") is not None:
+        line.mass_tons = data["mass_tons"]
+    if data.get("coefficient") is not None:
+        line.coefficient = data["coefficient"]
+    if "notes" in data:
+        line.notes = data["notes"] or None
+    await session.flush()
+    after = {
+        "mass_tons": str(line.mass_tons),
+        "coefficient": str(line.coefficient),
+        "notes": line.notes,
+    }
+    await AuditService(session).log_event(
+        tenant_id=str(tenant.id),
+        action="update",
+        object_type="NvosFeeLine",
+        object_id=line.id,
+        user_id=access.user.id,
+        ip=request.client.host if request.client else "unknown",
+        request_id=getattr(request.state, "trace_id", None),
+        user_agent=request.headers.get("user-agent"),
+        changed_fields=field_level_diff(before, after),
+        details={"entity": "NvosFeeLine"},
+    )
+    await session.commit()
+    await session.refresh(line)
+    rates = await _rates_by_key(session, tenant)
+    return _fee_line_read(line, rates.get((line.year, line.impact_kind, line.subject)))
+
+
 @router.get("/readiness", response_model=EcologyReadinessRead)
 async def ecology_readiness(
     tenant: TenantDep,
@@ -2493,7 +2920,38 @@ async def ecology_readiness(
         Decimal("0.000"),
     )
 
+    # Разд. 55.3 «плата за НВОС» за текущий год. В итог попадает только то,
+    # что посчитано: строка без ставки НЕ прибавляет ноль, иначе итог выглядел
+    # бы полным.
+    fee_lines = (
+        (
+            await session.execute(
+                select(NvosFeeLine).where(
+                    NvosFeeLine.tenant_id == tenant.id,
+                    NvosFeeLine.deleted_at.is_(None),
+                    NvosFeeLine.year == year,
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    fee_rates = await _rates_by_key(session, tenant)
+    fee_total = Decimal("0.00")
+    fee_without_rate = 0
+    for line in fee_lines:
+        rate = fee_rates.get((line.year, line.impact_kind, line.subject))
+        if rate is None:
+            fee_without_rate += 1
+            continue
+        fee_total += (line.mass_tons * rate.rate_per_ton * line.coefficient).quantize(
+            _KOPECKS
+        )
+
     return EcologyReadinessRead(
+        fee_lines=len(fee_lines),
+        fee_lines_without_rate=fee_without_rate,
+        fee_total_rubles=fee_total,
         water_points=len(water_points),
         water_permits_overdue=sum(
             1

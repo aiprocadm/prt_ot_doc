@@ -196,6 +196,8 @@
     "GET /api/v1/ecology/emission-norms",
     "GET /api/v1/ecology/emission-sources",
     "GET /api/v1/ecology/facilities",
+    "GET /api/v1/ecology/fee-lines",
+    "GET /api/v1/ecology/fee-rates",
     "GET /api/v1/ecology/monitoring-plan",
     "GET /api/v1/ecology/readiness",
     "GET /api/v1/ecology/waste-movements",
@@ -579,6 +581,8 @@
     "PATCH /api/v1/ecology/emission-norms/{norm_id}",
     "PATCH /api/v1/ecology/emission-sources/{source_id}",
     "PATCH /api/v1/ecology/facilities/{facility_id}",
+    "PATCH /api/v1/ecology/fee-lines/{line_id}",
+    "PATCH /api/v1/ecology/fee-rates/{rate_id}",
     "PATCH /api/v1/ecology/monitoring-plan/{item_id}",
     "PATCH /api/v1/ecology/waste-movements/{movement_id}",
     "PATCH /api/v1/ecology/waste-passports/{passport_id}",
@@ -741,6 +745,8 @@
     "POST /api/v1/ecology/emission-norms",
     "POST /api/v1/ecology/emission-sources",
     "POST /api/v1/ecology/facilities",
+    "POST /api/v1/ecology/fee-lines",
+    "POST /api/v1/ecology/fee-rates",
     "POST /api/v1/ecology/monitoring-plan",
     "POST /api/v1/ecology/waste-movements",
     "POST /api/v1/ecology/waste-passports",
@@ -1212,6 +1218,8 @@
     "create_export_api_v1_exports_post",
     "create_facility_api_v1_ecology_facilities_post",
     "create_facility_api_v1_industrial_safety_facilities_post",
+    "create_fee_line_api_v1_ecology_fee_lines_post",
+    "create_fee_rate_api_v1_ecology_fee_rates_post",
     "create_finding_api_v1_findings_post",
     "create_fire_document_api_v1_fire_safety_documents_post",
     "create_group_api_v1_training_groups_post",
@@ -1675,6 +1683,8 @@
     "list_facilities_api_v1_industrial_safety_facilities_get",
     "list_failed_deliveries_with_diagnostics_api_v1_webhooks_endpoints__endpoint_id__failed_deliveries_get",
     "list_failed_jobs_api_v1_jobs_failed_get",
+    "list_fee_lines_api_v1_ecology_fee_lines_get",
+    "list_fee_rates_api_v1_ecology_fee_rates_get",
     "list_findings_api_v1_findings_get",
     "list_fire_documents_api_v1_fire_safety_documents_get",
     "list_groups_api_v1_training_groups_get",
@@ -2054,6 +2064,8 @@
     "update_facility_api_v1_ecology_facilities__facility_id__patch",
     "update_facility_api_v1_industrial_safety_facilities__facility_id__patch",
     "update_factor_api_v1_sout_factors__fid__patch",
+    "update_fee_line_api_v1_ecology_fee_lines__line_id__patch",
+    "update_fee_rate_api_v1_ecology_fee_rates__rate_id__patch",
     "update_fire_document_api_v1_fire_safety_documents__document_id__patch",
     "update_inventory_count_lines_api_v1_ppe_stock_inventory_counts__count_id__lines_patch",
     "update_invoice_api_v1_invoices__invoice_id__patch",
@@ -2627,6 +2639,14 @@
     "NpaActListResponse",
     "NpaActRead",
     "NpaClauseRead",
+    "NvosFeeLineCreate",
+    "NvosFeeLinePage",
+    "NvosFeeLineRead",
+    "NvosFeeLineUpdate",
+    "NvosFeeRateCreate",
+    "NvosFeeRatePage",
+    "NvosFeeRateRead",
+    "NvosFeeRateUpdate",
     "ObligationSummary",
     "ObligationSummaryItem",
     "OffboardingCancel",
@@ -4951,7 +4971,10 @@
       "water_permits_overdue": "integer",
       "water_intake_cubic_meters": "string",
       "water_discharge_cubic_meters": "string",
-      "water_over_limit": "integer"
+      "water_over_limit": "integer",
+      "fee_lines": "integer",
+      "fee_lines_without_rate": "integer",
+      "fee_total_rubles": "string"
     },
     "EdoMessageIn": {
       "entity_type": "string",
@@ -6839,6 +6862,66 @@
       "id": "string",
       "code": "string",
       "text": "string"
+    },
+    "NvosFeeLineCreate": {
+      "year": "integer",
+      "quarter": "integer",
+      "impact_kind": "string",
+      "subject": "string",
+      "mass_tons": "number|string",
+      "coefficient": "number|string",
+      "notes": "null|string"
+    },
+    "NvosFeeLinePage": {
+      "items": "array",
+      "total": "integer"
+    },
+    "NvosFeeLineRead": {
+      "id": "string",
+      "year": "integer",
+      "quarter": "integer",
+      "impact_kind": "string",
+      "impact_kind_label": "string",
+      "subject": "string",
+      "mass_tons": "string",
+      "coefficient": "string",
+      "notes": "null|string",
+      "rate_status": "string",
+      "rate_status_label": "string",
+      "rate_per_ton": "null|string",
+      "amount_rubles": "null|string"
+    },
+    "NvosFeeLineUpdate": {
+      "mass_tons": "null|number|string",
+      "coefficient": "null|number|string",
+      "notes": "null|string"
+    },
+    "NvosFeeRateCreate": {
+      "year": "integer",
+      "impact_kind": "string",
+      "subject": "string",
+      "rate_per_ton": "number|string",
+      "source_document": "null|string",
+      "notes": "null|string"
+    },
+    "NvosFeeRatePage": {
+      "items": "array",
+      "total": "integer"
+    },
+    "NvosFeeRateRead": {
+      "id": "string",
+      "year": "integer",
+      "impact_kind": "string",
+      "impact_kind_label": "string",
+      "subject": "string",
+      "rate_per_ton": "string",
+      "source_document": "null|string",
+      "notes": "null|string"
+    },
+    "NvosFeeRateUpdate": {
+      "rate_per_ton": "null|number|string",
+      "source_document": "null|string",
+      "notes": "null|string"
     },
     "ObligationSummary": {
       "items": "array",

@@ -84,6 +84,8 @@ from app.models.ecology import (  # noqa: E402,F401
     EmissionNorm,
     EmissionSource,
     EnvironmentalFacility,
+    NvosFeeLine,
+    NvosFeeRate,
     WasteMovement,
     WastePassport,
     WaterUsagePoint,

@@ -272,6 +272,94 @@ class EcologyReadinessRead(BaseSchema):
     water_intake_cubic_meters: Decimal = Decimal("0.000")
     water_discharge_cubic_meters: Decimal = Decimal("0.000")
     water_over_limit: int = 0
+    #: разд. 55.3 «плата за НВОС» за текущий год.
+    #: ГРАНИЦА: полей «предлагаемый коэффициент» и «обязана ли организация
+    #: платить» здесь НЕТ — коэффициент устанавливается законом и решением
+    #: органа, а плательщика определяет категория объекта
+    fee_lines: int = 0
+    #: строки, для которых ставка не внесена: их сумма НЕ считается нулём и в
+    #: итог не попадает — иначе итог выглядел бы полным
+    fee_lines_without_rate: int = 0
+    fee_total_rubles: Decimal = Decimal("0.00")
+
+
+class NvosFeeRateCreate(BaseSchema):
+    year: int = Field(ge=2000, le=2100)
+    impact_kind: str = Field(min_length=1, max_length=16)
+    subject: str = Field(min_length=1, max_length=255)
+    rate_per_ton: Decimal = Field(ge=0)
+    source_document: str | None = Field(default=None, max_length=255)
+    notes: str | None = None
+
+
+class NvosFeeRateUpdate(BaseSchema):
+    rate_per_ton: Decimal | None = Field(default=None, ge=0)
+    source_document: str | None = Field(default=None, max_length=255)
+    notes: str | None = None
+
+
+class NvosFeeRateRead(BaseSchema):
+    id: str
+    year: int
+    impact_kind: str
+    impact_kind_label: str
+    subject: str
+    rate_per_ton: Decimal
+    source_document: str | None = None
+    notes: str | None = None
+
+
+class NvosFeeRatePage(BaseSchema):
+    items: list[NvosFeeRateRead]
+    total: int
+
+
+class NvosFeeLineCreate(BaseSchema):
+    year: int = Field(ge=2000, le=2100)
+    #: квартал, он же авансовый платёж
+    quarter: int = Field(ge=1, le=4)
+    impact_kind: str = Field(min_length=1, max_length=16)
+    subject: str = Field(min_length=1, max_length=255)
+    mass_tons: Decimal = Field(ge=0)
+    #: ноль обнулил бы плату — такого коэффициента не бывает
+    coefficient: Decimal = Field(default=Decimal("1.00"), gt=0, le=200)
+    notes: str | None = None
+
+
+class NvosFeeLineUpdate(BaseSchema):
+    mass_tons: Decimal | None = Field(default=None, ge=0)
+    coefficient: Decimal | None = Field(default=None, gt=0, le=200)
+    notes: str | None = None
+
+
+class NvosFeeLineRead(BaseSchema):
+    """Строка расчёта вместе с найденной ставкой и суммой.
+
+    Сумма НЕ хранится: считается при чтении, поэтому исправленная ставка сразу
+    доходит до всех строк своего года.
+    """
+
+    id: str
+    year: int
+    quarter: int
+    impact_kind: str
+    impact_kind_label: str
+    subject: str
+    mass_tons: Decimal
+    coefficient: Decimal
+    notes: str | None = None
+    #: found / missing — ставка ищется по ГОДУ строки
+    rate_status: str
+    rate_status_label: str
+    rate_per_ton: Decimal | None = None
+    #: None, а НЕ ноль, когда ставка не внесена: ноль читался бы как
+    #: «платить нечего»
+    amount_rubles: Decimal | None = None
+
+
+class NvosFeeLinePage(BaseSchema):
+    items: list[NvosFeeLineRead]
+    total: int
 
 
 class WaterUsagePointCreate(BaseSchema):
