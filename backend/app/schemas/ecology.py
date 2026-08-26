@@ -263,6 +263,106 @@ class EcologyReadinessRead(BaseSchema):
     monitoring_overdue: int = 0
     measurements_this_year: int = 0
     measurements_exceeded: int = 0
+    #: разд. 55.2 «водопользование». Забор и сброс считаются РАЗДЕЛЬНО: это
+    #: разные величины, и складывать их в одну цифру нельзя.
+    #: ГРАНИЦА: полей «требуется ли разрешение» и «норматив сброса» здесь НЕТ —
+    #: и то и другое устанавливает орган
+    water_points: int = 0
+    water_permits_overdue: int = 0
+    water_intake_cubic_meters: Decimal = Decimal("0.000")
+    water_discharge_cubic_meters: Decimal = Decimal("0.000")
+    water_over_limit: int = 0
+
+
+class WaterUsagePointCreate(BaseSchema):
+    facility_id: str = Field(min_length=1, max_length=36)
+    point_number: str = Field(min_length=1, max_length=32)
+    name: str = Field(min_length=1, max_length=255)
+    kind: str = Field(min_length=1, max_length=16)
+    water_body: str | None = Field(default=None, max_length=255)
+    permit_number: str | None = Field(default=None, max_length=64)
+    permit_valid_until: date | None = None
+    annual_limit_cubic_meters: Decimal | None = Field(default=None, ge=0)
+    notes: str | None = None
+
+
+class WaterUsagePointUpdate(BaseSchema):
+    point_number: str | None = Field(default=None, min_length=1, max_length=32)
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    kind: str | None = Field(default=None, min_length=1, max_length=16)
+    water_body: str | None = Field(default=None, max_length=255)
+    permit_number: str | None = Field(default=None, max_length=64)
+    permit_valid_until: date | None = None
+    annual_limit_cubic_meters: Decimal | None = Field(default=None, ge=0)
+    notes: str | None = None
+
+
+class WaterUsagePointRead(BaseSchema):
+    """Точка водопользования вместе с состоянием разрешения и объёмом за год.
+
+    ГРАНИЦА: полей «требуется ли разрешение» и «предлагаемый лимит» здесь НЕТ.
+    """
+
+    id: str
+    facility_id: str
+    point_number: str
+    name: str
+    kind: str
+    kind_label: str
+    water_body: str | None = None
+    permit_number: str | None = None
+    permit_valid_until: date | None = None
+    annual_limit_cubic_meters: Decimal | None = None
+    notes: str | None = None
+    #: ok / due_soon / overdue — пустой срок означает «бессрочно»
+    permit_status: str
+    permit_status_label: str
+    #: сумма внесённых объёмов за текущий год, м³
+    volume_this_year: Decimal = Decimal("0.000")
+    #: превышение — ФАКТ по внесённому лимиту; без лимита всегда False
+    over_limit: bool = False
+
+
+class WaterUsagePointPage(BaseSchema):
+    items: list[WaterUsagePointRead]
+    total: int
+
+
+class WaterUsageRecordCreate(BaseSchema):
+    point_id: str = Field(min_length=1, max_length=36)
+    period_year: int = Field(ge=2000, le=2100)
+    #: месяц — единица учёта водопользования
+    period_month: int = Field(ge=1, le=12)
+    volume_cubic_meters: Decimal = Field(ge=0)
+    basis: str = Field(min_length=1, max_length=16)
+    meter_number: str | None = Field(default=None, max_length=64)
+    notes: str | None = None
+
+
+class WaterUsageRecordUpdate(BaseSchema):
+    volume_cubic_meters: Decimal | None = Field(default=None, ge=0)
+    basis: str | None = Field(default=None, min_length=1, max_length=16)
+    meter_number: str | None = Field(default=None, max_length=64)
+    notes: str | None = None
+
+
+class WaterUsageRecordRead(BaseSchema):
+    id: str
+    point_id: str
+    period_year: int
+    period_month: int
+    #: «март 2026» — месяц числом читается хуже, чем словом
+    period_label: str
+    volume_cubic_meters: Decimal
+    basis: str
+    basis_label: str
+    meter_number: str | None = None
+    notes: str | None = None
+
+
+class WaterUsageRecordPage(BaseSchema):
+    items: list[WaterUsageRecordRead]
+    total: int
 
 
 class MonitoringPlanItemCreate(BaseSchema):

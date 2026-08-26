@@ -307,6 +307,8 @@ RLS_ENABLED_TABLES: frozenset[str] = frozenset(
         "violation",
         "waste_movement",
         "waste_passport",
+        "water_usage_point",
+        "water_usage_record",
         "webhook_deliveries",
         "webhook_endpoints",
         "webhook_subscription",

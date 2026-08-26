@@ -31,11 +31,15 @@ from app.models.ecology import (
     EMISSION_SOURCE_KINDS,
     MEASUREMENT_COMPARISON_TITLES,
     MONITORING_STATUS_TITLES,
+    MONTH_TITLES,
     NVOS_CATEGORIES,
     NVOS_STATUSES,
     PERIODICITY_LABELS,
     WASTE_HAZARD_CLASSES,
     WASTE_MOVEMENT_KINDS,
+    WATER_PERMIT_STATUS_TITLES,
+    WATER_POINT_KINDS,
+    WATER_RECORD_BASES,
     EmissionMeasurement,
     EmissionMonitoringPlanItem,
     EmissionNorm,
@@ -43,6 +47,8 @@ from app.models.ecology import (
     EnvironmentalFacility,
     WasteMovement,
     WastePassport,
+    WaterUsagePoint,
+    WaterUsageRecord,
 )
 from app.models.finance import Contract
 from app.models.master_data import Site
@@ -77,6 +83,14 @@ from app.schemas.ecology import (
     WastePassportPage,
     WastePassportRead,
     WastePassportUpdate,
+    WaterUsagePointCreate,
+    WaterUsagePointPage,
+    WaterUsagePointRead,
+    WaterUsagePointUpdate,
+    WaterUsageRecordCreate,
+    WaterUsageRecordPage,
+    WaterUsageRecordRead,
+    WaterUsageRecordUpdate,
 )
 from app.services.audit import AuditService, field_level_diff
 
@@ -1819,6 +1833,493 @@ async def update_emission_measurement(
     return _measurement_read(measurement, norm)
 
 
+# --- Водопользование: точки и помесячный учёт объёмов (разд. 55.2) ----------
+
+
+def _permit_status(valid_until: date | None, today: date) -> str:
+    """Состояние разрешения водопользования — считается ПРИ ЧТЕНИИ.
+
+    Пустой срок — НЕ просрочка: забор из городского водопровода идёт по
+    договору без срока, и объявлять такую точку нарушением было бы враньём.
+    """
+
+    return _norm_status(valid_until, today)
+
+
+def _period_label(year: int, month: int) -> str:
+    return f"{MONTH_TITLES.get(month, month)} {year}"
+
+
+def _water_point_read(
+    point: WaterUsagePoint, volume: Decimal, today: date
+) -> WaterUsagePointRead:
+    status_value = _permit_status(point.permit_valid_until, today)
+    limit = point.annual_limit_cubic_meters
+    return WaterUsagePointRead(
+        id=point.id,
+        facility_id=point.facility_id,
+        point_number=point.point_number,
+        name=point.name,
+        kind=point.kind,
+        kind_label=WATER_POINT_KINDS.get(point.kind, point.kind),
+        water_body=point.water_body,
+        permit_number=point.permit_number,
+        permit_valid_until=point.permit_valid_until,
+        annual_limit_cubic_meters=limit,
+        notes=point.notes,
+        permit_status=status_value,
+        permit_status_label=WATER_PERMIT_STATUS_TITLES.get(status_value, status_value),
+        volume_this_year=volume,
+        # Без внесённого лимита превышения НЕ БЫВАЕТ: 999 999 м³ по точке без
+        # лимита — это факт объёма, а не нарушение.
+        over_limit=limit is not None and volume > limit,
+    )
+
+
+def _water_record_read(record: WaterUsageRecord) -> WaterUsageRecordRead:
+    return WaterUsageRecordRead(
+        id=record.id,
+        point_id=record.point_id,
+        period_year=record.period_year,
+        period_month=record.period_month,
+        period_label=_period_label(record.period_year, record.period_month),
+        volume_cubic_meters=record.volume_cubic_meters,
+        basis=record.basis,
+        basis_label=WATER_RECORD_BASES.get(record.basis, record.basis),
+        meter_number=record.meter_number,
+        notes=record.notes,
+    )
+
+
+async def _water_volumes(
+    session: AsyncSession, tenant: Tenant, point_ids: list[str], year: int
+) -> dict[str, Decimal]:
+    """Объём по каждой точке за год — одним запросом, а не N+1."""
+
+    if not point_ids:
+        return {}
+    rows = await session.execute(
+        select(WaterUsageRecord.point_id, func.sum(WaterUsageRecord.volume_cubic_meters))
+        .where(
+            WaterUsageRecord.tenant_id == tenant.id,
+            WaterUsageRecord.deleted_at.is_(None),
+            WaterUsageRecord.point_id.in_(point_ids),
+            WaterUsageRecord.period_year == year,
+        )
+        .group_by(WaterUsageRecord.point_id)
+    )
+    return {row[0]: Decimal(str(row[1] or "0.000")) for row in rows}
+
+
+async def _get_water_point_or_404(
+    session: AsyncSession, tenant: Tenant, point_id: str
+) -> WaterUsagePoint:
+    stmt = select(WaterUsagePoint).where(
+        WaterUsagePoint.id == point_id,
+        WaterUsagePoint.tenant_id == tenant.id,
+        WaterUsagePoint.deleted_at.is_(None),
+    )
+    point = (await session.execute(stmt)).scalar_one_or_none()
+    if point is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            detail=api_problem_detail(
+                code="WATER_POINT_NOT_FOUND",
+                message="Water usage point not found",
+                error_type="ecology",
+            ),
+        )
+    return point
+
+
+async def _get_water_record_or_404(
+    session: AsyncSession, tenant: Tenant, record_id: str
+) -> WaterUsageRecord:
+    stmt = select(WaterUsageRecord).where(
+        WaterUsageRecord.id == record_id,
+        WaterUsageRecord.tenant_id == tenant.id,
+        WaterUsageRecord.deleted_at.is_(None),
+    )
+    record = (await session.execute(stmt)).scalar_one_or_none()
+    if record is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            detail=api_problem_detail(
+                code="WATER_RECORD_NOT_FOUND",
+                message="Water usage record not found",
+                error_type="ecology",
+            ),
+        )
+    return record
+
+
+async def _ensure_point_number_free(
+    session: AsyncSession,
+    tenant: Tenant,
+    facility_id: str,
+    point_number: str,
+    *,
+    exclude_id: str | None = None,
+) -> None:
+    """Номер точки уникален В ПРЕДЕЛАХ ОБЪЕКТА — как номер источника выбросов."""
+
+    stmt = select(WaterUsagePoint.id).where(
+        WaterUsagePoint.tenant_id == tenant.id,
+        WaterUsagePoint.facility_id == facility_id,
+        WaterUsagePoint.point_number == point_number,
+        WaterUsagePoint.deleted_at.is_(None),
+    )
+    if exclude_id:
+        stmt = stmt.where(WaterUsagePoint.id != exclude_id)
+    if (await session.execute(stmt)).scalar_one_or_none() is not None:
+        raise _unprocessable(
+            f"Точка с номером {point_number!r} на этом объекте уже заведена"
+        )
+
+
+async def _ensure_period_free(
+    session: AsyncSession, tenant: Tenant, point_id: str, year: int, month: int
+) -> None:
+    """Учёт помесячный: две записи за один месяц по точке — ошибка ввода."""
+
+    stmt = select(WaterUsageRecord.id).where(
+        WaterUsageRecord.tenant_id == tenant.id,
+        WaterUsageRecord.point_id == point_id,
+        WaterUsageRecord.period_year == year,
+        WaterUsageRecord.period_month == month,
+        WaterUsageRecord.deleted_at.is_(None),
+    )
+    if (await session.execute(stmt)).scalar_one_or_none() is not None:
+        raise _unprocessable(
+            f"Учёт за {_period_label(year, month)} по этой точке уже внесён"
+        )
+
+
+@router.get("/water-points", response_model=WaterUsagePointPage)
+async def list_water_points(
+    tenant: TenantDep,
+    session: SessionDep,
+    access: Access,
+    facility_id: str | None = Query(default=None),
+    kind: str | None = Query(default=None),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+) -> WaterUsagePointPage:
+    """Точки водопользования: водозаборы и выпуски сточных вод."""
+
+    TenantContextValidator.ensure_tenant_context(tenant)
+    stmt = select(WaterUsagePoint).where(
+        WaterUsagePoint.tenant_id == tenant.id,
+        WaterUsagePoint.deleted_at.is_(None),
+    )
+    if facility_id:
+        stmt = stmt.where(WaterUsagePoint.facility_id == facility_id)
+    if kind:
+        stmt = stmt.where(WaterUsagePoint.kind == kind)
+    total = int(
+        await session.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+    )
+    rows = (
+        (
+            await session.execute(
+                stmt.order_by(WaterUsagePoint.point_number).offset(offset).limit(limit)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    today = date.today()
+    volumes = await _water_volumes(session, tenant, [r.id for r in rows], today.year)
+    return WaterUsagePointPage(
+        items=[
+            _water_point_read(r, volumes.get(r.id, Decimal("0.000")), today)
+            for r in rows
+        ],
+        total=total,
+    )
+
+
+@router.post(
+    "/water-points",
+    response_model=WaterUsagePointRead,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_water_point(
+    request: Request,
+    payload: WaterUsagePointCreate,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: Access,
+) -> WaterUsagePointRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    await _validate_facility(session, tenant, payload.facility_id)
+    if payload.kind not in WATER_POINT_KINDS:
+        raise _unprocessable(
+            f"Неизвестный тип точки {payload.kind!r}; допустимые: "
+            f"{', '.join(WATER_POINT_KINDS)}"
+        )
+    point_number = payload.point_number.strip()
+    await _ensure_point_number_free(
+        session, tenant, payload.facility_id, point_number
+    )
+
+    point = WaterUsagePoint(
+        tenant_id=str(tenant.id),
+        facility_id=payload.facility_id,
+        point_number=point_number,
+        name=payload.name.strip(),
+        kind=payload.kind,
+        water_body=(payload.water_body or None),
+        permit_number=(payload.permit_number or None),
+        permit_valid_until=payload.permit_valid_until,
+        annual_limit_cubic_meters=payload.annual_limit_cubic_meters,
+        notes=(payload.notes or None),
+    )
+    session.add(point)
+    await session.flush()
+    await AuditService(session).log_event(
+        tenant_id=str(tenant.id),
+        action="create",
+        object_type="WaterUsagePoint",
+        object_id=point.id,
+        user_id=access.user.id,
+        ip=request.client.host if request.client else "unknown",
+        request_id=getattr(request.state, "trace_id", None),
+        user_agent=request.headers.get("user-agent"),
+        changed_fields={"fields": {"id": {"before": None, "after": point.id}}},
+        details={"entity": "WaterUsagePoint", "point_number": point.point_number},
+    )
+    await session.commit()
+    await session.refresh(point)
+    return _water_point_read(point, Decimal("0.000"), date.today())
+
+
+@router.patch("/water-points/{point_id}", response_model=WaterUsagePointRead)
+async def update_water_point(
+    request: Request,
+    point_id: str,
+    payload: WaterUsagePointUpdate,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: Access,
+) -> WaterUsagePointRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    point = await _get_water_point_or_404(session, tenant, point_id)
+    before = {
+        "point_number": point.point_number,
+        "name": point.name,
+        "kind": point.kind,
+        "water_body": point.water_body,
+        "permit_number": point.permit_number,
+        "permit_valid_until": str(point.permit_valid_until),
+        "annual_limit_cubic_meters": str(point.annual_limit_cubic_meters),
+        "notes": point.notes,
+    }
+    data = payload.model_dump(exclude_unset=True)
+    if data.get("kind"):
+        if data["kind"] not in WATER_POINT_KINDS:
+            raise _unprocessable(
+                f"Неизвестный тип точки {data['kind']!r}; допустимые: "
+                f"{', '.join(WATER_POINT_KINDS)}"
+            )
+        point.kind = str(data["kind"])
+    if data.get("point_number"):
+        number = str(data["point_number"]).strip()
+        await _ensure_point_number_free(
+            session, tenant, point.facility_id, number, exclude_id=point.id
+        )
+        point.point_number = number
+    if data.get("name"):
+        point.name = str(data["name"]).strip()
+    if "permit_valid_until" in data:
+        point.permit_valid_until = data["permit_valid_until"]
+    if "annual_limit_cubic_meters" in data:
+        point.annual_limit_cubic_meters = data["annual_limit_cubic_meters"]
+    for field in ("water_body", "permit_number", "notes"):
+        if field in data:
+            setattr(point, field, data[field] or None)
+    await session.flush()
+    after = {
+        "point_number": point.point_number,
+        "name": point.name,
+        "kind": point.kind,
+        "water_body": point.water_body,
+        "permit_number": point.permit_number,
+        "permit_valid_until": str(point.permit_valid_until),
+        "annual_limit_cubic_meters": str(point.annual_limit_cubic_meters),
+        "notes": point.notes,
+    }
+    await AuditService(session).log_event(
+        tenant_id=str(tenant.id),
+        action="update",
+        object_type="WaterUsagePoint",
+        object_id=point.id,
+        user_id=access.user.id,
+        ip=request.client.host if request.client else "unknown",
+        request_id=getattr(request.state, "trace_id", None),
+        user_agent=request.headers.get("user-agent"),
+        changed_fields=field_level_diff(before, after),
+        details={"entity": "WaterUsagePoint"},
+    )
+    await session.commit()
+    await session.refresh(point)
+    today = date.today()
+    volumes = await _water_volumes(session, tenant, [point.id], today.year)
+    return _water_point_read(point, volumes.get(point.id, Decimal("0.000")), today)
+
+
+@router.get("/water-records", response_model=WaterUsageRecordPage)
+async def list_water_records(
+    tenant: TenantDep,
+    session: SessionDep,
+    access: Access,
+    point_id: str | None = Query(default=None),
+    period_year: int | None = Query(default=None),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+) -> WaterUsageRecordPage:
+    """Помесячный учёт объёмов по точкам водопользования."""
+
+    TenantContextValidator.ensure_tenant_context(tenant)
+    stmt = select(WaterUsageRecord).where(
+        WaterUsageRecord.tenant_id == tenant.id,
+        WaterUsageRecord.deleted_at.is_(None),
+    )
+    if point_id:
+        stmt = stmt.where(WaterUsageRecord.point_id == point_id)
+    if period_year:
+        stmt = stmt.where(WaterUsageRecord.period_year == period_year)
+    total = int(
+        await session.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+    )
+    rows = (
+        (
+            await session.execute(
+                stmt.order_by(
+                    WaterUsageRecord.period_year.desc(),
+                    WaterUsageRecord.period_month.desc(),
+                )
+                .offset(offset)
+                .limit(limit)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return WaterUsageRecordPage(
+        items=[_water_record_read(r) for r in rows], total=total
+    )
+
+
+@router.post(
+    "/water-records",
+    response_model=WaterUsageRecordRead,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_water_record(
+    request: Request,
+    payload: WaterUsageRecordCreate,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: Access,
+) -> WaterUsageRecordRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    await _get_water_point_or_404(session, tenant, payload.point_id)
+    if payload.basis not in WATER_RECORD_BASES:
+        raise _unprocessable(
+            f"Неизвестное основание учёта {payload.basis!r}; допустимые: "
+            f"{', '.join(WATER_RECORD_BASES)}"
+        )
+    await _ensure_period_free(
+        session, tenant, payload.point_id, payload.period_year, payload.period_month
+    )
+
+    record = WaterUsageRecord(
+        tenant_id=str(tenant.id),
+        point_id=payload.point_id,
+        period_year=payload.period_year,
+        period_month=payload.period_month,
+        volume_cubic_meters=payload.volume_cubic_meters,
+        basis=payload.basis,
+        meter_number=(payload.meter_number or None),
+        notes=(payload.notes or None),
+    )
+    session.add(record)
+    await session.flush()
+    await AuditService(session).log_event(
+        tenant_id=str(tenant.id),
+        action="create",
+        object_type="WaterUsageRecord",
+        object_id=record.id,
+        user_id=access.user.id,
+        ip=request.client.host if request.client else "unknown",
+        request_id=getattr(request.state, "trace_id", None),
+        user_agent=request.headers.get("user-agent"),
+        changed_fields={"fields": {"id": {"before": None, "after": record.id}}},
+        details={
+            "entity": "WaterUsageRecord",
+            "period": _period_label(record.period_year, record.period_month),
+        },
+    )
+    await session.commit()
+    await session.refresh(record)
+    return _water_record_read(record)
+
+
+@router.patch("/water-records/{record_id}", response_model=WaterUsageRecordRead)
+async def update_water_record(
+    request: Request,
+    record_id: str,
+    payload: WaterUsageRecordUpdate,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: Access,
+) -> WaterUsageRecordRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    record = await _get_water_record_or_404(session, tenant, record_id)
+    before = {
+        "volume_cubic_meters": str(record.volume_cubic_meters),
+        "basis": record.basis,
+        "meter_number": record.meter_number,
+        "notes": record.notes,
+    }
+    data = payload.model_dump(exclude_unset=True)
+    if data.get("basis"):
+        if data["basis"] not in WATER_RECORD_BASES:
+            raise _unprocessable(
+                f"Неизвестное основание учёта {data['basis']!r}; допустимые: "
+                f"{', '.join(WATER_RECORD_BASES)}"
+            )
+        record.basis = str(data["basis"])
+    if data.get("volume_cubic_meters") is not None:
+        record.volume_cubic_meters = data["volume_cubic_meters"]
+    for field in ("meter_number", "notes"):
+        if field in data:
+            setattr(record, field, data[field] or None)
+    await session.flush()
+    after = {
+        "volume_cubic_meters": str(record.volume_cubic_meters),
+        "basis": record.basis,
+        "meter_number": record.meter_number,
+        "notes": record.notes,
+    }
+    await AuditService(session).log_event(
+        tenant_id=str(tenant.id),
+        action="update",
+        object_type="WaterUsageRecord",
+        object_id=record.id,
+        user_id=access.user.id,
+        ip=request.client.host if request.client else "unknown",
+        request_id=getattr(request.state, "trace_id", None),
+        user_agent=request.headers.get("user-agent"),
+        changed_fields=field_level_diff(before, after),
+        details={"entity": "WaterUsageRecord"},
+    )
+    await session.commit()
+    await session.refresh(record)
+    return _water_record_read(record)
+
+
 @router.get("/readiness", response_model=EcologyReadinessRead)
 async def ecology_readiness(
     tenant: TenantDep,
@@ -1958,7 +2459,56 @@ async def ecology_readiness(
         == "exceeded"
     )
 
+    # Разд. 55.2 «водопользование»: точки, разрешения и объёмы за год. Забор и
+    # сброс считаются РАЗДЕЛЬНО — это разные величины.
+    water_points = (
+        (
+            await session.execute(
+                select(WaterUsagePoint).where(
+                    WaterUsagePoint.tenant_id == tenant.id,
+                    WaterUsagePoint.deleted_at.is_(None),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    water_volumes = await _water_volumes(
+        session, tenant, [p.id for p in water_points], year
+    )
+    intake = sum(
+        (
+            water_volumes.get(p.id, Decimal("0.000"))
+            for p in water_points
+            if p.kind == "intake"
+        ),
+        Decimal("0.000"),
+    )
+    discharge = sum(
+        (
+            water_volumes.get(p.id, Decimal("0.000"))
+            for p in water_points
+            if p.kind == "discharge"
+        ),
+        Decimal("0.000"),
+    )
+
     return EcologyReadinessRead(
+        water_points=len(water_points),
+        water_permits_overdue=sum(
+            1
+            for p in water_points
+            if _permit_status(p.permit_valid_until, today) == "overdue"
+        ),
+        water_intake_cubic_meters=intake,
+        water_discharge_cubic_meters=discharge,
+        # Превышение — ФАКТ по внесённому лимиту: без лимита его не бывает.
+        water_over_limit=sum(
+            1
+            for p in water_points
+            if p.annual_limit_cubic_meters is not None
+            and water_volumes.get(p.id, Decimal("0.000")) > p.annual_limit_cubic_meters
+        ),
         monitoring_plan_items=len(plan_items),
         monitoring_overdue=sum(
             1

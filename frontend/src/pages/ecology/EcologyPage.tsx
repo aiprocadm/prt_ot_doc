@@ -22,7 +22,7 @@ const EcologyPage = () => {
   // Секции ПО ОДНОЙ (прецедент экранов ПБ и ПромБеза): объекты, паспорта и
   // журнал учёта — разные задачи, три таблицы сразу растят экран.
   const [section, setSection] = useState<
-    "facilities" | "waste" | "journal" | "emissions" | "pek"
+    "facilities" | "waste" | "journal" | "emissions" | "pek" | "water"
   >("facilities");
 
   const { data, loading, error, reload } = useAsyncResource({
@@ -35,6 +35,8 @@ const EcologyPage = () => {
         norms: await ecologyApi.listEmissionNorms(),
         planItems: await ecologyApi.listMonitoringPlan(),
         measurements: await ecologyApi.listEmissionMeasurements(),
+        waterPoints: await ecologyApi.listWaterPoints(),
+        waterRecords: await ecologyApi.listWaterRecords(),
         readiness: await ecologyApi.readiness(),
       }),
       [],
@@ -47,6 +49,8 @@ const EcologyPage = () => {
       norms: [],
       planItems: [],
       measurements: [],
+      waterPoints: [],
+      waterRecords: [],
       readiness: {
         total_facilities: 0,
         by_category: { I: 0, II: 0, III: 0, IV: 0 },
@@ -63,6 +67,11 @@ const EcologyPage = () => {
         monitoring_overdue: 0,
         measurements_this_year: 0,
         measurements_exceeded: 0,
+        water_points: 0,
+        water_permits_overdue: 0,
+        water_intake_cubic_meters: "0.000",
+        water_discharge_cubic_meters: "0.000",
+        water_over_limit: 0,
       },
     },
     errorMessage: "Не удалось загрузить реестр объектов НВОС",
@@ -138,6 +147,26 @@ const EcologyPage = () => {
         .includes(query),
   });
 
+  const waterPointRegistry = useLocalRegistry({
+    items: data.waterPoints,
+    match: (item, query) =>
+      [item.name, item.point_number, item.kind_label, item.water_body]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(query),
+  });
+
+  const waterRecordRegistry = useLocalRegistry({
+    items: data.waterRecords,
+    match: (item, query) =>
+      [item.period_label, item.basis_label, item.meter_number]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(query),
+  });
+
   const { readiness } = data;
 
   return (
@@ -182,6 +211,9 @@ const EcologyPage = () => {
             label: "Превышений в замерах",
             value: readiness.measurements_exceeded,
           },
+          // Разд. 55.2 «водопользование»: забор и сброс — РАЗНЫЕ величины,
+          // в одну цифру их не складываем.
+          { label: "Точек водопользования", value: readiness.water_points },
         ]}
       />
 
@@ -193,6 +225,7 @@ const EcologyPage = () => {
             ["journal", "Журнал учёта отходов"],
             ["emissions", "Выбросы"],
             ["pek", "ПЭК и замеры"],
+            ["water", "Водопользование"],
           ] as const
         ).map(([key, label]) => (
           <Button
@@ -592,6 +625,104 @@ const EcologyPage = () => {
               onSearchChange={measurementRegistry.onSearchChange}
               searchPlaceholder="Поиск по веществу и номеру протокола"
               caption="Замеры ПЭК"
+            />
+          ) : null}
+        </>
+      ) : null}
+      {section === "water" && !loading && !error ? (
+        <>
+          {/*
+            ГРАНИЦА, названная НА ЭКРАНЕ: нужно ли разрешение (договор
+            водопользования, решение о предоставлении водного объекта) и каков
+            норматив допустимого сброса — устанавливает орган. Платформа
+            хранит внесённое и складывает объёмы.
+          */}
+          <p className="text-sm text-muted-foreground">
+            Забор и сброс считаются раздельно: это разные величины. Нужно ли
+            разрешение и каков норматив сброса, определяет орган — платформа
+            хранит внесённое. Превышение показывается только там, где внесён
+            годовой лимит.
+          </p>
+          <p className="text-sm">
+            Забор за год: {readiness.water_intake_cubic_meters} м³ · сброс за
+            год: {readiness.water_discharge_cubic_meters} м³
+          </p>
+          {waterPointRegistry.total === 0 ? (
+            <EmptyState
+              title="Точки водопользования не заведены"
+              description="Внесите водозаборы и выпуски сточных вод: номер точки, водный объект, реквизиты разрешения и годовой лимит, если он установлен."
+            />
+          ) : (
+            <RegistryTable
+              columns={[
+                { accessorKey: "point_number", header: "№ точки" },
+                { accessorKey: "name", header: "Наименование" },
+                {
+                  accessorKey: "kind_label",
+                  header: "Тип",
+                  cell: ({ row }) => row.original.kind_label,
+                },
+                {
+                  accessorKey: "water_body",
+                  header: "Водный объект",
+                  cell: ({ row }) => row.original.water_body || "не указан",
+                },
+                {
+                  accessorKey: "permit_valid_until",
+                  header: "Разрешение до",
+                  cell: ({ row }) =>
+                    row.original.permit_valid_until
+                      ? formatDate(row.original.permit_valid_until)
+                      : "бессрочно",
+                },
+                {
+                  accessorKey: "volume_this_year",
+                  header: "Объём за год, м³",
+                  cell: ({ row }) =>
+                    row.original.over_limit
+                      ? `${row.original.volume_this_year} — превышен лимит`
+                      : row.original.volume_this_year,
+                },
+              ]}
+              data={waterPointRegistry.pagedItems}
+              pageIndex={waterPointRegistry.pageIndex}
+              pageSize={waterPointRegistry.pageSize}
+              total={waterPointRegistry.total}
+              onPageChange={waterPointRegistry.onPageChange}
+              onPageSizeChange={waterPointRegistry.onPageSizeChange}
+              onSearchChange={waterPointRegistry.onSearchChange}
+              searchPlaceholder="Поиск по номеру, наименованию, водному объекту"
+              caption="Точки водопользования"
+            />
+          )}
+          {waterRecordRegistry.total > 0 ? (
+            <RegistryTable
+              columns={[
+                { accessorKey: "period_label", header: "Период" },
+                {
+                  accessorKey: "volume_cubic_meters",
+                  header: "Объём, м³",
+                },
+                {
+                  accessorKey: "basis_label",
+                  header: "Основание",
+                  cell: ({ row }) => row.original.basis_label,
+                },
+                {
+                  accessorKey: "meter_number",
+                  header: "Прибор учёта",
+                  cell: ({ row }) => row.original.meter_number || "—",
+                },
+              ]}
+              data={waterRecordRegistry.pagedItems}
+              pageIndex={waterRecordRegistry.pageIndex}
+              pageSize={waterRecordRegistry.pageSize}
+              total={waterRecordRegistry.total}
+              onPageChange={waterRecordRegistry.onPageChange}
+              onPageSizeChange={waterRecordRegistry.onPageSizeChange}
+              onSearchChange={waterRecordRegistry.onSearchChange}
+              searchPlaceholder="Поиск по периоду, основанию, прибору"
+              caption="Помесячный учёт объёмов"
             />
           ) : null}
         </>
