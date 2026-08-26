@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from app.domains.packs.readiness import PROBLEM_ROWS_LIMIT, analyze_pack_readiness
+from app.modules.packs.readiness import PROBLEM_ROWS_LIMIT, analyze_pack_readiness
 
 
 def _codes(readiness) -> set[str]:

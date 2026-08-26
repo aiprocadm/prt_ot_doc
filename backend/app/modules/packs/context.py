@@ -15,6 +15,7 @@ from app.modules.packs.definitions import (
     PACK_CODE_CEO_SHIELD,
     PACK_CODE_CIVIL_DEFENCE,
     PACK_CODE_CONTRACTOR,
+    PACK_CODE_ECO_REPORTS,
     PACK_CODE_FIRE_INSPECTION,
     PACK_CODE_INCIDENT,
     PACK_CODE_INSPECTION_PREP,
@@ -470,6 +471,55 @@ def _apply_road_safety(context: dict[str, Any], data: dict[str, Any]) -> dict[st
     return context
 
 
+def _apply_eco_reports(context: dict[str, Any], data: dict[str, Any]) -> dict[str, Any]:
+    """Отчётные формы экологии (разд. 55.3): подстановки комплекта.
+
+    Умолчания говорящие и ЧЕСТНЫЕ: пустой ответ про превышения читается
+    «сведения не внесены», а не «превышений не было» — молчание нельзя
+    выдавать за благополучие. Суммы платы без ответа — «не внесено», а не
+    ноль: «ноль рублей» и «не внесено» — разные утверждения (довод «норматив
+    не внесён» из замеров ПЭК).
+    """
+
+    _ensure_company_alias(context)
+    context["logo"] = _decode_image(data.get("logo"), DEFAULT_LOGO_BYTES)
+    context["stamp"] = _decode_image(data.get("stamp"), DEFAULT_STAMP_BYTES)
+
+    payload = context.setdefault("data", {})
+    payload.setdefault("eco_report_year", _coerce_text(data.get("eco_report_year"), "не указан"))
+    payload.setdefault("eco_responsible", _coerce_text(data.get("eco_responsible"), "не указан"))
+    for money_field in (
+        "eco_fee_emissions",
+        "eco_fee_discharges",
+        "eco_fee_waste",
+        "eco_fee_advances",
+    ):
+        payload.setdefault(money_field, _coerce_text(data.get(money_field), "не внесено"))
+    payload.setdefault(
+        "eco_pek_exceedances",
+        _coerce_text(data.get("eco_pek_exceedances"), "сведения не внесены"),
+    )
+    for plain_field in (
+        "eco_waste_generated",
+        "eco_waste_transferred",
+        "eco_waste_disposed",
+        "eco_air_emitted",
+        "eco_air_sources",
+        "eco_air_treatment",
+        "eco_water_intake",
+        "eco_water_discharge",
+        "eco_water_meters",
+        "eco_pek_program",
+        "eco_pek_measurements",
+        "eco_pek_laboratory",
+        "eco_nvos_number",
+        "eco_nvos_category",
+        "eco_nvos_actualization",
+    ):
+        payload.setdefault(plain_field, _coerce_text(data.get(plain_field)))
+    return context
+
+
 _BUILDERS: dict[str, Builder] = {
     PACK_CODE_SITE_ACCESS: _apply_site_access,
     PACK_CODE_NEW_COMPANY: _apply_new_company,
@@ -483,6 +533,7 @@ _BUILDERS: dict[str, Builder] = {
     PACK_CODE_FIRE_INSPECTION: _apply_fire_inspection,
     PACK_CODE_CIVIL_DEFENCE: _apply_civil_defence,
     PACK_CODE_ROAD_SAFETY: _apply_road_safety,
+    PACK_CODE_ECO_REPORTS: _apply_eco_reports,
 }
 
 

@@ -34,6 +34,7 @@ __all__ = [
     "PACK_CODE_CONTRACTOR",
     "PACK_CODE_FIRE_INSPECTION",
     "PACK_CODE_CIVIL_DEFENCE",
+    "PACK_CODE_ECO_REPORTS",
     "PACK_CODE_ROAD_SAFETY",
     "PACKS_WITHOUT_DISCIPLINE",
     "discipline_pack_coverage",
@@ -60,6 +61,9 @@ PACK_CODE_CIVIL_DEFENCE = "GOCHS_BASE"
 # Срез-5: БДД была ЕДИНСТВЕННОЙ дисциплиной словаря без сценарного комплекта —
 # в таблице разд. 50.1 её нет, а приёмка §58.3 требует комплект для КАЖДОЙ.
 PACK_CODE_ROAD_SAFETY = "BDD_BASE"
+# Срез-8 экологии (разд. 55.3): отчётность как формы фабрики. До него каталог
+# держал только сценарные комплекты — ни одной отчётной формы.
+PACK_CODE_ECO_REPORTS = "ECO_REPORTS"
 
 
 class PackScenario(str, Enum):
@@ -68,6 +72,7 @@ class PackScenario(str, Enum):
     INSPECTION_PREP = "inspection_preparation"
     OPO = "hazardous_production_facility"
     WASTE = "waste_and_ecology"
+    ECOLOGY_REPORTING = "ecology_reporting"
     CEO_SHIELD = "ceo_shield"
     NEW_COMPANY = "new_company"
     NEW_EMPLOYEE = "new_employee"
@@ -365,6 +370,88 @@ def _waste_briefing() -> bytes:
         "Инструкции: {{ waste.instructions }}",
         "Контроль: {{ waste.control }}",
         footer="{{ logo }}",
+    )
+
+
+def _eco_fee_declaration() -> bytes:
+    """Декларация о плате за НВОС — заготовка, а не копия госформы.
+
+    Суммы — ответы специалиста по справочнику ставок и строкам расчёта
+    (разд. 55.3, экран «Экология → Плата за НВОС»), не вычисления платформы.
+    """
+
+    return _doc(
+        "Декларация о плате за негативное воздействие на окружающую среду",
+        "Организация: {{ company.name }} (ИНН {{ company.inn }})",
+        "Отчётный год: {{ data.eco_report_year }}",
+        "Плата по выбросам загрязняющих веществ: {{ data.eco_fee_emissions }}",
+        "Плата по сбросам загрязняющих веществ: {{ data.eco_fee_discharges }}",
+        "Плата за размещение отходов: {{ data.eco_fee_waste }}",
+        "Авансовые платежи по кварталам: {{ data.eco_fee_advances }}",
+        header="{{ logo }}",
+        footer="Составил: {{ data.eco_responsible }}",
+    )
+
+
+def _eco_2tp_waste() -> bytes:
+    return _doc(
+        "Форма 2-ТП (отходы): сведения об образовании и обращении с отходами",
+        "Организация: {{ company.name }} (ИНН {{ company.inn }})",
+        "Отчётный год: {{ data.eco_report_year }}",
+        "Образовано отходов за год: {{ data.eco_waste_generated }}",
+        "Передано операторам по договорам: {{ data.eco_waste_transferred }}",
+        "Размещено на объектах размещения: {{ data.eco_waste_disposed }}",
+        footer="Составил: {{ data.eco_responsible }}",
+    )
+
+
+def _eco_2tp_air() -> bytes:
+    return _doc(
+        "Форма 2-ТП (воздух): сведения об охране атмосферного воздуха",
+        "Организация: {{ company.name }} (ИНН {{ company.inn }})",
+        "Отчётный год: {{ data.eco_report_year }}",
+        "Выброшено загрязняющих веществ за год: {{ data.eco_air_emitted }}",
+        "Стационарных источников выбросов: {{ data.eco_air_sources }}",
+        "Установки очистки газа: {{ data.eco_air_treatment }}",
+        footer="Составил: {{ data.eco_responsible }}",
+    )
+
+
+def _eco_2tp_water() -> bytes:
+    return _doc(
+        "Форма 2-ТП (водхоз): сведения об использовании воды",
+        "Организация: {{ company.name }} (ИНН {{ company.inn }})",
+        "Отчётный год: {{ data.eco_report_year }}",
+        "Забрано воды за год: {{ data.eco_water_intake }}",
+        "Отведено сточных вод: {{ data.eco_water_discharge }}",
+        "Приборы учёта: {{ data.eco_water_meters }}",
+        footer="Составил: {{ data.eco_responsible }}",
+    )
+
+
+def _eco_pek_report() -> bytes:
+    return _doc(
+        "Отчёт об организации и результатах производственного экологического контроля",
+        "Организация: {{ company.name }} (ИНН {{ company.inn }})",
+        "Отчётный год: {{ data.eco_report_year }}",
+        "Программа ПЭК: {{ data.eco_pek_program }}",
+        "Выполненные замеры: {{ data.eco_pek_measurements }}",
+        "Превышения по замерам: {{ data.eco_pek_exceedances }}",
+        "Аккредитованная лаборатория: {{ data.eco_pek_laboratory }}",
+        footer="Составил: {{ data.eco_responsible }}",
+    )
+
+
+def _eco_nvos_report() -> bytes:
+    return _doc(
+        "Отчётность по объекту негативного воздействия на окружающую среду",
+        "Организация: {{ company.name }} (ИНН {{ company.inn }})",
+        "Отчётный год: {{ data.eco_report_year }}",
+        "Код объекта в государственном реестре: {{ data.eco_nvos_number }}",
+        "Категория объекта: {{ data.eco_nvos_category }}",
+        "Актуализация сведений об объекте: {{ data.eco_nvos_actualization }}",
+        footer="Составил: {{ data.eco_responsible }}",
+        header="{{ logo }}",
     )
 
 
@@ -953,6 +1040,76 @@ DEFAULT_PACKS: Sequence[PackDefinition] = (
             "pack_waste_register",
             "pack_waste_contract",
             "pack_waste_briefing",
+        ),
+        metadata={
+            "logo": build_inline_image_descriptor(DEFAULT_LOGO_BYTES)["data"],
+            "stamp": build_inline_image_descriptor(DEFAULT_STAMP_BYTES)["data"],
+            "discipline": "Экология",
+        },
+        disciplines=(Discipline.ECOLOGY,),
+    ),
+    # Срез-8 экологии (разд. 55.3): отчётные формы. Заготовки с
+    # плейсхолдерами, как весь каталог, а не копии госформ: значения
+    # специалист берёт из реестров экологии (срезы 2–7), суммы и массы —
+    # ответы мастера, не вычисления платформы.
+    PackDefinition(
+        code=PACK_CODE_ECO_REPORTS,
+        name="Экологическая отчётность",
+        description="Формы отчётности: декларация о плате, 2-ТП, отчёт по ПЭК, объект НВОС",
+        scenario=PackScenario.ECOLOGY_REPORTING,
+        module=DocumentPackModule.HEALTH,
+        scenario_type=DocumentPackScenario.DOCUMENT_BATCH,
+        templates=(
+            PackTemplateSpec(
+                code="pack_eco_fee_declaration",
+                name="Декларация о плате за НВОС",
+                description="Плата по выбросам, сбросам и отходам с авансовыми платежами",
+                category="report",
+                builder=_eco_fee_declaration,
+            ),
+            PackTemplateSpec(
+                code="pack_eco_2tp_waste",
+                name="2-ТП (отходы)",
+                description="Образование и обращение с отходами за год",
+                category="report",
+                builder=_eco_2tp_waste,
+            ),
+            PackTemplateSpec(
+                code="pack_eco_2tp_air",
+                name="2-ТП (воздух)",
+                description="Охрана атмосферного воздуха за год",
+                category="report",
+                builder=_eco_2tp_air,
+            ),
+            PackTemplateSpec(
+                code="pack_eco_2tp_water",
+                name="2-ТП (водхоз)",
+                description="Использование воды за год",
+                category="report",
+                builder=_eco_2tp_water,
+            ),
+            PackTemplateSpec(
+                code="pack_eco_pek_report",
+                name="Отчёт по ПЭК",
+                description="Организация и результаты производственного экологического контроля",
+                category="report",
+                builder=_eco_pek_report,
+            ),
+            PackTemplateSpec(
+                code="pack_eco_nvos_report",
+                name="Отчётность по объектам НВОС",
+                description="Сведения по объекту государственного реестра НВОС",
+                category="report",
+                builder=_eco_nvos_report,
+            ),
+        ),
+        item_order=(
+            "pack_eco_fee_declaration",
+            "pack_eco_2tp_waste",
+            "pack_eco_2tp_air",
+            "pack_eco_2tp_water",
+            "pack_eco_pek_report",
+            "pack_eco_nvos_report",
         ),
         metadata={
             "logo": build_inline_image_descriptor(DEFAULT_LOGO_BYTES)["data"],

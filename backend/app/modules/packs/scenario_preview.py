@@ -18,8 +18,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from app.domains.packs.fields import expand_answers, questions_for
-from app.domains.packs.readiness import ReadinessProblem
+from app.modules.packs.fields import expand_answers, questions_for
+from app.modules.packs.readiness import ReadinessProblem
 
 __all__ = [
     "PreviewDocument",

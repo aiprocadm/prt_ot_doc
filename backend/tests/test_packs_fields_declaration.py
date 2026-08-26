@@ -15,14 +15,14 @@ from typing import Any
 
 import pytest
 
-from app.domains.packs.fields import (
+from app.modules.packs.context import enrich_context
+from app.modules.packs.definitions import DEFAULT_PACKS
+from app.modules.packs.fields import (
     BRANDING_FIELDS,
     SCENARIO_FIELDS,
     expand_answers,
     questions_for,
 )
-from app.modules.packs.context import enrich_context
-from app.modules.packs.definitions import DEFAULT_PACKS
 from app.services.docx import DocxService
 
 _MARK = "СТРАЖ-9137"

@@ -41,8 +41,6 @@ from app.core.response import list_response
 from app.core.tenant_validation import TenantContextValidator
 from app.core.tracing import get_trace_id
 from app.db.session import rearm_session_tenant_context
-from app.domains.packs.fields import questions_for
-from app.domains.packs.scenario_preview import analyze_scenario_readiness
 from app.models.models import (
     Company,
     DocumentPack,
@@ -50,6 +48,8 @@ from app.models.models import (
     Site,
 )
 from app.modules.packs.definitions import DEFAULT_PACKS, PACK_DEFINITIONS_BY_CODE
+from app.modules.packs.fields import questions_for
+from app.modules.packs.scenario_preview import analyze_scenario_readiness
 from app.modules.packs.seeder import ensure_pack_by_code
 from app.schemas.pack import (
     PackFromScenarioRequest,
