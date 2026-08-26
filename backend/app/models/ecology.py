@@ -388,3 +388,125 @@ class EmissionMeasurement(TenantBaseModel, SoftDeleteMixin):
     __table_args__ = (
         Index("ix_emission_measurement_tenant_date", "tenant_id", "measured_on"),
     )
+
+
+#: Типы точек водопользования — ЗАКРЫТЫЙ словарь. Забор и сброс лежат в одном
+#: реестре: поля у них одни и те же (номер, водный объект, разрешение, объёмы),
+#: а тип нужен ровно для того, чтобы объёмы не смешивались в сводке — это
+#: разные величины, и складывать их нельзя.
+WATER_POINT_KINDS: dict[str, str] = {
+    "intake": "Водозабор",
+    "discharge": "Сброс сточных вод",
+}
+
+#: Состояние разрешительного документа водопользования. Пустой срок — это НЕ
+#: просрочка: забор из городского водопровода идёт по договору без срока, и
+#: объявлять такую точку нарушением было бы враньём (тот же выбор, что у
+#: нормативов выброса и сроков пересмотра документов ПБ).
+WATER_PERMIT_STATUS_TITLES: dict[str, str] = {
+    "ok": "Действует",
+    "due_soon": "Разрешение скоро истекает",
+    "overdue": "Разрешение просрочено",
+}
+
+#: Чем измерен объём — ЗАКРЫТЫЙ словарь. Это первое, что спрашивает надзор:
+#: свободный текст здесь превращается в «как записали», а не «чем меряли».
+WATER_RECORD_BASES: dict[str, str] = {
+    "meter": "Прибор учёта",
+    "calculation": "Расчётный метод",
+}
+
+#: Названия месяцев для подписи периода учёта. Учёт водопользования ведётся
+#: помесячно, и «3» в отчёте читается хуже, чем «март».
+MONTH_TITLES: dict[int, str] = {
+    1: "январь",
+    2: "февраль",
+    3: "март",
+    4: "апрель",
+    5: "май",
+    6: "июнь",
+    7: "июль",
+    8: "август",
+    9: "сентябрь",
+    10: "октябрь",
+    11: "ноябрь",
+    12: "декабрь",
+}
+
+
+class WaterUsagePoint(TenantBaseModel, SoftDeleteMixin):
+    """Точка водопользования: водозабор или выпуск сточных вод.
+
+    Своя сущность, а не поле объекта НВОС: у одного объекта бывает и забор из
+    скважины, и выпуск в водный объект, и у каждой точки свой номер, своё
+    разрешение и свой учёт.
+
+    ГРАНИЦА: платформа НЕ определяет, требуется ли разрешение (договор
+    водопользования, решение о предоставлении водного объекта в пользование), и
+    НЕ рассчитывает норматив допустимого сброса — его устанавливает орган по
+    проекту НДС. Лимит хранится как внесённый.
+    """
+
+    __tablename__ = "water_usage_point"
+
+    facility_id: Mapped[str] = mapped_column(
+        ForeignKey("nvos_facility.id"), nullable=False, index=True
+    )
+    #: номер точки по документам — нумерация ведётся ПО ОБЪЕКТУ
+    point_number: Mapped[str] = mapped_column(String(32), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    #: наименование водного объекта; пусто — забор из централизованной сети
+    water_body: Mapped[str | None] = mapped_column(String(255))
+    permit_number: Mapped[str | None] = mapped_column(String(64))
+    permit_valid_until: Mapped[date | None] = mapped_column(Date, nullable=True)
+    #: годовой лимит из разрешения, м³ — ВНЕСЁННЫЙ, платформа его не считает
+    annual_limit_cubic_meters: Mapped[Decimal | None] = mapped_column(
+        Numeric(16, 3), nullable=True
+    )
+    notes: Mapped[str | None] = mapped_column(Text)
+
+    facility: Mapped[EnvironmentalFacility] = relationship(backref="water_points")
+
+    __table_args__ = (
+        # Номер уникален В ПРЕДЕЛАХ ОБЪЕКТА — как у источников выбросов.
+        UniqueConstraint(
+            "tenant_id", "facility_id", "point_number", name="uq_water_point_number"
+        ),
+        Index("ix_water_point_tenant_permit", "tenant_id", "permit_valid_until"),
+    )
+
+
+class WaterUsageRecord(TenantBaseModel, SoftDeleteMixin):
+    """Запись учёта объёма по точке за МЕСЯЦ.
+
+    Единица учёта — месяц: журнал водопользования ведётся помесячно, поэтому
+    пара «точка + год + месяц» уникальна. Две записи за один месяц по одной
+    точке — это ошибка ввода, а не два разных факта.
+    """
+
+    __tablename__ = "water_usage_record"
+
+    point_id: Mapped[str] = mapped_column(
+        ForeignKey("water_usage_point.id"), nullable=False, index=True
+    )
+    period_year: Mapped[int] = mapped_column(Integer, nullable=False)
+    period_month: Mapped[int] = mapped_column(Integer, nullable=False)
+    volume_cubic_meters: Mapped[Decimal] = mapped_column(Numeric(16, 3), nullable=False)
+    basis: Mapped[str] = mapped_column(String(16), nullable=False)
+    #: номер прибора учёта — заполняется, когда основание «прибор учёта»
+    meter_number: Mapped[str | None] = mapped_column(String(64))
+    notes: Mapped[str | None] = mapped_column(Text)
+
+    point: Mapped[WaterUsagePoint] = relationship(backref="records")
+
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id",
+            "point_id",
+            "period_year",
+            "period_month",
+            name="uq_water_record_period",
+        ),
+        Index("ix_water_record_tenant_year", "tenant_id", "period_year"),
+    )

@@ -13,6 +13,8 @@ const listSourcesMock = vi.fn();
 const listNormsMock = vi.fn();
 const listPlanMock = vi.fn();
 const listMeasurementsMock = vi.fn();
+const listWaterPointsMock = vi.fn();
+const listWaterRecordsMock = vi.fn();
 const readinessMock = vi.fn();
 
 vi.mock("@/api/ecology", async (importOriginal) => ({
@@ -26,6 +28,8 @@ vi.mock("@/api/ecology", async (importOriginal) => ({
     listMonitoringPlan: (...args: unknown[]) => listPlanMock(...args),
     listEmissionMeasurements: (...args: unknown[]) =>
       listMeasurementsMock(...args),
+    listWaterPoints: (...args: unknown[]) => listWaterPointsMock(...args),
+    listWaterRecords: (...args: unknown[]) => listWaterRecordsMock(...args),
     readiness: (...args: unknown[]) => readinessMock(...args),
   },
 }));
@@ -240,6 +244,72 @@ const populatedMeasurements = [
   },
 ];
 
+/** Точки водопользования: забор с превышением лимита и бессрочный сброс. */
+const populatedWaterPoints = [
+  {
+    id: "wp-1",
+    facility_id: "nvos-1",
+    point_number: "В-1",
+    name: "Скважина №1",
+    kind: "intake",
+    kind_label: "Водозабор",
+    water_body: "Подземный водоносный горизонт",
+    permit_number: "МОС-00123-ВХ",
+    permit_valid_until: "2029-01-01",
+    annual_limit_cubic_meters: "500.000",
+    notes: null,
+    permit_status: "ok",
+    permit_status_label: "Действует",
+    volume_this_year: "700.000",
+    over_limit: true,
+  },
+  {
+    id: "wp-2",
+    facility_id: "nvos-1",
+    point_number: "С-1",
+    name: "Выпуск №1",
+    kind: "discharge",
+    kind_label: "Сброс сточных вод",
+    water_body: null,
+    permit_number: null,
+    permit_valid_until: null,
+    annual_limit_cubic_meters: null,
+    notes: null,
+    permit_status: "ok",
+    permit_status_label: "Действует",
+    volume_this_year: "400.000",
+    over_limit: false,
+  },
+];
+
+/** Записи учёта: прибор и расчёт. */
+const populatedWaterRecords = [
+  {
+    id: "wr-1",
+    point_id: "wp-1",
+    period_year: 2026,
+    period_month: 2,
+    period_label: "февраль 2026",
+    volume_cubic_meters: "700.000",
+    basis: "meter",
+    basis_label: "Прибор учёта",
+    meter_number: "СВК-15 №77123",
+    notes: null,
+  },
+  {
+    id: "wr-2",
+    point_id: "wp-2",
+    period_year: 2026,
+    period_month: 1,
+    period_label: "январь 2026",
+    volume_cubic_meters: "400.000",
+    basis: "calculation",
+    basis_label: "Расчётный метод",
+    meter_number: null,
+    notes: null,
+  },
+];
+
 const populatedReadiness = {
   total_facilities: 2,
   by_category: { I: 0, II: 1, III: 0, IV: 1 },
@@ -256,6 +326,11 @@ const populatedReadiness = {
   monitoring_overdue: 1,
   measurements_this_year: 2,
   measurements_exceeded: 1,
+  water_points: 2,
+  water_permits_overdue: 0,
+  water_intake_cubic_meters: "700.000",
+  water_discharge_cubic_meters: "400.000",
+  water_over_limit: 1,
 };
 
 describe("EcologyPage", () => {
@@ -267,6 +342,8 @@ describe("EcologyPage", () => {
     listNormsMock.mockReset();
     listPlanMock.mockReset();
     listMeasurementsMock.mockReset();
+    listWaterPointsMock.mockReset();
+    listWaterRecordsMock.mockReset();
     readinessMock.mockReset();
     listFacilitiesMock.mockResolvedValue(populatedFacilities);
     listPassportsMock.mockResolvedValue(populatedPassports);
@@ -275,6 +352,8 @@ describe("EcologyPage", () => {
     listNormsMock.mockResolvedValue(populatedNorms);
     listPlanMock.mockResolvedValue(populatedPlan);
     listMeasurementsMock.mockResolvedValue(populatedMeasurements);
+    listWaterPointsMock.mockResolvedValue(populatedWaterPoints);
+    listWaterRecordsMock.mockResolvedValue(populatedWaterRecords);
     readinessMock.mockResolvedValue(populatedReadiness);
   });
 
@@ -466,9 +545,39 @@ describe("EcologyPage", () => {
     expect(screen.getByText("Превышение норматива")).toBeInTheDocument();
     expect(screen.getByText("Норматив не внесён")).toBeInTheDocument();
     // Граница названа на экране.
+    expect(screen.getByText(/платформа её не назначает/i)).toBeInTheDocument();
+  });
+
+  // Доп. №1 разд. 55.2 срез-5: водопользование. Забор и сброс — разные
+  // величины, поэтому в сводке они стоят раздельно.
+  it("водопользование открывается шестой секцией", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter>
+        <EcologyPage />
+      </MemoryRouter>,
+    );
+
     expect(
-      screen.getByText(/платформа её не назначает/i),
+      await screen.findByText("Производственная площадка №1"),
     ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Водопользование" }));
+
+    expect(await screen.findByText("Скважина №1")).toBeInTheDocument();
+    // Тип точки — словами.
+    expect(screen.getByText("Водозабор")).toBeInTheDocument();
+    expect(screen.getByText("Сброс сточных вод")).toBeInTheDocument();
+    // Пустые клетки запрещены: «не указан» и «бессрочно» вместо прочерка.
+    expect(screen.getByText("не указан")).toBeInTheDocument();
+    expect(screen.getByText("бессрочно")).toBeInTheDocument();
+    // Превышение лимита названо прямо в клетке объёма.
+    expect(screen.getByText("700.000 — превышен лимит")).toBeInTheDocument();
+    // Учёт: период словами и основание из закрытого словаря.
+    expect(screen.getByText("февраль 2026")).toBeInTheDocument();
+    expect(screen.getByText("Расчётный метод")).toBeInTheDocument();
+    // Забор и сброс показаны раздельно, а не одной суммой.
+    expect(screen.getByText(/Забор за год: 700.000/)).toBeInTheDocument();
   });
 
   it("EcologyPage в UX-бюджете", async () => {

@@ -67,6 +67,49 @@ export type EcologyReadinessDto = {
   monitoring_overdue: number;
   measurements_this_year: number;
   measurements_exceeded: number;
+  /**
+   * Разд. 55.2 «водопользование». Забор и сброс считаются РАЗДЕЛЬНО: это
+   * разные величины, и складывать их в одну цифру нельзя.
+   */
+  water_points: number;
+  water_permits_overdue: number;
+  water_intake_cubic_meters: string;
+  water_discharge_cubic_meters: string;
+  water_over_limit: number;
+};
+
+export type WaterPointDto = {
+  id: string;
+  facility_id: string;
+  point_number: string;
+  name: string;
+  kind: string;
+  kind_label: string;
+  water_body?: string | null;
+  permit_number?: string | null;
+  permit_valid_until?: string | null;
+  annual_limit_cubic_meters?: string | null;
+  notes?: string | null;
+  /** ok | due_soon | overdue — пустой срок означает «бессрочно». */
+  permit_status: string;
+  permit_status_label: string;
+  volume_this_year: string;
+  /** ФАКТ по внесённому лимиту: без лимита превышения не бывает. */
+  over_limit: boolean;
+};
+
+export type WaterRecordDto = {
+  id: string;
+  point_id: string;
+  period_year: number;
+  period_month: number;
+  /** «март 2026» — месяц числом читается хуже, чем словом. */
+  period_label: string;
+  volume_cubic_meters: string;
+  basis: string;
+  basis_label: string;
+  meter_number?: string | null;
+  notes?: string | null;
 };
 
 export type MonitoringPlanItemDto = {
@@ -215,6 +258,22 @@ export const ecologyApi = {
   listEmissionMeasurements: async (): Promise<EmissionMeasurementDto[]> => {
     const { data } = await apiClient.get<{ items?: EmissionMeasurementDto[] }>(
       "/ecology/emission-measurements",
+      { params: { limit: 200, offset: 0 } },
+    );
+    return Array.isArray(data?.items) ? data.items : [];
+  },
+
+  listWaterPoints: async (): Promise<WaterPointDto[]> => {
+    const { data } = await apiClient.get<{ items?: WaterPointDto[] }>(
+      "/ecology/water-points",
+      { params: { limit: 200, offset: 0 } },
+    );
+    return Array.isArray(data?.items) ? data.items : [];
+  },
+
+  listWaterRecords: async (): Promise<WaterRecordDto[]> => {
+    const { data } = await apiClient.get<{ items?: WaterRecordDto[] }>(
+      "/ecology/water-records",
       { params: { limit: 200, offset: 0 } },
     );
     return Array.isArray(data?.items) ? data.items : [];
