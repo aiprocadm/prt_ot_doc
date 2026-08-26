@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 
 import { ecologyApi } from "@/api/ecology";
 import { EmptyState } from "@/components/common/EmptyState";
@@ -6,6 +6,7 @@ import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingScreen } from "@/components/common/LoadingScreen";
 import { RegistryPageHeader } from "@/components/common/RegistryPageHeader";
 import { RegistryTable } from "@/components/common/RegistryTable";
+import { Button } from "@/components/ui/button";
 import { useAsyncResource } from "@/hooks/useAsyncResource";
 import { useLocalRegistry } from "@/hooks/useLocalRegistry";
 import { formatDate } from "@/utils/datetime";
@@ -18,21 +19,34 @@ import { formatDate } from "@/utils/datetime";
  * сводился к комплекту документов, где все значения вводятся руками.
  */
 const EcologyPage = () => {
+  // Секции ПО ОДНОЙ (прецедент экранов ПБ и ПромБеза): объекты, паспорта и
+  // журнал учёта — разные задачи, три таблицы сразу растят экран.
+  const [section, setSection] = useState<"facilities" | "waste" | "journal">(
+    "facilities",
+  );
+
   const { data, loading, error, reload } = useAsyncResource({
     loader: useCallback(
       async () => ({
         facilities: await ecologyApi.listFacilities(),
+        passports: await ecologyApi.listWastePassports(),
+        movements: await ecologyApi.listWasteMovements(),
         readiness: await ecologyApi.readiness(),
       }),
       [],
     ),
     initialData: {
       facilities: [],
+      passports: [],
+      movements: [],
       readiness: {
         total_facilities: 0,
         by_category: { I: 0, II: 0, III: 0, IV: 0 },
         excluded_facilities: 0,
         never_actualized: 0,
+        waste_passports: 0,
+        waste_movements: 0,
+        waste_over_limit: 0,
       },
     },
     errorMessage: "Не удалось загрузить реестр объектов НВОС",
@@ -42,6 +56,26 @@ const EcologyPage = () => {
     items: data.facilities,
     match: (item, query) =>
       [item.name, item.register_number, item.category_label, item.responsible]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(query),
+  });
+
+  const passportRegistry = useLocalRegistry({
+    items: data.passports,
+    match: (item, query) =>
+      [item.name, item.fkko_code, item.hazard_class_label]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(query),
+  });
+
+  const movementRegistry = useLocalRegistry({
+    items: data.movements,
+    match: (item, query) =>
+      [item.kind_label, item.counterparty, item.notes]
         .filter(Boolean)
         .join(" ")
         .toLowerCase()
@@ -72,8 +106,34 @@ const EcologyPage = () => {
             label: "Без актуализации сведений",
             value: readiness.never_actualized,
           },
+          // Разд. 55.2 «отходы».
+          { label: "Паспортов отходов", value: readiness.waste_passports },
+          // ФАКТ по внесённым лимитам: платформа лимит не рассчитывает.
+          {
+            label: "Превышен лимит",
+            value: readiness.waste_over_limit,
+          },
         ]}
       />
+
+      <div className="flex flex-wrap gap-2">
+        {(
+          [
+            ["facilities", "Объекты НВОС"],
+            ["waste", "Паспорта отходов"],
+            ["journal", "Журнал учёта отходов"],
+          ] as const
+        ).map(([key, label]) => (
+          <Button
+            key={key}
+            size="sm"
+            variant={section === key ? "secondary" : "outline"}
+            onClick={() => setSection(key)}
+          >
+            {label}
+          </Button>
+        ))}
+      </div>
 
       <ErrorState error={error ?? undefined} onRetry={() => void reload()} />
       {loading ? <LoadingScreen label="Загрузка объектов НВОС" /> : null}
@@ -84,7 +144,7 @@ const EcologyPage = () => {
         мощность, виды воздействия, применяемые технологии. Этих данных в
         системе нет, поэтому платформа хранит внесённое, а не вычисляет.
       */}
-      {!loading && !error ? (
+      {section === "facilities" && !loading && !error ? (
         <p className="text-sm text-muted-foreground">
           Категория объекта присваивается при постановке на государственный учёт
           и хранится здесь как внесённая: платформа её не вычисляет — критерии
@@ -92,13 +152,16 @@ const EcologyPage = () => {
           которых в системе нет.
         </p>
       ) : null}
-      {!loading && !error && registry.total === 0 ? (
+      {section === "facilities" &&
+      !loading &&
+      !error &&
+      registry.total === 0 ? (
         <EmptyState
           title="Объекты НВОС не заведены"
           description="Внесите объекты из свидетельства о постановке на государственный учёт: наименование, код объекта в реестре и категорию."
         />
       ) : null}
-      {!loading && !error && registry.total > 0 ? (
+      {section === "facilities" && !loading && !error && registry.total > 0 ? (
         <RegistryTable
           columns={[
             { accessorKey: "name", header: "Объект" },
@@ -145,6 +208,117 @@ const EcologyPage = () => {
           searchPlaceholder="Поиск по объекту, коду, категории, ответственному"
           caption="Реестр объектов НВОС"
         />
+      ) : null}
+      {section === "waste" && !loading && !error ? (
+        <>
+          {/*
+            ГРАНИЦА, названная НА ЭКРАНЕ: годовой лимит берётся из НООЛР или
+            декларации — платформа его не рассчитывает, и без внесённого
+            значения превышения быть не может по построению.
+          */}
+          <p className="text-sm text-muted-foreground">
+            Паспорт составляется на отходы I–IV класса: отходы V класса
+            паспортизации не подлежат. Годовой лимит вносится из документа
+            (НООЛР или декларации) — платформа его не рассчитывает и без лимита
+            о превышении не судит.
+          </p>
+          {passportRegistry.total === 0 ? (
+            <EmptyState
+              title="Паспорта отходов не заведены"
+              description="Внесите паспорта по видам отходов: наименование, код ФККО, класс опасности и годовой лимит, если он установлен."
+            />
+          ) : (
+            <RegistryTable
+              columns={[
+                { accessorKey: "name", header: "Вид отхода" },
+                {
+                  accessorKey: "fkko_code",
+                  header: "Код ФККО",
+                  cell: ({ row }) => row.original.fkko_code,
+                },
+                {
+                  accessorKey: "hazard_class_label",
+                  header: "Класс опасности",
+                  cell: ({ row }) => row.original.hazard_class_label,
+                },
+                {
+                  accessorKey: "generated_this_year_tons",
+                  header: "Образование за год, т",
+                  cell: ({ row }) => row.original.generated_this_year_tons,
+                },
+                {
+                  accessorKey: "annual_limit_tons",
+                  header: "Лимит, т",
+                  cell: ({ row }) =>
+                    row.original.annual_limit_tons
+                      ? `${row.original.annual_limit_tons}${
+                          row.original.over_limit ? " · превышен" : ""
+                        }`
+                      : "не установлен",
+                },
+              ]}
+              data={passportRegistry.pagedItems}
+              pageIndex={passportRegistry.pageIndex}
+              pageSize={passportRegistry.pageSize}
+              total={passportRegistry.total}
+              onPageChange={passportRegistry.onPageChange}
+              onPageSizeChange={passportRegistry.onPageSizeChange}
+              onSearchChange={passportRegistry.onSearchChange}
+              searchPlaceholder="Поиск по виду отхода, коду ФККО, классу"
+              caption="Паспорта отходов"
+            />
+          )}
+        </>
+      ) : null}
+      {section === "journal" && !loading && !error ? (
+        <>
+          {movementRegistry.total === 0 ? (
+            <EmptyState
+              title="Журнал учёта отходов пуст"
+              description="Вносите движения по паспортам: образование, накопление, передачу оператору, размещение, обезвреживание и утилизацию."
+            />
+          ) : (
+            <RegistryTable
+              columns={[
+                {
+                  accessorKey: "happened_on",
+                  header: "Дата",
+                  cell: ({ row }) => formatDate(row.original.happened_on),
+                },
+                {
+                  accessorKey: "kind_label",
+                  header: "Движение",
+                  cell: ({ row }) => row.original.kind_label,
+                },
+                {
+                  accessorKey: "quantity_tons",
+                  header: "Масса, т",
+                  cell: ({ row }) => row.original.quantity_tons,
+                },
+                {
+                  accessorKey: "counterparty",
+                  header: "Контрагент",
+                  cell: ({ row }) => row.original.counterparty || "—",
+                },
+                {
+                  accessorKey: "contract_id",
+                  header: "Договор",
+                  cell: ({ row }) =>
+                    row.original.contract_id ? "по договору" : "—",
+                },
+              ]}
+              data={movementRegistry.pagedItems}
+              pageIndex={movementRegistry.pageIndex}
+              pageSize={movementRegistry.pageSize}
+              total={movementRegistry.total}
+              onPageChange={movementRegistry.onPageChange}
+              onPageSizeChange={movementRegistry.onPageSizeChange}
+              onSearchChange={movementRegistry.onSearchChange}
+              searchPlaceholder="Поиск по движению и контрагенту"
+              caption="Журнал учёта отходов"
+            />
+          )}
+        </>
       ) : null}
     </div>
   );

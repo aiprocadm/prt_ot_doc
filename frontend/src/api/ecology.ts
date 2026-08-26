@@ -45,6 +45,45 @@ export type EcologyReadinessDto = {
    * объекта, а не по календарю.
    */
   never_actualized: number;
+  /** Разд. 55.2 «отходы»: паспорта, записи журнала и превышения лимита. */
+  waste_passports: number;
+  waste_movements: number;
+  waste_over_limit: number;
+};
+
+/** Подписи классов отходов — запас; готовую подпись отдаёт сервер. */
+export const WASTE_HAZARD_CLASS_TITLES: Record<string, string> = {
+  I: "I класс — чрезвычайно опасные",
+  II: "II класс — высокоопасные",
+  III: "III класс — умеренно опасные",
+  IV: "IV класс — малоопасные",
+};
+
+export type WastePassportDto = {
+  id: string;
+  name: string;
+  fkko_code: string;
+  hazard_class: string;
+  hazard_class_label: string;
+  facility_id?: string | null;
+  approved_on?: string | null;
+  /** Годовой лимит из НООЛР/декларации — платформа его не рассчитывает. */
+  annual_limit_tons?: string | null;
+  notes?: string | null;
+  generated_this_year_tons: string;
+  over_limit: boolean;
+};
+
+export type WasteMovementDto = {
+  id: string;
+  passport_id: string;
+  kind: string;
+  kind_label: string;
+  happened_on: string;
+  quantity_tons: string;
+  contract_id?: string | null;
+  counterparty?: string | null;
+  notes?: string | null;
 };
 
 export const ecologyApi = {
@@ -52,6 +91,22 @@ export const ecologyApi = {
     const { data } = await apiClient.get<{
       items?: EnvironmentalFacilityDto[];
     }>("/ecology/facilities", { params: { limit: 200, offset: 0 } });
+    return Array.isArray(data?.items) ? data.items : [];
+  },
+
+  listWastePassports: async (): Promise<WastePassportDto[]> => {
+    const { data } = await apiClient.get<{ items?: WastePassportDto[] }>(
+      "/ecology/waste-passports",
+      { params: { limit: 200, offset: 0 } },
+    );
+    return Array.isArray(data?.items) ? data.items : [];
+  },
+
+  listWasteMovements: async (): Promise<WasteMovementDto[]> => {
+    const { data } = await apiClient.get<{ items?: WasteMovementDto[] }>(
+      "/ecology/waste-movements",
+      { params: { limit: 200, offset: 0 } },
+    );
     return Array.isArray(data?.items) ? data.items : [];
   },
 

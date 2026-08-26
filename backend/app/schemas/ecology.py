@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import date
+from decimal import Decimal
 
 from pydantic import Field
 
@@ -58,6 +59,90 @@ class EnvironmentalFacilityPage(BaseSchema):
     total: int
 
 
+class WastePassportCreate(BaseSchema):
+    name: str = Field(min_length=1, max_length=255)
+    #: обязателен: код ФККО — удостоверение вида отхода
+    fkko_code: str = Field(min_length=1, max_length=16)
+    hazard_class: str = Field(min_length=1, max_length=8)
+    facility_id: str | None = Field(default=None, min_length=1, max_length=36)
+    approved_on: date | None = None
+    #: годовой лимит в тоннах ИЗ ДОКУМЕНТА (НООЛР/декларация) — не расчёт
+    annual_limit_tons: Decimal | None = Field(default=None, ge=0)
+    notes: str | None = None
+
+
+class WastePassportUpdate(BaseSchema):
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    fkko_code: str | None = Field(default=None, min_length=1, max_length=16)
+    hazard_class: str | None = Field(default=None, min_length=1, max_length=8)
+    facility_id: str | None = Field(default=None, max_length=36)
+    approved_on: date | None = None
+    annual_limit_tons: Decimal | None = Field(default=None, ge=0)
+    notes: str | None = None
+
+
+class WastePassportRead(BaseSchema):
+    id: str
+    name: str
+    fkko_code: str
+    hazard_class: str
+    #: класс словами — перевод делает сервер
+    hazard_class_label: str
+    facility_id: str | None = None
+    approved_on: date | None = None
+    annual_limit_tons: Decimal | None = None
+    notes: str | None = None
+    #: образование за ТЕКУЩИЙ год — считается при чтении по журналу движений
+    generated_this_year_tons: Decimal
+    #: превышение лимита. ГРАНИЦА: только если лимит внесён — платформа его не
+    #: рассчитывает, он берётся из НООЛР или декларации
+    over_limit: bool = False
+
+
+class WastePassportPage(BaseSchema):
+    items: list[WastePassportRead]
+    total: int
+
+
+class WasteMovementCreate(BaseSchema):
+    passport_id: str = Field(min_length=1, max_length=36)
+    kind: str = Field(min_length=1, max_length=16)
+    happened_on: date
+    #: масса в тоннах; ноль не принимается — движение без массы ничего не
+    #: учитывает, это пустая строка журнала
+    quantity_tons: Decimal = Field(gt=0)
+    contract_id: str | None = Field(default=None, min_length=1, max_length=36)
+    counterparty: str | None = Field(default=None, max_length=255)
+    notes: str | None = None
+
+
+class WasteMovementUpdate(BaseSchema):
+    passport_id: str | None = Field(default=None, min_length=1, max_length=36)
+    kind: str | None = Field(default=None, min_length=1, max_length=16)
+    happened_on: date | None = None
+    quantity_tons: Decimal | None = Field(default=None, gt=0)
+    contract_id: str | None = Field(default=None, max_length=36)
+    counterparty: str | None = Field(default=None, max_length=255)
+    notes: str | None = None
+
+
+class WasteMovementRead(BaseSchema):
+    id: str
+    passport_id: str
+    kind: str
+    kind_label: str
+    happened_on: date
+    quantity_tons: Decimal
+    contract_id: str | None = None
+    counterparty: str | None = None
+    notes: str | None = None
+
+
+class WasteMovementPage(BaseSchema):
+    items: list[WasteMovementRead]
+    total: int
+
+
 class EcologyReadinessRead(BaseSchema):
     """Сводка экологии: сколько объектов НВОС и какой категории.
 
@@ -81,3 +166,8 @@ class EcologyReadinessRead(BaseSchema):
     #: нарушение: обязанность актуализировать возникает при изменении
     #: характеристик объекта, а не по календарю
     never_actualized: int
+    #: разд. 55.2 «отходы»: паспорта, записи журнала учёта и превышения лимита
+    #: (последнее — только по внесённым лимитам)
+    waste_passports: int = 0
+    waste_movements: int = 0
+    waste_over_limit: int = 0
