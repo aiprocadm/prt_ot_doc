@@ -58,6 +58,48 @@ export type EcologyReadinessDto = {
   emission_sources_without_norms: number;
   emission_norms: number;
   emission_permits_overdue: number;
+  /**
+   * Разд. 55.2 «ПЭК»: график замеров, просрочки и превышения ПО ЗАМЕРАМ.
+   * Превышение здесь — сравнение двух внесённых чисел (замер и норматив), а
+   * не вывод платформы о самом нормативе.
+   */
+  monitoring_plan_items: number;
+  monitoring_overdue: number;
+  measurements_this_year: number;
+  measurements_exceeded: number;
+};
+
+export type MonitoringPlanItemDto = {
+  id: string;
+  source_id: string;
+  substance: string;
+  periodicity_months: number;
+  /** «раз в квартал» и подобное; нетиповой срок — «раз в N месяцев». */
+  periodicity_label: string;
+  next_due_on: string;
+  method?: string | null;
+  laboratory?: string | null;
+  notes?: string | null;
+  /** ok | due_soon | overdue — считается при чтении по плановой дате. */
+  status: string;
+  status_label: string;
+  last_measured_on?: string | null;
+};
+
+export type EmissionMeasurementDto = {
+  id: string;
+  plan_id?: string | null;
+  source_id: string;
+  substance: string;
+  measured_on: string;
+  value_grams_per_second: string;
+  protocol_number?: string | null;
+  laboratory?: string | null;
+  notes?: string | null;
+  norm_grams_per_second?: string | null;
+  /** within | exceeded | no_norm | no_single_limit */
+  comparison: string;
+  comparison_label: string;
 };
 
 export type EmissionSourceDto = {
@@ -157,6 +199,22 @@ export const ecologyApi = {
   listEmissionNorms: async (): Promise<EmissionNormDto[]> => {
     const { data } = await apiClient.get<{ items?: EmissionNormDto[] }>(
       "/ecology/emission-norms",
+      { params: { limit: 200, offset: 0 } },
+    );
+    return Array.isArray(data?.items) ? data.items : [];
+  },
+
+  listMonitoringPlan: async (): Promise<MonitoringPlanItemDto[]> => {
+    const { data } = await apiClient.get<{ items?: MonitoringPlanItemDto[] }>(
+      "/ecology/monitoring-plan",
+      { params: { limit: 200, offset: 0 } },
+    );
+    return Array.isArray(data?.items) ? data.items : [];
+  },
+
+  listEmissionMeasurements: async (): Promise<EmissionMeasurementDto[]> => {
+    const { data } = await apiClient.get<{ items?: EmissionMeasurementDto[] }>(
+      "/ecology/emission-measurements",
       { params: { limit: 200, offset: 0 } },
     );
     return Array.isArray(data?.items) ? data.items : [];

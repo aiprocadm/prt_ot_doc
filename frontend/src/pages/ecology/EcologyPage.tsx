@@ -22,7 +22,7 @@ const EcologyPage = () => {
   // Секции ПО ОДНОЙ (прецедент экранов ПБ и ПромБеза): объекты, паспорта и
   // журнал учёта — разные задачи, три таблицы сразу растят экран.
   const [section, setSection] = useState<
-    "facilities" | "waste" | "journal" | "emissions"
+    "facilities" | "waste" | "journal" | "emissions" | "pek"
   >("facilities");
 
   const { data, loading, error, reload } = useAsyncResource({
@@ -33,6 +33,8 @@ const EcologyPage = () => {
         movements: await ecologyApi.listWasteMovements(),
         sources: await ecologyApi.listEmissionSources(),
         norms: await ecologyApi.listEmissionNorms(),
+        planItems: await ecologyApi.listMonitoringPlan(),
+        measurements: await ecologyApi.listEmissionMeasurements(),
         readiness: await ecologyApi.readiness(),
       }),
       [],
@@ -43,6 +45,8 @@ const EcologyPage = () => {
       movements: [],
       sources: [],
       norms: [],
+      planItems: [],
+      measurements: [],
       readiness: {
         total_facilities: 0,
         by_category: { I: 0, II: 0, III: 0, IV: 0 },
@@ -55,6 +59,10 @@ const EcologyPage = () => {
         emission_sources_without_norms: 0,
         emission_norms: 0,
         emission_permits_overdue: 0,
+        monitoring_plan_items: 0,
+        monitoring_overdue: 0,
+        measurements_this_year: 0,
+        measurements_exceeded: 0,
       },
     },
     errorMessage: "Не удалось загрузить реестр объектов НВОС",
@@ -110,6 +118,26 @@ const EcologyPage = () => {
         .includes(query),
   });
 
+  const planRegistry = useLocalRegistry({
+    items: data.planItems,
+    match: (item, query) =>
+      [item.substance, item.periodicity_label, item.laboratory, item.method]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(query),
+  });
+
+  const measurementRegistry = useLocalRegistry({
+    items: data.measurements,
+    match: (item, query) =>
+      [item.substance, item.protocol_number, item.laboratory]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(query),
+  });
+
   const { readiness } = data;
 
   return (
@@ -147,6 +175,13 @@ const EcologyPage = () => {
             label: "Разрешения просрочены",
             value: readiness.emission_permits_overdue,
           },
+          // Разд. 55.2 «ПЭК». Превышение — ФАКТ сравнения замера с внесённым
+          // нормативом, а не суждение платформы о самом нормативе.
+          { label: "Замеры просрочены", value: readiness.monitoring_overdue },
+          {
+            label: "Превышений в замерах",
+            value: readiness.measurements_exceeded,
+          },
         ]}
       />
 
@@ -157,6 +192,7 @@ const EcologyPage = () => {
             ["waste", "Паспорта отходов"],
             ["journal", "Журнал учёта отходов"],
             ["emissions", "Выбросы"],
+            ["pek", "ПЭК и замеры"],
           ] as const
         ).map(([key, label]) => (
           <Button
@@ -452,6 +488,110 @@ const EcologyPage = () => {
               onSearchChange={normRegistry.onSearchChange}
               searchPlaceholder="Поиск по веществу и номеру разрешения"
               caption="Нормативы выбросов по веществам"
+            />
+          ) : null}
+        </>
+      ) : null}
+      {section === "pek" && !loading && !error ? (
+        <>
+          {/*
+            ГРАНИЦА, названная НА ЭКРАНЕ: периодичность замеров берётся из
+            утверждённой программы ПЭК — платформа её не назначает. А вот
+            превышение здесь считается: это сравнение замера с внесённым
+            нормативом, то есть факт по двум числам.
+          */}
+          <p className="text-sm text-muted-foreground">
+            Периодичность замеров берётся из утверждённой программы ПЭК:
+            платформа её не назначает. Превышение показывается только там, где
+            внесён разовый норматив в г/с — без норматива сравнивать не с чем.
+          </p>
+          {planRegistry.total === 0 ? (
+            <EmptyState
+              title="План-график замеров не заведён"
+              description="Внесите строки графика по программе ПЭК: вещество на источнике, периодичность в месяцах и дату ближайшего замера."
+            />
+          ) : (
+            <RegistryTable
+              columns={[
+                { accessorKey: "substance", header: "Вещество" },
+                {
+                  accessorKey: "periodicity_label",
+                  header: "Периодичность",
+                  cell: ({ row }) => row.original.periodicity_label,
+                },
+                {
+                  accessorKey: "next_due_on",
+                  header: "Ближайший замер",
+                  cell: ({ row }) => formatDate(row.original.next_due_on),
+                },
+                {
+                  accessorKey: "status_label",
+                  header: "Состояние",
+                  cell: ({ row }) => row.original.status_label,
+                },
+                {
+                  accessorKey: "last_measured_on",
+                  header: "Последний замер",
+                  cell: ({ row }) =>
+                    row.original.last_measured_on
+                      ? formatDate(row.original.last_measured_on)
+                      : "замеров не было",
+                },
+                {
+                  accessorKey: "laboratory",
+                  header: "Лаборатория",
+                  cell: ({ row }) => row.original.laboratory || "—",
+                },
+              ]}
+              data={planRegistry.pagedItems}
+              pageIndex={planRegistry.pageIndex}
+              pageSize={planRegistry.pageSize}
+              total={planRegistry.total}
+              onPageChange={planRegistry.onPageChange}
+              onPageSizeChange={planRegistry.onPageSizeChange}
+              onSearchChange={planRegistry.onSearchChange}
+              searchPlaceholder="Поиск по веществу, периодичности, лаборатории"
+              caption="План-график замеров ПЭК"
+            />
+          )}
+          {measurementRegistry.total > 0 ? (
+            <RegistryTable
+              columns={[
+                {
+                  accessorKey: "measured_on",
+                  header: "Дата замера",
+                  cell: ({ row }) => formatDate(row.original.measured_on),
+                },
+                { accessorKey: "substance", header: "Вещество" },
+                {
+                  accessorKey: "value_grams_per_second",
+                  header: "Замер, г/с",
+                },
+                {
+                  accessorKey: "norm_grams_per_second",
+                  header: "Норматив, г/с",
+                  cell: ({ row }) => row.original.norm_grams_per_second ?? "—",
+                },
+                {
+                  accessorKey: "comparison_label",
+                  header: "Итог",
+                  cell: ({ row }) => row.original.comparison_label,
+                },
+                {
+                  accessorKey: "protocol_number",
+                  header: "Протокол",
+                  cell: ({ row }) => row.original.protocol_number || "—",
+                },
+              ]}
+              data={measurementRegistry.pagedItems}
+              pageIndex={measurementRegistry.pageIndex}
+              pageSize={measurementRegistry.pageSize}
+              total={measurementRegistry.total}
+              onPageChange={measurementRegistry.onPageChange}
+              onPageSizeChange={measurementRegistry.onPageSizeChange}
+              onSearchChange={measurementRegistry.onSearchChange}
+              searchPlaceholder="Поиск по веществу и номеру протокола"
+              caption="Замеры ПЭК"
             />
           ) : null}
         </>

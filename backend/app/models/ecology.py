@@ -27,6 +27,7 @@ from sqlalchemy import (
     Date,
     ForeignKey,
     Index,
+    Integer,
     Numeric,
     String,
     Text,
@@ -280,4 +281,110 @@ class EmissionNorm(TenantBaseModel, SoftDeleteMixin):
             "tenant_id", "source_id", "substance", name="uq_emission_norm_substance"
         ),
         Index("ix_emission_norm_tenant_valid", "tenant_id", "valid_until"),
+    )
+
+
+#: Состояние строки плана-графика замеров ПЭК. Считается ПРИ ЧТЕНИИ по плановой
+#: дате: хранить статус в колонке значило бы, что вчерашняя просрочка появится
+#: только после того, как строку кто-то тронет.
+MONITORING_STATUS_TITLES: dict[str, str] = {
+    "ok": "По графику",
+    "due_soon": "Скоро замер",
+    "overdue": "Замер просрочен",
+}
+
+#: Итог сравнения замера с нормативом. «Норматив не внесён» — отдельное
+#: значение НАМЕРЕННО: молчание о нормативе нельзя выдавать за нарушение, а
+#: валовый норматив (т/год) с разовым замером (г/с) несопоставим.
+MEASUREMENT_COMPARISON_TITLES: dict[str, str] = {
+    "within": "В пределах норматива",
+    "exceeded": "Превышение норматива",
+    "no_norm": "Норматив не внесён",
+    "no_single_limit": "Разовый норматив не внесён",
+}
+
+#: Привычные названия периодичности. Всё, чего здесь нет, читается как
+#: «раз в N месяцев»: программы ПЭК задают и нетиповые сроки, и подгонять их
+#: под словарь «квартал/полугодие» значило бы искажать документ.
+PERIODICITY_LABELS: dict[int, str] = {
+    1: "ежемесячно",
+    3: "раз в квартал",
+    6: "раз в полугодие",
+    12: "ежегодно",
+}
+
+
+class EmissionMonitoringPlanItem(TenantBaseModel, SoftDeleteMixin):
+    """Строка плана-графика замеров ПЭК: «источник + вещество + периодичность».
+
+    Строка заводится на ПАРУ, ровно как норматив: замеряют конкретное вещество
+    на конкретном источнике, «замера источника вообще» не бывает.
+
+    ГРАНИЦА: платформа НЕ НАЗНАЧАЕТ периодичность. Она берётся из утверждённой
+    программы ПЭК и зависит от категории объекта, перечня веществ и решения
+    надзорного органа — полей «требуемая периодичность» здесь нет и не будет.
+    """
+
+    __tablename__ = "emission_monitoring_plan"
+
+    source_id: Mapped[str] = mapped_column(
+        ForeignKey("emission_source.id"), nullable=False, index=True
+    )
+    #: вещество — свободная строка по тому же доводу, что и в нормативе
+    substance: Mapped[str] = mapped_column(String(255), nullable=False)
+    #: периодичность в МЕСЯЦАХ — как у медосмотров и СОУТ в этом же продукте
+    periodicity_months: Mapped[int] = mapped_column(Integer, nullable=False)
+    #: плановая дата ближайшего замера; двигается вперёд при внесении факта
+    next_due_on: Mapped[date] = mapped_column(Date, nullable=False)
+    #: методика измерения (ПНД Ф и т. п.)
+    method: Mapped[str | None] = mapped_column(String(255))
+    laboratory: Mapped[str | None] = mapped_column(String(255))
+    notes: Mapped[str | None] = mapped_column(Text)
+
+    source: Mapped[EmissionSource] = relationship(backref="monitoring_plan_items")
+
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id", "source_id", "substance", name="uq_monitoring_plan_substance"
+        ),
+        Index("ix_monitoring_plan_tenant_due", "tenant_id", "next_due_on"),
+    )
+
+
+class EmissionMeasurement(TenantBaseModel, SoftDeleteMixin):
+    """Замер ПЭК: результат по паре «источник + вещество» на дату.
+
+    Строка плана НЕОБЯЗАТЕЛЬНА: замер по предписанию надзорного органа делают
+    и вне графика, и отказывать такому замеру в записи нельзя.
+
+    Превышение здесь НЕ ХРАНИТСЯ: это результат сравнения двух внесённых чисел,
+    и норматив со временем меняется. Считаем при чтении — иначе вчерашний
+    вывод пережил бы новый норматив.
+    """
+
+    __tablename__ = "emission_measurement"
+
+    plan_id: Mapped[str | None] = mapped_column(
+        ForeignKey("emission_monitoring_plan.id"), nullable=True, index=True
+    )
+    source_id: Mapped[str] = mapped_column(
+        ForeignKey("emission_source.id"), nullable=False, index=True
+    )
+    substance: Mapped[str] = mapped_column(String(255), nullable=False)
+    measured_on: Mapped[date] = mapped_column(Date, nullable=False)
+    #: результат замера, приведённый к г/с — как в протоколе лаборатории
+    value_grams_per_second: Mapped[Decimal] = mapped_column(
+        Numeric(14, 6), nullable=False
+    )
+    protocol_number: Mapped[str | None] = mapped_column(String(64))
+    laboratory: Mapped[str | None] = mapped_column(String(255))
+    notes: Mapped[str | None] = mapped_column(Text)
+
+    source: Mapped[EmissionSource] = relationship(backref="measurements")
+    plan_item: Mapped[EmissionMonitoringPlanItem | None] = relationship(
+        backref="measurements"
+    )
+
+    __table_args__ = (
+        Index("ix_emission_measurement_tenant_date", "tenant_id", "measured_on"),
     )
