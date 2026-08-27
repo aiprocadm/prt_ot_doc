@@ -188,3 +188,114 @@ class CivilDefenseDrill(TenantBaseModel, SoftDeleteMixin):
     __table_args__ = (
         Index("ix_cd_drill_tenant_planned", "tenant_id", "planned_on"),
     )
+
+
+#: Категории объектов по гражданской обороне — ЗАКРЫТЫЙ словарь из четырёх
+#: (перечень установлен постановлением Правительства). Пятой категории не
+#: существует. «Категория не присвоена» — ЗНАЧЕНИЕ, а не пустота: «объекту
+#: категорию не присваивали» и «сведения в систему не внесены» — разные вещи,
+#: и молчание нельзя выдавать за первое.
+CD_GO_CATEGORIES: dict[str, str] = {
+    "special": "Объект особой важности",
+    "first": "Первая категория по ГО",
+    "second": "Вторая категория по ГО",
+    "none": "Категория не присвоена",
+}
+
+#: Виды документов планирования ГО — ЗАКРЫТЫЙ словарь. Перечислены ровно те,
+#: что названы в требовании: планы, паспорт безопасности, приказы, положения,
+#: инструкции.
+CD_DOCUMENT_KINDS: dict[str, str] = {
+    "plan_go": "План гражданской обороны",
+    "plan_emergency": "План действий по предупреждению и ликвидации ЧС",
+    "safety_passport": "Паспорт безопасности объекта",
+    "order": "Приказ",
+    "regulation": "Положение",
+    "instruction": "Инструкция",
+}
+
+#: Состояние срока пересмотра документа словами. Значения дословно совпадают с
+#: реестром документов ПБ: одинаковый смысл — одинаковые слова.
+CD_REVIEW_STATUS_TITLES: dict[str, str] = {
+    "ok": "Действует",
+    "due_soon": "Скоро пересмотр",
+    "overdue": "Просрочен пересмотр",
+}
+
+
+class CivilDefenseProfile(TenantBaseModel, SoftDeleteMixin):
+    """Сведения по ГО об объекте: категория и реквизиты решения.
+
+    ПОЧЕМУ ЭТО ПОНАДОБИЛОСЬ. Мастер комплекта GOCHS_BASE спрашивает «Категорию
+    объекта по ГО» при каждом выпуске пакета, и введённое НИКУДА не
+    сохранялось. При этом границы срезов 1–3 трижды ссылались на эту категорию
+    («сколько формирований нужно», «какова периодичность учений», «обязана ли
+    организация создавать КЧС»), а хранить её было негде.
+
+    Одна карточка на площадку: два решения о категорировании одного объекта не
+    бывает.
+
+    ГРАНИЦА: платформа НЕ присваивает категорию и не выводит из неё
+    обязанности. Категорирование выполняет орган по показателям (численность
+    работающих, оборонное значение, опасные производства), которых в системе
+    нет.
+    """
+
+    __tablename__ = "cd_profile"
+
+    site_id: Mapped[str] = mapped_column(
+        ForeignKey("site.id"), nullable=False, index=True
+    )
+    category: Mapped[str] = mapped_column(String(16), nullable=False)
+    #: реквизиты решения о категорировании — как в оригинале
+    decision_number: Mapped[str | None] = mapped_column(String(128))
+    decision_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    #: ответственный за ГО и ЧС на объекте — строкой, если приказом не назначен
+    responsible: Mapped[str | None] = mapped_column(String(255))
+    notes: Mapped[str | None] = mapped_column(Text)
+
+    site: Mapped[Site] = relationship(backref="civil_defense_profile")
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "site_id", name="uq_cd_profile_site"),
+    )
+
+
+class CivilDefenseDocument(TenantBaseModel, SoftDeleteMixin):
+    """Учётная карточка документа планирования ГО: что есть и не пора ли пересмотр.
+
+    Почему НЕ ядровой ``Document``: у того ``template_id`` NOT NULL, поэтому
+    план ГО, утверждённый до внедрения платформы, или паспорт безопасности,
+    согласованный в органе, в реестр ядра не заводятся вовсе. Довод дословно
+    тот же, что у реестра документов ПБ; ссылка ``document_id`` на выпущенный
+    фабрикой документ сохраняется, когда он есть.
+
+    Пустой срок пересмотра означает БЕССРОЧНО, а не «просрочено»: приказ без
+    даты пересмотра — это документ, который есть, а не отсутствующий.
+    """
+
+    __tablename__ = "cd_document"
+
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    number: Mapped[str | None] = mapped_column(String(64))
+    #: план ГО организации не привязан к одному объекту — площадка не обязательна
+    site_id: Mapped[str | None] = mapped_column(
+        ForeignKey("site.id"), nullable=True, index=True
+    )
+    approved_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    #: срок пересмотра/актуализации; NULL — документ бессрочный
+    review_due: Mapped[date | None] = mapped_column(Date, nullable=True)
+    responsible: Mapped[str | None] = mapped_column(String(255))
+    #: если документ выпущен документной фабрикой — ссылка на него; иначе NULL
+    #: (бумага из органа управления ГОЧС существует вне платформы)
+    document_id: Mapped[str | None] = mapped_column(
+        ForeignKey("document.id"), nullable=True
+    )
+    notes: Mapped[str | None] = mapped_column(Text)
+
+    site: Mapped[Site | None] = relationship(backref="cd_documents")
+
+    __table_args__ = (
+        Index("ix_cd_document_tenant_review", "tenant_id", "review_due"),
+    )
