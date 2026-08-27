@@ -22,6 +22,12 @@ class CommitteeKind(str, enum.Enum):
     PB = "pb"  # комитет по ПБ
     COMMISSION_TRAINING = "commission_training"
     COMMISSION_INVESTIGATION = "commission_investigation"
+    # Доп. №1 разд. 56.1 «Комиссии: КЧС и ПБ, эвакокомиссия». Контур комиссий
+    # (составы, заседания, протоколы, решения, голоса) уже есть — дисциплине
+    # ГО и ЧС не хватало ровно этих двух видов. Заводить свой реестр комиссий
+    # значило бы дублировать ядро вопреки принципу мультидисциплинарности.
+    COMMISSION_EMERGENCY = "commission_emergency"  # КЧС и ПБ
+    COMMISSION_EVACUATION = "commission_evacuation"  # эвакуационная комиссия
     OTHER = "other"
 
 
