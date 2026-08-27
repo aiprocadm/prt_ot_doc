@@ -79,6 +79,12 @@ def test_enums_use_value_labels() -> None:
         "pb",
         "commission_training",
         "commission_investigation",
+        # Доп. №1 разд. 56.1 (27.08.2026): комиссии контура ГО и ЧС. Заведены
+        # ДВУМЯ значениями словаря, а не своим реестром — контур комиссий уже
+        # даёт составы, протоколы и решения. Расширение нативного enum PG —
+        # миграция 20260827_cd04_committee_kinds.
+        "commission_emergency",
+        "commission_evacuation",
         "other",
     }
     assert {m.value for m in CommitteeMemberRole} == {"chair", "secretary", "member"}

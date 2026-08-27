@@ -38,11 +38,18 @@ import { formatDate } from "@/utils/datetime";
 
 // ── Label maps ──────────────────────────────────────────────────────────────
 
+// Подписи видов комиссий. Держатся в согласии со словарём бэкенда
+// (CommitteeKind) тестом-сторожем backend/tests/test_civil_defense_committees.py:
+// список строится ИЗ ЭТОГО map, поэтому вид, которого здесь нет, нельзя ни
+// выбрать при заведении, ни прочитать в реестре — он покажется сырым кодом.
 const KIND_LABELS: Record<string, string> = {
   osms: "Комитет по ОТ",
   pb: "Комитет по ПБ",
   commission_training: "Комиссия по обучению",
   commission_investigation: "Комиссия по расследованию",
+  // Доп. №1 разд. 56.1: комиссии контура ГО и ЧС.
+  commission_emergency: "КЧС и ПБ",
+  commission_evacuation: "Эвакуационная комиссия",
   other: "Иное",
 };
 
