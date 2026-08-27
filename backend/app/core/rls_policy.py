@@ -57,6 +57,7 @@ RLS_ENABLED_TABLES: frozenset[str] = frozenset(
         "client_portal_read_models",
         "client_portal_tokens",
         "client_request_tickets",
+        "cd_drill",
         "cd_formation",
         "cd_formation_member",
         "committee",

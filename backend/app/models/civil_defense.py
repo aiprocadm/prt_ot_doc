@@ -19,11 +19,11 @@ from __future__ import annotations
 
 from datetime import date
 
-from sqlalchemy import Date, ForeignKey, String, Text, UniqueConstraint
+from sqlalchemy import Date, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import SoftDeleteMixin, TenantBaseModel
-from app.models.master_data import Person
+from app.models.master_data import Person, Site
 
 #: Виды нештатных формирований — ЗАКРЫТЫЙ словарь из двух (ФЗ-28 «О гражданской
 #: обороне»): НАСФ создаются для аварийно-спасательных работ, НФГО — для
@@ -110,4 +110,81 @@ class CivilDefenseFormationMember(TenantBaseModel, SoftDeleteMixin):
         UniqueConstraint(
             "tenant_id", "formation_id", "person_id", name="uq_cd_member_person"
         ),
+    )
+
+
+#: Виды учений и тренировок ГО — ЗАКРЫТЫЙ словарь. Деление установлено
+#: положением о подготовке населения в области ГО: у каждого вида свои
+#: участники, продолжительность и порядок. Это НЕ то же, что тренировки ПБ
+#: (там эвакуация и первичные средства) — основания и органы разные.
+CD_DRILL_KINDS: dict[str, str] = {
+    "command_staff": "Командно-штабное учение",
+    "tactical_special": "Тактико-специальное учение",
+    "complex": "Комплексное учение",
+    "facility_training": "Объектовая тренировка",
+}
+
+#: Результат проведённого учения — закрытый словарь: «анализ» это сравнимая
+#: оценка, а не пересказ своими словами (пересказ живёт в findings).
+#: Словарь намеренно совпадает с оценками тренировок ПБ: одинаковый смысл —
+#: одинаковые слова, иначе два экрана продукта судят об одном по-разному.
+CD_DRILL_OUTCOMES: dict[str, str] = {
+    "passed": "Проведено, задачи выполнены",
+    "with_remarks": "Проведено с замечаниями",
+    "failed": "Задачи не выполнены",
+}
+
+#: Состояние учения — считается ПРИ ЧТЕНИИ по датам.
+CD_DRILL_STATUS_TITLES: dict[str, str] = {
+    "planned": "Запланировано",
+    "held": "Проведено",
+    "overdue": "Просрочено",
+}
+
+
+class CivilDefenseDrill(TenantBaseModel, SoftDeleteMixin):
+    """Учение или тренировка ГО: план-график, протокол, анализ.
+
+    СВОЯ таблица, а не переиспользование тренировок ПБ: у учения ГО есть то,
+    чего у пожарной тренировки не бывает — задействованное ФОРМИРОВАНИЕ
+    (срез-1). И виды разные: командно-штабное учение и тренировка по эвакуации
+    отличаются основанием, участниками и органом, который их требует.
+
+    Формирование НЕОБЯЗАТЕЛЬНО: объектовая тренировка проводится всем
+    персоналом, а не силами звена — требовать привязку значило бы выдумывать
+    связь, которой нет.
+
+    ГРАНИЦА: платформа НЕ назначает периодичность учений — она установлена
+    постановлением Правительства и зависит от категории организации по ГО.
+    """
+
+    __tablename__ = "cd_drill"
+
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    #: план-график: дата, на которую учение назначено (обязательна — учение
+    #: рождается ЗАПЛАНИРОВАННЫМ, иначе плана-графика нет)
+    planned_on: Mapped[date] = mapped_column(Date, nullable=False)
+    #: протокол: дата фактического проведения; NULL — ещё не проводилось
+    held_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    #: задействованное формирование (срез-1); NULL — учение общеобъектовое
+    formation_id: Mapped[str | None] = mapped_column(
+        ForeignKey("cd_formation.id"), nullable=True, index=True
+    )
+    site_id: Mapped[str | None] = mapped_column(
+        ForeignKey("site.id"), nullable=True, index=True
+    )
+    #: вводная обстановка по сценарию учения
+    scenario: Mapped[str | None] = mapped_column(Text)
+    participants: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    #: оценка из CD_DRILL_OUTCOMES; заполняется вместе с held_on
+    outcome: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    #: анализ: замечания, время сбора, выводы и меры
+    findings: Mapped[str | None] = mapped_column(Text)
+
+    formation: Mapped[CivilDefenseFormation | None] = relationship(backref="drills")
+    site: Mapped[Site | None] = relationship(backref="cd_drills")
+
+    __table_args__ = (
+        Index("ix_cd_drill_tenant_planned", "tenant_id", "planned_on"),
     )
