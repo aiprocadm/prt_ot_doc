@@ -89,6 +89,63 @@ class FormationMemberPage(BaseSchema):
     total: int
 
 
+class DrillCreate(BaseSchema):
+    kind: str = Field(min_length=1, max_length=32)
+    title: str = Field(min_length=1, max_length=255)
+    #: учение рождается ЗАПЛАНИРОВАННЫМ — иначе плана-графика нет
+    planned_on: date
+    formation_id: str | None = Field(default=None, max_length=36)
+    site_id: str | None = Field(default=None, max_length=36)
+    scenario: str | None = None
+    participants: int | None = Field(default=None, ge=0)
+    notes: str | None = None
+
+
+class DrillUpdate(BaseSchema):
+    kind: str | None = Field(default=None, min_length=1, max_length=32)
+    title: str | None = Field(default=None, min_length=1, max_length=255)
+    planned_on: date | None = None
+    held_on: date | None = None
+    formation_id: str | None = Field(default=None, max_length=36)
+    site_id: str | None = Field(default=None, max_length=36)
+    scenario: str | None = None
+    participants: int | None = Field(default=None, ge=0)
+    outcome: str | None = Field(default=None, max_length=32)
+    findings: str | None = None
+
+
+class DrillRead(BaseSchema):
+    """Учение вместе с состоянием и названием задействованного формирования.
+
+    ГРАНИЦА: полей «требуемая периодичность» и «следующее учение» здесь НЕТ —
+    периодичность установлена постановлением и категорией организации по ГО.
+    """
+
+    id: str
+    kind: str
+    kind_label: str
+    title: str
+    planned_on: date
+    held_on: date | None = None
+    formation_id: str | None = None
+    #: название формирования; None — учение общеобъектовое
+    formation_name: str | None = None
+    site_id: str | None = None
+    scenario: str | None = None
+    participants: int | None = None
+    outcome: str | None = None
+    outcome_label: str | None = None
+    findings: str | None = None
+    #: planned / held / overdue — считается ПРИ ЧТЕНИИ по датам
+    status: str
+    status_label: str
+
+
+class DrillPage(BaseSchema):
+    items: list[DrillRead]
+    total: int
+
+
 class CivilDefenseReadinessRead(BaseSchema):
     """Сводка ГО и ЧС: формирования и их составы.
 
@@ -103,3 +160,8 @@ class CivilDefenseReadinessRead(BaseSchema):
     without_commander: int
     #: действующие члены всех составов (выведенные не считаются)
     members_active: int
+    #: разд. 56.1 «учения и тренировки»: план-график и журнал проведённых
+    drills_total: int = 0
+    #: назначенные, срок которых прошёл, а протокола нет
+    drills_overdue: int = 0
+    drills_held_this_year: int = 0

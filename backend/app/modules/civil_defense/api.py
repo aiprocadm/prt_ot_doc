@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+from datetime import date
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -24,8 +25,12 @@ from app.core.feature_flags import is_module_enabled, raise_for_disabled_module
 from app.core.security import AccessContext, abac, rbac
 from app.core.tenant_validation import TenantContextValidator
 from app.models.civil_defense import (
+    CD_DRILL_KINDS,
+    CD_DRILL_OUTCOMES,
+    CD_DRILL_STATUS_TITLES,
     CD_FORMATION_KINDS,
     CD_MEMBER_STATUS_TITLES,
+    CivilDefenseDrill,
     CivilDefenseFormation,
     CivilDefenseFormationMember,
 )
@@ -33,6 +38,10 @@ from app.models.master_data import Person
 from app.models.models import Tenant
 from app.schemas.civil_defense import (
     CivilDefenseReadinessRead,
+    DrillCreate,
+    DrillPage,
+    DrillRead,
+    DrillUpdate,
     FormationCreate,
     FormationMemberCreate,
     FormationMemberPage,
@@ -613,6 +622,327 @@ async def update_member(
     return _member_read(member, _full_name(person))
 
 
+# --- Учения и тренировки ГО: план-график, протокол, журнал (разд. 56.1) -----
+
+
+def _drill_status(drill: CivilDefenseDrill, today: date) -> str:
+    """planned / held / overdue — считается ПРИ ЧТЕНИИ.
+
+    Хранимый статус разъехался бы с календарём в первую же ночь: срок
+    наступает сам, без запроса на изменение (прецедент тренировок ПБ).
+    """
+
+    if drill.held_on is not None:
+        return "held"
+    return "overdue" if drill.planned_on < today else "planned"
+
+
+def _drill_read(
+    drill: CivilDefenseDrill, today: date, formation_name: str | None
+) -> DrillRead:
+    status_value = _drill_status(drill, today)
+    return DrillRead(
+        id=drill.id,
+        kind=drill.kind,
+        kind_label=CD_DRILL_KINDS.get(drill.kind, drill.kind),
+        title=drill.title,
+        planned_on=drill.planned_on,
+        held_on=drill.held_on,
+        formation_id=drill.formation_id,
+        formation_name=formation_name,
+        site_id=drill.site_id,
+        scenario=drill.scenario,
+        participants=drill.participants,
+        outcome=drill.outcome,
+        outcome_label=(
+            CD_DRILL_OUTCOMES.get(drill.outcome, drill.outcome)
+            if drill.outcome
+            else None
+        ),
+        findings=drill.findings,
+        status=status_value,
+        status_label=CD_DRILL_STATUS_TITLES.get(status_value, status_value),
+    )
+
+
+def _validate_drill(
+    *,
+    kind: str | None,
+    outcome: str | None,
+    held_on: date | None,
+    has_outcome_field: bool,
+) -> None:
+    """Протокол обязан быть протоколом: проведено → есть результат, и наоборот.
+
+    Правила намеренно те же, что у тренировок ПБ: без этой пары требование ТЗ
+    «журналы» выполнялось бы на бумаге — запись «провели» без оценки нечего
+    анализировать, а оценка без даты проведения это выдумка о событии,
+    которого не было.
+    """
+
+    if kind is not None and kind not in CD_DRILL_KINDS:
+        raise _unprocessable(
+            f"Неизвестный вид учения {kind!r}; допустимые: "
+            f"{', '.join(CD_DRILL_KINDS)}"
+        )
+    if outcome is not None and outcome not in CD_DRILL_OUTCOMES:
+        raise _unprocessable(
+            f"Неизвестный результат {outcome!r}; допустимые: "
+            f"{', '.join(CD_DRILL_OUTCOMES)}"
+        )
+    if held_on is not None and held_on > date.today():
+        raise _unprocessable(
+            "Дата проведения не может быть в будущем — это план, а не протокол"
+        )
+    if held_on is not None and outcome is None:
+        raise _unprocessable(
+            "У проведённого учения обязателен результат: "
+            f"{', '.join(CD_DRILL_OUTCOMES)}"
+        )
+    if outcome is not None and held_on is None and has_outcome_field:
+        raise _unprocessable(
+            "Результат нельзя выставить, пока учение не проведено — "
+            "укажите дату проведения"
+        )
+
+
+async def _get_drill_or_404(
+    session: AsyncSession, tenant: Tenant, drill_id: str
+) -> CivilDefenseDrill:
+    stmt = select(CivilDefenseDrill).where(
+        CivilDefenseDrill.id == drill_id,
+        CivilDefenseDrill.tenant_id == tenant.id,
+        CivilDefenseDrill.deleted_at.is_(None),
+    )
+    drill = (await session.execute(stmt)).scalar_one_or_none()
+    if drill is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            detail=api_problem_detail(
+                code="CD_DRILL_NOT_FOUND",
+                message="Drill not found",
+                error_type="civil_defense",
+            ),
+        )
+    return drill
+
+
+async def _formation_names(
+    session: AsyncSession, tenant: Tenant, formation_ids: list[str]
+) -> dict[str, str]:
+    """Названия формирований одним запросом, а не N+1."""
+
+    ids = [fid for fid in formation_ids if fid]
+    if not ids:
+        return {}
+    rows = (
+        (
+            await session.execute(
+                select(CivilDefenseFormation).where(
+                    CivilDefenseFormation.tenant_id == tenant.id,
+                    CivilDefenseFormation.id.in_(ids),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return {str(row.id): row.name for row in rows}
+
+
+@router.get("/drills", response_model=DrillPage)
+async def list_drills(
+    tenant: TenantDep,
+    session: SessionDep,
+    access: Access,
+    status_filter: str | None = Query(default=None, alias="status"),
+    formation_id: str | None = Query(default=None),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+) -> DrillPage:
+    """План-график учений: и назначенные, и проведённые, в одном реестре.
+
+    ``status=held`` — это и есть «журнал» из требования: реестр с фактическими
+    датами проведения.
+    """
+
+    TenantContextValidator.ensure_tenant_context(tenant)
+    today = date.today()
+    stmt = select(CivilDefenseDrill).where(
+        CivilDefenseDrill.tenant_id == tenant.id,
+        CivilDefenseDrill.deleted_at.is_(None),
+    )
+    if formation_id:
+        stmt = stmt.where(CivilDefenseDrill.formation_id == formation_id)
+    if status_filter == "held":
+        stmt = stmt.where(CivilDefenseDrill.held_on.is_not(None))
+    elif status_filter == "planned":
+        stmt = stmt.where(
+            CivilDefenseDrill.held_on.is_(None),
+            CivilDefenseDrill.planned_on >= today,
+        )
+    elif status_filter == "overdue":
+        stmt = stmt.where(
+            CivilDefenseDrill.held_on.is_(None),
+            CivilDefenseDrill.planned_on < today,
+        )
+    total = int(
+        await session.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+    )
+    rows = (
+        (
+            await session.execute(
+                stmt.order_by(CivilDefenseDrill.planned_on.desc())
+                .offset(offset)
+                .limit(limit)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    names = await _formation_names(
+        session, tenant, [r.formation_id for r in rows if r.formation_id]
+    )
+    return DrillPage(
+        items=[
+            _drill_read(r, today, names.get(r.formation_id or "")) for r in rows
+        ],
+        total=total,
+    )
+
+
+@router.post("/drills", response_model=DrillRead, status_code=status.HTTP_201_CREATED)
+async def create_drill(
+    request: Request,
+    payload: DrillCreate,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: Access,
+) -> DrillRead:
+    """Завести учение в план-график. Рождается ЗАПЛАНИРОВАННЫМ."""
+
+    TenantContextValidator.ensure_tenant_context(tenant)
+    _validate_drill(
+        kind=payload.kind, outcome=None, held_on=None, has_outcome_field=False
+    )
+    formation_name: str | None = None
+    if payload.formation_id:
+        formation = await _get_formation_or_404(
+            session, tenant, payload.formation_id
+        )
+        formation_name = formation.name
+
+    drill = CivilDefenseDrill(
+        tenant_id=str(tenant.id),
+        kind=payload.kind,
+        title=payload.title.strip(),
+        planned_on=payload.planned_on,
+        formation_id=payload.formation_id or None,
+        site_id=payload.site_id or None,
+        scenario=(payload.scenario or None),
+        participants=payload.participants,
+    )
+    session.add(drill)
+    await session.flush()
+    await AuditService(session).log_event(
+        tenant_id=str(tenant.id),
+        action="create",
+        object_type="CivilDefenseDrill",
+        object_id=drill.id,
+        user_id=access.user.id,
+        ip=request.client.host if request.client else "unknown",
+        request_id=getattr(request.state, "trace_id", None),
+        user_agent=request.headers.get("user-agent"),
+        changed_fields={"fields": {"id": {"before": None, "after": drill.id}}},
+        details={"entity": "CivilDefenseDrill", "title": drill.title},
+    )
+    await session.commit()
+    await session.refresh(drill)
+    return _drill_read(drill, date.today(), formation_name)
+
+
+@router.patch("/drills/{drill_id}", response_model=DrillRead)
+async def update_drill(
+    request: Request,
+    drill_id: str,
+    payload: DrillUpdate,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: Access,
+) -> DrillRead:
+    """Внести протокол проведения или поправить план-график."""
+
+    TenantContextValidator.ensure_tenant_context(tenant)
+    drill = await _get_drill_or_404(session, tenant, drill_id)
+    data = payload.model_dump(exclude_unset=True)
+    _validate_drill(
+        kind=data.get("kind"),
+        outcome=data.get("outcome", drill.outcome),
+        held_on=data.get("held_on", drill.held_on),
+        has_outcome_field=True,
+    )
+    before = {
+        "kind": drill.kind,
+        "title": drill.title,
+        "planned_on": str(drill.planned_on),
+        "held_on": str(drill.held_on),
+        "formation_id": drill.formation_id,
+        "outcome": drill.outcome,
+        "participants": drill.participants,
+        "findings": drill.findings,
+    }
+    if data.get("kind"):
+        drill.kind = str(data["kind"])
+    if data.get("title"):
+        drill.title = str(data["title"]).strip()
+    if data.get("planned_on") is not None:
+        drill.planned_on = data["planned_on"]
+    if "held_on" in data:
+        drill.held_on = data["held_on"]
+    if "outcome" in data:
+        drill.outcome = data["outcome"] or None
+    if "formation_id" in data:
+        if data["formation_id"]:
+            await _get_formation_or_404(session, tenant, str(data["formation_id"]))
+        drill.formation_id = data["formation_id"] or None
+    if "site_id" in data:
+        drill.site_id = data["site_id"] or None
+    if "participants" in data:
+        drill.participants = data["participants"]
+    for field in ("scenario", "findings"):
+        if field in data:
+            setattr(drill, field, data[field] or None)
+    await session.flush()
+    after = {
+        "kind": drill.kind,
+        "title": drill.title,
+        "planned_on": str(drill.planned_on),
+        "held_on": str(drill.held_on),
+        "formation_id": drill.formation_id,
+        "outcome": drill.outcome,
+        "participants": drill.participants,
+        "findings": drill.findings,
+    }
+    await AuditService(session).log_event(
+        tenant_id=str(tenant.id),
+        action="update",
+        object_type="CivilDefenseDrill",
+        object_id=drill.id,
+        user_id=access.user.id,
+        ip=request.client.host if request.client else "unknown",
+        request_id=getattr(request.state, "trace_id", None),
+        user_agent=request.headers.get("user-agent"),
+        changed_fields=field_level_diff(before, after),
+        details={"entity": "CivilDefenseDrill"},
+    )
+    await session.commit()
+    await session.refresh(drill)
+    names = await _formation_names(
+        session, tenant, [drill.formation_id] if drill.formation_id else []
+    )
+    return _drill_read(drill, date.today(), names.get(drill.formation_id or ""))
+
+
 @router.get("/readiness", response_model=CivilDefenseReadinessRead)
 async def civil_defense_readiness(
     tenant: TenantDep,
@@ -655,7 +985,31 @@ async def civil_defense_readiness(
         )
         or 0
     )
+    # Разд. 56.1 «учения»: план-график, просрочки и журнал проведённых за год.
+    today = date.today()
+    drills = (
+        (
+            await session.execute(
+                select(CivilDefenseDrill).where(
+                    CivilDefenseDrill.tenant_id == tenant.id,
+                    CivilDefenseDrill.deleted_at.is_(None),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+
     return CivilDefenseReadinessRead(
+        drills_total=len(drills),
+        drills_overdue=sum(
+            1 for d in drills if _drill_status(d, today) == "overdue"
+        ),
+        drills_held_this_year=sum(
+            1
+            for d in drills
+            if d.held_on is not None and d.held_on.year == today.year
+        ),
         total_formations=len(formations),
         by_kind=by_kind,
         without_commander=sum(
