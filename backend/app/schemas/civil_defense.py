@@ -146,6 +146,90 @@ class DrillPage(BaseSchema):
     total: int
 
 
+class ProfileCreate(BaseSchema):
+    site_id: str = Field(min_length=1, max_length=36)
+    category: str = Field(min_length=1, max_length=16)
+    decision_number: str | None = Field(default=None, max_length=128)
+    decision_date: date | None = None
+    responsible: str | None = Field(default=None, max_length=255)
+    notes: str | None = None
+
+
+class ProfileUpdate(BaseSchema):
+    category: str | None = Field(default=None, min_length=1, max_length=16)
+    decision_number: str | None = Field(default=None, max_length=128)
+    decision_date: date | None = None
+    responsible: str | None = Field(default=None, max_length=255)
+    notes: str | None = None
+
+
+class ProfileRead(BaseSchema):
+    """Сведения по ГО об объекте.
+
+    ГРАНИЦА: полей «предлагаемая категория», «требуемые планы» и
+    «соответствует ли объект» здесь НЕТ — категорирование выполняет орган.
+    """
+
+    id: str
+    site_id: str
+    site_name: str | None = None
+    category: str
+    category_label: str
+    decision_number: str | None = None
+    decision_date: date | None = None
+    responsible: str | None = None
+    notes: str | None = None
+
+
+class ProfilePage(BaseSchema):
+    items: list[ProfileRead]
+    total: int
+
+
+class CdDocumentCreate(BaseSchema):
+    kind: str = Field(min_length=1, max_length=32)
+    title: str = Field(min_length=1, max_length=255)
+    number: str | None = Field(default=None, max_length=64)
+    site_id: str | None = Field(default=None, max_length=36)
+    approved_on: date | None = None
+    review_due: date | None = None
+    responsible: str | None = Field(default=None, max_length=255)
+    notes: str | None = None
+
+
+class CdDocumentUpdate(BaseSchema):
+    kind: str | None = Field(default=None, min_length=1, max_length=32)
+    title: str | None = Field(default=None, min_length=1, max_length=255)
+    number: str | None = Field(default=None, max_length=64)
+    site_id: str | None = Field(default=None, max_length=36)
+    approved_on: date | None = None
+    review_due: date | None = None
+    responsible: str | None = Field(default=None, max_length=255)
+    notes: str | None = None
+
+
+class CdDocumentRead(BaseSchema):
+    id: str
+    kind: str
+    kind_label: str
+    title: str
+    number: str | None = None
+    site_id: str | None = None
+    approved_on: date | None = None
+    review_due: date | None = None
+    responsible: str | None = None
+    notes: str | None = None
+    #: ok / due_soon / overdue — считается ПРИ ЧТЕНИИ;
+    #: пустой срок означает БЕССРОЧНО, а не «просрочено»
+    review_status: str
+    review_status_label: str
+
+
+class CdDocumentPage(BaseSchema):
+    items: list[CdDocumentRead]
+    total: int
+
+
 class CivilDefenseReadinessRead(BaseSchema):
     """Сводка ГО и ЧС: формирования и их составы.
 
@@ -165,3 +249,11 @@ class CivilDefenseReadinessRead(BaseSchema):
     #: назначенные, срок которых прошёл, а протокола нет
     drills_overdue: int = 0
     drills_held_this_year: int = 0
+    #: разд. 56.1 «категорирование и планирование»
+    profiles_total: int = 0
+    #: категория → число объектов; ключи всегда все четыре, чтобы «ноль
+    #: объектов первой категории» отличался от «поле не пришло»
+    profiles_by_category: dict[str, int] = Field(default_factory=dict)
+    planning_documents: int = 0
+    #: документы с прошедшим сроком пересмотра (по ВНЕСЁННОМУ сроку)
+    planning_review_overdue: int = 0

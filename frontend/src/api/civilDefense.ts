@@ -31,6 +31,39 @@ export type CivilDefenseReadinessDto = {
   drills_total: number;
   drills_overdue: number;
   drills_held_this_year: number;
+  /** Разд. 56.1 «категорирование и планирование». */
+  profiles_total: number;
+  profiles_by_category: Record<string, number>;
+  planning_documents: number;
+  planning_review_overdue: number;
+};
+
+export type ProfileDto = {
+  id: string;
+  site_id: string;
+  site_name?: string | null;
+  category: string;
+  category_label: string;
+  decision_number?: string | null;
+  decision_date?: string | null;
+  responsible?: string | null;
+  notes?: string | null;
+};
+
+export type CdDocumentDto = {
+  id: string;
+  kind: string;
+  kind_label: string;
+  title: string;
+  number?: string | null;
+  site_id?: string | null;
+  approved_on?: string | null;
+  review_due?: string | null;
+  responsible?: string | null;
+  notes?: string | null;
+  /** ok | due_soon | overdue — пустой срок означает «бессрочно». */
+  review_status: string;
+  review_status_label: string;
 };
 
 export type DrillDto = {
@@ -66,6 +99,22 @@ export const civilDefenseApi = {
   listDrills: async (): Promise<DrillDto[]> => {
     const { data } = await apiClient.get<{ items?: DrillDto[] }>(
       "/civil-defense/drills",
+      { params: { limit: 200, offset: 0 } },
+    );
+    return Array.isArray(data?.items) ? data.items : [];
+  },
+
+  listProfiles: async (): Promise<ProfileDto[]> => {
+    const { data } = await apiClient.get<{ items?: ProfileDto[] }>(
+      "/civil-defense/profiles",
+      { params: { limit: 200, offset: 0 } },
+    );
+    return Array.isArray(data?.items) ? data.items : [];
+  },
+
+  listDocuments: async (): Promise<CdDocumentDto[]> => {
+    const { data } = await apiClient.get<{ items?: CdDocumentDto[] }>(
+      "/civil-defense/documents",
       { params: { limit: 200, offset: 0 } },
     );
     return Array.isArray(data?.items) ? data.items : [];
