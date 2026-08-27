@@ -231,6 +231,16 @@ SELLABLE_MODULES: tuple[ModuleDescriptor, ...] = (
         ui_routes=("/ecology",),
         permissions=("ecology.view",),
     ),
+    # Доп. №1 разд. 56.1: контур ГО и ЧС получил первое содержание — реестр
+    # нештатных формирований. Тариф «Всё включено» сдвигается сам собой;
+    # компенсирует миграция 20260827_cd02_civil_defense_grant.
+    ModuleDescriptor(
+        code="civil_defense",
+        title="ГО и ЧС",
+        category="ГО и ЧС",
+        ui_routes=("/civil-defense",),
+        permissions=("civil_defense.view",),
+    ),
 )
 
 MODULE_REGISTRY: tuple[ModuleDescriptor, ...] = CORE_MODULES + SELLABLE_MODULES

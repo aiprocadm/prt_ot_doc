@@ -77,6 +77,12 @@ from app.models.budget import (  # noqa: E402
     SafetyBudget,
 )
 
+# Разд. 56.1: предметные модели контура ГО и ЧС.
+from app.models.civil_defense import (  # noqa: E402,F401
+    CivilDefenseFormation,
+    CivilDefenseFormationMember,
+)
+
 # Разд. 55: предметные модели контура экологии.
 from app.models.ecology import (  # noqa: E402,F401
     EmissionMeasurement,
