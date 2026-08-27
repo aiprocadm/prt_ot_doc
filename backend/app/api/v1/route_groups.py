@@ -81,6 +81,7 @@ from app.modules.analytics.api import router as analytics_router
 from app.modules.branding.api import router as branding_router
 from app.modules.budget.api import router as budget_router
 from app.modules.budget.reimbursement_api import router as budget_reimbursement_router
+from app.modules.civil_defense.api import router as civil_defense_router
 from app.modules.client_portal.api import internal_router as portal_requests_router
 from app.modules.client_portal.api import router as client_portal_v1_router
 from app.modules.ecology.api import router as ecology_router
@@ -227,6 +228,7 @@ DOCUMENT_CORE_ROUTER_REGISTRATIONS: tuple[RouterRegistration, ...] = (
     (fire_safety_router, {"tags": ["fire-safety"]}),
     (industrial_safety_router, {"tags": ["industrial-safety"]}),
     (ecology_router, {"tags": ["ecology"]}),
+    (civil_defense_router, {"tags": ["civil-defense"]}),
     (budget_reimbursement_router, {"tags": ["budget"]}),
     (privacy_router, {"tags": ["privacy"]}),
 )

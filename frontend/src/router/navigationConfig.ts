@@ -343,6 +343,17 @@ export const MAIN_NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
+    title: "ГО и ЧС",
+    items: [
+      {
+        label: "Формирования",
+        to: "/civil-defense",
+        icon: ShieldAlert,
+        permission: PERMISSIONS.CIVIL_DEFENSE_VIEW,
+      },
+    ],
+  },
+  {
     title: "Бизнес и аналитика",
     items: [
       {

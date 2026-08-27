@@ -77,6 +77,9 @@ export const IndustrialSafetyPage = lazy(
   () => import("@/pages/industrial-safety/IndustrialSafetyPage"),
 );
 export const EcologyPage = lazy(() => import("@/pages/ecology/EcologyPage"));
+export const CivilDefensePage = lazy(
+  () => import("@/pages/civilDefense/CivilDefensePage"),
+);
 export const ReferencePage = lazy(
   () => import("@/pages/reference/ReferencePage"),
 );

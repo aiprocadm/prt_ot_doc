@@ -44,6 +44,7 @@ import {
   FindingsPage,
   FireInspectionsPage,
   FireSafetyPage,
+  CivilDefensePage,
   EcologyPage,
   IndustrialSafetyPage,
   FireTrainingPage,
@@ -378,6 +379,17 @@ export const buildProtectedRouteGroups = (): ReactElement[] => {
       permission: PERMISSIONS.ECOLOGY_VIEW,
       routes: [
         <Route key="/ecology" path="/ecology" element={<EcologyPage />} />,
+      ],
+    },
+    {
+      // Доп. №1 разд. 56.1: реестр формирований — первый экран контура ГО и ЧС.
+      permission: PERMISSIONS.CIVIL_DEFENSE_VIEW,
+      routes: [
+        <Route
+          key="/civil-defense"
+          path="/civil-defense"
+          element={<CivilDefensePage />}
+        />,
       ],
     },
     {
