@@ -10,7 +10,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.errors import api_problem_detail
 from app.core.security import AccessContext, abac
-from app.domains.packs.readiness import analyze_pack_readiness
 from app.models.models import (
     PackagePresetItem,
     PackRun,
@@ -19,6 +18,7 @@ from app.models.models import (
     TemplateVersion,
     Tenant,
 )
+from app.modules.packs.readiness import analyze_pack_readiness
 from app.modules.packs.schemas import (
     DownloadRead,
     MappingPreviewRequest,

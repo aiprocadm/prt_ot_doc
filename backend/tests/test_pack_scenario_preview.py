@@ -11,7 +11,7 @@ Document Readiness Score, чего не хватает и почему, каки
 
 from __future__ import annotations
 
-from app.domains.packs.scenario_preview import NAMES_LIMIT, analyze_scenario_readiness
+from app.modules.packs.scenario_preview import NAMES_LIMIT, analyze_scenario_readiness
 
 SCENARIO = "OT_NEW_EMPLOYEE"
 
@@ -19,7 +19,7 @@ SCENARIO = "OT_NEW_EMPLOYEE"
 def _answers(**overrides: object) -> dict[str, object]:
     """Полные ответы на вопросы сценария — база, от которой отнимают."""
 
-    from app.domains.packs.fields import questions_for
+    from app.modules.packs.fields import questions_for
 
     return {question.name: "заполнено" for question in questions_for(SCENARIO)} | overrides
 
@@ -80,7 +80,7 @@ def test_required_fields_come_from_the_declaration() -> None:
     Разойдутся — мастер спросит одно, а предпросмотр потребует другое.
     """
 
-    from app.domains.packs.fields import questions_for
+    from app.modules.packs.fields import questions_for
 
     required = [q for q in questions_for(SCENARIO) if q.required]
     assert required, "у сценария нет обязательных полей — тест бессмысленен"
@@ -95,7 +95,7 @@ def test_required_fields_come_from_the_declaration() -> None:
 def test_blank_optional_is_named_but_does_not_block() -> None:
     """«Останется пустым» — это предупреждение, а не запрет."""
 
-    from app.domains.packs.fields import questions_for
+    from app.modules.packs.fields import questions_for
 
     optional = [q for q in questions_for(SCENARIO) if not q.required]
     assert optional, "у сценария нет необязательных полей — тест бессмысленен"

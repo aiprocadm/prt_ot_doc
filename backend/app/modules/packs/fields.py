@@ -34,6 +34,7 @@ from app.modules.packs.definitions import (
     PACK_CODE_CEO_SHIELD,
     PACK_CODE_CIVIL_DEFENCE,
     PACK_CODE_CONTRACTOR,
+    PACK_CODE_ECO_REPORTS,
     PACK_CODE_FIRE_INSPECTION,
     PACK_CODE_INCIDENT,
     PACK_CODE_INSPECTION_PREP,
@@ -227,6 +228,30 @@ FIELD_LABELS: dict[str, str] = {
     "bdd_briefing_topics": "Темы инструктажа",
     "bdd_briefing_hours": "Продолжительность инструктажа",
     "bdd_briefing_date": "Дата проведения инструктажа",
+    # Срез-8 экологии: отчётные формы (разд. 55.3). Суммы и массы — ответы
+    # специалиста по данным реестров экологии, платформа их не вычисляет.
+    "eco_report_year": "Отчётный год",
+    "eco_responsible": "Составитель отчётности (эколог)",
+    "eco_fee_emissions": "Плата по выбросам, руб.",
+    "eco_fee_discharges": "Плата по сбросам, руб.",
+    "eco_fee_waste": "Плата за размещение отходов, руб.",
+    "eco_fee_advances": "Авансовые платежи по кварталам, руб.",
+    "eco_waste_generated": "Образовано отходов за год, т",
+    "eco_waste_transferred": "Передано отходов операторам, т",
+    "eco_waste_disposed": "Размещено отходов, т",
+    "eco_air_emitted": "Выброшено загрязняющих веществ, т",
+    "eco_air_sources": "Число стационарных источников выбросов",
+    "eco_air_treatment": "Установки очистки газа",
+    "eco_water_intake": "Забрано воды за год, тыс. куб. м",
+    "eco_water_discharge": "Отведено сточных вод, тыс. куб. м",
+    "eco_water_meters": "Приборы учёта воды",
+    "eco_pek_program": "Программа ПЭК (реквизиты)",
+    "eco_pek_measurements": "Выполненные замеры ПЭК",
+    "eco_pek_exceedances": "Превышения по замерам",
+    "eco_pek_laboratory": "Аккредитованная лаборатория",
+    "eco_nvos_number": "Код объекта НВОС в реестре",
+    "eco_nvos_category": "Категория объекта НВОС",
+    "eco_nvos_actualization": "Актуализация сведений об объекте",
 }
 
 
@@ -418,6 +443,34 @@ SCENARIO_FIELDS: dict[str, tuple[PackField, ...]] = {
             "bdd_briefing_topics",
             "bdd_briefing_hours",
             "bdd_briefing_date",
+        ),
+    ),
+    # Срез-8 экологии: отчётные формы. Обязательны только год и составитель —
+    # без года форма бессмысленна, без составителя безымянна; числа берутся
+    # из реестров экологии и вносятся по мере готовности.
+    PACK_CODE_ECO_REPORTS: _fields(
+        ("eco_report_year", "eco_responsible"),
+        (
+            "eco_fee_emissions",
+            "eco_fee_discharges",
+            "eco_fee_waste",
+            "eco_fee_advances",
+            "eco_waste_generated",
+            "eco_waste_transferred",
+            "eco_waste_disposed",
+            "eco_air_emitted",
+            "eco_air_sources",
+            "eco_air_treatment",
+            "eco_water_intake",
+            "eco_water_discharge",
+            "eco_water_meters",
+            "eco_pek_program",
+            "eco_pek_measurements",
+            "eco_pek_exceedances",
+            "eco_pek_laboratory",
+            "eco_nvos_number",
+            "eco_nvos_category",
+            "eco_nvos_actualization",
         ),
     ),
 }
