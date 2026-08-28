@@ -230,6 +230,24 @@ class CdDocumentPage(BaseSchema):
     total: int
 
 
+class TrainingProgramRead(BaseSchema):
+    """Учебная программа, размеченная дисциплиной ГО.
+
+    Поля — только для чтения: реестром программ владеет контур обучения ядра.
+    """
+
+    id: str
+    title: str
+    code: str | None = None
+    duration_hours: int | None = None
+    valid_period_days: int | None = None
+
+
+class TrainingProgramPage(BaseSchema):
+    items: list[TrainingProgramRead]
+    total: int
+
+
 class CivilDefenseReadinessRead(BaseSchema):
     """Сводка ГО и ЧС: формирования и их составы.
 
@@ -257,3 +275,5 @@ class CivilDefenseReadinessRead(BaseSchema):
     planning_documents: int = 0
     #: документы с прошедшим сроком пересмотра (по ВНЕСЁННОМУ сроку)
     planning_review_overdue: int = 0
+    #: разд. 56.1 «программы обучения»: программы ЯДРА с дисциплиной ГО
+    training_programs: int = 0

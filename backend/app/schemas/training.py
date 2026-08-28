@@ -6,8 +6,13 @@ from datetime import date, datetime
 
 from pydantic import AliasChoices, Field
 
+from app.core.disciplines import DISCIPLINE_TITLES
 from app.models.models import TrainingSessionStatus
 from app.schemas.base import BaseSchema
+
+#: Словарь дисциплин для учебных программ — ССЫЛКА на общий словарь продукта,
+#: а не копия: две копии разъедутся при первой же новой дисциплине.
+TRAINING_DISCIPLINE_TITLES = DISCIPLINE_TITLES
 
 
 class TrainingCourseBase(BaseSchema):
@@ -16,6 +21,8 @@ class TrainingCourseBase(BaseSchema):
     description: str | None = None
     duration_hours: int | None = Field(default=None, ge=0)
     valid_period_days: int | None = Field(default=None, ge=1)
+    #: код дисциплины из общего словаря; пусто — «не размечено»
+    discipline: str | None = Field(default=None, max_length=32)
     metadata_json: dict = Field(
         default_factory=dict,
         serialization_alias="metadata",
@@ -33,6 +40,9 @@ class TrainingCourseUpdate(BaseSchema):
     description: str | None = None
     duration_hours: int | None = Field(default=None, ge=0)
     valid_period_days: int | None = Field(default=None, ge=1)
+    #: явный ``null`` СНИМАЕТ разметку: ошиблись дисциплиной — снять её
+    #: честнее, чем оставить ложную
+    discipline: str | None = Field(default=None, max_length=32)
     metadata_json: dict | None = Field(
         default=None,
         serialization_alias="metadata",
@@ -42,6 +52,8 @@ class TrainingCourseUpdate(BaseSchema):
 
 class TrainingCourseRead(TrainingCourseBase):
     id: str
+    #: подпись дисциплины словами; None — программа не размечена
+    discipline_label: str | None = None
     created_at: datetime
     updated_at: datetime
 

@@ -146,6 +146,7 @@
     "GET /api/v1/civil-defense/formations/{formation_id}/members",
     "GET /api/v1/civil-defense/profiles",
     "GET /api/v1/civil-defense/readiness",
+    "GET /api/v1/civil-defense/training-programs",
     "GET /api/v1/client-portal/dashboard",
     "GET /api/v1/client-portal/documents",
     "GET /api/v1/client-portal/history",
@@ -1817,6 +1818,7 @@
     "list_tenants_admin_endpoint_api_v1_admin_tenants_get",
     "list_tenants_endpoint_api_v1_tenants_get",
     "list_tests_api_v1_training_tests_get",
+    "list_training_programs_api_v1_civil_defense_training_programs_get",
     "list_triggers_api_v1_rules_triggers_get",
     "list_waste_movements_api_v1_ecology_waste_movements_get",
     "list_waste_passports_api_v1_ecology_waste_passports_get",
@@ -3066,6 +3068,8 @@
     "TrainingCourseUpdate",
     "TrainingPlanCreate",
     "TrainingPlanRead",
+    "TrainingProgramPage",
+    "TrainingProgramRead",
     "TrainingSessionCreate",
     "TrainingSessionRead",
     "TrainingSessionStatus",
@@ -4179,7 +4183,8 @@
       "profiles_total": "integer",
       "profiles_by_category": "object",
       "planning_documents": "integer",
-      "planning_review_overdue": "integer"
+      "planning_review_overdue": "integer",
+      "training_programs": "integer"
     },
     "ClassHistoryRead": {
       "id": "string",
@@ -9851,6 +9856,7 @@
       "description": "null|string",
       "duration_hours": "integer|null",
       "valid_period_days": "integer|null",
+      "discipline": "null|string",
       "metadata": "object"
     },
     "TrainingCoursePage": {
@@ -9863,8 +9869,10 @@
       "description": "null|string",
       "duration_hours": "integer|null",
       "valid_period_days": "integer|null",
+      "discipline": "null|string",
       "metadata": "object",
       "id": "string",
+      "discipline_label": "null|string",
       "created_at": "string",
       "updated_at": "string"
     },
@@ -9874,6 +9882,7 @@
       "description": "null|string",
       "duration_hours": "integer|null",
       "valid_period_days": "integer|null",
+      "discipline": "null|string",
       "metadata": "null|object"
     },
     "TrainingPlanCreate": {
@@ -9895,6 +9904,17 @@
       "assigned_at": "string",
       "created_at": "string",
       "updated_at": "string"
+    },
+    "TrainingProgramPage": {
+      "items": "array",
+      "total": "integer"
+    },
+    "TrainingProgramRead": {
+      "id": "string",
+      "title": "string",
+      "code": "null|string",
+      "duration_hours": "integer|null",
+      "valid_period_days": "integer|null"
     },
     "TrainingSessionCreate": {
       "person_id": "string",
