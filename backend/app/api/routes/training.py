@@ -35,6 +35,7 @@ from app.modules.training import (
     upcoming_certificate_expirations,
 )
 from app.schemas.training import (
+    TRAINING_DISCIPLINE_TITLES,
     TrainingCertificateCreate,
     TrainingCertificatePage,
     TrainingCertificateRead,
@@ -82,12 +83,33 @@ def _training_bad_request(message: str) -> HTTPException:
     )
 
 
+def _validate_discipline(value: str | None) -> None:
+    """Дисциплина — код ОБЩЕГО словаря продукта.
+
+    Пусто законно и означает «не размечено», а НЕ «общая охрана труда»:
+    приписывать незаряженной записи принадлежность — то же враньё, что и у
+    инструктажа с неизвестным видом.
+    """
+
+    if value is not None and value not in TRAINING_DISCIPLINE_TITLES:
+        raise _training_bad_request(
+            f"Неизвестная дисциплина {value!r}; допустимые: "
+            f"{', '.join(TRAINING_DISCIPLINE_TITLES)}"
+        )
+
+
 def _course_to_schema(course: TrainingCourse) -> TrainingCourseRead:
     return TrainingCourseRead(
         id=course.id,
         title=course.title,
         code=course.code,
         description=course.description,
+        discipline=course.discipline,
+        discipline_label=(
+            TRAINING_DISCIPLINE_TITLES.get(course.discipline)
+            if course.discipline
+            else None
+        ),
         duration_hours=course.duration_hours,
         valid_period_days=course.valid_period_days,
         metadata_json=course.metadata_json or {},
@@ -151,24 +173,31 @@ async def list_courses(
     tenant: TenantDep,
     session: SessionDep,
     access: ManagerAccess,
+    discipline: str | None = Query(default=None),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ) -> TrainingCoursePage | Response:
     TenantContextValidator.ensure_tenant_context(tenant)
 
+    # Фильтр по дисциплине: «какие программы обучения по ГО заведены» — это и
+    # есть вопрос требования 56.1. Без фильтра видны ВСЕ, включая
+    # неразмеченные: они существуют и прятать их нельзя.
+    _validate_discipline(discipline)
+    conditions = [
+        TrainingCourse.tenant_id == tenant.id,
+        TrainingCourse.deleted_at.is_(None),
+    ]
+    if discipline:
+        conditions.append(TrainingCourse.discipline == discipline)
     stmt = (
         select(TrainingCourse)
-        .where(TrainingCourse.tenant_id == tenant.id, TrainingCourse.deleted_at.is_(None))
+        .where(*conditions)
         .order_by(TrainingCourse.created_at.desc())
         .limit(limit)
         .offset(offset)
     )
     items = list((await session.execute(stmt)).scalars().all())
-    total_stmt = (
-        select(func.count())
-        .select_from(TrainingCourse)
-        .where(TrainingCourse.tenant_id == tenant.id, TrainingCourse.deleted_at.is_(None))
-    )
+    total_stmt = select(func.count()).select_from(TrainingCourse).where(*conditions)
     total = (await session.execute(total_stmt)).scalar_one()
     etag = compute_list_etag(
         tenant_id=str(tenant.id),
@@ -193,12 +222,14 @@ async def create_course(
     access: EditorAccess,
 ) -> TrainingCourseRead:
     TenantContextValidator.ensure_tenant_context(tenant)
+    _validate_discipline(payload.discipline)
 
     course = TrainingCourse(
         tenant_id=tenant.id,
         title=payload.title.strip(),
         code=payload.code.strip() if payload.code else None,
         description=payload.description,
+        discipline=payload.discipline,
         duration_hours=payload.duration_hours,
         valid_period_days=payload.valid_period_days,
         metadata_json=payload.metadata_json,
@@ -235,13 +266,17 @@ async def update_course(
 
     course = await _get_course(session, tenant, course_id)
     updates = payload.model_dump(exclude_unset=True, by_alias=True)
+    if "discipline" in updates:
+        # Явный ``null`` СНИМАЕТ разметку: ошиблись дисциплиной — снять её
+        # честнее, чем оставить ложную.
+        _validate_discipline(updates["discipline"])
     for field, value in updates.items():
         if field == "metadata_json" and value is None:
             continue
         setattr(course, field, value)
     await session.flush()
     await session.refresh(course)
-    return TrainingCourseRead.model_validate(course)
+    return _course_to_schema(course)
 
 
 @router.delete(

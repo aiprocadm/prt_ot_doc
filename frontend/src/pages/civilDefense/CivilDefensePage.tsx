@@ -7,6 +7,7 @@ import {
   type DrillDto,
   type FormationDto,
   type ProfileDto,
+  type TrainingProgramDto,
 } from "@/api/civilDefense";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
@@ -140,12 +141,37 @@ const CD_DOCUMENT_COLUMNS: ColumnDef<CdDocumentDto, unknown>[] = [
   },
 ];
 
+const TRAINING_PROGRAM_COLUMNS: ColumnDef<TrainingProgramDto, unknown>[] = [
+  { accessorKey: "title", header: "Программа" },
+  {
+    accessorKey: "code",
+    header: "Код",
+    cell: ({ row }) => row.original.code || "—",
+  },
+  {
+    accessorKey: "duration_hours",
+    header: "Часов",
+    cell: ({ row }) =>
+      row.original.duration_hours != null
+        ? `${row.original.duration_hours}`
+        : "не указано",
+  },
+  {
+    accessorKey: "valid_period_days",
+    header: "Срок действия",
+    cell: ({ row }) =>
+      row.original.valid_period_days != null
+        ? `${row.original.valid_period_days} дн.`
+        : "бессрочно",
+  },
+];
+
 const CivilDefensePage = () => {
   // Секции ПО ОДНОЙ (прецедент экранов ПБ, ПромБеза и экологии): реестр
   // формирований и план-график учений — разные задачи специалиста.
-  const [section, setSection] = useState<"formations" | "drills" | "planning">(
-    "formations",
-  );
+  const [section, setSection] = useState<
+    "formations" | "drills" | "planning" | "training"
+  >("formations");
 
   const { data, loading, error, reload } = useAsyncResource({
     loader: useCallback(
@@ -154,6 +180,7 @@ const CivilDefensePage = () => {
         drills: await civilDefenseApi.listDrills(),
         profiles: await civilDefenseApi.listProfiles(),
         documents: await civilDefenseApi.listDocuments(),
+        programs: await civilDefenseApi.listTrainingPrograms(),
         readiness: await civilDefenseApi.readiness(),
       }),
       [],
@@ -163,6 +190,7 @@ const CivilDefensePage = () => {
       drills: [] as DrillDto[],
       profiles: [] as ProfileDto[],
       documents: [] as CdDocumentDto[],
+      programs: [] as TrainingProgramDto[],
       readiness: {
         total_formations: 0,
         by_kind: { nasf: 0, nfgo: 0 },
@@ -175,6 +203,7 @@ const CivilDefensePage = () => {
         profiles_by_category: {},
         planning_documents: 0,
         planning_review_overdue: 0,
+        training_programs: 0,
       },
     },
     errorMessage: "Не удалось загрузить формирования ГО и ЧС",
@@ -225,6 +254,16 @@ const CivilDefensePage = () => {
         .includes(query),
   });
 
+  const programRegistry = useLocalRegistry({
+    items: data.programs,
+    match: (item, query) =>
+      [item.title, item.code]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(query),
+  });
+
   const { readiness } = data;
 
   return (
@@ -254,6 +293,9 @@ const CivilDefensePage = () => {
             label: "Пересмотр просрочен",
             value: readiness.planning_review_overdue,
           },
+          // Разд. 56.1 «программы обучения»: программы ядра с дисциплиной ГО.
+          // Реестром владеет раздел обучения — здесь только счётчик.
+          { label: "Программ обучения", value: readiness.training_programs },
         ]}
       />
 
@@ -263,6 +305,7 @@ const CivilDefensePage = () => {
             ["formations", "Формирования"],
             ["drills", "Учения и тренировки"],
             ["planning", "Категорирование и планы"],
+            ["training", "Программы обучения"],
           ] as const
         ).map(([key, label]) => (
           <Button
@@ -394,6 +437,41 @@ const CivilDefensePage = () => {
               caption="Планы, паспорт безопасности, приказы и положения"
             />
           ) : null}
+        </>
+      ) : null}
+      {section === "training" && !loading && !error ? (
+        <>
+          {/*
+            Реестром программ контур ГО НЕ владеет: заводятся и правятся они в
+            разделе обучения (принцип «ядро не дублируется»). Здесь показана
+            только своя часть — программы, размеченные дисциплиной ГО и ЧС.
+          */}
+          <p className="text-sm text-muted-foreground">
+            Здесь показаны программы обучения, отнесённые к дисциплине «ГО и
+            ЧС». Заводятся и правятся они в разделе «Обучение»: реестр программ
+            один на весь продукт, и второй вход в него означал бы два места
+            правды. Какие программы нужны организации, определяют категория по
+            ГО и решения органа — платформа этого не решает.
+          </p>
+          {programRegistry.total === 0 ? (
+            <EmptyState
+              title="Программы обучения по ГО не размечены"
+              description="Отнесите программы к дисциплине «ГО и ЧС» в разделе «Обучение» — например курсовое обучение работающего населения. Без отнесения программа неотличима от курса по охране труда."
+            />
+          ) : (
+            <RegistryTable
+              columns={TRAINING_PROGRAM_COLUMNS}
+              data={programRegistry.pagedItems}
+              pageIndex={programRegistry.pageIndex}
+              pageSize={programRegistry.pageSize}
+              total={programRegistry.total}
+              onPageChange={programRegistry.onPageChange}
+              onPageSizeChange={programRegistry.onPageSizeChange}
+              onSearchChange={programRegistry.onSearchChange}
+              searchPlaceholder="Поиск по названию и коду"
+              caption="Программы обучения по ГО и ЧС"
+            />
+          )}
         </>
       ) : null}
     </div>

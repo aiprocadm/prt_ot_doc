@@ -1,3 +1,23 @@
+/**
+ * Дисциплины учебных программ — подписи для экрана.
+ *
+ * Словарь написан РУКАМИ и обязан совпадать с общим словарём бэкенда
+ * (app.core.disciplines.Discipline). Держит его тест-сторож
+ * tests/test_training_discipline.py: не обнови этот файл — дисциплину нельзя
+ * будет ни выбрать, ни прочитать словами (тот же класс дрейфа, что подписи
+ * видов комиссий и источники календаря).
+ */
+export const TRAINING_DISCIPLINE_TITLES: Record<string, string> = {
+  training: "Обучение",
+  medical: "Медосмотры",
+  ppe: "СИЗ",
+  fire_safety: "Пожарная безопасность",
+  industrial_safety: "Промышленная безопасность",
+  ecology: "Экология",
+  civil_defense: "ГО и ЧС",
+  road_safety: "БДД",
+};
+
 import { apiClient } from "@/api/client";
 
 export type TeacherDashboardDto = {

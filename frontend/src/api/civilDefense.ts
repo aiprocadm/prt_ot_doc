@@ -36,6 +36,22 @@ export type CivilDefenseReadinessDto = {
   profiles_by_category: Record<string, number>;
   planning_documents: number;
   planning_review_overdue: number;
+  /** Разд. 56.1 «программы обучения»: программы ЯДРА с дисциплиной ГО. */
+  training_programs: number;
+};
+
+/**
+ * Учебная программа, размеченная дисциплиной ГО.
+ *
+ * ТОЛЬКО ЧТЕНИЕ: реестром программ владеет раздел обучения — второй вход в
+ * него означал бы два места правды.
+ */
+export type TrainingProgramDto = {
+  id: string;
+  title: string;
+  code?: string | null;
+  duration_hours?: number | null;
+  valid_period_days?: number | null;
 };
 
 export type ProfileDto = {
@@ -116,6 +132,13 @@ export const civilDefenseApi = {
     const { data } = await apiClient.get<{ items?: CdDocumentDto[] }>(
       "/civil-defense/documents",
       { params: { limit: 200, offset: 0 } },
+    );
+    return Array.isArray(data?.items) ? data.items : [];
+  },
+
+  listTrainingPrograms: async (): Promise<TrainingProgramDto[]> => {
+    const { data } = await apiClient.get<{ items?: TrainingProgramDto[] }>(
+      "/civil-defense/training-programs",
     );
     return Array.isArray(data?.items) ? data.items : [];
   },

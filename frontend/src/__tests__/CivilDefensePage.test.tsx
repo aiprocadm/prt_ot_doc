@@ -10,6 +10,7 @@ const listFormationsMock = vi.fn();
 const listDrillsMock = vi.fn();
 const listProfilesMock = vi.fn();
 const listDocumentsMock = vi.fn();
+const listProgramsMock = vi.fn();
 const readinessMock = vi.fn();
 
 vi.mock("@/api/civilDefense", () => ({
@@ -18,6 +19,7 @@ vi.mock("@/api/civilDefense", () => ({
     listDrills: (...args: unknown[]) => listDrillsMock(...args),
     listProfiles: (...args: unknown[]) => listProfilesMock(...args),
     listDocuments: (...args: unknown[]) => listDocumentsMock(...args),
+    listTrainingPrograms: (...args: unknown[]) => listProgramsMock(...args),
     readiness: (...args: unknown[]) => readinessMock(...args),
   },
 }));
@@ -148,6 +150,24 @@ const populatedDocuments = [
   },
 ];
 
+/** Программы обучения ЯДРА, размеченные дисциплиной ГО. */
+const populatedPrograms = [
+  {
+    id: "tc-1",
+    title: "Курсовое обучение по ГО",
+    code: "ГО-16",
+    duration_hours: 16,
+    valid_period_days: 365,
+  },
+  {
+    id: "tc-2",
+    title: "Вводный инструктаж по ГО",
+    code: null,
+    duration_hours: null,
+    valid_period_days: null,
+  },
+];
+
 const populatedReadiness = {
   total_formations: 2,
   by_kind: { nasf: 1, nfgo: 1 },
@@ -160,6 +180,7 @@ const populatedReadiness = {
   profiles_by_category: { special: 0, first: 0, second: 1, none: 1 },
   planning_documents: 2,
   planning_review_overdue: 1,
+  training_programs: 2,
 };
 
 describe("CivilDefensePage", () => {
@@ -168,11 +189,13 @@ describe("CivilDefensePage", () => {
     listDrillsMock.mockReset();
     listProfilesMock.mockReset();
     listDocumentsMock.mockReset();
+    listProgramsMock.mockReset();
     readinessMock.mockReset();
     listFormationsMock.mockResolvedValue(populatedFormations);
     listDrillsMock.mockResolvedValue(populatedDrills);
     listProfilesMock.mockResolvedValue(populatedProfiles);
     listDocumentsMock.mockResolvedValue(populatedDocuments);
+    listProgramsMock.mockResolvedValue(populatedPrograms);
     readinessMock.mockResolvedValue(populatedReadiness);
   });
 
@@ -203,6 +226,7 @@ describe("CivilDefensePage", () => {
     listDrillsMock.mockResolvedValue([]);
     listProfilesMock.mockResolvedValue([]);
     listDocumentsMock.mockResolvedValue([]);
+    listProgramsMock.mockResolvedValue([]);
     readinessMock.mockResolvedValue({
       total_formations: 0,
       by_kind: { nasf: 0, nfgo: 0 },
@@ -215,6 +239,7 @@ describe("CivilDefensePage", () => {
       profiles_by_category: {},
       planning_documents: 0,
       planning_review_overdue: 0,
+      training_programs: 0,
     });
 
     render(
@@ -287,6 +312,36 @@ describe("CivilDefensePage", () => {
     expect(
       screen.getByText(/не предлагает категорию сама/i),
     ).toBeInTheDocument();
+  });
+
+  // Доп. №1 разд. 56.1: программы обучения ГО. Реестром контур НЕ владеет —
+  // программы заводятся в разделе обучения, здесь только своя часть.
+  it("программы обучения открываются четвёртой секцией и только на чтение", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter>
+        <CivilDefensePage />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("Звено пожаротушения")).toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: "Программы обучения" }),
+    );
+
+    expect(
+      await screen.findByText("Курсовое обучение по ГО"),
+    ).toBeInTheDocument();
+    // Пустые клетки запрещены: причина названа словами.
+    expect(screen.getByText("не указано")).toBeInTheDocument();
+    expect(screen.getByText("бессрочно")).toBeInTheDocument();
+    // На экране прямо сказано, где программы заводятся: реестр один.
+    expect(screen.getByText(/два места правды/i)).toBeInTheDocument();
+    // Кнопки «завести программу» здесь нет — это ядро.
+    expect(
+      screen.queryByRole("button", { name: /добавить программу/i }),
+    ).toBeNull();
   });
 
   it("CivilDefensePage в UX-бюджете", async () => {

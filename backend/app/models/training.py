@@ -64,6 +64,18 @@ class TrainingCourse(TenantBaseModel, SoftDeleteMixin):
     description: Mapped[str | None] = mapped_column(Text)
     duration_hours: Mapped[int | None] = mapped_column(Integer, nullable=True)
     valid_period_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    #: Доп. №1 разд. 56.1: дисциплина программы — код из ОБЩЕГО словаря
+    #: ``app.core.disciplines.Discipline``. До этой колонки курс «Курсовое
+    #: обучение по ГО» был неотличим от курса по охране труда, и вопрос «какие
+    #: программы обучения по ГО заведены» не имел ответа в данных. Дыра
+    #: кросс-дисциплинарная: так же неотличимы ПТМ, обучение по отходам и
+    #: подготовка по промбезопасности.
+    #:
+    #: ПУСТО означает «не размечено», а НЕ «общая охрана труда»: приписывать
+    #: незаряженной записи принадлежность — то же враньё, что и у инструктажа
+    #: с неизвестным видом (там ``discipline_of_briefing`` возвращает ``None``
+    #: ровно с этим доводом).
+    discipline: Mapped[str | None] = mapped_column(String(32), nullable=True)
     metadata_json: Mapped[dict[str, Any]] = mapped_column(
         MutableDict.as_mutable(JSON), nullable=False, default=dict
     )
@@ -71,6 +83,7 @@ class TrainingCourse(TenantBaseModel, SoftDeleteMixin):
     __table_args__ = (
         UniqueConstraint("tenant_id", "title", name="uq_training_course_title"),
         Index("ix_training_course_code", "tenant_id", "code"),
+        Index("ix_training_course_discipline", "tenant_id", "discipline"),
     )
 
 

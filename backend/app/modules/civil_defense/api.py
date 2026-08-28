@@ -41,6 +41,7 @@ from app.models.civil_defense import (
 )
 from app.models.master_data import Person, Site
 from app.models.models import Tenant
+from app.models.training import TrainingCourse
 from app.schemas.civil_defense import (
     CdDocumentCreate,
     CdDocumentPage,
@@ -63,6 +64,8 @@ from app.schemas.civil_defense import (
     ProfilePage,
     ProfileRead,
     ProfileUpdate,
+    TrainingProgramPage,
+    TrainingProgramRead,
 )
 from app.services.audit import AuditService, field_level_diff
 
@@ -1394,6 +1397,69 @@ async def update_cd_document(
     return _cd_document_read(doc, date.today())
 
 
+# --- Программы обучения по ГО: СВОЯ ЧАСТЬ, но реестр остаётся в ядре --------
+
+#: Код дисциплины контура — им размечены учебные программы ядра.
+_DISCIPLINE_CODE = "civil_defense"
+
+
+async def _training_programs(
+    session: AsyncSession, tenant: Tenant
+) -> list[TrainingCourse]:
+    """Учебные программы, размеченные дисциплиной ГО и ЧС.
+
+    Реестром программ контур ГО НЕ владеет: заводятся и правятся они в разделе
+    обучения (принцип «ядро не дублируется»), здесь показывается только своя
+    часть.
+    """
+
+    rows = (
+        (
+            await session.execute(
+                select(TrainingCourse)
+                .where(
+                    TrainingCourse.tenant_id == tenant.id,
+                    TrainingCourse.deleted_at.is_(None),
+                    TrainingCourse.discipline == _DISCIPLINE_CODE,
+                )
+                .order_by(TrainingCourse.created_at)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return list(rows)
+
+
+@router.get("/training-programs", response_model=TrainingProgramPage)
+async def list_training_programs(
+    tenant: TenantDep,
+    session: SessionDep,
+    access: Access,
+) -> TrainingProgramPage:
+    """Программы обучения по ГО и ЧС (разд. 56.1) — ТОЛЬКО ЧТЕНИЕ.
+
+    Заводить и править программы здесь нельзя намеренно: реестр учебных
+    программ — ядро, и второй вход в него означал бы два места правды.
+    """
+
+    TenantContextValidator.ensure_tenant_context(tenant)
+    rows = await _training_programs(session, tenant)
+    return TrainingProgramPage(
+        items=[
+            TrainingProgramRead(
+                id=row.id,
+                title=row.title,
+                code=row.code,
+                duration_hours=row.duration_hours,
+                valid_period_days=row.valid_period_days,
+            )
+            for row in rows
+        ],
+        total=len(rows),
+    )
+
+
 @router.get("/readiness", response_model=CivilDefenseReadinessRead)
 async def civil_defense_readiness(
     tenant: TenantDep,
@@ -1482,7 +1548,12 @@ async def civil_defense_readiness(
         .all()
     )
 
+    # Разд. 56.1 «программы обучения»: считаем программы ЯДРА, размеченные
+    # дисциплиной ГО. Реестр остаётся в обучении — здесь только счётчик.
+    training_programs = await _training_programs(session, tenant)
+
     return CivilDefenseReadinessRead(
+        training_programs=len(training_programs),
         profiles_total=len(profiles),
         profiles_by_category=by_category,
         planning_documents=len(planning_docs),
