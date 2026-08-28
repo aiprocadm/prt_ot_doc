@@ -98,6 +98,7 @@ from app.modules.pipelines import api as pipelines_api
 from app.modules.privacy.api import router as privacy_router
 from app.modules.replace import api as replace_api
 from app.modules.report_builder.api import router as report_builder_router
+from app.modules.road_safety.api import router as road_safety_router
 from app.modules.rules_engine.api import router as rules_engine_router
 from app.modules.search.api import router as search_router
 from app.modules.workflow.api import router as workflow_router
@@ -229,6 +230,7 @@ DOCUMENT_CORE_ROUTER_REGISTRATIONS: tuple[RouterRegistration, ...] = (
     (industrial_safety_router, {"tags": ["industrial-safety"]}),
     (ecology_router, {"tags": ["ecology"]}),
     (civil_defense_router, {"tags": ["civil-defense"]}),
+    (road_safety_router, {"tags": ["road-safety"]}),
     (budget_reimbursement_router, {"tags": ["budget"]}),
     (privacy_router, {"tags": ["privacy"]}),
 )

@@ -80,6 +80,9 @@ export const EcologyPage = lazy(() => import("@/pages/ecology/EcologyPage"));
 export const CivilDefensePage = lazy(
   () => import("@/pages/civilDefense/CivilDefensePage"),
 );
+export const RoadSafetyPage = lazy(
+  () => import("@/pages/roadSafety/RoadSafetyPage"),
+);
 export const ReferencePage = lazy(
   () => import("@/pages/reference/ReferencePage"),
 );

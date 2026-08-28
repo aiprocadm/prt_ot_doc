@@ -354,6 +354,17 @@ export const MAIN_NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
+    title: "БДД",
+    items: [
+      {
+        label: "Транспортные средства",
+        to: "/road-safety",
+        icon: Truck,
+        permission: PERMISSIONS.ROAD_SAFETY_VIEW,
+      },
+    ],
+  },
+  {
     title: "Бизнес и аналитика",
     items: [
       {
