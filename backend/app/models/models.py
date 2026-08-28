@@ -279,6 +279,9 @@ from app.models.risk_register import (
     WorkplaceHazardLink,
 )
 
+# Разд. 56.2: предметные модели контура БДД.
+from app.models.road_safety import Vehicle  # noqa: E402,F401
+
 # P10-10 re01: re-export rules-engine models from app.models.rules_engine.
 from app.models.rules_engine import (  # noqa: E402
     AutomationRule,

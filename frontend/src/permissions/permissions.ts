@@ -45,6 +45,8 @@ export const PERMISSIONS = {
   ECOLOGY_VIEW: "ecology.view",
   // Доп. №1 разд. 56.1: право модуля «ГО и ЧС».
   CIVIL_DEFENSE_VIEW: "civil_defense.view",
+  // Доп. №1 разд. 56.2: право модуля «БДД».
+  ROAD_SAFETY_VIEW: "road_safety.view",
   REFERENCE_VIEW: "reference.view",
   CONTRACTOR_VIEW: "contractor.view",
   CONTRACTOR_MANAGE: "contractor.manage",

@@ -46,6 +46,7 @@ import {
   FireSafetyPage,
   CivilDefensePage,
   EcologyPage,
+  RoadSafetyPage,
   IndustrialSafetyPage,
   FireTrainingPage,
   IncidentsPage,
@@ -389,6 +390,17 @@ export const buildProtectedRouteGroups = (): ReactElement[] => {
           key="/civil-defense"
           path="/civil-defense"
           element={<CivilDefensePage />}
+        />,
+      ],
+    },
+    {
+      // Доп. №1 разд. 56.2: реестр ТС — первый экран контура БДД.
+      permission: PERMISSIONS.ROAD_SAFETY_VIEW,
+      routes: [
+        <Route
+          key="/road-safety"
+          path="/road-safety"
+          element={<RoadSafetyPage />}
         />,
       ],
     },

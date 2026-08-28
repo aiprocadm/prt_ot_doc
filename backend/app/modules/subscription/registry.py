@@ -241,6 +241,16 @@ SELLABLE_MODULES: tuple[ModuleDescriptor, ...] = (
         ui_routes=("/civil-defense",),
         permissions=("civil_defense.view",),
     ),
+    # Доп. №1 разд. 56.2: контур БДД получил первое содержание — реестр
+    # транспортных средств. Тариф «Всё включено» сдвигается сам собой;
+    # компенсирует миграция 20260828_rs02_road_safety_grant.
+    ModuleDescriptor(
+        code="road_safety",
+        title="БДД",
+        category="Безопасность дорожного движения",
+        ui_routes=("/road-safety",),
+        permissions=("road_safety.view",),
+    ),
 )
 
 MODULE_REGISTRY: tuple[ModuleDescriptor, ...] = CORE_MODULES + SELLABLE_MODULES
