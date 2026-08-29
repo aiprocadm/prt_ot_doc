@@ -39,6 +39,41 @@ export type VehicleDto = {
   tachograph_status_label: string;
 };
 
+/**
+ * Срез-2: карточка водителя. ФИО приходит из ядрового справочника людей и
+ * здесь НЕ хранится — второй список сотрудников разошёлся бы с первым.
+ *
+ * ГРАНИЦА: полей «допущен ли к этой машине» и «хватает ли стажа» нет —
+ * нужная категория и требуемый стаж следуют из массы ТС, числа мест и вида
+ * перевозок по закону.
+ */
+export type DriverDto = {
+  id: string;
+  person_id: string;
+  person_name: string;
+  personnel_number?: string | null;
+  position_title?: string | null;
+  license_number: string;
+  categories: string[];
+  /** те же категории словами — экран не знает справочника */
+  category_labels: string[];
+  license_issued_at?: string | null;
+  license_due?: string | null;
+  experience_since?: string | null;
+  /**
+   * Стаж СЧИТАЕТСЯ сервером при чтении от даты начала; null — дата не
+   * внесена. Числом стаж не хранится: записанное «3 года» через два года
+   * молча становится ложью.
+   */
+  experience_years?: number | null;
+  status: string;
+  status_label: string;
+  /** missing | ok | due_soon | overdue — пустой срок это «сведений нет». */
+  license_status: string;
+  license_status_label: string;
+  notes?: string | null;
+};
+
 export type RoadSafetyReadinessDto = {
   total_vehicles: number;
   by_status: Record<string, number>;
@@ -47,6 +82,12 @@ export type RoadSafetyReadinessDto = {
   tachograph_overdue: number;
   /** ТС в эксплуатации без внесённых сведений — факт о данных, не вердикт. */
   documents_missing: number;
+  /** Срез-2: водительский состав. Просрочки — только по ДОПУЩЕННЫМ. */
+  total_drivers: number;
+  drivers_by_status: Record<string, number>;
+  driver_license_overdue: number;
+  /** Допущенные без внесённого срока — факт о данных, не вердикт. */
+  driver_license_missing: number;
 };
 
 export const roadSafetyApi = {
@@ -58,6 +99,13 @@ export const roadSafetyApi = {
     return Array.isArray(data?.items) ? data.items : [];
   },
 
+  listDrivers: async (): Promise<DriverDto[]> => {
+    const { data } = await apiClient.get<{ items?: DriverDto[] }>(
+      "/road-safety/drivers",
+      { params: { limit: 200, offset: 0 } },
+    );
+    return Array.isArray(data?.items) ? data.items : [];
+  },
   readiness: async (): Promise<RoadSafetyReadinessDto> => {
     const { data } = await apiClient.get<RoadSafetyReadinessDto>(
       "/road-safety/readiness",

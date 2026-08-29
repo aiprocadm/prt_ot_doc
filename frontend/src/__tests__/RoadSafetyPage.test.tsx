@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -6,14 +7,61 @@ import RoadSafetyPage from "@/pages/roadSafety/RoadSafetyPage";
 import { uxBudgetDelta } from "@/test-utils/uxBudget";
 
 const listVehiclesMock = vi.fn();
+const listDriversMock = vi.fn();
 const readinessMock = vi.fn();
 
 vi.mock("@/api/roadSafety", () => ({
   roadSafetyApi: {
     listVehicles: (...args: unknown[]) => listVehiclesMock(...args),
+    listDrivers: (...args: unknown[]) => listDriversMock(...args),
     readiness: (...args: unknown[]) => readinessMock(...args),
   },
 }));
+
+/**
+ * Водительский состав: допущенный с внесённым стажем и отстранённый без
+ * сведений о сроке удостоверения.
+ */
+const populatedDrivers = [
+  {
+    id: "d-1",
+    person_id: "p-1",
+    person_name: "Шофёров Пётр Иванович",
+    personnel_number: "ТН-1",
+    position_title: "Водитель",
+    license_number: "9900 123456",
+    categories: ["B", "C"],
+    category_labels: ["B — легковые автомобили", "C — грузовые автомобили"],
+    license_issued_at: "2020-05-01",
+    license_due: "2030-05-01",
+    experience_since: "2015-05-01",
+    experience_years: 11,
+    status: "admitted",
+    status_label: "Допущен к управлению",
+    license_status: "ok",
+    license_status_label: "Действует",
+    notes: null,
+  },
+  {
+    id: "d-2",
+    person_id: "p-2",
+    person_name: "Отстранённов Иван Петрович",
+    personnel_number: "ТН-2",
+    position_title: "Водитель",
+    license_number: "9900 654321",
+    categories: ["D"],
+    category_labels: ["D — автобусы"],
+    license_issued_at: null,
+    license_due: null,
+    experience_since: null,
+    experience_years: null,
+    status: "suspended",
+    status_label: "Отстранён",
+    license_status: "missing",
+    license_status_label: "Сведения не внесены",
+    notes: null,
+  },
+];
 
 /** Парк: машина со сроками, машина без сведений и списанная. */
 const populatedVehicles = [
@@ -76,13 +124,19 @@ const populatedReadiness = {
   insurance_overdue: 0,
   tachograph_overdue: 0,
   documents_missing: 1,
+  total_drivers: 2,
+  drivers_by_status: { admitted: 1, suspended: 1, dismissed: 0 },
+  driver_license_overdue: 0,
+  driver_license_missing: 0,
 };
 
 describe("RoadSafetyPage", () => {
   beforeEach(() => {
     listVehiclesMock.mockReset();
+    listDriversMock.mockReset();
     readinessMock.mockReset();
     listVehiclesMock.mockResolvedValue(populatedVehicles);
+    listDriversMock.mockResolvedValue(populatedDrivers);
     readinessMock.mockResolvedValue(populatedReadiness);
   });
 
@@ -109,8 +163,56 @@ describe("RoadSafetyPage", () => {
     ).toBeInTheDocument();
   });
 
+  it("секция водителей показывает состав, стаж и границу", async () => {
+    render(
+      <MemoryRouter>
+        <RoadSafetyPage />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("А123АА777")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Водители" }));
+
+    // ФИО приходит из ядрового справочника людей, карточка его не хранит.
+    expect(
+      await screen.findByText("Шофёров Пётр Иванович"),
+    ).toBeInTheDocument();
+    // Стаж считает сервер от даты начала — экран печатает посчитанное.
+    expect(screen.getByText("11 л.")).toBeInTheDocument();
+    // «Не знаем» — это не «ноль лет» и не «просрочено».
+    expect(screen.getAllByText("Сведения не внесены").length).toBeGreaterThan(
+      0,
+    );
+    expect(screen.getByText("Отстранён")).toBeInTheDocument();
+    // Граница названа на экране.
+    expect(
+      screen.getByText(/не решает, какая категория нужна/i),
+    ).toBeInTheDocument();
+  });
+
+  it("пустой состав водителей объясняет, что вносить", async () => {
+    listDriversMock.mockResolvedValue([]);
+    readinessMock.mockResolvedValue({
+      ...populatedReadiness,
+      total_drivers: 0,
+      drivers_by_status: { admitted: 0, suspended: 0, dismissed: 0 },
+    });
+
+    render(
+      <MemoryRouter>
+        <RoadSafetyPage />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("А123АА777")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Водители" }));
+
+    expect(await screen.findByText("Водители не заведены")).toBeInTheDocument();
+  });
+
   it("пустой реестр объясняет, что вносить", async () => {
     listVehiclesMock.mockResolvedValue([]);
+    listDriversMock.mockResolvedValue([]);
     readinessMock.mockResolvedValue({
       total_vehicles: 0,
       by_status: { in_service: 0, suspended: 0, decommissioned: 0 },
@@ -118,6 +220,10 @@ describe("RoadSafetyPage", () => {
       insurance_overdue: 0,
       tachograph_overdue: 0,
       documents_missing: 0,
+      total_drivers: 0,
+      drivers_by_status: { admitted: 0, suspended: 0, dismissed: 0 },
+      driver_license_overdue: 0,
+      driver_license_missing: 0,
     });
 
     render(

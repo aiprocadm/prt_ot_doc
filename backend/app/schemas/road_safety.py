@@ -103,3 +103,82 @@ class RoadSafetyReadinessRead(BaseSchema):
     #: ТС в эксплуатации, у которых не внесены сведения о диагностической
     #: карте или полисе — это ФАКТ о данных, а не вердикт о нарушении
     documents_missing: int = 0
+    #: срез-2: водительский состав. Просрочки — ТОЛЬКО по допущенным: у
+    #: отстранённого водителя просроченное удостоверение это шум, а не
+    #: проблема (тот же довод, что у списанного ТС)
+    total_drivers: int = 0
+    #: ключи всегда все три, чтобы «ноль отстранённых» отличался от
+    #: «поле не пришло»
+    drivers_by_status: dict[str, int] = Field(default_factory=dict)
+    driver_license_overdue: int = 0
+    #: допущенные водители без внесённого срока удостоверения — ФАКТ о
+    #: данных, а не вердикт о нарушении
+    driver_license_missing: int = 0
+
+
+class DriverCreate(BaseSchema):
+    """Заведение карточки водителя.
+
+    ФИО здесь НЕТ: человек берётся из ядра по ``person_id``. Отдельного поля
+    «стаж, лет» тоже нет — стаж задаётся ДАТОЙ, с которой он идёт.
+    """
+
+    person_id: str = Field(min_length=1, max_length=36)
+    license_number: str = Field(min_length=1, max_length=32)
+    #: хотя бы одна категория: водитель без единой категории — это не водитель
+    categories: list[str] = Field(min_length=1)
+    license_issued_at: date | None = None
+    license_due: date | None = None
+    experience_since: date | None = None
+    status: str = Field(default="admitted", min_length=1, max_length=16)
+    notes: str | None = None
+
+
+class DriverUpdate(BaseSchema):
+    license_number: str | None = Field(default=None, min_length=1, max_length=32)
+    categories: list[str] | None = Field(default=None, min_length=1)
+    license_issued_at: date | None = None
+    license_due: date | None = None
+    experience_since: date | None = None
+    status: str | None = Field(default=None, min_length=1, max_length=16)
+    notes: str | None = None
+
+
+class DriverRead(BaseSchema):
+    """Карточка водителя вместе с состоянием удостоверения и стажем.
+
+    ГРАНИЦА: полей «допущен ли к этой машине», «хватает ли стажа» и
+    «соответствует ли водитель» здесь НЕТ — нужная категория и требуемый стаж
+    следуют из массы ТС, числа мест и вида перевозок по закону.
+    """
+
+    id: str
+    person_id: str
+    #: ФИО — из ядрового ``Person``, не хранится в карточке водителя
+    person_name: str
+    personnel_number: str | None = None
+    position_title: str | None = None
+    license_number: str
+    categories: list[str]
+    #: те же категории словами, чтобы экран не знал справочника
+    category_labels: list[str]
+    license_issued_at: date | None = None
+    license_due: date | None = None
+    experience_since: date | None = None
+    #: СЧИТАЕТСЯ ПРИ ЧТЕНИИ от ``experience_since``; ``null`` — дата не
+    #: внесена. Числом стаж не хранится: записанное «3 года» через два года
+    #: молча становится ложью
+    experience_years: int | None = None
+    status: str
+    status_label: str
+    #: missing / ok / due_soon / overdue — считается ПРИ ЧТЕНИИ. Пустой срок =
+    #: «сведения не внесены», а НЕ «бессрочно»: у водительского удостоверения
+    #: бессрочности не бывает
+    license_status: str
+    license_status_label: str
+    notes: str | None = None
+
+
+class DriverPage(BaseSchema):
+    items: list[DriverRead]
+    total: int

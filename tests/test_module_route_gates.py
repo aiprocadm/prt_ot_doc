@@ -39,6 +39,28 @@ MODULE_ROUTER_FILES: dict[str, tuple[str | None, tuple[str, ...]]] = {
         "router.dependencies.append(Depends(_require_fire_safety))",
         (),
     ),
+    # Дрейф, найденный срезом-2 контура БДД (Доп. №1 разд. 56.2): четыре
+    # модульных роутера подряд — экология, ГО-ЧС, промбез и БДД — гейт в коде
+    # поставили, а строку СЮДА не добавили. Дыры это не создало (гейт
+    # роутерный, покрывает каждый роут файла по построению), но сторож за ними
+    # не следил: убери кто-нибудь эту строку из кода — и никто бы не заметил.
+    # Сторож обязан расти вместе с продуктом, иначе он стережёт вчерашний.
+    "backend/app/modules/ecology/api.py": (
+        "router.dependencies.append(Depends(_require_ecology))",
+        (),
+    ),
+    "backend/app/modules/civil_defense/api.py": (
+        "router.dependencies.append(Depends(_require_civil_defense))",
+        (),
+    ),
+    "backend/app/modules/industrial_safety/api.py": (
+        "router.dependencies.append(Depends(_require_industrial_safety))",
+        (),
+    ),
+    "backend/app/modules/road_safety/api.py": (
+        "router.dependencies.append(Depends(_require_road_safety))",
+        (),
+    ),
     "backend/app/api/routes/contractors.py": (
         "router.dependencies.append(Depends(require_contractors_feature))",
         (),
