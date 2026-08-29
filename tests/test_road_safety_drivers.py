@@ -1,0 +1,558 @@
+"""Контур БДД срез-2 (Доп. №1 разд. 56.2): водители.
+
+Требование: «Водители: водительский состав, стаж/категории, режим труда и
+отдыха, нарушения». Этот срез закрывает состав, стаж и категории; режим труда
+и отдыха и нарушения — следующий срез, они опираются на путевые листы.
+
+СВЕРКА нашла:
+
+1. **Водителей в продукте нет вовсе.** После среза-1 в контуре БДД есть только
+   транспортные средства. Ни карточки водителя, ни удостоверения, ни допуска —
+   при этом комплект документов БДД уже ПЕЧАТАЕТ «режим труда и отдыха
+   водителей» и «ответственного за БДД» свободным текстом: бумага оформляется,
+   а учёта за ней нет. Тот же признак, что был у тренировок по пожарной
+   безопасности в разд. 54.1.
+2. **Ядро утверждало «Поимённый учёт БДД в системе не ведётся».** Этот срез
+   делает утверждение ложным в тот же день. Оставить его значило бы повторить
+   дрейф, который срез-1 нашёл у причины для ГО и ЧС: причина обязана
+   называть свойство модели, а не перечень таблиц.
+
+Решения:
+
+* **человек НЕ дублируется**: карточка ссылается на ядрового ``Person``, ФИО и
+  должность приходят из него. Второй список сотрудников разошёлся бы с первым
+  на первой же кадровой правке (прецедент аттестаций разд. 54.2 и формирований
+  разд. 56.1);
+* **один человек — одна карточка**, один номер удостоверения — одна карточка:
+  дубль это ошибка ввода, а не второй водитель;
+* **категории — ЗАКРЫТЫЙ словарь** (ФЗ-196 ст. 25), а не свободная строка:
+  «B», «в» и «кат. B» — три разные строки об одном, и вопрос «кто допущен к
+  автобусу» остался бы без ответа (прецедент вида инструктажа разд. 54.1);
+* **СТАЖ СЧИТАЕТСЯ ПРИ ЧТЕНИИ от даты начала и не хранится числом**:
+  записанное «стаж 3 года» через два года молча становится ложью, а отличить
+  устаревшее число от верного нельзя — у числа нет даты, на которую оно верно;
+* **пустой срок удостоверения = «сведений нет», а не «бессрочно»** и не
+  «просрочено» (как у полиса и диагностической карты в срезе-1);
+* **просрочки — только по ДОПУЩЕННЫМ**: у отстранённого водителя просроченное
+  удостоверение это шум, а не проблема (как у списанного ТС).
+
+ГРАНИЦА: платформа НЕ решает, какая категория нужна для конкретной машины и
+достаточен ли стаж для перевозки пассажиров. Это следует из массы ТС, числа
+мест и вида перевозок по закону — таких данных в системе нет. Полей «допущен
+ли к этой машине», «хватает ли стажа» и «соответствует ли водитель» нет ни в
+записи, ни в сводке.
+"""
+
+from __future__ import annotations
+
+from datetime import date, timedelta
+
+import pytest
+from sqlalchemy import select
+
+from app.models.feature import Feature, FeatureEnablement
+from app.models.master_data import Company, Person
+from app.models.models import Tenant
+
+pytestmark = pytest.mark.anyio
+
+_API = "/api/v1/road-safety"
+
+
+async def _grant(sessionmaker, code: str = "road_safety", on: bool = True) -> None:
+    async with sessionmaker() as session:
+        tenant = (
+            await session.execute(select(Tenant).where(Tenant.slug == "test"))
+        ).scalar_one()
+        feature = (
+            await session.execute(select(Feature).where(Feature.code == code))
+        ).scalar_one_or_none()
+        if feature is None:
+            feature = Feature(code=code, title=code)
+            session.add(feature)
+            await session.flush()
+        grant = (
+            await session.execute(
+                select(FeatureEnablement).where(
+                    FeatureEnablement.tenant_id == tenant.id,
+                    FeatureEnablement.feature_id == feature.id,
+                )
+            )
+        ).scalar_one_or_none()
+        if grant is None:
+            session.add(
+                FeatureEnablement(tenant_id=tenant.id, feature_id=feature.id, on=on)
+            )
+        else:
+            grant.on = on
+        await session.commit()
+
+
+async def _person(sessionmaker, last_name: str = "Шофёров") -> str:
+    """Человек из ЯДРА: карточка водителя своих людей не заводит."""
+
+    async with sessionmaker() as session:
+        tenant = (
+            await session.execute(select(Tenant).where(Tenant.slug == "test"))
+        ).scalar_one()
+        company = (
+            (
+                await session.execute(
+                    select(Company).where(Company.tenant_id == tenant.id)
+                )
+            )
+            .scalars()
+            .first()
+        )
+        if company is None:
+            company = Company(tenant_id=tenant.id, name="Головная компания")
+            session.add(company)
+            await session.flush()
+        person = Person(
+            tenant_id=tenant.id,
+            company_id=company.id,
+            last_name=last_name,
+            first_name="Пётр",
+            middle_name="Иванович",
+            personnel_number=f"ТН-{last_name}",
+            position_title="Водитель",
+        )
+        session.add(person)
+        await session.commit()
+        return str(person.id)
+
+
+async def _driver(
+    async_client,
+    headers,
+    person_id: str,
+    *,
+    license_number: str = "9900 123456",
+    categories: list[str] | None = None,
+    license_due: date | None = None,
+    experience_since: date | None = None,
+    status: str = "admitted",
+) -> dict:
+    payload: dict[str, object] = {
+        "person_id": person_id,
+        "license_number": license_number,
+        "categories": categories or ["B", "C"],
+        "status": status,
+    }
+    if license_due is not None:
+        payload["license_due"] = str(license_due)
+    if experience_since is not None:
+        payload["experience_since"] = str(experience_since)
+    response = await async_client.post(f"{_API}/drivers", json=payload, headers=headers)
+    assert response.status_code == 201, response.text
+    return response.json()
+
+
+class TestВодительскийСостав:
+    async def test_без_выдачи_модуль_невидим(
+        self, async_client, make_auth_headers
+    ) -> None:
+        headers = await make_auth_headers()
+        response = await async_client.get(f"{_API}/drivers", headers=headers)
+        assert response.status_code == 404
+
+    async def test_карточка_берёт_человека_из_ядра(
+        self, async_client, make_auth_headers, sessionmaker
+    ) -> None:
+        """ФИО и должность приходят из ``Person``, а не хранятся в карточке."""
+
+        headers = await make_auth_headers()
+        await _grant(sessionmaker)
+        person_id = await _person(sessionmaker)
+        body = await _driver(async_client, headers, person_id)
+        assert body["person_name"] == "Шофёров Пётр Иванович"
+        assert body["position_title"] == "Водитель"
+        assert body["status_label"] == "Допущен к управлению"
+
+    async def test_категории_приходят_словами(
+        self, async_client, make_auth_headers, sessionmaker
+    ) -> None:
+        headers = await make_auth_headers()
+        await _grant(sessionmaker)
+        person_id = await _person(sessionmaker)
+        body = await _driver(async_client, headers, person_id, categories=["D"])
+        assert body["categories"] == ["D"]
+        assert body["category_labels"] == ["D — автобусы"]
+
+    async def test_неизвестная_категория_отвергается(
+        self, async_client, make_auth_headers, sessionmaker
+    ) -> None:
+        """Главный сторож словаря: свободная строка сделала бы контроль
+        невыполнимым — «B», «в» и «кат. B» это три разные строки об одном."""
+
+        headers = await make_auth_headers()
+        await _grant(sessionmaker)
+        person_id = await _person(sessionmaker)
+        response = await async_client.post(
+            f"{_API}/drivers",
+            json={
+                "person_id": person_id,
+                "license_number": "9900 000001",
+                "categories": ["Б"],
+            },
+            headers=headers,
+        )
+        assert response.status_code == 422, response.text
+
+    async def test_без_единой_категории_карточка_не_заводится(
+        self, async_client, make_auth_headers, sessionmaker
+    ) -> None:
+        headers = await make_auth_headers()
+        await _grant(sessionmaker)
+        person_id = await _person(sessionmaker)
+        response = await async_client.post(
+            f"{_API}/drivers",
+            json={
+                "person_id": person_id,
+                "license_number": "9900 000002",
+                "categories": [],
+            },
+            headers=headers,
+        )
+        assert response.status_code == 422, response.text
+
+    async def test_неизвестный_допуск_отвергается(
+        self, async_client, make_auth_headers, sessionmaker
+    ) -> None:
+        headers = await make_auth_headers()
+        await _grant(sessionmaker)
+        person_id = await _person(sessionmaker)
+        response = await async_client.post(
+            f"{_API}/drivers",
+            json={
+                "person_id": person_id,
+                "license_number": "9900 000003",
+                "categories": ["B"],
+                "status": "в отпуске навсегда",
+            },
+            headers=headers,
+        )
+        assert response.status_code == 422, response.text
+
+    async def test_вторая_карточка_тому_же_человеку_отвергается(
+        self, async_client, make_auth_headers, sessionmaker
+    ) -> None:
+        """Иначе у одного человека два разных срока удостоверения — и какой
+        из них правда, неизвестно."""
+
+        headers = await make_auth_headers()
+        await _grant(sessionmaker)
+        person_id = await _person(sessionmaker)
+        await _driver(async_client, headers, person_id, license_number="9900 111111")
+        response = await async_client.post(
+            f"{_API}/drivers",
+            json={
+                "person_id": person_id,
+                "license_number": "9900 222222",
+                "categories": ["B"],
+            },
+            headers=headers,
+        )
+        assert response.status_code == 422, response.text
+
+    async def test_дубль_номера_удостоверения_отвергается(
+        self, async_client, make_auth_headers, sessionmaker
+    ) -> None:
+        headers = await make_auth_headers()
+        await _grant(sessionmaker)
+        first = await _person(sessionmaker, last_name="Первов")
+        second = await _person(sessionmaker, last_name="Второв")
+        await _driver(async_client, headers, first, license_number="9900 333333")
+        response = await async_client.post(
+            f"{_API}/drivers",
+            json={
+                "person_id": second,
+                "license_number": "9900 333333",
+                "categories": ["B"],
+            },
+            headers=headers,
+        )
+        assert response.status_code == 422, response.text
+
+    async def test_несуществующий_человек_даёт_404(
+        self, async_client, make_auth_headers, sessionmaker
+    ) -> None:
+        headers = await make_auth_headers()
+        await _grant(sessionmaker)
+        response = await async_client.post(
+            f"{_API}/drivers",
+            json={
+                "person_id": "00000000-0000-0000-0000-000000000000",
+                "license_number": "9900 444444",
+                "categories": ["B"],
+            },
+            headers=headers,
+        )
+        assert response.status_code == 404, response.text
+
+    async def test_отстранение_меняет_допуск_а_не_удаляет(
+        self, async_client, make_auth_headers, sessionmaker
+    ) -> None:
+        headers = await make_auth_headers()
+        await _grant(sessionmaker)
+        person_id = await _person(sessionmaker)
+        driver = await _driver(
+            async_client, headers, person_id, license_number="9900 555555"
+        )
+        patched = await async_client.patch(
+            f"{_API}/drivers/{driver['id']}",
+            json={"status": "suspended"},
+            headers=headers,
+        )
+        assert patched.status_code == 200, patched.text
+        assert patched.json()["status_label"] == "Отстранён"
+
+        listing = await async_client.get(f"{_API}/drivers", headers=headers)
+        assert listing.json()["total"] == 1, "карточка обязана остаться в истории"
+
+    async def test_чужая_карточка_не_читается(
+        self, async_client, make_auth_headers, sessionmaker
+    ) -> None:
+        headers = await make_auth_headers()
+        await _grant(sessionmaker)
+        response = await async_client.patch(
+            f"{_API}/drivers/00000000-0000-0000-0000-000000000000",
+            json={"status": "suspended"},
+            headers=headers,
+        )
+        assert response.status_code == 404, response.text
+
+    async def test_отбор_по_категории(
+        self, async_client, make_auth_headers, sessionmaker
+    ) -> None:
+        headers = await make_auth_headers()
+        await _grant(sessionmaker)
+        bus = await _person(sessionmaker, last_name="Автобусов")
+        truck = await _person(sessionmaker, last_name="Грузовиков")
+        await _driver(
+            async_client, headers, bus, license_number="9900 666666", categories=["D"]
+        )
+        await _driver(
+            async_client,
+            headers,
+            truck,
+            license_number="9900 777777",
+            categories=["B", "C"],
+        )
+        response = await async_client.get(
+            f"{_API}/drivers", params={"category": "D"}, headers=headers
+        )
+        body = response.json()
+        assert body["total"] == 1
+        assert body["items"][0]["person_name"].startswith("Автобусов")
+
+
+class TestСтаж:
+    """Стаж СЧИТАЕТСЯ, а не хранится: у числа нет даты, на которую оно верно."""
+
+    async def test_стаж_считается_от_даты_начала(
+        self, async_client, make_auth_headers, sessionmaker
+    ) -> None:
+        headers = await make_auth_headers()
+        await _grant(sessionmaker)
+        person_id = await _person(sessionmaker)
+        # ровно три года и один день назад — стаж три полных года
+        since = date.today() - timedelta(days=365 * 3 + 2)
+        body = await _driver(
+            async_client,
+            headers,
+            person_id,
+            license_number="9900 888888",
+            experience_since=since,
+        )
+        assert body["experience_years"] == 3
+        assert body["experience_since"] == str(since)
+
+    async def test_стаж_числом_задать_нельзя(
+        self, async_client, make_auth_headers, sessionmaker
+    ) -> None:
+        """Сторож решения: присланное число лет не должно попадать в запись —
+        иначе оно застынет и разойдётся с датой."""
+
+        headers = await make_auth_headers()
+        await _grant(sessionmaker)
+        person_id = await _person(sessionmaker)
+        response = await async_client.post(
+            f"{_API}/drivers",
+            json={
+                "person_id": person_id,
+                "license_number": "9900 999999",
+                "categories": ["B"],
+                "experience_since": str(date.today() - timedelta(days=400)),
+                "experience_years": 30,
+            },
+            headers=headers,
+        )
+        assert response.status_code == 201, response.text
+        assert response.json()["experience_years"] == 1, "стаж считает сервер"
+
+    async def test_стаж_без_даты_не_выдумывается(
+        self, async_client, make_auth_headers, sessionmaker
+    ) -> None:
+        headers = await make_auth_headers()
+        await _grant(sessionmaker)
+        person_id = await _person(sessionmaker)
+        body = await _driver(
+            async_client, headers, person_id, license_number="9901 000001"
+        )
+        assert body["experience_years"] is None, "«не знаем» — это не «ноль лет»"
+
+    async def test_стаж_из_будущего_отвергается(
+        self, async_client, make_auth_headers, sessionmaker
+    ) -> None:
+        headers = await make_auth_headers()
+        await _grant(sessionmaker)
+        person_id = await _person(sessionmaker)
+        response = await async_client.post(
+            f"{_API}/drivers",
+            json={
+                "person_id": person_id,
+                "license_number": "9901 000002",
+                "categories": ["B"],
+                "experience_since": str(date.today() + timedelta(days=1)),
+            },
+            headers=headers,
+        )
+        assert response.status_code == 422, response.text
+
+
+class TestСрокУдостоверения:
+    async def test_пустой_срок_это_сведений_нет_а_не_просрочено(
+        self, async_client, make_auth_headers, sessionmaker
+    ) -> None:
+        """У водительского удостоверения бессрочности не бывает, но «мы не
+        знаем» и «истекло» — разные утверждения."""
+
+        headers = await make_auth_headers()
+        await _grant(sessionmaker)
+        person_id = await _person(sessionmaker)
+        body = await _driver(
+            async_client, headers, person_id, license_number="9901 000003"
+        )
+        assert body["license_status"] == "missing"
+        assert body["license_status_label"] == "Сведения не внесены"
+
+    async def test_истёкшее_удостоверение_просрочено(
+        self, async_client, make_auth_headers, sessionmaker
+    ) -> None:
+        headers = await make_auth_headers()
+        await _grant(sessionmaker)
+        person_id = await _person(sessionmaker)
+        body = await _driver(
+            async_client,
+            headers,
+            person_id,
+            license_number="9901 000004",
+            license_due=date.today() - timedelta(days=10),
+        )
+        assert body["license_status"] == "overdue"
+
+
+class TestСводкаПоВодителям:
+    async def test_просрочки_только_по_допущенным(
+        self, async_client, make_auth_headers, sessionmaker
+    ) -> None:
+        headers = await make_auth_headers()
+        await _grant(sessionmaker)
+        admitted = await _person(sessionmaker, last_name="Допущенов")
+        suspended = await _person(sessionmaker, last_name="Отстранённов")
+        await _driver(
+            async_client,
+            headers,
+            admitted,
+            license_number="9902 000001",
+            license_due=date.today() - timedelta(days=5),
+        )
+        second = await _driver(
+            async_client,
+            headers,
+            suspended,
+            license_number="9902 000002",
+            license_due=date.today() - timedelta(days=500),
+        )
+        await async_client.patch(
+            f"{_API}/drivers/{second['id']}",
+            json={"status": "suspended"},
+            headers=headers,
+        )
+
+        body = (await async_client.get(f"{_API}/readiness", headers=headers)).json()
+        assert body["total_drivers"] == 2
+        assert body["drivers_by_status"]["admitted"] == 1
+        assert body["drivers_by_status"]["suspended"] == 1
+        assert body["driver_license_overdue"] == 1, "отстранённый в просрочки не идёт"
+
+    async def test_сводка_считает_допущенных_без_срока(
+        self, async_client, make_auth_headers, sessionmaker
+    ) -> None:
+        headers = await make_auth_headers()
+        await _grant(sessionmaker)
+        without = await _person(sessionmaker, last_name="Безсрокова")
+        with_due = await _person(sessionmaker, last_name="Сосроком")
+        await _driver(async_client, headers, without, license_number="9902 000003")
+        await _driver(
+            async_client,
+            headers,
+            with_due,
+            license_number="9902 000004",
+            license_due=date.today() + timedelta(days=300),
+        )
+        body = (await async_client.get(f"{_API}/readiness", headers=headers)).json()
+        assert body["driver_license_missing"] == 1
+
+    async def test_платформа_не_решает_допуск_к_машине_и_хватает_ли_стажа(
+        self, async_client, make_auth_headers, sessionmaker
+    ) -> None:
+        """ГРАНИЦА: это следует из массы ТС, числа мест и вида перевозок."""
+
+        headers = await make_auth_headers()
+        await _grant(sessionmaker)
+        person_id = await _person(sessionmaker)
+        body = await _driver(
+            async_client, headers, person_id, license_number="9902 000005"
+        )
+        forbidden = {
+            "can_drive",
+            "allowed_vehicle_kinds",
+            "compliant",
+            "experience_enough",
+            "required_categories",
+        }
+        assert forbidden.isdisjoint(body.keys())
+        readiness = await async_client.get(f"{_API}/readiness", headers=headers)
+        assert forbidden.isdisjoint(readiness.json().keys())
+
+
+class TestПричинаДисциплиныБДД:
+    """Починка собственного дрейфа, найденная сверкой этого среза.
+
+    Ядро утверждало «Поимённый учёт БДД в системе не ведётся» — этот срез
+    делает утверждение ложным. Причина обязана называть свойство модели (нет
+    эталона, не с чем сравнивать), а не отсутствие записей: перечень таблиц
+    протухает за один срез, свойство модели — нет.
+    """
+
+    def test_причина_не_отрицает_поимённый_учёт(self) -> None:
+        from app.core.disciplines import UNMEASURED_DISCIPLINES, Discipline
+
+        reason = UNMEASURED_DISCIPLINES[Discipline.ROAD_SAFETY].lower()
+        assert "поимённый учёт бдд" not in reason
+        assert "эталон" in reason, "причина обязана называть, чего именно нет"
+
+    def test_бдд_остаётся_без_светофора(self) -> None:
+        """Реестр водителей — ещё не эталон: норм по должностям в системе нет,
+        и красить дисциплину зелёным или жёлтым было бы выдумкой."""
+
+        from app.core.disciplines import (
+            MEASURED_DISCIPLINES,
+            UNMEASURED_DISCIPLINES,
+            Discipline,
+        )
+
+        assert Discipline.ROAD_SAFETY not in MEASURED_DISCIPLINES
+        assert Discipline.ROAD_SAFETY in UNMEASURED_DISCIPLINES
