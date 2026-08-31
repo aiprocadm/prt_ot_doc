@@ -1,9 +1,9 @@
-"""Контур БДД, собственные ручки (Доп. №1 разд. 56.2, срез-1).
+"""Контур БДД, собственные ручки (Доп. №1 разд. 56.2, срезы 1–3).
 
-Реестр транспортных средств: учёт парка, сроки диагностической карты, полиса
-и поверки тахографа. До этого среза по разд. 56.2 не было ни одной модели
-транспорта — ТЗ отсылало к «transport safety (vNext §17.3)», которого в коде
-не существовало.
+Реестр транспортных средств (срез-1), карточки водителей (срез-2) и путевые
+листы с отметками контроля (срез-3). До среза-1 по разд. 56.2 не было ни одной
+модели транспорта — ТЗ отсылало к «transport safety (vNext §17.3)», которого в
+коде не существовало.
 
 Гейт модуля — роутерный (разд. 61.3): на каждом роуте по построению,
 аутентификация РАНЬШЕ гейта (иначе без токена вернулся бы 404 вместо 401),
@@ -12,11 +12,11 @@
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -34,8 +34,12 @@ from app.models.road_safety import (
     VEHICLE_DOC_STATUS_TITLES,
     VEHICLE_KINDS,
     VEHICLE_STATUSES,
+    WAYBILL_MARK_STATUSES,
+    WAYBILL_RELEASE_TITLES,
+    WAYBILL_STATUSES,
     Driver,
     Vehicle,
+    Waybill,
 )
 from app.schemas.road_safety import (
     DriverCreate,
@@ -47,6 +51,10 @@ from app.schemas.road_safety import (
     VehiclePage,
     VehicleRead,
     VehicleUpdate,
+    WaybillCreate,
+    WaybillPage,
+    WaybillRead,
+    WaybillUpdate,
 )
 from app.services.audit import AuditService, field_level_diff
 
@@ -59,6 +67,11 @@ _ROLES = ["admin", "owner", "ot_pb_lead", "ot_specialist"]
 
 #: горизонт «скоро истекает» — тот же, что у остальных сводок продукта
 _DUE_SOON_DAYS = 30
+
+#: окно сводки по путевым листам. Парк и водительский состав считаются
+#: ЦЕЛИКОМ — их десятки; листов же выписывается по одному на машину за смену,
+#: и «всего листов за всё время» ни о чём не говорит.
+_WAYBILL_WINDOW_DAYS = 30
 
 
 def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> str | None:
@@ -410,7 +423,7 @@ async def road_safety_readiness(
     session: SessionDep,
     access: Access,
 ) -> RoadSafetyReadinessRead:
-    """Сводка БДД: парк, водительский состав и сроки.
+    """Сводка БДД: парк, водительский состав, сроки и выпуск на линию.
 
     Просрочки считаются ТОЛЬКО по ТС в эксплуатации и по ДОПУЩЕННЫМ водителям: у списанной машины
     просроченный полис это шум, а не проблема, и показывать его как нарушение
@@ -460,6 +473,48 @@ async def road_safety_readiness(
             drivers_by_status[driver.status] += 1
     admitted = [d for d in drivers if d.status == "admitted"]
 
+    # Срез-3: путевые листы. В отличие от парка и водительского состава,
+    # реестр листов растёт КАЖДУЮ СМЕНУ, поэтому сводка считается за окно и
+    # SQL-агрегатами, а не выгрузкой всех строк в память: «сколько листов у
+    # нас за три года» — не тот вопрос, на который смотрят утром.
+    window_start = today - timedelta(days=_WAYBILL_WINDOW_DAYS)
+    window = (
+        Waybill.tenant_id == tenant.id,
+        Waybill.deleted_at.is_(None),
+        Waybill.issued_on >= window_start,
+    )
+    waybills_by_status = {code: 0 for code in WAYBILL_STATUSES}
+    for code, count in (
+        await session.execute(
+            select(Waybill.status, func.count()).where(*window).group_by(Waybill.status)
+        )
+    ).all():
+        if code in waybills_by_status:
+            waybills_by_status[code] = int(count)
+
+    # Аннулированный лист выпуском не считается: именно по нему видно, что
+    # выезда не было, и записывать его в нарушения значило бы шуметь.
+    live = (*window, Waybill.status != "cancelled")
+    blocked = int(
+        await session.scalar(
+            select(func.count())
+            .select_from(Waybill)
+            .where(*live, _release_condition("blocked"))
+        )
+        or 0
+    )
+    # «Не внесено» и «не пройдено» не суммируются: лист с проваленным
+    # осмотром — нарушение, лист с пустой отметкой — дыра в учёте. Поэтому
+    # проваленные исключены из второго счётчика, а не посчитаны дважды.
+    unconfirmed = int(
+        await session.scalar(
+            select(func.count())
+            .select_from(Waybill)
+            .where(*live, _release_condition("unconfirmed"))
+        )
+        or 0
+    )
+
     return RoadSafetyReadinessRead(
         total_vehicles=len(rows),
         by_status=by_status,
@@ -486,6 +541,11 @@ async def road_safety_readiness(
         driver_license_missing=sum(
             1 for d in admitted if _doc_status(d.license_due, today) == "missing"
         ),
+        waybill_window_days=_WAYBILL_WINDOW_DAYS,
+        waybills_total=sum(waybills_by_status.values()),
+        waybills_by_status=waybills_by_status,
+        waybills_release_blocked=blocked,
+        waybills_release_unconfirmed=unconfirmed,
     )
 
 
@@ -848,3 +908,479 @@ async def update_driver(
     return _driver_read(
         await _get_driver_or_404(session, tenant, driver.id), date.today()
     )
+
+
+# ---------------------------------------------------------------------------
+# Срез-3: путевые листы (Доп. №1 разд. 56.2, пункт «Медицинский и технический
+# контроль»).
+#
+# Лист — ОДНА запись, а не четыре реестра: машина, водитель и три отметки
+# контроля сходятся на одном документе. Отдельный «журнал предрейсовых
+# осмотров» не заводится — это тот же список листов с отбором по датам, а
+# второе хранилище тех же фактов разошлось бы с первым.
+# ---------------------------------------------------------------------------
+
+#: отметки, без которых выпуск на линию не подтверждён.
+#:
+#: ПОСЛЕРЕЙСОВОГО ЗДЕСЬ НЕТ СОЗНАТЕЛЬНО: он обязателен не всем, а перевозчикам
+#: пассажиров и опасных грузов, а вида перевозок платформа не знает — та же
+#: граница, что у тахографа в срезе-1. Требовать его со всех значило бы
+#: показывать нарушение там, где его нет.
+_RELEASE_MARKS = ("pre_trip_medical", "pre_trip_technical")
+
+
+def _release_status(waybill: Waybill) -> str:
+    """Вердикт о выпуске — СЧИТАЕТСЯ, а не хранится.
+
+    Сохранённый вердикт разойдётся с отметками при первой же правке: отметку
+    поправили, а поле осталось прежним — и какое из двух правда, неизвестно
+    (прецедент стажа в срезе-2).
+    """
+
+    marks = [getattr(waybill, name) for name in _RELEASE_MARKS]
+    if any(mark == "failed" for mark in marks):
+        return "blocked"
+    if any(mark != "passed" for mark in marks):
+        return "unconfirmed"
+    return "confirmed"
+
+
+def _as_utc(value: datetime | None) -> datetime | None:
+    """Привести время к сравнимому виду: без пояса — считаем UTC.
+
+    ЗАЧЕМ ЭТО ВООБЩЕ НУЖНО. Колонка объявлена как ``DateTime(timezone=True)``,
+    но пояс сохраняет не всякая база: PostgreSQL отдаёт время С поясом, SQLite
+    — БЕЗ. Значит в одной и той же правке встречаются оба вида: выезд пришёл
+    из базы, возвращение — из запроса. Сравнить их напрямую нельзя, Python
+    роняет ``TypeError``.
+
+    Это не теория: лист выписывают утром с выездом, а возвращение проставляют
+    вечером отдельной правкой — самое частое действие за смену. Без приведения
+    оно отвечало бы пятисоткой (найдено тестом до вливания).
+    """
+
+    if value is None:
+        return None
+    return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value
+
+
+def _release_condition(value: str):
+    """ТО ЖЕ правило выпуска, но выраженное для базы.
+
+    ПОЧЕМУ ДВА ВЫРАЖЕНИЯ ОДНОГО ПРАВИЛА. Вердикт одной записи считает
+    ``_release_status``; счётчики сводки и отбор журнала должны считаться в
+    базе, иначе тысячи листов за смену пришлось бы тянуть в память ради
+    подсчёта. Оба выражения растут из ОДНОГО перечня обязательных отметок
+    ``_RELEASE_MARKS``: добавь четвёртую — изменятся оба. Что они дают
+    одинаковый ответ, проверяет отдельный тест: без него они молча разойдутся.
+    """
+
+    failed = or_(*[getattr(Waybill, mark) == "failed" for mark in _RELEASE_MARKS])
+    if value == "blocked":
+        return failed
+    not_failed = and_(
+        *[getattr(Waybill, mark) != "failed" for mark in _RELEASE_MARKS]
+    )
+    if value == "unconfirmed":
+        return and_(
+            not_failed,
+            or_(
+                *[
+                    getattr(Waybill, mark) == "not_recorded"
+                    for mark in _RELEASE_MARKS
+                ]
+            ),
+        )
+    return and_(*[getattr(Waybill, mark) == "passed" for mark in _RELEASE_MARKS])
+
+
+def _trip_hours(departure: datetime | None, arrival: datetime | None) -> float | None:
+    """Время В РЕЙСЕ, а не за рулём.
+
+    Сколько из рейса человек реально вёл машину, платформа не знает: стоянки,
+    погрузка и обед в лист не пишутся. Называть эту величину «временем за
+    рулём» значило бы соврать в пользу нарушителя.
+
+    Пустая дата — ``None``, а не ноль: «сведений нет» и «рейс длился нисколько»
+    это разные утверждения.
+    """
+
+    start, end = _as_utc(departure), _as_utc(arrival)
+    if start is None or end is None:
+        return None
+    return round((end - start).total_seconds() / 3600, 2)
+
+
+def _person_full_name(driver: Driver | None) -> str:
+    return _person_name(driver.person if driver else None)
+
+
+def _waybill_read(waybill: Waybill) -> WaybillRead:
+    vehicle = waybill.vehicle
+    driver = waybill.driver
+    release = _release_status(waybill)
+    return WaybillRead(
+        id=waybill.id,
+        number=waybill.number,
+        vehicle_id=waybill.vehicle_id,
+        # госномер и ФИО приходят из реестров, в листе они не хранятся —
+        # иначе переименование машины оставило бы старое имя в тысяче листов
+        vehicle_plate=vehicle.plate_number if vehicle else "",
+        vehicle_brand_model=vehicle.brand_model if vehicle else "",
+        driver_id=waybill.driver_id,
+        driver_name=_person_full_name(driver),
+        driver_license_number=driver.license_number if driver else "",
+        issued_on=waybill.issued_on,
+        departure_at=waybill.departure_at,
+        return_at=waybill.return_at,
+        trip_hours=_trip_hours(waybill.departure_at, waybill.return_at),
+        pre_trip_medical=waybill.pre_trip_medical,
+        pre_trip_medical_label=WAYBILL_MARK_STATUSES.get(
+            waybill.pre_trip_medical, waybill.pre_trip_medical
+        ),
+        post_trip_medical=waybill.post_trip_medical,
+        post_trip_medical_label=WAYBILL_MARK_STATUSES.get(
+            waybill.post_trip_medical, waybill.post_trip_medical
+        ),
+        pre_trip_technical=waybill.pre_trip_technical,
+        pre_trip_technical_label=WAYBILL_MARK_STATUSES.get(
+            waybill.pre_trip_technical, waybill.pre_trip_technical
+        ),
+        release_status=release,
+        release_status_label=WAYBILL_RELEASE_TITLES[release],
+        status=waybill.status,
+        status_label=WAYBILL_STATUSES.get(waybill.status, waybill.status),
+        notes=waybill.notes,
+    )
+
+
+def _validate_waybill_dictionaries(
+    *,
+    status_value: str | None,
+    marks: dict[str, str | None],
+) -> None:
+    if status_value is not None and status_value not in WAYBILL_STATUSES:
+        raise _unprocessable(
+            f"Неизвестное состояние путевого листа: {status_value!r}. "
+            f"Допустимые: {', '.join(WAYBILL_STATUSES)}"
+        )
+    for field, value in marks.items():
+        if value is not None and value not in WAYBILL_MARK_STATUSES:
+            raise _unprocessable(
+                f"Неизвестное состояние отметки {field!r}: {value!r}. "
+                f"Допустимые: {', '.join(WAYBILL_MARK_STATUSES)}"
+            )
+
+
+def _validate_waybill_times(
+    departure: datetime | None, arrival: datetime | None
+) -> None:
+    """Вернуться раньше, чем выехал, нельзя — это опечатка, а не короткий рейс.
+
+    Пропусти её — и время в рейсе станет отрицательным, а журнал за период
+    посчитает часы, которых не было.
+    """
+
+    start, end = _as_utc(departure), _as_utc(arrival)
+    if start is not None and end is not None and end < start:
+        raise _unprocessable("Возвращение раньше выезда: проверьте даты рейса")
+
+
+async def _get_waybill_or_404(
+    session: AsyncSession, tenant: Tenant, waybill_id: str
+) -> Waybill:
+    stmt = (
+        select(Waybill)
+        .options(
+            selectinload(Waybill.vehicle),
+            selectinload(Waybill.driver).selectinload(Driver.person),
+        )
+        .where(
+            Waybill.id == waybill_id,
+            Waybill.tenant_id == tenant.id,
+            Waybill.deleted_at.is_(None),
+        )
+    )
+    waybill = (await session.execute(stmt)).scalar_one_or_none()
+    if waybill is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            detail=api_problem_detail(
+                code="WAYBILL_NOT_FOUND",
+                message="Waybill not found",
+                error_type="road_safety",
+            ),
+        )
+    return waybill
+
+
+async def _ensure_number_free(
+    session: AsyncSession,
+    tenant: Tenant,
+    number: str,
+    *,
+    exclude_id: str | None = None,
+) -> None:
+    """Один номер — один лист: дубль это ошибка ввода, а не второй рейс."""
+
+    stmt = select(Waybill.id).where(
+        Waybill.tenant_id == tenant.id,
+        Waybill.number == number,
+        Waybill.deleted_at.is_(None),
+    )
+    if exclude_id:
+        stmt = stmt.where(Waybill.id != exclude_id)
+    if (await session.execute(stmt)).scalar_one_or_none() is not None:
+        raise _unprocessable(f"Путевой лист {number!r} уже выписан")
+
+
+async def _resolve_vehicle_for_trip(
+    session: AsyncSession, tenant: Tenant, vehicle_id: str
+) -> Vehicle:
+    """ТС обязано быть СВОИМ и не списанным.
+
+    Запрет на списанную машину — не экспертиза, а целостность: списание уже
+    означает «не эксплуатируется», и выписать на неё рейс можно только по
+    ошибке. Состояние «не эксплуатируется» (``suspended``) при этом НЕ
+    запрещаем: машина может стоять в ремонте и выйти в тот же день.
+    """
+
+    vehicle = await _get_vehicle_or_404(session, tenant, vehicle_id)
+    if vehicle.status == "decommissioned":
+        raise _unprocessable(
+            f"ТС {vehicle.plate_number!r} списано: путевой лист на него не выписывается"
+        )
+    return vehicle
+
+
+async def _resolve_driver_for_trip(
+    session: AsyncSession, tenant: Tenant, driver_id: str
+) -> Driver:
+    """Водитель обязан быть СВОИМ и допущенным к управлению.
+
+    Отстранённый водитель в рейс не выпускается — ради этого допуск и
+    заводился срезом-2. Это тоже целостность, а не экспертиза: платформа не
+    решает, ХВАТАЕТ ли водителю категории и стажа, — она лишь не даёт выписать
+    лист тому, кого сам арендатор отметил как отстранённого.
+    """
+
+    driver = await _get_driver_or_404(session, tenant, driver_id)
+    if driver.status != "admitted":
+        raise _unprocessable(
+            f"Водитель в состоянии {DRIVER_STATUSES.get(driver.status, driver.status)!r}: "
+            "путевой лист выписывается только допущенному"
+        )
+    return driver
+
+
+@router.get("/waybills", response_model=WaybillPage)
+async def list_waybills(
+    tenant: TenantDep,
+    session: SessionDep,
+    access: Access,
+    status_filter: str | None = Query(default=None, alias="status"),
+    vehicle_id: str | None = Query(default=None),
+    driver_id: str | None = Query(default=None),
+    issued_from: date | None = Query(default=None),
+    issued_to: date | None = Query(default=None),
+    release_status: str | None = Query(default=None),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+) -> WaybillPage:
+    """Реестр листов — он же ЖУРНАЛ за период.
+
+    Отбор по датам и машине и есть журнал предрейсовых осмотров: заводить его
+    второй таблицей значило бы получить два списка одних и тех же фактов.
+    Порядок — от свежих к старым: журнал читают с последней смены.
+    """
+
+    TenantContextValidator.ensure_tenant_context(tenant)
+    stmt = (
+        select(Waybill)
+        .options(
+            selectinload(Waybill.vehicle),
+            selectinload(Waybill.driver).selectinload(Driver.person),
+        )
+        .where(Waybill.tenant_id == tenant.id, Waybill.deleted_at.is_(None))
+    )
+    if status_filter:
+        stmt = stmt.where(Waybill.status == status_filter)
+    if vehicle_id:
+        stmt = stmt.where(Waybill.vehicle_id == vehicle_id)
+    if driver_id:
+        stmt = stmt.where(Waybill.driver_id == driver_id)
+    if issued_from:
+        stmt = stmt.where(Waybill.issued_on >= issued_from)
+    if issued_to:
+        stmt = stmt.where(Waybill.issued_on <= issued_to)
+    stmt = stmt.order_by(Waybill.issued_on.desc(), Waybill.number.desc())
+
+    if release_status:
+        if release_status not in WAYBILL_RELEASE_TITLES:
+            raise _unprocessable(
+                f"Неизвестный вердикт о выпуске: {release_status!r}. "
+                f"Допустимые: {', '.join(WAYBILL_RELEASE_TITLES)}"
+            )
+        # Отбираем В БАЗЕ, а не в памяти: журнал растёт каждую смену, и
+        # вытянуть его целиком ради вердикта значило бы уронить экран на
+        # арендаторе с большим парком. Правило при этом одно — см.
+        # _release_condition.
+        stmt = stmt.where(_release_condition(release_status))
+    total = int(
+        await session.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+    )
+    page = list(
+        (await session.execute(stmt.offset(offset).limit(limit))).scalars().all()
+    )
+    return WaybillPage(items=[_waybill_read(row) for row in page], total=total)
+
+
+@router.post(
+    "/waybills", response_model=WaybillRead, status_code=status.HTTP_201_CREATED
+)
+async def create_waybill(
+    request: Request,
+    payload: WaybillCreate,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: Access,
+) -> WaybillRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    _validate_waybill_dictionaries(
+        status_value=payload.status,
+        marks={
+            "pre_trip_medical": payload.pre_trip_medical,
+            "post_trip_medical": payload.post_trip_medical,
+            "pre_trip_technical": payload.pre_trip_technical,
+        },
+    )
+    _validate_waybill_times(payload.departure_at, payload.return_at)
+    number = payload.number.strip()
+    await _ensure_number_free(session, tenant, number)
+    vehicle = await _resolve_vehicle_for_trip(session, tenant, payload.vehicle_id)
+    driver = await _resolve_driver_for_trip(session, tenant, payload.driver_id)
+
+    waybill = Waybill(
+        tenant_id=str(tenant.id),
+        number=number,
+        vehicle_id=vehicle.id,
+        driver_id=driver.id,
+        issued_on=payload.issued_on,
+        departure_at=payload.departure_at,
+        return_at=payload.return_at,
+        pre_trip_medical=payload.pre_trip_medical,
+        post_trip_medical=payload.post_trip_medical,
+        pre_trip_technical=payload.pre_trip_technical,
+        status=payload.status,
+        notes=(payload.notes or None),
+    )
+    session.add(waybill)
+    await session.flush()
+    await AuditService(session).log_event(
+        tenant_id=str(tenant.id),
+        action="create",
+        object_type="Waybill",
+        object_id=waybill.id,
+        user_id=access.user.id,
+        ip=request.client.host if request.client else "unknown",
+        request_id=getattr(request.state, "trace_id", None),
+        user_agent=request.headers.get("user-agent"),
+        changed_fields={"fields": {"id": {"before": None, "after": waybill.id}}},
+        details={
+            "entity": "Waybill",
+            "number": waybill.number,
+            "vehicle_id": waybill.vehicle_id,
+            "driver_id": waybill.driver_id,
+        },
+    )
+    await session.commit()
+    return _waybill_read(await _get_waybill_or_404(session, tenant, waybill.id))
+
+
+@router.patch("/waybills/{waybill_id}", response_model=WaybillRead)
+async def update_waybill(
+    request: Request,
+    waybill_id: str,
+    payload: WaybillUpdate,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: Access,
+) -> WaybillRead:
+    """Правка листа: отметки контроля, время рейса, аннулирование.
+
+    МАШИНУ И ВОДИТЕЛЯ СМЕНИТЬ НЕЛЬЗЯ — полей для этого нет. Другая машина или
+    другой водитель это ДРУГОЙ РЕЙС, и переписать на него старый лист значило
+    бы приписать чужому рейсу чужие отметки медосмотра. Ошибочный лист
+    аннулируется, а верный выписывается заново.
+    """
+
+    TenantContextValidator.ensure_tenant_context(tenant)
+    waybill = await _get_waybill_or_404(session, tenant, waybill_id)
+    data = payload.model_dump(exclude_unset=True)
+    _validate_waybill_dictionaries(
+        status_value=data.get("status"),
+        marks={
+            field: data.get(field)
+            for field in (
+                "pre_trip_medical",
+                "post_trip_medical",
+                "pre_trip_technical",
+            )
+        },
+    )
+    departure = data.get("departure_at", waybill.departure_at)
+    arrival = data.get("return_at", waybill.return_at)
+    _validate_waybill_times(departure, arrival)
+
+    before = {
+        "number": waybill.number,
+        "status": waybill.status,
+        "pre_trip_medical": waybill.pre_trip_medical,
+        "post_trip_medical": waybill.post_trip_medical,
+        "pre_trip_technical": waybill.pre_trip_technical,
+        "release_status": _release_status(waybill),
+    }
+    if data.get("number"):
+        number = str(data["number"]).strip()
+        await _ensure_number_free(session, tenant, number, exclude_id=waybill.id)
+        waybill.number = number
+    for field in (
+        "issued_on",
+        "departure_at",
+        "return_at",
+        "pre_trip_medical",
+        "post_trip_medical",
+        "pre_trip_technical",
+        "status",
+    ):
+        if data.get(field) is not None:
+            setattr(waybill, field, data[field])
+        elif field in data and field in ("departure_at", "return_at"):
+            # снять время рейса можно: внесли по ошибке — стирается в
+            # «сведений нет», а не остаётся навсегда
+            setattr(waybill, field, None)
+    if "notes" in data:
+        waybill.notes = data["notes"] or None
+    await session.flush()
+    after = {
+        "number": waybill.number,
+        "status": waybill.status,
+        "pre_trip_medical": waybill.pre_trip_medical,
+        "post_trip_medical": waybill.post_trip_medical,
+        "pre_trip_technical": waybill.pre_trip_technical,
+        "release_status": _release_status(waybill),
+    }
+    await AuditService(session).log_event(
+        tenant_id=str(tenant.id),
+        action="update",
+        object_type="Waybill",
+        object_id=waybill.id,
+        user_id=access.user.id,
+        ip=request.client.host if request.client else "unknown",
+        request_id=getattr(request.state, "trace_id", None),
+        user_agent=request.headers.get("user-agent"),
+        changed_fields=field_level_diff(before, after),
+        details={"entity": "Waybill"},
+    )
+    await session.commit()
+    return _waybill_read(await _get_waybill_or_404(session, tenant, waybill.id))

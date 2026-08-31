@@ -5,6 +5,7 @@ import {
   roadSafetyApi,
   type DriverDto,
   type VehicleDto,
+  type WaybillDto,
 } from "@/api/roadSafety";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
@@ -102,23 +103,83 @@ const DRIVER_COLUMNS: ColumnDef<DriverDto, unknown>[] = [
 ];
 
 /**
+ * Путевые листы — РОВНО 7 колонок: столько разрешает UX-бюджет (разд. 59.2).
+ * Послерейсовый осмотр уехал в подсказку к предрейсовому, а не в восьмую
+ * колонку: он обязателен не всем, и держать его наравне с обязательными
+ * значило бы уравнять разное.
+ */
+const WAYBILL_COLUMNS: ColumnDef<WaybillDto, unknown>[] = [
+  { accessorKey: "number", header: "Номер" },
+  {
+    accessorKey: "issued_on",
+    header: "Дата и рейс",
+    // Время В РЕЙСЕ, а не за рулём: сколько из рейса человек реально вёл
+    // машину, платформа не знает. Пусто — сведений о выезде нет, а не «ноль».
+    cell: ({ row }) =>
+      row.original.trip_hours === null || row.original.trip_hours === undefined
+        ? formatDate(row.original.issued_on)
+        : `${formatDate(row.original.issued_on)} · ${row.original.trip_hours} ч в рейсе`,
+  },
+  {
+    accessorKey: "vehicle_plate",
+    header: "ТС",
+    // Госномер приходит из реестра ТС: в листе он не хранится, иначе смена
+    // номера оставила бы старый в тысяче листов.
+    cell: ({ row }) => (
+      <span title={row.original.vehicle_brand_model}>
+        {row.original.vehicle_plate}
+      </span>
+    ),
+  },
+  { accessorKey: "driver_name", header: "Водитель" },
+  {
+    accessorKey: "pre_trip_medical_label",
+    header: "Медосмотр",
+    cell: ({ row }) => (
+      <span
+        title={`Послерейсовый: ${row.original.post_trip_medical_label}`}
+      >
+        {row.original.pre_trip_medical_label}
+      </span>
+    ),
+  },
+  {
+    accessorKey: "pre_trip_technical_label",
+    header: "Техконтроль",
+    cell: ({ row }) => row.original.pre_trip_technical_label,
+  },
+  {
+    accessorKey: "release_status_label",
+    header: "Выпуск",
+    // Вердикт СЧИТАЕТСЯ сервером из двух обязательных отметок и не хранится:
+    // сохранённый разошёлся бы с отметками при первой правке.
+    cell: ({ row }) => row.original.release_status_label,
+  },
+];
+
+/**
  * БДД: транспортные средства и водители (Доп. №1 разд. 56.2, срезы 1–2).
  *
  * До среза-1 по разд. 56.2 не было НИЧЕГО: ТЗ отсылало к «transport safety»,
  * которого в коде не существовало. Срез-2 добавил водителей — и человека НЕ
- * продублировал: карточка ссылается на ядрового сотрудника.
+ * продублировал: карточка ссылается на ядрового сотрудника. Срез-3 добавил
+ * путевые листы: они же журнал предрейсовых осмотров за период — отдельного
+ * журнала не заводим, второй список тех же фактов разошёлся бы с первым.
  */
 const RoadSafetyPage = () => {
   // Секции ПО ОДНОЙ (прецедент экранов ПБ и ПромБеза): парк и водительский
   // состав — разные задачи, и показывать обе таблицы сразу значит растить
   // экран.
-  const [section, setSection] = useState<"vehicles" | "drivers">("vehicles");
+  const [section, setSection] = useState<"vehicles" | "drivers" | "waybills">(
+    "vehicles",
+  );
 
   const { data, loading, error, reload } = useAsyncResource({
     loader: useCallback(
       async () => ({
         vehicles: await roadSafetyApi.listVehicles(),
         drivers: await roadSafetyApi.listDrivers(),
+        waybills: await roadSafetyApi.listWaybills(),
         readiness: await roadSafetyApi.readiness(),
       }),
       [],
@@ -126,6 +187,7 @@ const RoadSafetyPage = () => {
     initialData: {
       vehicles: [] as VehicleDto[],
       drivers: [] as DriverDto[],
+      waybills: [] as WaybillDto[],
       readiness: {
         total_vehicles: 0,
         by_status: { in_service: 0, suspended: 0, decommissioned: 0 },
@@ -137,6 +199,11 @@ const RoadSafetyPage = () => {
         drivers_by_status: { admitted: 0, suspended: 0, dismissed: 0 },
         driver_license_overdue: 0,
         driver_license_missing: 0,
+        waybill_window_days: 30,
+        waybills_total: 0,
+        waybills_by_status: { issued: 0, closed: 0, cancelled: 0 },
+        waybills_release_blocked: 0,
+        waybills_release_unconfirmed: 0,
       },
     },
     errorMessage: "Не удалось загрузить реестр транспортных средств",
@@ -167,13 +234,29 @@ const RoadSafetyPage = () => {
         .includes(query),
   });
 
+  const waybills = useLocalRegistry({
+    items: data.waybills,
+    match: (item, query) =>
+      [
+        item.number,
+        item.vehicle_plate,
+        item.driver_name,
+        item.release_status_label,
+        item.status_label,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(query),
+  });
+
   const { readiness } = data;
 
   return (
     <div className="space-y-4">
       <RegistryPageHeader
         title="Безопасность дорожного движения"
-        description="Реестр транспортных средств и водительский состав: сроки диагностической карты, полиса, поверки тахографа и водительских удостоверений."
+        description="Реестр транспортных средств, водительский состав и путевые листы: сроки диагностической карты, полиса, поверки тахографа, водительских удостоверений и отметки контроля перед выездом."
         stats={[
           { label: "Транспортных средств", value: readiness.total_vehicles },
           {
@@ -198,6 +281,23 @@ const RoadSafetyPage = () => {
             label: "Удостоверение просрочено",
             value: readiness.driver_license_overdue,
           },
+          // Срез-3: листы считаются ЗА ОКНО, а не за всё время — реестр
+          // растёт каждую смену, и «всего за три года» ни о чём не говорит.
+          {
+            label: `Путевых листов за ${readiness.waybill_window_days} дн.`,
+            value: readiness.waybills_total,
+          },
+          // Нарушение и дыра в учёте — РАЗНЫЕ числа: «не пройден» здесь,
+          // «сведения не внесены» отдельной подписью в секции листов.
+          //
+          // ПОДПИСЬ НЕ ПОВТОРЯЕТ ВЕРДИКТ СТРОКИ дословно: плитка считает
+          // ЛИСТЫ, а вердикт в таблице говорит о ЭТОМ листе. Совпади они
+          // слово в слово — на экране появились бы две одинаковые надписи о
+          // разном, и понять, к чему относится число, стало бы нельзя.
+          {
+            label: "Контроль не пройден, листов",
+            value: readiness.waybills_release_blocked,
+          },
         ]}
       />
 
@@ -206,6 +306,7 @@ const RoadSafetyPage = () => {
           [
             ["vehicles", "Транспортные средства"],
             ["drivers", "Водители"],
+            ["waybills", "Путевые листы"],
           ] as const
         ).map(([key, label]) => (
           <Button
@@ -221,6 +322,50 @@ const RoadSafetyPage = () => {
 
       <ErrorState error={error ?? undefined} onRetry={() => void reload()} />
       {loading ? <LoadingScreen label="Загрузка парка" /> : null}
+
+      {section === "waybills" ? (
+        <>
+          {/*
+            ГРАНИЦА, названная НА ЭКРАНЕ (прецедент тахографа и стажа):
+            платформа не решает, законен ли выпуск и уложился ли водитель в
+            режим труда и отдыха — это следует из вида перевозок и
+            суммирования за неделю, а этих данных в системе нет.
+          */}
+          {!loading && !error ? (
+            <p className="text-sm text-muted-foreground">
+              Реестр листов с отбором по датам и есть журнал предрейсовых
+              осмотров — отдельного журнала платформа не ведёт. Выпуск
+              подтверждается двумя отметками: предрейсовым медосмотром и
+              техконтролем; послерейсовый осмотр в вердикт не входит, потому
+              что обязателен не всем. «Сведения не внесены» и «не пройден» —
+              разные вещи: первое дыра в учёте, второе нарушение выпуска.
+              Сейчас без подтверждения контроля: {" "}
+              {readiness.waybills_release_unconfirmed}. Время считается в
+              рейсе, а не за рулём, и платформа не судит о превышении.
+            </p>
+          ) : null}
+          {!loading && !error && waybills.total === 0 ? (
+            <EmptyState
+              title="Путевые листы не выписаны"
+              description="Выпишите лист: номер, машина из реестра ТС, допущенный водитель и дата. Отметки предрейсового медосмотра и техконтроля ставятся в самом листе. Ошибочный лист аннулируется, а не удаляется."
+            />
+          ) : null}
+          {!loading && !error && waybills.total > 0 ? (
+            <RegistryTable
+              columns={WAYBILL_COLUMNS}
+              data={waybills.pagedItems}
+              pageIndex={waybills.pageIndex}
+              pageSize={waybills.pageSize}
+              total={waybills.total}
+              onPageChange={waybills.onPageChange}
+              onPageSizeChange={waybills.onPageSizeChange}
+              onSearchChange={waybills.onSearchChange}
+              searchPlaceholder="Поиск по номеру, машине, водителю"
+              caption="Путевые листы"
+            />
+          ) : null}
+        </>
+      ) : null}
 
       {section === "drivers" ? (
         <>
