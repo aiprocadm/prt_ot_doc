@@ -119,6 +119,47 @@ export type WaybillDto = {
   notes?: string | null;
 };
 
+/**
+ * Срез-4: ДТП. Госномер и ФИО приходят из реестров и в записи не хранятся.
+ *
+ * ГРАНИЦА: полей «виновата ли организация» и «достаточны ли меры» нет. Вину
+ * устанавливают ГИБДД и суд — платформа хранит внесённое по их документам.
+ * Состояние разбора — факт о незакрытых мероприятиях, а не оценка качества.
+ */
+export type RoadAccidentDto = {
+  id: string;
+  occurred_at: string;
+  /** свободная строка: ДТП происходит на дороге, где площадки нет */
+  place: string;
+  vehicle_id: string;
+  vehicle_plate: string;
+  driver_id?: string | null;
+  /** пусто, если водителя за рулём не было */
+  driver_name?: string | null;
+  kind: string;
+  kind_label: string;
+  injured_count: number;
+  fatalities_count: number;
+  /** damage_only | injured | fatal — считается сервером из чисел людей */
+  consequences: string;
+  consequences_label: string;
+  fault: string;
+  fault_label: string;
+  gibdd_reference?: string | null;
+  /** связь с ядровым расследованием; пусто — законное состояние */
+  incident_id?: string | null;
+  description?: string | null;
+  /** мероприятия живут в ядровом CAPA — здесь только их счёт */
+  capa_total: number;
+  capa_open: number;
+  /**
+   * not_started | open | closed — считается сервером из связей: своего
+   * статуса «разобрано» у ДТП нет, иначе он разошёлся бы с мероприятиями.
+   */
+  follow_up: string;
+  follow_up_label: string;
+};
+
 export type RoadSafetyReadinessDto = {
   total_vehicles: number;
   by_status: Record<string, number>;
@@ -144,6 +185,18 @@ export type RoadSafetyReadinessDto = {
   waybills_release_blocked: number;
   /** Обязательная отметка не внесена — дыра в учёте, а НЕ нарушение. */
   waybills_release_unconfirmed: number;
+  /**
+   * Срез-4: ДТП. Окно ГОДОВОЕ, а не месячное как у листов: ДТП редки, и за
+   * месяц их обычно ноль — по такому окну об аварийности судить нельзя.
+   */
+  accident_window_days: number;
+  accidents_total: number;
+  accidents_by_consequences: Record<string, number>;
+  /** факты, а не оценка тяжести: числа людей */
+  injured_total: number;
+  fatalities_total: number;
+  /** ДТП без единого мероприятия и без связи с расследованием */
+  accidents_without_follow_up: number;
 };
 
 export const roadSafetyApi = {
@@ -165,6 +218,13 @@ export const roadSafetyApi = {
   listWaybills: async (): Promise<WaybillDto[]> => {
     const { data } = await apiClient.get<{ items?: WaybillDto[] }>(
       "/road-safety/waybills",
+      { params: { limit: 200, offset: 0 } },
+    );
+    return Array.isArray(data?.items) ? data.items : [];
+  },
+  listAccidents: async (): Promise<RoadAccidentDto[]> => {
+    const { data } = await apiClient.get<{ items?: RoadAccidentDto[] }>(
+      "/road-safety/accidents",
       { params: { limit: 200, offset: 0 } },
     );
     return Array.isArray(data?.items) ? data.items : [];

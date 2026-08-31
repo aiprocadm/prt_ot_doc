@@ -1,7 +1,8 @@
-"""Контур БДД, собственные ручки (Доп. №1 разд. 56.2, срезы 1–3).
+"""Контур БДД, собственные ручки (Доп. №1 разд. 56.2, срезы 1–4).
 
 Реестр транспортных средств (срез-1), карточки водителей (срез-2) и путевые
-листы с отметками контроля (срез-3). До среза-1 по разд. 56.2 не было ни одной
+листы с отметками контроля (срез-3) и учёт ДТП (срез-4). До среза-1 по разд.
+56.2 не было ни одной
 модели транспорта — ТЗ отсылало к «transport safety (vNext §17.3)», которого в
 коде не существовало.
 
@@ -12,11 +13,11 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -25,9 +26,15 @@ from app.core.errors import api_problem_detail
 from app.core.feature_flags import is_module_enabled, raise_for_disabled_module
 from app.core.security import AccessContext, abac, rbac
 from app.core.tenant_validation import TenantContextValidator
+from app.models.incidents import Incident
 from app.models.master_data import Person, Site
 from app.models.models import Tenant
 from app.models.road_safety import (
+    ACCIDENT_CAPA_SOURCE,
+    ACCIDENT_CONSEQUENCE_TITLES,
+    ACCIDENT_FAULT,
+    ACCIDENT_FOLLOWUP_TITLES,
+    ACCIDENT_KINDS,
     DRIVER_LICENSE_CATEGORIES,
     DRIVER_STATUSES,
     TACHOGRAPH_STATUS_TITLES,
@@ -38,14 +45,20 @@ from app.models.road_safety import (
     WAYBILL_RELEASE_TITLES,
     WAYBILL_STATUSES,
     Driver,
+    RoadAccident,
     Vehicle,
     Waybill,
 )
+from app.models.safety_ops import CorrectiveAction
 from app.schemas.road_safety import (
     DriverCreate,
     DriverPage,
     DriverRead,
     DriverUpdate,
+    RoadAccidentCreate,
+    RoadAccidentPage,
+    RoadAccidentRead,
+    RoadAccidentUpdate,
     RoadSafetyReadinessRead,
     VehicleCreate,
     VehiclePage,
@@ -67,6 +80,11 @@ _ROLES = ["admin", "owner", "ot_pb_lead", "ot_specialist"]
 
 #: горизонт «скоро истекает» — тот же, что у остальных сводок продукта
 _DUE_SOON_DAYS = 30
+
+#: окно сводки по ДТП — ГОДОВОЕ, а не месячное как у листов. ДТП редки: за
+#: месяц их у большинства арендаторов ноль, и по такому окну об аварийности
+#: судить нельзя. Год — стандартный горизонт её анализа.
+_ACCIDENT_WINDOW_DAYS = 365
 
 #: окно сводки по путевым листам. Парк и водительский состав считаются
 #: ЦЕЛИКОМ — их десятки; листов же выписывается по одному на машину за смену,
@@ -423,7 +441,7 @@ async def road_safety_readiness(
     session: SessionDep,
     access: Access,
 ) -> RoadSafetyReadinessRead:
-    """Сводка БДД: парк, водительский состав, сроки и выпуск на линию.
+    """Сводка БДД: парк, водительский состав, сроки, выпуск на линию и ДТП.
 
     Просрочки считаются ТОЛЬКО по ТС в эксплуатации и по ДОПУЩЕННЫМ водителям: у списанной машины
     просроченный полис это шум, а не проблема, и показывать его как нарушение
@@ -515,6 +533,38 @@ async def road_safety_readiness(
         or 0
     )
 
+    # Срез-4: ДТП. Окно ГОДОВОЕ — за месяц у большинства арендаторов их ноль,
+    # и по такому окну об аварийности судить нельзя.
+    accident_start = today - timedelta(days=_ACCIDENT_WINDOW_DAYS)
+    accidents = (
+        (
+            await session.execute(
+                select(RoadAccident).where(
+                    RoadAccident.tenant_id == tenant.id,
+                    RoadAccident.deleted_at.is_(None),
+                    RoadAccident.occurred_at
+                    >= datetime.combine(accident_start, time.min, tzinfo=timezone.utc),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    by_consequences = {code: 0 for code in ACCIDENT_CONSEQUENCE_TITLES}
+    for accident in accidents:
+        by_consequences[_consequences(accident)] += 1
+    accident_capa = await _capa_counts(session, tenant, [a.id for a in accidents])
+    without_follow_up = sum(
+        1
+        for a in accidents
+        if _follow_up(
+            capa_total=accident_capa.get(a.id, (0, 0))[0],
+            capa_open=accident_capa.get(a.id, (0, 0))[1],
+            incident_id=a.incident_id,
+        )
+        == "not_started"
+    )
+
     return RoadSafetyReadinessRead(
         total_vehicles=len(rows),
         by_status=by_status,
@@ -546,6 +596,12 @@ async def road_safety_readiness(
         waybills_by_status=waybills_by_status,
         waybills_release_blocked=blocked,
         waybills_release_unconfirmed=unconfirmed,
+        accident_window_days=_ACCIDENT_WINDOW_DAYS,
+        accidents_total=len(accidents),
+        accidents_by_consequences=by_consequences,
+        injured_total=sum(a.injured_count for a in accidents),
+        fatalities_total=sum(a.fatalities_count for a in accidents),
+        accidents_without_follow_up=without_follow_up,
     )
 
 
@@ -1384,3 +1440,388 @@ async def update_waybill(
     )
     await session.commit()
     return _waybill_read(await _get_waybill_or_404(session, tenant, waybill.id))
+
+
+# ---------------------------------------------------------------------------
+# Срез-4: учёт ДТП (Доп. №1 разд. 56.2, пункт «Профилактика и учёт ДТП»).
+#
+# ТЗ требует «связь с инцидентами и CAPA» — именно СВЯЗЬ. Ядровой инцидент
+# здесь НЕ поглощается: он требует площадку (у ДТП на трассе её нет), его вид
+# — перечисление в базе, общее для всего продукта, и помятый бампер это ДТП,
+# но не происшествие по охране труда. Мероприятия живут в ядровом CAPA, куда
+# ДТП адресуется парой «тип источника + идентификатор».
+# ---------------------------------------------------------------------------
+
+#: мероприятие считается НЕЗАКРЫТЫМ только в состоянии ``open``. Остальные
+#: (``done``/``verified``/``closed``/``canceled``) висящей работой не являются.
+_CAPA_OPEN_STATUS = "open"
+
+
+def _consequences(accident: RoadAccident) -> str:
+    """Тяжесть СЧИТАЕТСЯ из чисел людей, а не хранится словом.
+
+    Сохранённая «тяжесть» разойдётся с числами при первом же уточнении: в
+    сводке ГИБДД пострадавших стало двое, число поправили, а слово осталось
+    прежним — и какое из двух правда, непонятно.
+    """
+
+    if accident.fatalities_count > 0:
+        return "fatal"
+    if accident.injured_count > 0:
+        return "injured"
+    return "damage_only"
+
+
+def _follow_up(*, capa_total: int, capa_open: int, incident_id: str | None) -> str:
+    """Состояние разбора СЛЕДУЕТ ИЗ СВЯЗЕЙ — своего статуса у ДТП нет.
+
+    Заведи ДТП собственную галочку «разобрано» — она разошлась бы с
+    мероприятиями в первый же день: мероприятие закрыли, а галочку не
+    переставили. Поэтому состояние выводится из ядровых мероприятий и ссылки
+    на расследование.
+
+    ГРАНИЦА: это факт о НЕЗАКРЫТЫХ мероприятиях, а не оценка «разобрано
+    хорошо». Достаточны ли мероприятия, платформа не решает.
+    """
+
+    if capa_total == 0 and incident_id is None:
+        return "not_started"
+    if capa_open > 0:
+        return "open"
+    return "closed"
+
+
+async def _capa_counts(
+    session: AsyncSession, tenant: Tenant, accident_ids: list[str]
+) -> dict[str, tuple[int, int]]:
+    """Счёт мероприятий по ДТП — ОДНИМ запросом на страницу.
+
+    Спрашивать ядро по одному мероприятию на строку значило бы завести N+1 на
+    экране, который открывают каждый день.
+    """
+
+    if not accident_ids:
+        return {}
+    rows = (
+        await session.execute(
+            select(
+                CorrectiveAction.source_id,
+                func.count(),
+                func.sum(
+                    case(
+                        (CorrectiveAction.status == _CAPA_OPEN_STATUS, 1),
+                        else_=0,
+                    )
+                ),
+            )
+            .where(
+                CorrectiveAction.tenant_id == tenant.id,
+                CorrectiveAction.deleted_at.is_(None),
+                CorrectiveAction.source_type == ACCIDENT_CAPA_SOURCE,
+                CorrectiveAction.source_id.in_(accident_ids),
+            )
+            .group_by(CorrectiveAction.source_id)
+        )
+    ).all()
+    return {str(sid): (int(total or 0), int(open_ or 0)) for sid, total, open_ in rows}
+
+
+def _accident_read(
+    accident: RoadAccident, counts: dict[str, tuple[int, int]]
+) -> RoadAccidentRead:
+    capa_total, capa_open = counts.get(accident.id, (0, 0))
+    consequences = _consequences(accident)
+    follow_up = _follow_up(
+        capa_total=capa_total,
+        capa_open=capa_open,
+        incident_id=accident.incident_id,
+    )
+    driver = accident.driver
+    return RoadAccidentRead(
+        id=accident.id,
+        occurred_at=accident.occurred_at,
+        place=accident.place,
+        vehicle_id=accident.vehicle_id,
+        # госномер из реестра: в записи о ДТП он не хранится
+        vehicle_plate=accident.vehicle.plate_number if accident.vehicle else "",
+        driver_id=accident.driver_id,
+        driver_name=_person_name(driver.person) if driver else None,
+        kind=accident.kind,
+        kind_label=ACCIDENT_KINDS.get(accident.kind, accident.kind),
+        injured_count=accident.injured_count,
+        fatalities_count=accident.fatalities_count,
+        consequences=consequences,
+        consequences_label=ACCIDENT_CONSEQUENCE_TITLES[consequences],
+        fault=accident.fault,
+        fault_label=ACCIDENT_FAULT.get(accident.fault, accident.fault),
+        gibdd_reference=accident.gibdd_reference,
+        incident_id=accident.incident_id,
+        description=accident.description,
+        capa_total=capa_total,
+        capa_open=capa_open,
+        follow_up=follow_up,
+        follow_up_label=ACCIDENT_FOLLOWUP_TITLES[follow_up],
+    )
+
+
+def _validate_accident_dictionaries(
+    *, kind: str | None, fault: str | None
+) -> None:
+    if kind is not None and kind not in ACCIDENT_KINDS:
+        raise _unprocessable(
+            f"Неизвестный вид ДТП: {kind!r}. Допустимые: {', '.join(ACCIDENT_KINDS)}"
+        )
+    if fault is not None and fault not in ACCIDENT_FAULT:
+        raise _unprocessable(
+            f"Неизвестное значение вины: {fault!r}. "
+            f"Допустимые: {', '.join(ACCIDENT_FAULT)}"
+        )
+
+
+def _validate_occurred_at(occurred_at: datetime | None) -> None:
+    """ДТП в будущем не бывает — это опечатка в дате, а не запись наперёд."""
+
+    moment = _as_utc(occurred_at)
+    if moment is not None and moment > datetime.now(timezone.utc):
+        raise _unprocessable("ДТП не может произойти в будущем: проверьте дату")
+
+
+async def _get_accident_or_404(
+    session: AsyncSession, tenant: Tenant, accident_id: str
+) -> RoadAccident:
+    stmt = (
+        select(RoadAccident)
+        .options(
+            selectinload(RoadAccident.vehicle),
+            selectinload(RoadAccident.driver).selectinload(Driver.person),
+        )
+        .where(
+            RoadAccident.id == accident_id,
+            RoadAccident.tenant_id == tenant.id,
+            RoadAccident.deleted_at.is_(None),
+        )
+    )
+    accident = (await session.execute(stmt)).scalar_one_or_none()
+    if accident is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            detail=api_problem_detail(
+                code="ACCIDENT_NOT_FOUND",
+                message="Road accident not found",
+                error_type="road_safety",
+            ),
+        )
+    return accident
+
+
+async def _ensure_incident(
+    session: AsyncSession, tenant: Tenant, incident_id: str
+) -> None:
+    """Расследование обязано быть СВОИМ: контур БДД инцидентов не заводит."""
+
+    stmt = select(Incident.id).where(
+        Incident.id == incident_id,
+        Incident.tenant_id == tenant.id,
+        Incident.deleted_at.is_(None),
+    )
+    if (await session.execute(stmt)).scalar_one_or_none() is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            detail=api_problem_detail(
+                code="INCIDENT_NOT_FOUND",
+                message="Incident not found",
+                error_type="road_safety",
+            ),
+        )
+
+
+@router.get("/accidents", response_model=RoadAccidentPage)
+async def list_accidents(
+    tenant: TenantDep,
+    session: SessionDep,
+    access: Access,
+    vehicle_id: str | None = Query(default=None),
+    driver_id: str | None = Query(default=None),
+    kind: str | None = Query(default=None),
+    fault: str | None = Query(default=None),
+    occurred_from: datetime | None = Query(default=None),
+    occurred_to: datetime | None = Query(default=None),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+) -> RoadAccidentPage:
+    """Реестр ДТП. Порядок — от свежих: разбирают последнее происшествие."""
+
+    TenantContextValidator.ensure_tenant_context(tenant)
+    stmt = (
+        select(RoadAccident)
+        .options(
+            selectinload(RoadAccident.vehicle),
+            selectinload(RoadAccident.driver).selectinload(Driver.person),
+        )
+        .where(
+            RoadAccident.tenant_id == tenant.id, RoadAccident.deleted_at.is_(None)
+        )
+    )
+    if vehicle_id:
+        stmt = stmt.where(RoadAccident.vehicle_id == vehicle_id)
+    if driver_id:
+        stmt = stmt.where(RoadAccident.driver_id == driver_id)
+    if kind:
+        stmt = stmt.where(RoadAccident.kind == kind)
+    if fault:
+        stmt = stmt.where(RoadAccident.fault == fault)
+    if occurred_from:
+        stmt = stmt.where(RoadAccident.occurred_at >= occurred_from)
+    if occurred_to:
+        stmt = stmt.where(RoadAccident.occurred_at <= occurred_to)
+    stmt = stmt.order_by(RoadAccident.occurred_at.desc())
+
+    total = int(
+        await session.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+    )
+    page = list(
+        (await session.execute(stmt.offset(offset).limit(limit))).scalars().all()
+    )
+    counts = await _capa_counts(session, tenant, [row.id for row in page])
+    return RoadAccidentPage(
+        items=[_accident_read(row, counts) for row in page], total=total
+    )
+
+
+@router.post(
+    "/accidents", response_model=RoadAccidentRead, status_code=status.HTTP_201_CREATED
+)
+async def create_accident(
+    request: Request,
+    payload: RoadAccidentCreate,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: Access,
+) -> RoadAccidentRead:
+    """Регистрация ДТП.
+
+    СПИСАННОЕ ТС И ОТСТРАНЁННЫЙ ВОДИТЕЛЬ ЗДЕСЬ РАЗРЕШЕНЫ — в ОТЛИЧИЕ от
+    путевого листа, и это не недосмотр. Лист выписывают наперёд, поэтому на
+    списанную машину его выписать нельзя. ДТП же регистрируют ЗАДНИМ ЧИСЛОМ:
+    машину могли списать после аварии, а водителя — отстранить ИЗ-ЗА неё.
+    Запретить это значило бы сделать невозможной запись самых тяжёлых случаев.
+    """
+
+    TenantContextValidator.ensure_tenant_context(tenant)
+    _validate_accident_dictionaries(kind=payload.kind, fault=payload.fault)
+    _validate_occurred_at(payload.occurred_at)
+    vehicle = await _get_vehicle_or_404(session, tenant, payload.vehicle_id)
+    if payload.driver_id:
+        await _get_driver_or_404(session, tenant, payload.driver_id)
+    if payload.incident_id:
+        await _ensure_incident(session, tenant, payload.incident_id)
+
+    accident = RoadAccident(
+        tenant_id=str(tenant.id),
+        occurred_at=payload.occurred_at,
+        place=payload.place.strip(),
+        vehicle_id=vehicle.id,
+        driver_id=payload.driver_id or None,
+        kind=payload.kind,
+        injured_count=payload.injured_count,
+        fatalities_count=payload.fatalities_count,
+        fault=payload.fault,
+        gibdd_reference=(payload.gibdd_reference or None),
+        incident_id=payload.incident_id or None,
+        description=(payload.description or None),
+    )
+    session.add(accident)
+    await session.flush()
+    await AuditService(session).log_event(
+        tenant_id=str(tenant.id),
+        action="create",
+        object_type="RoadAccident",
+        object_id=accident.id,
+        user_id=access.user.id,
+        ip=request.client.host if request.client else "unknown",
+        request_id=getattr(request.state, "trace_id", None),
+        user_agent=request.headers.get("user-agent"),
+        changed_fields={"fields": {"id": {"before": None, "after": accident.id}}},
+        details={
+            "entity": "RoadAccident",
+            "vehicle_id": accident.vehicle_id,
+            "kind": accident.kind,
+        },
+    )
+    await session.commit()
+    fresh = await _get_accident_or_404(session, tenant, accident.id)
+    return _accident_read(fresh, await _capa_counts(session, tenant, [fresh.id]))
+
+
+@router.patch("/accidents/{accident_id}", response_model=RoadAccidentRead)
+async def update_accident(
+    request: Request,
+    accident_id: str,
+    payload: RoadAccidentUpdate,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: Access,
+) -> RoadAccidentRead:
+    """Правка: уточнение обстоятельств, вины по документам и связей.
+
+    МАШИНУ СМЕНИТЬ НЕЛЬЗЯ — поля для этого нет: другая машина это другое ДТП.
+    Водителя же уточнить МОЖНО: кто был за рулём, выясняется не всегда сразу.
+    """
+
+    TenantContextValidator.ensure_tenant_context(tenant)
+    accident = await _get_accident_or_404(session, tenant, accident_id)
+    data = payload.model_dump(exclude_unset=True)
+    _validate_accident_dictionaries(kind=data.get("kind"), fault=data.get("fault"))
+    _validate_occurred_at(data.get("occurred_at"))
+    if data.get("driver_id"):
+        await _get_driver_or_404(session, tenant, str(data["driver_id"]))
+    if data.get("incident_id"):
+        await _ensure_incident(session, tenant, str(data["incident_id"]))
+
+    before = {
+        "kind": accident.kind,
+        "fault": accident.fault,
+        "injured_count": str(accident.injured_count),
+        "fatalities_count": str(accident.fatalities_count),
+        "incident_id": str(accident.incident_id),
+        "consequences": _consequences(accident),
+    }
+    for field in (
+        "occurred_at",
+        "place",
+        "kind",
+        "fault",
+        "injured_count",
+        "fatalities_count",
+    ):
+        if data.get(field) is not None:
+            setattr(accident, field, data[field])
+    # снять связь и водителя МОЖНО: ошибочную привязку надо уметь отменить,
+    # иначе она останется навсегда
+    for field in ("driver_id", "incident_id", "gibdd_reference", "description"):
+        if field in data:
+            setattr(accident, field, data[field] or None)
+    await session.flush()
+    after = {
+        "kind": accident.kind,
+        "fault": accident.fault,
+        "injured_count": str(accident.injured_count),
+        "fatalities_count": str(accident.fatalities_count),
+        "incident_id": str(accident.incident_id),
+        "consequences": _consequences(accident),
+    }
+    await AuditService(session).log_event(
+        tenant_id=str(tenant.id),
+        action="update",
+        object_type="RoadAccident",
+        object_id=accident.id,
+        user_id=access.user.id,
+        ip=request.client.host if request.client else "unknown",
+        request_id=getattr(request.state, "trace_id", None),
+        user_agent=request.headers.get("user-agent"),
+        changed_fields=field_level_diff(before, after),
+        details={"entity": "RoadAccident"},
+    )
+    await session.commit()
+    fresh = await _get_accident_or_404(session, tenant, accident.id)
+    return _accident_read(fresh, await _capa_counts(session, tenant, [fresh.id]))
