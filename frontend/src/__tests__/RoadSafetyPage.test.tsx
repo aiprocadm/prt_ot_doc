@@ -281,6 +281,8 @@ const populatedReadiness = {
   injured_total: 2,
   fatalities_total: 0,
   accidents_without_follow_up: 1,
+  road_briefings_total: 4,
+  road_briefings_overdue: 1,
 };
 
 describe("RoadSafetyPage", () => {
@@ -345,6 +347,11 @@ describe("RoadSafetyPage", () => {
     expect(
       screen.getByText(/не решает, какая категория нужна/i),
     ).toBeInTheDocument();
+    // Срез-5: инструктажи БДД считаются, но своего журнала контур не заводит.
+    expect(screen.getByText("Инструктаж БДД просрочен")).toBeInTheDocument();
+    expect(
+      screen.getByText(/ведутся в общем журнале инструктажей/i),
+    ).toBeInTheDocument();
   });
 
   it("пустой состав водителей объясняет, что вносить", async () => {
@@ -394,6 +401,8 @@ describe("RoadSafetyPage", () => {
       injured_total: 0,
       fatalities_total: 0,
       accidents_without_follow_up: 0,
+      road_briefings_total: 0,
+      road_briefings_overdue: 0,
     });
 
     render(

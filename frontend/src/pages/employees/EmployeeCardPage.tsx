@@ -102,12 +102,34 @@ const DOCUMENT_STATUS_LABELS: Record<string, string> = {
   revoked: "Отозван",
 };
 
+/**
+ * Подписи видов инструктажа. Список написан руками и УСПЕЛ РАЗОЙТИСЬ с ядром
+ * (найдено срезом-5 контура БДД, разд. 56.2):
+ *
+ * - ключ `repeated` не существовал никогда — в ядре код `repeat`, и повторный
+ *   инструктаж всё это время показывался сырым кодом;
+ * - шести противопожарных видов, заведённых разд. 54.1, здесь не было вовсе.
+ *
+ * Подстраховки нет: `labelFor` печатает сырой ключ, и человек видел на
+ * карточке `fire_ptm`. Соответствие ядру пинает сторож
+ * `tests/test_road_safety_briefings.py`.
+ */
 const BRIEFING_TYPE_LABELS: Record<string, string> = {
-  primary: "Первичный",
-  repeated: "Повторный",
+  introductory: "Вводный",
+  primary: "Первичный на рабочем месте",
+  repeat: "Повторный",
   unscheduled: "Внеплановый",
   targeted: "Целевой",
-  introductory: "Вводный",
+  fire_introductory: "Противопожарный вводный",
+  fire_primary: "Противопожарный первичный",
+  fire_repeat: "Противопожарный повторный",
+  fire_unscheduled: "Противопожарный внеплановый",
+  fire_targeted: "Противопожарный целевой",
+  fire_ptm: "Пожарно-технический минимум (ПТМ)",
+  road_introductory: "Вводный инструктаж по БДД",
+  road_pre_trip: "Предрейсовый инструктаж",
+  road_seasonal: "Сезонный инструктаж по БДД",
+  road_special: "Специальный инструктаж по БДД",
 };
 
 const BRIEFING_STATUS_LABELS: Record<string, string> = {

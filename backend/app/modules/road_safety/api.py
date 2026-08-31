@@ -22,10 +22,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.core.disciplines import BRIEFING_TYPE_DISCIPLINE, Discipline
 from app.core.errors import api_problem_detail
 from app.core.feature_flags import is_module_enabled, raise_for_disabled_module
 from app.core.security import AccessContext, abac, rbac
 from app.core.tenant_validation import TenantContextValidator
+from app.models.briefings import BriefingEntry
 from app.models.incidents import Incident
 from app.models.master_data import Person, Site
 from app.models.models import Tenant
@@ -565,6 +567,45 @@ async def road_safety_readiness(
         == "not_started"
     )
 
+    # Срез-5: инструктажи водителей по БДД. Свой реестр НЕ заводится — механизм
+    # инструктажей есть в ядре, не хватало только видов БДД в закрытом словаре
+    # (та же дыра, что закрыл разд. 54.1 для пожарной безопасности).
+    #
+    # ГРАНИЦА: платформа НЕ решает, кого и как часто инструктировать, — это
+    # следует из вида перевозок и локальных приказов. Считается просроченное
+    # по ВНЕСЁННОМУ сроку, а не по норме.
+    road_briefing_types = [
+        code
+        for code, discipline in BRIEFING_TYPE_DISCIPLINE.items()
+        if discipline is Discipline.ROAD_SAFETY
+    ]
+    briefings_total = int(
+        await session.scalar(
+            select(func.count())
+            .select_from(BriefingEntry)
+            .where(
+                BriefingEntry.tenant_id == tenant.id,
+                BriefingEntry.deleted_at.is_(None),
+                BriefingEntry.briefing_type.in_(road_briefing_types),
+            )
+        )
+        or 0
+    )
+    briefings_overdue = int(
+        await session.scalar(
+            select(func.count())
+            .select_from(BriefingEntry)
+            .where(
+                BriefingEntry.tenant_id == tenant.id,
+                BriefingEntry.deleted_at.is_(None),
+                BriefingEntry.briefing_type.in_(road_briefing_types),
+                BriefingEntry.valid_until.is_not(None),
+                BriefingEntry.valid_until < func.now(),
+            )
+        )
+        or 0
+    )
+
     return RoadSafetyReadinessRead(
         total_vehicles=len(rows),
         by_status=by_status,
@@ -602,6 +643,8 @@ async def road_safety_readiness(
         injured_total=sum(a.injured_count for a in accidents),
         fatalities_total=sum(a.fatalities_count for a in accidents),
         accidents_without_follow_up=without_follow_up,
+        road_briefings_total=briefings_total,
+        road_briefings_overdue=briefings_overdue,
     )
 
 
