@@ -10,6 +10,7 @@ const listVehiclesMock = vi.fn();
 const listDriversMock = vi.fn();
 const listWaybillsMock = vi.fn();
 const listAccidentsMock = vi.fn();
+const listViolationsMock = vi.fn();
 const readinessMock = vi.fn();
 
 vi.mock("@/api/roadSafety", () => ({
@@ -18,6 +19,7 @@ vi.mock("@/api/roadSafety", () => ({
     listDrivers: (...args: unknown[]) => listDriversMock(...args),
     listWaybills: (...args: unknown[]) => listWaybillsMock(...args),
     listAccidents: (...args: unknown[]) => listAccidentsMock(...args),
+    listViolations: (...args: unknown[]) => listViolationsMock(...args),
     readiness: (...args: unknown[]) => readinessMock(...args),
   },
 }));
@@ -259,6 +261,48 @@ const populatedAccidents = [
   },
 ];
 
+/** Нарушения: снятое камерой без водителя и остановка инспектором с оплатой. */
+const populatedViolations = [
+  {
+    id: "vio-1",
+    vehicle_id: "v-1",
+    vehicle_plate: "А123АА777",
+    driver_id: null,
+    driver_name: null,
+    driver_identified: false,
+    occurred_at: "2026-08-25T09:15:00+00:00",
+    source: "camera",
+    source_label: "Автоматическая фиксация (камера)",
+    article: "12.9 ч.2 КоАП",
+    resolution_number: "18810177260825",
+    place: "45 км трассы М-4",
+    fine_amount: "500.00",
+    fine_paid_on: null,
+    fine_status: "unpaid",
+    fine_status_label: "Не оплачен",
+    description: null,
+  },
+  {
+    id: "vio-2",
+    vehicle_id: "v-2",
+    vehicle_plate: "В456ВВ777",
+    driver_id: "d-1",
+    driver_name: "Шофёров Пётр Иванович",
+    driver_identified: true,
+    occurred_at: "2026-08-12T14:00:00+00:00",
+    source: "officer",
+    source_label: "Остановлен инспектором",
+    article: "12.6 КоАП",
+    resolution_number: null,
+    place: null,
+    fine_amount: "1000.00",
+    fine_paid_on: "2026-08-20",
+    fine_status: "paid",
+    fine_status_label: "Оплачен",
+    description: null,
+  },
+];
+
 const populatedReadiness = {
   total_vehicles: 2,
   by_status: { in_service: 2, suspended: 0, decommissioned: 0 },
@@ -288,6 +332,11 @@ const populatedReadiness = {
   internships_total: 5,
   internships_in_progress: 2,
   internships_completed_short: 1,
+  violation_window_days: 365,
+  violations_total: 2,
+  violations_without_driver: 1,
+  fines_unpaid_count: 1,
+  fines_unpaid_amount: 500,
 };
 
 describe("RoadSafetyPage", () => {
@@ -296,11 +345,13 @@ describe("RoadSafetyPage", () => {
     listDriversMock.mockReset();
     listWaybillsMock.mockReset();
     listAccidentsMock.mockReset();
+    listViolationsMock.mockReset();
     readinessMock.mockReset();
     listVehiclesMock.mockResolvedValue(populatedVehicles);
     listDriversMock.mockResolvedValue(populatedDrivers);
     listWaybillsMock.mockResolvedValue(populatedWaybills);
     listAccidentsMock.mockResolvedValue(populatedAccidents);
+    listViolationsMock.mockResolvedValue(populatedViolations);
     readinessMock.mockResolvedValue(populatedReadiness);
   });
 
@@ -396,6 +447,7 @@ describe("RoadSafetyPage", () => {
     listDriversMock.mockResolvedValue([]);
     listWaybillsMock.mockResolvedValue([]);
     listAccidentsMock.mockResolvedValue([]);
+    listViolationsMock.mockResolvedValue([]);
     readinessMock.mockResolvedValue({
       total_vehicles: 0,
       by_status: { in_service: 0, suspended: 0, decommissioned: 0 },
@@ -425,6 +477,11 @@ describe("RoadSafetyPage", () => {
       internships_total: 0,
       internships_in_progress: 0,
       internships_completed_short: 0,
+      violation_window_days: 365,
+      violations_total: 0,
+      violations_without_driver: 0,
+      fines_unpaid_count: 0,
+      fines_unpaid_amount: 0,
     });
 
     render(
@@ -589,6 +646,71 @@ describe("RoadSafetyPage", () => {
     expect(await screen.findByText("А123АА777")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "ДТП" }));
     expect(await screen.findByText("45 км трассы М-4")).toBeInTheDocument();
+
+    const budget = uxBudgetDelta(document.body, "RoadSafetyPage");
+    expect(budget.unexpected).toEqual([]);
+    expect(budget.stale).toEqual([]);
+  });
+
+  it("секция нарушений различает «не наложен» и «не оплачен»", async () => {
+    render(
+      <MemoryRouter>
+        <RoadSafetyPage />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("А123АА777")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Нарушения" }));
+
+    expect(
+      await screen.findByText("Автоматическая фиксация (камера)"),
+    ).toBeInTheDocument();
+    // Пустой водитель — «не установлен», а не «неизвестно кто».
+    expect(screen.getByText("Не установлен")).toBeInTheDocument();
+    expect(screen.getByText("Не оплачен")).toBeInTheDocument();
+    expect(screen.getByText("Оплачен")).toBeInTheDocument();
+    // Граница названа на экране.
+    expect(
+      screen.getByText(/не устанавливает.{0,20}виновность/i),
+    ).toBeInTheDocument();
+  });
+
+  it("пустой реестр нарушений объясняет, что вносить", async () => {
+    listViolationsMock.mockResolvedValue([]);
+    readinessMock.mockResolvedValue({
+      ...populatedReadiness,
+      violations_total: 0,
+      violations_without_driver: 0,
+      fines_unpaid_count: 0,
+      fines_unpaid_amount: 0,
+    });
+
+    render(
+      <MemoryRouter>
+        <RoadSafetyPage />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("А123АА777")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Нарушения" }));
+
+    expect(
+      await screen.findByText("Нарушения не зарегистрированы"),
+    ).toBeInTheDocument();
+  });
+
+  it("секция нарушений остаётся в UX-бюджете", async () => {
+    render(
+      <MemoryRouter>
+        <RoadSafetyPage />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("А123АА777")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Нарушения" }));
+    expect(
+      await screen.findByText("Автоматическая фиксация (камера)"),
+    ).toBeInTheDocument();
 
     const budget = uxBudgetDelta(document.body, "RoadSafetyPage");
     expect(budget.unexpected).toEqual([]);

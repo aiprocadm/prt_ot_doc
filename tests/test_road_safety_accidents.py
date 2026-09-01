@@ -479,6 +479,31 @@ class TestСвязьСЯдром:
         # неправда
         assert body["follow_up"] == "closed"
 
+    async def test_водителя_дописывают_правкой(
+        self, async_client, make_auth_headers, sessionmaker
+    ) -> None:
+        """Кто был за рулём, выясняется не всегда сразу.
+
+        Тест добавлен срезом-8: он поймал дефект, которым болел и этот срез —
+        после правки связь бралась из кеша сессии, и ответ возвращал имя
+        ``null`` при заполненном идентификаторе водителя.
+        """
+
+        headers = await make_auth_headers()
+        await _grant(sessionmaker)
+        vehicle = await _vehicle(async_client, headers)
+        driver = await _driver(async_client, headers, await _person(sessionmaker))
+        body = await _accident(async_client, headers, vehicle)
+        assert body["driver_id"] is None
+        response = await async_client.patch(
+            f"{_API}/accidents/{body['id']}",
+            json={"driver_id": driver["id"]},
+            headers=headers,
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["driver_id"] == driver["id"]
+        assert response.json()["driver_name"] == "Шофёров Пётр Иванович"
+
     async def test_ошибочную_привязку_можно_снять(
         self, async_client, make_auth_headers, sessionmaker
     ) -> None:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+from decimal import Decimal
 
 from pydantic import Field
 
@@ -158,6 +159,17 @@ class RoadSafetyReadinessRead(BaseSchema):
     #: завершённые стажировки, где смен меньше плана — ФАКТ расхождения плана
     #: и факта, а НЕ вердикт «допуск незаконен»
     internships_completed_short: int = 0
+    #: срез-8: нарушения ПДД за годовое окно (как у ДТП: за месяц их часто
+    #: ноль, и судить по такому окну нельзя)
+    violation_window_days: int = 0
+    violations_total: int = 0
+    #: нарушения БЕЗ установленного водителя — камера фиксирует машину, а не
+    #: человека: организация платит, а разбираться не с кем
+    violations_without_driver: int = 0
+    #: штрафы наложенные и НЕ оплаченные. «Штраф не наложен» и «не оплачен» —
+    #: разные вещи, и здесь второе
+    fines_unpaid_count: int = 0
+    fines_unpaid_amount: float = 0.0
 
 
 class DriverCreate(BaseSchema):
@@ -390,4 +402,76 @@ class RoadAccidentRead(BaseSchema):
 
 class RoadAccidentPage(BaseSchema):
     items: list[RoadAccidentRead]
+    total: int
+
+
+class TrafficViolationCreate(BaseSchema):
+    """Регистрация нарушения ПДД.
+
+    Водитель НЕОБЯЗАТЕЛЕН: камера фиксирует госномер, а не человека, и кто
+    был за рулём, организация выясняет сама — иногда никогда.
+    """
+
+    vehicle_id: str = Field(min_length=1, max_length=36)
+    driver_id: str | None = Field(default=None, max_length=36)
+    occurred_at: datetime
+    source: str = Field(default="camera", min_length=1, max_length=16)
+    #: статья КоАП свободной строкой: словарь отстанет от поправок
+    article: str | None = Field(default=None, max_length=64)
+    resolution_number: str | None = Field(default=None, max_length=64)
+    place: str | None = Field(default=None, max_length=255)
+    #: пусто — штраф НЕ НАЛОЖЕН, а не «сумма неизвестна»
+    fine_amount: Decimal | None = Field(default=None, ge=0)
+    fine_paid_on: date | None = None
+    description: str | None = None
+
+
+class TrafficViolationUpdate(BaseSchema):
+    """Правка. Машину сменить нельзя — это другое нарушение."""
+
+    driver_id: str | None = Field(default=None, max_length=36)
+    occurred_at: datetime | None = None
+    source: str | None = Field(default=None, min_length=1, max_length=16)
+    article: str | None = Field(default=None, max_length=64)
+    resolution_number: str | None = Field(default=None, max_length=64)
+    place: str | None = Field(default=None, max_length=255)
+    fine_amount: Decimal | None = Field(default=None, ge=0)
+    fine_paid_on: date | None = None
+    description: str | None = None
+
+
+class TrafficViolationRead(BaseSchema):
+    """Нарушение вместе с состоянием штрафа.
+
+    ГРАНИЦА: полей «виновен ли водитель», «можно ли обжаловать» и «положена ли
+    скидка» здесь НЕТ. Виновность устанавливает ГИБДД, сроки обжалования и
+    скидка считаются по закону от даты постановления, которой платформа не
+    знает.
+    """
+
+    id: str
+    vehicle_id: str
+    #: госномер — из реестра ТС, в записи не хранится
+    vehicle_plate: str
+    driver_id: str | None = None
+    #: пусто — водитель НЕ УСТАНОВЛЕН (снято камерой), а не «поле забыли»
+    driver_name: str | None = None
+    #: то же самое отдельным признаком, чтобы экран не гадал по пустоте
+    driver_identified: bool
+    occurred_at: datetime
+    source: str
+    source_label: str
+    article: str | None = None
+    resolution_number: str | None = None
+    place: str | None = None
+    fine_amount: Decimal | None = None
+    fine_paid_on: date | None = None
+    #: none / unpaid / paid — СЧИТАЕТСЯ из суммы и даты оплаты, не хранится
+    fine_status: str
+    fine_status_label: str
+    description: str | None = None
+
+
+class TrafficViolationPage(BaseSchema):
+    items: list[TrafficViolationRead]
     total: int
