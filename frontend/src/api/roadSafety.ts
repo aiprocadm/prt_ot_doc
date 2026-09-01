@@ -204,6 +204,12 @@ export type RoadSafetyReadinessDto = {
    */
   road_briefings_total: number;
   road_briefings_overdue: number;
+  /**
+   * Срез-6: проверки знаний ПДД. Свой реестр НЕ заводится — запись живёт в
+   * общем реестре аттестаций, контур отбирает свою область.
+   */
+  knowledge_checks_total: number;
+  knowledge_checks_overdue: number;
 };
 
 export const roadSafetyApi = {

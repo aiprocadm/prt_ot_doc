@@ -283,6 +283,8 @@ const populatedReadiness = {
   accidents_without_follow_up: 1,
   road_briefings_total: 4,
   road_briefings_overdue: 1,
+  knowledge_checks_total: 3,
+  knowledge_checks_overdue: 2,
 };
 
 describe("RoadSafetyPage", () => {
@@ -349,6 +351,11 @@ describe("RoadSafetyPage", () => {
     ).toBeInTheDocument();
     // Срез-5: инструктажи БДД считаются, но своего журнала контур не заводит.
     expect(screen.getByText("Инструктаж БДД просрочен")).toBeInTheDocument();
+    // Срез-6: проверки знаний ПДД — тоже без своего реестра.
+    expect(screen.getByText("Проверка знаний просрочена")).toBeInTheDocument();
+    expect(
+      screen.getByText(/в общем реестре аттестаций/i),
+    ).toBeInTheDocument();
     expect(
       screen.getByText(/ведутся в общем журнале инструктажей/i),
     ).toBeInTheDocument();
@@ -403,6 +410,8 @@ describe("RoadSafetyPage", () => {
       accidents_without_follow_up: 0,
       road_briefings_total: 0,
       road_briefings_overdue: 0,
+      knowledge_checks_total: 0,
+      knowledge_checks_overdue: 0,
     });
 
     render(

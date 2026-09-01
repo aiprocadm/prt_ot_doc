@@ -255,6 +255,8 @@ const SECTION_STATS: Record<
     // Срез-5: инструктажи водителей. Свой реестр не заводится — записи живут
     // в общем журнале инструктажей, здесь только счёт по видам БДД.
     { label: "Инструктаж БДД просрочен", value: r.road_briefings_overdue },
+    // Срез-6: проверки знаний ПДД живут в общем реестре аттестаций.
+    { label: "Проверка знаний просрочена", value: r.knowledge_checks_overdue },
   ],
   waybills: (r) => [
     {
@@ -336,6 +338,8 @@ const RoadSafetyPage = () => {
         accidents_without_follow_up: 0,
         road_briefings_total: 0,
         road_briefings_overdue: 0,
+        knowledge_checks_total: 0,
+        knowledge_checks_overdue: 0,
       },
     },
     errorMessage: "Не удалось загрузить реестр транспортных средств",
@@ -537,6 +541,9 @@ const RoadSafetyPage = () => {
               сейчас: {readiness.road_briefings_overdue} из{" "}
               {readiness.road_briefings_total}. Как часто инструктировать,
               платформа не решает: срок берётся из внесённого, а не из нормы.
+              Проверки знаний ПДД так же ведутся в общем реестре аттестаций:
+              просрочено {readiness.knowledge_checks_overdue} из{" "}
+              {readiness.knowledge_checks_total}.
             </p>
           ) : null}
           {!loading && !error && drivers.total === 0 ? (

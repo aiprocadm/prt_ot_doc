@@ -9300,7 +9300,9 @@
       "fatalities_total": "integer",
       "accidents_without_follow_up": "integer",
       "road_briefings_total": "integer",
-      "road_briefings_overdue": "integer"
+      "road_briefings_overdue": "integer",
+      "knowledge_checks_total": "integer",
+      "knowledge_checks_overdue": "integer"
     },
     "RolePayload": {
       "code": "string",
