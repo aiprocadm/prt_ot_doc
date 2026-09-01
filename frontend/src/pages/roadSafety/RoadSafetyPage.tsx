@@ -257,6 +257,12 @@ const SECTION_STATS: Record<
     { label: "Инструктаж БДД просрочен", value: r.road_briefings_overdue },
     // Срез-6: проверки знаний ПДД живут в общем реестре аттестаций.
     { label: "Проверка знаний просрочена", value: r.knowledge_checks_overdue },
+    // Срез-7: стажировки. Показываем НЕДОБОР, а не общее число: формально
+    // закрытая стажировка, которой по сменам не было, — вот что важно утром.
+    {
+      label: "Стажировка с недобором смен",
+      value: r.internships_completed_short,
+    },
   ],
   waybills: (r) => [
     {
@@ -340,6 +346,9 @@ const RoadSafetyPage = () => {
         road_briefings_overdue: 0,
         knowledge_checks_total: 0,
         knowledge_checks_overdue: 0,
+        internships_total: 0,
+        internships_in_progress: 0,
+        internships_completed_short: 0,
       },
     },
     errorMessage: "Не удалось загрузить реестр транспортных средств",
@@ -543,7 +552,12 @@ const RoadSafetyPage = () => {
               платформа не решает: срок берётся из внесённого, а не из нормы.
               Проверки знаний ПДД так же ведутся в общем реестре аттестаций:
               просрочено {readiness.knowledge_checks_overdue} из{" "}
-              {readiness.knowledge_checks_total}.
+              {readiness.knowledge_checks_total}. Стажировки водителей ведутся
+              общим механизмом стажировок — своего реестра контур не заводит:
+              идёт {readiness.internships_in_progress} из{" "}
+              {readiness.internships_total}. «Недобор смен» — расхождение
+              плана и факта, а не приговор допуску: сколько смен нужно,
+              решает приказ, а не платформа.
             </p>
           ) : null}
           {!loading && !error && drivers.total === 0 ? (

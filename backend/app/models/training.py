@@ -407,3 +407,72 @@ class TrainingProtocolItem(TenantBaseModel):
     enrollment_id: Mapped[str | None] = mapped_column(
         ForeignKey("training_enrollments.id", ondelete="SET NULL"), nullable=True
     )
+
+#: Состояние стажировки — ЗАКРЫТЫЙ словарь. Отмена меняет СОСТОЯНИЕ, а не
+#: удаляет запись: несостоявшаяся стажировка это факт, который иногда важнее
+#: состоявшейся.
+INTERNSHIP_STATUSES: dict[str, str] = {
+    "planned": "Назначена",
+    "in_progress": "Идёт",
+    "completed": "Завершена",
+    "cancelled": "Отменена",
+}
+
+
+class Internship(TenantBaseModel, SoftDeleteMixin):
+    """Стажировка на рабочем месте: стажёр, наставник, смены.
+
+    ПОЧЕМУ В ЯДРЕ, А НЕ В КОНТУРЕ БДД. Требование пришло из разд. 56.2
+    («инструктажи и СТАЖИРОВКИ водителей»), но сама вещь не водительская:
+    комплект документов печатает «Стажировка: N смен» в ПЕРВИЧНОМ ИНСТРУКТАЖЕ
+    НОВОГО РАБОТНИКА — то есть по охране труда, любому рабочему. Заведи
+    ``road_internship`` внутри БДД — и через срез появилась бы стажировка
+    стропальщика, а с ней второй реестр одного и того же.
+
+    Это ЧЕТВЁРТЫЙ случай одного приёма, и потому он уже канон: виды
+    инструктажа (разд. 54.1), области аттестации (54.2 и 56.2), дисциплина
+    курса (56.1) и теперь стажировка. Общая сущность в ядре + разметка
+    дисциплиной; контур дисциплины отбирает СВОИ записи и не заводит копию.
+
+    ЛЮДИ НЕ ДУБЛИРУЮТСЯ: и стажёр, и наставник — ядровые ``Person``.
+
+    СМЕНЫ ХРАНЯТСЯ ЧИСЛАМИ (план и факт), а «сколько осталось» и «завершена ли
+    с недобором» СЧИТАЮТСЯ ПРИ ЧТЕНИИ. Недобор — самое ценное, что тут можно
+    показать: формально закрытая стажировка, которой по сменам не было.
+
+    ГРАНИЦА: платформа НЕ решает, нужна ли стажировка и сколько смен она
+    длится — это следует из профессии, стажа работника и локального приказа.
+    Полей «требуется ли стажировка» и «достаточно ли смен» здесь НЕТ.
+    """
+
+    __tablename__ = "internship"
+
+    #: стажёр — человек из ядра
+    person_id: Mapped[str] = mapped_column(
+        ForeignKey("person.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    #: наставник — тоже человек из ядра; НЕОБЯЗАТЕЛЕН: в приказе его иногда
+    #: называют позже, а требовать сразу значило бы заставлять выдумывать
+    mentor_person_id: Mapped[str | None] = mapped_column(
+        ForeignKey("person.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    #: дисциплина — код из ОБЩЕГО словаря ``app.core.disciplines.Discipline``.
+    #: ПУСТО означает «не размечено», а НЕ «общая охрана труда» — тот же довод,
+    #: что у дисциплины курса и у инструктажа с неизвестным видом.
+    discipline: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    #: на что стажировка — СВОБОДНАЯ строка: профессий и типов техники тысячи,
+    #: и словарь в коде гарантированно отстанет (тот же довод, что у марки и
+    #: модели ТС в разд. 56.2)
+    subject: Mapped[str | None] = mapped_column(String(255))
+    #: смен по приказу и смен фактически
+    planned_shifts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    completed_shifts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    started_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    finished_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="planned")
+    notes: Mapped[str | None] = mapped_column(Text)
+
+    __table_args__ = (
+        Index("ix_internship_person", "tenant_id", "person_id"),
+        Index("ix_internship_discipline", "tenant_id", "discipline"),
+    )

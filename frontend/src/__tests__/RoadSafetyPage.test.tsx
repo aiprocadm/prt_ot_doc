@@ -285,6 +285,9 @@ const populatedReadiness = {
   road_briefings_overdue: 1,
   knowledge_checks_total: 3,
   knowledge_checks_overdue: 2,
+  internships_total: 5,
+  internships_in_progress: 2,
+  internships_completed_short: 1,
 };
 
 describe("RoadSafetyPage", () => {
@@ -353,6 +356,13 @@ describe("RoadSafetyPage", () => {
     expect(screen.getByText("Инструктаж БДД просрочен")).toBeInTheDocument();
     // Срез-6: проверки знаний ПДД — тоже без своего реестра.
     expect(screen.getByText("Проверка знаний просрочена")).toBeInTheDocument();
+    // Срез-7: стажировки — тоже общим механизмом, без своего реестра.
+    expect(
+      screen.getByText("Стажировка с недобором смен"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/общим механизмом стажировок/i),
+    ).toBeInTheDocument();
     expect(
       screen.getByText(/в общем реестре аттестаций/i),
     ).toBeInTheDocument();
@@ -412,6 +422,9 @@ describe("RoadSafetyPage", () => {
       road_briefings_overdue: 0,
       knowledge_checks_total: 0,
       knowledge_checks_overdue: 0,
+      internships_total: 0,
+      internships_in_progress: 0,
+      internships_completed_short: 0,
     });
 
     render(

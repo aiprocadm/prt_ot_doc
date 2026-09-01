@@ -210,6 +210,15 @@ export type RoadSafetyReadinessDto = {
    */
   knowledge_checks_total: number;
   knowledge_checks_overdue: number;
+  /**
+   * Срез-7: стажировки. Сущность ЯДРОВАЯ — стажировку печатает документ по
+   * охране труда любому рабочему; контур отбирает свои по разметке
+   * дисциплиной и своей таблицы не заводит.
+   */
+  internships_total: number;
+  internships_in_progress: number;
+  /** завершённые с недобором смен — ФАКТ расхождения, а не вердикт */
+  internships_completed_short: number;
 };
 
 export const roadSafetyApi = {
