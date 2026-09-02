@@ -37,6 +37,7 @@ from app.modules.packs.definitions import (
     PACK_CODE_CONTRACTOR,
     PACK_CODE_ECO_REPORTS,
     PACK_CODE_FIRE_INSPECTION,
+    PACK_CODE_GOCHS_REPORTS,
     PACK_CODE_INCIDENT,
     PACK_CODE_INSPECTION_PREP,
     PACK_CODE_NEW_COMPANY,
@@ -224,6 +225,26 @@ FIELD_LABELS: dict[str, str] = {
     "bdd_plan_period": "Период плана мероприятий",
     "bdd_measures": "Мероприятия по предупреждению ДТП",
     # Срез-9: отчётность и положение (разд. 56.2, последний пункт раздела)
+    # Срез-6 ГО и ЧС: отчётность, положение и инструкция (разд. 56.1)
+    "gochs_unit_structure": "Состав объектового звена РСЧС",
+    "gochs_unit_tasks": "Задачи звена",
+    "gochs_unit_modes": "Режимы функционирования",
+    "gochs_approved_by": "Кто утвердил",
+    "gochs_alert_order": "Порядок оповещения",
+    "gochs_evacuation_order": "Порядок сбора и эвакуации",
+    "gochs_shelters": "Места укрытия",
+    "gochs_staff_actions": "Действия персонала",
+    "gochs_event_at": "Дата и время ЧС",
+    "gochs_event_kind": "Вид и характеристика ЧС",
+    "gochs_event_injured": "Пострадало / погибло",
+    "gochs_event_measures": "Принятые меры",
+    "gochs_event_forces": "Привлечённые силы и средства",
+    "gochs_report_period": "Отчётный период",
+    "gochs_report_author": "Составитель",
+    "gochs_formations_count": "Нештатных формирований",
+    "gochs_personnel_count": "Численность личного состава",
+    "gochs_ppe_coverage": "Обеспеченность СИЗ",
+    "gochs_alert_means": "Средства оповещения",
     "bdd_goals": "Цели в области БДД",
     "bdd_control_order": "Порядок контроля и учёта",
     "bdd_review_order": "Порядок разбора происшествий",
@@ -466,6 +487,35 @@ SCENARIO_FIELDS: dict[str, tuple[PackField, ...]] = {
     # Срез-8 экологии: отчётные формы. Обязательны только год и составитель —
     # без года форма бессмысленна, без составителя безымянна; числа берутся
     # из реестров экологии и вносятся по мере готовности.
+    # Срез-6 ГО и ЧС: отчётность, положение и инструкция. ОБЯЗАТЕЛЕН только
+    # составитель — без него документ безымянен. Ни период, ни дата ЧС
+    # обязательными НЕ делаются: положение и инструкция периода не имеют
+    # вовсе, а донесение готовят и до того, как время события уточнили.
+    PACK_CODE_GOCHS_REPORTS: _fields(
+        ("gochs_report_author",),
+        (
+            "gochs_responsible",
+            "facility_category",
+            "gochs_unit_structure",
+            "gochs_unit_tasks",
+            "gochs_unit_modes",
+            "gochs_approved_by",
+            "gochs_alert_order",
+            "gochs_evacuation_order",
+            "gochs_shelters",
+            "gochs_staff_actions",
+            "gochs_event_at",
+            "gochs_event_kind",
+            "gochs_event_injured",
+            "gochs_event_measures",
+            "gochs_event_forces",
+            "gochs_report_period",
+            "gochs_formations_count",
+            "gochs_personnel_count",
+            "gochs_ppe_coverage",
+            "gochs_alert_means",
+        ),
+    ),
     # Срез-9 БДД: отчётность и положение. ОБЯЗАТЕЛЬНЫ только период и
     # составитель — без периода отчёт бессмыслен, без составителя безымянен.
     # Числа берутся из реестров контура и вносятся по мере готовности: сводка

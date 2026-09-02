@@ -35,6 +35,7 @@ __all__ = [
     "PACK_CODE_FIRE_INSPECTION",
     "PACK_CODE_CIVIL_DEFENCE",
     "PACK_CODE_BDD_REPORTS",
+    "PACK_CODE_GOCHS_REPORTS",
     "PACK_CODE_ECO_REPORTS",
     "PACK_CODE_ROAD_SAFETY",
     "PACKS_WITHOUT_DISCIPLINE",
@@ -71,6 +72,11 @@ PACK_CODE_ECO_REPORTS = "ECO_REPORTS"
 # ОТЧЁТНОСТИ и ПОЛОЖЕНИЯ — а положение о системе управления БДД это как раз
 # документ, с которого проверка начинается.
 PACK_CODE_BDD_REPORTS = "BDD_REPORTS"
+# Срез-6 ГО и ЧС (разд. 56.1, последний пункт раздела): «документы и
+# отчётность: приказы, положения, инструкции, отчётность в органы управления
+# ГОЧС». Приказ, план, состав комиссии, программа учений и журнал печатались
+# базовым комплектом; не хватало ПОЛОЖЕНИЯ, ИНСТРУКЦИИ и самой ОТЧЁТНОСТИ.
+PACK_CODE_GOCHS_REPORTS = "GOCHS_REPORTS"
 
 
 class PackScenario(str, Enum):
@@ -88,6 +94,7 @@ class PackScenario(str, Enum):
     CIVIL_DEFENCE = "civil_defence"
     ROAD_SAFETY = "road_safety"
     ROAD_SAFETY_REPORTING = "road_safety_reporting"
+    CIVIL_DEFENCE_REPORTING = "civil_defence_reporting"
 
 
 @dataclass(slots=True, frozen=True)
@@ -799,6 +806,76 @@ def _bdd_vehicle_assignment_order() -> bytes:
         "Закрепление: {{ data.bdd_assignment_list }}",
         "Ответственный за БДД: {{ data.bdd_responsible }}",
         footer="Руководитель: {{ data.bdd_approved_by }} · {{ stamp }}",
+    )
+
+
+
+def _gochs_rsches_regulation() -> bytes:
+    """Положение об объектовом звене РСЧС.
+
+    ТЗ просит «положения», и это главное из них: им организация определяет
+    своё звено единой системы предупреждения и ликвидации ЧС. В базовом
+    комплекте печатались приказ и план, положения не было.
+    """
+
+    return _doc(
+        "Положение об объектовом звене РСЧС",
+        "Организация: {{ company.name }} (ИНН {{ company.inn }})",
+        "Категория объекта по ГО: {{ data.facility_category }}",
+        "Состав звена: {{ data.gochs_unit_structure }}",
+        "Задачи звена: {{ data.gochs_unit_tasks }}",
+        "Режимы функционирования: {{ data.gochs_unit_modes }}",
+        header="{{ logo }}",
+        footer="Утверждено: {{ data.gochs_approved_by }} · {{ stamp }}",
+    )
+
+
+def _gochs_emergency_instruction() -> bytes:
+    """Инструкция о действиях при угрозе и возникновении ЧС."""
+
+    return _doc(
+        "Инструкция о действиях при угрозе и возникновении ЧС",
+        "Организация: {{ company.name }}",
+        "Порядок оповещения: {{ data.gochs_alert_order }}",
+        "Порядок сбора и эвакуации: {{ data.gochs_evacuation_order }}",
+        "Места укрытия: {{ data.gochs_shelters }}",
+        "Действия персонала: {{ data.gochs_staff_actions }}",
+        footer="Ответственный за ГО и ЧС: {{ data.gochs_responsible }} · {{ stamp }}",
+    )
+
+
+def _gochs_emergency_report() -> bytes:
+    """Донесение о чрезвычайной ситуации.
+
+    ГРАНИЦА: платформа НЕ решает, какое донесение и в какой срок подавать —
+    это зависит от вида и масштаба ЧС и от требований органа управления ГОЧС.
+    Здесь заготовка, которую заполняет специалист.
+    """
+
+    return _doc(
+        "Донесение о чрезвычайной ситуации",
+        "Организация: {{ company.name }}",
+        "Дата и время ЧС: {{ data.gochs_event_at }}",
+        "Вид и краткая характеристика: {{ data.gochs_event_kind }}",
+        "Пострадало / погибло: {{ data.gochs_event_injured }}",
+        "Принятые меры: {{ data.gochs_event_measures }}",
+        "Привлечённые силы и средства: {{ data.gochs_event_forces }}",
+        footer="Донесение подготовил: {{ data.gochs_report_author }} · {{ stamp }}",
+    )
+
+
+def _gochs_forces_report() -> bytes:
+    """Сведения о силах и средствах ГО — отчётность в орган управления."""
+
+    return _doc(
+        "Сведения о силах и средствах гражданской обороны",
+        "Организация: {{ company.name }}",
+        "Отчётный период: {{ data.gochs_report_period }}",
+        "Нештатных формирований: {{ data.gochs_formations_count }}",
+        "Численность личного состава: {{ data.gochs_personnel_count }}",
+        "Обеспеченность СИЗ: {{ data.gochs_ppe_coverage }}",
+        "Средства оповещения: {{ data.gochs_alert_means }}",
+        footer="Составил: {{ data.gochs_report_author }} · {{ stamp }}",
     )
 
 
@@ -1565,6 +1642,56 @@ DEFAULT_PACKS: Sequence[PackDefinition] = (
             "discipline": "Безопасность дорожного движения",
         },
         disciplines=(Discipline.ROAD_SAFETY,),
+    ),
+    PackDefinition(
+        code=PACK_CODE_GOCHS_REPORTS,
+        name="Отчётность ГО и ЧС",
+        description="Положение об объектовом звене РСЧС, инструкция о действиях при ЧС, донесение о ЧС, сведения о силах и средствах",
+        scenario=PackScenario.CIVIL_DEFENCE_REPORTING,
+        module=DocumentPackModule.OT,
+        scenario_type=DocumentPackScenario.DOCUMENT_BATCH,
+        templates=(
+            PackTemplateSpec(
+                code="pack_gochs_regulation",
+                name="Положение об объектовом звене РСЧС",
+                description="Состав, задачи и режимы функционирования звена",
+                category="regulation",
+                builder=_gochs_rsches_regulation,
+            ),
+            PackTemplateSpec(
+                code="pack_gochs_instruction",
+                name="Инструкция о действиях при ЧС",
+                description="Оповещение, эвакуация, укрытие, действия персонала",
+                category="instruction",
+                builder=_gochs_emergency_instruction,
+            ),
+            PackTemplateSpec(
+                code="pack_gochs_emergency_report",
+                name="Донесение о чрезвычайной ситуации",
+                description="Заготовка донесения в орган управления ГОЧС",
+                category="report",
+                builder=_gochs_emergency_report,
+            ),
+            PackTemplateSpec(
+                code="pack_gochs_forces_report",
+                name="Сведения о силах и средствах ГО",
+                description="Формирования, личный состав, СИЗ и оповещение за период",
+                category="report",
+                builder=_gochs_forces_report,
+            ),
+        ),
+        item_order=(
+            "pack_gochs_regulation",
+            "pack_gochs_instruction",
+            "pack_gochs_emergency_report",
+            "pack_gochs_forces_report",
+        ),
+        metadata={
+            "logo": build_inline_image_descriptor(DEFAULT_LOGO_BYTES)["data"],
+            "stamp": build_inline_image_descriptor(DEFAULT_STAMP_BYTES)["data"],
+            "discipline": "Гражданская оборона и ЧС",
+        },
+        disciplines=(Discipline.CIVIL_DEFENSE,),
     ),
 )
 
