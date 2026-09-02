@@ -31,6 +31,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from app.modules.packs.definitions import (
+    PACK_CODE_BDD_REPORTS,
     PACK_CODE_CEO_SHIELD,
     PACK_CODE_CIVIL_DEFENCE,
     PACK_CODE_CONTRACTOR,
@@ -222,6 +223,23 @@ FIELD_LABELS: dict[str, str] = {
     "bdd_driver_schedule": "Режим труда и отдыха водителей",
     "bdd_plan_period": "Период плана мероприятий",
     "bdd_measures": "Мероприятия по предупреждению ДТП",
+    # Срез-9: отчётность и положение (разд. 56.2, последний пункт раздела)
+    "bdd_goals": "Цели в области БДД",
+    "bdd_control_order": "Порядок контроля и учёта",
+    "bdd_review_order": "Порядок разбора происшествий",
+    "bdd_approved_by": "Кто утвердил",
+    "bdd_report_period": "Отчётный период",
+    "bdd_report_author": "Составитель отчёта",
+    "bdd_report_vehicles": "ТС в эксплуатации",
+    "bdd_report_drivers": "Водителей допущено",
+    "bdd_report_accidents": "ДТП за период",
+    "bdd_report_injured": "Пострадало / погибло",
+    "bdd_report_violations": "Нарушений ПДД",
+    "bdd_measures_planned": "Мероприятий запланировано",
+    "bdd_measures_done": "Мероприятий выполнено",
+    "bdd_measures_failed_reason": "Причины невыполнения",
+    "bdd_assignment_date": "Дата закрепления",
+    "bdd_assignment_list": "Закрепление ТС за водителями",
     "bdd_completion_note": "Отметка о выполнении",
     "bdd_director": "Утверждающий (руководитель)",
     "bdd_briefing_kind": "Вид инструктажа водителей",
@@ -448,6 +466,31 @@ SCENARIO_FIELDS: dict[str, tuple[PackField, ...]] = {
     # Срез-8 экологии: отчётные формы. Обязательны только год и составитель —
     # без года форма бессмысленна, без составителя безымянна; числа берутся
     # из реестров экологии и вносятся по мере готовности.
+    # Срез-9 БДД: отчётность и положение. ОБЯЗАТЕЛЬНЫ только период и
+    # составитель — без периода отчёт бессмыслен, без составителя безымянен.
+    # Числа берутся из реестров контура и вносятся по мере готовности: сводка
+    # их показывает, но подставлять в документ платформа пока не умеет ни для
+    # одной дисциплины (то же у отчётных форм экологии).
+    PACK_CODE_BDD_REPORTS: _fields(
+        ("bdd_report_period", "bdd_report_author"),
+        (
+            "bdd_responsible",
+            "bdd_goals",
+            "bdd_control_order",
+            "bdd_review_order",
+            "bdd_approved_by",
+            "bdd_report_vehicles",
+            "bdd_report_drivers",
+            "bdd_report_accidents",
+            "bdd_report_injured",
+            "bdd_report_violations",
+            "bdd_measures_planned",
+            "bdd_measures_done",
+            "bdd_measures_failed_reason",
+            "bdd_assignment_date",
+            "bdd_assignment_list",
+        ),
+    ),
     PACK_CODE_ECO_REPORTS: _fields(
         ("eco_report_year", "eco_responsible"),
         (
