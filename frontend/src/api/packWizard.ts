@@ -21,6 +21,13 @@ export type PackScenarioField = {
   name: string;
   label: string;
   required: boolean;
+  /**
+   * ПОДСКАЗКА ИЗ РЕЕСТРА, а НЕ ответ. Не подставляется в поле сама: отчёт
+   * подписывает специалист, и он отвечает за каждое число в нём.
+   */
+  suggested?: string | null;
+  /** Откуда взята подсказка — без источника её нельзя проверить. */
+  suggested_source?: string | null;
 };
 
 export type PackScenarioFields = {
@@ -29,6 +36,8 @@ export type PackScenarioFields = {
   fields: PackScenarioField[];
   /** Что платформа подставит сама — мастер это не спрашивает, но показывает. */
   known_from_client: string[];
+  /** Пояснение про подсказки словами; пусто — подсказок нет. */
+  suggestions_note?: string | null;
 };
 
 export type PackPreviewProblem = {

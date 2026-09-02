@@ -312,6 +312,12 @@ export const QuickPackWizardPage = () => {
               </div>
             )}
 
+            {fields.suggestions_note && (
+              <div className="rounded border bg-muted/40 p-3 text-sm text-muted-foreground">
+                {fields.suggestions_note}
+              </div>
+            )}
+
             {fields.fields.map((field) => (
               <div key={field.name} className="space-y-1">
                 <Label htmlFor={`f-${field.name}`}>
@@ -325,6 +331,37 @@ export const QuickPackWizardPage = () => {
                     setAnswers((prev) => ({ ...prev, [field.name]: event.target.value }))
                   }
                 />
+                {/*
+                  ПОДСКАЗКА НЕ ПОДСТАВЛЯЕТСЯ САМА — её ставит нажатие.
+                  Причина не в осторожности: отчёт подписывает специалист, и
+                  он отвечает за каждое число. Автоподстановка означала бы,
+                  что человек подписал то, чего не проверял.
+
+                  Источник стоит РЯДОМ со значением, а не в подсказке при
+                  наведении: число без объяснения, откуда оно и за какой срок,
+                  подтвердить нельзя, а на телефоне наведения нет вовсе.
+                */}
+                {field.suggested != null && (
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                    <span>
+                      Платформа знает: <strong>{field.suggested}</strong>
+                      {field.suggested_source ? ` — ${field.suggested_source}` : ""}
+                    </span>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() =>
+                        setAnswers((prev) => ({
+                          ...prev,
+                          [field.name]: field.suggested ?? "",
+                        }))
+                      }
+                    >
+                      Подставить
+                    </Button>
+                  </div>
+                )}
               </div>
             ))}
 
