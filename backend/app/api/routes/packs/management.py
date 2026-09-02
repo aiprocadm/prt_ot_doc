@@ -49,6 +49,7 @@ from app.models.models import (
 )
 from app.modules.packs.definitions import DEFAULT_PACKS, PACK_DEFINITIONS_BY_CODE
 from app.modules.packs.fields import questions_for
+from app.modules.packs.prefill import suggestions_for_pack
 from app.modules.packs.scenario_preview import analyze_scenario_readiness
 from app.modules.packs.seeder import ensure_pack_by_code
 from app.schemas.pack import (
@@ -79,7 +80,10 @@ async def list_pack_scenarios(access: PackReadAccess) -> PackScenarioListRespons
 
 @router.get("/scenarios/{scenario_code}/fields", response_model=PackScenarioFieldsResponse)
 async def get_pack_scenario_fields(
-    scenario_code: str, access: PackReadAccess
+    scenario_code: str,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: PackReadAccess,
 ) -> PackScenarioFieldsResponse:
     """Второй шаг мастера (разд. 50.2): спросить ТОЛЬКО то, чего не хватает.
 
@@ -87,6 +91,13 @@ async def get_pack_scenario_fields(
     Сведений о клиенте здесь нет намеренно: организацию, объект и сотрудника
     платформа уже знает из карточки клиента и подставляет сама — спрашивать их
     второй раз и есть та «долгая настройка», от которой уходит ТЗ.
+
+    ПОДСКАЗКИ ИЗ РЕЕСТРОВ (решение владельца, handoff #960): часть вопросов
+    приходит с полем ``suggested`` — числом, которое платформа уже знает.
+    Это ПОДСКАЗКА, А НЕ ОТВЕТ: она не подставляется в документ сама собой,
+    потому что отчёт подписывает специалист и отвечает за каждое число в нём.
+    Рядом всегда стоит источник — число без объяснения, откуда оно, проверить
+    нельзя, а неподтверждаемую подсказку предлагать бессмысленно.
 
     Ничего не создаёт и не меняет: это описание формы, а не её отправка.
     """
@@ -102,13 +113,31 @@ async def get_pack_scenario_fields(
                 error_type="packs",
             ),
         )
+    suggestions = await suggestions_for_pack(session, str(tenant.id), definition.code)
     return PackScenarioFieldsResponse(
         scenario_code=definition.code,
         scenario_name=definition.name,
         fields=[
-            PackScenarioField(name=field.name, label=field.label, required=field.required)
+            PackScenarioField(
+                name=field.name,
+                label=field.label,
+                required=field.required,
+                suggested=(
+                    suggestions[field.name].value if field.name in suggestions else None
+                ),
+                suggested_source=(
+                    suggestions[field.name].source if field.name in suggestions else None
+                ),
+            )
             for field in questions_for(definition.code)
         ],
+        suggestions_note=(
+            "Числа со ссылкой на реестр — подсказки платформы. Они не "
+            "подставляются в документ сами: проверьте и подтвердите, "
+            "подписывать отчёт будете вы."
+            if suggestions
+            else None
+        ),
         known_from_client=[
             "Организация клиента (наименование, ИНН, адрес)",
             "Объект (наименование и адрес)",
