@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 
 from pydantic import Field
 
@@ -114,6 +114,19 @@ class RoadSafetyReadinessRead(BaseSchema):
     #: допущенные водители без внесённого срока удостоверения — ФАКТ о
     #: данных, а не вердикт о нарушении
     driver_license_missing: int = 0
+    #: срез-3: путевые листы. Реестр листов растёт каждую смену, поэтому в
+    #: сводке он считается ЗА ОКНО, а не за всё время: «сколько листов у нас
+    #: за три года» — не тот вопрос, на который смотрят утром
+    waybill_window_days: int = 0
+    waybills_total: int = 0
+    #: ключи всегда все три, чтобы «ноль аннулированных» отличался от
+    #: «поле не пришло»
+    waybills_by_status: dict[str, int] = Field(default_factory=dict)
+    #: листы, где обязательная отметка НЕ ПРОЙДЕНА — выпуск с нарушением
+    waybills_release_blocked: int = 0
+    #: листы, где обязательная отметка не внесена — дыра в учёте, а НЕ
+    #: вердикт о нарушении (разные вещи, как «нет сведений» и «просрочено»)
+    waybills_release_unconfirmed: int = 0
 
 
 class DriverCreate(BaseSchema):
@@ -181,4 +194,86 @@ class DriverRead(BaseSchema):
 
 class DriverPage(BaseSchema):
     items: list[DriverRead]
+    total: int
+
+
+class WaybillCreate(BaseSchema):
+    """Выписка путевого листа.
+
+    Номера машины и фамилии здесь НЕТ: лист ссылается на реестр ТС и на
+    карточку водителя. Отметки контроля можно не заполнять — свежий лист
+    выписывается до осмотра, и это законное состояние «сведений нет».
+    """
+
+    number: str = Field(min_length=1, max_length=32)
+    vehicle_id: str = Field(min_length=1, max_length=36)
+    driver_id: str = Field(min_length=1, max_length=36)
+    issued_on: date
+    departure_at: datetime | None = None
+    return_at: datetime | None = None
+    pre_trip_medical: str = Field(default="not_recorded", min_length=1, max_length=16)
+    post_trip_medical: str = Field(default="not_recorded", min_length=1, max_length=16)
+    pre_trip_technical: str = Field(default="not_recorded", min_length=1, max_length=16)
+    status: str = Field(default="issued", min_length=1, max_length=16)
+    notes: str | None = None
+
+
+class WaybillUpdate(BaseSchema):
+    """Правка листа. Машину и водителя сменить нельзя — это другой рейс."""
+
+    number: str | None = Field(default=None, min_length=1, max_length=32)
+    issued_on: date | None = None
+    departure_at: datetime | None = None
+    return_at: datetime | None = None
+    pre_trip_medical: str | None = Field(default=None, min_length=1, max_length=16)
+    post_trip_medical: str | None = Field(default=None, min_length=1, max_length=16)
+    pre_trip_technical: str | None = Field(default=None, min_length=1, max_length=16)
+    status: str | None = Field(default=None, min_length=1, max_length=16)
+    notes: str | None = None
+
+
+class WaybillRead(BaseSchema):
+    """Лист вместе с вердиктом о выпуске и временем в рейсе.
+
+    ГРАНИЦА: полей «законен ли выпуск» и «уложился ли водитель в режим труда и
+    отдыха» здесь НЕТ. Обязательность послерейсового осмотра и норма времени
+    следуют из вида перевозок и суммирования за неделю — таких данных в
+    системе нет.
+    """
+
+    id: str
+    number: str
+    vehicle_id: str
+    #: госномер и марка — из реестра ТС, в листе не хранятся
+    vehicle_plate: str
+    vehicle_brand_model: str
+    driver_id: str
+    #: ФИО — из ядрового ``Person`` через карточку водителя
+    driver_name: str
+    driver_license_number: str
+    issued_on: date
+    departure_at: datetime | None = None
+    return_at: datetime | None = None
+    #: СЧИТАЕТСЯ ПРИ ЧТЕНИИ из пары выезд/возвращение; ``null`` — хотя бы одна
+    #: дата не внесена. Это ВРЕМЯ В РЕЙСЕ, а не время за рулём: сколько из
+    #: рейса человек реально вёл машину, платформа не знает
+    trip_hours: float | None = None
+    pre_trip_medical: str
+    pre_trip_medical_label: str
+    post_trip_medical: str
+    post_trip_medical_label: str
+    pre_trip_technical: str
+    pre_trip_technical_label: str
+    #: confirmed / unconfirmed / blocked — считается ПРИ ЧТЕНИИ из ДВУХ
+    #: обязательных отметок (предрейсовые медосмотр и техконтроль).
+    #: Послерейсовый в вердикт не входит — он обязателен не всем
+    release_status: str
+    release_status_label: str
+    status: str
+    status_label: str
+    notes: str | None = None
+
+
+class WaybillPage(BaseSchema):
+    items: list[WaybillRead]
     total: int
