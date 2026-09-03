@@ -44,6 +44,9 @@
 
 from __future__ import annotations
 
+import re
+from pathlib import Path
+
 import pytest
 from sqlalchemy import select
 
@@ -51,6 +54,7 @@ from app.core.disciplines import Discipline
 from app.models.feature import Feature, FeatureEnablement
 from app.models.master_data import Company, Person
 from app.models.models import Tenant
+from app.models.training import INTERNSHIP_STATUSES
 
 pytestmark = pytest.mark.anyio
 
@@ -409,4 +413,135 @@ class TestОтборИСводкаБДД:
                 "internships_missing",
                 "admission_valid",
             )
+        )
+
+
+class TestСводкаЯдра:
+    """Сводка ОБЩЕГО экрана стажировок (срез: экран, `GET /internships/summary`).
+
+    До этого среза стажировки считала только сводка БДД — и только СВОИ (по
+    разметке дисциплиной). У общего экрана числа должны сходиться по ВСЕМ
+    записям арендатора, включая неразмеченные, и считаться В БАЗЕ: первая
+    страница списка на экране — не основание для плитки «всего».
+    """
+
+    async def test_сводка_считает_все_дисциплины(
+        self, async_client, make_auth_headers, sessionmaker
+    ) -> None:
+        headers = await make_auth_headers()
+        driver = await _person(sessionmaker, "Водителев")
+        welder = await _person(sessionmaker, "Сварщиков")
+        unmarked = await _person(sessionmaker, "Неразмеченов")
+        await _internship(
+            async_client,
+            headers,
+            driver,
+            discipline=Discipline.ROAD_SAFETY.value,
+            status="in_progress",
+        )
+        await _internship(
+            async_client,
+            headers,
+            welder,
+            discipline=Discipline.TRAINING.value,
+            planned=8,
+            completed=2,
+            status="completed",
+        )
+        await _internship(async_client, headers, unmarked)
+        response = await async_client.get(f"{_API}/summary", headers=headers)
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["total"] == 3
+        assert body["by_status"] == {
+            "planned": 1,
+            "in_progress": 1,
+            "completed": 1,
+            "cancelled": 0,
+        }
+        assert body["completed_short"] == 1
+
+    async def test_недобор_только_у_завершённых(
+        self, async_client, make_auth_headers, sessionmaker
+    ) -> None:
+        """Идущая с 0 из 4 смен — не недобор: она ещё не закрыта."""
+
+        headers = await make_auth_headers()
+        trainee = await _person(sessionmaker, "Стажёров")
+        await _internship(
+            async_client, headers, trainee, planned=4, completed=0, status="in_progress"
+        )
+        body = (await async_client.get(f"{_API}/summary", headers=headers)).json()
+        assert body["total"] == 1
+        assert body["completed_short"] == 0
+
+    async def test_активная_без_наставника_названа_отдельно(
+        self, async_client, make_auth_headers, sessionmaker
+    ) -> None:
+        """Назначена или идёт, а наставника нет — ДЫРА В ДАННЫХ, не нарушение.
+
+        В приказе наставника иногда называют позже, поэтому поле необязательно;
+        но стажировка без наставника — это стажировка, у которой некому
+        подтвердить смены. Завершённые и отменённые сюда не входят: у них
+        наставника уже не назначат.
+        """
+
+        headers = await make_auth_headers()
+        mentor = await _person(sessionmaker, "Наставников")
+        planned_alone = await _person(sessionmaker, "Одинокин")
+        running_alone = await _person(sessionmaker, "Бегущин")
+        running_with = await _person(sessionmaker, "Сопровождаев")
+        done_alone = await _person(sessionmaker, "Завершилов")
+        await _internship(async_client, headers, planned_alone)
+        await _internship(async_client, headers, running_alone, status="in_progress")
+        await _internship(
+            async_client, headers, running_with, mentor_id=mentor, status="in_progress"
+        )
+        await _internship(
+            async_client, headers, done_alone, planned=2, completed=2, status="completed"
+        )
+        body = (await async_client.get(f"{_API}/summary", headers=headers)).json()
+        assert body["active_without_mentor"] == 2
+
+    async def test_вердикта_в_сводке_нет(
+        self, async_client, make_auth_headers, sessionmaker
+    ) -> None:
+        """ГРАНИЦА: сводка называет факты, а не решает, законен ли допуск."""
+
+        headers = await make_auth_headers()
+        body = (await async_client.get(f"{_API}/summary", headers=headers)).json()
+        assert body["total"] == 0
+        assert not any(
+            key in body
+            for key in ("required", "missing", "admission_valid", "shifts_enough")
+        )
+
+
+class TestОбщийЭкран:
+    """Срез-41: экран у стажировок ОБЩИЙ, словарь состояний на фронте — руками."""
+
+    def test_фронт_знает_те_же_состояния(self) -> None:
+        """Сторож против дрейфа: словарь состояний на фронте написан руками.
+
+        Тот же класс, что словарь дисциплин в ``training.ts``: не обнови
+        фронт — состояние нельзя будет ни выбрать в форме, ни отфильтровать.
+        """
+
+        page = (
+            Path(__file__).resolve().parents[1]
+            / "frontend"
+            / "src"
+            / "api"
+            / "internships.ts"
+        )
+        text = page.read_text(encoding="utf-8")
+        block = re.search(
+            r"INTERNSHIP_STATUS_TITLES:\s*Record<string,\s*string>\s*=\s*\{(.*?)\}",
+            text,
+            re.S,
+        )
+        assert block is not None, "не нашёлся словарь состояний на фронте"
+        front = dict(re.findall(r'^\s*([a-z_]+):\s*"([^"]*)"', block.group(1), re.M))
+        assert front == INTERNSHIP_STATUSES, sorted(
+            set(front.items()) ^ set(INTERNSHIP_STATUSES.items())
         )

@@ -243,6 +243,12 @@ export const MAIN_NAV_GROUPS: NavGroup[] = [
         permission: PERMISSIONS.TRAINING_VIEW,
       },
       {
+        label: "Стажировки",
+        to: "/internships",
+        icon: GraduationCap,
+        permission: PERMISSIONS.TRAINING_VIEW,
+      },
+      {
         label: "Медосмотры/допуски",
         to: "/medical",
         icon: HeartPulse,

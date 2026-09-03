@@ -268,6 +268,7 @@
     "GET /api/v1/inspections/{inspection_id}/results",
     "GET /api/v1/integrations/readiness",
     "GET /api/v1/internships",
+    "GET /api/v1/internships/summary",
     "GET /api/v1/invoices",
     "GET /api/v1/invoices/{invoice_id}",
     "GET /api/v1/jobs",
@@ -1655,6 +1656,7 @@
     "internal_request_message_api_v1_portal_requests__request_id__messages_post",
     "internal_request_patch_api_v1_portal_requests__request_id__patch",
     "internal_requests_api_v1_portal_requests_get",
+    "internships_summary_api_v1_internships_summary_get",
     "issue_endpoint_api_v1_work_permits__wp_id__issue_post",
     "issue_machine_key_api_v1_machine_keys_post",
     "issue_protocol_api_v1_training_protocols__item_id__issue_post",
@@ -2621,6 +2623,7 @@
     "InternshipCreate",
     "InternshipPage",
     "InternshipRead",
+    "InternshipSummary",
     "InternshipUpdate",
     "InvitationBulkUpdate",
     "InvitationRead",
@@ -6455,6 +6458,12 @@
       "status": "string",
       "status_label": "string",
       "notes": "null|string"
+    },
+    "InternshipSummary": {
+      "total": "integer",
+      "by_status": "object",
+      "completed_short": "integer",
+      "active_without_mentor": "integer"
     },
     "InternshipUpdate": {
       "mentor_person_id": "null|string",

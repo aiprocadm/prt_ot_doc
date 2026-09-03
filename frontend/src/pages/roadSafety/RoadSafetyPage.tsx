@@ -1,5 +1,6 @@
 import { type ColumnDef } from "@tanstack/react-table";
 import { useCallback, useState } from "react";
+import { Link } from "react-router-dom";
 
 import {
   roadSafetyApi,
@@ -671,8 +672,12 @@ const RoadSafetyPage = () => {
               Проверки знаний ПДД так же ведутся в общем реестре аттестаций:
               просрочено {readiness.knowledge_checks_overdue} из{" "}
               {readiness.knowledge_checks_total}. Стажировки водителей ведутся
-              общим механизмом стажировок — своего реестра контур не заводит:
-              идёт {readiness.internships_in_progress} из{" "}
+              общим механизмом стажировок — своего реестра контур не заводит,
+              записи в{" "}
+              <Link to="/internships" className="underline">
+                общем реестре стажировок
+              </Link>
+              : идёт {readiness.internships_in_progress} из{" "}
               {readiness.internships_total}. «Недобор смен» — расхождение
               плана и факта, а не приговор допуску: сколько смен нужно,
               решает приказ, а не платформа.

@@ -23,6 +23,7 @@ import {
   BriefingsPage,
   BudgetPage,
   ImportsPage,
+  InternshipsPage,
   CalendarPage,
   ClientDeliveryDashboardPage,
   ClientPortalDashboardPage,
@@ -294,6 +295,11 @@ export const buildProtectedRouteGroups = (): ReactElement[] => {
           key="/briefings"
           path="/briefings"
           element={<BriefingsPage />}
+        />,
+        <Route
+          key="/internships"
+          path="/internships"
+          element={<InternshipsPage />}
         />,
       ],
     },

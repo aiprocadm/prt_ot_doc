@@ -11,9 +11,9 @@
 разметка дисциплиной (виды инструктажа 54.1, области аттестации 54.2 и 56.2,
 дисциплина курса 56.1). Контур дисциплины отбирает СВОИ записи.
 
-Экрана у стажировок пока нет — как не было у ядровых аттестаций до разд. 54.2:
-записи видны через API и через счётчики контура дисциплины. Это названо в
-handoff как следующий шаг, а не спрятано.
+Экран у стажировок ОБЩИЙ — ``/internships`` (как у ядровых аттестаций после
+разд. 54.2): реестр по всем дисциплинам, плитки из ``/internships/summary``.
+Контур дисциплины по-прежнему показывает только свои счётчики.
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
@@ -37,6 +37,7 @@ from app.schemas.internships import (
     InternshipCreate,
     InternshipPage,
     InternshipRead,
+    InternshipSummary,
     InternshipUpdate,
 )
 from app.services.audit import AuditService, field_level_diff
@@ -201,6 +202,73 @@ async def _load(session: AsyncSession, tenant: Tenant, record_id: str):
             ),
         )
     return row
+
+
+#: «активная» стажировка — назначена или идёт: наставника ей ещё могут назначить
+_ACTIVE_STATUSES = ("planned", "in_progress")
+
+
+@router.get("/internships/summary", response_model=InternshipSummary)
+async def internships_summary(
+    tenant: TenantDep,
+    session: SessionDep,
+    access: ReaderAccess,
+) -> InternshipSummary:
+    """Плитки общего экрана. Считаются В БАЗЕ, по всем дисциплинам.
+
+    ГРАНИЦА: факты о данных, а не вердикты — нужна ли стажировка и законен ли
+    допуск, платформа не решает (см. схему).
+    """
+
+    TenantContextValidator.ensure_tenant_context(tenant)
+    base = (
+        select(Internship.status, func.count().label("count"))
+        .where(Internship.tenant_id == tenant.id, Internship.deleted_at.is_(None))
+        .group_by(Internship.status)
+    )
+    by_status = {status_code: 0 for status_code in INTERNSHIP_STATUSES}
+    for status_code, count in (await session.execute(base)).all():
+        # чужое состояние в базе быть не должно (валидация на записи), но
+        # молча терять строку из «всего» нельзя — она попадёт в total ниже
+        by_status[status_code] = by_status.get(status_code, 0) + int(count)
+    facts = (
+        await session.execute(
+            select(
+                func.coalesce(
+                    func.sum(
+                        case(
+                            (
+                                (Internship.status == "completed")
+                                & (Internship.completed_shifts < Internship.planned_shifts),
+                                1,
+                            ),
+                            else_=0,
+                        )
+                    ),
+                    0,
+                ),
+                func.coalesce(
+                    func.sum(
+                        case(
+                            (
+                                Internship.status.in_(_ACTIVE_STATUSES)
+                                & Internship.mentor_person_id.is_(None),
+                                1,
+                            ),
+                            else_=0,
+                        )
+                    ),
+                    0,
+                ),
+            ).where(Internship.tenant_id == tenant.id, Internship.deleted_at.is_(None))
+        )
+    ).one()
+    return InternshipSummary(
+        total=sum(by_status.values()),
+        by_status=by_status,
+        completed_short=int(facts[0]),
+        active_without_mentor=int(facts[1]),
+    )
 
 
 @router.get("/internships", response_model=InternshipPage)
