@@ -242,6 +242,22 @@ BRIEFING_TYPE_DISCIPLINE: dict[str, Discipline] = {
     "fire_unscheduled": Discipline.FIRE_SAFETY,
     "fire_targeted": Discipline.FIRE_SAFETY,
     "fire_ptm": Discipline.FIRE_SAFETY,
+    # безопасность дорожного движения (разд. 56.2)
+    #
+    # ТА ЖЕ ДЫРА, что закрыл разд. 54.1 для пожарной безопасности: комплект
+    # документов БДД уже печатает «Программу инструктажа водителей», а
+    # ЗАПИСАТЬ проведённый инструктаж как БДД было нечем — он был неотличим
+    # от инструктажа по охране труда, и вопрос «когда водителей инструктировали
+    # по безопасности движения» не имел ответа.
+    #
+    # Четыре вида, а не один: у сезонного и предрейсового разная
+    # периодичность, и свалить их в одно значило бы сделать контроль сроков
+    # невыполнимым — ровно то, из-за чего вид инструктажа перестал быть
+    # свободной строкой.
+    "road_introductory": Discipline.ROAD_SAFETY,
+    "road_pre_trip": Discipline.ROAD_SAFETY,
+    "road_seasonal": Discipline.ROAD_SAFETY,
+    "road_special": Discipline.ROAD_SAFETY,
 }
 
 #: Подписи видов — словами: они уходят в журналы и на экран.
@@ -257,6 +273,10 @@ BRIEFING_TYPE_TITLES: dict[str, str] = {
     "fire_unscheduled": "Противопожарный внеплановый",
     "fire_targeted": "Противопожарный целевой",
     "fire_ptm": "Пожарно-технический минимум (ПТМ)",
+    "road_introductory": "Вводный инструктаж по БДД",
+    "road_pre_trip": "Предрейсовый инструктаж",
+    "road_seasonal": "Сезонный инструктаж по БДД",
+    "road_special": "Специальный инструктаж по БДД",
 }
 
 BRIEFING_TYPES: tuple[str, ...] = tuple(BRIEFING_TYPE_DISCIPLINE)

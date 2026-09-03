@@ -258,6 +258,7 @@ RLS_ENABLED_TABLES: frozenset[str] = frozenset(
         "risk_methodologies",
         "riskmap",
         "riskmethodology",
+        "road_accident",
         "road_driver",
         "road_vehicle",
         "road_waybill",

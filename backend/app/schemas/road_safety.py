@@ -127,6 +127,25 @@ class RoadSafetyReadinessRead(BaseSchema):
     #: листы, где обязательная отметка не внесена — дыра в учёте, а НЕ
     #: вердикт о нарушении (разные вещи, как «нет сведений» и «просрочено»)
     waybills_release_unconfirmed: int = 0
+    #: срез-4: ДТП. Окно ГОДОВОЕ, а не месячное как у листов: ДТП редки, и за
+    #: месяц их обычно ноль — по такому окну об аварийности судить нельзя
+    accident_window_days: int = 0
+    accidents_total: int = 0
+    #: ключи всегда все три, чтобы «ноль с погибшими» отличался от
+    #: «поле не пришло»
+    accidents_by_consequences: dict[str, int] = Field(default_factory=dict)
+    #: ФАКТЫ, а не оценка тяжести: числа людей
+    injured_total: int = 0
+    fatalities_total: int = 0
+    #: ДТП, по которым не заведено ни одного мероприятия и нет связи с
+    #: расследованием — дыра в разборе, а не вердикт «разобрано плохо»
+    accidents_without_follow_up: int = 0
+    #: срез-5: инструктажи водителей по БДД. Свой реестр НЕ заводится —
+    #: механизм инструктажей ядровой, здесь только счёт по видам БДД.
+    #: ГРАНИЦА: просрочка считается по ВНЕСЁННОМУ сроку, а не по норме —
+    #: кого и как часто инструктировать, платформа не решает
+    road_briefings_total: int = 0
+    road_briefings_overdue: int = 0
 
 
 class DriverCreate(BaseSchema):
@@ -276,4 +295,87 @@ class WaybillRead(BaseSchema):
 
 class WaybillPage(BaseSchema):
     items: list[WaybillRead]
+    total: int
+
+
+class RoadAccidentCreate(BaseSchema):
+    """Регистрация ДТП.
+
+    Полей «тяжесть», «разобрано» и «виноват ли наш водитель» здесь НЕТ:
+    тяжесть считается из чисел, состояние разбора — из связей, а вину
+    устанавливают ГИБДД и суд. Вносится ``fault`` по их документам, и по
+    умолчанию она «не установлена».
+    """
+
+    occurred_at: datetime
+    place: str = Field(min_length=1, max_length=255)
+    vehicle_id: str = Field(min_length=1, max_length=36)
+    #: водителя может не быть: в стоящую машину въезжают и без него
+    driver_id: str | None = Field(default=None, max_length=36)
+    kind: str = Field(min_length=1, max_length=24)
+    injured_count: int = Field(default=0, ge=0)
+    fatalities_count: int = Field(default=0, ge=0)
+    fault: str = Field(default="not_established", min_length=1, max_length=24)
+    gibdd_reference: str | None = Field(default=None, max_length=128)
+    #: связь с ядровым расследованием; пусто — законное состояние
+    incident_id: str | None = Field(default=None, max_length=36)
+    description: str | None = None
+
+
+class RoadAccidentUpdate(BaseSchema):
+    """Правка. Машину сменить нельзя — это другое ДТП."""
+
+    occurred_at: datetime | None = None
+    place: str | None = Field(default=None, min_length=1, max_length=255)
+    driver_id: str | None = Field(default=None, max_length=36)
+    kind: str | None = Field(default=None, min_length=1, max_length=24)
+    injured_count: int | None = Field(default=None, ge=0)
+    fatalities_count: int | None = Field(default=None, ge=0)
+    fault: str | None = Field(default=None, min_length=1, max_length=24)
+    gibdd_reference: str | None = Field(default=None, max_length=128)
+    incident_id: str | None = Field(default=None, max_length=36)
+    description: str | None = None
+
+
+class RoadAccidentRead(BaseSchema):
+    """ДТП вместе с последствиями и состоянием разбора.
+
+    ГРАНИЦА: полей «виновата ли организация», «достаточны ли мероприятия» и
+    «разобрано хорошо» здесь НЕТ. Состояние разбора — факт о незакрытых
+    мероприятиях, а не оценка их качества.
+    """
+
+    id: str
+    occurred_at: datetime
+    place: str
+    vehicle_id: str
+    #: госномер — из реестра ТС, в записи о ДТП не хранится
+    vehicle_plate: str
+    driver_id: str | None = None
+    #: ФИО — из ядрового ``Person`` через карточку водителя; пусто, если
+    #: водителя за рулём не было
+    driver_name: str | None = None
+    kind: str
+    kind_label: str
+    injured_count: int
+    fatalities_count: int
+    #: damage_only / injured / fatal — СЧИТАЕТСЯ из чисел, не хранится
+    consequences: str
+    consequences_label: str
+    fault: str
+    fault_label: str
+    gibdd_reference: str | None = None
+    incident_id: str | None = None
+    description: str | None = None
+    #: мероприятия живут в ядровом CAPA; здесь только их счёт
+    capa_total: int = 0
+    capa_open: int = 0
+    #: not_started / open / closed — СЧИТАЕТСЯ из связей: своего статуса
+    #: «разобрано» у ДТП нет, иначе он разошёлся бы с мероприятиями
+    follow_up: str
+    follow_up_label: str
+
+
+class RoadAccidentPage(BaseSchema):
+    items: list[RoadAccidentRead]
     total: int

@@ -4,6 +4,8 @@ import { useCallback, useState } from "react";
 import {
   roadSafetyApi,
   type DriverDto,
+  type RoadAccidentDto,
+  type RoadSafetyReadinessDto,
   type VehicleDto,
   type WaybillDto,
 } from "@/api/roadSafety";
@@ -158,6 +160,127 @@ const WAYBILL_COLUMNS: ColumnDef<WaybillDto, unknown>[] = [
 ];
 
 /**
+ * ДТП — РОВНО 7 колонок (лимит UX-бюджета, разд. 59.2). Вина и реквизиты
+ * ГИБДД уехали в подсказки: их читают при разборе конкретного случая, а не
+ * при просмотре списка.
+ */
+type Section = "vehicles" | "drivers" | "waybills" | "accidents";
+
+const ACCIDENT_COLUMNS: ColumnDef<RoadAccidentDto, unknown>[] = [
+  {
+    accessorKey: "occurred_at",
+    header: "Когда",
+    cell: ({ row }) => formatDate(row.original.occurred_at),
+  },
+  {
+    accessorKey: "place",
+    header: "Где",
+    // Свободная строка, а не площадка: ДТП происходит на дороге.
+    cell: ({ row }) => row.original.place,
+  },
+  {
+    accessorKey: "vehicle_plate",
+    header: "ТС",
+    cell: ({ row }) => row.original.vehicle_plate,
+  },
+  {
+    accessorKey: "driver_name",
+    header: "Водитель",
+    // Пусто — водителя за рулём НЕ БЫЛО (въехали в стоящую машину), а не
+    // «неизвестно кто».
+    cell: ({ row }) => row.original.driver_name ?? "За рулём никого не было",
+  },
+  {
+    accessorKey: "kind_label",
+    header: "Вид",
+    cell: ({ row }) => (
+      <span title={`Вина: ${row.original.fault_label}`}>
+        {row.original.kind_label}
+      </span>
+    ),
+  },
+  {
+    accessorKey: "consequences_label",
+    header: "Последствия",
+    // Тяжесть СЧИТАЕТСЯ сервером из чисел людей; числа — в подсказке.
+    cell: ({ row }) => (
+      <span
+        title={`Пострадало: ${row.original.injured_count}; погибло: ${row.original.fatalities_count}`}
+      >
+        {row.original.consequences_label}
+      </span>
+    ),
+  },
+  {
+    accessorKey: "follow_up_label",
+    header: "Разбор",
+    // Своего статуса «разобрано» у ДТП нет: состояние следует из ядровых
+    // мероприятий и связи с расследованием.
+    cell: ({ row }) => (
+      <span title={`Мероприятий: ${row.original.capa_total}`}>
+        {row.original.follow_up_label}
+      </span>
+    ),
+  },
+];
+
+/**
+ * Плитки шапки — ПО СЕКЦИЯМ, а не все сразу.
+ *
+ * ПОЧЕМУ ПЕРЕДЕЛАНО. К четвёртой секции общий набор дорос бы до пятнадцати
+ * плиток, и человек, пришедший разбирать ДТП, первым делом читал бы про
+ * поверку тахографов. ТЗ разд. 59 требует «одна задача — один экран», а
+ * пятнадцать чисел о четырёх разных задачах — это ровно обратное. Теперь
+ * каждая секция показывает СВОИ четыре числа.
+ */
+const SECTION_STATS: Record<
+  Section,
+  (r: RoadSafetyReadinessDto) => { label: string; value: number }[]
+> = {
+  vehicles: (r) => [
+    { label: "Транспортных средств", value: r.total_vehicles },
+    { label: "В эксплуатации", value: r.by_status.in_service ?? 0 },
+    // Просрочки — ТОЛЬКО по эксплуатируемым: у списанной машины просроченный
+    // полис это шум, а не проблема.
+    { label: "Техосмотр просрочен", value: r.inspection_overdue },
+    // ФАКТ о данных, а не вердикт о нарушении.
+    { label: "Сведения не внесены", value: r.documents_missing },
+  ],
+  drivers: (r) => [
+    { label: "Водителей", value: r.total_drivers },
+    { label: "Допущено к управлению", value: r.drivers_by_status.admitted ?? 0 },
+    // Тем же доводом: у отстранённого водителя просроченное удостоверение
+    // это шум, а не проблема.
+    { label: "Удостоверение просрочено", value: r.driver_license_overdue },
+    // Срез-5: инструктажи водителей. Свой реестр не заводится — записи живут
+    // в общем журнале инструктажей, здесь только счёт по видам БДД.
+    { label: "Инструктаж БДД просрочен", value: r.road_briefings_overdue },
+  ],
+  waybills: (r) => [
+    {
+      label: `Путевых листов за ${r.waybill_window_days} дн.`,
+      value: r.waybills_total,
+    },
+    // Нарушение и дыра в учёте — РАЗНЫЕ числа, они не складываются.
+    { label: "Контроль не пройден, листов", value: r.waybills_release_blocked },
+    {
+      label: "Контроль не подтверждён, листов",
+      value: r.waybills_release_unconfirmed,
+    },
+    { label: "Аннулировано", value: r.waybills_by_status.cancelled ?? 0 },
+  ],
+  accidents: (r) => [
+    // Окно ГОДОВОЕ: за месяц ДТП обычно ноль, и судить по нему нельзя.
+    { label: `ДТП за ${r.accident_window_days} дн.`, value: r.accidents_total },
+    // ФАКТЫ, а не оценка тяжести.
+    { label: "Пострадало людей", value: r.injured_total },
+    { label: "Погибло людей", value: r.fatalities_total },
+    // Дыра в разборе, а не вердикт «разобрано плохо».
+    { label: "Без разбора", value: r.accidents_without_follow_up },
+  ],
+};
+
+/**
  * БДД: транспортные средства и водители (Доп. №1 разд. 56.2, срезы 1–2).
  *
  * До среза-1 по разд. 56.2 не было НИЧЕГО: ТЗ отсылало к «transport safety»,
@@ -165,14 +288,13 @@ const WAYBILL_COLUMNS: ColumnDef<WaybillDto, unknown>[] = [
  * продублировал: карточка ссылается на ядрового сотрудника. Срез-3 добавил
  * путевые листы: они же журнал предрейсовых осмотров за период — отдельного
  * журнала не заводим, второй список тех же фактов разошёлся бы с первым.
+ * Срез-4 добавил учёт ДТП со связью на ядровое расследование и мероприятия.
  */
 const RoadSafetyPage = () => {
   // Секции ПО ОДНОЙ (прецедент экранов ПБ и ПромБеза): парк и водительский
   // состав — разные задачи, и показывать обе таблицы сразу значит растить
   // экран.
-  const [section, setSection] = useState<"vehicles" | "drivers" | "waybills">(
-    "vehicles",
-  );
+  const [section, setSection] = useState<Section>("vehicles");
 
   const { data, loading, error, reload } = useAsyncResource({
     loader: useCallback(
@@ -180,6 +302,7 @@ const RoadSafetyPage = () => {
         vehicles: await roadSafetyApi.listVehicles(),
         drivers: await roadSafetyApi.listDrivers(),
         waybills: await roadSafetyApi.listWaybills(),
+        accidents: await roadSafetyApi.listAccidents(),
         readiness: await roadSafetyApi.readiness(),
       }),
       [],
@@ -188,6 +311,7 @@ const RoadSafetyPage = () => {
       vehicles: [] as VehicleDto[],
       drivers: [] as DriverDto[],
       waybills: [] as WaybillDto[],
+      accidents: [] as RoadAccidentDto[],
       readiness: {
         total_vehicles: 0,
         by_status: { in_service: 0, suspended: 0, decommissioned: 0 },
@@ -204,6 +328,14 @@ const RoadSafetyPage = () => {
         waybills_by_status: { issued: 0, closed: 0, cancelled: 0 },
         waybills_release_blocked: 0,
         waybills_release_unconfirmed: 0,
+        accident_window_days: 365,
+        accidents_total: 0,
+        accidents_by_consequences: { damage_only: 0, injured: 0, fatal: 0 },
+        injured_total: 0,
+        fatalities_total: 0,
+        accidents_without_follow_up: 0,
+        road_briefings_total: 0,
+        road_briefings_overdue: 0,
       },
     },
     errorMessage: "Не удалось загрузить реестр транспортных средств",
@@ -250,6 +382,22 @@ const RoadSafetyPage = () => {
         .includes(query),
   });
 
+  const accidents = useLocalRegistry({
+    items: data.accidents,
+    match: (item, query) =>
+      [
+        item.place,
+        item.vehicle_plate,
+        item.driver_name ?? "",
+        item.kind_label,
+        item.consequences_label,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(query),
+  });
+
   const { readiness } = data;
 
   return (
@@ -257,48 +405,7 @@ const RoadSafetyPage = () => {
       <RegistryPageHeader
         title="Безопасность дорожного движения"
         description="Реестр транспортных средств, водительский состав и путевые листы: сроки диагностической карты, полиса, поверки тахографа, водительских удостоверений и отметки контроля перед выездом."
-        stats={[
-          { label: "Транспортных средств", value: readiness.total_vehicles },
-          {
-            label: "В эксплуатации",
-            value: readiness.by_status.in_service ?? 0,
-          },
-          { label: "Списано", value: readiness.by_status.decommissioned ?? 0 },
-          // Просрочки — ТОЛЬКО по эксплуатируемым: у списанной машины
-          // просроченный полис это шум, а не проблема.
-          { label: "Техосмотр просрочен", value: readiness.inspection_overdue },
-          { label: "ОСАГО просрочено", value: readiness.insurance_overdue },
-          // ФАКТ о данных, а не вердикт о нарушении.
-          { label: "Сведения не внесены", value: readiness.documents_missing },
-          { label: "Водителей", value: readiness.total_drivers },
-          {
-            label: "Допущено к управлению",
-            value: readiness.drivers_by_status.admitted ?? 0,
-          },
-          // Тем же доводом: у отстранённого водителя просроченное
-          // удостоверение это шум, а не проблема.
-          {
-            label: "Удостоверение просрочено",
-            value: readiness.driver_license_overdue,
-          },
-          // Срез-3: листы считаются ЗА ОКНО, а не за всё время — реестр
-          // растёт каждую смену, и «всего за три года» ни о чём не говорит.
-          {
-            label: `Путевых листов за ${readiness.waybill_window_days} дн.`,
-            value: readiness.waybills_total,
-          },
-          // Нарушение и дыра в учёте — РАЗНЫЕ числа: «не пройден» здесь,
-          // «сведения не внесены» отдельной подписью в секции листов.
-          //
-          // ПОДПИСЬ НЕ ПОВТОРЯЕТ ВЕРДИКТ СТРОКИ дословно: плитка считает
-          // ЛИСТЫ, а вердикт в таблице говорит о ЭТОМ листе. Совпади они
-          // слово в слово — на экране появились бы две одинаковые надписи о
-          // разном, и понять, к чему относится число, стало бы нельзя.
-          {
-            label: "Контроль не пройден, листов",
-            value: readiness.waybills_release_blocked,
-          },
-        ]}
+        stats={SECTION_STATS[section](readiness)}
       />
 
       <div className="flex flex-wrap gap-2">
@@ -307,6 +414,7 @@ const RoadSafetyPage = () => {
             ["vehicles", "Транспортные средства"],
             ["drivers", "Водители"],
             ["waybills", "Путевые листы"],
+            ["accidents", "ДТП"],
           ] as const
         ).map(([key, label]) => (
           <Button
@@ -322,6 +430,48 @@ const RoadSafetyPage = () => {
 
       <ErrorState error={error ?? undefined} onRetry={() => void reload()} />
       {loading ? <LoadingScreen label="Загрузка парка" /> : null}
+
+      {section === "accidents" ? (
+        <>
+          {/*
+            ГРАНИЦА, названная НА ЭКРАНЕ (прецедент тахографа, стажа и
+            выпуска): вину устанавливают ГИБДД и суд, а достаточность
+            мероприятий платформа не оценивает.
+          */}
+          {!loading && !error ? (
+            <p className="text-sm text-muted-foreground">
+              Платформа ведёт учёт происшествий и не устанавливает вину — она
+              следует из документов ГИБДД и решения суда, и вносится в запись
+              как сведения. Расследование ведётся в общем контуре
+              происшествий, мероприятия — в общем списке корректирующих
+              действий: своих копий контур БДД не заводит. Поэтому «разбор»
+              здесь не галочка, а следствие связей: без разбора сейчас{" "}
+              {readiness.accidents_without_follow_up}. Тяжесть считается из
+              числа пострадавших и погибших и словом не хранится.
+            </p>
+          ) : null}
+          {!loading && !error && accidents.total === 0 ? (
+            <EmptyState
+              title="ДТП не зарегистрированы"
+              description="Зарегистрируйте происшествие: когда и где, машина из реестра, вид ДТП и последствия. Водителя можно не указывать — в стоящую машину въезжают и без него. Если есть пострадавшие, свяжите запись с расследованием."
+            />
+          ) : null}
+          {!loading && !error && accidents.total > 0 ? (
+            <RegistryTable
+              columns={ACCIDENT_COLUMNS}
+              data={accidents.pagedItems}
+              pageIndex={accidents.pageIndex}
+              pageSize={accidents.pageSize}
+              total={accidents.total}
+              onPageChange={accidents.onPageChange}
+              onPageSizeChange={accidents.onPageSizeChange}
+              onSearchChange={accidents.onSearchChange}
+              searchPlaceholder="Поиск по месту, машине, водителю, виду"
+              caption="Учёт ДТП"
+            />
+          ) : null}
+        </>
+      ) : null}
 
       {section === "waybills" ? (
         <>
@@ -382,7 +532,11 @@ const RoadSafetyPage = () => {
               массы ТС, числа мест и вида перевозок. Стаж считается от даты
               начала и не хранится числом — записанное «3 года» через два года
               стало бы неправдой. Просрочки считаются только по допущенным
-              водителям.
+              водителям. Инструктажи по БДД ведутся в общем журнале
+              инструктажей — своего журнала контур не заводит; просрочено
+              сейчас: {readiness.road_briefings_overdue} из{" "}
+              {readiness.road_briefings_total}. Как часто инструктировать,
+              платформа не решает: срок берётся из внесённого, а не из нормы.
             </p>
           ) : null}
           {!loading && !error && drivers.total === 0 ? (

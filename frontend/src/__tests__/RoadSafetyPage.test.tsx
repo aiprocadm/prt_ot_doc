@@ -9,6 +9,7 @@ import { uxBudgetDelta } from "@/test-utils/uxBudget";
 const listVehiclesMock = vi.fn();
 const listDriversMock = vi.fn();
 const listWaybillsMock = vi.fn();
+const listAccidentsMock = vi.fn();
 const readinessMock = vi.fn();
 
 vi.mock("@/api/roadSafety", () => ({
@@ -16,6 +17,7 @@ vi.mock("@/api/roadSafety", () => ({
     listVehicles: (...args: unknown[]) => listVehiclesMock(...args),
     listDrivers: (...args: unknown[]) => listDriversMock(...args),
     listWaybills: (...args: unknown[]) => listWaybillsMock(...args),
+    listAccidents: (...args: unknown[]) => listAccidentsMock(...args),
     readiness: (...args: unknown[]) => readinessMock(...args),
   },
 }));
@@ -202,6 +204,61 @@ const populatedWaybills = [
   },
 ];
 
+/**
+ * ДТП: с пострадавшими и связанное с расследованием, без пострадавших и без
+ * разбора, и наезд на стоящую машину без водителя за рулём.
+ */
+const populatedAccidents = [
+  {
+    id: "a-1",
+    occurred_at: "2026-08-20T07:40:00+00:00",
+    place: "45 км трассы М-4",
+    vehicle_id: "v-1",
+    vehicle_plate: "А123АА777",
+    driver_id: "d-1",
+    driver_name: "Шофёров Пётр Иванович",
+    kind: "collision",
+    kind_label: "Столкновение",
+    injured_count: 2,
+    fatalities_count: 0,
+    consequences: "injured",
+    consequences_label: "Есть пострадавшие",
+    fault: "other_party",
+    fault_label: "Другой участник",
+    gibdd_reference: "МТ-12/345",
+    incident_id: "inc-1",
+    description: null,
+    capa_total: 2,
+    capa_open: 1,
+    follow_up: "open",
+    follow_up_label: "Есть незакрытые мероприятия",
+  },
+  {
+    id: "a-2",
+    occurred_at: "2026-08-10T12:00:00+00:00",
+    place: "двор склада",
+    vehicle_id: "v-2",
+    vehicle_plate: "В456ВВ777",
+    driver_id: null,
+    driver_name: null,
+    kind: "parked_vehicle",
+    kind_label: "Наезд на стоящее ТС",
+    injured_count: 0,
+    fatalities_count: 0,
+    consequences: "damage_only",
+    consequences_label: "Только материальный ущерб",
+    fault: "not_established",
+    fault_label: "Не установлена",
+    gibdd_reference: null,
+    incident_id: null,
+    description: null,
+    capa_total: 0,
+    capa_open: 0,
+    follow_up: "not_started",
+    follow_up_label: "Мероприятия не заведены",
+  },
+];
+
 const populatedReadiness = {
   total_vehicles: 2,
   by_status: { in_service: 2, suspended: 0, decommissioned: 0 },
@@ -218,6 +275,14 @@ const populatedReadiness = {
   waybills_by_status: { issued: 3, closed: 0, cancelled: 0 },
   waybills_release_blocked: 1,
   waybills_release_unconfirmed: 1,
+  accident_window_days: 365,
+  accidents_total: 2,
+  accidents_by_consequences: { damage_only: 1, injured: 1, fatal: 0 },
+  injured_total: 2,
+  fatalities_total: 0,
+  accidents_without_follow_up: 1,
+  road_briefings_total: 4,
+  road_briefings_overdue: 1,
 };
 
 describe("RoadSafetyPage", () => {
@@ -225,10 +290,12 @@ describe("RoadSafetyPage", () => {
     listVehiclesMock.mockReset();
     listDriversMock.mockReset();
     listWaybillsMock.mockReset();
+    listAccidentsMock.mockReset();
     readinessMock.mockReset();
     listVehiclesMock.mockResolvedValue(populatedVehicles);
     listDriversMock.mockResolvedValue(populatedDrivers);
     listWaybillsMock.mockResolvedValue(populatedWaybills);
+    listAccidentsMock.mockResolvedValue(populatedAccidents);
     readinessMock.mockResolvedValue(populatedReadiness);
   });
 
@@ -280,6 +347,11 @@ describe("RoadSafetyPage", () => {
     expect(
       screen.getByText(/не решает, какая категория нужна/i),
     ).toBeInTheDocument();
+    // Срез-5: инструктажи БДД считаются, но своего журнала контур не заводит.
+    expect(screen.getByText("Инструктаж БДД просрочен")).toBeInTheDocument();
+    expect(
+      screen.getByText(/ведутся в общем журнале инструктажей/i),
+    ).toBeInTheDocument();
   });
 
   it("пустой состав водителей объясняет, что вносить", async () => {
@@ -306,6 +378,7 @@ describe("RoadSafetyPage", () => {
     listVehiclesMock.mockResolvedValue([]);
     listDriversMock.mockResolvedValue([]);
     listWaybillsMock.mockResolvedValue([]);
+    listAccidentsMock.mockResolvedValue([]);
     readinessMock.mockResolvedValue({
       total_vehicles: 0,
       by_status: { in_service: 0, suspended: 0, decommissioned: 0 },
@@ -322,6 +395,14 @@ describe("RoadSafetyPage", () => {
       waybills_by_status: { issued: 0, closed: 0, cancelled: 0 },
       waybills_release_blocked: 0,
       waybills_release_unconfirmed: 0,
+      accident_window_days: 365,
+      accidents_total: 0,
+      accidents_by_consequences: { damage_only: 0, injured: 0, fatal: 0 },
+      injured_total: 0,
+      fatalities_total: 0,
+      accidents_without_follow_up: 0,
+      road_briefings_total: 0,
+      road_briefings_overdue: 0,
     });
 
     render(
@@ -393,6 +474,99 @@ describe("RoadSafetyPage", () => {
     expect(await screen.findByText("А123АА777")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Путевые листы" }));
     expect(await screen.findByText("ПЛ-001")).toBeInTheDocument();
+
+    const budget = uxBudgetDelta(document.body, "RoadSafetyPage");
+    expect(budget.unexpected).toEqual([]);
+    expect(budget.stale).toEqual([]);
+  });
+
+  it("секция ДТП показывает последствия, разбор и границу", async () => {
+    render(
+      <MemoryRouter>
+        <RoadSafetyPage />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("А123АА777")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "ДТП" }));
+
+    expect(await screen.findByText("45 км трассы М-4")).toBeInTheDocument();
+    // Тяжесть считает сервер из чисел людей — экран печатает посчитанное.
+    expect(screen.getByText("Есть пострадавшие")).toBeInTheDocument();
+    expect(screen.getByText("Только материальный ущерб")).toBeInTheDocument();
+    // Пустой водитель — это «за рулём никого не было», а не «неизвестно кто».
+    expect(
+      screen.getByText("За рулём никого не было"),
+    ).toBeInTheDocument();
+    // Разбор — следствие связей, а не галочка.
+    expect(screen.getByText("Есть незакрытые мероприятия")).toBeInTheDocument();
+    expect(screen.getByText("Мероприятия не заведены")).toBeInTheDocument();
+    // Граница названа на экране.
+    expect(
+      screen.getByText(/не устанавливает вину/i),
+    ).toBeInTheDocument();
+  });
+
+  it("пустой учёт ДТП объясняет, что вносить", async () => {
+    listAccidentsMock.mockResolvedValue([]);
+    readinessMock.mockResolvedValue({
+      ...populatedReadiness,
+      accidents_total: 0,
+      accidents_by_consequences: { damage_only: 0, injured: 0, fatal: 0 },
+      injured_total: 0,
+      fatalities_total: 0,
+      accidents_without_follow_up: 0,
+    });
+
+    render(
+      <MemoryRouter>
+        <RoadSafetyPage />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("А123АА777")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "ДТП" }));
+
+    expect(
+      await screen.findByText("ДТП не зарегистрированы"),
+    ).toBeInTheDocument();
+  });
+
+  it("плитки шапки меняются вместе с секцией", async () => {
+    /**
+     * Общий набор дорос бы до пятнадцати чисел о четырёх разных задачах —
+     * ровно то, что запрещает «одна задача — один экран» (разд. 59).
+     * Проверяем, что чужие плитки НЕ показываются: без этого набор снова
+     * начнёт расти и никто не заметит.
+     */
+
+    render(
+      <MemoryRouter>
+        <RoadSafetyPage />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("Транспортных средств")).toBeInTheDocument();
+    expect(screen.queryByText("Погибло людей")).not.toBeInTheDocument();
+    expect(screen.queryByText("Водителей")).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "ДТП" }));
+
+    expect(await screen.findByText("Погибло людей")).toBeInTheDocument();
+    expect(screen.getByText("ДТП за 365 дн.")).toBeInTheDocument();
+    expect(screen.queryByText("Транспортных средств")).not.toBeInTheDocument();
+  });
+
+  it("секция ДТП остаётся в UX-бюджете", async () => {
+    render(
+      <MemoryRouter>
+        <RoadSafetyPage />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("А123АА777")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "ДТП" }));
+    expect(await screen.findByText("45 км трассы М-4")).toBeInTheDocument();
 
     const budget = uxBudgetDelta(document.body, "RoadSafetyPage");
     expect(budget.unexpected).toEqual([]);
