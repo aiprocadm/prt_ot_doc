@@ -39,7 +39,7 @@ from app.models.models import Tenant
 from app.modules.packs.context import enrich_context
 from app.modules.packs.definitions import (
     PACK_CODE_BDD_REPORTS,
-    PACK_CODE_GOCHS_REPORTS,
+    PACK_CODE_CIVIL_DEFENCE,
 )
 
 pytestmark = pytest.mark.anyio
@@ -318,14 +318,16 @@ class TestГраница:
     ) -> None:
         """Пусто — законный ответ, а не «не нашли».
 
-        У отчётности ГО и ЧС числа берутся из решения специалиста и из
-        событий, которых в реестрах нет; выдумывать подсказку там значило бы
-        предложить число, ни на чём не основанное.
+        Базовый комплект ГО и ЧС (приказ, план, комиссия) состоит из решений
+        специалиста — кто отвечает, в каком порядке оповещают; реестры на такие
+        вопросы не отвечают, и выдумывать подсказку значило бы предложить
+        ответ, ни на чём не основанный. (Отчётность ГО и ЧС с среза-43
+        подсказки ПОЛУЧАЕТ — см. test_packs_prefill_civil_defense.py.)
         """
 
         headers = await make_auth_headers()
         await _grant(sessionmaker, "civil_defense")
-        fields = await _fields(async_client, headers, PACK_CODE_GOCHS_REPORTS)
+        fields = await _fields(async_client, headers, PACK_CODE_CIVIL_DEFENCE)
         body = fields.pop("__body__")
         assert all(f["suggested"] is None for f in fields.values())
         assert body["suggestions_note"] is None
