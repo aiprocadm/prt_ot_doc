@@ -20,7 +20,11 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
-from app.core.disciplines import ATTESTATION_AREA_TITLES
+from app.core.disciplines import (
+    ATTESTATION_AREA_TITLES,
+    Discipline,
+    areas_of_discipline,
+)
 from app.core.errors import api_problem_detail
 from app.core.feature_flags import is_module_enabled, raise_for_disabled_module
 from app.core.security import AccessContext, abac, rbac
@@ -869,11 +873,23 @@ async def list_attestations(
     """Аттестация по промбезопасности: СВОИ записи ядрового реестра.
 
     Дисциплина не заводит своей таблицы — запись живёт в ядре
-    (``Attestation``). Показываются только записи с областью из справочника:
-    аттестация без области принадлежит другой дисциплине.
+    (``Attestation``).
+
+    ОТБОР ИДЁТ ПО ДИСЦИПЛИНЕ, А НЕ ПО «ЗАПОЛНЕНА ЛИ ОБЛАСТЬ». Раньше здесь
+    стояло ``area_code IS NOT NULL`` с рассуждением «аттестация без области
+    принадлежит другой дисциплине». Рассуждение было верным ровно до тех пор,
+    пока в справочнике жили ТОЛЬКО области Ростехнадзора: тогда «область есть»
+    и означало «это промбез». Разд. 56.2 срез-6 завёл в том же справочнике
+    область «ПДД» — и старое правило втащило бы проверку знаний водителя на
+    экран опасных производственных объектов как аттестацию по
+    промбезопасности.
+
+    Это тот же класс, что причина для ГО и ЧС в срезе-1 контура БДД: условие,
+    верное на момент написания, протухает от одного расширения, и заметить
+    это некому. Поэтому отбор берёт коды СВОЕЙ дисциплины из общей разметки.
 
     Экрана у ядровых аттестаций нет ни одного (в интерфейсе есть лишь тип
-    задачи «Аттестации»), поэтому до этого среза их не было видно нигде.
+    задачи «Аттестации»), поэтому до среза 54.2 их не было видно нигде.
     """
 
     TenantContextValidator.ensure_tenant_context(tenant)
@@ -884,7 +900,9 @@ async def list_attestations(
         .where(
             Attestation.tenant_id == tenant.id,
             Attestation.deleted_at.is_(None),
-            Attestation.area_code.is_not(None),
+            Attestation.area_code.in_(
+                areas_of_discipline(Discipline.INDUSTRIAL_SAFETY)
+            ),
         )
     )
     if area_code:
@@ -1439,16 +1457,24 @@ async def industrial_readiness(
     )
     devices_without_work = sum(1 for d in devices if d.id not in confirmed_ids)
 
-    # Разд. 54.2 «аттестация персонала»: считаем ТОЛЬКО записи с областью из
-    # справочника — сводка дисциплины показывает свои записи, а не все
-    # аттестации арендатора (у аттестаций других дисциплин области нет).
+    # Разд. 54.2 «аттестация персонала»: считаем записи СВОЕЙ дисциплины.
+    #
+    # Здесь стояло ``area_code IS NOT NULL`` с доводом «у аттестаций других
+    # дисциплин области нет». Он был верен, пока справочник был перечнем
+    # Ростехнадзора; разд. 56.2 срез-6 завёл в нём область «ПДД», и просроченная
+    # проверка знаний водителя попала бы в счётчик просроченных аттестаций по
+    # ПРОМБЕЗОПАСНОСТИ — то есть в число, по которому готовятся к проверке
+    # Ростехнадзора. ВТОРОЕ такое место в этом же файле (список аттестаций)
+    # починено тем же приёмом: отбор по дисциплине, а не по заполненности поля.
     attestations = (
         (
             await session.execute(
                 select(Attestation).where(
                     Attestation.tenant_id == tenant.id,
                     Attestation.deleted_at.is_(None),
-                    Attestation.area_code.is_not(None),
+                    Attestation.area_code.in_(
+                        areas_of_discipline(Discipline.INDUSTRIAL_SAFETY)
+                    ),
                 )
             )
         )

@@ -146,6 +146,11 @@ class RoadSafetyReadinessRead(BaseSchema):
     #: кого и как часто инструктировать, платформа не решает
     road_briefings_total: int = 0
     road_briefings_overdue: int = 0
+    #: срез-6: проверки знаний ПДД. Свой реестр НЕ заводится — запись живёт в
+    #: ядровой аттестации, контур отбирает свою область из общей разметки.
+    #: ГРАНИЦА: кому проверка нужна и как часто, платформа не решает
+    knowledge_checks_total: int = 0
+    knowledge_checks_overdue: int = 0
 
 
 class DriverCreate(BaseSchema):

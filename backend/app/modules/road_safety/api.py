@@ -22,13 +22,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api.dependencies import get_session, get_tenant_record
-from app.core.disciplines import BRIEFING_TYPE_DISCIPLINE, Discipline
+from app.core.disciplines import (
+    BRIEFING_TYPE_DISCIPLINE,
+    Discipline,
+    areas_of_discipline,
+)
 from app.core.errors import api_problem_detail
 from app.core.feature_flags import is_module_enabled, raise_for_disabled_module
 from app.core.security import AccessContext, abac, rbac
 from app.core.tenant_validation import TenantContextValidator
 from app.models.briefings import BriefingEntry
 from app.models.incidents import Incident
+from app.models.inspections import Attestation
 from app.models.master_data import Person, Site
 from app.models.models import Tenant
 from app.models.road_safety import (
@@ -606,6 +611,41 @@ async def road_safety_readiness(
         or 0
     )
 
+    # Срез-6: проверки знаний ПДД. Свой реестр НЕ заводится — запись живёт в
+    # ядровой ``Attestation`` (человек аттестован по предмету до даты), контур
+    # лишь отбирает СВОЮ область из общей разметки.
+    #
+    # ГРАНИЦА: платформа НЕ решает, кому проверка знаний нужна и как часто —
+    # это следует из вида перевозок и локальных приказов. Просрочено считается
+    # по ВНЕСЁННОМУ сроку.
+    road_areas = areas_of_discipline(Discipline.ROAD_SAFETY)
+    checks_total = int(
+        await session.scalar(
+            select(func.count())
+            .select_from(Attestation)
+            .where(
+                Attestation.tenant_id == tenant.id,
+                Attestation.deleted_at.is_(None),
+                Attestation.area_code.in_(road_areas),
+            )
+        )
+        or 0
+    )
+    checks_overdue = int(
+        await session.scalar(
+            select(func.count())
+            .select_from(Attestation)
+            .where(
+                Attestation.tenant_id == tenant.id,
+                Attestation.deleted_at.is_(None),
+                Attestation.area_code.in_(road_areas),
+                Attestation.expires_at.is_not(None),
+                Attestation.expires_at < today,
+            )
+        )
+        or 0
+    )
+
     return RoadSafetyReadinessRead(
         total_vehicles=len(rows),
         by_status=by_status,
@@ -645,6 +685,8 @@ async def road_safety_readiness(
         accidents_without_follow_up=without_follow_up,
         road_briefings_total=briefings_total,
         road_briefings_overdue=briefings_overdue,
+        knowledge_checks_total=checks_total,
+        knowledge_checks_overdue=checks_overdue,
     )
 
 
