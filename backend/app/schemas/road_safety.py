@@ -151,6 +151,13 @@ class RoadSafetyReadinessRead(BaseSchema):
     #: ГРАНИЦА: кому проверка нужна и как часто, платформа не решает
     knowledge_checks_total: int = 0
     knowledge_checks_overdue: int = 0
+    #: срез-7: стажировки водителей. Сущность ЯДРОВАЯ — контур отбирает свои
+    #: по разметке дисциплиной и своей таблицы не заводит
+    internships_total: int = 0
+    internships_in_progress: int = 0
+    #: завершённые стажировки, где смен меньше плана — ФАКТ расхождения плана
+    #: и факта, а НЕ вердикт «допуск незаконен»
+    internships_completed_short: int = 0
 
 
 class DriverCreate(BaseSchema):

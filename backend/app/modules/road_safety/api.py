@@ -57,6 +57,7 @@ from app.models.road_safety import (
     Waybill,
 )
 from app.models.safety_ops import CorrectiveAction
+from app.models.training import Internship
 from app.schemas.road_safety import (
     DriverCreate,
     DriverPage,
@@ -646,6 +647,33 @@ async def road_safety_readiness(
         or 0
     )
 
+    # Срез-7: стажировки водителей. Сущность ЯДРОВАЯ (стажировку печатает
+    # документ по охране труда для любого рабочего), контур отбирает свои по
+    # разметке дисциплиной — своей таблицы не заводит.
+    #
+    # ГРАНИЦА: платформа НЕ решает, нужна ли стажировка и сколько смен она
+    # длится. «Завершена с недобором» — ФАКТ расхождения плана и факта, а не
+    # вердикт «допуск незаконен».
+    internships = (
+        (
+            await session.execute(
+                select(Internship).where(
+                    Internship.tenant_id == tenant.id,
+                    Internship.deleted_at.is_(None),
+                    Internship.discipline == Discipline.ROAD_SAFETY.value,
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    internships_in_progress = sum(1 for i in internships if i.status == "in_progress")
+    internships_short = sum(
+        1
+        for i in internships
+        if i.status == "completed" and i.completed_shifts < i.planned_shifts
+    )
+
     return RoadSafetyReadinessRead(
         total_vehicles=len(rows),
         by_status=by_status,
@@ -687,6 +715,9 @@ async def road_safety_readiness(
         road_briefings_overdue=briefings_overdue,
         knowledge_checks_total=checks_total,
         knowledge_checks_overdue=checks_overdue,
+        internships_total=len(internships),
+        internships_in_progress=internships_in_progress,
+        internships_completed_short=internships_short,
     )
 
 

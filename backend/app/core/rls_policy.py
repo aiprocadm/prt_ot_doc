@@ -163,6 +163,7 @@ RLS_ENABLED_TABLES: frozenset[str] = frozenset(
         "inspection_result",
         "inspection_run_items",
         "inspection_runs",
+        "internship",
         "invoice",
         "invoices",
         "job_logs",
