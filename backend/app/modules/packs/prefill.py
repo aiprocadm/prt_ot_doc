@@ -483,9 +483,6 @@ async def _industrial_safety_suggestions(
     return suggestions
 
 
-#: Комплекты, у которых есть источник в реестрах. Пусто для комплекта —
-#: НЕ ошибка: у большинства документов числа берутся не из данных, а из
-#: решения специалиста, и подсказывать там нечего.
 async def _civil_defense_suggestions(
     session: AsyncSession, tenant_id: str
 ) -> dict[str, Suggestion]:
@@ -582,6 +579,9 @@ async def _civil_defense_suggestions(
     return suggestions
 
 
+#: Комплекты, у которых есть источник в реестрах. Пусто для комплекта —
+#: НЕ ошибка: у большинства документов числа берутся не из данных, а из
+#: решения специалиста, и подсказывать там нечего.
 _RESOLVERS = {
     PACK_CODE_BDD_REPORTS: _road_safety_suggestions,
     PACK_CODE_ECO_REPORTS: _ecology_suggestions,
