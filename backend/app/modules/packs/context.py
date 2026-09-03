@@ -24,6 +24,7 @@ from app.modules.packs.definitions import (
     PACK_CODE_NEW_COMPANY,
     PACK_CODE_NEW_EMPLOYEE,
     PACK_CODE_OPO,
+    PACK_CODE_OPO_REPORTS,
     PACK_CODE_ROAD_SAFETY,
     PACK_CODE_SITE_ACCESS,
     PACK_CODE_WASTE,
@@ -640,6 +641,74 @@ def _apply_eco_reports(context: dict[str, Any], data: dict[str, Any]) -> dict[st
     return context
 
 
+def _apply_opo_reports(context: dict[str, Any], data: dict[str, Any]) -> dict[str, Any]:
+    """Отчётность ПромБез (разд. 54.2 срез-42): подстановки комплекта.
+
+    Умолчания ЧЕСТНЫЕ, и в сведениях для Ростехнадзора это критично:
+    незаполненное число аварий, просроченных ЭПБ или аттестаций читается
+    «сведения не внесены», а НЕ «ноль». Подставь ноль — и отчёт В НАДЗОРНЫЙ
+    ОРГАН заявит, что инцидентов не было и просрочек нет, хотя их просто не
+    посчитали. Отвечает за это подписавший.
+    """
+
+    _ensure_company_alias(context)
+    context["logo"] = _decode_image(data.get("logo"), DEFAULT_LOGO_BYTES)
+    context["stamp"] = _decode_image(data.get("stamp"), DEFAULT_STAMP_BYTES)
+
+    payload = context.setdefault("data", {})
+    payload.setdefault(
+        "opo_report_author", _coerce_text(data.get("opo_report_author"), "не указан")
+    )
+    payload.setdefault("opo_report_year", _coerce_text(data.get("opo_report_year"), "не указан"))
+    payload.setdefault(
+        "opo_pc_responsible",
+        _coerce_text(data.get("opo_pc_responsible"), "Ответственный не назначен"),
+    )
+    payload.setdefault(
+        "opo_approved_by", _coerce_text(data.get("opo_approved_by"), "не утверждено")
+    )
+    payload.setdefault("opo_director", _coerce_text(data.get("opo_director"), "не указан"))
+    # числовые ответы: пусто = «сведения не внесены», а НЕ ноль
+    for number_field in (
+        "opo_facilities_count",
+        "opo_devices_count",
+        "opo_epb_done",
+        "opo_epb_overdue",
+        "opo_attestations_count",
+        "opo_attestations_overdue",
+        "opo_pc_measures_planned",
+        "opo_pc_measures_done",
+        "opo_incidents_count",
+    ):
+        payload.setdefault(
+            number_field, _coerce_text(data.get(number_field), "сведения не внесены")
+        )
+    # «нарушений не выявлено» — утверждение, которое платформа за специалиста
+    # не делает: молчание нельзя выдавать за благополучие
+    payload.setdefault(
+        "opo_violations_note",
+        _coerce_text(data.get("opo_violations_note"), "сведения не внесены"),
+    )
+    for text_field in (
+        "opo_pc_attestation",
+        "opo_pc_inspection_order",
+        "opo_pc_reporting_order",
+        "opo_order_date",
+        "opo_facilities_by_class",
+        "opo_incident_period",
+        "opo_incident_downtime",
+    ):
+        payload.setdefault(text_field, _coerce_text(data.get(text_field)))
+    for list_field in (
+        "opo_pc_tasks",
+        "opo_facility_responsibles",
+        "opo_incident_causes",
+        "opo_incident_measures",
+    ):
+        payload.setdefault(list_field, _format_list(data.get(list_field)))
+    return context
+
+
 _BUILDERS: dict[str, Builder] = {
     PACK_CODE_SITE_ACCESS: _apply_site_access,
     PACK_CODE_NEW_COMPANY: _apply_new_company,
@@ -656,6 +725,7 @@ _BUILDERS: dict[str, Builder] = {
     PACK_CODE_BDD_REPORTS: _apply_bdd_reports,
     PACK_CODE_GOCHS_REPORTS: _apply_gochs_reports,
     PACK_CODE_ECO_REPORTS: _apply_eco_reports,
+    PACK_CODE_OPO_REPORTS: _apply_opo_reports,
 }
 
 
