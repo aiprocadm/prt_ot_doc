@@ -37,6 +37,9 @@ export const TrainingPage = lazy(() => import("@/pages/training/TrainingPage"));
 export const BriefingsPage = lazy(
   () => import("@/pages/briefings/BriefingsPage"),
 );
+export const InternshipsPage = lazy(
+  () => import("@/pages/internships/InternshipsPage"),
+);
 export const MedicalPage = lazy(() => import("@/pages/medical/MedicalPage"));
 export const IncidentsPage = lazy(
   () => import("@/pages/incidents/IncidentsPage"),
