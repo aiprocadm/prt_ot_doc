@@ -18,6 +18,7 @@ from app.modules.packs.definitions import (
     PACK_CODE_CONTRACTOR,
     PACK_CODE_ECO_REPORTS,
     PACK_CODE_FIRE_INSPECTION,
+    PACK_CODE_GOCHS_REPORTS,
     PACK_CODE_INCIDENT,
     PACK_CODE_INSPECTION_PREP,
     PACK_CODE_NEW_COMPANY,
@@ -472,6 +473,67 @@ def _apply_road_safety(context: dict[str, Any], data: dict[str, Any]) -> dict[st
     return context
 
 
+def _apply_gochs_reports(context: dict[str, Any], data: dict[str, Any]) -> dict[str, Any]:
+    """Отчётность ГО и ЧС (разд. 56.1 срез-6): подстановки комплекта.
+
+    Умолчания ЧЕСТНЫЕ, и в донесении о ЧС это критично: незаполненное число
+    пострадавших читается «сведения не внесены», а НЕ «ноль». Подставь ноль —
+    и донесение В ОРГАН УПРАВЛЕНИЯ заявит, что пострадавших нет, хотя их
+    просто не успели посчитать. Донесение подают в первые часы, когда как раз
+    и не знают точных чисел.
+    """
+
+    _ensure_company_alias(context)
+    context["logo"] = _decode_image(data.get("logo"), DEFAULT_LOGO_BYTES)
+    context["stamp"] = _decode_image(data.get("stamp"), DEFAULT_STAMP_BYTES)
+
+    payload = context.setdefault("data", {})
+    payload.setdefault(
+        "gochs_report_author", _coerce_text(data.get("gochs_report_author"), "не указан")
+    )
+    payload.setdefault(
+        "gochs_responsible",
+        _coerce_text(data.get("gochs_responsible"), "Ответственный не назначен"),
+    )
+    payload.setdefault(
+        "gochs_approved_by", _coerce_text(data.get("gochs_approved_by"), "не утверждено")
+    )
+    payload.setdefault(
+        "facility_category",
+        _coerce_text(data.get("facility_category"), "не установлена"),
+    )
+    # числовые ответы: пусто = «сведения не внесены», а НЕ ноль
+    for number_field in (
+        "gochs_event_injured",
+        "gochs_formations_count",
+        "gochs_personnel_count",
+        "gochs_ppe_coverage",
+    ):
+        payload.setdefault(
+            number_field, _coerce_text(data.get(number_field), "сведения не внесены")
+        )
+    for text_field in (
+        "gochs_unit_modes",
+        "gochs_alert_order",
+        "gochs_evacuation_order",
+        "gochs_shelters",
+        "gochs_event_at",
+        "gochs_event_kind",
+        "gochs_report_period",
+        "gochs_alert_means",
+    ):
+        payload.setdefault(text_field, _coerce_text(data.get(text_field)))
+    for list_field in (
+        "gochs_unit_structure",
+        "gochs_unit_tasks",
+        "gochs_staff_actions",
+        "gochs_event_measures",
+        "gochs_event_forces",
+    ):
+        payload.setdefault(list_field, _format_list(data.get(list_field)))
+    return context
+
+
 def _apply_bdd_reports(context: dict[str, Any], data: dict[str, Any]) -> dict[str, Any]:
     """Отчётность БДД (разд. 56.2 срез-9): подстановки комплекта.
 
@@ -592,6 +654,7 @@ _BUILDERS: dict[str, Builder] = {
     PACK_CODE_CIVIL_DEFENCE: _apply_civil_defence,
     PACK_CODE_ROAD_SAFETY: _apply_road_safety,
     PACK_CODE_BDD_REPORTS: _apply_bdd_reports,
+    PACK_CODE_GOCHS_REPORTS: _apply_gochs_reports,
     PACK_CODE_ECO_REPORTS: _apply_eco_reports,
 }
 
