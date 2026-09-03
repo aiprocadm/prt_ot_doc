@@ -25,12 +25,15 @@
 Срез-4 добавляет УЧЁТ ДТП. Ядровой инцидент здесь НЕ переиспользуется как
 хранилище, и это решение требует объяснения — см. класс ``RoadAccident``.
 
-Нарушения режима труда и отдыха — следующий срез.
+Срез-8 добавляет УЧЁТ НАРУШЕНИЙ ПДД — последнее незакрытое в пункте
+«Водители» (состав, стаж и категории дал срез-2, режим труда и отдыха —
+срез-3).
 """
 
 from __future__ import annotations
 
 from datetime import date, datetime
+from decimal import Decimal
 
 from sqlalchemy import (
     JSON,
@@ -40,6 +43,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    Numeric,
     String,
     Text,
     UniqueConstraint,
@@ -466,3 +470,85 @@ class RoadAccident(TenantBaseModel, SoftDeleteMixin):
     driver: Mapped[Driver | None] = relationship(backref="accidents")
 
     __table_args__ = (Index("ix_accident_tenant_occurred", "tenant_id", "occurred_at"),)
+
+
+#: Как выявлено нарушение — ЗАКРЫТЫЙ словарь. Деление не косметическое: от
+#: способа выявления зависит, ИЗВЕСТЕН ЛИ ВОДИТЕЛЬ. Камера фиксирует машину, а
+#: не человека за рулём, и штраф приходит собственнику; инспектор ДПС
+#: останавливает конкретного водителя.
+VIOLATION_SOURCES: dict[str, str] = {
+    "camera": "Автоматическая фиксация (камера)",
+    "officer": "Остановлен инспектором",
+    "internal": "Собственный контроль",
+}
+
+#: Состояние штрафа — СЧИТАЕТСЯ ПРИ ЧТЕНИИ из суммы и даты оплаты, полем не
+#: хранится: сохранённое «оплачено» разойдётся с датой при первой же правке.
+#:
+#: «Штраф не наложен» и «штраф не оплачен» — РАЗНЫЕ вещи: за первое платить
+#: нечего, второе это долг. Склеить их значило бы считать долгом каждое
+#: замечание собственного контроля.
+VIOLATION_FINE_TITLES: dict[str, str] = {
+    "none": "Штраф не наложен",
+    "unpaid": "Не оплачен",
+    "paid": "Оплачен",
+}
+
+
+class TrafficViolation(TenantBaseModel, SoftDeleteMixin):
+    """Нарушение ПДД: машина, водитель (если известен) и штраф.
+
+    ПОЧЕМУ СВОЯ СУЩНОСТЬ, А НЕ ЯДРОВОЕ ``Violation``. Ядровое нарушение —
+    находка ПРОВЕРКИ по пункту чек-листа: у него ``inspection_id`` NOT NULL и
+    ``clause_ref``. У нарушения ПДД никакой проверки нет: оно приходит
+    постановлением ГИБДД или снимается камерой. Общее у них только слово.
+
+    ВОДИТЕЛЬ НЕОБЯЗАТЕЛЕН, И ЭТО ГЛАВНОЕ В МОДЕЛИ. Камера фиксирует
+    ГОСНОМЕР, а не человека: постановление приходит собственнику, и кто был за
+    рулём, организация выясняет сама — иногда никогда. Требовать водителя
+    значило бы заставлять вписывать наугад, а нарушения без установленного
+    водителя — как раз то, что стоит показывать: организация платит, а
+    разбираться не с кем.
+
+    МАШИНА ОБЯЗАТЕЛЬНА: нарушение без своего ТС организации не касается.
+
+    СТАТЬЯ — СВОБОДНАЯ СТРОКА. Статей КоАП с частями многие десятки, они
+    меняются поправками, и словарь в коде гарантированно отстанет (тот же
+    довод, что у марки и модели ТС).
+
+    ГРАНИЦА: платформа НЕ устанавливает виновность, НЕ считает сроки
+    обжалования и скидку за раннюю оплату. Она хранит внесённое по
+    постановлению и показывает, что не оплачено.
+    """
+
+    __tablename__ = "road_violation"
+
+    #: машина из реестра — по ней штраф и приходит
+    vehicle_id: Mapped[str] = mapped_column(
+        ForeignKey("road_vehicle.id"), nullable=False, index=True
+    )
+    #: водитель, ЕСЛИ УСТАНОВЛЕН; пусто — «за рулём был неизвестно кто», а не
+    #: «поле забыли»
+    driver_id: Mapped[str | None] = mapped_column(
+        ForeignKey("road_driver.id"), nullable=True, index=True
+    )
+    occurred_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    source: Mapped[str] = mapped_column(String(16), nullable=False, default="camera")
+    #: статья КоАП свободной строкой: словарь отстанет от поправок
+    article: Mapped[str | None] = mapped_column(String(64))
+    #: номер постановления — по нему нарушение ищут в переписке с ГИБДД
+    resolution_number: Mapped[str | None] = mapped_column(String(64))
+    place: Mapped[str | None] = mapped_column(String(255))
+    #: сумма штрафа; пусто — штраф НЕ НАЛОЖЕН, а не «неизвестна сумма долга»
+    fine_amount: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
+    fine_paid_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    description: Mapped[str | None] = mapped_column(Text)
+
+    vehicle: Mapped[Vehicle] = relationship(backref="violations")
+    driver: Mapped[Driver | None] = relationship(backref="violations")
+
+    __table_args__ = (
+        Index("ix_violation_tenant_occurred", "tenant_id", "occurred_at"),
+    )

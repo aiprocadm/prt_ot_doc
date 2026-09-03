@@ -48,11 +48,14 @@ from app.models.road_safety import (
     VEHICLE_DOC_STATUS_TITLES,
     VEHICLE_KINDS,
     VEHICLE_STATUSES,
+    VIOLATION_FINE_TITLES,
+    VIOLATION_SOURCES,
     WAYBILL_MARK_STATUSES,
     WAYBILL_RELEASE_TITLES,
     WAYBILL_STATUSES,
     Driver,
     RoadAccident,
+    TrafficViolation,
     Vehicle,
     Waybill,
 )
@@ -68,6 +71,10 @@ from app.schemas.road_safety import (
     RoadAccidentRead,
     RoadAccidentUpdate,
     RoadSafetyReadinessRead,
+    TrafficViolationCreate,
+    TrafficViolationPage,
+    TrafficViolationRead,
+    TrafficViolationUpdate,
     VehicleCreate,
     VehiclePage,
     VehicleRead,
@@ -88,6 +95,9 @@ _ROLES = ["admin", "owner", "ot_pb_lead", "ot_specialist"]
 
 #: горизонт «скоро истекает» — тот же, что у остальных сводок продукта
 _DUE_SOON_DAYS = 30
+
+#: окно сводки по нарушениям — ГОДОВОЕ, как у ДТП: за месяц их часто ноль.
+_VIOLATION_WINDOW_DAYS = 365
 
 #: окно сводки по ДТП — ГОДОВОЕ, а не месячное как у листов. ДТП редки: за
 #: месяц их у большинства арендаторов ноль, и по такому окну об аварийности
@@ -674,6 +684,43 @@ async def road_safety_readiness(
         if i.status == "completed" and i.completed_shifts < i.planned_shifts
     )
 
+    # Срез-8: нарушения ПДД. Считаются В БАЗЕ за годовое окно: у большого
+    # парка их тысячи, и тянуть их в память ради счётчиков нельзя.
+    violation_start = datetime.combine(
+        today - timedelta(days=_VIOLATION_WINDOW_DAYS), time.min, tzinfo=timezone.utc
+    )
+    violation_window = (
+        TrafficViolation.tenant_id == tenant.id,
+        TrafficViolation.deleted_at.is_(None),
+        TrafficViolation.occurred_at >= violation_start,
+    )
+    violations_total = int(
+        await session.scalar(
+            select(func.count()).select_from(TrafficViolation).where(*violation_window)
+        )
+        or 0
+    )
+    # Нарушения БЕЗ установленного водителя: камера фиксирует машину, а не
+    # человека — организация платит, а разбираться не с кем. Это и есть
+    # показатель, ради которого водитель сделан необязательным.
+    violations_without_driver = int(
+        await session.scalar(
+            select(func.count())
+            .select_from(TrafficViolation)
+            .where(*violation_window, TrafficViolation.driver_id.is_(None))
+        )
+        or 0
+    )
+    unpaid_rows = (
+        await session.execute(
+            select(
+                func.count(), func.coalesce(func.sum(TrafficViolation.fine_amount), 0)
+            )
+            .select_from(TrafficViolation)
+            .where(*violation_window, _fine_condition("unpaid"))
+        )
+    ).one()
+
     return RoadSafetyReadinessRead(
         total_vehicles=len(rows),
         by_status=by_status,
@@ -718,6 +765,11 @@ async def road_safety_readiness(
         internships_total=len(internships),
         internships_in_progress=internships_in_progress,
         internships_completed_short=internships_short,
+        violation_window_days=_VIOLATION_WINDOW_DAYS,
+        violations_total=violations_total,
+        violations_without_driver=violations_without_driver,
+        fines_unpaid_count=int(unpaid_rows[0] or 0),
+        fines_unpaid_amount=float(unpaid_rows[1] or 0),
     )
 
 
@@ -1716,6 +1768,13 @@ async def _get_accident_or_404(
             RoadAccident.tenant_id == tenant.id,
             RoadAccident.deleted_at.is_(None),
         )
+        # ПЕРЕЧИТЫВАЕМ СВЯЗИ, а не берём из кеша сессии. Запись уже лежит в
+        # сессии после правки, и SQLAlchemy по умолчанию НЕ перезаписывает
+        # загруженные связи: дописали водителя — ссылка новая, а объект
+        # водителя остался прежним (пустым), и ответ возвращал имя ``null``
+        # при заполненном идентификаторе. Найдено тестом среза-8; тем же
+        # дефектом болел и этот срез, просто он был не покрыт.
+        .execution_options(populate_existing=True)
     )
     accident = (await session.execute(stmt)).scalar_one_or_none()
     if accident is None:
@@ -1941,3 +2000,307 @@ async def update_accident(
     await session.commit()
     fresh = await _get_accident_or_404(session, tenant, accident.id)
     return _accident_read(fresh, await _capa_counts(session, tenant, [fresh.id]))
+
+
+# ---------------------------------------------------------------------------
+# Срез-8: нарушения ПДД (Доп. №1 разд. 56.2, пункт «Водители» — последнее
+# незакрытое в нём).
+#
+# Ядровое ``Violation`` здесь не годится: у него ``inspection_id`` NOT NULL и
+# ``clause_ref`` — это находка ПРОВЕРКИ по пункту чек-листа. У нарушения ПДД
+# никакой проверки нет: оно приходит постановлением или снимается камерой.
+# ---------------------------------------------------------------------------
+
+
+def _fine_status(violation: TrafficViolation) -> str:
+    """Состояние штрафа СЧИТАЕТСЯ из суммы и даты оплаты.
+
+    «Штраф НЕ НАЛОЖЕН» и «штраф НЕ ОПЛАЧЕН» — разные вещи: за первое платить
+    нечего, второе это долг. Склеить их значило бы записать в долги каждое
+    замечание собственного контроля.
+    """
+
+    if violation.fine_amount is None or violation.fine_amount == 0:
+        return "none"
+    return "paid" if violation.fine_paid_on is not None else "unpaid"
+
+
+def _violation_read(violation: TrafficViolation) -> TrafficViolationRead:
+    driver = violation.driver
+    status_value = _fine_status(violation)
+    return TrafficViolationRead(
+        id=violation.id,
+        vehicle_id=violation.vehicle_id,
+        vehicle_plate=violation.vehicle.plate_number if violation.vehicle else "",
+        driver_id=violation.driver_id,
+        driver_name=_person_name(driver.person) if driver else None,
+        # отдельный признак, чтобы экран не гадал по пустому имени: пусто —
+        # водитель НЕ УСТАНОВЛЕН, а не «поле забыли»
+        driver_identified=violation.driver_id is not None,
+        occurred_at=violation.occurred_at,
+        source=violation.source,
+        source_label=VIOLATION_SOURCES.get(violation.source, violation.source),
+        article=violation.article,
+        resolution_number=violation.resolution_number,
+        place=violation.place,
+        fine_amount=violation.fine_amount,
+        fine_paid_on=violation.fine_paid_on,
+        fine_status=status_value,
+        fine_status_label=VIOLATION_FINE_TITLES[status_value],
+        description=violation.description,
+    )
+
+
+def _validate_violation(*, source: str | None, occurred_at: datetime | None) -> None:
+    if source is not None and source not in VIOLATION_SOURCES:
+        raise _unprocessable(
+            f"Неизвестный способ выявления {source!r}. "
+            f"Допустимые: {', '.join(VIOLATION_SOURCES)}"
+        )
+    moment = _as_utc(occurred_at)
+    if moment is not None and moment > datetime.now(timezone.utc):
+        raise _unprocessable("Нарушение не может произойти в будущем: проверьте дату")
+
+
+async def _get_violation_or_404(
+    session: AsyncSession, tenant: Tenant, violation_id: str
+) -> TrafficViolation:
+    stmt = (
+        select(TrafficViolation)
+        .options(
+            selectinload(TrafficViolation.vehicle),
+            selectinload(TrafficViolation.driver).selectinload(Driver.person),
+        )
+        .where(
+            TrafficViolation.id == violation_id,
+            TrafficViolation.tenant_id == tenant.id,
+            TrafficViolation.deleted_at.is_(None),
+        )
+        # см. довод у _get_accident_or_404: без этого дописанный правкой
+        # водитель возвращался бы с пустым именем
+        .execution_options(populate_existing=True)
+    )
+    violation = (await session.execute(stmt)).scalar_one_or_none()
+    if violation is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            detail=api_problem_detail(
+                code="VIOLATION_NOT_FOUND",
+                message="Traffic violation not found",
+                error_type="road_safety",
+            ),
+        )
+    return violation
+
+
+@router.get("/violations", response_model=TrafficViolationPage)
+async def list_violations(
+    tenant: TenantDep,
+    session: SessionDep,
+    access: Access,
+    vehicle_id: str | None = Query(default=None),
+    driver_id: str | None = Query(default=None),
+    source: str | None = Query(default=None),
+    fine_status: str | None = Query(default=None),
+    occurred_from: datetime | None = Query(default=None),
+    occurred_to: datetime | None = Query(default=None),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+) -> TrafficViolationPage:
+    """Реестр нарушений. Порядок — от свежих: разбирают последнее."""
+
+    TenantContextValidator.ensure_tenant_context(tenant)
+    stmt = (
+        select(TrafficViolation)
+        .options(
+            selectinload(TrafficViolation.vehicle),
+            selectinload(TrafficViolation.driver).selectinload(Driver.person),
+        )
+        .where(
+            TrafficViolation.tenant_id == tenant.id,
+            TrafficViolation.deleted_at.is_(None),
+        )
+    )
+    if vehicle_id:
+        stmt = stmt.where(TrafficViolation.vehicle_id == vehicle_id)
+    if driver_id:
+        stmt = stmt.where(TrafficViolation.driver_id == driver_id)
+    if source:
+        stmt = stmt.where(TrafficViolation.source == source)
+    if occurred_from:
+        stmt = stmt.where(TrafficViolation.occurred_at >= occurred_from)
+    if occurred_to:
+        stmt = stmt.where(TrafficViolation.occurred_at <= occurred_to)
+    if fine_status:
+        if fine_status not in VIOLATION_FINE_TITLES:
+            raise _unprocessable(
+                f"Неизвестное состояние штрафа {fine_status!r}. "
+                f"Допустимые: {', '.join(VIOLATION_FINE_TITLES)}"
+            )
+        # Правило одно и живёт в _fine_status; здесь оно выражено для базы,
+        # а их согласие пинает тест (тот же приём, что у вердикта о выпуске).
+        stmt = stmt.where(_fine_condition(fine_status))
+    stmt = stmt.order_by(TrafficViolation.occurred_at.desc())
+
+    total = int(
+        await session.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+    )
+    page = list(
+        (await session.execute(stmt.offset(offset).limit(limit))).scalars().all()
+    )
+    return TrafficViolationPage(
+        items=[_violation_read(row) for row in page], total=total
+    )
+
+
+def _fine_condition(value: str):
+    """ТО ЖЕ правило состояния штрафа, выраженное для базы.
+
+    Отбор и счётчики сводки обязаны считаться в базе: нарушений у большого
+    парка тысячи, и тянуть их в память ради подсчёта нельзя. Что оба выражения
+    дают одинаковый ответ, проверяет отдельный тест — без него они молча
+    разойдутся (урок среза-3).
+    """
+
+    no_fine = or_(
+        TrafficViolation.fine_amount.is_(None), TrafficViolation.fine_amount == 0
+    )
+    if value == "none":
+        return no_fine
+    has_fine = and_(
+        TrafficViolation.fine_amount.is_not(None), TrafficViolation.fine_amount != 0
+    )
+    if value == "paid":
+        return and_(has_fine, TrafficViolation.fine_paid_on.is_not(None))
+    return and_(has_fine, TrafficViolation.fine_paid_on.is_(None))
+
+
+@router.post(
+    "/violations",
+    response_model=TrafficViolationRead,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_violation(
+    request: Request,
+    payload: TrafficViolationCreate,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: Access,
+) -> TrafficViolationRead:
+    """Регистрация нарушения.
+
+    СПИСАННОЕ ТС И ОТСТРАНЁННЫЙ ВОДИТЕЛЬ РАЗРЕШЕНЫ — как у ДТП и в отличие от
+    путевого листа: постановление приходит месяцами позже, машину к тому
+    времени могли списать, а водителя отстранить именно из-за этого нарушения.
+    """
+
+    TenantContextValidator.ensure_tenant_context(tenant)
+    _validate_violation(source=payload.source, occurred_at=payload.occurred_at)
+    vehicle = await _get_vehicle_or_404(session, tenant, payload.vehicle_id)
+    if payload.driver_id:
+        await _get_driver_or_404(session, tenant, payload.driver_id)
+
+    violation = TrafficViolation(
+        tenant_id=str(tenant.id),
+        vehicle_id=vehicle.id,
+        driver_id=payload.driver_id or None,
+        occurred_at=payload.occurred_at,
+        source=payload.source,
+        article=(payload.article or None),
+        resolution_number=(payload.resolution_number or None),
+        place=(payload.place or None),
+        fine_amount=payload.fine_amount,
+        fine_paid_on=payload.fine_paid_on,
+        description=(payload.description or None),
+    )
+    session.add(violation)
+    await session.flush()
+    await AuditService(session).log_event(
+        tenant_id=str(tenant.id),
+        action="create",
+        object_type="TrafficViolation",
+        object_id=violation.id,
+        user_id=access.user.id,
+        ip=request.client.host if request.client else "unknown",
+        request_id=getattr(request.state, "trace_id", None),
+        user_agent=request.headers.get("user-agent"),
+        changed_fields={"fields": {"id": {"before": None, "after": violation.id}}},
+        details={"entity": "TrafficViolation", "vehicle_id": violation.vehicle_id},
+    )
+    await session.commit()
+    return _violation_read(await _get_violation_or_404(session, tenant, violation.id))
+
+
+@router.patch("/violations/{violation_id}", response_model=TrafficViolationRead)
+async def update_violation(
+    request: Request,
+    violation_id: str,
+    payload: TrafficViolationUpdate,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: Access,
+) -> TrafficViolationRead:
+    """Правка: установленный водитель, реквизиты постановления, оплата.
+
+    МАШИНУ СМЕНИТЬ НЕЛЬЗЯ — поля для этого нет: другая машина это другое
+    нарушение. А ВОДИТЕЛЯ ДОПИСАТЬ МОЖНО, и ради этого правка и нужна: чаще
+    всего его устанавливают уже после получения постановления.
+    """
+
+    TenantContextValidator.ensure_tenant_context(tenant)
+    violation = await _get_violation_or_404(session, tenant, violation_id)
+    data = payload.model_dump(exclude_unset=True)
+    _validate_violation(
+        source=data.get("source"), occurred_at=data.get("occurred_at")
+    )
+    if data.get("driver_id"):
+        await _get_driver_or_404(session, tenant, str(data["driver_id"]))
+
+    before = {
+        "driver_id": str(violation.driver_id),
+        "source": violation.source,
+        "fine_amount": str(violation.fine_amount),
+        "fine_paid_on": str(violation.fine_paid_on),
+        "fine_status": _fine_status(violation),
+    }
+    for field in (
+        "occurred_at",
+        "source",
+        "article",
+        "resolution_number",
+        "place",
+        "fine_amount",
+        "fine_paid_on",
+        "description",
+    ):
+        if data.get(field) is not None:
+            setattr(violation, field, data[field])
+    # снять привязку и оплату МОЖНО: ошибочно приписанный водитель и ошибочная
+    # отметка об оплате должны сниматься, иначе останутся навсегда
+    for field in ("driver_id", "fine_paid_on", "fine_amount"):
+        if field in data and data[field] is None:
+            setattr(violation, field, None)
+    if data.get("driver_id"):
+        violation.driver_id = str(data["driver_id"])
+    await session.flush()
+    after = {
+        "driver_id": str(violation.driver_id),
+        "source": violation.source,
+        "fine_amount": str(violation.fine_amount),
+        "fine_paid_on": str(violation.fine_paid_on),
+        "fine_status": _fine_status(violation),
+    }
+    await AuditService(session).log_event(
+        tenant_id=str(tenant.id),
+        action="update",
+        object_type="TrafficViolation",
+        object_id=violation.id,
+        user_id=access.user.id,
+        ip=request.client.host if request.client else "unknown",
+        request_id=getattr(request.state, "trace_id", None),
+        user_agent=request.headers.get("user-agent"),
+        changed_fields=field_level_diff(before, after),
+        details={"entity": "TrafficViolation"},
+    )
+    await session.commit()
+    return _violation_read(await _get_violation_or_404(session, tenant, violation.id))

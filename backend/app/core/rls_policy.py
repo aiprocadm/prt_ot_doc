@@ -262,6 +262,7 @@ RLS_ENABLED_TABLES: frozenset[str] = frozenset(
         "road_accident",
         "road_driver",
         "road_vehicle",
+        "road_violation",
         "road_waybill",
         "safety_budget",
         "saved_calendar_views",

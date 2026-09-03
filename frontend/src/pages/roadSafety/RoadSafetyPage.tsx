@@ -5,6 +5,7 @@ import {
   roadSafetyApi,
   type DriverDto,
   type RoadAccidentDto,
+  type TrafficViolationDto,
   type RoadSafetyReadinessDto,
   type VehicleDto,
   type WaybillDto,
@@ -164,7 +165,49 @@ const WAYBILL_COLUMNS: ColumnDef<WaybillDto, unknown>[] = [
  * ГИБДД уехали в подсказки: их читают при разборе конкретного случая, а не
  * при просмотре списка.
  */
-type Section = "vehicles" | "drivers" | "waybills" | "accidents";
+type Section = "vehicles" | "drivers" | "waybills" | "accidents" | "violations";
+
+/**
+ * Нарушения — 6 колонок (лимит UX-бюджета 7). Статья и место в подсказке:
+ * их читают при разборе конкретного постановления, а не в списке.
+ */
+const VIOLATION_COLUMNS: ColumnDef<TrafficViolationDto, unknown>[] = [
+  {
+    accessorKey: "occurred_at",
+    header: "Когда",
+    cell: ({ row }) => formatDate(row.original.occurred_at),
+  },
+  { accessorKey: "vehicle_plate", header: "ТС" },
+  {
+    accessorKey: "driver_name",
+    header: "Водитель",
+    // Пусто — водитель НЕ УСТАНОВЛЕН (снято камерой), а не «неизвестно».
+    cell: ({ row }) =>
+      row.original.driver_identified
+        ? row.original.driver_name
+        : "Не установлен",
+  },
+  {
+    accessorKey: "source_label",
+    header: "Как выявлено",
+    cell: ({ row }) => (
+      <span title={row.original.article ?? ""}>{row.original.source_label}</span>
+    ),
+  },
+  {
+    accessorKey: "fine_amount",
+    header: "Штраф",
+    // Пусто — штраф НЕ НАЛОЖЕН, а не «сумма неизвестна».
+    cell: ({ row }) =>
+      row.original.fine_amount ? `${row.original.fine_amount} ₽` : "—",
+  },
+  {
+    accessorKey: "fine_status_label",
+    header: "Оплата",
+    // Состояние СЧИТАЕТСЯ сервером из суммы и даты оплаты.
+    cell: ({ row }) => row.original.fine_status_label,
+  },
+];
 
 const ACCIDENT_COLUMNS: ColumnDef<RoadAccidentDto, unknown>[] = [
   {
@@ -277,6 +320,17 @@ const SECTION_STATS: Record<
     },
     { label: "Аннулировано", value: r.waybills_by_status.cancelled ?? 0 },
   ],
+  violations: (r) => [
+    {
+      label: `Нарушений за ${r.violation_window_days} дн.`,
+      value: r.violations_total,
+    },
+    // Камера фиксирует машину, а не человека: платить есть кому, спросить
+    // не с кого — именно ради этого числа водитель сделан необязательным.
+    { label: "Водитель не установлен", value: r.violations_without_driver },
+    { label: "Штрафов не оплачено", value: r.fines_unpaid_count },
+    { label: "Долг по штрафам, ₽", value: r.fines_unpaid_amount },
+  ],
   accidents: (r) => [
     // Окно ГОДОВОЕ: за месяц ДТП обычно ноль, и судить по нему нельзя.
     { label: `ДТП за ${r.accident_window_days} дн.`, value: r.accidents_total },
@@ -311,6 +365,7 @@ const RoadSafetyPage = () => {
         drivers: await roadSafetyApi.listDrivers(),
         waybills: await roadSafetyApi.listWaybills(),
         accidents: await roadSafetyApi.listAccidents(),
+        violations: await roadSafetyApi.listViolations(),
         readiness: await roadSafetyApi.readiness(),
       }),
       [],
@@ -320,6 +375,7 @@ const RoadSafetyPage = () => {
       drivers: [] as DriverDto[],
       waybills: [] as WaybillDto[],
       accidents: [] as RoadAccidentDto[],
+      violations: [] as TrafficViolationDto[],
       readiness: {
         total_vehicles: 0,
         by_status: { in_service: 0, suspended: 0, decommissioned: 0 },
@@ -349,6 +405,11 @@ const RoadSafetyPage = () => {
         internships_total: 0,
         internships_in_progress: 0,
         internships_completed_short: 0,
+        violation_window_days: 365,
+        violations_total: 0,
+        violations_without_driver: 0,
+        fines_unpaid_count: 0,
+        fines_unpaid_amount: 0,
       },
     },
     errorMessage: "Не удалось загрузить реестр транспортных средств",
@@ -411,6 +472,22 @@ const RoadSafetyPage = () => {
         .includes(query),
   });
 
+  const violations = useLocalRegistry({
+    items: data.violations,
+    match: (item, query) =>
+      [
+        item.vehicle_plate,
+        item.driver_name ?? "",
+        item.article ?? "",
+        item.source_label,
+        item.fine_status_label,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(query),
+  });
+
   const { readiness } = data;
 
   return (
@@ -428,6 +505,7 @@ const RoadSafetyPage = () => {
             ["drivers", "Водители"],
             ["waybills", "Путевые листы"],
             ["accidents", "ДТП"],
+            ["violations", "Нарушения"],
           ] as const
         ).map(([key, label]) => (
           <Button
@@ -443,6 +521,46 @@ const RoadSafetyPage = () => {
 
       <ErrorState error={error ?? undefined} onRetry={() => void reload()} />
       {loading ? <LoadingScreen label="Загрузка парка" /> : null}
+
+      {section === "violations" ? (
+        <>
+          {/*
+            ГРАНИЦА, названная НА ЭКРАНЕ: виновность устанавливает ГИБДД, а
+            сроки обжалования и скидку платформа не считает.
+          */}
+          {!loading && !error ? (
+            <p className="text-sm text-muted-foreground">
+              Платформа ведёт учёт по постановлениям и не устанавливает
+              виновность, не считает сроки обжалования и скидку за раннюю
+              оплату. Водитель может быть не установлен — камера фиксирует
+              госномер, а не человека, и штраф приходит собственнику: таких
+              сейчас {readiness.violations_without_driver}. «Штраф не наложен»
+              и «не оплачен» — разные вещи: замечание собственного контроля
+              долгом не становится.
+            </p>
+          ) : null}
+          {!loading && !error && violations.total === 0 ? (
+            <EmptyState
+              title="Нарушения не зарегистрированы"
+              description="Внесите нарушение: машина из реестра, дата, как выявлено, статья и номер постановления. Водителя можно указать позже — его устанавливают уже после получения постановления."
+            />
+          ) : null}
+          {!loading && !error && violations.total > 0 ? (
+            <RegistryTable
+              columns={VIOLATION_COLUMNS}
+              data={violations.pagedItems}
+              pageIndex={violations.pageIndex}
+              pageSize={violations.pageSize}
+              total={violations.total}
+              onPageChange={violations.onPageChange}
+              onPageSizeChange={violations.onPageSizeChange}
+              onSearchChange={violations.onSearchChange}
+              searchPlaceholder="Поиск по машине, водителю, статье"
+              caption="Нарушения ПДД"
+            />
+          ) : null}
+        </>
+      ) : null}
 
       {section === "accidents" ? (
         <>

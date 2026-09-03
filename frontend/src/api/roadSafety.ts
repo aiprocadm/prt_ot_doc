@@ -160,6 +160,36 @@ export type RoadAccidentDto = {
   follow_up_label: string;
 };
 
+/**
+ * Срез-8: нарушение ПДД.
+ *
+ * ГРАНИЦА: полей «виновен ли водитель», «можно ли обжаловать» и «положена ли
+ * скидка» нет. Виновность устанавливает ГИБДД, сроки и скидка считаются по
+ * закону от даты постановления, которой платформа не знает.
+ */
+export type TrafficViolationDto = {
+  id: string;
+  vehicle_id: string;
+  vehicle_plate: string;
+  driver_id?: string | null;
+  /** пусто — водитель НЕ УСТАНОВЛЕН (снято камерой), а не «поле забыли» */
+  driver_name?: string | null;
+  /** то же отдельным признаком, чтобы экран не гадал по пустоте */
+  driver_identified: boolean;
+  occurred_at: string;
+  source: string;
+  source_label: string;
+  article?: string | null;
+  resolution_number?: string | null;
+  place?: string | null;
+  fine_amount?: string | null;
+  fine_paid_on?: string | null;
+  /** none | unpaid | paid — считается сервером из суммы и даты оплаты */
+  fine_status: string;
+  fine_status_label: string;
+  description?: string | null;
+};
+
 export type RoadSafetyReadinessDto = {
   total_vehicles: number;
   by_status: Record<string, number>;
@@ -219,6 +249,14 @@ export type RoadSafetyReadinessDto = {
   internships_in_progress: number;
   /** завершённые с недобором смен — ФАКТ расхождения, а не вердикт */
   internships_completed_short: number;
+  /** Срез-8: нарушения ПДД за годовое окно. */
+  violation_window_days: number;
+  violations_total: number;
+  /** камера фиксирует машину, а не человека: платить есть кому, спросить не с кого */
+  violations_without_driver: number;
+  /** «штраф не наложен» и «не оплачен» — разные вещи; здесь второе */
+  fines_unpaid_count: number;
+  fines_unpaid_amount: number;
 };
 
 export const roadSafetyApi = {
@@ -247,6 +285,13 @@ export const roadSafetyApi = {
   listAccidents: async (): Promise<RoadAccidentDto[]> => {
     const { data } = await apiClient.get<{ items?: RoadAccidentDto[] }>(
       "/road-safety/accidents",
+      { params: { limit: 200, offset: 0 } },
+    );
+    return Array.isArray(data?.items) ? data.items : [];
+  },
+  listViolations: async (): Promise<TrafficViolationDto[]> => {
+    const { data } = await apiClient.get<{ items?: TrafficViolationDto[] }>(
+      "/road-safety/violations",
       { params: { limit: 200, offset: 0 } },
     );
     return Array.isArray(data?.items) ? data.items : [];
