@@ -30,6 +30,7 @@ from datetime import date, datetime, time, timedelta, timezone
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.disciplines import Discipline, areas_of_discipline
 from app.models.ecology import (
     EmissionMeasurement,
     EmissionSource,
@@ -38,8 +39,21 @@ from app.models.ecology import (
     WaterUsagePoint,
     WaterUsageRecord,
 )
+from app.models.industrial_safety import (
+    OPO_HAZARD_CLASSES,
+    DeviceWorkRecord,
+    HazardousFacility,
+    ProductionControlMeasure,
+    ProductionControlPlan,
+    TechnicalDevice,
+)
+from app.models.inspections import Attestation
 from app.models.road_safety import Driver, RoadAccident, TrafficViolation, Vehicle
-from app.modules.packs.definitions import PACK_CODE_BDD_REPORTS, PACK_CODE_ECO_REPORTS
+from app.modules.packs.definitions import (
+    PACK_CODE_BDD_REPORTS,
+    PACK_CODE_ECO_REPORTS,
+    PACK_CODE_OPO_REPORTS,
+)
 
 __all__ = ["Suggestion", "suggestions_for_pack"]
 
@@ -296,12 +310,178 @@ async def _ecology_suggestions(
     return suggestions
 
 
+async def _industrial_safety_suggestions(
+    session: AsyncSession, tenant_id: str
+) -> dict[str, Suggestion]:
+    """Подсказки для отчётности ПромБез — из реестров контура.
+
+    ДВА РАЗНЫХ ВРЕМЕНИ, и это не небрежность. Сведения об организации ПК
+    подают ЗА ПРОШЕДШИЙ календарный год (Правила организации ПК — до 1
+    апреля), поэтому ПОТОКИ — проведённые экспертизы, мероприятия плана —
+    считаются за прошлый год, как у экологии. А ОПО, устройства и
+    аттестации — это СОСТОЯНИЕ, у него нет «за год»: сколько объектов
+    эксплуатируется, спрашивают на день составления. Считать состояние «на
+    31 декабря прошлого года» платформа не может — истории состояний в
+    реестрах нет, и число получилось бы выдуманным. Год и «сегодня» названы
+    В ИСТОЧНИКЕ, чтобы специалист видел, что именно перед ним.
+
+    МЕРОПРИЯТИЯ ПЛАНА ПК ПОДСКАЗЫВАЮТСЯ ТОЛЬКО ПРИ ПЛАНЕ НА ТОТ ГОД. Без
+    плана «0 запланировано» читалось бы как «план был, но пустой» — а плана
+    не было, и это другой факт.
+
+    АВАРИИ И ИНЦИДЕНТЫ НЕ ПОДСКАЗЫВАЮТСЯ: реестр происшествий не размечен
+    дисциплиной, и выдать все происшествия организации за инциденты на ОПО
+    значило бы вписать в отчёт для Ростехнадзора чужие числа.
+    """
+
+    today = date.today()
+    year = today.year - 1
+    start, end = date(year, 1, 1), date(year, 12, 31)
+    window = f"за {year} год"
+
+    facilities = (
+        (
+            await session.execute(
+                select(HazardousFacility).where(
+                    HazardousFacility.tenant_id == tenant_id,
+                    HazardousFacility.deleted_at.is_(None),
+                    HazardousFacility.status == "registered",
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    by_class = {code: 0 for code in OPO_HAZARD_CLASSES}
+    for facility in facilities:
+        if facility.hazard_class in by_class:
+            by_class[facility.hazard_class] += 1
+
+    # только эксплуатируемые: списанное устройство ни в отчёт, ни в
+    # просрочку не попадает (тот же отбор, что у сводки контура)
+    devices = (
+        (
+            await session.execute(
+                select(TechnicalDevice).where(
+                    TechnicalDevice.tenant_id == tenant_id,
+                    TechnicalDevice.deleted_at.is_(None),
+                    TechnicalDevice.status != "decommissioned",
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    epb_overdue = sum(
+        1 for d in devices if d.epb_valid_until is not None and d.epb_valid_until < today
+    )
+    epb_done = int(
+        await session.scalar(
+            select(func.count())
+            .select_from(DeviceWorkRecord)
+            .where(
+                DeviceWorkRecord.tenant_id == tenant_id,
+                DeviceWorkRecord.deleted_at.is_(None),
+                DeviceWorkRecord.kind == "epb",
+                DeviceWorkRecord.performed_on >= start,
+                DeviceWorkRecord.performed_on <= end,
+            )
+        )
+        or 0
+    )
+
+    # аттестации СВОЕЙ дисциплины — по областям Ростехнадзора, а не по
+    # заполненности поля: иначе проверка знаний водителя по «ПДД» попала бы
+    # в отчёт по промбезопасности (прецедент сводки контура)
+    attestations = (
+        (
+            await session.execute(
+                select(Attestation.expires_at).where(
+                    Attestation.tenant_id == tenant_id,
+                    Attestation.deleted_at.is_(None),
+                    Attestation.area_code.in_(areas_of_discipline(Discipline.INDUSTRIAL_SAFETY)),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    attestations_valid = sum(
+        1 for expires_at in attestations if expires_at is not None and expires_at >= today
+    )
+    attestations_overdue = sum(
+        1 for expires_at in attestations if expires_at is not None and expires_at < today
+    )
+
+    suggestions: dict[str, Suggestion] = {
+        "opo_facilities_count": Suggestion(
+            str(len(facilities)), "действующих ОПО сегодня по реестру ОПО"
+        ),
+        "opo_facilities_by_class": Suggestion(
+            ", ".join(f"{code} класс — {count}" for code, count in by_class.items()),
+            "действующие ОПО по классам сегодня по реестру ОПО",
+        ),
+        "opo_devices_count": Suggestion(
+            str(len(devices)),
+            "устройств в эксплуатации сегодня по реестру технических устройств",
+        ),
+        "opo_epb_done": Suggestion(
+            str(epb_done), f"экспертиз ПБ {window} по журналу работ устройств"
+        ),
+        "opo_epb_overdue": Suggestion(
+            str(epb_overdue),
+            "устройств с истёкшим заключением ЭПБ сегодня по реестру устройств",
+        ),
+        "opo_attestations_count": Suggestion(
+            str(attestations_valid),
+            "действующих аттестаций по областям Ростехнадзора сегодня",
+        ),
+        "opo_attestations_overdue": Suggestion(
+            str(attestations_overdue),
+            "просроченных аттестаций по областям Ростехнадзора сегодня",
+        ),
+    }
+
+    plan_id = await session.scalar(
+        select(ProductionControlPlan.id).where(
+            ProductionControlPlan.tenant_id == tenant_id,
+            ProductionControlPlan.deleted_at.is_(None),
+            ProductionControlPlan.year == year,
+        )
+    )
+    if plan_id is not None:
+        statuses = (
+            (
+                await session.execute(
+                    select(ProductionControlMeasure.status).where(
+                        ProductionControlMeasure.tenant_id == tenant_id,
+                        ProductionControlMeasure.deleted_at.is_(None),
+                        ProductionControlMeasure.plan_id == plan_id,
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        # отменённое мероприятие — не запланированное: его сняли с плана
+        planned = sum(1 for status in statuses if status != "cancelled")
+        done = sum(1 for status in statuses if status == "done")
+        suggestions["opo_pc_measures_planned"] = Suggestion(
+            str(planned), f"мероприятий плана ПК на {year} год без отменённых"
+        )
+        suggestions["opo_pc_measures_done"] = Suggestion(
+            str(done), f"выполненных мероприятий плана ПК на {year} год"
+        )
+    return suggestions
+
+
 #: Комплекты, у которых есть источник в реестрах. Пусто для комплекта —
 #: НЕ ошибка: у большинства документов числа берутся не из данных, а из
 #: решения специалиста, и подсказывать там нечего.
 _RESOLVERS = {
     PACK_CODE_BDD_REPORTS: _road_safety_suggestions,
     PACK_CODE_ECO_REPORTS: _ecology_suggestions,
+    PACK_CODE_OPO_REPORTS: _industrial_safety_suggestions,
 }
 
 

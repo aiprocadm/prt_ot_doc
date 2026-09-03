@@ -77,6 +77,11 @@ PACK_CODE_BDD_REPORTS = "BDD_REPORTS"
 # ГОЧС». Приказ, план, состав комиссии, программа учений и журнал печатались
 # базовым комплектом; не хватало ПОЛОЖЕНИЯ, ИНСТРУКЦИИ и самой ОТЧЁТНОСТИ.
 PACK_CODE_GOCHS_REPORTS = "GOCHS_REPORTS"
+# Срез-42 ПромБез (разд. 54.2 «документы и отчётность: ПЛА, положения,
+# приказы, отчёты для Ростехнадзора»): ПЛА печатался базовым комплектом ОПО с
+# первого среза; не хватало ПОЛОЖЕНИЯ о производственном контроле, ПРИКАЗА о
+# назначении ответственного и самих ОТЧЁТОВ в Ростехнадзор.
+PACK_CODE_OPO_REPORTS = "OPO_REPORTS"
 
 
 class PackScenario(str, Enum):
@@ -95,6 +100,7 @@ class PackScenario(str, Enum):
     ROAD_SAFETY = "road_safety"
     ROAD_SAFETY_REPORTING = "road_safety_reporting"
     CIVIL_DEFENCE_REPORTING = "civil_defence_reporting"
+    OPO_REPORTING = "opo_reporting"
 
 
 @dataclass(slots=True, frozen=True)
@@ -876,6 +882,96 @@ def _gochs_forces_report() -> bytes:
         "Обеспеченность СИЗ: {{ data.gochs_ppe_coverage }}",
         "Средства оповещения: {{ data.gochs_alert_means }}",
         footer="Составил: {{ data.gochs_report_author }} · {{ stamp }}",
+    )
+
+
+def _opo_pc_regulation() -> bytes:
+    """Положение о производственном контроле.
+
+    ТЗ просит «положения», и для ОПО главное из них — это: ФЗ-116 ст. 11
+    обязывает эксплуатирующую организацию организовать производственный
+    контроль, а Правила организации ПК — иметь положение о нём. В базовом
+    комплекте ОПО печатались паспорт, ПЛА и матрица обучения; положения не
+    было.
+    """
+
+    return _doc(
+        "Положение о производственном контроле за соблюдением требований промышленной безопасности",
+        "Организация: {{ company.name }} (ИНН {{ company.inn }})",
+        "Эксплуатируемых ОПО: {{ data.opo_facilities_count }}",
+        "Ответственный за производственный контроль: {{ data.opo_pc_responsible }}",
+        "Задачи производственного контроля: {{ data.opo_pc_tasks }}",
+        "Порядок проверок и обследований: {{ data.opo_pc_inspection_order }}",
+        "Порядок учёта и отчётности: {{ data.opo_pc_reporting_order }}",
+        header="{{ logo }}",
+        footer="Утверждено: {{ data.opo_approved_by }} · {{ stamp }}",
+    )
+
+
+def _opo_pc_order() -> bytes:
+    """Приказ о назначении ответственного за производственный контроль."""
+
+    return _doc(
+        "Приказ о назначении ответственного за осуществление производственного контроля",
+        "Организация: {{ company.name }}",
+        "Дата приказа: {{ data.opo_order_date }}",
+        "Ответственный за производственный контроль: {{ data.opo_pc_responsible }}",
+        "Основание: аттестация в области промышленной безопасности {{ data.opo_pc_attestation }}",
+        "Ответственные за эксплуатацию ОПО: {{ data.opo_facility_responsibles }}",
+        header="{{ logo }}",
+        footer="Руководитель: {{ data.opo_director }} · {{ stamp }}",
+    )
+
+
+def _opo_pc_report() -> bytes:
+    """Сведения об организации производственного контроля — годовой отчёт.
+
+    Правила организации ПК требуют представлять в Ростехнадзор сведения об
+    организации производственного контроля ЗА ПРОШЕДШИЙ год. Здесь заготовка,
+    которую заполняет и подписывает специалист.
+
+    ГРАНИЦА: платформа НЕ решает, обязана ли организация подавать сведения и
+    по каким ОПО — это зависит от того, что и как она эксплуатирует, и от
+    требований территориального органа.
+    """
+
+    return _doc(
+        "Сведения об организации производственного контроля за соблюдением требований промышленной безопасности",
+        "Организация: {{ company.name }} (ИНН {{ company.inn }})",
+        "Отчётный год: {{ data.opo_report_year }}",
+        "Ответственный за производственный контроль: {{ data.opo_pc_responsible }}",
+        "Эксплуатируемых ОПО: {{ data.opo_facilities_count }}",
+        "ОПО по классам опасности: {{ data.opo_facilities_by_class }}",
+        "Технических устройств в эксплуатации: {{ data.opo_devices_count }}",
+        "Экспертиз промышленной безопасности проведено: {{ data.opo_epb_done }}",
+        "Устройств с просроченным заключением ЭПБ: {{ data.opo_epb_overdue }}",
+        "Действующих аттестаций работников: {{ data.opo_attestations_count }}",
+        "Просроченных аттестаций: {{ data.opo_attestations_overdue }}",
+        "Мероприятий плана ПК запланировано: {{ data.opo_pc_measures_planned }}",
+        "Мероприятий плана ПК выполнено: {{ data.opo_pc_measures_done }}",
+        "Аварий и инцидентов: {{ data.opo_incidents_count }}",
+        "Выявленных нарушений и принятые меры: {{ data.opo_violations_note }}",
+        footer="Составил: {{ data.opo_report_author }} · {{ stamp }}",
+    )
+
+
+def _opo_incident_report() -> bytes:
+    """Сведения об инцидентах на ОПО — периодический отчёт в Ростехнадзор.
+
+    Учёт инцидентов ведёт организация, а сведения о них подаёт в
+    территориальный орган за период. Второй из «отчётов для Ростехнадзора»
+    формулировки ТЗ.
+    """
+
+    return _doc(
+        "Сведения об инцидентах, происшедших на опасных производственных объектах",
+        "Организация: {{ company.name }}",
+        "Отчётный период: {{ data.opo_incident_period }}",
+        "Инцидентов за период: {{ data.opo_incidents_count }}",
+        "Причины инцидентов: {{ data.opo_incident_causes }}",
+        "Принятые меры: {{ data.opo_incident_measures }}",
+        "Продолжительность простоя: {{ data.opo_incident_downtime }}",
+        footer="Составил: {{ data.opo_report_author }} · {{ stamp }}",
     )
 
 
@@ -1692,6 +1788,56 @@ DEFAULT_PACKS: Sequence[PackDefinition] = (
             "discipline": "Гражданская оборона и ЧС",
         },
         disciplines=(Discipline.CIVIL_DEFENSE,),
+    ),
+    PackDefinition(
+        code=PACK_CODE_OPO_REPORTS,
+        name="Отчётность по промышленной безопасности",
+        description="Положение о производственном контроле, приказ о назначении ответственного, сведения об организации ПК и об инцидентах для Ростехнадзора",
+        scenario=PackScenario.OPO_REPORTING,
+        module=DocumentPackModule.OT,
+        scenario_type=DocumentPackScenario.DOCUMENT_BATCH,
+        templates=(
+            PackTemplateSpec(
+                code="pack_opo_pc_regulation",
+                name="Положение о производственном контроле",
+                description="Задачи ПК, порядок проверок, учёта и отчётности",
+                category="regulation",
+                builder=_opo_pc_regulation,
+            ),
+            PackTemplateSpec(
+                code="pack_opo_pc_order",
+                name="Приказ о назначении ответственного за ПК",
+                description="Ответственный за производственный контроль и за эксплуатацию ОПО",
+                category="order",
+                builder=_opo_pc_order,
+            ),
+            PackTemplateSpec(
+                code="pack_opo_pc_report",
+                name="Сведения об организации производственного контроля",
+                description="Годовой отчёт в Ростехнадзор за прошедший год",
+                category="report",
+                builder=_opo_pc_report,
+            ),
+            PackTemplateSpec(
+                code="pack_opo_incident_report",
+                name="Сведения об инцидентах на ОПО",
+                description="Заготовка периодических сведений об инцидентах для Ростехнадзора",
+                category="report",
+                builder=_opo_incident_report,
+            ),
+        ),
+        item_order=(
+            "pack_opo_pc_regulation",
+            "pack_opo_pc_order",
+            "pack_opo_pc_report",
+            "pack_opo_incident_report",
+        ),
+        metadata={
+            "logo": build_inline_image_descriptor(DEFAULT_LOGO_BYTES)["data"],
+            "stamp": build_inline_image_descriptor(DEFAULT_STAMP_BYTES)["data"],
+            "discipline": "Промышленная безопасность",
+        },
+        disciplines=(Discipline.INDUSTRIAL_SAFETY,),
     ),
 )
 

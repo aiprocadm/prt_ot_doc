@@ -43,6 +43,7 @@ from app.modules.packs.definitions import (
     PACK_CODE_NEW_COMPANY,
     PACK_CODE_NEW_EMPLOYEE,
     PACK_CODE_OPO,
+    PACK_CODE_OPO_REPORTS,
     PACK_CODE_ROAD_SAFETY,
     PACK_CODE_SITE_ACCESS,
     PACK_CODE_WASTE,
@@ -291,6 +292,35 @@ FIELD_LABELS: dict[str, str] = {
     "eco_nvos_number": "Код объекта НВОС в реестре",
     "eco_nvos_category": "Категория объекта НВОС",
     "eco_nvos_actualization": "Актуализация сведений об объекте",
+    # Срез-42 ПромБез: положение о ПК, приказ и отчёты в Ростехнадзор
+    # (разд. 54.2). Числа — ответы специалиста; реестры контура их
+    # ПОДСКАЗЫВАЮТ, но не подставляют.
+    "opo_report_author": "Составитель",
+    "opo_report_year": "Отчётный год",
+    "opo_pc_responsible": "Ответственный за производственный контроль",
+    "opo_pc_attestation": "Аттестация ответственного (реквизиты)",
+    "opo_pc_tasks": "Задачи производственного контроля",
+    "opo_pc_inspection_order": "Порядок проверок и обследований",
+    "opo_pc_reporting_order": "Порядок учёта и отчётности",
+    "opo_approved_by": "Кто утвердил",
+    "opo_order_date": "Дата приказа",
+    "opo_facility_responsibles": "Ответственные за эксплуатацию ОПО",
+    "opo_director": "Руководитель (подписант приказа)",
+    "opo_facilities_count": "Эксплуатируемых ОПО",
+    "opo_facilities_by_class": "ОПО по классам опасности",
+    "opo_devices_count": "Технических устройств в эксплуатации",
+    "opo_epb_done": "Экспертиз ПБ проведено за год",
+    "opo_epb_overdue": "Устройств с просроченным заключением ЭПБ",
+    "opo_attestations_count": "Действующих аттестаций работников",
+    "opo_attestations_overdue": "Просроченных аттестаций",
+    "opo_pc_measures_planned": "Мероприятий плана ПК запланировано",
+    "opo_pc_measures_done": "Мероприятий плана ПК выполнено",
+    "opo_incidents_count": "Аварий и инцидентов",
+    "opo_violations_note": "Выявленные нарушения и принятые меры",
+    "opo_incident_period": "Отчётный период по инцидентам",
+    "opo_incident_causes": "Причины инцидентов",
+    "opo_incident_measures": "Принятые меры по инцидентам",
+    "opo_incident_downtime": "Продолжительность простоя",
 }
 
 
@@ -564,6 +594,41 @@ SCENARIO_FIELDS: dict[str, tuple[PackField, ...]] = {
             "eco_nvos_number",
             "eco_nvos_category",
             "eco_nvos_actualization",
+        ),
+    ),
+    # Срез-42 ПромБез: положение о ПК, приказ и отчёты в Ростехнадзор.
+    # ОБЯЗАТЕЛЕН только составитель — как у ГО и ЧС, а не как у экологии:
+    # положение и приказ отчётного года не имеют вовсе, а требовать год
+    # значило бы не дать напечатать приказ без отчёта. Год спрашивается у
+    # годовых сведений и подсказывается ИСТОЧНИКОМ подсказок, не ответом.
+    PACK_CODE_OPO_REPORTS: _fields(
+        ("opo_report_author",),
+        (
+            "opo_report_year",
+            "opo_pc_responsible",
+            "opo_pc_attestation",
+            "opo_pc_tasks",
+            "opo_pc_inspection_order",
+            "opo_pc_reporting_order",
+            "opo_approved_by",
+            "opo_order_date",
+            "opo_facility_responsibles",
+            "opo_director",
+            "opo_facilities_count",
+            "opo_facilities_by_class",
+            "opo_devices_count",
+            "opo_epb_done",
+            "opo_epb_overdue",
+            "opo_attestations_count",
+            "opo_attestations_overdue",
+            "opo_pc_measures_planned",
+            "opo_pc_measures_done",
+            "opo_incidents_count",
+            "opo_violations_note",
+            "opo_incident_period",
+            "opo_incident_causes",
+            "opo_incident_measures",
+            "opo_incident_downtime",
         ),
     ),
 }
