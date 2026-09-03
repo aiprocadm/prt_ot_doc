@@ -46,6 +46,7 @@ from app.models.ecology import (
     WaterUsagePoint,
     WaterUsageRecord,
 )
+from app.models.incidents import Incident, IncidentStatus
 from app.models.industrial_safety import (
     OPO_HAZARD_CLASSES,
     DeviceWorkRecord,
@@ -337,9 +338,13 @@ async def _industrial_safety_suggestions(
     плана «0 запланировано» читалось бы как «план был, но пустой» — а плана
     не было, и это другой факт.
 
-    АВАРИИ И ИНЦИДЕНТЫ НЕ ПОДСКАЗЫВАЮТСЯ: реестр происшествий не размечен
-    дисциплиной, и выдать все происшествия организации за инциденты на ОПО
-    значило бы вписать в отчёт для Ростехнадзора чужие числа.
+    ИНЦИДЕНТЫ — ТОЛЬКО РАЗМЕЧЕННЫЕ ПРОМБЕЗОМ (in01). До разметки они не
+    подсказывались вовсе: выдать все происшествия организации за инциденты
+    на ОПО значило бы вписать в отчёт для Ростехнадзора чужие числа. Теперь
+    считаются происшествия с дисциплиной «промышленная безопасность» за
+    прошлый год; неразмеченные НЕ считаются — «не размечено» не значит «не
+    промбез», но и не значит «промбез», а отчёт в надзор — не место для
+    догадок. Отменённые не считаются: их зарегистрировали по ошибке.
     """
 
     today = date.today()
@@ -480,6 +485,31 @@ async def _industrial_safety_suggestions(
         suggestions["opo_pc_measures_done"] = Suggestion(
             str(done), f"выполненных мероприятий плана ПК на {year} год"
         )
+
+    # Происшествие — ядровая сущность с ДАТОЙ-ВРЕМЕНЕМ; границы года берутся
+    # по UTC, как хранится ``occurred_at``.
+    year_start = datetime(year, 1, 1, tzinfo=timezone.utc)
+    year_end = datetime(year + 1, 1, 1, tzinfo=timezone.utc)
+    incidents = int(
+        await session.scalar(
+            select(func.count())
+            .select_from(Incident)
+            .where(
+                Incident.tenant_id == tenant_id,
+                Incident.deleted_at.is_(None),
+                Incident.discipline == Discipline.INDUSTRIAL_SAFETY.value,
+                Incident.status != IncidentStatus.CANCELLED,
+                Incident.occurred_at >= year_start,
+                Incident.occurred_at < year_end,
+            )
+        )
+        or 0
+    )
+    suggestions["opo_incidents_count"] = Suggestion(
+        str(incidents),
+        f"происшествий {window} с дисциплиной «промышленная безопасность» по реестру "
+        "происшествий (неразмеченные и отменённые не считаются)",
+    )
     return suggestions
 
 

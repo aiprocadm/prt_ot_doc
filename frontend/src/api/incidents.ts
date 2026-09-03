@@ -14,6 +14,10 @@ export type Incident = {
   location_description: string | null;
   pack_id: string | null;
   victim_ids: string[];
+  /** Код дисциплины из общего словаря; null — «не размечено», а НЕ «охрана труда». */
+  discipline?: string | null;
+  /** Дисциплина словами; null, если не размечена. */
+  discipline_label?: string | null;
 };
 
 export type IncidentPage = {
@@ -38,6 +42,7 @@ export const incidentsApi = {
     site_id?: string;
     status_filter?: string;
     incident_type?: string;
+    discipline?: string;
     limit?: number;
     offset?: number;
   }) => {
@@ -60,6 +65,7 @@ export const incidentsApi = {
     company_id: string;
     site_id?: string;
     severity: string;
+    discipline?: string | null;
   }) => {
     const { data } = await apiClient.post<Incident>("/incidents", payload);
     return data;

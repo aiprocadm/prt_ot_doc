@@ -23,13 +23,14 @@
 причины.
 
 ГРАНИЦА: платформа НЕ решает, обязана ли организация подавать сведения и по
-каким ОПО, и НЕ считает аварии: реестр происшествий не размечен дисциплиной.
+каким ОПО. Инциденты с среза-44 (in01) подсказываются ТОЛЬКО размеченные
+промбезом: до разметки все происшествия организации были бы чужими числами.
 """
 
 from __future__ import annotations
 
 import re
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from io import BytesIO
 
 import pytest
@@ -37,6 +38,7 @@ from docx import Document
 from sqlalchemy import select
 
 from app.core.disciplines import Discipline
+from app.models.incidents import Incident, IncidentStatus, IncidentType
 from app.models.industrial_safety import (
     DeviceWorkRecord,
     HazardousFacility,
@@ -45,7 +47,7 @@ from app.models.industrial_safety import (
     TechnicalDevice,
 )
 from app.models.inspections import Attestation
-from app.models.master_data import Company, Person
+from app.models.master_data import Company, Person, Site
 from app.models.models import Tenant
 from app.modules.packs.context import enrich_context
 from app.modules.packs.definitions import (
@@ -313,6 +315,44 @@ async def _plan(sessionmaker, *, year: int, statuses: tuple[str, ...]) -> None:
         await session.commit()
 
 
+async def _incident(
+    sessionmaker,
+    *,
+    discipline: str | None,
+    occurred_on: date,
+    status: IncidentStatus = IncidentStatus.REPORTED,
+) -> None:
+    """Происшествие из ЯДРА: контур промбеза своих не заводит."""
+
+    async with sessionmaker() as session:
+        tenant_id = await _tenant_id(sessionmaker)
+        company = (
+            (await session.execute(select(Company).where(Company.tenant_id == tenant_id)))
+            .scalars()
+            .first()
+        )
+        if company is None:
+            company = Company(tenant_id=tenant_id, name="Головная компания")
+            session.add(company)
+            await session.flush()
+        site = Site(tenant_id=tenant_id, company_id=company.id, name="Площадка ОПО")
+        session.add(site)
+        await session.flush()
+        session.add(
+            Incident(
+                tenant_id=tenant_id,
+                title="Разгерметизация",
+                incident_type=IncidentType.NEAR_MISS,
+                occurred_at=datetime.combine(occurred_on, datetime.min.time(), tzinfo=timezone.utc),
+                company_id=company.id,
+                site_id=site.id,
+                status=status,
+                discipline=discipline,
+            )
+        )
+        await session.commit()
+
+
 async def _fields(async_client, headers) -> dict:
     response = await async_client.get(f"{_FIELDS}/{PACK_CODE_OPO_REPORTS}/fields", headers=headers)
     assert response.status_code == 200, response.text
@@ -432,19 +472,67 @@ class TestПодсказкиЗаГод:
         assert fields["opo_pc_measures_done"]["suggested"] is None
 
 
-class TestГраница:
-    async def test_аварии_год_и_составитель_не_подсказываются(
+class TestПодсказкиПроисшествия:
+    """Срез-44 (in01): инциденты считаются ТОЛЬКО размеченные промбезом."""
+
+    async def test_размеченные_промбезом_за_прошлый_год_считаются(
         self, async_client, make_auth_headers, sessionmaker
     ) -> None:
-        """Реестр происшествий не размечен дисциплиной: выдать все
-        происшествия за инциденты на ОПО значило бы вписать в отчёт чужие
-        числа. Год и составитель — решение специалиста."""
+        headers = await make_auth_headers()
+        await _incident(
+            sessionmaker, discipline="industrial_safety", occurred_on=date(_LAST_YEAR, 3, 1)
+        )
+        await _incident(
+            sessionmaker, discipline="industrial_safety", occurred_on=date(_LAST_YEAR, 12, 31)
+        )
+        fields = await _fields(async_client, headers)
+        field = fields["opo_incidents_count"]
+        assert field["suggested"] == "2"
+        assert str(_LAST_YEAR) in field["suggested_source"]
+        assert "неразмеченные" in field["suggested_source"]
+
+    async def test_неразмеченные_и_чужие_не_считаются(
+        self, async_client, make_auth_headers, sessionmaker
+    ) -> None:
+        """«Не размечено» — не «промбез»: отчёт в надзор — не место для догадок."""
+
+        headers = await make_auth_headers()
+        await _incident(sessionmaker, discipline=None, occurred_on=date(_LAST_YEAR, 3, 1))
+        await _incident(sessionmaker, discipline="ecology", occurred_on=date(_LAST_YEAR, 3, 1))
+        fields = await _fields(async_client, headers)
+        assert fields["opo_incidents_count"]["suggested"] == "0"
+
+    async def test_отменённые_и_не_за_тот_год_не_считаются(
+        self, async_client, make_auth_headers, sessionmaker
+    ) -> None:
+        headers = await make_auth_headers()
+        await _incident(
+            sessionmaker,
+            discipline="industrial_safety",
+            occurred_on=date(_LAST_YEAR, 6, 1),
+            status=IncidentStatus.CANCELLED,
+        )
+        await _incident(
+            sessionmaker, discipline="industrial_safety", occurred_on=date(_LAST_YEAR - 1, 12, 31)
+        )
+        await _incident(
+            sessionmaker, discipline="industrial_safety", occurred_on=date(_LAST_YEAR + 1, 1, 1)
+        )
+        fields = await _fields(async_client, headers)
+        assert fields["opo_incidents_count"]["suggested"] == "0"
+
+
+class TestГраница:
+    async def test_год_и_составитель_не_подсказываются(
+        self, async_client, make_auth_headers, sessionmaker
+    ) -> None:
+        """Год, составитель, ответственный и графа о нарушениях — решение
+        специалиста, а не реестра."""
 
         headers = await make_auth_headers()
         await _facility(sessionmaker, number="А01-00001")
         fields = await _fields(async_client, headers)
         for key in (
-            "opo_incidents_count",
             "opo_report_year",
             "opo_report_author",
             "opo_pc_responsible",
