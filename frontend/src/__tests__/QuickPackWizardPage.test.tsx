@@ -80,9 +80,18 @@ describe("мастер разового комплекта", () => {
       scenario_name: SCENARIO.name,
       fields: [
         { name: "employee_name", label: "ФИО работника", required: true },
-        { name: "internship_days", label: "Дней стажировки", required: false },
+        {
+          name: "internship_days",
+          label: "Дней стажировки",
+          required: false,
+          // подсказка из реестра — платформа знает, но НЕ подставляет сама
+          suggested: "4",
+          suggested_source: "по реестру стажировок",
+        },
       ],
       known_from_client: ["Организация клиента (наименование, ИНН, адрес)"],
+      suggestions_note:
+        "Числа со ссылкой на реестр — подсказки платформы. Они не подставляются в документ сами: проверьте и подтвердите, подписывать отчёт будете вы.",
     });
     previewPack.mockResolvedValue({
       ready: true,
@@ -106,6 +115,48 @@ describe("мастер разового комплекта", () => {
     // говорит об этом, иначе специалист ищет, где это ввести.
     expect(screen.getByText(/Платформа подставит сама/)).toBeInTheDocument();
     expect(screen.getByText(/наименование, ИНН, адрес/)).toBeInTheDocument();
+  });
+
+  it("подсказка из реестра НЕ подставляется сама", async () => {
+    /**
+     * САМОЕ ВАЖНОЕ В ЭТОМ ЭКРАНЕ.
+     *
+     * Отчёт подписывает специалист, и он отвечает за каждое число в нём.
+     * Автоподстановка означала бы, что человек подписал то, чего не
+     * проверял, — поэтому поле остаётся пустым, пока он не нажмёт.
+     */
+
+    await fillStepOne();
+
+    const input = await screen.findByLabelText(/Дней стажировки/);
+    expect(input).toHaveValue("");
+    // но подсказка видна, и рядом с ней — откуда она
+    expect(screen.getByText(/Платформа знает/)).toBeInTheDocument();
+    expect(screen.getByText(/по реестру стажировок/)).toBeInTheDocument();
+    // и пояснение словами: число предложено, а не подтверждено
+    expect(
+      screen.getByText(/подписывать отчёт будете вы/i),
+    ).toBeInTheDocument();
+  });
+
+  it("нажатие «Подставить» переносит подсказку в поле", async () => {
+    const user = await fillStepOne();
+    const input = await screen.findByLabelText(/Дней стажировки/);
+    expect(input).toHaveValue("");
+
+    await user.click(screen.getByRole("button", { name: "Подставить" }));
+
+    expect(await screen.findByLabelText(/Дней стажировки/)).toHaveValue("4");
+  });
+
+  it("вопрос без подсказки кнопки не получает", async () => {
+    /** Сторож: кнопка у поля, которому нечего предложить, обещала бы пустоту. */
+
+    await fillStepOne();
+    await screen.findByLabelText(/ФИО работника/);
+
+    // подсказка ровно одна — у поля стажировки
+    expect(screen.getAllByRole("button", { name: "Подставить" })).toHaveLength(1);
   });
 
   it("показывает состав комплекта до генерации", async () => {
