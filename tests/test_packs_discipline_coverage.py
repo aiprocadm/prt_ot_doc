@@ -22,6 +22,7 @@ import pytest
 from app.core.disciplines import DISCIPLINE_TITLES, Discipline
 from app.modules.packs.definitions import (
     DEFAULT_PACKS,
+    PACK_CODE_BDD_REPORTS,
     PACK_CODE_ROAD_SAFETY,
     PACK_DEFINITIONS_BY_CODE,
     PACKS_WITHOUT_DISCIPLINE,
@@ -41,12 +42,42 @@ class TestПокрытиеДисциплин:
         rows = discipline_pack_coverage()
         assert {row["discipline"] for row in rows} == {d.value for d in Discipline}
 
-    def test_бдд_закрыта_собственным_комплектом(self) -> None:
-        """Единственная дисциплина, у которой комплекта не было вовсе."""
+    def test_бдд_закрыта_собственными_комплектами(self) -> None:
+        """Единственная дисциплина, у которой комплекта не было вовсе.
 
-        assert packs_for(Discipline.ROAD_SAFETY) == (
-            PACK_DEFINITIONS_BY_CODE[PACK_CODE_ROAD_SAFETY],
-        )
+        ПРОВЕРКА ОСЛАБЛЕНА СОЗНАТЕЛЬНО (разд. 56.2 срез-9). Раньше здесь
+        стояло РАВЕНСТВО одному комплекту — верное, пока у БДД был только
+        базовый. Срез-9 добавил отчётность (положение о системе управления,
+        отчёты об аварийности и мероприятиях, приказ о закреплении ТС), и
+        равенство стало ложным ПО СУЩЕСТВУ: требовать его значило бы запретить
+        дисциплине второй комплект, чего приёмка §58.3 не требует и не
+        подразумевает.
+
+        Что осталось под сторожем и стало важнее: БАЗОВЫЙ комплект никуда не
+        делся (иначе дисциплина осталась бы без сценарного), и оба комплекта
+        размечены именно БДД.
+        """
+
+        packs = packs_for(Discipline.ROAD_SAFETY)
+        codes = {pack.code for pack in packs}
+        assert PACK_CODE_ROAD_SAFETY in codes
+        assert PACK_CODE_BDD_REPORTS in codes
+        assert PACK_DEFINITIONS_BY_CODE[PACK_CODE_ROAD_SAFETY] in packs
+
+    def test_отчётность_бдд_печатает_положение_и_отчёты(self) -> None:
+        """ТЗ просит «отчётность и документы (приказы, положения, планы)».
+
+        Приказ, инструкция и план печатались базовым комплектом с первого
+        среза. Не хватало ОТЧЁТНОСТИ и ПОЛОЖЕНИЯ — а положение о системе
+        управления БДД это документ, с которого проверка начинается.
+        """
+
+        pack = PACK_DEFINITIONS_BY_CODE[PACK_CODE_BDD_REPORTS]
+        categories = {template.category for template in pack.templates}
+        assert "report" in categories
+        assert "regulation" in categories
+        codes = {template.code for template in pack.templates}
+        assert "pack_bdd_regulation" in codes
 
 
 class TestРазметкаЧестная:

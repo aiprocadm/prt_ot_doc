@@ -12,6 +12,7 @@ from app.modules.packs.assets import (
     build_inline_image_descriptor,
 )
 from app.modules.packs.definitions import (
+    PACK_CODE_BDD_REPORTS,
     PACK_CODE_CEO_SHIELD,
     PACK_CODE_CIVIL_DEFENCE,
     PACK_CODE_CONTRACTOR,
@@ -471,6 +472,63 @@ def _apply_road_safety(context: dict[str, Any], data: dict[str, Any]) -> dict[st
     return context
 
 
+def _apply_bdd_reports(context: dict[str, Any], data: dict[str, Any]) -> dict[str, Any]:
+    """Отчётность БДД (разд. 56.2 срез-9): подстановки комплекта.
+
+    Умолчания ЧЕСТНЫЕ, и это здесь важнее обычного: незаполненное число ДТП
+    читается «сведения не внесены», а НЕ «ноль». Подставь ноль — и отчёт о
+    состоянии аварийности заявит, что происшествий не было, хотя их просто
+    не внесли. Молчание нельзя выдавать за благополучие (довод превышений ПЭК
+    в отчётных формах экологии).
+    """
+
+    _ensure_company_alias(context)
+    context["logo"] = _decode_image(data.get("logo"), DEFAULT_LOGO_BYTES)
+    context["stamp"] = _decode_image(data.get("stamp"), DEFAULT_STAMP_BYTES)
+
+    payload = context.setdefault("data", {})
+    payload.setdefault(
+        "bdd_report_period", _coerce_text(data.get("bdd_report_period"), "не указан")
+    )
+    payload.setdefault(
+        "bdd_report_author", _coerce_text(data.get("bdd_report_author"), "не указан")
+    )
+    payload.setdefault(
+        "bdd_responsible",
+        _coerce_text(data.get("bdd_responsible"), "Ответственный не назначен"),
+    )
+    payload.setdefault(
+        "bdd_approved_by", _coerce_text(data.get("bdd_approved_by"), "не утверждено")
+    )
+    # числовые ответы: пусто = «сведения не внесены», а НЕ ноль
+    for number_field in (
+        "bdd_report_vehicles",
+        "bdd_report_drivers",
+        "bdd_report_accidents",
+        "bdd_report_injured",
+        "bdd_report_violations",
+        "bdd_measures_planned",
+        "bdd_measures_done",
+    ):
+        payload.setdefault(
+            number_field, _coerce_text(data.get(number_field), "сведения не внесены")
+        )
+    payload.setdefault("bdd_goals", _format_list(data.get("bdd_goals")))
+    payload.setdefault("bdd_control_order", _coerce_text(data.get("bdd_control_order")))
+    payload.setdefault("bdd_review_order", _coerce_text(data.get("bdd_review_order")))
+    payload.setdefault(
+        "bdd_measures_failed_reason",
+        _coerce_text(data.get("bdd_measures_failed_reason")),
+    )
+    payload.setdefault(
+        "bdd_assignment_date", _coerce_text(data.get("bdd_assignment_date"))
+    )
+    payload.setdefault(
+        "bdd_assignment_list", _format_list(data.get("bdd_assignment_list"))
+    )
+    return context
+
+
 def _apply_eco_reports(context: dict[str, Any], data: dict[str, Any]) -> dict[str, Any]:
     """Отчётные формы экологии (разд. 55.3): подстановки комплекта.
 
@@ -533,6 +591,7 @@ _BUILDERS: dict[str, Builder] = {
     PACK_CODE_FIRE_INSPECTION: _apply_fire_inspection,
     PACK_CODE_CIVIL_DEFENCE: _apply_civil_defence,
     PACK_CODE_ROAD_SAFETY: _apply_road_safety,
+    PACK_CODE_BDD_REPORTS: _apply_bdd_reports,
     PACK_CODE_ECO_REPORTS: _apply_eco_reports,
 }
 

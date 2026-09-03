@@ -34,6 +34,7 @@ __all__ = [
     "PACK_CODE_CONTRACTOR",
     "PACK_CODE_FIRE_INSPECTION",
     "PACK_CODE_CIVIL_DEFENCE",
+    "PACK_CODE_BDD_REPORTS",
     "PACK_CODE_ECO_REPORTS",
     "PACK_CODE_ROAD_SAFETY",
     "PACKS_WITHOUT_DISCIPLINE",
@@ -64,6 +65,12 @@ PACK_CODE_ROAD_SAFETY = "BDD_BASE"
 # Срез-8 экологии (разд. 55.3): отчётность как формы фабрики. До него каталог
 # держал только сценарные комплекты — ни одной отчётной формы.
 PACK_CODE_ECO_REPORTS = "ECO_REPORTS"
+# Срез-9 БДД (разд. 56.2, последний пункт раздела): «отчётность по БДД и
+# документы (приказы, положения, планы мероприятий)». Приказ, инструкция и план
+# мероприятий печатались базовым комплектом с первого среза; не хватало
+# ОТЧЁТНОСТИ и ПОЛОЖЕНИЯ — а положение о системе управления БДД это как раз
+# документ, с которого проверка начинается.
+PACK_CODE_BDD_REPORTS = "BDD_REPORTS"
 
 
 class PackScenario(str, Enum):
@@ -80,6 +87,7 @@ class PackScenario(str, Enum):
     FIRE_INSPECTION = "fire_inspection"
     CIVIL_DEFENCE = "civil_defence"
     ROAD_SAFETY = "road_safety"
+    ROAD_SAFETY_REPORTING = "road_safety_reporting"
 
 
 @dataclass(slots=True, frozen=True)
@@ -717,6 +725,80 @@ def _civil_defence_journal() -> bytes:
         "Дата: {{ data.session_date }}",
         "Присутствовали: {{ data.team_members }}",
         footer="Занятие провёл: {{ data.gochs_responsible }}",
+    )
+
+
+
+def _bdd_management_regulation() -> bytes:
+    """Положение о системе управления БДД.
+
+    ТЗ просит «положения», и это ровно тот документ: с него начинается
+    проверка организации, эксплуатирующей транспорт. В базовом комплекте его
+    не было — печатались приказ, инструкция и план.
+    """
+
+    return _doc(
+        "Положение о системе управления безопасностью дорожного движения",
+        "Организация: {{ company.name }} (ИНН {{ company.inn }})",
+        "Ответственный за БДД: {{ data.bdd_responsible }}",
+        "Цели в области БДД: {{ data.bdd_goals }}",
+        "Порядок контроля и учёта: {{ data.bdd_control_order }}",
+        "Порядок разбора происшествий: {{ data.bdd_review_order }}",
+        header="{{ logo }}",
+        footer="Утверждено: {{ data.bdd_approved_by }} · {{ stamp }}",
+    )
+
+
+def _bdd_accident_report() -> bytes:
+    """Отчёт о состоянии аварийности — ЗАГОТОВКА, а не выборка из реестров.
+
+    Числа вносит специалист: платформа умеет показать их в сводке контура, но
+    подставлять их в документ автоматически она пока не умеет ни для одной
+    дисциплины (то же у отчётных форм экологии). Предзаполнение мастера из
+    реестров — отдельная работа, названная в журнале волн.
+    """
+
+    return _doc(
+        "Отчёт о состоянии аварийности",
+        "Организация: {{ company.name }}",
+        "Отчётный период: {{ data.bdd_report_period }}",
+        "Транспортных средств в эксплуатации: {{ data.bdd_report_vehicles }}",
+        "Водителей допущено: {{ data.bdd_report_drivers }}",
+        "Дорожно-транспортных происшествий: {{ data.bdd_report_accidents }}",
+        "Пострадало / погибло: {{ data.bdd_report_injured }}",
+        "Нарушений ПДД: {{ data.bdd_report_violations }}",
+        footer="Составил: {{ data.bdd_report_author }} · {{ stamp }}",
+    )
+
+
+def _bdd_measures_report() -> bytes:
+    """Отчёт о выполнении мероприятий по предупреждению аварийности."""
+
+    return _doc(
+        "Отчёт о выполнении мероприятий по предупреждению ДТП",
+        "Организация: {{ company.name }}",
+        "Отчётный период: {{ data.bdd_report_period }}",
+        "Запланировано мероприятий: {{ data.bdd_measures_planned }}",
+        "Выполнено: {{ data.bdd_measures_done }}",
+        "Причины невыполнения: {{ data.bdd_measures_failed_reason }}",
+        footer="Составил: {{ data.bdd_report_author }} · {{ stamp }}",
+    )
+
+
+def _bdd_vehicle_assignment_order() -> bytes:
+    """Приказ о закреплении ТС за водителями.
+
+    ГРАНИЦА: платформа не решает, за кем закреплять машину, — она печатает
+    внесённое.
+    """
+
+    return _doc(
+        "Приказ о закреплении транспортных средств за водителями",
+        "Организация: {{ company.name }}",
+        "Дата: {{ data.bdd_assignment_date }}",
+        "Закрепление: {{ data.bdd_assignment_list }}",
+        "Ответственный за БДД: {{ data.bdd_responsible }}",
+        footer="Руководитель: {{ data.bdd_approved_by }} · {{ stamp }}",
     )
 
 
@@ -1426,6 +1508,56 @@ DEFAULT_PACKS: Sequence[PackDefinition] = (
             "pack_bdd_instruction",
             "pack_bdd_action_plan",
             "pack_bdd_briefing",
+        ),
+        metadata={
+            "logo": build_inline_image_descriptor(DEFAULT_LOGO_BYTES)["data"],
+            "stamp": build_inline_image_descriptor(DEFAULT_STAMP_BYTES)["data"],
+            "discipline": "Безопасность дорожного движения",
+        },
+        disciplines=(Discipline.ROAD_SAFETY,),
+    ),
+    PackDefinition(
+        code=PACK_CODE_BDD_REPORTS,
+        name="Отчётность по БДД",
+        description="Положение о системе управления БДД, отчёты об аварийности и мероприятиях, приказ о закреплении ТС",
+        scenario=PackScenario.ROAD_SAFETY_REPORTING,
+        module=DocumentPackModule.OT,
+        scenario_type=DocumentPackScenario.DOCUMENT_BATCH,
+        templates=(
+            PackTemplateSpec(
+                code="pack_bdd_regulation",
+                name="Положение о системе управления БДД",
+                description="Цели, порядок контроля и разбора происшествий",
+                category="regulation",
+                builder=_bdd_management_regulation,
+            ),
+            PackTemplateSpec(
+                code="pack_bdd_accident_report",
+                name="Отчёт о состоянии аварийности",
+                description="Парк, водители, ДТП, пострадавшие и нарушения за период",
+                category="report",
+                builder=_bdd_accident_report,
+            ),
+            PackTemplateSpec(
+                code="pack_bdd_measures_report",
+                name="Отчёт о выполнении мероприятий по БДД",
+                description="План и факт мероприятий по предупреждению аварийности",
+                category="report",
+                builder=_bdd_measures_report,
+            ),
+            PackTemplateSpec(
+                code="pack_bdd_assignment_order",
+                name="Приказ о закреплении ТС за водителями",
+                description="Кто на чём ездит — по внесённому",
+                category="order",
+                builder=_bdd_vehicle_assignment_order,
+            ),
+        ),
+        item_order=(
+            "pack_bdd_regulation",
+            "pack_bdd_accident_report",
+            "pack_bdd_measures_report",
+            "pack_bdd_assignment_order",
         ),
         metadata={
             "logo": build_inline_image_descriptor(DEFAULT_LOGO_BYTES)["data"],
