@@ -7994,14 +7994,17 @@
     "PackScenarioField": {
       "name": "string",
       "label": "string",
-      "required": "boolean"
+      "required": "boolean",
+      "suggested": "null|string",
+      "suggested_source": "null|string"
     },
     "PackScenarioFieldsResponse": {
       "ok": "boolean",
       "scenario_code": "string",
       "scenario_name": "string",
       "fields": "array",
-      "known_from_client": "array"
+      "known_from_client": "array",
+      "suggestions_note": "null|string"
     },
     "PackScenarioListResponse": {
       "ok": "boolean",
