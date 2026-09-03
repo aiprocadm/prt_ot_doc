@@ -122,6 +122,7 @@ async def register_incident(
     location_description: str | None = None,
     pack_id: str | None = None,
     victim_ids: Sequence[str] | None = None,
+    discipline: str | None = None,
 ) -> Incident:
     company = await _get_company(session, tenant_id, company_id)
     site = await _get_site(session, tenant_id, site_id)
@@ -145,6 +146,7 @@ async def register_incident(
         description=description,
         location_description=location_description,
         pack_id=pack.id if pack else None,
+        discipline=discipline,
         status=IncidentStatus.REPORTED,
         investigation_stage=IncidentStage.REGISTRATION,
     )
@@ -213,6 +215,7 @@ async def update_incident(
         "status",
         "investigation_stage",
         "location_description",
+        "discipline",
     }:
         if key in updates:
             setattr(incident, key, updates[key])

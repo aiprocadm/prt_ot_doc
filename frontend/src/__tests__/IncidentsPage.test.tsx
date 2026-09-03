@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -173,6 +173,68 @@ describe("IncidentsPage", () => {
 
     expect(screen.getByRole("dialog")).toBeInTheDocument();
     expect(screen.getByLabelText(/заголовок/i)).toBeInTheDocument();
+  });
+
+  it("дисциплина показывается словами под событием, неразмеченное — молчит (срез-44)", async () => {
+    listMock.mockResolvedValue({
+      items: [
+        {
+          ...mockIncident,
+          discipline: "industrial_safety",
+          discipline_label: "Промышленная безопасность",
+        },
+        {
+          ...mockIncident,
+          id: "inc-2",
+          title: "Порез при уборке",
+          discipline: null,
+          discipline_label: null,
+        },
+      ],
+      total: 2,
+    });
+
+    render(
+      <MemoryRouter>
+        <IncidentsPage />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Порез при уборке")).toBeInTheDocument();
+    });
+    // Подпись — одна, у размеченного; «не размечено» не превращается в
+    // «охрана труда» и не рисуется словами вовсе. Ищем В ТАБЛИЦЕ: тот же
+    // текст есть и в списке выбора формы.
+    const table = within(screen.getByRole("table"));
+    expect(table.getAllByText("Промышленная безопасность")).toHaveLength(1);
+    expect(table.queryByText(/охрана труда/i)).not.toBeInTheDocument();
+    // Колонок по-прежнему семь: дисциплина не стала восьмой (разд. 59.2).
+    expect(table.getAllByRole("columnheader")).toHaveLength(7);
+  });
+
+  it("форма регистрации спрашивает дисциплину, пусто — «не размечена» (срез-44)", async () => {
+    listMock.mockResolvedValue({ items: [], total: 0 });
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter>
+        <IncidentsPage />
+      </MemoryRouter>,
+    );
+
+    await user.click(
+      await screen.findByRole("button", { name: /зарегистрировать инцидент/i }),
+    );
+
+    const select = screen.getByLabelText(/дисциплина/i) as HTMLSelectElement;
+    expect(select.value).toBe("");
+    expect(
+      screen.getByRole("option", { name: "— Не размечена —" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("option", { name: "Промышленная безопасность" }),
+    ).toBeInTheDocument();
   });
 
   it("shows disabled create action without create permission", async () => {

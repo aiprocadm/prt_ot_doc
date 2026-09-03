@@ -100,6 +100,13 @@ class Incident(TenantBaseModel, SoftDeleteMixin):
     pack_id: Mapped[str | None] = mapped_column(
         ForeignKey("document_pack.id", ondelete="SET NULL"), nullable=True, index=True
     )
+    #: дисциплина — код из ОБЩЕГО словаря ``app.core.disciplines.Discipline``
+    #: (in01, Доп. №1 разд. 54.2 «расследования инцидентов на ОПО»). ПУСТО
+    #: означает «не размечено», а НЕ «охрана труда» — тот же довод, что у
+    #: дисциплины курса и стажировки. Без разметки отчёт в Ростехнадзор не мог
+    #: подсказать число инцидентов: все происшествия организации за инциденты
+    #: на ОПО — чужие числа.
+    discipline: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
     company: Mapped[Company] = relationship(backref="incidents")
     site: Mapped[Site] = relationship(backref="incidents")
@@ -123,6 +130,7 @@ class Incident(TenantBaseModel, SoftDeleteMixin):
         Index("ix_incident_site", "tenant_id", "site_id"),
         Index("ix_incident_status", "tenant_id", "status"),
         Index("ix_incident_occurred_at", "occurred_at"),
+        Index("ix_incident_discipline", "tenant_id", "discipline"),
     )
 
 
