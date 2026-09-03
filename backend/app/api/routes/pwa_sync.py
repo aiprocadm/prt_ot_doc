@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.audit_decorator import audit_operation
+from app.core.disciplines import BRIEFING_TYPES
 from app.core.errors import api_problem_detail
 from app.core.rbac_abac import ROLE_PERMISSIONS
 from app.core.security import AccessContext, rbac
@@ -251,7 +252,14 @@ def _serialize_deadline(item: ComplianceDeadline) -> PwaDeadlineProjection:
 
 def _build_dictionaries() -> dict[str, Any]:
     return {
-        "briefing_types": ["introductory", "primary", "repeat", "target", "unscheduled"],
+        # ОФЛАЙННЫЙ СПРАВОЧНИК БЕРЁТСЯ ИЗ ЯДРА, а не пишется руками.
+        #
+        # Список здесь УСПЕЛ РАЗОЙТИСЬ с каноном (найдено срезом-5 контура
+        # БДД): стояло "target" вместо "targeted", а шесть противопожарных
+        # видов, заведённых разд. 54.1, не появились вовсе. Телефон в поле
+        # получал справочник, по которому половину инструктажей нельзя было
+        # ни выбрать, ни прочитать.
+        "briefing_types": list(BRIEFING_TYPES),
         "briefing_statuses": [
             "draft",
             "assigned",

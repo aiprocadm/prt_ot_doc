@@ -197,6 +197,13 @@ export type RoadSafetyReadinessDto = {
   fatalities_total: number;
   /** ДТП без единого мероприятия и без связи с расследованием */
   accidents_without_follow_up: number;
+  /**
+   * Срез-5: инструктажи водителей по БДД. Свой реестр НЕ заводится —
+   * механизм инструктажей ядровой, здесь только счёт по видам БДД.
+   * Просрочка считается по ВНЕСЁННОМУ сроку, а не по норме.
+   */
+  road_briefings_total: number;
+  road_briefings_overdue: number;
 };
 
 export const roadSafetyApi = {
