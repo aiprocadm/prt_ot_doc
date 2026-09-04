@@ -2497,6 +2497,7 @@
     "EmployeeDocumentsSection",
     "EmployeeIncidentItem",
     "EmployeeIncidentsSection",
+    "EmployeeInternshipItem",
     "EmployeeMedicalItem",
     "EmployeeMedicalSection",
     "EmployeePPEIssueItem",
@@ -5456,6 +5457,20 @@
       "open_count": "integer",
       "items": "array"
     },
+    "EmployeeInternshipItem": {
+      "id": "string",
+      "subject": "null|string",
+      "discipline": "null|string",
+      "discipline_label": "null|string",
+      "mentor_name": "null|string",
+      "planned_shifts": "integer",
+      "completed_shifts": "integer",
+      "completed_short": "boolean",
+      "started_on": "null|string",
+      "finished_on": "null|string",
+      "status": "string",
+      "status_label": "string"
+    },
     "EmployeeMedicalItem": {
       "id": "string",
       "exam_type": "string",
@@ -5558,8 +5573,10 @@
     "EmployeeTrainingSection": {
       "sessions_count": "integer",
       "certificates_count": "integer",
+      "internships_count": "integer",
       "sessions": "array",
-      "certificates": "array"
+      "certificates": "array",
+      "internships": "array"
     },
     "EmployeeUserAccount": {
       "user_id": "string",
@@ -6271,7 +6288,8 @@
       "description": "null|string",
       "location_description": "null|string",
       "pack_id": "null|string",
-      "victim_ids": "array"
+      "victim_ids": "array",
+      "discipline": "null|string"
     },
     "IncidentLogCreate": {
       "stage": "IncidentStage",
@@ -6306,7 +6324,9 @@
       "investigation_stage": "IncidentStage",
       "location_description": "null|string",
       "pack_id": "null|string",
-      "victim_ids": "array"
+      "victim_ids": "array",
+      "discipline": "null|string",
+      "discipline_label": "null|string"
     },
     "IncidentUpdate": {
       "title": "null|string",
@@ -6320,7 +6340,8 @@
       "description": "null|string",
       "location_description": "null|string",
       "pack_id": "null|string",
-      "victim_ids": "array|null"
+      "victim_ids": "array|null",
+      "discipline": "null|string"
     },
     "IndustrialReadinessRead": {
       "total_facilities": "integer",

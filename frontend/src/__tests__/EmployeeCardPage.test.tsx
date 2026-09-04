@@ -87,6 +87,37 @@ const sampleCard: EmployeeCardDto = {
         status: "active",
       },
     ],
+    internships_count: 2,
+    internships: [
+      {
+        id: "int-1",
+        subject: "автобус категории D",
+        discipline: "road_safety",
+        discipline_label: "БДД",
+        mentor_name: "Наставников Пётр Иванович",
+        planned_shifts: 5,
+        completed_shifts: 3,
+        completed_short: true,
+        started_on: "2026-02-01",
+        finished_on: "2026-02-20",
+        status: "completed",
+        status_label: "Завершена",
+      },
+      {
+        id: "int-2",
+        subject: "стропальщик",
+        discipline: null,
+        discipline_label: null,
+        mentor_name: null,
+        planned_shifts: 4,
+        completed_shifts: 0,
+        completed_short: false,
+        started_on: null,
+        finished_on: null,
+        status: "planned",
+        status_label: "Назначена",
+      },
+    ],
   },
   medicals: {
     count: 1,
@@ -323,6 +354,44 @@ describe("EmployeeCardPage", () => {
     expect(
       within(signedRow as HTMLElement).getAllByText("Подписан"),
     ).toHaveLength(2);
+  });
+
+  it("вкладка «Обучение» показывает стажировки из общего реестра (срез-45)", async () => {
+    const user = userEvent.setup();
+    getCardMock.mockResolvedValueOnce(sampleCard);
+
+    renderPage();
+
+    await screen.findByRole("heading", {
+      level: 1,
+      name: "Иванов Иван Иванович",
+    });
+
+    // плашка вкладки считает и стажировки: 1 сессия + 1 удостоверение + 2
+    expect(screen.getByRole("tab", { name: /Обучение/ })).toHaveTextContent(
+      "4",
+    );
+
+    await user.click(screen.getByRole("tab", { name: /Обучение/ }));
+
+    expect(
+      await screen.findByRole("heading", { level: 3, name: /Стажировки · 2/ }),
+    ).toBeInTheDocument();
+    const shortRow = screen.getByText("автобус категории D").closest("tr");
+    expect(shortRow).not.toBeNull();
+    const short = within(shortRow as HTMLElement);
+    expect(short.getByText("Наставников Пётр Иванович")).toBeInTheDocument();
+    expect(short.getByText("3 / 5")).toBeInTheDocument();
+    expect(short.getByText("Завершена")).toBeInTheDocument();
+    // недобор — факт расхождения плана и факта, показан словом, не цветом
+    expect(short.getByText("недобор")).toBeInTheDocument();
+    expect(short.getByText("БДД")).toBeInTheDocument();
+
+    const plannedRow = screen.getByText("стропальщик").closest("tr");
+    const planned = within(plannedRow as HTMLElement);
+    // пустой наставник — «не назначен», а не «неизвестен»
+    expect(planned.getByText("Не назначен")).toBeInTheDocument();
+    expect(planned.queryByText("недобор")).toBeNull();
   });
 
   it("opens the Briefings tab and shows expired badge", async () => {

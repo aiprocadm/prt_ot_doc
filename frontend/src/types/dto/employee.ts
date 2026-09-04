@@ -111,11 +111,36 @@ export interface EmployeeTrainingCertificateDto {
   status?: string | null;
 }
 
+/**
+ * Стажировка человека — та же запись, что в общем реестре `/internships`.
+ * `completed_short` — недобор: завершена, а смен меньше плана. Это факт
+ * расхождения плана и факта, а не вердикт о допуске к работе.
+ */
+export interface EmployeeInternshipItemDto {
+  id: string;
+  subject?: string | null;
+  discipline?: string | null;
+  /** Дисциплина словами; null — не размечена. */
+  discipline_label?: string | null;
+  /** null — наставник НЕ НАЗНАЧЕН, а не «неизвестен». */
+  mentor_name?: string | null;
+  planned_shifts: number;
+  completed_shifts: number;
+  completed_short: boolean;
+  started_on?: string | null;
+  finished_on?: string | null;
+  status: string;
+  status_label: string;
+}
+
 export interface EmployeeTrainingSectionDto {
   sessions_count: number;
   certificates_count: number;
+  /** Стажировки — с среза-45; старые ответы могут прийти без них. */
+  internships_count?: number;
   sessions: EmployeeTrainingItemDto[];
   certificates: EmployeeTrainingCertificateDto[];
+  internships?: EmployeeInternshipItemDto[];
 }
 
 export interface EmployeeMedicalItemDto {

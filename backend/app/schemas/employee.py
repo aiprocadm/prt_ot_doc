@@ -105,11 +105,38 @@ class EmployeeTrainingCertificate(BaseSchema):
     status: str | None = None
 
 
+class EmployeeInternshipItem(BaseSchema):
+    """Стажировка человека — та же запись, что в общем реестре ``/internships``.
+
+    Недобор (``completed_short``) считается ТЕМ ЖЕ правилом, что в реестре:
+    стажировка завершена, а смен меньше плана. Это ФАКТ расхождения плана и
+    факта, а не вердикт о допуске к самостоятельной работе.
+    """
+
+    id: str
+    subject: str | None = None
+    discipline: str | None = None
+    #: дисциплина словами; пусто — не размечена
+    discipline_label: str | None = None
+    #: пусто — наставник НЕ НАЗНАЧЕН, а не «неизвестен»
+    mentor_name: str | None = None
+    planned_shifts: int
+    completed_shifts: int
+    completed_short: bool
+    started_on: date | None = None
+    finished_on: date | None = None
+    status: str
+    status_label: str
+
+
 class EmployeeTrainingSection(BaseSchema):
     sessions_count: int
     certificates_count: int
+    #: стажировки — с среза-45; до него реестр был общий, а на человеке пусто
+    internships_count: int = 0
     sessions: list[EmployeeTrainingItem] = Field(default_factory=list)
     certificates: list[EmployeeTrainingCertificate] = Field(default_factory=list)
+    internships: list[EmployeeInternshipItem] = Field(default_factory=list)
 
 
 class EmployeeMedicalItem(BaseSchema):
