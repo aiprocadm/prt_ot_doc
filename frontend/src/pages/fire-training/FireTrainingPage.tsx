@@ -57,6 +57,7 @@ const FireTrainingPage = () => {
     initialData: {
       items: [],
       readiness: {
+        incidents_open: 0,
         total_units: 0,
         overdue_recharge: 0,
         overdue_inspection: 0,

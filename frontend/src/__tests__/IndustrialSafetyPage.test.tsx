@@ -175,6 +175,7 @@ const populatedReadiness = {
   current_year_plan_exists: true,
   pc_measures_overdue: 1,
   pc_measures_planned: 0,
+  incidents_open: 3,
 };
 
 describe("IndustrialSafetyPage", () => {
@@ -416,6 +417,24 @@ describe("IndustrialSafetyPage", () => {
     expect(
       await screen.findByText(/применимость определяет специалист/i),
     ).toBeInTheDocument();
+  });
+
+  it("открытые происшествия контура: число из сводки и ссылка в реестр (срез-49)", async () => {
+    render(
+      <MemoryRouter>
+        <IndustrialSafetyPage />
+      </MemoryRouter>,
+    );
+
+    expect(
+      await screen.findByText("Открытых происшествий"),
+    ).toBeInTheDocument();
+    // число — из сводки бэкенда (та же формула, что разрез у директора), а
+    // ссылка ведёт в ОБЩИЙ реестр с уже выставленным фильтром дисциплины
+    expect(screen.getByRole("link", { name: "3" })).toHaveAttribute(
+      "href",
+      "/incidents?discipline=industrial_safety",
+    );
   });
 
   it("IndustrialSafetyPage в UX-бюджете", async () => {

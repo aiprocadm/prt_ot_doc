@@ -65,6 +65,7 @@ from app.schemas.fire_safety import (
     FireReadinessRead,
 )
 from app.services.audit import AuditService, field_level_diff
+from app.services.discipline_incidents import open_incidents_count
 
 router = APIRouter(prefix="/fire-safety", tags=["fire-safety"])
 
@@ -1089,4 +1090,7 @@ async def fire_readiness(
         due_soon=due_soon,
         due_soon_days=_DUE_SOON_DAYS,
         overdue_fire_briefings=overdue_briefings,
+        # Доп. №1 разд. 57.4: открытые происшествия контура — той же формулой,
+        # что разрез «по дисциплинам» у директора (срез-49).
+        incidents_open=await open_incidents_count(session, str(tenant.id), Discipline.FIRE_SAFETY),
     )

@@ -181,6 +181,7 @@ const populatedReadiness = {
   planning_documents: 2,
   planning_review_overdue: 1,
   training_programs: 2,
+  incidents_open: 3,
 };
 
 describe("CivilDefensePage", () => {
@@ -342,6 +343,24 @@ describe("CivilDefensePage", () => {
     expect(
       screen.queryByRole("button", { name: /добавить программу/i }),
     ).toBeNull();
+  });
+
+  it("открытые происшествия контура: число из сводки и ссылка в реестр (срез-49)", async () => {
+    render(
+      <MemoryRouter>
+        <CivilDefensePage />
+      </MemoryRouter>,
+    );
+
+    expect(
+      await screen.findByText("Открытых происшествий"),
+    ).toBeInTheDocument();
+    // число — из сводки бэкенда (та же формула, что разрез у директора), а
+    // ссылка ведёт в ОБЩИЙ реестр с уже выставленным фильтром дисциплины
+    expect(screen.getByRole("link", { name: "3" })).toHaveAttribute(
+      "href",
+      "/incidents?discipline=civil_defense",
+    );
   });
 
   it("CivilDefensePage в UX-бюджете", async () => {

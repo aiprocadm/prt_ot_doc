@@ -4251,7 +4251,8 @@
       "profiles_by_category": "object",
       "planning_documents": "integer",
       "planning_review_overdue": "integer",
-      "training_programs": "integer"
+      "training_programs": "integer",
+      "incidents_open": "integer"
     },
     "ClassHistoryRead": {
       "id": "string",
@@ -5236,7 +5237,8 @@
       "water_over_limit": "integer",
       "fee_lines": "integer",
       "fee_lines_without_rate": "integer",
-      "fee_total_rubles": "string"
+      "fee_total_rubles": "string",
+      "incidents_open": "integer"
     },
     "EdoMessageIn": {
       "entity_type": "string",
@@ -5958,7 +5960,8 @@
       "overdue_drills": "integer",
       "planned_drills": "integer",
       "last_drill_on": "null|string",
-      "days_since_last_drill": "integer|null"
+      "days_since_last_drill": "integer|null",
+      "incidents_open": "integer"
     },
     "FleetUsageReport": {
       "period": "string",
@@ -6357,7 +6360,8 @@
       "attestations_due_soon": "integer",
       "current_year_plan_exists": "boolean",
       "pc_measures_overdue": "integer",
-      "pc_measures_planned": "integer"
+      "pc_measures_planned": "integer",
+      "incidents_open": "integer"
     },
     "IndustryList": {
       "items": "array"
@@ -9409,7 +9413,8 @@
       "violations_total": "integer",
       "violations_without_driver": "integer",
       "fines_unpaid_count": "integer",
-      "fines_unpaid_amount": "number"
+      "fines_unpaid_amount": "number",
+      "incidents_open": "integer"
     },
     "RolePayload": {
       "code": "string",

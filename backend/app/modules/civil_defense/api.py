@@ -20,6 +20,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.core.disciplines import Discipline
 from app.core.errors import api_problem_detail
 from app.core.feature_flags import is_module_enabled, raise_for_disabled_module
 from app.core.security import AccessContext, abac, rbac
@@ -68,6 +69,7 @@ from app.schemas.civil_defense import (
     TrainingProgramRead,
 )
 from app.services.audit import AuditService, field_level_diff
+from app.services.discipline_incidents import open_incidents_count
 
 router = APIRouter(prefix="/civil-defense", tags=["civil-defense"])
 
@@ -1575,4 +1577,9 @@ async def civil_defense_readiness(
             1 for f in formations if f.commander_person_id is None
         ),
         members_active=members_active,
+        # Доп. №1 разд. 57.4: открытые происшествия контура — той же формулой,
+        # что разрез «по дисциплинам» у директора (срез-49).
+        incidents_open=await open_incidents_count(
+            session, str(tenant.id), Discipline.CIVIL_DEFENSE
+        ),
     )

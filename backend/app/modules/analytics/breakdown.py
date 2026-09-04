@@ -37,7 +37,6 @@ from app.models.inspections import Inspection
 from app.models.master_data import Company, Person, Site
 from app.models.models import (
     Incident,
-    IncidentStatus,
     PPEIssue,
     PPEIssueStatus,
     Prescription,
@@ -51,6 +50,7 @@ from app.services.discipline_attention import (
     attention_events,
     overdue_by_discipline,
 )
+from app.services.discipline_incidents import open_incidents_where
 
 BREAKDOWN_DIMENSIONS = ("company", "site", "contractor", "discipline")
 BREAKDOWN_ROW_CAP = 200
@@ -107,9 +107,7 @@ async def compute_breakdown(
     incidents_stmt = (
         select(dim_incidents, func.count())
         .where(
-            Incident.tenant_id == tenant_id,
-            Incident.deleted_at.is_(None),
-            Incident.status.notin_([IncidentStatus.CLOSED, IncidentStatus.CANCELLED]),
+            *open_incidents_where(tenant_id),
         )
         .group_by(dim_incidents)
     )
@@ -223,9 +221,7 @@ async def _discipline_breakdown(
     incidents_stmt = (
         select(Incident.discipline, func.count())
         .where(
-            Incident.tenant_id == tenant_id,
-            Incident.deleted_at.is_(None),
-            Incident.status.notin_([IncidentStatus.CLOSED, IncidentStatus.CANCELLED]),
+            *open_incidents_where(tenant_id),
         )
         .group_by(Incident.discipline)
     )
