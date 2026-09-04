@@ -162,7 +162,8 @@ async def _disciplines_report_tick() -> int:
         )
     created = 0
     # Изоляция и идемпотентность — как у _managed_clients_audit_tick: отчёт
-    # за ту же дату второй раз не пишется, поэтому autoretry безвреден.
+    # за ту же дату второй раз не пишется (и уведомления о нём — тоже),
+    # поэтому autoretry безвреден.
     for tenant in tenants:
         with tenant_context(tenant.slug):
             ensure_tenant_schema(tenant.slug)

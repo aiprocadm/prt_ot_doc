@@ -321,12 +321,21 @@ async def run_discipline_report_now(
     return DisciplineReportRunRead(
         created=outcome.created,
         report=DisciplineReportRead.model_validate(outcome.report),
-        summary=(
-            "Отчёт собран"
-            if outcome.created
-            else "Отчёт за сегодня уже есть — показан он, второй не пишется"
-        ),
+        notified=outcome.notified,
+        summary=_run_summary(outcome.created, outcome.notified),
     )
+
+
+def _run_summary(created: bool, notified: int) -> str:
+    if not created:
+        return "Отчёт за сегодня уже есть — показан он, второй не пишется"
+    if notified == 0:
+        # Получателей нет (или все выключили канал) — это надо увидеть, а не
+        # прочитать «собран» и решить, что директор уже в курсе.
+        return "Отчёт собран, уведомление отправлять некому"
+    tail = notified % 100
+    word = "получателю" if notified % 10 == 1 and tail != 11 else "получателям"
+    return f"Отчёт собран, уведомление ушло {notified} {word}"
 
 
 @router.post("/recompute", dependencies=[_AdminGuard])
