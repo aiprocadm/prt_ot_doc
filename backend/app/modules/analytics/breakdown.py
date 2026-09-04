@@ -14,6 +14,10 @@ Discipline-разрез (Доп. №1 разд. 57.4, «директорский
 той же формулы, что у Центра внимания (``services.discipline_attention``).
 У дисциплины без размеченных источников сроков просрочка ``None``: это
 «не считается», а не ноль — ноль читался бы как «нарушений нет».
+Дисциплины вне редакции арендатора (модуль не выдан или выключен, приёмка
+§58.3, срез-56): ПУСТАЯ строка убирается, строка с фактами остаётся —
+происшествие случилось независимо от того, что куплено; скрытое названо в
+``not_applicable`` одной фразой.
 
 None-bucket (site-разрез): ``Risk.site_id`` и ``Inspection.site_id`` nullable —
 high-риски и просроченные предписания без привязки к объекту не должны тихо
@@ -45,6 +49,7 @@ from app.models.models import (
 from app.models.risk import Risk
 from app.modules.contractors.models import ContractorRegistry
 from app.modules.projections.models import ContractorReadinessReadModel
+from app.services.discipline_applicability import collect_applicability, describe_hidden
 from app.services.discipline_attention import (
     ATTENTION_DISCIPLINES,
     attention_events,
@@ -242,6 +247,8 @@ async def _discipline_breakdown(
         )
     )
 
+    applicability = await collect_applicability(session, tenant_id)
+    with_facts: list[Discipline] = []
     items: list[dict[str, Any]] = []
     for position, discipline in enumerate(Discipline):
         counted = discipline in ATTENTION_DISCIPLINES
@@ -252,6 +259,10 @@ async def _discipline_breakdown(
             "overdue_items": overdue.get(discipline, 0) if counted else None,
         }
         row["total_issues"] = row["incidents_open"] + (row["overdue_items"] or 0)
+        if not applicability.applies(discipline):
+            if row["total_issues"] == 0:
+                continue
+            with_facts.append(discipline)
         items.append(row)
         row["_order"] = position
     if incidents_unmarked > 0:
@@ -269,7 +280,12 @@ async def _discipline_breakdown(
     # Худшее сверху, при равенстве — порядок словаря, а не алфавит: «БДД»
     # впереди «Медосмотров» ничего не значит.
     items.sort(key=lambda r: (-r["total_issues"], r.pop("_order")))
-    return {"dimension": "discipline", "items": items, "total": len(items)}
+    return {
+        "dimension": "discipline",
+        "items": items,
+        "total": len(items),
+        "not_applicable": describe_hidden(applicability, with_facts=with_facts),
+    }
 
 
 async def _contractor_breakdown(session: AsyncSession, tenant_id: str) -> dict[str, Any]:

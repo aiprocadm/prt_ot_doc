@@ -29,10 +29,30 @@ from tests.utils.factories import TestDataFactory
 NOW = datetime.now(tz=timezone.utc)
 BASE = "/api/v1/analytics/dashboard/breakdown"
 
+#: Пять дисциплин Доп. №1 — продаваемые модули; по умолчанию у арендатора
+#: теста они НЕ выданы (BIZ-61), и пустых строк по ним в разрезе нет (срез-56).
+DISCIPLINE_MODULES = (
+    "fire_safety",
+    "industrial_safety",
+    "ecology",
+    "civil_defense",
+    "road_safety",
+)
+
+
+async def _grant(sessionmaker, data_factory: TestDataFactory, codes=DISCIPLINE_MODULES, *, on=True):
+    """Редакция «всё включено»: иначе в разрезе остались бы три дисциплины ядра."""
+
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        await data_factory.set_modules(session, tenant.id, codes, on=on)
+        await session.commit()
+
 
 async def _seed(sessionmaker, data_factory: TestDataFactory) -> str:
     """Три происшествия по дисциплинам, одно без разметки, одно закрытое."""
 
+    await _grant(sessionmaker, data_factory)
     async with sessionmaker() as session:
         tenant = await data_factory.ensure_tenant(session=session)
         tid = str(tenant.id)
@@ -111,18 +131,44 @@ async def test_без_неразмеченных_строки_нет_и_поря
 ):
     """Пустой арендатор: строки словаря в его порядке, синтетической строки нет."""
 
+    await _grant(sessionmaker, data_factory)
     headers = await make_auth_headers(RoleEnum.ADMIN)
 
     body = (await async_client.get(f"{BASE}?dimension=discipline", headers=headers)).json()
 
     assert [row["id"] for row in body["items"]] == [d.value for d in Discipline]
     assert all(row["total_issues"] == 0 for row in body["items"])
+    assert body["not_applicable"] is None
+
+
+@pytest.mark.asyncio
+async def test_дисциплины_вне_редакции_пустые_скрыты_а_с_фактами_остаются(
+    async_client: AsyncClient, make_auth_headers, sessionmaker, data_factory
+):
+    """BIZ-54-57 срез-56, приёмка §58.3: модуль выключен — пустой строки нет,
+    строка с открытыми происшествиями остаётся (факт), скрытое названо."""
+
+    await _seed(sessionmaker, data_factory)
+    await _grant(sessionmaker, data_factory, ("ecology", "civil_defense"), on=False)
+    headers = await make_auth_headers(RoleEnum.ADMIN)
+
+    body = (await async_client.get(f"{BASE}?dimension=discipline", headers=headers)).json()
+
+    rows = _by_id(body)
+    assert "civil_defense" not in rows, "пусто и вне редакции — строки нет"
+    assert rows["ecology"]["incidents_open"] == 1, "разлив — факт, строка остаётся"
+    assert body["total"] == len(Discipline)  # семь дисциплин + «не размечено»
+    assert body["not_applicable"] == (
+        "Вне редакции арендатора (модуль не выдан или выключен): ГО и ЧС; "
+        "Экология — модуль не выдан или выключен, но открытые записи есть и показаны как факты"
+    )
 
 
 @pytest.mark.asyncio
 async def test_просрочка_не_считается_это_none_а_не_ноль(
     async_client: AsyncClient, make_auth_headers, sessionmaker, data_factory
 ):
+    await _grant(sessionmaker, data_factory)
     headers = await make_auth_headers(RoleEnum.ADMIN)
 
     rows = _by_id((await async_client.get(f"{BASE}?dimension=discipline", headers=headers)).json())

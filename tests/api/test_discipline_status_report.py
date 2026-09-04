@@ -37,12 +37,32 @@ NOW = datetime.now(tz=timezone.utc)
 BASE = "/api/v1/analytics/discipline-reports"
 BREAKDOWN = "/api/v1/analytics/dashboard/breakdown?dimension=discipline"
 
+#: Пять дисциплин Доп. №1 — продаваемые модули; по умолчанию у арендатора
+#: теста они НЕ выданы (BIZ-61), и пустых строк по ним в разрезе нет (срез-56).
+DISCIPLINE_MODULES = (
+    "fire_safety",
+    "industrial_safety",
+    "ecology",
+    "civil_defense",
+    "road_safety",
+)
+
+
+async def _grant(sessionmaker, data_factory: TestDataFactory, codes=DISCIPLINE_MODULES, *, on=True):
+    """Редакция «всё включено»: иначе в разрезе остались бы три дисциплины ядра."""
+
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        await data_factory.set_modules(session, tenant.id, codes, on=on)
+        await session.commit()
+
 
 async def _seed(sessionmaker, data_factory: TestDataFactory) -> str:
     """Два открытых ДТП, разлив (экология), неразмеченное, закрытое; три
     просроченных медосмотра."""
 
     today = date.today()
+    await _grant(sessionmaker, data_factory)
     async with sessionmaker() as session:
         tenant = await data_factory.ensure_tenant(session=session)
         tid = str(tenant.id)
@@ -149,6 +169,34 @@ async def test_собрать_сейчас_снимок_равен_разрез�
     )
     assert "Не размечено дисциплиной: 1 происшествие" in report["summary"]
     assert any(action.startswith("Разметить дисциплиной") for action in payload["actions"])
+    assert payload["not_applicable"] is None
+    assert "Вне редакции" not in report["summary"]
+
+
+@pytest.mark.asyncio
+async def test_дисциплины_вне_редакции_в_отчёте_названы_а_факты_остаются(
+    async_client: AsyncClient, make_auth_headers, sessionmaker, data_factory
+):
+    """BIZ-54-57 срез-56: отчёт наследует правило разреза — пустая скрытая строка
+    убрана, строка с происшествием остаётся, скрытое названо предложением."""
+
+    await _seed(sessionmaker, data_factory)
+    await _grant(sessionmaker, data_factory, ("ecology", "civil_defense"), on=False)
+    headers = await make_auth_headers(RoleEnum.ADMIN)
+
+    report = (await async_client.post(f"{BASE}/run", headers=headers)).json()["report"]
+
+    rows = _rows(report)
+    assert "civil_defense" not in rows
+    assert rows["ecology"]["incidents_open"] == 1
+    assert report["total_issues"] == 7, "итог тот же: факты не спрятаны"
+    phrase = (
+        "Вне редакции арендатора (модуль не выдан или выключен): ГО и ЧС; "
+        "Экология — модуль не выдан или выключен, но открытые записи есть и показаны как факты"
+    )
+    assert report["payload"]["not_applicable"] == phrase
+    assert f"{phrase}." in report["summary"]
+    assert "Экология: 1 происшествие" in report["summary"]
 
 
 @pytest.mark.asyncio
@@ -174,6 +222,9 @@ async def test_динамика_к_прошлому_отчёту_с_его_да�
     """Пустой вчера → нарушения сегодня → «хуже»; закрыли → завтра «лучше»."""
 
     today = date.today()
+    # редакция «всё включено» с самого начала: иначе у вчерашнего отчёта не было
+    # бы строки БДД, и динамика по ней сегодня честно осталась бы пустой
+    await _grant(sessionmaker, data_factory)
     async with sessionmaker() as session:
         tenant = await data_factory.ensure_tenant(session=session)
         tid = str(tenant.id)

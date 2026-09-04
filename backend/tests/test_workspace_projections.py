@@ -13,7 +13,8 @@ from app.api.routes.workspace import (
     workspace_task_inbox,
 )
 from app.core.security import AccessContext
-from app.db.session import TenantBase
+from app.db.session import SharedBase, TenantBase
+from app.models.feature import Feature, FeatureEnablement
 from app.models.medical import MedicalExam
 from app.models.models import (
     ComplianceDeadline,
@@ -31,6 +32,9 @@ async def db_session():
     if "tenant" not in TenantBase.metadata.tables:
         Table("tenant", TenantBase.metadata, Column("id", String(36), primary_key=True))
     async with engine.begin() as conn:
+        # Флаги модулей живут в общей схеме: без неё применимость дисциплин
+        # (срез-56) упала бы на «no such table: feature».
+        await conn.run_sync(SharedBase.metadata.create_all)
         await conn.run_sync(TenantBase.metadata.create_all)
 
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
@@ -38,6 +42,24 @@ async def db_session():
         yield session
 
     await engine.dispose()
+
+
+#: Дисциплины Доп. №1 — продаваемые модули; без выдачи их строк в сводке нет
+#: (BIZ-61 умолчание «выключено», срез-56).
+DISCIPLINE_MODULES = ("fire_safety", "industrial_safety", "ecology", "civil_defense", "road_safety")
+
+
+async def _grant_modules(session, tenant_id: str, codes=DISCIPLINE_MODULES, *, on=True) -> None:
+    for code in codes:
+        feature = (
+            await session.execute(select(Feature).where(Feature.code == code))
+        ).scalar_one_or_none()
+        if feature is None:
+            feature = Feature(code=code, title=code)
+            session.add(feature)
+            await session.flush()
+        session.add(FeatureEnablement(tenant_id=tenant_id, feature_id=feature.id, on=on))
+    await session.flush()
 
 
 def _access(user_id: str, role: str, tenant_id: str, tenant_slug: str) -> AccessContext:
@@ -171,11 +193,15 @@ async def test_attention_reports_unmeasured_disciplines_honestly(db_session) -> 
 
     tenant = SimpleNamespace(id="tenant-1", slug="tenant-a", name="Tenant A", is_active=True)
     access = _access("user-1", "admin", tenant.id, tenant.slug)
+    # медосмотры — тоже модуль; без выдачи пустая строка «Медосмотры» скрыта
+    await _grant_modules(db_session, tenant.id, (*DISCIPLINE_MODULES, "medical"))
+    await db_session.commit()
 
     payload = await workspace_attention(tenant=tenant, session=db_session, access=access)
 
     by_code = {row.code: row for row in payload.disciplines}
     assert len(payload.disciplines) == 8, "все дисциплины ТЗ обязаны быть в ответе"
+    assert payload.not_applicable is None
     for code in ("fire_safety", "industrial_safety", "ecology", "civil_defense", "road_safety"):
         assert by_code[code].measured is False
         assert by_code[code].reason and "не ведётся" in by_code[code].reason
@@ -185,6 +211,45 @@ async def test_attention_reports_unmeasured_disciplines_honestly(db_session) -> 
     # Источники без дисциплины названы, а не спрятаны.
     assert payload.unclassified_sources
     assert any("Наряд-допуск" in reason for reason in payload.unclassified_sources)
+
+
+@pytest.mark.asyncio
+async def test_attention_hides_empty_disciplines_outside_edition_but_keeps_facts(
+    db_session,
+) -> None:
+    """BIZ-54-57 срез-56, приёмка §58.3: модуль не выдан — пустой строки нет,
+    строка с просрочкой остаётся, скрытое названо фразой."""
+
+    tenant = SimpleNamespace(id="tenant-1", slug="tenant-a", name="Tenant A", is_active=True)
+    access = _access("user-1", "admin", tenant.id, tenant.slug)
+    today = datetime.now(timezone.utc).date()
+    # выдано только два из пяти; медосмотры не выданы, но просрочка есть
+    await _grant_modules(db_session, tenant.id, ("fire_safety", "industrial_safety"))
+    person = _person(tenant.id)
+    db_session.add(person)
+    await db_session.flush()
+    db_session.add(
+        MedicalExam(
+            tenant_id=tenant.id,
+            person_id=person.id,
+            exam_type="периодический",
+            exam_date=today - timedelta(days=400),
+            valid_until=today - timedelta(days=35),
+        )
+    )
+    await db_session.commit()
+
+    payload = await workspace_attention(tenant=tenant, session=db_session, access=access)
+
+    codes = [row.code for row in payload.disciplines]
+    assert codes == ["medical", "ppe", "training", "fire_safety", "industrial_safety"]
+    medical = next(row for row in payload.disciplines if row.code == "medical")
+    assert medical.overdue == 1, "факт остаётся, даже если модуль не куплен"
+    assert payload.not_applicable == (
+        "Вне редакции арендатора (модуль не выдан или выключен): Экология, ГО и ЧС, БДД; "
+        "Медосмотры — модуль не выдан или выключен, но открытые записи есть и показаны как факты"
+    )
+    assert any("Просрочено по дисциплинам: Медосмотры" in rec for rec in payload.recommendations)
 
 
 @pytest.mark.asyncio
@@ -216,9 +281,9 @@ async def test_attention_worker_without_person_sees_no_foreign_records(db_sessio
 
     payload = await workspace_attention(tenant=tenant, session=db_session, access=worker)
 
-    assert not [item for item in payload.items if item.discipline == "medical"], (
-        "рабочая роль без своей кадровой записи не должна видеть чужой медосмотр"
-    )
+    assert not [
+        item for item in payload.items if item.discipline == "medical"
+    ], "рабочая роль без своей кадровой записи не должна видеть чужой медосмотр"
 
 
 @pytest.mark.asyncio
@@ -251,9 +316,9 @@ async def test_attention_ordinary_role_does_not_see_foreign_medical(db_session) 
     for role in ("employee", "student", "accountant", "contractor_inspector"):
         access = _access(f"user-{role}", role, tenant.id, tenant.slug)
         payload = await workspace_attention(tenant=tenant, session=db_session, access=access)
-        assert not [item for item in payload.items if item.discipline == "medical"], (
-            f"роль {role} не должна видеть чужой медосмотр"
-        )
+        assert not [
+            item for item in payload.items if item.discipline == "medical"
+        ], f"роль {role} не должна видеть чужой медосмотр"
 
 
 @pytest.mark.asyncio
@@ -284,9 +349,7 @@ async def test_attention_counts_come_from_totals_not_from_page(db_session) -> No
         )
     await db_session.commit()
 
-    payload = await workspace_attention(
-        tenant=tenant, session=db_session, access=access, limit=3
-    )
+    payload = await workspace_attention(tenant=tenant, session=db_session, access=access, limit=3)
 
     medical = next(row for row in payload.disciplines if row.code == "medical")
     assert medical.overdue == 8, "счётчик обязан показывать все просрочки, а не страницу"

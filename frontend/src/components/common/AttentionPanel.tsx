@@ -252,6 +252,16 @@ export const AttentionPanel = ({
                 </span>
               ))}
             </div>
+            {/* Скрытое названо, а не пропущено молча: дисциплины вне
+                редакции — одной фразой под полосой (срез-56). */}
+            {data?.not_applicable ? (
+              <p
+                className="text-xs text-muted-foreground"
+                data-testid="attention-not-applicable"
+              >
+                {data.not_applicable}
+              </p>
+            ) : null}
           </div>
         )}
 

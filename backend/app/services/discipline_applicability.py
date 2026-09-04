@@ -23,10 +23,20 @@ feature-флагами по редакции/клиенту» и «карточ�
 
 Итог (``worst_light``) считается по оставшимся строкам: скрытая дисциплина в
 любом случае была «не измеряется» и в итог не входила.
+
+## Сводки с фактами (срез-56)
+
+Центр внимания и разрез по дисциплинам считают не статус, а ФАКТЫ: открытые
+происшествия и просрочки. Факт не зависит от того, что куплено: ДТП случилось,
+даже если модуль БДД выключен. Поэтому там строка скрытой дисциплины убирается
+ТОЛЬКО пустая; строка с фактами остаётся, а фраза (:func:`describe_hidden`)
+называет обе группы отдельно — «вне редакции» и «модуль выключен, но записи
+остались».
 """
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -40,6 +50,7 @@ __all__ = [
     "DISCIPLINE_MODULE",
     "DisciplineApplicability",
     "collect_applicability",
+    "describe_hidden",
     "only_applicable",
 ]
 
@@ -58,6 +69,7 @@ DISCIPLINE_MODULE: dict[Discipline, str | None] = {
 }
 
 HIDDEN_PREFIX = "Вне редакции арендатора (модуль не выдан или выключен)"
+KEPT_SUFFIX = "модуль не выдан или выключен, но открытые записи есть и показаны как факты"
 
 
 @dataclass(frozen=True)
@@ -105,3 +117,20 @@ def only_applicable(
     """Оставить строки применимых дисциплин, порядок не менять."""
 
     return [row for row in rows if applicability.applies(row.discipline)]
+
+
+def describe_hidden(
+    applicability: DisciplineApplicability, *, with_facts: Iterable[Discipline] = ()
+) -> str | None:
+    """Фраза для сводки фактов: скрытые пустые — «вне редакции», скрытые с
+    фактами — названы отдельно, потому что их строки остались."""
+
+    facts = {d for d in with_facts}
+    dropped = [d for d in applicability.hidden if d not in facts]
+    kept = [d for d in applicability.hidden if d in facts]
+    parts: list[str] = []
+    if dropped:
+        parts.append(f"{HIDDEN_PREFIX}: {', '.join(DISCIPLINE_TITLES[d] for d in dropped)}")
+    if kept:
+        parts.append(f"{', '.join(DISCIPLINE_TITLES[d] for d in kept)} — {KEPT_SUFFIX}")
+    return "; ".join(parts) or None
