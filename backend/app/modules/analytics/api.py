@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.core.audit_decorator import audit_operation
 from app.core.errors import api_problem_detail
 from app.core.security import abac
 from app.db.session import rearm_session_tenant_context
@@ -20,6 +21,12 @@ from app.modules.analytics.services import (
 )
 from app.modules.projections.models import DashboardKpiSnapshot
 from app.modules.projections.services import ProjectionOrchestrator
+from app.schemas.discipline_reports import (
+    DisciplineReportPage,
+    DisciplineReportRead,
+    DisciplineReportRunRead,
+)
+from app.services.discipline_report import list_reports, run_discipline_report
 
 
 def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> str | None:
@@ -282,6 +289,43 @@ async def dashboard_breakdown(
         )
     return await compute_breakdown(
         session, str(tenant.id), dimension, date_from=date_from, date_to=date_to
+    )
+
+
+# Доп. №1 разд. 57.4 «авто-отчёты о состоянии по каждой дисциплине» (срез-50):
+# отчёт арендатора о самом себе — снимок разреза «по дисциплинам» на дату и
+# динамика к прошлому отчёту. Пишет еженедельный тик ``disciplines.report.tick``;
+# «собрать сейчас» доступно тем же ролям, что читают дашборд: прогон
+# идемпотентен по дате, второй отчёт за день не появится.
+@router.get("/discipline-reports", response_model=DisciplineReportPage)
+async def list_discipline_reports(
+    limit: int = Query(default=12, ge=1, le=52),
+    offset: int = Query(default=0, ge=0),
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+) -> DisciplineReportPage:
+    rows, total = await list_reports(session, str(tenant.id), limit=limit, offset=offset)
+    return DisciplineReportPage(
+        items=[DisciplineReportRead.model_validate(row) for row in rows], total=total
+    )
+
+
+@router.post("/discipline-reports/run", response_model=DisciplineReportRunRead)
+@audit_operation("create", "discipline_status_report", id_attr="report")
+async def run_discipline_report_now(
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+) -> DisciplineReportRunRead:
+    outcome = await run_discipline_report(session, str(tenant.id))
+    await session.commit()
+    return DisciplineReportRunRead(
+        created=outcome.created,
+        report=DisciplineReportRead.model_validate(outcome.report),
+        summary=(
+            "Отчёт собран"
+            if outcome.created
+            else "Отчёт за сегодня уже есть — показан он, второй не пишется"
+        ),
     )
 
 

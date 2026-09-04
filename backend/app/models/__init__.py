@@ -15,6 +15,7 @@ from app.models.committees import (
     DecisionTaskStatus,
     MeetingStatus,
 )
+from app.models.discipline_reports import DisciplineStatusReport
 from app.models.document import (
     Document,
     DocumentBatchItem,
@@ -170,6 +171,7 @@ from app.models.work_permit import WorkPermit, WorkPermitEvent, WorkPermitMember
 __all__ = [
     "TenantBranding",
     "ClientChange",
+    "DisciplineStatusReport",
     "TenantLegalAcceptance",
     "TenantLegalDocument",
     "ApiDeprecationUsage",
