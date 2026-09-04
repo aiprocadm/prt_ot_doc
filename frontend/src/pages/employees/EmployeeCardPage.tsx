@@ -32,6 +32,7 @@ import type {
   EmployeeComplianceDeadlineItemDto,
   EmployeeDocumentItemDto,
   EmployeeIncidentItemDto,
+  EmployeeInternshipItemDto,
   EmployeeMedicalItemDto,
   EmployeePermitItemDto,
   EmployeePPEIssueItemDto,
@@ -312,7 +313,12 @@ const RolesTab = ({ card }: { card: EmployeeCardDto }) => {
 
 const TrainingTab = ({ card }: { card: EmployeeCardDto }) => {
   const { training } = card;
-  if (training.sessions.length === 0 && training.certificates.length === 0) {
+  const internships = training.internships ?? [];
+  if (
+    training.sessions.length === 0 &&
+    training.certificates.length === 0 &&
+    internships.length === 0
+  ) {
     return <EmptyTabContent message="Нет записей об обучении." />;
   }
   return (
@@ -402,6 +408,66 @@ const TrainingTab = ({ card }: { card: EmployeeCardDto }) => {
                       </TableRow>
                     ),
                   )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        )}
+      </section>
+      <section>
+        <h3 className="text-sm font-semibold">
+          Стажировки · {training.internships_count ?? 0}
+        </h3>
+        {/* Та же запись, что в общем реестре /internships: недобор — факт
+            расхождения плана и факта, а не вердикт о допуске к работе. */}
+        {internships.length === 0 ? (
+          <EmptyTabContent message="Стажировки не назначались." />
+        ) : (
+          <Card className="mt-2">
+            <CardContent className="px-0 pb-0 pt-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Предмет</TableHead>
+                    <TableHead className="w-[200px]">Наставник</TableHead>
+                    <TableHead className="w-[120px] text-right">
+                      Смены
+                    </TableHead>
+                    <TableHead className="w-[140px]">Состояние</TableHead>
+                    <TableHead className="w-[200px]">Период</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {internships.map((item: EmployeeInternshipItemDto) => (
+                    <TableRow key={item.id}>
+                      <TableCell className="text-sm font-medium">
+                        {item.subject ?? "—"}
+                        {item.discipline_label ? (
+                          <div className="text-xs text-muted-foreground">
+                            {item.discipline_label}
+                          </div>
+                        ) : null}
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        {item.mentor_name ?? "Не назначен"}
+                      </TableCell>
+                      <TableCell className="text-right text-sm">
+                        {item.completed_shifts} / {item.planned_shifts}
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        {item.status_label}
+                        {item.completed_short ? (
+                          <Badge variant="destructive" className="ml-2">
+                            недобор
+                          </Badge>
+                        ) : null}
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        {formatDate(item.started_on)} —{" "}
+                        {formatDate(item.finished_on)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
                 </TableBody>
               </Table>
             </CardContent>
@@ -961,7 +1027,8 @@ export default function EmployeeCardPage() {
                   <TabBadge
                     count={
                       card.training.sessions_count +
-                      card.training.certificates_count
+                      card.training.certificates_count +
+                      (card.training.internships_count ?? 0)
                     }
                   />
                 </TabsTrigger>
