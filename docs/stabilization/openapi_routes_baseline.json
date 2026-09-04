@@ -2500,6 +2500,8 @@
     "EmployeeCard",
     "EmployeeComplianceDeadlineItem",
     "EmployeeComplianceDeadlinesSection",
+    "EmployeeDisciplineStatus",
+    "EmployeeDisciplinesSection",
     "EmployeeDocumentItem",
     "EmployeeDocumentsSection",
     "EmployeeIncidentItem",
@@ -4950,6 +4952,7 @@
     "DisciplineReportRunRead": {
       "created": "boolean",
       "report": "DisciplineReportRead",
+      "notified": "integer",
       "summary": "string"
     },
     "DocGeneratePipelineRequest": {
@@ -5431,6 +5434,7 @@
       "generated_at": "string",
       "personal": "EmployeePersonal",
       "roles_and_assignments": "EmployeeRolesAndAssignments",
+      "disciplines": "EmployeeDisciplinesSection",
       "training": "EmployeeTrainingSection",
       "medicals": "EmployeeMedicalSection",
       "ppe": "EmployeePPESection",
@@ -5455,6 +5459,21 @@
       "overdue_count": "integer",
       "upcoming_count": "integer",
       "items": "array"
+    },
+    "EmployeeDisciplineStatus": {
+      "discipline": "string",
+      "title": "string",
+      "light": "string",
+      "reason": "string",
+      "required": "integer",
+      "missing": "integer",
+      "lapsed": "integer",
+      "expiring": "integer"
+    },
+    "EmployeeDisciplinesSection": {
+      "overall": "string",
+      "rows": "array",
+      "note": "null|string"
     },
     "EmployeeDocumentItem": {
       "id": "string",

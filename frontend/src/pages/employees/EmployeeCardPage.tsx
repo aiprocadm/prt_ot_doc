@@ -24,12 +24,14 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { lightLabel, lightVariant } from "@/lib/lights";
 import type { ApiError } from "@/types/dto/common";
 import type {
   EmployeeAuditItemDto,
   EmployeeBriefingItemDto,
   EmployeeCardDto,
   EmployeeComplianceDeadlineItemDto,
+  EmployeeDisciplinesSectionDto,
   EmployeeDocumentItemDto,
   EmployeeIncidentItemDto,
   EmployeeInternshipItemDto,
@@ -909,6 +911,65 @@ const AuditTab = ({ card }: { card: EmployeeCardDto }) => {
   );
 };
 
+/**
+ * Светофор дисциплин (BIZ-54-57 срез-53, Доп. №1 разд. 57.1).
+ *
+ * Вкладки ниже показывают записи; этот блок отвечает на вопрос «всё ли
+ * положенное у человека действует» — по каждой дисциплине словаря, теми же
+ * словами и цветами, что карточка площадки 360°. Стоит НАД вкладками:
+ * ответ читают первым, а записи — когда ответ красный.
+ */
+const DisciplinesCard = ({
+  section,
+}: {
+  section: EmployeeDisciplinesSectionDto;
+}) => (
+  <section data-ux-block>
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-lg">
+          Дисциплины
+          <Badge
+            className="ml-2"
+            variant={lightVariant(section.overall)}
+            data-testid="employee-disciplines-overall"
+          >
+            {lightLabel(section.overall)}
+          </Badge>
+        </CardTitle>
+        <CardDescription>
+          {section.note ??
+            "Всё ли положенное действует — по нормам должности; «Не измеряется» значит, что эталона в системе нет, а не что всё в порядке."}
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="overflow-x-auto">
+        <table className="w-full text-sm" data-testid="employee-disciplines">
+          <thead>
+            <tr className="text-left text-muted-foreground">
+              <th className="py-1 pr-4 font-medium">Дисциплина</th>
+              <th className="py-1 pr-4 font-medium">Состояние</th>
+              <th className="py-1 font-medium">Расшифровка</th>
+            </tr>
+          </thead>
+          <tbody>
+            {section.rows.map((row) => (
+              <tr key={row.discipline} className="border-t align-top">
+                <td className="py-2 pr-4">{row.title}</td>
+                <td className="py-2 pr-4">
+                  <Badge variant={lightVariant(row.light)}>
+                    {lightLabel(row.light)}
+                  </Badge>
+                </td>
+                <td className="py-2 text-muted-foreground">{row.reason}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </CardContent>
+    </Card>
+  </section>
+);
+
 export default function EmployeeCardPage() {
   const { personId = "" } = useParams<{ personId: string }>();
   const navigate = useNavigate();
@@ -1001,6 +1062,10 @@ export default function EmployeeCardPage() {
 
       {loading && !card ? (
         <LoadingScreen label="Загрузка карточки сотрудника" />
+      ) : null}
+
+      {!loading && !error && card ? (
+        <DisciplinesCard section={card.disciplines} />
       ) : null}
 
       {!loading && !error && card ? (

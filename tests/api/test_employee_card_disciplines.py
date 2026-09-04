@@ -1,0 +1,239 @@
+"""Светофор дисциплин на карточке сотрудника (BIZ-54-57 срез-53, Доп. №1 разд. 57.1).
+
+ТЗ: «карточка сотрудника 360°: все его обучения, допуски, медосмотры, СИЗ,
+аттестации по всем дисциплинам сразу». Вкладки карточки показывали записи, но
+не отвечали «всё ли положенное у человека действует». Здесь закрепляется:
+
+- строка на КАЖДУЮ дисциплину словаря, в порядке словаря, теми же словами;
+- числа — ТЕ ЖЕ, что у карточки площадки, где этот человек единственный
+  (одни правила, а не второй расчёт);
+- «эталон не задан» говорит про должность человека, а не «должности клиента»;
+- уволенный не красится: «не измеряется» с причиной, итог ``not_measured``;
+- неизмеримые дисциплины в итог не входят: зелёные медосмотры и СИЗ дают
+  зелёный итог, а не «неизвестно».
+"""
+
+from __future__ import annotations
+
+from datetime import date, datetime, timedelta, timezone
+
+import pytest
+from httpx import AsyncClient
+from sqlalchemy import select
+
+from app.core.disciplines import DISCIPLINE_TITLES, Discipline
+from app.models.master_data import EmploymentStatus, Person, Site, Workplace
+from app.models.medical import MedicalExam, MedicalExamKind, MedicalNorm
+from app.models.models import Position, PPEIssue, PPEItem, PPENorm, RoleEnum
+from app.models.risk import RiskHazard
+from app.models.training import TrainingEnrollment, TrainingProgram
+from app.services.employee_card import TERMINATED_REASON
+
+NOW = datetime.now(tz=timezone.utc)
+TODAY = date.today()
+
+
+async def _card(async_client: AsyncClient, headers, person_id: str) -> dict:
+    response = await async_client.get(f"/api/v1/employees/{person_id}", headers=headers)
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def _row(section: dict, discipline: str) -> dict:
+    return next(r for r in section["rows"] if r["discipline"] == discipline)
+
+
+@pytest.fixture()
+async def welder(sessionmaker, data_factory):
+    """Сварщик на площадке: норма медосмотра без экзамена, норма каски с выдачей,
+    одно просроченное обучение."""
+
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        company = await data_factory.create_company(tenant=tenant, name="АКМЕ", session=session)
+        position = Position(tenant_id=tenant.id, company_id=company.id, name="Сварщик")
+        hazard = RiskHazard(tenant_id=tenant.id, code="height", title="Работы на высоте")
+        helmet = PPEItem(tenant_id=tenant.id, name="Каска защитная", default_wear_days=730)
+        site = Site(tenant_id=tenant.id, company_id=company.id, name="Цех №1")
+        program = TrainingProgram(
+            tenant_id=tenant.id, code="ПРГ-1", title="Программа 46н", category="ot", kind="program"
+        )
+        session.add_all([position, hazard, helmet, site, program])
+        await session.flush()
+        workplace = Workplace(
+            tenant_id=tenant.id, company_id=company.id, site_id=site.id, name="Пост сварки"
+        )
+        session.add(workplace)
+        session.add_all(
+            [
+                MedicalNorm(
+                    tenant_id=tenant.id,
+                    position_id=position.id,
+                    exam_kind=MedicalExamKind.PERIODIC,
+                    interval_days=365,
+                ),
+                PPENorm(
+                    tenant_id=tenant.id,
+                    position_id=position.id,
+                    hazard_id=hazard.id,
+                    item_id=helmet.id,
+                    item_name=helmet.name,
+                    quantity=1,
+                    interval_days=730,
+                ),
+            ]
+        )
+        await session.flush()
+        person = await data_factory.create_person(
+            tenant=tenant,
+            company=company,
+            last_name="Сварщиков",
+            position_id=position.id,
+            workplace_id=workplace.id,
+            session=session,
+        )
+        session.add_all(
+            [
+                PPEIssue(
+                    tenant_id=tenant.id,
+                    person_id=person.id,
+                    item_id=helmet.id,
+                    item_name=helmet.name,
+                    quantity=1,
+                    issued_at=NOW - timedelta(days=10),
+                    expires_at=NOW + timedelta(days=400),
+                    status="issued",
+                ),
+                TrainingEnrollment(
+                    tenant_id=tenant.id,
+                    training_program_id=program.id,
+                    person_id=person.id,
+                    status="assigned",
+                    due_at=NOW - timedelta(days=3),
+                ),
+            ]
+        )
+        await session.commit()
+        return tenant, str(person.id), str(site.id)
+
+
+@pytest.mark.anyio
+class TestEmployeeCardDisciplines:
+    async def test_строка_на_каждую_дисциплину_и_те_же_числа_что_у_площадки(
+        self, async_client: AsyncClient, make_auth_headers, welder
+    ) -> None:
+        _tenant, person_id, site_id = welder
+        headers = await make_auth_headers(RoleEnum.ADMIN)
+
+        section = (await _card(async_client, headers, person_id))["disciplines"]
+        site = (await async_client.get(f"/api/v1/sites/{site_id}/overview", headers=headers)).json()
+
+        # все дисциплины словаря, в его порядке, его словами
+        assert [r["discipline"] for r in section["rows"]] == [d.value for d in Discipline]
+        for row in section["rows"]:
+            assert row["title"] == DISCIPLINE_TITLES[Discipline(row["discipline"])]
+        medical = _row(section, "medical")
+        assert medical["light"] == "red"
+        assert medical["required"] == 1 and medical["missing"] == 1
+        assert "не оформлено вовсе: 1" in medical["reason"]
+        ppe = _row(section, "ppe")
+        assert ppe["light"] == "green"
+        assert ppe["required"] == 1
+        training = _row(section, "training")
+        assert training["light"] == "red"
+        assert "Просрочено назначенное обучение: 1" in training["reason"]
+        assert _row(section, "fire_safety")["light"] == "not_measured"
+        assert section["overall"] == "red"
+        assert section["note"] is None
+        # человек на площадке один — карточка площадки считает то же самое
+        site_rows = {r["discipline"]: r for r in site["disciplines"]}
+        for code in ("medical", "ppe", "training"):
+            mine, theirs = _row(section, code), site_rows[code]
+            assert (mine["light"], mine["required"], mine["missing"], mine["lapsed"]) == (
+                theirs["light"],
+                theirs["required"],
+                theirs["missing"],
+                theirs["lapsed"],
+            ), code
+
+    async def test_зелёные_измеримые_дают_зелёный_итог_несмотря_на_неизмеримые(
+        self, async_client: AsyncClient, make_auth_headers, welder, sessionmaker
+    ) -> None:
+        tenant, person_id, _ = welder
+        async with sessionmaker() as session:
+            session.add(
+                MedicalExam(
+                    tenant_id=tenant.id,
+                    person_id=person_id,
+                    exam_type="периодический",
+                    exam_kind=MedicalExamKind.PERIODIC,
+                    exam_date=TODAY - timedelta(days=30),
+                    valid_until=TODAY + timedelta(days=300),
+                )
+            )
+            enrollment = (
+                await session.execute(
+                    select(TrainingEnrollment).where(TrainingEnrollment.person_id == person_id)
+                )
+            ).scalar_one()
+            enrollment.status = "completed"
+            await session.commit()
+        headers = await make_auth_headers(RoleEnum.ADMIN)
+
+        section = (await _card(async_client, headers, person_id))["disciplines"]
+
+        assert _row(section, "medical")["light"] == "green"
+        assert _row(section, "ppe")["light"] == "green"
+        # обучение без просрочек — «эталон не задан», а не зелёный
+        assert _row(section, "training")["light"] == "not_measured"
+        assert section["overall"] == "green"
+
+    async def test_эталон_не_задан_говорит_про_должность_человека(
+        self, async_client: AsyncClient, make_auth_headers, sessionmaker, data_factory
+    ) -> None:
+        async with sessionmaker() as session:
+            tenant = await data_factory.ensure_tenant(session=session)
+            company = await data_factory.create_company(tenant=tenant, session=session)
+            position = Position(tenant_id=tenant.id, company_id=company.id, name="Клерк")
+            session.add(position)
+            await session.flush()
+            with_position = await data_factory.create_person(
+                tenant=tenant,
+                company=company,
+                last_name="Клерков",
+                position_id=position.id,
+                session=session,
+            )
+            without_position = await data_factory.create_person(
+                tenant=tenant, company=company, last_name="Безработных", session=session
+            )
+            await session.commit()
+            with_id, without_id = str(with_position.id), str(without_position.id)
+        headers = await make_auth_headers(RoleEnum.ADMIN)
+
+        clerk = (await _card(async_client, headers, with_id))["disciplines"]
+        nobody = (await _card(async_client, headers, without_id))["disciplines"]
+
+        assert _row(clerk, "medical")["light"] == "not_measured"
+        assert _row(clerk, "medical")["reason"] == "Эталон не задан: у должности нет норм"
+        assert _row(clerk, "ppe")["reason"] == "Эталон не задан: у должности нет норм"
+        assert _row(nobody, "medical")["reason"] == "Эталон не задан: должность не указана"
+        assert clerk["overall"] == "not_measured"
+
+    async def test_уволенный_не_красится(
+        self, async_client: AsyncClient, make_auth_headers, welder, sessionmaker
+    ) -> None:
+        tenant, person_id, _ = welder
+        async with sessionmaker() as session:
+            person = await session.get(Person, person_id)
+            person.employment_status = EmploymentStatus.TERMINATED
+            await session.commit()
+        headers = await make_auth_headers(RoleEnum.ADMIN)
+
+        section = (await _card(async_client, headers, person_id))["disciplines"]
+
+        assert section["overall"] == "not_measured"
+        assert section["note"] == TERMINATED_REASON
+        assert len(section["rows"]) == len(Discipline)
+        assert all(r["light"] == "not_measured" for r in section["rows"])
+        assert all(r["reason"] == TERMINATED_REASON for r in section["rows"])
