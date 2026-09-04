@@ -62,6 +62,9 @@ class NotificationType(str, enum.Enum):
     EDO_STATUS_CHANGED = "EdoStatusChanged"
     BILLING_LIMIT_WARNING = "BillingLimitWarning"
     AUTOMATION_RULE = "AutomationRule"
+    # Еженедельный отчёт о состоянии по дисциплинам (Доп. №1 разд. 57.4, срез-51);
+    # label добавлен в оба PG-типа миграцией dr02.
+    DISCIPLINE_REPORT = "DisciplineReport"
 
 
 class NotificationTemplate(TenantBaseModel, SoftDeleteMixin):

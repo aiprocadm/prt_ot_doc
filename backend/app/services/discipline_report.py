@@ -26,6 +26,10 @@
 
 **4. «Хуже/лучше» — только к предыдущему отчёту, и его дата названа.** Первый
 отчёт честно говорит «сравнивать не с чем», а не рисует ноль как «было».
+
+**5. Новый отчёт сам находит читателя (срез-51).** Сборка и доставка — один
+шаг: отчёт, о котором никому не сказали, «авто-отчётом для клиента» не
+является. Кому и как — в ``discipline_report_delivery``.
 """
 
 from __future__ import annotations
@@ -39,6 +43,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.discipline_reports import DisciplineStatusReport
 from app.modules.analytics.breakdown import NO_DISCIPLINE_BUCKET_ID, compute_breakdown
+from app.services.discipline_report_delivery import deliver_discipline_report
 
 __all__ = [
     "REPORT_PERIOD_DAYS",
@@ -66,10 +71,15 @@ class DisciplineReportContent:
 
 @dataclass(frozen=True)
 class DisciplineReportOutcome:
-    """Честный итог: создан новый отчёт или за эту дату уже был."""
+    """Честный итог: создан новый отчёт или за эту дату уже был.
+
+    ``notified`` — сколько уведомлений ушло; у повторного запуска ноль:
+    отчёт тот же, второй раз о нём не говорят.
+    """
 
     created: bool
     report: DisciplineStatusReport
+    notified: int = 0
 
 
 def _plural(count: int, forms: tuple[str, str, str]) -> str:
@@ -269,7 +279,8 @@ async def run_discipline_report(
     )
     session.add(report)
     await session.flush()
-    return DisciplineReportOutcome(created=True, report=report)
+    notified = await deliver_discipline_report(session, report)
+    return DisciplineReportOutcome(created=True, report=report, notified=notified)
 
 
 async def list_reports(

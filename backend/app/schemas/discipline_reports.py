@@ -35,4 +35,6 @@ class DisciplineReportRunRead(BaseSchema):
 
     created: bool
     report: DisciplineReportRead
+    #: Сколько уведомлений ушло получателям (срез-51); у повторного запуска 0.
+    notified: int = 0
     summary: str

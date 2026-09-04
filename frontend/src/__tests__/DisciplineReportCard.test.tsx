@@ -154,7 +154,9 @@ describe("DisciplineReportCard (Доп. №1 разд. 57.4, срез-50)", () =
     api.runDisciplineReport.mockResolvedValue({
       created: true,
       report: latest,
-      summary: "Отчёт собран",
+      notified: 2,
+      // текст итога — с сервера: там же считают, кому ушло уведомление
+      summary: "Отчёт собран, уведомление ушло 2 получателям",
     });
     renderCard();
     expect(await screen.findByText("Отчётов ещё нет")).toBeInTheDocument();
@@ -165,7 +167,7 @@ describe("DisciplineReportCard (Доп. №1 разд. 57.4, срез-50)", () =
 
     expect(
       await screen.findByTestId("discipline-report-run-note"),
-    ).toHaveTextContent("Отчёт собран");
+    ).toHaveTextContent("Отчёт собран, уведомление ушло 2 получателям");
     await waitFor(() =>
       expect(api.listDisciplineReports).toHaveBeenCalledTimes(2),
     );
