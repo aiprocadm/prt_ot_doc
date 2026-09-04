@@ -77,6 +77,22 @@ class TestCoverage:
         personal = set(attention_sources(person_id="person-1"))
         assert "ecology_permit" not in personal
         assert "ecology_measurement" not in personal
+        # срез-57: ЭПБ устройства, учение ГО и документы ТС — тоже про
+        # организацию, а не про человека
+        assert "industrial_safety_epb" not in personal
+        assert "civil_defense_drill" not in personal
+        assert "road_safety_vehicle" not in personal
+
+    def test_у_дисциплин_разд_57_2_есть_источник_сроков(self) -> None:
+        """Разд. 57.2 (срез-57): ЭПБ на ОПО, учения ГО, техосмотр ТС — в центре.
+
+        Раньше три дисциплины (ПромБез, ГО и ЧС, БДД) не имели ни одного
+        источника, и их просрочки в центр не попадали никогда. Пожарная
+        безопасность источника по-прежнему не имеет: её сроки — инструктажи,
+        а тот источник целиком размечен обучением (см. ``SOURCE_DISCIPLINE``).
+        """
+
+        assert set(SOURCE_DISCIPLINE.values()) == set(Discipline) - {Discipline.FIRE_SAFETY}
 
 
 class TestSingleSource:

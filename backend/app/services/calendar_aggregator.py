@@ -34,11 +34,13 @@ from typing import Any, Iterable
 from sqlalchemy import Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.civil_defense import CivilDefenseDrill
 from app.models.ecology import (
     EmissionMonitoringPlanItem,
     EmissionNorm,
     WaterUsagePoint,
 )
+from app.models.industrial_safety import TechnicalDevice
 from app.models.models import (
     BriefingEntry,
     BriefingTemplate,
@@ -56,6 +58,7 @@ from app.models.models import (
     TrainingSession,
     TrainingSessionStatus,
 )
+from app.models.road_safety import Vehicle
 from app.schemas.calendar import (
     CalendarEventItem,
     CalendarEventsResponse,
@@ -85,6 +88,23 @@ ALL_SOURCES: tuple[str, ...] = (
     # их значило бы отнять возможность отфильтровать.
     "ecology_permit",
     "ecology_measurement",
+    # Доп. №1 разд. 57.2 (срез-57): Центр внимания обязан видеть «просрочена
+    # ЭПБ на ОПО», «не проведены учения по ГО», «просрочен техосмотр ТС».
+    # Три источника — по одному на дисциплину, у которой сроков в календаре
+    # не было вовсе; модули считали их у себя, а общий календарь молчал.
+    "industrial_safety_epb",
+    "civil_defense_drill",
+    "road_safety_vehicle",
+)
+
+#: Сроки документов ТС: колонка → (код вида, подпись). Порядок — порядок
+#: строк в календаре при одной дате. Водительские удостоверения сюда НЕ входят:
+#: это поимённый учёт водителя, а не документ машины.
+_VEHICLE_DUE_COLUMNS: tuple[tuple[str, str, str], ...] = (
+    ("inspection_due", "inspection", "Техосмотр ТС"),
+    ("insurance_due", "insurance", "Полис ОСАГО"),
+    ("license_due", "license", "Лицензия на перевозки"),
+    ("tachograph_due", "tachograph", "Поверка тахографа"),
 )
 
 _CLOSED_DEADLINE_STATUSES = frozenset({"closed", "completed", "cancelled"})
@@ -109,6 +129,11 @@ _SLA_THRESHOLDS: dict[str, tuple[int, int]] = {
     # окно шире, чем у медосмотра.
     "ecology_permit": (30, 90),
     "ecology_measurement": (7, 30),
+    # ЭПБ заказывают у экспертной организации за месяцы — окно как у разрешений;
+    # у модуля ПромБез «скоро истекает» = 30 дней, это внутренняя полоса.
+    "industrial_safety_epb": (30, 90),
+    "civil_defense_drill": (7, 30),
+    "road_safety_vehicle": (7, 30),
 }
 
 
@@ -219,6 +244,53 @@ class CalendarAggregatorService:
             by_source.append(
                 CalendarSourceCount(
                     source_type="ecology_measurement", count=total, overdue_count=overdue
+                )
+            )
+
+        if "industrial_safety_epb" in sources:
+            collected, total, overdue = await self._build_epb(
+                from_at=from_at,
+                to_at=to_at,
+                now=now,
+                include_fact=include_fact,
+                include_sla=include_sla,
+            )
+            items.extend(collected)
+            by_source.append(
+                CalendarSourceCount(
+                    source_type="industrial_safety_epb", count=total, overdue_count=overdue
+                )
+            )
+
+        if "civil_defense_drill" in sources:
+            collected, total, overdue = await self._build_cd_drills(
+                from_at=from_at,
+                to_at=to_at,
+                site_id=site_id,
+                now=now,
+                include_fact=include_fact,
+                include_sla=include_sla,
+            )
+            items.extend(collected)
+            by_source.append(
+                CalendarSourceCount(
+                    source_type="civil_defense_drill", count=total, overdue_count=overdue
+                )
+            )
+
+        if "road_safety_vehicle" in sources:
+            collected, total, overdue = await self._build_vehicle_documents(
+                from_at=from_at,
+                to_at=to_at,
+                site_id=site_id,
+                now=now,
+                include_fact=include_fact,
+                include_sla=include_sla,
+            )
+            items.extend(collected)
+            by_source.append(
+                CalendarSourceCount(
+                    source_type="road_safety_vehicle", count=total, overdue_count=overdue
                 )
             )
 
@@ -766,9 +838,290 @@ class CalendarAggregatorService:
             as_date=True,
         )
         total = await self._count(base)
-        overdue = await self._count(
-            base.where(EmissionMonitoringPlanItem.next_due_on < today)
+        overdue = await self._count(base.where(EmissionMonitoringPlanItem.next_due_on < today))
+        return items, total, overdue
+
+    async def _build_epb(
+        self,
+        *,
+        from_at: datetime | None,
+        to_at: datetime | None,
+        now: datetime,
+        include_fact: bool = False,
+        include_sla: bool = False,
+    ) -> tuple[list[CalendarEventItem], int, int]:
+        """Сроки заключений ЭПБ технических устройств на ОПО (разд. 57.2).
+
+        Правила ТЕ ЖЕ, что у модуля ПромБез (``_epb_status``): списанное
+        устройство просрочкой быть не может, а устройство БЕЗ срока — это
+        «заключения нет», отдельное состояние, не срок и не просрочка; в
+        календарь оно не попадает, потому что события без даты не бывает.
+        Устройство привязано к ОПО, а не к площадке, поэтому сужения по
+        площадке у источника нет.
+        """
+
+        today = now.date()
+        stmt = (
+            select(TechnicalDevice)
+            .where(
+                TechnicalDevice.tenant_id == self.tenant_id,
+                TechnicalDevice.deleted_at.is_(None),
+                TechnicalDevice.status != "decommissioned",
+                TechnicalDevice.epb_valid_until.is_not(None),
+            )
+            .order_by(TechnicalDevice.epb_valid_until.asc())
+            .limit(MAX_ITEMS_PER_SOURCE)
         )
+        if from_at is not None:
+            stmt = stmt.where(TechnicalDevice.epb_valid_until >= from_at.date())
+        if to_at is not None:
+            stmt = stmt.where(TechnicalDevice.epb_valid_until <= to_at.date())
+
+        items: list[CalendarEventItem] = []
+        for device in (await self.db.execute(stmt)).scalars().all():
+            anchor = _coerce_dt(device.epb_valid_until)
+            if anchor is None:
+                continue
+            is_overdue = anchor < now
+            days_to_due = _days_to_due(anchor, now) if include_sla else None
+            items.append(
+                CalendarEventItem(
+                    id=f"industrial_safety_epb:{device.id}",
+                    source_type="industrial_safety_epb",
+                    source_id=str(device.id),
+                    title=f"ЭПБ: {device.name}",
+                    starts_at=anchor,
+                    ends_at=None,
+                    status="expired" if is_overdue else "valid",
+                    is_overdue=is_overdue,
+                    expected_at=anchor if include_fact else None,
+                    actual_at=None,
+                    variance_days=None,
+                    days_to_due=days_to_due,
+                    sla_band=(
+                        _sla_band(
+                            "industrial_safety_epb",
+                            days_to_due=days_to_due,
+                            is_overdue=is_overdue,
+                        )
+                        if include_sla
+                        else None
+                    ),
+                    extra={
+                        "kind": device.kind,
+                        "serial_number": device.serial_number,
+                        "facility_id": str(device.facility_id),
+                        "epb_conclusion_number": device.epb_conclusion_number,
+                        "epb_valid_until": device.epb_valid_until.isoformat(),
+                    },
+                )
+            )
+
+        base = self._apply_window(
+            self._scoped_count(TechnicalDevice).where(
+                TechnicalDevice.status != "decommissioned",
+                TechnicalDevice.epb_valid_until.is_not(None),
+            ),
+            TechnicalDevice.epb_valid_until,
+            from_at,
+            to_at,
+            as_date=True,
+        )
+        total = await self._count(base)
+        overdue = await self._count(base.where(TechnicalDevice.epb_valid_until < today))
+        return items, total, overdue
+
+    async def _build_cd_drills(
+        self,
+        *,
+        from_at: datetime | None,
+        to_at: datetime | None,
+        site_id: str | None,
+        now: datetime,
+        include_fact: bool = False,
+        include_sla: bool = False,
+    ) -> tuple[list[CalendarEventItem], int, int]:
+        """Учения и тренировки ГО из плана-графика, ещё НЕ проведённые (разд. 57.2).
+
+        Проведённое учение — протокол, а не срок: в календарь оно не идёт, как
+        и в модуле ГО (``_drill_status``: есть ``held_on`` — «проведено»).
+        Дата в прошлом без протокола — «не проведены учения по ГО».
+        """
+
+        today = now.date()
+        stmt = (
+            select(CivilDefenseDrill)
+            .where(
+                CivilDefenseDrill.tenant_id == self.tenant_id,
+                CivilDefenseDrill.deleted_at.is_(None),
+                CivilDefenseDrill.held_on.is_(None),
+            )
+            .order_by(CivilDefenseDrill.planned_on.asc())
+            .limit(MAX_ITEMS_PER_SOURCE)
+        )
+        if site_id:
+            stmt = stmt.where(CivilDefenseDrill.site_id == site_id)
+        if from_at is not None:
+            stmt = stmt.where(CivilDefenseDrill.planned_on >= from_at.date())
+        if to_at is not None:
+            stmt = stmt.where(CivilDefenseDrill.planned_on <= to_at.date())
+
+        items: list[CalendarEventItem] = []
+        for drill in (await self.db.execute(stmt)).scalars().all():
+            anchor = _coerce_dt(drill.planned_on)
+            if anchor is None:
+                continue
+            is_overdue = drill.planned_on < today
+            days_to_due = _days_to_due(anchor, now) if include_sla else None
+            items.append(
+                CalendarEventItem(
+                    id=f"civil_defense_drill:{drill.id}",
+                    source_type="civil_defense_drill",
+                    source_id=str(drill.id),
+                    title=f"Учение ГО: {drill.title}",
+                    starts_at=anchor,
+                    ends_at=None,
+                    status="overdue" if is_overdue else "planned",
+                    is_overdue=is_overdue,
+                    expected_at=anchor if include_fact else None,
+                    actual_at=None,
+                    variance_days=None,
+                    days_to_due=days_to_due,
+                    sla_band=(
+                        _sla_band(
+                            "civil_defense_drill",
+                            days_to_due=days_to_due,
+                            is_overdue=is_overdue,
+                        )
+                        if include_sla
+                        else None
+                    ),
+                    site_id=str(drill.site_id) if drill.site_id else None,
+                    extra={
+                        "kind": drill.kind,
+                        "formation_id": str(drill.formation_id) if drill.formation_id else None,
+                        "planned_on": drill.planned_on.isoformat(),
+                    },
+                )
+            )
+
+        base = self._apply_window(
+            self._scoped_count(CivilDefenseDrill, site_id=site_id).where(
+                CivilDefenseDrill.held_on.is_(None)
+            ),
+            CivilDefenseDrill.planned_on,
+            from_at,
+            to_at,
+            as_date=True,
+        )
+        total = await self._count(base)
+        overdue = await self._count(base.where(CivilDefenseDrill.planned_on < today))
+        return items, total, overdue
+
+    async def _build_vehicle_documents(
+        self,
+        *,
+        from_at: datetime | None,
+        to_at: datetime | None,
+        site_id: str | None,
+        now: datetime,
+        include_fact: bool = False,
+        include_sla: bool = False,
+    ) -> tuple[list[CalendarEventItem], int, int]:
+        """Сроки документов ТС: техосмотр, ОСАГО, лицензия, поверка тахографа.
+
+        Один источник на все четыре срока: для ответственного за БДД это один
+        вопрос «что по машинам истекает», вид срока лежит в ``extra.kind``.
+        Считаются ТОЛЬКО эксплуатируемые ТС — как в модуле БДД: у списанной
+        машины просроченный полис это шум, а не проблема. Пустая дата у ТС
+        значит «сведений нет» (бессрочных техосмотров не бывает) — это не срок
+        и в календарь не попадает; поверка тахографа — только если он стоит.
+        """
+
+        today = now.date()
+        lo = from_at.date() if from_at is not None else None
+        hi = to_at.date() if to_at is not None else None
+
+        def _base(attr: str) -> Select[tuple[int]]:
+            column = getattr(Vehicle, attr)
+            stmt = self._scoped_count(Vehicle, site_id=site_id).where(
+                Vehicle.status == "in_service", column.is_not(None)
+            )
+            if attr == "tachograph_due":
+                stmt = stmt.where(Vehicle.tachograph_installed.is_(True))
+            return stmt
+
+        items: list[CalendarEventItem] = []
+        for attr, kind, label in _VEHICLE_DUE_COLUMNS:
+            column = getattr(Vehicle, attr)
+            stmt = (
+                select(Vehicle)
+                .where(
+                    Vehicle.tenant_id == self.tenant_id,
+                    Vehicle.deleted_at.is_(None),
+                    Vehicle.status == "in_service",
+                    column.is_not(None),
+                )
+                .order_by(column.asc())
+                .limit(MAX_ITEMS_PER_SOURCE)
+            )
+            if attr == "tachograph_due":
+                stmt = stmt.where(Vehicle.tachograph_installed.is_(True))
+            if site_id:
+                stmt = stmt.where(Vehicle.site_id == site_id)
+            if lo is not None:
+                stmt = stmt.where(column >= lo)
+            if hi is not None:
+                stmt = stmt.where(column <= hi)
+            for vehicle in (await self.db.execute(stmt)).scalars().all():
+                due = getattr(vehicle, attr)
+                anchor = _coerce_dt(due)
+                if anchor is None:
+                    continue
+                is_overdue = due < today
+                days_to_due = _days_to_due(anchor, now) if include_sla else None
+                items.append(
+                    CalendarEventItem(
+                        id=f"road_safety_vehicle:{vehicle.id}:{kind}",
+                        source_type="road_safety_vehicle",
+                        source_id=str(vehicle.id),
+                        title=f"{label}: {vehicle.plate_number}",
+                        starts_at=anchor,
+                        ends_at=None,
+                        status="expired" if is_overdue else "valid",
+                        is_overdue=is_overdue,
+                        expected_at=anchor if include_fact else None,
+                        actual_at=None,
+                        variance_days=None,
+                        days_to_due=days_to_due,
+                        sla_band=(
+                            _sla_band(
+                                "road_safety_vehicle",
+                                days_to_due=days_to_due,
+                                is_overdue=is_overdue,
+                            )
+                            if include_sla
+                            else None
+                        ),
+                        site_id=str(vehicle.site_id) if vehicle.site_id else None,
+                        extra={
+                            "kind": kind,
+                            "plate_number": vehicle.plate_number,
+                            "brand_model": vehicle.brand_model,
+                            "due_on": due.isoformat(),
+                        },
+                    )
+                )
+        items.sort(key=lambda item: item.starts_at)
+        items = items[:MAX_ITEMS_PER_SOURCE]
+
+        total = 0
+        overdue = 0
+        for attr, _kind, _label in _VEHICLE_DUE_COLUMNS:
+            column = getattr(Vehicle, attr)
+            base = self._apply_window(_base(attr), column, from_at, to_at, as_date=True)
+            total += await self._count(base)
+            overdue += await self._count(base.where(column < today))
         return items, total, overdue
 
     async def _build_ppe(

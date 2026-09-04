@@ -574,6 +574,12 @@ async def workspace_attention(
         code: {"overdue": facts.overdue.get(code, 0), "due_soon": 0}
         for code in MEASURED_DISCIPLINES
     }
+    # Просрочки есть и у дисциплин без поимённого учёта: у экологии — с разд.
+    # 55.3, у ПромБез, ГО и БДД — с разд. 57.2 (срез-57). Раньше их честные
+    # COUNT'ы терялись здесь: словарь заводился только по измеримым, и
+    # просроченное разрешение на выброс в строке «Экология» стояло нулём.
+    for code, overdue_total in facts.overdue.items():
+        counts.setdefault(code, {"overdue": 0, "due_soon": 0})["overdue"] = overdue_total
     for event in discipline_events:
         discipline = discipline_of(event.source_type)
         overdue = event.is_overdue
