@@ -20,7 +20,9 @@ from typing import Any
 
 from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
+from app.core.disciplines import DISCIPLINE_TITLES, Discipline
 from app.models.document import Document
 from app.models.models import (
     AuditLog,
@@ -49,6 +51,7 @@ from app.models.models import (
 from app.models.models import (
     TrainingSession as TrainingSessionModel,
 )
+from app.models.training import INTERNSHIP_STATUSES, Internship
 from app.schemas.employee import (
     EmployeeAuditItem,
     EmployeeAuditSection,
@@ -61,6 +64,7 @@ from app.schemas.employee import (
     EmployeeDocumentsSection,
     EmployeeIncidentItem,
     EmployeeIncidentsSection,
+    EmployeeInternshipItem,
     EmployeeMedicalItem,
     EmployeeMedicalSection,
     EmployeePermitItem,
@@ -78,6 +82,9 @@ from app.schemas.employee import (
 __all__ = ["EmployeeCardService", "MAX_ITEMS_PER_SECTION"]
 
 MAX_ITEMS_PER_SECTION = 50
+
+#: дисциплина стажировки словами — тот же словарь, что у реестра ``/internships``
+_DISCIPLINE_CODES = {d.value: DISCIPLINE_TITLES[d] for d in Discipline}
 
 
 def _utcnow() -> datetime:
@@ -375,12 +382,73 @@ class EmployeeCardService:
             )
         )
 
+        internships, internships_total = await self._build_internships(person)
+
         return EmployeeTrainingSection(
             sessions_count=sessions_total,
             certificates_count=certificates_total,
+            internships_count=internships_total,
             sessions=sessions,
             certificates=certificates,
+            internships=internships,
         )
+
+    async def _build_internships(self, person: Person) -> tuple[list[EmployeeInternshipItem], int]:
+        """Стажировки человека — из ОБЩЕГО реестра, без своей копии.
+
+        Наставник — ядровой ``Person``, имя берётся оттуда же, что и в реестре.
+        Недобор считается тем же правилом, что в ``/internships`` (под тестом
+        сравнением с ручкой реестра): завершена, а смен меньше плана.
+        """
+
+        Mentor = aliased(Person)
+        stmt = (
+            select(Internship, Mentor)
+            .outerjoin(Mentor, Mentor.id == Internship.mentor_person_id)
+            .where(
+                Internship.tenant_id == self.tenant_id,
+                Internship.person_id == person.id,
+                Internship.deleted_at.is_(None),
+            )
+            # свежие сверху: без даты начала — по дате назначения
+            .order_by(
+                desc(Internship.started_on).nulls_last(),
+                desc(Internship.created_at),
+            )
+            .limit(self.max_items_per_section)
+        )
+        rows = (await self.db.execute(stmt)).all()
+        items = [
+            EmployeeInternshipItem(
+                id=str(record.id),
+                subject=record.subject,
+                discipline=record.discipline,
+                discipline_label=(
+                    _DISCIPLINE_CODES.get(record.discipline) if record.discipline else None
+                ),
+                mentor_name=_person_name(mentor) if mentor is not None else None,
+                planned_shifts=record.planned_shifts,
+                completed_shifts=record.completed_shifts,
+                completed_short=(
+                    record.status == "completed" and record.completed_shifts < record.planned_shifts
+                ),
+                started_on=record.started_on,
+                finished_on=record.finished_on,
+                status=record.status,
+                status_label=INTERNSHIP_STATUSES.get(record.status, record.status),
+            )
+            for record, mentor in rows
+        ]
+        total = await self._count(
+            select(func.count())
+            .select_from(Internship)
+            .where(
+                Internship.tenant_id == self.tenant_id,
+                Internship.person_id == person.id,
+                Internship.deleted_at.is_(None),
+            )
+        )
+        return items, total
 
     async def _build_medicals(self, person: Person) -> EmployeeMedicalSection:
         today = _today()
@@ -775,6 +843,14 @@ class EmployeeCardService:
 
     async def _count(self, stmt: Any) -> int:
         return int((await self.db.execute(stmt)).scalar_one() or 0)
+
+
+def _person_name(person: Person) -> str:
+    """ФИО наставника — тем же правилом, что ``/internships``."""
+
+    return " ".join(
+        part for part in (person.last_name, person.first_name, person.middle_name) if part
+    )
 
 
 def _legacy_training_status(value: Any) -> TrainingSessionStatus:

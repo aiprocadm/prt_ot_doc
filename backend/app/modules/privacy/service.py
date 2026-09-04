@@ -58,6 +58,7 @@ _CATEGORY_SPECIAL_HEALTH = "special_health"
 _SECTION_COUNTERS: tuple[tuple[str, str, str], ...] = (
     ("training", "sessions_count", "sessions"),
     ("training", "certificates_count", "certificates"),
+    ("training", "internships_count", "internships"),
     ("medicals", "count", "items"),
     ("ppe", "count", "items"),
     ("permits", "count", "items"),
