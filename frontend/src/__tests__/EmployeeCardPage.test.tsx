@@ -64,6 +64,7 @@ const sampleCard: EmployeeCardDto = {
   disciplines: {
     overall: "red",
     note: null,
+    not_applicable: null,
     rows: [
       {
         discipline: "medical",
@@ -406,6 +407,7 @@ describe("EmployeeCardPage", () => {
       disciplines: {
         overall: "not_measured",
         note: "Сотрудник уволен: обязательств нет, светофор не считается",
+        not_applicable: null,
         rows: sampleCard.disciplines.rows.map((row) => ({
           ...row,
           light: "not_measured",
@@ -429,6 +431,47 @@ describe("EmployeeCardPage", () => {
       ).length,
     ).toBeGreaterThanOrEqual(2);
     expect(screen.queryByText(/по нормам должности/)).not.toBeInTheDocument();
+  });
+
+  it("дисциплины вне редакции: строк меньше, скрытое названо фразой под таблицей (срез-54)", async () => {
+    getCardMock.mockResolvedValueOnce({
+      ...sampleCard,
+      disciplines: {
+        ...sampleCard.disciplines,
+        rows: sampleCard.disciplines.rows.filter(
+          (row) => row.discipline !== "fire_safety",
+        ),
+        not_applicable:
+          "Вне редакции арендатора (модуль не выдан или выключен): Пожарная безопасность",
+      },
+    });
+
+    renderPage();
+    await screen.findByRole("heading", {
+      level: 1,
+      name: "Иванов Иван Иванович",
+    });
+
+    const table = screen.getByTestId("employee-disciplines");
+    expect(within(table).getAllByRole("row").slice(1)).toHaveLength(2);
+    expect(within(table).queryByText("Пожарная безопасность")).toBeNull();
+    expect(
+      screen.getByTestId("employee-disciplines-not-applicable"),
+    ).toHaveTextContent("модуль не выдан или выключен): Пожарная безопасность");
+  });
+
+  it("все дисциплины в редакции: фразы про скрытое нет (срез-54)", async () => {
+    getCardMock.mockResolvedValueOnce(sampleCard);
+
+    renderPage();
+    await screen.findByRole("heading", {
+      level: 1,
+      name: "Иванов Иван Иванович",
+    });
+
+    expect(
+      screen.queryByTestId("employee-disciplines-not-applicable"),
+    ).toBeNull();
   });
 
   it("opens the Documents tab and renders signed-document drill-down link", async () => {

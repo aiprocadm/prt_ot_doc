@@ -294,13 +294,16 @@ class EmployeeDisciplineStatus(BaseSchema):
 
 
 class EmployeeDisciplinesSection(BaseSchema):
-    """Светофор по ВСЕМ дисциплинам словаря для одного человека."""
+    """Светофор по всем ПРИМЕНИМЫМ дисциплинам словаря для одного человека."""
 
     #: итог по худшей ИЗМЕРЕННОЙ дисциплине; ``not_measured`` — если не измерено ничего
     overall: str
     rows: list[EmployeeDisciplineStatus] = Field(default_factory=list)
     #: почему светофор не считался (уволен) — словами, а не пустой таблицей
     note: str | None = None
+    #: дисциплины вне редакции арендатора — одной фразой, чтобы семь строк вместо
+    #: восьми не читались как недоделка (срез-54)
+    not_applicable: str | None = None
 
 
 class EmployeeCard(BaseSchema):

@@ -43,6 +43,17 @@ def _row(section: dict, discipline: str) -> dict:
     return next(r for r in section["rows"] if r["discipline"] == discipline)
 
 
+#: Пять дисциплин Доп. №1 — продаваемые модули; по умолчанию у арендатора
+#: теста они НЕ выданы (BIZ-61), и карточка их не показывает (срез-54).
+DISCIPLINE_MODULES = (
+    "fire_safety",
+    "industrial_safety",
+    "ecology",
+    "civil_defense",
+    "road_safety",
+)
+
+
 @pytest.fixture()
 async def welder(sessionmaker, data_factory):
     """Сварщик на площадке: норма медосмотра без экзамена, норма каски с выдачей,
@@ -50,6 +61,8 @@ async def welder(sessionmaker, data_factory):
 
     async with sessionmaker() as session:
         tenant = await data_factory.ensure_tenant(session=session)
+        # Редакция «всё включено»: иначе на карточке остались бы три дисциплины ядра.
+        await data_factory.set_modules(session, tenant.id, DISCIPLINE_MODULES, on=True)
         company = await data_factory.create_company(tenant=tenant, name="АКМЕ", session=session)
         position = Position(tenant_id=tenant.id, company_id=company.id, name="Сварщик")
         hazard = RiskHazard(tenant_id=tenant.id, code="height", title="Работы на высоте")
@@ -145,6 +158,7 @@ class TestEmployeeCardDisciplines:
         assert _row(section, "fire_safety")["light"] == "not_measured"
         assert section["overall"] == "red"
         assert section["note"] is None
+        assert section["not_applicable"] is None
         # человек на площадке один — карточка площадки считает то же самое
         site_rows = {r["discipline"]: r for r in site["disciplines"]}
         for code in ("medical", "ppe", "training"):
@@ -237,3 +251,53 @@ class TestEmployeeCardDisciplines:
         assert len(section["rows"]) == len(Discipline)
         assert all(r["light"] == "not_measured" for r in section["rows"])
         assert all(r["reason"] == TERMINATED_REASON for r in section["rows"])
+
+    async def test_дисциплины_вне_редакции_скрыты_и_названы_фразой(
+        self, async_client: AsyncClient, make_auth_headers, welder, sessionmaker, data_factory
+    ) -> None:
+        """Приёмка §58.3: дисциплины включаются флагами; скрытое не молчит (срез-54)."""
+
+        tenant, person_id, site_id = welder
+        async with sessionmaker() as session:
+            await data_factory.set_modules(
+                session, tenant.id, ("ecology", "civil_defense", "road_safety"), on=False
+            )
+            await session.commit()
+        headers = await make_auth_headers(RoleEnum.ADMIN)
+
+        section = (await _card(async_client, headers, person_id))["disciplines"]
+        site = (await async_client.get(f"/api/v1/sites/{site_id}/overview", headers=headers)).json()
+
+        assert [r["discipline"] for r in section["rows"]] == [
+            "medical",
+            "ppe",
+            "training",
+            "fire_safety",
+            "industrial_safety",
+        ]
+        assert section["overall"] == "red"
+        assert section["not_applicable"] == (
+            "Вне редакции арендатора (модуль не выдан или выключен): Экология, ГО и ЧС, БДД"
+        )
+        # площадка того же арендатора скрывает то же самое — одно правило на обе карточки
+        assert [r["discipline"] for r in site["disciplines"]] == [
+            r["discipline"] for r in section["rows"]
+        ]
+
+    async def test_уволенный_вне_редакции_тоже_не_видит_скрытого(
+        self, async_client: AsyncClient, make_auth_headers, welder, sessionmaker, data_factory
+    ) -> None:
+        tenant, person_id, _ = welder
+        async with sessionmaker() as session:
+            await data_factory.set_modules(session, tenant.id, ("ecology",), on=False)
+            person = await session.get(Person, person_id)
+            person.employment_status = EmploymentStatus.TERMINATED
+            await session.commit()
+        headers = await make_auth_headers(RoleEnum.ADMIN)
+
+        section = (await _card(async_client, headers, person_id))["disciplines"]
+
+        assert len(section["rows"]) == len(Discipline) - 1
+        assert "ecology" not in {r["discipline"] for r in section["rows"]}
+        assert section["note"] == TERMINATED_REASON
+        assert section["not_applicable"].endswith(": Экология")

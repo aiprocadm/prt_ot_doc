@@ -965,6 +965,16 @@ const DisciplinesCard = ({
             ))}
           </tbody>
         </table>
+        {section.not_applicable ? (
+          // Скрытое по редакции не молчит: иначе пять строк вместо восьми
+          // читались бы как недоделка (срез-54).
+          <p
+            className="mt-3 text-xs text-muted-foreground"
+            data-testid="employee-disciplines-not-applicable"
+          >
+            {section.not_applicable}
+          </p>
+        ) : null}
       </CardContent>
     </Card>
   </section>

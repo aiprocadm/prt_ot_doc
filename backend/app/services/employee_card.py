@@ -22,7 +22,9 @@ Implementation notes
 отвечает на вопрос «всё ли положенное у человека действует» — по каждой
 дисциплине словаря и одними правилами с карточкой площадки и светофором
 клиента (``services/discipline_numbers`` + ``core/discipline_status``).
-Своего здесь два решения:
+Своего здесь два решения (третье — общее с площадкой: дисциплины вне редакции
+арендатора скрыты и названы фразой ``not_applicable``,
+``services/discipline_applicability``, срез-54):
 
 * **уволенный не красится.** Площадка и клиент уволенных не считают
   (``employment_status != terminated``); карточка уволенного показала бы
@@ -109,6 +111,11 @@ from app.schemas.employee import (
     EmployeeTrainingItem,
     EmployeeTrainingSection,
     EmployeeUserAccount,
+)
+from app.services.discipline_applicability import (
+    DisciplineApplicability,
+    collect_applicability,
+    only_applicable,
 )
 from app.services.discipline_numbers import collect_people_numbers
 
@@ -312,6 +319,7 @@ class EmployeeCardService:
     async def _build_disciplines(self, person: Person) -> EmployeeDisciplinesSection:
         """Светофор по всем дисциплинам словаря — одними правилами с площадкой."""
 
+        applicability = await collect_applicability(self.db, self.tenant_id)
         if person.employment_status == EmploymentStatus.TERMINATED:
             rows = [
                 DisciplineStatus(
@@ -321,14 +329,18 @@ class EmployeeCardService:
                     reason=TERMINATED_REASON,
                 )
                 for discipline in Discipline
+                if applicability.applies(discipline)
             ]
-            return _disciplines_section(rows, note=TERMINATED_REASON)
+            return _disciplines_section(rows, applicability, note=TERMINATED_REASON)
 
         numbers = await collect_people_numbers(self.db, tenant_id=self.tenant_id, people=[person])
-        rows = build_discipline_statuses(
-            medical=numbers.medical,
-            ppe=numbers.ppe,
-            training_overdue=numbers.training_overdue,
+        rows = only_applicable(
+            build_discipline_statuses(
+                medical=numbers.medical,
+                ppe=numbers.ppe,
+                training_overdue=numbers.training_overdue,
+            ),
+            applicability,
         )
         no_norms = (
             "Эталон не задан: должность не указана"
@@ -344,7 +356,7 @@ class EmployeeCardService:
             )
             for row in rows
         ]
-        return _disciplines_section(rows)
+        return _disciplines_section(rows, applicability)
 
     async def _build_training(self, person: Person) -> EmployeeTrainingSection:
         # TrainingSession (modern) — primary timeline.
@@ -923,10 +935,14 @@ class EmployeeCardService:
 
 
 def _disciplines_section(
-    rows: list[DisciplineStatus], *, note: str | None = None
+    rows: list[DisciplineStatus],
+    applicability: DisciplineApplicability,
+    *,
+    note: str | None = None,
 ) -> EmployeeDisciplinesSection:
     return EmployeeDisciplinesSection(
         overall=worst_light(rows).value,
+        not_applicable=applicability.note,
         rows=[
             EmployeeDisciplineStatus(
                 discipline=row.discipline.value,

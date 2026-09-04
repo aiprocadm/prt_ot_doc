@@ -154,6 +154,8 @@ export interface EmployeeDisciplinesSectionDto {
   rows: EmployeeDisciplineStatusDto[];
   /** Почему светофор не считался (уволен) — словами, а не пустой таблицей. */
   note: string | null;
+  /** дисциплины вне редакции арендатора — одной фразой; null — скрывать нечего */
+  not_applicable: string | null;
 }
 
 export interface EmployeeTrainingSectionDto {
