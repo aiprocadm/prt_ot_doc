@@ -83,6 +83,8 @@ export type EcologyReadinessDto = {
   fee_lines: number;
   fee_lines_without_rate: number;
   fee_total_rubles: string;
+  /** Доп. №1 разд. 57.4: открытые происшествия этой дисциплины (срез-49). */
+  incidents_open: number;
 };
 
 export type FeeRateDto = {

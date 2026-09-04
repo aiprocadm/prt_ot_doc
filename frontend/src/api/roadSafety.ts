@@ -257,6 +257,8 @@ export type RoadSafetyReadinessDto = {
   /** «штраф не наложен» и «не оплачен» — разные вещи; здесь второе */
   fines_unpaid_count: number;
   fines_unpaid_amount: number;
+  /** Доп. №1 разд. 57.4: открытые происшествия этой дисциплины (срез-49). */
+  incidents_open: number;
 };
 
 export const roadSafetyApi = {

@@ -11,6 +11,7 @@ import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingScreen } from "@/components/common/LoadingScreen";
 import { RegistryPageHeader } from "@/components/common/RegistryPageHeader";
+import { disciplineIncidentsStat } from "@/components/common/disciplineIncidentsStat";
 import { RegistryTable } from "@/components/common/RegistryTable";
 import { Button } from "@/components/ui/button";
 import { useAsyncResource } from "@/hooks/useAsyncResource";
@@ -54,6 +55,7 @@ const FireSafetyPage = () => {
       equipment: [],
       documents: [],
       readiness: {
+        incidents_open: 0,
         total_units: 0,
         overdue_recharge: 0,
         overdue_inspection: 0,
@@ -166,6 +168,9 @@ const FireSafetyPage = () => {
             label: "Просрочен пересмотр документов",
             value: readiness.overdue_documents,
           },
+          // Доп. №1 разд. 57.4: происшествия контура — той же формулой, что
+          // разрез у директора; ссылка ведёт в общий реестр (срез-49).
+          disciplineIncidentsStat("fire_safety", readiness.incidents_open),
         ]}
       />
 

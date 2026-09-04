@@ -306,3 +306,8 @@ class IndustrialReadinessRead(BaseSchema):
     current_year_plan_exists: bool = False
     pc_measures_overdue: int = 0
     pc_measures_planned: int = 0
+    #: Доп. №1 разд. 57.4: открытые происшествия, размеченные этой дисциплиной
+    #: (срез-49). Формула одна на контуры и разрез директора —
+    #: ``app.services.discipline_incidents``; «не закрыто и не отменено».
+    #: Неразмеченные сюда не попадают: контур не угадывает дисциплину.
+    incidents_open: int = 0

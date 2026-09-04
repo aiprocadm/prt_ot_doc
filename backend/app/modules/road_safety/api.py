@@ -85,6 +85,7 @@ from app.schemas.road_safety import (
     WaybillUpdate,
 )
 from app.services.audit import AuditService, field_level_diff
+from app.services.discipline_incidents import open_incidents_count
 
 router = APIRouter(prefix="/road-safety", tags=["road-safety"])
 
@@ -770,6 +771,9 @@ async def road_safety_readiness(
         violations_without_driver=violations_without_driver,
         fines_unpaid_count=int(unpaid_rows[0] or 0),
         fines_unpaid_amount=float(unpaid_rows[1] or 0),
+        # Доп. №1 разд. 57.4: открытые происшествия контура — той же формулой,
+        # что разрез «по дисциплинам» у директора (срез-49).
+        incidents_open=await open_incidents_count(session, str(tenant.id), Discipline.ROAD_SAFETY),
     )
 
 

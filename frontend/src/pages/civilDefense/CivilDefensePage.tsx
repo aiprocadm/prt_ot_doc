@@ -13,6 +13,7 @@ import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingScreen } from "@/components/common/LoadingScreen";
 import { RegistryPageHeader } from "@/components/common/RegistryPageHeader";
+import { disciplineIncidentsStat } from "@/components/common/disciplineIncidentsStat";
 import { RegistryTable } from "@/components/common/RegistryTable";
 import { Button } from "@/components/ui/button";
 import { useAsyncResource } from "@/hooks/useAsyncResource";
@@ -192,6 +193,7 @@ const CivilDefensePage = () => {
       documents: [] as CdDocumentDto[],
       programs: [] as TrainingProgramDto[],
       readiness: {
+        incidents_open: 0,
         total_formations: 0,
         by_kind: { nasf: 0, nfgo: 0 },
         without_commander: 0,
@@ -296,6 +298,9 @@ const CivilDefensePage = () => {
           // Разд. 56.1 «программы обучения»: программы ядра с дисциплиной ГО.
           // Реестром владеет раздел обучения — здесь только счётчик.
           { label: "Программ обучения", value: readiness.training_programs },
+          // Доп. №1 разд. 57.4: происшествия контура — той же формулой, что
+          // разрез у директора; ссылка ведёт в общий реестр (срез-49).
+          disciplineIncidentsStat("civil_defense", readiness.incidents_open),
         ]}
       />
 
