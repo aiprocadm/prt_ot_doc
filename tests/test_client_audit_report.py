@@ -5,7 +5,9 @@
 * отчёт всегда отвечает на три вопроса, даже когда ответ «ничего»;
 * действия ВЫВОДЯТСЯ из красных направлений и неразобранной ленты, а не
   сочиняются;
-* итог отчёта равен худшему измеренному направлению.
+* итог отчёта равен худшему измеренному направлению;
+* происшествия (срез-52) — отдельным числом по дисциплинам и действием
+  «довести до закрытия», цвет от них не меняется, неразмеченное названо.
 """
 
 from __future__ import annotations
@@ -84,3 +86,42 @@ class TestBuildReport:
         )
         assert content.payload["period"] == {"start": "2026-08-11", "end": "2026-08-18"}
         assert len(content.payload["directions"]) == 8
+
+    def test_происшествия_по_дисциплинам_названы_и_не_красят_светофор(self) -> None:
+        content = build_report(
+            **PERIOD,
+            directions=_directions(medical=DirectionCounts(required=2)),
+            changes_by_kind={},
+            changes_unhandled=0,
+            incidents_open={"road_safety": 2, "ecology": 1, "fire_safety": 0},
+            incidents_unmarked=1,
+        )
+        # цвет — только от эталона; происшествия его не трогают
+        assert content.overall == "green"
+        assert (
+            "Открытых происшествий: 4 (БДД — 2; Экология — 1; не размечено — 1)." in content.summary
+        )
+        actions = content.payload["actions"]
+        assert "БДД: довести до закрытия 2 происшествия" in actions
+        assert "Экология: довести до закрытия 1 происшествие" in actions
+        assert "Разметить дисциплиной в реестре происшествий: 1" in actions
+        assert not any("Пожарная" in a for a in actions), "ноль — не действие"
+        assert content.payload["incidents"] == {
+            "total": 4,
+            "by_discipline": {"road_safety": 2, "ecology": 1},
+            "unmarked": 1,
+        }
+        by_code = {row["direction"]: row for row in content.payload["directions"]}
+        assert by_code["road_safety"]["incidents_open"] == 2
+        assert by_code["medical"]["incidents_open"] == 0
+
+    def test_без_происшествий_сказано_словами_а_не_пропущено(self) -> None:
+        content = build_report(
+            **PERIOD,
+            directions=_directions(),
+            changes_by_kind={},
+            changes_unhandled=0,
+        )
+        assert "Открытых происшествий нет." in content.summary
+        assert content.payload["incidents"] == {"total": 0, "by_discipline": {}, "unmarked": 0}
+        assert "Действий не требуется" in content.summary
