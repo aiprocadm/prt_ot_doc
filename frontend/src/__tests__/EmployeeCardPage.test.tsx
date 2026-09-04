@@ -377,6 +377,10 @@ describe("EmployeeCardPage", () => {
     expect(
       await screen.findByRole("heading", { level: 3, name: /Стажировки · 2/ }),
     ).toBeInTheDocument();
+    // из карточки — в общий реестр, открытый на этом человеке (срез-46)
+    expect(
+      screen.getByRole("link", { name: "открыть в реестре" }),
+    ).toHaveAttribute("href", "/internships?person_id=p-1");
     const shortRow = screen.getByText("автобус категории D").closest("tr");
     expect(shortRow).not.toBeNull();
     const short = within(shortRow as HTMLElement);
