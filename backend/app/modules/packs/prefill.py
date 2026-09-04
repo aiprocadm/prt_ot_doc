@@ -31,6 +31,13 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.disciplines import Discipline, areas_of_discipline
+from app.models.civil_defense import (
+    CD_FORMATION_KINDS,
+    CD_GO_CATEGORIES,
+    CivilDefenseFormation,
+    CivilDefenseFormationMember,
+    CivilDefenseProfile,
+)
 from app.models.ecology import (
     EmissionMeasurement,
     EmissionSource,
@@ -52,6 +59,7 @@ from app.models.road_safety import Driver, RoadAccident, TrafficViolation, Vehic
 from app.modules.packs.definitions import (
     PACK_CODE_BDD_REPORTS,
     PACK_CODE_ECO_REPORTS,
+    PACK_CODE_GOCHS_REPORTS,
     PACK_CODE_OPO_REPORTS,
 )
 
@@ -475,12 +483,109 @@ async def _industrial_safety_suggestions(
     return suggestions
 
 
+async def _civil_defense_suggestions(
+    session: AsyncSession, tenant_id: str
+) -> dict[str, Suggestion]:
+    """Подсказки для отчётности ГО и ЧС — из реестров контура.
+
+    ЭТО ЗАКРЫВАЕТ СТАРУЮ ГРАНИЦУ. Срез-6 честно записал: «формирования и
+    личный состав в системе есть, но подставлять их в документ платформа не
+    умеет». С решением #960 умеет — тем же способом, что БДД, экология и
+    ПромБез: подсказкой с источником, а не ответом.
+
+    Подсказываются ТОЛЬКО факты о внесённом на СЕГОДНЯ:
+
+    * формирования — сколько их в реестре, с разбивкой по видам в источнике;
+    * личный состав — строки состава БЕЗ даты вывода. Правило ТО ЖЕ, что у
+      сводки готовности контура, иначе сводка и мастер показали бы разные
+      числа за один и тот же день. Считаются строки, а не люди: один человек
+      в двух формированиях — две строки, и сводка считает так же;
+    * категория объекта и ответственный — ТОЛЬКО когда объект по ГО ОДИН
+      (правило единственного объекта, как у НВОС в экологии): о котором из
+      нескольких площадок положение, платформа за специалиста не решает.
+
+    НЕ ПОДСКАЗЫВАЮТСЯ: обеспеченность СИЗ и средства оповещения (таких
+    реестров у контура нет), всё о ЧС в донесении (событие описывает тот, кто
+    его видел), период и составитель (решение специалиста).
+    """
+
+    formations = (
+        (
+            await session.execute(
+                select(CivilDefenseFormation).where(
+                    CivilDefenseFormation.tenant_id == tenant_id,
+                    CivilDefenseFormation.deleted_at.is_(None),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    by_kind = {code: 0 for code in CD_FORMATION_KINDS}
+    for formation in formations:
+        if formation.kind in by_kind:
+            by_kind[formation.kind] += 1
+    # В источнике вид назван коротко («НАСФ»), а не полным словарным именем:
+    # подсказка должна читаться в одну строку.
+    kinds_note = ", ".join(
+        f"{label.split(' ', 1)[0]} — {by_kind[code]}" for code, label in CD_FORMATION_KINDS.items()
+    )
+    members_active = int(
+        await session.scalar(
+            select(func.count())
+            .select_from(CivilDefenseFormationMember)
+            .where(
+                CivilDefenseFormationMember.tenant_id == tenant_id,
+                CivilDefenseFormationMember.deleted_at.is_(None),
+                CivilDefenseFormationMember.released_on.is_(None),
+            )
+        )
+        or 0
+    )
+    suggestions = {
+        "gochs_formations_count": Suggestion(
+            str(len(formations)), f"формирований сегодня по реестру ГО и ЧС ({kinds_note})"
+        ),
+        "gochs_personnel_count": Suggestion(
+            str(members_active),
+            "в составе формирований сегодня по реестру (выведенные не считаются)",
+        ),
+    }
+
+    profiles = (
+        (
+            await session.execute(
+                select(CivilDefenseProfile).where(
+                    CivilDefenseProfile.tenant_id == tenant_id,
+                    CivilDefenseProfile.deleted_at.is_(None),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if len(profiles) == 1:
+        only = profiles[0]
+        suggestions["facility_category"] = Suggestion(
+            CD_GO_CATEGORIES.get(only.category, only.category),
+            "категория единственного объекта в реестре ГО",
+        )
+        # Ответственный у объекта — свободная строка, и пустая означает «не
+        # назначен», а не «неизвестен»: пустую подсказывать нечего.
+        if only.responsible:
+            suggestions["gochs_responsible"] = Suggestion(
+                only.responsible, "ответственный единственного объекта в реестре ГО"
+            )
+    return suggestions
+
+
 #: Комплекты, у которых есть источник в реестрах. Пусто для комплекта —
 #: НЕ ошибка: у большинства документов числа берутся не из данных, а из
 #: решения специалиста, и подсказывать там нечего.
 _RESOLVERS = {
     PACK_CODE_BDD_REPORTS: _road_safety_suggestions,
     PACK_CODE_ECO_REPORTS: _ecology_suggestions,
+    PACK_CODE_GOCHS_REPORTS: _civil_defense_suggestions,
     PACK_CODE_OPO_REPORTS: _industrial_safety_suggestions,
 }
 
