@@ -181,9 +181,31 @@ async def test_просрочка_не_считается_это_none_а_не_н
             assert (
                 value is None
             ), f"{discipline}: нет размеченных сроков — не ноль, а «не считается»"
-    # словарь размеченных не выродился: ПромБез и БДД сроков не имеют, медосмотры имеют
-    assert Discipline.MEDICAL in ATTENTION_DISCIPLINES
-    assert Discipline.INDUSTRIAL_SAFETY not in ATTENTION_DISCIPLINES
+    # срез-57 (разд. 57.2): ПромБез, ГО и ЧС и БДД получили источники сроков
+    # (ЭПБ, учения ГО, документы ТС). Без источника осталась ТОЛЬКО пожарная
+    # безопасность: её сроки живут в инструктажах, а источник инструктажей
+    # целиком размечен обучением — по видам он пока не делится.
+    assert ATTENTION_DISCIPLINES == frozenset(Discipline) - {Discipline.FIRE_SAFETY}
+
+
+@pytest.mark.asyncio
+async def test_дисциплина_без_источников_осталась_бы_none(
+    async_client: AsyncClient, make_auth_headers, sessionmaker, data_factory, monkeypatch
+):
+    """Правило «не считается — None, а не ноль» живо: сторож на случай, если
+    источник дисциплины когда-нибудь уберут из разметки."""
+
+    await _grant(sessionmaker, data_factory)
+    headers = await make_auth_headers(RoleEnum.ADMIN)
+    monkeypatch.setattr(
+        "app.modules.analytics.breakdown.ATTENTION_DISCIPLINES",
+        frozenset(Discipline) - {Discipline.INDUSTRIAL_SAFETY},
+    )
+
+    rows = _by_id((await async_client.get(f"{BASE}?dimension=discipline", headers=headers)).json())
+
+    assert rows["industrial_safety"]["overdue_items"] is None
+    assert isinstance(rows["road_safety"]["overdue_items"], int)
 
 
 @pytest.mark.asyncio

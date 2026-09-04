@@ -14,7 +14,10 @@ from app.api.routes.workspace import (
 )
 from app.core.security import AccessContext
 from app.db.session import SharedBase, TenantBase
+from app.models.civil_defense import CivilDefenseDrill
+from app.models.ecology import EmissionNorm, EmissionSource, EnvironmentalFacility
 from app.models.feature import Feature, FeatureEnablement
+from app.models.industrial_safety import HazardousFacility, TechnicalDevice
 from app.models.medical import MedicalExam
 from app.models.models import (
     ComplianceDeadline,
@@ -24,6 +27,7 @@ from app.models.models import (
     PPEIssueStatus,
 )
 from app.models.obligations import Task, TaskPriority, TaskStatus
+from app.models.road_safety import Vehicle
 
 
 @pytest.fixture()
@@ -250,6 +254,119 @@ async def test_attention_hides_empty_disciplines_outside_edition_but_keeps_facts
         "Медосмотры — модуль не выдан или выключен, но открытые записи есть и показаны как факты"
     )
     assert any("Просрочено по дисциплинам: Медосмотры" in rec for rec in payload.recommendations)
+
+
+@pytest.mark.asyncio
+async def test_attention_aggregates_epb_drills_and_vehicle_documents(db_session) -> None:
+    """BIZ-54-57 срез-57, разд. 57.2: «просрочена ЭПБ на ОПО», «не проведены
+    учения по ГО», «просрочен техосмотр ТС» — в одном Центре внимания.
+
+    До среза у трёх дисциплин не было ни одного источника сроков: модули
+    считали просрочки у себя, а строки «Промышленная безопасность», «ГО и ЧС»
+    и «БДД» в центре всегда стояли по нулям.
+    """
+
+    tenant = SimpleNamespace(id="tenant-1", slug="tenant-a", name="Tenant A", is_active=True)
+    access = _access("user-1", "admin", tenant.id, tenant.slug)
+    today = datetime.now(timezone.utc).date()
+    await _grant_modules(db_session, tenant.id, (*DISCIPLINE_MODULES, "medical"))
+    facility = HazardousFacility(
+        tenant_id=tenant.id, name="Котельная", register_number="А01-1", hazard_class="III"
+    )
+    db_session.add(facility)
+    await db_session.flush()
+    db_session.add_all(
+        [
+            TechnicalDevice(
+                tenant_id=tenant.id,
+                facility_id=facility.id,
+                kind="boiler",
+                name="Котёл №1",
+                epb_valid_until=today - timedelta(days=10),
+            ),
+            CivilDefenseDrill(
+                tenant_id=tenant.id,
+                kind="evacuation",
+                title="Тренировка по эвакуации",
+                planned_on=today - timedelta(days=7),
+            ),
+            Vehicle(
+                tenant_id=tenant.id,
+                plate_number="А123БВ77",
+                brand_model="ГАЗель",
+                kind="truck",
+                inspection_due=today - timedelta(days=1),
+                insurance_due=today + timedelta(days=2),
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    payload = await workspace_attention(tenant=tenant, session=db_session, access=access)
+
+    by_code = {row.code: row for row in payload.disciplines}
+    assert by_code["industrial_safety"].overdue == 1
+    assert by_code["civil_defense"].overdue == 1
+    assert by_code["road_safety"].overdue == 1
+    assert by_code["road_safety"].due_soon == 1, "ОСАГО через два дня — «скоро срок»"
+    # поимённого учёта у этих дисциплин по-прежнему нет — причина остаётся
+    assert by_code["industrial_safety"].measured is False
+    titles = {item.item_type: item.title for item in payload.items}
+    assert titles["industrial_safety_epb"] == "ЭПБ: Котёл №1"
+    assert titles["civil_defense_drill"] == "Учение ГО: Тренировка по эвакуации"
+    assert titles["road_safety_vehicle"] in {"Техосмотр ТС: А123БВ77", "Полис ОСАГО: А123БВ77"}
+    rec = next(r for r in payload.recommendations if r.startswith("Просрочено по дисциплинам"))
+    for title in ("Промышленная безопасность", "ГО и ЧС", "БДД"):
+        assert title in rec, rec
+    # приёмка §58.3: дедлайны минимум из трёх дисциплин — здесь их три без
+    # единого медосмотра, СИЗ или обучения
+    assert len({item.discipline for item in payload.items if item.discipline}) >= 3
+
+
+@pytest.mark.asyncio
+async def test_attention_ecology_overdue_is_counted_not_zero(db_session) -> None:
+    """Сторож против потери честных COUNT'ов у дисциплин без поимённого учёта.
+
+    Словарь счётчиков заводился только по измеримым дисциплинам, и просроченное
+    разрешение на выброс в строке «Экология» стояло нулём, хотя агрегатор его
+    посчитал (срез-57 нашёл это на сверке разд. 57.2).
+    """
+
+    tenant = SimpleNamespace(id="tenant-1", slug="tenant-a", name="Tenant A", is_active=True)
+    access = _access("user-1", "admin", tenant.id, tenant.slug)
+    today = datetime.now(timezone.utc).date()
+    await _grant_modules(db_session, tenant.id, (*DISCIPLINE_MODULES, "medical"))
+    facility = EnvironmentalFacility(
+        tenant_id=tenant.id, name="Площадка", register_number="12-1", category="II"
+    )
+    db_session.add(facility)
+    await db_session.flush()
+    source = EmissionSource(
+        tenant_id=tenant.id,
+        facility_id=facility.id,
+        source_number="0001",
+        name="Труба",
+        kind="organized",
+    )
+    db_session.add(source)
+    await db_session.flush()
+    db_session.add(
+        EmissionNorm(
+            tenant_id=tenant.id,
+            source_id=source.id,
+            substance="Азота диоксид",
+            limit_grams_per_second=1,
+            permit_number="РВ-1",
+            valid_until=today - timedelta(days=3),
+        )
+    )
+    await db_session.commit()
+
+    payload = await workspace_attention(tenant=tenant, session=db_session, access=access)
+
+    ecology = next(row for row in payload.disciplines if row.code == "ecology")
+    assert ecology.overdue == 1
+    assert any("Экология" in rec for rec in payload.recommendations)
 
 
 @pytest.mark.asyncio

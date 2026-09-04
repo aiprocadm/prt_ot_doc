@@ -128,6 +128,12 @@ SOURCE_DISCIPLINE: dict[str, Discipline] = {
     # оба источника целиком экологические, гадать не о чем.
     "ecology_permit": Discipline.ECOLOGY,
     "ecology_measurement": Discipline.ECOLOGY,
+    # Доп. №1 разд. 57.2 (срез-57): «просрочена ЭПБ на ОПО», «не проведены
+    # учения по ГО», «просрочен техосмотр ТС». Каждый источник целиком
+    # принадлежит своей дисциплине — гадать по названию не приходится.
+    "industrial_safety_epb": Discipline.INDUSTRIAL_SAFETY,
+    "civil_defense_drill": Discipline.CIVIL_DEFENSE,
+    "road_safety_vehicle": Discipline.ROAD_SAFETY,
 }
 
 #: Источники БЕЗ дисциплины — каждый с причиной. Причина уходит в ответ API:

@@ -18,7 +18,11 @@ export type CalendarSourceType =
   | "calendar_event"
   // Доп. №1 разд. 55.3 «экологический календарь».
   | "ecology_permit"
-  | "ecology_measurement";
+  | "ecology_measurement"
+  // Доп. №1 разд. 57.2 (срез-57): ЭПБ на ОПО, учения ГО, документы ТС.
+  | "industrial_safety_epb"
+  | "civil_defense_drill"
+  | "road_safety_vehicle";
 
 export const CALENDAR_SOURCE_TYPES: readonly CalendarSourceType[] = [
   "medical_exam",
@@ -32,6 +36,9 @@ export const CALENDAR_SOURCE_TYPES: readonly CalendarSourceType[] = [
   "calendar_event",
   "ecology_permit",
   "ecology_measurement",
+  "industrial_safety_epb",
+  "civil_defense_drill",
+  "road_safety_vehicle",
 ] as const;
 
 export type CalendarSlaBand = "overdue" | "critical" | "warning" | "ok";
