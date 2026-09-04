@@ -72,6 +72,11 @@ const IncidentsPage = () => {
   const [statusFilter, setStatusFilter] = useState<string>(
     searchParams.get("status") ?? "",
   );
+  // Дисциплина живёт в адресе (?discipline=), как и статус: ссылку с
+  // контура можно передать — откроется уже отфильтрованный список.
+  const [disciplineFilter, setDisciplineFilter] = useState<string>(
+    searchParams.get("discipline") ?? "",
+  );
   const { items: companies, list: listCompanies } = useCompaniesStore();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
@@ -97,13 +102,15 @@ const IncidentsPage = () => {
   });
 
   const load = useCallback(
-    async (status = statusFilter) => {
+    async (status = statusFilter, discipline = disciplineFilter) => {
       setLoading(true);
       setError(null);
       try {
         const page = await incidentsApi.list({
           limit: 100,
           status_filter: status || undefined,
+          // фильтрует сервер, а не страница: пустое — ключ не уходит вовсе
+          ...(discipline ? { discipline } : {}),
         });
         setItems(page.items);
       } catch (err) {
@@ -114,13 +121,13 @@ const IncidentsPage = () => {
         setLoading(false);
       }
     },
-    [statusFilter],
+    [statusFilter, disciplineFilter],
   );
 
   useEffect(() => {
-    void load(statusFilter);
+    void load(statusFilter, disciplineFilter);
     listCompanies({ page_size: 100 }).catch(() => undefined);
-  }, [listCompanies, load, statusFilter]);
+  }, [listCompanies, load, statusFilter, disciplineFilter]);
 
   const handleCreate = async () => {
     if (!form.title || !form.company_id) {
@@ -194,6 +201,27 @@ const IncidentsPage = () => {
             <option value="draft">Черновик</option>
             <option value="investigating">Расследуется</option>
             <option value="closed">Закрыт</option>
+          </select>
+          <select
+            value={disciplineFilter}
+            onChange={(event) => {
+              const next = event.target.value;
+              setDisciplineFilter(next);
+              const params = new URLSearchParams(searchParams);
+              if (next) params.set("discipline", next);
+              else params.delete("discipline");
+              setSearchParams(params, { replace: true });
+              void load(statusFilter, next);
+            }}
+            className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+            aria-label="Фильтр по дисциплине"
+          >
+            <option value="">Все дисциплины</option>
+            {Object.entries(TRAINING_DISCIPLINE_TITLES).map(([code, title]) => (
+              <option key={code} value={code}>
+                {title}
+              </option>
+            ))}
           </select>
           <Button variant="outline" onClick={() => void load()}>
             Обновить
