@@ -9,6 +9,11 @@
 **Dedicated пропускается и СЧИТАЕТСЯ.** Данные такого клиента живут в его
 собственном арендаторе — отчёт «по нулям» был бы враньём (правило «Центра
 внимания»). Пропуск виден числом в итоге, а не молчит.
+
+**Происшествия — по компании клиента, той же формулой, что у директора
+(срез-52).** ``open_incidents_where`` + ``Incident.company_id``: заказчик
+читает в отчёте те же числа, что аутсорсер видит в разрезе по дисциплинам,
+только суженные до его организации.
 """
 
 from __future__ import annotations
@@ -26,7 +31,9 @@ from app.domains.managed_clients.lifecycle import ManagedClientMode
 from app.domains.managed_clients.readiness import build_directions
 from app.domains.managed_clients.readiness_service import collect_client_numbers
 from app.models.client_changes import ClientAuditReport, ClientChange
+from app.models.incidents import Incident
 from app.models.managed_clients import ManagedClient
+from app.services.discipline_incidents import open_incidents_where
 
 __all__ = ["AUDIT_PERIOD_DAYS", "AuditRunOutcome", "run_tenant_audit"]
 
@@ -64,9 +71,7 @@ async def _changes_by_kind(
     return dict(counter)
 
 
-async def _unhandled_count(
-    session: AsyncSession, tenant_id: str, client_id: str
-) -> int:
+async def _unhandled_count(session: AsyncSession, tenant_id: str, client_id: str) -> int:
     return int(
         (
             await session.execute(
@@ -80,6 +85,28 @@ async def _unhandled_count(
         ).scalar_one()
         or 0
     )
+
+
+async def _incidents_by_discipline(
+    session: AsyncSession, tenant_id: str, company_id: str
+) -> tuple[dict[str, int], int]:
+    """Открытые происшествия компании клиента: по коду дисциплины + без разметки."""
+
+    rows = (
+        await session.execute(
+            select(Incident.discipline, func.count())
+            .where(*open_incidents_where(tenant_id), Incident.company_id == company_id)
+            .group_by(Incident.discipline)
+        )
+    ).all()
+    by_discipline: dict[str, int] = {}
+    unmarked = 0
+    for discipline, count in rows:
+        if discipline is None:
+            unmarked += int(count or 0)
+        else:
+            by_discipline[str(discipline)] = int(count or 0)
+    return by_discipline, unmarked
 
 
 async def _report_exists(
@@ -143,6 +170,9 @@ async def run_tenant_audit(
             ppe=numbers.ppe,
             training_overdue=numbers.training_overdue,
         )
+        incidents_open, incidents_unmarked = await _incidents_by_discipline(
+            session, tenant_id, str(client.company_id)
+        )
         content = build_report(
             period_start=period_start,
             period_end=today,
@@ -150,9 +180,9 @@ async def run_tenant_audit(
             changes_by_kind=await _changes_by_kind(
                 session, tenant_id, str(client.id), period_start
             ),
-            changes_unhandled=await _unhandled_count(
-                session, tenant_id, str(client.id)
-            ),
+            changes_unhandled=await _unhandled_count(session, tenant_id, str(client.id)),
+            incidents_open=incidents_open,
+            incidents_unmarked=incidents_unmarked,
         )
         session.add(
             ClientAuditReport(
@@ -169,6 +199,4 @@ async def run_tenant_audit(
 
     if created:
         await session.flush()
-    return AuditRunOutcome(
-        created=created, already_current=already, skipped_dedicated=skipped
-    )
+    return AuditRunOutcome(created=created, already_current=already, skipped_dedicated=skipped)

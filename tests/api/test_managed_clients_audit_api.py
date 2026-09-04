@@ -9,12 +9,14 @@
   назван числом;
 * Dedicated пропускается и виден в итоге, отчёт по нему не пишется;
 * список отчётов клиента — свежие сверху;
-* выключенный модуль — 404.
+* выключенный модуль — 404;
+* происшествия компании клиента — в отчёте по дисциплинам, чужие и закрытые
+  не считаются (срез-52).
 """
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 import pytest
 from httpx import AsyncClient
@@ -25,7 +27,7 @@ from app.domains.managed_clients.lifecycle import ContractStatus, ManagedClientM
 from app.models.client_changes import ClientAuditReport, ClientChange
 from app.models.managed_clients import ManagedClient
 from app.models.medical import MedicalExamKind, MedicalNorm
-from app.models.models import Position, RoleEnum
+from app.models.models import Company, Incident, IncidentStatus, Position, RoleEnum
 
 BASE = "/api/v1/managed-clients"
 
@@ -129,6 +131,68 @@ class TestClientAudit:
         assert "Разобрать записи ленты изменений: 1" in report["summary"]
         assert report["payload"]["changes"]["total"] == 1
 
+    async def test_происшествия_компании_клиента_по_дисциплинам_чужие_не_считаются(
+        self, async_client: AsyncClient, make_auth_headers, served_client, data_factory
+    ) -> None:
+        tenant, person, mcid = served_client
+        async with await _trusted() as session:
+            other = await data_factory.create_company(tenant=tenant, name="Чужая", session=session)
+            own = await session.get(Company, person.company_id)
+            own_site = await data_factory.create_site(
+                tenant=tenant, company=own, name="Склад", session=session
+            )
+            other_site = await data_factory.create_site(
+                tenant=tenant, company=other, name="Чужой цех", session=session
+            )
+            site_of = {person.company_id: own_site.id, other.id: other_site.id}
+
+            def incident(title: str, company_id, *, discipline: str | None, **extra):
+                return Incident(
+                    tenant_id=tenant.id,
+                    company_id=company_id,
+                    site_id=site_of[company_id],
+                    title=title,
+                    occurred_at=datetime.now(tz=timezone.utc) - timedelta(days=1),
+                    discipline=discipline,
+                    **extra,
+                )
+
+            session.add_all(
+                [
+                    incident("ДТП у ворот", person.company_id, discipline="road_safety"),
+                    incident("Наезд на складе", person.company_id, discipline="road_safety"),
+                    incident("Порез при уборке", person.company_id, discipline=None),
+                    incident(
+                        "Старое ДТП",
+                        person.company_id,
+                        discipline="road_safety",
+                        status=IncidentStatus.CLOSED,
+                    ),
+                    incident("Чужой разлив", other.id, discipline="ecology"),
+                ]
+            )
+            await session.commit()
+        headers = await make_auth_headers(RoleEnum.ADMIN)
+
+        await _run(async_client, headers)
+
+        report = (await _reports(async_client, headers, mcid))["items"][0]
+        # только компания клиента, только открытые; чужой разлив не попал
+        assert report["payload"]["incidents"] == {
+            "total": 3,
+            "by_discipline": {"road_safety": 2},
+            "unmarked": 1,
+        }
+        assert "Открытых происшествий: 3 (БДД — 2; не размечено — 1)." in report["summary"]
+        actions = report["payload"]["actions"]
+        assert "БДД: довести до закрытия 2 происшествия" in actions
+        assert "Разметить дисциплиной в реестре происшествий: 1" in actions
+        # цвет по-прежнему от эталона (норма без экзамена → красный), не от происшествий
+        assert report["overall"] == "red"
+        by_code = {row["direction"]: row for row in report["payload"]["directions"]}
+        assert by_code["road_safety"]["incidents_open"] == 2
+        assert by_code["ecology"]["incidents_open"] == 0
+
     async def test_повторный_запуск_в_тот_же_день_не_дублирует(
         self, async_client: AsyncClient, make_auth_headers, served_client
     ) -> None:
@@ -204,6 +268,7 @@ class TestClientAudit:
         response = await async_client.post(f"{BASE}/audit/run", headers=headers)
 
         assert response.status_code == 404, response.text
+
 
 @pytest.mark.anyio
 class TestReportDelivery:
