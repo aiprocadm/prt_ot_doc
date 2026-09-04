@@ -75,6 +75,9 @@ export interface CalendarSourceCountDto {
   source_type: CalendarSourceType;
   count: number;
   overdue_count: number;
+  /** Просрочки по виду записи (например, `briefing_type`) — только у
+   * источников, где дисциплина зависит от вида; у остальных `null`. */
+  overdue_by_kind?: Record<string, number> | null;
 }
 
 export interface CalendarEventsResponseDto {

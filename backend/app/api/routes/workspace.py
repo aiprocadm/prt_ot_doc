@@ -16,6 +16,7 @@ from app.core.disciplines import (
     UNMEASURED_DISCIPLINES,
     Discipline,
     discipline_of,
+    discipline_of_event,
 )
 from app.core.security import AccessContext, rbac
 from app.core.tenant_validation import TenantContextValidator
@@ -581,7 +582,9 @@ async def workspace_attention(
     for code, overdue_total in facts.overdue.items():
         counts.setdefault(code, {"overdue": 0, "due_soon": 0})["overdue"] = overdue_total
     for event in discipline_events:
-        discipline = discipline_of(event.source_type)
+        # срез-58: у инструктажа дисциплина — по виду записи (противопожарный
+        # → «Пожарная безопасность», предрейсовый → «БДД»), а не по таблице
+        discipline = discipline_of_event(event.source_type, event.extra)
         overdue = event.is_overdue
         if discipline is not None and not overdue:
             counts.setdefault(discipline, {"overdue": 0, "due_soon": 0})

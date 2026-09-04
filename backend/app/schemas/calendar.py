@@ -124,6 +124,15 @@ class CalendarSourceCount(BaseSchema):
     source_type: str
     count: int
     overdue_count: int = 0
+    overdue_by_kind: dict[str, int] | None = Field(
+        default=None,
+        description=(
+            "Overdue split by record kind (e.g. `briefing_type`) for sources whose "
+            "discipline depends on the kind rather than on the table (see "
+            "`SOURCE_KIND_FIELD`); `null` for every other source. Values sum to "
+            "`overdue_count`."
+        ),
+    )
 
 
 class CalendarEventsResponse(BaseSchema):

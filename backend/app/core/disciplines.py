@@ -37,6 +37,8 @@
 from __future__ import annotations
 
 import enum
+from collections.abc import Mapping
+from typing import Any
 
 __all__ = [
     "ATTENTION_SOURCES",
@@ -46,6 +48,11 @@ __all__ = [
     "BRIEFING_TYPE_DISCIPLINE",
     "BRIEFING_TYPE_TITLES",
     "discipline_of_briefing",
+    "SOURCE_KIND_FIELD",
+    "KIND_DISCIPLINE",
+    "KIND_DISCIPLINES",
+    "discipline_of_record",
+    "discipline_of_event",
     "PERMIT_WORK_TYPE_DISCIPLINE",
     "UNMAPPED_PERMIT_WORK_TYPES",
     "discipline_of_permit",
@@ -385,6 +392,56 @@ def discipline_of_briefing(briefing_type: str) -> Discipline | None:
     """
 
     return BRIEFING_TYPE_DISCIPLINE.get(briefing_type)
+
+
+#: Источники, у которых дисциплина ЗАПИСИ зависит от её вида, а не от таблицы:
+#: источник → поле ``extra`` события календаря, где лежит вид. Сейчас один —
+#: инструктажи: противопожарный (разд. 54.1) и по БДД (разд. 56.2) живут в той
+#: же таблице, что и инструктаж по охране труда, и таблица про дисциплину
+#: молчит.
+SOURCE_KIND_FIELD: dict[str, str] = {"briefing_entry": "briefing_type"}
+
+#: Источник → разметка его видов. Ключи те же, что у ``SOURCE_KIND_FIELD``.
+KIND_DISCIPLINE: dict[str, dict[str, Discipline]] = {
+    "briefing_entry": BRIEFING_TYPE_DISCIPLINE,
+}
+
+#: Дисциплины, до которых источники сроков дотягиваются ТОЛЬКО через вид
+#: записи (срез-58): пожарная безопасность — через противопожарные
+#: инструктажи и ПТМ. У неё нет своей таблицы сроков, и до среза-58 её
+#: просрочки шли в «Обучение» — умолчание источника инструктажей.
+KIND_DISCIPLINES: frozenset[Discipline] = frozenset(
+    discipline for by_kind in KIND_DISCIPLINE.values() for discipline in by_kind.values()
+)
+
+
+def discipline_of_record(source_type: str, kind: str | None) -> Discipline | None:
+    """Дисциплина ОДНОЙ записи источника: по виду, если источник размечается
+    по видам, иначе — по источнику.
+
+    Три исхода — намеренно разные:
+
+    * источник размечается по таблице → ``discipline_of``;
+    * вида «нет под рукой» (``kind is None``) → умолчание источника из
+      ``SOURCE_DISCIPLINE``, ровно как обещает комментарий там;
+    * вид есть, но словарю незнаком → ``None``: у записи вид ЕСТЬ, и он не
+      наш; приписать ей умолчание значило бы то же враньё, от которого
+      отказался ``discipline_of_briefing``.
+    """
+
+    by_kind = KIND_DISCIPLINE.get(source_type)
+    if by_kind is None or kind is None:
+        return discipline_of(source_type)
+    return by_kind.get(kind)
+
+
+def discipline_of_event(source_type: str, extra: Mapping[str, Any] | None) -> Discipline | None:
+    """Дисциплина события календаря: вид берётся из ``extra`` по
+    ``SOURCE_KIND_FIELD``, дальше — ``discipline_of_record``."""
+
+    field = SOURCE_KIND_FIELD.get(source_type)
+    kind = extra.get(field) if (field is not None and extra) else None
+    return discipline_of_record(source_type, str(kind) if kind is not None else None)
 
 
 def discipline_of_permit(work_type: str) -> Discipline | None:
