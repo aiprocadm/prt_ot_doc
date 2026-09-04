@@ -32,11 +32,18 @@ export interface BreakdownRowDto {
   id: string;
   name: string;
   total_issues: number;
-  [metric: string]: string | number;
+  /** null — метрика по этой строке НЕ считается (не ноль). */
+  [metric: string]: string | number | null;
 }
 
+export type BreakdownDimension =
+  | "company"
+  | "site"
+  | "contractor"
+  | "discipline";
+
 export interface BreakdownDto {
-  dimension: "company" | "site" | "contractor";
+  dimension: BreakdownDimension;
   items: BreakdownRowDto[];
   total: number;
 }

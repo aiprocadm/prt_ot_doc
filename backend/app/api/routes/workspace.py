@@ -15,7 +15,6 @@ from app.core.disciplines import (
     UNCLASSIFIED_SOURCES,
     UNMEASURED_DISCIPLINES,
     Discipline,
-    attention_sources,
     discipline_of,
 )
 from app.core.security import AccessContext, rbac
@@ -38,7 +37,7 @@ from app.models.models import (
 )
 from app.models.obligations import Task, TaskStatus
 from app.schemas.calendar import CalendarEventItem
-from app.services.calendar_aggregator import CalendarAggregatorService
+from app.services.discipline_attention import attention_events, overdue_by_discipline
 from app.services.person_link import resolve_person_id
 
 router = APIRouter(prefix="/workspace", tags=["workspace"])
@@ -145,11 +144,6 @@ def _as_utc(value: datetime | None) -> datetime | None:
     return value.astimezone(timezone.utc)
 
 
-#: Насколько глубоко в прошлое смотрит Центр внимания. Просрочку двухлетней
-#: давности он не покажет: это уже не «внимание», а разбор архива, и такой
-#: запрос стоил бы посадочной странице лишних строк на каждый источник.
-_DISCIPLINE_LOOKBACK = timedelta(days=180)
-
 #: Полосы SLA, которые агрегатор считает поводом для внимания. ``warning`` и
 #: ``ok`` сюда не входят — иначе список превратился бы в копию календаря.
 _ATTENTION_BANDS = {"overdue", "critical"}
@@ -210,24 +204,16 @@ async def _discipline_events(
 
     Запрашиваются ТОЛЬКО размеченные источники (``ATTENTION_SOURCES``):
     у остальных дисциплина не хранится, и их строки некуда отнести.
+
+    Окно и итоги — из ``services.discipline_attention``: те же самые числа
+    показывает руководителю разрез «по дисциплинам» (разд. 57.4).
     """
 
-    service = CalendarAggregatorService(tenant_id=str(tenant.id), db=session)
-    response = await service.list_events(
-        from_at=now - _DISCIPLINE_LOOKBACK,
-        to_at=now + timedelta(days=3),
-        source_types=attention_sources(person_id=person_id),
-        person_id=person_id,
-        include_sla=True,
+    response = await attention_events(
+        session=session, tenant_id=str(tenant.id), person_id=person_id, now=now
     )
-
     # Честные итоги: сумма COUNT'ов источников, а не длина показанного списка.
-    overdue: dict[Discipline, int] = {}
-    for source in response.by_source:
-        discipline = discipline_of(source.source_type)
-        if discipline is None:
-            continue
-        overdue[discipline] = overdue.get(discipline, 0) + int(source.overdue_count or 0)
+    overdue = overdue_by_discipline(response)
 
     events = [item for item in response.items if item.sla_band in _ATTENTION_BANDS]
     # Просроченное вперёд: с него начинают работу, а близкий срок подождёт.
