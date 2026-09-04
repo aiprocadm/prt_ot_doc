@@ -83,7 +83,9 @@ const base = "/sites";
 const silent = { silentApiErrorToast: true } as const;
 
 export const sitesApi = {
-  async list(params: { limit?: number; offset?: number } = {}): Promise<SitePage> {
+  async list(
+    params: { limit?: number; offset?: number } = {},
+  ): Promise<SitePage> {
     const r = await apiClient.get<SitePage>(base, {
       params: { limit: 200, offset: 0, ...params },
       ...silent,

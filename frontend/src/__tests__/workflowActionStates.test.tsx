@@ -133,7 +133,11 @@ describe("workflow action states", () => {
                   graph_json: {
                     nodes: [
                       { id: "start", type: "start", name: "Старт" },
-                      { id: "approval", type: "approval", name: "Согласование" },
+                      {
+                        id: "approval",
+                        type: "approval",
+                        name: "Согласование",
+                      },
                       { id: "end", type: "end", name: "Завершение" },
                     ],
                     transitions: [

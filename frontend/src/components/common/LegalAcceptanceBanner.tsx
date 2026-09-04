@@ -75,7 +75,11 @@ export const LegalAcceptanceBanner = () => {
             {item.outdated
               ? `Условия изменились: перечитайте ${KIND_LABELS[item.kind]}.`
               : `Примите ${KIND_LABELS[item.kind]}, чтобы продолжить работу.`}{" "}
-            <Link className="underline" to={`/legal/${item.kind}`} target="_blank">
+            <Link
+              className="underline"
+              to={`/legal/${item.kind}`}
+              target="_blank"
+            >
               Прочитать
             </Link>
           </span>

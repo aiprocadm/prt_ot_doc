@@ -113,8 +113,18 @@ describe("AdminPage", () => {
         total: 4,
         overdue: 2,
         items: [
-          { id: "task-1", title: "Продлить обучение", priority: "high", overdue: true },
-          { id: "task-2", title: "Выдать СИЗ", priority: "normal", overdue: false },
+          {
+            id: "task-1",
+            title: "Продлить обучение",
+            priority: "high",
+            overdue: true,
+          },
+          {
+            id: "task-2",
+            title: "Выдать СИЗ",
+            priority: "normal",
+            overdue: false,
+          },
         ],
       },
       providerStatus: {

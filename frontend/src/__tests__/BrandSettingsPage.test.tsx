@@ -68,7 +68,9 @@ describe("экран настройки бренда (BIZ-52 разд. 52.2)", (
     // «Пусто» без подсказки читалось бы как «приложение без названия», поэтому
     // проверяем не только сам текст, но и что в нём названо действующее имя.
     expect(
-      screen.getByText(/не задано — действует бренд платформы — «Платформа ОТ\/ПБ»/),
+      screen.getByText(
+        /не задано — действует бренд платформы — «Платформа ОТ\/ПБ»/,
+      ),
     ).toBeInTheDocument();
   });
 
@@ -122,7 +124,9 @@ describe("экран настройки бренда (BIZ-52 разд. 52.2)", (
   it("без своих картинок убирать нечего", async () => {
     await renderLoaded();
 
-    expect(screen.queryByRole("button", { name: "Убрать" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Убрать" }),
+    ).not.toBeInTheDocument();
   });
 
   it("«Убрать» снимает именно ту картинку, у которой нажали", async () => {
@@ -172,7 +176,9 @@ describe("экран настройки бренда (BIZ-52 разд. 52.2)", (
     expect(
       await screen.findByText(/доступен владельцу платформы и партнёрам/),
     ).toBeInTheDocument();
-    expect(screen.queryByLabelText("Название приложения")).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Название приложения"),
+    ).not.toBeInTheDocument();
   });
 
   it("подсказки называют ограничения форматов", async () => {

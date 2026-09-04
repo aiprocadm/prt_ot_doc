@@ -85,6 +85,8 @@ export const uploadOwnBrandImage = async (
 };
 
 /** Убрать свою картинку — наследование вернётся само. */
-export const deleteOwnBrandImage = async (kind: "logo" | "favicon"): Promise<void> => {
+export const deleteOwnBrandImage = async (
+  kind: "logo" | "favicon",
+): Promise<void> => {
   await apiClient.delete(`/platform/branding/${kind}`);
 };

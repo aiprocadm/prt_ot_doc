@@ -62,7 +62,11 @@ const PipelineBuilderPage = () => {
   // ВЫБРАННОГО — узла или ребра; списки только выбирают.
   const [selection, setSelection] = useState<
     { kind: "node"; id: string } | { kind: "edge"; idx: number } | null
-  >(defaultGraph.nodes[0] ? { kind: "node", id: defaultGraph.nodes[0].id } : null);
+  >(
+    defaultGraph.nodes[0]
+      ? { kind: "node", id: defaultGraph.nodes[0].id }
+      : null,
+  );
   const selectedNodeId = selection?.kind === "node" ? selection.id : "";
   const [configText, setConfigText] = useState(
     JSON.stringify(defaultGraph.nodes[0]?.config ?? {}, null, 2),
@@ -240,7 +244,9 @@ const PipelineBuilderPage = () => {
                       key={`${node.id}-${nodeIdx}`}
                       type="button"
                       className={`w-full rounded border p-2 text-left text-xs ${selectedNodeId === node.id ? "border-blue-500 bg-blue-50" : ""}`}
-                      onClick={() => setSelection({ kind: "node", id: node.id })}
+                      onClick={() =>
+                        setSelection({ kind: "node", id: node.id })
+                      }
                     >
                       <div className="font-medium">{node.id}</div>
                       <div className="text-muted-foreground">{node.type}</div>

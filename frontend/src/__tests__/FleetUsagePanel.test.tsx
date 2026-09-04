@@ -1,7 +1,10 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { FleetUsagePanel, formatBytes } from "@/features/tenants/FleetUsagePanel";
+import {
+  FleetUsagePanel,
+  formatBytes,
+} from "@/features/tenants/FleetUsagePanel";
 
 const usageMock = vi.fn();
 
@@ -54,7 +57,9 @@ describe("расход клиентов в кабинете (BIZ-52 разд. 52
     // Молчание читалось бы как «ЭДО не пользуются».
     render(<FleetUsagePanel />);
 
-    expect(await screen.findByText(/ЭДО: отправка не подключена/)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/ЭДО: отправка не подключена/),
+    ).toBeInTheDocument();
   });
 
   it("пустой месяц объясняется словами", async () => {

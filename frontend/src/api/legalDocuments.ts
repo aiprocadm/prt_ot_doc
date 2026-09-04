@@ -49,8 +49,9 @@ export interface LegalAcceptanceState {
 }
 
 /** Что ждёт подписи. С токеном: подписывает конкретный человек. */
-export const getLegalAcceptanceState = async (): Promise<LegalAcceptanceState> =>
-  (await apiClient.get<LegalAcceptanceState>("/legal/acceptance")).data;
+export const getLegalAcceptanceState =
+  async (): Promise<LegalAcceptanceState> =>
+    (await apiClient.get<LegalAcceptanceState>("/legal/acceptance")).data;
 
 /** Принять действующую редакцию. Номер и текст сервер берёт сам. */
 export const acceptLegalDocument = async (

@@ -266,7 +266,13 @@ export interface ClientAuditReportPage {
 
 /** Итог отправки отчёта клиенту: причина обязательна. */
 export interface ReportSendResult {
-  status: "sent" | "no_email" | "no_consent" | "mail_disabled" | "failed" | string;
+  status:
+    | "sent"
+    | "no_email"
+    | "no_consent"
+    | "mail_disabled"
+    | "failed"
+    | string;
   reason: string;
   recipient?: string | null;
 }
@@ -432,7 +438,11 @@ export const managedClientsApi = {
   /** Лента изменений клиента: свежие сверху (разд. 51.1). */
   async changes(
     clientId: string,
-    params: { status?: ClientChangeStatus; limit?: number; offset?: number } = {},
+    params: {
+      status?: ClientChangeStatus;
+      limit?: number;
+      offset?: number;
+    } = {},
   ): Promise<ClientChangePage> {
     const r = await apiClient.get<ClientChangePage>(
       `${base}/${clientId}/changes`,
@@ -492,9 +502,8 @@ export const managedClientsApi = {
 
   /** Карточка клиента. */
   async get(clientId: string): Promise<ManagedClient> {
-    return (
-      await apiClient.get<ManagedClient>(`${base}/${clientId}`, silent)
-    ).data;
+    return (await apiClient.get<ManagedClient>(`${base}/${clientId}`, silent))
+      .data;
   },
 
   /** Отправить отчёт клиенту письмом (разд. 51.3). */

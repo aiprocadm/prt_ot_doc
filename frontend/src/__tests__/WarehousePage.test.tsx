@@ -338,7 +338,9 @@ describe("WarehousePage", () => {
       </MemoryRouter>,
     );
     // BIZ-59: раздел открывается переключателем — одна задача за раз.
-    fireEvent.click(await screen.findByRole("button", { name: "Инвентаризация" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Инвентаризация" }),
+    );
     // Ждём именно строку инвентаризации: заголовок «Инвентаризация» статичен
     // и появляется ДО ответа listCounts — синхронные getBy* давали гонку.
     expect(await screen.findByText("июль")).toBeInTheDocument();
@@ -384,7 +386,9 @@ describe("WarehousePage", () => {
       </MemoryRouter>,
     );
     // BIZ-59: раздел открывается переключателем — одна задача за раз.
-    fireEvent.click(await screen.findByRole("button", { name: "Инвентаризация" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Инвентаризация" }),
+    );
     await waitFor(() =>
       expect(screen.getAllByText("Инвентаризация").length).toBeGreaterThan(1),
     );

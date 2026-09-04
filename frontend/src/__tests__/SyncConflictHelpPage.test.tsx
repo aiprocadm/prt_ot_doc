@@ -29,14 +29,10 @@ describe("SyncConflictHelpPage", () => {
       "href",
       "/settings",
     );
-    expect(
-      screen.getByText("Синхронизация и конфликты"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Синхронизация и конфликты")).toBeInTheDocument();
     // Содержимое сценария действительно на экране, а не пустая карточка.
     expect(screen.getAllByRole("listitem")).toHaveLength(4);
-    expect(
-      screen.getByText(/приоритет у подтверждённой/),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/приоритет у подтверждённой/)).toBeInTheDocument();
   });
 
   it("экран в UX-бюджете (BIZ-60 волна 5)", async () => {

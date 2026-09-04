@@ -122,9 +122,9 @@ describe("бренд приложения (BIZ-52 срезы 4 и 6)", () => {
   it("применяет цвет в ту же переменную, которую использует тема", () => {
     applyBrandTheme(partnerBrand);
 
-    expect(
-      document.documentElement.style.getPropertyValue("--primary"),
-    ).toBe("210 90% 40%");
+    expect(document.documentElement.style.getPropertyValue("--primary")).toBe(
+      "210 90% 40%",
+    );
   });
 
   it("ставит имя приложения в заголовок вкладки", () => {
@@ -147,7 +147,9 @@ describe("бренд приложения (BIZ-52 срезы 4 и 6)", () => {
     // подмены вендора. Манифест браузер грузит сам, поэтому слаг идёт в адресе.
     applyManifest("acme");
 
-    const link = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
+    const link = document.querySelector<HTMLLinkElement>(
+      'link[rel="manifest"]',
+    );
     expect(link?.getAttribute("href")).toBe(
       "/api/v1/public/manifest.webmanifest?tenant=acme",
     );
@@ -158,14 +160,20 @@ describe("бренд приложения (BIZ-52 срезы 4 и 6)", () => {
     // платформенным.
     applyManifest(null);
 
-    const link = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
-    expect(link?.getAttribute("href")).toBe("/api/v1/public/manifest.webmanifest");
+    const link = document.querySelector<HTMLLinkElement>(
+      'link[rel="manifest"]',
+    );
+    expect(link?.getAttribute("href")).toBe(
+      "/api/v1/public/manifest.webmanifest",
+    );
   });
 
   it("слаг экранируется", () => {
     applyManifest("под чертой");
 
-    const link = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
+    const link = document.querySelector<HTMLLinkElement>(
+      'link[rel="manifest"]',
+    );
     expect(link?.getAttribute("href")).toContain("%20");
   });
 

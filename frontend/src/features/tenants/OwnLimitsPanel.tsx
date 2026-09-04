@@ -65,7 +65,9 @@ export const OwnLimitsPanel = () => {
             <span>{line.title}</span>
             <span
               className={
-                line.exhausted ? "font-medium text-destructive" : "text-muted-foreground"
+                line.exhausted
+                  ? "font-medium text-destructive"
+                  : "text-muted-foreground"
               }
             >
               {describeLine(line)}

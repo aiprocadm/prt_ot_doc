@@ -133,7 +133,9 @@ describe("NpaPage", () => {
         "Приказ Минтруда № 772н об обучении по охране труда",
       ),
     ).toBeInTheDocument();
-    expect(screen.getByText("Постановление № 2464 о порядке обучения")).toBeInTheDocument();
+    expect(
+      screen.getByText("Постановление № 2464 о порядке обучения"),
+    ).toBeInTheDocument();
 
     const budget = uxBudgetDelta(document.body, "NpaPage");
     expect(budget.unexpected).toEqual([]);

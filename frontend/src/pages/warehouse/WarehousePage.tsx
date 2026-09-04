@@ -61,7 +61,13 @@ const WarehousePage = () => {
   // Открыт всегда ОДИН раздел: кладовщик приходит с одной задачей.
   // Обзор (остатки, дефицит, дозаказ) — чтение, он виден всегда.
   const [openSection, setOpenSection] = useState<
-    "movement" | "transfer" | "supplier" | "batch" | "inventory" | "budget" | null
+    | "movement"
+    | "transfer"
+    | "supplier"
+    | "batch"
+    | "inventory"
+    | "budget"
+    | null
   >(null);
   const [counts, setCounts] = useState<InventoryCountDto[]>([]);
   const [transfers, setTransfers] = useState<StockTransferDto[]>([]);
@@ -614,7 +620,10 @@ const WarehousePage = () => {
           ) : null}
         </CardContent>
       </Card>
-      <div className="flex flex-wrap gap-2" data-testid="warehouse-section-switch">
+      <div
+        className="flex flex-wrap gap-2"
+        data-testid="warehouse-section-switch"
+      >
         {(
           [
             ["movement", "Движения"],
@@ -636,371 +645,374 @@ const WarehousePage = () => {
         ))}
       </div>
       {openSection === "movement" ? (
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Движения</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="grid gap-2 md:grid-cols-5">
-            <Input
-              placeholder="ID партии"
-              value={form.batch_id}
-              onChange={(e) => setForm({ ...form, batch_id: e.target.value })}
-            />
-            <select
-              className="h-9 rounded-md border border-input bg-background px-2 text-sm"
-              value={form.kind}
-              onChange={(e) => setForm({ ...form, kind: e.target.value })}
-            >
-              <option value="receipt">Приход</option>
-              <option value="writeoff">Списание</option>
-              <option value="adjustment">Корректировка (до факт.)</option>
-            </select>
-            <Input
-              type="number"
-              min={0}
-              value={form.quantity}
-              onChange={(e) => setForm({ ...form, quantity: e.target.value })}
-            />
-            <Input
-              placeholder="Причина"
-              value={form.reason}
-              onChange={(e) => setForm({ ...form, reason: e.target.value })}
-            />
-            <Button
-              onClick={submitMovement}
-              disabled={submitting || !form.batch_id}
-            >
-              Провести
-            </Button>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Для «Корректировки» количество — это фактический остаток партии (не
-            дельта).
-          </p>
-          {movements.length === 0 ? (
-            <EmptyState
-              title="Движений нет"
-              description="Проведите приход или корректировку по партии."
-            />
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Дата</TableHead>
-                  <TableHead>Тип</TableHead>
-                  <TableHead>Δ Кол-во</TableHead>
-                  <TableHead>Причина</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {movements.map((m) => (
-                  <TableRow key={m.id}>
-                    <TableCell>{formatDate(m.occurred_at) || "—"}</TableCell>
-                    <TableCell>{m.kind}</TableCell>
-                    <TableCell>{m.quantity_delta}</TableCell>
-                    <TableCell>{m.reason || "—"}</TableCell>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Движения</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="grid gap-2 md:grid-cols-5">
+              <Input
+                placeholder="ID партии"
+                value={form.batch_id}
+                onChange={(e) => setForm({ ...form, batch_id: e.target.value })}
+              />
+              <select
+                className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+                value={form.kind}
+                onChange={(e) => setForm({ ...form, kind: e.target.value })}
+              >
+                <option value="receipt">Приход</option>
+                <option value="writeoff">Списание</option>
+                <option value="adjustment">Корректировка (до факт.)</option>
+              </select>
+              <Input
+                type="number"
+                min={0}
+                value={form.quantity}
+                onChange={(e) => setForm({ ...form, quantity: e.target.value })}
+              />
+              <Input
+                placeholder="Причина"
+                value={form.reason}
+                onChange={(e) => setForm({ ...form, reason: e.target.value })}
+              />
+              <Button
+                onClick={submitMovement}
+                disabled={submitting || !form.batch_id}
+              >
+                Провести
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Для «Корректировки» количество — это фактический остаток партии
+              (не дельта).
+            </p>
+            {movements.length === 0 ? (
+              <EmptyState
+                title="Движений нет"
+                description="Проведите приход или корректировку по партии."
+              />
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Дата</TableHead>
+                    <TableHead>Тип</TableHead>
+                    <TableHead>Δ Кол-во</TableHead>
+                    <TableHead>Причина</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+                </TableHeader>
+                <TableBody>
+                  {movements.map((m) => (
+                    <TableRow key={m.id}>
+                      <TableCell>{formatDate(m.occurred_at) || "—"}</TableCell>
+                      <TableCell>{m.kind}</TableCell>
+                      <TableCell>{m.quantity_delta}</TableCell>
+                      <TableCell>{m.reason || "—"}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
       ) : null}
       {openSection === "transfer" ? (
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">
-            Перемещения между локациями
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Input
-              aria-label="Партия-источник"
-              placeholder="ID партии-источника"
-              value={transferForm.source_batch_id}
-              onChange={(e) =>
-                setTransferForm((f) => ({
-                  ...f,
-                  source_batch_id: e.target.value,
-                }))
-              }
-            />
-            <Input
-              aria-label="Куда (локация)"
-              list="transfer-locations"
-              placeholder="Локация назначения"
-              value={transferForm.to_location}
-              onChange={(e) =>
-                setTransferForm((f) => ({ ...f, to_location: e.target.value }))
-              }
-            />
-            <datalist id="transfer-locations">
-              {knownLocations.map((loc) => (
-                <option key={loc} value={loc} />
-              ))}
-            </datalist>
-            <Input
-              aria-label="Количество для переноса"
-              type="number"
-              min={1}
-              value={transferForm.quantity}
-              onChange={(e) =>
-                setTransferForm((f) => ({ ...f, quantity: e.target.value }))
-              }
-            />
-            <Input
-              aria-label="Причина перемещения"
-              placeholder="Причина (опционально)"
-              value={transferForm.reason}
-              onChange={(e) =>
-                setTransferForm((f) => ({ ...f, reason: e.target.value }))
-              }
-            />
-          </div>
-          <Button onClick={submitTransfer} disabled={transferSubmitting}>
-            Перенести
-          </Button>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Позиция</TableHead>
-                <TableHead>Партия</TableHead>
-                <TableHead>Маршрут</TableHead>
-                <TableHead>Кол-во</TableHead>
-                <TableHead>Когда</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {transfers.map((t) => (
-                <TableRow key={t.ref_id}>
-                  <TableCell>{t.item_name}</TableCell>
-                  <TableCell>{t.batch_no}</TableCell>
-                  <TableCell>
-                    {t.from_location ?? "—"} → {t.to_location}
-                  </TableCell>
-                  <TableCell>{t.quantity}</TableCell>
-                  <TableCell>{formatDate(t.occurred_at)}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
-      ) : null}
-      {openSection === "supplier" ? (
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            Поставщики
-            <Badge variant="secondary">{suppliers.length}</Badge>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid gap-2 md:grid-cols-5">
-            <Input
-              aria-label="Название поставщика"
-              placeholder="Название"
-              value={supplierForm.name}
-              onChange={(e) =>
-                setSupplierForm((f) => ({ ...f, name: e.target.value }))
-              }
-            />
-            <Input
-              aria-label="ИНН поставщика"
-              placeholder="ИНН"
-              value={supplierForm.inn}
-              onChange={(e) =>
-                setSupplierForm((f) => ({ ...f, inn: e.target.value }))
-              }
-            />
-            <Input
-              aria-label="Email поставщика"
-              placeholder="Email"
-              value={supplierForm.contact_email}
-              onChange={(e) =>
-                setSupplierForm((f) => ({
-                  ...f,
-                  contact_email: e.target.value,
-                }))
-              }
-            />
-            <Input
-              aria-label="Телефон поставщика"
-              placeholder="Телефон"
-              value={supplierForm.contact_phone}
-              onChange={(e) =>
-                setSupplierForm((f) => ({
-                  ...f,
-                  contact_phone: e.target.value,
-                }))
-              }
-            />
-            <div className="flex gap-2">
-              <Button
-                onClick={submitSupplier}
-                disabled={submitting || !supplierForm.name.trim()}
-              >
-                Сохранить поставщика
-              </Button>
-              {supplierForm.id ? (
-                <Button
-                  variant="ghost"
-                  onClick={() =>
-                    setSupplierForm({
-                      id: "",
-                      name: "",
-                      inn: "",
-                      contact_email: "",
-                      contact_phone: "",
-                    })
-                  }
-                >
-                  Отмена
-                </Button>
-              ) : null}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">
+              Перемещения между локациями
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Input
+                aria-label="Партия-источник"
+                placeholder="ID партии-источника"
+                value={transferForm.source_batch_id}
+                onChange={(e) =>
+                  setTransferForm((f) => ({
+                    ...f,
+                    source_batch_id: e.target.value,
+                  }))
+                }
+              />
+              <Input
+                aria-label="Куда (локация)"
+                list="transfer-locations"
+                placeholder="Локация назначения"
+                value={transferForm.to_location}
+                onChange={(e) =>
+                  setTransferForm((f) => ({
+                    ...f,
+                    to_location: e.target.value,
+                  }))
+                }
+              />
+              <datalist id="transfer-locations">
+                {knownLocations.map((loc) => (
+                  <option key={loc} value={loc} />
+                ))}
+              </datalist>
+              <Input
+                aria-label="Количество для переноса"
+                type="number"
+                min={1}
+                value={transferForm.quantity}
+                onChange={(e) =>
+                  setTransferForm((f) => ({ ...f, quantity: e.target.value }))
+                }
+              />
+              <Input
+                aria-label="Причина перемещения"
+                placeholder="Причина (опционально)"
+                value={transferForm.reason}
+                onChange={(e) =>
+                  setTransferForm((f) => ({ ...f, reason: e.target.value }))
+                }
+              />
             </div>
-          </div>
-          {suppliers.length === 0 ? (
-            <EmptyState
-              title="Поставщиков нет"
-              description="Добавьте поставщика для дозаказа СИЗ."
-            />
-          ) : (
+            <Button onClick={submitTransfer} disabled={transferSubmitting}>
+              Перенести
+            </Button>
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Название</TableHead>
-                  <TableHead>ИНН</TableHead>
-                  <TableHead>Контакт</TableHead>
-                  <TableHead />
+                  <TableHead>Позиция</TableHead>
+                  <TableHead>Партия</TableHead>
+                  <TableHead>Маршрут</TableHead>
+                  <TableHead>Кол-во</TableHead>
+                  <TableHead>Когда</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {suppliers.map((s) => (
-                  <TableRow key={s.id}>
-                    <TableCell className="font-medium">{s.name}</TableCell>
-                    <TableCell>{s.inn || "—"}</TableCell>
+                {transfers.map((t) => (
+                  <TableRow key={t.ref_id}>
+                    <TableCell>{t.item_name}</TableCell>
+                    <TableCell>{t.batch_no}</TableCell>
                     <TableCell>
-                      {s.contact_email || s.contact_phone || "—"}
+                      {t.from_location ?? "—"} → {t.to_location}
                     </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-2">
-                        <Button
-                          variant="outline"
-                          onClick={() => editSupplier(s)}
-                        >
-                          Изменить
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          aria-label={`Удалить поставщика ${s.name}`}
-                          onClick={() => removeSupplier(s.id)}
-                          disabled={submitting}
-                        >
-                          Удалить
-                        </Button>
-                      </div>
-                    </TableCell>
+                    <TableCell>{t.quantity}</TableCell>
+                    <TableCell>{formatDate(t.occurred_at)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
-          )}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      ) : null}
+      {openSection === "supplier" ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              Поставщики
+              <Badge variant="secondary">{suppliers.length}</Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-2 md:grid-cols-5">
+              <Input
+                aria-label="Название поставщика"
+                placeholder="Название"
+                value={supplierForm.name}
+                onChange={(e) =>
+                  setSupplierForm((f) => ({ ...f, name: e.target.value }))
+                }
+              />
+              <Input
+                aria-label="ИНН поставщика"
+                placeholder="ИНН"
+                value={supplierForm.inn}
+                onChange={(e) =>
+                  setSupplierForm((f) => ({ ...f, inn: e.target.value }))
+                }
+              />
+              <Input
+                aria-label="Email поставщика"
+                placeholder="Email"
+                value={supplierForm.contact_email}
+                onChange={(e) =>
+                  setSupplierForm((f) => ({
+                    ...f,
+                    contact_email: e.target.value,
+                  }))
+                }
+              />
+              <Input
+                aria-label="Телефон поставщика"
+                placeholder="Телефон"
+                value={supplierForm.contact_phone}
+                onChange={(e) =>
+                  setSupplierForm((f) => ({
+                    ...f,
+                    contact_phone: e.target.value,
+                  }))
+                }
+              />
+              <div className="flex gap-2">
+                <Button
+                  onClick={submitSupplier}
+                  disabled={submitting || !supplierForm.name.trim()}
+                >
+                  Сохранить поставщика
+                </Button>
+                {supplierForm.id ? (
+                  <Button
+                    variant="ghost"
+                    onClick={() =>
+                      setSupplierForm({
+                        id: "",
+                        name: "",
+                        inn: "",
+                        contact_email: "",
+                        contact_phone: "",
+                      })
+                    }
+                  >
+                    Отмена
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+            {suppliers.length === 0 ? (
+              <EmptyState
+                title="Поставщиков нет"
+                description="Добавьте поставщика для дозаказа СИЗ."
+              />
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Название</TableHead>
+                    <TableHead>ИНН</TableHead>
+                    <TableHead>Контакт</TableHead>
+                    <TableHead />
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {suppliers.map((s) => (
+                    <TableRow key={s.id}>
+                      <TableCell className="font-medium">{s.name}</TableCell>
+                      <TableCell>{s.inn || "—"}</TableCell>
+                      <TableCell>
+                        {s.contact_email || s.contact_phone || "—"}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            variant="outline"
+                            onClick={() => editSupplier(s)}
+                          >
+                            Изменить
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            aria-label={`Удалить поставщика ${s.name}`}
+                            onClick={() => removeSupplier(s.id)}
+                            disabled={submitting}
+                          >
+                            Удалить
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
       ) : null}
       {openSection === "batch" ? (
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Новая партия (приёмка)</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="grid gap-2 md:grid-cols-3">
-            <Input
-              aria-label="ID позиции партии"
-              placeholder="ID позиции"
-              value={batchForm.item_id}
-              onChange={(e) =>
-                setBatchForm((f) => ({ ...f, item_id: e.target.value }))
-              }
-            />
-            <Input
-              aria-label="Номер партии"
-              placeholder="Номер партии"
-              value={batchForm.batch_no}
-              onChange={(e) =>
-                setBatchForm((f) => ({ ...f, batch_no: e.target.value }))
-              }
-            />
-            <Input
-              aria-label="Количество партии"
-              type="number"
-              min={0}
-              value={batchForm.quantity}
-              onChange={(e) =>
-                setBatchForm((f) => ({ ...f, quantity: e.target.value }))
-              }
-            />
-          </div>
-          {/* BIZ-59 (разд. 59.3): необязательные реквизиты приёмки — на втором
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Новая партия (приёмка)</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="grid gap-2 md:grid-cols-3">
+              <Input
+                aria-label="ID позиции партии"
+                placeholder="ID позиции"
+                value={batchForm.item_id}
+                onChange={(e) =>
+                  setBatchForm((f) => ({ ...f, item_id: e.target.value }))
+                }
+              />
+              <Input
+                aria-label="Номер партии"
+                placeholder="Номер партии"
+                value={batchForm.batch_no}
+                onChange={(e) =>
+                  setBatchForm((f) => ({ ...f, batch_no: e.target.value }))
+                }
+              />
+              <Input
+                aria-label="Количество партии"
+                type="number"
+                min={0}
+                value={batchForm.quantity}
+                onChange={(e) =>
+                  setBatchForm((f) => ({ ...f, quantity: e.target.value }))
+                }
+              />
+            </div>
+            {/* BIZ-59 (разд. 59.3): необязательные реквизиты приёмки — на втором
               уровне. Партию принимают по позиции, номеру и количеству; локация,
               поставщик и цена дописываются, когда они вообще известны. */}
-          <details className="space-y-2">
-            <summary className="cursor-pointer text-sm text-muted-foreground">
-              Дополнительно (локация, поставщик, цена)
-            </summary>
-            <div className="grid gap-2 pt-2 md:grid-cols-3">
-            <Input
-              aria-label="Локация партии"
-              placeholder="Локация (опц.)"
-              value={batchForm.location}
-              onChange={(e) =>
-                setBatchForm((f) => ({ ...f, location: e.target.value }))
-              }
-            />
-            <select
-              aria-label="Поставщик партии"
-              className="h-9 rounded-md border border-input bg-background px-2 text-sm"
-              value={batchForm.supplier_id}
-              onChange={(e) =>
-                setBatchForm((f) => ({ ...f, supplier_id: e.target.value }))
+            <details className="space-y-2">
+              <summary className="cursor-pointer text-sm text-muted-foreground">
+                Дополнительно (локация, поставщик, цена)
+              </summary>
+              <div className="grid gap-2 pt-2 md:grid-cols-3">
+                <Input
+                  aria-label="Локация партии"
+                  placeholder="Локация (опц.)"
+                  value={batchForm.location}
+                  onChange={(e) =>
+                    setBatchForm((f) => ({ ...f, location: e.target.value }))
+                  }
+                />
+                <select
+                  aria-label="Поставщик партии"
+                  className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+                  value={batchForm.supplier_id}
+                  onChange={(e) =>
+                    setBatchForm((f) => ({ ...f, supplier_id: e.target.value }))
+                  }
+                >
+                  <option value="">— без поставщика —</option>
+                  {suppliers.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+                <Input
+                  aria-label="Цена за единицу"
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  placeholder="Цена за единицу"
+                  value={batchForm.unit_cost}
+                  onChange={(e) =>
+                    setBatchForm((f) => ({ ...f, unit_cost: e.target.value }))
+                  }
+                />
+              </div>
+            </details>
+            <Button
+              onClick={submitBatch}
+              disabled={
+                submitting ||
+                !batchForm.item_id.trim() ||
+                !batchForm.batch_no.trim()
               }
             >
-              <option value="">— без поставщика —</option>
-              {suppliers.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
-            <Input
-              aria-label="Цена за единицу"
-              type="number"
-              min={0}
-              step="0.01"
-              placeholder="Цена за единицу"
-              value={batchForm.unit_cost}
-              onChange={(e) =>
-                setBatchForm((f) => ({ ...f, unit_cost: e.target.value }))
-              }
-            />
-            </div>
-          </details>
-          <Button
-            onClick={submitBatch}
-            disabled={
-              submitting ||
-              !batchForm.item_id.trim() ||
-              !batchForm.batch_no.trim()
-            }
-          >
-            Создать партию
-          </Button>
-        </CardContent>
-      </Card>
+              Создать партию
+            </Button>
+          </CardContent>
+        </Card>
       ) : null}
       <Card>
         <CardHeader>
@@ -1170,293 +1182,299 @@ const WarehousePage = () => {
         </CardContent>
       </Card>
       {openSection === "inventory" ? (
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            Инвентаризация
-            <Badge variant="secondary">{counts.length}</Badge>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex flex-wrap gap-2 items-end">
-            <Input
-              placeholder="ID позиции (опц.)"
-              value={countForm.scope_item_id}
-              onChange={(e) =>
-                setCountForm({ ...countForm, scope_item_id: e.target.value })
-              }
-            />
-            <Input
-              placeholder="Локация (опц.)"
-              value={countForm.scope_location}
-              onChange={(e) =>
-                setCountForm({ ...countForm, scope_location: e.target.value })
-              }
-            />
-            <Input
-              placeholder="Заметка (опц.)"
-              value={countForm.note}
-              onChange={(e) =>
-                setCountForm({ ...countForm, note: e.target.value })
-              }
-            />
-            <Button onClick={createCount} disabled={submitting}>
-              Создать
-            </Button>
-          </div>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              Инвентаризация
+              <Badge variant="secondary">{counts.length}</Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex flex-wrap gap-2 items-end">
+              <Input
+                placeholder="ID позиции (опц.)"
+                value={countForm.scope_item_id}
+                onChange={(e) =>
+                  setCountForm({ ...countForm, scope_item_id: e.target.value })
+                }
+              />
+              <Input
+                placeholder="Локация (опц.)"
+                value={countForm.scope_location}
+                onChange={(e) =>
+                  setCountForm({ ...countForm, scope_location: e.target.value })
+                }
+              />
+              <Input
+                placeholder="Заметка (опц.)"
+                value={countForm.note}
+                onChange={(e) =>
+                  setCountForm({ ...countForm, note: e.target.value })
+                }
+              />
+              <Button onClick={createCount} disabled={submitting}>
+                Создать
+              </Button>
+            </div>
 
-          {counts.length === 0 ? (
-            <EmptyState
-              title="Нет инвентаризаций"
-              description="Создайте срез для сверки факта."
-            />
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Статус</TableHead>
-                  <TableHead>Заметка</TableHead>
-                  <TableHead>Строк</TableHead>
-                  <TableHead>Сосчитано</TableHead>
-                  <TableHead>Создан</TableHead>
-                  <TableHead />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {counts.map((c) => (
-                  <TableRow key={c.id}>
-                    <TableCell>
-                      <Badge
-                        variant={
-                          c.status === "applied" ? "secondary" : "outline"
-                        }
-                      >
-                        {c.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>{c.note || "—"}</TableCell>
-                    <TableCell>{c.line_count}</TableCell>
-                    <TableCell>{c.counted_count}</TableCell>
-                    <TableCell>{formatDate(c.created_at) || "—"}</TableCell>
-                    <TableCell>
-                      <Button variant="outline" onClick={() => openCount(c.id)}>
-                        Открыть
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-
-          {activeCount ? (
-            <div className="space-y-3 border-t pt-3">
-              <div className="flex items-center gap-2">
-                <span className="font-medium">Строки инвентаризации</span>
-                <Badge variant="outline">{activeCount.status}</Badge>
-                <Badge variant="secondary">
-                  расхождений: {activeCount.diff_count}
-                </Badge>
-              </div>
+            {counts.length === 0 ? (
+              <EmptyState
+                title="Нет инвентаризаций"
+                description="Создайте срез для сверки факта."
+              />
+            ) : (
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Партия</TableHead>
-                    <TableHead>Локация</TableHead>
-                    <TableHead>Система</TableHead>
-                    <TableHead>Остаток</TableHead>
-                    <TableHead>Факт</TableHead>
-                    <TableHead>Δ</TableHead>
+                    <TableHead>Статус</TableHead>
+                    <TableHead>Заметка</TableHead>
+                    <TableHead>Строк</TableHead>
+                    <TableHead>Сосчитано</TableHead>
+                    <TableHead>Создан</TableHead>
+                    <TableHead />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {activeCount.lines.map((line) => (
-                    <TableRow key={line.id}>
-                      <TableCell className="font-medium">
-                        {line.batch_no}
-                      </TableCell>
-                      <TableCell>{line.location || "—"}</TableCell>
-                      <TableCell>{line.system_qty}</TableCell>
-                      <TableCell>{line.on_hand}</TableCell>
+                  {counts.map((c) => (
+                    <TableRow key={c.id}>
                       <TableCell>
-                        <Input
-                          type="number"
-                          min={0}
-                          aria-label={`Факт ${line.batch_no}`}
-                          value={countedInputs[line.id] ?? ""}
-                          disabled={activeCount.status !== "draft"}
-                          onChange={(e) =>
-                            setCountedInputs({
-                              ...countedInputs,
-                              [line.id]: e.target.value,
-                            })
+                        <Badge
+                          variant={
+                            c.status === "applied" ? "secondary" : "outline"
                           }
-                        />
+                        >
+                          {c.status}
+                        </Badge>
                       </TableCell>
+                      <TableCell>{c.note || "—"}</TableCell>
+                      <TableCell>{c.line_count}</TableCell>
+                      <TableCell>{c.counted_count}</TableCell>
+                      <TableCell>{formatDate(c.created_at) || "—"}</TableCell>
                       <TableCell>
-                        {line.delta === null ? "—" : line.delta}
+                        <Button
+                          variant="outline"
+                          onClick={() => openCount(c.id)}
+                        >
+                          Открыть
+                        </Button>
                       </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
-              {activeCount.status === "draft" ? (
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    onClick={saveCounts}
-                    disabled={submitting}
-                  >
-                    Сохранить факт
-                  </Button>
-                  <Button onClick={applyActiveCount} disabled={submitting}>
-                    Применить
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    onClick={cancelActiveCount}
-                    disabled={submitting}
-                  >
-                    Отменить
-                  </Button>
+            )}
+
+            {activeCount ? (
+              <div className="space-y-3 border-t pt-3">
+                <div className="flex items-center gap-2">
+                  <span className="font-medium">Строки инвентаризации</span>
+                  <Badge variant="outline">{activeCount.status}</Badge>
+                  <Badge variant="secondary">
+                    расхождений: {activeCount.diff_count}
+                  </Badge>
                 </div>
-              ) : null}
-            </div>
-          ) : null}
-        </CardContent>
-      </Card>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Партия</TableHead>
+                      <TableHead>Локация</TableHead>
+                      <TableHead>Система</TableHead>
+                      <TableHead>Остаток</TableHead>
+                      <TableHead>Факт</TableHead>
+                      <TableHead>Δ</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {activeCount.lines.map((line) => (
+                      <TableRow key={line.id}>
+                        <TableCell className="font-medium">
+                          {line.batch_no}
+                        </TableCell>
+                        <TableCell>{line.location || "—"}</TableCell>
+                        <TableCell>{line.system_qty}</TableCell>
+                        <TableCell>{line.on_hand}</TableCell>
+                        <TableCell>
+                          <Input
+                            type="number"
+                            min={0}
+                            aria-label={`Факт ${line.batch_no}`}
+                            value={countedInputs[line.id] ?? ""}
+                            disabled={activeCount.status !== "draft"}
+                            onChange={(e) =>
+                              setCountedInputs({
+                                ...countedInputs,
+                                [line.id]: e.target.value,
+                              })
+                            }
+                          />
+                        </TableCell>
+                        <TableCell>
+                          {line.delta === null ? "—" : line.delta}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+                {activeCount.status === "draft" ? (
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={saveCounts}
+                      disabled={submitting}
+                    >
+                      Сохранить факт
+                    </Button>
+                    <Button onClick={applyActiveCount} disabled={submitting}>
+                      Применить
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      onClick={cancelActiveCount}
+                      disabled={submitting}
+                    >
+                      Отменить
+                    </Button>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+          </CardContent>
+        </Card>
       ) : null}
       {openSection === "budget" ? (
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            Бюджет безопасности
-            <Badge variant="secondary">{budgets.length}</Badge>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid gap-2 md:grid-cols-5">
-            <Input
-              aria-label="Название"
-              placeholder="Название"
-              value={budgetForm.name}
-              onChange={(e) =>
-                setBudgetForm((f) => ({ ...f, name: e.target.value }))
-              }
-            />
-            <Input
-              aria-label="Начало периода"
-              type="date"
-              value={budgetForm.period_start}
-              onChange={(e) =>
-                setBudgetForm((f) => ({ ...f, period_start: e.target.value }))
-              }
-            />
-            <Input
-              aria-label="Конец периода"
-              type="date"
-              value={budgetForm.period_end}
-              onChange={(e) =>
-                setBudgetForm((f) => ({ ...f, period_end: e.target.value }))
-              }
-            />
-            <Input
-              aria-label="Плановая сумма"
-              type="number"
-              min={0}
-              step="0.01"
-              placeholder="Плановая сумма"
-              value={budgetForm.planned_amount}
-              onChange={(e) =>
-                setBudgetForm((f) => ({ ...f, planned_amount: e.target.value }))
-              }
-            />
-            <Input
-              aria-label="Заметки"
-              placeholder="Заметки (опц.)"
-              value={budgetForm.notes}
-              onChange={(e) =>
-                setBudgetForm((f) => ({ ...f, notes: e.target.value }))
-              }
-            />
-          </div>
-          <Button
-            onClick={submitBudget}
-            disabled={
-              submitting ||
-              !budgetForm.name.trim() ||
-              !budgetForm.period_start ||
-              !budgetForm.period_end
-            }
-          >
-            Создать бюджет
-          </Button>
-          {budgets.length === 0 ? (
-            <EmptyState
-              title="Бюджетов нет"
-              description="Создайте бюджет безопасности для контроля затрат на СИЗ."
-            />
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Название</TableHead>
-                  <TableHead>Период</TableHead>
-                  <TableHead>План</TableHead>
-                  <TableHead />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {budgets.map((b) => (
-                  <TableRow key={b.id}>
-                    <TableCell className="font-medium">{b.name}</TableCell>
-                    <TableCell>
-                      {b.period_start} – {b.period_end}
-                    </TableCell>
-                    <TableCell>План: {b.planned_amount}</TableCell>
-                    <TableCell className="text-right">
-                      <Button
-                        variant="outline"
-                        onClick={() => void openBudget(b.id)}
-                      >
-                        Открыть
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-
-          {activeBudget ? (
-            <div className="space-y-2 border-t pt-3">
-              <div className="flex items-center gap-2">
-                <span className="font-medium">{activeBudget.name}</span>
-                <Badge variant="secondary">
-                  Факт: {activeBudget.actual_total}
-                </Badge>
-                <Badge variant="outline">
-                  Остаток: {activeBudget.remaining}
-                </Badge>
-              </div>
-              {activeBudget.by_category.length > 0 ? (
-                <ul className="space-y-1 text-sm">
-                  {activeBudget.by_category.map((c) => (
-                    <li key={c.category}>
-                      {c.category}: {c.amount}
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-              {activeBudget.unpriced_receipt_count > 0 ? (
-                <p className="text-xs text-muted-foreground">
-                  Приходов без цены: {activeBudget.unpriced_receipt_count}
-                </p>
-              ) : null}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              Бюджет безопасности
+              <Badge variant="secondary">{budgets.length}</Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-2 md:grid-cols-5">
+              <Input
+                aria-label="Название"
+                placeholder="Название"
+                value={budgetForm.name}
+                onChange={(e) =>
+                  setBudgetForm((f) => ({ ...f, name: e.target.value }))
+                }
+              />
+              <Input
+                aria-label="Начало периода"
+                type="date"
+                value={budgetForm.period_start}
+                onChange={(e) =>
+                  setBudgetForm((f) => ({ ...f, period_start: e.target.value }))
+                }
+              />
+              <Input
+                aria-label="Конец периода"
+                type="date"
+                value={budgetForm.period_end}
+                onChange={(e) =>
+                  setBudgetForm((f) => ({ ...f, period_end: e.target.value }))
+                }
+              />
+              <Input
+                aria-label="Плановая сумма"
+                type="number"
+                min={0}
+                step="0.01"
+                placeholder="Плановая сумма"
+                value={budgetForm.planned_amount}
+                onChange={(e) =>
+                  setBudgetForm((f) => ({
+                    ...f,
+                    planned_amount: e.target.value,
+                  }))
+                }
+              />
+              <Input
+                aria-label="Заметки"
+                placeholder="Заметки (опц.)"
+                value={budgetForm.notes}
+                onChange={(e) =>
+                  setBudgetForm((f) => ({ ...f, notes: e.target.value }))
+                }
+              />
             </div>
-          ) : null}
-        </CardContent>
-      </Card>
+            <Button
+              onClick={submitBudget}
+              disabled={
+                submitting ||
+                !budgetForm.name.trim() ||
+                !budgetForm.period_start ||
+                !budgetForm.period_end
+              }
+            >
+              Создать бюджет
+            </Button>
+            {budgets.length === 0 ? (
+              <EmptyState
+                title="Бюджетов нет"
+                description="Создайте бюджет безопасности для контроля затрат на СИЗ."
+              />
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Название</TableHead>
+                    <TableHead>Период</TableHead>
+                    <TableHead>План</TableHead>
+                    <TableHead />
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {budgets.map((b) => (
+                    <TableRow key={b.id}>
+                      <TableCell className="font-medium">{b.name}</TableCell>
+                      <TableCell>
+                        {b.period_start} – {b.period_end}
+                      </TableCell>
+                      <TableCell>План: {b.planned_amount}</TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          variant="outline"
+                          onClick={() => void openBudget(b.id)}
+                        >
+                          Открыть
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+
+            {activeBudget ? (
+              <div className="space-y-2 border-t pt-3">
+                <div className="flex items-center gap-2">
+                  <span className="font-medium">{activeBudget.name}</span>
+                  <Badge variant="secondary">
+                    Факт: {activeBudget.actual_total}
+                  </Badge>
+                  <Badge variant="outline">
+                    Остаток: {activeBudget.remaining}
+                  </Badge>
+                </div>
+                {activeBudget.by_category.length > 0 ? (
+                  <ul className="space-y-1 text-sm">
+                    {activeBudget.by_category.map((c) => (
+                      <li key={c.category}>
+                        {c.category}: {c.amount}
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+                {activeBudget.unpriced_receipt_count > 0 ? (
+                  <p className="text-xs text-muted-foreground">
+                    Приходов без цены: {activeBudget.unpriced_receipt_count}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+          </CardContent>
+        </Card>
       ) : null}
     </div>
   );

@@ -88,9 +88,7 @@ describe("AdminLayoutPresetsPage", () => {
     expect(
       await screen.findByText("company_brand — Company brand"),
     ).toBeInTheDocument();
-    expect(
-      screen.getByText("branch_brand — Branch brand"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("branch_brand — Branch brand")).toBeInTheDocument();
     expect(screen.getByText("Макеты/Колонтитулы")).toBeInTheDocument();
     // Первый пресет выбирается по умолчанию — его данные попали в форму.
     expect(screen.getByDisplayValue("company_brand")).toBeInTheDocument();

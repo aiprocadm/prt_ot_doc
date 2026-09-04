@@ -31,7 +31,8 @@ vi.mock("@/api/packWizard", async (importOriginal) => {
   return {
     ...actual,
     listPackScenarios: (...args: unknown[]) => listPackScenarios(...args),
-    getPackScenarioFields: (...args: unknown[]) => getPackScenarioFields(...args),
+    getPackScenarioFields: (...args: unknown[]) =>
+      getPackScenarioFields(...args),
     previewPack: (...args: unknown[]) => previewPack(...args),
     generatePack: (...args: unknown[]) => generatePack(...args),
     getPackTaskStatus: (...args: unknown[]) => getPackTaskStatus(...args),
@@ -60,7 +61,10 @@ const fillStepOne = async () => {
   renderWithRouter(<QuickPackWizardPage />);
   await screen.findByRole("option", { name: /Приём нового сотрудника/ });
   await user.selectOptions(screen.getByLabelText("Сценарий"), SCENARIO.code);
-  await user.selectOptions(screen.getByLabelText("Организация клиента"), COMPANY.id);
+  await user.selectOptions(
+    screen.getByLabelText("Организация клиента"),
+    COMPANY.id,
+  );
   await user.click(screen.getByRole("button", { name: "Дальше" }));
   return user;
 };
@@ -103,7 +107,10 @@ describe("мастер разового комплекта", () => {
       problems: [],
     });
     generatePack.mockResolvedValue({ task_id: "task-1", status_url: "/x" });
-    getPackTaskStatus.mockResolvedValue({ task_id: "task-1", status: "running" });
+    getPackTaskStatus.mockResolvedValue({
+      task_id: "task-1",
+      status: "running",
+    });
     publishPackToPortal.mockResolvedValue({ id: "run-1" });
   });
 
@@ -156,14 +163,18 @@ describe("мастер разового комплекта", () => {
     await screen.findByLabelText(/ФИО работника/);
 
     // подсказка ровно одна — у поля стажировки
-    expect(screen.getAllByRole("button", { name: "Подставить" })).toHaveLength(1);
+    expect(screen.getAllByRole("button", { name: "Подставить" })).toHaveLength(
+      1,
+    );
   });
 
   it("показывает состав комплекта до генерации", async () => {
     const user = await fillStepOne();
     await screen.findByLabelText(/ФИО работника/);
 
-    await user.click(screen.getByRole("button", { name: /Показать, что получится/ }));
+    await user.click(
+      screen.getByRole("button", { name: /Показать, что получится/ }),
+    );
 
     expect(await screen.findByText("Приказ о приёме")).toBeInTheDocument();
     expect(screen.getByText(/Готовность:/)).toBeInTheDocument();
@@ -189,11 +200,17 @@ describe("мастер разового комплекта", () => {
 
     const user = await fillStepOne();
     await screen.findByLabelText(/ФИО работника/);
-    await user.click(screen.getByRole("button", { name: /Показать, что получится/ }));
+    await user.click(
+      screen.getByRole("button", { name: /Показать, что получится/ }),
+    );
 
-    expect(await screen.findByText(/Пока сгенерировать нельзя/)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/Пока сгенерировать нельзя/),
+    ).toBeInTheDocument();
     expect(screen.getByText(/Не заполнено обязательное/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Сгенерировать" })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Сгенерировать" }),
+    ).toBeDisabled();
   });
 
   it("предупреждение не мешает генерации", async () => {
@@ -216,9 +233,13 @@ describe("мастер разового комплекта", () => {
 
     const user = await fillStepOne();
     await screen.findByLabelText(/ФИО работника/);
-    await user.click(screen.getByRole("button", { name: /Показать, что получится/ }));
+    await user.click(
+      screen.getByRole("button", { name: /Показать, что получится/ }),
+    );
 
-    expect(await screen.findByText(/Выйдет, но с пробелами/)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/Выйдет, но с пробелами/),
+    ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Сгенерировать" })).toBeEnabled();
   });
 
@@ -226,22 +247,34 @@ describe("мастер разового комплекта", () => {
     getPackTaskStatus.mockResolvedValue({
       task_id: "task-1",
       status: "success",
-      metadata: { outputs: { zip_storage_key: "tenants/test/packs/result.zip" } },
+      metadata: {
+        outputs: { zip_storage_key: "tenants/test/packs/result.zip" },
+      },
     });
 
     const user = await fillStepOne();
     await screen.findByLabelText(/ФИО работника/);
-    await user.click(screen.getByRole("button", { name: /Показать, что получится/ }));
+    await user.click(
+      screen.getByRole("button", { name: /Показать, что получится/ }),
+    );
     await screen.findByText("Приказ о приёме");
     await user.click(screen.getByRole("button", { name: "Сгенерировать" }));
 
-    const download = await screen.findByRole("link", { name: "Скачать архив" }, { timeout: 5000 });
+    const download = await screen.findByRole(
+      "link",
+      { name: "Скачать архив" },
+      { timeout: 5000 },
+    );
     expect(download).toHaveAttribute(
       "href",
-      expect.stringContaining("storage_key=tenants%2Ftest%2Fpacks%2Fresult.zip"),
+      expect.stringContaining(
+        "storage_key=tenants%2Ftest%2Fpacks%2Fresult.zip",
+      ),
     );
 
-    await user.click(screen.getByRole("button", { name: /Выдать в кабинет клиента/ }));
+    await user.click(
+      screen.getByRole("button", { name: /Выдать в кабинет клиента/ }),
+    );
     await waitFor(() => {
       expect(publishPackToPortal).toHaveBeenCalledWith({
         preset_code: SCENARIO.code,
@@ -249,7 +282,9 @@ describe("мастер разового комплекта", () => {
         client_company_id: COMPANY.id,
       });
     });
-    expect(await screen.findByRole("button", { name: "Выдан клиенту" })).toBeDisabled();
+    expect(
+      await screen.findByRole("button", { name: "Выдан клиенту" }),
+    ).toBeDisabled();
   });
 
   it("состав бригады уходит в предпросмотр — комплект на нескольких сразу", async () => {
@@ -259,7 +294,10 @@ describe("мастер разового комплекта", () => {
     renderWithRouter(<QuickPackWizardPage />);
     await screen.findByRole("option", { name: /Приём нового сотрудника/ });
     await user.selectOptions(screen.getByLabelText("Сценарий"), SCENARIO.code);
-    await user.selectOptions(screen.getByLabelText("Организация клиента"), COMPANY.id);
+    await user.selectOptions(
+      screen.getByLabelText("Организация клиента"),
+      COMPANY.id,
+    );
 
     await user.click(await screen.findByLabelText("Иванов Иван"));
     await user.click(screen.getByLabelText("Петров Пётр"));
@@ -267,7 +305,9 @@ describe("мастер разового комплекта", () => {
 
     await user.click(screen.getByRole("button", { name: "Дальше" }));
     await screen.findByLabelText(/ФИО работника/);
-    await user.click(screen.getByRole("button", { name: /Показать, что получится/ }));
+    await user.click(
+      screen.getByRole("button", { name: /Показать, что получится/ }),
+    );
 
     await waitFor(() => {
       expect(previewPack).toHaveBeenCalledWith(
@@ -280,16 +320,27 @@ describe("мастер разового комплекта", () => {
     // Иначе в запрос уехал бы сотрудник ПРЕЖНЕЙ организации, а генерация
     // такого отвергает: «комплект оформляется по одной организации».
     const user = userEvent.setup();
-    listCompanies.mockResolvedValue([COMPANY, { id: "c-2", name: "ООО Вторая" }]);
+    listCompanies.mockResolvedValue([
+      COMPANY,
+      { id: "c-2", name: "ООО Вторая" },
+    ]);
     renderWithRouter(<QuickPackWizardPage />);
     await screen.findByRole("option", { name: /Приём нового сотрудника/ });
     await user.selectOptions(screen.getByLabelText("Сценарий"), SCENARIO.code);
-    await user.selectOptions(screen.getByLabelText("Организация клиента"), COMPANY.id);
+    await user.selectOptions(
+      screen.getByLabelText("Организация клиента"),
+      COMPANY.id,
+    );
     await user.click(await screen.findByLabelText("Иванов Иван"));
     expect(screen.getByText("Выбрано: 1")).toBeInTheDocument();
 
-    listCompanyPersons.mockResolvedValue([{ id: "p-9", label: "Сидоров Сидор" }]);
-    await user.selectOptions(screen.getByLabelText("Организация клиента"), "c-2");
+    listCompanyPersons.mockResolvedValue([
+      { id: "p-9", label: "Сидоров Сидор" },
+    ]);
+    await user.selectOptions(
+      screen.getByLabelText("Организация клиента"),
+      "c-2",
+    );
 
     await waitFor(() => {
       expect(screen.queryByText(/Выбрано:/)).not.toBeInTheDocument();
@@ -303,7 +354,10 @@ describe("мастер разового комплекта", () => {
     const { container } = renderWithRouter(<QuickPackWizardPage />);
     await screen.findByRole("option", { name: /Приём нового сотрудника/ });
     await user.selectOptions(screen.getByLabelText("Сценарий"), SCENARIO.code);
-    await user.selectOptions(screen.getByLabelText("Организация клиента"), COMPANY.id);
+    await user.selectOptions(
+      screen.getByLabelText("Организация клиента"),
+      COMPANY.id,
+    );
     await screen.findByLabelText("Иванов Иван");
 
     expect(uxBudgetViolations(container)).toEqual([]);
@@ -323,7 +377,10 @@ describe("мастер разового комплекта", () => {
     renderWithRouter(<QuickPackWizardPage />);
     await screen.findByRole("option", { name: /Приём нового сотрудника/ });
     await user.selectOptions(screen.getByLabelText("Сценарий"), SCENARIO.code);
-    await user.selectOptions(screen.getByLabelText("Организация клиента"), COMPANY.id);
+    await user.selectOptions(
+      screen.getByLabelText("Организация клиента"),
+      COMPANY.id,
+    );
     await screen.findByLabelText("Иванов Иван");
 
     const budget = uxBudgetDelta(document.body, "QuickPackWizardPage");

@@ -17,12 +17,18 @@ import type { FleetUsageReport } from "@/types/dto/tenants";
 export const formatBytes = (value: number): string => {
   if (!Number.isFinite(value) || value <= 0) return "0 Б";
   const units = ["Б", "КБ", "МБ", "ГБ", "ТБ"];
-  const power = Math.min(Math.floor(Math.log(value) / Math.log(1024)), units.length - 1);
+  const power = Math.min(
+    Math.floor(Math.log(value) / Math.log(1024)),
+    units.length - 1,
+  );
   const scaled = value / 1024 ** power;
   // Целые байты не дробим, и круглые значения показываем без хвостового нуля:
   // «1536,0 Б» и «2,0 КБ» читаются как огрех расчёта.
   const digits = power === 0 || scaled >= 100 ? 0 : 1;
-  const text = scaled.toFixed(digits).replace(/[.,]0$/, "").replace(".", ",");
+  const text = scaled
+    .toFixed(digits)
+    .replace(/[.,]0$/, "")
+    .replace(".", ",");
   return `${text} ${units[power]}`;
 };
 
@@ -79,7 +85,9 @@ export const FleetUsagePanel = () => {
                 <tr key={row.tenant_id} className="border-t">
                   <td className="py-1 pr-4">{row.name}</td>
                   <td className="py-1 pr-4">{row.doc_generations}</td>
-                  <td className="py-1 pr-4">{formatBytes(row.storage_bytes)}</td>
+                  <td className="py-1 pr-4">
+                    {formatBytes(row.storage_bytes)}
+                  </td>
                   <td className="py-1">{row.active_workers}</td>
                 </tr>
               ))}

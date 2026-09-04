@@ -53,7 +53,11 @@ const LoginPage = () => {
         {/* Логотип партнёра — до входа (BIZ-52 разд. 52.2): человек должен
             видеть, К КОМУ он входит, ещё на этом экране. */}
         {logoUrl ? (
-          <img src={logoUrl} alt="" className="mb-3 h-12 w-auto object-contain" />
+          <img
+            src={logoUrl}
+            alt=""
+            className="mb-3 h-12 w-auto object-contain"
+          />
         ) : null}
         <h1 className="text-2xl font-bold">Вход в платформу</h1>
         <p className="text-sm text-muted-foreground">

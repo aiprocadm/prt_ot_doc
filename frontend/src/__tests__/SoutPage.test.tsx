@@ -152,9 +152,7 @@ describe("SoutPage", () => {
     });
     expect((await screen.findAllByText(/РМ-001/)).length).toBeGreaterThan(0);
     expect(soutApiMock.getReport).toHaveBeenCalledWith("camp-1");
-    expect(
-      screen.getByText(/Подлежат декларированию: 1/),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/Подлежат декларированию: 1/)).toBeInTheDocument();
 
     const budget = uxBudgetDelta(document.body, "SoutPage");
     expect(budget.unexpected).toEqual([]);

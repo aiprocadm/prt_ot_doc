@@ -1,7 +1,10 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { describeLine, OwnLimitsPanel } from "@/features/tenants/OwnLimitsPanel";
+import {
+  describeLine,
+  OwnLimitsPanel,
+} from "@/features/tenants/OwnLimitsPanel";
 import type { OwnLimitLine } from "@/types/dto/tenants";
 
 const ownLimitsMock = vi.fn();
@@ -38,7 +41,9 @@ describe("свои лимиты в кабинете (BIZ-52 разд. 52.4)", ()
     // Один предел не отвечает на вопрос «хватит ли до конца месяца».
     render(<OwnLimitsPanel />);
 
-    expect(await screen.findByText(/80 шт\. из 100 шт\., осталось 20 шт\./)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/80 шт\. из 100 шт\., осталось 20 шт\./),
+    ).toBeInTheDocument();
   });
 
   it("исчерпание называет словом, а не только цветом", async () => {
@@ -108,8 +113,8 @@ describe("текст строки лимита", () => {
   });
 
   it("без предела и без расхода говорит «не ограничено»", () => {
-    expect(describeLine(line({ limit: null, used: null, remaining: null }))).toBe(
-      "не ограничено",
-    );
+    expect(
+      describeLine(line({ limit: null, used: null, remaining: null })),
+    ).toBe("не ограничено");
   });
 });
