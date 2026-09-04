@@ -270,9 +270,7 @@ describe("BrandingSettingsPage", () => {
 
     // BIZ-59: поле живёт в секции «Служебные (JSON)» — открываем её.
     await act(async () => {
-      fireEvent.click(
-        screen.getByRole("button", { name: "Служебные (JSON)" }),
-      );
+      fireEvent.click(screen.getByRole("button", { name: "Служебные (JSON)" }));
     });
     const metadataTextarea = getLabeledTextarea("Метаданные (JSON)");
     await act(async () => {

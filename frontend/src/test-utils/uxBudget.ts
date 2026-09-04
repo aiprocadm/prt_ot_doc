@@ -24,7 +24,9 @@ const isVisible = (element: Element): boolean => {
   if (element.getAttribute("type") === "hidden") return false;
   // Поле внутри свёрнутого «Дополнительно» не видно пользователю, а значит и
   // в бюджет уровня 1 не входит (разд. 59.3: три уровня раскрытия).
-  const collapsed = element.closest("[hidden], [aria-expanded='false'] + *, details:not([open])");
+  const collapsed = element.closest(
+    "[hidden], [aria-expanded='false'] + *, details:not([open])",
+  );
   return collapsed === null;
 };
 
@@ -41,31 +43,38 @@ export const countPrimaryCta = (container: HTMLElement): number =>
   ).length;
 
 export const countVisibleFormFields = (container: HTMLElement): number =>
-  Array.from(container.querySelectorAll("input, select, textarea")).filter((element) => {
-    // Отметки в списке выбора — это один ответ на один вопрос, а не двадцать
-    // полей: считать каждую строкой формы значит объявить нарушением любой
-    // множественный выбор.
-    if (element.getAttribute("type") === "checkbox") return false;
-    if (element.getAttribute("type") === "radio") return false;
-    return isVisible(element);
-  }).length;
+  Array.from(container.querySelectorAll("input, select, textarea")).filter(
+    (element) => {
+      // Отметки в списке выбора — это один ответ на один вопрос, а не двадцать
+      // полей: считать каждую строкой формы значит объявить нарушением любой
+      // множественный выбор.
+      if (element.getAttribute("type") === "checkbox") return false;
+      if (element.getAttribute("type") === "radio") return false;
+      return isVisible(element);
+    },
+  ).length;
 
 /** Колонок в первой таблице экрана — столько человек видит по умолчанию. */
 export const countTableColumns = (container: HTMLElement): number => {
   const table = container.querySelector("table");
   if (!table) return 0;
-  const headerRow = table.querySelector("thead tr") ?? table.querySelector("tr");
+  const headerRow =
+    table.querySelector("thead tr") ?? table.querySelector("tr");
   if (!headerRow) return 0;
-  return Array.from(headerRow.querySelectorAll("th, [role='columnheader']")).filter(isVisible)
-    .length;
+  return Array.from(
+    headerRow.querySelectorAll("th, [role='columnheader']"),
+  ).filter(isVisible).length;
 };
 
 /** Блоков-карточек верхнего уровня: вложенные не считаем — это части блока. */
 export const countDashboardBlocks = (container: HTMLElement): number =>
-  Array.from(container.querySelectorAll("[data-ux-block], section, article")).filter(
+  Array.from(
+    container.querySelectorAll("[data-ux-block], section, article"),
+  ).filter(
     (element) =>
       isVisible(element) &&
-      element.parentElement?.closest("[data-ux-block], section, article") == null,
+      element.parentElement?.closest("[data-ux-block], section, article") ==
+        null,
   ).length;
 
 export const measureUxBudget = (container: HTMLElement): UxMeasurement => ({
@@ -111,7 +120,6 @@ export const uxBudgetViolations = (container: HTMLElement): string[] => {
   }
   return violations;
 };
-
 
 /**
  * Нарушения экрана против записанного по нему долга (ТЗ разд. 59.2).

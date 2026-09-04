@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { buildCompanyWriteBody, normalizeCompanyRead } from "@/api/companiesApi";
+import {
+  buildCompanyWriteBody,
+  normalizeCompanyRead,
+} from "@/api/companiesApi";
 import type { CompanyFormValues } from "@/types/forms/companies";
 
 /**

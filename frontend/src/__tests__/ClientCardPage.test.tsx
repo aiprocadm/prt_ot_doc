@@ -67,10 +67,7 @@ const renderPage = () =>
   render(
     <MemoryRouter initialEntries={["/managed-clients/mc1"]}>
       <Routes>
-        <Route
-          path="/managed-clients/:clientId"
-          element={<ClientCardPage />}
-        />
+        <Route path="/managed-clients/:clientId" element={<ClientCardPage />} />
       </Routes>
     </MemoryRouter>,
   );
@@ -82,7 +79,8 @@ beforeEach(() => {
   api.update.mockResolvedValue(CLIENT);
   api.sendReport.mockResolvedValue({
     status: "no_consent",
-    reason: "Клиент не давал согласия на получение отчётов — включите его в карточке",
+    reason:
+      "Клиент не давал согласия на получение отчётов — включите его в карточке",
     recipient: "client@example.com",
   });
   api.runAudit.mockResolvedValue({

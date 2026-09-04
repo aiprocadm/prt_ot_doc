@@ -19,7 +19,9 @@ const KNOWN_KINDS: LegalDocumentKind[] = ["offer", "privacy", "consent"];
 export const LegalDocumentPage = () => {
   const { kind } = useParams<{ kind: string }>();
   const [document, setDocument] = useState<LegalDocument | null>(null);
-  const [state, setState] = useState<"loading" | "ready" | "missing">("loading");
+  const [state, setState] = useState<"loading" | "ready" | "missing">(
+    "loading",
+  );
 
   useEffect(() => {
     let mounted = true;

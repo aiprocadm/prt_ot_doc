@@ -235,7 +235,9 @@ export const AttentionPanel = ({
                 >
                   {d.title}:{" "}
                   {d.measured ? (
-                    <strong className={d.overdue > 0 ? "text-destructive" : undefined}>
+                    <strong
+                      className={d.overdue > 0 ? "text-destructive" : undefined}
+                    >
                       {d.overdue > 0
                         ? `просрочено ${d.overdue}`
                         : d.due_soon > 0
@@ -278,7 +280,9 @@ export const AttentionPanel = ({
                   {severityIcon(item.severity)}
                   <span className="flex-1 min-w-0">
                     <span className="font-medium">{item.title}</span>{" "}
-                    <span className="text-muted-foreground">— {item.reason}</span>
+                    <span className="text-muted-foreground">
+                      — {item.reason}
+                    </span>
                   </span>
                   {item.discipline ? (
                     <Badge variant="outline" className="text-xs shrink-0">

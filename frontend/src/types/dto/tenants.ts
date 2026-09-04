@@ -4,7 +4,12 @@
 // backend/app/schemas/tenant.py; расхождение стережёт
 // backend/tests/test_tenant_kinds_single_source.py — разъедься они, форма
 // отправила бы вид, который сервер не принимает.
-export const TENANT_KINDS = ["customer", "branch", "contractor", "reseller"] as const;
+export const TENANT_KINDS = [
+  "customer",
+  "branch",
+  "contractor",
+  "reseller",
+] as const;
 
 export type TenantKind = (typeof TENANT_KINDS)[number];
 

@@ -89,12 +89,8 @@ describe("BriefingsPage", () => {
     ).toBeDisabled();
     // BIZ-59: формы раскрываются по выбору, поэтому переключатели тоже обязаны
     // быть заблокированы без права — иначе человек нажимал бы их впустую.
-    expect(
-      screen.getByRole("button", { name: "Новый шаблон" }),
-    ).toBeDisabled();
-    expect(
-      screen.getByRole("button", { name: "Новый журнал" }),
-    ).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Новый шаблон" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Новый журнал" })).toBeDisabled();
     expect(
       screen.getByRole("button", { name: "Назначить инструктаж" }),
     ).toBeDisabled();

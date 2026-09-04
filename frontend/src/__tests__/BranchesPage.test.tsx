@@ -103,9 +103,7 @@ describe("BranchesPage", () => {
     expect(await screen.findByText("Северный филиал")).toBeInTheDocument();
     // Компания видна и в фильтре (option), и в колонке таблицы.
     expect(screen.getAllByText("АО Ромашка").length).toBeGreaterThan(1);
-    expect(
-      screen.getByRole("button", { name: "Новый филиал" }),
-    ).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Новый филиал" })).toBeEnabled();
   });
 
   it("экран в UX-бюджете на наполненных данных (BIZ-60)", async () => {

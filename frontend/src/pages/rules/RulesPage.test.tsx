@@ -107,7 +107,12 @@ const LIBRARY = {
   total: 6,
   installed: 6,
   items: [
-    { discipline: "fire_safety", title: "Пожарная безопасность", rules: 1, reason: "" },
+    {
+      discipline: "fire_safety",
+      title: "Пожарная безопасность",
+      rules: 1,
+      reason: "",
+    },
     {
       discipline: "ecology",
       title: "Экология",
@@ -342,16 +347,23 @@ describe("RulesPage", () => {
     renderPage();
 
     const library = await screen.findByTestId("rule-library");
-    expect(within(library).getByText(/Пожарная безопасность/)).toBeInTheDocument();
+    expect(
+      within(library).getByText(/Пожарная безопасность/),
+    ).toBeInTheDocument();
     // Ноль без причины прочитали бы как недоделку, а не как решение.
     expect(
-      within(library).getByText(/правил нет — в системе нет ни одного события экологии/),
+      within(library).getByText(
+        /правил нет — в системе нет ни одного события экологии/,
+      ),
     ).toBeInTheDocument();
     expect(screen.getByText(/выдано 6 из 6/)).toBeInTheDocument();
   });
 
   it("ошибка библиотеки не гасит реестр правил", async () => {
-    vi.mocked(rulesApi.library).mockRejectedValue({ status: 500, message: "boom" });
+    vi.mocked(rulesApi.library).mockRejectedValue({
+      status: 500,
+      message: "boom",
+    });
     renderPage();
 
     expect(

@@ -31,13 +31,15 @@ export const ModuleDisabledPage = () => {
       <Card className="max-w-xl">
         <CardHeader>
           <CardTitle className="text-xl font-semibold">
-            {module ? `Модуль «${module.title}» не подключён` : "Модуль не подключён"}
+            {module
+              ? `Модуль «${module.title}» не подключён`
+              : "Модуль не подключён"}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3 text-sm text-muted-foreground">
           <p>
-            Права у вас есть, но этот раздел не входит в состав вашей
-            подписки. Чтобы его подключить, обратитесь к вашему менеджеру.
+            Права у вас есть, но этот раздел не входит в состав вашей подписки.
+            Чтобы его подключить, обратитесь к вашему менеджеру.
           </p>
           <div className="flex items-center gap-2">
             <Button asChild>

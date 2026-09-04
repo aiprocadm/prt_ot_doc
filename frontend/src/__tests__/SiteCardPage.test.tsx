@@ -189,7 +189,9 @@ describe("SiteCardPage", () => {
     const table = await screen.findByTestId("disciplines");
     const fire = within(table).getByText("Пожарная безопасность").closest("tr");
     expect(fire).not.toBeNull();
-    expect(within(fire as HTMLElement).getByText("Не измеряется")).toBeInTheDocument();
+    expect(
+      within(fire as HTMLElement).getByText("Не измеряется"),
+    ).toBeInTheDocument();
     expect(
       within(fire as HTMLElement).getByText(/нарядов-допусков: 2/),
     ).toBeInTheDocument();

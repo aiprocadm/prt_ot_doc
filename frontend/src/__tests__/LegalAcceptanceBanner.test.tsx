@@ -42,7 +42,10 @@ describe("напоминание принять юридические текс�
   });
 
   it("молчит, когда подписывать нечего", async () => {
-    getStateMock.mockResolvedValue({ items: [status({ accepted: true })], pending: [] });
+    getStateMock.mockResolvedValue({
+      items: [status({ accepted: true })],
+      pending: [],
+    });
 
     const { container } = draw();
 
@@ -66,7 +69,9 @@ describe("напоминание принять юридические текс�
     // Человека, уже подписавшего прежнюю редакцию, «примите оферту» сбивало бы
     // с толку: он её принимал.
     getStateMock.mockResolvedValue({
-      items: [status({ accepted_version: 1, current_version: 2, outdated: true })],
+      items: [
+        status({ accepted_version: 1, current_version: 2, outdated: true }),
+      ],
       pending: ["offer"],
     });
 
@@ -80,7 +85,10 @@ describe("напоминание принять юридические текс�
     const user = userEvent.setup();
     getStateMock
       .mockResolvedValueOnce({ items: [status()], pending: ["offer"] })
-      .mockResolvedValueOnce({ items: [status({ accepted: true })], pending: [] });
+      .mockResolvedValueOnce({
+        items: [status({ accepted: true })],
+        pending: [],
+      });
     draw();
     await screen.findByText(/Примите оферту/);
 

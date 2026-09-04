@@ -92,10 +92,7 @@ const AppRouter = () => {
               авторизацию — и ссылка с экрана входа вела бы обратно на вход. */}
           <Route path="/legal/:kind" element={<LegalDocumentPage />} />
           <Route path="/no-access" element={<AccessDeniedPage />} />
-          <Route
-            path="/module-unavailable"
-            element={<ModuleDisabledPage />}
-          />
+          <Route path="/module-unavailable" element={<ModuleDisabledPage />} />
           <Route element={<ProtectedRoute />}>
             <Route element={<MainLayout />}>
               <Route index element={<LandingRedirect />} />

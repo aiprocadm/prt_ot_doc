@@ -23,7 +23,10 @@ import { uxBudgetDelta } from "@/test-utils/uxBudget";
 
 const fill = async (user: ReturnType<typeof userEvent.setup>) => {
   await user.type(screen.getByLabelText("Название организации"), "ООО Ромашка");
-  await user.type(screen.getByLabelText("Адрес рабочего пространства"), "romashka");
+  await user.type(
+    screen.getByLabelText("Адрес рабочего пространства"),
+    "romashka",
+  );
   await user.type(
     screen.getByLabelText("Электронная почта владельца"),
     "owner@romashka.ru",
@@ -75,14 +78,19 @@ describe("SignupPage", () => {
   });
 
   it("занятый адрес объяснён отдельно от прочих сбоев", async () => {
-    api.signup.mockRejectedValue({ status: 409, message: "Tenant already exists" });
+    api.signup.mockRejectedValue({
+      status: 409,
+      message: "Tenant already exists",
+    });
     const user = userEvent.setup();
     renderPage();
     await fill(user);
 
     await user.click(screen.getByRole("button", { name: "Создать" }));
 
-    expect(await screen.findByTestId("signup-error")).toHaveTextContent(/уже занят/);
+    expect(await screen.findByTestId("signup-error")).toHaveTextContent(
+      /уже занят/,
+    );
   });
 
   it("перебор объяснён отдельно от прочих сбоев", async () => {

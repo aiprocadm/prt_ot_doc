@@ -82,7 +82,6 @@ export const getPackScenarioFields = async (code: string) => {
   return data;
 };
 
-
 /** Люди и объекты выбранной организации — для первого шага мастера. */
 export type WizardPerson = { id: string; label: string };
 export type WizardSite = { id: string; name: string };
@@ -96,7 +95,9 @@ export const listCompanyPersons = async (companyId: string) => {
   );
   return (data.items ?? []).map((row) => {
     const parts = [row["last_name"], row["first_name"], row["middle_name"]]
-      .filter((part): part is string => typeof part === "string" && part.length > 0)
+      .filter(
+        (part): part is string => typeof part === "string" && part.length > 0,
+      )
       .join(" ");
     return {
       id: String(row["id"]),
@@ -106,10 +107,9 @@ export const listCompanyPersons = async (companyId: string) => {
 };
 
 export const listCompanySites = async (companyId: string) => {
-  const { data } = await apiClient.get<{ items: { id: string; name: string }[] }>(
-    "/sites",
-    { params: { company_id: companyId, limit: 200 } },
-  );
+  const { data } = await apiClient.get<{
+    items: { id: string; name: string }[];
+  }>("/sites", { params: { company_id: companyId, limit: 200 } });
   return (data.items ?? []).map((row) => ({ id: row.id, name: row.name }));
 };
 

@@ -89,7 +89,10 @@ const SignupPage = () => {
       <h1 className="text-xl font-semibold">Создать рабочее пространство</h1>
 
       {closed ? (
-        <p className="text-sm text-muted-foreground" data-testid="signup-closed">
+        <p
+          className="text-sm text-muted-foreground"
+          data-testid="signup-closed"
+        >
           Самостоятельная регистрация на этой платформе закрыта. Обратитесь к
           владельцу платформы — он заведёт рабочее пространство за вас.
         </p>

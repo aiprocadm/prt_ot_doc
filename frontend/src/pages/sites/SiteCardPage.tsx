@@ -43,7 +43,10 @@ const SiteCardPage = () => {
     try {
       setOverview(await sitesApi.overview(siteId));
     } catch (err) {
-      const apiError = asApiError(err, "Не удалось загрузить карточку площадки");
+      const apiError = asApiError(
+        err,
+        "Не удалось загрузить карточку площадки",
+      );
       // 403 объясняем словами: площадки читает администратор арендатора.
       // Голая ошибка на этом месте выглядит как поломка, а не как правило.
       if (apiError.status === 403) setForbidden(true);
@@ -83,7 +86,9 @@ const SiteCardPage = () => {
       ) : (
         <>
           <ErrorState error={error ?? undefined} onRetry={load} />
-          {loading ? <LoadingScreen label="Загрузка карточки площадки" /> : null}
+          {loading ? (
+            <LoadingScreen label="Загрузка карточки площадки" />
+          ) : null}
 
           {!loading && !error && overview ? (
             <>
@@ -106,7 +111,8 @@ const SiteCardPage = () => {
                       data-testid="site-facts"
                     >
                       <span>
-                        Адрес: <strong>{overview.address || "не указан"}</strong>
+                        Адрес:{" "}
+                        <strong>{overview.address || "не указан"}</strong>
                       </span>
                       <span>
                         Класс опасности:{" "}
@@ -128,8 +134,8 @@ const SiteCardPage = () => {
                         <strong>{facts?.people ?? 0}</strong>
                       </span>
                       <span data-testid="people-without-workplace">
-                        Без рабочего места во всей компании (ни к одной
-                        площадке не отнесены):{" "}
+                        Без рабочего места во всей компании (ни к одной площадке
+                        не отнесены):{" "}
                         <strong>{facts?.people_without_workplace ?? 0}</strong>
                       </span>
                       <span data-testid="site-permits">

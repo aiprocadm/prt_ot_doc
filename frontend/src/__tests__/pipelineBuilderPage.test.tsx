@@ -31,7 +31,8 @@ describe("PipelineBuilderPage", () => {
     // дефолтного состояния (выбран узел) ничего не сказал бы про панель
     // ребра — меряем ОБЕ.
     apiClientMock.get.mockImplementation((url: string) => {
-      if (url !== "/pipelines/profiles") throw new Error(`Unexpected GET ${url}`);
+      if (url !== "/pipelines/profiles")
+        throw new Error(`Unexpected GET ${url}`);
       return Promise.resolve({
         data: [
           {
@@ -58,9 +59,7 @@ describe("PipelineBuilderPage", () => {
     expect(withNode.unexpected).toEqual([]);
     expect(withNode.stale).toEqual([]);
 
-    fireEvent.click(
-      screen.getByRole("button", { name: /render → headers/ }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: /render → headers/ }));
     const withEdge = uxBudgetDelta(document.body, "PipelineBuilderPage");
     expect(withEdge.unexpected).toEqual([]);
     expect(withEdge.stale).toEqual([]);

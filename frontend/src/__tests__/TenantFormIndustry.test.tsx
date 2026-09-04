@@ -45,7 +45,9 @@ describe("выбор отрасли при заведении клиента (BI
     await openDialog(user);
 
     // Зашитая копия списка разошлась бы с набором файлов эталонов на сервере.
-    expect(await screen.findByRole("option", { name: "Строительство" })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("option", { name: "Строительство" }),
+    ).toBeInTheDocument();
   });
 
   it("объясняет, на что влияет выбор", async () => {
@@ -53,7 +55,9 @@ describe("выбор отрасли при заведении клиента (BI
     await openDialog(user);
 
     expect(
-      await screen.findByText(/какие должности, опасности и меры получит новый клиент/),
+      await screen.findByText(
+        /какие должности, опасности и меры получит новый клиент/,
+      ),
     ).toBeInTheDocument();
   });
 
@@ -64,7 +68,10 @@ describe("выбор отрасли при заведении клиента (BI
 
     await user.type(screen.getByLabelText("Слаг"), "stroyco");
     await user.type(screen.getByLabelText("Название"), "ООО Строй");
-    await user.type(screen.getByLabelText("E-mail владельца"), "owner@stroyco.ru");
+    await user.type(
+      screen.getByLabelText("E-mail владельца"),
+      "owner@stroyco.ru",
+    );
     await user.type(screen.getByLabelText("Пароль владельца"), "OwnerPass123");
     await user.selectOptions(screen.getByLabelText("Отрасль"), "construction");
     await user.click(screen.getByRole("button", { name: "Создать тенант" }));
@@ -79,7 +86,9 @@ describe("выбор отрасли при заведении клиента (BI
     await openDialog(user);
 
     await waitFor(() =>
-      expect((screen.getByLabelText("Отрасль") as HTMLSelectElement).value).toBe("general"),
+      expect(
+        (screen.getByLabelText("Отрасль") as HTMLSelectElement).value,
+      ).toBe("general"),
     );
   });
 

@@ -29,12 +29,17 @@ import { useBrandStore } from "@/stores/brand";
 
 /** Цвет храним HSL-триплетом, как ждёт переменная `--primary`, но человеку
  *  показываем обычный выбор цвета. Перевод живёт здесь и только здесь. */
-const HSL_TRIPLET = /^(\d{1,3}(?:\.\d+)?)\s+(\d{1,3}(?:\.\d+)?)%\s+(\d{1,3}(?:\.\d+)?)%$/;
+const HSL_TRIPLET =
+  /^(\d{1,3}(?:\.\d+)?)\s+(\d{1,3}(?:\.\d+)?)%\s+(\d{1,3}(?:\.\d+)?)%$/;
 
 export const hslTripletToHex = (triplet: string): string => {
   const match = HSL_TRIPLET.exec(triplet.trim());
   if (!match) return "#000000";
-  const [h, s, l] = [Number(match[1]), Number(match[2]) / 100, Number(match[3]) / 100];
+  const [h, s, l] = [
+    Number(match[1]),
+    Number(match[2]) / 100,
+    Number(match[3]) / 100,
+  ];
   const chroma = (1 - Math.abs(2 * l - 1)) * s;
   const x = chroma * (1 - Math.abs(((h / 60) % 2) - 1));
   const m = l - chroma / 2;
@@ -64,7 +69,9 @@ const trim = (value: number): string => String(Math.round(value * 100) / 100);
 
 export const hexToHslTriplet = (hex: string): string => {
   const clean = hex.replace("#", "");
-  const [r, g, b] = [0, 2, 4].map((i) => parseInt(clean.slice(i, i + 2), 16) / 255);
+  const [r, g, b] = [0, 2, 4].map(
+    (i) => parseInt(clean.slice(i, i + 2), 16) / 255,
+  );
   const max = Math.max(r, g, b);
   const min = Math.min(r, g, b);
   const l = (max + min) / 2;
@@ -109,7 +116,9 @@ const BrandSettingsPage = () => {
       setData(loaded);
       setAppName(loaded.app_name ?? "");
       setSupportEmail(loaded.support_email ?? "");
-      setColor(hslTripletToHex(loaded.primary_color ?? loaded.effective.primary_color));
+      setColor(
+        hslTripletToHex(loaded.primary_color ?? loaded.effective.primary_color),
+      );
     } catch {
       // Кабинет бренда открыт владельцу платформы и партнёру; клиенту сервер
       // отвечает отказом — показываем это состоянием, а не пустой формой.
@@ -249,7 +258,11 @@ const BrandSettingsPage = () => {
               }}
             />
             {data?.has_logo ? (
-              <Button variant="ghost" size="sm" onClick={() => void drop("logo")}>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => void drop("logo")}
+              >
                 Убрать
               </Button>
             ) : null}
@@ -273,13 +286,18 @@ const BrandSettingsPage = () => {
               }}
             />
             {data?.has_favicon ? (
-              <Button variant="ghost" size="sm" onClick={() => void drop("favicon")}>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => void drop("favicon")}
+              >
                 Убрать
               </Button>
             ) : null}
           </div>
           <p className="text-xs text-muted-foreground">
-            PNG или ICO, до 128 КБ. WebP не подходит: его иконки не понимает Safari.
+            PNG или ICO, до 128 КБ. WebP не подходит: его иконки не понимает
+            Safari.
           </p>
         </div>
       </div>

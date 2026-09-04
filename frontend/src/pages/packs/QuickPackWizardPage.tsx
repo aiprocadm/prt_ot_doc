@@ -19,7 +19,10 @@ import {
   type WizardPerson,
   type WizardSite,
 } from "@/api/packWizard";
-import { WizardStepper, type WizardStep } from "@/components/wizard/WizardStepper";
+import {
+  WizardStepper,
+  type WizardStep,
+} from "@/components/wizard/WizardStepper";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -66,8 +69,12 @@ export const QuickPackWizardPage = () => {
   const pollRef = useRef<number | null>(null);
 
   useEffect(() => {
-    void listPackScenarios().then(setScenarios).catch(() => undefined);
-    void listCompanies().then(setCompanies).catch(() => undefined);
+    void listPackScenarios()
+      .then(setScenarios)
+      .catch(() => undefined);
+    void listCompanies()
+      .then(setCompanies)
+      .catch(() => undefined);
   }, []);
 
   // Смена организации обнуляет объект и состав: они принадлежат прежней, и
@@ -78,8 +85,12 @@ export const QuickPackWizardPage = () => {
     setPersons([]);
     setSites([]);
     if (!companyId) return;
-    void listCompanySites(companyId).then(setSites).catch(() => undefined);
-    void listCompanyPersons(companyId).then(setPersons).catch(() => undefined);
+    void listCompanySites(companyId)
+      .then(setSites)
+      .catch(() => undefined);
+    void listCompanyPersons(companyId)
+      .then(setPersons)
+      .catch(() => undefined);
   }, [companyId]);
 
   const selection = useMemo(
@@ -107,7 +118,9 @@ export const QuickPackWizardPage = () => {
       return;
     }
     pollRef.current = window.setInterval(() => {
-      void getPackTaskStatus(taskId).then(setTaskStatus).catch(() => undefined);
+      void getPackTaskStatus(taskId)
+        .then(setTaskStatus)
+        .catch(() => undefined);
     }, POLL_MS);
     return () => {
       if (pollRef.current) {
@@ -198,12 +211,16 @@ export const QuickPackWizardPage = () => {
                 <option value="">— выберите —</option>
                 {scenarios.map((item) => (
                   <option key={item.code} value={item.code}>
-                    {item.discipline ? `${item.discipline} · ${item.name}` : item.name}
+                    {item.discipline
+                      ? `${item.discipline} · ${item.name}`
+                      : item.name}
                   </option>
                 ))}
               </select>
               {scenario && (
-                <p className="text-sm text-muted-foreground">{scenario.description}</p>
+                <p className="text-sm text-muted-foreground">
+                  {scenario.description}
+                </p>
               )}
             </div>
 
@@ -252,8 +269,8 @@ export const QuickPackWizardPage = () => {
                 </legend>
                 {persons.length === 0 && (
                   <p className="text-sm text-muted-foreground">
-                    У этой организации нет сотрудников. Комплект будет оформлен на
-                    организацию целиком.
+                    У этой организации нет сотрудников. Комплект будет оформлен
+                    на организацию целиком.
                   </p>
                 )}
                 {/* Один сценарий на несколько человек — это и есть «комплект на
@@ -261,7 +278,10 @@ export const QuickPackWizardPage = () => {
                     интерфейс его просто не предлагал. */}
                 <div className="max-h-56 space-y-1 overflow-y-auto rounded border p-2">
                   {persons.map((person) => (
-                    <label key={person.id} className="flex items-center gap-2 text-sm">
+                    <label
+                      key={person.id}
+                      className="flex items-center gap-2 text-sm"
+                    >
                       <input
                         type="checkbox"
                         checked={personIds.includes(person.id)}
@@ -322,13 +342,18 @@ export const QuickPackWizardPage = () => {
               <div key={field.name} className="space-y-1">
                 <Label htmlFor={`f-${field.name}`}>
                   {field.label}
-                  {field.required && <span className="text-destructive"> *</span>}
+                  {field.required && (
+                    <span className="text-destructive"> *</span>
+                  )}
                 </Label>
                 <Input
                   id={`f-${field.name}`}
                   value={answers[field.name] ?? ""}
                   onChange={(event) =>
-                    setAnswers((prev) => ({ ...prev, [field.name]: event.target.value }))
+                    setAnswers((prev) => ({
+                      ...prev,
+                      [field.name]: event.target.value,
+                    }))
                   }
                 />
                 {/*
@@ -345,7 +370,9 @@ export const QuickPackWizardPage = () => {
                   <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                     <span>
                       Платформа знает: <strong>{field.suggested}</strong>
-                      {field.suggested_source ? ` — ${field.suggested_source}` : ""}
+                      {field.suggested_source
+                        ? ` — ${field.suggested_source}`
+                        : ""}
                     </span>
                     <Button
                       type="button"
@@ -414,7 +441,9 @@ export const QuickPackWizardPage = () => {
               <div className="font-medium">Войдут документы:</div>
               <ul className="list-inside list-disc text-sm text-muted-foreground">
                 {preview.documents.map((item, index) => (
-                  <li key={`${item.template_name}-${item.person_name ?? "org"}-${index}`}>
+                  <li
+                    key={`${item.template_name}-${item.person_name ?? "org"}-${index}`}
+                  >
                     {item.template_name}
                     {item.person_name ? ` — ${item.person_name}` : ""}
                   </li>
@@ -447,8 +476,8 @@ export const QuickPackWizardPage = () => {
           <CardContent className="space-y-4">
             {!archiveKey && (
               <p className="text-sm text-muted-foreground">
-                Готовим комплект. Это занимает до нескольких минут — страницу можно не
-                держать открытой, задача не потеряется.
+                Готовим комплект. Это занимает до нескольких минут — страницу
+                можно не держать открытой, задача не потеряется.
               </p>
             )}
 

@@ -224,7 +224,9 @@ describe("AttentionPanel", () => {
         reason: "Поимённый учёт экологии в системе не ведётся",
       },
     ],
-    unclassified_sources: ["Наряд-допуск: вид работ хранится свободной строкой"],
+    unclassified_sources: [
+      "Наряд-допуск: вид работ хранится свободной строкой",
+    ],
   });
 
   it("рисует записи внимания — раньше сервер считал список, который выбрасывался", async () => {
@@ -255,7 +257,9 @@ describe("AttentionPanel", () => {
 
     await screen.findByTestId("attention-disciplines");
     const chips = screen.getAllByTestId("attention-discipline");
-    const ecology = chips.find((chip) => chip.textContent?.includes("Экология"));
+    const ecology = chips.find((chip) =>
+      chip.textContent?.includes("Экология"),
+    );
     expect(ecology).toBeDefined();
     expect(ecology).toHaveTextContent("учёт не ведётся");
     expect(ecology).not.toHaveTextContent("нарушений нет");
@@ -281,6 +285,8 @@ describe("AttentionPanel", () => {
     expect(
       await screen.findByText("Медосмотр: Иванов И.И."),
     ).toBeInTheDocument();
-    expect(screen.queryByTestId("attention-disciplines")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("attention-disciplines"),
+    ).not.toBeInTheDocument();
   });
 });

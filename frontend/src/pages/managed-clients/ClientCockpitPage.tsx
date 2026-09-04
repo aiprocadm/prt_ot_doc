@@ -423,8 +423,8 @@ const ChangeFeedPanel = ({ clients }: ChangeFeedPanelProps) => {
   // всегда видимые четыре поля съели бы бюджет экрана (полей ≤ 7).
   const [adding, setAdding] = useState(false);
   const [newKind, setNewKind] = useState<ClientChangeKind>("employee_hired");
-  const [newDate, setNewDate] = useState(
-    () => new Date().toISOString().slice(0, 10),
+  const [newDate, setNewDate] = useState(() =>
+    new Date().toISOString().slice(0, 10),
   );
   const [newSummary, setNewSummary] = useState("");
   const [newDetails, setNewDetails] = useState("");
@@ -533,7 +533,10 @@ const ChangeFeedPanel = ({ clients }: ChangeFeedPanelProps) => {
       </CardHeader>
       <CardContent className="space-y-3">
         <div className="space-y-1">
-          <label className="text-xs text-muted-foreground" htmlFor="feed-client">
+          <label
+            className="text-xs text-muted-foreground"
+            htmlFor="feed-client"
+          >
             Клиент
           </label>
           <select
@@ -558,7 +561,10 @@ const ChangeFeedPanel = ({ clients }: ChangeFeedPanelProps) => {
             data-testid="add-change-form"
           >
             <div className="space-y-1">
-              <label className="text-xs text-muted-foreground" htmlFor="chg-kind">
+              <label
+                className="text-xs text-muted-foreground"
+                htmlFor="chg-kind"
+              >
                 Что изменилось
               </label>
               <select
@@ -575,7 +581,10 @@ const ChangeFeedPanel = ({ clients }: ChangeFeedPanelProps) => {
               </select>
             </div>
             <div className="space-y-1">
-              <label className="text-xs text-muted-foreground" htmlFor="chg-date">
+              <label
+                className="text-xs text-muted-foreground"
+                htmlFor="chg-date"
+              >
                 Дата изменения
               </label>
               {/* Дата САМОГО изменения, не записи: сроки считаются от неё
@@ -691,7 +700,9 @@ const ChangeFeedPanel = ({ clients }: ChangeFeedPanelProps) => {
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => void setStatus(change.id, "handled")}
+                              onClick={() =>
+                                void setStatus(change.id, "handled")
+                              }
                             >
                               Разобрано
                             </Button>
@@ -803,7 +814,9 @@ const ReadinessPanel = ({ clients }: ReadinessPanelProps) => {
             // живут в его собственном контуре (правило «Центра внимания»).
             <EmptyState
               title="Данные не собраны"
-              description={data.reason ?? "Данные ведутся в отдельном контуре клиента"}
+              description={
+                data.reason ?? "Данные ведутся в отдельном контуре клиента"
+              }
             />
           ) : (
             <>
@@ -1022,69 +1035,75 @@ const PortfolioPanel = ({
       </CardHeader>
       <CardContent className="space-y-3">
         {adding ? (
-        <form
-          className="flex flex-wrap items-end gap-2"
-          onSubmit={handleCreate}
-        >
-          <div className="flex-1 min-w-[180px] space-y-1">
-            <label className="text-xs text-muted-foreground" htmlFor="mc-name">
-              Название клиента
-            </label>
-            <Input
-              id="mc-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-            />
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs text-muted-foreground" htmlFor="mc-mode">
-              Режим ведения
-            </label>
-            <select
-              id="mc-mode"
-              className={selectClass}
-              value={mode}
-              onChange={(e) => setMode(e.target.value as ManagedClientMode)}
-            >
-              <option value="lightweight">{MODE_LABELS.lightweight}</option>
-              <option value="dedicated">{MODE_LABELS.dedicated}</option>
-            </select>
-          </div>
-          {mode === "lightweight" ? (
+          <form
+            className="flex flex-wrap items-end gap-2"
+            onSubmit={handleCreate}
+          >
+            <div className="flex-1 min-w-[180px] space-y-1">
+              <label
+                className="text-xs text-muted-foreground"
+                htmlFor="mc-name"
+              >
+                Название клиента
+              </label>
+              <Input
+                id="mc-name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
+            </div>
             <div className="space-y-1">
               <label
                 className="text-xs text-muted-foreground"
-                htmlFor="mc-company"
+                htmlFor="mc-mode"
               >
-                Организация клиента
+                Режим ведения
               </label>
-              <Input
-                id="mc-company"
-                value={companyId}
-                onChange={(e) => setCompanyId(e.target.value)}
-                placeholder="ID организации"
-              />
-            </div>
-          ) : (
-            <div className="space-y-1">
-              <label
-                className="text-xs text-muted-foreground"
-                htmlFor="mc-tenant"
+              <select
+                id="mc-mode"
+                className={selectClass}
+                value={mode}
+                onChange={(e) => setMode(e.target.value as ManagedClientMode)}
               >
-                Контур клиента
-              </label>
-              <Input
-                id="mc-tenant"
-                value={tenantSlug}
-                onChange={(e) => setTenantSlug(e.target.value)}
-                placeholder="slug контура"
-              />
+                <option value="lightweight">{MODE_LABELS.lightweight}</option>
+                <option value="dedicated">{MODE_LABELS.dedicated}</option>
+              </select>
             </div>
-          )}
-          <Button type="submit" disabled={saving || !name.trim()}>
-            Сохранить клиента
-          </Button>
-        </form>
+            {mode === "lightweight" ? (
+              <div className="space-y-1">
+                <label
+                  className="text-xs text-muted-foreground"
+                  htmlFor="mc-company"
+                >
+                  Организация клиента
+                </label>
+                <Input
+                  id="mc-company"
+                  value={companyId}
+                  onChange={(e) => setCompanyId(e.target.value)}
+                  placeholder="ID организации"
+                />
+              </div>
+            ) : (
+              <div className="space-y-1">
+                <label
+                  className="text-xs text-muted-foreground"
+                  htmlFor="mc-tenant"
+                >
+                  Контур клиента
+                </label>
+                <Input
+                  id="mc-tenant"
+                  value={tenantSlug}
+                  onChange={(e) => setTenantSlug(e.target.value)}
+                  placeholder="slug контура"
+                />
+              </div>
+            )}
+            <Button type="submit" disabled={saving || !name.trim()}>
+              Сохранить клиента
+            </Button>
+          </form>
         ) : null}
         <ErrorState error={formError ?? undefined} />
         <ErrorState error={error ?? undefined} onRetry={onRetry} />
