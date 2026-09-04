@@ -287,6 +287,7 @@ const READINESS: ClientReadiness = {
       expiring: 0,
     },
   ],
+  not_applicable: null,
 };
 
 beforeEach(() => {
@@ -877,5 +878,42 @@ describe("Светофор соответствия (BIZ-51 срез-6)", () => 
       ).toBeGreaterThan(0),
     );
     expect(screen.queryByTestId("readiness-overall")).not.toBeInTheDocument();
+  });
+
+  it("дисциплины вне редакции названы фразой под списком (срез-55)", async () => {
+    api.readiness.mockResolvedValue({
+      ...READINESS,
+      not_applicable:
+        "Вне редакции арендатора (модуль не выдан или выключен): Экология, БДД",
+    });
+    render(
+      <MemoryRouter>
+        <ClientCockpitPage />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.getByTestId("readiness-not-applicable"),
+      ).toBeInTheDocument(),
+    );
+    expect(screen.getByTestId("readiness-not-applicable")).toHaveTextContent(
+      "Экология, БДД",
+    );
+  });
+
+  it("без скрытых дисциплин фразы нет", async () => {
+    render(
+      <MemoryRouter>
+        <ClientCockpitPage />
+      </MemoryRouter>,
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("readiness-overall")).toBeInTheDocument(),
+    );
+
+    expect(
+      screen.queryByTestId("readiness-not-applicable"),
+    ).not.toBeInTheDocument();
   });
 });

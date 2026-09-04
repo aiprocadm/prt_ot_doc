@@ -30,10 +30,19 @@ DQ: тот же, что у `starter_pack_skipped`).
 Формула «открытое» — общая с дашбордом директора (``open_incidents_where``),
 считаются только размеченные; неразмеченные названы отдельно, а не спрятаны
 в «охрану труда».
+
+**5. Дисциплины вне редакции исполнителя — вне светофора, но названы (BIZ-54-57
+срез-55, приёмка §58.3).** Строки отчёта — только по применимым дисциплинам
+(``services/discipline_applicability``: модуль выдан и включён); скрытые
+перечислены отдельной фразой, чтобы шесть строк вместо восьми не читались
+как недоделка. Происшествия — факты, и от редакции не зависят: действие
+«довести до закрытия» строится по всем размеченным кодам, а не по строкам
+светофора.
 """
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import date
 from typing import Any, Mapping
@@ -90,6 +99,15 @@ def _incidents_block(incidents_open: Mapping[str, int], incidents_unmarked: int)
     return f"Открытых происшествий: {total} ({'; '.join(parts)})."
 
 
+def _not_applicable_block(titles: Sequence[str]) -> str | None:
+    if not titles:
+        return None
+    return (
+        f"Вне отчёта: {', '.join(titles)} — модули у исполнителя не подключены, "
+        "статус по ним не считается."
+    )
+
+
 def _gaps_block(directions: list[DirectionReadiness]) -> str:
     problems = [
         f"{row.title}: {row.reason}"
@@ -109,11 +127,12 @@ def _actions(
 ) -> list[str]:
     actions = [f"{row.title}: {row.reason}" for row in directions if row.light is TrafficLight.RED]
     # Источник каждого действия виден: дисциплина и её число из блока
-    # происшествий, а не общее «разобраться».
-    for row in directions:
-        count = incidents_open.get(row.discipline.value, 0)
+    # происшествий, а не общее «разобраться». Идём по словарю, а не по строкам
+    # светофора: происшествие по скрытой дисциплине — факт, и он не прячется.
+    for code, title in _TITLE_BY_CODE.items():
+        count = incidents_open.get(code, 0)
         if count:
-            actions.append(f"{row.title}: довести до закрытия {_plural(count, _INCIDENT_FORMS)}")
+            actions.append(f"{title}: довести до закрытия {_plural(count, _INCIDENT_FORMS)}")
     if incidents_unmarked:
         actions.append(f"Разметить дисциплиной в реестре происшествий: {incidents_unmarked}")
     if changes_unhandled:
@@ -130,11 +149,14 @@ def build_report(
     changes_unhandled: int,
     incidents_open: Mapping[str, int] | None = None,
     incidents_unmarked: int = 0,
+    not_applicable: Sequence[str] = (),
 ) -> AuditReportContent:
     """Собрать отчёт «что изменилось, что просрочено, что нужно сделать».
 
     ``incidents_open`` — открытые происшествия по коду дисциплины,
     ``incidents_unmarked`` — без разметки (срез-52). Цвет от них не зависит.
+    ``not_applicable`` — названия дисциплин вне редакции исполнителя (срез-55):
+    ``directions`` приходят уже без них, здесь они только названы.
     """
 
     incidents_open = dict(incidents_open or {})
@@ -143,6 +165,7 @@ def build_report(
     summary_parts = [
         _changes_block(changes_by_kind),
         _gaps_block(directions),
+        _not_applicable_block(not_applicable),
         _incidents_block(incidents_open, incidents_unmarked),
         ("Что нужно сделать: " + "; ".join(actions) + "." if actions else "Действий не требуется."),
     ]
@@ -175,10 +198,11 @@ def build_report(
             "by_discipline": {k: v for k, v in incidents_open.items() if v},
             "unmarked": incidents_unmarked,
         },
+        "not_applicable": list(not_applicable),
         "actions": actions,
     }
     return AuditReportContent(
         overall=overall.value,
-        summary=" ".join(summary_parts),
+        summary=" ".join(part for part in summary_parts if part),
         payload=payload,
     )

@@ -159,6 +159,7 @@ from app.schemas.managed_clients import (
 from app.services.client_change_signals import enqueue_change_recorded
 from app.services.client_dq_signals import DqSignalsOutcome, collect_dq_signals
 from app.services.client_report_mail import send_report_to_client
+from app.services.discipline_applicability import collect_applicability, only_applicable
 from app.services.tenants.bootstrap.service import BootstrapTenantService
 
 router = APIRouter(prefix="/managed-clients", tags=["managed-clients"])
@@ -1889,16 +1890,22 @@ async def get_client_readiness(
     numbers = await collect_client_numbers(
         session, tenant_id=str(tenant.id), company_id=str(client.company_id)
     )
-    rows = build_directions(
-        medical=numbers.medical,
-        ppe=numbers.ppe,
-        training_overdue=numbers.training_overdue,
+    # Дисциплины вне редакции исполнителя — вне светофора, но названы (срез-55).
+    applicability = await collect_applicability(session, str(tenant.id))
+    rows = only_applicable(
+        build_directions(
+            medical=numbers.medical,
+            ppe=numbers.ppe,
+            training_overdue=numbers.training_overdue,
+        ),
+        applicability,
     )
     return ClientReadinessRead(
         client_id=client.id,
         client_name=client.name,
         aggregation="aggregated",
         overall=worst_light(rows).value,
+        not_applicable=applicability.note,
         directions=[
             DirectionReadinessRead(
                 direction=row.discipline.value,
@@ -1947,9 +1954,7 @@ async def run_client_audit(
     )
 
 
-@router.post(
-    "/{mcid}/audit-reports/{report_id}/send", response_model=ReportSendRead
-)
+@router.post("/{mcid}/audit-reports/{report_id}/send", response_model=ReportSendRead)
 @audit_operation("update", "client_audit_report")
 async def send_client_audit_report(
     mcid: str,
@@ -2007,12 +2012,7 @@ async def list_client_audit_reports(
         ClientAuditReport.tenant_id == tenant.id,
         ClientAuditReport.managed_client_id == mcid,
     )
-    total = int(
-        (
-            await session.execute(select(func.count()).where(*where))
-        ).scalar_one()
-        or 0
-    )
+    total = int((await session.execute(select(func.count()).where(*where))).scalar_one() or 0)
     rows = (
         (
             await session.execute(

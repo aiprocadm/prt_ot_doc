@@ -452,6 +452,9 @@ class ClientReadinessRead(BaseSchema):
     #: Итог по худшему ИЗМЕРЕННОМУ направлению; not_measured в итог не входит.
     overall: str | None = None
     directions: list[DirectionReadinessRead] = Field(default_factory=list)
+    #: Дисциплины вне редакции исполнителя — одной фразой; null — скрывать нечего
+    #: (BIZ-54-57 срез-55, приёмка §58.3).
+    not_applicable: str | None = None
 
 
 class ClientAuditReportRead(BaseSchema):

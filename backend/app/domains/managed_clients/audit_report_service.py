@@ -33,6 +33,7 @@ from app.domains.managed_clients.readiness_service import collect_client_numbers
 from app.models.client_changes import ClientAuditReport, ClientChange
 from app.models.incidents import Incident
 from app.models.managed_clients import ManagedClient
+from app.services.discipline_applicability import collect_applicability, only_applicable
 from app.services.discipline_incidents import open_incidents_where
 
 __all__ = ["AUDIT_PERIOD_DAYS", "AuditRunOutcome", "run_tenant_audit"]
@@ -153,6 +154,8 @@ async def run_tenant_audit(
         .all()
     )
 
+    # Редакция — у исполнителя одна на всех клиентов: спрашиваем один раз.
+    applicability = await collect_applicability(session, tenant_id)
     created = already = skipped = 0
     for client in clients:
         if client.mode is ManagedClientMode.DEDICATED or not client.company_id:
@@ -165,10 +168,13 @@ async def run_tenant_audit(
         numbers = await collect_client_numbers(
             session, tenant_id=tenant_id, company_id=str(client.company_id), today=today
         )
-        directions = build_directions(
-            medical=numbers.medical,
-            ppe=numbers.ppe,
-            training_overdue=numbers.training_overdue,
+        directions = only_applicable(
+            build_directions(
+                medical=numbers.medical,
+                ppe=numbers.ppe,
+                training_overdue=numbers.training_overdue,
+            ),
+            applicability,
         )
         incidents_open, incidents_unmarked = await _incidents_by_discipline(
             session, tenant_id, str(client.company_id)
@@ -183,6 +189,7 @@ async def run_tenant_audit(
             changes_unhandled=await _unhandled_count(session, tenant_id, str(client.id)),
             incidents_open=incidents_open,
             incidents_unmarked=incidents_unmarked,
+            not_applicable=applicability.hidden_titles,
         )
         session.add(
             ClientAuditReport(

@@ -31,6 +31,16 @@ from app.models.models import Company, Incident, IncidentStatus, Position, RoleE
 
 BASE = "/api/v1/managed-clients"
 
+#: Пять дисциплин Доп. №1 — продаваемые модули; по умолчанию у арендатора
+#: теста они НЕ выданы (BIZ-61), и отчёт их не показывает (срез-55).
+DISCIPLINE_MODULES = (
+    "fire_safety",
+    "industrial_safety",
+    "ecology",
+    "civil_defense",
+    "road_safety",
+)
+
 
 @pytest.fixture(autouse=True)
 def _module_on(monkeypatch: pytest.MonkeyPatch):
@@ -55,6 +65,8 @@ async def served_client(sessionmaker, data_factory):
 
     async with sessionmaker() as session:
         tenant = await data_factory.ensure_tenant(session=session)
+        # Редакция «всё включено»: иначе в отчёте остались бы три дисциплины ядра.
+        await data_factory.set_modules(session, tenant.id, DISCIPLINE_MODULES, on=True)
         company = await data_factory.create_company(tenant=tenant, name="АКМЕ", session=session)
         position = Position(tenant_id=tenant.id, company_id=company.id, name="Слесарь")
         session.add(position)
@@ -192,6 +204,46 @@ class TestClientAudit:
         by_code = {row["direction"]: row for row in report["payload"]["directions"]}
         assert by_code["road_safety"]["incidents_open"] == 2
         assert by_code["ecology"]["incidents_open"] == 0
+
+    async def test_дисциплина_вне_редакции_вне_светофора_но_происшествие_названо(
+        self, async_client: AsyncClient, make_auth_headers, served_client, data_factory
+    ) -> None:
+        """BIZ-54-57 срез-55, приёмка §58.3: модуль БДД выключен, ДТП — факт."""
+
+        tenant, person, mcid = served_client
+        async with await _trusted() as session:
+            await data_factory.set_modules(session, tenant.id, ("road_safety",), on=False)
+            own = await session.get(Company, person.company_id)
+            site = await data_factory.create_site(
+                tenant=tenant, company=own, name="Склад", session=session
+            )
+            session.add(
+                Incident(
+                    tenant_id=tenant.id,
+                    company_id=person.company_id,
+                    site_id=site.id,
+                    title="ДТП у ворот",
+                    occurred_at=datetime.now(tz=timezone.utc) - timedelta(days=1),
+                    discipline="road_safety",
+                )
+            )
+            await session.commit()
+        headers = await make_auth_headers(RoleEnum.ADMIN)
+
+        await _run(async_client, headers)
+
+        report = (await _reports(async_client, headers, mcid))["items"][0]
+        assert "road_safety" not in {r["direction"] for r in report["payload"]["directions"]}
+        assert len(report["payload"]["directions"]) == 7
+        assert report["payload"]["not_applicable"] == ["БДД"]
+        assert (
+            "Вне отчёта: БДД — модули у исполнителя не подключены, статус по ним не считается."
+            in report["summary"]
+        )
+        # факт не прячется: происшествие названо и требует действия
+        assert "Открытых происшествий: 1 (БДД — 1)." in report["summary"]
+        assert "БДД: довести до закрытия 1 происшествие" in report["payload"]["actions"]
+        assert report["overall"] == "red", "цвет по-прежнему от эталона"
 
     async def test_повторный_запуск_в_тот_же_день_не_дублирует(
         self, async_client: AsyncClient, make_auth_headers, served_client
