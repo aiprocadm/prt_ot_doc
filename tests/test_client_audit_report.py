@@ -125,3 +125,55 @@ class TestBuildReport:
         assert "Открытых происшествий нет." in content.summary
         assert content.payload["incidents"] == {"total": 0, "by_discipline": {}, "unmarked": 0}
         assert "Действий не требуется" in content.summary
+
+    def test_дисциплины_вне_редакции_названы_фразой_а_не_пропущены(self) -> None:
+        """BIZ-54-57 срез-55, приёмка §58.3: строк меньше, но скрытое не молчит."""
+
+        rows = [
+            row
+            for row in _directions(medical=DirectionCounts(required=2))
+            if row.discipline.value not in ("ecology", "civil_defense")
+        ]
+        content = build_report(
+            **PERIOD,
+            directions=rows,
+            changes_by_kind={},
+            changes_unhandled=0,
+            not_applicable=["Экология", "ГО и ЧС"],
+        )
+        assert (
+            "Вне отчёта: Экология, ГО и ЧС — модули у исполнителя не подключены, "
+            "статус по ним не считается." in content.summary
+        )
+        assert {r["direction"] for r in content.payload["directions"]} == {
+            "medical",
+            "ppe",
+            "training",
+            "fire_safety",
+            "industrial_safety",
+            "road_safety",
+        }
+        assert content.payload["not_applicable"] == ["Экология", "ГО и ЧС"]
+        assert content.overall == "green"
+
+    def test_без_скрытого_фразы_нет_и_снимок_несёт_пустой_список(self) -> None:
+        content = build_report(
+            **PERIOD, directions=_directions(), changes_by_kind={}, changes_unhandled=0
+        )
+        assert "Вне отчёта" not in content.summary
+        assert content.payload["not_applicable"] == []
+
+    def test_происшествие_по_скрытой_дисциплине_не_прячется(self) -> None:
+        """Происшествие — факт, редакция исполнителя его не отменяет."""
+
+        rows = [row for row in _directions() if row.discipline.value != "ecology"]
+        content = build_report(
+            **PERIOD,
+            directions=rows,
+            changes_by_kind={},
+            changes_unhandled=0,
+            incidents_open={"ecology": 1},
+            not_applicable=["Экология"],
+        )
+        assert "Открытых происшествий: 1 (Экология — 1)." in content.summary
+        assert "Экология: довести до закрытия 1 происшествие" in content.payload["actions"]

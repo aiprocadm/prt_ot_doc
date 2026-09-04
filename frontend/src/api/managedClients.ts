@@ -241,6 +241,9 @@ export interface ClientReadiness {
   reason?: string | null;
   overall?: TrafficLight | null;
   directions: DirectionReadiness[];
+  /** Дисциплины вне редакции исполнителя — одной фразой, чтобы семь строк
+   *  вместо восьми не читались как недоделка (BIZ-54-57 срез-55). */
+  not_applicable?: string | null;
 }
 
 // BIZ-51 срез-7/10: отчёты авто-аудита (разд. 51.3).

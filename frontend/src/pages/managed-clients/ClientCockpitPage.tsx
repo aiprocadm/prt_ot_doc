@@ -852,6 +852,16 @@ const ReadinessPanel = ({ clients }: ReadinessPanelProps) => {
                   </li>
                 ))}
               </ul>
+              {/* Скрытое названо, а не пропущено молча: дисциплины вне
+                  редакции исполнителя — одной фразой под списком (срез-55). */}
+              {data.not_applicable ? (
+                <p
+                  className="text-xs text-muted-foreground"
+                  data-testid="readiness-not-applicable"
+                >
+                  {data.not_applicable}
+                </p>
+              ) : null}
             </>
           )
         ) : null}

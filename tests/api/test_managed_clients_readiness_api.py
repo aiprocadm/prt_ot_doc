@@ -27,6 +27,16 @@ from app.models.models import Position, RoleEnum
 
 BASE = "/api/v1/managed-clients"
 
+#: Пять дисциплин Доп. №1 — продаваемые модули; по умолчанию у арендатора
+#: теста они НЕ выданы (BIZ-61), и светофор/отчёт их не показывают (срез-55).
+DISCIPLINE_MODULES = (
+    "fire_safety",
+    "industrial_safety",
+    "ecology",
+    "civil_defense",
+    "road_safety",
+)
+
 TODAY = date.today()
 
 
@@ -53,6 +63,8 @@ async def served_client(sessionmaker, data_factory):
 
     async with sessionmaker() as session:
         tenant = await data_factory.ensure_tenant(session=session)
+        # Редакция «всё включено»: иначе в светофоре остались бы три дисциплины ядра.
+        await data_factory.set_modules(session, tenant.id, DISCIPLINE_MODULES, on=True)
         company = await data_factory.create_company(tenant=tenant, name="АКМЕ", session=session)
         position = Position(tenant_id=tenant.id, company_id=company.id, name="Слесарь")
         session.add(position)
@@ -178,6 +190,32 @@ class TestClientReadiness:
         ecology = _direction(body, "ecology")
         assert ecology["light"] == "not_measured"
         assert "не ведётся" in ecology["reason"]
+        assert body["not_applicable"] is None
+
+    async def test_дисциплина_вне_редакции_исполнителя_скрыта_и_названа(
+        self,
+        async_client: AsyncClient,
+        make_auth_headers,
+        served_client,
+        sessionmaker,
+        data_factory,
+    ) -> None:
+        """BIZ-54-57 срез-55, приёмка §58.3: модуль выключен — строки нет, фраза есть."""
+
+        tenant, _, mcid = served_client
+        async with sessionmaker() as session:
+            await data_factory.set_modules(session, tenant.id, ("ecology",), on=False)
+            await session.commit()
+        headers = await make_auth_headers(RoleEnum.ADMIN)
+
+        body = await _readiness(async_client, headers, mcid)
+
+        assert len(body["directions"]) == 7
+        assert "ecology" not in {d["direction"] for d in body["directions"]}
+        assert body["overall"] == "red", "итог по оставшимся: норма без экзамена"
+        assert body["not_applicable"] == (
+            "Вне редакции арендатора (модуль не выдан или выключен): Экология"
+        )
 
     async def test_dedicated_клиент_честное_not_aggregated(
         self, async_client: AsyncClient, make_auth_headers, served_client, sessionmaker
