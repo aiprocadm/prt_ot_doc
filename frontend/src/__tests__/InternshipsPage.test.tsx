@@ -169,6 +169,37 @@ describe("InternshipsPage — общий экран стажировок (сре
     );
   });
 
+  it("открывается на человеке: ?person_id уходит на сервер, плашка с именем, «все» снимает (срез-46)", async () => {
+    listMock.mockResolvedValue([internship()]);
+    setUser([PERMISSIONS.TRAINING_VIEW]);
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={["/internships?person_id=p1"]}>
+        <InternshipsPage />
+      </MemoryRouter>,
+    );
+    await screen.findByText("Водитель автобуса");
+
+    // отбор — параметром запроса, а не срезом загруженного списка
+    expect(listMock).toHaveBeenLastCalledWith({ person_id: "p1" });
+    const chip = screen.getByTestId("internships-person-filter");
+    expect(chip).toHaveTextContent("Стажёр: Иванов И. И.");
+    expect(screen.getByRole("link", { name: "карточка" })).toHaveAttribute(
+      "href",
+      "/employees/p1",
+    );
+    // плитки шапки — по всему реестру, и это сказано словами
+    expect(
+      screen.getByText(/Плитки шапки считаются по всему реестру/),
+    ).toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("button", { name: "Показать всех стажёров" }),
+    );
+    await waitFor(() => expect(listMock).toHaveBeenLastCalledWith({}));
+    expect(screen.queryByTestId("internships-person-filter")).toBeNull();
+  });
+
   it("без training.assign назначить стажировку нельзя", async () => {
     listMock.mockResolvedValue([internship()]);
     setUser([PERMISSIONS.TRAINING_VIEW]);

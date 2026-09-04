@@ -30,26 +30,63 @@ vi.mock("@/api/incidents", () => ({
   },
 }));
 
-vi.mock("@/components/ui/dialog", () => ({
-  Dialog: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-  DialogTrigger: ({ children }: { children: ReactNode }) => (
-    <div>{children}</div>
-  ),
-  DialogContent: ({ children }: { children: ReactNode }) => (
-    <div role="dialog">{children}</div>
-  ),
-  DialogHeader: ({ children }: { children: ReactNode }) => (
-    <div>{children}</div>
-  ),
-  DialogTitle: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-  DialogDescription: ({ children }: { children: ReactNode }) => (
-    <div>{children}</div>
-  ),
-  DialogFooter: ({ children }: { children: ReactNode }) => (
-    <div>{children}</div>
-  ),
-  DialogClose: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-}));
+// Заглушка окна ведёт себя как настоящее: тело окна есть в документе только
+// пока окно открыто. Иначе поля формы регистрации «просвечивали» бы сквозь
+// закрытое окно, и UX-бюджет считал бы их вместе с фильтрами списка — это
+// два разных экрана (разд. 59.1 «одна задача — один экран»).
+vi.mock("@/components/ui/dialog", async () => {
+  const React = await import("react");
+  const OpenContext = React.createContext<{
+    open: boolean;
+    setOpen: (next: boolean) => void;
+  }>({ open: false, setOpen: () => undefined });
+  return {
+    Dialog: ({
+      children,
+      open,
+      onOpenChange,
+    }: {
+      children: ReactNode;
+      open?: boolean;
+      onOpenChange?: (next: boolean) => void;
+    }) => (
+      <OpenContext.Provider
+        value={{
+          open: Boolean(open),
+          setOpen: onOpenChange ?? (() => undefined),
+        }}
+      >
+        <div>{children}</div>
+      </OpenContext.Provider>
+    ),
+    DialogTrigger: ({ children }: { children: ReactNode }) => {
+      // как `asChild` у настоящего окна: щелчок вешается на саму кнопку
+      const { setOpen } = React.useContext(OpenContext);
+      return React.isValidElement<{ onClick?: () => void }>(children)
+        ? React.cloneElement(children, { onClick: () => setOpen(true) })
+        : children;
+    },
+    DialogContent: ({ children }: { children: ReactNode }) => {
+      const { open } = React.useContext(OpenContext);
+      return open ? <div role="dialog">{children}</div> : null;
+    },
+    DialogHeader: ({ children }: { children: ReactNode }) => (
+      <div>{children}</div>
+    ),
+    DialogTitle: ({ children }: { children: ReactNode }) => (
+      <div>{children}</div>
+    ),
+    DialogDescription: ({ children }: { children: ReactNode }) => (
+      <div>{children}</div>
+    ),
+    DialogFooter: ({ children }: { children: ReactNode }) => (
+      <div>{children}</div>
+    ),
+    DialogClose: ({ children }: { children: ReactNode }) => (
+      <div>{children}</div>
+    ),
+  };
+});
 
 import { PERMISSIONS } from "@/permissions/permissions";
 import IncidentsPage from "@/pages/incidents/IncidentsPage";
@@ -115,9 +152,22 @@ describe("IncidentsPage", () => {
       expect(screen.getByText("Падение с высоты")).toBeInTheDocument();
     });
 
+    // Список: два фильтра (статус, дисциплина) и таблица в семь колонок.
     const budget = uxBudgetDelta(document.body, "IncidentsPage");
     expect(budget.unexpected).toEqual([]);
     expect(budget.stale).toEqual([]);
+
+    // Окно регистрации — отдельный экран, меряется отдельно: поля первого
+    // уровня без «Дополнительно» укладываются в бюджет сами по себе.
+    await userEvent.click(
+      screen.getByRole("button", { name: /зарегистрировать инцидент/i }),
+    );
+    const dialog = uxBudgetDelta(
+      screen.getByRole("dialog"),
+      "IncidentsPage/create",
+    );
+    expect(dialog.unexpected).toEqual([]);
+    expect(dialog.stale).toEqual([]);
   });
 
   it("initializes status filter from query params", async () => {
@@ -227,14 +277,67 @@ describe("IncidentsPage", () => {
       await screen.findByRole("button", { name: /зарегистрировать инцидент/i }),
     );
 
-    const select = screen.getByLabelText(/дисциплина/i) as HTMLSelectElement;
+    // ищем В ОКНЕ: у списка есть свой фильтр по дисциплине с теми же словами
+    const dialog = within(screen.getByRole("dialog"));
+    const select = dialog.getByLabelText(/дисциплина/i) as HTMLSelectElement;
     expect(select.value).toBe("");
     expect(
-      screen.getByRole("option", { name: "— Не размечена —" }),
+      dialog.getByRole("option", { name: "— Не размечена —" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("option", { name: "Промышленная безопасность" }),
+      dialog.getByRole("option", { name: "Промышленная безопасность" }),
     ).toBeInTheDocument();
+  });
+
+  it("фильтр по дисциплине уходит на сервер и живёт в адресе (срез-47)", async () => {
+    listMock.mockResolvedValue({ items: [mockIncident], total: 1 });
+    const user = userEvent.setup();
+
+    // ссылка с контура: ?discipline= уже в адресе — первый запрос с ним
+    render(
+      <MemoryRouter initialEntries={["/incidents?discipline=road_safety"]}>
+        <IncidentsPage />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(listMock).toHaveBeenCalledWith({
+        limit: 100,
+        discipline: "road_safety",
+      });
+    });
+    const select = screen.getByLabelText(
+      "Фильтр по дисциплине",
+    ) as HTMLSelectElement;
+    expect(select.value).toBe("road_safety");
+    expect(
+      within(select).getByRole("option", { name: "Все дисциплины" }),
+    ).toBeInTheDocument();
+
+    // «Все дисциплины» — ключ discipline не уходит вовсе (а не пустой строкой)
+    listMock.mockClear();
+    await user.selectOptions(select, "");
+    await waitFor(() => {
+      expect(listMock).toHaveBeenCalled();
+    });
+    for (const [params] of listMock.mock.calls) {
+      expect(params).not.toHaveProperty("discipline");
+    }
+
+    // выбор дисциплины вместе со статусом — оба фильтра в одном запросе
+    listMock.mockClear();
+    await user.selectOptions(
+      screen.getByLabelText("Фильтр по статусу"),
+      "closed",
+    );
+    await user.selectOptions(select, "industrial_safety");
+    await waitFor(() => {
+      expect(listMock).toHaveBeenLastCalledWith({
+        limit: 100,
+        status_filter: "closed",
+        discipline: "industrial_safety",
+      });
+    });
   });
 
   it("shows disabled create action without create permission", async () => {
