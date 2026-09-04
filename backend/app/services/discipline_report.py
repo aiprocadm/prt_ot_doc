@@ -126,12 +126,16 @@ def build_discipline_report(
     period_end: date,
     rows: Sequence[Mapping[str, Any]],
     previous: Mapping[str, Any] | None,
+    not_applicable: str | None = None,
 ) -> DisciplineReportContent:
     """Собрать отчёт из строк разреза «по дисциплинам» и прошлого отчёта.
 
     ``rows`` — ``items`` из ``compute_breakdown``: худшее сверху, строка
     ``id == ""`` — неразмеченные происшествия. ``previous`` — ``payload``
-    прошлого отчёта или ``None``. Правила чистые, без базы.
+    прошлого отчёта или ``None``. ``not_applicable`` — фраза разреза про
+    дисциплины вне редакции (срез-56): в отчёте она звучит отдельным
+    предложением, чтобы семь строк вместо восьми не читались как недоделка.
+    Правила чистые, без базы.
     """
 
     previous = previous or {}
@@ -192,6 +196,8 @@ def build_discipline_report(
             f"Не размечено дисциплиной: {_plural(unmarked, _INCIDENTS)} — "
             "ни один контур их не видит."
         )
+    if not_applicable:
+        summary_parts.append(f"{not_applicable}.")
     summary_parts.append(
         "Что нужно сделать: " + "; ".join(actions) + "." if actions else "Действий не требуется."
     )
@@ -210,6 +216,7 @@ def build_discipline_report(
         "previous_period_end": previous_end,
         "worst": ({"discipline": worst["discipline"], "title": worst["title"]} if worst else None),
         "actions": actions,
+        "not_applicable": not_applicable,
     }
     return DisciplineReportContent(
         total_issues=total_issues, summary=" ".join(summary_parts), payload=payload
@@ -268,6 +275,7 @@ async def run_discipline_report(
         period_end=today,
         rows=breakdown["items"],
         previous=previous.payload if previous is not None else None,
+        not_applicable=breakdown.get("not_applicable"),
     )
     report = DisciplineStatusReport(
         tenant_id=tenant_id,

@@ -293,6 +293,36 @@ describe("ManagementDashboardPage", () => {
     );
   });
 
+  it("разрез по дисциплинам называет дисциплины вне редакции фразой (срез-56)", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByRole("table");
+
+    api.getBreakdown.mockResolvedValue({
+      dimension: "discipline",
+      items: [
+        {
+          id: "medical",
+          name: "Медосмотры",
+          incidents_open: 0,
+          overdue_items: 3,
+          total_issues: 3,
+        },
+      ],
+      total: 1,
+      not_applicable:
+        "Вне редакции арендатора (модуль не выдан или выключен): Экология, ГО и ЧС",
+    });
+    await user.click(screen.getByRole("button", { name: "По дисциплинам" }));
+
+    expect(
+      await screen.findByTestId("breakdown-not-applicable"),
+    ).toHaveTextContent("Экология, ГО и ЧС");
+    // фраза — не колонка таблицы: заголовков по-прежнему столько же
+    const table = screen.getByRole("table");
+    expect(within(table).queryByText(/Вне редакции/)).not.toBeInTheDocument();
+  });
+
   it("экран в UX-бюджете, или долг записан явно (BIZ-60)", async () => {
     renderPage();
     // Наполненное состояние: KPI-карточки из executive/overdue/sla-load и

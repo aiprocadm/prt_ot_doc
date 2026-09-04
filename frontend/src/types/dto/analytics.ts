@@ -46,6 +46,10 @@ export interface BreakdownDto {
   dimension: BreakdownDimension;
   items: BreakdownRowDto[];
   total: number;
+  /** Только у разреза «по дисциплинам»: дисциплины вне редакции одной фразой
+   *  (BIZ-54-57 срез-56). Пустая скрытая строка убрана, строка с фактами
+   *  остаётся — происшествие случилось независимо от того, что куплено. */
+  not_applicable?: string | null;
 }
 
 export interface DirectoryItemDto {

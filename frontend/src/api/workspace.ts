@@ -55,6 +55,9 @@ export interface WorkspaceAttentionDto {
   unclassified_sources?: string[];
   /** Показаны не все записи — сработал лимит. */
   items_truncated?: boolean;
+  /** Дисциплины вне редакции арендатора — одной фразой; пустые строки скрытых
+   *  дисциплин убраны, строки с фактами остались (BIZ-54-57 срез-56). */
+  not_applicable?: string | null;
 }
 
 export interface TaskInboxItem {

@@ -270,6 +270,43 @@ describe("AttentionPanel", () => {
     );
   });
 
+  it("дисциплины вне редакции названы фразой под полосой (срез-56)", async () => {
+    getAttentionMock.mockResolvedValueOnce({
+      ...withDisciplines(),
+      not_applicable:
+        "Вне редакции арендатора (модуль не выдан или выключен): ГО и ЧС, БДД",
+    });
+
+    render(
+      <MemoryRouter>
+        <AttentionPanel />
+      </MemoryRouter>,
+    );
+
+    await screen.findByTestId("attention-disciplines");
+    expect(screen.getByTestId("attention-not-applicable")).toHaveTextContent(
+      "ГО и ЧС, БДД",
+    );
+  });
+
+  it("без скрытых дисциплин фразы нет", async () => {
+    getAttentionMock.mockResolvedValueOnce({
+      ...withDisciplines(),
+      not_applicable: null,
+    });
+
+    render(
+      <MemoryRouter>
+        <AttentionPanel />
+      </MemoryRouter>,
+    );
+
+    await screen.findByTestId("attention-disciplines");
+    expect(
+      screen.queryByTestId("attention-not-applicable"),
+    ).not.toBeInTheDocument();
+  });
+
   it("старый ответ без дисциплин не ломает панель", async () => {
     const legacy = withDisciplines();
     delete (legacy as { disciplines?: unknown }).disciplines;

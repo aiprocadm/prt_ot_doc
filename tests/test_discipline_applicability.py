@@ -16,6 +16,7 @@ from app.services.discipline_applicability import (
     ALL_APPLICABLE,
     DISCIPLINE_MODULE,
     DisciplineApplicability,
+    describe_hidden,
     only_applicable,
 )
 from app.services.discipline_numbers import DisciplineNumbers
@@ -114,3 +115,31 @@ class TestКарточкаПлощадки:
             facts=SiteFacts(),
         )
         assert overview.not_counted == NOT_COUNTED
+
+
+class TestФразаДляСводокФактов:
+    """Срез-56: центр внимания и разрез считают факты, и факт редакция не прячет."""
+
+    def test_скрытые_пустые_вне_редакции_скрытые_с_фактами_названы_отдельно(self) -> None:
+        hidden = DisciplineApplicability(
+            hidden=(Discipline.ECOLOGY, Discipline.CIVIL_DEFENSE, Discipline.ROAD_SAFETY)
+        )
+        phrase = describe_hidden(hidden, with_facts=[Discipline.ROAD_SAFETY])
+        assert phrase == (
+            "Вне редакции арендатора (модуль не выдан или выключен): Экология, ГО и ЧС; "
+            "БДД — модуль не выдан или выключен, но открытые записи есть и показаны как факты"
+        )
+
+    def test_только_с_фактами_без_части_вне_редакции(self) -> None:
+        hidden = DisciplineApplicability(hidden=(Discipline.MEDICAL,))
+        assert describe_hidden(hidden, with_facts=[Discipline.MEDICAL]) == (
+            "Медосмотры — модуль не выдан или выключен, но открытые записи есть "
+            "и показаны как факты"
+        )
+
+    def test_факты_по_применимой_дисциплине_во_фразу_не_попадают(self) -> None:
+        hidden = DisciplineApplicability(hidden=(Discipline.ECOLOGY,))
+        assert describe_hidden(hidden, with_facts=[Discipline.MEDICAL]) == hidden.note
+
+    def test_без_скрытого_фразы_нет(self) -> None:
+        assert describe_hidden(ALL_APPLICABLE, with_facts=[Discipline.MEDICAL]) is None

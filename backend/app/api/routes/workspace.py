@@ -37,6 +37,7 @@ from app.models.models import (
 )
 from app.models.obligations import Task, TaskStatus
 from app.schemas.calendar import CalendarEventItem
+from app.services.discipline_applicability import collect_applicability, describe_hidden
 from app.services.discipline_attention import attention_events, overdue_by_discipline
 from app.services.person_link import resolve_person_id
 
@@ -112,6 +113,10 @@ class WorkspaceAttentionResponse(BaseModel):
     #: Показаны не все записи (сработал лимит). Молча обрезанный список читался
     #: бы как полный, а «скоро срок» тогда занижен.
     items_truncated: bool = False
+    #: Дисциплины вне редакции арендатора — одной фразой (BIZ-54-57 срез-56,
+    #: приёмка §58.3): пустая строка скрытой дисциплины убрана, строка с
+    #: фактами (просрочки, сроки) оставлена и названа во фразе.
+    not_applicable: str | None = None
 
 
 class TaskInboxItem(BaseModel):
@@ -519,15 +524,11 @@ async def workspace_attention(
     # нет кадровой записи — не подмешиваем ничего. Роль с привязкой к компании
     # тоже идёт по личной ветке: агрегатор не умеет сужать по компании, и в
     # арендаторе-аутсорсере админ одного клиента увидел бы записи другого.
-    tenant_wide = role in _DISCIPLINE_TENANT_WIDE_ROLES and not getattr(
-        access, "company_id", None
-    )
+    tenant_wide = role in _DISCIPLINE_TENANT_WIDE_ROLES and not getattr(access, "company_id", None)
     facts = _DisciplineFacts([], {}, shown=0)
     person_id: str | None = None
     if not tenant_wide:
-        person_id = await resolve_person_id(
-            session, tenant.id, getattr(access.user, "email", None)
-        )
+        person_id = await resolve_person_id(session, tenant.id, getattr(access.user, "email", None))
     if tenant_wide or person_id:
         facts = await _discipline_events(
             session=session,
@@ -594,6 +595,10 @@ async def workspace_attention(
             )
         )
 
+    # Дисциплины вне редакции: пустая строка убирается, строка с фактами
+    # остаётся — просрочка есть независимо от того, что куплено (срез-56).
+    applicability = await collect_applicability(session, str(tenant.id))
+    with_facts = [code for code, nums in counts.items() if nums["overdue"] or nums["due_soon"]]
     disciplines = [
         DisciplineAttention(
             code=code.value,
@@ -604,6 +609,7 @@ async def workspace_attention(
             reason=UNMEASURED_DISCIPLINES.get(code),
         )
         for code in Discipline
+        if applicability.applies(code) or code in with_facts
     ]
     items_truncated = facts.truncated
 
@@ -639,10 +645,13 @@ async def workspace_attention(
         recommendations=recs,
         disciplines=disciplines,
         items_truncated=items_truncated,
+        not_applicable=describe_hidden(applicability, with_facts=with_facts),
         unclassified_sources=[
-            f"{DISCIPLINE_TITLES.get(discipline_of(source), source)}: {reason}"
-            if discipline_of(source)
-            else reason
+            (
+                f"{DISCIPLINE_TITLES.get(discipline_of(source), source)}: {reason}"
+                if discipline_of(source)
+                else reason
+            )
             for source, reason in UNCLASSIFIED_SOURCES.items()
         ],
     )

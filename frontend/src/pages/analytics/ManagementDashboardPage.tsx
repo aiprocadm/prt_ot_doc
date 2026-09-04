@@ -453,6 +453,16 @@ export default function ManagementDashboardPage() {
                   })}
                 </tbody>
               </table>
+              {/* Дисциплины вне редакции названы, а не пропущены молча:
+                  семь строк вместо восьми читались бы как недоделка (срез-56). */}
+              {dimension === "discipline" && breakdown.not_applicable ? (
+                <p
+                  className="mt-2 text-xs text-muted-foreground"
+                  data-testid="breakdown-not-applicable"
+                >
+                  {breakdown.not_applicable}
+                </p>
+              ) : null}
             </div>
           )}
         </CardContent>
