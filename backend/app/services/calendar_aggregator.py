@@ -402,7 +402,7 @@ class CalendarAggregatorService:
             )
 
         if "briefing_entry" in sources:
-            collected, total, overdue = await self._build_briefings(
+            collected, total, overdue, overdue_by_kind = await self._build_briefings(
                 from_at=from_at,
                 to_at=to_at,
                 person_id=person_id,
@@ -414,7 +414,10 @@ class CalendarAggregatorService:
             items.extend(collected)
             by_source.append(
                 CalendarSourceCount(
-                    source_type="briefing_entry", count=total, overdue_count=overdue
+                    source_type="briefing_entry",
+                    count=total,
+                    overdue_count=overdue,
+                    overdue_by_kind=overdue_by_kind,
                 )
             )
 
@@ -1614,7 +1617,7 @@ class CalendarAggregatorService:
         now: datetime,
         include_fact: bool = False,
         include_sla: bool = False,
-    ) -> tuple[list[CalendarEventItem], int, int]:
+    ) -> tuple[list[CalendarEventItem], int, int, dict[str, int]]:
         # Anchor on `valid_until` so the calendar shows when re-briefing is
         # due; rows without `valid_until` (one-shot/targeted) fall back to
         # `briefing_date`.
@@ -1700,13 +1703,38 @@ class CalendarAggregatorService:
             to_at,
         )
         total = await self._count(base_count)
-        overdue = await self._count(
-            base_count.where(
-                BriefingEntry.valid_until.is_not(None),
-                BriefingEntry.valid_until < now,
-            )
+        overdue_where = (
+            BriefingEntry.valid_until.is_not(None),
+            BriefingEntry.valid_until < now,
         )
-        return items, total, overdue
+        overdue = await self._count(base_count.where(*overdue_where))
+        # Срез-58: те же просрочки, разложенные по виду инструктажа. Дисциплина
+        # инструктажа зависит от вида, а не от таблицы (разд. 54.1 / 56.2:
+        # противопожарный и по БДД живут рядом с инструктажем по охране труда),
+        # и Центру внимания нужен честный COUNT по каждому виду, а не догадка
+        # по показанному (обрезанному) списку. Фильтры — те же, что у
+        # ``base_count``: окно, человек, площадка, без удалённых.
+        by_kind_stmt = self._apply_window(
+            select(BriefingEntry.briefing_type, func.count())
+            .where(
+                BriefingEntry.tenant_id == self.tenant_id,
+                BriefingEntry.deleted_at.is_(None),
+                *overdue_where,
+            )
+            .group_by(BriefingEntry.briefing_type),
+            anchor_col,
+            from_at,
+            to_at,
+        )
+        if person_id:
+            by_kind_stmt = by_kind_stmt.where(BriefingEntry.person_id == person_id)
+        if site_id:
+            by_kind_stmt = by_kind_stmt.where(BriefingEntry.site_id == site_id)
+        overdue_by_kind = {
+            str(kind): int(amount or 0)
+            for kind, amount in (await self.db.execute(by_kind_stmt)).all()
+        }
+        return items, total, overdue, overdue_by_kind
 
     async def _build_calendar_events(
         self,

@@ -16,14 +16,18 @@ from __future__ import annotations
 from app.core.disciplines import (
     ATTENTION_SOURCES,
     DISCIPLINE_TITLES,
+    KIND_DISCIPLINES,
     MEASURED_DISCIPLINES,
     PERSON_SCOPED_SOURCES,
     SOURCE_DISCIPLINE,
+    SOURCE_KIND_FIELD,
     UNCLASSIFIED_SOURCES,
     UNMEASURED_DISCIPLINES,
     Discipline,
     attention_sources,
     discipline_of,
+    discipline_of_event,
+    discipline_of_record,
 )
 from app.services.calendar_aggregator import ALL_SOURCES
 
@@ -88,11 +92,35 @@ class TestCoverage:
 
         Раньше три дисциплины (ПромБез, ГО и ЧС, БДД) не имели ни одного
         источника, и их просрочки в центр не попадали никогда. Пожарная
-        безопасность источника по-прежнему не имеет: её сроки — инструктажи,
-        а тот источник целиком размечен обучением (см. ``SOURCE_DISCIPLINE``).
+        безопасность своей ТАБЛИЦЫ сроков не имеет и теперь: её сроки —
+        противопожарные инструктажи, и до них источник дотягивается по виду
+        записи (срез-58, ``KIND_DISCIPLINES``), а не по таблице.
         """
 
         assert set(SOURCE_DISCIPLINE.values()) == set(Discipline) - {Discipline.FIRE_SAFETY}
+        assert Discipline.FIRE_SAFETY in KIND_DISCIPLINES
+        assert set(SOURCE_DISCIPLINE.values()) | KIND_DISCIPLINES == set(Discipline)
+
+    def test_дисциплина_записи_по_виду_а_не_по_таблице(self) -> None:
+        """Срез-58: три исхода ``discipline_of_record`` — и все три разные."""
+
+        assert discipline_of_record("briefing_entry", "fire_ptm") is Discipline.FIRE_SAFETY
+        assert discipline_of_record("briefing_entry", "road_pre_trip") is Discipline.ROAD_SAFETY
+        assert discipline_of_record("briefing_entry", "repeat") is Discipline.TRAINING
+        # вида нет под рукой — умолчание источника, как обещает SOURCE_DISCIPLINE
+        assert discipline_of_record("briefing_entry", None) is Discipline.TRAINING
+        # вид есть, но чужой — НЕ умолчание: приписывать нечего
+        assert discipline_of_record("briefing_entry", "legacy_free_text") is None
+        # источник по таблице — вид не при чём
+        assert discipline_of_record("medical_exam", "whatever") is Discipline.MEDICAL
+        # событие календаря: вид берётся из extra по SOURCE_KIND_FIELD
+        assert SOURCE_KIND_FIELD == {"briefing_entry": "briefing_type"}
+        assert (
+            discipline_of_event("briefing_entry", {"briefing_type": "fire_repeat"})
+            is Discipline.FIRE_SAFETY
+        )
+        assert discipline_of_event("briefing_entry", {}) is Discipline.TRAINING
+        assert discipline_of_event("ppe_issue", {"briefing_type": "fire_repeat"}) is Discipline.PPE
 
 
 class TestSingleSource:

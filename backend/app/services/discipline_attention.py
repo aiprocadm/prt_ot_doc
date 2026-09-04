@@ -13,6 +13,13 @@
 размеченного источника просрочек НЕ ИМЕЕТ — не «ноль», а «не считается»;
 кто показывает такую строку, обязан отличать одно от другого
 (``ATTENTION_DISCIPLINES``).
+
+Срез-58: у источников, размеченных ПО ВИДУ записи (``KIND_DISCIPLINE`` —
+инструктажи), агрегатор отдаёт просрочки по видам (``overdue_by_kind``), и
+здесь они раскладываются по дисциплинам вида: просроченный противопожарный
+инструктаж — строка «Пожарная безопасность», предрейсовый — «БДД», а не
+«Обучение» скопом. Вид, которого нет в словаре, никуда не относится — это
+запись с чужой разметкой, а не «обучение по умолчанию».
 """
 
 from __future__ import annotations
@@ -21,7 +28,14 @@ from datetime import datetime, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.disciplines import SOURCE_DISCIPLINE, Discipline, attention_sources, discipline_of
+from app.core.disciplines import (
+    KIND_DISCIPLINES,
+    SOURCE_DISCIPLINE,
+    Discipline,
+    attention_sources,
+    discipline_of,
+    discipline_of_record,
+)
 from app.schemas.calendar import CalendarEventsResponse
 from app.services.calendar_aggregator import CalendarAggregatorService
 
@@ -34,8 +48,12 @@ DISCIPLINE_LOOKBACK = timedelta(days=180)
 DISCIPLINE_LOOKAHEAD = timedelta(days=3)
 
 #: Дисциплины, у которых есть хотя бы один размеченный источник сроков —
-#: только по ним просрочка вообще считается.
-ATTENTION_DISCIPLINES: frozenset[Discipline] = frozenset(SOURCE_DISCIPLINE.values())
+#: по таблице или по виду записи (срез-58: пожарная безопасность дотягивается
+#: до сроков только через вид инструктажа). Только по ним просрочка вообще
+#: считается.
+ATTENTION_DISCIPLINES: frozenset[Discipline] = (
+    frozenset(SOURCE_DISCIPLINE.values()) | KIND_DISCIPLINES
+)
 
 
 async def attention_events(
@@ -61,9 +79,17 @@ def overdue_by_discipline(response: CalendarEventsResponse) -> dict[Discipline, 
     """Честные итоги просрочек: сумма COUNT'ов источников, а не длина списка."""
 
     overdue: dict[Discipline, int] = {}
+
+    def _add(discipline: Discipline | None, amount: int) -> None:
+        if discipline is None or not amount:
+            return
+        overdue[discipline] = overdue.get(discipline, 0) + amount
+
     for source in response.by_source:
-        discipline = discipline_of(source.source_type)
-        if discipline is None:
+        if source.overdue_by_kind is not None:
+            # источник размечен по видам — каждый вид в свою дисциплину
+            for kind, amount in source.overdue_by_kind.items():
+                _add(discipline_of_record(source.source_type, kind), int(amount or 0))
             continue
-        overdue[discipline] = overdue.get(discipline, 0) + int(source.overdue_count or 0)
+        _add(discipline_of(source.source_type), int(source.overdue_count or 0))
     return overdue

@@ -14,6 +14,7 @@ from app.api.routes.workspace import (
 )
 from app.core.security import AccessContext
 from app.db.session import SharedBase, TenantBase
+from app.models.briefings import BriefingEntry, BriefingJournal
 from app.models.civil_defense import CivilDefenseDrill
 from app.models.ecology import EmissionNorm, EmissionSource, EnvironmentalFacility
 from app.models.feature import Feature, FeatureEnablement
@@ -367,6 +368,67 @@ async def test_attention_ecology_overdue_is_counted_not_zero(db_session) -> None
     ecology = next(row for row in payload.disciplines if row.code == "ecology")
     assert ecology.overdue == 1
     assert any("Экология" in rec for rec in payload.recommendations)
+
+
+@pytest.mark.asyncio
+async def test_attention_fire_briefing_counts_as_fire_safety_not_training(db_session) -> None:
+    """BIZ-54-57 срез-58: противопожарный инструктаж — в строку «Пожарная
+    безопасность», а не в «Обучение» скопом.
+
+    До среза источник инструктажей целиком был размечен обучением: просроченный
+    ПТМ и просроченный повторный инструктаж по охране труда давали «Обучение:
+    2», а строка пожарной безопасности сроков «не имела» вовсе. Дисциплина
+    инструктажа зависит от его вида (разд. 54.1 / 56.2), и центр внимания
+    обязан это видеть — и в счётчиках (честный COUNT по видам), и в пунктах.
+    """
+
+    tenant = SimpleNamespace(id="tenant-1", slug="tenant-a", name="Tenant A", is_active=True)
+    access = _access("user-1", "admin", tenant.id, tenant.slug)
+    now = datetime.now(timezone.utc)
+    await _grant_modules(db_session, tenant.id, (*DISCIPLINE_MODULES, "medical"))
+    person = _person(tenant.id)
+    journal = BriefingJournal(tenant_id=tenant.id, code="J-1", title="Журнал", journal_type="fire")
+    db_session.add_all([person, journal])
+    await db_session.flush()
+
+    def entry(kind: str, *, days_ago: int) -> BriefingEntry:
+        return BriefingEntry(
+            tenant_id=tenant.id,
+            briefing_journal_id=journal.id,
+            person_id=person.id,
+            briefing_type=kind,
+            briefing_date=now - timedelta(days=400),
+            valid_until=now - timedelta(days=days_ago),
+            status="done",
+        )
+
+    db_session.add_all(
+        [
+            entry("fire_ptm", days_ago=35),
+            entry("fire_repeat", days_ago=10),
+            entry("repeat", days_ago=20),
+            entry("road_pre_trip", days_ago=1),
+        ]
+    )
+    await db_session.commit()
+
+    payload = await workspace_attention(tenant=tenant, session=db_session, access=access)
+
+    by_code = {row.code: row for row in payload.disciplines}
+    assert by_code["fire_safety"].overdue == 2, "ПТМ и противопожарный повторный"
+    assert by_code["training"].overdue == 1, "только повторный по охране труда"
+    assert by_code["road_safety"].overdue == 1, "предрейсовый — БДД"
+    by_kind = {
+        item.title: item.discipline for item in payload.items if item.item_type == "briefing_entry"
+    }
+    assert by_kind == {
+        "Инструктаж: fire_ptm": "fire_safety",
+        "Инструктаж: fire_repeat": "fire_safety",
+        "Инструктаж: repeat": "training",
+        "Инструктаж: road_pre_trip": "road_safety",
+    }
+    rec = next(r for r in payload.recommendations if r.startswith("Просрочено по дисциплинам"))
+    assert "Пожарная безопасность" in rec, rec
 
 
 @pytest.mark.asyncio
