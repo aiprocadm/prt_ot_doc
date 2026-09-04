@@ -386,6 +386,7 @@ const populatedReadiness = {
   fee_lines: 2,
   fee_lines_without_rate: 1,
   fee_total_rubles: "277.60",
+  incidents_open: 3,
 };
 
 describe("EcologyPage", () => {
@@ -668,6 +669,24 @@ describe("EcologyPage", () => {
     expect(
       screen.getByText(/сумма не считается вовсе — это не ноль/i),
     ).toBeInTheDocument();
+  });
+
+  it("открытые происшествия контура: число из сводки и ссылка в реестр (срез-49)", async () => {
+    render(
+      <MemoryRouter>
+        <EcologyPage />
+      </MemoryRouter>,
+    );
+
+    expect(
+      await screen.findByText("Открытых происшествий"),
+    ).toBeInTheDocument();
+    // число — из сводки бэкенда (та же формула, что разрез у директора), а
+    // ссылка ведёт в ОБЩИЙ реестр с уже выставленным фильтром дисциплины
+    expect(screen.getByRole("link", { name: "3" })).toHaveAttribute(
+      "href",
+      "/incidents?discipline=ecology",
+    );
   });
 
   it("EcologyPage в UX-бюджете", async () => {

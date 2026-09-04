@@ -113,6 +113,8 @@ export type FireReadinessDto = {
    * называет это нарушением.
    */
   days_since_last_drill?: number | null;
+  /** Доп. №1 разд. 57.4: открытые происшествия этой дисциплины (срез-49). */
+  incidents_open: number;
 };
 
 export type FireDrillDto = {

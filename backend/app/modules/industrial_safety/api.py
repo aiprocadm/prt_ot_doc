@@ -77,6 +77,7 @@ from app.schemas.industrial_safety import (
     TechnicalDeviceUpdate,
 )
 from app.services.audit import AuditService, field_level_diff
+from app.services.discipline_incidents import open_incidents_count
 
 router = APIRouter(prefix="/industrial-safety", tags=["industrial-safety"])
 
@@ -1531,4 +1532,9 @@ async def industrial_readiness(
         epb_overdue=epb_overdue,
         epb_due_soon=epb_due_soon,
         devices_past_lifetime_without_epb=past_lifetime_without_epb,
+        # Доп. №1 разд. 57.4: открытые происшествия контура — той же формулой,
+        # что разрез «по дисциплинам» у директора (срез-49).
+        incidents_open=await open_incidents_count(
+            session, str(tenant.id), Discipline.INDUSTRIAL_SAFETY
+        ),
     )

@@ -216,6 +216,79 @@ describe("ManagementDashboardPage", () => {
     );
   });
 
+  it("разрез по дисциплинам: «—» где не считается, число ведёт в реестр, строка не фильтр (срез-48)", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByRole("table");
+
+    // ответ сервера для разреза: у БДД просрочки не считаются (null),
+    // у медосмотров происшествий нет, неразмеченные — отдельной строкой
+    api.getBreakdown.mockResolvedValue({
+      dimension: "discipline",
+      items: [
+        {
+          id: "medical",
+          name: "Медосмотры",
+          incidents_open: 0,
+          overdue_items: 3,
+          total_issues: 3,
+        },
+        {
+          id: "road_safety",
+          name: "БДД",
+          incidents_open: 2,
+          overdue_items: null,
+          total_issues: 2,
+        },
+        {
+          id: "",
+          name: "— не размечено",
+          incidents_open: 1,
+          overdue_items: null,
+          total_issues: 1,
+        },
+      ],
+      total: 3,
+    });
+    await user.click(screen.getByRole("button", { name: "По дисциплинам" }));
+    await waitFor(() =>
+      expect(api.getBreakdown).toHaveBeenLastCalledWith(
+        "discipline",
+        expect.anything(),
+      ),
+    );
+
+    const table = await screen.findByRole("table");
+    const bdd = within(table).getByText("БДД").closest("tr");
+    expect(bdd).not.toBeNull();
+    // null — «не считается», а не ноль: прочерк, не «0»
+    expect(within(bdd as HTMLElement).getByText("—")).toHaveAttribute(
+      "title",
+      "По этой дисциплине не считается",
+    );
+    // число происшествий — ссылка в реестр с уже выставленным фильтром
+    expect(
+      within(bdd as HTMLElement).getByRole("link", { name: "2" }),
+    ).toHaveAttribute("href", "/incidents?discipline=road_safety");
+    // у неразмеченных ссылки нет: фильтра «без дисциплины» в реестре нет
+    const unmarked = within(table)
+      .getByText("— не размечено")
+      .closest("tr") as HTMLElement;
+    expect(within(unmarked).queryByRole("link")).not.toBeInTheDocument();
+    // ноль — не ссылка, некуда вести
+    const medical = within(table)
+      .getByText("Медосмотры")
+      .closest("tr") as HTMLElement;
+    expect(within(medical).queryByRole("link")).not.toBeInTheDocument();
+
+    // клик по строке дисциплины не становится фильтром страницы
+    const callsBefore = api.getExecutive.mock.calls.length;
+    await user.click(within(table).getByText("БДД"));
+    await waitFor(() =>
+      expect(api.getExecutive.mock.calls.length).toBe(callsBefore),
+    );
+  });
+
   it("экран в UX-бюджете, или долг записан явно (BIZ-60)", async () => {
     renderPage();
     // Наполненное состояние: KPI-карточки из executive/overdue/sla-load и

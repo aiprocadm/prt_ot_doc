@@ -65,6 +65,8 @@ export type IndustrialReadinessDto = {
   current_year_plan_exists: boolean;
   pc_measures_overdue: number;
   pc_measures_planned: number;
+  /** Доп. №1 разд. 57.4: открытые происшествия этой дисциплины (срез-49). */
+  incidents_open: number;
 };
 
 export type PcPlanDto = {

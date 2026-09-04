@@ -38,6 +38,8 @@ export type CivilDefenseReadinessDto = {
   planning_review_overdue: number;
   /** Разд. 56.1 «программы обучения»: программы ЯДРА с дисциплиной ГО. */
   training_programs: number;
+  /** Доп. №1 разд. 57.4: открытые происшествия этой дисциплины (срез-49). */
+  incidents_open: number;
 };
 
 /**

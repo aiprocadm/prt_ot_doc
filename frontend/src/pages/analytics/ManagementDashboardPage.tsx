@@ -65,6 +65,9 @@ const DIMENSIONS = [
   { key: "company", label: "По компаниям" },
   { key: "site", label: "По объектам" },
   { key: "contractor", label: "По подрядчикам" },
+  // Доп. №1 разд. 57.4: «директорский» взгляд — вся безопасность предприятия
+  // по дисциплинам на одном экране, а не восемь экранов контуров.
+  { key: "discipline", label: "По дисциплинам" },
 ] as const;
 
 const PERIODS = [
@@ -192,7 +195,9 @@ export default function ManagementDashboardPage() {
     (rowId: string) => {
       if (dimension === "company") setFilter("company_id", rowId);
       else if (dimension === "site") setFilter("site_id", rowId);
-      else setFilter("contractor_id", rowId);
+      else if (dimension === "contractor") setFilter("contractor_id", rowId);
+      // у дисциплины фильтра страницы нет: её число происшествий само ведёт в
+      // реестр (ссылка в ячейке), а KPI по дисциплине не режутся
     },
     [dimension, setFilter],
   );
@@ -356,7 +361,9 @@ export default function ManagementDashboardPage() {
             </div>
           </div>
           <CardDescription>
-            Клик по строке применяет её как фильтр страницы.
+            {dimension === "discipline"
+              ? "Происшествия — по разметке дисциплины; «—» значит, что просрочки по этой дисциплине не считаются (не ноль)."
+              : "Клик по строке применяет её как фильтр страницы."}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -389,7 +396,8 @@ export default function ManagementDashboardPage() {
                     // Строка "— без объекта —" (id=="") агрегирует записи без привязки
                     // к объекту — бэкенд не поддерживает семантику "site_id IS NULL"
                     // как фильтр, поэтому строка не кликабельна.
-                    const clickable = Boolean(row.id);
+                    const clickable =
+                      Boolean(row.id) && dimension !== "discipline";
                     return (
                       <tr
                         key={row.id || row.name}
@@ -402,7 +410,26 @@ export default function ManagementDashboardPage() {
                         <td className="py-2 pr-4">{row.name}</td>
                         {metricKeys.map((k) => (
                           <td key={k} className="py-2 pr-4">
-                            {row[k]}
+                            {row[k] === null ? (
+                              <span
+                                className="text-muted-foreground"
+                                title="По этой дисциплине не считается"
+                              >
+                                —
+                              </span>
+                            ) : dimension === "discipline" &&
+                              k === "incidents_open" &&
+                              row.id &&
+                              Number(row[k]) > 0 ? (
+                              <Link
+                                to={`/incidents?discipline=${encodeURIComponent(row.id)}`}
+                                className="text-primary underline"
+                              >
+                                {row[k]}
+                              </Link>
+                            ) : (
+                              row[k]
+                            )}
                           </td>
                         ))}
                         <td className="py-2">

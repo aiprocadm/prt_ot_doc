@@ -22,6 +22,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.core.disciplines import Discipline
 from app.core.errors import api_problem_detail
 from app.core.feature_flags import is_module_enabled, raise_for_disabled_module
 from app.core.security import AccessContext, abac, rbac
@@ -105,6 +106,7 @@ from app.schemas.ecology import (
     WaterUsageRecordUpdate,
 )
 from app.services.audit import AuditService, field_level_diff
+from app.services.discipline_incidents import open_incidents_count
 
 router = APIRouter(prefix="/ecology", tags=["ecology"])
 
@@ -2990,4 +2992,7 @@ async def ecology_readiness(
         # ФАКТ, а не нарушение: обязанность актуализировать сведения возникает
         # при изменении характеристик объекта, а не по календарю.
         never_actualized=sum(1 for r in active if r.actualized_on is None),
+        # Доп. №1 разд. 57.4: открытые происшествия контура — той же формулой,
+        # что разрез «по дисциплинам» у директора (срез-49).
+        incidents_open=await open_incidents_count(session, str(tenant.id), Discipline.ECOLOGY),
     )

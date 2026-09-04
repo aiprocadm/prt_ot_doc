@@ -337,6 +337,7 @@ const populatedReadiness = {
   violations_without_driver: 1,
   fines_unpaid_count: 1,
   fines_unpaid_amount: 500,
+  incidents_open: 3,
 };
 
 describe("RoadSafetyPage", () => {
@@ -408,15 +409,11 @@ describe("RoadSafetyPage", () => {
     // Срез-6: проверки знаний ПДД — тоже без своего реестра.
     expect(screen.getByText("Проверка знаний просрочена")).toBeInTheDocument();
     // Срез-7: стажировки — тоже общим механизмом, без своего реестра.
-    expect(
-      screen.getByText("Стажировка с недобором смен"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Стажировка с недобором смен")).toBeInTheDocument();
     expect(
       screen.getByText(/общим механизмом стажировок/i),
     ).toBeInTheDocument();
-    expect(
-      screen.getByText(/в общем реестре аттестаций/i),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/в общем реестре аттестаций/i)).toBeInTheDocument();
     expect(
       screen.getByText(/ведутся в общем журнале инструктажей/i),
     ).toBeInTheDocument();
@@ -503,7 +500,9 @@ describe("RoadSafetyPage", () => {
     );
 
     expect(await screen.findByText("А123АА777")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Путевые листы" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Путевые листы" }),
+    );
 
     expect(await screen.findByText("ПЛ-001")).toBeInTheDocument();
     // Три вердикта показаны РАЗНЫМИ словами: склей их — и дыра в учёте
@@ -536,7 +535,9 @@ describe("RoadSafetyPage", () => {
     );
 
     expect(await screen.findByText("А123АА777")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Путевые листы" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Путевые листы" }),
+    );
 
     expect(
       await screen.findByText("Путевые листы не выписаны"),
@@ -551,7 +552,9 @@ describe("RoadSafetyPage", () => {
     );
 
     expect(await screen.findByText("А123АА777")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Путевые листы" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Путевые листы" }),
+    );
     expect(await screen.findByText("ПЛ-001")).toBeInTheDocument();
 
     const budget = uxBudgetDelta(document.body, "RoadSafetyPage");
@@ -574,16 +577,12 @@ describe("RoadSafetyPage", () => {
     expect(screen.getByText("Есть пострадавшие")).toBeInTheDocument();
     expect(screen.getByText("Только материальный ущерб")).toBeInTheDocument();
     // Пустой водитель — это «за рулём никого не было», а не «неизвестно кто».
-    expect(
-      screen.getByText("За рулём никого не было"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("За рулём никого не было")).toBeInTheDocument();
     // Разбор — следствие связей, а не галочка.
     expect(screen.getByText("Есть незакрытые мероприятия")).toBeInTheDocument();
     expect(screen.getByText("Мероприятия не заведены")).toBeInTheDocument();
     // Граница названа на экране.
-    expect(
-      screen.getByText(/не устанавливает вину/i),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/не устанавливает вину/i)).toBeInTheDocument();
   });
 
   it("пустой учёт ДТП объясняет, что вносить", async () => {
@@ -715,6 +714,29 @@ describe("RoadSafetyPage", () => {
     const budget = uxBudgetDelta(document.body, "RoadSafetyPage");
     expect(budget.unexpected).toEqual([]);
     expect(budget.stale).toEqual([]);
+  });
+
+  it("открытые происшествия контура: число из сводки и ссылка в реестр (срез-49)", async () => {
+    render(
+      <MemoryRouter>
+        <RoadSafetyPage />
+      </MemoryRouter>,
+    );
+
+    // плитка живёт в секции ДТП: рядом с реестром ДТП, чтобы не путать одно
+    // с другим — это ОБЩИЙ реестр происшествий, размеченных БДД
+    expect(await screen.findByText("А123АА777")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "ДТП" }));
+
+    expect(
+      await screen.findByText("Открытых происшествий"),
+    ).toBeInTheDocument();
+    // число — из сводки бэкенда (та же формула, что разрез у директора), а
+    // ссылка ведёт в ОБЩИЙ реестр с уже выставленным фильтром дисциплины
+    expect(screen.getByRole("link", { name: "3" })).toHaveAttribute(
+      "href",
+      "/incidents?discipline=road_safety",
+    );
   });
 
   it("RoadSafetyPage в UX-бюджете", async () => {

@@ -1,5 +1,5 @@
 import { type ColumnDef } from "@tanstack/react-table";
-import { useCallback, useState } from "react";
+import { type ReactNode, useCallback, useState } from "react";
 import { Link } from "react-router-dom";
 
 import {
@@ -15,6 +15,7 @@ import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingScreen } from "@/components/common/LoadingScreen";
 import { RegistryPageHeader } from "@/components/common/RegistryPageHeader";
+import { disciplineIncidentsStat } from "@/components/common/disciplineIncidentsStat";
 import { RegistryTable } from "@/components/common/RegistryTable";
 import { Button } from "@/components/ui/button";
 import { useAsyncResource } from "@/hooks/useAsyncResource";
@@ -140,9 +141,7 @@ const WAYBILL_COLUMNS: ColumnDef<WaybillDto, unknown>[] = [
     accessorKey: "pre_trip_medical_label",
     header: "Медосмотр",
     cell: ({ row }) => (
-      <span
-        title={`Послерейсовый: ${row.original.post_trip_medical_label}`}
-      >
+      <span title={`Послерейсовый: ${row.original.post_trip_medical_label}`}>
         {row.original.pre_trip_medical_label}
       </span>
     ),
@@ -192,7 +191,9 @@ const VIOLATION_COLUMNS: ColumnDef<TrafficViolationDto, unknown>[] = [
     accessorKey: "source_label",
     header: "Как выявлено",
     cell: ({ row }) => (
-      <span title={row.original.article ?? ""}>{row.original.source_label}</span>
+      <span title={row.original.article ?? ""}>
+        {row.original.source_label}
+      </span>
     ),
   },
   {
@@ -279,7 +280,9 @@ const ACCIDENT_COLUMNS: ColumnDef<RoadAccidentDto, unknown>[] = [
  */
 const SECTION_STATS: Record<
   Section,
-  (r: RoadSafetyReadinessDto) => { label: string; value: number }[]
+  (
+    r: RoadSafetyReadinessDto,
+  ) => { label: string; value: ReactNode; hint?: string }[]
 > = {
   vehicles: (r) => [
     { label: "Транспортных средств", value: r.total_vehicles },
@@ -292,7 +295,10 @@ const SECTION_STATS: Record<
   ],
   drivers: (r) => [
     { label: "Водителей", value: r.total_drivers },
-    { label: "Допущено к управлению", value: r.drivers_by_status.admitted ?? 0 },
+    {
+      label: "Допущено к управлению",
+      value: r.drivers_by_status.admitted ?? 0,
+    },
     // Тем же доводом: у отстранённого водителя просроченное удостоверение
     // это шум, а не проблема.
     { label: "Удостоверение просрочено", value: r.driver_license_overdue },
@@ -340,6 +346,9 @@ const SECTION_STATS: Record<
     { label: "Погибло людей", value: r.fatalities_total },
     // Дыра в разборе, а не вердикт «разобрано плохо».
     { label: "Без разбора", value: r.accidents_without_follow_up },
+    // Доп. №1 разд. 57.4: происшествия, размеченные БДД, в ОБЩЕМ реестре —
+    // это не ДТП (те ведутся здесь) и не второй счёт: ссылка ведёт туда (срез-49).
+    disciplineIncidentsStat("road_safety", r.incidents_open),
   ],
 };
 
@@ -378,6 +387,7 @@ const RoadSafetyPage = () => {
       accidents: [] as RoadAccidentDto[],
       violations: [] as TrafficViolationDto[],
       readiness: {
+        incidents_open: 0,
         total_vehicles: 0,
         by_status: { in_service: 0, suspended: 0, decommissioned: 0 },
         inspection_overdue: 0,
@@ -535,9 +545,9 @@ const RoadSafetyPage = () => {
               виновность, не считает сроки обжалования и скидку за раннюю
               оплату. Водитель может быть не установлен — камера фиксирует
               госномер, а не человека, и штраф приходит собственнику: таких
-              сейчас {readiness.violations_without_driver}. «Штраф не наложен»
-              и «не оплачен» — разные вещи: замечание собственного контроля
-              долгом не становится.
+              сейчас {readiness.violations_without_driver}. «Штраф не наложен» и
+              «не оплачен» — разные вещи: замечание собственного контроля долгом
+              не становится.
             </p>
           ) : null}
           {!loading && !error && violations.total === 0 ? (
@@ -574,10 +584,10 @@ const RoadSafetyPage = () => {
             <p className="text-sm text-muted-foreground">
               Платформа ведёт учёт происшествий и не устанавливает вину — она
               следует из документов ГИБДД и решения суда, и вносится в запись
-              как сведения. Расследование ведётся в общем контуре
-              происшествий, мероприятия — в общем списке корректирующих
-              действий: своих копий контур БДД не заводит. Поэтому «разбор»
-              здесь не галочка, а следствие связей: без разбора сейчас{" "}
+              как сведения. Расследование ведётся в общем контуре происшествий,
+              мероприятия — в общем списке корректирующих действий: своих копий
+              контур БДД не заводит. Поэтому «разбор» здесь не галочка, а
+              следствие связей: без разбора сейчас{" "}
               {readiness.accidents_without_follow_up}. Тяжесть считается из
               числа пострадавших и погибших и словом не хранится.
             </p>
@@ -618,12 +628,12 @@ const RoadSafetyPage = () => {
               Реестр листов с отбором по датам и есть журнал предрейсовых
               осмотров — отдельного журнала платформа не ведёт. Выпуск
               подтверждается двумя отметками: предрейсовым медосмотром и
-              техконтролем; послерейсовый осмотр в вердикт не входит, потому
-              что обязателен не всем. «Сведения не внесены» и «не пройден» —
-              разные вещи: первое дыра в учёте, второе нарушение выпуска.
-              Сейчас без подтверждения контроля: {" "}
-              {readiness.waybills_release_unconfirmed}. Время считается в
-              рейсе, а не за рулём, и платформа не судит о превышении.
+              техконтролем; послерейсовый осмотр в вердикт не входит, потому что
+              обязателен не всем. «Сведения не внесены» и «не пройден» — разные
+              вещи: первое дыра в учёте, второе нарушение выпуска. Сейчас без
+              подтверждения контроля: {readiness.waybills_release_unconfirmed}.
+              Время считается в рейсе, а не за рулём, и платформа не судит о
+              превышении.
             </p>
           ) : null}
           {!loading && !error && waybills.total === 0 ? (
@@ -664,9 +674,9 @@ const RoadSafetyPage = () => {
               массы ТС, числа мест и вида перевозок. Стаж считается от даты
               начала и не хранится числом — записанное «3 года» через два года
               стало бы неправдой. Просрочки считаются только по допущенным
-              водителям. Инструктажи по БДД ведутся в общем журнале
-              инструктажей — своего журнала контур не заводит; просрочено
-              сейчас: {readiness.road_briefings_overdue} из{" "}
+              водителям. Инструктажи по БДД ведутся в общем журнале инструктажей
+              — своего журнала контур не заводит; просрочено сейчас:{" "}
+              {readiness.road_briefings_overdue} из{" "}
               {readiness.road_briefings_total}. Как часто инструктировать,
               платформа не решает: срок берётся из внесённого, а не из нормы.
               Проверки знаний ПДД так же ведутся в общем реестре аттестаций:
@@ -678,9 +688,9 @@ const RoadSafetyPage = () => {
                 общем реестре стажировок
               </Link>
               : идёт {readiness.internships_in_progress} из{" "}
-              {readiness.internships_total}. «Недобор смен» — расхождение
-              плана и факта, а не приговор допуску: сколько смен нужно,
-              решает приказ, а не платформа.
+              {readiness.internships_total}. «Недобор смен» — расхождение плана
+              и факта, а не приговор допуску: сколько смен нужно, решает приказ,
+              а не платформа.
             </p>
           ) : null}
           {!loading && !error && drivers.total === 0 ? (

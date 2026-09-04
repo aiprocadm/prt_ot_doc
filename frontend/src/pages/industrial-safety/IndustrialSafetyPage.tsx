@@ -8,6 +8,7 @@ import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingScreen } from "@/components/common/LoadingScreen";
 import { RegistryPageHeader } from "@/components/common/RegistryPageHeader";
+import { disciplineIncidentsStat } from "@/components/common/disciplineIncidentsStat";
 import { RegistryTable } from "@/components/common/RegistryTable";
 import { Button } from "@/components/ui/button";
 import { useAsyncResource } from "@/hooks/useAsyncResource";
@@ -50,6 +51,7 @@ const IndustrialSafetyPage = () => {
       attestations: [],
       pcMeasures: [],
       readiness: {
+        incidents_open: 0,
         total_facilities: 0,
         by_class: { I: 0, II: 0, III: 0, IV: 0 },
         excluded_facilities: 0,
@@ -163,6 +165,12 @@ const IndustrialSafetyPage = () => {
             label: "Просрочено мероприятий ПК",
             value: readiness.pc_measures_overdue,
           },
+          // Доп. №1 разд. 57.4: происшествия контура — той же формулой, что
+          // разрез у директора; ссылка ведёт в общий реестр (срез-49).
+          disciplineIncidentsStat(
+            "industrial_safety",
+            readiness.incidents_open,
+          ),
         ]}
       />
 

@@ -7,6 +7,14 @@ overdue-метрики описывают состояние «на сегодн
 Contractor-разрез использует собственный набор метрик из
 ``ContractorReadinessReadModel`` (у пяти общих метрик нет FK на подрядчика).
 
+Discipline-разрез (Доп. №1 разд. 57.4, «директорский» взгляд на всю
+безопасность): строка на КАЖДУЮ дисциплину общего словаря, открытые
+происшествия — по разметке ``Incident.discipline`` (неразмеченные — в
+синтетическую строку «— не размечено», а НЕ в «охрану труда»), просрочки — из
+той же формулы, что у Центра внимания (``services.discipline_attention``).
+У дисциплины без размеченных источников сроков просрочка ``None``: это
+«не считается», а не ноль — ноль читался бы как «нарушений нет».
+
 None-bucket (site-разрез): ``Risk.site_id`` и ``Inspection.site_id`` nullable —
 high-риски и просроченные предписания без привязки к объекту не должны тихо
 исчезать из site-разреза (иначе итоги не сойдутся с executive-дашбордом).
@@ -18,17 +26,17 @@ None-bucket не попадают. Company-разрез: все company_id NOT N
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime, timezone
 from typing import Any
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.disciplines import DISCIPLINE_TITLES, Discipline
 from app.models.inspections import Inspection
 from app.models.master_data import Company, Person, Site
 from app.models.models import (
     Incident,
-    IncidentStatus,
     PPEIssue,
     PPEIssueStatus,
     Prescription,
@@ -37,8 +45,14 @@ from app.models.models import (
 from app.models.risk import Risk
 from app.modules.contractors.models import ContractorRegistry
 from app.modules.projections.models import ContractorReadinessReadModel
+from app.services.discipline_attention import (
+    ATTENTION_DISCIPLINES,
+    attention_events,
+    overdue_by_discipline,
+)
+from app.services.discipline_incidents import open_incidents_where
 
-BREAKDOWN_DIMENSIONS = ("company", "site", "contractor")
+BREAKDOWN_DIMENSIONS = ("company", "site", "contractor", "discipline")
 BREAKDOWN_ROW_CAP = 200
 
 # Порог «высокого» риска — как в operational_dashboard/service.py:211
@@ -48,6 +62,9 @@ HIGH_RISK_LEVEL_THRESHOLD = 15
 
 NO_SITE_BUCKET_ID = ""
 NO_SITE_BUCKET_NAME = "— без объекта"
+
+NO_DISCIPLINE_BUCKET_ID = ""
+NO_DISCIPLINE_BUCKET_NAME = "— не размечено"
 
 
 async def _grouped_counts(session: AsyncSession, stmt) -> tuple[dict[str, int], int]:
@@ -74,6 +91,8 @@ async def compute_breakdown(
 ) -> dict[str, Any]:
     if dimension == "contractor":
         return await _contractor_breakdown(session, tenant_id)
+    if dimension == "discipline":
+        return await _discipline_breakdown(session, tenant_id, date_from=date_from, date_to=date_to)
 
     today = date.today()
     if dimension == "company":
@@ -88,9 +107,7 @@ async def compute_breakdown(
     incidents_stmt = (
         select(dim_incidents, func.count())
         .where(
-            Incident.tenant_id == tenant_id,
-            Incident.deleted_at.is_(None),
-            Incident.status.notin_([IncidentStatus.CLOSED, IncidentStatus.CANCELLED]),
+            *open_incidents_where(tenant_id),
         )
         .group_by(dim_incidents)
     )
@@ -192,6 +209,67 @@ async def compute_breakdown(
 
     items.sort(key=lambda r: (-r["total_issues"], r["name"]))
     return {"dimension": dimension, "items": items[:BREAKDOWN_ROW_CAP], "total": len(items)}
+
+
+async def _discipline_breakdown(
+    session: AsyncSession,
+    tenant_id: str,
+    *,
+    date_from: date | None,
+    date_to: date | None,
+) -> dict[str, Any]:
+    incidents_stmt = (
+        select(Incident.discipline, func.count())
+        .where(
+            *open_incidents_where(tenant_id),
+        )
+        .group_by(Incident.discipline)
+    )
+    if date_from is not None:
+        incidents_stmt = incidents_stmt.where(func.date(Incident.occurred_at) >= date_from)
+    if date_to is not None:
+        incidents_stmt = incidents_stmt.where(func.date(Incident.occurred_at) <= date_to)
+    incidents, incidents_unmarked = await _grouped_counts(session, incidents_stmt)
+
+    # Окно к просрочкам не применяется — они описывают состояние «на сегодня»,
+    # как и у остальных разрезов.
+    overdue = overdue_by_discipline(
+        await attention_events(
+            session=session,
+            tenant_id=tenant_id,
+            person_id=None,
+            now=datetime.now(tz=timezone.utc),
+        )
+    )
+
+    items: list[dict[str, Any]] = []
+    for position, discipline in enumerate(Discipline):
+        counted = discipline in ATTENTION_DISCIPLINES
+        row: dict[str, Any] = {
+            "id": discipline.value,
+            "name": DISCIPLINE_TITLES[discipline],
+            "incidents_open": incidents.get(discipline.value, 0),
+            "overdue_items": overdue.get(discipline, 0) if counted else None,
+        }
+        row["total_issues"] = row["incidents_open"] + (row["overdue_items"] or 0)
+        items.append(row)
+        row["_order"] = position
+    if incidents_unmarked > 0:
+        items.append(
+            {
+                "id": NO_DISCIPLINE_BUCKET_ID,
+                "name": NO_DISCIPLINE_BUCKET_NAME,
+                "incidents_open": incidents_unmarked,
+                "overdue_items": None,
+                "total_issues": incidents_unmarked,
+                "_order": len(items),
+            }
+        )
+
+    # Худшее сверху, при равенстве — порядок словаря, а не алфавит: «БДД»
+    # впереди «Медосмотров» ничего не значит.
+    items.sort(key=lambda r: (-r["total_issues"], r.pop("_order")))
+    return {"dimension": "discipline", "items": items, "total": len(items)}
 
 
 async def _contractor_breakdown(session: AsyncSession, tenant_id: str) -> dict[str, Any]:

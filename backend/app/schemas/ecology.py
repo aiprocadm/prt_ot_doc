@@ -281,6 +281,11 @@ class EcologyReadinessRead(BaseSchema):
     #: итог не попадает — иначе итог выглядел бы полным
     fee_lines_without_rate: int = 0
     fee_total_rubles: Decimal = Decimal("0.00")
+    #: Доп. №1 разд. 57.4: открытые происшествия, размеченные этой дисциплиной
+    #: (срез-49). Формула одна на контуры и разрез директора —
+    #: ``app.services.discipline_incidents``; «не закрыто и не отменено».
+    #: Неразмеченные сюда не попадают: контур не угадывает дисциплину.
+    incidents_open: int = 0
 
 
 class NvosFeeRateCreate(BaseSchema):

@@ -1,6 +1,7 @@
 import { apiClient } from "@/api/client";
 import type {
   AnalyticsFiltersDto,
+  BreakdownDimension,
   BreakdownDto,
   DashboardWidgetsDto,
   DirectoryItemDto,
@@ -57,7 +58,7 @@ export const analyticsApi = {
     return data;
   },
   getBreakdown: async (
-    dimension: "company" | "site" | "contractor",
+    dimension: BreakdownDimension,
     window: Pick<AnalyticsFiltersDto, "date_from" | "date_to">,
   ): Promise<BreakdownDto> => {
     const { data } = await apiClient.get<BreakdownDto>(

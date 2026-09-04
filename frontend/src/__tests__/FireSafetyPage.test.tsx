@@ -99,6 +99,7 @@ const populatedReadiness = {
   units_without_maintenance: 1,
   fire_documents: 2,
   overdue_documents: 1,
+  incidents_open: 3,
 };
 
 /** Наполненный снимок: статистика шапки и реестр площадок на экране. */
@@ -291,6 +292,25 @@ describe("FireSafetyPage", () => {
     expect(
       await screen.findByText(/определяет специалист/i),
     ).toBeInTheDocument();
+  });
+
+  it("открытые происшествия контура: число из сводки и ссылка в реестр (срез-49)", async () => {
+    getFireSafetySnapshotMock.mockResolvedValue(populatedFireSafetySnapshot);
+    render(
+      <MemoryRouter>
+        <FireSafetyPage />
+      </MemoryRouter>,
+    );
+
+    expect(
+      await screen.findByText("Открытых происшествий"),
+    ).toBeInTheDocument();
+    // число — из сводки бэкенда (та же формула, что разрез у директора), а
+    // ссылка ведёт в ОБЩИЙ реестр с уже выставленным фильтром дисциплины
+    expect(screen.getByRole("link", { name: "3" })).toHaveAttribute(
+      "href",
+      "/incidents?discipline=fire_safety",
+    );
   });
 
   it("FireSafetyPage в UX-бюджете во ВСЕХ ТРЁХ секциях", async () => {
