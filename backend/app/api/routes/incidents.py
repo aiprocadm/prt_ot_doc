@@ -14,6 +14,7 @@ from app.api.helpers.etag import (
     compute_list_etag,
 )
 from app.core.audit_decorator import audit_operation
+from app.core.disciplines import DISCIPLINE_TITLES, Discipline
 from app.core.errors import api_problem_detail
 from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
@@ -45,6 +46,10 @@ TenantDep = Annotated[Tenant, Depends(get_tenant_record)]
 _INCIDENT_READ_ROLES = ["admin"]
 _INCIDENT_WRITE_ROLES = ["admin"]
 
+#: дисциплина происшествия — код из ОБЩЕГО словаря (in01, разд. 54.2); тот же
+#: приём, что у курса обучения и стажировки
+_DISCIPLINE_CODES = {d.value: DISCIPLINE_TITLES[d] for d in Discipline}
+
 
 def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> str | None:
     return getattr(tenant, "id", None)
@@ -71,6 +76,15 @@ def _incident_bad_request(message: str) -> HTTPException:
             code="INCIDENT_VALIDATION_ERROR", message=message, error_type="incidents"
         ),
     )
+
+
+def _validate_discipline(discipline: str | None) -> None:
+    """Неизвестный код — ошибка запроса, а не тихая запись «чего-то»."""
+
+    if discipline is not None and discipline not in _DISCIPLINE_CODES:
+        raise _incident_bad_request(
+            f"Неизвестная дисциплина {discipline!r}; допустимые: {', '.join(_DISCIPLINE_CODES)}"
+        )
 
 
 async def _get_incident(session: AsyncSession, tenant: Tenant, incident_id: str) -> Incident:
@@ -100,6 +114,10 @@ def _serialize_incident(instance: Incident, victim_ids: list[str] | None = None)
         ]
     payload = IncidentRead.model_validate(instance)
     payload.victim_ids = list(computed)
+    # Подпись дисциплины — словами из общего словаря; пусто, если не размечена
+    payload.discipline_label = (
+        _DISCIPLINE_CODES.get(instance.discipline) if instance.discipline else None
+    )
     return payload
 
 
@@ -114,10 +132,12 @@ async def list_incidents(
     site_id: str | None = Query(default=None, min_length=1, max_length=36),
     status_filter: IncidentStatus | None = Query(default=None),
     incident_type: IncidentType | None = Query(default=None),
+    discipline: str | None = Query(default=None, max_length=32),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ) -> IncidentPage | Response:
     TenantContextValidator.ensure_tenant_context(tenant)
+    _validate_discipline(discipline)
 
     stmt = (
         select(Incident)
@@ -132,6 +152,8 @@ async def list_incidents(
         stmt = stmt.where(Incident.status == status_filter)
     if incident_type:
         stmt = stmt.where(Incident.incident_type == incident_type)
+    if discipline:
+        stmt = stmt.where(Incident.discipline == discipline)
 
     total_stmt = select(func.count()).select_from(stmt.subquery())
     stmt = stmt.order_by(Incident.occurred_at.desc()).offset(offset).limit(limit)
@@ -148,6 +170,7 @@ async def list_incidents(
             ("site", site_id or ""),
             ("status", status_filter.value if status_filter else ""),
             ("type", incident_type.value if incident_type else ""),
+            ("discipline", discipline or ""),
         ],
     )
     apply_etag_response_headers(response, etag)
@@ -168,6 +191,7 @@ async def create_incident(
     access: EditorAccess,
 ) -> IncidentRead:
     TenantContextValidator.ensure_tenant_context(tenant)
+    _validate_discipline(payload.discipline)
 
     try:
         incident = await register_incident(
@@ -183,6 +207,7 @@ async def create_incident(
             location_description=payload.location_description,
             pack_id=payload.pack_id,
             victim_ids=payload.victim_ids,
+            discipline=payload.discipline,
         )
     except ValueError as exc:  # pragma: no cover - defensive conversion to HTTP error
         raise _incident_bad_request(str(exc)) from exc
@@ -243,6 +268,8 @@ async def patch_incident(
 
     incident = await _get_incident(session, tenant, incident_id)
     updates = payload.model_dump(exclude_unset=True)
+    if "discipline" in updates:
+        _validate_discipline(updates["discipline"])
     victim_ids = updates.pop("victim_ids", None)
     try:
         updated = await update_incident(

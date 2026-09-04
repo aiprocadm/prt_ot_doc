@@ -28,6 +28,9 @@ class IncidentCreate(BaseSchema):
     location_description: str | None = Field(default=None, max_length=255)
     pack_id: str | None = Field(default=None, min_length=1, max_length=36)
     victim_ids: list[str] = Field(default_factory=list)
+    #: код дисциплины из общего словаря; пусто — «не размечено», а НЕ «охрана
+    #: труда» (in01, разд. 54.2)
+    discipline: str | None = Field(default=None, max_length=32)
 
 
 class IncidentUpdate(BaseSchema):
@@ -43,6 +46,7 @@ class IncidentUpdate(BaseSchema):
     location_description: str | None = Field(default=None, max_length=255)
     pack_id: str | None = Field(default=None, min_length=1, max_length=36)
     victim_ids: list[str] | None = None
+    discipline: str | None = Field(default=None, max_length=32)
 
 
 class IncidentRead(BaseSchema):
@@ -59,6 +63,9 @@ class IncidentRead(BaseSchema):
     location_description: str | None
     pack_id: str | None
     victim_ids: list[str] = Field(default_factory=list)
+    discipline: str | None = None
+    #: дисциплина словами; пусто, если не размечена
+    discipline_label: str | None = None
 
 
 class IncidentPage(BaseSchema):

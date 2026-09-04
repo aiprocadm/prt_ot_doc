@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
 import { incidentsApi, type Incident } from "@/api/incidents";
+import { TRAINING_DISCIPLINE_TITLES } from "@/api/training";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingScreen } from "@/components/common/LoadingScreen";
@@ -92,6 +93,7 @@ const IncidentsPage = () => {
     company_id: "",
     site_id: "",
     severity: "medium",
+    discipline: "",
   });
 
   const load = useCallback(
@@ -135,6 +137,8 @@ const IncidentsPage = () => {
         company_id: form.company_id,
         site_id: form.site_id || undefined,
         severity: form.severity,
+        // пусто — «не размечено»: сервер хранит null, а не «охрана труда»
+        discipline: form.discipline || null,
       });
       toast.success("Инцидент зарегистрирован");
       setCreateOpen(false);
@@ -146,6 +150,7 @@ const IncidentsPage = () => {
         company_id: "",
         site_id: "",
         severity: "medium",
+        discipline: "",
       });
       const params = new URLSearchParams(searchParams);
       params.set("entity_type", "incident");
@@ -303,6 +308,34 @@ const IncidentsPage = () => {
                         ))}
                       </select>
                     </div>
+                    {/* Срез-44 (in01, разд. 54.2): дисциплина — на первом
+                        уровне, а не под «Дополнительно». Разметка нужна В
+                        МОМЕНТ регистрации: потом инцидент на ОПО никто не
+                        отличит от микротравмы, и отчёт в Ростехнадзор не
+                        сможет подсказать число. Пусто — «не размечено». */}
+                    <div className="space-y-1.5">
+                      <Label htmlFor="inc-discipline">Дисциплина</Label>
+                      <select
+                        id="inc-discipline"
+                        className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                        value={form.discipline}
+                        onChange={(e) =>
+                          setForm((prev) => ({
+                            ...prev,
+                            discipline: e.target.value,
+                          }))
+                        }
+                      >
+                        <option value="">— Не размечена —</option>
+                        {Object.entries(TRAINING_DISCIPLINE_TITLES).map(
+                          ([code, title]) => (
+                            <option key={code} value={code}>
+                              {title}
+                            </option>
+                          ),
+                        )}
+                      </select>
+                    </div>
                   </div>
                   {/* BIZ-59 (разд. 59.3, три уровня раскрытия): необязательные
                       поля уходят на второй уровень. При регистрации инцидента
@@ -414,7 +447,16 @@ const IncidentsPage = () => {
                 {items.map((incident) => (
                   <TableRow key={incident.id}>
                     <TableCell className="font-medium">{incident.id}</TableCell>
-                    <TableCell>{incident.title}</TableCell>
+                    <TableCell>
+                      <div>{incident.title}</div>
+                      {/* дисциплина — подписью под событием, а не восьмой
+                          колонкой: бюджет таблицы — семь (разд. 59.2) */}
+                      {incident.discipline_label ? (
+                        <div className="text-xs text-muted-foreground">
+                          {incident.discipline_label}
+                        </div>
+                      ) : null}
+                    </TableCell>
                     <TableCell>
                       {INCIDENT_TYPE_LABELS[incident.incident_type] ??
                         incident.incident_type}
