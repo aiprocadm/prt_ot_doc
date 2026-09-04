@@ -1,4 +1,5 @@
 import { useCallback, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import type { ColumnDef } from "@tanstack/react-table";
 
 import {
@@ -55,15 +56,24 @@ const statusVariant = (
  */
 const InternshipsPage = () => {
   const [statusFilter, setStatusFilter] = useState("");
+  // Экран умеет открываться НА ЧЕЛОВЕКЕ (`?person_id=`) — так на него ведёт
+  // ссылка из карточки сотрудника (срез-46). Отбор уходит на сервер
+  // параметром, а не режет загруженный список: у крупного клиента человек
+  // мог бы не попасть в первые двести строк.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const personFilter = searchParams.get("person_id") ?? "";
 
   const loader = useCallback(async (): Promise<InternshipsData> => {
     const [items, persons, summary] = await Promise.all([
-      internshipsApi.list(statusFilter ? { status: statusFilter } : {}),
+      internshipsApi.list({
+        ...(statusFilter ? { status: statusFilter } : {}),
+        ...(personFilter ? { person_id: personFilter } : {}),
+      }),
       fetchAllPersons(),
       internshipsApi.summary(),
     ]);
     return { items, persons, summary };
-  }, [statusFilter]);
+  }, [statusFilter, personFilter]);
 
   const { data, loading, error, reload } = useAsyncResource<InternshipsData>({
     loader,
@@ -86,6 +96,19 @@ const InternshipsPage = () => {
   });
 
   const onChanged = useCallback(() => void reload(), [reload]);
+
+  const clearPersonFilter = () => {
+    const next = new URLSearchParams(searchParams);
+    next.delete("person_id");
+    setSearchParams(next, { replace: true });
+  };
+  // Имя для плашки — из справочника людей; если человека там нет (уволен и
+  // скрыт), берём имя из первой его записи; иначе честно показываем id.
+  const personFilterName = personFilter
+    ? (data.persons.find((person) => person.id === personFilter)?.full_name ??
+      data.items.find((item) => item.person_id === personFilter)?.person_name ??
+      personFilter)
+    : "";
 
   const columns: ColumnDef<InternshipDto, unknown>[] = [
     {
@@ -217,7 +240,35 @@ const InternshipsPage = () => {
                 </option>
               ))}
             </select>
+            {personFilter ? (
+              <span
+                className="inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm"
+                data-testid="internships-person-filter"
+              >
+                Стажёр: <span className="font-medium">{personFilterName}</span>
+                <Link
+                  to={`/employees/${personFilter}`}
+                  className="text-xs underline"
+                >
+                  карточка
+                </Link>
+                <button
+                  type="button"
+                  className="text-xs text-muted-foreground underline"
+                  onClick={clearPersonFilter}
+                  aria-label="Показать всех стажёров"
+                >
+                  все
+                </button>
+              </span>
+            ) : null}
           </div>
+          {personFilter ? (
+            <p className="text-xs text-muted-foreground">
+              Плитки шапки считаются по всему реестру, список — только по этому
+              человеку.
+            </p>
+          ) : null}
 
           <ErrorState
             error={error ?? undefined}
@@ -228,7 +279,7 @@ const InternshipsPage = () => {
             <EmptyState
               title="Стажировок нет"
               description={
-                registry.query || statusFilter
+                registry.query || statusFilter || personFilter
                   ? "Измените запрос или фильтр."
                   : "Назначьте первую: кому, у кого и сколько смен по плану."
               }

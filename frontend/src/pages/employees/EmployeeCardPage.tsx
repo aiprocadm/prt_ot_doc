@@ -417,6 +417,12 @@ const TrainingTab = ({ card }: { card: EmployeeCardDto }) => {
       <section>
         <h3 className="text-sm font-semibold">
           Стажировки · {training.internships_count ?? 0}
+          <Link
+            to={`/internships?person_id=${encodeURIComponent(card.person_id)}`}
+            className="ml-3 text-xs font-normal text-primary underline"
+          >
+            открыть в реестре
+          </Link>
         </h3>
         {/* Та же запись, что в общем реестре /internships: недобор — факт
             расхождения плана и факта, а не вердикт о допуске к работе. */}
