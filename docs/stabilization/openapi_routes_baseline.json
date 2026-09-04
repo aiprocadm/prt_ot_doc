@@ -88,6 +88,7 @@
     "GET /api/v1/analytics/dashboard/safety",
     "GET /api/v1/analytics/dashboard/sla-load",
     "GET /api/v1/analytics/dashboard/training",
+    "GET /api/v1/analytics/discipline-reports",
     "GET /api/v1/analytics/trends/compliance",
     "GET /api/v1/analytics/trends/incidents",
     "GET /api/v1/analytics/trends/inspections",
@@ -691,6 +692,7 @@
     "POST /api/v1/admin/roles/assign",
     "POST /api/v1/admin/tenants",
     "POST /api/v1/admin/users/{user_id}/roles",
+    "POST /api/v1/analytics/discipline-reports/run",
     "POST /api/v1/analytics/recompute",
     "POST /api/v1/api-tokens",
     "POST /api/v1/approval-routes",
@@ -1711,6 +1713,7 @@
     "list_departments_api_v1_departments_get",
     "list_device_works_api_v1_industrial_safety_device_works_get",
     "list_devices_api_v1_industrial_safety_devices_get",
+    "list_discipline_reports_api_v1_analytics_discipline_reports_get",
     "list_document_requirements_api_v1_contractors_document_requirements_get",
     "list_documents_api_v1_documents_get",
     "list_drills_api_v1_civil_defense_drills_get",
@@ -2039,6 +2042,7 @@
     "rule_library_api_v1_rules_library_get",
     "run_client_audit_api_v1_managed_clients_audit_run_post",
     "run_definition_api_v1_report_builder_definitions__definition_id__run_post",
+    "run_discipline_report_now_api_v1_analytics_discipline_reports_run_post",
     "run_pack_api_v1_packs_run_post",
     "run_pipeline_api_v1_pipelines__template_id__run_post",
     "run_pipeline_api_v1_pipelines_runs_post",
@@ -2429,6 +2433,9 @@
     "DeviceWorkRead",
     "DirectionReadinessRead",
     "DisciplineAttention",
+    "DisciplineReportPage",
+    "DisciplineReportRead",
+    "DisciplineReportRunRead",
     "DocGeneratePipelineRequest",
     "DocGenerateRequest",
     "DocumentBatchItemRead",
@@ -4927,6 +4934,23 @@
       "overdue": "integer",
       "due_soon": "integer",
       "reason": "null|string"
+    },
+    "DisciplineReportPage": {
+      "items": "array",
+      "total": "integer"
+    },
+    "DisciplineReportRead": {
+      "id": "string",
+      "period_start": "string",
+      "period_end": "string",
+      "total_issues": "integer",
+      "summary": "string",
+      "payload": "object"
+    },
+    "DisciplineReportRunRead": {
+      "created": "boolean",
+      "report": "DisciplineReportRead",
+      "summary": "string"
     },
     "DocGeneratePipelineRequest": {
       "template": "GenerateTemplateRef",

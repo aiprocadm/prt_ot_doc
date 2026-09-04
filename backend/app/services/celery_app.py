@@ -86,6 +86,12 @@ celery_app.conf.beat_schedule = {
         "task": "managed_clients.audit.tick",
         "schedule": crontab(hour=5, minute=0, day_of_week="mon"),
     },
+    # Доп. №1 разд. 57.4 (срез-50): еженедельный отчёт арендатору о состоянии
+    # по дисциплинам — следом за авто-аудитом клиентов, тем же утром.
+    "disciplines-report-weekly": {
+        "task": "disciplines.report.tick",
+        "schedule": crontab(hour=5, minute=15, day_of_week="mon"),
+    },
     "contractors-readiness-daily": {
         "task": "contractors.readiness.tick",
         "schedule": crontab(hour=3, minute=30),

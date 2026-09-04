@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { analyticsApi } from "@/api/analyticsApi";
+import { DisciplineReportCard } from "@/components/analytics/DisciplineReportCard";
 import { TrendLineChart } from "@/components/analytics/TrendLineChart";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
@@ -456,6 +457,10 @@ export default function ManagementDashboardPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Доп. №1 разд. 57.4: авто-отчёт о состоянии по дисциплинам — снимок на
+          дату и динамика; числа те же, что в разрезе «По дисциплинам» выше. */}
+      <DisciplineReportCard />
 
       <Card>
         <CardHeader>

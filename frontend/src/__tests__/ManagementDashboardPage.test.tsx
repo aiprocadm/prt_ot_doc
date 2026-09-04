@@ -8,6 +8,8 @@ const api = vi.hoisted(() => ({
   getDashboard: vi.fn(),
   getTrend: vi.fn(),
   getBreakdown: vi.fn(),
+  listDisciplineReports: vi.fn(),
+  runDisciplineReport: vi.fn(),
   getCompanies: vi.fn(),
   getSites: vi.fn(),
   getContractors: vi.fn(),
@@ -86,6 +88,8 @@ beforeEach(() => {
     ],
     total: 2,
   });
+  // отчётов о состоянии по умолчанию нет — карточка показывает пустое состояние
+  api.listDisciplineReports.mockResolvedValue({ items: [], total: 0 });
   api.getCompanies.mockResolvedValue({
     items: [{ id: "c1", name: "ООО Ромашка" }],
     total: 1,

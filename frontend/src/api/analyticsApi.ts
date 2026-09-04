@@ -5,6 +5,8 @@ import type {
   BreakdownDto,
   DashboardWidgetsDto,
   DirectoryItemDto,
+  DisciplineReportPageDto,
+  DisciplineReportRunDto,
   ExecutiveDashboardDto,
   TrendSeriesDto,
 } from "@/types/dto/analytics";
@@ -66,6 +68,23 @@ export const analyticsApi = {
       {
         params: { dimension, ...clean(window) },
       },
+    );
+    return data;
+  },
+  // Доп. №1 разд. 57.4: авто-отчёты о состоянии по дисциплинам — свежие сверху.
+  listDisciplineReports: async (
+    limit = 12,
+  ): Promise<DisciplineReportPageDto> => {
+    const { data } = await apiClient.get<DisciplineReportPageDto>(
+      "/analytics/discipline-reports",
+      { params: { limit } },
+    );
+    return data;
+  },
+  // «Собрать сейчас»: за сегодня отчёт один — повторный вызов вернёт его же.
+  runDisciplineReport: async (): Promise<DisciplineReportRunDto> => {
+    const { data } = await apiClient.post<DisciplineReportRunDto>(
+      "/analytics/discipline-reports/run",
     );
     return data;
   },
