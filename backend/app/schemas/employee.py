@@ -275,6 +275,34 @@ class EmployeeComplianceDeadlinesSection(BaseSchema):
     items: list[EmployeeComplianceDeadlineItem] = Field(default_factory=list)
 
 
+class EmployeeDisciplineStatus(BaseSchema):
+    """Строка светофора дисциплин на карточке сотрудника (срез-53, разд. 57.1).
+
+    Те же поля, что у строки карточки площадки 360° (``SiteDisciplineRead``):
+    цвет и расшифровка считаются одними правилами (``core/discipline_status``),
+    и экран сотрудника читается теми же словами, что экран площадки.
+    """
+
+    discipline: str
+    title: str
+    light: str
+    reason: str
+    required: int = 0
+    missing: int = 0
+    lapsed: int = 0
+    expiring: int = 0
+
+
+class EmployeeDisciplinesSection(BaseSchema):
+    """Светофор по ВСЕМ дисциплинам словаря для одного человека."""
+
+    #: итог по худшей ИЗМЕРЕННОЙ дисциплине; ``not_measured`` — если не измерено ничего
+    overall: str
+    rows: list[EmployeeDisciplineStatus] = Field(default_factory=list)
+    #: почему светофор не считался (уволен) — словами, а не пустой таблицей
+    note: str | None = None
+
+
 class EmployeeCard(BaseSchema):
     """Top-level Unified Employee Card response."""
 
@@ -283,6 +311,7 @@ class EmployeeCard(BaseSchema):
     generated_at: datetime
     personal: EmployeePersonal
     roles_and_assignments: EmployeeRolesAndAssignments
+    disciplines: EmployeeDisciplinesSection
     training: EmployeeTrainingSection
     medicals: EmployeeMedicalSection
     ppe: EmployeePPESection

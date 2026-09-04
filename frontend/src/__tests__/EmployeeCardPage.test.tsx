@@ -61,6 +61,42 @@ const sampleCard: EmployeeCardDto = {
       additional_roles: ["line_manager"],
     },
   },
+  disciplines: {
+    overall: "red",
+    note: null,
+    rows: [
+      {
+        discipline: "medical",
+        title: "Медосмотры",
+        light: "red",
+        reason: "Разрывы с эталоном — не оформлено вовсе: 1",
+        required: 1,
+        missing: 1,
+        lapsed: 0,
+        expiring: 0,
+      },
+      {
+        discipline: "ppe",
+        title: "СИЗ",
+        light: "green",
+        reason: "Всё положенное действует (1)",
+        required: 1,
+        missing: 0,
+        lapsed: 0,
+        expiring: 0,
+      },
+      {
+        discipline: "fire_safety",
+        title: "Пожарная безопасность",
+        light: "not_measured",
+        reason: "Поимённых норм по дисциплине в системе нет",
+        required: 0,
+        missing: 0,
+        lapsed: 0,
+        expiring: 0,
+      },
+    ],
+  },
   training: {
     sessions_count: 1,
     certificates_count: 1,
@@ -330,6 +366,69 @@ describe("EmployeeCardPage", () => {
       screen.getByRole("tab", { name: /Происшествия/ }),
     ).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /Аудит/ })).toBeInTheDocument();
+  });
+
+  it("светофор дисциплин над вкладками: итог словом, строка на дисциплину, расшифровка (срез-53)", async () => {
+    getCardMock.mockResolvedValueOnce(sampleCard);
+
+    renderPage();
+    await screen.findByRole("heading", {
+      level: 1,
+      name: "Иванов Иван Иванович",
+    });
+
+    // итог — тем же словом, что у площадки и клиента (lib/lights)
+    expect(
+      screen.getByTestId("employee-disciplines-overall"),
+    ).toHaveTextContent("Разрывы");
+    const table = screen.getByTestId("employee-disciplines");
+    const rows = within(table).getAllByRole("row").slice(1);
+    expect(rows).toHaveLength(3);
+    expect(rows[0]).toHaveTextContent("Медосмотры");
+    expect(rows[0]).toHaveTextContent("Разрывы");
+    expect(rows[0]).toHaveTextContent("не оформлено вовсе: 1");
+    expect(rows[1]).toHaveTextContent("В порядке");
+    // «не измеряется» — не «в порядке»: слово и причина на месте
+    expect(rows[2]).toHaveTextContent("Не измеряется");
+    expect(rows[2]).toHaveTextContent(
+      "Поимённых норм по дисциплине в системе нет",
+    );
+    // светофор стоит выше вкладок: ответ читают первым
+    const tabs = screen.getByRole("tablist");
+    expect(
+      table.compareDocumentPosition(tabs) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("уволенный: причина вместо пояснения, итог «Не измеряется» (срез-53)", async () => {
+    getCardMock.mockResolvedValueOnce({
+      ...sampleCard,
+      disciplines: {
+        overall: "not_measured",
+        note: "Сотрудник уволен: обязательств нет, светофор не считается",
+        rows: sampleCard.disciplines.rows.map((row) => ({
+          ...row,
+          light: "not_measured",
+          reason: "Сотрудник уволен: обязательств нет, светофор не считается",
+        })),
+      },
+    });
+
+    renderPage();
+    await screen.findByRole("heading", {
+      level: 1,
+      name: "Иванов Иван Иванович",
+    });
+
+    expect(
+      screen.getByTestId("employee-disciplines-overall"),
+    ).toHaveTextContent("Не измеряется");
+    expect(
+      screen.getAllByText(
+        "Сотрудник уволен: обязательств нет, светофор не считается",
+      ).length,
+    ).toBeGreaterThanOrEqual(2);
+    expect(screen.queryByText(/по нормам должности/)).not.toBeInTheDocument();
   });
 
   it("opens the Documents tab and renders signed-document drill-down link", async () => {

@@ -133,6 +133,29 @@ export interface EmployeeInternshipItemDto {
   status_label: string;
 }
 
+/**
+ * Строка светофора дисциплин (BIZ-54-57 срез-53, Доп. №1 разд. 57.1) —
+ * те же поля, что у строки карточки площадки 360°: одни правила, одни слова.
+ */
+export interface EmployeeDisciplineStatusDto {
+  discipline: string;
+  title: string;
+  light: string;
+  reason: string;
+  required: number;
+  missing: number;
+  lapsed: number;
+  expiring: number;
+}
+
+export interface EmployeeDisciplinesSectionDto {
+  /** Итог по худшей измеренной дисциплине; `not_measured` — не измерено ничего. */
+  overall: string;
+  rows: EmployeeDisciplineStatusDto[];
+  /** Почему светофор не считался (уволен) — словами, а не пустой таблицей. */
+  note: string | null;
+}
+
 export interface EmployeeTrainingSectionDto {
   sessions_count: number;
   certificates_count: number;
@@ -279,6 +302,7 @@ export interface EmployeeCardDto {
   generated_at: string;
   personal: EmployeePersonalDto;
   roles_and_assignments: EmployeeRolesAndAssignmentsDto;
+  disciplines: EmployeeDisciplinesSectionDto;
   training: EmployeeTrainingSectionDto;
   medicals: EmployeeMedicalSectionDto;
   ppe: EmployeePPESectionDto;

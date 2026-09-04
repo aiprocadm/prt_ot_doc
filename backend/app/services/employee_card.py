@@ -11,10 +11,32 @@ Implementation notes
   predictable. Counts always reflect the *unbounded* totals.
 * The query plan is a small fixed number of selects (one per section); we
   trade a few round-trips for code simplicity.
+* Сроки СИЗ/инструктажей/дедлайнов сравниваются через ``as_utc``: SQLite
+  отдаёт время без зоны, и «истёк ли» падало бы ``TypeError`` ровно на живой
+  ручке (срез-53 — поймано первым HTTP-тестом с выдачей СИЗ со сроком).
+
+Светофор дисциплин (BIZ-54-57 срез-53, Доп. №1 разд. 57.1)
+------------------------------------------------------------
+ТЗ: «карточка сотрудника 360°: все его обучения, допуски, медосмотры, СИЗ,
+аттестации по всем дисциплинам сразу». Вкладки показывают записи; светофор
+отвечает на вопрос «всё ли положенное у человека действует» — по каждой
+дисциплине словаря и одними правилами с карточкой площадки и светофором
+клиента (``services/discipline_numbers`` + ``core/discipline_status``).
+Своего здесь два решения:
+
+* **уволенный не красится.** Площадка и клиент уволенных не считают
+  (``employment_status != terminated``); карточка уволенного показала бы
+  красные разрывы по обязательствам, которых у него уже нет. Строки отдаются
+  «не измеряется» с причиной, а не пустой таблицей;
+* **«эталон не задан» — про должность человека.** Общая расшифровка говорит
+  «у должностей клиента нет норм» — на карточке одного человека это либо
+  «должность не указана», либо «у должности нет норм»; специалист по этим
+  словам делает разное (заполнить карточку / завести норму).
 """
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import date, datetime, timezone
 from typing import Any
 
@@ -22,7 +44,14 @@ from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
+from app.core.discipline_status import (
+    DisciplineStatus,
+    TrafficLight,
+    build_discipline_statuses,
+    worst_light,
+)
 from app.core.disciplines import DISCIPLINE_TITLES, Discipline
+from app.core.feature_flags import as_utc
 from app.models.document import Document
 from app.models.models import (
     AuditLog,
@@ -30,6 +59,7 @@ from app.models.models import (
     BriefingTemplate,
     Company,
     ComplianceDeadline,
+    EmploymentStatus,
     Incident,
     IncidentPerson,
     MedicalExam,
@@ -60,6 +90,8 @@ from app.schemas.employee import (
     EmployeeCard,
     EmployeeComplianceDeadlineItem,
     EmployeeComplianceDeadlinesSection,
+    EmployeeDisciplinesSection,
+    EmployeeDisciplineStatus,
     EmployeeDocumentItem,
     EmployeeDocumentsSection,
     EmployeeIncidentItem,
@@ -78,10 +110,14 @@ from app.schemas.employee import (
     EmployeeTrainingSection,
     EmployeeUserAccount,
 )
+from app.services.discipline_numbers import collect_people_numbers
 
-__all__ = ["EmployeeCardService", "MAX_ITEMS_PER_SECTION"]
+__all__ = ["EmployeeCardService", "MAX_ITEMS_PER_SECTION", "TERMINATED_REASON"]
 
 MAX_ITEMS_PER_SECTION = 50
+
+#: Почему у уволенного светофор не считается — одной строкой на всех дисциплинах.
+TERMINATED_REASON = "Сотрудник уволен: обязательств нет, светофор не считается"
 
 #: дисциплина стажировки словами — тот же словарь, что у реестра ``/internships``
 _DISCIPLINE_CODES = {d.value: DISCIPLINE_TITLES[d] for d in Discipline}
@@ -122,6 +158,7 @@ class EmployeeCardService:
 
         personal = self._build_personal(person, company, position, workplace)
         roles = await self._build_roles_and_assignments(person, company, position, workplace)
+        disciplines = await self._build_disciplines(person)
         training = await self._build_training(person)
         medicals = await self._build_medicals(person)
         ppe = await self._build_ppe(person)
@@ -138,6 +175,7 @@ class EmployeeCardService:
             generated_at=_utcnow(),
             personal=personal,
             roles_and_assignments=roles,
+            disciplines=disciplines,
             training=training,
             medicals=medicals,
             ppe=ppe,
@@ -270,6 +308,43 @@ class EmployeeCardService:
             employment_status=person.employment_status,
             user_account=user_account,
         )
+
+    async def _build_disciplines(self, person: Person) -> EmployeeDisciplinesSection:
+        """Светофор по всем дисциплинам словаря — одними правилами с площадкой."""
+
+        if person.employment_status == EmploymentStatus.TERMINATED:
+            rows = [
+                DisciplineStatus(
+                    discipline=discipline,
+                    title=DISCIPLINE_TITLES[discipline],
+                    light=TrafficLight.NOT_MEASURED,
+                    reason=TERMINATED_REASON,
+                )
+                for discipline in Discipline
+            ]
+            return _disciplines_section(rows, note=TERMINATED_REASON)
+
+        numbers = await collect_people_numbers(self.db, tenant_id=self.tenant_id, people=[person])
+        rows = build_discipline_statuses(
+            medical=numbers.medical,
+            ppe=numbers.ppe,
+            training_overdue=numbers.training_overdue,
+        )
+        no_norms = (
+            "Эталон не задан: должность не указана"
+            if not person.position_id
+            else "Эталон не задан: у должности нет норм"
+        )
+        rows = [
+            (
+                replace(row, reason=no_norms)
+                if row.discipline in (Discipline.MEDICAL, Discipline.PPE)
+                and row.counts.required == 0
+                else row
+            )
+            for row in rows
+        ]
+        return _disciplines_section(rows)
 
     async def _build_training(self, person: Person) -> EmployeeTrainingSection:
         # TrainingSession (modern) — primary timeline.
@@ -521,7 +596,7 @@ class EmployeeCardService:
                 is_expired=bool(
                     issue.status == PPEIssueStatus.ISSUED
                     and issue.expires_at is not None
-                    and issue.expires_at < now
+                    and (as_utc(issue.expires_at) or now) < now
                 ),
             )
             for issue in rows
@@ -731,7 +806,9 @@ class EmployeeCardService:
                 briefing_date=entry.briefing_date,
                 valid_until=entry.valid_until,
                 status=entry.status,
-                is_expired=bool(entry.valid_until is not None and entry.valid_until < now),
+                is_expired=bool(
+                    entry.valid_until is not None and (as_utc(entry.valid_until) or now) < now
+                ),
             )
             for entry, template_title in rows
         ]
@@ -781,7 +858,7 @@ class EmployeeCardService:
                 reminder_policy=deadline.reminder_policy,
                 is_overdue=bool(
                     deadline.status not in {"closed", "completed", "cancelled"}
-                    and deadline.due_at < now
+                    and (as_utc(deadline.due_at) or now) < now
                 ),
             )
             for deadline in rows
@@ -843,6 +920,28 @@ class EmployeeCardService:
 
     async def _count(self, stmt: Any) -> int:
         return int((await self.db.execute(stmt)).scalar_one() or 0)
+
+
+def _disciplines_section(
+    rows: list[DisciplineStatus], *, note: str | None = None
+) -> EmployeeDisciplinesSection:
+    return EmployeeDisciplinesSection(
+        overall=worst_light(rows).value,
+        rows=[
+            EmployeeDisciplineStatus(
+                discipline=row.discipline.value,
+                title=row.title,
+                light=row.light.value,
+                reason=row.reason,
+                required=row.counts.required,
+                missing=row.counts.missing,
+                lapsed=row.counts.lapsed,
+                expiring=row.counts.expiring,
+            )
+            for row in rows
+        ],
+        note=note,
+    )
 
 
 def _person_name(person: Person) -> str:
