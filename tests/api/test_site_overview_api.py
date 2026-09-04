@@ -15,15 +15,26 @@ from __future__ import annotations
 
 import pytest
 from httpx import AsyncClient
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
 from app.db.session import AsyncSessionLocal
+from app.models.feature import Feature, FeatureEnablement
 from app.models.master_data import Company, Site, Workplace
 from app.models.medical import MedicalExamKind, MedicalNorm
 from app.models.models import Position, RoleEnum, Tenant
 from app.models.work_permit import WorkPermit
 
 BASE = "/api/v1/sites"
+
+#: Пять дисциплин Доп. №1 — продаваемые модули; по умолчанию у арендатора
+#: теста они НЕ выданы (BIZ-61), и карточка их не показывает (срез-54).
+DISCIPLINE_MODULES = (
+    "fire_safety",
+    "industrial_safety",
+    "ecology",
+    "civil_defense",
+    "road_safety",
+)
 
 
 @pytest.fixture()
@@ -32,9 +43,9 @@ async def site_with_people(sessionmaker, data_factory):
 
     async with sessionmaker() as session:
         tenant = await data_factory.ensure_tenant(session=session)
-        company = await data_factory.create_company(
-            tenant=tenant, name="АКМЕ", session=session
-        )
+        # Редакция «всё включено»: иначе на карточке остались бы три дисциплины ядра.
+        await data_factory.set_modules(session, tenant.id, DISCIPLINE_MODULES, on=True)
+        company = await data_factory.create_company(tenant=tenant, name="АКМЕ", session=session)
         position = Position(tenant_id=tenant.id, company_id=company.id, name="Слесарь")
         session.add(position)
         await session.flush()
@@ -83,7 +94,6 @@ async def site_with_people(sessionmaker, data_factory):
         )
         await session.commit()
         return tenant, site.id
-
 
 
 async def _foreign_site() -> str:
@@ -147,7 +157,7 @@ class TestSiteOverview:
     async def test_все_дисциплины_тз_на_одном_экране(
         self, async_client: AsyncClient, make_auth_headers, site_with_people
     ) -> None:
-        """Приёмка §58.3: статус по ВСЕМ дисциплинам, а не по измеримым трём."""
+        """Приёмка §58.3: статус по ВСЕМ ПРИМЕНИМЫМ дисциплинам (все модули выданы)."""
 
         _tenant, site_id = site_with_people
         headers = await make_auth_headers(RoleEnum.ADMIN)
@@ -252,6 +262,47 @@ class TestSiteOverview:
             "Риски",
         }
 
+    async def test_дисциплины_вне_редакции_скрыты_и_названы(
+        self,
+        async_client: AsyncClient,
+        make_auth_headers,
+        site_with_people,
+        sessionmaker,
+        data_factory,
+    ) -> None:
+        """Приёмка §58.3: дисциплины включаются флагами; скрытое не молчит (срез-54)."""
+
+        tenant, site_id = site_with_people
+        async with sessionmaker() as session:
+            # «Экология» выключена после выдачи, «ГО и ЧС» — никогда не выдавалась
+            # (строка выдачи удалена): на карточке оба случая равны.
+            await data_factory.set_modules(session, tenant.id, ("ecology",), on=False)
+            civil_defense = (
+                await session.execute(select(Feature.id).where(Feature.code == "civil_defense"))
+            ).scalar_one()
+            await session.execute(
+                delete(FeatureEnablement).where(
+                    FeatureEnablement.tenant_id == tenant.id,
+                    FeatureEnablement.feature_id == civil_defense,
+                )
+            )
+            await session.commit()
+        headers = await make_auth_headers(RoleEnum.ADMIN)
+
+        body = await _overview(async_client, headers, site_id)
+
+        assert [r["discipline"] for r in body["disciplines"]] == [
+            "medical",
+            "ppe",
+            "training",
+            "fire_safety",
+            "industrial_safety",
+            "road_safety",
+        ]
+        assert body["overall"] == "red", "итог считался по оставшимся — красный медосмотр на месте"
+        hidden = next(r for r in body["not_counted"] if r["title"] == "Дисциплины вне редакции")
+        assert hidden["reason"].startswith("Экология, ГО и ЧС — модуль не выдан")
+
     async def test_несуществующая_площадка_отвечает_404(
         self, async_client: AsyncClient, make_auth_headers, site_with_people
     ) -> None:
@@ -293,9 +344,7 @@ class TestSiteOverview:
                 company_id=other_company.id,
                 session=session,
             )
-        headers = await make_auth_headers(
-            RoleEnum.ADMIN, email="admin-other-company@example.com"
-        )
+        headers = await make_auth_headers(RoleEnum.ADMIN, email="admin-other-company@example.com")
 
         response = await async_client.get(f"{BASE}/{site_id}/overview", headers=headers)
 
@@ -314,9 +363,7 @@ class TestSiteOverview:
         tenant, site_id = site_with_people
         async with sessionmaker() as session:
             company_id = (
-                await session.execute(
-                    select(Site.company_id).where(Site.id == site_id)
-                )
+                await session.execute(select(Site.company_id).where(Site.id == site_id))
             ).scalar_one()
             await data_factory.create_user(
                 tenant=tenant,
@@ -325,9 +372,7 @@ class TestSiteOverview:
                 company_id=str(company_id),
                 session=session,
             )
-        headers = await make_auth_headers(
-            RoleEnum.ADMIN, email="admin-own-company@example.com"
-        )
+        headers = await make_auth_headers(RoleEnum.ADMIN, email="admin-own-company@example.com")
 
         response = await async_client.get(f"{BASE}/{site_id}/overview", headers=headers)
 

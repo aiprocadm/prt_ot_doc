@@ -41,13 +41,32 @@ class TestDataFactory:
         здесь значило бы сломать проверку того, что срез защищает.
         """
 
+        await TestDataFactory.set_modules(
+            session, tenant_id, ("medical", "contractors", "warehouse"), on=True, overwrite=False
+        )
+
+    @staticmethod
+    async def set_modules(
+        session: AsyncSession,
+        tenant_id: str,
+        codes: tuple[str, ...],
+        *,
+        on: bool = True,
+        overwrite: bool = True,
+    ) -> None:
+        """Выдать (``on=True``) или выключить (``on=False``) арендатору модули по кодам.
+
+        Коды — из реестра ``SELLABLE_MODULES``; неизвестный код — ошибка, а не
+        тихая строка в базе. ``overwrite=False`` не трогает уже существующую
+        выдачу (так ведёт себя «тариф по умолчанию» выше).
+        """
+
         from app.models.feature import Feature, FeatureEnablement
         from app.modules.subscription.registry import SELLABLE_MODULES
 
-        implicitly_on = {"medical", "contractors", "warehouse"}
-        for module in SELLABLE_MODULES:
-            if module.code not in implicitly_on:
-                continue
+        by_code = {module.code: module for module in SELLABLE_MODULES}
+        for code in codes:
+            module = by_code[code]
             feature = (
                 await session.execute(select(Feature).where(Feature.code == module.code))
             ).scalar_one_or_none()
@@ -64,7 +83,9 @@ class TestDataFactory:
                 )
             ).scalar_one_or_none()
             if existing is None:
-                session.add(FeatureEnablement(tenant_id=tenant_id, feature_id=feature.id, on=True))
+                session.add(FeatureEnablement(tenant_id=tenant_id, feature_id=feature.id, on=on))
+            elif overwrite:
+                existing.on = on
         await session.flush()
 
     async def ensure_tenant(

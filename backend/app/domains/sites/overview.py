@@ -11,6 +11,14 @@
 (``app/core/discipline_status.py``) — теми же, что у светофора клиента. Своего
 здесь ровно одно: **кто такие «люди площадки»**.
 
+## Применимые дисциплины — по выданным модулям (срез-54, приёмка §58.3)
+
+Дисциплины, модуль которых арендатору не выдан или выключен, на карточке не
+показываются (``app/services/discipline_applicability.py``) — и НЕ молча:
+они названы строкой в «не посчитано». Единственная применимость, которая
+следует из данных самой площадки, — ОПО → промышленная безопасность; она
+дописывается в расшифровку, если модуль ПромБеза выдан.
+
 ## Люди площадки — через рабочее место, и это видно
 
 Сотрудник привязан к площадке только через рабочее место
@@ -67,6 +75,12 @@ from app.core.disciplines import (
 )
 from app.models.master_data import EmploymentStatus, Person, Site, Workplace
 from app.models.work_permit import WorkPermit
+from app.services.discipline_applicability import (
+    ALL_APPLICABLE,
+    DisciplineApplicability,
+    collect_applicability,
+    only_applicable,
+)
 from app.services.discipline_numbers import DisciplineNumbers, collect_people_numbers
 
 __all__ = [
@@ -170,13 +184,17 @@ def build_site_overview(
     *,
     numbers: DisciplineNumbers,
     facts: SiteFacts,
+    applicability: DisciplineApplicability = ALL_APPLICABLE,
 ) -> SiteOverview:
     """Собрать карточку из чисел и фактов. Без базы — правила проверяемы построчно."""
 
-    rows = build_discipline_statuses(
-        medical=numbers.medical,
-        ppe=numbers.ppe,
-        training_overdue=numbers.training_overdue,
+    rows = only_applicable(
+        build_discipline_statuses(
+            medical=numbers.medical,
+            ppe=numbers.ppe,
+            training_overdue=numbers.training_overdue,
+        ),
+        applicability,
     )
 
     notes = _permit_notes(facts.permits)
@@ -201,12 +219,26 @@ def build_site_overview(
         overall=worst_light(rows),
         disciplines=rows,
         facts=facts,
+        not_counted=_not_counted(applicability),
     )
 
 
-async def _site_workplace_ids(
-    session: AsyncSession, tenant_id: str, site_id: str
-) -> list[str]:
+def _not_counted(applicability: DisciplineApplicability) -> tuple[tuple[str, str], ...]:
+    """Постоянный список «не посчитано» плюс скрытые по редакции дисциплины."""
+
+    if not applicability.hidden:
+        return NOT_COUNTED
+    return (
+        *NOT_COUNTED,
+        (
+            "Дисциплины вне редакции",
+            f"{', '.join(applicability.hidden_titles)} — модуль не выдан арендатору "
+            "или выключен; статус по ним не считается и в итог не входит",
+        ),
+    )
+
+
+async def _site_workplace_ids(session: AsyncSession, tenant_id: str, site_id: str) -> list[str]:
     rows = (
         await session.execute(
             select(Workplace.id).where(
@@ -237,9 +269,7 @@ async def _site_people(
     return list(rows)
 
 
-async def _people_without_workplace(
-    session: AsyncSession, tenant_id: str, company_id: str
-) -> int:
+async def _people_without_workplace(session: AsyncSession, tenant_id: str, company_id: str) -> int:
     return int(
         (
             await session.execute(
@@ -256,9 +286,7 @@ async def _people_without_workplace(
     )
 
 
-async def _permit_facts(
-    session: AsyncSession, tenant_id: str, site_id: str
-) -> PermitFacts:
+async def _permit_facts(session: AsyncSession, tenant_id: str, site_id: str) -> PermitFacts:
     rows = (
         await session.execute(
             select(WorkPermit.work_type, func.count())
@@ -317,4 +345,5 @@ async def collect_site_overview(
         ),
         permits=await _permit_facts(session, tenant_id, site_id),
     )
-    return build_site_overview(site, numbers=numbers, facts=facts)
+    applicability = await collect_applicability(session, tenant_id)
+    return build_site_overview(site, numbers=numbers, facts=facts, applicability=applicability)
