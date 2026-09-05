@@ -270,10 +270,13 @@ export const roadSafetyApi = {
     return Array.isArray(data?.items) ? data.items : [];
   },
 
-  listDrivers: async (): Promise<DriverDto[]> => {
+  /** `person_id` — состав НА ЧЕЛОВЕКЕ (срез-67): отбирает сервер, не экран. */
+  listDrivers: async (
+    params: { person_id?: string } = {},
+  ): Promise<DriverDto[]> => {
     const { data } = await apiClient.get<{ items?: DriverDto[] }>(
       "/road-safety/drivers",
-      { params: { limit: 200, offset: 0 } },
+      { params: { limit: 200, offset: 0, ...params } },
     );
     return Array.isArray(data?.items) ? data.items : [];
   },

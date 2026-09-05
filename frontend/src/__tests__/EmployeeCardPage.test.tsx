@@ -433,6 +433,75 @@ describe("EmployeeCardPage", () => {
     expect(screen.queryByText(/по нормам должности/)).not.toBeInTheDocument();
   });
 
+  it("строка «БДД» с водителем ведёт на его карточку в контуре, без водителя — нет (срез-67)", async () => {
+    getCardMock.mockResolvedValueOnce({
+      ...sampleCard,
+      disciplines: {
+        ...sampleCard.disciplines,
+        rows: [
+          ...sampleCard.disciplines.rows,
+          {
+            discipline: "road_safety",
+            title: "БДД",
+            light: "red",
+            reason: "Истекло водительское удостоверение: 1",
+            required: 1,
+            missing: 0,
+            lapsed: 1,
+            expiring: 0,
+          },
+        ],
+      },
+    });
+
+    renderPage();
+    await screen.findByRole("heading", {
+      level: 1,
+      name: "Иванов Иван Иванович",
+    });
+
+    // Срок удостоверения назван в расшифровке; править его можно только в
+    // карточке водителя — ссылка открывает состав НА ЭТОМ человеке.
+    expect(
+      screen.getByTestId("employee-discipline-driver-link"),
+    ).toHaveAttribute("href", "/road-safety?section=drivers&person_id=p-1");
+    expect(
+      screen.getByText("Истекло водительское удостоверение: 1"),
+    ).toBeInTheDocument();
+  });
+
+  it("строка «БДД» без карточки водителя ссылки не даёт: вести некуда (срез-67)", async () => {
+    getCardMock.mockResolvedValueOnce({
+      ...sampleCard,
+      disciplines: {
+        ...sampleCard.disciplines,
+        rows: [
+          ...sampleCard.disciplines.rows,
+          {
+            discipline: "road_safety",
+            title: "БДД",
+            light: "not_measured",
+            reason: "Эталон БДД по должностям не ведётся: сравнивать не с чем",
+            required: 0,
+            missing: 0,
+            lapsed: 0,
+            expiring: 0,
+          },
+        ],
+      },
+    });
+
+    renderPage();
+    await screen.findByRole("heading", {
+      level: 1,
+      name: "Иванов Иван Иванович",
+    });
+
+    expect(
+      screen.queryByTestId("employee-discipline-driver-link"),
+    ).not.toBeInTheDocument();
+  });
+
   it("дисциплины вне редакции: строк меньше, скрытое названо фразой под таблицей (срез-54)", async () => {
     getCardMock.mockResolvedValueOnce({
       ...sampleCard,

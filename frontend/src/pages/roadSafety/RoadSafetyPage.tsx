@@ -1,6 +1,6 @@
 import { type ColumnDef } from "@tanstack/react-table";
 import { type ReactNode, useCallback, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 
 import {
   roadSafetyApi,
@@ -166,6 +166,17 @@ const WAYBILL_COLUMNS: ColumnDef<WaybillDto, unknown>[] = [
  * при просмотре списка.
  */
 type Section = "vehicles" | "drivers" | "waybills" | "accidents" | "violations";
+
+const SECTIONS: readonly Section[] = [
+  "vehicles",
+  "drivers",
+  "waybills",
+  "accidents",
+  "violations",
+];
+
+const isSection = (value: string | null): value is Section =>
+  value !== null && (SECTIONS as readonly string[]).includes(value);
 
 /**
  * Нарушения — 6 колонок (лимит UX-бюджета 7). Статья и место в подсказке:
@@ -365,20 +376,30 @@ const SECTION_STATS: Record<
 const RoadSafetyPage = () => {
   // Секции ПО ОДНОЙ (прецедент экранов ПБ и ПромБеза): парк и водительский
   // состав — разные задачи, и показывать обе таблицы сразу значит растить
-  // экран.
-  const [section, setSection] = useState<Section>("vehicles");
+  // экран. Секция живёт и в адресе (`?section=`): так на состав ведёт
+  // ссылка из карточки сотрудника (срез-67); руками — как раньше.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const sectionParam = searchParams.get("section");
+  const [section, setSection] = useState<Section>(
+    isSection(sectionParam) ? sectionParam : "vehicles",
+  );
+  // Экран умеет открываться НА ЧЕЛОВЕКЕ (`?person_id=`, прецедент стажировок
+  // среза-46): отбор уходит на сервер, а не режет загруженный список.
+  const personFilter = searchParams.get("person_id") ?? "";
 
   const { data, loading, error, reload } = useAsyncResource({
     loader: useCallback(
       async () => ({
         vehicles: await roadSafetyApi.listVehicles(),
-        drivers: await roadSafetyApi.listDrivers(),
+        drivers: await roadSafetyApi.listDrivers(
+          personFilter ? { person_id: personFilter } : {},
+        ),
         waybills: await roadSafetyApi.listWaybills(),
         accidents: await roadSafetyApi.listAccidents(),
         violations: await roadSafetyApi.listViolations(),
         readiness: await roadSafetyApi.readiness(),
       }),
-      [],
+      [personFilter],
     ),
     initialData: {
       vehicles: [] as VehicleDto[],
@@ -501,6 +522,26 @@ const RoadSafetyPage = () => {
 
   const { readiness } = data;
 
+  const selectSection = (next: Section) => {
+    setSection(next);
+    const params = new URLSearchParams(searchParams);
+    if (next === "vehicles") params.delete("section");
+    else params.set("section", next);
+    setSearchParams(params, { replace: true });
+  };
+
+  const clearPersonFilter = () => {
+    const params = new URLSearchParams(searchParams);
+    params.delete("person_id");
+    setSearchParams(params, { replace: true });
+  };
+  // Имя для плашки — из карточки водителя; если карточки у человека нет
+  // (список пуст), честно показываем id, а не выдумываем.
+  const personFilterName = personFilter
+    ? (data.drivers.find((driver) => driver.person_id === personFilter)
+        ?.person_name ?? personFilter)
+    : "";
+
   return (
     <div className="space-y-4">
       <RegistryPageHeader
@@ -523,7 +564,7 @@ const RoadSafetyPage = () => {
             key={key}
             size="sm"
             variant={section === key ? "secondary" : "outline"}
-            onClick={() => setSection(key)}
+            onClick={() => selectSection(key)}
           >
             {label}
           </Button>
@@ -693,10 +734,38 @@ const RoadSafetyPage = () => {
               а не платформа.
             </p>
           ) : null}
+          {personFilter ? (
+            <span
+              className="inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm"
+              data-testid="road-safety-person-filter"
+            >
+              Водитель: <span className="font-medium">{personFilterName}</span>
+              <Link
+                to={`/employees/${encodeURIComponent(personFilter)}`}
+                className="text-xs underline"
+              >
+                карточка
+              </Link>
+              <button
+                type="button"
+                className="text-xs text-muted-foreground underline"
+                onClick={clearPersonFilter}
+                aria-label="Показать всех водителей"
+              >
+                все
+              </button>
+            </span>
+          ) : null}
           {!loading && !error && drivers.total === 0 ? (
             <EmptyState
-              title="Водители не заведены"
-              description="Заведите карточки водителей: сотрудник из справочника людей, номер удостоверения, категории и дата начала стажа. Отстранение меняет допуск в карточке, а не удаляет её."
+              title={
+                personFilter ? "Карточки водителя нет" : "Водители не заведены"
+              }
+              description={
+                personFilter
+                  ? "У этого сотрудника нет карточки водителя. Заведите её: номер удостоверения, категории и дата начала стажа."
+                  : "Заведите карточки водителей: сотрудник из справочника людей, номер удостоверения, категории и дата начала стажа. Отстранение меняет допуск в карточке, а не удаляет её."
+              }
             />
           ) : null}
           {!loading && !error && drivers.total > 0 ? (
