@@ -669,6 +669,75 @@ async def test_attention_worker_sees_own_driver_license_only(db_session) -> None
 
 
 @pytest.mark.asyncio
+async def test_attention_orders_by_severity_then_due(db_session) -> None:
+    """Разд. 57.2: «всё в одном месте, с приоритизацией» (срез-70).
+
+    До среза лента шла «сначала все задачи, потом дисциплины»: просроченная
+    ЭПБ на ОПО (critical) стояла под открытой задачей без срока (medium), и
+    специалист начинал день не с того, что горит. Теперь порядок: тяжесть →
+    ближайший срок; без срока — в конец.
+    """
+
+    tenant = SimpleNamespace(id="tenant-1", slug="tenant-a", name="Tenant A", is_active=True)
+    access = _access("user-1", "admin", tenant.id, tenant.slug)
+    now = datetime.now(timezone.utc)
+    today = now.date()
+    await _grant_modules(db_session, tenant.id, ("industrial_safety",))
+    facility = HazardousFacility(
+        tenant_id=tenant.id, name="Котельная", register_number="А01-1", hazard_class="III"
+    )
+    db_session.add(facility)
+    await db_session.flush()
+    db_session.add_all(
+        [
+            # Задачи заводятся в «неправильном» порядке нарочно: без срока —
+            # первой, чтобы сортировка не выглядела случайным совпадением.
+            Task(
+                tenant_id=tenant.id,
+                title="Открытая задача без срока",
+                status=TaskStatus.OPEN,
+                priority=TaskPriority.MEDIUM,
+                assignee_id=access.user.id,
+            ),
+            Task(
+                tenant_id=tenant.id,
+                title="Задача на завтра",
+                status=TaskStatus.OPEN,
+                priority=TaskPriority.MEDIUM,
+                due_at=now + timedelta(days=1),
+                assignee_id=access.user.id,
+            ),
+            Task(
+                tenant_id=tenant.id,
+                title="Задача просрочена вчера",
+                status=TaskStatus.OPEN,
+                priority=TaskPriority.MEDIUM,
+                due_at=now - timedelta(days=1),
+                assignee_id=access.user.id,
+            ),
+            TechnicalDevice(
+                tenant_id=tenant.id,
+                facility_id=facility.id,
+                kind="boiler",
+                name="Котёл №1",
+                epb_valid_until=today - timedelta(days=10),
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    payload = await workspace_attention(tenant=tenant, session=db_session, access=access)
+
+    assert [item.severity for item in payload.items] == ["critical", "critical", "high", "medium"]
+    # Самое давнее просроченное — первым: ЭПБ (10 дней) выше задачи (1 день).
+    assert payload.items[0].item_type == "industrial_safety_epb"
+    assert payload.items[0].title == "ЭПБ: Котёл №1"
+    assert payload.items[1].title == "Задача просрочена вчера"
+    assert payload.items[2].title == "Задача на завтра"
+    assert payload.items[-1].title == "Открытая задача без срока"
+
+
+@pytest.mark.asyncio
 async def test_workspace_task_inbox_worker_sees_only_own_tasks(db_session) -> None:
     tenant = SimpleNamespace(id="tenant-1", slug="tenant-a", name="Tenant A", is_active=True)
     worker = _access("worker-1", "worker", tenant.id, tenant.slug)
