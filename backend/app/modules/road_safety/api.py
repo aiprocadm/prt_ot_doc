@@ -973,10 +973,15 @@ async def list_drivers(
     access: Access,
     status_filter: str | None = Query(default=None, alias="status"),
     category: str | None = Query(default=None),
+    person_id: str | None = Query(default=None, min_length=1, max_length=36),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ) -> DriverPage:
-    """Водительский состав: и допущенные, и отстранённые — история цела."""
+    """Водительский состав: и допущенные, и отстранённые — история цела.
+
+    ``person_id`` — открыть состав НА ЧЕЛОВЕКЕ (срез-67): так на него ведёт
+    строка «БДД» карточки сотрудника; отбор на сервере, а не на экране.
+    """
 
     TenantContextValidator.ensure_tenant_context(tenant)
     stmt = (
@@ -986,6 +991,8 @@ async def list_drivers(
     )
     if status_filter:
         stmt = stmt.where(Driver.status == status_filter)
+    if person_id:
+        stmt = stmt.where(Driver.person_id == person_id)
     stmt = stmt.order_by(Driver.license_number)
 
     if category:

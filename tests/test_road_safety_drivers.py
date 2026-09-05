@@ -346,6 +346,37 @@ class TestВодительскийСостав:
         assert body["total"] == 1
         assert body["items"][0]["person_name"].startswith("Автобусов")
 
+    async def test_отбор_по_человеку(
+        self, async_client, make_auth_headers, sessionmaker
+    ) -> None:
+        """Срез-67: строка «БДД» карточки сотрудника открывает состав НА НЁМ."""
+
+        headers = await make_auth_headers()
+        await _grant(sessionmaker)
+        bus = await _person(sessionmaker, last_name="Автобусов")
+        truck = await _person(sessionmaker, last_name="Грузовиков")
+        await _driver(
+            async_client, headers, bus, license_number="9900 666666", categories=["D"]
+        )
+        await _driver(
+            async_client,
+            headers,
+            truck,
+            license_number="9900 777777",
+            categories=["B", "C"],
+        )
+        response = await async_client.get(
+            f"{_API}/drivers", params={"person_id": truck}, headers=headers
+        )
+        body = response.json()
+        assert body["total"] == 1
+        assert body["items"][0]["person_id"] == truck
+        # Чужой/несуществующий человек — пусто, а не весь состав.
+        nobody = await async_client.get(
+            f"{_API}/drivers", params={"person_id": "no-such-person"}, headers=headers
+        )
+        assert nobody.json()["total"] == 0
+
 
 class TestСтаж:
     """Стаж СЧИТАЕТСЯ, а не хранится: у числа нет даты, на которую оно верно."""

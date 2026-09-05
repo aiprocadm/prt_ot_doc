@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -417,6 +417,58 @@ describe("RoadSafetyPage", () => {
     expect(
       screen.getByText(/ведутся в общем журнале инструктажей/i),
     ).toBeInTheDocument();
+  });
+
+  it("открывается на водителе по ссылке из карточки сотрудника (срез-67)", async () => {
+    listDriversMock.mockResolvedValue([populatedDrivers[0]]);
+    render(
+      <MemoryRouter
+        initialEntries={["/road-safety?section=drivers&person_id=p-1"]}
+      >
+        <RoadSafetyPage />
+      </MemoryRouter>,
+    );
+
+    // Секция из адреса — сразу «Водители», без клика; отбор — на сервере.
+    // Имя встречается дважды: в строке таблицы и на плашке отбора.
+    expect(
+      await screen.findByRole("cell", { name: "Шофёров Пётр Иванович" }),
+    ).toBeInTheDocument();
+    expect(listDriversMock).toHaveBeenCalledWith({ person_id: "p-1" });
+    // Плашка называет человека и ведёт обратно в карточку сотрудника.
+    const chip = screen.getByTestId("road-safety-person-filter");
+    expect(chip).toHaveTextContent("Водитель: Шофёров Пётр Иванович");
+    expect(
+      within(chip).getByRole("link", { name: "карточка" }),
+    ).toHaveAttribute("href", "/employees/p-1");
+
+    // «все» — снимает отбор: список перечитывается без person_id.
+    listDriversMock.mockResolvedValue(populatedDrivers);
+    await userEvent.click(
+      screen.getByRole("button", { name: "Показать всех водителей" }),
+    );
+    await waitFor(() => expect(listDriversMock).toHaveBeenLastCalledWith({}));
+    expect(
+      screen.queryByTestId("road-safety-person-filter"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("у сотрудника без карточки водителя — честная пустота, а не весь состав (срез-67)", async () => {
+    listDriversMock.mockResolvedValue([]);
+    render(
+      <MemoryRouter
+        initialEntries={["/road-safety?section=drivers&person_id=p-9"]}
+      >
+        <RoadSafetyPage />
+      </MemoryRouter>,
+    );
+
+    expect(
+      await screen.findByText("Карточки водителя нет"),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("road-safety-person-filter")).toHaveTextContent(
+      "p-9",
+    );
   });
 
   it("пустой состав водителей объясняет, что вносить", async () => {

@@ -918,11 +918,18 @@ const AuditTab = ({ card }: { card: EmployeeCardDto }) => {
  * положенное у человека действует» — по каждой дисциплине словаря, теми же
  * словами и цветами, что карточка площадки 360°. Стоит НАД вкладками:
  * ответ читают первым, а записи — когда ответ красный.
+ *
+ * Срез-67: строка «БДД» с водителем ведёт на его карточку в контуре
+ * (`/road-safety?section=drivers&person_id=`) — расшифровка называет срок
+ * удостоверения, а править его можно только там. Без карточки водителя
+ * (`required` = 0) ссылки нет: вести некуда.
  */
 const DisciplinesCard = ({
   section,
+  personId,
 }: {
   section: EmployeeDisciplinesSectionDto;
+  personId: string;
 }) => (
   <section data-ux-block>
     <Card>
@@ -960,7 +967,18 @@ const DisciplinesCard = ({
                     {lightLabel(row.light)}
                   </Badge>
                 </td>
-                <td className="py-2 text-muted-foreground">{row.reason}</td>
+                <td className="py-2 text-muted-foreground">
+                  {row.reason}
+                  {row.discipline === "road_safety" && row.required > 0 ? (
+                    <Link
+                      to={`/road-safety?section=drivers&person_id=${encodeURIComponent(personId)}`}
+                      className="ml-2 text-xs text-primary underline"
+                      data-testid="employee-discipline-driver-link"
+                    >
+                      карточка водителя
+                    </Link>
+                  ) : null}
+                </td>
               </tr>
             ))}
           </tbody>
@@ -1075,7 +1093,7 @@ export default function EmployeeCardPage() {
       ) : null}
 
       {!loading && !error && card ? (
-        <DisciplinesCard section={card.disciplines} />
+        <DisciplinesCard section={card.disciplines} personId={card.person_id} />
       ) : null}
 
       {!loading && !error && card ? (
