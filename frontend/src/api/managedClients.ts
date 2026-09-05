@@ -258,6 +258,12 @@ export interface ClientAuditReport {
   summary: string;
   payload: {
     actions?: string[];
+    /** Открытые происшествия клиента по коду дисциплины (срез-52). */
+    incidents?: {
+      total: number;
+      by_discipline: Record<string, number>;
+      unmarked: number;
+    };
     [key: string]: unknown;
   };
 }

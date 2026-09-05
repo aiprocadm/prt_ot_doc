@@ -77,6 +77,11 @@ const IncidentsPage = () => {
   const [disciplineFilter, setDisciplineFilter] = useState<string>(
     searchParams.get("discipline") ?? "",
   );
+  // Компания — тоже в адресе (?company_id=): карточка клиента у аутсорсера
+  // ведёт сюда «происшествия этого клиента по этой дисциплине» (срез-61).
+  const [companyFilter, setCompanyFilter] = useState<string>(
+    searchParams.get("company_id") ?? "",
+  );
   const { items: companies, list: listCompanies } = useCompaniesStore();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
@@ -102,7 +107,11 @@ const IncidentsPage = () => {
   });
 
   const load = useCallback(
-    async (status = statusFilter, discipline = disciplineFilter) => {
+    async (
+      status = statusFilter,
+      discipline = disciplineFilter,
+      company = companyFilter,
+    ) => {
       setLoading(true);
       setError(null);
       try {
@@ -111,6 +120,7 @@ const IncidentsPage = () => {
           status_filter: status || undefined,
           // фильтрует сервер, а не страница: пустое — ключ не уходит вовсе
           ...(discipline ? { discipline } : {}),
+          ...(company ? { company_id: company } : {}),
         });
         setItems(page.items);
       } catch (err) {
@@ -121,13 +131,13 @@ const IncidentsPage = () => {
         setLoading(false);
       }
     },
-    [statusFilter, disciplineFilter],
+    [statusFilter, disciplineFilter, companyFilter],
   );
 
   useEffect(() => {
-    void load(statusFilter, disciplineFilter);
+    void load(statusFilter, disciplineFilter, companyFilter);
     listCompanies({ page_size: 100 }).catch(() => undefined);
-  }, [listCompanies, load, statusFilter, disciplineFilter]);
+  }, [listCompanies, load, statusFilter, disciplineFilter, companyFilter]);
 
   const handleCreate = async () => {
     if (!form.title || !form.company_id) {
@@ -222,6 +232,33 @@ const IncidentsPage = () => {
                 {title}
               </option>
             ))}
+          </select>
+          <select
+            value={companyFilter}
+            onChange={(event) => {
+              const next = event.target.value;
+              setCompanyFilter(next);
+              const params = new URLSearchParams(searchParams);
+              if (next) params.set("company_id", next);
+              else params.delete("company_id");
+              setSearchParams(params, { replace: true });
+              void load(statusFilter, disciplineFilter, next);
+            }}
+            className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+            aria-label="Фильтр по компании"
+          >
+            <option value="">Все компании</option>
+            {companies.map((company) => (
+              <option key={company.id} value={company.id}>
+                {company.name}
+              </option>
+            ))}
+            {/* Компания из ссылки, которой нет в первой сотне справочника:
+                фильтр всё равно действует, и выбор не должен выглядеть пустым. */}
+            {companyFilter &&
+            !companies.some((company) => company.id === companyFilter) ? (
+              <option value={companyFilter}>Компания из ссылки</option>
+            ) : null}
           </select>
           <Button variant="outline" onClick={() => void load()}>
             Обновить

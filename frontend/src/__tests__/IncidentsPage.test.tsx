@@ -92,6 +92,7 @@ import { PERMISSIONS } from "@/permissions/permissions";
 import IncidentsPage from "@/pages/incidents/IncidentsPage";
 import { uxBudgetDelta } from "@/test-utils/uxBudget";
 import { useAuthStore } from "@/stores/auth";
+import { useCompaniesStore } from "@/stores/companies";
 
 const userWithIncidentCreate = {
   id: "user-incident-create",
@@ -115,6 +116,8 @@ describe("IncidentsPage", () => {
   beforeEach(() => {
     listMock.mockReset();
     createMock.mockReset();
+    // справочник компаний — свой в каждом тесте, а не хвост предыдущего
+    useCompaniesStore.setState({ items: [] as never });
     useAuthStore.setState({
       user: userWithIncidentCreate,
       loading: false,
@@ -338,6 +341,75 @@ describe("IncidentsPage", () => {
         discipline: "industrial_safety",
       });
     });
+  });
+
+  it("фильтр по компании — по ссылке с карточки клиента и из списка (срез-61)", async () => {
+    listMock.mockResolvedValue({ items: [mockIncident], total: 1 });
+    useCompaniesStore.setState({
+      items: [
+        { id: "c-1", name: "ООО Ромашка" },
+        { id: "c-2", name: "ООО Василёк" },
+      ] as never,
+    });
+    const user = userEvent.setup();
+
+    // ссылка с карточки клиента: компания и дисциплина уже в адресе —
+    // первый запрос ровно с ними, а не со всем реестром
+    render(
+      <MemoryRouter
+        initialEntries={["/incidents?company_id=c-1&discipline=road_safety"]}
+      >
+        <IncidentsPage />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(listMock).toHaveBeenCalledWith({
+        limit: 100,
+        discipline: "road_safety",
+        company_id: "c-1",
+      });
+    });
+    const select = screen.getByLabelText(
+      "Фильтр по компании",
+    ) as HTMLSelectElement;
+    expect(select.value).toBe("c-1");
+    expect(select.options[select.selectedIndex].text).toBe("ООО Ромашка");
+
+    // «Все компании» — ключ company_id не уходит вовсе
+    listMock.mockClear();
+    await user.selectOptions(select, "");
+    await waitFor(() => {
+      expect(listMock).toHaveBeenCalled();
+    });
+    for (const [params] of listMock.mock.calls) {
+      expect(params).not.toHaveProperty("company_id");
+    }
+  });
+
+  it("компания из ссылки, которой нет в справочнике, не выглядит пустым выбором (срез-61)", async () => {
+    listMock.mockResolvedValue({ items: [], total: 0 });
+    useCompaniesStore.setState({ items: [] as never });
+
+    render(
+      <MemoryRouter initialEntries={["/incidents?company_id=c-far"]}>
+        <IncidentsPage />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(listMock).toHaveBeenCalledWith({
+        limit: 100,
+        company_id: "c-far",
+      });
+    });
+    const select = screen.getByLabelText(
+      "Фильтр по компании",
+    ) as HTMLSelectElement;
+    expect(select.value).toBe("c-far");
+    expect(select.options[select.selectedIndex].text).toBe(
+      "Компания из ссылки",
+    );
   });
 
   it("shows disabled create action without create permission", async () => {

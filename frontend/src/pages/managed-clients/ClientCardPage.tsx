@@ -4,10 +4,12 @@ import { Link, useParams } from "react-router-dom";
 import {
   MANAGED_CLIENTS_DISABLED,
   managedClientsApi,
+  type ClientAuditReport,
   type ClientAuditReportPage,
   type ManagedClient,
   type ManagedClientMode,
 } from "@/api/managedClients";
+import { TRAINING_DISCIPLINE_TITLES } from "@/api/training";
 import { Input } from "@/components/ui/input";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
@@ -37,6 +39,36 @@ const CONTRACT_LABELS: Record<string, string> = {
   active: "Действует",
   suspended: "Приостановлен",
   terminated: "Расторгнут",
+};
+
+/**
+ * Ссылки «происшествия клиента по дисциплине» (срез-61). Отчёт называет
+ * число, реестр показывает сами происшествия — того же клиента (компании в
+ * контуре исполнителя) и той же дисциплины, какими их считал отчёт.
+ * Неразмеченные — весь реестр клиента: фильтра «без дисциплины» у реестра нет.
+ */
+const incidentLinks = (
+  report: ClientAuditReport,
+  companyId: string,
+): { key: string; label: string; to: string }[] => {
+  const incidents = report.payload.incidents;
+  if (!incidents || !incidents.total) return [];
+  const base = `/incidents?company_id=${encodeURIComponent(companyId)}`;
+  const links = Object.entries(incidents.by_discipline ?? {})
+    .filter(([, count]) => count > 0)
+    .map(([code, count]) => ({
+      key: code,
+      label: `${TRAINING_DISCIPLINE_TITLES[code] ?? code} — ${count}`,
+      to: `${base}&discipline=${encodeURIComponent(code)}`,
+    }));
+  if (incidents.unmarked > 0) {
+    links.push({
+      key: "unmarked",
+      label: `без разметки — ${incidents.unmarked}`,
+      to: base,
+    });
+  }
+  return links;
 };
 
 const asApiError = (err: unknown, fallback: string): ApiError =>
@@ -329,6 +361,28 @@ const ClientCardPage = () => {
                         <p className="text-sm text-muted-foreground">
                           {report.summary}
                         </p>
+                        {client?.company_id &&
+                        incidentLinks(report, client.company_id).length > 0 ? (
+                          <p
+                            className="flex flex-wrap gap-x-3 gap-y-1 text-sm"
+                            data-testid="incident-links"
+                          >
+                            <span className="text-muted-foreground">
+                              Открытые происшествия:
+                            </span>
+                            {incidentLinks(report, client.company_id).map(
+                              (link) => (
+                                <Link
+                                  key={link.key}
+                                  to={link.to}
+                                  className="underline-offset-4 hover:underline"
+                                >
+                                  {link.label}
+                                </Link>
+                              ),
+                            )}
+                          </p>
+                        ) : null}
                         <Button
                           variant="ghost"
                           size="sm"
