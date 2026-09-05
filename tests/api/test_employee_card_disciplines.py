@@ -17,7 +17,9 @@
 - (срез-84) строка «ПБ» — по противопожарным инструктажам и ПТМ человека,
   человек × вид по самой поздней дате действия: истёк — красный, действует —
   факт, но не зелёный; про средства защиты и тренировки площадки — ни слова;
-  у площадки, где он единственный, — тот же инструктаж в просрочке.
+  у площадки, где он единственный, — тот же инструктаж в просрочке;
+- (срез-85) вкладка инструктажей считает «просрочено» той же формулой:
+  перекрытая свежей запись помечена ``is_superseded`` и в счётчик не входит.
 """
 
 from __future__ import annotations
@@ -310,6 +312,82 @@ class TestEmployeeCardDisciplines:
         assert (theirs["light"], theirs["required"], theirs["lapsed"]) == ("red", 2, 1)
         # у площадки — ещё и факты объекта, у человека их нет
         assert "тренировок" in theirs["reason"] and "тренировок" not in row["reason"]
+
+    async def test_вкладка_инструктажей_считает_просрочку_тем_же_правилом_что_строка_пб(
+        self, async_client: AsyncClient, make_auth_headers, welder, sessionmaker
+    ) -> None:
+        """Срез-85: у вкладки и у светофора — одна формула (человек × вид).
+
+        Записи журнала во вкладке — все, у каждой свой факт ``is_expired``.
+        Но «просрочено: N» в шапке — это ВИДЫ, чья самая поздняя запись
+        истекла, а перекрытая свежей старая запись помечена ``is_superseded``:
+        иначе у любого давно работающего человека вкладка кричала бы
+        «просрочено», а строка ПБ рядом молчала бы.
+        """
+
+        tenant, person_id, _ = welder
+        headers = await make_auth_headers(RoleEnum.ADMIN)
+
+        async with sessionmaker() as session:
+            journal = BriefingJournal(
+                tenant_id=tenant.id, code="J-ALL", title="Журнал инструктажей", journal_type="all"
+            )
+            session.add(journal)
+            await session.flush()
+            entries = {}
+            for key, briefing_type, days_ago, valid_days in (
+                # ПТМ истёк — просрочка вида (красит ПБ)
+                ("ptm", "fire_ptm", 400, -35),
+                # повторный ПБ: старая перекрыта свежей — не просрочка
+                ("fire_old", "fire_repeat", 400, -220),
+                ("fire_new", "fire_repeat", 10, 170),
+                # повторный по ОТ истёк — просрочка вида, но не пожарная
+                ("ot_repeat", "repeat", 300, -120),
+                # первичный по ОТ действует
+                ("ot_primary", "primary", 5, 360),
+            ):
+                entry = BriefingEntry(
+                    tenant_id=tenant.id,
+                    briefing_journal_id=journal.id,
+                    person_id=person_id,
+                    briefing_type=briefing_type,
+                    briefing_date=NOW - timedelta(days=days_ago),
+                    valid_until=NOW + timedelta(days=valid_days),
+                    status="completed",
+                )
+                session.add(entry)
+                entries[key] = entry
+            await session.commit()
+            ids = {key: str(entry.id) for key, entry in entries.items()}
+
+        card = await _card(async_client, headers, person_id)
+        tab = card["briefings"]
+        by_id = {item["id"]: item for item in tab["items"]}
+
+        assert tab["count"] == 5
+        # три записи с истёкшим сроком, но просроченных ВИДОВ — два: ПТМ и повторный ОТ
+        assert sum(1 for item in tab["items"] if item["is_expired"]) == 3
+        assert tab["expired_count"] == 2
+        assert by_id[ids["fire_old"]]["is_expired"] and by_id[ids["fire_old"]]["is_superseded"]
+        assert by_id[ids["ptm"]]["is_expired"] and not by_id[ids["ptm"]]["is_superseded"]
+        assert (
+            by_id[ids["ot_repeat"]]["is_expired"] and not by_id[ids["ot_repeat"]]["is_superseded"]
+        )
+        assert not any(
+            by_id[ids[key]]["is_expired"] or by_id[ids[key]]["is_superseded"]
+            for key in ("fire_new", "ot_primary")
+        )
+        # строка ПБ — те же виды, только пожарные: просрочен один (ПТМ), действует один
+        row = _row(card["disciplines"], "fire_safety")
+        assert (row["light"], row["required"], row["lapsed"]) == ("red", 2, 1)
+        fire_expired_kinds = {
+            item["briefing_type"]
+            for item in tab["items"]
+            if item["is_expired"]
+            and not item["is_superseded"]
+            and item["briefing_type"].startswith("fire_")
+        }
+        assert len(fire_expired_kinds) == row["lapsed"]
 
     async def test_действующее_удостоверение_это_факт_а_не_зелёный(
         self, async_client: AsyncClient, make_auth_headers, welder, sessionmaker

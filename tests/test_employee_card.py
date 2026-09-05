@@ -426,10 +426,17 @@ class TestEmployeeCardService:
         ), "template join must hydrate readable names"
 
         assert card.briefings.count == 2
-        assert card.briefings.expired_count == 1
+        # срез-85: «просрочено» — по человеку × виду, как в строке ПБ светофора.
+        # Старый первичный перекрыт свежим — это история, а не нарушение.
+        assert card.briefings.expired_count == 0
         titles = {item.briefing_template_title for item in card.briefings.items}
         assert "Первичный инструктаж" in titles
-        assert any(item.is_expired for item in card.briefings.items)
+        by_id = {item.id: item for item in card.briefings.items}
+        old_entry = by_id[str(briefing_expired.id)]
+        assert old_entry.is_expired, "факт записи: срок этой записи прошёл"
+        assert old_entry.is_superseded, "и её перекрыла свежая того же вида"
+        current_entry = by_id[str(briefing_current.id)]
+        assert not current_entry.is_expired and not current_entry.is_superseded
 
         assert card.compliance_deadlines.count == 3
         assert card.compliance_deadlines.overdue_count == 1

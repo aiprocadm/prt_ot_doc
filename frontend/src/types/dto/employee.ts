@@ -272,11 +272,15 @@ export interface EmployeeBriefingItemDto {
   briefing_date: string;
   valid_until?: string | null;
   status: string;
+  /** срок ЭТОЙ записи прошёл (факт записи) */
   is_expired: boolean;
+  /** есть запись того же вида с более поздним сроком — история, не нарушение (срез-85) */
+  is_superseded: boolean;
 }
 
 export interface EmployeeBriefingsSectionDto {
   count: number;
+  /** видов, у которых самая поздняя запись истекла — как в строке ПБ светофора (срез-85) */
   expired_count: number;
   items: EmployeeBriefingItemDto[];
 }
