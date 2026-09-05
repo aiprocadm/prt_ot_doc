@@ -19,7 +19,9 @@
   обходе, потому что своего события у срока нет; бессрочное, отозванное и
   действующее событием не становятся;
 - (срез-78) просроченное назначение на обучение (срез-77) — второй источник
-  ядра по той же причине; сданное, проваленное, без срока и будущее молчат.
+  ядра по той же причине; сданное, проваленное, без срока и будущее молчат;
+- (срез-79) перезарядка и поверка средств ПБ (срез-79): два срока одной
+  единицы — два события с видом в ключе; списанное и без модуля ПБ молчат.
 """
 
 from __future__ import annotations
@@ -33,6 +35,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.disciplines import Discipline
 from app.models.civil_defense import CivilDefenseDrill
 from app.models.ecology import EcologyReportingDeadline
+from app.models.fire_safety import FireSafetyEquipment
 from app.models.master_data import Person
 from app.models.models import (
     Company,
@@ -183,7 +186,12 @@ async def test_просрочки_становятся_событиями_оди
 
     first = await _run(sessionmaker, tenant_id)
     assert first.emitted == 4, first  # права + техосмотр + ОСАГО + учение
-    assert first.skipped == (Discipline.INDUSTRIAL_SAFETY, Discipline.ECOLOGY)
+    # без модулей ПБ (срез-79), ПромБез и экологии их обход честно назван пропущенным
+    assert first.skipped == (
+        Discipline.FIRE_SAFETY,
+        Discipline.INDUSTRIAL_SAFETY,
+        Discipline.ECOLOGY,
+    )
     assert first.truncated == ()
 
     rows = await _events(sessionmaker, tenant_id)
@@ -438,6 +446,77 @@ async def test_просроченное_назначение_становитс�
     assert payload["days_overdue"] == 6
 
     assert (await _run(sessionmaker, tenant_id)).emitted == 0, "тот же день — ничего нового"
+
+
+async def test_сроки_средства_пб_становятся_событиями_по_виду_а_списанное_нет(
+    sessionmaker, data_factory
+):
+    """Срез-79: перезарядка и поверка — два события одной единицы, вид в ключе."""
+
+    tenant_id = await _tenant(sessionmaker, data_factory, modules=("fire_safety",))
+    async with sessionmaker() as session:
+        session.add_all(
+            [
+                FireSafetyEquipment(
+                    tenant_id=tenant_id,
+                    kind="extinguisher",
+                    label="ОП-4 №12",
+                    location="Склад №1",
+                    recharge_due=TODAY - timedelta(days=5),
+                    inspection_due=TODAY - timedelta(days=2),
+                ),
+                FireSafetyEquipment(
+                    tenant_id=tenant_id,
+                    kind="extinguisher",
+                    label="ОП-4 №99",
+                    status="decommissioned",
+                    recharge_due=TODAY - timedelta(days=5),
+                ),
+                FireSafetyEquipment(
+                    tenant_id=tenant_id,
+                    kind="alarm_system",
+                    label="АУПС корпус Б",
+                    inspection_due=TODAY + timedelta(days=20),
+                ),
+            ]
+        )
+        await session.commit()
+
+    outcome = await _run(sessionmaker, tenant_id)
+    assert outcome.emitted == 2, outcome
+    assert Discipline.FIRE_SAFETY not in outcome.skipped
+
+    rows = await _events(sessionmaker, tenant_id)
+    by_kind = {row.payload["kind"]: row for row in rows}
+    assert set(by_kind) == {"recharge", "inspection"}
+    assert by_kind["recharge"].payload["title"] == "Перезарядка: ОП-4 №12 (Склад №1)"
+    assert by_kind["recharge"].payload["days_overdue"] == 5
+    assert by_kind["inspection"].payload["days_overdue"] == 2
+    assert all(row.payload["discipline"] == "fire_safety" for row in rows)
+    assert ":recharge:" in by_kind["recharge"].idempotency_key
+    assert ":inspection:" in by_kind["inspection"].idempotency_key
+
+    assert (await _run(sessionmaker, tenant_id)).emitted == 0, "тот же день — ничего нового"
+
+
+async def test_без_модуля_пб_срок_средства_молчит(sessionmaker, data_factory):
+    """Срез-79: ПБ — модуль, не ядро; без выдачи обход честно пропускает дисциплину."""
+
+    tenant_id = await _tenant(sessionmaker, data_factory, modules=("civil_defense",))
+    async with sessionmaker() as session:
+        session.add(
+            FireSafetyEquipment(
+                tenant_id=tenant_id,
+                kind="extinguisher",
+                label="ОП-4 №12",
+                recharge_due=TODAY - timedelta(days=5),
+            )
+        )
+        await session.commit()
+
+    outcome = await _run(sessionmaker, tenant_id)
+    assert outcome.emitted == 0
+    assert Discipline.FIRE_SAFETY in outcome.skipped
 
 
 async def test_без_единого_модуля_обход_пуст(sessionmaker, data_factory):

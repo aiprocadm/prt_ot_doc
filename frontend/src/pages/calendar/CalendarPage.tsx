@@ -73,6 +73,8 @@ const SOURCE_LABELS: Record<CalendarSourceType, string> = {
   civil_defense_drill: "ГО и ЧС: учения",
   road_safety_vehicle: "БДД: документы ТС",
   road_safety_driver: "БДД: водительские удостоверения",
+  // Доп. №1 разд. 54.1 (срез-79).
+  fire_safety_equipment: "ПБ: средства защиты",
 };
 
 const DRILL_DOWN: Partial<Record<CalendarSourceType, string>> = {
@@ -92,6 +94,7 @@ const DRILL_DOWN: Partial<Record<CalendarSourceType, string>> = {
   civil_defense_drill: "/civil-defense",
   road_safety_vehicle: "/road-safety",
   road_safety_driver: "/road-safety",
+  fire_safety_equipment: "/fire-safety",
 };
 
 const SLA_BAND_LABELS: Record<CalendarSlaBand, string> = {

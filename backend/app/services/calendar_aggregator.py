@@ -42,6 +42,7 @@ from app.models.ecology import (
     EmissionNorm,
     WaterUsagePoint,
 )
+from app.models.fire_safety import FireSafetyEquipment
 from app.models.industrial_safety import TechnicalDevice
 from app.models.master_data import Person
 from app.models.models import (
@@ -123,6 +124,11 @@ ALL_SOURCES: tuple[str, ...] = (
     # Доп. №1 разд. 56.2 (срез-59): водительское удостоверение — поимённый
     # срок БДД, в отличие от документов машины
     "road_safety_driver",
+    # Доп. №1 разд. 54.1 / 57.2 (срез-79): перезарядка огнетушителей и
+    # поверка/ТО систем защиты. Модуль ПБ считал эти просрочки в своей сводке
+    # готовности к проверке МЧС, а общий календарь и Центр внимания молчали —
+    # строка «Пожарная безопасность» видела только инструктажи.
+    "fire_safety_equipment",
 )
 
 #: Сроки документов ТС: колонка → (код вида, подпись). Порядок — порядок
@@ -133,6 +139,14 @@ _VEHICLE_DUE_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("insurance_due", "insurance", "Полис ОСАГО"),
     ("license_due", "license", "Лицензия на перевозки"),
     ("tachograph_due", "tachograph", "Поверка тахографа"),
+)
+
+#: Сроки средств и систем ПБ: колонка → (код вида, подпись). Один источник на
+#: оба срока — как у документов ТС: для ответственного за ПБ это один вопрос
+#: «что по средствам защиты истекает», вид срока лежит в ``extra.kind``.
+_FIRE_EQUIPMENT_DUE_COLUMNS: tuple[tuple[str, str, str], ...] = (
+    ("recharge_due", "recharge", "Перезарядка"),
+    ("inspection_due", "inspection", "Поверка/ТО"),
 )
 
 _CLOSED_DEADLINE_STATUSES = frozenset({"closed", "completed", "cancelled"})
@@ -181,6 +195,8 @@ _SLA_THRESHOLDS: dict[str, tuple[int, int]] = {
     "road_safety_driver": (7, 30),
     "training_certificate": (7, 30),
     "training_enrollment": (3, 14),
+    # у модуля ПБ «скоро» = 30 дней (``_DUE_SOON_DAYS``) — та же полоса
+    "fire_safety_equipment": (7, 30),
 }
 
 
@@ -360,6 +376,22 @@ class CalendarAggregatorService:
             by_source.append(
                 CalendarSourceCount(
                     source_type="road_safety_vehicle", count=total, overdue_count=overdue
+                )
+            )
+
+        if "fire_safety_equipment" in sources:
+            collected, total, overdue = await self._build_fire_equipment(
+                from_at=from_at,
+                to_at=to_at,
+                site_id=site_id,
+                now=now,
+                include_fact=include_fact,
+                include_sla=include_sla,
+            )
+            items.extend(collected)
+            by_source.append(
+                CalendarSourceCount(
+                    source_type="fire_safety_equipment", count=total, overdue_count=overdue
                 )
             )
 
@@ -1644,6 +1676,112 @@ class CalendarAggregatorService:
         overdue = 0
         for attr, _kind, _label in _VEHICLE_DUE_COLUMNS:
             column = getattr(Vehicle, attr)
+            base = self._apply_window(_base(attr), column, from_at, to_at, as_date=True)
+            total += await self._count(base)
+            overdue += await self._count(base.where(column < today))
+        return items, total, overdue
+
+    async def _build_fire_equipment(
+        self,
+        *,
+        from_at: datetime | None,
+        to_at: datetime | None,
+        site_id: str | None,
+        now: datetime,
+        include_fact: bool = False,
+        include_sla: bool = False,
+    ) -> tuple[list[CalendarEventItem], int, int]:
+        """Сроки средств и систем ПБ: перезарядка и поверка/ТО (разд. 54.1, срез-79).
+
+        Один источник на оба срока, вид — в ``extra.kind`` (как у документов
+        ТС). Считаются ТОЛЬКО действующие единицы (``status == "active"``) —
+        как в сводке готовности модуля ПБ: у списанного огнетушителя
+        просроченная перезарядка это шум. Пустая дата значит «не применимо»
+        (у крана нет перезарядки) — это не срок и в календарь не попадает.
+        Срок двигает сама запись о выполненной работе (журнал ``fire_maintenance``),
+        поэтому «факт» здесь не отдаётся: выполненная работа уже перенесла срок.
+        """
+
+        today = now.date()
+        lo = from_at.date() if from_at is not None else None
+        hi = to_at.date() if to_at is not None else None
+
+        def _base(attr: str) -> Select[tuple[int]]:
+            column = getattr(FireSafetyEquipment, attr)
+            return self._scoped_count(FireSafetyEquipment, site_id=site_id).where(
+                FireSafetyEquipment.status == "active", column.is_not(None)
+            )
+
+        items: list[CalendarEventItem] = []
+        for attr, kind, label in _FIRE_EQUIPMENT_DUE_COLUMNS:
+            column = getattr(FireSafetyEquipment, attr)
+            stmt = (
+                select(FireSafetyEquipment)
+                .where(
+                    FireSafetyEquipment.tenant_id == self.tenant_id,
+                    FireSafetyEquipment.deleted_at.is_(None),
+                    FireSafetyEquipment.status == "active",
+                    column.is_not(None),
+                )
+                .order_by(column.asc())
+                .limit(self._limit)
+            )
+            if site_id:
+                stmt = stmt.where(FireSafetyEquipment.site_id == site_id)
+            if lo is not None:
+                stmt = stmt.where(column >= lo)
+            if hi is not None:
+                stmt = stmt.where(column <= hi)
+            for unit in (await self.db.execute(stmt)).scalars().all():
+                due = getattr(unit, attr)
+                anchor = _coerce_dt(due)
+                if anchor is None:
+                    continue
+                is_overdue = due < today
+                days_to_due = _days_to_due(anchor, now) if include_sla else None
+                title = f"{label}: {unit.label}"
+                if unit.location:
+                    title = f"{title} ({unit.location})"
+                items.append(
+                    CalendarEventItem(
+                        id=f"fire_safety_equipment:{unit.id}:{kind}",
+                        source_type="fire_safety_equipment",
+                        source_id=str(unit.id),
+                        title=title,
+                        starts_at=anchor,
+                        ends_at=None,
+                        status="overdue" if is_overdue else "valid",
+                        is_overdue=is_overdue,
+                        expected_at=anchor if include_fact else None,
+                        actual_at=None,
+                        variance_days=None,
+                        days_to_due=days_to_due,
+                        sla_band=(
+                            _sla_band(
+                                "fire_safety_equipment",
+                                days_to_due=days_to_due,
+                                is_overdue=is_overdue,
+                            )
+                            if include_sla
+                            else None
+                        ),
+                        site_id=str(unit.site_id) if unit.site_id else None,
+                        extra={
+                            "kind": kind,
+                            "equipment_kind": unit.kind,
+                            "label": unit.label,
+                            "location": unit.location,
+                            "due_on": due.isoformat(),
+                        },
+                    )
+                )
+        items.sort(key=lambda item: item.starts_at)
+        items = items[: self._limit]
+
+        total = 0
+        overdue = 0
+        for attr, _kind, _label in _FIRE_EQUIPMENT_DUE_COLUMNS:
+            column = getattr(FireSafetyEquipment, attr)
             base = self._apply_window(_base(attr), column, from_at, to_at, as_date=True)
             total += await self._count(base)
             overdue += await self._count(base.where(column < today))
