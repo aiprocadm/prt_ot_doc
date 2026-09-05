@@ -12,7 +12,9 @@
 - дисциплина без модуля молчит: у арендатора без «ГО и ЧС» просроченное
   учение событием не становится, и это названо в итоге;
 - окно — как у Центра внимания: полугодовой давности просрочка — архив;
-- потолок обхода назван, а не проглочен.
+- потолок обхода назван, а не проглочен;
+- (срез-72) срок отчётности или платежа эколога (срез-71) — событие с видом
+  в ключе; исполненный срок событием не становится.
 """
 
 from __future__ import annotations
@@ -25,6 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.disciplines import Discipline
 from app.models.civil_defense import CivilDefenseDrill
+from app.models.ecology import EcologyReportingDeadline
 from app.models.master_data import Person
 from app.models.models import Company, Outbox
 from app.models.road_safety import Driver, Vehicle
@@ -239,6 +242,55 @@ async def test_дисциплина_без_модуля_молчит_и_это_�
     outcome = await _run(sessionmaker, tenant_id)
     assert outcome.emitted == 1
     assert Discipline.CIVIL_DEFENSE not in outcome.skipped
+
+
+async def test_срок_отчётности_эколога_становится_событием_а_исполненный_нет(
+    sessionmaker, data_factory
+):
+    """Срез-72: 2-ТП и платежи (срез-71) — тот же обход, без второй формулы."""
+
+    tenant_id = await _tenant(sessionmaker, data_factory, modules=("ecology",))
+    async with sessionmaker() as session:
+        session.add_all(
+            [
+                EcologyReportingDeadline(
+                    tenant_id=tenant_id,
+                    kind="report",
+                    title="2-ТП (воздух)",
+                    due_on=TODAY - timedelta(days=6),
+                ),
+                EcologyReportingDeadline(
+                    tenant_id=tenant_id,
+                    kind="payment",
+                    title="Плата за НВОС, I квартал",
+                    due_on=TODAY - timedelta(days=6),
+                    done_on=TODAY - timedelta(days=7),
+                ),
+                EcologyReportingDeadline(
+                    tenant_id=tenant_id,
+                    kind="payment",
+                    title="Плата за НВОС, II квартал",
+                    due_on=TODAY + timedelta(days=20),
+                ),
+            ]
+        )
+        await session.commit()
+
+    outcome = await _run(sessionmaker, tenant_id)
+    assert outcome.emitted == 1, outcome
+
+    rows = await _events(sessionmaker, tenant_id)
+    assert len(rows) == 1
+    key, payload = rows[0].idempotency_key, rows[0].payload
+    assert ":ecology_report:" in key and ":report:" in key, key
+    assert key.endswith((TODAY - timedelta(days=6)).isoformat())
+    assert payload["discipline"] == "ecology"
+    assert payload["source_type"] == "ecology_report"
+    assert payload["kind"] == "report"
+    assert payload["title"] == "Отчётность: 2-ТП (воздух)"
+    assert payload["days_overdue"] == 6
+
+    assert (await _run(sessionmaker, tenant_id)).emitted == 0, "тот же день — ничего нового"
 
 
 async def test_без_единого_модуля_обход_пуст(sessionmaker, data_factory):

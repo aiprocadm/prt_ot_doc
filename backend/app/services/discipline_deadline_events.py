@@ -69,6 +69,10 @@ __all__ = [
 DEADLINE_EVENT_SOURCES: tuple[str, ...] = (
     "ecology_permit",
     "ecology_measurement",
+    # срез-72: срок 2-ТП / декларации / платежа, внесённый экологом (срез-71).
+    # Исполненный срок календарь не отдаёт, поэтому событие получает только
+    # несданное; вид (report / payment) уходит в ключ и payload.
+    "ecology_report",
     "industrial_safety_epb",
     "civil_defense_drill",
     "road_safety_vehicle",
