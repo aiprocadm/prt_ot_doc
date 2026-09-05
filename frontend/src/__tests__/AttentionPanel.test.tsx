@@ -56,6 +56,14 @@ describe("AttentionPanel", () => {
     expect(
       screen.getByRole("link", { name: "Открыть рабочий экран" }),
     ).toHaveAttribute("href", "/persons");
+    // Срез-73: обязательства — это контрольные сроки, их экран — календарь,
+    // а не список задач.
+    expect(
+      screen.getByRole("link", { name: /1 просроченных обязательств/ }),
+    ).toHaveAttribute(
+      "href",
+      "/calendar?sources=compliance_deadline&include_sla=1&sla_bands=overdue",
+    );
   });
 
   it("uses explicit CTA for employees_missing_contacts → /persons", async () => {

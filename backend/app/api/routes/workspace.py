@@ -5,7 +5,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
@@ -37,6 +37,7 @@ from app.models.models import (
 )
 from app.models.obligations import Task, TaskStatus
 from app.schemas.calendar import CalendarEventItem
+from app.services.calendar_aggregator import overdue_compliance_deadline_where
 from app.services.discipline_applicability import collect_applicability, describe_hidden
 from app.services.discipline_attention import attention_events, overdue_by_discipline
 from app.services.discipline_incidents import open_incidents_where
@@ -485,10 +486,8 @@ async def workspace_attention(
                 .select_from(ComplianceDeadline)
                 .where(
                     ComplianceDeadline.tenant_id == tenant.id,
-                    or_(
-                        ComplianceDeadline.status == "overdue",
-                        and_(ComplianceDeadline.status == "due", ComplianceDeadline.due_at < now),
-                    ),
+                    # Формула одна с календарём (срез-73): по времени, а не по статусу.
+                    overdue_compliance_deadline_where(now),
                 )
             )
         ).scalar_one()
@@ -894,10 +893,8 @@ async def role_workspace_summary(
                 .select_from(ComplianceDeadline)
                 .where(
                     ComplianceDeadline.tenant_id == tenant.id,
-                    or_(
-                        ComplianceDeadline.status == "overdue",
-                        and_(ComplianceDeadline.status == "due", ComplianceDeadline.due_at < now),
-                    ),
+                    # Формула одна с календарём (срез-73): по времени, а не по статусу.
+                    overdue_compliance_deadline_where(now),
                 )
             )
         ).scalar_one()
