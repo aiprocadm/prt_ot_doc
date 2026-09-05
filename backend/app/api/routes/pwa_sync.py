@@ -28,6 +28,7 @@ from app.models.models import (
     TrainingEnrollment,
 )
 from app.modules.pwa_sync.services import OfflineSyncService
+from app.services.discipline_training import ACTIVE_ENROLLMENT_STATUSES
 from app.services.person_link import resolve_person_id
 
 router = APIRouter(prefix="/pwa", tags=["pwa"])
@@ -576,7 +577,8 @@ async def bootstrap(
                         TrainingEnrollment.tenant_id == tenant.id,
                         TrainingEnrollment.person_id == person_id,
                         TrainingEnrollment.deleted_at.is_(None),
-                        TrainingEnrollment.status.in_(["assigned", "in_progress"]),
+                        # Словарь «живых» статусов один с календарём (срез-77).
+                        TrainingEnrollment.status.in_(list(ACTIVE_ENROLLMENT_STATUSES)),
                     )
                 )
             )

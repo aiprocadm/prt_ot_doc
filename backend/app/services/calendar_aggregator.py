@@ -59,6 +59,7 @@ from app.models.models import (
     PPEIssueStatus,
     TrainingCertificate,
     TrainingCourse,
+    TrainingEnrollment,
     TrainingProgram,
     TrainingSession,
     TrainingSessionStatus,
@@ -68,6 +69,10 @@ from app.schemas.calendar import (
     CalendarEventItem,
     CalendarEventsResponse,
     CalendarSourceCount,
+)
+from app.services.discipline_training import (
+    overdue_training_enrollment_where,
+    pending_training_enrollment_where,
 )
 
 __all__ = [
@@ -90,6 +95,11 @@ ALL_SOURCES: tuple[str, ...] = (
     # ``training_session`` — это занятия, ``compliance_deadline`` — снимок,
     # который делает только ручной пересчёт. Источник поимённый.
     "training_certificate",
+    # Срез-77: срок назначения обучения (``TrainingEnrollment.due_at``, контур
+    # обучение-next). Блокер готовности и светофор дисциплины считали его
+    # просрочку, а календарь и Центр внимания — нет: ``training_session`` читает
+    # старую модель занятий. Источник поимённый, формула — ``discipline_training``.
+    "training_enrollment",
     "inspection",
     "compliance_deadline",
     "briefing_entry",
@@ -170,6 +180,7 @@ _SLA_THRESHOLDS: dict[str, tuple[int, int]] = {
     "road_safety_vehicle": (7, 30),
     "road_safety_driver": (7, 30),
     "training_certificate": (7, 30),
+    "training_enrollment": (3, 14),
 }
 
 
@@ -381,6 +392,22 @@ class CalendarAggregatorService:
             by_source.append(
                 CalendarSourceCount(
                     source_type="training_certificate", count=total, overdue_count=overdue
+                )
+            )
+
+        if "training_enrollment" in sources:
+            collected, total, overdue = await self._build_training_enrollments(
+                from_at=from_at,
+                to_at=to_at,
+                person_id=person_id,
+                now=now,
+                include_fact=include_fact,
+                include_sla=include_sla,
+            )
+            items.extend(collected)
+            by_source.append(
+                CalendarSourceCount(
+                    source_type="training_enrollment", count=total, overdue_count=overdue
                 )
             )
 
@@ -749,6 +776,120 @@ class CalendarAggregatorService:
         )
         total = await self._count(base_count)
         overdue = await self._count(base_count.where(TrainingCertificate.valid_until < today))
+        return items, total, overdue
+
+    async def _build_training_enrollments(
+        self,
+        *,
+        from_at: datetime | None,
+        to_at: datetime | None,
+        person_id: str | None,
+        now: datetime,
+        include_fact: bool = False,
+        include_sla: bool = False,
+    ) -> tuple[list[CalendarEventItem], int, int]:
+        """Сроки назначений обучения — поимённый источник обучения (срез-77).
+
+        Считаются ТОЛЬКО живые назначения со сроком
+        (``pending_training_enrollment_where``): сданное или проваленное — итог
+        получен, срок больше не давит; без срока — не срок. Просрочка —
+        ``overdue_training_enrollment_where``: та же формула, что у блокера
+        готовности, светофора дисциплины и сервисного центра. В заголовке —
+        фамилия и имя: задача по назначению адресована человеку.
+        """
+
+        stmt = (
+            select(TrainingEnrollment, TrainingProgram.title, Person.last_name, Person.first_name)
+            .outerjoin(
+                TrainingProgram, TrainingProgram.id == TrainingEnrollment.training_program_id
+            )
+            .outerjoin(Person, Person.id == TrainingEnrollment.person_id)
+            .where(*pending_training_enrollment_where(self.tenant_id))
+            .order_by(TrainingEnrollment.due_at.asc(), TrainingEnrollment.assigned_at.asc())
+            .limit(self._limit)
+        )
+        if person_id:
+            stmt = stmt.where(TrainingEnrollment.person_id == person_id)
+        if from_at is not None:
+            stmt = stmt.where(TrainingEnrollment.due_at >= from_at)
+        if to_at is not None:
+            stmt = stmt.where(TrainingEnrollment.due_at <= to_at)
+
+        items: list[CalendarEventItem] = []
+        for enrollment, program_title, last_name, first_name in (await self.db.execute(stmt)).all():
+            anchor = _coerce_dt(enrollment.due_at)
+            if anchor is None:
+                continue
+            is_overdue = anchor < now
+            days_to_due = _days_to_due(anchor, now) if include_sla else None
+            person_name = " ".join(part for part in (last_name, first_name) if part)
+            title = f"Назначение: {program_title or 'без программы'}"
+            if person_name:
+                title = f"{title} — {person_name}"
+            items.append(
+                CalendarEventItem(
+                    id=f"training_enrollment:{enrollment.id}",
+                    source_type="training_enrollment",
+                    source_id=str(enrollment.id),
+                    title=title,
+                    starts_at=anchor,
+                    ends_at=None,
+                    status="overdue" if is_overdue else str(enrollment.status),
+                    is_overdue=is_overdue,
+                    person_id=str(enrollment.person_id) if enrollment.person_id else None,
+                    site_id=None,
+                    expected_at=anchor if include_fact else None,
+                    actual_at=_coerce_dt(enrollment.started_at) if include_fact else None,
+                    variance_days=None,
+                    days_to_due=days_to_due,
+                    sla_band=(
+                        _sla_band(
+                            "training_enrollment", days_to_due=days_to_due, is_overdue=is_overdue
+                        )
+                        if include_sla
+                        else None
+                    ),
+                    extra={
+                        "status": str(enrollment.status),
+                        "program_id": (
+                            str(enrollment.training_program_id)
+                            if enrollment.training_program_id
+                            else None
+                        ),
+                        "program_title": program_title,
+                        "person_name": person_name or None,
+                        "assigned_at": (
+                            enrollment.assigned_at.isoformat() if enrollment.assigned_at else None
+                        ),
+                        "due_at": anchor.isoformat(),
+                        "progress_percent": (
+                            float(enrollment.progress_percent)
+                            if enrollment.progress_percent is not None
+                            else None
+                        ),
+                    },
+                )
+            )
+
+        base_count = self._apply_window(
+            self._scoped_count(TrainingEnrollment, person_id=person_id).where(
+                *pending_training_enrollment_where(self.tenant_id)
+            ),
+            TrainingEnrollment.due_at,
+            from_at,
+            to_at,
+        )
+        total = await self._count(base_count)
+        overdue = await self._count(
+            self._apply_window(
+                self._scoped_count(TrainingEnrollment, person_id=person_id).where(
+                    *overdue_training_enrollment_where(self.tenant_id, now)
+                ),
+                TrainingEnrollment.due_at,
+                from_at,
+                to_at,
+            )
+        )
         return items, total, overdue
 
     async def _build_medicals(

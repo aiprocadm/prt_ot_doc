@@ -43,11 +43,11 @@ from app.models.medical import MedicalExam, MedicalNorm
 from app.models.ppe import PPEIssue, PPENorm
 from app.models.road_safety import Driver
 from app.models.training import TrainingEnrollment
+from app.services.discipline_training import overdue_training_enrollment_where
 
 __all__ = ["DisciplineNumbers", "collect_people_numbers"]
 
 #: Статусы обучения, у которых бывает срок (как в «Центре внимания»).
-_ACTIVE_TRAINING_STATUSES = ("assigned", "in_progress")
 
 
 @dataclass(frozen=True)
@@ -247,18 +247,15 @@ async def collect_people_numbers(
         ):
             issues_by_person[str(issue.person_id)].append(issue)
 
+    # Формула просрочки одна с календарём и Центром внимания (срез-77).
     training_overdue = int(
         (
             await session.execute(
                 select(func.count())
                 .select_from(TrainingEnrollment)
                 .where(
-                    TrainingEnrollment.tenant_id == tenant_id,
+                    *overdue_training_enrollment_where(tenant_id, now),
                     TrainingEnrollment.person_id.in_(person_ids),
-                    TrainingEnrollment.deleted_at.is_(None),
-                    TrainingEnrollment.status.in_(_ACTIVE_TRAINING_STATUSES),
-                    TrainingEnrollment.due_at.is_not(None),
-                    TrainingEnrollment.due_at < now,
                 )
             )
         ).scalar_one()
