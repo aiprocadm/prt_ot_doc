@@ -53,6 +53,13 @@
 старая запись, перекрытая свежим повторным инструктажем, — не нарушение.
 Сколько людям ПОЛОЖЕНО инструктажей, платформа не судит — поэтому и с
 действующими инструктажами ПБ не зелёная, а «не измеряется» с фактом.
+
+**7. ПБ у одного человека — только его инструктажи (срез-84).** Карточка
+сотрудника считает строку ПБ той же формулой, но без объектов: средства
+защиты, тренировки и документы — сроки площадки, у человека их нет, и
+говорить «проведённых тренировок нет» про сварщика было бы ложью. Без
+объектов и причина другая (``FIRE_SAFETY_PERSON_REASON``): не «эталон по
+объекту не ведётся», а «сколько инструктажей человеку положено, не судится».
 """
 
 from __future__ import annotations
@@ -70,6 +77,7 @@ from app.core.disciplines import (
 __all__ = [
     "DisciplineCounts",
     "DisciplineStatus",
+    "FIRE_SAFETY_PERSON_REASON",
     "FireSafetyNumbers",
     "RoadSafetyNumbers",
     "TrafficLight",
@@ -254,6 +262,14 @@ def road_safety_status(numbers: RoadSafetyNumbers) -> DisciplineStatus:
     )
 
 
+#: Причина «не измеряется» для ПБ ОДНОГО человека (срез-84, решение 7):
+#: объектов у него нет, а сколько инструктажей положено — эталона нет.
+FIRE_SAFETY_PERSON_REASON: str = (
+    "Сколько противопожарных инструктажей и ПТМ человеку положено, "
+    "платформа не судит: сравнивать не с чем"
+)
+
+
 @dataclass(frozen=True)
 class FireSafetyNumbers:
     """Сроки пожарной безопасности ОДНОГО объекта — факт ПБ (срез-82).
@@ -297,6 +313,10 @@ class FireSafetyNumbers:
     briefings_due_soon: int = 0
     #: действуют дольше горизонта — факт, цвет не трогает
     briefings_valid: int = 0
+    #: считались ли объекты (средства, тренировки, документы). ``False`` —
+    #: только инструктажи людей (карточка сотрудника, срез-84): фактов об
+    #: объекте нет, и «тренировок нет» сказать не о чем
+    objects_counted: bool = True
 
     @property
     def overdue(self) -> int:
@@ -351,7 +371,7 @@ def _fire_safety_facts(numbers: FireSafetyNumbers) -> list[str]:
             else ""
         )
         facts.append(f"последняя тренировка {when}{ago}")
-    else:
+    elif numbers.objects_counted:
         facts.append("проведённых тренировок нет")
     if numbers.planned_drills:
         facts.append(f"тренировок назначено: {numbers.planned_drills}")
@@ -368,7 +388,11 @@ def fire_safety_status(numbers: FireSafetyNumbers) -> DisciplineStatus:
     сроках — «не измеряется» с фактом: см. решение 5 в докстринге модуля.
     """
 
-    base = UNMEASURED_DISCIPLINES[Discipline.FIRE_SAFETY]
+    base = (
+        UNMEASURED_DISCIPLINES[Discipline.FIRE_SAFETY]
+        if numbers.objects_counted
+        else FIRE_SAFETY_PERSON_REASON
+    )
     title = DISCIPLINE_TITLES[Discipline.FIRE_SAFETY]
     if not numbers.has_objects:
         return DisciplineStatus(
@@ -383,6 +407,8 @@ def fire_safety_status(numbers: FireSafetyNumbers) -> DisciplineStatus:
         expiring=numbers.expiring,
     )
     facts = "; ".join(_fire_safety_facts(numbers))
+    # у человека без действующих инструктажей фактов нет — хвост пустой
+    tail = f"; {facts}" if facts else ""
     if numbers.overdue > 0:
         parts = _named_amounts(
             ("перезарядка средств защиты", numbers.overdue_recharge),
@@ -395,7 +421,7 @@ def fire_safety_status(numbers: FireSafetyNumbers) -> DisciplineStatus:
             discipline=Discipline.FIRE_SAFETY,
             title=title,
             light=TrafficLight.RED,
-            reason=f"Просрочено по ПБ — {parts}; {facts}",
+            reason=f"Просрочено по ПБ — {parts}{tail}",
             counts=counts,
         )
     if numbers.expiring > 0:
@@ -407,7 +433,16 @@ def fire_safety_status(numbers: FireSafetyNumbers) -> DisciplineStatus:
             discipline=Discipline.FIRE_SAFETY,
             title=title,
             light=TrafficLight.YELLOW,
-            reason=f"Истекает по ПБ в ближайшие {numbers.due_soon_days} дн. — {parts}; {facts}",
+            reason=f"Истекает по ПБ в ближайшие {numbers.due_soon_days} дн. — {parts}{tail}",
+            counts=counts,
+        )
+    if not numbers.objects_counted:
+        # у человека объектов нет — только его инструктажи, и они действуют
+        return DisciplineStatus(
+            discipline=Discipline.FIRE_SAFETY,
+            title=title,
+            light=TrafficLight.NOT_MEASURED,
+            reason=f"Противопожарных инструктажей действует: {numbers.briefings_valid}. {base}",
             counts=counts,
         )
     return DisciplineStatus(

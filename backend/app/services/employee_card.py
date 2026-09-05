@@ -33,7 +33,13 @@ Implementation notes
 * **«эталон не задан» — про должность человека.** Общая расшифровка говорит
   «у должностей клиента нет норм» — на карточке одного человека это либо
   «должность не указана», либо «у должности нет норм»; специалист по этим
-  словам делает разное (заполнить карточку / завести норму).
+  словам делает разное (заполнить карточку / завести норму);
+* **ПБ — по его инструктажам, без объектов (срез-84).** Противопожарные
+  инструктажи и ПТМ — поимённый срок, и считаются той же формулой, что у
+  площадки и сводки модуля (``services/discipline_fire_safety``, человек ×
+  вид по самой поздней дате действия). Средства защиты, тренировки и
+  документы — сроки площадки, у человека их нет: строка не говорит про них
+  ни слова (``objects_counted=False``).
 """
 
 from __future__ import annotations
@@ -117,6 +123,7 @@ from app.services.discipline_applicability import (
     collect_applicability,
     only_applicable,
 )
+from app.services.discipline_fire_safety import collect_fire_briefing_numbers
 from app.services.discipline_numbers import collect_people_numbers
 
 __all__ = ["EmployeeCardService", "MAX_ITEMS_PER_SECTION", "TERMINATED_REASON"]
@@ -334,12 +341,16 @@ class EmployeeCardService:
             return _disciplines_section(rows, applicability, note=TERMINATED_REASON)
 
         numbers = await collect_people_numbers(self.db, tenant_id=self.tenant_id, people=[person])
+        fire_safety = await collect_fire_briefing_numbers(
+            self.db, tenant_id=self.tenant_id, person_ids=[str(person.id)]
+        )
         rows = only_applicable(
             build_discipline_statuses(
                 medical=numbers.medical,
                 ppe=numbers.ppe,
                 training_overdue=numbers.training_overdue,
                 road_safety=numbers.road_safety,
+                fire_safety=fire_safety,
             ),
             applicability,
         )

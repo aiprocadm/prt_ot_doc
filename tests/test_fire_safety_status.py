@@ -28,6 +28,7 @@ from datetime import date
 import pytest
 
 from app.core.discipline_status import (
+    FIRE_SAFETY_PERSON_REASON,
     DisciplineCounts,
     FireSafetyNumbers,
     TrafficLight,
@@ -179,6 +180,50 @@ class TestЦвет:
         )
         assert numbers.overdue == 15
         assert FireSafetyNumbers(due_soon=1, briefings_due_soon=2).expiring == 3
+
+
+class TestОдинЧеловек:
+    """Срез-84 (решение 7): у человека объектов нет — только его инструктажи."""
+
+    def test_без_инструктажей_причина_про_человека_а_не_про_объект(self) -> None:
+        row = fire_safety_status(FireSafetyNumbers(objects_counted=False))
+        assert row.light is TrafficLight.NOT_MEASURED
+        assert row.reason == FIRE_SAFETY_PERSON_REASON
+        assert "объект" not in row.reason
+
+    def test_действующие_инструктажи_факт_без_слова_о_тренировках(self) -> None:
+        row = fire_safety_status(FireSafetyNumbers(briefings_valid=2, objects_counted=False))
+        assert row.light is TrafficLight.NOT_MEASURED
+        assert row.reason == (
+            f"Противопожарных инструктажей действует: 2. {FIRE_SAFETY_PERSON_REASON}"
+        )
+        assert row.counts == DisciplineCounts(required=2)
+
+    def test_истёкший_инструктаж_красный_без_слова_о_тренировках(self) -> None:
+        row = fire_safety_status(
+            FireSafetyNumbers(overdue_briefings=1, briefings_valid=1, objects_counted=False)
+        )
+        assert row.light is TrafficLight.RED
+        assert row.reason == (
+            "Просрочено по ПБ — противопожарные инструктажи: 1; "
+            "противопожарных инструктажей действует: 1"
+        )
+        assert row.counts == DisciplineCounts(required=2, lapsed=1)
+
+    def test_истекающий_инструктаж_жёлтый(self) -> None:
+        row = fire_safety_status(FireSafetyNumbers(briefings_due_soon=1, objects_counted=False))
+        assert row.light is TrafficLight.YELLOW
+        assert row.reason == "Истекает по ПБ в ближайшие 30 дн. — противопожарные инструктажи: 1"
+
+    @pytest.mark.parametrize(
+        "numbers",
+        [
+            FireSafetyNumbers(objects_counted=False),
+            FireSafetyNumbers(briefings_valid=9, objects_counted=False),
+        ],
+    )
+    def test_у_человека_пб_тоже_не_зелёная(self, numbers: FireSafetyNumbers) -> None:
+        assert fire_safety_status(numbers).light is not TrafficLight.GREEN
 
 
 class TestВСветофоре:

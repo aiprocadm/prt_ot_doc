@@ -13,7 +13,11 @@
   зелёный итог, а не «неизвестно»;
 - (срез-64) у допущенного водителя строка «БДД» считается по удостоверению:
   истекло — красный, действует — факт с датой, но не зелёный; у площадки те
-  же числа; не водитель — прежняя причина словаря.
+  же числа; не водитель — прежняя причина словаря;
+- (срез-84) строка «ПБ» — по противопожарным инструктажам и ПТМ человека,
+  человек × вид по самой поздней дате действия: истёк — красный, действует —
+  факт, но не зелёный; про средства защиты и тренировки площадки — ни слова;
+  у площадки, где он единственный, — тот же инструктаж в просрочке.
 """
 
 from __future__ import annotations
@@ -25,6 +29,7 @@ from httpx import AsyncClient
 from sqlalchemy import select
 
 from app.core.disciplines import DISCIPLINE_TITLES, Discipline
+from app.models.briefings import BriefingEntry, BriefingJournal
 from app.models.master_data import EmploymentStatus, Person, Site, Workplace
 from app.models.medical import MedicalExam, MedicalExamKind, MedicalNorm
 from app.models.models import Position, PPEIssue, PPEItem, PPENorm, RoleEnum
@@ -249,6 +254,62 @@ class TestEmployeeCardDisciplines:
         assert row["required"] == 1 and row["lapsed"] == 1
         theirs = next(r for r in site["disciplines"] if r["discipline"] == "road_safety")
         assert (theirs["light"], theirs["required"], theirs["lapsed"]) == ("red", 1, 1)
+
+    async def test_истёкший_птм_красит_пб_человека_и_площадка_считает_так_же(
+        self, async_client: AsyncClient, make_auth_headers, welder, sessionmaker
+    ) -> None:
+        """Срез-84: ПБ на карточке человека — его инструктажи, без объектов."""
+
+        from app.core.discipline_status import FIRE_SAFETY_PERSON_REASON
+
+        tenant, person_id, site_id = welder
+        headers = await make_auth_headers(RoleEnum.ADMIN)
+
+        before = _row((await _card(async_client, headers, person_id))["disciplines"], "fire_safety")
+        assert before["light"] == "not_measured"
+        assert before["reason"] == FIRE_SAFETY_PERSON_REASON
+
+        async with sessionmaker() as session:
+            journal = BriefingJournal(
+                tenant_id=tenant.id, code="J-FIRE", title="Журнал ПБ", journal_type="fire"
+            )
+            session.add(journal)
+            await session.flush()
+            for briefing_type, days_ago, valid_days in (
+                # ПТМ истёк — просрочка
+                ("fire_ptm", 400, -35),
+                # повторный: старая запись перекрыта свежей — действует
+                ("fire_repeat", 400, -220),
+                ("fire_repeat", 10, 170),
+            ):
+                session.add(
+                    BriefingEntry(
+                        tenant_id=tenant.id,
+                        briefing_journal_id=journal.id,
+                        person_id=person_id,
+                        briefing_type=briefing_type,
+                        briefing_date=NOW - timedelta(days=days_ago),
+                        valid_until=NOW + timedelta(days=valid_days),
+                        status="completed",
+                    )
+                )
+            await session.commit()
+
+        section = (await _card(async_client, headers, person_id))["disciplines"]
+        site = (await async_client.get(f"/api/v1/sites/{site_id}/overview", headers=headers)).json()
+
+        row = _row(section, "fire_safety")
+        assert row["light"] == "red"
+        assert row["reason"] == (
+            "Просрочено по ПБ — противопожарные инструктажи: 1; "
+            "противопожарных инструктажей действует: 1"
+        )
+        assert row["required"] == 2 and row["lapsed"] == 1
+        assert section["overall"] == "red"
+        theirs = next(r for r in site["disciplines"] if r["discipline"] == "fire_safety")
+        assert (theirs["light"], theirs["required"], theirs["lapsed"]) == ("red", 2, 1)
+        # у площадки — ещё и факты объекта, у человека их нет
+        assert "тренировок" in theirs["reason"] and "тренировок" not in row["reason"]
 
     async def test_действующее_удостоверение_это_факт_а_не_зелёный(
         self, async_client: AsyncClient, make_auth_headers, welder, sessionmaker
