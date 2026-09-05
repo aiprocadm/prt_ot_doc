@@ -174,6 +174,31 @@ _DISCIPLINE_TENANT_WIDE_ROLES = frozenset(
 )
 
 
+#: Тяжесть записи Центра внимания → место в списке (разд. 57.2 «с
+#: приоритизацией», срез-70). Неизвестная тяжесть — в конец, а не ошибка:
+#: лента обязана показаться в любом случае.
+_SEVERITY_RANK = {"critical": 0, "high": 1, "medium": 2, "low": 3}
+
+
+def _attention_order(item: AttentionItem, now: datetime) -> tuple[int, bool, datetime, str, str]:
+    """Ключ порядка ленты: тяжесть → ближайший срок (без срока — в конец) →
+    название и id, чтобы две одинаковые записи не менялись местами от запроса
+    к запросу."""
+
+    due = item.due_at
+    # Срок задачи из SQLite приходит без часового пояса, событие агрегатора —
+    # с ним; сравнение наивной и aware даты — TypeError посреди рабочего стола.
+    if due is not None and due.tzinfo is None:
+        due = due.replace(tzinfo=timezone.utc)
+    return (
+        _SEVERITY_RANK.get(item.severity, len(_SEVERITY_RANK)),
+        due is None,
+        due or now,
+        item.title,
+        item.id,
+    )
+
+
 class _DisciplineFacts:
     """События внимания и ЧЕСТНЫЕ итоги по дисциплинам.
 
@@ -603,6 +628,14 @@ async def workspace_attention(
                 discipline=discipline.value if discipline else None,
             )
         )
+
+    # Приоритизация (разд. 57.2: «всё в одном месте, с приоритизацией»; срез-70).
+    # До этого лента шла «сначала все задачи, потом дисциплины», и просроченная
+    # ЭПБ на ОПО (critical) стояла под открытой задачей без срока (medium).
+    # Каждый источник уже отдал свои самые срочные записи (задачи — по сроку,
+    # дисциплины — просроченное вперёд), поэтому верх общего списка после
+    # сортировки — настоящий верх, а не верх одной из двух половин.
+    items.sort(key=lambda item: _attention_order(item, now))
 
     # Дисциплины вне редакции: пустая строка убирается, строка с фактами
     # остаётся — просрочка есть независимо от того, что куплено (срез-56).
