@@ -25,16 +25,34 @@
 Средство, тренировка или документ БЕЗ площадки (``site_id IS NULL``) в счёт
 арендатора входят, а в счёт площадки — нет: приписать их одной из площадок
 значило бы угадать.
+
+Противопожарные инструктажи (срез-83) — единственный ПОИМЁННЫЙ срок ПБ, как
+удостоверение водителя у БДД. Люди площадки известны через рабочее место
+(``domains/sites/overview._site_people``), поэтому формула принимает
+``person_ids``: ``None`` — весь арендатор (сводка модуля), список — люди
+площадки (карточка), пустой список — ноль. Считается не запись, а
+**человек × вид**: у одного человека по одному виду берётся самая поздняя
+дата ``valid_until``; она в прошлом — просрочка, в горизонте — «скоро»,
+дальше — действует. Иначе старая запись, которую давно перекрыл свежий
+повторный инструктаж, красила бы площадку красным навсегда — светофор, которому
+перестают верить. Запись без человека (журнал без привязки) — сама себе
+ключ, перекрыть её нечем; запись без ``valid_until`` — бессрочная, не срок.
+Виды не перекрывают друг друга: повторный не закрывает истёкший ПТМ (это
+другая обязанность), а первичный обычно без срока.
 """
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from collections.abc import Sequence
+from datetime import date, datetime, timedelta, timezone
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.discipline_status import FireSafetyNumbers
+from app.core.disciplines import BRIEFING_TYPE_DISCIPLINE, Discipline
+from app.core.feature_flags import as_utc
+from app.models.briefings import BriefingEntry
 from app.models.fire_safety import (
     FireDrill,
     FireMaintenanceRecord,
@@ -42,10 +60,50 @@ from app.models.fire_safety import (
     FireSafetyEquipment,
 )
 
-__all__ = ["FIRE_DUE_SOON_DAYS", "collect_fire_safety_numbers"]
+__all__ = ["FIRE_BRIEFING_TYPES", "FIRE_DUE_SOON_DAYS", "collect_fire_safety_numbers"]
 
 #: горизонт «скоро истекает» — общий у сводки модуля и карточки площадки
 FIRE_DUE_SOON_DAYS = 30
+
+#: виды инструктажа, которые относятся к ПБ, — из закрытого словаря, а не
+#: по префиксу «fire_»: словарь — единственное место, где вид получает дисциплину
+FIRE_BRIEFING_TYPES: tuple[str, ...] = tuple(
+    code
+    for code, discipline in BRIEFING_TYPE_DISCIPLINE.items()
+    if discipline is Discipline.FIRE_SAFETY
+)
+
+
+async def _fire_briefing_numbers(
+    session: AsyncSession,
+    *,
+    tenant_id: str,
+    person_ids: Sequence[str] | None,
+    now: datetime,
+) -> tuple[int, int, int]:
+    """(просрочено, скоро истекает, действует) — по человеку × виду, не по записи."""
+
+    if person_ids is not None and not person_ids:
+        return 0, 0, 0
+    # ключ — человек, а без человека — сама запись: перекрыть её нечем
+    owner = func.coalesce(BriefingEntry.person_id, BriefingEntry.id)
+    stmt = (
+        select(func.max(BriefingEntry.valid_until))
+        .where(
+            BriefingEntry.tenant_id == tenant_id,
+            BriefingEntry.deleted_at.is_(None),
+            BriefingEntry.briefing_type.in_(FIRE_BRIEFING_TYPES),
+            BriefingEntry.valid_until.is_not(None),
+        )
+        .group_by(owner, BriefingEntry.briefing_type)
+    )
+    if person_ids is not None:
+        stmt = stmt.where(BriefingEntry.person_id.in_(list(person_ids)))
+    latest = [as_utc(value) for value in (await session.execute(stmt)).scalars()]
+    soon = now + timedelta(days=FIRE_DUE_SOON_DAYS)
+    overdue = sum(1 for value in latest if value is not None and value < now)
+    due_soon = sum(1 for value in latest if value is not None and now <= value <= soon)
+    return overdue, due_soon, len(latest) - overdue - due_soon
 
 
 async def collect_fire_safety_numbers(
@@ -53,11 +111,18 @@ async def collect_fire_safety_numbers(
     *,
     tenant_id: str,
     site_id: str | None = None,
+    person_ids: Sequence[str] | None = None,
     today: date | None = None,
+    now: datetime | None = None,
 ) -> FireSafetyNumbers:
-    """Числа ПБ по арендатору (``site_id=None``) или по одной площадке."""
+    """Числа ПБ по арендатору (``site_id=None``) или по одной площадке.
+
+    ``person_ids`` — чьи противопожарные инструктажи считать: ``None`` — всех
+    людей арендатора, список — только этих (люди площадки), ``[]`` — никого.
+    """
 
     today = today or date.today()
+    now = now or datetime.now(tz=timezone.utc)
     soon = today + timedelta(days=FIRE_DUE_SOON_DAYS)
 
     def _scoped(stmt, model):
@@ -128,6 +193,10 @@ async def collect_fire_safety_numbers(
         or 0
     )
 
+    overdue_briefings, briefings_due_soon, briefings_valid = await _fire_briefing_numbers(
+        session, tenant_id=tenant_id, person_ids=person_ids, now=now
+    )
+
     return FireSafetyNumbers(
         units=len(rows),
         overdue_recharge=overdue_recharge,
@@ -141,4 +210,7 @@ async def collect_fire_safety_numbers(
         days_since_last_drill=((today - last_drill_on).days if last_drill_on is not None else None),
         documents=documents,
         overdue_documents=overdue_documents,
+        overdue_briefings=overdue_briefings,
+        briefings_due_soon=briefings_due_soon,
+        briefings_valid=briefings_valid,
     )

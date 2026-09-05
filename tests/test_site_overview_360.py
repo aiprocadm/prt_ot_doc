@@ -143,7 +143,7 @@ class TestФактыНеКрасятСветофор:
 
 
 class TestСрокиПБПлощадки:
-    """Срез-82 (разд. 54.1): сроки ПБ самой площадки — красят, наряды — нет."""
+    """Срез-82/83 (разд. 54.1): сроки ПБ площадки и инструктажи её людей — красят, наряды — нет."""
 
     def test_просрочка_средства_защиты_красит_пб_и_итог(self) -> None:
         overview = build_site_overview(
@@ -170,6 +170,21 @@ class TestСрокиПБПлощадки:
         row = _row(overview, Discipline.FIRE_SAFETY)
         assert row.light is TrafficLight.YELLOW
         assert row.reason.endswith("К площадке привязано действующих нарядов-допусков: 1")
+
+    def test_истёкший_инструктаж_человека_площадки_красит_пб_и_итог(self) -> None:
+        """Срез-83: поимённый срок ПБ — в цвет площадки, как удостоверение у БДД."""
+
+        overview = build_site_overview(
+            _site(),
+            numbers=_numbers(),
+            facts=SiteFacts(),
+            fire_safety=FireSafetyNumbers(overdue_briefings=1, briefings_valid=4),
+        )
+        row = _row(overview, Discipline.FIRE_SAFETY)
+        assert row.light is TrafficLight.RED
+        assert row.reason.startswith("Просрочено по ПБ — противопожарные инструктажи: 1; ")
+        assert "противопожарных инструктажей действует: 4" in row.reason
+        assert overview.overall is TrafficLight.RED
 
     def test_без_чисел_пб_прежняя_причина(self) -> None:
         overview = build_site_overview(_site(), numbers=_numbers(), facts=SiteFacts())

@@ -164,3 +164,68 @@ class TestКонтрольСроков:
         assert (
             after["overdue_fire_briefings"] == before["overdue_fire_briefings"] + 1
         ), after
+
+    async def test_старая_запись_перекрытая_свежей_не_просрочка(
+        self, async_client, make_auth_headers, sessionmaker, data_factory
+    ) -> None:
+        """Срез-83: считается человек × вид по самой поздней дате действия.
+
+        Повторный инструктаж записывают каждые полгода, и старые записи в
+        журнале остаются навсегда. Считай сводка каждую запись, у любого
+        давно работающего человека была бы «просрочка» — светофор, которому
+        перестают верить. А вот ПТМ повторный не закрывает: другой вид,
+        другая обязанность.
+        """
+
+        headers = await make_auth_headers()
+        await _grant_fire(sessionmaker)
+        now = datetime.now(timezone.utc)
+
+        before = (
+            await async_client.get("/api/v1/fire-safety/readiness", headers=headers)
+        ).json()
+
+        async with sessionmaker() as session:
+            tenant = (
+                await session.execute(select(Tenant).where(Tenant.slug == "test"))
+            ).scalar_one()
+            company = await data_factory.create_company(
+                tenant=tenant, name="ООО Огонёк", session=session
+            )
+            person = await data_factory.create_person(
+                tenant=tenant, company=company, last_name="Сидоров", session=session
+            )
+            journal = BriefingJournal(
+                tenant_id=tenant.id,
+                code="J-FIRE-2",
+                title="Журнал ПБ",
+                journal_type="fire",
+            )
+            session.add(journal)
+            await session.flush()
+            for briefing_type, days_ago, valid_days in (
+                # повторный: старая запись истекла, свежая действует — не просрочка
+                ("fire_repeat", 400, -220),
+                ("fire_repeat", 10, 170),
+                # ПТМ истёк, и повторный его не закрывает — просрочка
+                ("fire_ptm", 400, -35),
+            ):
+                session.add(
+                    BriefingEntry(
+                        tenant_id=tenant.id,
+                        briefing_journal_id=journal.id,
+                        person_id=person.id,
+                        briefing_type=briefing_type,
+                        briefing_date=now - timedelta(days=days_ago),
+                        valid_until=now + timedelta(days=valid_days),
+                        status="completed",
+                    )
+                )
+            await session.commit()
+
+        after = (
+            await async_client.get("/api/v1/fire-safety/readiness", headers=headers)
+        ).json()
+        assert (
+            after["overdue_fire_briefings"] == before["overdue_fire_briefings"] + 1
+        ), after
