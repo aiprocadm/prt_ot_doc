@@ -279,6 +279,42 @@ LIBRARY_RULES: tuple[LibraryRule, ...] = (
         ],
         priority=15,
     ),
+    LibraryRule(
+        discipline=Discipline.FIRE_SAFETY,
+        name="ПБ: истёк срок перезарядки или поверки средства защиты — привести в порядок",
+        description=(
+            "Первичные средства пожаротушения и системы защиты должны быть "
+            "исправны и проверены в установленные сроки (Правила противопожарного "
+            "режима — ПП РФ № 1479, разд. XIX; СП 9.13130). Просроченная перезарядка "
+            "огнетушителя или поверка системы — нарушение к приходу МЧС и реальный "
+            "риск при пожаре. Правило ставит задачу заказать перезарядку или "
+            "проверку и предупреждает ответственного за ПБ. Срок — неделя: работу "
+            "выполняет подрядчик, за день его не вызвать."
+        ),
+        event_type="DisciplineDeadlineOverdue",
+        conditions={
+            "match": "all",
+            "conditions": [{"field": "source_type", "op": "eq", "value": "fire_safety_equipment"}],
+        },
+        actions=[
+            {
+                "type": "create_task",
+                "title_template": "{title}: срок истёк — заказать перезарядку или проверку",
+                "priority": "high",
+                "due_in_days": 7,
+                "assignee_mode": "none",
+            },
+            {
+                "type": "notify",
+                "title_template": "Истёк срок обслуживания средства пожарной защиты",
+                "body_template": "{title} — срок истёк, просрочка {days_overdue} дн.; до обслуживания средство считать неисправным.",
+                "recipient_mode": "role",
+                "roles": ["pb_engineer"],
+                "priority": "high",
+            },
+        ],
+        priority=20,
+    ),
     # ── Промышленная безопасность ───────────────────────────────────────────
     LibraryRule(
         discipline=Discipline.INDUSTRIAL_SAFETY,

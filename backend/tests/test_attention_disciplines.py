@@ -95,14 +95,16 @@ class TestCoverage:
 
         Раньше три дисциплины (ПромБез, ГО и ЧС, БДД) не имели ни одного
         источника, и их просрочки в центр не попадали никогда. Пожарная
-        безопасность своей ТАБЛИЦЫ сроков не имеет и теперь: её сроки —
+        безопасность до среза-79 своей ТАБЛИЦЫ сроков не имела: её сроки —
         противопожарные инструктажи, и до них источник дотягивается по виду
-        записи (срез-58, ``KIND_DISCIPLINES``), а не по таблице.
+        записи (срез-58, ``KIND_DISCIPLINES``). Срез-79 добавил ей источник
+        по таблице — перезарядка и поверка средств защиты; путь по виду
+        инструктажа остался: у ПБ теперь оба.
         """
 
-        assert set(SOURCE_DISCIPLINE.values()) == set(Discipline) - {Discipline.FIRE_SAFETY}
+        assert set(SOURCE_DISCIPLINE.values()) == set(Discipline)
         assert Discipline.FIRE_SAFETY in KIND_DISCIPLINES
-        assert set(SOURCE_DISCIPLINE.values()) | KIND_DISCIPLINES == set(Discipline)
+        assert SOURCE_DISCIPLINE["fire_safety_equipment"] is Discipline.FIRE_SAFETY
 
     def test_дисциплина_записи_по_виду_а_не_по_таблице(self) -> None:
         """Срез-58: три исхода ``discipline_of_record`` — и все три разные."""
