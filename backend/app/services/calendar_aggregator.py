@@ -36,6 +36,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.civil_defense import CivilDefenseDrill
 from app.models.ecology import (
+    REPORTING_KINDS,
+    EcologyReportingDeadline,
     EmissionMonitoringPlanItem,
     EmissionNorm,
     WaterUsagePoint,
@@ -89,6 +91,10 @@ ALL_SOURCES: tuple[str, ...] = (
     # их значило бы отнять возможность отфильтровать.
     "ecology_permit",
     "ecology_measurement",
+    # Доп. №1 разд. 55.3 «2-ТП, декларация НВОС, платежи» (срез-71): срок
+    # отчёта или платежа, который эколог внёс сам. Платформа дат не вычисляет
+    # (решение среза-23), а исполненный срок из календаря уходит — он не событие.
+    "ecology_report",
     # Доп. №1 разд. 57.2 (срез-57): Центр внимания обязан видеть «просрочена
     # ЭПБ на ОПО», «не проведены учения по ГО», «просрочен техосмотр ТС».
     # Три источника — по одному на дисциплину, у которой сроков в календаре
@@ -133,6 +139,8 @@ _SLA_THRESHOLDS: dict[str, tuple[int, int]] = {
     # окно шире, чем у медосмотра.
     "ecology_permit": (30, 90),
     "ecology_measurement": (7, 30),
+    # Отчёт и платёж готовят по данным за период — за неделю уже поздно начинать.
+    "ecology_report": (7, 30),
     # ЭПБ заказывают у экспертной организации за месяцы — окно как у разрешений;
     # у модуля ПромБез «скоро истекает» = 30 дней, это внутренняя полоса.
     "industrial_safety_epb": (30, 90),
@@ -256,6 +264,21 @@ class CalendarAggregatorService:
             by_source.append(
                 CalendarSourceCount(
                     source_type="ecology_measurement", count=total, overdue_count=overdue
+                )
+            )
+
+        if "ecology_report" in sources:
+            collected, total, overdue = await self._build_ecology_reports(
+                from_at=from_at,
+                to_at=to_at,
+                now=now,
+                include_fact=include_fact,
+                include_sla=include_sla,
+            )
+            items.extend(collected)
+            by_source.append(
+                CalendarSourceCount(
+                    source_type="ecology_report", count=total, overdue_count=overdue
                 )
             )
 
@@ -962,6 +985,90 @@ class CalendarAggregatorService:
         )
         total = await self._count(base)
         overdue = await self._count(base.where(EmissionMonitoringPlanItem.next_due_on < today))
+        return items, total, overdue
+
+    async def _build_ecology_reports(
+        self,
+        *,
+        from_at: datetime | None,
+        to_at: datetime | None,
+        now: datetime,
+        include_fact: bool = False,
+        include_sla: bool = False,
+    ) -> tuple[list[CalendarEventItem], int, int]:
+        """Сроки экологической отчётности и платежей (разд. 55.3, срез-71).
+
+        Дату вносит эколог по нормативному акту; платформа её не назначает и не
+        вычисляет — это граница среза-23. Исполненный срок (``done_on`` задан)
+        в календарь НЕ попадает: сданный отчёт — не событие и не просрочка,
+        иначе он лежал бы «просроченным» вечно после срока. Срок — на всю
+        организацию, площадки у него нет, поэтому сужения по площадке нет.
+        """
+
+        today = now.date()
+        stmt = (
+            select(EcologyReportingDeadline)
+            .where(
+                EcologyReportingDeadline.tenant_id == self.tenant_id,
+                EcologyReportingDeadline.deleted_at.is_(None),
+                EcologyReportingDeadline.done_on.is_(None),
+            )
+            .order_by(EcologyReportingDeadline.due_on.asc(), EcologyReportingDeadline.title.asc())
+            .limit(self._limit)
+        )
+        if from_at is not None:
+            stmt = stmt.where(EcologyReportingDeadline.due_on >= from_at.date())
+        if to_at is not None:
+            stmt = stmt.where(EcologyReportingDeadline.due_on <= to_at.date())
+
+        items: list[CalendarEventItem] = []
+        for row in (await self.db.execute(stmt)).scalars().all():
+            anchor = _coerce_dt(row.due_on)
+            if anchor is None:
+                continue
+            is_overdue = anchor < now
+            days_to_due = _days_to_due(anchor, now) if include_sla else None
+            kind_label = REPORTING_KINDS.get(row.kind, row.kind)
+            items.append(
+                CalendarEventItem(
+                    id=f"ecology_report:{row.id}",
+                    source_type="ecology_report",
+                    source_id=str(row.id),
+                    title=f"{kind_label}: {row.title}",
+                    starts_at=anchor,
+                    ends_at=None,
+                    status="overdue" if is_overdue else "planned",
+                    is_overdue=is_overdue,
+                    expected_at=anchor if include_fact else None,
+                    actual_at=None,
+                    variance_days=None,
+                    days_to_due=days_to_due,
+                    sla_band=(
+                        _sla_band("ecology_report", days_to_due=days_to_due, is_overdue=is_overdue)
+                        if include_sla
+                        else None
+                    ),
+                    extra={
+                        "kind": row.kind,
+                        "kind_label": kind_label,
+                        "period": row.period,
+                        "due_on": row.due_on.isoformat(),
+                        "responsible": row.responsible,
+                    },
+                )
+            )
+
+        base = self._apply_window(
+            self._scoped_count(EcologyReportingDeadline).where(
+                EcologyReportingDeadline.done_on.is_(None)
+            ),
+            EcologyReportingDeadline.due_on,
+            from_at,
+            to_at,
+            as_date=True,
+        )
+        total = await self._count(base)
+        overdue = await self._count(base.where(EcologyReportingDeadline.due_on < today))
         return items, total, overdue
 
     async def _build_epb(

@@ -17,6 +17,7 @@ const listWaterPointsMock = vi.fn();
 const listWaterRecordsMock = vi.fn();
 const listFeeRatesMock = vi.fn();
 const listFeeLinesMock = vi.fn();
+const listReportingDeadlinesMock = vi.fn();
 const readinessMock = vi.fn();
 
 vi.mock("@/api/ecology", async (importOriginal) => ({
@@ -34,6 +35,8 @@ vi.mock("@/api/ecology", async (importOriginal) => ({
     listWaterRecords: (...args: unknown[]) => listWaterRecordsMock(...args),
     listFeeRates: (...args: unknown[]) => listFeeRatesMock(...args),
     listFeeLines: (...args: unknown[]) => listFeeLinesMock(...args),
+    listReportingDeadlines: (...args: unknown[]) =>
+      listReportingDeadlinesMock(...args),
     readiness: (...args: unknown[]) => readinessMock(...args),
   },
 }));
@@ -362,6 +365,49 @@ const populatedFeeLines = [
   },
 ];
 
+/** Сроки отчётности (срез-71): один просрочен, один предстоит, один исполнен. */
+const populatedReportingDeadlines = [
+  {
+    id: "rd-1",
+    kind: "report",
+    kind_label: "Отчётность",
+    title: "2-ТП (отходы) за 2025 год",
+    period: "2025",
+    due_on: "2026-02-01",
+    done_on: null,
+    responsible: "Эколог Иванова",
+    notes: null,
+    status: "overdue",
+    status_label: "Просрочено",
+  },
+  {
+    id: "rd-2",
+    kind: "payment",
+    kind_label: "Платёж",
+    title: "Авансовый платёж за НВОС, III квартал",
+    period: "3 кв. 2026",
+    due_on: "2026-10-20",
+    done_on: null,
+    responsible: null,
+    notes: null,
+    status: "planned",
+    status_label: "Предстоит",
+  },
+  {
+    id: "rd-3",
+    kind: "report",
+    kind_label: "Отчётность",
+    title: "Декларация о плате за НВОС за 2025 год",
+    period: "2025",
+    due_on: "2026-03-10",
+    done_on: "2026-03-05",
+    responsible: null,
+    notes: null,
+    status: "done",
+    status_label: "Исполнено",
+  },
+];
+
 const populatedReadiness = {
   total_facilities: 2,
   by_category: { I: 0, II: 1, III: 0, IV: 1 },
@@ -387,6 +433,7 @@ const populatedReadiness = {
   fee_lines_without_rate: 1,
   fee_total_rubles: "277.60",
   incidents_open: 3,
+  reporting_overdue: 1,
 };
 
 describe("EcologyPage", () => {
@@ -402,6 +449,7 @@ describe("EcologyPage", () => {
     listWaterRecordsMock.mockReset();
     listFeeRatesMock.mockReset();
     listFeeLinesMock.mockReset();
+    listReportingDeadlinesMock.mockReset();
     readinessMock.mockReset();
     listFacilitiesMock.mockResolvedValue(populatedFacilities);
     listPassportsMock.mockResolvedValue(populatedPassports);
@@ -414,6 +462,7 @@ describe("EcologyPage", () => {
     listWaterRecordsMock.mockResolvedValue(populatedWaterRecords);
     listFeeRatesMock.mockResolvedValue(populatedFeeRates);
     listFeeLinesMock.mockResolvedValue(populatedFeeLines);
+    listReportingDeadlinesMock.mockResolvedValue(populatedReportingDeadlines);
     readinessMock.mockResolvedValue(populatedReadiness);
   });
 
@@ -668,6 +717,38 @@ describe("EcologyPage", () => {
     // Граница названа на экране.
     expect(
       screen.getByText(/сумма не считается вовсе — это не ноль/i),
+    ).toBeInTheDocument();
+  });
+
+  it("сроки отчётности открываются восьмой секцией (срез-71)", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter>
+        <EcologyPage />
+      </MemoryRouter>,
+    );
+
+    expect(
+      await screen.findByText("Производственная площадка №1"),
+    ).toBeInTheDocument();
+    // Просроченная отчётность — цифрой в шапке, из сводки бэкенда.
+    expect(screen.getByText("Отчётность просрочена")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Сроки отчётности" }));
+
+    // Просроченный, предстоящий и исполненный — словами, а не кодами.
+    expect(
+      await screen.findByText("2-ТП (отходы) за 2025 год"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Просрочено")).toBeInTheDocument();
+    expect(screen.getByText("Предстоит")).toBeInTheDocument();
+    expect(screen.getByText("Исполнено")).toBeInTheDocument();
+    // Вид — словами: отчёт и платёж различимы.
+    expect(screen.getAllByText("Отчётность").length).toBeGreaterThan(0);
+    expect(screen.getByText("Платёж")).toBeInTheDocument();
+    // Граница названа на экране: даты вносит эколог, платформа не вычисляет.
+    expect(
+      screen.getByText(/платформа их не назначает и не вычисляет/i),
     ).toBeInTheDocument();
   });
 

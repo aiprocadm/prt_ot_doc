@@ -65,6 +65,7 @@ const SOURCE_LABELS: Record<CalendarSourceType, string> = {
   // Доп. №1 разд. 55.3 «экологический календарь».
   ecology_permit: "Экология: разрешения",
   ecology_measurement: "Экология: замеры ПЭК",
+  ecology_report: "Экология: отчётность и платежи",
   // Доп. №1 разд. 57.2 (срез-57).
   industrial_safety_epb: "ПромБез: ЭПБ устройств",
   civil_defense_drill: "ГО и ЧС: учения",
@@ -81,6 +82,7 @@ const DRILL_DOWN: Partial<Record<CalendarSourceType, string>> = {
   compliance_deadline: "/workspace/data-quality",
   ecology_permit: "/ecology",
   ecology_measurement: "/ecology",
+  ecology_report: "/ecology",
   briefing_entry: "/briefings",
   industrial_safety_epb: "/industrial-safety",
   civil_defense_drill: "/civil-defense",

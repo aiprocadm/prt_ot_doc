@@ -88,6 +88,7 @@ from app.models.civil_defense import (  # noqa: E402,F401
 
 # Разд. 55: предметные модели контура экологии.
 from app.models.ecology import (  # noqa: E402,F401
+    EcologyReportingDeadline,
     EmissionMeasurement,
     EmissionMonitoringPlanItem,
     EmissionNorm,

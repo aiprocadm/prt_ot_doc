@@ -23,7 +23,14 @@ const EcologyPage = () => {
   // Секции ПО ОДНОЙ (прецедент экранов ПБ и ПромБеза): объекты, паспорта и
   // журнал учёта — разные задачи, три таблицы сразу растят экран.
   const [section, setSection] = useState<
-    "facilities" | "waste" | "journal" | "emissions" | "pek" | "water" | "fee"
+    | "facilities"
+    | "waste"
+    | "journal"
+    | "emissions"
+    | "pek"
+    | "water"
+    | "fee"
+    | "reporting"
   >("facilities");
 
   const { data, loading, error, reload } = useAsyncResource({
@@ -40,6 +47,7 @@ const EcologyPage = () => {
         waterRecords: await ecologyApi.listWaterRecords(),
         feeRates: await ecologyApi.listFeeRates(),
         feeLines: await ecologyApi.listFeeLines(),
+        reportingDeadlines: await ecologyApi.listReportingDeadlines(),
         readiness: await ecologyApi.readiness(),
       }),
       [],
@@ -56,8 +64,10 @@ const EcologyPage = () => {
       waterRecords: [],
       feeRates: [],
       feeLines: [],
+      reportingDeadlines: [],
       readiness: {
         incidents_open: 0,
+        reporting_overdue: 0,
         total_facilities: 0,
         by_category: { I: 0, II: 0, III: 0, IV: 0 },
         excluded_facilities: 0,
@@ -196,6 +206,16 @@ const EcologyPage = () => {
         .includes(query),
   });
 
+  const reportingRegistry = useLocalRegistry({
+    items: data.reportingDeadlines,
+    match: (item, query) =>
+      [item.title, item.kind_label, item.period, item.responsible]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(query),
+  });
+
   const { readiness } = data;
 
   return (
@@ -249,6 +269,12 @@ const EcologyPage = () => {
             label: "Строк без ставки",
             value: readiness.fee_lines_without_rate,
           },
+          // Разд. 55.3 (срез-71): сроки 2-ТП, декларации и платежей, у
+          // которых дата прошла, а исполнение не отмечено. Дату вносит эколог.
+          {
+            label: "Отчётность просрочена",
+            value: readiness.reporting_overdue,
+          },
           // Доп. №1 разд. 57.4: происшествия контура — той же формулой, что
           // разрез у директора; ссылка ведёт в общий реестр (срез-49).
           disciplineIncidentsStat("ecology", readiness.incidents_open),
@@ -265,6 +291,7 @@ const EcologyPage = () => {
             ["pek", "ПЭК и замеры"],
             ["water", "Водопользование"],
             ["fee", "Плата за НВОС"],
+            ["reporting", "Сроки отчётности"],
           ] as const
         ).map(([key, label]) => (
           <Button
@@ -853,6 +880,77 @@ const EcologyPage = () => {
               caption="Справочник ставок платы"
             />
           ) : null}
+        </>
+      ) : null}
+      {section === "reporting" && !loading && !error ? (
+        <>
+          {/*
+            ГРАНИЦА, названная НА ЭКРАНЕ (решение среза-23): даты сдачи 2-ТП,
+            декларации о плате и платежей задают нормативные акты и меняются;
+            платформа их не вшивает и не вычисляет — их вносит эколог. Что
+            платформа делает: держит внесённый срок в общем календаре и
+            Центре внимания, пока эколог не отметит исполнение.
+          */}
+          <p className="text-sm text-muted-foreground">
+            Даты сроков вносит эколог по нормативным актам; платформа их не
+            назначает и не вычисляет. Внесённый срок виден в общем календаре и
+            Центре внимания до отметки об исполнении. Исполненный срок из
+            календаря уходит — это не событие и не просрочка.
+          </p>
+          {reportingRegistry.total === 0 ? (
+            <EmptyState
+              title="Сроки отчётности не внесены"
+              description="Внесите сроки сдачи 2-ТП (воздух, отходы, водхоз), декларации о плате за НВОС и платежей с датой по нормативному акту — они появятся в календаре и Центре внимания."
+            />
+          ) : (
+            <RegistryTable
+              columns={[
+                {
+                  accessorKey: "kind_label",
+                  header: "Вид",
+                  cell: ({ row }) => row.original.kind_label,
+                },
+                { accessorKey: "title", header: "Что сдать или оплатить" },
+                {
+                  accessorKey: "period",
+                  header: "Период",
+                  cell: ({ row }) => row.original.period || "—",
+                },
+                {
+                  accessorKey: "due_on",
+                  header: "Срок",
+                  cell: ({ row }) => formatDate(row.original.due_on),
+                },
+                {
+                  accessorKey: "status_label",
+                  header: "Состояние",
+                  cell: ({ row }) => row.original.status_label,
+                },
+                {
+                  accessorKey: "done_on",
+                  header: "Дата исполнения",
+                  cell: ({ row }) =>
+                    row.original.done_on
+                      ? formatDate(row.original.done_on)
+                      : "—",
+                },
+                {
+                  accessorKey: "responsible",
+                  header: "Ответственный",
+                  cell: ({ row }) => row.original.responsible || "—",
+                },
+              ]}
+              data={reportingRegistry.pagedItems}
+              pageIndex={reportingRegistry.pageIndex}
+              pageSize={reportingRegistry.pageSize}
+              total={reportingRegistry.total}
+              onPageChange={reportingRegistry.onPageChange}
+              onPageSizeChange={reportingRegistry.onPageSizeChange}
+              onSearchChange={reportingRegistry.onSearchChange}
+              searchPlaceholder="Поиск по названию, периоду и ответственному"
+              caption="Сроки экологической отчётности и платежей"
+            />
+          )}
         </>
       ) : null}
     </div>

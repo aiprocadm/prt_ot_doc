@@ -85,6 +85,12 @@ export type EcologyReadinessDto = {
   fee_total_rubles: string;
   /** Доп. №1 разд. 57.4: открытые происшествия этой дисциплины (срез-49). */
   incidents_open: number;
+  /**
+   * Разд. 55.3 «2-ТП, декларация, платежи» (срез-71): сроки отчётности и
+   * платежей, у которых дата прошла, а исполнение не отмечено. Даты вносит
+   * эколог — платформа их не назначает и не вычисляет.
+   */
+  reporting_overdue: number;
 };
 
 export type FeeRateDto = {
@@ -114,6 +120,25 @@ export type FeeLineDto = {
   rate_per_ton?: string | null;
   /** null, а НЕ ноль, когда ставка не внесена. */
   amount_rubles?: string | null;
+};
+
+/** Срок экологической отчётности или платежа (разд. 55.3, срез-71). */
+export type ReportingDeadlineDto = {
+  id: string;
+  /** report | payment. */
+  kind: string;
+  kind_label: string;
+  title: string;
+  period?: string | null;
+  /** Дата, внесённая экологом по нормативному акту. */
+  due_on: string;
+  /** Дата исполнения; пока пусто — срок живёт в календаре и Центре внимания. */
+  done_on?: string | null;
+  responsible?: string | null;
+  notes?: string | null;
+  /** planned | overdue | done — выводится на сервере из двух дат. */
+  status: string;
+  status_label: string;
 };
 
 export type WaterPointDto = {
@@ -328,6 +353,14 @@ export const ecologyApi = {
   listFeeLines: async (): Promise<FeeLineDto[]> => {
     const { data } = await apiClient.get<{ items?: FeeLineDto[] }>(
       "/ecology/fee-lines",
+      { params: { limit: 200, offset: 0 } },
+    );
+    return Array.isArray(data?.items) ? data.items : [];
+  },
+
+  listReportingDeadlines: async (): Promise<ReportingDeadlineDto[]> => {
+    const { data } = await apiClient.get<{ items?: ReportingDeadlineDto[] }>(
+      "/ecology/reporting-deadlines",
       { params: { limit: 200, offset: 0 } },
     );
     return Array.isArray(data?.items) ? data.items : [];
