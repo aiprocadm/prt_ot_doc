@@ -14,7 +14,6 @@ from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
 from app.models.models import (
     Incident,
-    IncidentStatus,
     PPEIssue,
     Prescription,
     PrescriptionStatus,
@@ -22,6 +21,7 @@ from app.models.models import (
     TrainingPlan,
 )
 from app.models.risk import RiskAssessmentItem
+from app.services.discipline_incidents import open_incidents_where
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 
@@ -91,13 +91,9 @@ async def get_kpi(
             PPEIssue.issued_at < next_month,
         )
     )
+    # «Открытое» — одна формула на платформу (срез-69): удалённые не считаются
     incidents_open_stmt = (
-        select(func.count())
-        .select_from(Incident)
-        .where(
-            Incident.tenant_id == tenant.id,
-            Incident.status.notin_([IncidentStatus.CLOSED, IncidentStatus.CANCELLED]),
-        )
+        select(func.count()).select_from(Incident).where(*open_incidents_where(str(tenant.id)))
     )
     prescriptions_overdue_stmt = (
         select(func.count())

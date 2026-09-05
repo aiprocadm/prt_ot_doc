@@ -12,7 +12,6 @@ from app.models.models import (
     ClientPackageRun,
     Company,
     Incident,
-    IncidentStatus,
     Inspection,
     InspectionStatus,
     Person,
@@ -35,6 +34,7 @@ from app.modules.projections.models import (
 )
 from app.modules.workflow.models import WorkflowTask, WorkflowTaskStatus
 from app.services.contractor_admission import evaluate_with_documents
+from app.services.discipline_incidents import open_incidents_where
 
 
 class PackageProjectionService:
@@ -79,11 +79,7 @@ class SiteSafetyProjectionService:
         incidents_by_site = (
             await self.session.execute(
                 select(Incident.site_id, func.count(Incident.id))
-                .where(
-                    Incident.tenant_id == self.tenant_id,
-                    Incident.deleted_at.is_(None),
-                    Incident.status.notin_([IncidentStatus.CLOSED, IncidentStatus.CANCELLED]),
-                )
+                .where(*open_incidents_where(self.tenant_id))
                 .group_by(Incident.site_id)
             )
         ).all()
